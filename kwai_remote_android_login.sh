@@ -60,9 +60,31 @@ if [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
   adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null 2>&1 || true
   adb pull /sdcard/kwai-ui.xml /tmp/kwai-ui.xml >/dev/null 2>&1 || true
   # Prefer visible login controls, then fill focused fields without logging values.
-  python3 kwai_android_autologin.py >/dev/null 2>&1 || log "KWAI_AUTO_LOGIN_NEEDS_INTERACTION"
+  if python3 kwai_android_autologin.py >>"$REPORT" 2>&1; then
+    log "KWAI_AUTO_LOGIN_ADVANCED"
+    # Validate authentication directly from the Android UI; no human "done" click required.
+    for _ in $(seq 1 12); do
+      sleep 2
+      adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null 2>&1 || true
+      adb pull /sdcard/kwai-ui.xml /tmp/kwai-ui.xml >/dev/null 2>&1 || true
+      UI_TEXT="$(tr '[:upper:]' '[:lower:]' </tmp/kwai-ui.xml 2>/dev/null || true)"
+      if echo "$UI_TEXT" | grep -Eqi 'verification code|código de verificação|captcha|verify it.s you|senha|password|log in|login|entrar'; then
+        continue
+      fi
+      if echo "$UI_TEXT" | grep -Eqi 'profile|perfil|following|seguindo|for you|para você|discover|descobrir|friends|amigos'; then
+        log "KWAI_LOGIN_CONFIRMED_AUTOMATIC"
+        capture
+        adb shell run-as com.kwai.video id >>"$REPORT" 2>&1 && log "APP_STATE_RUN_AS_AVAILABLE" || log "APP_STATE_RUN_AS_UNAVAILABLE"
+        exit 0
+      fi
+    done
+    log "KWAI_AUTO_LOGIN_UNCONFIRMED"
+  else
+    rc=$?
+    log "KWAI_AUTO_LOGIN_NEEDS_INTERACTION_RC=$rc"
+  fi
 fi
-LOGIN_DEADLINE=$((SECONDS+720))
+LOGIN_DEADLINE=$((SECONDS+120))
 while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   if [ -f /tmp/anthares-android-done ]; then
     log "DONE_SIGNAL_RECEIVED"
@@ -83,5 +105,5 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   kill -0 "$TUNNEL_PID" 2>/dev/null || { log "FAIL: tunnel-died-during-login"; exit 27; }
   sleep 1
 done
-log "FAIL: login-window-expired-720s"; exit 28
+log "FAIL: login-window-expired-120s"; exit 28
 
