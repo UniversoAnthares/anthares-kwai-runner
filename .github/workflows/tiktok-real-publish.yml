@@ -1,5 +1,8 @@
 name: TikTok Real Publish
 on:
+  push:
+    paths:
+      - '.tiktok-session-restore-probe'
   workflow_dispatch:
     inputs:
       video_url:
@@ -12,7 +15,64 @@ permissions:
   contents: read
   id-token: write
 jobs:
+  session-restore-probe:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-slim
+    timeout-minutes: 8
+    steps:
+      - name: Wait for exact Render revision
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 40); do
+            REV=$(curl -fsS https://anthares-tiktok-render-rootless.onrender.com/health | python3 -c "import json,sys; print(json.load(sys.stdin).get('revision',''))" || true)
+            echo "render_revision=${REV:0:12}"
+            [ "$REV" = "fc26d51a2a548d19771b533fb095dbcbb3695d77" ] && exit 0
+            sleep 10
+          done
+          echo RENDER_REVISION_NOT_READY
+          exit 2
+      - name: Restore central session and validate exact account
+        run: |
+          set -euo pipefail
+          RENDER_TOKEN=$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+('&' if '?' in os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] else '?')+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )
+          CONTROL_TOKEN=$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          aud='https://anthares-control.anthares1.workers.dev'
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+('&' if '?' in os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] else '?')+urllib.parse.urlencode({'audience':aud})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )
+          echo "::add-mask::$RENDER_TOKEN"
+          echo "::add-mask::$CONTROL_TOKEN"
+          curl -fsS https://anthares-tiktok-render-rootless.onrender.com/session-status \
+            -H "Authorization: Bearer $RENDER_TOKEN" \
+            -H "X-Anthares-Control-OIDC: $CONTROL_TOKEN" > /tmp/status.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/status.json'))
+          safe={k:d.get(k) for k in ('ok','bootstrapped','identity_verified','ready_for_tiktok','central_restored')}
+          print('SESSION_RESTORE_SAFE='+json.dumps(safe,sort_keys=True))
+          if not d.get('bootstrapped') or not d.get('central_restored'): raise SystemExit('SESSION_RESTORE_NOT_PROVEN')
+          PY
+          code=$(curl -sS -o /tmp/test.json -w '%{http_code}' -X POST https://anthares-tiktok-render-rootless.onrender.com/session-test \
+            -H "Authorization: Bearer $RENDER_TOKEN" \
+            -H "X-Anthares-Control-OIDC: $CONTROL_TOKEN")
+          python3 - "$code" <<'PY'
+          import json,sys
+          d=json.load(open('/tmp/test.json'))
+          safe={'http':int(sys.argv[1]),'ok':d.get('ok'),'code':d.get('code'),'identity_verified':d.get('identity_verified'),'central_persisted':d.get('central_persisted'),'error':d.get('error')}
+          print('IDENTITY_TEST_SAFE='+json.dumps(safe,sort_keys=True))
+          if int(sys.argv[1])!=200 or not d.get('ok') or not d.get('identity_verified'): raise SystemExit('TIKTOK_IDENTITY_NOT_PROVEN')
+          print('TIKTOK_SESSION_AND_IDENTITY_PROVEN')
+          PY
+
   publish:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-slim
     timeout-minutes: 10
     steps:
