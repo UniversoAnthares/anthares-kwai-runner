@@ -11,7 +11,13 @@ permissions:
 
 jobs:
   acceptance:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [baseline, permission, back, swipe, tap, activity, intent, settings, adaptive, inspect]
     runs-on: ubuntu-24.04
+    env:
+      TEST_MODE: ${{ matrix.mode }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -53,13 +59,72 @@ jobs:
           emulator-boot-timeout: 300
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
-          script: bash kwai_acceptance.sh
+          script: |
+            set -e
+            bash kwai_vault_install.sh
+            adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+            sleep 8
+            python3 - <<'PY'
+            import os,subprocess,time,xml.etree.ElementTree as ET
+            mode=os.environ["TEST_MODE"]
+            def adb(*a):
+                return subprocess.run(["adb",*a],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=20).stdout
+            def snap(tag):
+                adb("shell","uiautomator","dump",f"/sdcard/{tag}.xml")
+                adb("pull",f"/sdcard/{tag}.xml",f"{tag}.xml")
+                with open(f"{tag}.png","wb") as f:
+                    subprocess.run(["adb","exec-out","screencap","-p"],stdout=f,timeout=20)
+            def text():
+                snap("probe-"+mode)
+                try:
+                    r=ET.parse("probe-"+mode+".xml").getroot()
+                    return " ".join(((n.attrib.get("text","")+" "+n.attrib.get("content-desc","")).lower()) for n in r.iter("node"))
+                except Exception:return ""
+            if mode=="permission":
+                adb("shell","pm","grant","com.kwai.video","android.permission.POST_NOTIFICATIONS")
+            elif mode=="back":
+                for _ in range(4): adb("shell","input","keyevent","4"); time.sleep(1)
+            elif mode=="swipe":
+                for _ in range(4): adb("shell","input","swipe","850","1100","180","1100","300"); time.sleep(1)
+            elif mode=="tap":
+                for xy in [(270,1200),(810,1200),(540,2050),(950,2050)]:
+                    adb("shell","input","tap",*map(str,xy)); time.sleep(1)
+            elif mode=="activity":
+                print(adb("shell","dumpsys","package","com.kwai.video"))
+            elif mode=="intent":
+                adb("shell","am","start","-a","android.intent.action.VIEW","-d","kwai://login","com.kwai.video"); time.sleep(3)
+            elif mode=="settings":
+                adb("shell","appops","set","com.kwai.video","POST_NOTIFICATION","allow")
+                adb("shell","settings","put","global","heads_up_notifications_enabled","0")
+            elif mode=="adaptive":
+                for _ in range(8):
+                    t=text()
+                    if any(x in t for x in ["login","log in","sign in","entrar"]): break
+                    for word in ["allow","while using","skip","later","next","continue","education","entertainment","talent"]:
+                        if word in t:
+                            adb("shell","input","tap","540","1800"); break
+                    else: adb("shell","input","swipe","850","1100","180","1100","250")
+                    time.sleep(1)
+            elif mode=="baseline":
+                pass
+            elif mode=="inspect":
+                print(adb("shell","dumpsys","activity","activities"))
+                print(adb("shell","dumpsys","window","windows"))
+            snap("result-"+mode)
+            print("MODE="+mode)
+            print("UI="+text()[:1500])
+            PY
       - name: Evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-executor-acceptance-${{ github.run_id }}
+          name: android-probe-${{ matrix.mode }}-${{ github.run_id }}
           path: |
             kwai-vault-install-status.txt
+            probe-*.xml
+            probe-*.png
+            result-*.xml
+            result-*.png
           if-no-files-found: warn
           retention-days: 1
