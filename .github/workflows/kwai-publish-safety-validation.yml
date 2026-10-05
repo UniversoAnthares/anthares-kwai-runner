@@ -16,13 +16,42 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash -n kwai_publish.sh
+          bash -n kwai_publish.sh kwai_queue_state.sh
           python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py
           grep -q 'KWAI_MEDIA_SHA256=' kwai_publish.sh
           grep -q '/sdcard/Movies/AntharesPublish/' kwai_publish.sh
           grep -q 'MEDIASTORE_MATCHES=1' kwai_publish.sh
+          grep -q 'STATE=READY_TO_PUBLISH' kwai_publish_video.py
           grep -q 'STATE=PUBLISH_REQUESTED' kwai_publish_video.py
-          grep -q 'STATE=UNCERTAIN' kwai_publish_video.py
+          grep -q 'explicit-publish-phase-required' kwai_publish_video.py
+          grep -q 'kwai_queue_state.sh started' kwai_publish.sh
+          grep -q 'kwai_publish_video.py commit' kwai_publish.sh
+          grep -q '/github-queue/$endpoint' kwai_queue_state.sh
+          grep -q 'CONTROL_VERSION_MISMATCH' kwai_queue_state.sh
+          grep -q 'QUEUE_STARTED_FLAG_MISSING' kwai_queue_state.sh
+          grep -q 'KWAI_EXPECTED_ACCOUNT' kwai_verify_publication.py
+          grep -q 'STATE=PROFILE_LOADING' kwai_verify_publication.py
+          grep -q 'KWAI_PUBLICATION_SPECIFICALLY_VERIFIED' kwai_verify_publication.py
+          grep -q 'KWAI_CONFIRMATION_EVIDENCE=' kwai_verify_publication.py
+          grep -q 'kwai_queue_state.sh complete' kwai_publish.sh
           grep -q 'STATE=CONFIRMED' kwai_publish.sh
-          ! grep -q 'KWAI_PUBLISH_RETURNED_HOME.*sys.exit(0)' kwai_publish_video.py
+          ! grep -q 'KWAI_PUBLICATION_MARKER_VERIFIED' kwai_verify_publication.py
+          ! grep -q 'just now.*sys.exit(0)' kwai_verify_publication.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('kwai_publish.sh').read_text()
+          required=[
+              'kwai_publish_video.py prepare',
+              'kwai_queue_state.sh started',
+              'kwai_publish_video.py commit',
+              'kwai_verify_publication.py',
+              'kwai_queue_state.sh complete',
+              'STATE=CONFIRMED',
+          ]
+          pos=[s.index(x) for x in required]
+          assert pos==sorted(pos), (required,pos)
+          v=Path('kwai_publish_video.py').read_text()
+          assert v.index('STATE=READY_TO_PUBLISH') < v.index('STATE=PUBLISH_REQUESTED')
+          print('KWAI_STARTED_BEFORE_COMMIT_STATIC_OK')
+          PY
           echo 'KWAI_PUBLISH_SAFETY_STATIC_OK'
