@@ -1,0 +1,28 @@
+name: Kwai Publish Safety Validation
+on:
+  push:
+    paths:
+      - '.kwai-publish-safety-trigger'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate syntax and fail-closed invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n kwai_publish.sh
+          python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py
+          grep -q 'KWAI_MEDIA_SHA256=' kwai_publish.sh
+          grep -q '/sdcard/Movies/AntharesPublish/' kwai_publish.sh
+          grep -q 'MEDIASTORE_MATCHES=1' kwai_publish.sh
+          grep -q 'STATE=PUBLISH_REQUESTED' kwai_publish_video.py
+          grep -q 'STATE=UNCERTAIN' kwai_publish_video.py
+          grep -q 'STATE=CONFIRMED' kwai_publish.sh
+          ! grep -q 'KWAI_PUBLISH_RETURNED_HOME.*sys.exit(0)' kwai_publish_video.py
+          echo 'KWAI_PUBLISH_SAFETY_STATIC_OK'
