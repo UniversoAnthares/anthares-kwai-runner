@@ -61,7 +61,5 @@ jobs:
           name: android-executor-acceptance-${{ github.run_id }}
           path: |
             kwai-vault-install-status.txt
-            executor-ui.xml
-            executor-screen.png
           if-no-files-found: warn
           retention-days: 1
