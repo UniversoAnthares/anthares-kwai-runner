@@ -26,8 +26,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          sshpass -e ssh -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
-            "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          {
+            printf 'export VPS_PASSWORD=%q\n' "$VPS_PASSWORD"
+            cat <<'REMOTE'
           set -euo pipefail
 
           echo "=== HOST ==="
@@ -97,5 +98,7 @@ jobs:
           echo "=== RESULT ==="
           echo "BOOTSTRAP_DIAGNOSTIC_COMPLETE=1"
           REMOTE
+          } | sshpass -e ssh -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+              "$VPS_USER@$VPS_HOST" 'bash -s'
         env:
           SSHPASS: ${{ secrets.VPS_PASSWORD }}
