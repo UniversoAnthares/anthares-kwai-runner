@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   acceptance:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 18
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Fetch validated Kwai vault
@@ -50,7 +50,7 @@ jobs:
           ram-size: 2048M
           cores: 2
           disable-animations: true
-          emulator-boot-timeout: 180
+          emulator-boot-timeout: 300
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: bash kwai_acceptance.sh
