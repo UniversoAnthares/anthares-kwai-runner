@@ -72,23 +72,9 @@ async function list(env,prefix){
   return [...memory.entries()].filter(([k])=>k.startsWith(prefix)).map(([,v])=>v);
 }
 async function sha256(s){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
-const LOCAL_EXECUTOR_FALLBACK_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwqMVKLsftqOwVa5U7CWqksPdck2z17p1sJMbFI8Ul7YeRaayxEI3l91NApPpSr5SjNZnTnZ/lmZiowXs6tdbVrPPcj8Ip5tiYcuuQlZ4ItBD0cfj0KuDpBiGyWJkKrtSz89GRHePP1eI6VsiBlhGQSUaxQ71RjAuCBB0miPcZ58iy+G4NzOP8p3PjgCq7nfVIQqJMDbORydzPjDIgLbWKibXLbbvIThyanJ0wgK4fr4ciUsn67ZGsWSEYpr8A303TMXjmDyvd3TFz+9mKEUhZYejXgb2k/0KgIUsSlXMkXe1E7lDfKoNWmKiu3z633hmu+KpTraHn1WTf2aiRPR/dQIDAQAB\\n-----END PUBLIC KEY-----";
-async function localExecutorAuth(request,env,body){
- const id=String(body.executor||""); if(id!=="local") return false;
- const localToken=env.LOCAL_EXECUTOR_TOKEN||"",suppliedToken=request.headers.get("X-Anthares-Local-Token")||"";
- if(localToken&&suppliedToken&&localToken.length===suppliedToken.length){let d=0;for(let i=0;i<localToken.length;i++)d|=localToken.charCodeAt(i)^suppliedToken.charCodeAt(i);if(d===0)return true;}
- const pub=env.LOCAL_EXECUTOR_PUBLIC_KEY||""; const sig=request.headers.get("X-Anthares-Executor-Signature")||"";
- if(!pub||!sig)return false;
- const data=JSON.stringify({executor:"local",healthy:!!body.healthy,failures:Number(body.failures||0),heartbeat_at:String(body.heartbeat_at||"")});
- try{
-  const b64=pub.replace(/-----BEGIN PUBLIC KEY-----/,"").replace(/-----END PUBLIC KEY-----/,"").replace(/\\s+/g,""); const bin=atob(b64); const der=Uint8Array.from(bin,c=>c.charCodeAt(0)); const key=await crypto.subtle.importKey("spki",der,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);
-  const raw=Uint8Array.from(atob(sig),c=>c.charCodeAt(0));
-  return await crypto.subtle.verify("RSASSA-PKCS1-v1_5",key,raw,new TextEncoder().encode(data));
- }catch(e){return false}
-}
 async function executorAuth(request,env,body,rawBody=""){
   const id=String(body.executor||"");
-  if(id==="local"){const suppliedPub=request.headers.get("X-Anthares-Executor-Public-Key")||"",sig0=request.headers.get("X-Anthares-Executor-Signature")||"";if(suppliedPub&&sig0){try{const der=Uint8Array.from(atob(suppliedPub),c=>c.charCodeAt(0));const fp=await crypto.subtle.digest("SHA-256",der);const hex=[...new Uint8Array(fp)].map(x=>x.toString(16).padStart(2,"0")).join("");if(hex==="1f77e429c04386c54c2765d5aa7d97d80417e1b1573a883f7a228a2cb748c673"){const key=await crypto.subtle.importKey("spki",der,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);const raw=Uint8Array.from(atob(sig0),c=>c.charCodeAt(0));if(await crypto.subtle.verify("RSASSA-PKCS1-v1_5",key,raw,new TextEncoder().encode(rawBody||JSON.stringify(body))))return true;}}catch(e){}}const localToken=env.LOCAL_EXECUTOR_TOKEN||"",supplied=request.headers.get("X-Anthares-Local-Token")||"";if(localToken&&supplied&&localToken.length===supplied.length){let d=0;for(let i=0;i<localToken.length;i++)d|=localToken.charCodeAt(i)^supplied.charCodeAt(i);if(d===0)return true;}const pub=LOCAL_EXECUTOR_FALLBACK_PUBLIC_KEY||env.LOCAL_EXECUTOR_PUBLIC_KEY||"",sig=request.headers.get("X-Anthares-Executor-Signature")||"";if(pub&&sig){try{const b64=pub.replace(/-----BEGIN PUBLIC KEY-----/,"").replace(/-----END PUBLIC KEY-----/,"").replace(/\s+/g,"");const bin=atob(b64);const der=Uint8Array.from(bin,c=>c.charCodeAt(0));const key=await crypto.subtle.importKey("spki",der,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);const raw=Uint8Array.from(atob(sig),c=>c.charCodeAt(0));if(await crypto.subtle.verify("RSASSA-PKCS1-v1_5",key,raw,new TextEncoder().encode(rawBody||JSON.stringify(body))))return true;}catch(e){}}}
+  if(id==="local") return false;
   const root=env.CONTROL_TOKEN||env.ANTHARES_CONTROL_HMAC_SECRET||"";
   const supplied=request.headers.get("X-Anthares-Executor-Key")||"";
   if(!root||!id||!supplied) return false;
@@ -113,8 +99,7 @@ async function probeHls(url,timeoutMs=5000){
 async function activeProbes(env){
  const targets={
   render:env.RENDER_HEALTH_URL||"https://anthares-tiktok-render-rootless.onrender.com/health",
-  google:env.GOOGLE_HEALTH_URL||"",
-  local:env.ANTHARES_LOCAL_HEALTH_URL||""
+  
  };
  const pairs=await Promise.all(Object.entries(targets).filter(([,url])=>!!url).map(async([executor,url])=>[executor,{executor,url,...await probe(url)}]));
  const hls=env.HLS_HEALTH_URL||"https://anthares.us/wp-content/uploads/anthares-live/index.m3u8";
@@ -247,11 +232,11 @@ export class AntharesQueue extends DurableObject {
   }
  }
 }
-function priorities(){return {cuts:["render","github","local"],tiktok:["render","github","local"],kwai:["kwai_web","local"],kwai_live:["hls_origin","local"],control:["cloudflare","github","render","local"]};}
+function priorities(){return {cuts:["render","github"],tiktok:["render","github"],kwai:["github"],kwai_live:["hls_origin","github"],control:["cloudflare","github","render"]};}
 const ROLE_CAPACITY={cuts:["cuts"],tiktok:["tiktok"],kwai:["kwai"],kwai_live:["kwai_live"],control:["control"]};
 function capacityOk(role,e){if(!e)return false;const cap=Number(e.daily_limit??e.capacity_daily??0);const used=Number(e.published_today??0);if(cap>0&&used>=cap)return false;const caps=Array.isArray(e.capabilities)?e.capabilities:[];const required=ROLE_CAPACITY[role]||[];if(required.length&&caps.length&&!required.some(x=>caps.includes(x)))return false;return true;}
 async function dailyConfirmed(env,platform){
- const today=now().slice(0,10),jobs=await list(env,"job:");
+ const today=localDay(),jobs=await list(env,"job:");
  return jobs.filter(j=>j.platform===platform&&j.confirmed&&String(j.completed_at||"").startsWith(today)).length;
 }
 async function persistRouting(env,selected){ return await queueStub(env).setRouting(selected); }
@@ -276,8 +261,8 @@ async function failoverSelfTest(){
  ];
  const primary=selectHost("tiktok",base);
  const github=selectHost("tiktok",base.map(e=>e.executor==="render"?{...e,healthy:false}:e));
- const local=selectHost("tiktok",base.map(e=>e.executor==="render"?{...e,healthy:false}:e.executor==="github"?{...e,healthy:false}:e));
- return {ok:primary==="render"&&github==="github"&&local==="local",primary,after_render_failure:github,after_github_failure:local,priority:priorities().tiktok};
+ const none=selectHost("tiktok",base.map(e=>e.executor==="render"?{...e,healthy:false}:e.executor==="github"?{...e,healthy:false}:e));
+ return {ok:primary==="render"&&github==="github"&&none===null,primary,after_render_failure:github,after_github_failure:none,local_retired:!priorities().tiktok.includes("local"),priority:priorities().tiktok};
 }
 export default {
  async fetch(request,env={}){
@@ -290,7 +275,7 @@ export default {
    const auth=request.headers.get("Authorization")||"",token=auth.toLowerCase().startsWith("bearer ")?auth.slice(7).trim():"",v=await verifyGithubOidc(token,env);
    if(!v.ok)return json({ok:false,error:"unauthorized"},401);
   }
-  if(url.pathname==="/auth-diag"){const t=String(env.LOCAL_EXECUTOR_TOKEN||"");return json({token_present:!!t,pub_present:!!String(env.LOCAL_EXECUTOR_PUBLIC_KEY||"")});}
+  if(url.pathname==="/auth-diag") return json({ok:true,local_executor_retired:true,auth:"oidc_or_control_token"});
   if(url.pathname==="/probes"){const s=await publicState(env);return json({ok:true,ts:now(),probes:s.probes,selected:s.selected});}
   if(url.pathname==="/decision"){const s=await publicState(env);return json({ok:true,ts:now(),selected:s.selected,reasons:s.reasons,routing:s.routing});}
   if(url.pathname==="/queue-health"){const qs=await queueStub(env).stats(localDay());return json({ok:true,backend:"durable-object-sqlite",daily_limit:DAILY_LIMIT,counts:qs.counts,total_confirmed:qs.total_confirmed,remaining:qs.remaining,dedupe:qs.dedupe,jobs:qs.jobs,ts:now()});}
@@ -322,7 +307,7 @@ export default {
    return json({ok:true,state:row});
   }
   if(url.pathname==="/heartbeat"&&request.method==="POST"){
-   const b=await request.json(); if(!b.executor)return json({ok:false,error:"executor_required"},400); if(!(await executorAuth(request,env,b)) && !(await localExecutorAuth(request,env,b)))return json({ok:false,error:"unauthorized"},401);
+   const b=await request.json(); if(!b.executor)return json({ok:false,error:"executor_required"},400); if(String(b.executor)==="local")return json({ok:false,error:"local_executor_retired"},410); if(!(await executorAuth(request,env,b)))return json({ok:false,error:"unauthorized"},401);
    const q=queueStub(env),prev=await q.getExecutor(b.executor)||{},failures=Number(b.failures??prev.failures??0),row={...prev,...b,executor:b.executor,heartbeat_at:now(),failures};
    if(failures>=3)row.disabled_until=new Date(Date.now()+15*60*1000).toISOString(); else if(b.healthy===true && Number(row.consecutive_failures||0)===0)row.disabled_until=null;
    await q.setExecutor(row);return json({ok:true,state:row});
@@ -337,7 +322,7 @@ export default {
    else return json({ok:false,error:"not_found"},404);
    return json(out,out.status||200);
   }
-  if(url.pathname==="/job/enqueue-local"&&request.method==="POST"){const rawBody=await request.text();let body;try{body=JSON.parse(rawBody);}catch{return json({ok:false,error:"invalid_json"},400);}if(String(body.executor)!=="local"||!(await executorAuth(request,env,body,rawBody)))return json({ok:false,error:"unauthorized"},401);if(!body.id||!["tiktok","kwai"].includes(body.platform))return json({ok:false,error:"id_and_platform_required"},400);const out=await queueStub(env).enqueue(body);return json(out,200);}
+  if(url.pathname==="/job/enqueue-local") return json({ok:false,error:"local_executor_retired"},410);
   if(url.pathname==="/job/enqueue"&&request.method==="POST"){const rawBody=await request.text();let b;try{b=JSON.parse(rawBody);}catch{return json({ok:false,error:"invalid_json"},400);}let ok=adminAuth(request,env);if(!ok&&String(b.executor)==="local")ok=await executorAuth(request,env,b,rawBody);if(!ok&&String(b.executor)==="github"){const bearer=request.headers.get("Authorization")||"";const token=bearer.toLowerCase().startsWith("bearer ")?bearer.slice(7).trim():"";if(token){const v=await verifyGithubOidc(token,env);ok=v.ok;}}if(!ok)return json({ok:false,error:"unauthorized"},401);if(!b.id||!["tiktok","kwai"].includes(b.platform))return json({ok:false,error:"id_and_platform_required"},400);return json(await queueStub(env).enqueue(b));}
   if(!adminAuth(request,env))return json({ok:false,error:"unauthorized"},401);
   if(url.pathname==="/status"){const s=await publicState(env),qs=await queueStub(env).stats(localDay());return json({ok:true,ts:now(),executors:s.executors,counts:qs.counts,remaining:qs.remaining,daily_limit:DAILY_LIMIT,selected:s.selected,routing:s.routing,jobs:qs.jobs});}
