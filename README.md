@@ -10,4 +10,4 @@ Required GitHub Actions secrets:
 - ANTHARES_CONTROL_URL
 - ANTHARES_CONTROL_TOKEN
 
-The runner installs only a previously validated Kwai package supplied as a workflow artifact or release asset.
+The runner downloads the validated Kwai package from this repository's public `kwai-package-vault` release and verifies its pinned SHA-256 before installation. No private-repository token is required.
