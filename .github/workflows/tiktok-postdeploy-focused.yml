@@ -1,0 +1,55 @@
+name: TikTok Post-Deploy Focused Diagnostics
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  focused:
+    name: "${{ matrix.label }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        include:
+          - { id: "02", label: "02 OIDC public runner -> Render" }
+          - { id: "04", label: "04 TikTok session persistence" }
+          - { id: "05", label: "05 Alternate account identity" }
+          - { id: "08", label: "08 TikTok upload auth dry-run" }
+          - { id: "09", label: "09 MP4 dry-run" }
+          - { id: "10", label: "10 Publish guard dry-run" }
+    env:
+      RENDER_WORKER_URL: "https://anthares-tiktok-render-rootless.onrender.com"
+    steps:
+      - name: Focused post-deploy probe
+        env:
+          TEST_ID: ${{ matrix.id }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.parse,urllib.request,urllib.error
+          base=os.environ['RENDER_WORKER_URL'].rstrip('/'); tid=os.environ['TEST_ID']
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+('&' if '?' in os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] else '?')+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          q=urllib.request.Request(u,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN'],'Accept':'application/json'})
+          with urllib.request.urlopen(q,timeout=20) as r: token=json.load(r)['value']
+          def call(path,payload=None):
+              h={'Authorization':'Bearer '+token,'Accept':'application/json'}
+              data=None
+              if payload is not None:
+                  data=json.dumps(payload).encode(); h['Content-Type']='application/json'
+              q=urllib.request.Request(base+path,data=data,method='POST' if data else 'GET',headers=h)
+              try:
+                  with urllib.request.urlopen(q,timeout=120) as r:return json.load(r)
+              except urllib.error.HTTPError as e:
+                  body=e.read().decode('utf-8','replace'); print('HTTP',e.code,body); raise
+          if tid in {'02','04','05'}:
+              d=call('/session-status'); print(json.dumps(d))
+              if tid=='02': assert 'ok' in d
+              if tid=='04': assert d.get('bootstrapped')
+              if tid=='05': assert d.get('identity_verified') and d.get('ready_for_tiktok')
+          else:
+              p={'test':tid,'media_url':'https://samplelib.com/lib/preview/mp4/sample-5s.mp4','plan':{'segment_id':'focused-'+tid,'title':'Literatura e escrita — Universo Anthares'}}
+              d=call('/publish-dry-run',p); print(json.dumps(d)); assert d.get('ok') and d.get('no_publish',True)
+          print('PASS focused-'+tid)
+          PY
