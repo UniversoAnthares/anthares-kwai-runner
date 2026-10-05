@@ -35,6 +35,11 @@ for i in range(20):
     r=dump(f"s{i}"); t=" ".join(lab(n) for n in ns(r))
     if "profile" in t and ("home" in t or "discover" in t or "inbox" in t):
         summary("MAIN_NAV",r);break
+    # Explicit final onboarding gate discovered in run 37380757409.
+    start=[n for n in ns(r) if n.attrib.get("resource-id","").endswith("tiny_discovery_left_operation_btn") or lab(n)=="start now"]
+    if start:
+        print("START_NOW_GATE=1")
+        if tap(start[0]): continue
     if interest(r):continue
     adb("shell","input","swipe","850","1100","180","1100","250");time.sleep(1)
 else:
