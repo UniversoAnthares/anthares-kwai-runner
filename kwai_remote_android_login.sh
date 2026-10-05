@@ -75,6 +75,7 @@ if [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
         log "KWAI_LOGIN_CONFIRMED_AUTOMATIC"
         capture
         adb shell run-as com.kwai.video id >>"$REPORT" 2>&1 && log "APP_STATE_RUN_AS_AVAILABLE" || log "APP_STATE_RUN_AS_UNAVAILABLE"
+        bash kwai_session_state.sh save >>"$REPORT" 2>&1 || log "KWAI_SESSION_SAVE_WARNING"
         exit 0
       fi
     done
@@ -98,6 +99,7 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
       # Do not persist a full AVD. Probe whether app-scoped state is exportable;
       # if not, the next stage will use a rootable disposable image and encrypted app-data only.
       adb shell run-as com.kwai.video id >>"$REPORT" 2>&1 && log "APP_STATE_RUN_AS_AVAILABLE" || log "APP_STATE_RUN_AS_UNAVAILABLE"
+      bash kwai_session_state.sh save >>"$REPORT" 2>&1 || log "KWAI_SESSION_SAVE_WARNING"
       exit 0
     fi
   fi
