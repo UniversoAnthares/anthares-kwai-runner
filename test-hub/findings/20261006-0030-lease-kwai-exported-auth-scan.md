@@ -2,9 +2,9 @@
 STATUS: RUNNING
 AREA: kwai
 DATE: 2026-10-06
-RUN: pending
+RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37388571002
 JOB: static manifest scan
-COMMIT: pending
+COMMIT: 8e90ad7c07e00afde8f6bd74909f0f627950a4ae
 SUPERSEDES: none
 EXPIRES: 2026-10-06T02:15:00-04:00
 
