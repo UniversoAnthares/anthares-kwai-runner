@@ -57,6 +57,27 @@ def fill(value, index=0):
     return True
 
 
+
+def tap_resource_id(suffix):
+    r=dump()
+    for n in nodes(r):
+        rid=n.attrib.get("resource-id","")
+        if rid.endswith(suffix) and tap_node(n):
+            return True
+    return False
+
+def clear_interest_discovery():
+    # Current Kwai onboarding uses icon-only like/dislike controls for 11 cards.
+    # Resource IDs are stable even though the buttons have no text/content-desc.
+    for _ in range(15):
+        r=dump()
+        ids={n.attrib.get("resource-id","") for n in nodes(r)}
+        if not any(x.endswith("tiny_discovery_like_button") or x.endswith("tiny_discovery_dislike_button") for x in ids):
+            return
+        if not tap_resource_id("tiny_discovery_dislike_button"):
+            tap_resource_id("tiny_discovery_like_button")
+        time.sleep(.6)
+
 def dismiss_android_permission_dialogs():
     # Runtime permission dialogs are owned by Android, not Kwai. Clear them before
     # looking for Kwai controls. Denying notifications is safe for publishing/login.
@@ -79,10 +100,12 @@ def dismiss_android_permission_dialogs():
             time.sleep(1)
 
 dismiss_android_permission_dialogs()
+clear_interest_discovery()
 
 # Clear common onboarding screens without resetting app data.
 for _ in range(8):
     dismiss_android_permission_dialogs()
+    clear_interest_discovery()
     r=dump(); txt=" ".join(label(n) for n in nodes(r))
     if any(k in txt for k in ("log in","login","entrar","sign in","telefone","phone","email")): break
     if tap_matching(("skip","pular","later","agora não","continue","continuar","next","próximo")): continue
