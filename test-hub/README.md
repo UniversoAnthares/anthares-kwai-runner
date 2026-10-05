@@ -48,22 +48,32 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 
 ## Estado consolidado atual
 
-> Atualizado em 2026-10-05 18:55 -04:00. Antes de testar, ler também os findings mais recentes da área; este resumo nunca substitui os findings append-only.
+> Atualizado em 2026-10-05 19:28 -04:00 pelo CHAT 5/QA. Os findings append-only continuam sendo a autoridade detalhada.
 
 ### Arquitetura comprovada/descartada
 - PROVEN: runner público GitHub funciona sem depender da cota do repositório privado.
 - PROVEN: vault público validado; PRIVATE_REPO_TOKEN não pertence à arquitetura final.
-- PROVEN: Android API 35 x86_64 + tradução ARM; splits Kwai base + dfm_ug + config.arm64_v8a + config.xxhdpi instalam e chegam a KWAI_LAUNCHED.
+- PROVEN: Android API 35 x86_64 + tradução ARM; splits Kwai necessários instalam e chegam a KWAI_LAUNCHED.
 - ABANDONED: PC como executor/fallback; Oracle; Open Platform Kuaishou como publicador do Kwai brasileiro; Aurora/Play Store como aquisição principal.
+- Cloudflare: snapshot atual contém fila Durable Object, dedupe temporal e correção OIDC, mas o deploy público 37387933513 NÃO chegou ao Wrangler porque CLOUDFLARE_API_TOKEN estava vazio. Código implementado não equivale a deploy production-PROVEN.
 
 ### Kwai: cadeia causal atual
-- PROVEN: restart-after-nav recuperou feed real + Home/Discover/Inbox/Profile no run 37378856592.
-- PROVEN: análise estática encontrou TinyLoginActivity, TinyUserInfoActivity, TinyGoogleSSOActivity, TinyLoginPluginImpl, AutoLoginActivity e recursos tiny_login_* / auth_token_login_button no run 37384780073.
-- FAILED: matrizes que ramificaram antes de normalizar o estado inicial; onboarding varia entre emuladores.
-- FAILED: Profile Account Inspector terminou NO_MAIN_NAV antes de testar Profile/login.
-- FAILED: matrizes post-gate misturaram estados e não encontraram EditText/auth.
-- RUNNING: State Driver Matrix 37384859435 usa FSM state-driven em 10 réplicas; critério é FSM_MAIN_REACHED/10.
-- INVALID TEST: Login Activity Metadata 37384917974 ficou verde apesar de "aapt: command not found"; não é evidência sobre activities.
+- PROVEN: FSM state-driven alcança MAIN em múltiplas réplicas e deve ser preservada; não voltar a matrizes pré-normalização.
+- UNKNOWN/NOT_TESTED: recovery específico de Pixel Launcher ANR; run 37385649745 teve seis FSM_MAIN_REACHED, mas nenhum job concluído observou LAUNCHER_ANR e quatro foram cancelados.
+- PROVEN: Manifest válido no run 37388030409 declarou SplashLoginActivity, PhoneAccountActivityV2, EmailLoginActivity, LoginActivity, CommonLoginActivity, KwaiAuthActivity e outras.
+- IMPORTANTE: SplashLoginActivity, PhoneAccountActivityV2, EmailLoginActivity e LoginActivity são android:exported=false no Manifest. Permission Denial via adb shell não prova ausência da UI. KwaiAuthActivity/LivePartnerAuthActivity são exported=true.
+- RUNNING: Kwai Declared Login Activity Probe 37388231997. Interpretar separadamente permissão de start e existência de UI; não classificar Activities internas como inexistentes por Permission Denial.
+- PROVEN somente STATIC/SIMULATED: Kwai publish safety run 37387709252 emitiu KWAI_PUBLISH_SAFETY_STATIC_OK. Publicação real continua sem prova e o workflow real está fail-closed até READY.
+
+### TikTok: cadeia causal atual
+- RUNNING: session restore/identity probe 37388273031; job publish está skipped nesse push e não deve ser confundido com publicação real.
+- Modo DIAGNOSTIC atual: 3 posts/dia com observação 3–6h para investigar baixa distribuição. A meta/capacidade de produção 100/dia permanece separada; nenhum modo deve ser usado como prova do outro.
+- O caminho workflow_dispatch de tiktok-real-publish ainda não satisfaz aceitação production-PROVEN: precisa alinhar endpoint ativo, validar identidade imediatamente antes, verificar o novo post independentemente e fechar ledger/estado incerto.
+
+### Control plane / fila
+- Snapshot atual ainda contém prioridades/fallback `local`; CHAT 4 possui lease ativo para removê-lo e endurecer invariantes.
+- QA encontrou que complete()/reconcile() ainda confiam em `confirmed=true` do chamador com validação insuficiente do estado anterior/publication_started/evidência. Não classificar queue safety como fechada até o controlador rejeitar confirmação prematura.
+- O hub tinha RUNNING obsoletos; findings QA recentes os supersedem. Sempre verificar o finding mais novo antes de usar o resumo.
 
 ### Regra experimental obrigatória
 Antes de disparar novo teste, o finding RUNNING deve declarar:
