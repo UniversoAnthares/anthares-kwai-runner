@@ -42,12 +42,20 @@ jobs:
         run: |
           curl -fL --retry 2 --connect-timeout 5 --max-time 30 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x /tmp/cloudflared
+      - name: Restore encrypted Kwai session cache
+        uses: actions/cache/restore@v4
+        with:
+          path: kwai-session.enc
+          key: kwai-session-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            kwai-session-${{ runner.os }}-
       - name: Boot Android and expose Kwai
         uses: reactivecircus/android-emulator-runner@v2
         env:
           REMOTE_ANDROID_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}-anthares
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_SESSION_FILE: kwai-session.enc
         with:
           api-level: 35
           arch: x86_64
@@ -67,6 +75,12 @@ jobs:
               echo "HEADLESS_KWAI_ACCEPTANCE=FALLBACK"
               timeout 240s bash kwai_remote_android_login.sh
             fi
+      - name: Save encrypted Kwai session cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: kwai-session.enc
+          key: kwai-session-${{ runner.os }}-${{ github.run_id }}
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
