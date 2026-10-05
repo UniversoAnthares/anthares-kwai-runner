@@ -1,0 +1,27 @@
+name: TikTok Low Distribution Circuit Breaker
+on:
+  workflow_dispatch:
+    inputs:
+      recent_views_csv:
+        description: "Views dos posts automáticos recentes, ex.: 2,1,3"
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  evaluate:
+    runs-on: ubuntu-slim
+    steps:
+      - name: Evaluate containment rule
+        env:
+          VIEWS: ${{ inputs.recent_views_csv }}
+        run: |
+          python - <<'PY'
+          import os
+          vals=[int(x.strip()) for x in os.environ['VIEWS'].split(',') if x.strip()]
+          if len(vals)<3: raise SystemExit('need at least 3 observations')
+          low=all(v<10 for v in vals[-3:])
+          print('TIKTOK_LOW_DISTRIBUTION_BREAKER='+('TRIGGERED' if low else 'CLEAR'))
+          if low:
+              print('ACTION=keep automatic publishing quarantined at diagnostic cadence; require controlled comparison before scaling')
+          PY

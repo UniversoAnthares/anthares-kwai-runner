@@ -1,0 +1,24 @@
+name: Kwai APK Component Matrix
+on:
+  push:
+    paths: ['.apk-component-matrix-trigger']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [activities,services,receivers,providers,schemes,login-strings,profile-strings,dfm-files]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      MODE: ${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -eu
+          curl -fL --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+          rm -rf kwai-vault && mkdir kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+          bash kwai_apk_component_probe.sh "$MODE"
