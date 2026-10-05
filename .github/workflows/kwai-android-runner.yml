@@ -5,37 +5,43 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   android:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
-
+    timeout-minutes: 20
     steps:
-      - name: Checkout runner
+      - name: Checkout public runner
         uses: actions/checkout@v4
-
-      - name: Check required secrets without exposing them
+      - name: Check required secrets
         env:
+          PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
-          ANTHARES_CONTROL_URL: ${{ secrets.ANTHARES_CONTROL_URL }}
-          ANTHARES_CONTROL_TOKEN: ${{ secrets.ANTHARES_CONTROL_TOKEN }}
         run: |
-          test -n "$KWAI_LOGIN"
-          test -n "$KWAI_PASSWORD"
-          test -n "$ANTHARES_CONTROL_URL"
-          test -n "$ANTHARES_CONTROL_TOKEN"
+          test -n "$PRIVATE_REPO_TOKEN" || { echo "PRIVATE_REPO_TOKEN missing"; exit 41; }
+          test -n "$KWAI_LOGIN" || { echo "KWAI_LOGIN missing"; exit 42; }
+          test -n "$KWAI_PASSWORD" || { echo "KWAI_PASSWORD missing"; exit 43; }
           echo "required secrets present"
-
-      - name: Boot Android and keep runner disposable
+      - name: Download validated Kwai vault from private repository
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          rm -rf kwai-vault kwai-vault.zip
+          gh release download kwai-package-vault --repo UniversoAnthares/anthares-clipper --pattern kwai-vault.zip --output kwai-vault.zip
+          unzip -q kwai-vault.zip -d kwai-vault
+          test -s kwai-vault/MANIFEST.tsv
+          echo "validated Kwai vault acquired"
+      - name: Download Cloudflare tunnel client
+        run: |
+          curl -fL --retry 2 --connect-timeout 5 --max-time 30 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x /tmp/cloudflared
+      - name: Boot Android and expose Kwai
         uses: reactivecircus/android-emulator-runner@v2
         env:
+          REMOTE_ANDROID_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}-anthares
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
-          ANTHARES_CONTROL_URL: ${{ secrets.ANTHARES_CONTROL_URL }}
-          ANTHARES_CONTROL_TOKEN: ${{ secrets.ANTHARES_CONTROL_TOKEN }}
         with:
           api-level: 35
           arch: x86_64
@@ -47,10 +53,14 @@ jobs:
           emulator-boot-timeout: 120
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
-          script: |
-            chmod +x kwai_runner.sh
-            echo "Runner infrastructure initialized"
-            # Package installation is intentionally disabled until the validated
-            # vault artifact is attached to this public runner.
-            adb shell getprop ro.build.version.sdk
-            adb shell pm path com.kwai.video || true
+          script: timeout 900s bash kwai_remote_android_login.sh
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-runner-diagnostics-${{ github.run_id }}
+          path: |
+            kwai-remote-status.txt
+            kwai-remote-ready.png
+          if-no-files-found: warn
+          retention-days: 1
