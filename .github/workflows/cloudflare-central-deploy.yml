@@ -1,0 +1,35 @@
+name: Cloudflare Central Deploy Public Runner
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout public runner
+        uses: actions/checkout@v4
+      - name: Fetch exact controller source from private repository
+        env:
+          GH_TOKEN: ${{ secrets.ANTHARES_PRIVATE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          mkdir -p cloudflare-worker/src
+          curl --fail-with-body -sS             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github.raw+json"             https://api.github.com/repos/UniversoAnthares/anthares-clipper/contents/cloudflare-worker/src/index.js             -o cloudflare-worker/src/index.js
+          curl --fail-with-body -sS             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github.raw+json"             https://api.github.com/repos/UniversoAnthares/anthares-clipper/contents/cloudflare-worker/wrangler.toml             -o cloudflare-worker/wrangler.toml
+          test -s cloudflare-worker/src/index.js
+          test -s cloudflare-worker/wrangler.toml
+      - name: Deploy exact controller to Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          cd cloudflare-worker
+          npx --yes wrangler@4.43.0 deploy
+      - name: Verify public health
+        run: |
+          set -euo pipefail
+          curl --fail-with-body -sS https://anthares-control.anthares1.workers.dev/health
