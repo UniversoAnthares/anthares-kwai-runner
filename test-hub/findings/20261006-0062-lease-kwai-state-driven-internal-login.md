@@ -2,9 +2,9 @@
 STATUS: RUNNING
 AREA: kwai
 DATE: 2026-10-06
-RUN: pending
+RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37389749589
 JOB: Android state-driven login control probe
-COMMIT: pending
+COMMIT: 50302956da7da5165611b155b83e3094ed684de1
 SUPERSEDES: none
 EXPIRES: 2026-10-06T03:45:00-04:00
 
