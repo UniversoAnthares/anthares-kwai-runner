@@ -73,14 +73,15 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 
 ### Control plane / fila
 - PROVEN no snapshot: PC/local, Google e Oracle foram removidos do roteamento final; failover TikTok é Render -> GitHub -> nenhum executor elegível. Isto ainda não prova deploy em produção.
-- QA encontrou que complete()/reconcile() ainda confiam em `confirmed=true` do chamador com validação insuficiente do estado anterior/publication_started/evidência. Não classificar queue safety como fechada até o controlador rejeitar confirmação prematura.
+- PROVEN no snapshot: complete()/reconcile() agora são fail-closed: confirmação positiva exige estado anterior válido, publication_started quando aplicável e remote_id/confirmation_evidence; run 37388863529.
 - O hub tinha RUNNING obsoletos; findings QA recentes os supersedem. Sempre verificar o finding mais novo antes de usar o resumo.
 
 ### Control plane central
 - PROVEN no snapshot: Durable Object SQLite cobre enqueue/lease/started/complete/fail/reconcile, dedupe por chave e overlap temporal, UNCERTAIN e circuit breaker.
 - PROVEN no snapshot: PC/local, Google e Oracle não pertencem ao roteamento final; failover TikTok é Render -> GitHub -> nenhum executor elegível.
-- IMPLEMENTED, ainda não DEPLOYED/PROVEN: allowlist OIDC para tiktok-central-session-read.yml.
-- BLOCKER atual de deploy: runner público validou o snapshot, mas CLOUDFLARE_API_TOKEN está ausente nesse repositório; não repetir deploy sem mudança causal de credencial.
+- PROVEN no snapshot final v12: allowlist OIDC para tiktok-central-session-read.yml, confirmação fail-closed, PC/Google/Oracle removidos e sem HLS WordPress hardcoded.
+- PRODUÇÃO COMPROVADAMENTE STALE: run 37389095100 mostrou Worker ativo ainda selecionando local; health verde não basta. Deploy só é aceito com version=2026-10-05-no-pc-confirmation-v12 e pc_fallback=false.
+- BLOCKER atual de deploy: runner público não possui CLOUDFLARE_API_TOKEN. Deploy automático conhecido foi colocado em quarentena; não repetir sem mudança causal de credencial. Workers Builds/Git integration é alternativa oficial sem segredo no GitHub, mas requer conexão inicial no painel Cloudflare.
 
 ### Regra experimental obrigatória
 Antes de disparar novo teste, o finding RUNNING deve declarar:
