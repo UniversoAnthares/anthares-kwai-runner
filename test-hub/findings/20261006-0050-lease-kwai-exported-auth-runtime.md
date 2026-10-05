@@ -2,9 +2,9 @@
 STATUS: RUNNING
 AREA: kwai
 DATE: 2026-10-06
-RUN: pending
+RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37389007878
 JOB: Android runtime probe
-COMMIT: pending
+COMMIT: 2d6a094237329dbc196902b2c0bede40881daff9
 SUPERSEDES: none
 EXPIRES: 2026-10-06T03:15:00-04:00
 BASELINE_PROVEN: test-hub/findings/20261006-0048-kwai-auth-intent-contracts-proven.md
