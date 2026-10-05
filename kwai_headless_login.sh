@@ -18,6 +18,9 @@ if ! adb shell pm path com.kwai.video 2>/dev/null | grep -q package:; then
   bash kwai_vault_install.sh >>"$REPORT" 2>&1 || { log "FAIL: validated-vault-install"; exit 30; }
 fi
 log "KWAI_INSTALLED"
+if bash kwai_session_state.sh restore >>"$REPORT" 2>&1; then
+  log "KWAI_SESSION_RESTORE_ATTEMPTED"
+fi
 adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >>"$REPORT" 2>&1 || { log "FAIL: kwai-launch"; exit 31; }
 for _ in $(seq 1 15); do
   adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null 2>&1 || true
@@ -45,6 +48,7 @@ for _ in $(seq 1 15); do
     log "KWAI_SESSION_AUTHENTICATED"
     adb shell pidof com.kwai.video >/dev/null || { log "FAIL: kwai-process-missing"; exit 62; }
     log "KWAI_HEALTH_OK"
+    bash kwai_session_state.sh save >>"$REPORT" 2>&1 || log "KWAI_SESSION_SAVE_WARNING"
     exit 0
   fi
 done
