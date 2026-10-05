@@ -75,6 +75,12 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 - QA encontrou que complete()/reconcile() ainda confiam em `confirmed=true` do chamador com validação insuficiente do estado anterior/publication_started/evidência. Não classificar queue safety como fechada até o controlador rejeitar confirmação prematura.
 - O hub tinha RUNNING obsoletos; findings QA recentes os supersedem. Sempre verificar o finding mais novo antes de usar o resumo.
 
+### Control plane central
+- PROVEN no snapshot: Durable Object SQLite cobre enqueue/lease/started/complete/fail/reconcile, dedupe por chave e overlap temporal, UNCERTAIN e circuit breaker.
+- PROVEN no snapshot: PC/local, Google e Oracle não pertencem ao roteamento final; failover TikTok é Render -> GitHub -> nenhum executor elegível.
+- IMPLEMENTED, ainda não DEPLOYED/PROVEN: allowlist OIDC para tiktok-central-session-read.yml.
+- BLOCKER atual de deploy: runner público validou o snapshot, mas CLOUDFLARE_API_TOKEN está ausente nesse repositório; não repetir deploy sem mudança causal de credencial.
+
 ### Regra experimental obrigatória
 Antes de disparar novo teste, o finding RUNNING deve declarar:
 1. BASELINE_PROVEN: finding/estado comprovado do qual parte.
