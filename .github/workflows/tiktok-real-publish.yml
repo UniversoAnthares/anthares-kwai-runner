@@ -1,0 +1,45 @@
+name: TikTok Real Publish
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        required: true
+        type: string
+      video_title:
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - name: Publish through remote Render executor
+        shell: bash
+        env:
+          VIDEO_URL: ${{ inputs.video_url }}
+          VIDEO_TITLE: ${{ inputs.video_title }}
+        run: |
+          set -euo pipefail
+          BASE="https://anthares-tiktok-worker.onrender.com"
+          OIDC="$(python - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+('&' if '?' in os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] else '?')+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          req=urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+          with urllib.request.urlopen(req,timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )"
+          curl -fL --retry 3 --max-time 180 -o /tmp/publish.mp4 "$VIDEO_URL"
+          python - <<'PY'
+          import json,os
+          json.dump({'segment_id':'public-runner-'+os.environ['GITHUB_RUN_ID'],'title':os.environ['VIDEO_TITLE']},open('/tmp/plan.json','w'))
+          PY
+          curl --fail-with-body -sS --max-time 420 -X POST "$BASE/publish"             -H "Authorization: Bearer $OIDC"             -F "media=@/tmp/publish.mp4;type=video/mp4"             -F "plan=</tmp/plan.json" > /tmp/result.json
+          python - <<'PY'
+          import json
+          x=json.load(open('/tmp/result.json'))
+          if not x.get('ok'): raise SystemExit('remote TikTok publication not confirmed')
+          print('TIKTOK_REMOTE_PUBLICATION_CONFIRMED')
+          PY

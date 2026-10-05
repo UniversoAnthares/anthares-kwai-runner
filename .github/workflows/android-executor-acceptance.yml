@@ -43,14 +43,14 @@ jobs:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
         with:
-          api-level: 33
+          api-level: 35
           arch: x86_64
           target: google_apis
           profile: pixel_5
           ram-size: 2048M
           cores: 2
           disable-animations: true
-          emulator-boot-timeout: 300
+          emulator-boot-timeout: 180
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
