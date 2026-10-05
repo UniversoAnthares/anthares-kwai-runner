@@ -2,9 +2,6 @@ name: Bootstrap FreeVPS Android Host
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.freevps-validation-trigger'
 
 jobs:
   bootstrap:
