@@ -33,6 +33,7 @@ jobs:
           emulator-boot-timeout: 240
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
+            bash <<'BASH'
             set -euo pipefail
             bash kwai_vault_install.sh
             adb shell monkey -p com.kwai.video 1
@@ -46,6 +47,7 @@ jobs:
             set -e
             echo "DIRECT_SEND_PROBE_RC=$rc"
             exit "$rc"
+            BASH
       - name: Upload direct-send evidence
         if: always()
         uses: actions/upload-artifact@v4
