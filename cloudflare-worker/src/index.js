@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 ﻿const memory = new Map();
+const CONTROL_VERSION="2026-10-05-no-pc-confirmation-v12";
 
 function json(data, status=200) {
   return Response.json(data, {status, headers: {
@@ -269,8 +270,8 @@ export default {
   const url=new URL(request.url);
   if(url.pathname==="/tiktok/session-state") return await tiktokSessionState(request,env);
   if(url.pathname==="/failover-self-test") return json(await failoverSelfTest());
-  if(url.pathname==="/health") return json({ok:true,service:"anthares-control",provider:"cloudflare",role:"control-plane",persistent_state:!!env.ANTHARES_STATE,ts:now()});
-  if(url.pathname==="/strategy") return json({ok:true,strategy:"split-executors-v10-central-failover",execution_priority:priorities(),oracle:false,google_compute:false});
+  if(url.pathname==="/health") return json({ok:true,service:"anthares-control",provider:"cloudflare",role:"control-plane",version:CONTROL_VERSION,persistent_state:!!env.ANTHARES_STATE,queue_bound:!!env.ANTHARES_QUEUE,pc_fallback:false,ts:now()});
+  if(url.pathname==="/strategy") return json({ok:true,strategy:"split-executors-v12-no-pc-failclosed",execution_priority:priorities(),oracle:false,google_compute:false});
   if(["/auth-diag","/probes","/decision","/queue-health"].includes(url.pathname)&&!adminAuth(request,env)){
    const auth=request.headers.get("Authorization")||"",token=auth.toLowerCase().startsWith("bearer ")?auth.slice(7).trim():"",v=await verifyGithubOidc(token,env);
    if(!v.ok)return json({ok:false,error:"unauthorized"},401);
