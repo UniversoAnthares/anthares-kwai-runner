@@ -4,9 +4,11 @@ Public, disposable Android runner for the Universo Anthares Kwai publishing pipe
 
 This repository contains only generic runner infrastructure. Account credentials, private controller URLs, private application logic and publishing policy remain outside the repository.
 
-Required GitHub Actions secrets:
+Required now:
 - KWAI_LOGIN
 - KWAI_PASSWORD
+
+Reserved for the later controller-integration stage (not required by the current Android acceptance path):
 - ANTHARES_CONTROL_URL
 - ANTHARES_CONTROL_TOKEN
 
