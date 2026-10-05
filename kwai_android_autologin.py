@@ -56,8 +56,33 @@ def fill(value, index=0):
     time.sleep(.7)
     return True
 
+
+def dismiss_android_permission_dialogs():
+    # Runtime permission dialogs are owned by Android, not Kwai. Clear them before
+    # looking for Kwai controls. Denying notifications is safe for publishing/login.
+    for _ in range(8):
+        r=dump()
+        ns=nodes(r)
+        packages={n.attrib.get("package","") for n in ns}
+        if not any("permissioncontroller" in p for p in packages):
+            return
+        acted=False
+        for words in (("don’t allow","don't allow","not now","agora não","não permitir"),
+                      ("allow","permitir","while using the app","durante o uso do app")):
+            for n in ns:
+                if any(w in label(n) for w in words) and tap_node(n):
+                    acted=True
+                    break
+            if acted: break
+        if not acted:
+            adb("shell","input","keyevent","4")
+            time.sleep(1)
+
+dismiss_android_permission_dialogs()
+
 # Clear common onboarding screens without resetting app data.
 for _ in range(8):
+    dismiss_android_permission_dialogs()
     r=dump(); txt=" ".join(label(n) for n in nodes(r))
     if any(k in txt for k in ("log in","login","entrar","sign in","telefone","phone","email")): break
     if tap_matching(("skip","pular","later","agora não","continue","continuar","next","próximo")): continue
