@@ -48,19 +48,32 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 
 ## Estado consolidado atual
 
-- PROVEN: repositório público `UniversoAnthares/anthares-kwai-runner` recebe GitHub-hosted runners sem depender da cota do repositório privado.
-- PROVEN: vault público validado; `PRIVATE_REPO_TOKEN` não faz parte da arquitetura final.
-- PROVEN: Android API 35 x86_64 anuncia arm64-v8a e `libndk_translation.so`.
-- PROVEN: conjunto de splits Kwai: base + `dfm_ug` + `config.arm64_v8a` + `config.xxhdpi`; instala e chega a `KWAI_LAUNCHED`.
-- FAILED: autologin anterior procurou login antes de atravessar permissão/onboarding; retornou RC=3.
-- FAILED: matrix de 10 probes do run 37372686273 não testou as hipóteses: heredoc Python foi quebrado pelo executor em comandos shell (`import: not found`). Não interpretar esses jobs como resultado das estratégias.
-- RUNNING: matrix corrigida usa `kwai_onboarding_probe.py`, run 37377433515.
+> Atualizado em 2026-10-05 18:55 -04:00. Antes de testar, ler também os findings mais recentes da área; este resumo nunca substitui os findings append-only.
+
+### Arquitetura comprovada/descartada
+- PROVEN: runner público GitHub funciona sem depender da cota do repositório privado.
+- PROVEN: vault público validado; PRIVATE_REPO_TOKEN não pertence à arquitetura final.
+- PROVEN: Android API 35 x86_64 + tradução ARM; splits Kwai base + dfm_ug + config.arm64_v8a + config.xxhdpi instalam e chegam a KWAI_LAUNCHED.
 - ABANDONED: PC como executor/fallback; Oracle; Open Platform Kuaishou como publicador do Kwai brasileiro; Aurora/Play Store como aquisição principal.
 
+### Kwai: cadeia causal atual
+- PROVEN: restart-after-nav recuperou feed real + Home/Discover/Inbox/Profile no run 37378856592.
+- PROVEN: análise estática encontrou TinyLoginActivity, TinyUserInfoActivity, TinyGoogleSSOActivity, TinyLoginPluginImpl, AutoLoginActivity e recursos tiny_login_* / auth_token_login_button no run 37384780073.
+- FAILED: matrizes que ramificaram antes de normalizar o estado inicial; onboarding varia entre emuladores.
+- FAILED: Profile Account Inspector terminou NO_MAIN_NAV antes de testar Profile/login.
+- FAILED: matrizes post-gate misturaram estados e não encontraram EditText/auth.
+- RUNNING: State Driver Matrix 37384859435 usa FSM state-driven em 10 réplicas; critério é FSM_MAIN_REACHED/10.
+- INVALID TEST: Login Activity Metadata 37384917974 ficou verde apesar de "aapt: command not found"; não é evidência sobre activities.
+
+### Regra experimental obrigatória
+Antes de disparar novo teste, o finding RUNNING deve declarar:
+1. BASELINE_PROVEN: finding/estado comprovado do qual parte.
+2. FAILED_AVOIDED: FAILED relevantes e a alteração causal que impede repetição.
+3. SUCCESS_SIGNAL: evidência observável necessária para considerar sucesso.
+4. FAILURE_SIGNAL: evidência observável que encerra/refuta a hipótese.
+5. TEST_VALIDITY: como detectar falha do próprio harness; falha do harness não conta contra a hipótese.
+
+Não abrir nova matriz enquanto existir run causal relevante RUNNING, salvo camada independente. Job verde sem SUCCESS_SIGNAL explícito não é PROVEN.
+
 ## Concorrência
-
-O diretório `findings/` é append-only de propósito. Chats simultâneos devem criar arquivos únicos no padrão:
-
-`YYYYMMDD-HHMM-area-resumo-curto.md`
-
-Se dois chats trabalharem simultaneamente, ambos podem acrescentar evidência sem disputar um arquivo central. Este README é um índice/protocolo e só deve ser atualizado quando uma decisão consolidada mudar.
+O diretório `findings/` é append-only. Antes de novo experimento, consultar findings recentes e runs em andamento. Se dois chats atuam na mesma cadeia causal, o run mais recente declarado RUNNING tem precedência até produzir evidência.
