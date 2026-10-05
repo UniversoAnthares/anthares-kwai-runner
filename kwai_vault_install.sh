@@ -13,7 +13,8 @@ BRIDGE="$(adb shell getprop ro.dalvik.vm.native.bridge | tr -d '\r')"
 log "DEVICE_ABI=$ABI"
 log "NATIVE_BRIDGE=$BRIDGE"
 log "DEVICE_DENSITY=$DENSITY"
-BASE="$(find kwai-vault -type f \( -name 'base.apk' -o -name 'com.kwai.video.apk' \) | head -1)"
+BASE="$(find kwai-vault -type f -name 'com.kwai.video.apk' | head -1)"
+[ -n "$BASE" ] || BASE="$(find kwai-vault -type f -name 'base.apk' | head -1)"
 [ -n "$BASE" ] || { log FAIL_NO_BASE_APK; exit 40; }
 APKS=("$BASE")
 # Proven install set for this validated bundle: base + dfm_ug + ABI + density.
