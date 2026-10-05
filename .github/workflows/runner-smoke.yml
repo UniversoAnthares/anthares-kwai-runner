@@ -7,31 +7,69 @@ on:
 permissions:
   contents: read
 jobs:
-  smoke:
+  boot:
+    name: "01 BOOT"
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
-      - name: "01 BOOT STATIC"
-        run: |
+      - run: |
           echo PUBLIC_RUNNER_OK
           test -e /dev/kvm
           uname -a
-      - name: "02 INSTALLER STATIC"
-        run: |
+
+  installer:
+    name: "02 INSTALLER"
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
           bash -n kwai_vault_install.sh
           grep -q FAIL_NO_COMPATIBLE_ABI_SPLIT kwai_vault_install.sh
-      - name: "03 PERMISSIONS STATIC"
-        run: |
+
+  permissions:
+    name: "03 PERMISSIONS"
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
           python3 -m py_compile kwai_android_autologin.py
           grep -q dismiss_android_permission_dialogs kwai_android_autologin.py
-      - name: "04 ONBOARDING STATIC"
-        run: |
+
+  onboarding:
+    name: "04 ONBOARDING"
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
           grep -q tiny_discovery_like_button kwai_android_autologin.py
           grep -q tiny_discovery_dislike_button kwai_android_autologin.py
           grep -q clear_interest_discovery kwai_android_autologin.py
-      - name: "05 UI MAP STATIC"
-        run: |
+
+  ui_map:
+    name: "05 UI MAP"
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
           python3 -m py_compile kwai_auth_probe.py
           grep -q editable_nodes kwai_android_autologin.py
           grep -q tap_resource_id kwai_android_autologin.py
+
+  autologin_gate:
+    name: "06 AUTOLOGIN E2E"
+    needs: [boot, installer, permissions, onboarding, ui_map]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Credentialed E2E is isolated in Android Executor Acceptance"
+
+  auth_probe_gate:
+    name: "07 AUTH PROBE"
+    needs: [autologin_gate]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Auth probe follows credentialed acceptance"
