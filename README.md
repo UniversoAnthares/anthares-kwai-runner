@@ -1,6 +1,6 @@
 # Shared operational state
 
-**Before running or changing any Anthares automation test, read [TEST-HUB.md](TEST-HUB.md). It is the canonical shared record of proven results, known failures, discarded routes and pending acceptance criteria. After meaningful tests, follow [test-hub/PROTOCOL.md](test-hub/PROTOCOL.md).**
+**Before running or changing any Anthares automation test, read [test-hub/README.md](test-hub/README.md) and [AGENTS.md](AGENTS.md). The append-only evidence ledger is [test-hub/findings/](test-hub/findings/).**
 
 # Anthares Kwai Runner
 
