@@ -30,7 +30,7 @@ jobs:
           echo "KWAI_SECRETS_PRESENT=1"
       - name: Download validated public Kwai vault
         run: |
-          set -euo pipefail
+          set -eu
           rm -rf kwai-vault kwai-vault.zip
           curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip \
             https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
@@ -63,7 +63,7 @@ jobs:
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
           KWAI_SESSION_FILE: kwai-session.enc
         with:
-          api-level: 35
+          api-level: 33
           arch: x86_64
           target: google_apis
           profile: pixel_5
