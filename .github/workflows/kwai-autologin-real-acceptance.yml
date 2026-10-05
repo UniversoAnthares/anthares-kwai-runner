@@ -2,6 +2,9 @@ name: Kwai Autologin Real Acceptance
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.autologin-trigger'
 
 permissions:
   contents: read
