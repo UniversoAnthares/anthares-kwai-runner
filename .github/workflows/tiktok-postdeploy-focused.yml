@@ -1,6 +1,9 @@
 name: TikTok Post-Deploy Focused Diagnostics
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tiktok-postdeploy-focused.yml']
 permissions:
   contents: read
   id-token: write
