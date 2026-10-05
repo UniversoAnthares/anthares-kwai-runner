@@ -1,6 +1,9 @@
 name: Kwai Real Publication
 
 on:
+  push:
+    branches: [main]
+    paths: ['.kwai-real-publish-trigger']
   workflow_dispatch:
     inputs:
       video_url:
