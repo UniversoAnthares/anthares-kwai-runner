@@ -83,7 +83,7 @@ jobs:
           VIDEO_TITLE: ${{ inputs.video_title }}
         run: |
           set -euo pipefail
-          BASE="https://anthares-tiktok-worker.onrender.com"
+          BASE="https://anthares-tiktok-render-rootless.onrender.com"
           OIDC="$(python - <<'PY'
           import json,os,urllib.parse,urllib.request
           u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+('&' if '?' in os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] else '?')+urllib.parse.urlencode({'audience':'anthares-render-worker'})
@@ -91,6 +91,15 @@ jobs:
           with urllib.request.urlopen(req,timeout=20) as r: print(json.load(r)['value'])
           PY
           )"
+          echo "::add-mask::$OIDC"
+          curl -fsS "$BASE/session-status" -H "Authorization: Bearer $OIDC" > /tmp/preflight.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/preflight.json'))
+          safe={k:d.get(k) for k in ('bootstrapped','identity_verified','ready_for_tiktok')}
+          print('TIKTOK_PUBLISH_PREFLIGHT='+json.dumps(safe,sort_keys=True))
+          if not d.get('ready_for_tiktok'): raise SystemExit('TikTok publish blocked: session/identity not ready')
+          PY
           curl -fL --retry 3 --max-time 180 -o /tmp/publish.mp4 "$VIDEO_URL"
           python - <<'PY'
           import json,os
