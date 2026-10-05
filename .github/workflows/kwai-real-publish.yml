@@ -1,6 +1,8 @@
 name: Kwai Real Publication
 
 on:
+  schedule:
+    - cron: '*/10 * * * *'
   push:
     branches: [main]
     paths: ['.kwai-real-publish-trigger']
@@ -48,14 +50,22 @@ jobs:
           python - <<'PY'
           import json,os
           j=json.load(open('/tmp/lease.json')).get('job')
-          if not j: raise SystemExit('no queued Kwai job')
+          if not j:
+            with open(os.environ['GITHUB_ENV'],'a') as f: f.write('KWAI_QUEUE_EMPTY=1\n')
+            raise SystemExit(0)
           if not j.get('media_url'): raise SystemExit('queued Kwai job has no media_url')
           with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as f:
             f.write('KWAI_VIDEO_URL='+j['media_url']+'\n')
             f.write('KWAI_VIDEO_TITLE='+str(j.get('title') or 'Universo Anthares') .replace('\n',' ')+'\n')
             f.write('KWAI_QUEUE_JOB_ID='+j['id']+'\n')
           PY
-          curl --fail-with-body -sS -X POST "$BASE/github-queue/started" -H "Authorization: Bearer $OIDC" -H 'Content-Type: application/json' --data "{"id":"$KWAI_QUEUE_JOB_ID"}" >/dev/null
+          if [ "${KWAI_QUEUE_EMPTY:-0}" != "1" ]; then
+            python - <<'PY' >/tmp/started.json
+          import json,os
+          print(json.dumps({"id":os.environ["KWAI_QUEUE_JOB_ID"]},separators=(",",":")))
+          PY
+            curl --fail-with-body -sS -X POST "$BASE/github-queue/started" -H "Authorization: Bearer $OIDC" -H 'Content-Type: application/json' --data-binary @/tmp/started.json >/dev/null
+          fi
       - name: Use manual publication inputs
         if: ${{ inputs.video_url != '' }}
         shell: bash
@@ -65,7 +75,11 @@ jobs:
         run: |
           echo "KWAI_VIDEO_URL=$INPUT_VIDEO_URL" >> "$GITHUB_ENV"
           echo "KWAI_VIDEO_TITLE=$INPUT_VIDEO_TITLE" >> "$GITHUB_ENV"
+      - name: Stop cleanly when queue is empty
+        if: env.KWAI_QUEUE_EMPTY == '1'
+        run: echo "KWAI_QUEUE_IDLE=1"
       - name: Check secrets
+        if: env.KWAI_QUEUE_EMPTY != '1'
         env:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
@@ -73,11 +87,13 @@ jobs:
           test -n "$KWAI_LOGIN"
           test -n "$KWAI_PASSWORD"
       - name: Fetch validated Kwai vault
+        if: env.KWAI_QUEUE_EMPTY != '1'
         run: |
           curl -fL --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
           echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
           unzip -q kwai-vault.zip -d kwai-vault
       - name: Restore encrypted Kwai session
+        if: env.KWAI_QUEUE_EMPTY != '1'
         uses: actions/cache/restore@v4
         with:
           path: kwai-session.enc
@@ -85,6 +101,7 @@ jobs:
           restore-keys: |
             kwai-session-${{ runner.os }}-
       - name: Publish and verify real MP4
+        if: env.KWAI_QUEUE_EMPTY != '1'
         uses: reactivecircus/android-emulator-runner@v2
         env:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
@@ -128,6 +145,7 @@ jobs:
           test -n "$OIDC" || exit 0
           curl -sS -X POST "https://anthares-control.anthares1.workers.dev/github-queue/fail" -H "Authorization: Bearer $OIDC" -H 'Content-Type: application/json' --data "{"id":"$KWAI_QUEUE_JOB_ID","error_class":"remote_publish_failed","error_message":"public Android runner failed before verified completion","published_possible":true}" || true
       - name: Save encrypted session
+        if: env.KWAI_QUEUE_EMPTY != '1'
         if: success()
         uses: actions/cache/save@v4
         with:
