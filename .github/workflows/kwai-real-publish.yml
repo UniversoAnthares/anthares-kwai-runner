@@ -1,5 +1,4 @@
 name: Kwai Real Publication
-
 on:
   push:
     branches: [main]
@@ -14,15 +13,12 @@ on:
         description: Coherent title for the video; empty uses queued title
         required: false
         type: string
-
 permissions:
   contents: read
   id-token: write
-
 concurrency:
   group: anthares-kwai-publish
   cancel-in-progress: false
-
 jobs:
   publish:
     runs-on: ubuntu-24.04
@@ -49,21 +45,16 @@ jobs:
           import json,os
           j=json.load(open('/tmp/lease.json')).get('job')
           if not j:
-            with open(os.environ['GITHUB_ENV'],'a') as f: f.write('KWAI_QUEUE_EMPTY=1\n')
-            raise SystemExit(0)
+              with open(os.environ['GITHUB_ENV'],'a') as f: f.write('KWAI_QUEUE_EMPTY=1\n')
+              raise SystemExit(0)
           if not j.get('media_url'): raise SystemExit('queued Kwai job has no media_url')
-          source_id=str(j.get('source_id') or '').strip()
-          source_start=j.get('source_start'); source_end=j.get('source_end')
-          if not source_id or source_start is None or source_end is None:
-            raise SystemExit('queued Kwai job lacks canonical source_id/source_start/source_end; refusing unsafe publication')
-          try:
-            if float(source_end) <= float(source_start): raise ValueError()
-          except Exception:
-            raise SystemExit('queued Kwai job has invalid source interval; refusing unsafe publication')
+          sid=str(j.get('source_id') or '').strip(); a=j.get('source_start'); b=j.get('source_end')
+          if not sid or a is None or b is None: raise SystemExit('queued Kwai job lacks canonical source interval')
+          if float(b) <= float(a): raise SystemExit('queued Kwai job has invalid source interval')
           with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as f:
-            f.write('KWAI_VIDEO_URL='+j['media_url']+'\n')
-            f.write('KWAI_VIDEO_TITLE='+str(j.get('title') or 'Universo Anthares') .replace('\n',' ')+'\n')
-            f.write('KWAI_QUEUE_JOB_ID='+j['id']+'\n')
+              f.write('KWAI_VIDEO_URL='+j['media_url']+'\n')
+              f.write('KWAI_VIDEO_TITLE='+str(j.get('title') or 'Universo Anthares').replace('\n',' ')+'\n')
+              f.write('KWAI_QUEUE_JOB_ID='+j['id']+'\n')
           PY
       - name: Use manual publication inputs
         if: ${{ inputs.video_url != '' }}
@@ -82,9 +73,7 @@ jobs:
         env:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
-        run: |
-          test -n "$KWAI_LOGIN"
-          test -n "$KWAI_PASSWORD"
+        run: test -n "$KWAI_LOGIN" && test -n "$KWAI_PASSWORD"
       - name: Fetch validated Kwai vault
         if: env.KWAI_QUEUE_EMPTY != '1'
         run: |
@@ -108,6 +97,7 @@ jobs:
           KWAI_SESSION_FILE: kwai-session.enc
           KWAI_VIDEO_URL: ${{ env.KWAI_VIDEO_URL }}
           KWAI_VIDEO_TITLE: ${{ env.KWAI_VIDEO_TITLE }}
+          KWAI_QUEUE_JOB_ID: ${{ env.KWAI_QUEUE_JOB_ID }}
         with:
           api-level: 35
           arch: x86_64
@@ -125,9 +115,7 @@ jobs:
             bash kwai_session_state.sh restore || true
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
             sleep 5
-            if ! python3 kwai_auth_probe.py; then
-              bash kwai_headless_login.sh
-            fi
+            if ! python3 kwai_auth_probe.py; then bash kwai_headless_login.sh; fi
             bash kwai_publish.sh
             bash kwai_session_state.sh save || true
       - name: Confirm central queue publication
@@ -135,12 +123,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -q '^STATE=CONFIRMED      - name: Mark central queue failure
+          grep -q '^STATE=CONFIRMED$' kwai-publish-status.txt || { echo 'Refusing completion without positive verification'; exit 90; }
+          OIDC="$(cat /tmp/oidc)"
+          MEDIA_SHA="$(sed -n 's/^MEDIA_SHA256=//p' kwai-publish-status.txt | tail -1)"
+          test -n "$MEDIA_SHA"
+          export MEDIA_SHA
+          python - <<'PY' >/tmp/complete.json
+          import json,os
+          print(json.dumps({"id":os.environ["KWAI_QUEUE_JOB_ID"],"confirmed":True,"remote_id":"kwai-ui-verified","media_sha256":os.environ["MEDIA_SHA"]},separators=(",",":")))
+          PY
+          curl --fail-with-body -sS -X POST "https://anthares-control.anthares1.workers.dev/github-queue/complete" -H "Authorization: Bearer $OIDC" -H 'Content-Type: application/json' --data-binary @/tmp/complete.json
+      - name: Mark central queue failure or uncertainty
         if: failure() && env.KWAI_QUEUE_JOB_ID != ''
         shell: bash
         run: |
-          OIDC="$(cat /tmp/oidc 2>/dev/null || true)"
-          test -n "$OIDC" || exit 0
+          OIDC="$(cat /tmp/oidc 2>/dev/null || true)"; test -n "$OIDC" || exit 0
           STATE="$(sed -n 's/^STATE=//p' kwai-publish-status.txt 2>/dev/null | tail -1 | awk '{print $1}' || true)"
           export STATE
           python - <<'PY' >/tmp/fail.json
@@ -148,40 +145,6 @@ jobs:
           state=os.environ.get("STATE") or "UNCERTAIN"
           uncertain=state in ("UNCERTAIN","PUBLISH_REQUESTED","VERIFYING")
           print(json.dumps({"id":os.environ["KWAI_QUEUE_JOB_ID"],"error_class":"uncertain_publish" if uncertain else "remote_publish_failed","error_message":"publication requires reconciliation" if uncertain else "failed safely before confirmed publication","published_possible":uncertain,"state":state},separators=(",",":")))
-          PY
-          curl -sS -X POST "https://anthares-control.anthares1.workers.dev/github-queue/fail" -H "Authorization: Bearer $OIDC" -H 'Content-Type: application/json' --data-binary @/tmp/fail.json || true
-      - name: Save encrypted session
-        if: success() && env.KWAI_QUEUE_EMPTY != '1'
-        uses: actions/cache/save@v4
-        with:
-          path: kwai-session.enc
-          key: kwai-session-${{ runner.os }}-${{ github.run_id }}
-      - name: Upload publication evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kwai-publication-${{ github.run_id }}
-          path: kwai-publish-status.txt
-          if-no-files-found: warn
-          retention-days: 1
- kwai-publish-status.txt || { echo 'Refusing queue completion without positive publication verification'; exit 90; }
-          OIDC="$(cat /tmp/oidc)"
-          MEDIA_SHA="$(sed -n 's/^MEDIA_SHA256=//p' kwai-publish-status.txt | tail -1)"
-          test -n "$MEDIA_SHA"
-          python - <<'PY' >/tmp/complete.json
-          import json,os
-          print(json.dumps({"id":os.environ["KWAI_QUEUE_JOB_ID"],"confirmed":True,"remote_id":"kwai-ui-verified","media_sha256":os.environ.get("MEDIA_SHA","")},separators=(",",":")))
-          PY
-          curl --fail-with-body -sS -X POST "https://anthares-control.anthares1.workers.dev/github-queue/complete" -H "Authorization: Bearer $OIDC" -H 'Content-Type: application/json' --data-binary @/tmp/complete.json
-      - name: Mark central queue failure
-        if: failure() && env.KWAI_QUEUE_JOB_ID != ''
-        shell: bash
-        run: |
-          OIDC="$(cat /tmp/oidc 2>/dev/null || true)"
-          test -n "$OIDC" || exit 0
-          python - <<'PY' >/tmp/fail.json
-          import json,os
-          print(json.dumps({"id":os.environ["KWAI_QUEUE_JOB_ID"],"error_class":"remote_publish_failed","error_message":"public Android runner failed before verified completion","published_possible":True},separators=(",",":")))
           PY
           curl -sS -X POST "https://anthares-control.anthares1.workers.dev/github-queue/fail" -H "Authorization: Bearer $OIDC" -H 'Content-Type: application/json' --data-binary @/tmp/fail.json || true
       - name: Save encrypted session
