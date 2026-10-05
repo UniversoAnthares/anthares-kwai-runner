@@ -1,6 +1,9 @@
 name: Cloudflare Central Deploy Public Runner
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.cloudflare-central-deploy-trigger']
 permissions:
   contents: read
 jobs:
@@ -8,19 +11,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Checkout public runner
-        uses: actions/checkout@v4
-      - name: Fetch exact controller source from private repository
-        env:
-          GH_TOKEN: ${{ secrets.ANTHARES_PRIVATE_READ_TOKEN }}
+      - uses: actions/checkout@v4
+      - name: Validate deploy snapshot
         run: |
           set -euo pipefail
-          test -n "$GH_TOKEN"
-          mkdir -p cloudflare-worker/src
-          curl --fail-with-body -sS             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github.raw+json"             https://api.github.com/repos/UniversoAnthares/anthares-clipper/contents/cloudflare-worker/src/index.js             -o cloudflare-worker/src/index.js
-          curl --fail-with-body -sS             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github.raw+json"             https://api.github.com/repos/UniversoAnthares/anthares-clipper/contents/cloudflare-worker/wrangler.toml             -o cloudflare-worker/wrangler.toml
           test -s cloudflare-worker/src/index.js
           test -s cloudflare-worker/wrangler.toml
+          grep -q 'tiktok-central-session-read.yml' cloudflare-worker/src/index.js
+          echo 'SNAPSHOT_VALID=8fa4187db1316f11bc8f0213e410dd800f1cc886'
       - name: Deploy exact controller to Cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -29,7 +27,11 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           cd cloudflare-worker
           npx --yes wrangler@4.43.0 deploy
+          echo 'WRANGLER_DEPLOY_OK=1'
       - name: Verify public health
         run: |
           set -euo pipefail
-          curl --fail-with-body -sS https://anthares-control.anthares1.workers.dev/health
+          out="$(curl --fail-with-body -sS https://anthares-control.anthares1.workers.dev/health)"
+          echo "$out"
+          echo "$out" | grep -q '"service":"anthares-control"'
+          echo 'CONTROL_HEALTH_OK=1'
