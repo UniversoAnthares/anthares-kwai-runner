@@ -1,43 +1,25 @@
 # Shared test-hub protocol
 
-Before changing or testing this project, read `test-hub/README.md` and the relevant files under `test-hub/findings/`.
+Before ANY change or test in this project, the agent MUST perform the hub preflight below. Reading only README is not sufficient.
 
-Rules:
+## Mandatory preflight
+1. Read `test-hub/README.md`.
+2. List `test-hub/findings/` and read ALL findings newer than the last consolidated timestamp in README for the same area/causal chain, plus every finding explicitly referenced by them through SUPERSEDES/baseline.
+3. Check current GitHub Actions runs for the same causal chain. Do not launch a competing experiment while a causally relevant RUNNING test exists, unless the new test is explicitly an independent layer.
+4. Before creating a run, write its RUNNING finding first (or in the same change set) with:
+   - BASELINE_PROVEN
+   - FAILED_AVOIDED
+   - SUCCESS_SIGNAL
+   - FAILURE_SIGNAL
+   - TEST_VALIDITY
+5. A matrix may branch only AFTER every variant reaches the same observable precondition. If a job does not reach that precondition, classify it INVALID/NOT_TESTED, never as hypothesis FAILED.
+6. A green GitHub job is not PROVEN unless its declared SUCCESS_SIGNAL appears in evidence.
+7. After completion, append a new finding and SUPERSEDE the RUNNING finding. Update README consolidated state when the causal conclusion changes.
+
+## Preservation rules
 - Treat the hub as the shared source of truth across simultaneous chats/agents.
 - Do not repeat a FAILED path unless the new test explicitly changes the recorded failure cause.
-- Preserve PROVEN behavior unless a newer real test supersedes it.
-- After every meaningful test, create a new append-only finding using the template in the hub.
+- Preserve PROVEN behavior unless newer real evidence supersedes it.
 - Never put credentials, secrets, cookies, tokens, or session payloads in the hub.
-- A run that failed because the test harness itself was broken is not evidence that the tested hypothesis failed.
-
-
-## Mandatory concurrency gate
-
-Before EVERY state-changing action (code mutation, deploy, session/bootstrap change, queue mutation, publication, workflow trigger that mutates external state):
-
-1. Refresh `test-hub/README.md`.
-2. Read all new `test-hub/findings/` commits created since your last snapshot, not only files you already know.
-3. Inspect currently RUNNING workflow runs and active deploys for the same causal area.
-4. Create an append-only lease finding BEFORE the mutation:
-   `test-hub/findings/YYYYMMDD-HHMM-lease-<area>-<short-purpose>.md`
-   with:
-   - `STATUS: RUNNING`
-   - `AREA:`
-   - `LEASE: <area>/<purpose>`
-   - `BASELINE_COMMIT:`
-   - `BASELINE_PROVEN:`
-   - `FAILED_AVOIDED:`
-   - `SUCCESS_SIGNAL:`
-   - `FAILURE_SIGNAL:`
-   - `TEST_VALIDITY:`
-   - `EXPIRES_AT:` (maximum 30 minutes)
-5. Re-read the repository HEAD immediately after creating the lease. If another active lease for the same area/purpose was created first, STOP mutating and observe only.
-6. A lease is released only by a new append-only finding that references it and records PROVEN/FAILED/PARTIAL/SUPERSEDED evidence. Never edit/delete the lease.
-7. Read-only diagnostics may run in parallel. Mutations in the same causal area MUST be serialized.
-8. A test whose baseline commit/deploy changed after its lease was created is INVALID for the hypothesis; record it as harness/baseline invalid, not FAILED.
-9. Before triggering a workflow, verify no causal RUNNING run already tests the same hypothesis. Do not create redundant matrices.
-10. Never infer that a commit is deployed: verify the live deploy revision first.
-
-Suggested causal areas: `tiktok-session`, `tiktok-publish`, `kwai-login`, `kwai-publish`, `kwai-live`, `cloudflare-control`, `queue`.
-
-If append-only lease creation conflicts (409), refresh HEAD/findings and retry with a unique filename; do not proceed with the mutation until the lease is visible.
+- Harness failure is not evidence that the tested hypothesis failed.
+- Do not infer success/failure from workflow conclusion alone; inspect decisive logs/artifacts.
