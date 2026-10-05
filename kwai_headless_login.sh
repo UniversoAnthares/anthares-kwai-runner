@@ -31,9 +31,21 @@ for _ in $(seq 1 15); do
   sleep 2
 done
 test -s /tmp/kwai-ui.xml || { log "FAIL: no-ui-dump"; exit 32; }
+# A restored encrypted session wins over credential entry.
+if python3 kwai_auth_probe.py >>"$REPORT" 2>&1; then
+  log "KWAI_SESSION_AUTHENTICATED_RESTORED"
+  adb shell pidof com.kwai.video >/dev/null || { log "FAIL: kwai-process-missing"; exit 62; }
+  log "KWAI_HEALTH_OK"
+  exit 0
+fi
 log "KWAI_AUTO_LOGIN_ATTEMPT"
-if ! python3 kwai_android_autologin.py >>"$REPORT" 2>&1; then
-  rc=$?; log "KWAI_AUTO_LOGIN_FALLBACK_REQUIRED_RC=$rc"; exit 60
+set +e
+python3 kwai_android_autologin.py >>"$REPORT" 2>&1
+rc=$?
+set -e
+if [ "$rc" -ne 0 ]; then
+  log "KWAI_AUTO_LOGIN_FALLBACK_REQUIRED_RC=$rc"
+  exit 60
 fi
 log "KWAI_AUTO_LOGIN_ADVANCED"
 for _ in $(seq 1 15); do
