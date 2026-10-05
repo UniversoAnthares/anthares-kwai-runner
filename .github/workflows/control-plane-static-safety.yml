@@ -1,0 +1,49 @@
+name: Control Plane Static Safety Validation
+on:
+  push:
+    branches: [main]
+    paths: ['.control-plane-safety-trigger']
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate central safety invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          F=cloudflare-worker/src/index.js
+          test -s "$F"
+          grep -q 'class AntharesQueue extends DurableObject' "$F"
+          grep -q 'async enqueue(' "$F"
+          grep -q 'async lease(' "$F"
+          grep -q 'async started(' "$F"
+          grep -q 'async complete(' "$F"
+          grep -q 'async fail(' "$F"
+          grep -q 'async reconcile(' "$F"
+          grep -q 'timeline_overlap' "$F"
+          grep -q 'status=.uncertain' "$F"
+          grep -q 'tiktok-central-session-read.yml' "$F"
+          grep -q 'if(id==="local") return false' "$F"
+          ! grep -q 'LOCAL_EXECUTOR' "$F"
+          ! grep -q 'ANTHARES_LOCAL_HEALTH_URL' "$F"
+          ! grep -q 'GOOGLE_HEALTH_URL' "$F"
+          python - <<'PY'
+          import re
+          p=open('cloudflare-worker/src/index.js',encoding='utf-8-sig').read()
+          m=re.search(r'function priorities\(\)\{return (\{.*?\});\}',p)
+          assert m, 'priorities missing'
+          x=m.group(1)
+          assert '"local"' not in x, x
+          assert '"google"' not in x, x
+          assert 'cuts:["render","github"]' in x
+          assert 'tiktok:["render","github"]' in x
+          assert 'kwai:["github"]' in x
+          assert 'kwai_live:["hls_origin","github"]' in x
+          assert 'primary==="render"&&github==="github"&&none===null' in p
+          assert 'const today=localDay()' in p
+          print('CONTROL_STATIC_SAFETY=OK')
+          PY
