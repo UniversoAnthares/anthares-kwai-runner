@@ -1,0 +1,43 @@
+name: Kwai Login Control Discovery
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.login-control-trigger'
+
+permissions:
+  contents: read
+
+jobs:
+  discover-login-control:
+    name: "DISCOVER PROFILE LOGIN CONTROL"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch validated Kwai vault
+        run: |
+          set -eu
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+          rm -rf kwai-vault && mkdir kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+      - name: Enable KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Discover login control without credentials
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: bash kwai_login_control_discovery.sh
