@@ -28,7 +28,7 @@ jobs:
           - { id: "09", label: "09 MP4 upload dry-run" }
           - { id: "10", label: "10 Publish controls dry-run" }
     env:
-      RENDER_WORKER_URL: ${{ secrets.RENDER_WORKER_URL }}
+      RENDER_WORKER_URL: "https://anthares-tiktok-render-rootless.onrender.com"
     steps:
       - name: Execute isolated diagnostic
         env:
@@ -57,7 +57,7 @@ jobs:
           elif tid=='05':
               d=get('/session-status',True); print(json.dumps(d)); assert d.get('identity_verified') and d.get('ready_for_tiktok')
           elif tid=='06':
-              url='https://github.com/UniversoAnthares/anthares-clipper/releases/download/tiktok-failover-test/kwai-daily-current-021.mp4'
+              url='https://samplelib.com/lib/preview/mp4/sample-5s.mp4'
               q=urllib.request.Request(url,method='GET',headers={'Range':'bytes=0-4095','User-Agent':'Anthares-Diagnostic'})
               with urllib.request.urlopen(q,timeout=30) as r:b=r.read(4096)
               assert len(b)>100 and b'ftyp' in b[:64]; print('PASS mp4 bytes='+str(len(b)))
@@ -65,7 +65,7 @@ jobs:
               d=get('/health'); print(json.dumps(d)); assert d.get('ready_for_tiktok')
           elif tid in {'08','09','10'}:
               token=oidc()
-              payload={'test':tid,'media_url':'https://github.com/UniversoAnthares/anthares-clipper/releases/download/tiktok-failover-test/kwai-daily-current-021.mp4','plan':{'segment_id':'diagnostic-'+tid,'title':'Literatura e escrita — Universo Anthares'}}
+              payload={'test':tid,'media_url':'https://samplelib.com/lib/preview/mp4/sample-5s.mp4','plan':{'segment_id':'diagnostic-'+tid,'title':'Literatura e escrita — Universo Anthares'}}
               q=urllib.request.Request(base+'/publish-dry-run',data=json.dumps(payload).encode(),method='POST',headers={'Authorization':'Bearer '+token,'Content-Type':'application/json','Accept':'application/json'})
               try:
                   with urllib.request.urlopen(q,timeout=180) as r:d=json.load(r)
