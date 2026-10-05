@@ -1,0 +1,51 @@
+name: TikTok Central Session Read Probe
+on:
+  push:
+    paths:
+      - '.tiktok-central-session-read-trigger'
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  central-session-read:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request GitHub OIDC for anthares-control
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+      - name: Read central TikTok session metadata
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/session.json -w '%{http_code}' -H "Authorization: Bearer $OIDC_TOKEN" -H 'Accept: application/json' https://anthares-control.anthares1.workers.dev/tiktok/session-state)"
+          python3 - "$code" <<'PY'
+          import json,sys
+          code=int(sys.argv[1])
+          try: d=json.load(open('/tmp/session.json'))
+          except Exception: d={}
+          safe={"http":code,"ok":d.get("ok"),"available":d.get("available"),"updated_at":d.get("updated_at")}
+          state=d.get("state") if isinstance(d,dict) else None
+          if isinstance(state,dict):
+              safe["cookie_count"]=len(state.get("cookies") or [])
+              safe["origin_count"]=len(state.get("origins") or [])
+          print(json.dumps(safe,sort_keys=True))
+          if code==200 and d.get("available") is True and isinstance(state,dict) and isinstance(state.get("cookies"),list):
+              print("CENTRAL_SESSION_AVAILABLE")
+              raise SystemExit(0)
+          if code==404 and d.get("available") is False:
+              print("CENTRAL_SESSION_ABSENT")
+              raise SystemExit(2)
+          if code in (401,403):
+              print("PROBE_AUTH_INVALID")
+              raise SystemExit(3)
+          print("PROBE_RESPONSE_INVALID")
+          raise SystemExit(4)
+          PY
