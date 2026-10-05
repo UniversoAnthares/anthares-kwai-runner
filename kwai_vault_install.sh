@@ -25,16 +25,18 @@ while IFS= read -r p; do
   esac
 done < <(find kwai-vault -type f -name '*.apk' | sort)
 selected_abi=""
-for abi in x86_64 x86 arm64_v8a armeabi_v7a; do
+# This validated vault is ARM64. On x86 hosts, only use it when a native bridge is present.
+for abi in arm64_v8a armeabi_v7a x86_64 x86; do
   if echo "$ABI" | tr '-' '_' | grep -qw "$abi"; then selected_abi="$abi"; break; fi
 done
 # Never mix a foreign ABI. ARM64 is permitted on x86_64 only when Android exposes a native bridge.
-has_selected="$(find kwai-vault -type f \( -name "config.$selected_abi.apk" -o -name "*.config.$selected_abi.apk" \) -print -quit 2>/dev/null)"
+has_selected=""
+[ -z "$selected_abi" ] || has_selected="$(find kwai-vault -type f \( -name "config.$selected_abi.apk" -o -name "*.config.$selected_abi.apk" \) -print -quit 2>/dev/null)"
 if [ -z "$has_selected" ]; then
   if [ -n "$BRIDGE" ] && [ "$BRIDGE" != "0" ] && [ -n "$(find kwai-vault -type f \( -name 'config.arm64_v8a.apk' -o -name '*.config.arm64_v8a.apk' \) -print -quit)" ]; then
     selected_abi=arm64_v8a
   else
-    log "FAIL_NO_COMPATIBLE_ABI_SPLIT=$selected_abi"
+    log "FAIL_NO_COMPATIBLE_ABI_SPLIT=$selected_abi BRIDGE=$BRIDGE"
     exit 44
   fi
 fi
