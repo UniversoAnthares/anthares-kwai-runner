@@ -39,7 +39,7 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
-            set -euo pipefail
+            set -eu
             adb wait-for-device
             test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
             echo "ANDROID_BOOT_OK_API=${{ matrix.api }}"
