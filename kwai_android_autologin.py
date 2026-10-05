@@ -41,9 +41,12 @@ def tap_matching(words):
         if any(w in s for w in words) and tap_node(n): return True
     return False
 
+def editable_nodes(r):
+    return [n for n in nodes(r) if n.attrib.get("class","").endswith("EditText") or n.attrib.get("editable","")=="true"]
+
 def fill(value, index=0):
     r=dump()
-    edits=[n for n in nodes(r) if n.attrib.get("class","").endswith("EditText")]
+    edits=editable_nodes(r)
     if len(edits) <= index: return False
     tap_node(edits[index])
     adb("shell","input","keyevent","KEYCODE_MOVE_END")
@@ -67,11 +70,18 @@ time.sleep(1)
 # Prefer password/email/phone login over social providers.
 tap_matching(("password","senha","phone","telefone","email","e-mail"))
 time.sleep(1)
-if not fill(LOGIN): raise SystemExit(3)
+if not fill(LOGIN):
+    # Some Kwai builds expose the account field only after choosing the generic login method.
+    tap_matching(("other ways","other login","use phone","use email","phone number","mobile","account","outras formas","outra forma","usar telefone","usar e-mail","número de telefone","conta"))
+    time.sleep(1)
+    if not fill(LOGIN):
+        # Last deterministic fallback: focus the lower-center form area and verify an editable field appeared.
+        adb("shell","input","tap","540","1120"); time.sleep(1)
+        if not fill(LOGIN): raise SystemExit(3)
 # Move to password step if needed.
 tap_matching(("next","continue","continuar","avançar"))
 time.sleep(1)
-r=dump(); edits=[n for n in nodes(r) if n.attrib.get("class","").endswith("EditText")]
+r=dump(); edits=editable_nodes(r)
 if len(edits)>=2:
     if not fill(PASSWORD, 1): raise SystemExit(4)
 elif not fill(PASSWORD, 0):
