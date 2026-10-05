@@ -1,5 +1,5 @@
 name: TikTok Post-Deploy Focused Diagnostics
-# post-workflow_ref probe
+# post-central-restore probe
 on:
   workflow_dispatch:
   push:

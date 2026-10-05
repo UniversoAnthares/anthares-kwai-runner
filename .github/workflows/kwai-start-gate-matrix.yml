@@ -1,0 +1,41 @@
+name: Kwai Start Gate Matrix
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.start-gate-trigger']
+permissions:
+  contents: read
+jobs:
+  gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [node,double,long,enter,dpad,tab-enter,center,low-center,high-center,back,restart,tap-restart,wait5-tap,wait15-tap,wait30-tap,swipe-left,swipe-up,swipe-down,tap-back-tap,tap-wait10]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GATE_MODE: ${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -fL --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          mkdir -p kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+      - run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            bash kwai_vault_install.sh
+            adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+            sleep 8
+            python3 kwai_start_gate_probe.py
