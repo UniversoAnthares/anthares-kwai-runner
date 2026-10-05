@@ -59,13 +59,22 @@ jobs:
           emulator-boot-timeout: 120
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
-          script: timeout 900s bash kwai_remote_android_login.sh
+          script: |
+            set -o pipefail
+            if timeout 240s bash kwai_headless_login.sh; then
+              echo "HEADLESS_KWAI_ACCEPTANCE=OK"
+            else
+              echo "HEADLESS_KWAI_ACCEPTANCE=FALLBACK"
+              timeout 240s bash kwai_remote_android_login.sh
+            fi
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: kwai-runner-diagnostics-${{ github.run_id }}
           path: |
+            kwai-headless-status.txt
+            kwai-headless-ready.png
             kwai-remote-status.txt
             kwai-remote-ready.png
           if-no-files-found: warn
