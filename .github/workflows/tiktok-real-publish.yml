@@ -26,7 +26,7 @@ jobs:
           for i in $(seq 1 40); do
             REV=$(curl -fsS https://anthares-tiktok-render-rootless.onrender.com/health | python3 -c "import json,sys; print(json.load(sys.stdin).get('revision',''))" || true)
             echo "render_revision=${REV:0:12}"
-            [ "$REV" = "f9ed83d7acc26bc0ce95dbac7074ca258840fdd6" ] && exit 0
+            [ "$REV" = "a91b7baf747d88405847a94c39c1a57d072f32b3" ] && exit 0
             sleep 10
           done
           echo RENDER_REVISION_NOT_READY
@@ -55,7 +55,7 @@ jobs:
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/status.json'))
-          safe={k:d.get(k) for k in ('ok','bootstrapped','identity_verified','ready_for_tiktok','central_restored')}
+          safe={k:d.get(k) for k in ('ok','bootstrapped','identity_verified','ready_for_tiktok','central_restored','central_restore_reason','central_restore_http')}
           print('SESSION_RESTORE_SAFE='+json.dumps(safe,sort_keys=True))
           if not d.get('bootstrapped') or not d.get('central_restored'): raise SystemExit('SESSION_RESTORE_NOT_PROVEN')
           PY
