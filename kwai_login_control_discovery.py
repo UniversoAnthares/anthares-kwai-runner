@@ -42,8 +42,12 @@ else:
 # Semantic Profile.
 r=dump("main")
 for n in ns(r):
-    if "profile" in lab(n):
-        if tap(n):break
+    if n.attrib.get("resource-id","").endswith("ll_profile") and n.attrib.get("clickable")=="true":
+        print("PROFILE_CLICK_TARGET="+n.attrib.get("resource-id",""))
+        if tap(n): break
+else:
+    for n in ns(r):
+        if "profile" in lab(n) and tap(n): break
 r=dump("profile");summary("PROFILE_INITIAL",r)
 # Profile is a dynamic feature in this build. Wait for the download gate to
 # disappear before concluding that authentication controls are absent.
