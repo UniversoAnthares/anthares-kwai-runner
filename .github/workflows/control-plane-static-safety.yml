@@ -50,6 +50,8 @@ jobs:
           assert 'kwai_live:["hls_origin","github"]' in x
           assert 'primary==="render"&&github==="github"&&none===null' in p
           assert 'const today=localDay()' in p
+          assert 'anthares.us/wp-content' not in p
+          assert 'complete_without_evidence_rejected:true' in p
           print('CONTROL_STATIC_SAFETY=OK')
           PY
       - name: Probe deployed controller read-only
