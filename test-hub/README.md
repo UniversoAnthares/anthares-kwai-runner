@@ -62,7 +62,8 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 - UNKNOWN/NOT_TESTED: recovery específico de Pixel Launcher ANR; run 37385649745 teve seis FSM_MAIN_REACHED, mas nenhum job concluído observou LAUNCHER_ANR e quatro foram cancelados.
 - PROVEN: Manifest válido no run 37388030409 declarou SplashLoginActivity, PhoneAccountActivityV2, EmailLoginActivity, LoginActivity, CommonLoginActivity, KwaiAuthActivity e outras.
 - IMPORTANTE: SplashLoginActivity, PhoneAccountActivityV2, EmailLoginActivity e LoginActivity são android:exported=false no Manifest. Permission Denial via adb shell não prova ausência da UI. KwaiAuthActivity/LivePartnerAuthActivity são exported=true.
-- RUNNING: Kwai Declared Login Activity Probe 37388231997. Interpretar separadamente permissão de start e existência de UI; não classificar Activities internas como inexistentes por Permission Denial.
+- PROVEN: run 37388231997 confirmou que cinco Activities internas selecionadas são bloqueadas por `not exported`; isto prova apenas a fronteira de start externo, não ausência da UI. Não repetir `am start` nelas.
+- PROVEN: Manifest também mostra gateways exported=true relevantes: TinyGoogleSSOActivity, TinyUserInfoActivity, OpenAuthActivity, KwaiAuthActivity e LivePartnerAuthActivity. Próximo probe deve partir destes alvos exportados, sem confundir OAuth externo com login do usuário.
 - PROVEN somente STATIC/SIMULATED: Kwai publish safety run 37387709252 emitiu KWAI_PUBLISH_SAFETY_STATIC_OK. Publicação real continua sem prova e o workflow real está fail-closed até READY.
 
 ### TikTok: cadeia causal atual
@@ -71,7 +72,7 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 - O caminho workflow_dispatch de tiktok-real-publish ainda não satisfaz aceitação production-PROVEN: precisa alinhar endpoint ativo, validar identidade imediatamente antes, verificar o novo post independentemente e fechar ledger/estado incerto.
 
 ### Control plane / fila
-- Snapshot atual ainda contém prioridades/fallback `local`; CHAT 4 possui lease ativo para removê-lo e endurecer invariantes.
+- PROVEN no snapshot: PC/local, Google e Oracle foram removidos do roteamento final; failover TikTok é Render -> GitHub -> nenhum executor elegível. Isto ainda não prova deploy em produção.
 - QA encontrou que complete()/reconcile() ainda confiam em `confirmed=true` do chamador com validação insuficiente do estado anterior/publication_started/evidência. Não classificar queue safety como fechada até o controlador rejeitar confirmação prematura.
 - O hub tinha RUNNING obsoletos; findings QA recentes os supersedem. Sempre verificar o finding mais novo antes de usar o resumo.
 
