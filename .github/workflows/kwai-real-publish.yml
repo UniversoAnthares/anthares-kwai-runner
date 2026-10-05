@@ -1,0 +1,90 @@
+name: Kwai Real Publication
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: Temporary HTTPS URL for the real MP4
+        required: true
+        type: string
+      video_title:
+        description: Coherent title for the video
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-kwai-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        run: |
+          test -n "$KWAI_LOGIN"
+          test -n "$KWAI_PASSWORD"
+      - name: Fetch validated Kwai vault
+        run: |
+          curl -fL --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+          unzip -q kwai-vault.zip -d kwai-vault
+      - name: Restore encrypted Kwai session
+        uses: actions/cache/restore@v4
+        with:
+          path: kwai-session.enc
+          key: kwai-session-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            kwai-session-${{ runner.os }}-
+      - name: Publish and verify real MP4
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_SESSION_FILE: kwai-session.enc
+          KWAI_VIDEO_URL: ${{ inputs.video_url }}
+          KWAI_VIDEO_TITLE: ${{ inputs.video_title }}
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            set -Eeuo pipefail
+            bash kwai_vault_install.sh
+            bash kwai_session_state.sh restore || true
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+            sleep 5
+            if ! python3 kwai_auth_probe.py; then
+              bash kwai_headless_login.sh
+            fi
+            bash kwai_publish.sh
+            bash kwai_session_state.sh save || true
+      - name: Save encrypted session
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: kwai-session.enc
+          key: kwai-session-${{ runner.os }}-${{ github.run_id }}
+      - name: Upload publication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-publication-${{ github.run_id }}
+          path: kwai-publish-status.txt
+          if-no-files-found: warn
+          retention-days: 1
