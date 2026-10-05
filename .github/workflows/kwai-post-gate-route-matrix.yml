@@ -1,0 +1,45 @@
+name: Kwai Post-Gate Route Matrix
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.post-gate-matrix-trigger']
+permissions:
+  contents: read
+jobs:
+  route:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [parent-now,parent-wait5,parent-wait15,parent-wait30,parent-restart,parent-restart-wait,parent-twice,parent-back-parent,parent-home-profile,parent-inbox-profile,parent-discover-profile,parent-hide-resource,parent-wait-resource,parent-start-restart,parent-start-wait,parent-dump-activities,parent-keyevent-menu,parent-scroll-up,parent-scroll-down,parent-coordinate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      ROUTE_MODE: ${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          mkdir -p kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+      - run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: bash kwai_post_gate_route_probe.sh
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-gate-${{ matrix.mode }}-${{ github.run_id }}
+          path: |
+            postgate-*.xml
+            postgate-*.png
+          if-no-files-found: warn
+          retention-days: 1
