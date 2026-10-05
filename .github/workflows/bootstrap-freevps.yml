@@ -2,6 +2,9 @@ name: Bootstrap FreeVPS Android Host
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.freevps-validation-trigger'
 
 jobs:
   bootstrap:
@@ -23,6 +26,7 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
         run: |
           set -euo pipefail
 
@@ -100,5 +104,3 @@ jobs:
           REMOTE
           } | sshpass -e ssh -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
               "$VPS_USER@$VPS_HOST" 'bash -s'
-        env:
-          SSHPASS: ${{ secrets.VPS_PASSWORD }}
