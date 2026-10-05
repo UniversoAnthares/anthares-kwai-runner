@@ -68,7 +68,7 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 - PROVEN somente STATIC/SIMULATED: Kwai publish safety run 37387709252 emitiu KWAI_PUBLISH_SAFETY_STATIC_OK. Publicação real continua sem prova e o workflow real está fail-closed até READY.
 
 ### TikTok: cadeia causal atual
-- FAILED/HARNESS: probe 37388273031 expirou esperando marcador de revisão stale; não testou sessão e publish ficou skipped. Probe válido posterior 37389276949 alcançou Render correto e mostrou restore central HTTP 403, bootstrapped=false, identity_verified=false. Nova tentativa de fallback por seed de ambiente está RUNNING em 37389620043.
+- FAILED/HARNESS: probe 37388273031 expirou esperando marcador de revisão stale; não testou sessão e publish ficou skipped. Probe válido posterior 37389276949 alcançou Render correto e mostrou restore central HTTP 403, bootstrapped=false, identity_verified=false. Fallback por seed de ambiente também FAILED no run 37389620043: revisão correta ativa, mas bootstrapped=false e restore central ainda HTTP 403. Não repetir central GET/env-seed sem mudança causal.
 - Modo DIAGNOSTIC atual: 3 posts/dia com observação 3–6h para investigar baixa distribuição. A meta/capacidade de produção 100/dia permanece separada; nenhum modo deve ser usado como prova do outro.
 - O caminho workflow_dispatch de tiktok-real-publish ainda não satisfaz aceitação production-PROVEN: precisa alinhar endpoint ativo, validar identidade imediatamente antes, verificar o novo post independentemente e fechar ledger/estado incerto.
 
