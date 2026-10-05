@@ -2,7 +2,7 @@ name: Kwai Start Gate Matrix
 on:
   workflow_dispatch:
   push:
-    paths: ['.start-gate-trigger']
+    paths: ['.start-gate-trigger', '.start-gate-trigger-2']
 permissions:
   contents: read
 jobs:
