@@ -44,7 +44,30 @@ r=dump("main")
 for n in ns(r):
     if "profile" in lab(n):
         if tap(n):break
-r=dump("profile");summary("PROFILE",r)
+r=dump("profile");summary("PROFILE_INITIAL",r)
+# Profile is a dynamic feature in this build. Wait for the download gate to
+# disappear before concluding that authentication controls are absent.
+for wait_idx in range(36):
+    t=" ".join(lab(n) for n in ns(r))
+    loading=("resource downloading" in t or "access to all the features when" in t)
+    if not loading:
+        print("PROFILE_MODULE_READY=1")
+        break
+    print("PROFILE_MODULE_WAIT="+str(wait_idx))
+    time.sleep(5)
+    r=dump("profile-wait")
+else:
+    print("PROFILE_MODULE_TIMEOUT=1")
+    # Hide the progress dialog, then re-open the already requested Profile module.
+    for n in ns(r):
+        if n.attrib.get("resource-id","").endswith("btn_cancel") or lab(n)=="hide":
+            tap(n); break
+    rr=dump("main-after-hide")
+    for n in ns(rr):
+        if n.attrib.get("resource-id","").endswith("ll_profile") or lab(n)=="profile":
+            if tap(n): break
+    r=dump("profile-after-reopen")
+summary("PROFILE_READY_STATE",r)
 # Try only explicit auth/account controls, logging state after each candidate.
 terms=("log in","login","sign in","entrar","account","conta","phone","telefone","email","e-mail")
 candidates=[n for n in ns(r) if any(t in lab(n) for t in terms)]
