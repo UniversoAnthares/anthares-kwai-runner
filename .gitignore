@@ -1,0 +1,9 @@
+*.zip
+*.apk
+*.aab
+*.keystore
+*.jks
+.env
+.env.*
+__pycache__/
+*.log
