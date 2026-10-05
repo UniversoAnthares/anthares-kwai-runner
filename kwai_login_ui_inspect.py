@@ -53,7 +53,7 @@ adb("shell","am","force-stop","com.kwai.video");time.sleep(2)
 adb("shell","monkey","-p","com.kwai.video","-c","android.intent.category.LAUNCHER","1");time.sleep(15)
 r,rr=snap("inspect-stable")
 # Open Profile semantically, then inspect only; no credentials.
-tap_semantic(rr,("profile","perfil")); r,rr=snap("inspect-profile")
+clicked=False\nfor x in rr:\n    if x["resource-id"].endswith("ll_profile"):\n        p=center(x["bounds"])\n        if p: adb("shell","input","tap",str(p[0]),str(p[1]));time.sleep(5);clicked=True;break\nif not clicked: tap_semantic(rr,("profile","perfil"))\nr,rr=snap("inspect-profile")
 # Try only visible login/sign-in/account controls, one transition at a time.
 for step in range(4):
     if not tap_semantic(rr,("log in","login","sign in","entrar","account","conta","phone","telefone","email")): break
