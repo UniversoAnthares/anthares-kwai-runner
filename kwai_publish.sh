@@ -6,7 +6,19 @@ log(){ printf '%s\n' "$*" | tee -a "$REPORT"; }
 
 : "${KWAI_VIDEO_URL:?KWAI_VIDEO_URL is required}"
 : "${KWAI_VIDEO_TITLE:?KWAI_VIDEO_TITLE is required}"
-JOB_SAFE="${KWAI_QUEUE_JOB_ID:-manual-${GITHUB_RUN_ID:-local}}"
+: "${KWAI_QUEUE_JOB_ID:?KWAI_QUEUE_JOB_ID is required for safe publication}"
+: "${KWAI_EXPECTED_ACCOUNT:?KWAI_EXPECTED_ACCOUNT is required for positive verification}"
+JOB_SAFE="$KWAI_QUEUE_JOB_ID"
+STARTED_ACK=0
+
+mark_uncertain(){
+  local reason="${1:-unknown}"
+  if [ "$STARTED_ACK" = "1" ]; then
+    set +e
+    bash kwai_queue_state.sh fail "$reason" >>"$REPORT" 2>&1
+    set -e
+  fi
+}
 
 log "STATE=MEDIA_PREPARING"
 curl -fL --retry 3 --connect-timeout 15 --max-time 300 -o /tmp/anthares-upload.mp4 "$KWAI_VIDEO_URL"
@@ -33,18 +45,53 @@ COUNT="$(adb shell content query --uri content://media/external/video/media --pr
 test "$COUNT" = "1" || { log "STATE=FAILED_SAFE REASON=mediastore-identity-count-$COUNT"; exit 85; }
 log "STATE=MEDIA_IMPORTED MEDIASTORE_MATCHES=1"
 
+# Transitional gate: real workflow remains quarantined until kwai-login supplies READY.
 python3 kwai_auth_probe.py >>"$REPORT" 2>&1 || { log "STATE=SESSION_EXPIRED"; exit 82; }
+
+# PREPARE must end before the irreversible publish boundary.
 set +e
-python3 kwai_publish_video.py >>"$REPORT" 2>&1
+python3 kwai_publish_video.py prepare >>"$REPORT" 2>&1
+prc=$?
+set -e
+if [ "$prc" -ne 0 ]; then log "STATE=FAILED_SAFE PREPARE_RC=$prc"; exit "$prc"; fi
+grep -q '^STATE=READY_TO_PUBLISH$' "$REPORT" || { log "STATE=FAILED_SAFE REASON=ready-to-publish-proof-missing"; exit 87; }
+
+# Central started acknowledgement is mandatory before commit. This call also rejects stale Worker versions.
+bash kwai_queue_state.sh started >>"$REPORT" 2>&1 || { log "STATE=FAILED_SAFE REASON=central-started-not-acknowledged"; exit 86; }
+STARTED_ACK=1
+
+set +e
+python3 kwai_publish_video.py commit >>"$REPORT" 2>&1
 rc=$?
 set -e
-if [ "$rc" -eq 90 ]; then log "STATE=UNCERTAIN"; exit 90; fi
-if [ "$rc" -ne 0 ]; then log "STATE=FAILED_SAFE PUBLISH_FLOW_RC=$rc"; exit "$rc"; fi
+if [ "$rc" -ne 0 ]; then
+  mark_uncertain "commit-rc-$rc"
+  log "STATE=UNCERTAIN PUBLISH_FLOW_RC=$rc"
+  exit 90
+fi
 
 log "STATE=VERIFYING"
 set +e
-python3 kwai_verify_publication.py >>"$REPORT" 2>&1
+VERIFY_OUT="$(python3 kwai_verify_publication.py 2>&1)"
 vrc=$?
 set -e
-if [ "$vrc" -ne 0 ]; then log "STATE=UNCERTAIN REASON=publication-not-positively-verified"; exit 90; fi
+printf '%s\n' "$VERIFY_OUT" | tee -a "$REPORT"
+if [ "$vrc" -ne 0 ]; then
+  mark_uncertain "verification-rc-$vrc"
+  log "STATE=UNCERTAIN REASON=publication-not-positively-verified"
+  exit 90
+fi
+KWAI_CONFIRMATION_EVIDENCE="$(printf '%s\n' "$VERIFY_OUT" | sed -n 's/^KWAI_CONFIRMATION_EVIDENCE=//p' | tail -1)"
+test -n "$KWAI_CONFIRMATION_EVIDENCE" || {
+  mark_uncertain "verification-evidence-missing"
+  log "STATE=UNCERTAIN REASON=confirmation-evidence-missing"
+  exit 90
+}
+export KWAI_CONFIRMATION_EVIDENCE
+
+# CONFIRMED is emitted only after the controller accepts the specific evidence.
+if ! bash kwai_queue_state.sh complete "$KWAI_CONFIRMATION_EVIDENCE" >>"$REPORT" 2>&1; then
+  log "STATE=UNCERTAIN REASON=central-complete-not-acknowledged"
+  exit 90
+fi
 log "STATE=CONFIRMED"
