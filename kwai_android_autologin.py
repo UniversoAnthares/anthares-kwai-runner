@@ -102,6 +102,23 @@ def dismiss_android_permission_dialogs():
 dismiss_android_permission_dialogs()
 clear_interest_discovery()
 
+def reach_profile_semantically():
+    # Probe 37378176856 proved that adaptive horizontal traversal can expose
+    # Home / Discover / Inbox / Profile. Prefer the semantic Profile node.
+    for _ in range(14):
+        r=dump()
+        txt=" ".join(label(n) for n in nodes(r))
+        if "profile" in txt and ("home" in txt or "discover" in txt or "inbox" in txt):
+            for n in nodes(r):
+                if "profile" in label(n) and tap_node(n):
+                    time.sleep(2)
+                    return True
+        # Advance onboarding cards without assuming a fixed 11/12-card count.
+        adb("shell","input","swipe","850","1100","180","1100","250")
+        time.sleep(.8)
+        clear_interest_discovery()
+    return False
+
 # Clear common onboarding screens without resetting app data.
 for _ in range(8):
     dismiss_android_permission_dialogs()
@@ -112,6 +129,12 @@ for _ in range(8):
     # Interest selection: choose Education/Talent/Entertainment if shown.
     if tap_matching(("education","talent & art","entertainment")): continue
     adb("shell","input","keyevent","4"); time.sleep(1)
+
+# If onboarding did not expose login directly, use the proven path to the
+# main navigation and open Profile semantically.
+r=dump(); txt=" ".join(label(n) for n in nodes(r))
+if not any(k in txt for k in ("log in","login","entrar","sign in","telefone","phone","email")):
+    reach_profile_semantically()
 
 tap_matching(("log in","login","entrar","sign in"))
 time.sleep(1)
