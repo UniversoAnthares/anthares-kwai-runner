@@ -11,13 +11,13 @@ permissions:
 
 jobs:
   acceptance:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
       - name: Fetch validated Kwai vault
         run: |
-          set -euo pipefail
+          set -eu
           curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
           echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
           rm -rf kwai-vault
@@ -31,13 +31,19 @@ jobs:
         run: |
           test -n "$KWAI_LOGIN"
           test -n "$KWAI_PASSWORD"
+      - name: Enable KVM acceleration
+        run: |
+          test -e /dev/kvm || { echo "KVM_DEVICE_MISSING"; exit 70; }
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm -a -w /dev/kvm
+          echo "KVM_ACCELERATION_READY=1"
       - name: Boot disposable Android executor
         uses: reactivecircus/android-emulator-runner@v2
         env:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
         with:
-          api-level: 35
+          api-level: 33
           arch: x86_64
           target: google_apis
           profile: pixel_5
@@ -48,7 +54,7 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
-            set -euo pipefail
+            set -eu
             test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
             bash kwai_vault_install.sh
             adb shell pm path com.kwai.video | grep -q package:
