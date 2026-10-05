@@ -2,9 +2,9 @@
 STATUS: RUNNING
 AREA: kwai
 DATE: 2026-10-06
-RUN: pending
+RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37388231997
 JOB: single Android activity probe
-COMMIT: pending
+COMMIT: a0cda10864a4c165d28482989bed90dc3d17d71d
 SUPERSEDES: none
 EXPIRES: 2026-10-06T01:45:00-04:00
 
