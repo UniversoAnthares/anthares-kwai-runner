@@ -1,3 +1,7 @@
+# Shared operational state
+
+**Before running or changing any Anthares automation test, read [TEST-HUB.md](TEST-HUB.md). It is the canonical shared record of proven results, known failures, discarded routes and pending acceptance criteria. After meaningful tests, follow [test-hub/PROTOCOL.md](test-hub/PROTOCOL.md).**
+
 # Anthares Kwai Runner
 
 Public, disposable Android runner for the Universo Anthares Kwai publishing pipeline.
