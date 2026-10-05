@@ -9,7 +9,26 @@ jobs:
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
-      - run: |
+      - name: "01 BOOT STATIC"
+        run: |
           echo PUBLIC_RUNNER_OK
+          test -e /dev/kvm
           uname -a
-          python3 --version
+      - name: "02 INSTALLER STATIC"
+        run: |
+          bash -n kwai_vault_install.sh
+          grep -q FAIL_NO_COMPATIBLE_ABI_SPLIT kwai_vault_install.sh
+      - name: "03 PERMISSIONS STATIC"
+        run: |
+          python3 -m py_compile kwai_android_autologin.py
+          grep -q dismiss_android_permission_dialogs kwai_android_autologin.py
+      - name: "04 ONBOARDING STATIC"
+        run: |
+          grep -q tiny_discovery_like_button kwai_android_autologin.py
+          grep -q tiny_discovery_dislike_button kwai_android_autologin.py
+          grep -q clear_interest_discovery kwai_android_autologin.py
+      - name: "05 UI MAP STATIC"
+        run: |
+          python3 -m py_compile kwai_auth_probe.py
+          grep -q editable_nodes kwai_android_autologin.py
+          grep -q tap_resource_id kwai_android_autologin.py
