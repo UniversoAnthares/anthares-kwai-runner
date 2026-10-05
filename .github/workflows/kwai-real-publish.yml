@@ -4,16 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       video_url:
-        description: Temporary HTTPS URL for the real MP4
-        required: true
+        description: Temporary HTTPS URL for the real MP4; empty leases central queue
+        required: false
         type: string
       video_title:
-        description: Coherent title for the video
-        required: true
+        description: Coherent title for the video; empty uses queued title
+        required: false
         type: string
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: anthares-kwai-publish
@@ -25,6 +26,42 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Lease central Kwai queue when inputs are empty
+        if: ${{ inputs.video_url == '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://anthares-control.anthares1.workers.dev"
+          OIDC="$(python - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          base='https://anthares-control.anthares1.workers.dev'
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+('&' if '?' in os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] else '?')+urllib.parse.urlencode({'audience':base})
+          req=urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN'],'Accept':'application/json'})
+          with urllib.request.urlopen(req,timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )"
+          printf '%s' "$OIDC" > /tmp/oidc
+          curl --fail-with-body -sS -X POST "$BASE/github-queue/lease" -H "Authorization: Bearer $OIDC" -H 'Content-Type: application/json' --data '{"platform":"kwai","ttl_seconds":1800}' > /tmp/lease.json
+          python - <<'PY'
+          import json,os
+          j=json.load(open('/tmp/lease.json')).get('job')
+          if not j: raise SystemExit('no queued Kwai job')
+          if not j.get('media_url'): raise SystemExit('queued Kwai job has no media_url')
+          with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as f:
+            f.write('KWAI_VIDEO_URL='+j['media_url']+'\n')
+            f.write('KWAI_VIDEO_TITLE='+str(j.get('title') or 'Universo Anthares') .replace('\n',' ')+'\n')
+            f.write('KWAI_QUEUE_JOB_ID='+j['id']+'\n')
+          PY
+          curl --fail-with-body -sS -X POST "$BASE/github-queue/started" -H "Authorization: Bearer $OIDC" -H 'Content-Type: application/json' --data "{"id":"$KWAI_QUEUE_JOB_ID"}" >/dev/null
+      - name: Use manual publication inputs
+        if: ${{ inputs.video_url != '' }}
+        shell: bash
+        env:
+          INPUT_VIDEO_URL: ${{ inputs.video_url }}
+          INPUT_VIDEO_TITLE: ${{ inputs.video_title }}
+        run: |
+          echo "KWAI_VIDEO_URL=$INPUT_VIDEO_URL" >> "$GITHUB_ENV"
+          echo "KWAI_VIDEO_TITLE=$INPUT_VIDEO_TITLE" >> "$GITHUB_ENV"
       - name: Check secrets
         env:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
@@ -50,8 +87,8 @@ jobs:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
           KWAI_SESSION_FILE: kwai-session.enc
-          KWAI_VIDEO_URL: ${{ inputs.video_url }}
-          KWAI_VIDEO_TITLE: ${{ inputs.video_title }}
+          KWAI_VIDEO_URL: ${{ env.KWAI_VIDEO_URL }}
+          KWAI_VIDEO_TITLE: ${{ env.KWAI_VIDEO_TITLE }}
         with:
           api-level: 35
           arch: x86_64
@@ -74,6 +111,19 @@ jobs:
             fi
             bash kwai_publish.sh
             bash kwai_session_state.sh save || true
+      - name: Confirm central queue publication
+        if: success() && env.KWAI_QUEUE_JOB_ID != ''
+        shell: bash
+        run: |
+          OIDC="$(cat /tmp/oidc)"
+          curl --fail-with-body -sS -X POST "https://anthares-control.anthares1.workers.dev/github-queue/complete" -H "Authorization: Bearer $OIDC" -H 'Content-Type: application/json' --data "{"id":"$KWAI_QUEUE_JOB_ID","confirmed":true,"remote_id":"kwai-ui-verified"}"
+      - name: Mark central queue failure
+        if: failure() && env.KWAI_QUEUE_JOB_ID != ''
+        shell: bash
+        run: |
+          OIDC="$(cat /tmp/oidc 2>/dev/null || true)"
+          test -n "$OIDC" || exit 0
+          curl -sS -X POST "https://anthares-control.anthares1.workers.dev/github-queue/fail" -H "Authorization: Bearer $OIDC" -H 'Content-Type: application/json' --data "{"id":"$KWAI_QUEUE_JOB_ID","error_class":"remote_publish_failed","error_message":"public Android runner failed before verified completion","published_possible":true}" || true
       - name: Save encrypted session
         if: success()
         uses: actions/cache/save@v4
