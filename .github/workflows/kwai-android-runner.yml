@@ -2,6 +2,9 @@ name: Anthares Kwai Android Runner
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.runner-trigger'
 
 permissions:
   contents: read
