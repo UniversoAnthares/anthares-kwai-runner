@@ -102,7 +102,7 @@ async function activeProbes(env){
   
  };
  const pairs=await Promise.all(Object.entries(targets).filter(([,url])=>!!url).map(async([executor,url])=>[executor,{executor,url,...await probe(url)}]));
- const hls=env.HLS_HEALTH_URL||"https://anthares.us/wp-content/uploads/anthares-live/index.m3u8";
+ const hls=env.HLS_HEALTH_URL||"";
  if(hls)pairs.push(["hls_origin",{executor:"hls_origin",url:hls,...await probeHls(hls)}]);
  return Object.fromEntries(pairs);
 }
