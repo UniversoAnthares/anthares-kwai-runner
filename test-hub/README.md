@@ -77,3 +77,20 @@ Não abrir nova matriz enquanto existir run causal relevante RUNNING, salvo cama
 
 ## Concorrência
 O diretório `findings/` é append-only. Antes de novo experimento, consultar findings recentes e runs em andamento. Se dois chats atuam na mesma cadeia causal, o run mais recente declarado RUNNING tem precedência até produzir evidência.
+
+
+## Lease obrigatório para mutações
+
+Diagnósticos somente-leitura podem ser paralelos. Toda mutação de código/deploy/sessão/fila/publicação precisa de lease append-only antes da ação.
+
+O agente deve:
+- atualizar README + todos os findings/commits novos desde seu último snapshot;
+- conferir runs/deploys RUNNING da mesma cadeia causal;
+- criar finding `lease-<area>-<objetivo>` com baseline, FAILED evitados, sinais de sucesso/falha/validade e expiração máxima de 30 min;
+- reler HEAD após criar o lease e ceder se já existir lease ativo anterior da mesma área;
+- invalidar, em vez de classificar FAILED, qualquer teste cujo baseline/deploy mudou durante a execução;
+- encerrar o lease com novo finding append-only baseado em evidência.
+
+Áreas de mutação são serializadas: `tiktok-session`, `tiktok-publish`, `kwai-login`, `kwai-publish`, `kwai-live`, `cloudflare-control`, `queue`.
+
+A existência de um lease ativo não impede probes somente-leitura, mas impede outro deploy/mudança de estado na mesma área.
