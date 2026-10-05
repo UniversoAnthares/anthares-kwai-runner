@@ -16,14 +16,9 @@ log "DEVICE_DENSITY=$DENSITY"
 BASE="$(find kwai-vault -type f \( -name 'base.apk' -o -name 'com.kwai.video.apk' \) | head -1)"
 [ -n "$BASE" ] || { log FAIL_NO_BASE_APK; exit 40; }
 APKS=("$BASE")
-# Include non-configuration feature splits, but never install a foreign ABI split.
-while IFS= read -r p; do
-  n="$(basename "$p")"
-  case "$n" in
-    base.apk|com.kwai.video.apk|config.*|*.config.arm64_v8a.apk|*.config.armeabi_v7a.apk|*.config.x86.apk|*.config.x86_64.apk) ;;
-    *) APKS+=("$p") ;;
-  esac
-done < <(find kwai-vault -type f -name '*.apk' | sort)
+# Proven install set for this validated bundle: base + dfm_ug + ABI + density.
+p="$(find kwai-vault -type f -name 'dfm_ug.apk' | head -1 || true)"
+[ -z "$p" ] || APKS+=("$p")
 selected_abi=""
 # This validated vault is ARM64. On x86 hosts, only use it when a native bridge is present.
 for abi in arm64_v8a armeabi_v7a x86_64 x86; do
