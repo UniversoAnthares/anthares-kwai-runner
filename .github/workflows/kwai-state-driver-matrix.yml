@@ -1,0 +1,37 @@
+name: Kwai State Driver Matrix
+on:
+  push:
+    paths: ['.state-driver-trigger']
+permissions:
+  contents: read
+jobs:
+  state-driver:
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [1,2,3,4,5,6,7,8,9,10]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -fL --retry 2 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          mkdir -p kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+          sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 180
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            bash kwai_vault_install.sh
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+            sleep 7
+            python3 kwai_state_driver.py
