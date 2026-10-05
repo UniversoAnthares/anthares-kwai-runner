@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+import subprocess,time,xml.etree.ElementTree as ET,re
+def adb(*a):
+    return subprocess.run(["adb",*a],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=25).stdout
+def dump(tag):
+    adb("shell","uiautomator","dump",f"/sdcard/{tag}.xml")
+    adb("pull",f"/sdcard/{tag}.xml",f"/tmp/{tag}.xml")
+    try:return ET.parse(f"/tmp/{tag}.xml").getroot()
+    except:return None
+def ns(r): return list(r.iter("node")) if r is not None else []
+def lab(n): return (n.attrib.get("text","")+" "+n.attrib.get("content-desc","")).strip().lower()
+def ctr(b):
+    m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",b or "")
+    return ((int(m[1])+int(m[3]))//2,(int(m[2])+int(m[4]))//2) if m else None
+def tap(n):
+    p=ctr(n.attrib.get("bounds"))
+    if not p:return False
+    adb("shell","input","tap",str(p[0]),str(p[1]));time.sleep(2);return True
+def summary(tag,r):
+    vals=[]
+    for n in ns(r):
+        s=lab(n); rid=n.attrib.get("resource-id","")
+        if s or rid:
+            vals.append((s,rid,n.attrib.get("class","").split(".")[-1],n.attrib.get("clickable","")))
+    print("STATE="+tag)
+    for x in vals[-80:]: print("NODE="+" | ".join(x))
+def interest(r):
+    for suffix in ("tiny_discovery_dislike_button","tiny_discovery_like_button"):
+        for n in ns(r):
+            if n.attrib.get("resource-id","").endswith(suffix):
+                return tap(n)
+    return False
+# Advance using actual controls first; swipe only when no icon control exists.
+for i in range(20):
+    r=dump(f"s{i}"); t=" ".join(lab(n) for n in ns(r))
+    if "profile" in t and ("home" in t or "discover" in t or "inbox" in t):
+        summary("MAIN_NAV",r);break
+    if interest(r):continue
+    adb("shell","input","swipe","850","1100","180","1100","250");time.sleep(1)
+else:
+    summary("NO_MAIN_NAV",dump("no-main"));raise SystemExit(20)
+# Semantic Profile.
+r=dump("main")
+for n in ns(r):
+    if "profile" in lab(n):
+        if tap(n):break
+r=dump("profile");summary("PROFILE",r)
+# Try only explicit auth/account controls, logging state after each candidate.
+terms=("log in","login","sign in","entrar","account","conta","phone","telefone","email","e-mail")
+candidates=[n for n in ns(r) if any(t in lab(n) for t in terms)]
+print("AUTH_CANDIDATES="+str(len(candidates)))
+for idx,n in enumerate(candidates[:8]):
+    print("TRY="+str(idx)+" | "+lab(n)+" | "+n.attrib.get("resource-id",""))
+    if tap(n):
+        rr=dump("candidate");summary("AFTER_AUTH_CANDIDATE",rr)
+        edits=[x for x in ns(rr) if x.attrib.get("editable")=="true" or x.attrib.get("class","").endswith("EditText")]
+        if edits:
+            print("LOGIN_FORM_FOUND=1");raise SystemExit(0)
+        adb("shell","input","keyevent","4");time.sleep(1)
+print("LOGIN_FORM_FOUND=0")
+raise SystemExit(21)

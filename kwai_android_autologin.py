@@ -101,6 +101,7 @@ def dismiss_android_permission_dialogs():
 
 dismiss_android_permission_dialogs()
 clear_interest_discovery()
+# Stabilization matrix showed restart-after-nav is the strongest causal path.
 
 def reach_profile_semantically():
     # Probe 37378176856 proved that adaptive horizontal traversal can expose
@@ -134,7 +135,10 @@ for _ in range(8):
 # main navigation and open Profile semantically.
 r=dump(); txt=" ".join(label(n) for n in nodes(r))
 if not any(k in txt for k in ("log in","login","entrar","sign in","telefone","phone","email")):
-    reach_profile_semantically()
+    if reach_profile_semantically():
+        adb("shell","am","force-stop","com.kwai.video"); time.sleep(2)
+        adb("shell","monkey","-p","com.kwai.video","-c","android.intent.category.LAUNCHER","1"); time.sleep(15)
+        reach_profile_semantically()
 
 tap_matching(("log in","login","entrar","sign in"))
 time.sleep(1)
