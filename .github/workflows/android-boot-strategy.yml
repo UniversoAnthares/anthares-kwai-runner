@@ -16,9 +16,18 @@ jobs:
       matrix:
         api: [30, 33, 34]
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.android
+            /opt/hostedtoolcache/android
+          key: android-sdk-${{ runner.os }}-${{ hashFiles('.github/workflows/android-boot-strategy.yml') }}
+          restore-keys: |
+            android-sdk-${{ runner.os }}-
       - name: Enable KVM acceleration
         run: |
           test -e /dev/kvm || { echo "KVM_DEVICE_MISSING"; exit 70; }

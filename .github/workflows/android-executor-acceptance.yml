@@ -18,9 +18,18 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       TEST_MODE: ${{ matrix.mode }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.android
+            /opt/hostedtoolcache/android
+          key: android-sdk-${{ runner.os }}-${{ hashFiles('.github/workflows/android-executor-acceptance.yml') }}
+          restore-keys: |
+            android-sdk-${{ runner.os }}-
       - name: Fetch validated Kwai vault
         run: |
           set -eu
