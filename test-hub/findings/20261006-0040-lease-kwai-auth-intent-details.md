@@ -2,9 +2,9 @@
 STATUS: RUNNING
 AREA: kwai
 DATE: 2026-10-06
-RUN: pending
+RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37388775209
 JOB: static manifest detail
-COMMIT: pending
+COMMIT: b2e6551285ab6ad2d81aef4b399e7b1b141beb4d
 SUPERSEDES: none
 EXPIRES: 2026-10-06T02:45:00-04:00
 BASELINE_PROVEN: test-hub/findings/20261006-0038-exported-kwai-auth-entrypoints-proven.md
