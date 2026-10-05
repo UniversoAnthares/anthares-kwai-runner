@@ -52,3 +52,12 @@ jobs:
           assert 'const today=localDay()' in p
           print('CONTROL_STATIC_SAFETY=OK')
           PY
+      - name: Probe deployed controller read-only
+        run: |
+          set -euo pipefail
+          curl --fail-with-body -sS https://anthares-control.anthares1.workers.dev/health
+          echo
+          curl --fail-with-body -sS https://anthares-control.anthares1.workers.dev/strategy
+          echo
+          curl --fail-with-body -sS https://anthares-control.anthares1.workers.dev/failover-self-test
+          echo
