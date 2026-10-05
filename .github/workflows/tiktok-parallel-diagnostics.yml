@@ -1,0 +1,75 @@
+name: TikTok Parallel Diagnostics
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.tiktok-parallel-tests-trigger']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  tests:
+    name: "${{ matrix.label }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        include:
+          - { id: "01", label: "01 Runner GitHub" }
+          - { id: "02", label: "02 OIDC GitHub -> Render" }
+          - { id: "03", label: "03 Render health/revision" }
+          - { id: "04", label: "04 TikTok session persistence" }
+          - { id: "05", label: "05 Alternate account identity" }
+          - { id: "06", label: "06 MP4 cloud accessibility" }
+          - { id: "07", label: "07 Render browser readiness" }
+          - { id: "08", label: "08 TikTok upload page auth" }
+          - { id: "09", label: "09 MP4 upload dry-run" }
+          - { id: "10", label: "10 Publish controls dry-run" }
+    env:
+      RENDER_WORKER_URL: ${{ secrets.RENDER_WORKER_URL }}
+    steps:
+      - name: Execute isolated diagnostic
+        env:
+          TEST_ID: ${{ matrix.id }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.parse,urllib.request,urllib.error
+          tid=os.environ['TEST_ID']; base=(os.environ.get('RENDER_WORKER_URL') or '').rstrip('/')
+          def oidc(aud='anthares-render-worker'):
+              u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+('&' if '?' in os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] else '?')+urllib.parse.urlencode({'audience':aud})
+              q=urllib.request.Request(u,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN'],'Accept':'application/json'})
+              with urllib.request.urlopen(q,timeout=20) as r:return json.load(r)['value']
+          def get(path,auth=False):
+              h={'Accept':'application/json'}
+              if auth:h['Authorization']='Bearer '+oidc()
+              q=urllib.request.Request(base+path,headers=h)
+              with urllib.request.urlopen(q,timeout=45) as r:return json.load(r)
+          if tid=='01':
+              print('PASS runner online')
+          elif tid=='02':
+              d=get('/session-status',True); print(json.dumps(d)); assert 'ok' in d
+          elif tid=='03':
+              d=get('/health'); print(json.dumps(d)); assert d.get('ok') and d.get('service')=='anthares-tiktok-render'
+          elif tid=='04':
+              d=get('/session-status',True); print(json.dumps(d)); assert d.get('bootstrapped')
+          elif tid=='05':
+              d=get('/session-status',True); print(json.dumps(d)); assert d.get('identity_verified') and d.get('ready_for_tiktok')
+          elif tid=='06':
+              url='https://github.com/UniversoAnthares/anthares-clipper/releases/download/tiktok-failover-test/kwai-daily-current-021.mp4'
+              q=urllib.request.Request(url,method='GET',headers={'Range':'bytes=0-4095','User-Agent':'Anthares-Diagnostic'})
+              with urllib.request.urlopen(q,timeout=30) as r:b=r.read(4096)
+              assert len(b)>100 and b'ftyp' in b[:64]; print('PASS mp4 bytes='+str(len(b)))
+          elif tid=='07':
+              d=get('/health'); print(json.dumps(d)); assert d.get('ready_for_tiktok')
+          elif tid in {'08','09','10'}:
+              token=oidc()
+              payload={'test':tid,'media_url':'https://github.com/UniversoAnthares/anthares-clipper/releases/download/tiktok-failover-test/kwai-daily-current-021.mp4','plan':{'segment_id':'diagnostic-'+tid,'title':'Literatura e escrita — Universo Anthares'}}
+              q=urllib.request.Request(base+'/publish-dry-run',data=json.dumps(payload).encode(),method='POST',headers={'Authorization':'Bearer '+token,'Content-Type':'application/json','Accept':'application/json'})
+              try:
+                  with urllib.request.urlopen(q,timeout=180) as r:d=json.load(r)
+              except urllib.error.HTTPError as e:
+                  body=e.read().decode('utf-8','replace'); print(body); raise
+              print(json.dumps(d)); assert d.get('ok')
+          PY
