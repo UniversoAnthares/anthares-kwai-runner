@@ -1,0 +1,56 @@
+name: Anthares Kwai Android Runner
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout runner
+        uses: actions/checkout@v4
+
+      - name: Check required secrets without exposing them
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          ANTHARES_CONTROL_URL: ${{ secrets.ANTHARES_CONTROL_URL }}
+          ANTHARES_CONTROL_TOKEN: ${{ secrets.ANTHARES_CONTROL_TOKEN }}
+        run: |
+          test -n "$KWAI_LOGIN"
+          test -n "$KWAI_PASSWORD"
+          test -n "$ANTHARES_CONTROL_URL"
+          test -n "$ANTHARES_CONTROL_TOKEN"
+          echo "required secrets present"
+
+      - name: Boot Android and keep runner disposable
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          ANTHARES_CONTROL_URL: ${{ secrets.ANTHARES_CONTROL_URL }}
+          ANTHARES_CONTROL_TOKEN: ${{ secrets.ANTHARES_CONTROL_TOKEN }}
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 120
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            chmod +x kwai_runner.sh
+            echo "Runner infrastructure initialized"
+            # Package installation is intentionally disabled until the validated
+            # vault artifact is attached to this public runner.
+            adb shell getprop ro.build.version.sdk
+            adb shell pm path com.kwai.video || true
