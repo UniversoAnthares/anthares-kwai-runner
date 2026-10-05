@@ -25,6 +25,23 @@ def tap_semantic(rr,words):
             p=center(n["bounds"])
             if p: adb("shell","input","tap",str(p[0]),str(p[1]));time.sleep(2);return True
     return False
+def clear_permission_dialog():
+    for _ in range(6):
+        r,rr=snap("permission-check")
+        if not any("permissioncontroller" in x["resource-id"] for x in rr):
+            return
+        target=None
+        for x in rr:
+            rid=x["resource-id"]
+            if rid.endswith("permission_deny_button") or rid.endswith("permission_allow_button"):
+                target=x; break
+        if target:
+            p=center(target["bounds"])
+            if p: adb("shell","input","tap",str(p[0]),str(p[1]));time.sleep(1);continue
+        adb("shell","input","keyevent","4");time.sleep(1)
+
+clear_permission_dialog()
+
 # Traverse interest onboarding by proven adaptive gestures.
 for i in range(18):
     r,rr=snap("inspect-stage-"+str(i))
