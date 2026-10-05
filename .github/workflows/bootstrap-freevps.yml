@@ -17,7 +17,7 @@ jobs:
           sudo apt-get install -y -qq sshpass
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          : # host key is accepted only for this disposable bootstrap probe
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
 
@@ -30,6 +30,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          VPS_PORT=""
+          for p in 22 2222 2121 2200 2022 443; do
+            if timeout 3 bash -c "exec 3<>/dev/tcp/$VPS_HOST/$p" 2>/dev/null; then VPS_PORT="$p"; break; fi
+          done
+          test -n "$VPS_PORT" || { echo "FREEVPS_NO_SSH_PORT"; exit 50; }
+          echo "FREEVPS_SSH_PORT=$VPS_PORT"
           {
             printf 'export VPS_PASSWORD=%q\n' "$VPS_PASSWORD"
             cat <<'REMOTE'
@@ -102,5 +108,5 @@ jobs:
           echo "=== RESULT ==="
           echo "BOOTSTRAP_DIAGNOSTIC_COMPLETE=1"
           REMOTE
-          } | sshpass -e ssh -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+          } | sshpass -e ssh -p "$VPS_PORT" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
               "$VPS_USER@$VPS_HOST" 'bash -s'
