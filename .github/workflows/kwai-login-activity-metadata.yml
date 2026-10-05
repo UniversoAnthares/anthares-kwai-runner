@@ -1,0 +1,19 @@
+name: Kwai Login Activity Metadata
+on:
+  push:
+    paths: ['.login-activity-metadata-trigger']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -fL --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+          rm -rf kwai-vault && mkdir kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+          base=$(find kwai-vault -type f -name 'com.kwai.video.apk' | head -1)
+          aapt dump xmltree "$base" AndroidManifest.xml | grep -E -B8 -A12 'TinyLoginActivity|TinyUserInfoActivity|TinyGoogleSSOActivity|AutoLoginActivity|KwaiAuthActivity|LivePartnerAuthActivity' || true
+          echo LOGIN_ACTIVITY_METADATA_DONE=1
