@@ -1,0 +1,25 @@
+name = "anthares-control"
+main = "src/index.js"
+compatibility_date = "2026-10-04"
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "ANTHARES_STATE"
+id = "d5ca2033673040babc9fd701cc0c8738"
+
+[[durable_objects.bindings]]
+name = "ANTHARES_QUEUE"
+class_name = "AntharesQueue"
+
+[[migrations]]
+tag = "v1-queue-sqlite"
+new_sqlite_classes = ["AntharesQueue"]
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+HLS_HEALTH_URL = "https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8"
+
+LOCAL_EXECUTOR_PUBLIC_KEY = "-----BEGIN PUBLIC KEY----- MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAhhw2SHWfus9up70XDTvp ZPDWkkO+7/L8u69jXLuAF7xapO535OLa06Cjg1a/s49KfkDifwTVmT1qm3Bia6LT V8dAps+svGhtuNWvJiHpG0EY37WC3Mk9MUm24DOkTHz1sBT2jesczQCHFdw12J5v dqMvgn/fpo2GX3Lm5DqD7s+JsefG4sHUWz3O5QFpCKtUVemPXMusOILTrZE6gUkf e3dnKoBG7uRq9BU5J7L9c6fyn9+Zx1h+BkPGbKJoZqG2E7V2wCW5ga/Uzm4NyPe3 LPGbTc0kr+uvOch/IHHrkBuJOzv8jRVQF/r3w31CF5PW1jXyylB4MY8G6UAIkUP4 CvxV4CDhaQt1nNiBpauTyxVOfL8wBPyzFNjeorz6gnfLB9EAylI/Eu08HRFhpjWn 9g62pR/vjGNMhsCBWmQbr1iXdM0hDR989xDYtmZzcQYmla1k5lVslpU5Nf1Clfsd aV4Xd5SLasWanVq6fbri2fljNYGE4yu7PP7uuLOdn9qZAgMBAAE= -----END PUBLIC KEY-----"
+
