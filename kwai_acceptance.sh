@@ -4,6 +4,7 @@ set -Eeuo pipefail
 test "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1"
 bash kwai_vault_install.sh
 adb shell pm path com.kwai.video | grep -q 'package:'
+adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
 adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
 sleep 8
 adb shell pidof com.kwai.video
