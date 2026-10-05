@@ -1,10 +1,16 @@
 name: Anthares Kwai Android Runner
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: anthares-kwai-android
+  cancel-in-progress: true
 
 jobs:
   android:
@@ -28,9 +34,12 @@ jobs:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
         run: |
           rm -rf kwai-vault kwai-vault.zip
-          gh release download kwai-package-vault --repo UniversoAnthares/anthares-clipper --pattern kwai-vault.zip --output kwai-vault.zip
+          if ! gh release download kwai-package-vault --repo UniversoAnthares/anthares-clipper --pattern kwai-vault.zip --output kwai-vault.zip; then
+            echo "PRIVATE_REPO_TOKEN cannot read the private Kwai vault release"
+            exit 44
+          fi
           unzip -q kwai-vault.zip -d kwai-vault
-          test -s kwai-vault/MANIFEST.tsv
+          test -s kwai-vault/MANIFEST.tsv || { echo "validated vault manifest missing"; exit 45; }
           echo "validated Kwai vault acquired"
       - name: Download Cloudflare tunnel client
         run: |
