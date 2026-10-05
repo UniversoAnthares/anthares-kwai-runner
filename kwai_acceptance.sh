@@ -12,10 +12,12 @@ adb pull /sdcard/ui.xml executor-ui.xml >/dev/null || true
 adb exec-out screencap -p > executor-screen.png || true
 echo ANDROID_EXECUTOR_ACCEPTED
 
-rc=0
-python3 kwai_android_autologin.py || rc=$?
-if [ "$rc" -ne 0 ] && [ "$rc" -ne 6 ]; then
-  echo "AUTOLOGIN_FAILED_RC=$rc"
-  exit "$rc"
-fi
+set +e
+python3 kwai_android_autologin.py
+rc=$?
+set -e
+case "$rc" in
+  0|6) ;;
+  *) echo "AUTOLOGIN_FAILED_RC=$rc"; exit "$rc" ;;
+esac
 python3 kwai_auth_probe.py
