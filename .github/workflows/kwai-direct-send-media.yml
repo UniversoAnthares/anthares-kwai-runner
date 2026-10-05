@@ -1,0 +1,62 @@
+name: Kwai Direct Video Send Probe
+on:
+  push:
+    branches: [main]
+    paths: ['.kwai-direct-send-trigger']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch validated Kwai package vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+          rm -rf kwai-vault && mkdir kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+          sudo chmod 666 /dev/kvm
+      - name: Reach proven MAIN then hand exact MediaStore URI through ACTION_SEND
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 240
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            set -euo pipefail
+            bash kwai_vault_install.sh
+            adb shell monkey -p com.kwai.video 1
+            sleep 7
+            python3 kwai_state_driver.py | tee direct-send-fsm.log
+            grep -q 'FSM_MAIN_REACHED' direct-send-fsm.log || { echo 'TEST_VALIDITY=NO_FSM_MAIN'; exit 90; }
+            echo 'TEST_VALIDITY=FSM_MAIN_REACHED'
+            set +e
+            python3 kwai_direct_send_probe.py | tee direct-send-probe.log
+            rc=${PIPESTATUS[0]}
+            set -e
+            echo "DIRECT_SEND_PROBE_RC=$rc"
+            exit "$rc"
+      - name: Upload direct-send evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-direct-send-${{ github.run_id }}
+          path: |
+            direct-send-fsm.log
+            direct-send-probe.log
+            direct-send-before.xml
+            direct-send-after.xml
+            direct-send-after.png
+            direct-send-probe.mp4
+          if-no-files-found: warn
+          retention-days: 1
