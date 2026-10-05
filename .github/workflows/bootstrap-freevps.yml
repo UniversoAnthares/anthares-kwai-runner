@@ -1,0 +1,101 @@
+name: Bootstrap FreeVPS Android Host
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Prepare SSH client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+
+      - name: Diagnose and bootstrap host
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          sshpass -e ssh -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+
+          echo "=== HOST ==="
+          uname -a
+          echo "=== VIRTUALIZATION ==="
+          (systemd-detect-virt || true)
+          echo "=== KVM ==="
+          if [ -e /dev/kvm ]; then
+            ls -l /dev/kvm
+            echo "KVM_OK=1"
+          else
+            echo "KVM_OK=0"
+          fi
+
+          echo "=== MEMORY/CPU/DISK ==="
+          free -h
+          nproc
+          df -h /
+
+          echo "=== BINDER ==="
+          if [ -e /dev/binderfs/binder-control ] || [ -e /dev/binder/binder ]; then
+            echo "BINDER_DEVICE_PRESENT=1"
+          else
+            echo "BINDER_DEVICE_PRESENT=0"
+          fi
+
+          echo "=== NETWORK ==="
+          curl -4 -fsS --max-time 10 https://example.com >/dev/null && echo "OUTBOUND_HTTPS=1" || echo "OUTBOUND_HTTPS=0"
+
+          echo "=== DOCKER ==="
+          if command -v docker >/dev/null 2>&1; then
+            docker --version
+          else
+            echo "DOCKER_MISSING=1"
+          fi
+
+          echo "=== INSTALL BASE ==="
+          if ! command -v docker >/dev/null 2>&1; then
+            export DEBIAN_FRONTEND=noninteractive
+            sudo -S apt-get update -qq <<<"$VPS_PASSWORD"
+            sudo -S apt-get install -y -qq ca-certificates curl git jq \
+              linux-modules-extra-$(uname -r) 2>/dev/null <<<"$VPS_PASSWORD" || true
+            curl -fsSL https://get.docker.com | sudo -S sh
+            sudo -S usermod -aG docker "$USER" <<<"$VPS_PASSWORD" || true
+          fi
+
+          echo "=== DOCKER FINAL ==="
+          sudo -S docker --version <<<"$VPS_PASSWORD"
+
+          echo "=== BINDER MODULE CHECK ==="
+          if sudo -S modprobe binder_linux 2>/dev/null <<<"$VPS_PASSWORD"; then
+            echo "BINDER_MODULE=loaded"
+          else
+            echo "BINDER_MODULE=unavailable"
+          fi
+
+          echo "=== BINDERFS CHECK ==="
+          if sudo -S mkdir -p /dev/binderfs 2>/dev/null <<<"$VPS_PASSWORD"; then
+            if sudo -S mount -t binder binder /dev/binderfs 2>/dev/null <<<"$VPS_PASSWORD"; then
+              echo "BINDERFS_MOUNT=ok"
+              sudo -S chmod 666 /dev/binderfs/binder-control 2>/dev/null <<<"$VPS_PASSWORD" || true
+            else
+              echo "BINDERFS_MOUNT=failed"
+            fi
+          fi
+
+          echo "=== RESULT ==="
+          echo "BOOTSTRAP_DIAGNOSTIC_COMPLETE=1"
+          REMOTE
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
