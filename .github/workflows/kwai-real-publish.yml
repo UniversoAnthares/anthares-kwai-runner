@@ -54,6 +54,14 @@ jobs:
             with open(os.environ['GITHUB_ENV'],'a') as f: f.write('KWAI_QUEUE_EMPTY=1\n')
             raise SystemExit(0)
           if not j.get('media_url'): raise SystemExit('queued Kwai job has no media_url')
+          source_id=str(j.get('source_id') or '').strip()
+          source_start=j.get('source_start'); source_end=j.get('source_end')
+          if not source_id or source_start is None or source_end is None:
+            raise SystemExit('queued Kwai job lacks canonical source_id/source_start/source_end; refusing unsafe publication')
+          try:
+            if float(source_end) <= float(source_start): raise ValueError()
+          except Exception:
+            raise SystemExit('queued Kwai job has invalid source interval; refusing unsafe publication')
           with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as f:
             f.write('KWAI_VIDEO_URL='+j['media_url']+'\n')
             f.write('KWAI_VIDEO_TITLE='+str(j.get('title') or 'Universo Anthares') .replace('\n',' ')+'\n')
