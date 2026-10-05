@@ -9,9 +9,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [parent-now,parent-wait10,parent-wait30,parent-restart,parent-twice,parent-back-parent,parent-scroll,parent-resource-wait]
+        mode: [parent-now,parent-wait10,parent-wait30,parent-restart,parent-twice,parent-back-parent,parent-scroll,parent-resource-wait,start-now,launcher-wait,launcher-close-relaunch,start-now-restart,module-wait60,module-hide-reopen,profile-id-direct,profile-id-restart]
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 8
     env:
       ROUTE_MODE: ${{ matrix.mode }}
     steps:
