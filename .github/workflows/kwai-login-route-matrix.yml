@@ -1,0 +1,39 @@
+name: Kwai Login Route Matrix
+on:
+  push:
+    paths: ['.login-route-matrix-trigger']
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [parent-now,parent-wait10,parent-wait30,parent-restart,parent-twice,parent-back-parent,parent-scroll,parent-resource-wait]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      ROUTE_MODE: ${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -fL --retry 2 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          mkdir kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+          sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 180
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            bash kwai_vault_install.sh
+            adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+            sleep 8
+            python3 kwai_login_route_probe.py
