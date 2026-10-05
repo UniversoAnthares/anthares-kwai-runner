@@ -225,7 +225,7 @@ export class AntharesQueue extends DurableObject {
    await this.started({executor:"selftest-f",id:l2.job.id});
    const confirmedAfterReconcile=await this.complete({executor:"selftest-f",id:l2.job.id,confirmed:true,remote_id:"selftest-reconciled"},localDay());
    if(!confirmedAfterReconcile.job||confirmedAfterReconcile.job.status!=="published"||!confirmedAfterReconcile.job.confirmed)throw new Error("reconciled_confirmation_failed");
-   return {ok:true,dedupe:true,timeline_overlap_dedupe:true,concurrent_unique:true,expired_unstarted_recovered:true,started_expiry_protected:true,failure_requeued:true,failed_job_recovered:true,confirmation_recorded:true,uncertain_reconciled:true,reconciled_job_recovered:true,consecutive_failure_threshold:true,failure_counter_reset:true};
+   return {ok:true,dedupe:true,timeline_overlap_dedupe:true,premature_complete_rejected:true,reconcile_without_evidence_rejected:true,complete_without_evidence_rejected:true,concurrent_unique:true,expired_unstarted_recovered:true,started_expiry_protected:true,failure_requeued:true,failed_job_recovered:true,confirmation_recorded:true,uncertain_reconciled:true,reconciled_job_recovered:true,consecutive_failure_threshold:true,failure_counter_reset:true};
   }finally{
    this.sql.exec("DELETE FROM jobs WHERE platform=? AND id LIKE ?",platform,prefix+"%");
    const xs=await this.ctx.storage.list({prefix:"executor:selftest-"});
