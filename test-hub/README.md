@@ -63,11 +63,12 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 - PROVEN: Manifest válido no run 37388030409 declarou SplashLoginActivity, PhoneAccountActivityV2, EmailLoginActivity, LoginActivity, CommonLoginActivity, KwaiAuthActivity e outras.
 - IMPORTANTE: SplashLoginActivity, PhoneAccountActivityV2, EmailLoginActivity e LoginActivity são android:exported=false no Manifest. Permission Denial via adb shell não prova ausência da UI. KwaiAuthActivity/LivePartnerAuthActivity são exported=true.
 - PROVEN: run 37388231997 confirmou que cinco Activities internas selecionadas são bloqueadas por `not exported`; isto prova apenas a fronteira de start externo, não ausência da UI. Não repetir `am start` nelas.
-- PROVEN: Manifest também mostra gateways exported=true relevantes: TinyGoogleSSOActivity, TinyUserInfoActivity, OpenAuthActivity, KwaiAuthActivity e LivePartnerAuthActivity. Próximo probe deve partir destes alvos exportados, sem confundir OAuth externo com login do usuário.
+- PROVEN: Manifest mostra TinyUserInfoActivity, OpenAuthActivity, KwaiAuthActivity e LivePartnerAuthActivity como entrypoints exportados relevantes; TinyGoogleSSOActivity é exported=false.
+- FAILED: run 37389007878 invocou os URI contracts exportados com AM_RC=0, mas nenhum expôs UI de login. `ikwai://authorization` caiu em TinyLaunchActivity/diálogo de notificação; as demais rotas caíram no feed/home. Não repetir bare deep links. Próximo caminho: MAIN state-driven + navegação interna/Accessibility/Anthares Agent.
 - PROVEN somente STATIC/SIMULATED: Kwai publish safety run 37387709252 emitiu KWAI_PUBLISH_SAFETY_STATIC_OK. Publicação real continua sem prova e o workflow real está fail-closed até READY.
 
 ### TikTok: cadeia causal atual
-- RUNNING: session restore/identity probe 37388273031; job publish está skipped nesse push e não deve ser confundido com publicação real.
+- FAILED/HARNESS: probe 37388273031 expirou esperando marcador de revisão stale; não testou sessão e publish ficou skipped. Probe válido posterior 37389276949 alcançou Render correto e mostrou restore central HTTP 403, bootstrapped=false, identity_verified=false. Nova tentativa de fallback por seed de ambiente está RUNNING em 37389620043.
 - Modo DIAGNOSTIC atual: 3 posts/dia com observação 3–6h para investigar baixa distribuição. A meta/capacidade de produção 100/dia permanece separada; nenhum modo deve ser usado como prova do outro.
 - O caminho workflow_dispatch de tiktok-real-publish ainda não satisfaz aceitação production-PROVEN: precisa alinhar endpoint ativo, validar identidade imediatamente antes, verificar o novo post independentemente e fechar ledger/estado incerto.
 
