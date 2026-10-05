@@ -56,7 +56,7 @@ jobs:
           ram-size: 2048M
           cores: 2
           disable-animations: true
-          emulator-boot-timeout: 120
+          emulator-boot-timeout: 300
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
