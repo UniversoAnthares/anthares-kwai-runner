@@ -17,14 +17,29 @@ def tapid(s):
    p=ctr(n.attrib.get("bounds")); 
    if p: adb("shell","input","tap",str(p[0]),str(p[1]));time.sleep(3);return True
  return False
-for i in range(20):
+for i in range(24):
  r=dump();t=" ".join(lab(n) for n in ns(r))
+ if "pixel launcher isn't responding" in t:
+  tapid("aerr_wait" if mode=="launcher-wait" else "aerr_close");time.sleep(2)
+  if mode=="launcher-close-relaunch":
+   adb("shell","monkey","-p","com.kwai.video","1");time.sleep(5)
+  continue
+ if "start now" in t:
+  tapid("tiny_discovery_left_operation_btn");time.sleep(4)
+  if mode=="start-now-restart":
+   adb("shell","am","force-stop","com.kwai.video");adb("shell","monkey","-p","com.kwai.video","1");time.sleep(8)
+  continue
  if "profile" in t and ("home" in t or "discover" in t):break
  adb("shell","input","swipe","850","1100","180","1100","250");time.sleep(.8)
 adb("shell","am","force-stop","com.kwai.video");time.sleep(2);adb("shell","monkey","-p","com.kwai.video","1");time.sleep(15)
 if mode=="parent-wait10":time.sleep(10)
 if mode=="parent-wait30":time.sleep(30)
+if mode=="profile-id-restart":
+ adb("shell","am","force-stop","com.kwai.video");adb("shell","monkey","-p","com.kwai.video","1");time.sleep(10)
 tapid("ll_profile")
+if mode=="module-wait60":time.sleep(60)
+if mode=="module-hide-reopen":
+ time.sleep(20);tapid("btn_cancel");time.sleep(2);tapid("ll_profile");time.sleep(20)
 if mode=="parent-restart":
  adb("shell","am","force-stop","com.kwai.video");adb("shell","monkey","-p","com.kwai.video","1");time.sleep(10);tapid("ll_profile")
 elif mode=="parent-twice":tapid("ll_profile")
