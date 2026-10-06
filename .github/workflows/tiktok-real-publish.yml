@@ -155,7 +155,7 @@ jobs:
 
           postq() { curl --fail-with-body -sS -X POST "$CONTROL/github-queue/$1" -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "$2"; }
 
-          curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json'             --data "{\"id\":\"$JOB_ID\",\"platform\":\"tiktok\",\"executor\":\"github\",\"dedupe_key\":\"$DEDUPE\",\"source_id\":\"synthetic-owned-canary-v1\",\"source_start\":0,\"source_end\":12}" > /tmp/enqueue.json
+          curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json'             --data "{\"id\":\"$JOB_ID\",\"platform\":\"tiktok\",\"executor\":\"github\",\"dedupe_key\":\"$DEDUPE\",\"source_id\":\"synthetic-owned-canary-v3\",\"source_start\":0,\"source_end\":12}" > /tmp/enqueue.json
           cat /tmp/enqueue.json
 
           postq lease '{"platform":"tiktok","ttl_seconds":900}' > /tmp/lease.json
