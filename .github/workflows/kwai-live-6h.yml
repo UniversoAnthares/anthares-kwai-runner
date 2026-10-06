@@ -1,0 +1,73 @@
+name: Kwai LIVE Cloud Executor
+on:
+  workflow_dispatch:
+    inputs:
+      activate:
+        description: 'Create and start a short real LIVE canary'
+        required: true
+        default: false
+        type: boolean
+      seconds:
+        description: 'Canary duration, 15-120 seconds'
+        required: true
+        default: '60'
+        type: string
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: kwai-live-cloud-executor
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+      KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+      ANTHARES_PUBLIC_HLS_URL: https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8
+      ATD_ARTIFACT_DIR: live-artifacts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated browser runtime
+        run: |
+          python -m pip install -q playwright pillow
+          python -m playwright install --with-deps chromium >/dev/null
+      - name: Prove HLS and authenticated Studio without starting LIVE
+        run: python -u kwai_live_cloud_network.py
+      - name: Upload non-secret diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-live-preflight-diagnostics
+          path: |
+            live-artifacts/page.png
+          if-no-files-found: ignore
+          retention-days: 2
+  canary:
+    if: ${{ inputs.activate == true }}
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+      KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+      ANTHARES_PUBLIC_HLS_URL: https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8
+      ATD_ARTIFACT_DIR: live-artifacts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated browser runtime
+        run: |
+          python -m pip install -q playwright pillow
+          python -m playwright install --with-deps chromium >/dev/null
+      - name: Run one finite network-pull LIVE canary with mandatory cleanup
+        run: python -u kwai_live_cloud_network.py --activate --seconds '${{ inputs.seconds }}'
+      - name: Require cleanup marker in controller semantics
+        if: always()
+        run: grep -q 'KWAI_LIVE_CLEANUP_CONFIRMED' kwai_live_cloud_network.py
