@@ -1,0 +1,17 @@
+format_version: '13'
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+project_type: other
+workflows:
+  primary:
+    steps:
+    - git-clone@8: {}
+    - script@1:
+        title: Provider hub smoke
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            CI_PROVIDER=bitrise CI_RUN_ID="$BITRISE_BUILD_SLUG" CI_COMMIT_SHA="$BITRISE_GIT_COMMIT" bash ci/shared/provider-smoke.sh
+    - deploy-to-bitrise-io@2:
+        inputs:
+        - deploy_path: "$BITRISE_SOURCE_DIR/ci-hub/bitrise/runtime"
