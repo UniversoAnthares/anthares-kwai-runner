@@ -28,6 +28,8 @@ jobs:
           adb install-multiple -r /tmp/v/*.apk
           echo MANUAL_RUNTIME_READY
       - name: Run 30 direct auth entries
+        env:
+          PATH: /usr/local/lib/android/sdk/platform-tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         run: |
           python3 - <<'PY'
           import subprocess,time,xml.etree.ElementTree as ET
