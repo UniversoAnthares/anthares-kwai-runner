@@ -135,4 +135,5 @@ def commit():
             print("STATE=VERIFYING HOME_RETURN=1"); return 0
     print("STATE=UNCERTAIN REASON=post-request-timeout"); return 90
 
-if __name__=="__main__":\n    sys.exit(prepare() if PHASE=="prepare" else commit())
+if __name__=="__main__":
+    sys.exit(prepare() if PHASE=="prepare" else commit())
