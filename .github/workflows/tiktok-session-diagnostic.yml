@@ -1,0 +1,37 @@
+name: TikTok Session Diagnostic
+on:
+  push:
+    paths: ['.github/workflows/tiktok-session-diagnostic.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  diagnostic:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Read remote session state safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          RENDER_TOKEN="$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )"
+          CONTROL_TOKEN="$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'https://anthares-control.anthares1.workers.dev'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )"
+          echo "::add-mask::$RENDER_TOKEN"; echo "::add-mask::$CONTROL_TOKEN"
+          curl --fail-with-body -sS https://anthares-tiktok-render-rootless.onrender.com/session-status             -H "Authorization: Bearer $RENDER_TOKEN"             -H "X-Anthares-Control-OIDC: $CONTROL_TOKEN" > /tmp/status.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/status.json'))
+          safe={k:d.get(k) for k in ('ok','bootstrapped','identity_verified','ready_for_tiktok','central_restored','central_restore_reason','central_restore_http')}
+          print("SESSION_DIAGNOSTIC="+json.dumps(safe,sort_keys=True))
+          PY
