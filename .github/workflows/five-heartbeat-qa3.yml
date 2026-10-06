@@ -1,0 +1,71 @@
+name: Five Heartbeat Adversarial QA3
+on:
+  push:
+    branches: [main]
+    paths: ['.five-heartbeat-qa3-trigger']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [parallel-isolation, identity-stable, external-term, missing-command, slow-renew]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          p='${{ matrix.probe }}'
+          tmp="$(mktemp -d)"; cp kwai_queue_heartbeat.sh "$tmp/"; cd "$tmp"
+          cat > kwai_queue_state.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          echo "${KWAI_QUEUE_JOB_ID:-missing} ${KWAI_LEASE_GENERATION:-missing} $*" >> "${LOG_FILE:-renew.log}"
+          [ "${SLOW_RENEW:-0}" != 1 ] || sleep 20
+          SH
+          chmod +x *.sh
+          export KWAI_LEASE_RENEW_INTERVAL_SECONDS=15 KWAI_LEASE_RENEW_TTL_SECONDS=60
+          case "$p" in
+            parallel-isolation)
+              (KWAI_QUEUE_JOB_ID=A KWAI_LEASE_GENERATION=11 LOG_FILE=a.log ./kwai_queue_heartbeat.sh sleep 1)& a=$!
+              (KWAI_QUEUE_JOB_ID=B KWAI_LEASE_GENERATION=22 LOG_FILE=b.log ./kwai_queue_heartbeat.sh sleep 1)& b=$!
+              wait "$a"; wait "$b"
+              grep -q '^A 11 renew 60$' a.log; ! grep -q 'B 22' a.log
+              grep -q '^B 22 renew 60$' b.log; ! grep -q 'A 11' b.log
+              echo PROBE_PARALLEL_ISOLATION_OK
+              ;;
+            identity-stable)
+              export KWAI_QUEUE_JOB_ID=stable KWAI_LEASE_GENERATION=33 LOG_FILE=id.log
+              ./kwai_queue_heartbeat.sh sleep 16
+              test "$(wc -l < id.log)" -ge 2
+              test "$(sort -u id.log | wc -l)" = 1
+              grep -q '^stable 33 renew 60$' id.log
+              echo PROBE_IDENTITY_STABLE_OK
+              ;;
+            external-term)
+              export KWAI_QUEUE_JOB_ID=term KWAI_LEASE_GENERATION=44
+              ./kwai_queue_heartbeat.sh sleep 120 >out 2>&1 & w=$!
+              sleep 2; kill -TERM "$w"; set +e; wait "$w"; rc=$?; set -e
+              test "$rc" = 143
+              echo PROBE_EXTERNAL_TERM_OK
+              ;;
+            missing-command)
+              export KWAI_QUEUE_JOB_ID=cmd KWAI_LEASE_GENERATION=55
+              set +e; ./kwai_queue_heartbeat.sh /definitely/not/a/command >out 2>&1; rc=$?; set -e
+              test "$rc" = 127
+              echo PROBE_MISSING_COMMAND_OK
+              ;;
+            slow-renew)
+              export KWAI_QUEUE_JOB_ID=slow KWAI_LEASE_GENERATION=66 SLOW_RENEW=1
+              set +e
+              timeout 5 ./kwai_queue_heartbeat.sh bash -c 'touch child-started' >out 2>&1; rc=$?
+              set -e
+              test "$rc" = 124
+              test ! -e child-started
+              echo PROBE_SLOW_INITIAL_RENEW_BLOCKS_CHILD_OK
+              ;;
+          esac
