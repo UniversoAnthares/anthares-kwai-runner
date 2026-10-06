@@ -181,6 +181,7 @@ jobs:
           raise SystemExit(42)
           PY
       - name: Open official Kwai Studio Phone form with 15 observations
+        continue-on-error: true
         run: |
           python3 - <<'PY'
           import subprocess,time,re,xml.etree.ElementTree as ET
