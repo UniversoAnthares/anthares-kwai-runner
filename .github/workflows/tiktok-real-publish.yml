@@ -2,7 +2,7 @@ name: TikTok Real Publish
 on:
   push:
     paths:
-      - '.tiktok-canary-run4'
+      - '.tiktok-canary-run5'
   workflow_dispatch:
     inputs:
       video_url:
@@ -123,6 +123,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
           ffmpeg -hide_banner -loglevel error -y             -f lavfi -i "color=c=black:s=1080x1920:r=30:d=12"             -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=48000"             -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='UNIVERSO ANTHARES':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2-60,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='teste tecnico de publicacao':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=(h-text_h)/2+60"             -t 12 -c:v libx264 -pix_fmt yuv420p -profile:v high -level 4.1 -preset medium -crf 20             -c:a aac -b:a 128k -movflags +faststart /tmp/canary.mp4
           ffprobe -v error -show_entries format=duration,size -show_entries stream=codec_type,codec_name,width,height,r_frame_rate -of json /tmp/canary.mp4 | tee /tmp/ffprobe.json
           python3 - <<'PY'
@@ -160,7 +162,7 @@ jobs:
 
           postq() { curl --fail-with-body -fsS -X POST "$CONTROL/github-queue/$1" -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "$2"; }
 
-          curl --fail-with-body -fsS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json'             --data "{"id":"$JOB_ID","platform":"tiktok","executor":"github","dedupe_key":"$DEDUPE","source_id":"synthetic-owned-canary-v1","source_start":0,"source_end":12}" > /tmp/enqueue.json
+          curl --fail-with-body -fsS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json'             --data "{\"id\":\"$JOB_ID\",\"platform\":\"tiktok\",\"executor\":\"github\",\"dedupe_key\":\"$DEDUPE\",\"source_id\":\"synthetic-owned-canary-v1\",\"source_start\":0,\"source_end\":12}" > /tmp/enqueue.json
           cat /tmp/enqueue.json
 
           postq lease '{"platform":"tiktok","ttl_seconds":900}' > /tmp/lease.json
@@ -186,20 +188,20 @@ jobs:
               raise SystemExit('TIKTOK_IDENTITY_NOT_READY')
           PY
 
-          postq renew "{"id":"$JOB_ID","lease_generation":$LEASE_GEN,"ttl_seconds":900}" > /tmp/renew.json
+          postq renew "{\"id\":\"$JOB_ID\",\"lease_generation\":$LEASE_GEN,\"ttl_seconds\":900}" > /tmp/renew.json
 
           STARTED=0
           fail_after_started() {
             rc=$?
             if [ "$STARTED" = 1 ]; then
-              postq fail "{"id":"$JOB_ID","lease_generation":$LEASE_GEN,"error_class":"canary_publish_error","error_message":"workflow failed after publication_started","published_possible":true}" >/tmp/fail.json 2>/dev/null || true
+              postq fail "{\"id\":\"$JOB_ID\",\"lease_generation\":$LEASE_GEN,\"error_class\":\"canary_publish_error\",\"error_message\":\"workflow failed after publication_started\",\"published_possible\":true}" >/tmp/fail.json 2>/dev/null || true
               echo "CANARY_STATE=UNCERTAIN"
             fi
             exit $rc
           }
           trap fail_after_started ERR
 
-          postq started "{"id":"$JOB_ID","lease_generation":$LEASE_GEN}" > /tmp/started.json
+          postq started "{\"id\":\"$JOB_ID\",\"lease_generation\":$LEASE_GEN}" > /tmp/started.json
           STARTED=1
 
           printf '%s' '{"segment_id":"tiktok-canary-20261005-synthetic-v1","title":"Universo Anthares — teste técnico de publicação"}' > /tmp/plan.json
@@ -217,7 +219,7 @@ jobs:
           PY
           )"
 
-          postq complete "{"id":"$JOB_ID","lease_generation":$LEASE_GEN,"confirmed":true,"remote_id":"$REMOTE_ID","confirmation_evidence":"profile_new_post:$REMOTE_ID"}" > /tmp/complete.json
+          postq complete "{\"id\":\"$JOB_ID\",\"lease_generation\":$LEASE_GEN,\"confirmed\":true,\"remote_id\":\"$REMOTE_ID\",\"confirmation_evidence\":\"profile_new_post:$REMOTE_ID\"}" > /tmp/complete.json
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/complete.json')); j=d.get('job') or {}
