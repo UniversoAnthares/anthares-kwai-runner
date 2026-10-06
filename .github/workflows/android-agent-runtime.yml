@@ -133,9 +133,15 @@ jobs:
           def adb(*a):
               return subprocess.run(["adb",*a],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=30).stdout
           def dump(tag):
-              adb("shell","uiautomator","dump",f"/sdcard/{tag}.xml")
-              adb("pull",f"/sdcard/{tag}.xml",f"/tmp/{tag}.xml")
-              return ET.parse(f"/tmp/{tag}.xml").getroot()
+              for i in range(5):
+                  out=adb("shell","uiautomator","dump",f"/sdcard/{tag}.xml")
+                  pulled=adb("pull",f"/sdcard/{tag}.xml",f"/tmp/{tag}.xml")
+                  try:
+                      return ET.parse(f"/tmp/{tag}.xml").getroot()
+                  except Exception:
+                      print("UI_DUMP_RETRY="+str(i+1)+" OUT="+out[-240:]+" PULL="+pulled[-240:])
+                      time.sleep(2)
+              raise SystemExit("UI_DUMP_UNAVAILABLE")
           def label(n):
               return (n.attrib.get("text","")+" "+n.attrib.get("content-desc","")).strip().lower()
           root=dump("main-login")
