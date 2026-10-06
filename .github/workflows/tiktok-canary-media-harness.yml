@@ -1,0 +1,32 @@
+name: TikTok Canary Media Harness 5-Way
+on:
+  push:
+    paths: ['.github/workflows/tiktok-canary-media-harness.yml']
+  workflow_dispatch:
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [apt_ffmpeg, imageio_ffmpeg, static_ffmpeg, system_paths, docker_ffmpeg]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe canary media mechanism
+        env: { MODE: ${{ matrix.mode }} }
+        shell: bash
+        run: |
+          set -euo pipefail
+          mode="$MODE"; bin=""
+          if [ "$mode" = apt_ffmpeg ]; then sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null; bin="$(command -v ffmpeg)"
+          elif [ "$mode" = imageio_ffmpeg ]; then pip -q install imageio-ffmpeg; bin="$(python3 -c 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())')"
+          elif [ "$mode" = static_ffmpeg ]; then curl -fsSL --max-time 40 https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o /tmp/f.tar.xz; tar -xJf /tmp/f.tar.xz -C /tmp; bin="$(find /tmp -path '*ffmpeg-*-static/ffmpeg' -type f | head -1)"
+          elif [ "$mode" = system_paths ]; then bin="$(find /usr /opt -type f -name ffmpeg -perm -111 2>/dev/null | head -1 || true)"
+          else
+            docker run --rm -v /tmp:/work linuxserver/ffmpeg -f lavfi -i color=c=black:s=320x568:d=1 -y /work/canary.mp4 >/dev/null 2>&1
+            test -s /tmp/canary.mp4 && echo "CANARY_MEDIA_HARNESS=PROVEN $mode" && exit 0
+          fi
+          test -n "$bin" && test -x "$bin"
+          "$bin" -hide_banner -loglevel error -y -f lavfi -i color=c=black:s=320x568:d=1 -c:v libx264 -pix_fmt yuv420p /tmp/canary.mp4
+          test -s /tmp/canary.mp4
+          echo "CANARY_MEDIA_HARNESS=PROVEN $mode"
