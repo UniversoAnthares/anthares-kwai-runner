@@ -1,5 +1,5 @@
 name: Android Boot Matrix 30
-'on':
+on:
   push:
     paths:
       - android-agent/boot30-trigger.txt
