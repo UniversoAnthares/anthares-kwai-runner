@@ -28,6 +28,14 @@ jobs:
           PY
           )"
           echo "::add-mask::$RENDER_TOKEN"; echo "::add-mask::$CONTROL_TOKEN"
+          code=$(curl -sS -o /tmp/direct-control.json -w '%{http_code}' https://anthares-control.anthares1.workers.dev/tiktok/session-state -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Accept: application/json' || true)
+          python3 - "$code" <<'PY'
+          import json,sys
+          try: d=json.load(open('/tmp/direct-control.json'))
+          except Exception: d={}
+          cookies=d.get('cookies') if isinstance(d,dict) else None
+          print("DIRECT_CONTROL_SESSION_META="+json.dumps({"http":int(sys.argv[1]),"available":d.get("available"),"cookie_count":len(cookies or [])},sort_keys=True))
+          PY
           curl --fail-with-body -sS https://anthares-tiktok-render-rootless.onrender.com/session-status             -H "Authorization: Bearer $RENDER_TOKEN"             -H "X-Anthares-Control-OIDC: $CONTROL_TOKEN" > /tmp/status.json
           python3 - <<'PY'
           import json
