@@ -85,6 +85,9 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 ### Control plane central
 - PROVEN EM PRODUÇÃO: Durable Object SQLite cobre enqueue/lease/started/complete/fail/reconcile, dedupe por chave e overlap temporal, UNCERTAIN e circuit breaker no Worker v12 implantado.
 - PROVEN EM PRODUÇÃO: allowlist OIDC, confirmação fail-closed, PC/Google/Oracle removidos e HLS sem fallback WordPress hardcoded estão ativos na versão `2026-10-05-no-pc-confirmation-v12`.
+- PROVEN EM PRODUÇÃO v16: `/health` retorna `version=2026-10-05-queue-fencing-v16`, `persistent_state=true`, `queue_bound=true`, `pc_fallback=false`; Cloudflare Version ID `1a25c85d-aea3-4bc9-8a8b-5fcedef7abcd`. Run 37396894429 / job 112054896540.
+- PROVEN EM PRODUÇÃO v16: cada aquisição incrementa `lease_generation`; holders obsoletos são rejeitados em `started`, `complete` e `fail`; crash antes de `publication_started` é recuperável e crash/expiração depois de `publication_started` permanece `UNCERTAIN` até reconciliação.
+- HANDOFF kwai-publish: o cliente `kwai_queue_state.sh` ainda está pinado em v15 e não envia `lease_generation` nem operação `renew`. Deve ser migrado pelo agente que detém o lease `kwai-publish`; o v16 falha fechado até essa migração.
 - PROVEN EM PRODUÇÃO v15: `/health` retorna `version=2026-10-05-queue-heartbeat-renew-v15`, `persistent_state=true`, `queue_bound=true`, `pc_fallback=false`; run 37395158585.
 - PROVEN EM PRODUÇÃO v15: além de owner/estado/expiração e single-job double-claim, o self-test comprova `lease_renew_repeated=true`, isto é, renovação repetida/heartbeat durante execução longa. Run 37395158585 / job 112049276852.
 - PROVEN EM PRODUÇÃO v14: sucesso confirmado limpa o circuit breaker (`disabled_until=null`) junto com os contadores de falha; regressão detectada no run v13 37394632606 e fechada no v14.
