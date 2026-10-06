@@ -11,15 +11,17 @@ jobs:
     timeout-minutes: 14
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch proven Agent APK artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.9' }
+      - name: Build current Agent APK
+        working-directory: android-agent
         run: |
-          mkdir -p /tmp/agent-apk
-          gh api repos/UniversoAnthares/anthares-kwai-runner/actions/artifacts/11384550256/zip > /tmp/agent.zip
-          unzip -q /tmp/agent.zip -d /tmp/agent-apk
-          test -s /tmp/agent-apk/app-debug.apk
-          echo TEST_VALIDITY=PROVEN_AGENT_APK_FETCHED
+          gradle --no-daemon :app:assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk /tmp/anthares-agent.apk
+          test -s /tmp/anthares-agent.apk
+          echo TEST_VALIDITY=CURRENT_AGENT_APK_BUILT
       - name: Fetch validated Kwai vault
         run: |
           curl -fL --retry 3 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
@@ -87,7 +89,7 @@ jobs:
             exit 1
           fi
           cd "$GITHUB_WORKSPACE"
-          if ! adb install -r /tmp/agent-apk/app-debug.apk 2>&1 | tee /tmp/agent-install.log; then
+          if ! adb install -r /tmp/anthares-agent.apk 2>&1 | tee /tmp/agent-install.log; then
             echo AGENT_INSTALL_FAILED
             cat /tmp/agent-install.log || true
             exit 1
