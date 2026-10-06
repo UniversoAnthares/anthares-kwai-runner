@@ -1,7 +1,7 @@
 name: TikTok Final Preflight Round 5
 on:
   push:
-    paths: ['.tiktok-final-preflight-r5']
+    paths: ['.tiktok-final-preflight-r5', '.tiktok-final-preflight-r5-activate']
 permissions:
   contents: read
   id-token: write
