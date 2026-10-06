@@ -1,0 +1,4 @@
+Trigger current bounded Kwai interactive login workflow.
+Expected account: lucasrosalem
+No credentials or OTP stored here.
+Trigger: 2026-10-06T15:40Z
