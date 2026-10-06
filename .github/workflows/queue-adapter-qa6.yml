@@ -1,0 +1,28 @@
+name: Queue Adapter QA6
+on:
+  push:
+    branches: [main]
+    paths: ['.queue-adapter-qa6-trigger']
+permissions: {contents: read}
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [missing-job, missing-generation-started, missing-generation-fail, nonnumeric-renew-ttl, nonnumeric-generation-complete]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          case '${{ matrix.probe }}' in
+            missing-job) unset KWAI_QUEUE_JOB_ID || true; export KWAI_LEASE_GENERATION=1; set +e; ./kwai_queue_state.sh renew 60 >out 2>&1; rc=$?; set -e ;;
+            missing-generation-started) export KWAI_QUEUE_JOB_ID=j; unset KWAI_LEASE_GENERATION || true; set +e; ./kwai_queue_state.sh started >out 2>&1; rc=$?; set -e ;;
+            missing-generation-fail) export KWAI_QUEUE_JOB_ID=j; unset KWAI_LEASE_GENERATION || true; set +e; ./kwai_queue_state.sh fail x >out 2>&1; rc=$?; set -e ;;
+            nonnumeric-renew-ttl) export KWAI_QUEUE_JOB_ID=j KWAI_LEASE_GENERATION=1; set +e; ./kwai_queue_state.sh renew nope >out 2>&1; rc=$?; set -e ;;
+            nonnumeric-generation-complete) export KWAI_QUEUE_JOB_ID=j KWAI_LEASE_GENERATION=nope; set +e; ./kwai_queue_state.sh complete evidence >out 2>&1; rc=$?; set -e ;;
+          esac
+          test "$rc" != 0
+          ! grep -q 'STATE=CENTRAL_' out
+          echo "PROBE_${{ matrix.probe }}_FAIL_CLOSED_OK"
