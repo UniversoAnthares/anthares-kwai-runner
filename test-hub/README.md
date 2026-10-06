@@ -138,3 +138,12 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - **Adversarial control contracts: PROVEN.** UNCERTAIN, observation-only reconcile, evidence-gated complete, lease_generation fencing, heartbeat, no-PC path and serialized real-publish gate passed the final CHAT2 acceptance.
 - **Final project acceptance remains OPEN** until `TIKTOK_REAL_REMOTE_POST=PROVEN` and `KWAI_REAL_REMOTE_POST=PROVEN` both have independent verification and ledger confirmation.
 - Canonical QA finding: `test-hub/findings/20261006-qa-items-2-4-final-state.md`.
+
+
+## QA execution round — four immediate fronts
+- TikTok OIDC: repository contains the allowlist fix for `tiktok-reconcile-v2.yml`, but current deployed control plane still returns HTTP 401 on run 37411367637. Do not repeat until the SHA is deployed.
+- Render TikTok publisher: latest deployment `c57af706086399b058690510cb20c289fa7ab468` is LIVE; Render is not the current blocker.
+- Kwai login: active `kwai-login` lease remains authoritative; no competing mutation performed.
+- Final SHA dedupe QA: run 37411496459 passed all 5 current cases with explicit PROVEN signals.
+- Whole-project audit: no unowned immediate implementation gap found. Final acceptance still requires independent real-post proof for TikTok and Kwai.
+- Canonical finding: `test-hub/findings/20261006-qa-four-fronts-execution-round.md`.
