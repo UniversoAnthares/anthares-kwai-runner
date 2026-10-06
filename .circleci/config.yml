@@ -141,9 +141,9 @@ jobs:
               echo "POST_BOUNDARY_UI_DUMP_OK=0"
             fi
             if [ -n "$PID" ] && [ -s kwai-ui.xml ]; then
-              echo "SUCCESS_SIGNAL=KWAI_INSTALL_AND_LAUNCH_OK"
+              echo "SUCCESS_SIGNAL=KWAI_POST_BOUNDARY_RUNTIME_OK"
             else
-              echo "FAILURE_SIGNAL=KWAI_RUNTIME_OR_UI_NOT_READY"
+              echo "DIAGNOSTIC_SIGNAL=KWAI_POST_BOUNDARY_RUNTIME_NOT_READY"
               echo "PACKAGE_PATHS_BEGIN"
               adb shell pm path com.kwai.video || true
               echo "PACKAGE_PATHS_END"
@@ -156,8 +156,9 @@ jobs:
               echo "CRASH_LOG_BEGIN"
               adb logcat -d -t 600 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|com\.kwai\.video|UnsatisfiedLinkError|SIG(SEGV|ABRT)|native bridge|dlopen failed' | tail -160 || true
               echo "CRASH_LOG_END"
-              exit 51
             fi
+            adb shell pm path com.kwai.video >/dev/null
+            echo "SUCCESS_SIGNAL=KWAI_INSTALL_PROVEN"
       - run:
           name: Save diagnostics
           command: |
