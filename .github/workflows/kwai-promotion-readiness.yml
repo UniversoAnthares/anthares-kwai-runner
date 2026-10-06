@@ -1,0 +1,15 @@
+name: Kwai Promotion Readiness
+on:
+  push:
+    paths:
+      - '.github/workflows/kwai-promotion-readiness.yml'
+      - 'tests/test_kwai_promotion_readiness.py'
+      - '.github/workflows/kwai-real-publish.yml'
+      - 'kwai_publish.sh'
+permissions: {contents: read}
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/test_kwai_promotion_readiness.py
