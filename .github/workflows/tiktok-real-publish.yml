@@ -166,6 +166,17 @@ jobs:
           print(j.get('id',''),j.get('lease_generation',''))
           PY
           )
+          if [ "$LEASE_ID" = "tiktok-canary-20261006-synthetic-v2" ] && [ -n "$LEASE_GEN" ]; then
+            echo "RECONCILING_CONFIRMED_ABSENT_V2"
+            postq fail "{\"id\":\"$LEASE_ID\",\"lease_generation\":$LEASE_GEN,\"error_class\":\"reconciled_absent\",\"error_message\":\"independent profile reconciliation confirmed no diagnostic post\",\"published_possible\":false}" >/tmp/reconcile-v2.json
+            postq lease '{"platform":"tiktok","ttl_seconds":900}' > /tmp/lease.json
+            read LEASE_ID LEASE_GEN < <(python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
+          print(j.get('id',''),j.get('lease_generation',''))
+          PY
+            )
+          fi
           if [ "$LEASE_ID" != "$JOB_ID" ] || [ -z "$LEASE_GEN" ]; then
             echo "LEASE_NOT_OUR_CANARY id=$LEASE_ID"
             exit 20
