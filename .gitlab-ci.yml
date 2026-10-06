@@ -1,0 +1,10 @@
+stages: [test]
+provider_smoke:
+  stage: test
+  image: ubuntu:22.04
+  script:
+    - CI_PROVIDER=gitlab CI_RUN_ID="$CI_PIPELINE_ID" CI_COMMIT_SHA="$CI_COMMIT_SHA" bash ci/shared/provider-smoke.sh
+  artifacts:
+    when: always
+    paths:
+      - ci-hub/gitlab/runtime/
