@@ -73,9 +73,9 @@ jobs:
           )"
           echo "MATCH_COUNT=$MATCH_COUNT"
           if [ "$MATCH_COUNT" = "0" ]; then
-            curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v2","executor":"github","confirmed_absent":true,"confirmation_evidence":"authenticated_profile_inventory_count_zero"}' > /tmp/reconcile.json
+            curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v5","executor":"github","confirmed_absent":true,"confirmation_evidence":"authenticated_profile_inventory_count_zero"}' > /tmp/reconcile.json
             cat /tmp/reconcile.json
-            echo TIKTOK_V2_RECONCILED_ABSENT
+            echo TIKTOK_V5_RECONCILED_ABSENT
             exit 0
           fi
           if [ "$MATCH_COUNT" != "1" ]; then
@@ -95,11 +95,11 @@ jobs:
           PY
           )"
           test -n "$REMOTE_ID"
-          curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "{"id":"tiktok-canary-20261006-synthetic-v2","executor":"github","confirmed":true,"remote_id":"$REMOTE_ID","confirmation_evidence":"profile_exact_caption:$REMOTE_ID"}" > /tmp/reconcile.json
+          curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "{"id":"tiktok-canary-20261006-synthetic-v5","executor":"github","confirmed":true,"remote_id":"$REMOTE_ID","confirmation_evidence":"profile_exact_caption:$REMOTE_ID"}" > /tmp/reconcile.json
           cat /tmp/reconcile.json
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/reconcile.json')); j=d.get('job') or {}
           if not d.get('ok') or j.get('status')!='published' or not j.get('confirmed'): raise SystemExit('RECONCILE_NOT_CONFIRMED')
-          print('TIKTOK_REAL_REMOTE_POST=PROVEN remote_id='+str(j.get('remote_id')))
+          print('TIKTOK_V5_REMOTE_POST=PROVEN remote_id='+str(j.get('remote_id')))
           PY
