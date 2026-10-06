@@ -1,11 +1,19 @@
-# RUNNING — TikTok Render central rehydrate after Cloudflare v12
-STATUS: RUNNING
+# CLOSED — TikTok Render central rehydrate after Cloudflare v12
+STATUS: PRODUCTION PROVEN — superseded by completed prepublish proof
 AREA: tiktok-session
 DATE: 2026-10-05
 OWNER: CHAT 5
 
-CAUSAL_BASELINE: production Cloudflare v12 has already returned HTTP 200 + available=true + 21 cookies to run 37394495580.
-HYPOTHESIS: `UniversoAnthares/anthares-clipper/.github/workflows/anthares-render-tiktok-session-validation.yml` can now load that central state, POST it to Render `/bootstrap-session`, run `/session-test`, verify `universo.anthares` / user ID 7577123938226406401, refresh the storage state, and persist the refreshed state centrally.
-SUCCESS_SIGNAL: workflow prints CENTRAL_SESSION_LOAD=OK, RENDER_OIDC_BOOTSTRAP=OK, RENDER_SESSION_STATUS=OK, RENDER_SESSION_TEST=OK identity_verified=true, CENTRAL_SESSION_PERSIST=OK; final Render `/config-status` ok=true.
-FAILURE_SIGNAL: central load fallback, bootstrap/session-test error, identity mismatch, central persist error, or incomplete Render config.
-SAFETY: session mutation only. The workflow does not call `/publish-url`; no TikTok post is created. Cloudflare control code is not modified, respecting active queue/control-plane leases.
+ORIGINAL_BASELINE: production Cloudflare v12 had returned HTTP 200 + available=true + 21 cookies to run 37394495580.
+
+FINAL_PROOF: run https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37396243429 completed the production session path and proved:
+- central TikTok session GET HTTP 200, available=true, 21 cookies;
+- Render bootstrap HTTP 200 with 21 cookies;
+- Render `/session-test` HTTP 200 with worker_code=0 and identity_verified=true;
+- refreshed 21-cookie state persisted centrally HTTP 200;
+- direct Render `/publish-dry-run` HTTP 200 with ok=true, identity_verified=true, upload_page_auth=true;
+- no publish endpoint was called by this proof.
+
+ACCOUNT: `universo.anthares`; expected user ID 7577123938226406401.
+
+RESULT: the tiktok-session dependency that this lease tracked is closed. The remaining canary/media work is owned by the separate `tiktok-canary-media` lease and must not be duplicated here.
