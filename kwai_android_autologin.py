@@ -99,7 +99,29 @@ def dismiss_android_permission_dialogs():
             adb("shell","input","keyevent","4")
             time.sleep(1)
 
+def dismiss_system_anr():
+    # GitHub's headless Pixel launcher can ANR independently of Kwai.  The
+    # system dialog overlays the app and previously made every semantic login
+    # lookup return zero nodes.  Dismiss only system-owned ANR dialogs, then
+    # bring Kwai back to foreground; never clear Kwai data.
+    for _ in range(5):
+        r=dump(); ns=nodes(r)
+        txt=" ".join(label(n) for n in ns)
+        pkgs={n.attrib.get("package","") for n in ns}
+        system_dialog=("isn't responding" in txt or "is not responding" in txt or "não está respondendo" in txt)
+        if not system_dialog:
+            return
+        acted=False
+        for n in ns:
+            if any(w in label(n) for w in ("close app","fechar app","wait","aguardar")) and tap_node(n):
+                acted=True; break
+        if not acted:
+            adb("shell","input","keyevent","4"); time.sleep(1)
+        adb("shell","am","start","-n","com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity")
+        time.sleep(3)
+
 dismiss_android_permission_dialogs()
+dismiss_system_anr()
 clear_interest_discovery()
 # Normalize the current chooser into the Phone authentication surface when present.
 subprocess.run(["python3","kwai_phone_surface_probe.py"],check=False)
