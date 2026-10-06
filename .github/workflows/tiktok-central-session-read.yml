@@ -181,7 +181,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json,os,urllib.request
-          req=urllib.request.Request('https://anthares-control.anthares1.workers.dev/queue-health',headers={'Authorization':'Bearer '+os.environ['CONTROL_TOKEN'],'Accept':'application/json'})
+          req=urllib.request.Request('https://anthares-control.anthares1.workers.dev/queue-health',headers={'Authorization':'Bearer '+os.environ['CONTROL_TOKEN'],'Accept':'application/json','User-Agent':'Mozilla/5.0'})
           with urllib.request.urlopen(req,timeout=30) as r: q=json.load(r)
           safe={
               'ok':q.get('ok'),
