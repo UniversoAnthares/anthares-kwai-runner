@@ -26,3 +26,5 @@ with tempfile.TemporaryDirectory() as td:
  print("VULNERABLE_"+case.upper().replace("-","_"))
  print(p.stdout)
  raise SystemExit(1)
+
+# rerun after evidence-binding hardening
