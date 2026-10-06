@@ -1,0 +1,89 @@
+name: TikTok 15 Environment Replacement Matrix
+on:
+  push:
+    paths: ['.tiktok-15env-trigger']
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {id: 1, runner: ubuntu-22.04, locale: en-US, viewport: "1280,720", mode: default}
+          - {id: 2, runner: ubuntu-22.04, locale: pt-BR, viewport: "1280,900", mode: default}
+          - {id: 3, runner: ubuntu-22.04, locale: en-US, viewport: "1920,1080", mode: noauto}
+          - {id: 4, runner: ubuntu-22.04, locale: pt-BR, viewport: "1366,768", mode: noauto}
+          - {id: 5, runner: ubuntu-22.04, locale: en-US, viewport: "1440,900", mode: persistent}
+          - {id: 6, runner: ubuntu-24.04, locale: en-US, viewport: "1280,720", mode: default}
+          - {id: 7, runner: ubuntu-24.04, locale: pt-BR, viewport: "1280,900", mode: default}
+          - {id: 8, runner: ubuntu-24.04, locale: en-US, viewport: "1920,1080", mode: noauto}
+          - {id: 9, runner: ubuntu-24.04, locale: pt-BR, viewport: "1366,768", mode: noauto}
+          - {id: 10, runner: ubuntu-24.04, locale: en-US, viewport: "1440,900", mode: persistent}
+          - {id: 11, runner: ubuntu-latest, locale: en-US, viewport: "1280,800", mode: default}
+          - {id: 12, runner: ubuntu-latest, locale: pt-BR, viewport: "1600,900", mode: noauto}
+          - {id: 13, runner: ubuntu-latest, locale: en-US, viewport: "1536,864", mode: persistent}
+          - {id: 14, runner: ubuntu-latest, locale: pt-BR, viewport: "1920,1080", mode: persistent}
+          - {id: 15, runner: ubuntu-latest, locale: en-US, viewport: "1365,768", mode: noauto}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Playwright
+        run: |
+          python3 -m pip install -q playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Fetch central session
+        env:
+          CONTROL: https://anthares-control.anthares1.workers.dev
+        run: |
+          TOKEN="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$TOKEN"
+          curl -fsSL -H "Authorization: Bearer $TOKEN" "$CONTROL/tiktok/session-state" > /tmp/s.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/s.json')); s=d.get('state') or {}; c=s.get('cookies') or []
+          assert d.get('available') is True and c
+          json.dump(s,open('/tmp/state.json','w'),separators=(',',':'))
+          print("TEST_VALIDITY=CENTRAL_SESSION cookies="+str(len(c)))
+          PY
+      - name: Probe environment
+        env:
+          V: ${{ matrix.id }}
+          LOCALE: ${{ matrix.locale }}
+          VIEWPORT: ${{ matrix.viewport }}
+          MODE: ${{ matrix.mode }}
+          EXPECTED: universo.anthares
+        run: |
+          xvfb-run -a python3 - <<'PY'
+          import os,re,json,time
+          from playwright.sync_api import sync_playwright
+          v=os.environ['V']; loc=os.environ['LOCALE']; mode=os.environ['MODE']
+          w,h=map(int,os.environ['VIEWPORT'].split(','))
+          state=json.load(open('/tmp/state.json'))
+          args=["--disable-dev-shm-usage","--no-sandbox","--disable-gpu"]
+          if mode=="noauto": args += ["--disable-blink-features=AutomationControlled"]
+          with sync_playwright() as p:
+            browser=p.chromium.launch(headless=(mode!="persistent"),args=args)
+            ctx=browser.new_context(storage_state=state,locale=loc,viewport={"width":w,"height":h},timezone_id="America/Sao_Paulo")
+            page=ctx.new_page()
+            page.goto("https://www.tiktok.com/upload?lang=en",wait_until="domcontentloaded",timeout=60000)
+            time.sleep(6)
+            final=page.url
+            cookies=ctx.cookies("https://www.tiktok.com")
+            auth=[c for c in cookies if c.get("name","").lower() in {"sessionid","sessionid_ss","sid_tt","sid_guard","uid_tt","uid_tt_ss"}]
+            body=""
+            try: body=page.locator("body").inner_text(timeout=3000)[:5000].lower()
+            except: pass
+            login=("/login" in final.lower()) or ("log in" in body[:1200] and "upload" not in body[:1200])
+            challenge=any(x in body for x in ("captcha","verify to continue","security check"))
+            print(f"ENV15={v} RUNNER={os.environ.get('RUNNER_OS')} MODE={mode} LOCALE={loc} VIEW={w}x{h}")
+            print(f"AUTH_COOKIES={len(auth)} FINAL_URL={final} LOGIN={login} CHALLENGE={challenge}")
+            if auth and not login and not challenge and "/upload" in final:
+              print("SUCCESS_SIGNAL=TIKTOK_UPLOAD_AUTH_ENV_"+v)
+            else:
+              print("FAILURE_SIGNAL=TIKTOK_UPLOAD_REJECTED_ENV_"+v)
+            ctx.close();browser.close()
+          PY
