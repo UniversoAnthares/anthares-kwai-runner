@@ -1,0 +1,74 @@
+name: TikTok WordPress Post Media Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.tiktok-wordpress-post-media-trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Inspect public WordPress post media references
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import html,json,re,urllib.parse,urllib.request,urllib.error
+
+          base='https://anthares.us'
+          slugs=['ultimo-pedido-homem-morto','analise-conto-siga-as-lagartixas']
+          headers={'User-Agent':'Mozilla/5.0 AntharesCanaryPostProbe/1','Accept':'application/json'}
+
+          def get(url):
+              req=urllib.request.Request(url,headers=headers)
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      return int(getattr(r,'status',200)),r.read().decode('utf-8','replace')
+              except urllib.error.HTTPError as e:
+                  return int(e.code),e.read().decode('utf-8','replace')
+
+          all_urls=[]
+          for slug in slugs:
+              url=base+'/wp-json/wp/v2/posts?'+urllib.parse.urlencode({'slug':slug,'_embed':'1'})
+              code,raw=get(url)
+              print(json.dumps({'slug':slug,'posts_http':code,'bytes':len(raw)},sort_keys=True))
+              if code!=200: continue
+              try: rows=json.loads(raw)
+              except Exception: continue
+              if not isinstance(rows,list): continue
+              for post in rows:
+                  if not isinstance(post,dict): continue
+                  rendered=str(((post.get('content') or {}).get('rendered') or ''))
+                  decoded=html.unescape(rendered).replace('\\/','/')
+                  urls=re.findall(r'https?://[^\s"\'<>]+',decoded)
+                  uploads=[]
+                  for u in urls:
+                      u=u.rstrip(').,;')
+                      if '/wp-content/uploads/' in u and u not in uploads: uploads.append(u)
+                  media=[u for u in uploads if re.search(r'\.(?:mp4|webm|m4v|mov|mp3|m4a|wav)(?:\?|$)',u,re.I)]
+                  yids=[]
+                  for pat in [r'youtube\.com/watch\?v=([\w-]{6,})',r'youtu\.be/([\w-]{6,})',r'youtube\.com/embed/([\w-]{6,})']:
+                      yids.extend(re.findall(pat,decoded,re.I))
+                  safe={'slug':slug,'post_id':post.get('id'),'date':post.get('date'),'upload_url_count':len(uploads),'media_url_count':len(media),'youtube_ids':sorted(set(yids)),'media_urls':media[:20]}
+                  print(json.dumps({'POST_MEDIA':safe},ensure_ascii=False,sort_keys=True))
+                  all_urls.extend(media)
+          seen=[]
+          for u in all_urls:
+              if u in seen: continue
+              seen.append(u)
+              req=urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0 AntharesCanaryPostProbe/1'},method='HEAD')
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as r:
+                      print(json.dumps({'MEDIA_HEAD':{'url':u,'http':int(getattr(r,'status',200)),'content_type':r.headers.get('content-type'),'content_length':r.headers.get('content-length')}},sort_keys=True))
+              except Exception as e:
+                  print(json.dumps({'MEDIA_HEAD':{'url':u,'error':type(e).__name__}},sort_keys=True))
+          if not seen: raise SystemExit('NO_POST_MEDIA_URL')
+          print('WORDPRESS_POST_MEDIA=FOUND')
+          PY
