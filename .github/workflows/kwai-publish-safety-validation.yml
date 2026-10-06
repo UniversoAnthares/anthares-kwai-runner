@@ -60,6 +60,7 @@ jobs:
           grep -q 'STATE=UNCERTAIN' kwai_reconcile_uncertain.sh
           grep -q 'STATE=CONFIRMED SOURCE=RECONCILIATION' kwai_reconcile_uncertain.sh
           echo 'KWAI_UNCERTAIN_RECONCILE_STATIC_OK'
+          bash tests/test_kwai_reconcile_uncertain.sh
           grep -q '2026-10-05-queue-fencing-v16' kwai_queue_state.sh
           ! grep -q '2026-10-05-no-pc-confirmation-v12' kwai_queue_state.sh
           ! grep -q '2026-10-05-queue-lease-renew-v14' kwai_queue_state.sh
