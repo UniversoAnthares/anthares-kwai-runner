@@ -1,5 +1,8 @@
 name: Kwai Real Publication
 on:
+  push:
+    branches: [main]
+    paths: ['.kwai-queue-self-test-trigger']
   workflow_dispatch:
     inputs:
       enable_real_publish:
@@ -20,7 +23,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   queue-self-test:
-    if: ${{ inputs.queue_self_test == 'YES' }}
+    if: ${{ github.event_name == 'push' || inputs.queue_self_test == 'YES' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
@@ -63,7 +66,7 @@ jobs:
           PY
           echo 'KWAI_PRODUCTION_QUEUE_OIDC_SELFTEST_OK'
   guard:
-    if: ${{ inputs.queue_self_test != 'YES' }}
+    if: ${{ github.event_name != 'push' && inputs.queue_self_test != 'YES' }}
     runs-on: ubuntu-24.04
     steps:
       - name: Publication safety gate
