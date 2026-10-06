@@ -1,0 +1,37 @@
+name: Recovery Idempotency QA5
+on:
+  push:
+    branches: [main]
+    paths: ['.recovery-idempotency-qa5-trigger']
+permissions: {contents: read}
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [confirmed-not-reclaimed, uncertain-not-republished, expired-unstarted-reclaim, old-generation-fenced, reconcile-confirmed-terminal]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          python3 - '${{ matrix.probe }}' <<'PY'
+          import sys
+          p=sys.argv[1]
+          job={"status":"leased","generation":1,"publication_started":False,"confirmed":False}
+          def reclaim(j):
+              if j["status"]=="published" or j["confirmed"]: return False
+              if j["status"]=="uncertain": return False
+              j["generation"]+=1; j["status"]="leased"; return True
+          if p=="confirmed-not-reclaimed":
+              job.update(status="published",confirmed=True); assert not reclaim(job)
+          elif p=="uncertain-not-republished":
+              job.update(status="uncertain",publication_started=True); assert not reclaim(job)
+          elif p=="expired-unstarted-reclaim":
+              old=job["generation"]; assert reclaim(job) and job["generation"]>old
+          elif p=="old-generation-fenced":
+              old=job["generation"]; assert reclaim(job); assert old!=job["generation"]
+          elif p=="reconcile-confirmed-terminal":
+              job.update(status="uncertain",publication_started=True); job.update(status="published",confirmed=True); assert not reclaim(job)
+          print("PROBE_"+p+"_OK")
+          PY
