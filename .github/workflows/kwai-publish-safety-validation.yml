@@ -50,6 +50,8 @@ jobs:
           grep -q 'kwai_publish_video.py commit' kwai_publish.sh
           grep -q '/github-queue/$endpoint' kwai_queue_state.sh
           grep -q 'CONTROL_VERSION_MISMATCH' kwai_queue_state.sh
+          grep -q '2026-10-05-queue-lease-renew-v14' kwai_queue_state.sh
+          ! grep -q '2026-10-05-no-pc-confirmation-v12' kwai_queue_state.sh
           grep -q 'QUEUE_STARTED_FLAG_MISSING' kwai_queue_state.sh
           grep -q 'KWAI_EXPECTED_ACCOUNT' kwai_verify_publication.py
           grep -q 'STATE=PROFILE_LOADING' kwai_verify_publication.py
