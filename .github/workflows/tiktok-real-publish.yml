@@ -16,7 +16,7 @@ jobs:
       CONTROL: https://anthares-control.anthares1.workers.dev
       EXPECTED_TIKTOK_USERNAME: universo.anthares
       JOB_ID: tiktok-canary-20261006-synthetic-v9
-      DEDUPE: tiktok-canary-20261006-synthetic-v8
+      DEDUPE: tiktok-canary-20261006-synthetic-v9
     steps:
       - name: Checkout runner repository
         uses: actions/checkout@v4
@@ -59,7 +59,7 @@ jobs:
           PY
 
           for n in 1 2 3 4 5; do
-            lease="$(call lease '{"platform":"tiktok","ttl_seconds":300}')"
+            lease="$(call lease '{"platform":"tiktok","executor":"github","ttl_seconds":300}')"
             echo "$lease"
             python3 - "$lease" <<'PY' > /tmp/lease-meta
           import json,sys
@@ -71,7 +71,7 @@ jobs:
             readarray -t M < /tmp/lease-meta
             id="${M[0]}"; gen="${M[1]}"; status="${M[2]}"
             if [ "$id" = "$JOB_ID" ]; then
-              echo "V5_RETIRED_AND_V6_ACQUIRED generation=$gen"
+              echo "V5_RETIRED_AND_V9_ACQUIRED generation=$gen"
               echo "LEASE_ID=$id" >> "$GITHUB_ENV"
               echo "LEASE_GEN=$gen" >> "$GITHUB_ENV"
               exit 0
@@ -86,14 +86,14 @@ jobs:
           echo "V5_RETIREMENT_FAILED"
           exit 22
 
-      - name: Enqueue and acquire v6 exact canary
+      - name: Enqueue and acquire v9 exact canary
         if: env.LEASE_ID != env.JOB_ID
         env:
           CONTROL_TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "{"id":"$JOB_ID","platform":"tiktok","executor":"github","dedupe_key":"$DEDUPE","source_id":"synthetic-owned-canary-v6","source_start":0,"source_end":12}" > /tmp/enqueue.json
+          curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "{"id":"$JOB_ID","platform":"tiktok","executor":"github","dedupe_key":"$DEDUPE","source_id":"synthetic-owned-canary-v9","source_start":0,"source_end":12}" > /tmp/enqueue.json
           cat /tmp/enqueue.json
           curl --fail-with-body -sS -X POST "$CONTROL/job/lease"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data '{"platform":"tiktok","executor":"github","ttl_seconds":900}' > /tmp/lease.json
           cat /tmp/lease.json
@@ -101,8 +101,8 @@ jobs:
           import json
           d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
           if j.get('id')!='tiktok-canary-20261006-synthetic-v8' or j.get('status')!='leased':
-              raise SystemExit('V6_LEASE_NOT_EXACT')
-          print('V6_EXACT_LEASE',j.get('lease_generation'))
+              raise SystemExit('V9_LEASE_NOT_EXACT')
+          print('V9_EXACT_LEASE',j.get('lease_generation'))
           with open('/tmp/lease-meta','w') as f:
               f.write(str(j.get('lease_generation'))+'\n')
           PY
@@ -135,6 +135,7 @@ jobs:
           ATD_MODE: session
           ATD_FAST_SESSION: "0"
           EXPECTED_TIKTOK_USERNAME: universo.anthares
+          TIKTOK_CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
         shell: bash
         run: |
           set -euo pipefail
@@ -184,7 +185,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > /tmp/tiktok-owned-plan.json <<'JSON'
-          {"segment_id":"tiktok-canary-20261006-synthetic-v6","source_id":"synthetic-owned-canary-v6","title":"Universo Anthares — teste técnico de publicação","summary":"Teste técnico controlado de publicação do Universo Anthares."}
+          {"segment_id":"tiktok-canary-20261006-synthetic-v9","source_id":"synthetic-owned-canary-v6","title":"Universo Anthares — teste técnico de publicação","summary":"Teste técnico controlado de publicação do Universo Anthares."}
           JSON
           python3 - <<'PY'
           import json
