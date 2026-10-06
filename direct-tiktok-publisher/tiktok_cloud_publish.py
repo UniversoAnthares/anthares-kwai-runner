@@ -7,6 +7,8 @@ import os
 import re
 import sys
 import time
+import subprocess
+import tempfile
 import unicodedata
 from pathlib import Path
 
@@ -107,6 +109,33 @@ def _fill_caption(page, caption: str) -> None:
     raise RuntimeError("Campo de legenda/título do TikTok não foi localizado.")
 
 
+def _inventory_profile_videos_isolated(account: str) -> list[dict]:
+    """Run profile inventory in a separate process so Playwright Sync never nests."""
+    fd, path = tempfile.mkstemp(prefix="tiktok-inventory-", suffix=".json")
+    os.close(fd)
+    try:
+        code = (
+            "import json,sys; import tiktok_worker as tw; "
+            "json.dump(tw.inventory_profile_videos(sys.argv[2]),open(sys.argv[1],'w'),ensure_ascii=False)"
+        )
+        subprocess.run(
+            [sys.executable, "-c", code, path, account],
+            cwd=str(Path(__file__).resolve().parent),
+            env=os.environ.copy(),
+            check=True,
+            timeout=120,
+        )
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            raise RuntimeError("isolated profile inventory returned non-list")
+        return data
+    finally:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+
+
 def _new_profile_candidates(before_ids: set[str], inventory: list[dict]) -> list[dict]:
     unique = {}
     for item in inventory or []:
@@ -149,7 +178,7 @@ def main() -> None:
         if isinstance(prior, dict) and prior.get("account") == account and prior.get("media_sha256") == media_hash:
             raise RuntimeError("Publicação duplicada bloqueada pelo hash do vídeo: "+str(prior_key))
 
-    before_inventory = tw.inventory_profile_videos(account)
+    before_inventory = _inventory_profile_videos_isolated(account)
     before_ids = {str(item.get("id") or "").strip() for item in before_inventory if str(item.get("id") or "").strip()}
     print(f"TIKTOK_PROFILE_BASELINE count={len(before_ids)}", flush=True)
 
@@ -205,7 +234,7 @@ def main() -> None:
 
             verified_post = None
             for verify_attempt in range(1, 4):
-                post_inventory = tw.inventory_profile_videos(account)
+                post_inventory = _inventory_profile_videos_isolated(account)
                 candidates = _new_profile_candidates(before_ids, post_inventory)
                 print(
                     f"TIKTOK_PROFILE_VERIFY attempt={verify_attempt} new_candidates={len(candidates)}",
