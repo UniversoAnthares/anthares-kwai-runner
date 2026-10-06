@@ -22,6 +22,9 @@ jobs:
           grep -q '/sdcard/Movies/AntharesPublish/' kwai_publish.sh
           grep -q 'MEDIASTORE_MATCHES=1' kwai_publish.sh
           grep -q 'STATE=READY_TO_PUBLISH' kwai_publish_video.py
+          grep -q 'STATE=GALLERY_MEDIA_IDENTITY_VERIFIED' kwai_publish_video.py
+          grep -q 'gallery-media-identity-not-unique' kwai_publish_video.py
+          ! grep -q 'candidates\[0\]' kwai_publish_video.py
           grep -q 'STATE=PUBLISH_REQUESTED' kwai_publish_video.py
           grep -q 'explicit-publish-phase-required' kwai_publish_video.py
           grep -q 'kwai_queue_state.sh started' kwai_publish.sh
