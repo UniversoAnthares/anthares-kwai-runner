@@ -48,7 +48,7 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 
 ## Estado consolidado atual
 
-> Atualizado em 2026-10-05 20:01 -04:00. Os findings append-only continuam sendo a autoridade detalhada.
+> Atualizado em 2026-10-05 20:35 -04:00. Os findings append-only continuam sendo a autoridade detalhada.
 
 ### Arquitetura comprovada/descartada
 - PROVEN: runner público GitHub funciona sem depender da cota do repositório privado.
@@ -85,7 +85,9 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 ### Control plane central
 - PROVEN EM PRODUÇÃO: Durable Object SQLite cobre enqueue/lease/started/complete/fail/reconcile, dedupe por chave e overlap temporal, UNCERTAIN e circuit breaker no Worker v12 implantado.
 - PROVEN EM PRODUÇÃO: allowlist OIDC, confirmação fail-closed, PC/Google/Oracle removidos e HLS sem fallback WordPress hardcoded estão ativos na versão `2026-10-05-no-pc-confirmation-v12`.
-- PROVEN EM PRODUÇÃO: `/health` retorna `persistent_state=true`, `queue_bound=true`, `pc_fallback=false`; deploy Cloudflare Version ID `960c9ae5-e3fc-4e9f-b662-7a28dc8b6c6b`.
+- PROVEN EM PRODUÇÃO v14: `/health` retorna `version=2026-10-05-queue-lease-renew-v14`, `persistent_state=true`, `queue_bound=true`, `pc_fallback=false`; deploy Cloudflare Version ID `21f1cd93-9a62-426e-a2b4-7602de30355e`.
+- PROVEN EM PRODUÇÃO v14: lease de job possui renovação explícita fail-closed por owner/estado/expiração; o self-test de produção também prova disputa de exatamente um job por dois consumidores com exatamente um vencedor. Run 37394732038 / job 112047887652.
+- PROVEN EM PRODUÇÃO v14: sucesso confirmado limpa o circuit breaker (`disabled_until=null`) junto com os contadores de falha; regressão detectada no run v13 37394632606 e fechada no v14.
 - O caminho automático conhecido via runner público continua sem `CLOUDFLARE_API_TOKEN`; isso deixou de bloquear a versão atual porque o deploy v12 foi concluído pela sessão Wrangler OAuth autorizada. Não reabrir o caminho de deploy antigo sem mudança causal.
 
 ### Regra experimental obrigatória
