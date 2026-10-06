@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Generic hidden-desktop web chat runner for dedicated provider profiles.
 
-Status: architecture scaffold. Claude has its own PROVEN runner. Grok/Manus/Perplexity
-must be bootstrapped and validated before this generic runner is considered PROVEN.
+Claude has its own PROVEN runner. This generic runner supports Grok, Manus,
+Perplexity and Gemini. Use --expect for deterministic validation: success is
+reported only when the expected marker appears at least twice in visible page
+text (once in the sent prompt and once in the provider response).
 """
 import argparse, ctypes, ctypes.wintypes as wt, json, os, socket, subprocess, time, uuid, urllib.request
 from playwright.sync_api import sync_playwright
@@ -13,9 +15,11 @@ PROVIDERS = {
     "grok": {"url":"https://grok.com/", "profile":os.path.join(BASE,"grok-hidden-desktop-profile")},
     "manus": {"url":"https://manus.im/", "profile":os.path.join(BASE,"manus-hidden-desktop-profile")},
     "perplexity": {"url":"https://www.perplexity.ai/", "profile":os.path.join(BASE,"perplexity-hidden-desktop-profile")},
+    "gemini": {"url":"https://gemini.google.com/app", "profile":os.path.join(BASE,"gemini-hidden-desktop-profile")},
 }
 PROMPT_SELECTORS=["textarea","div[contenteditable='true']"]
 ASSISTANT_SELECTORS=['[data-testid*="assistant"]','[data-testid*="answer"]','[class*="assistant"]','[class*="answer"]','main article']
+LOGIN_TERMS=['sign in','log in','login','entrar','continue with google','continuar com o google','sign up','criar conta']
 
 kernel32=ctypes.WinDLL("kernel32",use_last_error=True); user32=ctypes.WinDLL("user32",use_last_error=True)
 class STARTUPINFO(ctypes.Structure):
@@ -37,10 +41,19 @@ def wait_cdp(port,seconds=30):
         except Exception:time.sleep(.5)
     return None
 
-def run(provider,prompt,timeout=90):
+def find_box(page):
+    for sel in PROMPT_SELECTORS:
+        loc=page.locator(sel)
+        for i in range(loc.count()-1,-1,-1):
+            try:
+                if loc.nth(i).is_visible(): return loc.nth(i)
+            except Exception: pass
+    return None
+
+def run(provider,prompt,timeout=90,expect=None):
     cfg=PROVIDERS[provider]; started=time.time(); port=free_port(); desktop="AntharesChat_"+provider+"_"+uuid.uuid4().hex[:8]
     hdesk=user32.CreateDesktopW(desktop,None,None,0,0x10000000,None); pid=None
-    result={"provider":provider,"ok":False,"status":None,"response":"","elapsed_s":None}
+    result={"provider":provider,"ok":False,"status":None,"response":"","elapsed_s":None,"expected":expect}
     try:
         if not hdesk: result["status"]="DESKTOP_CREATE_FAILED"; return result
         os.makedirs(cfg["profile"],exist_ok=True)
@@ -56,39 +69,44 @@ def run(provider,prompt,timeout=90):
             while time.time()<deadline:
                 try:
                     body=page.locator('body').inner_text(timeout=2000);low=body.lower()
-                    if any(x in low for x in ['sign in','log in','login','entrar','continue with google','continuar com o google','sign up','criar conta']):
-                        result["status"]="LOGIN_REQUIRED"
-                    for sel in PROMPT_SELECTORS:
-                        loc=page.locator(sel)
-                        for i in range(loc.count()-1,-1,-1):
-                            if loc.nth(i).is_visible():box=loc.nth(i);break
-                        if box is not None:break
+                    result["login_required"]=any(x in low for x in LOGIN_TERMS)
+                    box=find_box(page)
                     if box is not None:break
                 except Exception:pass
                 time.sleep(1)
             if box is None:
-                if not result["status"]:result["status"]="NO_PROMPT_BOX"
-                browser.close();return result
+                result["status"]="LOGIN_REQUIRED" if result.get("login_required") else "NO_PROMPT_BOX";browser.close();return result
             try:box.fill(prompt)
             except Exception:box.click();page.keyboard.type(prompt)
-            page.keyboard.press('Enter');time.sleep(4);stable='';hits=0;end=time.time()+60
-            while time.time()<end:
-                try:
-                    response=''
-                    for sel in ASSISTANT_SELECTORS:
-                        loc=page.locator(sel)
-                        for i in range(loc.count()-1,-1,-1):
-                            txt=loc.nth(i).inner_text(timeout=1000).strip()
-                            if txt and txt!=prompt:response=txt;break
-                        if response:break
-                    if response:
-                        if response==stable:hits+=1
-                        else:stable=response;hits=0
-                        if hits>=2:result.update({"ok":True,"status":"SUCCESS","response":response[:8000]});break
-                except Exception:pass
-                time.sleep(1.5)
-            if not result["status"] or result["status"]=="LOGIN_REQUIRED":
-                if box is not None and not result["ok"]:result["status"]="RESPONSE_TIMEOUT"
+            page.keyboard.press('Enter');time.sleep(3);end=time.time()+60
+            if expect:
+                count=0
+                while time.time()<end:
+                    try:
+                        txt=page.locator('body').inner_text(timeout=2000);count=txt.count(expect)
+                        if count>=2:
+                            result.update({"ok":True,"status":"SUCCESS","response":expect,"marker_count":count});break
+                    except Exception:pass
+                    time.sleep(1.5)
+                if not result["ok"]: result.update({"status":"MARKER_TIMEOUT","marker_count":count})
+            else:
+                stable='';hits=0
+                while time.time()<end:
+                    try:
+                        response=''
+                        for sel in ASSISTANT_SELECTORS:
+                            loc=page.locator(sel)
+                            for i in range(loc.count()-1,-1,-1):
+                                txt=loc.nth(i).inner_text(timeout=1000).strip()
+                                if txt and txt!=prompt:response=txt;break
+                            if response:break
+                        if response:
+                            if response==stable:hits+=1
+                            else:stable=response;hits=0
+                            if hits>=2:result.update({"ok":True,"status":"SUCCESS","response":response[:8000]});break
+                    except Exception:pass
+                    time.sleep(1.5)
+                if not result["ok"]:result["status"]="RESPONSE_TIMEOUT"
             browser.close()
     finally:
         if pid:subprocess.run(['taskkill','/PID',str(pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -97,4 +115,4 @@ def run(provider,prompt,timeout=90):
     return result
 
 if __name__=='__main__':
-    ap=argparse.ArgumentParser();ap.add_argument('--provider',choices=sorted(PROVIDERS),required=True);ap.add_argument('--prompt',required=True);args=ap.parse_args();print(json.dumps(run(args.provider,args.prompt),ensure_ascii=False))
+    ap=argparse.ArgumentParser();ap.add_argument('--provider',choices=sorted(PROVIDERS),required=True);ap.add_argument('--prompt',required=True);ap.add_argument('--expect');ap.add_argument('--timeout',type=int,default=90);args=ap.parse_args();print(json.dumps(run(args.provider,args.prompt,args.timeout,args.expect),ensure_ascii=False))
