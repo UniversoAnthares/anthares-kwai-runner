@@ -2,7 +2,7 @@ name: TikTok Real Publish
 on:
   push:
     paths:
-      - '.tiktok-direct-v9-trigger'
+      - '.tiktok-direct-v10-trigger'
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,8 +15,8 @@ jobs:
     env:
       CONTROL: https://anthares-control.anthares1.workers.dev
       EXPECTED_TIKTOK_USERNAME: universo.anthares
-      JOB_ID: tiktok-canary-20261006-synthetic-v9
-      DEDUPE: tiktok-canary-20261006-synthetic-v9
+      JOB_ID: tiktok-canary-20261006-synthetic-v10
+      DEDUPE: tiktok-canary-20261006-synthetic-v10
     steps:
       - name: Checkout runner repository
         uses: actions/checkout@v4
@@ -48,18 +48,35 @@ jobs:
             curl --fail-with-body -sS -X POST "$CONTROL/job/$1"               -H "Authorization: Bearer $CONTROL_TOKEN"               -H 'Content-Type: application/json'               --data "$2"
           }
 
-          rec="$(call reconcile '{"id":"tiktok-canary-20261006-synthetic-v5","executor":"github","confirmed_absent":true,"confirmation_evidence":"user_verified_profile_absent"}')"
-          echo "$rec"
-          python3 - "$rec" <<'PY'
-          import json,sys
-          d=json.loads(sys.argv[1]); j=d.get("job") or {}
-          if not d.get("ok") or j.get("status")!="queued":
-              raise SystemExit("V5_ABSENCE_RECONCILE_FAILED")
-          print("V5_RECONCILED_ABSENT")
+          health="$(curl -fsSL "$CONTROL/queue-health")"
+          echo "$health" > /tmp/queue-health.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/queue-health.json'))
+          rows=[x for x in d.get('jobs',[]) if x.get('id')=='tiktok-canary-20261006-synthetic-v5']
+          if rows:
+              j=rows[0]
+              print('V5_QUEUE_STATE',j.get('status'),j.get('attempts'),j.get('publication_started'))
+              if j.get('status') not in {'queued','uncertain'}:
+                  raise SystemExit('V5_UNEXPECTED_STATE')
+          else:
+              print('V5_QUEUE_STATE=missing')
           PY
+          v5state="$(python3 - <<'PY'
+          import json
+          rows=[x for x in json.load(open('/tmp/queue-health.json')).get('jobs',[]) if x.get('id')=='tiktok-canary-20261006-synthetic-v5']
+          print(rows[0].get('status') if rows else 'missing')
+          PY
+          )"
+          if [ "$v5state" = "uncertain" ]; then
+            rec="$(curl --fail-with-body -sS -X POST "$CONTROL/github-queue/reconcile" -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v5","confirmed_absent":true}')"
+            echo "$rec"
+          elif [ "$v5state" = "missing" ]; then
+            echo "V5_ALREADY_RETIRED"
+          fi
 
           for n in 1 2 3 4 5; do
-            lease="$(call lease '{"platform":"tiktok","executor":"github","ttl_seconds":300}')"
+            lease="$(curl -sS -X POST "$CONTROL/github-queue/lease" -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data '{"platform":"tiktok","ttl_seconds":300}')"
             echo "$lease"
             python3 - "$lease" <<'PY' > /tmp/lease-meta
           import json,sys
@@ -71,7 +88,7 @@ jobs:
             readarray -t M < /tmp/lease-meta
             id="${M[0]}"; gen="${M[1]}"; status="${M[2]}"
             if [ "$id" = "$JOB_ID" ]; then
-              echo "V5_RETIRED_AND_V9_ACQUIRED generation=$gen"
+              echo "V5_RETIRED_AND_V10_ACQUIRED generation=$gen"
               echo "LEASE_ID=$id" >> "$GITHUB_ENV"
               echo "LEASE_GEN=$gen" >> "$GITHUB_ENV"
               exit 0
@@ -93,16 +110,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "{"id":"$JOB_ID","platform":"tiktok","executor":"github","dedupe_key":"$DEDUPE","source_id":"synthetic-owned-canary-v9","source_start":0,"source_end":12}" > /tmp/enqueue.json
+          curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "{"id":"$JOB_ID","platform":"tiktok","executor":"github","dedupe_key":"$DEDUPE","source_id":"synthetic-owned-canary-v10","source_start":0,"source_end":12}" > /tmp/enqueue.json
           cat /tmp/enqueue.json
           curl --fail-with-body -sS -X POST "$CONTROL/job/lease"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data '{"platform":"tiktok","executor":"github","ttl_seconds":900}' > /tmp/lease.json
           cat /tmp/lease.json
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
-          if j.get('id')!='tiktok-canary-20261006-synthetic-v9' or j.get('status')!='leased':
-              raise SystemExit('V9_LEASE_NOT_EXACT')
-          print('V9_EXACT_LEASE',j.get('lease_generation'))
+          if j.get('id')!='tiktok-canary-20261006-synthetic-v10' or j.get('status')!='leased':
+              raise SystemExit('V10_LEASE_NOT_EXACT')
+          print('V10_EXACT_LEASE',j.get('lease_generation'))
           with open('/tmp/lease-meta','w') as f:
               f.write(str(j.get('lease_generation'))+'\n')
           PY
@@ -185,7 +202,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > /tmp/tiktok-owned-plan.json <<'JSON'
-          {"segment_id":"tiktok-canary-20261006-synthetic-v9","source_id":"synthetic-owned-canary-v6","title":"Universo Anthares — teste técnico de publicação","summary":"Teste técnico controlado de publicação do Universo Anthares."}
+          {"segment_id":"tiktok-canary-20261006-synthetic-v10","source_id":"synthetic-owned-canary-v6","title":"Universo Anthares — teste técnico de publicação","summary":"Teste técnico controlado de publicação do Universo Anthares."}
           JSON
           python3 - <<'PY'
           import json
