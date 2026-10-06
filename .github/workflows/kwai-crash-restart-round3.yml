@@ -1,0 +1,10 @@
+name: Kwai Crash Restart QA Round 3
+on: {push: {paths: ['.github/workflows/kwai-crash-restart-round3.yml','tests/test_kwai_crash_restart_round3.py']}}
+permissions: {contents: read}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy: {fail-fast: false, matrix: {case: [late-complete-ack, old-generation-restart, new-generation-claim, three-restarts, positive-then-restart]}}
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/test_kwai_crash_restart_round3.py "${{ matrix.case }}"
