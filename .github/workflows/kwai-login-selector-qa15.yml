@@ -1,0 +1,41 @@
+name: Kwai Login Selector QA15
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-login-selector-qa15-trigger']
+jobs:
+  qa15:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run 15 semantic selector cases
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases=[
+          ('text_exact','<hierarchy><node text="Log in" bounds="[1,2][101,42]"/></hierarchy>',True),
+          ('desc_exact','<hierarchy><node content-desc="Log in" bounds="[2,3][102,43]"/></hierarchy>',True),
+          ('signin','<hierarchy><node text="Sign in" bounds="[3,4][103,44]"/></hierarchy>',True),
+          ('login_compact','<hierarchy><node text="Login" bounds="[4,5][104,45]"/></hierarchy>',True),
+          ('pt_entrar','<hierarchy><node text="Entrar" bounds="[5,6][105,46]"/></hierarchy>',True),
+          ('profile_fallback','<hierarchy><node resource-id="com.kwai.video.basis:id/id_home_bottom_tab_me" bounds="[6,7][106,47]"/></hierarchy>',False),
+          ('merged_parent','<hierarchy><node text=""><node text="Log in" bounds="[7,8][107,48]"/></node></hierarchy>',True),
+          ('case_upper','<hierarchy><node text="LOG IN" bounds="[8,9][108,49]"/></hierarchy>',True),
+          ('spaces','<hierarchy><node text="  Log in  " bounds="[9,10][109,50]"/></hierarchy>',True),
+          ('empty','<hierarchy><node text="" bounds="[10,11][110,51]"/></hierarchy>',False),
+          ('join_now','<hierarchy><node text="Join now!" bounds="[11,12][111,52]"/></hierarchy>',False),
+          ('phone','<hierarchy><node text="Phone" bounds="[12,13][112,53]"/></hierarchy>',False),
+          ('profile_label','<hierarchy><node text="Profile" bounds="[13,14][113,54]"/></hierarchy>',False),
+          ('desc_signin','<hierarchy><node content-desc="Sign in" bounds="[14,15][114,55]"/></hierarchy>',True),
+          ('localized_noise','<hierarchy><node text="For You"/><node text="Log in" bounds="[15,16][115,56]"/></hierarchy>',True)]
+          def lab(n):return (n.attrib.get('text','')+' '+n.attrib.get('content-desc','')).strip().lower()
+          ok=0
+          for i,(name,xml,expected) in enumerate(cases,1):
+            root=ET.fromstring(xml)
+            found=any(lab(n) in ('log in','login','sign in','entrar') for n in root.iter('node'))
+            passed=found==expected
+            print(f'QA15_{i:02d} {name} FOUND={found} EXPECTED={expected} PASS={passed}')
+            if not passed: raise SystemExit(i)
+            ok+=1
+          print('KWAI_LOGIN_SELECTOR_QA15_OK='+str(ok))
+          PY
