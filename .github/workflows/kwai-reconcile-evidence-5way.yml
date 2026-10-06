@@ -1,0 +1,19 @@
+name: Kwai Reconcile Evidence 5-Way
+on:
+  push:
+    paths:
+      - '.github/workflows/kwai-reconcile-evidence-5way.yml'
+      - 'tests/test_kwai_reconcile_evidence_5way.py'
+permissions:
+  contents: read
+jobs:
+  adversarial:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        case: [wrong-job, wrong-sha, wrong-account, wrong-title, malformed]
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/test_kwai_reconcile_evidence_5way.py "${{ matrix.case }}"
