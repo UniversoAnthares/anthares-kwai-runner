@@ -30,7 +30,7 @@ jobs:
           sudo chmod 666 /dev/kvm
       - name: Install emulator image
         run: |
-          export ANDROID_SDK_HOME="$HOME/.android"
+          export ANDROID_SDK_HOME="$HOME"
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           mkdir -p "$ANDROID_AVD_HOME"
           yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null || true
@@ -39,6 +39,14 @@ jobs:
           echo "/usr/local/lib/android/sdk/emulator" >> "$GITHUB_PATH"
           echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo no | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/avdmanager create avd -n anthares -k "system-images;android-35;google_apis;x86_64" --device "pixel_5" --force
+      - name: Install emulator runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libpulse0
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          ls -la "$ANDROID_AVD_HOME" || true
+          /usr/local/lib/android/sdk/emulator/emulator -list-avds || true
       - name: Boot emulator
         run: |
           export ANDROID_SDK_HOME="$HOME/.android"
