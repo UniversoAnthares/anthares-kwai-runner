@@ -17,6 +17,7 @@ def rid(ns,s):
 def state(ns,t):
  if "permissioncontroller" in " ".join(n.attrib.get("resource-id","") for n in ns):return "PERMISSION"
  if "start now" in t or "you’re all set" in t or "you're all set" in t:return "START"
+ if "resource downloading" in t:return "RESOURCE_LOADING"
  if "profile" in t and ("home" in t or "discover" in t):return "MAIN"
  if "choose like or dislike" in t:return "INTEREST"
  if "select your interests" in t and ("skip" in t or "selected and continue" in t):return "INTEREST_SELECT"
@@ -53,6 +54,14 @@ for i in range(45):
   else:
    print("INTEREST_SELECT_SKIP_NOT_FOUND")
    adb("shell","input","tap","90","250");time.sleep(3)
+ elif s=="RESOURCE_LOADING":
+  print("RESOURCE_LOADING_WAIT")
+  for _ in range(30):
+   time.sleep(3);ns2,t2=snap()
+   if "resource downloading" not in t2:
+    print("RESOURCE_LOADING_CLEARED");break
+  else:
+   print("RESOURCE_LOADING_TIMEOUT");raise SystemExit(21)
  elif s=="LAUNCHER_ANR":
   print("LAUNCHER_RECOVERY_BEGIN")
   n=rid(ns,"aerr_close")
