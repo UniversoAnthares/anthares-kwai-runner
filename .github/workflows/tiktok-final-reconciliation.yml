@@ -3,6 +3,9 @@ on:
   push:
     paths:
       - '.tiktok-final-reconcile-trigger'
+permissions:
+  id-token: write
+  contents: read
 jobs:
   reconcile:
     runs-on: ubuntu-latest
