@@ -178,6 +178,23 @@ jobs:
           print("POST_LOGIN_UI="+text[-1800:])
           if edits or explicit:
               print("SUCCESS_SIGNAL=LOGIN_SURFACE_REACHED")
+              phone=next((x for x in nodes if label(x) in ("phone","telefone") or "phone" in label(x) or "telefone" in label(x)),None)
+              if phone is not None:
+                  pm=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",phone.attrib.get("bounds",""))
+                  if pm:
+                      a,b,c,d=map(int,pm.groups());adb("shell","input","tap",str((a+c)//2),str((b+d)//2));time.sleep(4)
+                      phone_root=dump("after-phone")
+                      pnodes=list(phone_root.iter("node"))
+                      ptext=" ".join(label(x) for x in pnodes)
+                      pedits=[x for x in pnodes if x.attrib.get("editable")=="true" or x.attrib.get("class","").endswith("EditText")]
+                      challenge=any(t in ptext for t in ("verification code","código de verificação","otp","sms","captcha","phone number","número de telefone","numero de telefone"))
+                      print("PHONE_EDITABLE_FIELDS="+str(len(pedits)))
+                      print("PHONE_CHALLENGE_HINT="+("1" if challenge else "0"))
+                      print("PHONE_UI="+ptext[-1800:])
+                      if pedits or challenge:
+                          print("SUCCESS_SIGNAL=PHONE_OR_AUTH_CHALLENGE_REACHED")
+                          raise SystemExit(0)
+              print("PARTIAL_SIGNAL=LOGIN_CHOOSER_ONLY")
               raise SystemExit(0)
           print("FAILURE_SIGNAL=LOGIN_SURFACE_NOT_REACHED")
           raise SystemExit(42)
