@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+
+: "${KWAI_LEASE_GENERATION:?KWAI_LEASE_GENERATION is required for fenced publication}"
+if [ "${KWAI_HEARTBEAT_ACTIVE:-0}" != "1" ]; then
+  export KWAI_HEARTBEAT_ACTIVE=1
+  exec bash kwai_queue_heartbeat.sh bash "$0" "$@"
+fi
 REPORT="kwai-publish-status.txt"
 : >"$REPORT"
 log(){ printf '%s\n' "$*" | tee -a "$REPORT"; }
