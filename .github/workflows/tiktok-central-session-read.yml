@@ -55,7 +55,7 @@ jobs:
 
 
   reconcile-final:
-    if: ${{ contains(github.event.head_commit.message, '[reconcile-final]') }}
+    if: ${{ contains(github.event.head_commit.message, 'execute single final reconciliation') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
