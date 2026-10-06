@@ -23,7 +23,10 @@ def main():
     lease=None
     for _ in range(60):
         x=call("lease",{"platform":"tiktok","executor":"github","ttl_seconds":900}); j=x.get("job") or {}
-        if not j:\n            import time; time.sleep(1); continue
+        if not j:
+            import time
+            time.sleep(1)
+            continue
         if j.get("id")==JOB_ID: lease=j; break
         if j.get("publication_started"):
             raise RuntimeError("queue blocked by possibly published job "+str(j.get("id")))
