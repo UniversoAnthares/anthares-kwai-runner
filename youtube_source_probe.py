@@ -5,6 +5,8 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+import threading
+import time
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
@@ -131,6 +133,25 @@ def probe():
         "direct_watch": _direct_watch_probe(video_id),
         "yt_dlp": _ydl_probe(video_id, client),
     })
+
+
+def _startup_probe():
+    time.sleep(8)
+    video_id = os.environ.get("PROBE_VIDEO_ID", "uohL105_5bg").strip()
+    clients = ["default", "android_vr", "tv", "web_safari", "mweb"]
+    for raw_client in clients:
+        client = None if raw_client == "default" else raw_client
+        result = {
+            "event": "STARTUP_SOURCE_PROBE",
+            "video_id": video_id,
+            "client": raw_client,
+            "direct_watch": _direct_watch_probe(video_id),
+            "yt_dlp": _ydl_probe(video_id, client),
+        }
+        print(json.dumps(result, ensure_ascii=False), flush=True)
+
+
+threading.Thread(target=_startup_probe, daemon=True).start()
 
 
 if __name__ == "__main__":
