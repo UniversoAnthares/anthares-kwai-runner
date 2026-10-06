@@ -1,0 +1,49 @@
+name: TikTok V15 Reconcile 30-Way
+on:
+  push:
+    paths: ['.tiktok-reconcile30-trigger']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read-only independent profile observation
+        env:
+          CONTROL: https://anthares-control.anthares1.workers.dev
+          R: ${{ matrix.replica }}
+          EXPECTED_TIKTOK_USERNAME: universo.anthares
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check -q playwright requests
+          python3 -m playwright install --with-deps chromium >/dev/null
+          CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          curl --fail-with-body -sS "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $CT" >/tmp/state-envelope.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/state-envelope.json'));s=d.get('state') or {}
+          assert d.get('available') is True and s.get('cookies')
+          json.dump(s,open('/tmp/state.json','w'),separators=(',',':'))
+          PY
+          export TIKTOK_STORAGE_STATE="$(cat /tmp/state.json)"
+          cd direct-tiktok-publisher
+          python3 - <<'PY' | tee /tmp/inventory.log
+          import json,os
+          import tiktok_worker as tw
+          rows=tw.inventory_profile_videos('universo.anthares')
+          print('REPLICA='+os.environ['R'])
+          print('IDS='+','.join(str(x.get('id') or '') for x in rows))
+          print('TEXTS='+json.dumps([x.get('text') for x in rows],ensure_ascii=False))
+          hit=[x for x in rows if 'teste técnico v15' in str(x.get('text') or '').casefold() or 'teste tecnico v15' in str(x.get('text') or '').casefold()]
+          print('V15_MATCHES='+str(len(hit)))
+          if hit: print('V15_PRESENT_REMOTE_ID='+str(hit[0].get('id')))
+          else: print('V15_ABSENT_OBSERVATION=1')
+          PY
