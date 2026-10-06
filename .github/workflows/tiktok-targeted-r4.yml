@@ -1,0 +1,76 @@
+name: TikTok Targeted Round 4
+on:
+  push:
+    paths: ['.tiktok-targeted-r4']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  session:
+    strategy:
+      fail-fast: false
+      matrix:
+        repetition: [1,2,3,4,5]
+    runs-on: ubuntu-slim
+    steps:
+      - name: Session test diagnostic
+        shell: bash
+        env:
+          REP: ${{ matrix.repetition }}
+        run: |
+          set -u
+          R=https://anthares-tiktok-render-rootless.onrender.com
+          T=$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )
+          echo "::add-mask::$T"
+          sc=$(curl -sS -o /tmp/status -w '%{http_code}' "$R/session-status" -H "Authorization: Bearer $T")
+          tc=$(curl -sS -o /tmp/test -w '%{http_code}' -X POST "$R/session-test" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' --data '{}')
+          python3 - <<'PY'
+          import json,os
+          def load(p):
+            try:return json.load(open(p))
+            except:return {'raw':open(p).read()[:500]}
+          s,t=load('/tmp/status'),load('/tmp/test')
+          print('SESSION_R4',os.environ['REP'],'status=',s,'test=',t)
+          assert s.get('bootstrapped') and s.get('identity_verified') and s.get('ready_for_tiktok')
+          if t.get('ok') is True: assert t.get('identity_verified')
+          PY
+          echo "SESSION_R4_HTTP rep=$REP status=$sc test=$tc"
+  media:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [static_exact, static_find_safe, apt_audio, imageio_audio, docker_audio]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Media diagnostic
+        shell: bash
+        env:
+          MODE: ${{ matrix.mode }}
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            static_exact)
+              curl -fsSL --max-time 40 https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o /tmp/f.tar.xz
+              mkdir -p /tmp/ff && tar -xJf /tmp/f.tar.xz -C /tmp/ff
+              B=$(find /tmp/ff -type f -name ffmpeg -perm -111 2>/dev/null | head -1) ;;
+            static_find_safe)
+              curl -fsSL --max-time 40 https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o /tmp/f.tar.xz
+              mkdir -p /tmp/ff && tar -xJf /tmp/f.tar.xz -C /tmp/ff
+              B=$(find /tmp/ff -type f -name ffmpeg -perm -111 2>/dev/null | head -1 || true) ;;
+            apt_audio)
+              sudo apt-get update -qq; sudo apt-get install -y -qq ffmpeg >/dev/null; B=$(command -v ffmpeg) ;;
+            imageio_audio)
+              pip -q install imageio-ffmpeg; B=$(python3 -c 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())') ;;
+            docker_audio)
+              docker run --rm -v /tmp:/work linuxserver/ffmpeg -f lavfi -i color=c=black:s=320x568:d=1 -f lavfi -i anullsrc=r=44100:cl=stereo -shortest -c:v libx264 -c:a aac -pix_fmt yuv420p -y /work/r4.mp4 >/dev/null 2>&1
+              test -s /tmp/r4.mp4; echo "MEDIA_R4_PASS $MODE"; exit 0 ;;
+          esac
+          test -x "$B"
+          "$B" -hide_banner -loglevel error -y -f lavfi -i color=c=black:s=320x568:d=1 -f lavfi -i anullsrc=r=44100:cl=stereo -shortest -c:v libx264 -c:a aac -pix_fmt yuv420p /tmp/r4.mp4
+          test -s /tmp/r4.mp4
+          echo "MEDIA_R4_PASS $MODE"
