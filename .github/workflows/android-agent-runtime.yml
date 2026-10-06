@@ -170,69 +170,57 @@ jobs:
           print("FAILURE_SIGNAL=LOGIN_SURFACE_NOT_REACHED")
           raise SystemExit(42)
           PY
-      - name: Probe Phone authentication form
+      - name: Probe auth chooser nodes and 15 semantic actions
         run: |
           python3 - <<'PY'
           import subprocess,time,re,xml.etree.ElementTree as ET
           def adb(*a):
               return subprocess.run(["adb",*a],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=30).stdout
           def dump(tag):
-              adb("shell","uiautomator","dump",f"/sdcard/{tag}.xml")
-              adb("pull",f"/sdcard/{tag}.xml",f"/tmp/{tag}.xml")
-              return ET.parse(f"/tmp/{tag}.xml").getroot()
-          def label(n):
-              return (n.attrib.get("text","")+" "+n.attrib.get("content-desc","")).strip().lower()
-          def tap(n):
-              m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.attrib.get("bounds",""))
-              if not m:return False
-              x1,y1,x2,y2=map(int,m.groups())
-              adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2));return True
-          root=dump("auth-chooser")
-          phone=[n for n in root.iter("node") if any(k in label(n) for k in ("phone","telefone"))]
-          print("PHONE_CONTROL_COUNT="+str(len(phone)))
-          if not phone: raise SystemExit("PHONE_CONTROL_VISIBLE=0")
-          n=phone[0]
-          print("PHONE_NODE_LABEL="+label(n))
-          print("PHONE_NODE_BOUNDS="+n.attrib.get("bounds",""))
-          print("PHONE_NODE_CLICKABLE="+n.attrib.get("clickable",""))
-          # Matrix 15: probe 15 horizontal fractions of the Phone-bearing node.
-          m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.attrib.get("bounds",""))
-          if not m: raise SystemExit("PHONE_BOUNDS_INVALID")
-          x1,y1,x2,y2=map(int,m.groups())
-          baseline=" ".join(label(x) for x in root.iter("node"))
-          for idx in range(1,16):
-              frac=idx/16.0
-              x=round(x1+(x2-x1)*frac); y=(y1+y2)//2
-              adb("shell","input","tap",str(x),str(y)); time.sleep(1.2)
-              try:
-                  probe=dump("phone-probe-"+str(idx))
+              for i in range(5):
+                  adb("shell","uiautomator","dump",f"/sdcard/{tag}.xml")
+                  adb("pull",f"/sdcard/{tag}.xml",f"/tmp/{tag}.xml")
+                  try:return ET.parse(f"/tmp/{tag}.xml").getroot()
+                  except Exception:time.sleep(1)
+              raise SystemExit("UI_DUMP_UNAVAILABLE")
+          def lab(n):return (n.attrib.get("text","")+" "+n.attrib.get("content-desc","")).strip().lower()
+          def tapxy(x,y):adb("shell","input","tap",str(x),str(y));time.sleep(1.5)
+          root=dump("chooser-detail")
+          ns=list(root.iter("node"))
+          for i,n in enumerate(ns):
+              l=lab(n)
+              if any(k in l for k in ("google","facebook","phone","welcome","join now","log in")):
+                  print("AUTH_NODE",i,"LABEL=",l,"RID=",n.attrib.get("resource-id",""),"CLASS=",n.attrib.get("class",""),"CLICK=",n.attrib.get("clickable",""),"BOUNDS=",n.attrib.get("bounds",""))
+          # 15 probes around the visual Phone area, including below/above the text node.
+          target=next((n for n in ns if "phone" in lab(n)),None)
+          if target is None:raise SystemExit("PHONE_TEXT_NODE_MISSING")
+          m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",target.attrib.get("bounds",""))
+          if not m:raise SystemExit("PHONE_TEXT_BOUNDS_INVALID")
+          x1,y1,x2,y2=map(int,m.groups()); cx=(x1+x2)//2; cy=(y1+y2)//2
+          pts=[(cx,cy),(x2-12,cy),(x2+35,cy),(x2+80,cy),(x2+130,cy),
+               (cx,cy-55),(cx,cy+55),(x2-12,cy-55),(x2-12,cy+55),
+               (x2+35,cy-55),(x2+35,cy+55),(x2+80,cy-55),(x2+80,cy+55),
+               (x2+130,cy-55),(x2+130,cy+55)]
+          base=" ".join(lab(n) for n in ns)
+          for i,(x,y) in enumerate(pts,1):
+              tapxy(x,y)
+              try:r=dump("auth-action-"+str(i))
               except SystemExit:
-                  print("PHONE_MATRIX_"+str(idx)+"=DUMP_UNAVAILABLE")
-                  adb("shell","input","keyevent","4");time.sleep(.5);continue
-              pnodes=list(probe.iter("node"))
-              ptxt=" ".join(label(z) for z in pnodes)
-              edits=[z for z in pnodes if z.attrib.get("editable")=="true" or z.attrib.get("class","").endswith("EditText")]
-              changed=(ptxt!=baseline)
-              print("PHONE_MATRIX_"+str(idx)+"=x"+str(x)+" EDITS="+str(len(edits))+" CHANGED="+str(changed)+" UI="+ptxt[-500:])
-              if edits or any(k in ptxt for k in ("phone number","country code","verification code","get code","send code")):
-                  print("PHONE_MATRIX_WINNER="+str(idx))
-                  print("SUCCESS_SIGNAL=PHONE_AUTH_FORM_REACHED")
-                  raise SystemExit(0)
-              adb("shell","input","keyevent","4");time.sleep(.7)
-              # Return to chooser if the probe navigated elsewhere.
-              try: root=dump("auth-chooser-return")
-              except SystemExit: pass
-          print("FAILURE_SIGNAL=PHONE_15POINT_MATRIX_EXHAUSTED")
-          raise SystemExit(44)
-          after=dump("phone-form")
-          nodes=list(after.iter("node"))
-          edits=[n for n in nodes if n.attrib.get("editable")=="true" or n.attrib.get("class","").endswith("EditText")]
-          txt=" ".join(label(n) for n in nodes)
-          print("PHONE_EDITABLE_FIELDS="+str(len(edits)))
-          print("PHONE_FORM_UI="+txt[-1800:])
-          if edits and any(k in txt for k in ("phone","country","code","continue","next","log in","login")):
-              print("SUCCESS_SIGNAL=PHONE_AUTH_FORM_REACHED")
-              raise SystemExit(0)
-          print("FAILURE_SIGNAL=PHONE_AUTH_FORM_NOT_REACHED")
-          raise SystemExit(43)
+                  print("AUTH15_"+str(i)+"=DUMP_FAIL");continue
+              pn=list(r.iter("node")); txt=" ".join(lab(n) for n in pn)
+              edits=[n for n in pn if n.attrib.get("editable")=="true" or n.attrib.get("class","").endswith("EditText")]
+              print("AUTH15_"+str(i)+" X="+str(x)+" Y="+str(y)+" EDITS="+str(len(edits))+" CHANGED="+str(txt!=base)+" UI="+txt[-650:])
+              if edits or any(k in txt for k in ("phone number","country code","verification code","get code","send code")):
+                  print("AUTH15_WINNER="+str(i));print("SUCCESS_SIGNAL=PHONE_AUTH_FORM_REACHED");raise SystemExit(0)
+              # If chooser disappeared, reopen it deterministically through visible Log in.
+              if "welcome to kwai" not in txt:
+                  back=next((n for n in pn if lab(n) in ("log in","login")),None)
+                  if back is not None:
+                      bm=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",back.attrib.get("bounds",""))
+                      if bm:
+                          a,b,c,d=map(int,bm.groups());tapxy((a+c)//2,(b+d)//2)
+                  else:
+                      adb("shell","input","keyevent","4");time.sleep(1)
+          print("FAILURE_SIGNAL=AUTH_15_SEMANTIC_ACTIONS_EXHAUSTED")
+          raise SystemExit(45)
           PY
