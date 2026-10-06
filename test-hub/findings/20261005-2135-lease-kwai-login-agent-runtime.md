@@ -2,9 +2,9 @@
 STATUS: RUNNING
 AREA: kwai
 DATE: 2026-10-05
-RUN: none
+RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37397864424
 JOB: install + AccessibilityService + Kwai semantic state validation
-COMMIT: pending
+COMMIT: 1072f7b8d594c60e989bca6004a0e570a5a07b96
 SUPERSEDES: none
 EXPIRES: 2026-10-05T22:05:00-04:00
 
