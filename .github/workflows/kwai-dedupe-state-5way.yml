@@ -1,0 +1,20 @@
+name: Kwai Dedupe State 5-Way
+on:
+  push:
+    paths:
+      - '.github/workflows/kwai-dedupe-state-5way.yml'
+      - 'tests/test_kwai_dedupe_state_5way.py'
+      - '.kwai-dedupe-state-trigger'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        case: [touching-interval, contained-interval, cross-source, failed-job-dedupe, canonical-before-publish]
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/test_kwai_dedupe_state_5way.py "${{ matrix.case }}"
