@@ -1,0 +1,39 @@
+name: TikTok Inventory Isolation 30-Way
+on:
+  push:
+    paths: ['.tiktok-inventory30-trigger']
+permissions:
+  contents: read
+jobs:
+  isolate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate isolated inventory boundary
+        env:
+          R: ${{ matrix.replica }}
+        run: |
+          set -euo pipefail
+          python3 -m py_compile direct-tiktok-publisher/tiktok_cloud_publish.py
+          python3 - <<'PY'
+          import ast,os
+          p='direct-tiktok-publisher/tiktok_cloud_publish.py'
+          s=open(p,encoding='utf-8').read(); tree=ast.parse(s)
+          funcs={n.name:n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef)}
+          assert '_inventory_profile_videos_isolated' in funcs
+          main=funcs['main']
+          direct=[]
+          for n in ast.walk(main):
+              if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr=='inventory_profile_videos':
+                  direct.append(n.lineno)
+          assert direct==[], direct
+          calls=[n for n in ast.walk(main) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='_inventory_profile_videos_isolated']
+          assert len(calls)>=2
+          print('INVENTORY_ISOLATION_REPLICA_'+os.environ['R']+'=PROVEN calls='+str(len(calls)))
+          PY
