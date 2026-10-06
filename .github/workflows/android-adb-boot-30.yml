@@ -1,7 +1,7 @@
 name: Android ADB Boot 30-Way
 on:
   push:
-    paths: ['.github/workflows/android-adb-boot-30.yml']
+    paths: ['.github/workflows/android-adb-boot-30.yml', 'android-agent/.adb30-trigger']
 permissions: { contents: read }
 jobs:
   probe:
