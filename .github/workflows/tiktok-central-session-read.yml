@@ -256,7 +256,13 @@ jobs:
           json.dump(st,open('/tmp/state.json','w'),separators=(',',':'))
           PY
           curl --fail-with-body -sS -X POST https://anthares-tiktok-render-rootless.onrender.com/bootstrap-session -H "Authorization: Bearer $RENDER_TOKEN" -H 'Content-Type: application/json' --data-binary @/tmp/state.json >/tmp/boot.json
-          curl --fail-with-body -sS --max-time 180 https://anthares-tiktok-render-rootless.onrender.com/profile-inventory -H "Authorization: Bearer $RENDER_TOKEN" >/tmp/inventory.json
+          INV_HTTP="$(curl -sS --max-time 180 -o /tmp/inventory.json -w '%{http_code}' https://anthares-tiktok-render-rootless.onrender.com/profile-inventory -H "Authorization: Bearer $RENDER_TOKEN")"
+          python3 - "$INV_HTTP" <<'PY'
+          import json,sys
+          d=json.load(open('/tmp/inventory.json'))
+          print('PROFILE_INVENTORY_META',{'http':int(sys.argv[1]),'ok':d.get('ok'),'error':d.get('error'),'detail':d.get('detail'),'count':d.get('count')})
+          if int(sys.argv[1])!=200 or not d.get('ok'): raise SystemExit('PROFILE_INVENTORY_INVALID')
+          PY
           REMOTE_ID="$(python3 - <<'PY'
           import json,re,unicodedata,sys
           d=json.load(open('/tmp/inventory.json'))
