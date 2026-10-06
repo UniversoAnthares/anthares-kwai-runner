@@ -1,0 +1,73 @@
+name: TikTok UNCERTAIN Observation Reconcile
+on:
+  push:
+    paths: ['.tiktok-reconcile-observe']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  observe:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - name: Wait for observation revision
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 45); do
+            REV=$(curl -fsS https://anthares-tiktok-render-rootless.onrender.com/health | python3 -c "import json,sys; print(json.load(sys.stdin).get('revision',''))" || true)
+            echo "revision=$REV"
+            [ "$REV" = "ada42e5e45d7a04682dab808b125c7f5ece81de8" ] && exit 0
+            sleep 8
+          done
+          exit 2
+      - name: Observe profile and reconcile only on exact positive evidence
+        run: |
+          set -euo pipefail
+          RENDER_TOKEN="$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )"
+          CONTROL_TOKEN="$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'https://anthares-control.anthares1.workers.dev'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )"
+          echo "::add-mask::$RENDER_TOKEN"; echo "::add-mask::$CONTROL_TOKEN"
+          curl --fail-with-body -sS https://anthares-tiktok-render-rootless.onrender.com/session-status -H "Authorization: Bearer $RENDER_TOKEN" > /tmp/status.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/status.json'))
+          print('OBSERVE_SESSION', {k:d.get(k) for k in ('bootstrapped','identity_verified','ready_for_tiktok')})
+          if not (d.get('bootstrapped') and d.get('identity_verified') and d.get('ready_for_tiktok')): raise SystemExit('OBSERVE_IDENTITY_INVALID')
+          PY
+          curl --fail-with-body -sS --max-time 180 https://anthares-tiktok-render-rootless.onrender.com/profile-inventory -H "Authorization: Bearer $RENDER_TOKEN" > /tmp/inventory.json
+          cat /tmp/inventory.json
+          REMOTE_ID="$(python3 - <<'PY'
+          import json,re,unicodedata,sys
+          d=json.load(open('/tmp/inventory.json'))
+          if not d.get('ok'): raise SystemExit(3)
+          def norm(s):
+            s=unicodedata.normalize('NFKD',str(s)).encode('ascii','ignore').decode().casefold()
+            return re.sub(r'[^a-z0-9]+',' ',s).strip()
+          hits=[]
+          for x in d.get('items') or []:
+            t=norm(x.get('text',''))
+            if 'universo anthares' in t and 'teste tecnico de publicacao' in t:
+              hits.append(str(x.get('id') or ''))
+          print('MATCH_COUNT='+str(len(hits)),file=sys.stderr)
+          if len(hits)!=1: raise SystemExit(4)
+          print(hits[0])
+          PY
+          )" || { echo "TIKTOK_RECONCILE_OBSERVATION=NO_UNIQUE_POSITIVE_MATCH"; exit 4; }
+          test -n "$REMOTE_ID"
+          curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "{\"id\":\"tiktok-canary-20261006-synthetic-v2\",\"executor\":\"github\",\"confirmed\":true,\"remote_id\":\"$REMOTE_ID\",\"confirmation_evidence\":\"profile_exact_caption:$REMOTE_ID\"}" > /tmp/reconcile.json
+          cat /tmp/reconcile.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/reconcile.json')); j=d.get('job') or {}
+          if not d.get('ok') or j.get('status')!='published' or not j.get('confirmed'): raise SystemExit('RECONCILE_NOT_CONFIRMED')
+          print('TIKTOK_REAL_REMOTE_POST=PROVEN remote_id='+str(j.get('remote_id')))
+          PY
