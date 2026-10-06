@@ -1,0 +1,17 @@
+name: Hub Lease Index QA Round 3
+on:
+  push:
+    paths:
+      - '.github/workflows/hub-lease-index-qa-round3.yml'
+      - 'tests/test_hub_lease_index_round3.py'
+permissions: {contents: read}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [supersedes-chain, case-sensitive-area, three-way-conflict, closed-plus-active, distinct-areas]
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/test_hub_lease_index_round3.py "${{ matrix.case }}"
