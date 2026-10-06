@@ -1,0 +1,52 @@
+name: Android Boot Matrix 30
+'on':
+  push:
+    paths:
+      - android-agent/boot30-trigger.txt
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        v: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+    steps:
+      - name: Prepare tools
+        run: |
+          set -e
+          SDK=/usr/local/lib/android/sdk
+          SM=$SDK/cmdline-tools/latest/bin/sdkmanager
+          AV=$SDK/cmdline-tools/latest/bin/avdmanager
+          EM=$SDK/emulator/emulator
+          "$SM" "platform-tools" "system-images;android-35;google_apis;x86_64" >/dev/null
+          test -x "$AV" && test -x "$EM" && test -x "$SDK/platform-tools/adb"
+          echo TEST_VALIDITY=TOOLS_AND_IMAGE_READY
+      - name: Boot variant
+        env:
+          V: ${{ matrix.v }}
+        run: |
+          set -e
+          SDK=/usr/local/lib/android/sdk
+          AV=$SDK/cmdline-tools/latest/bin/avdmanager
+          EM=$SDK/emulator/emulator
+          AD=$SDK/platform-tools/adb
+          NAME=b$V
+          echo no | "$AV" create avd -n "$NAME" -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force >/dev/null
+          sudo chmod 666 /dev/kvm
+          M=$((1024 + (V % 5) * 256))
+          C=$((1 + (V % 2)))
+          EXTRA="-no-snapshot"
+          if [ $((V % 3)) -eq 0 ]; then EXTRA="-wipe-data"; fi
+          if [ $((V % 5)) -eq 0 ]; then EXTRA="-no-snapshot-save"; fi
+          nohup "$EM" -avd "$NAME" -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory "$M" -cores "$C" $EXTRA >/tmp/emulator.log 2>&1 &
+          "$AD" wait-for-device
+          for i in $(seq 1 60); do
+            B=$("$AD" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$B" = "1" ]; then echo RUNTIME_HARNESS_PROVEN=$V; exit 0; fi
+            sleep 3
+          done
+          tail -100 /tmp/emulator.log
+          echo FAILURE_SIGNAL=BOOT_TIMEOUT_$V
+          exit 42
