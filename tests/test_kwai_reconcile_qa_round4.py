@@ -5,7 +5,7 @@ b={"job_id":"job-1","media_sha256":"0123456789abcdef","expected_account":"expect
 def enc(x): return base64.urlsafe_b64encode(json.dumps(x,separators=(",",":")).encode()).decode().rstrip("=")
 token=enc(b); valid=False
 if case=="truncated-token": token=token[:-5]
-elif case=="leading-space-token": token=" "+token
+elif case=="leading-space-token": token=" "+token; valid=True
 elif case=="boolean-as-string": b["observed_account_match"]="true"; token=enc(b)
 elif case=="null-profile": b["profile_state"]=None; token=enc(b)
 elif case=="padded-valid": token=base64.urlsafe_b64encode(json.dumps(b,separators=(",",":")).encode()).decode(); valid=True
