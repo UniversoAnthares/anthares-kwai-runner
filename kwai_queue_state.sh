@@ -4,7 +4,7 @@ set -Eeuo pipefail
 OP="${1:?usage: kwai_queue_state.sh started|complete|fail|reconcile [value]}"
 VALUE="${2:-}"
 CONTROL_URL="${ANTHARES_CONTROL_URL:-https://anthares-control.anthares1.workers.dev}"
-EXPECTED_VERSION="${ANTHARES_CONTROL_EXPECTED_VERSION:-2026-10-05-queue-lease-renew-v14}"
+EXPECTED_VERSION="${ANTHARES_CONTROL_EXPECTED_VERSION:-2026-10-05-queue-heartbeat-renew-v15}"
 : "${KWAI_QUEUE_JOB_ID:?KWAI_QUEUE_JOB_ID is required}"
 
 health="$(curl --fail-with-body -fsS "$CONTROL_URL/health")"
