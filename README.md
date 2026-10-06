@@ -17,3 +17,6 @@ Reserved for the later controller-integration stage (not required by the current
 - ANTHARES_CONTROL_TOKEN
 
 The runner downloads the validated Kwai package from this repository's public `kwai-package-vault` release and verifies its pinned SHA-256 before installation. No private-repository token is required.
+## External CI provider smoke
+
+CircleCI is configured through `.circleci/config.yml` with the shared provider smoke job. GitHub remains the source of truth; CircleCI is an interchangeable external executor.
