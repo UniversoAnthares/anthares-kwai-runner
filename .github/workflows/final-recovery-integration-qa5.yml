@@ -1,0 +1,42 @@
+name: Final Recovery Integration QA5
+on:
+  push:
+    branches: [main]
+    paths: ['.final-recovery-integration-trigger']
+permissions: {contents: read}
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [crash-before-start-reclaim,crash-after-start-uncertain,stale-holder-fenced,restart-uncertain-no-publish,reconcile-absent-requeues]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          python3 - '${{ matrix.case }}' <<'PY'
+          import sys
+          c=sys.argv[1]; calls=[]
+          j={"status":"leased","generation":1,"started":False,"confirmed":False,"attempts":1}
+          def expire():
+            if j["started"]: j["status"]="uncertain"
+            else: j["status"]="queued"
+          def claim():
+            if j["status"]!="queued": return False
+            j["status"]="leased"; j["generation"]+=1; j["started"]=False; calls.append(("claim",j["generation"])); return True
+          def publish(gen):
+            if j["status"]!="leased" or gen!=j["generation"]: return False
+            calls.append(("publish",gen)); j["started"]=True; return True
+          if c=="crash-before-start-reclaim":
+            expire(); assert j["status"]=="queued"; assert claim(); assert j["generation"]==2
+          elif c=="crash-after-start-uncertain":
+            assert publish(1); expire(); assert j["status"]=="uncertain"; assert not claim()
+          elif c=="stale-holder-fenced":
+            expire(); assert claim(); assert not publish(1); assert not any(x==("publish",1) for x in calls)
+          elif c=="restart-uncertain-no-publish":
+            assert publish(1); expire(); before=len([x for x in calls if x[0]=="publish"]); assert not claim(); after=len([x for x in calls if x[0]=="publish"]); assert before==after==1
+          elif c=="reconcile-absent-requeues":
+            assert publish(1); expire(); assert j["status"]=="uncertain"; j["status"]="queued"; j["started"]=False; assert claim(); assert j["generation"]==2
+          print("FINAL_RECOVERY_"+c+"_OK")
+          PY
