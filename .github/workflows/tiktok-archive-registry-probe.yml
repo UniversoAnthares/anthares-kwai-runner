@@ -1,0 +1,49 @@
+name: TikTok Archive Registry Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.tiktok-archive-registry-trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Probe public Anthares live registry for clean sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.error, urllib.request
+          url='https://anthares.us/wp-json/anthares/v1/clipper-live/registry'
+          req=urllib.request.Request(url,headers={'Accept':'application/json','User-Agent':'Mozilla/5.0 AntharesCanaryArchiveProbe/1'})
+          try:
+              with urllib.request.urlopen(req,timeout=30) as r:
+                  code=int(getattr(r,'status',200)); raw=r.read().decode('utf-8','replace')
+          except urllib.error.HTTPError as e:
+              code=int(e.code); raw=e.read().decode('utf-8','replace')
+          print('REGISTRY_HTTP='+str(code))
+          if code!=200:
+              print('REGISTRY_PUBLIC_ACCESS=BLOCKED')
+              raise SystemExit(2)
+          try: data=json.loads(raw)
+          except Exception: raise SystemExit('REGISTRY_NON_JSON')
+          rows=data.get('items') if isinstance(data,dict) else None
+          if not isinstance(rows,list): raise SystemExit('REGISTRY_ITEMS_INVALID')
+          wanted={'uohL105_5bg','otvyyx2x-fE'}
+          found=[]
+          for row in rows:
+              if not isinstance(row,dict): continue
+              vid=str(row.get('video_id') or '')
+              if vid not in wanted: continue
+              site=str(row.get('site_video_url') or '')
+              found.append({'video_id':vid,'title':str(row.get('title') or ''),'status':str(row.get('status') or ''),'has_site_video_url':bool(site),'site_video_url':site})
+          print(json.dumps({'REGISTRY_MATCHES':found},ensure_ascii=False,sort_keys=True))
+          print('REGISTRY_PUBLIC_ACCESS=OK')
+          PY
