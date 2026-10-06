@@ -1,0 +1,50 @@
+name: TikTok Safe Preflight Round 3 25-Probe
+on:
+  push:
+    paths: ['.tiktok-safe-preflight-r3-25']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      max-parallel: 25
+      matrix:
+        case: [render-session-status, render-session-test, render-bad-token, control-public-health, control-queue-no-token]
+        repetition: [1,2,3,4,5]
+    runs-on: ubuntu-slim
+    timeout-minutes: 3
+    steps:
+      - name: Probe contract
+        shell: bash
+        env:
+          CASE: ${{ matrix.case }}
+          REP: ${{ matrix.repetition }}
+        run: |
+          set -euo pipefail
+          C=https://anthares-control.anthares1.workers.dev
+          R=https://anthares-tiktok-render-rootless.onrender.com
+          token() {
+            python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          }
+          case "$CASE" in
+            render-session-status)
+              T="$(token)"; echo "::add-mask::$T"; code=$(curl -sS -o /tmp/r -w '%{http_code}' "$R/session-status" -H "Authorization: Bearer $T"); test "$code" = 200
+              python3 -c "import json;d=json.load(open('/tmp/r'));assert d.get('bootstrapped') and d.get('identity_verified') and d.get('ready_for_tiktok')" ;;
+            render-session-test)
+              T="$(token)"; echo "::add-mask::$T"; code=$(curl -sS -o /tmp/r -w '%{http_code}' -X POST "$R/session-test" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' --data '{}'); test "$code" = 200
+              python3 -c "import json;d=json.load(open('/tmp/r'));assert d.get('ok') and d.get('identity_verified')" ;;
+            render-bad-token)
+              code=$(curl -sS -o /tmp/r -w '%{http_code}' "$R/session-status" -H "Authorization: Bearer invalid-r3-$REP"); { test "$code" = 401 || test "$code" = 403; } ;;
+            control-public-health)
+              code=$(curl -sS -o /tmp/r -w '%{http_code}' "$C/health"); test "$code" = 200
+              python3 -c "import json;d=json.load(open('/tmp/r'));assert d.get('ok') and d.get('service')=='anthares-control'" ;;
+            control-queue-no-token)
+              code=$(curl -sS -o /tmp/r -w '%{http_code}' "$C/github-queue/health"); { test "$code" = 401 || test "$code" = 403; } ;;
+          esac
+          echo "R3_RESULT case=$CASE repetition=$REP http=$code PASS"
