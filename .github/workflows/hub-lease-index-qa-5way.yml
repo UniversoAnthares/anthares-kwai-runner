@@ -1,0 +1,17 @@
+name: Hub Lease Index QA 5-Way
+on:
+  push:
+    paths:
+      - '.github/workflows/hub-lease-index-qa-5way.yml'
+      - 'tests/test_hub_lease_index_5way.py'
+permissions: {contents: read}
+jobs:
+  lease-index:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [future-active, expired-running, superseded-future, closed-successor, malformed-expiry]
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/test_hub_lease_index_5way.py "${{ matrix.case }}"
