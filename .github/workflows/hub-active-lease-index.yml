@@ -1,0 +1,40 @@
+name: Hub Active Lease Index
+on:
+  push:
+    branches: [main]
+    paths: ['.hub-active-lease-index-trigger']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  index:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import re,json
+          now=datetime.now(timezone.utc); active=[]; expired=[]
+          for p in Path("test-hub/findings").glob("*.md"):
+              t=p.read_text(errors="replace")
+              st=re.search(r"(?m)^STATUS:\s*([^\n]+)",t)
+              ex=re.search(r"(?m)^LEASE_EXPIRES:\s*([^\s]+)",t)
+              area=re.search(r"(?m)^LEASE_AREA:\s*([^\n]+)",t)
+              if not(st and ex) or st.group(1).strip().upper()!="RUNNING": continue
+              try: dt=datetime.fromisoformat(ex.group(1).replace("Z","+00:00"))
+              except ValueError: continue
+              row={"path":str(p),"lease_area":area.group(1).strip() if area else None,"expires":dt.isoformat()}
+              (active if dt>=now else expired).append(row)
+          out={"generated_at":now.isoformat(),"active":sorted(active,key=lambda x:x["expires"]),"expired_running":sorted(expired,key=lambda x:x["expires"])}
+          Path("hub-active-leases.json").write_text(json.dumps(out,indent=2)+"\n")
+          print("ACTIVE_LEASE_COUNT="+str(len(active)))
+          print("EXPIRED_RUNNING_COUNT="+str(len(expired)))
+          for x in active: print("ACTIVE",x["expires"],x["lease_area"],x["path"])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hub-active-leases
+          path: hub-active-leases.json
