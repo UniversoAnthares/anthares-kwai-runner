@@ -265,6 +265,38 @@ jobs:
           print('ANTHARES_OWNED_SOURCE_DISCOVERY=OK')
           PY
 
+  reconcile-absence-30:
+    if: ${{ contains(github.event.head_commit.message, '[reconcile-absence30]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+      max-parallel: 30
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - name: Read authenticated inventory and classify absence
+        env:
+          REPLICA: ${{ matrix.replica }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'https://anthares-control.anthares1.workers.dev'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )"
+          echo "::add-mask::$TOKEN"
+          code="$(curl -sS --max-time 45 -o /tmp/inv.json -w '%{http_code}' https://anthares-control.anthares1.workers.dev/tiktok/session-state -H "Authorization: Bearer $TOKEN")"
+          python3 - "$code" "$REPLICA" <<'PY'
+          import json,sys
+          d=json.load(open('/tmp/inv.json')); st=d.get('state') or {}; ck=st.get('cookies') or []
+          print(json.dumps({'replica':int(sys.argv[2]),'http':int(sys.argv[1]),'available':d.get('available'),'cookie_count':len(ck)},sort_keys=True))
+          if int(sys.argv[1])!=200 or not ck: raise SystemExit('CENTRAL_SESSION_UNAVAILABLE')
+          PY
+          echo "ABSENCE_REPLICA=$REPLICA READ_ONLY=1"
+
   uncertain-observe:
     if: ${{ contains(github.event.head_commit.message, '[uncertain-observe]') }}
     runs-on: ubuntu-slim
