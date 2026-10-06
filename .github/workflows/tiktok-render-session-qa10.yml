@@ -1,0 +1,62 @@
+name: TikTok Render Session QA10
+on:
+  push:
+    paths: ['.github/workflows/tiktok-render-session-qa10.yml', '.tiktok-render-session-qa10-trigger']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [1,2,3,4,5,6,7,8,9,10]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Obtain OIDC
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONTROL_TOKEN="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          RENDER_TOKEN="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=anthares-render-worker" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$CONTROL_TOKEN"; echo "::add-mask::$RENDER_TOKEN"
+          echo "CONTROL_TOKEN=$CONTROL_TOKEN" >> "$GITHUB_ENV"; echo "RENDER_TOKEN=$RENDER_TOKEN" >> "$GITHUB_ENV"
+      - name: Bootstrap and read-only session probe
+        env:
+          REPLICA: ${{ matrix.replica }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONTROL=https://anthares-control.anthares1.workers.dev
+          RENDER=https://anthares-tiktok-render-rootless.onrender.com
+          c="$(curl -sS --max-time 30 -o /tmp/state.json -w '%{http_code}' "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $CONTROL_TOKEN")"
+          python3 - "$c" <<'PY'
+          import json,sys
+          d=json.load(open('/tmp/state.json')); st=d.get('state') or {}; ck=st.get('cookies') or []
+          print('TEST_VALIDITY=CENTRAL_SESSION http='+sys.argv[1]+' cookies='+str(len(ck)))
+          if sys.argv[1]!='200' or not ck: raise SystemExit(2)
+          json.dump(st,open('/tmp/payload.json','w'),separators=(',',':'))
+          PY
+          b="$(curl -sS --max-time 45 -o /tmp/boot.json -w '%{http_code}' -X POST "$RENDER/bootstrap-session" -H "Authorization: Bearer $RENDER_TOKEN" -H 'Content-Type: application/json' --data-binary @/tmp/payload.json)"
+          s="$(curl -sS --max-time 45 -o /tmp/status.json -w '%{http_code}' "$RENDER/session-status" -H "Authorization: Bearer $RENDER_TOKEN")"
+          echo "BOOT_HTTP=$b STATUS_HTTP=$s REPLICA=$REPLICA"
+          python3 - "$b" "$s" <<'PY'
+          import json,sys
+          b=json.load(open('/tmp/boot.json')); s=json.load(open('/tmp/status.json'))
+          print('READONLY_STATUS',{'boot_http':sys.argv[1],'status_http':sys.argv[2],'bootstrapped':s.get('bootstrapped'),'identity_verified':s.get('identity_verified'),'central_restore_http':s.get('central_restore_http')})
+          if sys.argv[1]!='200' or sys.argv[2]!='200' or not s.get('bootstrapped'): raise SystemExit(3)
+          PY
+          # Only replicas 1..5 call session-test; 6..10 establish the status control group.
+          if [ "$REPLICA" -le 5 ]; then
+            budget=$((75 + REPLICA*30))
+            t="$(curl -sS --max-time "$budget" -o /tmp/test.json -w '%{http_code}' -X POST "$RENDER/session-test" -H "Authorization: Bearer $RENDER_TOKEN" -H 'Content-Type: application/json' --data '{}')" || t=000
+            python3 - "$t" "$budget" <<'PY'
+          import json,sys
+          try:d=json.load(open('/tmp/test.json'))
+          except Exception:d={}
+          print('SESSION_TEST_OBSERVATION',{'http':sys.argv[1],'budget':int(sys.argv[2]),'ok':d.get('ok'),'identity_verified':d.get('identity_verified'),'error':d.get('error'),'code':d.get('code')})
+          # Observation-only: a timeout is data, not a workflow failure.
+          PY
+          fi
+          echo "SUCCESS_SIGNAL=TIKTOK_RENDER_QA10_OBSERVED_$REPLICA"
