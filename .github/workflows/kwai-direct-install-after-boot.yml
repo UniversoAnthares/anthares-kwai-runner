@@ -14,6 +14,7 @@ jobs:
           set -euo pipefail
           SDK=/usr/local/lib/android/sdk
           export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export PATH="$SDK/platform-tools:$SDK/emulator:$PATH"
           export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
           mkdir -p "$ANDROID_AVD_HOME"
           curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
