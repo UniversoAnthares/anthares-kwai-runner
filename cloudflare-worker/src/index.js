@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 ﻿const memory = new Map();
-const CONTROL_VERSION="2026-10-05-no-pc-confirmation-v12";
+const CONTROL_VERSION="2026-10-05-queue-lease-renew-v13";
 
 function json(data, status=200) {
   return Response.json(data, {status, headers: {
@@ -177,6 +177,19 @@ export class AntharesQueue extends DurableObject {
   this.sql.exec("UPDATE jobs SET status='leased',owner=?,lease_until=?,reserved_day=?,publication_started=0,attempts=attempts+1 WHERE id=?",b.executor,until,day,j.id);
   return {ok:true,job:this.row(this.one(j.id)),count,reserved:reserved+1,limit:DAILY_LIMIT};
  }
+ async renew(b){
+  const j=this.one(b.id); if(!j)return {ok:false,error:"not_found",status:404};
+  if(j.owner!==b.executor)return {ok:false,error:"lease_owner_mismatch",status:409};
+  if(j.status!=="leased")return {ok:false,error:"invalid_state",status:409};
+  const t=Date.now(),current=Number(j.lease_until||0);
+  if(!current||current<=t)return {ok:false,error:"lease_expired",status:409};
+  const ttl=Math.min(Math.max(Number(b.ttl_seconds)||600,60),3600)*1000;
+  const until=Math.max(current+1000,t+ttl);
+  this.sql.exec("UPDATE jobs SET lease_until=? WHERE id=? AND status='leased' AND owner=? AND lease_until>?",until,j.id,b.executor,t);
+  const updated=this.one(j.id);
+  if(!updated||updated.owner!==b.executor||updated.status!=="leased"||Number(updated.lease_until||0)<=current)return {ok:false,error:"lease_renew_conflict",status:409};
+  return {ok:true,job:this.row(updated),previous_lease_until:new Date(current).toISOString()};
+ }
  async started(b){const j=this.one(b.id);if(!j)return {ok:false,error:"not_found",status:404};if(j.owner!==b.executor||j.status!=="leased")return {ok:false,error:"lease_owner_mismatch",status:409};this.sql.exec("UPDATE jobs SET publication_started=1,publication_started_at=? WHERE id=?",now(),j.id);return {ok:true,job:this.row(this.one(j.id))};}
  async complete(b,day){const j=this.one(b.id);if(!j)return {ok:false,error:"not_found",status:404};if(j.owner!==b.executor)return {ok:false,error:"lease_owner_mismatch",status:409};if(j.status!=="leased")return {ok:false,error:"invalid_state",status:409};if(b.confirmed){if(!j.publication_started)return {ok:false,error:"publication_not_started",status:409};if(!String(b.remote_id||j.remote_id||b.confirmation_evidence||"").trim())return {ok:false,error:"confirmation_evidence_required",status:422};this.sql.exec("UPDATE jobs SET status='published',confirmed=1,remote_id=?,completed_at=?,completed_day=?,reserved_day=NULL,uncertain_at=NULL,lease_until=NULL WHERE id=?",b.remote_id||j.remote_id||null,now(),day,j.id);}else this.sql.exec("UPDATE jobs SET status='uncertain',confirmed=0,remote_id=?,completed_at=NULL,completed_day=NULL,reserved_day=NULL,uncertain_at=?,lease_until=NULL WHERE id=?",b.remote_id||j.remote_id||null,now(),j.id);if(b.confirmed)await this.recordSuccess(b.executor,j.platform); return {ok:true,job:this.row(this.one(j.id))};}
  async fail(b){const j=this.one(b.id);if(!j)return {ok:false,error:"not_found",status:404};if(j.owner!==b.executor)return {ok:false,error:"lease_owner_mismatch",status:409};const ec=String(b.error_class||"unknown"),em=String(b.error_message||"").slice(0,500),ts=now(); await this.recordFailure(b.executor,j.platform,!!b.published_possible||!!j.publication_started);if(b.published_possible||j.publication_started)this.sql.exec("UPDATE jobs SET status='uncertain',error_class=?,error_message=?,failed_at=?,uncertain_at=?,lease_until=NULL WHERE id=?",ec,em,ts,ts,j.id);else if(Number(j.attempts||0)<MAX_ATTEMPTS)this.sql.exec("UPDATE jobs SET status='queued',owner=NULL,publication_started=0,error_class=?,error_message=?,failed_at=?,lease_until=NULL WHERE id=?",ec,em,ts,j.id);else this.sql.exec("UPDATE jobs SET status='failed',error_class=?,error_message=?,failed_at=?,lease_until=NULL WHERE id=?",ec,em,ts,j.id);return {ok:true,job:this.row(this.one(j.id))};}
@@ -189,8 +202,31 @@ export class AntharesQueue extends DurableObject {
  async executors(){const m=await this.ctx.storage.list({prefix:"executor:"});return [...m.values()];}
  async setRouting(selected){const prev=await this.ctx.storage.get("routing:current")||{selected:{},switched_at:{}};const switched={...(prev.switched_at||{})};for(const [role,host] of Object.entries(selected))if((prev.selected||{})[role]!==host)switched[role]=now();const row={selected,switched_at:switched,updated_at:now()};await this.ctx.storage.put("routing:current",row);return row;}
  async selfTest(){
-  const prefix="selftest-"+crypto.randomUUID(),platform="__selftest__",ids=[prefix+"-a",prefix+"-b",prefix+"-c",prefix+"-d",prefix+"-e"];
+  const prefix="selftest-"+crypto.randomUUID(),platform="__selftest__",claimPlatform="__selftest_claim__",renewPlatform="__selftest_renew__",ids=[prefix+"-a",prefix+"-b",prefix+"-c",prefix+"-d",prefix+"-e"];
   try{
+   const claimId=prefix+"-single-claim";
+   await this.enqueue({id:claimId,platform:claimPlatform,dedupe_key:claimId,source_id:"selftest"});
+   const [claimA,claimB]=await Promise.all([this.lease({executor:"selftest-claim-a",platform:claimPlatform,ttl_seconds:60},localDay()),this.lease({executor:"selftest-claim-b",platform:claimPlatform,ttl_seconds:60},localDay())]);
+   const claimWinners=[claimA,claimB].filter(x=>x&&x.job&&x.job.id===claimId);
+   if(claimWinners.length!==1)throw new Error("single_job_double_claim_failed");
+   const claimLoser=[claimA,claimB].find(x=>!x||!x.job);
+   if(!claimLoser)throw new Error("single_job_double_claim_no_loser");
+
+   const renewId=prefix+"-renew";
+   await this.enqueue({id:renewId,platform:renewPlatform,dedupe_key:renewId,source_id:"selftest"});
+   const renewLease=await this.lease({executor:"selftest-renew-owner",platform:renewPlatform,ttl_seconds:60},localDay());
+   if(!renewLease.job||renewLease.job.id!==renewId)throw new Error("renew_precondition_failed");
+   const beforeRenew=Date.parse(renewLease.job.lease_until);
+   const wrongOwnerRenew=await this.renew({executor:"selftest-renew-other",id:renewId,ttl_seconds:60});
+   if(wrongOwnerRenew.ok||wrongOwnerRenew.error!=="lease_owner_mismatch")throw new Error("renew_wrong_owner_not_rejected");
+   const validRenew=await this.renew({executor:"selftest-renew-owner",id:renewId,ttl_seconds:60});
+   if(!validRenew.ok||Date.parse(validRenew.job.lease_until)<=beforeRenew)throw new Error("renew_did_not_extend");
+   this.sql.exec("UPDATE jobs SET status='queued' WHERE id=?",renewId);
+   const wrongStateRenew=await this.renew({executor:"selftest-renew-owner",id:renewId,ttl_seconds:60});
+   if(wrongStateRenew.ok||wrongStateRenew.error!=="invalid_state")throw new Error("renew_invalid_state_not_rejected");
+   this.sql.exec("UPDATE jobs SET status='leased',lease_until=? WHERE id=?",Date.now()-1000,renewId);
+   const expiredRenew=await this.renew({executor:"selftest-renew-owner",id:renewId,ttl_seconds:60});
+   if(expiredRenew.ok||expiredRenew.error!=="lease_expired")throw new Error("renew_expired_not_rejected");
    await this.enqueue({id:ids[0],platform,dedupe_key:prefix+"-dup",source_id:"selftest"});
    const d=await this.enqueue({id:prefix+"-dup2",platform,dedupe_key:prefix+"-dup",source_id:"selftest"});
    if(!d.deduplicated||d.job.id!==ids[0])throw new Error("dedupe_failed");
@@ -225,9 +261,10 @@ export class AntharesQueue extends DurableObject {
    await this.started({executor:"selftest-f",id:l2.job.id});
    const confirmedAfterReconcile=await this.complete({executor:"selftest-f",id:l2.job.id,confirmed:true,remote_id:"selftest-reconciled"},localDay());
    if(!confirmedAfterReconcile.job||confirmedAfterReconcile.job.status!=="published"||!confirmedAfterReconcile.job.confirmed)throw new Error("reconciled_confirmation_failed");
-   return {ok:true,dedupe:true,timeline_overlap_dedupe:true,premature_complete_rejected:true,reconcile_without_evidence_rejected:true,complete_without_evidence_rejected:true,concurrent_unique:true,expired_unstarted_recovered:true,started_expiry_protected:true,failure_requeued:true,failed_job_recovered:true,confirmation_recorded:true,uncertain_reconciled:true,reconciled_job_recovered:true,consecutive_failure_threshold:true,failure_counter_reset:true};
+   return {ok:true,dedupe:true,timeline_overlap_dedupe:true,premature_complete_rejected:true,reconcile_without_evidence_rejected:true,complete_without_evidence_rejected:true,concurrent_unique:true,single_job_double_claim:true,lease_renew_owner_only:true,lease_renew_extended:true,lease_renew_invalid_state_rejected:true,lease_renew_expired_rejected:true,expired_unstarted_recovered:true,started_expiry_protected:true,failure_requeued:true,failed_job_recovered:true,confirmation_recorded:true,uncertain_reconciled:true,reconciled_job_recovered:true,consecutive_failure_threshold:true,failure_counter_reset:true};
   }finally{
    this.sql.exec("DELETE FROM jobs WHERE platform=? AND id LIKE ?",platform,prefix+"%");
+   this.sql.exec("DELETE FROM jobs WHERE platform IN (?,?) AND id LIKE ?",claimPlatform,renewPlatform,prefix+"%");
    const xs=await this.ctx.storage.list({prefix:"executor:selftest-"});
    for(const k of xs.keys())await this.ctx.storage.delete(k);
   }
@@ -285,6 +322,7 @@ export default {
    const auth=request.headers.get("Authorization")||""; const token=auth.toLowerCase().startsWith("bearer ")?auth.slice(7).trim():""; const v=await verifyGithubOidc(token,env); if(!v.ok)return json({ok:false,error:v.error},401);
    const b=await request.json(); b.executor="github"; const q=queueStub(env); let out; const op=url.pathname.slice("/github-queue/".length);
    if(op==="lease"){if(!["tiktok","kwai"].includes(b.platform))return json({ok:false,error:"platform_required"},400);out=await q.lease(b,localDay());}
+   else if(op==="renew")out=await q.renew(b);
    else if(op==="started")out=await q.started(b);
    else if(op==="complete")out=await q.complete(b,localDay());
    else if(op==="fail")out=await q.fail(b);
@@ -304,7 +342,7 @@ export default {
    const q=queueStub(env),prev=await q.getExecutor("github")||{},requestedReady=b.ready_for_tiktok===true,requestedUntil=requestedReady?String(b.tiktok_ready_until||""):null,validRequested=requestedReady&&requestedUntil&&Date.parse(requestedUntil)>Date.now(),until=validRequested?requestedUntil:(prev.tiktok_ready_until||null),stillReady=validRequested||(!!until&&Date.parse(until)>Date.now());
    const row={...prev,executor:"github",healthy:true,failures:Number(prev.failures||0),heartbeat_at:now(),disabled_until:prev.disabled_until&&Date.parse(prev.disabled_until)>Date.now()?prev.disabled_until:null,host:"github-actions",platform:"github",workflow:v.claims.workflow,repository:v.claims.repository,ref:v.claims.ref,capabilities:["cuts","tiktok","control"],daily_limit:100,published_today:Number(prev.published_today||0),ready_for_tiktok:stillReady,tiktok_ready_until:stillReady?until:null};
    await q.setExecutor(row);
-   if(b.queue_op){let out;if(b.queue_op==="lease")out=await q.lease({...b,executor:"github"},localDay());else if(b.queue_op==="started")out=await q.started({...b,executor:"github"});else if(b.queue_op==="complete")out=await q.complete({...b,executor:"github"},localDay());else if(b.queue_op==="fail")out=await q.fail({...b,executor:"github"});else return json({ok:false,error:"queue_op_invalid"},400);return json({ok:true,state:row,queue:out});}
+   if(b.queue_op){let out;if(b.queue_op==="lease")out=await q.lease({...b,executor:"github"},localDay());else if(b.queue_op==="renew")out=await q.renew({...b,executor:"github"});else if(b.queue_op==="started")out=await q.started({...b,executor:"github"});else if(b.queue_op==="complete")out=await q.complete({...b,executor:"github"},localDay());else if(b.queue_op==="fail")out=await q.fail({...b,executor:"github"});else return json({ok:false,error:"queue_op_invalid"},400);return json({ok:true,state:row,queue:out});}
    return json({ok:true,state:row});
   }
   if(url.pathname==="/heartbeat"&&request.method==="POST"){
@@ -316,6 +354,7 @@ export default {
   if(url.pathname.startsWith("/job/")&&request.method==="POST"&&url.pathname!=="/job/enqueue"&&url.pathname!=="/job/enqueue-local"){
    const rawBody=await request.text(); let b; try{b=JSON.parse(rawBody);}catch{return json({ok:false,error:"invalid_json"},400);} let authOk=await executorAuth(request,env,b,rawBody); if(!authOk&&String(b.executor)==="github"){const bearer=request.headers.get("Authorization")||"";const token=bearer.toLowerCase().startsWith("bearer ")?bearer.slice(7).trim():"";if(token){const v=await verifyGithubOidc(token,env);authOk=v.ok;}} if(!authOk)return json({ok:false,error:"unauthorized"},401); const q=queueStub(env); let out;
    if(url.pathname==="/job/lease"){if(!["tiktok","kwai"].includes(b.platform))return json({ok:false,error:"platform_required"},400);out=await q.lease(b,localDay());}
+   else if(url.pathname==="/job/renew")out=await q.renew(b);
    else if(url.pathname==="/job/started")out=await q.started(b);
    else if(url.pathname==="/job/complete")out=await q.complete(b,localDay());
    else if(url.pathname==="/job/fail")out=await q.fail(b);
