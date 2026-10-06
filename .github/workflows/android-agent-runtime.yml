@@ -1,0 +1,107 @@
+name: Anthares Android Agent Runtime
+on:
+  push:
+    paths: ['.github/workflows/android-agent-runtime.yml', 'android-agent/.runtime-trigger']
+permissions: { contents: read }
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.9' }
+      - name: Build Agent
+        working-directory: android-agent
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Fetch validated Kwai vault
+        run: |
+          curl -fL --retry 3 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
+          mkdir -p /tmp/kwai-vault && unzip -q /tmp/kwai-vault.zip -d /tmp/kwai-vault
+      - name: Enable KVM
+        run: |
+          sudo chmod 666 /dev/kvm
+      - name: Install emulator image
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          echo no | avdmanager create avd -n anthares -k "system-images;android-35;google_apis;x86_64" --device "pixel_5" --force
+      - name: Boot emulator
+        run: |
+          nohup emulator -avd anthares -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
+          adb wait-for-device
+          timeout 180 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+          adb shell input keyevent 82 || true
+          echo TEST_VALIDITY=EMULATOR_BOOTED
+      - name: Install Kwai and Agent
+        run: |
+          cd /tmp/kwai-vault
+          SCRIPT="$(find . -name kwai_vault_install.sh -print -quit)"
+          test -n "$SCRIPT"
+          bash "$SCRIPT"
+          cd "$GITHUB_WORKSPACE"
+          adb install -r android-agent/app/build/outputs/apk/debug/app-debug.apk
+          adb shell pm list packages | grep -q 'package:us.anthares.agent'
+          adb shell pm list packages | grep -q 'package:com.kwai.video'
+          echo TEST_VALIDITY=APPS_INSTALLED
+      - name: Enable AccessibilityService
+        run: |
+          SVC='us.anthares.agent/us.anthares.agent.AntharesAccessibilityService'
+          adb shell settings put secure enabled_accessibility_services "$SVC"
+          adb shell settings put secure accessibility_enabled 1
+          sleep 3
+          adb shell settings get secure enabled_accessibility_services | grep -q 'us.anthares.agent'
+          adb shell dumpsys accessibility > /tmp/accessibility.txt
+          grep -E 'us.anthares.agent|AntharesAccessibilityService' /tmp/accessibility.txt
+          echo AGENT_SERVICE_ENABLED
+      - name: Launch Kwai and normalize to MAIN
+        run: |
+          adb logcat -c
+          adb shell monkey -p com.kwai.video 1
+          sleep 7
+          python3 kwai_state_driver.py | tee /tmp/fsm.log
+          grep -q 'FSM_MAIN_REACHED' /tmp/fsm.log
+          echo TEST_VALIDITY=FSM_MAIN_REACHED
+          sleep 3
+          adb logcat -d -s AntharesAgent:I '*:S' | tee /tmp/agent-main.log
+          grep -q 'STATE=MAIN' /tmp/agent-main.log
+          echo AGENT_MAIN_OBSERVED
+      - name: Semantic Profile action and state proof
+        run: |
+          python3 - <<'PY'
+          import subprocess, time, xml.etree.ElementTree as ET
+          def dump():
+              subprocess.run(["adb","shell","uiautomator","dump","/sdcard/u.xml"],stdout=subprocess.DEVNULL,check=False)
+              subprocess.run(["adb","pull","/sdcard/u.xml","/tmp/u.xml"],stdout=subprocess.DEVNULL,check=True)
+              return ET.parse("/tmp/u.xml").getroot()
+          root=dump()
+          target=None
+          for n in root.iter("node"):
+              rid=n.attrib.get("resource-id","")
+              if rid.endswith("/ll_profile"):
+                  target=n; break
+          if target is None: raise SystemExit("PROFILE_SEMANTIC_ANCHOR_MISSING")
+          b=target.attrib.get("bounds","")
+          import re
+          m=re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",b)
+          if not m: raise SystemExit("PROFILE_BOUNDS_INVALID")
+          x1,y1,x2,y2=map(int,m.groups())
+          subprocess.run(["adb","shell","input","tap",str((x1+x2)//2),str((y1+y2)//2)],check=True)
+          print("SEMANTIC_ANCHOR=ll_profile")
+          time.sleep(8)
+          PY
+          adb logcat -d -s AntharesAgent:I '*:S' | tee /tmp/agent-profile.log
+          adb shell uiautomator dump /sdcard/final.xml >/dev/null || true
+          adb pull /sdcard/final.xml /tmp/final.xml >/dev/null || true
+          if grep -Eq 'STATE=(PROFILE|RESOURCE_LOADING|LOGIN_REQUIRED|AUTHENTICATED)' /tmp/agent-profile.log; then
+            echo SUCCESS_SIGNAL=AGENT_PROFILE_STATE_OBSERVED
+          elif grep -Eqi 'resource downloading|downloading resources' /tmp/final.xml; then
+            echo SUCCESS_SIGNAL=RESOURCE_LOADING_UI_OBSERVED
+          else
+            echo FAILURE_SIGNAL=AGENT_NO_PROFILE_STATE
+            cat /tmp/agent-profile.log
+            exit 41
+          fi
