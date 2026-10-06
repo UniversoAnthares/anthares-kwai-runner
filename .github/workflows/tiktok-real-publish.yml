@@ -166,10 +166,10 @@ jobs:
             postq lease '{"platform":"tiktok","ttl_seconds":900}' > /tmp/lease.json
             cat /tmp/lease.json
             read LEASE_ID LEASE_GEN LEASE_STARTED < <(python3 - <<'PY'
-import json
-d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
-print(j.get('id',''),j.get('lease_generation',''),str(bool(j.get('publication_started'))).lower())
-PY
+          import json
+          d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
+          print(j.get('id',''),j.get('lease_generation',''),str(bool(j.get('publication_started'))).lower())
+          PY
             )
             if [ "$LEASE_ID" = "$JOB_ID" ] && [ -n "$LEASE_GEN" ]; then
               echo "EXACT_V13_LEASE generation=$LEASE_GEN"
