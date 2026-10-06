@@ -157,7 +157,7 @@ jobs:
 
           # Clear the known pre-publication v3 lease left by the previous read-only gate failure.
           # Safe because that run failed before publication_started.
-          postq fail '{"id":"tiktok-canary-20261006-synthetic-v3","lease_generation":3,"error_class":"prepublish_probe_failed","error_message":"read-only memory gate returned 409 before publication_started","published_possible":false}' >/tmp/preclean-v3.json 2>/dev/null || true
+          postq fail '{"id":"tiktok-canary-20261006-synthetic-v3","lease_generation":4,"error_class":"prepublish_probe_failed","error_message":"read-only memory gate returned 409 before publication_started","published_possible":false}' >/tmp/preclean-v3.json 2>/dev/null || true
 
           curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json'             --data "{\"id\":\"$JOB_ID\",\"platform\":\"tiktok\",\"executor\":\"github\",\"dedupe_key\":\"$DEDUPE\",\"source_id\":\"synthetic-owned-canary-v3\",\"source_start\":0,\"source_end\":12}" > /tmp/enqueue.json
           cat /tmp/enqueue.json
@@ -187,7 +187,13 @@ jobs:
           fi
 
           curl --fail-with-body -sS "$RENDER/session-status" -H "Authorization: Bearer $RENDER_TOKEN" -H "X-Anthares-Control-OIDC: $CONTROL_TOKEN" > /tmp/status.json
-          echo 'BROWSER_MEMORY_PROBE=OMITTED_FROM_REAL_CANARY_GATE'
+          curl --fail-with-body -sS --max-time 180 -X POST "$RENDER/browser-memory-test" -H "Authorization: Bearer $RENDER_TOKEN" > /tmp/memory.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/memory.json'))
+          if not d.get('ok') or not d.get('no_publish'): raise SystemExit('BROWSER_MEMORY_PROBE_FAILED')
+          print('BROWSER_MEMORY_PROBE_OK')
+          PY
           for i in 1 2 3; do
             code=$(curl -sS -o /tmp/session-test.json -w '%{http_code}' --max-time 130 -X POST "$RENDER/session-test" -H "Authorization: Bearer $RENDER_TOKEN" || true)
             [ "$code" = "200" ] && break
