@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Common toolchain precondition
-        env: { V: ${{ matrix.variant }} }
+        env:\n          V: ${{ matrix.variant }}
         run: |
           set -e
           SDK=/usr/local/lib/android/sdk
@@ -37,7 +37,7 @@ jobs:
           "$SM" --sdk_root="$SDK" "system-images;android-35;google_apis;x86_64" >/dev/null
           echo TEST_VALIDITY=SDK_AVD_EMULATOR_IMAGE_READY
       - name: Resolve ADB and boot
-        env: { V: ${{ matrix.variant }} }
+        env:\n          V: ${{ matrix.variant }}
         shell: bash
         run: |
           set -e
