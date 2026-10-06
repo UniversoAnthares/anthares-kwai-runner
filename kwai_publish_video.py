@@ -4,11 +4,11 @@ import json,os,re,subprocess,sys,time,xml.etree.ElementTree as ET
 TITLE=os.environ.get("KWAI_VIDEO_TITLE","").strip()
 MEDIA_NAME=os.environ.get("KWAI_MEDIA_NAME","").strip()
 VIDEO=os.environ.get("KWAI_ANDROID_VIDEO","").strip()
-JOB_ID=os.environ.get("KWAI_QUEUE_JOB_ID","").strip()
+JOB_ID=os.environ.get("KWAI_QUEUE_JOB_ID","").strip()\nMEDIA_SHA=os.environ.get("KWAI_MEDIA_SHA256","").strip()
 PHASE=(sys.argv[1] if len(sys.argv)>1 else os.environ.get("KWAI_PUBLISH_PHASE","")).strip().lower()
 READY_FILE="/tmp/kwai-publish-ready.json"
 
-if not MEDIA_NAME or not VIDEO or not JOB_ID:
+if not MEDIA_NAME or not VIDEO or not JOB_ID or not MEDIA_SHA:
     print("STATE=FAILED_SAFE REASON=missing-media-or-job-identity"); sys.exit(69)
 if PHASE not in ("prepare","commit"):
     print("STATE=FAILED_SAFE REASON=explicit-publish-phase-required"); sys.exit(68)
@@ -70,14 +70,25 @@ def prepare():
     if len(rows)!=1:
         print(f"STATE=FAILED_SAFE REASON=media-identity-not-unique COUNT={len(rows)}"); return 71
     print("STATE=MEDIA_IDENTITY_VERIFIED NAME="+MEDIA_NAME)
-    r=dump(); candidates=[]
+    r=dump(); matches=[]
+    media_name=MEDIA_NAME.casefold()
+    media_stem=os.path.splitext(MEDIA_NAME)[0].casefold()
+    sha_prefix=MEDIA_SHA[:12].casefold()
+    job_token=re.sub(r"[^a-z0-9._-]","_",JOB_ID.casefold())
+    identity_tokens=[x for x in (media_name,media_stem,sha_prefix,job_token) if len(x)>=8]
     for n in r.iter("node"):
         p=center(n.attrib.get("bounds",""))
-        if p and p[1]>180 and n.attrib.get("clickable")=="true": candidates.append((p,label(n)))
-    # Temporary fallback until the manifest-proven direct ACTION_SEND path is runtime-accepted.
-    if not candidates:
-        print("STATE=FAILED_SAFE REASON=no-selectable-media"); return 71
-    adb("shell","input","tap",str(candidates[0][0][0]),str(candidates[0][0][1])); time.sleep(2)
+        if not p or p[1]<=180 or n.attrib.get("clickable")!="true":
+            continue
+        node_label=label(n).casefold()
+        matched=[token for token in identity_tokens if token in node_label]
+        if matched:
+            matches.append((p,node_label,matched))
+    if len(matches)!=1:
+        print(f"STATE=FAILED_SAFE REASON=gallery-media-identity-not-unique COUNT={len(matches)}"); return 71
+    selected=matches[0]
+    print("STATE=GALLERY_MEDIA_IDENTITY_VERIFIED TOKEN="+selected[2][0])
+    adb("shell","input","tap",str(selected[0][0]),str(selected[0][1])); time.sleep(2)
     if not tap(("next","próximo","avançar","continue","continuar")):
         print("STATE=FAILED_SAFE REASON=media-selection-not-accepted"); return 75
     time.sleep(2)
@@ -87,7 +98,7 @@ def prepare():
     if publish is None:
         print("STATE=FAILED_SAFE REASON=publish-control-not-ready"); return 72
     with open(READY_FILE,"w",encoding="utf-8") as f:
-        json.dump({"job_id":JOB_ID,"media_name":MEDIA_NAME,"title":TITLE},f,ensure_ascii=False)
+        json.dump({"job_id":JOB_ID,"media_name":MEDIA_NAME,"media_sha256":MEDIA_SHA,"title":TITLE},f,ensure_ascii=False)
     print("STATE=CAPTION_SET")
     print("STATE=READY_TO_PUBLISH")
     return 0
@@ -97,7 +108,7 @@ def commit():
         with open(READY_FILE,encoding="utf-8") as f: ready=json.load(f)
     except Exception:
         print("STATE=FAILED_SAFE REASON=missing-ready-proof"); return 77
-    if ready.get("job_id")!=JOB_ID or ready.get("media_name")!=MEDIA_NAME or ready.get("title")!=TITLE:
+    if ready.get("job_id")!=JOB_ID or ready.get("media_name")!=MEDIA_NAME or ready.get("media_sha256")!=MEDIA_SHA or ready.get("title")!=TITLE:
         print("STATE=FAILED_SAFE REASON=ready-proof-mismatch"); return 77
     publish=find_node(("publish","publicar","post","compartilhar","share"),retries=2,clickable=True)
     if publish is None:
