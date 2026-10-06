@@ -39,11 +39,11 @@ SH
   if [ "$calls" = "1" ]; then grep -q '^reconcile|' "$d/queue.calls"; fi
 }
 
-run_case confirmed 0 $'KWAI_CONFIRMATION_EVIDENCE=profile-account-title-proof\nKWAI_PUBLICATION_SPECIFICALLY_VERIFIED' 0 0 'STATE=CONFIRMED SOURCE=RECONCILIATION' 1
+run_case confirmed 0 $'KWAI_CONFIRMATION_EVIDENCE=eyJqb2JfaWQiOiJqb2ItMSIsIm1lZGlhX3NoYTI1NiI6IjAxMjM0NTY3ODlhYmNkZWYiLCJleHBlY3RlZF9hY2NvdW50IjoiZXhwZWN0ZWQtYWNjb3VudCIsIm9ic2VydmVkX2FjY291bnRfbWF0Y2giOnRydWUsImV4cGVjdGVkX3RpdGxlIjoiQ2FuYXJ5IHRpdGxlIiwib2JzZXJ2ZWRfdGl0bGVfbWF0Y2giOnRydWUsInByb2ZpbGVfc3RhdGUiOiJyZWFkeSJ9\nKWAI_PUBLICATION_SPECIFICALLY_VERIFIED' 0 0 'STATE=CONFIRMED SOURCE=RECONCILIATION' 1
 run_case verifier_negative 7 'PROFILE_LOADING' 0 90 'STATE=UNCERTAIN REASON=reconcile-not-positively-verified' 0
 run_case evidence_missing 0 'KWAI_PUBLICATION_SPECIFICALLY_VERIFIED' 0 90 'STATE=UNCERTAIN REASON=reconcile-evidence-missing' 0
 run_case specific_missing 0 'KWAI_CONFIRMATION_EVIDENCE=weak-proof' 0 90 'STATE=UNCERTAIN REASON=reconcile-specific-proof-missing' 0
-run_case central_reject 0 $'KWAI_CONFIRMATION_EVIDENCE=profile-account-title-proof\nKWAI_PUBLICATION_SPECIFICALLY_VERIFIED' 9 90 'STATE=UNCERTAIN REASON=central-reconcile-not-acknowledged' 1
+run_case central_reject 0 $'KWAI_CONFIRMATION_EVIDENCE=eyJqb2JfaWQiOiJqb2ItMSIsIm1lZGlhX3NoYTI1NiI6IjAxMjM0NTY3ODlhYmNkZWYiLCJleHBlY3RlZF9hY2NvdW50IjoiZXhwZWN0ZWQtYWNjb3VudCIsIm9ic2VydmVkX2FjY291bnRfbWF0Y2giOnRydWUsImV4cGVjdGVkX3RpdGxlIjoiQ2FuYXJ5IHRpdGxlIiwib2JzZXJ2ZWRfdGl0bGVfbWF0Y2giOnRydWUsInByb2ZpbGVfc3RhdGUiOiJyZWFkeSJ9\nKWAI_PUBLICATION_SPECIFICALLY_VERIFIED' 9 90 'STATE=UNCERTAIN REASON=central-reconcile-not-acknowledged' 1
 
 ! grep -Eq 'kwai_publish_video|[[:space:]]commit([[:space:]]|$)|input tap.*Publish|text=Publish' "$SCRIPT"
 echo KWAI_UNCERTAIN_RECONCILE_EXECUTABLE_OK
