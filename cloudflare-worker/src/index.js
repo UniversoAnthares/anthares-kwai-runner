@@ -152,6 +152,13 @@ export class AntharesQueue extends DurableObject {
  async enqueue(b){
   const e=this.one(b.id); if(e)return {ok:true,job:this.row(e),deduplicated:true};
   if(b.dedupe_key){const d=this.sql.exec("SELECT * FROM jobs WHERE platform=? AND dedupe_key=? AND status<>'failed' ORDER BY created_at LIMIT 1",b.platform,String(b.dedupe_key)).toArray()[0];if(d)return {ok:true,job:this.row(d),deduplicated:true,dedupe_key:true};}
+  const mediaSha=String(b.media_sha256||"").trim().toLowerCase();
+  if(mediaSha&&/^[0-9a-f]{64}$/.test(mediaSha)){
+    for(const raw of this.sql.exec("SELECT * FROM jobs WHERE platform=? AND status<>'failed' ORDER BY created_at",b.platform).toArray()){
+      const prior=this.row(raw),priorSha=String(prior.media_sha256||"").trim().toLowerCase();
+      if(priorSha===mediaSha)return {ok:true,job:prior,deduplicated:true,media_sha256:true};
+    }
+  }
   const sourceId=String(b.source_id||"").trim(),start=Number(b.source_start),end=Number(b.source_end);
   if(sourceId&&Number.isFinite(start)&&Number.isFinite(end)&&end>start){
     for(const raw of this.sql.exec("SELECT * FROM jobs WHERE platform=? AND status<>'failed' ORDER BY created_at",b.platform).toArray()){
