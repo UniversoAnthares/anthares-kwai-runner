@@ -49,10 +49,10 @@ for i in range(45):
    label=(x.attrib.get("text","")+" "+x.attrib.get("content-desc","")).strip().lower()
    if label=="skip" or label.startswith("skip "):
     n=x;break
-  if n is not None: tap(n)
+  if n is not None and ctr(n.attrib.get("bounds")): tap(n)
   else:
    print("INTEREST_SELECT_SKIP_NOT_FOUND")
-   adb("shell","input","keyevent","4");time.sleep(2)
+   adb("shell","input","tap","90","250");time.sleep(3)
  elif s=="LAUNCHER_ANR":
   print("LAUNCHER_RECOVERY_BEGIN")
   n=rid(ns,"aerr_close")
