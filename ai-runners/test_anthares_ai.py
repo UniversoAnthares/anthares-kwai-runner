@@ -26,12 +26,15 @@ class AntharesAITests(unittest.TestCase):
         text = "x START\nresposta útil\nEND y"
         self.assertEqual(anthares_ai.strip_envelope(text, "START", "END"), "resposta útil")
 
+    def test_envelope_markers_occur_once_in_prompt(self):
+        wrapped, start, end = anthares_ai.build_envelope("teste")
+        self.assertEqual(wrapped.count(start), 1)
+        self.assertEqual(wrapped.count(end), 1)
+
     @patch("anthares_ai.subprocess.run")
     def test_auto_fallback_after_simulated_primary_failure(self, run):
         # The first provider is simulated and never spawns a subprocess; the second succeeds.
         def fake(cmd, **kwargs):
-            start = cmd[cmd.index("--expect") + 1]
-            end = cmd[cmd.index("--expect-end") + 1]
             return FakeCompleted({
                 "provider": "grok",
                 "ok": True,
