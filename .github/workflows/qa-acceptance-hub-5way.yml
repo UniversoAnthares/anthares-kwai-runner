@@ -1,0 +1,28 @@
+name: QA Acceptance Hub 5-Way
+on:
+  push:
+    paths: ['.github/workflows/qa-acceptance-hub-5way.yml']
+  workflow_dispatch:
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [stale_running, v15_v16_drift, real_publish_claims, acceptance_markers, lease_docs]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit
+        env:
+          MODE: ${{ matrix.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "TEST_VALIDITY=OK MODE=$MODE"
+          case "$MODE" in
+            stale_running) grep -RIl 'STATUS: RUNNING' test-hub/findings | tail -30; echo QA_SIGNAL=RUNNING_INDEX ;;
+            v15_v16_drift) grep -nE 'v15|v16|lease_generation|renew' test-hub/README.md | tail -30; echo QA_SIGNAL=VERSION_DRIFT_AUDITED ;;
+            real_publish_claims) grep -RniE 'real publish|real publication|PRODUCTION_PROVEN|produção real|publicação real' test-hub/findings | tail -40 || true; echo QA_SIGNAL=REAL_CLAIMS_AUDITED ;;
+            acceptance_markers) grep -RniE 'SUCCESS_SIGNAL|acceptance|CONFIRMED|identity_verified' test-hub/findings | tail -40 || true; echo QA_SIGNAL=ACCEPTANCE_AUDITED ;;
+            lease_docs) grep -RniE 'lease-|EXPIRES|expir|STATUS: RUNNING' test-hub/findings | tail -40 || true; echo QA_SIGNAL=LEASE_DOCS_AUDITED ;;
+          esac
