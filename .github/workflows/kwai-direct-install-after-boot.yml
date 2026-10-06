@@ -1,0 +1,41 @@
+name: Kwai Direct Install After Proven Boot
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-direct-install-trigger']
+permissions: {contents: read}
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
+          python3 - <<'PY'
+          import zipfile
+          zipfile.ZipFile("/tmp/kwai-vault.zip").extractall("/tmp/kwai-vault")
+          PY
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n directprobe -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force
+          sudo chmod 666 /dev/kvm
+          "$SDK/emulator/emulator" -avd directprobe -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emu.log 2>&1 &
+          EP=$!
+          trap 'kill $EP 2>/dev/null || true' EXIT
+          timeout 120 adb wait-for-device
+          timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+          echo BOOT_OK
+          set +e
+          adb install-multiple -r /tmp/kwai-vault/*.apk > /tmp/install.log 2>&1
+          RC=$?
+          set -e
+          cat /tmp/install.log
+          test "$RC" = 0
+          adb shell pm list packages | grep -q 'package:com.kwai.video'
+          echo KWAI_DIRECT_INSTALL_OK
