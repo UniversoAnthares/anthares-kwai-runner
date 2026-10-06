@@ -41,10 +41,14 @@ for i in range(45):
   if n:tap(n)
   else:adb("shell","input","swipe","850","1100","180","1100","250");time.sleep(1)
  elif s=="LAUNCHER_ANR":
+  print("LAUNCHER_RECOVERY_BEGIN")
   n=rid(ns,"aerr_close") or rid(ns,"aerr_wait")
   if n:tap(n)
+  adb("shell","input","keyevent","3");time.sleep(4)
+  nsr,tr=snap(); print("LAUNCHER_AFTER_HOME="+state(nsr,tr))
   adb("shell","am","force-stop","com.kwai.video");time.sleep(1)
   adb("shell","monkey","-p","com.kwai.video","1");time.sleep(7)
+  nsr,tr=snap(); print("LAUNCHER_RECOVERY_STATE="+state(nsr,tr))
  else:
   adb("shell","input","swipe","850","1100","180","1100","250");time.sleep(1)
 else:
