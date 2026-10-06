@@ -1,0 +1,46 @@
+name: TikTok Controlled WP Media Discovery
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/tiktok-wp-media-discovery.yml'
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Scan owned WordPress media
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.request,urllib.parse
+          base='https://anthares.us/wp-json/wp/v2/media'
+          ua={'User-Agent':'AntharesControlledMediaDiscovery/1'}
+          found=[]
+          for page in range(1,11):
+            q=urllib.parse.urlencode({'media_type':'video','per_page':100,'page':page,'orderby':'date','order':'desc'})
+            try:
+              with urllib.request.urlopen(urllib.request.Request(base+'?'+q,headers=ua),timeout=25) as r:
+                rows=json.load(r)
+            except Exception as e:
+              print('PAGE_ERROR',page,type(e).__name__); break
+            print('PAGE',page,'ROWS',len(rows))
+            for x in rows:
+              u=x.get('source_url') or ''
+              mime=x.get('mime_type') or ''
+              if u and (mime.startswith('video/') or u.lower().split('?')[0].endswith(('.mp4','.m4v','.mov','.webm'))):
+                found.append((x.get('id'),mime,u))
+            if len(rows)<100: break
+          print('VIDEO_ATTACHMENTS',len(found))
+          for i,m,u in found[:30]:
+            req=urllib.request.Request(u,headers={**ua,'Range':'bytes=0-1048575'})
+            try:
+              with urllib.request.urlopen(req,timeout=25) as r:
+                b=r.read(1048576)
+                print('MEDIA_OK',i,m,r.status,len(b),u)
+            except Exception as e: print('MEDIA_BAD',i,type(e).__name__,u)
+          if not found:
+            print('CONTROLLED_WP_VIDEO=ABSENT'); raise SystemExit(2)
+          print('CONTROLLED_WP_VIDEO=FOUND')
+          PY
