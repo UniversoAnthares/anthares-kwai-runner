@@ -72,14 +72,18 @@ jobs:
       - name: Install Kwai and Agent
         run: |
           cd /tmp/kwai-vault
-          SCRIPT="$(find . -name kwai_vault_install.sh -print -quit)"
-          test -n "$SCRIPT"
-          set -o pipefail
-          if ! bash -x "$SCRIPT" 2>&1 | tee /tmp/kwai-vault-install.log; then
-            echo KWAI_VAULT_INSTALL_FAILED
-            cat /tmp/kwai-vault-install.log || true
-            adb shell getprop ro.product.cpu.abilist || true
-            adb shell getprop ro.dalvik.vm.native.bridge || true
+          echo "KWAIVault_APKS:"
+          find . -type f -name '*.apk' -print
+          APK_COUNT="$(find . -type f -name '*.apk' | wc -l | tr -d ' ')"
+          if [ "$APK_COUNT" = "1" ]; then
+            APK="$(find . -type f -name '*.apk' -print -quit)"
+            adb install -r "$APK" 2>&1 | tee /tmp/kwai-install.log
+          elif [ "$APK_COUNT" -gt 1 ]; then
+            mapfile -t APKS < <(find . -type f -name '*.apk' -print)
+            adb install-multiple -r "${APKS[@]}" 2>&1 | tee /tmp/kwai-install.log
+          else
+            echo KWAI_APK_MISSING
+            find . -maxdepth 3 -type f -print | head -200
             exit 1
           fi
           cd "$GITHUB_WORKSPACE"
@@ -91,6 +95,7 @@ jobs:
           adb shell pm list packages | grep -q 'package:us.anthares.agent' || { echo AGENT_PACKAGE_MISSING; adb shell pm list packages | sort; exit 1; }
           adb shell pm list packages | grep -q 'package:com.kwai.video' || { echo KWAI_PACKAGE_MISSING; adb shell pm list packages | sort; exit 1; }
           echo TEST_VALIDITY=APPS_INSTALLED
+
       - name: Enable AccessibilityService
         run: |
           SVC='us.anthares.agent/us.anthares.agent.AntharesAccessibilityService'
