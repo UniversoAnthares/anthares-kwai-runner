@@ -36,7 +36,7 @@ active=["kwai_publish.sh","kwai_publish_video.py","kwai_verify_publication.py","
 forbidden=[r"localhost",r"127\.0\.0\.1",r"MEmu",r"Windows",r"C:\\Users",r"C:/Users",r"powershell"]
 violations={f:[pat for pat in forbidden if re.search(pat,files[f],re.I)] for f in active}
 checks["production_path_has_no_pc_dependency"]=not any(violations.values())
-checks["pc_fallback_disabled"]="pc_fallback" in files[".github/workflows/kwai-real-publish.yml"]
+checks["pc_fallback_disabled"]="pc_fallback" in files["kwai_queue_state.sh"] or "pc_fallback" in files["kwai_claim_job.sh"]
 # 8 canary readiness
 wf=files[".github/workflows/kwai-real-publish.yml"]
 checks["manual_real_publish_gate"]='enable_real_publish == 'YES'' in wf and 'Type YES only after kwai-login reports READY' in wf
