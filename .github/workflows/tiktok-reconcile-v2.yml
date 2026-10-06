@@ -1,5 +1,6 @@
-name: TikTok Reconcile v2
+name: TikTok Reconcile v15 Observation
 on:
+  workflow_dispatch:
   push:
     paths:
       - '.tiktok-reconcile-v2-go'
@@ -9,26 +10,77 @@ permissions:
 jobs:
   reconcile:
     runs-on: ubuntu-slim
+    timeout-minutes: 12
+    env:
+      CONTROL: https://anthares-control.anthares1.workers.dev
+      RENDER: https://anthares-tiktok-render-rootless.onrender.com
+      JOB_ID: tiktok-canary-20261006-synthetic-v15
     steps:
-      - name: Reconcile confirmed-absent v2
+      - name: Observe v15 repeatedly and reconcile only exact positive evidence
         shell: bash
         run: |
           set -euo pipefail
-          CONTROL="https://anthares-control.anthares1.workers.dev"
-          TOKEN="$(python3 - <<'PY'
+          CT="$(python3 - <<'PY'
           import json,os,urllib.parse,urllib.request
-          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience': 'https://anthares-control.anthares1.workers.dev'})
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'https://anthares-control.anthares1.workers.dev'})
           with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
           PY
           )"
-          echo "::add-mask::$TOKEN"
-          fail=$(curl --fail-with-body -sS -X POST "$CONTROL/github-queue/fail" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v2","lease_generation":3,"error_class":"reconciled_absent","error_message":"independent profile reconciliation confirmed no diagnostic post","published_possible":true}')
-          echo "$fail"
-          rec=$(curl --fail-with-body -sS -X POST "$CONTROL/github-queue/reconcile" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v2","confirmed_absent":true}')
-          echo "$rec"
-          python3 - "$rec" <<'PY'
+          RT="$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )"
+          echo "::add-mask::$CT"
+          echo "::add-mask::$RT"
+          curl --fail-with-body -sS "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $CT" >/tmp/central.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/central.json')); s=d.get('state') or {}
+          assert d.get('available') is True and s.get('cookies')
+          json.dump(s,open('/tmp/state.json','w'),separators=(',',':'))
+          print('CENTRAL_SESSION_RECONCILE=PROVEN cookies='+str(len(s['cookies'])))
+          PY
+          curl --fail-with-body -sS -X POST "$RENDER/bootstrap-session" -H "Authorization: Bearer $RT" -H 'Content-Type: application/json' --data-binary @/tmp/state.json >/tmp/bootstrap.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/bootstrap.json')); assert d.get('ok'),d
+          print('RENDER_SESSION_RECONCILE=PROVEN')
+          PY
+          found=''
+          for n in 1 2 3 4 5 6; do
+            curl --fail-with-body -sS --max-time 180 "$RENDER/profile-inventory" -H "Authorization: Bearer $RT" >/tmp/inventory.json
+            found="$(python3 - <<'PY'
+          import json,re,unicodedata,sys
+          d=json.load(open('/tmp/inventory.json')); assert d.get('ok') is True,d
+          def norm(s):
+            return re.sub(r'[^a-z0-9]+',' ',unicodedata.normalize('NFKD',str(s)).encode('ascii','ignore').decode().casefold()).strip()
+          xs=d.get('items') or []
+          hits=[]
+          for x in xs:
+            t=norm(x.get('text',''))
+            if 'universo anthares' in t and 'teste tecnico v15' in t:
+              rid=str(x.get('id') or '').strip()
+              if rid: hits.append(rid)
+          hits=list(dict.fromkeys(hits))
+          print(','.join(hits))
+          print('INVENTORY_COUNT='+str(len(xs))+' MATCHES='+str(len(hits)),file=sys.stderr)
+          PY
+            )"
+            echo "OBSERVATION=$n REMOTE_IDS=${found:-none}"
+            [ -n "$found" ] && break
+            sleep 20
+          done
+          case "$found" in
+            *,*) echo 'TIKTOK_V15_RECONCILE=AMBIGUOUS'; exit 4;;
+            '') echo 'TIKTOK_V15_RECONCILE=UNCERTAIN_NO_POSITIVE_EVIDENCE'; exit 3;;
+          esac
+          out="$(curl --fail-with-body -sS -X POST "$CONTROL/job/reconcile" -H "Authorization: Bearer $CT" -H 'Content-Type: application/json' --data "{\"id\":\"$JOB_ID\",\"executor\":\"github\",\"confirmed\":true,\"remote_id\":\"$found\",\"confirmation_evidence\":\"render_authenticated_profile_exact_v15:$found\"}")"
+          echo "$out"
+          python3 - "$out" <<'PY'
           import json,sys
           d=json.loads(sys.argv[1]); j=d.get('job') or {}
-          if not d.get('ok') or j.get('status')!='queued': raise SystemExit('V2_NOT_REQUEUED')
-          print('V2_RECONCILED_ABSENT_AND_QUEUED')
+          assert d.get('ok') and j.get('status')=='published' and j.get('confirmed') is True,d
+          print('TIKTOK_REAL_REMOTE_POST=PROVEN remote_id='+str(j.get('remote_id')))
           PY
