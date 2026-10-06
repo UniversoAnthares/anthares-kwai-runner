@@ -123,6 +123,21 @@ def dismiss_system_anr():
 dismiss_android_permission_dialogs()
 dismiss_system_anr()
 clear_interest_discovery()
+
+def accept_onboarding_completion():
+    # A fresh install may land on the final onboarding screen ("You're all set").
+    # This is not an authentication challenge. Enter MAIN before attempting Profile/login.
+    for _ in range(4):
+        r=dump(); txt=" ".join(label(n) for n in nodes(r))
+        if ("all set" in txt or "tudo pronto" in txt) and any(k in txt for k in ("start now","começar agora","iniciar agora")):
+            if tap_matching(("start now","começar agora","iniciar agora")):
+                time.sleep(4)
+                dismiss_android_permission_dialogs()
+                clear_interest_discovery()
+                continue
+        break
+
+accept_onboarding_completion()
 # Normalize the current chooser into the Phone authentication surface when present.
 subprocess.run(["python3","kwai_phone_surface_probe.py"],check=False)
 time.sleep(2)
