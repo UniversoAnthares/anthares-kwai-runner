@@ -269,10 +269,22 @@ jobs:
           def norm(v): return re.sub(r'[^a-z0-9]+',' ',unicodedata.normalize('NFKD',str(v)).encode('ascii','ignore').decode().casefold()).strip()
           hits=[str(x.get('id') or '') for x in d.get('items',[]) if 'universo anthares' in norm(x.get('text','')) and 'teste tecnico de publicacao' in norm(x.get('text',''))]
           print('MATCH_COUNT='+str(len(hits)),file=sys.stderr)
+          if len(hits)==0 and int(d.get('count') or 0)==0:
+            print('__ABSENT__'); raise SystemExit(0)
           if len(hits)!=1: raise SystemExit(4)
           print(hits[0])
           PY
-          )" || { echo TIKTOK_RECONCILE_OBSERVATION=NO_UNIQUE_POSITIVE_MATCH; exit 4; }
+          )" || { echo TIKTOK_RECONCILE_OBSERVATION=INCONCLUSIVE; exit 4; }
+          if [ "$REMOTE_ID" = "__ABSENT__" ]; then
+            curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "{\"id\":\"tiktok-canary-20261006-synthetic-v2\",\"executor\":\"github\",\"confirmed_absent\":true,\"confirmation_evidence\":\"authenticated_profile_inventory_count_zero\"}" >/tmp/reconcile.json
+            python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/reconcile.json')); j=d.get('job') or {}
+          if not d.get('ok') or j.get('status')!='queued' or j.get('publication_started'): raise SystemExit('ABSENCE_RECONCILE_FAILED')
+          print('TIKTOK_CANARY_ABSENCE_PROVEN_SAFE_REQUEUE')
+          PY
+            exit 0
+          fi
           curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "{\"id\":\"tiktok-canary-20261006-synthetic-v2\",\"executor\":\"github\",\"confirmed\":true,\"remote_id\":\"$REMOTE_ID\",\"confirmation_evidence\":\"profile_exact_caption:$REMOTE_ID\"}" >/tmp/reconcile.json
           python3 - <<'PY'
           import json
