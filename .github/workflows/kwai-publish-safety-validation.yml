@@ -60,8 +60,9 @@ jobs:
           grep -q 'STATE=UNCERTAIN' kwai_reconcile_uncertain.sh
           grep -q 'STATE=CONFIRMED SOURCE=RECONCILIATION' kwai_reconcile_uncertain.sh
           echo 'KWAI_UNCERTAIN_RECONCILE_STATIC_OK'
-          grep -q '2026-10-05-queue-lease-renew-v14' kwai_queue_state.sh
+          grep -q '2026-10-05-queue-heartbeat-renew-v15' kwai_queue_state.sh
           ! grep -q '2026-10-05-no-pc-confirmation-v12' kwai_queue_state.sh
+          ! grep -q '2026-10-05-queue-lease-renew-v14' kwai_queue_state.sh
           grep -q 'QUEUE_STARTED_FLAG_MISSING' kwai_queue_state.sh
           grep -q 'KWAI_EXPECTED_ACCOUNT' kwai_verify_publication.py
           grep -q 'STATE=PROFILE_LOADING' kwai_verify_publication.py
