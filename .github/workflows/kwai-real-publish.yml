@@ -37,7 +37,7 @@ jobs:
           python3 - "$health" <<'PY'
           import json,sys
           d=json.loads(sys.argv[1])
-          assert d.get('version')=='2026-10-05-queue-lease-renew-v13', d
+          assert d.get('version')=='2026-10-05-queue-lease-renew-v14', d
           assert d.get('pc_fallback') is False, d
           assert d.get('queue_bound') is True, d
           PY
