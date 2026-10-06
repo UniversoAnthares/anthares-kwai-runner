@@ -1,0 +1,27 @@
+name: Kwai Phone Surface QA30
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-phone-surface-qa30-trigger']
+jobs:
+  qa30:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate 30 phone-surface selector variants
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          positives=["Phone","phone"," PHONE ","Use phone","Continue with phone","Phone number","Mobile","Use mobile","Telefone","telefone","Usar telefone","Número de telefone","Phone login","Login by phone","Sign in with phone","Continue via phone","phone "," phone","PHONE","Mobile number"]
+          negatives=["Facebook","Google","Join now!","Privacy policy","Terms of Service","Profile","Home","Discover","Inbox","Email"]
+          cases=[(x,True) for x in positives]+[(x,False) for x in negatives]
+          def match(s):
+            s=s.strip().lower()
+            return any(k in s for k in ("phone","telefone","mobile"))
+          for i,(label,want) in enumerate(cases,1):
+            xml=f'<hierarchy><node text="{label}" bounds="[10,20][300,80]"/></hierarchy>'
+            r=ET.fromstring(xml);got=any(match((n.attrib.get("text","")+" "+n.attrib.get("content-desc",""))) for n in r.iter("node"))
+            ok=got==want;print(f"PHONE30_{i:02d} LABEL={label!r} FOUND={got} EXPECTED={want} PASS={ok}")
+            if not ok:raise SystemExit(i)
+          print("KWAI_PHONE_SURFACE_QA30_OK=30")
+          PY
