@@ -1,0 +1,67 @@
+name: Android SDK Harness 30-Way
+on:
+  push:
+    paths: ['.github/workflows/android-sdk-harness-30.yml', 'android-agent/.sdk30-trigger']
+permissions: { contents: read }
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        variant: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Common precondition
+        run: echo TEST_VALIDITY=HOSTED_UBUNTU_2404
+      - name: Probe distinct SDK strategy
+        env:
+          VARIANT: ${{ matrix.variant }}
+        shell: bash
+        run: |
+          set +e
+          V="$VARIANT"
+          ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          case "$V" in
+            1) C="$(command -v sdkmanager 2>/dev/null)" ;;
+            2) C="$ROOT/cmdline-tools/latest/bin/sdkmanager" ;;
+            3) C="$ROOT/cmdline-tools/16.0/bin/sdkmanager" ;;
+            4) C="$ROOT/cmdline-tools/17.0/bin/sdkmanager" ;;
+            5) C="$ROOT/cmdline-tools/18.0/bin/sdkmanager" ;;
+            6) C="$ROOT/tools/bin/sdkmanager" ;;
+            7) C="$(find "$ROOT" -type f -name sdkmanager 2>/dev/null | head -1)" ;;
+            8) C="$(find /usr/local -type f -name sdkmanager 2>/dev/null | head -1)" ;;
+            9) C="$(find /opt -type f -name sdkmanager 2>/dev/null | head -1)" ;;
+            10) C="$(find "$HOME" -type f -name sdkmanager 2>/dev/null | head -1)" ;;
+            11) C="$(ls -1d "$ROOT"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)" ;;
+            12) C="$(ls -1d /usr/local/lib/android/sdk/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)" ;;
+            13) C="$(find /usr/local/lib/android -path '*/bin/sdkmanager' -type f 2>/dev/null | head -1)" ;;
+            14) C="$(find /opt/hostedtoolcache -type f -name sdkmanager 2>/dev/null | head -1)" ;;
+            15) C="$(find /home/runner -maxdepth 6 -type f -name sdkmanager 2>/dev/null | head -1)" ;;
+            16) C="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ;;
+            17) C="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ;;
+            18) C="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager" ;;
+            19) C="$ANDROID_SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager" ;;
+            20) C="$(find "$ROOT/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -executable 2>/dev/null | head -1)" ;;
+            21) C="$(find "$ROOT" -type f -name avdmanager 2>/dev/null | head -1 | sed 's/avdmanager$/sdkmanager/')" ;;
+            22) C="$(find "$ROOT" -type f -name apkanalyzer 2>/dev/null | head -1 | sed 's#bin/apkanalyzer#bin/sdkmanager#')" ;;
+            23) C="$(find "$ROOT" -type f -name lint 2>/dev/null | head -1 | sed 's#bin/lint#bin/sdkmanager#')" ;;
+            24) C="$(find / -xdev -type f -name sdkmanager 2>/dev/null | head -1)" ;;
+            25) C="$(find /usr -type f -name sdkmanager 2>/dev/null | head -1)" ;;
+            26) C="$(find /usr/share -type f -name sdkmanager 2>/dev/null | head -1)" ;;
+            27) C="$(find /usr/lib -type f -name sdkmanager 2>/dev/null | head -1)" ;;
+            28) C="$(find "$ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort | tail -1)" ;;
+            29) C="$(find "$ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | head -1)" ;;
+            30) C="$(find "$ROOT" -type f -name sdkmanager 2>/dev/null | head -1)" ;;
+          esac
+          echo VARIANT=$V
+          echo ROOT=$ROOT
+          echo CANDIDATE=$C
+          if [ -n "$C" ] && [ -x "$C" ]; then
+            "$C" --version || exit 31
+            echo SDK_STRATEGY_PROVEN=$V
+            exit 0
+          fi
+          echo FAILURE_SIGNAL=SDKMANAGER_NOT_FOUND_VARIANT_$V
+          exit 32
