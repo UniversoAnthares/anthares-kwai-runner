@@ -18,6 +18,25 @@ jobs:
           set -euo pipefail
           bash -n kwai_publish.sh kwai_queue_state.sh
           python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py
+          python3 - <<'PY'
+          import os,sys,xml.etree.ElementTree as ET
+          os.environ.update({
+              "KWAI_VIDEO_TITLE":"fixture",
+              "KWAI_MEDIA_NAME":"anthares-job12345-abcdef123456.mp4",
+              "KWAI_ANDROID_VIDEO":"/sdcard/Movies/AntharesPublish/anthares-job12345-abcdef123456.mp4",
+              "KWAI_QUEUE_JOB_ID":"job12345",
+              "KWAI_MEDIA_SHA256":"abcdef1234567890",
+          })
+          sys.argv=["matcher-test","prepare"]
+          import kwai_publish_video as k
+          def root(*labels):
+              nodes="".join(f'<node text="{x}" content-desc="" clickable="true" bounds="[0,200][100,300]" />' for x in labels)
+              return ET.fromstring("<hierarchy>"+nodes+"</hierarchy>")
+          assert len(k.gallery_identity_matches(root("camera","anthares-job12345-abcdef123456.mp4"),k.MEDIA_NAME,k.MEDIA_SHA,k.JOB_ID))==1
+          assert len(k.gallery_identity_matches(root("camera","recent video"),k.MEDIA_NAME,k.MEDIA_SHA,k.JOB_ID))==0
+          assert len(k.gallery_identity_matches(root("anthares-job12345-abcdef123456.mp4","abcdef123456"),k.MEDIA_NAME,k.MEDIA_SHA,k.JOB_ID))==2
+          print("KWAI_GALLERY_MATCHER_BEHAVIOR_OK")
+          PY
           grep -q 'KWAI_MEDIA_SHA256=' kwai_publish.sh
           grep -q '/sdcard/Movies/AntharesPublish/' kwai_publish.sh
           grep -q 'MEDIASTORE_MATCHES=1' kwai_publish.sh
