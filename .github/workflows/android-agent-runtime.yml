@@ -190,19 +190,40 @@ jobs:
           root=dump("auth-chooser")
           phone=[n for n in root.iter("node") if any(k in label(n) for k in ("phone","telefone"))]
           print("PHONE_CONTROL_COUNT="+str(len(phone)))
-          if phone:
-              tap(phone[0])
-          else:
-              # In this build Facebook and Phone are rendered in one compound accessibility node.
-              compound=[n for n in root.iter("node") if "facebook" in label(n) and "phone" in label(n)]
-              if not compound: raise SystemExit("PHONE_CONTROL_VISIBLE=0")
-              m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",compound[0].attrib.get("bounds",""))
-              if not m: raise SystemExit("PHONE_COMPOUND_BOUNDS_INVALID")
-              x1,y1,x2,y2=map(int,m.groups())
-              # Phone is the right-hand segment after the vertical separator.
-              adb("shell","input","tap",str(x1+(x2-x1)*3//4),str((y1+y2)//2))
-              print("PHONE_CONTROL_COMPOUND_FALLBACK=1")
-          time.sleep(4)
+          if not phone: raise SystemExit("PHONE_CONTROL_VISIBLE=0")
+          n=phone[0]
+          print("PHONE_NODE_LABEL="+label(n))
+          print("PHONE_NODE_BOUNDS="+n.attrib.get("bounds",""))
+          print("PHONE_NODE_CLICKABLE="+n.attrib.get("clickable",""))
+          # Matrix 15: probe 15 horizontal fractions of the Phone-bearing node.
+          m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.attrib.get("bounds",""))
+          if not m: raise SystemExit("PHONE_BOUNDS_INVALID")
+          x1,y1,x2,y2=map(int,m.groups())
+          baseline=" ".join(label(x) for x in root.iter("node"))
+          for idx in range(1,16):
+              frac=idx/16.0
+              x=round(x1+(x2-x1)*frac); y=(y1+y2)//2
+              adb("shell","input","tap",str(x),str(y)); time.sleep(1.2)
+              try:
+                  probe=dump("phone-probe-"+str(idx))
+              except SystemExit:
+                  print("PHONE_MATRIX_"+str(idx)+"=DUMP_UNAVAILABLE")
+                  adb("shell","input","keyevent","4");time.sleep(.5);continue
+              pnodes=list(probe.iter("node"))
+              ptxt=" ".join(label(z) for z in pnodes)
+              edits=[z for z in pnodes if z.attrib.get("editable")=="true" or z.attrib.get("class","").endswith("EditText")]
+              changed=(ptxt!=baseline)
+              print("PHONE_MATRIX_"+str(idx)+"=x"+str(x)+" EDITS="+str(len(edits))+" CHANGED="+str(changed)+" UI="+ptxt[-500:])
+              if edits or any(k in ptxt for k in ("phone number","country code","verification code","get code","send code")):
+                  print("PHONE_MATRIX_WINNER="+str(idx))
+                  print("SUCCESS_SIGNAL=PHONE_AUTH_FORM_REACHED")
+                  raise SystemExit(0)
+              adb("shell","input","keyevent","4");time.sleep(.7)
+              # Return to chooser if the probe navigated elsewhere.
+              try: root=dump("auth-chooser-return")
+              except SystemExit: pass
+          print("FAILURE_SIGNAL=PHONE_15POINT_MATRIX_EXHAUSTED")
+          raise SystemExit(44)
           after=dump("phone-form")
           nodes=list(after.iter("node"))
           edits=[n for n in nodes if n.attrib.get("editable")=="true" or n.attrib.get("class","").endswith("EditText")]
