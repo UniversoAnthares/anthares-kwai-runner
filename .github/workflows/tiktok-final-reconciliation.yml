@@ -1,0 +1,33 @@
+name: TikTok Final Reconciliation
+on:
+  push:
+    paths:
+      - '.tiktok-final-reconcile-trigger'
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Obtain allowlisted control OIDC
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+      - name: Reconcile exactly once
+        env:
+          CONTROL_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          code="$(curl -sS --max-time 90 -o /tmp/r.json -w '%{http_code}' -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v2","executor":"github","confirmed_absent":true,"confirmation_evidence":"authenticated_profile_inventory_count_zero_after_identity_verified"}')"
+          python3 - "$code" <<'PY'
+          import json,sys
+          code=int(sys.argv[1]); d=json.load(open('/tmp/r.json')); j=d.get('job') or {}
+          print(json.dumps({'http':code,'ok':d.get('ok'),'status':j.get('status'),'confirmed':j.get('confirmed'),'publication_started':j.get('publication_started'),'remote_id':j.get('remote_id')},sort_keys=True))
+          if code not in (200,201,202,409): raise SystemExit(1)
+          if j.get('publication_started'): raise SystemExit('REFUSED_PUBLICATION_STARTED')
+          if code==409 and j.get('status') not in ('already_confirmed','confirmed','reconciled'): raise SystemExit(2)
+          print('TIKTOK_FINAL_RECONCILIATION=PROVEN')
+          PY
