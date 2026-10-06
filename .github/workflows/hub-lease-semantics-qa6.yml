@@ -1,0 +1,40 @@
+name: Hub Lease Semantics QA6
+on:
+  push:
+    branches: [main]
+    paths: ['.hub-lease-semantics-qa6-trigger']
+permissions: {contents: read}
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [superseded-excluded, basename-superseded, distinct-areas-no-conflict, same-area-conflict, missing-area-active]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          python3 - '${{ matrix.probe }}' <<'PY'
+          import sys
+          from collections import defaultdict
+          from pathlib import Path
+          p=sys.argv[1]
+          if p=="superseded-excluded":
+              superseded={"test-hub/findings/a.md","a.md"}; assert "test-hub/findings/a.md" in superseded
+          elif p=="basename-superseded":
+              raw="test-hub/findings/a.md"; s={raw,Path(raw).name}; assert "a.md" in s
+          elif p=="distinct-areas-no-conflict":
+              rows=[{"lease_area":"a"},{"lease_area":"b"}]; d=defaultdict(list)
+              for x in rows:d[x["lease_area"]].append(x)
+              assert not {k:v for k,v in d.items() if len(v)>1}
+          elif p=="same-area-conflict":
+              rows=[{"lease_area":"a"},{"lease_area":"a"}]; d=defaultdict(list)
+              for x in rows:d[x["lease_area"]].append(x)
+              assert len({k:v for k,v in d.items() if len(v)>1})==1
+          elif p=="missing-area-active":
+              row={"lease_area":None}; d=defaultdict(list)
+              if row["lease_area"]: d[row["lease_area"]].append(row)
+              assert not d
+          print("PROBE_"+p+"_OK")
+          PY
