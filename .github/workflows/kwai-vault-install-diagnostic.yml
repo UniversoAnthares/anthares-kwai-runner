@@ -1,0 +1,24 @@
+name: Kwai Vault Install Diagnostic
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-vault-diag-trigger']
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
+          rm -rf /tmp/kwai-vault && mkdir /tmp/kwai-vault && unzip -q /tmp/kwai-vault.zip -d /tmp/kwai-vault
+          SCRIPT="$(find /tmp/kwai-vault -name kwai_vault_install.sh -print -quit)"
+          test -n "$SCRIPT"
+          echo "SCRIPT=$SCRIPT"
+          bash -n "$SCRIPT"
+          echo "=== SCRIPT ==="
+          nl -ba "$SCRIPT" | sed -n '1,260p'
+          echo "=== SHELLCHECK ==="
+          shellcheck "$SCRIPT" || true
