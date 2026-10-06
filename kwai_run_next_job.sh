@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 # Canonical single-job executor. It is safe to call only on a cloud executor with the authenticated Android session.
-bash kwai_claim_job.sh
+CLAIM_ENV="$(mktemp)"
+trap 'rm -f "$CLAIM_ENV"' EXIT
+GITHUB_ENV="$CLAIM_ENV" bash kwai_claim_job.sh
+set -a
+# shellcheck disable=SC1090
+source "$CLAIM_ENV"
+set +a
 python3 kwai_real_publish_promotion_gate.py
 : "${KWAI_VIDEO_URL:?leased job lacks video_url}"
 : "${KWAI_VIDEO_TITLE:?leased job lacks video_title}"
