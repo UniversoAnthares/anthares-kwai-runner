@@ -216,7 +216,7 @@ jobs:
           print("FAILURE_SIGNAL=LOGIN_SURFACE_NOT_REACHED")
           raise SystemExit(42)
           PY
-      - name: Open official Kwai Studio Phone form with 15 observations
+      - name: Continue Phone-originated web auth after Chrome prompts
         continue-on-error: true
         run: |
           python3 - <<'PY'
@@ -228,57 +228,54 @@ jobs:
               adb("pull",f"/sdcard/{tag}.xml",f"/tmp/{tag}.xml")
               try:return ET.parse(f"/tmp/{tag}.xml").getroot()
               except:return None
-          def lab(x):return (x.attrib.get("text","")+" "+x.attrib.get("content-desc","")+" "+x.attrib.get("resource-id","")).strip().lower()
+          def lab(n):
+              return (n.attrib.get("text","")+" "+n.attrib.get("content-desc","")+" "+n.attrib.get("resource-id","")).strip().lower()
           def tap(n):
               m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.attrib.get("bounds",""))
               if not m:return False
               a,b,c,d=map(int,m.groups());adb("shell","input","tap",str((a+c)//2),str((b+d)//2));return True
-          url="https://studio.kwai.com/"
-          adb("shell","am","start","-a","android.intent.action.VIEW","-d",url);time.sleep(4)
-          # Clear Chrome first-run deterministically before opening Studio.
-          # UI tap is attempted first; policy flags are a fallback for headless images.
-          for fre_try in range(1,6):
-              r=snap("chrome-fre-"+str(fre_try))
-              if r is None: break
-              ns=list(r.iter("node")); fre=" ".join(lab(n) for n in ns)
-              if "welcome to chrome" not in fre: break
-              dismiss=next((n for n in ns if "use without an account" in lab(n) or n.attrib.get("resource-id","").endswith("signin_fre_dismiss_button")),None)
-              print("CHROME_FRE_DETECTED="+str(fre_try))
-              if dismiss is not None and tap(dismiss):
-                  time.sleep(3); continue
-              adb("shell","am","force-stop","com.android.chrome")
-              adb("shell","pm","clear","com.android.chrome")
-              adb("shell","am","start","-n","com.android.chrome/com.google.android.apps.chrome.Main","--ez","disable-fre","true")
-              time.sleep(3)
-          # Launch URL explicitly in Chrome after FRE clearing.
-          adb("shell","am","start","-n","com.android.chrome/com.google.android.apps.chrome.Main","-a","android.intent.action.VIEW","-d",url)
-          # Chrome may show a second, independent notifications education dialog.
-          # Dismiss it semantically; this changes no account/auth state.
-          for notice_try in range(1,6):
+          def foreground():
+              w=adb("shell","dumpsys","window","windows")
+              a=adb("shell","dumpsys","activity","activities")
+              return (" ".join(x.strip() for x in w.splitlines() if "mCurrentFocus" in x or "mFocusedApp" in x)[-1200:],
+                      " ".join(x.strip() for x in a.splitlines() if "mResumedActivity" in x or "topResumedActivity" in x)[-1200:])
+          # Phone was already invoked by the previous semantic step. Never open an unrelated URL here.
+          w,a=foreground();print("PHONE_WEB_INITIAL_WINDOW="+w);print("PHONE_WEB_INITIAL_ACTIVITY="+a)
+          for phase in range(1,31):
               time.sleep(2)
-              r=snap("chrome-notice-"+str(notice_try))
-              if r is None: break
-              ns=list(r.iter("node")); notice=" ".join(lab(n) for n in ns)
-              if "chrome notifications" not in notice and "notifications make things easier" not in notice: break
-              dismiss=next((n for n in ns if "no thanks" in lab(n) or n.attrib.get("resource-id","").endswith("negative_button")),None)
-              print("CHROME_NOTIFICATION_DIALOG_DETECTED="+str(notice_try))
-              if dismiss is not None and tap(dismiss):
-                  time.sleep(2); continue
-              adb("shell","input","keyevent","4");time.sleep(2)
-          # Indispensable boundary: 30 reversible observations, never submit auth or start LIVE.
-          for attempt in range(1,31):
-              time.sleep(2)
-              r=snap("studio-"+str(attempt))
+              r=snap("phone-web-"+str(phase))
               if r is None:
-                  print("STUDIO30_"+str(attempt)+"=DUMP_UNAVAILABLE");continue
+                  print("PHONE_WEB_"+str(phase)+"=DUMP_UNAVAILABLE");continue
               ns=list(r.iter("node")); txt=" ".join(lab(n) for n in ns)
+              pkg=" ".join(sorted(set(n.attrib.get("package","") for n in ns if n.attrib.get("package"))))
               edits=[n for n in ns if n.attrib.get("editable")=="true" or n.attrib.get("class","").endswith("EditText")]
-              print("STUDIO30_"+str(attempt)+" EDITS="+str(len(edits))+" PHONE="+str("phone" in txt)+" CODE="+str("verification" in txt or "code" in txt)+" UI="+txt[-700:])
-              if edits and "phone" in txt and ("verification" in txt or "code" in txt):
-                  print("SUCCESS_SIGNAL=KWAI_STUDIO_PHONE_FORM_REACHED")
+              # Browser chrome can expose its address field as editable; classify auth only with page/auth markers.
+              auth_markers=("phone number","mobile number","country code","verification code","send code","password","email","log in","login","sign in","continue with")
+              challenge_markers=("verification code","otp","sms","captcha","security check","verify it's you","verify it is you")
+              auth=any(x in txt for x in auth_markers)
+              challenge=any(x in txt for x in challenge_markers)
+              print("PHONE_WEB_"+str(phase)+" PKG="+pkg+" EDITS="+str(len(edits))+" AUTH="+str(int(auth))+" CHALLENGE="+str(int(challenge))+" UI="+txt[-1200:])
+              # Chrome first-run.
+              if "welcome to chrome" in txt:
+                  n=next((x for x in ns if "use without an account" in lab(x) or x.attrib.get("resource-id","").endswith("signin_fre_dismiss_button")),None)
+                  if n is not None and tap(n):
+                      print("PHONE_WEB_FRE_DISMISSED="+str(phase));continue
+              # Independent notification education/prompt.
+              if "chrome notifications" in txt or "notifications make things easier" in txt:
+                  n=next((x for x in ns if "no thanks" in lab(x) or x.attrib.get("resource-id","").endswith("negative_button")),None)
+                  if n is not None and tap(n):
+                      print("PHONE_WEB_NOTIFICATION_DISMISSED="+str(phase));continue
+              # Permission prompt, if present, is declined without touching auth state.
+              n=next((x for x in ns if x.attrib.get("resource-id","").endswith("permission_deny_button")),None)
+              if n is not None and tap(n):
+                  print("PHONE_WEB_PERMISSION_DECLINED="+str(phase));continue
+              if auth or challenge:
+                  w,a=foreground();print("PHONE_WEB_AUTH_WINDOW="+w);print("PHONE_WEB_AUTH_ACTIVITY="+a)
+                  print("SUCCESS_SIGNAL=PHONE_WEB_AUTH_BOUNDARY_REACHED")
+                  print("AUTH_CHALLENGE="+str(int(challenge)))
                   raise SystemExit(0)
-              if attempt in (10,20):
-                  adb("shell","am","start","-a","android.intent.action.VIEW","-d",url)
-          print("FAILURE_SIGNAL=KWAI_STUDIO_30_OBSERVATIONS_EXHAUSTED")
+          w,a=foreground();print("PHONE_WEB_FINAL_WINDOW="+w);print("PHONE_WEB_FINAL_ACTIVITY="+a)
+          print("FAILURE_SIGNAL=PHONE_WEB_30_OBSERVATIONS_EXHAUSTED")
           raise SystemExit(46)
           PY
+
