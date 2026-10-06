@@ -9,240 +9,25 @@ permissions:
   id-token: write
 
 jobs:
-  direct-publisher:
+  oidc-matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      CONTROL: https://anthares-control.anthares1.workers.dev
-      EXPECTED_TIKTOK_USERNAME: universo.anthares
-      JOB_ID: tiktok-canary-20261006-synthetic-v12
-      DEDUPE: tiktok-canary-20261006-synthetic-v12
     steps:
-      - name: Checkout runner repository
-        uses: actions/checkout@v4
-
-      - name: Install browser runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m pip install --disable-pip-version-check -q playwright requests
-          command -v google-chrome || command -v chromium || exit 30
-
-      - name: Obtain Cloudflare control OIDC
+      - name: Get OIDC
         id: oidc
         shell: bash
         run: |
           set -euo pipefail
-          TOKEN="$(curl -fsSL             -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN"             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" |
-            python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          TOKEN="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           echo "::add-mask::$TOKEN"
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-
-      - name: Reconcile confirmed-absent v5 and retire its queue attempts
+      - name: Safe auth probe
         env:
-          CONTROL_TOKEN: ${{ steps.oidc.outputs.token }}
+          TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
-          call() {
-            curl --fail-with-body -sS -X POST "$CONTROL/job/$1"               -H "Authorization: Bearer $CONTROL_TOKEN"               -H 'Content-Type: application/json'               --data "$2"
-          }
-
-          health="$(curl -fsSL "$CONTROL/queue-health")"
-          echo "$health" > /tmp/queue-health.json
-          python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/queue-health.json'))
-          rows=[x for x in d.get('jobs',[]) if x.get('id')=='tiktok-canary-20261006-synthetic-v5']
-          if rows:
-              j=rows[0]
-              print('V5_QUEUE_STATE',j.get('status'),j.get('attempts'),j.get('publication_started'))
-              if j.get('status') not in {'queued','uncertain'}:
-                  raise SystemExit('V5_UNEXPECTED_STATE')
-          else:
-              print('V5_QUEUE_STATE=missing')
-          PY
-          v5state="$(python3 - <<'PY'
-          import json
-          rows=[x for x in json.load(open('/tmp/queue-health.json')).get('jobs',[]) if x.get('id')=='tiktok-canary-20261006-synthetic-v5']
-          print(rows[0].get('status') if rows else 'missing')
-          PY
-          )"
-          if [ "$v5state" = "uncertain" ]; then
-            rec="$(curl --fail-with-body -sS -X POST "$CONTROL/github-queue/reconcile" -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v5","confirmed_absent":true}')"
-            echo "$rec"
-          elif [ "$v5state" = "missing" ]; then
-            echo "V5_ALREADY_RETIRED"
-          fi
-
-          for n in 1 2 3 4 5; do
-            lease="$(curl --fail-with-body -sS -X POST "$CONTROL/job" -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data '{"executor":"github","platform":"tiktok","queue_op":"lease","ttl_seconds":300}')"
-            echo "$lease"
-            python3 - "$lease" <<'PY' > /tmp/lease-meta
-          import json,sys
-          d=json.loads(sys.argv[1]); j=d.get("job") or {}
-          print(j.get("id",""))
-          print(j.get("lease_generation",""))
-          print(j.get("status",""))
-          PY
-            readarray -t M < /tmp/lease-meta
-            id="${M[0]}"; gen="${M[1]}"; status="${M[2]}"
-            if [ "$id" = "$JOB_ID" ]; then
-              echo "V5_RETIRED_AND_V12_ACQUIRED generation=$gen"
-              echo "LEASE_ID=$id" >> "$GITHUB_ENV"
-              echo "LEASE_GEN=$gen" >> "$GITHUB_ENV"
-              exit 0
-            fi
-            if [ "$id" != "tiktok-canary-20261006-synthetic-v5" ]; then
-              echo "UNEXPECTED_QUEUE_JOB=$id"
-              exit 21
-            fi
-            failed="$(curl --fail-with-body -sS -X POST "$CONTROL/job" -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "{\"executor\":\"github\",\"queue_op\":\"fail\",\"id\":\"$id\",\"lease_generation\":$gen,\"error_class\":\"reconciled_absent_retirement\",\"error_message\":\"user independently confirmed no v5 post; retiring stale diagnostic job\",\"published_possible\":false}")"
-            echo "$failed"
-          done
-          echo "V5_RETIREMENT_FAILED"
-          exit 22
-
-      - name: Enqueue and acquire v12 exact canary
-        if: env.LEASE_ID != env.JOB_ID
-        env:
-          CONTROL_TOKEN: ${{ steps.oidc.outputs.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "{"id":"$JOB_ID","platform":"tiktok","executor":"github","dedupe_key":"$DEDUPE","source_id":"synthetic-owned-canary-v12","source_start":0,"source_end":12}" > /tmp/enqueue.json
-          cat /tmp/enqueue.json
-          curl --fail-with-body -sS -X POST "$CONTROL/job/lease"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data '{"platform":"tiktok","executor":"github","ttl_seconds":900}' > /tmp/lease.json
-          cat /tmp/lease.json
-          python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
-          if j.get('id')!='tiktok-canary-20261006-synthetic-v12' or j.get('status')!='leased':
-              raise SystemExit('V12_LEASE_NOT_EXACT')
-          print('V12_EXACT_LEASE',j.get('lease_generation'))
-          with open('/tmp/lease-meta','w') as f:
-              f.write(str(j.get('lease_generation'))+'\n')
-          PY
-          echo "LEASE_ID=$JOB_ID" >> "$GITHUB_ENV"
-          echo "LEASE_GEN=$(cat /tmp/lease-meta)" >> "$GITHUB_ENV"
-
-      - name: Fetch central TikTok session
-        env:
-          CONTROL_TOKEN: ${{ steps.oidc.outputs.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          code="$(curl -sS -o /tmp/session.json -w '%{http_code}'             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Accept: application/json'             "$CONTROL/tiktok/session-state")"
-          python3 - "$code" <<'PY'
-          import json,sys
-          code=int(sys.argv[1]); d=json.load(open('/tmp/session.json'))
-          state=d.get('state') if isinstance(d,dict) else None
-          cookies=state.get('cookies') if isinstance(state,dict) else None
-          if code!=200 or d.get('available') is not True or not isinstance(cookies,list) or not cookies:
-              raise SystemExit('CENTRAL_SESSION_UNAVAILABLE')
-          if len(cookies)>256:
-              raise SystemExit('CENTRAL_SESSION_TOO_LARGE')
-          print(json.dumps({'http':code,'cookies':len(cookies),'origins':len(state.get('origins') or [])},sort_keys=True))
-          json.dump(state,open('/tmp/tiktok-state.json','w'),ensure_ascii=False,separators=(',',':'))
-          PY
-
-      - name: Direct session identity preflight
-        working-directory: direct-tiktok-publisher
-        env:
-          ATD_MODE: session
-          ATD_FAST_SESSION: "0"
-          EXPECTED_TIKTOK_USERNAME: universo.anthares
-          TIKTOK_CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
-        shell: bash
-        run: |
-          set -euo pipefail
-          export TIKTOK_STORAGE_STATE="$(cat /tmp/tiktok-state.json)"
-          python3 tiktok_worker.py
-
-      - name: Generate deterministic owned diagnostic MP4
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg >/dev/null
-          ffmpeg -hide_banner -loglevel error -y             -f lavfi -i "color=c=black:s=1080x1920:r=30:d=12"             -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=48000"             -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='UNIVERSO ANTHARES':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2-60,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='teste tecnico de publicacao':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=(h-text_h)/2+60"             -t 12 -c:v libx264 -pix_fmt yuv420p -profile:v high -level 4.1 -preset medium -crf 20             -c:a aac -b:a 128k -movflags +faststart /tmp/canary.mp4
-          ffprobe -v error -show_entries format=duration,size -show_entries stream=codec_type,codec_name,width,height,r_frame_rate -of json /tmp/canary.mp4 | tee /tmp/ffprobe.json
-          python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/ffprobe.json')); dur=float(d['format']['duration'])
-          vs=[s for s in d['streams'] if s.get('codec_type')=='video']
-          if not (11.5<=dur<=12.5 and vs and vs[0].get('codec_name')=='h264' and vs[0].get('width')==1080 and vs[0].get('height')==1920):
-              raise SystemExit('SYNTHETIC_MP4_INVALID')
-          print('SYNTHETIC_MP4_VALID')
-          PY
-
-      - name: Mark publication started
-        env:
-          CONTROL_TOKEN: ${{ steps.oidc.outputs.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail-with-body -sS -X POST "$CONTROL/job/started"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "{"id":"$LEASE_ID","executor":"github","lease_generation":$LEASE_GEN}" > /tmp/started.json
-          cat /tmp/started.json
-
-      - name: Publish directly from GitHub-hosted runner
-        id: publish
-        continue-on-error: true
-        working-directory: direct-tiktok-publisher
-        env:
-          EXPECTED_TIKTOK_USERNAME: universo.anthares
-          TIKTOK_CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
-          ATD_MODE: session
-          TIKTOK_YOUTUBE_PLAN: /tmp/tiktok-owned-plan.json
-          ATD_ARTIFACT_DIR: /tmp/tiktok-artifacts
-          TIKTOK_AUTOMATION_HALT: /tmp/TIKTOK_AUTOMATION_HALT.json
-          TIKTOK_PUBLISHED_KEYS: /tmp/tiktok-published-keys.json
-          TIKTOK_PUBLISH_EVIDENCE: /tmp/tiktok-last-publish.json
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > /tmp/tiktok-owned-plan.json <<'JSON'
-          {"segment_id":"tiktok-canary-20261006-synthetic-v12","source_id":"synthetic-owned-canary-v6","title":"Universo Anthares — teste técnico de publicação","summary":"Teste técnico controlado de publicação do Universo Anthares."}
-          JSON
-          python3 - <<'PY'
-          import json
-          p=json.load(open('/tmp/tiktok-owned-plan.json')); p['media_path']='/tmp/canary.mp4'
-          json.dump(p,open('/tmp/tiktok-owned-plan.json','w'),ensure_ascii=False,separators=(',',':'))
-          PY
-          export TIKTOK_STORAGE_STATE="$(cat /tmp/tiktok-state.json)"
-          python3 tiktok_web_publish_local.py
-
-      - name: Reconcile publication result
-        if: always() && env.LEASE_ID != ''
-        env:
-          CONTROL_TOKEN: ${{ steps.oidc.outputs.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          outcome="${{ steps.publish.outcome }}"
-          if [ "$outcome" = "success" ]; then
-            remote_id="$(python3 - <<'PY'
-          import json,re
-          s=open('/tmp/tiktok-artifacts/tiktok-owned-after-post.png','rb').read() if False else b''
-          p='/tmp/tiktok-published-keys.json'
-          d=json.load(open(p)); rows=list(d.values())
-          if not rows: raise SystemExit('NO_PUBLISHED_LEDGER')
-          print(str(rows[-1].get('remote_id') or ''))
-          PY
-            )"
-            [ -n "$remote_id" ] || { echo REMOTE_ID_MISSING; exit 31; }
-            curl --fail-with-body -sS -X POST "$CONTROL/job/complete"               -H "Authorization: Bearer $CONTROL_TOKEN"               -H 'Content-Type: application/json'               --data "{"id":"$LEASE_ID","executor":"github","lease_generation":$LEASE_GEN,"confirmed":true,"remote_id":"$remote_id","confirmation_evidence":"publisher_profile_new_post:$remote_id"}" > /tmp/complete.json
-            cat /tmp/complete.json
-            python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/complete.json')); j=d.get('job') or {}
-          if not d.get('ok') or j.get('status')!='published' or not j.get('confirmed'):
-              raise SystemExit('CENTRAL_COMPLETE_FAILED')
-          print('TIKTOK_CANARY_PRODUCTION_PROVEN remote_id='+str(j.get('remote_id')))
-          PY
-          else
-            curl --fail-with-body -sS -X POST "$CONTROL/job/fail"               -H "Authorization: Bearer $CONTROL_TOKEN"               -H 'Content-Type: application/json'               --data "{"id":"$LEASE_ID","executor":"github","lease_generation":$LEASE_GEN,"error_class":"direct_github_publish_failed","error_message":"GitHub-hosted direct publisher failed; reconcile profile before retry","published_possible":true}" > /tmp/fail.json || true
-            cat /tmp/fail.json 2>/dev/null || true
-            echo "DIRECT_GITHUB_CANARY=UNCERTAIN"
-            exit 1
-          fi
+          curl --fail-with-body -sS -X POST "https://anthares-control.anthares1.workers.dev/queue-self-test" -H "Authorization: Bearer $TOKEN"
