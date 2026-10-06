@@ -6,7 +6,33 @@ permissions:
   contents: read
   id-token: write
 jobs:
+  restore-session:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Restore Render from central session
+        env:
+          CONTROL: https://anthares-control.anthares1.workers.dev
+          RENDER: https://anthares-tiktok-render-rootless.onrender.com
+        run: |
+          set -euo pipefail
+          CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          RT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=anthares-render-worker" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          curl --fail-with-body -sS "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $CT" >/tmp/c.json
+          curl --fail-with-body -sS "$RENDER/session-status" -H "Authorization: Bearer $RT" -H "X-Anthares-Control-OIDC: $CT" >/tmp/r.json
+          python3 - <<'PY'
+          import json
+          c=json.load(open('/tmp/c.json'));r=json.load(open('/tmp/r.json'))
+          print('CENTRAL_AVAILABLE='+str(bool(c.get('available'))).lower())
+          print('CENTRAL_COOKIES='+str(len((c.get('state') or {}).get('cookies') or [])))
+          print('RENDER_BOOTSTRAPPED='+str(bool(r.get('bootstrapped'))).lower())
+          print('RESTORE_REASON='+str(r.get('central_restore_reason')))
+          assert c.get('available') is True and (c.get('state') or {}).get('cookies')
+          assert r.get('bootstrapped') is True
+          print('SESSION_RESTORE=PROVEN')
+          PY
   preflight:
+    needs: restore-session
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
