@@ -2,20 +2,24 @@ name: Anthares Android Agent Runtime
 on:
   push:
     paths: ['.github/workflows/android-agent-runtime.yml', 'android-agent/.runtime-trigger']
-permissions: { contents: read }
+permissions:
+  contents: read
+  actions: read
 jobs:
   runtime:
     runs-on: ubuntu-24.04
     timeout-minutes: 14
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
-      - uses: gradle/actions/setup-gradle@v4
-        with: { gradle-version: '8.9' }
-      - name: Build Agent
-        working-directory: android-agent
-        run: gradle --no-daemon :app:assembleDebug
+      - name: Fetch proven Agent APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/agent-apk
+          gh api repos/UniversoAnthares/anthares-kwai-runner/actions/artifacts/11384550256/zip > /tmp/agent.zip
+          unzip -q /tmp/agent.zip -d /tmp/agent-apk
+          test -s /tmp/agent-apk/app-debug.apk
+          echo TEST_VALIDITY=PROVEN_AGENT_APK_FETCHED
       - name: Fetch validated Kwai vault
         run: |
           curl -fL --retry 3 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
@@ -26,8 +30,8 @@ jobs:
           sudo chmod 666 /dev/kvm
       - name: Install emulator image
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null || true
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;x86_64"
           echo no | avdmanager create avd -n anthares -k "system-images;android-35;google_apis;x86_64" --device "pixel_5" --force
       - name: Boot emulator
         run: |
@@ -43,7 +47,7 @@ jobs:
           test -n "$SCRIPT"
           bash "$SCRIPT"
           cd "$GITHUB_WORKSPACE"
-          adb install -r android-agent/app/build/outputs/apk/debug/app-debug.apk
+          adb install -r /tmp/agent-apk/app-debug.apk
           adb shell pm list packages | grep -q 'package:us.anthares.agent'
           adb shell pm list packages | grep -q 'package:com.kwai.video'
           echo TEST_VALIDITY=APPS_INSTALLED
