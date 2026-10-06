@@ -19,7 +19,7 @@ jobs:
           echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
           rm -rf kwai-vault && mkdir kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
       - name: Fetch agent APK
-        env: { GH_TOKEN: ${{ github.token }} }
+        env:\n          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p /tmp/agent
           gh api repos/UniversoAnthares/anthares-kwai-runner/actions/artifacts/11384550256/zip > /tmp/agent.zip
