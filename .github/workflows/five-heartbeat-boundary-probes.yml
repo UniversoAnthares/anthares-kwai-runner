@@ -1,0 +1,64 @@
+name: Five Heartbeat Boundary Probes
+on:
+  push:
+    branches: [main]
+    paths: ['.five-heartbeat-boundary-trigger']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [initial-deny-no-child, missing-job, missing-generation, periodic-deny, child-zero]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          p='${{ matrix.probe }}'
+          tmp="$(mktemp -d)"; cp kwai_queue_heartbeat.sh "$tmp/"; cd "$tmp"
+          cat > kwai_queue_state.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          echo "$*" >> renew.log
+          if [ "${DENY_INITIAL:-0}" = 1 ]; then exit 71; fi
+          if [ "${DENY_SECOND:-0}" = 1 ] && [ "$(wc -l < renew.log)" -ge 2 ]; then exit 72; fi
+          SH
+          chmod +x *.sh
+          case "$p" in
+            initial-deny-no-child)
+              export KWAI_QUEUE_JOB_ID=j KWAI_LEASE_GENERATION=1 DENY_INITIAL=1 KWAI_LEASE_RENEW_INTERVAL_SECONDS=15 KWAI_LEASE_RENEW_TTL_SECONDS=60
+              set +e; ./kwai_queue_heartbeat.sh bash -c 'touch child-started' >out 2>&1; rc=$?; set -e
+              test "$rc" = 49; test ! -e child-started
+              grep -q 'initial-lease-renew-failed' out
+              echo PROBE_INITIAL_DENY_NO_CHILD_OK
+              ;;
+            missing-job)
+              unset KWAI_QUEUE_JOB_ID || true; export KWAI_LEASE_GENERATION=1
+              set +e; ./kwai_queue_heartbeat.sh true >out 2>&1; rc=$?; set -e
+              test "$rc" != 0; grep -q 'KWAI_QUEUE_JOB_ID' out
+              echo PROBE_MISSING_JOB_OK
+              ;;
+            missing-generation)
+              export KWAI_QUEUE_JOB_ID=j; unset KWAI_LEASE_GENERATION || true
+              set +e; ./kwai_queue_heartbeat.sh true >out 2>&1; rc=$?; set -e
+              test "$rc" != 0; grep -q 'KWAI_LEASE_GENERATION' out
+              echo PROBE_MISSING_GENERATION_OK
+              ;;
+            periodic-deny)
+              export KWAI_QUEUE_JOB_ID=j KWAI_LEASE_GENERATION=2 DENY_SECOND=1 KWAI_LEASE_RENEW_INTERVAL_SECONDS=15 KWAI_LEASE_RENEW_TTL_SECONDS=60
+              set +e; ./kwai_queue_heartbeat.sh sleep 30 >out 2>&1; rc=$?; set -e
+              test "$rc" = 49; grep -q 'lease-heartbeat-lost' out; test "$(wc -l < renew.log)" -ge 2
+              echo PROBE_PERIODIC_DENY_OK
+              ;;
+            child-zero)
+              export KWAI_QUEUE_JOB_ID=j KWAI_LEASE_GENERATION=3 KWAI_LEASE_RENEW_INTERVAL_SECONDS=15 KWAI_LEASE_RENEW_TTL_SECONDS=60
+              ./kwai_queue_heartbeat.sh true
+              test "$(wc -l < renew.log)" = 1
+              echo PROBE_CHILD_ZERO_OK
+              ;;
+          esac
