@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Unified Anthares AI orchestrator.
 
 Local development/runtime adapter for the five PROVEN isolated web providers:
@@ -77,11 +77,11 @@ def build_envelope(prompt: str) -> tuple[str, str, str]:
     start = f"ANTHARES_RESPONSE_START_{token}"
     end = f"ANTHARES_RESPONSE_END_{token}"
     wrapped = (
-        "Siga a solicitação do usuário abaixo. Não repita nem explique estas instruções de integração.\n\n"
-        "SOLICITAÇÃO DO USUÁRIO:\n"
+        "Siga a solicitaÃ§Ã£o do usuÃ¡rio abaixo. NÃ£o repita nem explique estas instruÃ§Ãµes de integraÃ§Ã£o.\n\n"
+        "SOLICITAÃ‡ÃƒO DO USUÃRIO:\n"
         f"{prompt}\n\n"
-        "FORMATO OBRIGATÓRIO DA RESPOSTA:\n"
-        f"{start}\n[sua resposta]\n{end}"
+        "FORMATO OBRIGATÓRIO: escreva o marcador inicial abaixo como a primeira linha; depois responda de fato à solicitação; escreva o marcador final como a última linha.\n"
+        f"{start}\n{end}"
     )
     return wrapped, start, end
 
@@ -280,7 +280,7 @@ def health(provider: str, order: list[str], timeout: int, response_timeout: int,
     rows = []
     for name in targets:
         marker = f"HEALTH_{name.upper()}_{uuid.uuid4().hex[:8]}"
-        prompt = "Retorne exatamente o texto a seguir, sem explicações adicionais: " + marker
+        prompt = "Retorne exatamente o texto a seguir, sem explicaÃ§Ãµes adicionais: " + marker
         row = execute(
             prompt, provider=name, retries=0, timeout=timeout,
             response_timeout=response_timeout, envelope=True, log_path=log_path,
