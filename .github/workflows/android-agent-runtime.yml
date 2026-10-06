@@ -147,10 +147,20 @@ jobs:
           root=dump("main-login")
           candidates=[n for n in root.iter("node") if label(n) in ("log in","login","sign in","entrar")]
           print("LOGIN_CONTROL_COUNT="+str(len(candidates)))
-          if not candidates:
+          n=candidates[0] if candidates else None
+          if n is None:
+              # Current MAIN sometimes exposes the label only in merged accessibility text.
+              ns=list(root.iter("node"))
+              prof=next((x for x in ns if x.attrib.get("resource-id","").endswith("id_home_bottom_tab_me")),None)
+              if prof is not None:
+                  pm=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",prof.attrib.get("bounds",""))
+                  if pm:
+                      a,b,c,d=map(int,pm.groups());adb("shell","input","tap",str((a+c)//2),str((b+d)//2));time.sleep(3)
+                      root=dump("profile-login");candidates=[x for x in root.iter("node") if label(x) in ("log in","login","sign in","entrar")]
+                      n=candidates[0] if candidates else None
+          if n is None:
               raise SystemExit("LOGIN_CONTROL_VISIBLE=0")
           print("LOGIN_CONTROL_VISIBLE=1")
-          n=candidates[0]
           m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.attrib.get("bounds",""))
           if not m: raise SystemExit("LOGIN_CONTROL_BOUNDS_INVALID")
           x1,y1,x2,y2=map(int,m.groups())
