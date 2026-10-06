@@ -1,0 +1,43 @@
+name: Kwai Split APK Install Probe
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-split-install-trigger']
+permissions: {contents: read}
+jobs:
+  install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch vault and APK
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
+          python3 - <<'PY'
+          import zipfile
+          zipfile.ZipFile("/tmp/kwai-vault.zip").extractall("/tmp/kwai-vault")
+          PY
+          test "$(cat /tmp/kwai-vault/ABI.txt)" = "arm64-v8a"
+      - name: Boot Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -accel on -memory 2048
+          script: |
+            set -Eeuo pipefail
+            adb wait-for-device
+            timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+            adb install-multiple -r /tmp/kwai-vault/*.apk
+            adb shell pm list packages | grep -q 'package:com.kwai.video'
+            adb shell dumpsys package com.kwai.video | grep -q 'versionName'
+            echo "KWAI_SPLIT_APK_INSTALL_OK"
