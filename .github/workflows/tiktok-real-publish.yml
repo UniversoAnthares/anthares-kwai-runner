@@ -6,7 +6,35 @@ permissions:
   contents: read
   id-token: write
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 15
+      matrix:
+        replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+    steps:
+      - name: Parallel OIDC and endpoint boundary
+        env:
+          CONTROL: https://anthares-control.anthares1.workers.dev
+          RENDER: https://anthares-tiktok-render-rootless.onrender.com
+          N: ${{ matrix.replica }}
+        run: |
+          set -euo pipefail
+          CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          RT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=anthares-render-worker" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          curl --fail-with-body -sS "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $CT" >/tmp/c.json
+          curl --fail-with-body -sS "$RENDER/config-status" -H "Authorization: Bearer $RT" >/tmp/r.json
+          python3 - <<'PY'
+          import json,os
+          c=json.load(open('/tmp/c.json')); r=json.load(open('/tmp/r.json'))
+          assert c.get('available') is True and (c.get('state') or {}).get('cookies')
+          assert r.get('session_bootstrapped') is True
+          print('PREFLIGHT_REPLICA_'+os.environ['N']+'=PROVEN')
+          PY
   lean-v14:
+    needs: preflight:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
