@@ -1,5 +1,6 @@
 name: Android ADB Boot 30-Way
-'on':
+on:
+  workflow_dispatch:
   push:
     paths: ['.github/workflows/android-adb-boot-30.yml', 'android-agent/.adb30-trigger']
 permissions: { contents: read }
