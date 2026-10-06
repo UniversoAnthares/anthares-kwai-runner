@@ -42,11 +42,18 @@ jobs:
               except ValueError: continue
               row={"path":str(p),"lease_area":area.group(1).strip() if area else None,"expires":dt.isoformat()}
               (active if dt>=now else expired).append(row)
-          out={"generated_at":now.isoformat(),"active":sorted(active,key=lambda x:x["expires"]),"expired_running":sorted(expired,key=lambda x:x["expires"])}
+          from collections import defaultdict
+          by_area=defaultdict(list)
+          for x in active:
+              if x["lease_area"]: by_area[x["lease_area"]].append(x)
+          conflicts={k:v for k,v in by_area.items() if len(v)>1}
+          out={"generated_at":now.isoformat(),"active":sorted(active,key=lambda x:x["expires"]),"expired_running":sorted(expired,key=lambda x:x["expires"]),"active_area_conflicts":conflicts}
           Path("hub-active-leases.json").write_text(json.dumps(out,indent=2)+"\n")
           print("ACTIVE_LEASE_COUNT="+str(len(active)))
           print("EXPIRED_RUNNING_COUNT="+str(len(expired)))
+          print("ACTIVE_AREA_CONFLICT_COUNT="+str(len(conflicts)))
           for x in active: print("ACTIVE",x["expires"],x["lease_area"],x["path"])
+          for area,rows in conflicts.items(): print("CONFLICT",area,len(rows))
           PY
       - uses: actions/upload-artifact@v4
         with:
