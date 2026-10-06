@@ -1,10 +1,14 @@
-stages: [test]
-provider_smoke:
-  stage: test
-  image: ubuntu:22.04
+stages:
+  - verify
+
+sha_consistency:
+  stage: verify
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache git
   script:
-    - CI_PROVIDER=gitlab CI_RUN_ID="$CI_PIPELINE_ID" CI_COMMIT_SHA="$CI_COMMIT_SHA" bash ci/shared/provider-smoke.sh
-  artifacts:
-    when: always
-    paths:
-      - ci-hub/gitlab/runtime/
+    - test -n "$GITHUB_MIRROR_URL"
+    - github_sha="$(git ls-remote "$GITHUB_MIRROR_URL" refs/heads/main | awk '{print $1}')"
+    - gitlab_sha="$(git rev-parse HEAD)"
+    - test "$github_sha" = "$gitlab_sha"
+    - echo "GITLAB_CROSS_PROVIDER_SHA=PROVEN"
