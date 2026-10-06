@@ -413,7 +413,7 @@ jobs:
           PY
 
   reconcile-v2:
-    if: ${{ false }}
+    if: ${{ contains(github.event.head_commit.message, '[reconcile-v2]') }}
     runs-on: ubuntu-slim
     steps:
       - name: Reconcile confirmed-absent v2 through allowlisted workflow identity
