@@ -1,4 +1,5 @@
 version: 2.1
+
 jobs:
   provider_smoke:
     machine:
@@ -8,7 +9,57 @@ jobs:
       - run:
           name: Provider hub smoke
           command: CI_PROVIDER=circleci bash ci/shared/provider-smoke.sh
+
+  android_executor_smoke:
+    machine:
+      image: android:default
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Inspect Android executor
+          command: |
+            set -eu
+            uname -a
+            test -n "${ANDROID_HOME:-}"
+            adb version
+            emulator -version
+      - run:
+          name: Create API 35 x86_64 emulator
+          command: |
+            set -eu
+            SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
+            yes | sdkmanager --licenses >/dev/null 2>&1 || true
+            sdkmanager "$SYSTEM_IMAGE"
+            echo "no" | avdmanager create avd --force --name anthares-api35 --package "$SYSTEM_IMAGE" --device "pixel_2"
+      - run:
+          name: Boot API 35 emulator
+          command: |
+            set -eu
+            nohup emulator -avd anthares-api35               -no-window               -no-audio               -no-boot-anim               -no-snapshot               -gpu swiftshader_indirect               -accel on               >/tmp/anthares-emulator.log 2>&1 &
+            adb start-server
+            adb wait-for-device
+            for i in $(seq 1 90); do
+              BOOTED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+              if [ "$BOOTED" = "1" ]; then
+                break
+              fi
+              sleep 2
+            done
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+            adb shell getprop ro.build.version.sdk
+            adb shell getprop ro.product.cpu.abi
+            echo "TEST_VALIDITY=ANDROID_EXECUTOR_BOOT"
+            echo "SUCCESS_SIGNAL=ANDROID_API35_BOOT_OK"
+      - run:
+          name: Save emulator diagnostics
+          command: |
+            cat /tmp/anthares-emulator.log || true
+            adb devices || true
+          when: always
+
 workflows:
   anthares_parallel:
     jobs:
       - provider_smoke
+      - android_executor_smoke
