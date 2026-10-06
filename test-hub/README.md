@@ -130,3 +130,11 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - PARTIAL/PROVEN INVENTORY BASELINE: successor run 37405510219 validly inspected 191 REST video records; all are video/mp4, all expose source_url/slug/top-level filename, only 73 expose media_details/filesize. Physical MP4 byte retrieval remains unproven.
 - Canonical findings: test-hub/findings/20261006-0249-qa-tiktok-canary-media-harness-proven.md and test-hub/findings/20261006-0251-qa-tiktok-wp-inventory-canonical-closure.md.
 - Consequence: the TikTok real canary no longer depends on WordPress media recovery; its ffmpeg/media-preparation blocker is closed. WordPress retrieval can continue independently from the 191-record inventory if needed.
+
+
+## QA closure 2026-10-06 — items 2-4
+- **Kwai publish safety: PROVEN.** Final CHAT2 acceptance run 37410436742 passed all 24 implementation/safety checks. Real Kwai publication remains gated by authenticated `kwai-login READY` and therefore is not claimed as proven.
+- **TikTok media/publisher: PROVEN.** Controlled MP4 generation and the Render publisher path are proven. The current real-canary blocker is session restoration: current diagnostics show `bootstrapped=false`, `identity_verified=false`, `ready_for_tiktok=false`, with central restore HTTP 403 and direct central-session HTTP 401. A prior allowlisted observation run 37409026789 successfully read 21 central cookies; the current OIDC/control authorization has regressed or changed outside this repository.
+- **Adversarial control contracts: PROVEN.** UNCERTAIN, observation-only reconcile, evidence-gated complete, lease_generation fencing, heartbeat, no-PC path and serialized real-publish gate passed the final CHAT2 acceptance.
+- **Final project acceptance remains OPEN** until `TIKTOK_REAL_REMOTE_POST=PROVEN` and `KWAI_REAL_REMOTE_POST=PROVEN` both have independent verification and ledger confirmation.
+- Canonical QA finding: `test-hub/findings/20261006-qa-items-2-4-final-state.md`.
