@@ -16,7 +16,7 @@ jobs:
           for i in $(seq 1 45); do
             REV=$(curl -fsS https://anthares-tiktok-render-rootless.onrender.com/health | python3 -c "import json,sys; print(json.load(sys.stdin).get('revision',''))" || true)
             echo "revision=$REV"
-            [ "$REV" = "68a069acf137a2cb8d59190b2bbdd3855f31ef82" ] && exit 0
+            [ "$REV" = "c57af706086399b058690510cb20c289fa7ab468" ] && exit 0
             sleep 8
           done
           exit 2
@@ -60,25 +60,42 @@ jobs:
           PY
           curl --fail-with-body -sS --max-time 180 https://anthares-tiktok-render-rootless.onrender.com/profile-inventory -H "Authorization: Bearer $RENDER_TOKEN" > /tmp/inventory.json
           cat /tmp/inventory.json
-          REMOTE_ID="$(python3 - <<'PY'
-          import json,re,unicodedata,sys
+          MATCH_COUNT="$(python3 - <<'PY'
+          import json,re,unicodedata
           d=json.load(open('/tmp/inventory.json'))
           if not d.get('ok'): raise SystemExit(3)
           def norm(s):
             s=unicodedata.normalize('NFKD',str(s)).encode('ascii','ignore').decode().casefold()
             return re.sub(r'[^a-z0-9]+',' ',s).strip()
-          hits=[]
+          hits=[str(x.get('id') or '') for x in d.get('items') or [] if 'universo anthares' in norm(x.get('text','')) and 'teste tecnico de publicacao' in norm(x.get('text',''))]
+          print(len(hits))
+          PY
+          )"
+          echo "MATCH_COUNT=$MATCH_COUNT"
+          if [ "$MATCH_COUNT" = "0" ]; then
+            curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v2","executor":"github","confirmed_absent":true,"confirmation_evidence":"authenticated_profile_inventory_count_zero"}' > /tmp/reconcile.json
+            cat /tmp/reconcile.json
+            echo TIKTOK_V2_RECONCILED_ABSENT
+            exit 0
+          fi
+          if [ "$MATCH_COUNT" != "1" ]; then
+            echo "TIKTOK_RECONCILE_OBSERVATION=NO_UNIQUE_POSITIVE_MATCH"
+            exit 4
+          fi
+          REMOTE_ID="$(python3 - <<'PY'
+          import json,re,unicodedata
+          d=json.load(open('/tmp/inventory.json'))
+          def norm(s):
+            s=unicodedata.normalize('NFKD',str(s)).encode('ascii','ignore').decode().casefold()
+            return re.sub(r'[^a-z0-9]+',' ',s).strip()
           for x in d.get('items') or []:
             t=norm(x.get('text',''))
             if 'universo anthares' in t and 'teste tecnico de publicacao' in t:
-              hits.append(str(x.get('id') or ''))
-          print('MATCH_COUNT='+str(len(hits)),file=sys.stderr)
-          if len(hits)!=1: raise SystemExit(4)
-          print(hits[0])
+              print(str(x.get('id') or '')); break
           PY
-          )" || { echo "TIKTOK_RECONCILE_OBSERVATION=NO_UNIQUE_POSITIVE_MATCH"; exit 4; }
+          )"
           test -n "$REMOTE_ID"
-          curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "{\"id\":\"tiktok-canary-20261006-synthetic-v2\",\"executor\":\"github\",\"confirmed\":true,\"remote_id\":\"$REMOTE_ID\",\"confirmation_evidence\":\"profile_exact_caption:$REMOTE_ID\"}" > /tmp/reconcile.json
+          curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "{"id":"tiktok-canary-20261006-synthetic-v2","executor":"github","confirmed":true,"remote_id":"$REMOTE_ID","confirmation_evidence":"profile_exact_caption:$REMOTE_ID"}" > /tmp/reconcile.json
           cat /tmp/reconcile.json
           python3 - <<'PY'
           import json
