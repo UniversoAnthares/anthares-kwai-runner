@@ -52,7 +52,7 @@ jobs:
           export ANDROID_SDK_HOME="$HOME/.android"
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           export ANDROID_HOME="/usr/local/lib/android/sdk"
-          nohup /usr/local/lib/android/sdk/emulator/emulator -avd anthares -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data -gpu swiftshader_indirect -accel off -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
+          nohup /usr/local/lib/android/sdk/emulator/emulator -avd anthares -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
           if ! timeout 120 adb wait-for-device; then
             echo EMULATOR_WAIT_FOR_DEVICE_FAILED
             cat /tmp/emulator.log || true
@@ -61,7 +61,7 @@ jobs:
             adb devices -l || true
             exit 124
           fi
-          if ! timeout 180 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'; then
+          if ! timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'; then
             echo EMULATOR_BOOT_COMPLETION_FAILED
             cat /tmp/emulator.log || true
             adb devices -l || true
