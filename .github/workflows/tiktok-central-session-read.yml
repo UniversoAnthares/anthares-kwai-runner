@@ -37,7 +37,10 @@ jobs:
               safe["cookie_count"]=len(state.get("cookies") or [])
               safe["origin_count"]=len(state.get("origins") or [])
           print(json.dumps(safe,sort_keys=True))
-          if code==200 and d.get("available") is True and isinstance(state,dict) and isinstance(state.get("cookies"),list):
+          if code==200 and d.get("available") is True and isinstance(state,dict) and isinstance(state.get("cookies"),list) and state.get("cookies"):
+              if len(state.get("cookies") or [])>256:
+                  print("CENTRAL_SESSION_COOKIE_LIMIT_INVALID")
+                  raise SystemExit(5)
               print("CENTRAL_SESSION_AVAILABLE")
               raise SystemExit(0)
           if code==404 and d.get("available") is False:
@@ -48,4 +51,115 @@ jobs:
               raise SystemExit(3)
           print("PROBE_RESPONSE_INVALID")
           raise SystemExit(4)
+          PY
+      - name: Request GitHub OIDC for Render TikTok worker
+        id: render_oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=anthares-render-worker" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+      - name: Rehydrate Render and verify TikTok identity
+        env:
+          CONTROL_TOKEN: ${{ steps.oidc.outputs.token }}
+          RENDER_TOKEN: ${{ steps.render_oidc.outputs.token }}
+          CONTROL_URL: https://anthares-control.anthares1.workers.dev
+          RENDER_URL: https://anthares-tiktok-render-rootless.onrender.com
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.error, urllib.request
+
+          control=os.environ['CONTROL_URL'].rstrip('/')
+          render=os.environ['RENDER_URL'].rstrip('/')
+          control_token=os.environ['CONTROL_TOKEN']
+          render_token=os.environ['RENDER_TOKEN']
+
+          def call(url, token, method='GET', payload=None, timeout=180):
+              headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'AntharesApprovedTikTokSession/1'}
+              body=None
+              if payload is not None:
+                  headers['Content-Type']='application/json'
+                  body=json.dumps(payload,separators=(',',':')).encode('utf-8')
+              req=urllib.request.Request(url,data=body,method=method,headers=headers)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as r:
+                      raw=r.read().decode('utf-8','replace')
+                      data=json.loads(raw) if raw else {}
+                      return int(getattr(r,'status',200)), data
+              except urllib.error.HTTPError as exc:
+                  raw=exc.read().decode('utf-8','replace')
+                  try: data=json.loads(raw) if raw else {}
+                  except Exception: data={}
+                  return int(exc.code), data
+
+          envelope=json.load(open('/tmp/session.json',encoding='utf-8'))
+          state=envelope.get('state') if isinstance(envelope,dict) else None
+          cookies=state.get('cookies') if isinstance(state,dict) else None
+          origins=state.get('origins') if isinstance(state,dict) else None
+          if not isinstance(cookies,list) or not cookies or len(cookies)>256:
+              raise SystemExit('central state failed local validation')
+          if origins is not None and not isinstance(origins,list):
+              raise SystemExit('central origins failed local validation')
+
+          code,boot=call(render+'/bootstrap-session',render_token,'POST',state,60)
+          print(json.dumps({'RENDER_OIDC_BOOTSTRAP':'OK' if code==200 and boot.get('ok') is True else 'FAILED','http':code,'cookie_count':boot.get('cookies')},sort_keys=True))
+          if code!=200 or boot.get('ok') is not True:
+              raise SystemExit('Render bootstrap failed')
+
+          code,status=call(render+'/session-status',render_token,timeout=45)
+          safe_status={
+              'RENDER_SESSION_STATUS':'OK' if code==200 and status.get('bootstrapped') is True else 'FAILED',
+              'http':code,
+              'bootstrapped':status.get('bootstrapped'),
+              'identity_verified_before_test':status.get('identity_verified'),
+              'central_restore_reason':status.get('central_restore_reason'),
+              'central_restore_http':status.get('central_restore_http'),
+          }
+          print(json.dumps(safe_status,sort_keys=True))
+          if code!=200 or status.get('bootstrapped') is not True:
+              raise SystemExit('Render session-status failed')
+
+          code,tested=call(render+'/session-test',render_token,'POST',{},180)
+          safe_test={
+              'RENDER_SESSION_TEST':'OK' if code==200 and tested.get('ok') is True and tested.get('identity_verified') is True else 'FAILED',
+              'http':code,
+              'worker_code':tested.get('code'),
+              'ok':tested.get('ok'),
+              'identity_verified':tested.get('identity_verified'),
+              'central_persisted_from_worker':tested.get('central_persisted'),
+              'error':tested.get('error'),
+          }
+          print(json.dumps(safe_test,sort_keys=True))
+          if code!=200 or tested.get('ok') is not True or tested.get('identity_verified') is not True:
+              raise SystemExit('Render session-test identity verification failed')
+
+          refreshed=tested.get('refreshed_state')
+          fresh_cookies=refreshed.get('cookies') if isinstance(refreshed,dict) else None
+          fresh_origins=refreshed.get('origins') if isinstance(refreshed,dict) else None
+          if not isinstance(fresh_cookies,list) or not fresh_cookies or len(fresh_cookies)>256:
+              raise SystemExit('refreshed state missing or invalid')
+          if not isinstance(fresh_origins,list):
+              fresh_origins=[]
+
+          code,persisted=call(control+'/tiktok/session-state',control_token,'POST',{'cookies':fresh_cookies,'origins':fresh_origins},45)
+          print(json.dumps({'CENTRAL_SESSION_PERSIST':'OK' if code==200 and persisted.get('ok') is True else 'FAILED','http':code,'cookie_count':len(fresh_cookies)},sort_keys=True))
+          if code!=200 or persisted.get('ok') is not True:
+              raise SystemExit('central session persist failed')
+
+          code,cfg=call(render+'/config-status',render_token,timeout=45)
+          safe_cfg={
+              'RENDER_CONFIG_STATUS':'OK' if code==200 and cfg.get('ok') is True else 'FAILED',
+              'http':code,
+              'ok':cfg.get('ok'),
+              'session_bootstrapped':cfg.get('session_bootstrapped'),
+              'configured':cfg.get('configured'),
+          }
+          print(json.dumps(safe_cfg,sort_keys=True))
+          if code!=200 or cfg.get('ok') is not True:
+              raise SystemExit('Render configuration incomplete')
+
+          print('TIKTOK_RENDER_REHYDRATE=PRODUCTION_PROVEN')
           PY
