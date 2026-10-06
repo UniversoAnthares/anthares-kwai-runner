@@ -1,0 +1,29 @@
+name: Kwai Promotion Gate QA15
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-promotion-gate-qa15-trigger']
+jobs:
+  qa15:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run 15 promotion contract cases
+        run: |
+          python3 - <<'PY'
+          import subprocess,os
+          good={"KWAI_QUEUE_JOB_ID":"j1","KWAI_LEASE_GENERATION":"1","KWAI_SOURCE_ID":"src","KWAI_SOURCE_START":"1.0","KWAI_SOURCE_END":"2.0"}
+          cases=[
+          ("valid",{},0),("missing_job",{"KWAI_QUEUE_JOB_ID":""},1),("missing_gen",{"KWAI_LEASE_GENERATION":""},1),
+          ("missing_source",{"KWAI_SOURCE_ID":""},1),("missing_start",{"KWAI_SOURCE_START":""},1),("missing_end",{"KWAI_SOURCE_END":""},1),
+          ("gen_zero",{"KWAI_LEASE_GENERATION":"0"},1),("gen_negative",{"KWAI_LEASE_GENERATION":"-1"},1),("gen_text",{"KWAI_LEASE_GENERATION":"x"},1),
+          ("end_equal",{"KWAI_SOURCE_END":"1.0"},1),("end_before",{"KWAI_SOURCE_END":"0.5"},1),("start_text",{"KWAI_SOURCE_START":"x"},1),
+          ("end_text",{"KWAI_SOURCE_END":"x"},1),("gen_large",{"KWAI_LEASE_GENERATION":"999999"},0),("fraction_window",{"KWAI_SOURCE_START":"1.25","KWAI_SOURCE_END":"1.26"},0)]
+          for i,(name,patch,want_fail) in enumerate(cases,1):
+            env=os.environ.copy();env.update(good);env.update(patch)
+            p=subprocess.run(["python3","kwai_real_publish_promotion_gate.py"],env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+            passed=(p.returncode!=0)==bool(want_fail)
+            print(f"PROMO15_{i:02d} {name} RC={p.returncode} PASS={passed} OUT={p.stdout.strip()}")
+            if not passed:raise SystemExit(i)
+          print("KWAI_PROMOTION_GATE_QA15_OK=15")
+          PY
