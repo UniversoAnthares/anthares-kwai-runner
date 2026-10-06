@@ -1,0 +1,27 @@
+name: Kwai READY Proof QA30
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-ready-proof-qa30-trigger']
+permissions: {contents: read}
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: {replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate fail-closed READY contract
+        env: {KWAI_EXPECTED_ACCOUNT: universo.anthares}
+        run: |
+          set -euo pipefail
+          f=/tmp/snapshot.enc; head -c 128 /dev/zero > "$f"
+          python3 kwai_ready_proof.py --account universo.anthares --identity-observed true --session-generation "$((100 + ${{ matrix.replica }}))" --snapshot "$f" --out /tmp/ready.json | grep '"state":"READY"'
+          if python3 kwai_ready_proof.py --account wrong --identity-observed true --session-generation 1 --snapshot "$f"; then exit 31; fi
+          if python3 kwai_ready_proof.py --account universo.anthares --identity-observed false --session-generation 1 --snapshot "$f"; then exit 32; fi
+          if python3 kwai_ready_proof.py --account universo.anthares --identity-observed true --session-generation 0 --snapshot "$f"; then exit 33; fi
+          if python3 kwai_ready_proof.py --account universo.anthares --identity-observed true --session-generation 1 --snapshot /tmp/missing; then exit 34; fi
+          touch -d '2 days ago' "$f"
+          if python3 kwai_ready_proof.py --account universo.anthares --identity-observed true --session-generation 1 --snapshot "$f"; then exit 35; fi
+          echo "SUCCESS_SIGNAL=KWAI_READY_PROOF_FAIL_CLOSED_${{ matrix.replica }}"
