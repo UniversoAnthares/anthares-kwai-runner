@@ -32,22 +32,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 240
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
-          script: |
-            bash <<'BASH'
-            set -euo pipefail
-            bash kwai_vault_install.sh
-            adb shell monkey -p com.kwai.video 1
-            sleep 7
-            python3 kwai_state_driver.py | tee direct-send-fsm.log
-            grep -q 'FSM_MAIN_REACHED' direct-send-fsm.log || { echo 'TEST_VALIDITY=NO_FSM_MAIN'; exit 90; }
-            echo 'TEST_VALIDITY=FSM_MAIN_REACHED'
-            set +e
-            python3 kwai_direct_send_probe.py | tee direct-send-probe.log
-            rc=${PIPESTATUS[0]}
-            set -e
-            echo "DIRECT_SEND_PROBE_RC=$rc"
-            exit "$rc"
-            BASH
+          script: bash kwai_direct_send_runner.sh
       - name: Upload direct-send evidence
         if: always()
         uses: actions/upload-artifact@v4
