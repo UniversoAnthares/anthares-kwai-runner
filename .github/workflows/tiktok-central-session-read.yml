@@ -385,7 +385,7 @@ jobs:
           PY
           )"
           echo "::add-mask::$TOKEN"
-          rec=$(curl --fail-with-body -sS -X POST "$CONTROL/github-queue/reconcile" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v2","confirmed_absent":true}')
+          rec=$(curl --fail-with-body -sS -X POST "$CONTROL/job/reconcile" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v2","executor":"github","confirmed_absent":true}')
           echo "$rec"
           python3 - "$rec" <<'PY'
           import json,sys
