@@ -1,6 +1,11 @@
 name: Arsenal global health
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'tools/arsenal_health.py'
+      - 'test-hub/ARSENAL.md'
+      - '.github/workflows/arsenal-global-health.yml'
   schedule:
     - cron: "17 */6 * * *"
 permissions:
