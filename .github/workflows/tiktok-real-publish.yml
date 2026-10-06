@@ -100,7 +100,7 @@ jobs:
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
-          if j.get('id')!='tiktok-canary-20261006-synthetic-v8' or j.get('status')!='leased':
+          if j.get('id')!='tiktok-canary-20261006-synthetic-v9' or j.get('status')!='leased':
               raise SystemExit('V9_LEASE_NOT_EXACT')
           print('V9_EXACT_LEASE',j.get('lease_generation'))
           with open('/tmp/lease-meta','w') as f:
