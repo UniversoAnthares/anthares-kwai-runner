@@ -1,0 +1,17 @@
+name: Kwai Crash Restart QA Round 2
+on:
+  push:
+    paths:
+      - '.github/workflows/kwai-crash-restart-round2.yml'
+      - 'tests/test_kwai_crash_restart_round2.py'
+permissions: {contents: read}
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [crash-after-started-before-commit, verifier-timeout-after-commit, complete-reject-after-commit, heartbeat-loss-after-started, stale-reacquire-uncertain]
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/test_kwai_crash_restart_round2.py "${{ matrix.case }}"
