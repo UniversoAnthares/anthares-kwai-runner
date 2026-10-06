@@ -1,18 +1,10 @@
 #!/usr/bin/env python3
-import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import anthares_ai
-
-
-class FakeCompleted:
-    def __init__(self, payload, returncode=0):
-        self.stdout = json.dumps(payload, ensure_ascii=False) + "\n"
-        self.stderr = ""
-        self.returncode = returncode
 
 
 class AntharesAITests(unittest.TestCase):
@@ -31,20 +23,13 @@ class AntharesAITests(unittest.TestCase):
         self.assertEqual(wrapped.count(start), 1)
         self.assertEqual(wrapped.count(end), 1)
 
-    @patch("anthares_ai.subprocess.run")
-    def test_auto_fallback_after_simulated_primary_failure(self, run):
-        # The first provider is simulated and never spawns a subprocess; the second succeeds.
-        def fake(cmd, **kwargs):
-            return FakeCompleted({
-                "provider": "grok",
-                "ok": True,
-                "status": "SUCCESS",
-                "response": "resposta do grok",
-                "elapsed_s": 1.0,
-                "marker_count": 2,
-                "end_marker_count": 2,
-            })
-        run.side_effect = fake
+    @patch("anthares_ai.invoke_runner")
+    def test_auto_fallback_after_simulated_primary_failure(self, invoke):
+        invoke.return_value = {
+            "provider": "grok", "ok": True, "status": "SUCCESS",
+            "response": "resposta do grok", "elapsed_s": 1.0,
+            "marker_count": 2, "end_marker_count": 2,
+        }
         with tempfile.TemporaryDirectory() as td:
             result = anthares_ai.execute(
                 "teste",
@@ -57,16 +42,14 @@ class AntharesAITests(unittest.TestCase):
         self.assertEqual(result["provider"], "grok")
         self.assertEqual(result["attempts"][0]["status"], "SIMULATED_FAILURE")
         self.assertEqual(result["attempts"][1]["provider"], "grok")
+        self.assertEqual(invoke.call_count, 1)
 
-    @patch("anthares_ai.subprocess.run")
-    def test_retry_retryable_then_success(self, run):
-        calls = {"n": 0}
-        def fake(cmd, **kwargs):
-            calls["n"] += 1
-            if calls["n"] == 1:
-                return FakeCompleted({"provider": "grok", "ok": False, "status": "CDP_NOT_READY", "response": "", "elapsed_s": 1.0})
-            return FakeCompleted({"provider": "grok", "ok": True, "status": "SUCCESS", "response": "ok", "elapsed_s": 1.0})
-        run.side_effect = fake
+    @patch("anthares_ai.invoke_runner")
+    def test_retry_retryable_then_success(self, invoke):
+        invoke.side_effect = [
+            {"provider": "grok", "ok": False, "status": "CDP_NOT_READY", "response": "", "elapsed_s": 1.0},
+            {"provider": "grok", "ok": True, "status": "SUCCESS", "response": "ok", "elapsed_s": 1.0},
+        ]
         with tempfile.TemporaryDirectory() as td:
             result, attempts = anthares_ai.run_with_retry(
                 "grok", "raw", 30, 30, 1, False, False, Path(td) / "log.jsonl"
@@ -74,18 +57,19 @@ class AntharesAITests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(len(attempts), 2)
 
-    @patch("anthares_ai.subprocess.run")
-    def test_non_retryable_login_required_stops(self, run):
-        run.return_value = FakeCompleted({
+    @patch("anthares_ai.invoke_runner")
+    def test_non_retryable_login_required_stops(self, invoke):
+        invoke.return_value = {
             "provider": "manus", "ok": False, "status": "LOGIN_REQUIRED",
             "response": "", "elapsed_s": 1.0,
-        })
+        }
         with tempfile.TemporaryDirectory() as td:
             result, attempts = anthares_ai.run_with_retry(
                 "manus", "raw", 30, 30, 3, False, False, Path(td) / "log.jsonl"
             )
         self.assertFalse(result["ok"])
         self.assertEqual(len(attempts), 1)
+        self.assertEqual(invoke.call_count, 1)
 
     def test_log_never_contains_prompt_or_response(self):
         with tempfile.TemporaryDirectory() as td:
