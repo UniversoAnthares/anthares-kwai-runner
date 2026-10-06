@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+import json,os,time
+p=os.getenv("KWAI_AUTH_READY_PROOF","").strip()
+if not p: raise SystemExit("KWAI_AUTH_READY_PROOF_MISSING")
+try: d=json.loads(p)
+except Exception: raise SystemExit("KWAI_AUTH_READY_PROOF_INVALID_JSON")
+required=("state","account","observed_at","proof_id")
+if any(not str(d.get(k,"")).strip() for k in required): raise SystemExit("KWAI_AUTH_READY_PROOF_INCOMPLETE")
+if d["state"]!="READY": raise SystemExit("KWAI_AUTH_NOT_READY")
+expected=os.getenv("KWAI_EXPECTED_ACCOUNT","").strip()
+if expected and d["account"]!=expected: raise SystemExit("KWAI_AUTH_ACCOUNT_MISMATCH")
+try: age=time.time()-float(d["observed_at"])
+except Exception: raise SystemExit("KWAI_AUTH_READY_PROOF_BAD_TIME")
+max_age=int(os.getenv("KWAI_READY_MAX_AGE_SECONDS","900"))
+if age < -60 or age > max_age: raise SystemExit("KWAI_AUTH_READY_PROOF_STALE")
+print("KWAI_AUTH_READY_PROOF_ACCEPTED")
