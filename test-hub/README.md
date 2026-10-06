@@ -122,3 +122,11 @@ O agente deve:
 Áreas de mutação são serializadas: `tiktok-session`, `tiktok-publish`, `kwai-login`, `kwai-publish`, `kwai-live`, `cloudflare-control`, `queue`.
 
 A existência de um lease ativo não impede probes somente-leitura, mas impede outro deploy/mudança de estado na mesma área.
+
+
+### QA closure — TikTok canary media / WordPress inventory (2026-10-06 02:51Z)
+- PROVEN: cloud synthetic canary MP4 preparation. Run 37405248345 emitted CANARY_MEDIA_HARNESS=PROVEN for imageio_ffmpeg, apt_ffmpeg and docker_ffmpeg. Preserve imageio_ffmpeg as canonical no-PC preparation path.
+- INVALID (do not count as FAILED): run 37405252389 WordPress filename reconstruction 5-way; all five jobs emitted TEST_VALIDITY=INVALID because the newest REST video record lacked media_details.file.
+- PARTIAL/PROVEN INVENTORY BASELINE: successor run 37405510219 validly inspected 191 REST video records; all are video/mp4, all expose source_url/slug/top-level filename, only 73 expose media_details/filesize. Physical MP4 byte retrieval remains unproven.
+- Canonical findings: test-hub/findings/20261006-0249-qa-tiktok-canary-media-harness-proven.md and test-hub/findings/20261006-0251-qa-tiktok-wp-inventory-canonical-closure.md.
+- Consequence: the TikTok real canary no longer depends on WordPress media recovery; its ffmpeg/media-preparation blocker is closed. WordPress retrieval can continue independently from the 191-record inventory if needed.
