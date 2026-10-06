@@ -21,9 +21,9 @@ def main():
 
     call("enqueue",{"id":JOB_ID,"platform":"tiktok","executor":"github","dedupe_key":JOB_ID,"source_id":"synthetic-owned-canary-v15","source_start":0,"source_end":5})
     lease=None
-    for _ in range(12):
+    for _ in range(60):
         x=call("lease",{"platform":"tiktok","executor":"github","ttl_seconds":900}); j=x.get("job") or {}
-        if not j: continue
+        if not j:\n            import time; time.sleep(1); continue
         if j.get("id")==JOB_ID: lease=j; break
         if j.get("publication_started"):
             raise RuntimeError("queue blocked by possibly published job "+str(j.get("id")))
