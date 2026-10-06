@@ -4,8 +4,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') { http_response_code(405); ex
 $state = '/home/u566597497/.anthares-forgejo/sync.state';
 $lockf = fopen('/home/u566597497/.anthares-forgejo/sync.lock', 'c');
 if (!$lockf || !flock($lockf, LOCK_EX | LOCK_NB)) { http_response_code(409); exit; }
-$last = is_file($state) ? (int)file_get_contents($state) : 0;
-if (time() - $last < 300) { echo "SYNC_RECENT\n"; exit; }
 $repo = '/home/u566597497/.anthares-forgejo/data/repositories/anthares-admin/anthares-kwai-runner.git';
 $cmd = '/usr/bin/git --git-dir=' . escapeshellarg($repo) . ' fetch --prune origin ' .
        escapeshellarg('+refs/heads/*:refs/heads/*') . ' ' .
