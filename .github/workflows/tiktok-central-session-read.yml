@@ -3,12 +3,14 @@ on:
   push:
     paths:
       - '.tiktok-central-session-read-trigger'
+      - '.tiktok-reconcile-observe-allowed'
   workflow_dispatch:
 permissions:
   contents: read
   id-token: write
 jobs:
   central-session-read:
+    if: ${{ !contains(github.event.head_commit.message, '[uncertain-observe]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Request GitHub OIDC for anthares-control
@@ -217,4 +219,58 @@ jobs:
           if not rows: raise SystemExit('no owned stream source discovered')
           print(json.dumps({'ANTHARES_OWNED_STREAM_CANDIDATES':rows},ensure_ascii=False,sort_keys=True))
           print('ANTHARES_OWNED_SOURCE_DISCOVERY=OK')
+          PY
+
+  uncertain-observe:
+    if: ${{ contains(github.event.head_commit.message, '[uncertain-observe]') }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 8
+    steps:
+      - name: Obtain allowed control and Render OIDC
+        run: |
+          set -euo pipefail
+          CONTROL_TOKEN="$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'https://anthares-control.anthares1.workers.dev'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )"
+          RENDER_TOKEN="$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )"
+          echo "::add-mask::$CONTROL_TOKEN"; echo "::add-mask::$RENDER_TOKEN"
+          echo "CONTROL_TOKEN=$CONTROL_TOKEN" >> "$GITHUB_ENV"
+          echo "RENDER_TOKEN=$RENDER_TOKEN" >> "$GITHUB_ENV"
+      - name: Bootstrap from central and observe exact canary
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/central.json -w '%{http_code}' https://anthares-control.anthares1.workers.dev/tiktok/session-state -H "Authorization: Bearer $CONTROL_TOKEN")"
+          python3 - "$code" <<'PY'
+          import json,sys
+          d=json.load(open('/tmp/central.json')); st=d.get('state') if isinstance(d,dict) else None; ck=st.get('cookies') if isinstance(st,dict) else None
+          print('CENTRAL_SESSION_META',{'http':int(sys.argv[1]),'available':d.get('available'),'cookie_count':len(ck or [])})
+          if int(sys.argv[1])!=200 or not ck: raise SystemExit('CENTRAL_SESSION_UNAVAILABLE')
+          json.dump(st,open('/tmp/state.json','w'),separators=(',',':'))
+          PY
+          curl --fail-with-body -sS -X POST https://anthares-tiktok-render-rootless.onrender.com/bootstrap-session -H "Authorization: Bearer $RENDER_TOKEN" -H 'Content-Type: application/json' --data-binary @/tmp/state.json >/tmp/boot.json
+          curl --fail-with-body -sS --max-time 180 https://anthares-tiktok-render-rootless.onrender.com/profile-inventory -H "Authorization: Bearer $RENDER_TOKEN" >/tmp/inventory.json
+          REMOTE_ID="$(python3 - <<'PY'
+          import json,re,unicodedata,sys
+          d=json.load(open('/tmp/inventory.json'))
+          def norm(v): return re.sub(r'[^a-z0-9]+',' ',unicodedata.normalize('NFKD',str(v)).encode('ascii','ignore').decode().casefold()).strip()
+          hits=[str(x.get('id') or '') for x in d.get('items',[]) if 'universo anthares' in norm(x.get('text','')) and 'teste tecnico de publicacao' in norm(x.get('text',''))]
+          print('MATCH_COUNT='+str(len(hits)),file=sys.stderr)
+          if len(hits)!=1: raise SystemExit(4)
+          print(hits[0])
+          PY
+          )" || { echo TIKTOK_RECONCILE_OBSERVATION=NO_UNIQUE_POSITIVE_MATCH; exit 4; }
+          curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "{\"id\":\"tiktok-canary-20261006-synthetic-v2\",\"executor\":\"github\",\"confirmed\":true,\"remote_id\":\"$REMOTE_ID\",\"confirmation_evidence\":\"profile_exact_caption:$REMOTE_ID\"}" >/tmp/reconcile.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/reconcile.json')); j=d.get('job') or {}
+          if not d.get('ok') or j.get('status')!='published' or not j.get('confirmed'): raise SystemExit('RECONCILE_NOT_CONFIRMED')
+          print('TIKTOK_REAL_REMOTE_POST=PROVEN remote_id='+str(j.get('remote_id')))
           PY
