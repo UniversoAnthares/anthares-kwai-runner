@@ -58,8 +58,78 @@ jobs:
             adb devices || true
           when: always
 
+
+  kwai_install_smoke:
+    machine:
+      image: android:default
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Inspect Android executor
+          command: |
+            set -Eeuo pipefail
+            uname -a
+            test -n "${ANDROID_HOME:-}"
+            adb version
+            emulator -version
+      - run:
+          name: Create API 35 x86_64 emulator
+          command: |
+            set -Eeuo pipefail
+            SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
+            yes | sdkmanager --licenses >/dev/null 2>&1 || true
+            sdkmanager "$SYSTEM_IMAGE"
+            echo "no" | avdmanager create avd --force --name anthares-kwai-api35 --package "$SYSTEM_IMAGE" --device "pixel_2"
+      - run:
+          name: Boot API 35 emulator
+          command: |
+            set -Eeuo pipefail
+            nohup emulator -avd anthares-kwai-api35               -no-window -no-audio -no-boot-anim -no-snapshot               -gpu swiftshader_indirect -accel on >/tmp/anthares-kwai-emulator.log 2>&1 &
+            adb start-server
+            adb wait-for-device
+            for i in $(seq 1 120); do
+              BOOTED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+              if [ "$BOOTED" = "1" ]; then break; fi
+              sleep 2
+            done
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+            adb shell getprop ro.build.version.sdk
+            adb shell getprop ro.product.cpu.abilist
+            adb shell getprop ro.dalvik.vm.native.bridge
+      - run:
+          name: Install validated Kwai vault
+          command: |
+            set -Eeuo pipefail
+            curl -fL --retry 3 --connect-timeout 10 --max-time 180               -o kwai-vault.zip               https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+            echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+            rm -rf kwai-vault
+            mkdir kwai-vault
+            unzip -q kwai-vault.zip -d kwai-vault
+            test -s kwai-vault/MANIFEST.tsv
+            bash kwai_vault_install.sh
+            adb shell pm path com.kwai.video
+            adb shell dumpsys package com.kwai.video | grep -E 'versionName|versionCode|primaryCpuAbi' | head -20
+      - run:
+          name: Probe Kwai UI and process
+          command: |
+            set -Eeuo pipefail
+            adb shell pidof com.kwai.video
+            adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null || true
+            adb pull /sdcard/kwai-ui.xml kwai-ui.xml >/dev/null || true
+            test -s kwai-ui.xml
+            grep -Eo 'text="[^"]*"|content-desc="[^"]*"' kwai-ui.xml | head -40 || true
+            echo "SUCCESS_SIGNAL=KWAI_INSTALL_AND_LAUNCH_OK"
+      - run:
+          name: Save diagnostics
+          command: |
+            cat /tmp/anthares-kwai-emulator.log || true
+            adb devices || true
+          when: always
+
 workflows:
   anthares_parallel:
     jobs:
       - provider_smoke
       - android_executor_smoke
+      - kwai_install_smoke
