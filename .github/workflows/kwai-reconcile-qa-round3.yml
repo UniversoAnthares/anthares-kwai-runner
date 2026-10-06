@@ -1,0 +1,11 @@
+name: Kwai Reconcile QA Round 3
+on: {push: {paths: ['.github/workflows/kwai-reconcile-qa-round3.yml','tests/test_kwai_reconcile_qa_round3.py']}}
+permissions: {contents: read}
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    strategy: {fail-fast: false, matrix: {case: [missing-marker, duplicate-evidence-last-invalid, unicode-title-valid, sha-case-mismatch, queue-reconcile-reject]}}
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n kwai_reconcile_uncertain.sh
+      - run: python3 tests/test_kwai_reconcile_qa_round3.py "${{ matrix.case }}"
