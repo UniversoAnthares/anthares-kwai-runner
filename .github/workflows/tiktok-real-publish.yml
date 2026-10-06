@@ -2,7 +2,7 @@ name: TikTok Real Publish
 on:
   push:
     paths:
-      - '.tiktok-direct-v11-trigger'
+      - '.tiktok-direct-v12-trigger'
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,8 +15,8 @@ jobs:
     env:
       CONTROL: https://anthares-control.anthares1.workers.dev
       EXPECTED_TIKTOK_USERNAME: universo.anthares
-      JOB_ID: tiktok-canary-20261006-synthetic-v11
-      DEDUPE: tiktok-canary-20261006-synthetic-v11
+      JOB_ID: tiktok-canary-20261006-synthetic-v12
+      DEDUPE: tiktok-canary-20261006-synthetic-v12
     steps:
       - name: Checkout runner repository
         uses: actions/checkout@v4
@@ -88,7 +88,7 @@ jobs:
             readarray -t M < /tmp/lease-meta
             id="${M[0]}"; gen="${M[1]}"; status="${M[2]}"
             if [ "$id" = "$JOB_ID" ]; then
-              echo "V5_RETIRED_AND_V11_ACQUIRED generation=$gen"
+              echo "V5_RETIRED_AND_V12_ACQUIRED generation=$gen"
               echo "LEASE_ID=$id" >> "$GITHUB_ENV"
               echo "LEASE_GEN=$gen" >> "$GITHUB_ENV"
               exit 0
@@ -110,16 +110,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "{"id":"$JOB_ID","platform":"tiktok","executor":"github","dedupe_key":"$DEDUPE","source_id":"synthetic-owned-canary-v11","source_start":0,"source_end":12}" > /tmp/enqueue.json
+          curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "{"id":"$JOB_ID","platform":"tiktok","executor":"github","dedupe_key":"$DEDUPE","source_id":"synthetic-owned-canary-v12","source_start":0,"source_end":12}" > /tmp/enqueue.json
           cat /tmp/enqueue.json
           curl --fail-with-body -sS -X POST "$CONTROL/job/lease"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data '{"platform":"tiktok","executor":"github","ttl_seconds":900}' > /tmp/lease.json
           cat /tmp/lease.json
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
-          if j.get('id')!='tiktok-canary-20261006-synthetic-v11' or j.get('status')!='leased':
-              raise SystemExit('V11_LEASE_NOT_EXACT')
-          print('V11_EXACT_LEASE',j.get('lease_generation'))
+          if j.get('id')!='tiktok-canary-20261006-synthetic-v12' or j.get('status')!='leased':
+              raise SystemExit('V12_LEASE_NOT_EXACT')
+          print('V12_EXACT_LEASE',j.get('lease_generation'))
           with open('/tmp/lease-meta','w') as f:
               f.write(str(j.get('lease_generation'))+'\n')
           PY
@@ -202,7 +202,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > /tmp/tiktok-owned-plan.json <<'JSON'
-          {"segment_id":"tiktok-canary-20261006-synthetic-v11","source_id":"synthetic-owned-canary-v6","title":"Universo Anthares — teste técnico de publicação","summary":"Teste técnico controlado de publicação do Universo Anthares."}
+          {"segment_id":"tiktok-canary-20261006-synthetic-v12","source_id":"synthetic-owned-canary-v6","title":"Universo Anthares — teste técnico de publicação","summary":"Teste técnico controlado de publicação do Universo Anthares."}
           JSON
           python3 - <<'PY'
           import json
