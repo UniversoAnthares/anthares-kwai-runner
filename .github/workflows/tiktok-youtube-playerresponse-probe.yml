@@ -1,0 +1,87 @@
+name: TikTok YouTube PlayerResponse Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.tiktok-youtube-playerresponse-trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Probe public player response for clean owned sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,urllib.parse,urllib.request
+
+          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/154.0.0.0 Safari/537.36'
+          headers={'User-Agent':ua,'Accept-Language':'pt-BR,pt;q=0.9,en;q=0.7'}
+          videos=['uohL105_5bg','otvyyx2x-fE']
+          dec=json.JSONDecoder()
+
+          def fetch(vid):
+              q=urllib.parse.urlencode({'v':vid,'hl':'pt-BR','gl':'BR','bpctr':'9999999999','has_verified':'1'})
+              req=urllib.request.Request('https://www.youtube.com/watch?'+q,headers=headers)
+              with urllib.request.urlopen(req,timeout=30) as r:
+                  return r.read().decode('utf-8','replace')
+
+          def player_response(text):
+              markers=['ytInitialPlayerResponse =','var ytInitialPlayerResponse =','window["ytInitialPlayerResponse"] =','ytInitialPlayerResponse=']
+              for marker in markers:
+                  pos=text.find(marker)
+                  if pos<0: continue
+                  brace=text.find('{',pos+len(marker))
+                  if brace<0: continue
+                  try: return dec.raw_decode(text[brace:])[0]
+                  except Exception: pass
+              # Some pages embed the object under a JSON key.
+              m=re.search(r'"ytInitialPlayerResponse"\s*:\s*',text)
+              if m:
+                  brace=text.find('{',m.end())
+                  if brace>=0:
+                      try: return dec.raw_decode(text[brace:])[0]
+                      except Exception: pass
+              return None
+
+          any_stream=False
+          for vid in videos:
+              text=fetch(vid)
+              pr=player_response(text)
+              if not isinstance(pr,dict):
+                  print(json.dumps({'video_id':vid,'html_bytes':len(text),'player_response':False,'bot_phrase':'confirm you' in text.lower()},sort_keys=True))
+                  continue
+              play=pr.get('playabilityStatus') or {}
+              sd=pr.get('streamingData') or {}
+              formats=(sd.get('formats') or [])+(sd.get('adaptiveFormats') or [])
+              audio=[f for f in formats if isinstance(f,dict) and str(f.get('mimeType') or '').startswith('audio/')]
+              direct=[f for f in audio if f.get('url')]
+              cipher=[f for f in audio if f.get('signatureCipher') or f.get('cipher')]
+              best=max(direct,key=lambda f:int(f.get('bitrate') or 0),default={})
+              safe={
+                'video_id':vid,
+                'html_bytes':len(text),
+                'player_response':True,
+                'playability_status':play.get('status'),
+                'playability_reason':play.get('reason'),
+                'format_count':len(formats),
+                'audio_count':len(audio),
+                'direct_audio_count':len(direct),
+                'cipher_audio_count':len(cipher),
+                'best_direct_audio_itag':best.get('itag'),
+                'best_direct_audio_bitrate':best.get('bitrate'),
+                'best_direct_audio_mime':best.get('mimeType'),
+                'caption_track_count':len((((pr.get('captions') or {}).get('playerCaptionsTracklistRenderer') or {}).get('captionTracks') or [])),
+              }
+              print(json.dumps(safe,ensure_ascii=False,sort_keys=True))
+              if direct: any_stream=True
+          if not any_stream: raise SystemExit('NO_DIRECT_AUDIO_STREAM')
+          print('PUBLIC_PLAYER_DIRECT_AUDIO=AVAILABLE')
+          PY
