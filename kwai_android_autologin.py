@@ -101,6 +101,9 @@ def dismiss_android_permission_dialogs():
 
 dismiss_android_permission_dialogs()
 clear_interest_discovery()
+# Normalize the current chooser into the Phone authentication surface when present.
+subprocess.run(["python3","kwai_phone_surface_probe.py"],check=False)
+time.sleep(2)
 # Stabilization matrix showed restart-after-nav is the strongest causal path.
 
 def reach_profile_semantically():
