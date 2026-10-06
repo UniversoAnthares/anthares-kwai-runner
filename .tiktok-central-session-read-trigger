@@ -1,1 +1,3 @@
 probe after Cloudflare v12 production deploy
+
+2026-10-05T20:33-04:00 v12 read-only probe
