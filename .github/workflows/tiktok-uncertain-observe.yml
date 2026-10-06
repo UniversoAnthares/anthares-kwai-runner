@@ -16,7 +16,7 @@ jobs:
           for i in $(seq 1 45); do
             REV=$(curl -fsS https://anthares-tiktok-render-rootless.onrender.com/health | python3 -c "import json,sys; print(json.load(sys.stdin).get('revision',''))" || true)
             echo "revision=$REV"
-            [ "$REV" = "ef7a3df660e73b0d53986ad57cb944f61226859d" ] && exit 0
+            [ "$REV" = "68a069acf137a2cb8d59190b2bbdd3855f31ef82" ] && exit 0
             sleep 8
           done
           exit 2
