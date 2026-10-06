@@ -9,19 +9,26 @@ permissions:
   id-token: write
 
 jobs:
-  preflight-matrix:
+  browser-session-matrix:
     strategy:
       fail-fast: false
       matrix:
-        replica: [1,2,3,4,5]
+        replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     env:
       CONTROL: https://anthares-control.anthares1.workers.dev
+      EXPECTED_TIKTOK_USERNAME: universo.anthares
     steps:
       - uses: actions/checkout@v4
+      - name: Install runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check -q playwright requests
+          command -v google-chrome
       - name: Get OIDC
         id: oidc
         shell: bash
@@ -30,19 +37,28 @@ jobs:
           TOKEN="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           echo "::add-mask::$TOKEN"
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-      - name: OIDC and session read
+      - name: Fetch central session
         env:
           TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body -sS -X POST "$CONTROL/queue-self-test" -H "Authorization: Bearer $TOKEN" >/tmp/q.json
-          curl --fail-with-body -sS "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $TOKEN" >/tmp/s.json
+          curl --fail-with-body -sS "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $TOKEN" >/tmp/session.json
           python3 - <<'PY'
           import json
-          q=json.load(open('/tmp/q.json')); s=json.load(open('/tmp/s.json'))
-          state=s.get('state') or {}; cookies=state.get('cookies') or []
-          assert q.get('ok') is True
-          assert s.get('available') is True and cookies
-          print('SAFE_PREFLIGHT_OK cookies='+str(len(cookies)))
+          d=json.load(open('/tmp/session.json')); s=d.get('state') or {}
+          assert d.get('available') is True and s.get('cookies')
+          json.dump(s,open('/tmp/tiktok-state.json','w'),separators=(',',':'))
           PY
+      - name: Browser identity preflight only
+        working-directory: direct-tiktok-publisher
+        env:
+          ATD_MODE: session
+          ATD_FAST_SESSION: "0"
+          EXPECTED_TIKTOK_USERNAME: universo.anthares
+          TIKTOK_CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          export TIKTOK_STORAGE_STATE="$(cat /tmp/tiktok-state.json)"
+          python3 tiktok_worker.py
