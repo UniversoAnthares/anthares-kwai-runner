@@ -9,13 +9,19 @@ permissions:
   id-token: write
 
 jobs:
-  oidc-matrix:
+  preflight-matrix:
     strategy:
       fail-fast: false
       matrix:
-        replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+        replica: [1,2,3,4,5]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CONTROL: https://anthares-control.anthares1.workers.dev
     steps:
+      - uses: actions/checkout@v4
       - name: Get OIDC
         id: oidc
         shell: bash
@@ -24,10 +30,19 @@ jobs:
           TOKEN="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           echo "::add-mask::$TOKEN"
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-      - name: Safe auth probe
+      - name: OIDC and session read
         env:
           TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body -sS -X POST "https://anthares-control.anthares1.workers.dev/queue-self-test" -H "Authorization: Bearer $TOKEN"
+          curl --fail-with-body -sS -X POST "$CONTROL/queue-self-test" -H "Authorization: Bearer $TOKEN" >/tmp/q.json
+          curl --fail-with-body -sS "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $TOKEN" >/tmp/s.json
+          python3 - <<'PY'
+          import json
+          q=json.load(open('/tmp/q.json')); s=json.load(open('/tmp/s.json'))
+          state=s.get('state') or {}; cookies=state.get('cookies') or []
+          assert q.get('ok') is True
+          assert s.get('available') is True and cookies
+          print('SAFE_PREFLIGHT_OK cookies='+str(len(cookies)))
+          PY
