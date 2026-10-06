@@ -1,0 +1,63 @@
+name: Android SDK discovery matrix 40
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Probe Android tool discovery case ${{ matrix.case }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          case ${{ matrix.case }} in
+            1) test -d "$SDK_ROOT" ;;
+            2) test -d "$SDK_ROOT/platform-tools" ;;
+            3) test -d "$SDK_ROOT/emulator" ;;
+            4) test -f "$SDK_ROOT/platform-tools/adb" ;;
+            5) test -f "$SDK_ROOT/emulator/emulator" ;;
+            6) test -x "$SDK_ROOT/platform-tools/adb" ;;
+            7) test -x "$SDK_ROOT/emulator/emulator" ;;
+            8) test -d "$SDK_ROOT/cmdline-tools" ;;
+            9) find "$SDK_ROOT" -type f -name sdkmanager -print -quit | grep -q . ;;
+            10) find "$SDK_ROOT" -type f -name avdmanager -print -quit | grep -q . ;;
+            11) find "$SDK_ROOT" -type f -name adb -print -quit | grep -q . ;;
+            12) find "$SDK_ROOT" -type f -name emulator -print -quit | grep -q . ;;
+            13) command -v adb >/dev/null ;;
+            14) command -v emulator >/dev/null ;;
+            15) command -v sdkmanager >/dev/null ;;
+            16) command -v avdmanager >/dev/null ;;
+            17) test -x "$SDK_ROOT/platform-tools/adb" -a -x "$SDK_ROOT/emulator/emulator" ;;
+            18) test -d "$HOME/.android" ;;
+            19) test -d "$HOME/.android/avd" || true ;;
+            20) printf '%s\n' "$SDK_ROOT" | grep -q '/android/sdk' ;;
+            21) test -r "$SDK_ROOT/platform-tools/adb" ;;
+            22) test -r "$SDK_ROOT/emulator/emulator" ;;
+            23) test -s "$SDK_ROOT/platform-tools/adb" ;;
+            24) test -s "$SDK_ROOT/emulator/emulator" ;;
+            25) find "$SDK_ROOT" -type f -name adb -perm -111 -print -quit | grep -q . ;;
+            26) find "$SDK_ROOT" -type f -name emulator -perm -111 -print -quit | grep -q . ;;
+            27) test -d "$SDK_ROOT/platform-tools" && test -d "$SDK_ROOT/emulator" ;;
+            28) test -f "$SDK_ROOT/emulator/package.xml" ;;
+            29) test -f "$SDK_ROOT/platform-tools/package.xml" ;;
+            30) test -d "$SDK_ROOT/system-images" ;;
+            31) test -d "$SDK_ROOT/build-tools" ;;
+            32) test -d "$SDK_ROOT/platforms" ;;
+            33) find "$SDK_ROOT" -type f -name sdkmanager | head -1 | grep -q sdkmanager ;;
+            34) find "$SDK_ROOT" -type f -name avdmanager | head -1 | grep -q avdmanager ;;
+            35) find "$SDK_ROOT" -type f -name adb | head -1 | grep -q adb ;;
+            36) find "$SDK_ROOT" -type f -name emulator | head -1 | grep -q emulator ;;
+            37) test -n "${ANDROID_HOME:-}" ;;
+            38) test "$(dirname "$(command -v adb)")" = "$SDK_ROOT/platform-tools" ;;
+            39) test "$(dirname "$(command -v emulator)")" = "$SDK_ROOT/emulator" ;;
+            40) test -x "$(command -v adb)" -a -x "$(command -v emulator)" ;;
+            *) exit 2 ;;
+          esac
+          echo "SDK_DISCOVERY_CASE=${{ matrix.case }} PASS"
