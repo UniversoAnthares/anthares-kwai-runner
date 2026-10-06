@@ -164,3 +164,37 @@ jobs:
           print("FAILURE_SIGNAL=LOGIN_SURFACE_NOT_REACHED")
           raise SystemExit(42)
           PY
+      - name: Probe Phone authentication form
+        run: |
+          python3 - <<'PY'
+          import subprocess,time,re,xml.etree.ElementTree as ET
+          def adb(*a):
+              return subprocess.run(["adb",*a],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=30).stdout
+          def dump(tag):
+              adb("shell","uiautomator","dump",f"/sdcard/{tag}.xml")
+              adb("pull",f"/sdcard/{tag}.xml",f"/tmp/{tag}.xml")
+              return ET.parse(f"/tmp/{tag}.xml").getroot()
+          def label(n):
+              return (n.attrib.get("text","")+" "+n.attrib.get("content-desc","")).strip().lower()
+          def tap(n):
+              m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.attrib.get("bounds",""))
+              if not m:return False
+              x1,y1,x2,y2=map(int,m.groups())
+              adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2));return True
+          root=dump("auth-chooser")
+          phone=[n for n in root.iter("node") if label(n) in ("phone","phone number","use phone","telefone","usar telefone")]
+          print("PHONE_CONTROL_COUNT="+str(len(phone)))
+          if not phone: raise SystemExit("PHONE_CONTROL_VISIBLE=0")
+          tap(phone[0]);time.sleep(4)
+          after=dump("phone-form")
+          nodes=list(after.iter("node"))
+          edits=[n for n in nodes if n.attrib.get("editable")=="true" or n.attrib.get("class","").endswith("EditText")]
+          txt=" ".join(label(n) for n in nodes)
+          print("PHONE_EDITABLE_FIELDS="+str(len(edits)))
+          print("PHONE_FORM_UI="+txt[-1800:])
+          if edits and any(k in txt for k in ("phone","country","code","continue","next","log in","login")):
+              print("SUCCESS_SIGNAL=PHONE_AUTH_FORM_REACHED")
+              raise SystemExit(0)
+          print("FAILURE_SIGNAL=PHONE_AUTH_FORM_NOT_REACHED")
+          raise SystemExit(43)
+          PY
