@@ -1,0 +1,47 @@
+name: Queue Adapter QA5
+on:
+  push:
+    branches: [main]
+    paths: ['.queue-adapter-qa5-trigger']
+permissions: {contents: read}
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [missing-oidc-url, missing-oidc-token, missing-complete-evidence, missing-reconcile-evidence, unknown-op]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          export KWAI_QUEUE_JOB_ID=j KWAI_LEASE_GENERATION=7 ANTHARES_CONTROL_URL=http://127.0.0.1:18080
+          python3 -m http.server 18080 >/dev/null 2>&1 & srv=$!; trap 'kill $srv 2>/dev/null || true' EXIT
+          case '${{ matrix.probe }}' in
+            missing-oidc-url)
+              unset ACTIONS_ID_TOKEN_REQUEST_URL ACTIONS_ID_TOKEN_REQUEST_TOKEN || true
+              set +e; ./kwai_queue_state.sh renew 60 >out 2>&1; rc=$?; set -e
+              test "$rc" != 0; grep -q OIDC_REQUEST_URL_MISSING out || grep -q 'curl:' out
+              ;;
+            missing-oidc-token)
+              export ACTIONS_ID_TOKEN_REQUEST_URL=x; unset ACTIONS_ID_TOKEN_REQUEST_TOKEN || true
+              set +e; ./kwai_queue_state.sh renew 60 >out 2>&1; rc=$?; set -e
+              test "$rc" != 0
+              ;;
+            missing-complete-evidence)
+              set +e; ./kwai_queue_state.sh complete >out 2>&1; rc=$?; set -e
+              test "$rc" != 0
+              ;;
+            missing-reconcile-evidence)
+              unset KWAI_LEASE_GENERATION || true
+              set +e; ./kwai_queue_state.sh reconcile >out 2>&1; rc=$?; set -e
+              test "$rc" != 0
+              ;;
+            unknown-op)
+              set +e; ./kwai_queue_state.sh nonsense >out 2>&1; rc=$?; set -e
+              test "$rc" != 0
+              ;;
+          esac
+          ! grep -q 'STATE=CENTRAL_' out
+          echo "PROBE_${{ matrix.probe }}_FAIL_CLOSED_OK"
