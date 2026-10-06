@@ -70,3 +70,23 @@ jobs:
           "$AD" wait-for-device
           timeout 180 bash -c 'until [ "$('"$AD"' shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
           echo RUNTIME_HARNESS_PROVEN=$V
+          bash kwai_vault_install.sh
+          "$AD" shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
+          "$AD" shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+          sleep 8
+          "$AD" shell pidof com.kwai.video >/dev/null
+          echo KWAI_LAUNCHED=$V
+          set +e
+          PATH="$(dirname "$AD"):$PATH" python3 kwai_state_driver.py | tee /tmp/fsm.log
+          RC=${PIPESTATUS[0]}
+          set -e
+          if grep -q FSM_MAIN_REACHED /tmp/fsm.log; then
+            echo SUCCESS_SIGNAL=KWAI_RESOURCE_TO_MAIN_PROVEN_$V
+            exit 0
+          fi
+          if grep -q RESOURCE_LOADING_TIMEOUT /tmp/fsm.log; then
+            echo FAILURE_SIGNAL=KWAI_RESOURCE_LOADING_TIMEOUT_$V
+            exit 21
+          fi
+          echo TEST_VALIDITY=INVALID_FSM_RC_${RC}_VARIANT_$V
+          exit 22
