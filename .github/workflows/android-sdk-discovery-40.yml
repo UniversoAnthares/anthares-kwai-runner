@@ -1,6 +1,8 @@
 name: Android SDK discovery matrix 40
 on:
   workflow_dispatch:
+  push:
+    paths: ['.github/workflows/android-sdk-discovery-40.yml']
 permissions:
   contents: read
 jobs:
