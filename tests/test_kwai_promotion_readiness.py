@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-import pathlib,re,sys
+import pathlib,sys
 root=pathlib.Path(__file__).resolve().parents[1]
 wf=(root/".github/workflows/kwai-real-publish.yml").read_text()
 pub=(root/"kwai_publish.sh").read_text()
+gate=(root/"kwai_real_publish_promotion_gate.py").read_text()
 checks={
 "auth-gate": "Type YES only after kwai-login reports READY" in wf,
 "production-still-guarded": "Real publication remains gated until the kwai-publish acceptance workflow is promoted." in wf and "kwai_publish.sh" not in wf,
-"canonical-interval": all(x in wf for x in ["source_id","source_start","source_end","KWAI_CANONICAL_INTERVAL_GATE_OK"]),
+"canonical-contract-wired": "kwai_real_publish_promotion_gate.py" in wf and "KWAI_CANONICAL_INTERVAL_GATE_OK" in wf,
+"canonical-identity": all(x in gate for x in ["KWAI_QUEUE_JOB_ID","KWAI_LEASE_GENERATION","KWAI_SOURCE_ID","KWAI_SOURCE_START","KWAI_SOURCE_END"]),
+"canonical-fail-closed": "PROMOTION_CONTRACT_MISSING" in gate and "PROMOTION_CONTRACT_INVALID" in gate,
 "publisher-fencing": all(x in pub for x in ["KWAI_LEASE_GENERATION","kwai_queue_heartbeat.sh","kwai_queue_state.sh started"]),
 "uncertain-path": "STATE=UNCERTAIN" in pub and "kwai_queue_state.sh fail" in pub,
 }
