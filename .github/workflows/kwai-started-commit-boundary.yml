@@ -1,0 +1,11 @@
+name: Kwai Started Commit Boundary
+on:
+  push:
+    paths: ['tests/test_kwai_started_commit_boundary.sh', '.kwai-started-commit-trigger']
+permissions: { contents: read }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tests/test_kwai_started_commit_boundary.sh
