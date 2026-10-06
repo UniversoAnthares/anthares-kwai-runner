@@ -10,7 +10,7 @@ permissions:
   id-token: write
 jobs:
   central-session-read:
-    if: ${{ !contains(github.event.head_commit.message, '[uncertain-observe]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[uncertain-observe]') && !contains(github.event.head_commit.message, '[reconcile-v2]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Request GitHub OIDC for anthares-control
@@ -291,4 +291,31 @@ jobs:
           d=json.load(open('/tmp/reconcile.json')); j=d.get('job') or {}
           if not d.get('ok') or j.get('status')!='published' or not j.get('confirmed'): raise SystemExit('RECONCILE_NOT_CONFIRMED')
           print('TIKTOK_REAL_REMOTE_POST=PROVEN remote_id='+str(j.get('remote_id')))
+          PY
+
+  reconcile-v2:
+    if: ${{ contains(github.event.head_commit.message, '[reconcile-v2]') }}
+    runs-on: ubuntu-slim
+    steps:
+      - name: Reconcile confirmed-absent v2 through allowlisted workflow identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONTROL="https://anthares-control.anthares1.workers.dev"
+          TOKEN="$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'https://anthares-control.anthares1.workers.dev'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )"
+          echo "::add-mask::$TOKEN"
+          fail=$(curl --fail-with-body -sS -X POST "$CONTROL/github-queue/fail" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v2","lease_generation":3,"error_class":"reconciled_absent","error_message":"independent profile reconciliation confirmed no diagnostic post","published_possible":true}')
+          echo "$fail"
+          rec=$(curl --fail-with-body -sS -X POST "$CONTROL/github-queue/reconcile" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v2","confirmed_absent":true}')
+          echo "$rec"
+          python3 - "$rec" <<'PY'
+          import json,sys
+          d=json.loads(sys.argv[1]); j=d.get('job') or {}
+          if not d.get('ok') or j.get('status')!='queued': raise SystemExit('V2_NOT_REQUEUED')
+          print('V2_RECONCILED_ABSENT_AND_QUEUED')
           PY
