@@ -1,0 +1,56 @@
+name: Kwai Resource Module 30-Way
+on:
+  push:
+    paths: ['.kwai-resource30-trigger']
+permissions:
+  contents: read
+jobs:
+  resource:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch validated Kwai vault
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+          rm -rf kwai-vault && mkdir kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+      - name: Probe profile module without credentials
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          R: ${{ matrix.replica }}
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            set -euo pipefail
+            bash kwai_vault_install.sh
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+            sleep 8
+            python3 kwai_state_driver.py | tee /tmp/fsm.log
+            grep -q FSM_MAIN_REACHED /tmp/fsm.log
+            for n in $(seq 1 60); do
+              adb shell uiautomator dump /sdcard/r.xml >/dev/null 2>&1 || true
+              T="$(adb shell cat /sdcard/r.xml 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+              if ! grep -q 'resource downloading' <<<"$T"; then
+                echo RESOURCE_MODULE_READY_REPLICA=$R
+                exit 0
+              fi
+              sleep 3
+            done
+            echo RESOURCE_MODULE_TIMEOUT_REPLICA=$R
+            exit 21
