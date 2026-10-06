@@ -15,12 +15,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          SDKMANAGER="$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -1)"
-          AVDMANAGER="$(find "$ANDROID_HOME" -type f -name avdmanager 2>/dev/null | head -1)"
+          export ANDROID_SDK_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$ANDROID_SDK_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager 2>/dev/null | head -1)"
+          AVDMANAGER="$(find "$SDK_ROOT" -type f -name avdmanager 2>/dev/null | head -1)"
+          EMULATOR="$(find "$SDK_ROOT" -type f -name emulator -perm -111 2>/dev/null | head -1)"
+          ADB="$(find "$SDK_ROOT" -type f -name adb -perm -111 2>/dev/null | head -1)"
           [ -x "$SDKMANAGER" ] || { echo "FAILURE_SIGNAL=SDKMANAGER_NOT_FOUND"; exit 2; }
           [ -x "$AVDMANAGER" ] || { echo "FAILURE_SIGNAL=AVDMANAGER_NOT_FOUND"; exit 2; }
+          [ -x "$EMULATOR" ] || { echo "FAILURE_SIGNAL=EMULATOR_NOT_FOUND"; exit 2; }
+          [ -x "$ADB" ] || { echo "FAILURE_SIGNAL=ADB_NOT_FOUND"; exit 2; }
+          echo "$(dirname "$EMULATOR")" >> "$GITHUB_PATH"
+          echo "$(dirname "$ADB")" >> "$GITHUB_PATH"
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
           "$SDKMANAGER" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
           echo no | "$AVDMANAGER" create avd -n anthares-remote -k "system-images;android-35;google_apis;x86_64" --device "pixel_5"
@@ -28,9 +36,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export ANDROID_AVD_HOME="$HOME/.android/avd"
-          /usr/local/lib/android/sdk/emulator/emulator -avd anthares-remote -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 2048 -accel on >/tmp/emulator.log 2>&1 &
-          adb wait-for-device
+          export ANDROID_SDK_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$ANDROID_SDK_HOME/avd"
+          EMULATOR="$(command -v emulator)"
+          "$EMULATOR" -avd anthares-remote -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 2048 -accel on >/tmp/emulator.log 2>&1 &
+          timeout 60 adb wait-for-device
           for i in $(seq 1 90); do
             [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && { echo TEST_VALIDITY=EMULATOR_BOOTED; exit 0; }
             sleep 2
