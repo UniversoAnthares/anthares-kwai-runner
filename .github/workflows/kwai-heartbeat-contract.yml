@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'kwai_queue_heartbeat.sh'
+      - 'kwai_publish.sh'
       - '.github/workflows/kwai-heartbeat-contract.yml'
   workflow_dispatch:
 permissions:
@@ -41,3 +42,15 @@ jobs:
           test "$rc" -eq 49
           grep -q 'STATE=FAILED_SAFE REASON=lease-heartbeat-lost' fail.log
           echo KWAI_HEARTBEAT_CONTRACT_OK
+          cd "$GITHUB_WORKSPACE"
+          bash -n kwai_publish.sh
+          grep -q 'KWAI_LEASE_GENERATION.*required for fenced publication' kwai_publish.sh
+          grep -q 'exec bash kwai_queue_heartbeat.sh bash "\$0" "\$@"' kwai_publish.sh
+          grep -q 'KWAI_HEARTBEAT_ACTIVE' kwai_publish.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("kwai_publish.sh").read_text()
+          assert s.index("exec bash kwai_queue_heartbeat.sh") < s.index('REPORT="kwai-publish-status.txt"')
+          assert s.count("exec bash kwai_queue_heartbeat.sh")==1
+          print("KWAI_PUBLISH_HEARTBEAT_WIRING_OK")
+          PY
