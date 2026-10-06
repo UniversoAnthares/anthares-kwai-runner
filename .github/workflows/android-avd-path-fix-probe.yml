@@ -1,0 +1,40 @@
+name: Android Emulator AVD Path Fix Probe
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.android-avd-path-fix-trigger']
+permissions: { contents: read }
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install API 35 image and create explicit AVD path
+        run: |
+          set -euo pipefail
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export ANDROID_SDK_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n fixprobe -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force
+          "$SDK/cmdline-tools/latest/bin/avdmanager" list avd
+          test -s "$ANDROID_AVD_HOME/fixprobe.ini"
+          test -s "$ANDROID_AVD_HOME/fixprobe.avd/config.ini"
+      - name: Boot
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
+          export PATH="$SDK/platform-tools:$SDK/emulator:$PATH"
+          sudo chmod 666 /dev/kvm
+          nohup "$SDK/emulator/emulator" -avd fixprobe -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 2 -accel on -no-snapshot-save >/tmp/emulator.log 2>&1 &
+          timeout 90 adb wait-for-device
+          timeout 180 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+          echo "ANDROID_AVD_PATH_FIX_PROVEN=1"
+          adb devices -l
