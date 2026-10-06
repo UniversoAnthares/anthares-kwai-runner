@@ -2,7 +2,7 @@ name: TikTok Real Publish
 on:
   push:
     paths:
-      - '.tiktok-direct-v8-trigger'
+      - '.tiktok-direct-v9-trigger'
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,7 +15,7 @@ jobs:
     env:
       CONTROL: https://anthares-control.anthares1.workers.dev
       EXPECTED_TIKTOK_USERNAME: universo.anthares
-      JOB_ID: tiktok-canary-20261006-synthetic-v8
+      JOB_ID: tiktok-canary-20261006-synthetic-v9
       DEDUPE: tiktok-canary-20261006-synthetic-v8
     steps:
       - name: Checkout runner repository
@@ -26,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m pip install --disable-pip-version-check -q playwright requests
-          python3 -m playwright install --with-deps chromium
+          command -v google-chrome || command -v chromium || exit 30
 
       - name: Obtain Cloudflare control OIDC
         id: oidc
@@ -173,6 +173,7 @@ jobs:
         working-directory: direct-tiktok-publisher
         env:
           EXPECTED_TIKTOK_USERNAME: universo.anthares
+          TIKTOK_CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
           ATD_MODE: session
           TIKTOK_YOUTUBE_PLAN: /tmp/tiktok-owned-plan.json
           ATD_ARTIFACT_DIR: /tmp/tiktok-artifacts
