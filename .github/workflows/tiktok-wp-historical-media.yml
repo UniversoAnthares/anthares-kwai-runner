@@ -1,0 +1,37 @@
+name: TikTok WP Historical Media 5-Way
+on:
+  push:
+    paths: ['.github/workflows/tiktok-wp-historical-media.yml']
+  workflow_dispatch:
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        strategy: [oldest, middle, parent_page, encoded_path, query_bust]
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Probe historical media
+        env:
+          STRATEGY: ${{ matrix.strategy }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.parse
+          h={'User-Agent':'Mozilla/5.0 AntharesHistoricalMedia/1'}; rows=[]
+          for p in (1,2):
+            with urllib.request.urlopen(urllib.request.Request('https://anthares.us/wp-json/wp/v2/media?media_type=video&per_page=100&page='+str(p)+'&orderby=date&order=desc',headers=h),timeout=25) as r: rows+=json.load(r)
+          if len(rows)<20: print('TEST_VALIDITY=INVALID'); raise SystemExit(3)
+          s=os.environ['STRATEGY']; x=rows[-1] if s=='oldest' else rows[len(rows)//2] if s=='middle' else rows[0]; u=x.get('source_url','')
+          if s=='encoded_path':
+            z=urllib.parse.urlsplit(u); u=urllib.parse.urlunsplit((z.scheme,z.netloc,urllib.parse.quote(urllib.parse.unquote(z.path),safe='/'),z.query,z.fragment))
+          if s=='query_bust': u+=('?anthares_probe=1')
+          if s=='parent_page': print('PARENT_ID',x.get('post'))
+          try:
+            with urllib.request.urlopen(urllib.request.Request(u,headers=h),timeout=30) as r:
+              b=r.read(131072); print('STRATEGY',s,'HTTP',r.status,'BYTES',len(b),'CT',r.headers.get('Content-Type'),'URL',u)
+              if r.status in (200,206) and len(b)>=1024: print('HISTORICAL_MEDIA=PROVEN',s)
+              else: raise SystemExit(2)
+          except Exception as e: print('STRATEGY',s,'ERROR',type(e).__name__,getattr(e,'code','')); raise
+          PY
