@@ -413,7 +413,7 @@ jobs:
           PY
 
   reconcile-v2:
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    if: ${{ false }}
     runs-on: ubuntu-slim
     steps:
       - name: Reconcile confirmed-absent v2 through allowlisted workflow identity
