@@ -34,7 +34,7 @@ jobs:
           print('PREFLIGHT_REPLICA_'+os.environ['N']+'=PROVEN')
           PY
   lean-v14:
-    needs: preflight:
+    needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
