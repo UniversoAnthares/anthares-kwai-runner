@@ -1,0 +1,56 @@
+name: TikTok Safe Preflight Round 2
+on:
+  push:
+    paths:
+      - '.tiktok-safe-preflight-r2'
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [render-session-status, render-session-test, render-bad-token, control-public-health, control-queue-no-token]
+    runs-on: ubuntu-slim
+    steps:
+      - name: Probe
+        shell: bash
+        env:
+          CASE: ${{ matrix.case }}
+        run: |
+          set -euo pipefail
+          C=https://anthares-control.anthares1.workers.dev
+          R=https://anthares-tiktok-render-rootless.onrender.com
+          token() {
+            python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          }
+          code=0
+          case "$CASE" in
+            render-session-status)
+              T="$(token)"; echo "::add-mask::$T"; code=$(curl -sS -o /tmp/r -w '%{http_code}' "$R/session-status" -H "Authorization: Bearer $T"); test "$code" = 200 ;;
+            render-session-test)
+              T="$(token)"; echo "::add-mask::$T"; code=$(curl -sS -o /tmp/r -w '%{http_code}' -X POST "$R/session-test" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' --data '{}'); test "$code" = 200 ;;
+            render-bad-token)
+              code=$(curl -sS -o /tmp/r -w '%{http_code}' "$R/session-status" -H 'Authorization: Bearer invalid-probe-token'); test "$code" = 401 -o "$code" = 403 ;;
+            control-public-health)
+              code=$(curl -sS -o /tmp/r -w '%{http_code}' "$C/health"); test "$code" = 200 ;;
+            control-queue-no-token)
+              code=$(curl -sS -o /tmp/r -w '%{http_code}' "$C/github-queue/health"); test "$code" = 401 -o "$code" = 403 ;;
+          esac
+          echo "ROUND2_PROBE case=$CASE http=$code"
+          if [ "$CASE" = render-session-status ] || [ "$CASE" = render-session-test ]; then
+            python3 - <<'PY'
+          import json,os
+          d=json.load(open('/tmp/r'))
+          print({k:d.get(k) for k in ('ok','bootstrapped','identity_verified','ready_for_tiktok')})
+          if os.environ['CASE']=='render-session-status':
+              assert d.get('bootstrapped') and d.get('identity_verified') and d.get('ready_for_tiktok')
+          else:
+              assert d.get('ok') and d.get('identity_verified')
+          PY
+          fi
