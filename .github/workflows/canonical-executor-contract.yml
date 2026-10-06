@@ -1,0 +1,33 @@
+name: Canonical Executor Contract
+on:
+  push:
+    branches: [main]
+    paths: ['kwai_claim_job.sh','kwai_run_next_job.sh','kwai_real_publish_promotion_gate.py','.canonical-executor-trigger']
+permissions: {contents: read}
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          bash -n kwai_claim_job.sh kwai_run_next_job.sh
+          python3 -m py_compile kwai_real_publish_promotion_gate.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("kwai_run_next_job.sh").read_text()
+          order=["kwai_claim_job.sh","kwai_real_publish_promotion_gate.py","kwai_publish.sh"]
+          pos=[s.index(x) for x in order]; assert pos==sorted(pos),pos
+          assert s.count("bash kwai_publish.sh")==1
+          assert "if [ \"$rc\" -ne 90 ]" in s
+          assert "kwai_reconcile_uncertain.sh" in s
+          assert s.index("kwai_reconcile_uncertain.sh") > s.index("if [ \"$rc\" -ne 90 ]")
+          c=Path("kwai_claim_job.sh").read_text()
+          for x in ["github-queue-get/lease?platform=kwai","KWAI_QUEUE_JOB_ID","KWAI_LEASE_GENERATION","KWAI_QUEUE_CLAIM_READY"]: assert x in c
+          assert "source_start" in c and "source_end" in c
+          print("CANONICAL_EXECUTOR_ORDER_OK")
+          print("SINGLE_PUBLISH_INVOCATION_OK")
+          print("UNCERTAIN_ONLY_RECONCILE_OK")
+          print("FENCED_CLAIM_EXPORT_OK")
+          PY
