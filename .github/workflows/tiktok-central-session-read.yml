@@ -73,7 +73,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code="$(curl -sS --max-time 60 -o /tmp/r.json -w '%{http_code}' -X POST https://anthares-control.anthares1.workers.dev/job/reconcile             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data '{"id":"tiktok-canary-20261006-synthetic-v2","executor":"github","confirmed_absent":true,"confirmation_evidence":"authenticated_profile_inventory_count_zero_after_identity_verified"}')"
+          code=000
+          for attempt in 1 2 3 4 5; do
+            code="$(curl -sS --max-time 60 -o /tmp/r.json -w '%{http_code}' -X POST https://anthares-control.anthares1.workers.dev/job/reconcile             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data '{"id":"tiktok-canary-20261006-synthetic-v2","executor":"github","confirmed_absent":true,"confirmation_evidence":"authenticated_profile_inventory_count_zero_after_identity_verified"}')"
+            if [ "$code" != "409" ]; then break; fi
+            sleep $((attempt*5))
+          done
+          echo "RECONCILE_FINAL_ATTEMPTS=$attempt"
           python3 - "$code" <<'PY'
           import json,sys
           code=int(sys.argv[1])
