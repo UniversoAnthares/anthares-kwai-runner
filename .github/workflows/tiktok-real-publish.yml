@@ -14,10 +14,8 @@ jobs:
       RENDER: https://anthares-tiktok-render-rootless.onrender.com
       JOB_ID: tiktok-canary-20261006-synthetic-v14
     steps:
-      - name: Checkout media publisher
+      - name: Checkout runner repository
         uses: actions/checkout@v4
-        with:
-          repository: UniversoAnthares/anthares-clipper
       - name: Get control and Render OIDC
         id: oidc
         shell: bash
