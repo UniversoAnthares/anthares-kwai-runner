@@ -180,32 +180,45 @@ jobs:
           print("FAILURE_SIGNAL=LOGIN_SURFACE_NOT_REACHED")
           raise SystemExit(42)
           PY
-      - name: Open Phone auth through Kwai Studio web fallback
+      - name: Open official Kwai Studio Phone form with 15 observations
         run: |
           python3 - <<'PY'
-          import subprocess,time,xml.etree.ElementTree as ET
+          import subprocess,time,re,xml.etree.ElementTree as ET
           def adb(*a):
               return subprocess.run(["adb",*a],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=30).stdout
-          # The official Kwai Studio exposes a direct Phone Number + Verification Code login form.
-          adb("shell","am","start","-a","android.intent.action.VIEW","-d","https://studio.kwai.com/")
-          time.sleep(8)
-          for n in range(5):
-              adb("shell","uiautomator","dump","/sdcard/studio.xml")
-              adb("pull","/sdcard/studio.xml","/tmp/studio.xml")
-              try:
-                  root=ET.parse("/tmp/studio.xml").getroot(); break
-              except Exception:
-                  time.sleep(2)
-          else: raise SystemExit("STUDIO_DUMP_UNAVAILABLE")
-          nodes=list(root.iter("node"))
-          def lab(x): return (x.attrib.get("text","")+" "+x.attrib.get("content-desc","")+" "+x.attrib.get("resource-id","")).strip().lower()
-          edits=[x for x in nodes if x.attrib.get("editable")=="true" or x.attrib.get("class","").endswith("EditText")]
-          txt=" ".join(lab(x) for x in nodes)
-          print("STUDIO_EDITABLE_FIELDS="+str(len(edits)))
-          print("STUDIO_UI="+txt[-2000:])
-          if edits and any(k in txt for k in ("phone","verification","code","password","log in","login")):
-              print("SUCCESS_SIGNAL=KWAI_STUDIO_PHONE_FORM_REACHED")
-              raise SystemExit(0)
-          print("FAILURE_SIGNAL=KWAI_STUDIO_PHONE_FORM_NOT_REACHED")
+          def snap(tag):
+              adb("shell","uiautomator","dump",f"/sdcard/{tag}.xml")
+              adb("pull",f"/sdcard/{tag}.xml",f"/tmp/{tag}.xml")
+              try:return ET.parse(f"/tmp/{tag}.xml").getroot()
+              except:return None
+          def lab(x):return (x.attrib.get("text","")+" "+x.attrib.get("content-desc","")+" "+x.attrib.get("resource-id","")).strip().lower()
+          def tap(n):
+              m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.attrib.get("bounds",""))
+              if not m:return False
+              a,b,c,d=map(int,m.groups());adb("shell","input","tap",str((a+c)//2),str((b+d)//2));return True
+          url="https://studio.kwai.com/"
+          adb("shell","am","start","-a","android.intent.action.VIEW","-d",url);time.sleep(4)
+          r=snap("chrome-fre")
+          if r is not None:
+              ns=list(r.iter("node"))
+              dismiss=next((n for n in ns if "use without an account" in lab(n)),None)
+              if dismiss is not None:
+                  print("CHROME_FRE_DETECTED=1");tap(dismiss);time.sleep(3)
+          # Force the official URL again after Chrome first-run is cleared.
+          adb("shell","am","start","-a","android.intent.action.VIEW","-d",url)
+          for attempt in range(1,16):
+              time.sleep(2)
+              r=snap("studio-"+str(attempt))
+              if r is None:
+                  print("STUDIO15_"+str(attempt)+"=DUMP_UNAVAILABLE");continue
+              ns=list(r.iter("node")); txt=" ".join(lab(n) for n in ns)
+              edits=[n for n in ns if n.attrib.get("editable")=="true" or n.attrib.get("class","").endswith("EditText")]
+              print("STUDIO15_"+str(attempt)+" EDITS="+str(len(edits))+" PHONE="+str("phone" in txt)+" CODE="+str("verification" in txt or "code" in txt)+" UI="+txt[-700:])
+              if edits and "phone" in txt and ("verification" in txt or "code" in txt):
+                  print("SUCCESS_SIGNAL=KWAI_STUDIO_PHONE_FORM_REACHED")
+                  raise SystemExit(0)
+              if attempt in (5,10):
+                  adb("shell","am","start","-a","android.intent.action.VIEW","-d",url)
+          print("FAILURE_SIGNAL=KWAI_STUDIO_15_OBSERVATIONS_EXHAUSTED")
           raise SystemExit(46)
           PY
