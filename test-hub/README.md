@@ -59,7 +59,7 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 
 ### Kwai: cadeia causal atual
 - PROVEN: FSM state-driven alcança MAIN em múltiplas réplicas e deve ser preservada; não voltar a matrizes pré-normalização.
-- UNKNOWN/NOT_TESTED: recovery específico de Pixel Launcher ANR; run 37385649745 teve seis FSM_MAIN_REACHED, mas nenhum job concluído observou LAUNCHER_ANR e quatro foram cancelados.
+- FAILED/OPEN: recovery específico de Pixel Launcher ANR tornou-se gargalo real no run 37392541208: STATE=LAUNCHER_ANR repetiu até FSM_TIMEOUT antes do ACTION_SEND. Esse run não testou SEND. Corrigir recovery causalmente antes de interpretar novos failures pré-MAIN.
 - PROVEN: Manifest válido no run 37388030409 declarou SplashLoginActivity, PhoneAccountActivityV2, EmailLoginActivity, LoginActivity, CommonLoginActivity, KwaiAuthActivity e outras.
 - IMPORTANTE: SplashLoginActivity, PhoneAccountActivityV2, EmailLoginActivity e LoginActivity são android:exported=false no Manifest. Permission Denial via adb shell não prova ausência da UI. KwaiAuthActivity/LivePartnerAuthActivity são exported=true.
 - PROVEN: run 37388231997 confirmou que cinco Activities internas selecionadas são bloqueadas por `not exported`; isto prova apenas a fronteira de start externo, não ausência da UI. Não repetir `am start` nelas.
@@ -72,7 +72,7 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 - Publicação real continua em quarentena até identidade/autenticação READY do Kwai. O blocker Cloudflare v12 já foi fechado.
 
 ### TikTok: cadeia causal atual
-- FAILED/HARNESS: probe 37388273031 expirou esperando marcador de revisão stale; não testou sessão e publish ficou skipped. Probe válido posterior 37389276949 alcançou Render correto e mostrou restore central HTTP 403, bootstrapped=false, identity_verified=false. Fallback por seed de ambiente também FAILED no run 37389620043: revisão correta ativa, mas bootstrapped=false e restore central ainda HTTP 403. Não repetir central GET/env-seed sem mudança causal.
+- SUPERSEDED: os antigos 403 ocorreram antes do Cloudflare v12. PROVEN agora: run 37394495580 leu a sessão central via OIDC em produção, HTTP 200, available=true, cookie_count=21. Próximo passo TikTok é restaurar esse estado no Render e provar identidade; publicação continua bloqueada até ready_for_tiktok.
 - Modo DIAGNOSTIC atual: 3 posts/dia com observação 3–6h para investigar baixa distribuição. A meta/capacidade de produção 100/dia permanece separada; nenhum modo deve ser usado como prova do outro.
 - O caminho workflow_dispatch de tiktok-real-publish ainda não satisfaz aceitação production-PROVEN: precisa alinhar endpoint ativo, validar identidade imediatamente antes, verificar o novo post independentemente e fechar ledger/estado incerto.
 
