@@ -2,7 +2,7 @@ name: TikTok Real Publish
 on:
   push:
     paths:
-      - '.tiktok-canary-run3'
+      - '.tiktok-canary-run4'
   workflow_dispatch:
     inputs:
       video_url:
@@ -116,7 +116,7 @@ jobs:
 
   synthetic-controlled-canary:
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     timeout-minutes: 15
     steps:
       - name: Generate deterministic owned diagnostic MP4
