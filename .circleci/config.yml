@@ -127,9 +127,85 @@ jobs:
             adb devices || true
           when: always
 
+
+  kwai_login_surface_smoke:
+    machine:
+      image: android:default
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Create API 35 x86_64 emulator
+          command: |
+            set -Eeuo pipefail
+            SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
+            yes | sdkmanager --licenses >/dev/null 2>&1 || true
+            sdkmanager "$SYSTEM_IMAGE"
+            echo "no" | avdmanager create avd --force --name anthares-kwai-login --package "$SYSTEM_IMAGE" --device "pixel_2"
+      - run:
+          name: Boot emulator with bounded ADB wait
+          command: |
+            set -Eeuo pipefail
+            nohup emulator -avd anthares-kwai-login               -no-window -no-audio -no-boot-anim -no-snapshot               -gpu swiftshader_indirect -accel on >/tmp/anthares-kwai-login-emulator.log 2>&1 &
+            adb start-server
+            timeout 60 adb wait-for-device
+            for i in $(seq 1 120); do
+              BOOTED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+              if [ "$BOOTED" = "1" ]; then break; fi
+              sleep 2
+            done
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+            echo "EMULATOR_BOOTED"
+      - run:
+          name: Install validated Kwai bundle
+          command: |
+            set -Eeuo pipefail
+            curl -fL --retry 3 --connect-timeout 10 --max-time 180               -o kwai-vault.zip               https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+            echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+            rm -rf kwai-vault && mkdir kwai-vault
+            unzip -q kwai-vault.zip -d kwai-vault
+            test -s kwai-vault/MANIFEST.tsv
+            bash kwai_vault_install.sh
+            adb shell pm path com.kwai.video
+            echo "APPS_INSTALLED"
+      - run:
+          name: Probe proven Profile to login surface
+          command: |
+            set -Eeuo pipefail
+            set +e
+            python3 kwai_login_control_discovery.py | tee kwai-login-surface.txt
+            rc=$?
+            set -e
+            if grep -q 'LOGIN_FORM_FOUND=1' kwai-login-surface.txt; then
+              echo "LOGIN_SURFACE=EDITABLE_FORM"
+              exit 0
+            fi
+            if grep -q 'PROFILE_MODULE_READY=1' kwai-login-surface.txt; then
+              echo "LOGIN_SURFACE=PROFILE_READY_NO_FORM"
+            elif grep -q 'PROFILE_MODULE_TIMEOUT=1' kwai-login-surface.txt; then
+              echo "LOGIN_SURFACE=PROFILE_MODULE_TIMEOUT"
+            fi
+            exit "$rc"
+      - run:
+          name: Save login-surface diagnostics
+          command: |
+            adb shell uiautomator dump /sdcard/final-ui.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/final-ui.xml final-ui.xml >/dev/null 2>&1 || true
+            cat /tmp/anthares-kwai-login-emulator.log || true
+          when: always
+      - store_artifacts:
+          path: kwai-login-surface.txt
+          destination: kwai-login-surface.txt
+      - store_artifacts:
+          path: final-ui.xml
+          destination: final-ui.xml
+
 workflows:
   anthares_parallel:
     jobs:
       - provider_smoke
       - android_executor_smoke
       - kwai_install_smoke
+      - kwai_login_surface_smoke:
+          requires:
+            - kwai_install_smoke
