@@ -21,16 +21,16 @@ jobs:
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager 2>/dev/null | head -1)"
           AVDMANAGER="$(find "$SDK_ROOT" -type f -name avdmanager 2>/dev/null | head -1)"
-          EMULATOR="$(find "$SDK_ROOT" -type f -name emulator -perm -111 2>/dev/null | head -1)"
-          ADB="$(find "$SDK_ROOT" -type f -name adb -perm -111 2>/dev/null | head -1)"
           [ -x "$SDKMANAGER" ] || { echo "FAILURE_SIGNAL=SDKMANAGER_NOT_FOUND"; exit 2; }
           [ -x "$AVDMANAGER" ] || { echo "FAILURE_SIGNAL=AVDMANAGER_NOT_FOUND"; exit 2; }
-          [ -x "$EMULATOR" ] || { echo "FAILURE_SIGNAL=EMULATOR_NOT_FOUND"; exit 2; }
-          [ -x "$ADB" ] || { echo "FAILURE_SIGNAL=ADB_NOT_FOUND"; exit 2; }
-          echo "$(dirname "$EMULATOR")" >> "$GITHUB_PATH"
-          echo "$(dirname "$ADB")" >> "$GITHUB_PATH"
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
           "$SDKMANAGER" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
+          EMULATOR="$(find "$SDK_ROOT" -type f -name emulator -perm -111 2>/dev/null | head -1)"
+          ADB="$(find "$SDK_ROOT" -type f -name adb -perm -111 2>/dev/null | head -1)"
+          [ -x "$EMULATOR" ] || { echo "FAILURE_SIGNAL=EMULATOR_NOT_FOUND_AFTER_INSTALL"; exit 2; }
+          [ -x "$ADB" ] || { echo "FAILURE_SIGNAL=ADB_NOT_FOUND_AFTER_INSTALL"; exit 2; }
+          echo "$(dirname "$EMULATOR")" >> "$GITHUB_PATH"
+          echo "$(dirname "$ADB")" >> "$GITHUB_PATH"
           echo no | "$AVDMANAGER" create avd -n anthares-remote -k "system-images;android-35;google_apis;x86_64" --device "pixel_5"
       - name: Boot Android
         shell: bash
