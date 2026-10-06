@@ -13,7 +13,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Probe canary media mechanism
-        env: { MODE: ${{ matrix.mode }} }
+        env:
+          MODE: ${{ matrix.mode }}
         shell: bash
         run: |
           set -euo pipefail
