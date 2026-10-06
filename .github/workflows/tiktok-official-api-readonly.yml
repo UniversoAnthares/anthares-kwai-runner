@@ -1,0 +1,18 @@
+name: TikTok Official API Read-Only Gate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-official-api-readonly
+  cancel-in-progress: false
+jobs:
+  creator-info:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Query creator info only
+        env:
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_OFFICIAL_ACCESS_TOKEN }}
+        run: python3 tiktok_official_api.py creator-info
