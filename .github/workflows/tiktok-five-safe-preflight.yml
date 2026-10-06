@@ -2,7 +2,7 @@ name: TikTok Five Safe Preflight Probes
 on:
   push:
     paths:
-      - '.tiktok-five-safe-probes-v1'
+      - '.tiktok-five-safe-probes-v2'
 permissions:
   contents: read
   id-token: write
