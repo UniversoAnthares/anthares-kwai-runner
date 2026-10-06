@@ -262,9 +262,72 @@ jobs:
             adb devices -l || true
           when: always
 
+  kwai_same_step_probe:
+    parameters:
+      replica:
+        type: integer
+    machine:
+      image: android:default
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Replica << parameters.replica >> full same-step Kwai probe
+          no_output_timeout: 12m
+          command: |
+            set -Eeuo pipefail
+            R="<< parameters.replica >>"
+            SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
+            yes | sdkmanager --licenses >/dev/null 2>&1 || true
+            sdkmanager "$SYSTEM_IMAGE"
+            echo "no" | avdmanager create avd --force --name "anthares-kwai-full-$R" --package "$SYSTEM_IMAGE" --device "pixel_2"
+            nohup emulator -avd "anthares-kwai-full-$R" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >"/tmp/kwai-full-$R.log" 2>&1 &
+            adb start-server
+            timeout 60 adb wait-for-device
+            for i in $(seq 1 120); do
+              [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
+              sleep 2
+            done
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+            echo "REPLICA=$R BOOT_OK=1 SERIAL=$(adb get-serialno)"
+            curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+            echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+            rm -rf kwai-vault && mkdir kwai-vault
+            unzip -q kwai-vault.zip -d kwai-vault
+            bash kwai_vault_install.sh
+            echo "REPLICA=$R INSTALL_OK=1"
+            adb shell pidof com.kwai.video || true
+            adb shell uiautomator dump /sdcard/full.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/full.xml "kwai-full-$R.xml" >/dev/null 2>&1 || true
+            test -s "kwai-full-$R.xml"
+            echo "REPLICA=$R UI_DUMP_OK=1"
+      - run:
+          name: Replica << parameters.replica >> post-install liveness
+          command: |
+            set -Eeuo pipefail
+            R="<< parameters.replica >>"
+            timeout 15 adb wait-for-device
+            echo "REPLICA=$R POST_BOUNDARY_ADB=$(adb get-state)"
+            echo "REPLICA=$R POST_BOUNDARY_PID=$(adb shell pidof com.kwai.video || true)"
+
 workflows:
   anthares_parallel:
     jobs:
+      - kwai_same_step_probe:
+          name: kwai_same_step_probe_01
+          replica: 1
+      - kwai_same_step_probe:
+          name: kwai_same_step_probe_02
+          replica: 2
+      - kwai_same_step_probe:
+          name: kwai_same_step_probe_03
+          replica: 3
+      - kwai_same_step_probe:
+          name: kwai_same_step_probe_04
+          replica: 4
+      - kwai_same_step_probe:
+          name: kwai_same_step_probe_05
+          replica: 5
       - provider_smoke
       - android_executor_smoke
       - kwai_install_smoke
