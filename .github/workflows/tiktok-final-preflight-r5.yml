@@ -1,0 +1,65 @@
+name: TikTok Final Preflight Round 5
+on:
+  push:
+    paths: ['.tiktok-final-preflight-r5']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  session:
+    strategy:
+      fail-fast: false
+      matrix:
+        repetition: [1,2,3,4,5]
+    runs-on: ubuntu-slim
+    timeout-minutes: 3
+    steps:
+      - name: Exact final session gate
+        shell: bash
+        env:
+          REP: ${{ matrix.repetition }}
+        run: |
+          set -euo pipefail
+          R=https://anthares-tiktok-render-rootless.onrender.com
+          T=$(python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          )
+          echo "::add-mask::$T"
+          curl -fsS "$R/session-status" -H "Authorization: Bearer $T" >/tmp/status.json
+          python3 - <<'PY'
+          import json,os
+          d=json.load(open('/tmp/status.json'))
+          safe={k:d.get(k) for k in ('bootstrapped','identity_verified','ready_for_tiktok')}
+          print('FINAL_SESSION',os.environ['REP'],safe)
+          assert all(safe.values())
+          PY
+  media:
+    strategy:
+      fail-fast: false
+      matrix:
+        repetition: [1,2,3,4,5]
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Exact final canary media
+        shell: bash
+        env:
+          REP: ${{ matrix.repetition }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          ffmpeg -hide_banner -loglevel error -y -f lavfi -i "color=c=black:s=1080x1920:r=30:d=12" -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=48000" -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='UNIVERSO ANTHARES':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2-60,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='teste tecnico de publicacao':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=(h-text_h)/2+60" -t 12 -c:v libx264 -pix_fmt yuv420p -profile:v high -level 4.1 -preset medium -crf 20 -c:a aac -b:a 128k -movflags +faststart /tmp/canary.mp4
+          ffprobe -v error -show_entries format=duration,size -show_entries stream=codec_type,codec_name,width,height -of json /tmp/canary.mp4 >/tmp/probe.json
+          python3 - <<'PY'
+          import json,os
+          d=json.load(open('/tmp/probe.json')); dur=float(d['format']['duration']); size=int(d['format']['size']); streams=d['streams']
+          v=[s for s in streams if s.get('codec_type')=='video']; a=[s for s in streams if s.get('codec_type')=='audio']
+          assert 11.5<=dur<=12.5 and size>10000 and v and a
+          assert v[0].get('codec_name')=='h264' and v[0].get('width')==1080 and v[0].get('height')==1920
+          assert a[0].get('codec_name')=='aac'
+          print('FINAL_MEDIA',os.environ['REP'],'duration',dur,'size',size,'PASS')
+          PY
