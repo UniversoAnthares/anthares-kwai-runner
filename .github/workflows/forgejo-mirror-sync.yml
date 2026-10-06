@@ -1,6 +1,9 @@
 name: Forgejo mirror sync
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/forgejo-mirror-sync.yml
   schedule:
     - cron: "*/10 * * * *"
 permissions:
