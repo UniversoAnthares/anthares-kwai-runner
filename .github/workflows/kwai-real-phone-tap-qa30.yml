@@ -1,0 +1,68 @@
+name: Kwai Real Phone Tap QA30
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-real-phone-tap-qa30-trigger']
+permissions: {contents: read}
+jobs:
+  phone30:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch vault
+        run: |
+          curl -fL --retry 3 -o /tmp/v.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/v.zip" | sha256sum -c -
+          mkdir -p /tmp/v && python3 -c "import zipfile;zipfile.ZipFile('/tmp/v.zip').extractall('/tmp/v')"
+      - name: Android Phone 30-way
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 4096M
+          cores: 2
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 4096
+          script: |
+            adb install-multiple -r /tmp/v/*.apk
+            adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS || true
+            adb shell monkey -p com.kwai.video 1 >/dev/null
+            sleep 10
+            python3 kwai_state_driver.py
+            python3 - <<'PY'
+            import subprocess,time,re,xml.etree.ElementTree as ET
+            def a(*x):return subprocess.run(["adb",*x],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True).stdout
+            def d():
+              a("shell","uiautomator","dump","/sdcard/q.xml");x=a("shell","cat","/sdcard/q.xml")
+              try:return ET.fromstring(x)
+              except:return None
+            def lab(n):return (n.attrib.get("text","")+" "+n.attrib.get("content-desc","")).strip().lower()
+            def c(n):
+              z=[int(x) for x in re.findall(r"\d+",n.attrib.get("bounds",""))]
+              return ((z[0]+z[2])//2,(z[1]+z[3])//2) if len(z)==4 else None
+            r=d();ns=list(r.iter("node"));login=next((n for n in ns if lab(n) in ("log in","login","sign in","entrar")),None)
+            if login and c(login):x,y=c(login);a("shell","input","tap",str(x),str(y));time.sleep(3)
+            r=d();ns=list(r.iter("node"));phone=next((n for n in ns if any(k in lab(n) for k in ("phone","telefone","mobile"))),None)
+            if phone is None:raise SystemExit("PHONE30_REAL_NODE_MISSING")
+            x,y=c(phone); print("PHONE30_REAL_CENTER",x,y)
+            pts=[]
+            for dy in (-60,-30,0,30,60):
+              for dx in (-120,-60,0,60,120):pts.append((x+dx,y+dy))
+            pts += [(x-180,y),(x+180,y),(x,y-90),(x,y+90),(x,y)]
+            for i,(px,py) in enumerate(pts[:30],1):
+              a("shell","input","tap",str(px),str(py));time.sleep(2);q=d()
+              txt=" ".join(lab(n) for n in q.iter("node")) if q is not None else ""
+              edits=sum(n.attrib.get("editable")=="true" or n.attrib.get("class","").endswith("EditText") for n in q.iter("node")) if q is not None else 0
+              print(f"REALPHONE30_{i:02d} X={px} Y={py} EDITS={edits} UI={txt[-500:]}")
+              if edits or any(k in txt for k in ("phone number","verification code","get code","send code","country code")):
+                print("REALPHONE30_WINNER="+str(i));print("SUCCESS_SIGNAL=REAL_PHONE_FORM_REACHED");raise SystemExit(0)
+              a("shell","input","keyevent","4");time.sleep(1)
+              q=d();qt=" ".join(lab(n) for n in q.iter("node")) if q is not None else ""
+              if "welcome to kwai" not in qt:
+                a("shell","input","keyevent","4");time.sleep(1)
+            print("FAILURE_SIGNAL=REALPHONE30_EXHAUSTED");raise SystemExit(45)
+            PY
