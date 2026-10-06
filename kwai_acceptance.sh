@@ -13,6 +13,11 @@ adb pull /sdcard/ui.xml executor-ui.xml >/dev/null || true
 adb exec-out screencap -p > executor-screen.png || true
 echo ANDROID_EXECUTOR_ACCEPTED
 
+# Normalize launcher/onboarding through the proven state-driven recovery before credentials.
+python3 kwai_state_driver.py | tee /tmp/kwai-fsm.log
+grep -q FSM_MAIN_REACHED /tmp/kwai-fsm.log
+echo TEST_VALIDITY=FSM_MAIN_REACHED
+
 set +e
 python3 kwai_android_autologin.py
 rc=$?
