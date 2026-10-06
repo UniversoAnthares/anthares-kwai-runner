@@ -61,6 +61,23 @@ def fill_title():
     safe=TITLE[:120].replace("%","%25").replace(" ","%s").replace("&","\\&").replace("(","\\(").replace(")","\\)")
     adb("shell","input","text",safe); time.sleep(1); return True
 
+def gallery_identity_matches(root,media_name,media_sha,job_id):
+    media_name=media_name.casefold()
+    media_stem=os.path.splitext(media_name)[0]
+    sha_prefix=media_sha[:12].casefold()
+    job_token=re.sub(r"[^a-z0-9._-]","_",job_id.casefold())
+    identity_tokens=[x for x in (media_name,media_stem,sha_prefix,job_token) if len(x)>=8]
+    matches=[]
+    for n in root.iter("node"):
+        p=center(n.attrib.get("bounds",""))
+        if not p or p[1]<=180 or n.attrib.get("clickable")!="true":
+            continue
+        node_label=label(n).casefold()
+        matched=[token for token in identity_tokens if token in node_label]
+        if matched:
+            matches.append((p,node_label,matched))
+    return matches
+
 def prepare():
     adb("shell","monkey","-p","com.kwai.video","-c","android.intent.category.LAUNCHER","1"); time.sleep(3)
     if not tap(("create","criar","post","publicar","+")):
@@ -71,20 +88,8 @@ def prepare():
     if len(rows)!=1:
         print(f"STATE=FAILED_SAFE REASON=media-identity-not-unique COUNT={len(rows)}"); return 71
     print("STATE=MEDIA_IDENTITY_VERIFIED NAME="+MEDIA_NAME)
-    r=dump(); matches=[]
-    media_name=MEDIA_NAME.casefold()
-    media_stem=os.path.splitext(MEDIA_NAME)[0].casefold()
-    sha_prefix=MEDIA_SHA[:12].casefold()
-    job_token=re.sub(r"[^a-z0-9._-]","_",JOB_ID.casefold())
-    identity_tokens=[x for x in (media_name,media_stem,sha_prefix,job_token) if len(x)>=8]
-    for n in r.iter("node"):
-        p=center(n.attrib.get("bounds",""))
-        if not p or p[1]<=180 or n.attrib.get("clickable")!="true":
-            continue
-        node_label=label(n).casefold()
-        matched=[token for token in identity_tokens if token in node_label]
-        if matched:
-            matches.append((p,node_label,matched))
+    r=dump()
+    matches=gallery_identity_matches(r,MEDIA_NAME,MEDIA_SHA,JOB_ID)
     if len(matches)!=1:
         print(f"STATE=FAILED_SAFE REASON=gallery-media-identity-not-unique COUNT={len(matches)}"); return 71
     selected=matches[0]
@@ -130,4 +135,4 @@ def commit():
             print("STATE=VERIFYING HOME_RETURN=1"); return 0
     print("STATE=UNCERTAIN REASON=post-request-timeout"); return 90
 
-sys.exit(prepare() if PHASE=="prepare" else commit())
+if __name__=="__main__":\n    sys.exit(prepare() if PHASE=="prepare" else commit())
