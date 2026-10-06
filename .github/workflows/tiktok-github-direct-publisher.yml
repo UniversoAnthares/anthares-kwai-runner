@@ -2,7 +2,7 @@ name: TikTok GitHub Direct Publisher Canary
 on:
   push:
     paths:
-      - '.tiktok-github-direct-v6-trigger'
+      - '.tiktok-github-direct-v7-trigger'
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,18 +15,11 @@ jobs:
     env:
       CONTROL: https://anthares-control.anthares1.workers.dev
       EXPECTED_TIKTOK_USERNAME: universo.anthares
-      JOB_ID: tiktok-canary-20261006-synthetic-v6
-      DEDUPE: tiktok-canary-20261006-synthetic-v6
+      JOB_ID: tiktok-canary-20261006-synthetic-v7
+      DEDUPE: tiktok-canary-20261006-synthetic-v7
     steps:
       - name: Checkout runner repository
         uses: actions/checkout@v4
-
-      - name: Checkout publisher code
-        uses: actions/checkout@v4
-        with:
-          repository: UniversoAnthares/anthares-clipper
-          ref: main
-          path: publisher
 
       - name: Install browser runtime
         shell: bash
@@ -107,7 +100,7 @@ jobs:
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
-          if j.get('id')!='tiktok-canary-20261006-synthetic-v6' or j.get('status')!='leased':
+          if j.get('id')!='tiktok-canary-20261006-synthetic-v7' or j.get('status')!='leased':
               raise SystemExit('V6_LEASE_NOT_EXACT')
           print('V6_EXACT_LEASE',j.get('lease_generation'))
           with open('/tmp/lease-meta','w') as f:
@@ -135,20 +128,17 @@ jobs:
           print(json.dumps({'http':code,'cookies':len(cookies),'origins':len(state.get('origins') or [])},sort_keys=True))
           json.dump(state,open('/tmp/tiktok-state.json','w'),ensure_ascii=False,separators=(',',':'))
           PY
-          echo "TIKTOK_STORAGE_STATE<<STATE" >> "$GITHUB_ENV"
-          cat /tmp/tiktok-state.json >> "$GITHUB_ENV"
-          echo "STATE" >> "$GITHUB_ENV"
 
       - name: Direct session identity preflight
-        working-directory: publisher
+        working-directory: direct-tiktok-publisher
         env:
-          TIKTOK_STORAGE_STATE: ${{ env.TIKTOK_STORAGE_STATE }}
           ATD_MODE: session
           ATD_FAST_SESSION: "0"
           EXPECTED_TIKTOK_USERNAME: universo.anthares
         shell: bash
         run: |
           set -euo pipefail
+          export TIKTOK_STORAGE_STATE="$(cat /tmp/tiktok-state.json)"
           python3 tiktok_worker.py
 
       - name: Generate deterministic owned diagnostic MP4
@@ -180,9 +170,8 @@ jobs:
       - name: Publish directly from GitHub-hosted runner
         id: publish
         continue-on-error: true
-        working-directory: publisher
+        working-directory: direct-tiktok-publisher
         env:
-          TIKTOK_STORAGE_STATE: ${{ env.TIKTOK_STORAGE_STATE }}
           EXPECTED_TIKTOK_USERNAME: universo.anthares
           ATD_MODE: session
           TIKTOK_YOUTUBE_PLAN: /tmp/tiktok-owned-plan.json
@@ -201,6 +190,7 @@ jobs:
           p=json.load(open('/tmp/tiktok-owned-plan.json')); p['media_path']='/tmp/canary.mp4'
           json.dump(p,open('/tmp/tiktok-owned-plan.json','w'),ensure_ascii=False,separators=(',',':'))
           PY
+          export TIKTOK_STORAGE_STATE="$(cat /tmp/tiktok-state.json)"
           python3 tiktok_web_publish_local.py
 
       - name: Reconcile publication result
