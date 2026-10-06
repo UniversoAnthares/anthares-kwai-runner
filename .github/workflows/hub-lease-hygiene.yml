@@ -1,0 +1,37 @@
+name: Hub Lease Hygiene
+on:
+  push:
+    branches: [main]
+    paths: ['.hub-lease-hygiene-trigger']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  expired-running-leases:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import re
+          now=datetime.now(timezone.utc)
+          expired=[]
+          for p in Path("test-hub/findings").glob("*.md"):
+              t=p.read_text(errors="replace")
+              st=re.search(r"(?m)^STATUS:\s*([^\n]+)",t)
+              ex=re.search(r"(?m)^LEASE_EXPIRES:\s*([^\s]+)",t)
+              if not st or not ex or st.group(1).strip().upper()!="RUNNING": continue
+              try: dt=datetime.fromisoformat(ex.group(1).replace("Z","+00:00"))
+              except ValueError: continue
+              if dt < now: expired.append((dt.isoformat(),str(p)))
+          print("EXPIRED_RUNNING_COUNT="+str(len(expired)))
+          for dt,p in sorted(expired): print("EXPIRED_RUNNING",dt,p)
+          Path("expired-running-leases.txt").write_text("\n".join(p for _,p in sorted(expired))+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: expired-running-leases
+          path: expired-running-leases.txt
