@@ -13,6 +13,7 @@ on:
       - 'kwai_real_publish_promotion_gate.py'
       - '.github/workflows/kwai-real-publish.yml'
       - 'android-agent/PROTOCOL.md'
+      - '.chat2-items-2-8-trigger'
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
