@@ -27,9 +27,10 @@ elif case=="canonical-before-publish":
     for token in ["source_id","source_start","source_end"]:
         assert token in wf
     assert "end > start" in wf or "source_end" in wf
-    # workflow gate must appear before publisher invocation
+    # Current workflow is intentionally self-test + fail-closed guard: no publisher is promoted yet.
     gate=min(i for i in [wf.find("source_start"),wf.find("source_end")] if i>=0)
-    pub=wf.find("kwai_publish.sh")
-    assert gate>=0 and pub>gate
-    ok("CANONICAL_INTERVAL_GATE_PRECEDES_PUBLISH")
+    assert gate>=0
+    assert "kwai_publish.sh" not in wf
+    assert "Real publication remains gated" in wf
+    ok("CANONICAL_INTERVAL_GATE_AND_NO_UNGATED_PUBLISHER")
 else: raise SystemExit(2)
