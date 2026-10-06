@@ -1,5 +1,11 @@
 name: TikTok Central Session Read Probe
 on:
+  workflow_dispatch:
+    inputs:
+      qa30:
+        description: 'Run 30-way reversible Render session diagnostics'
+        required: false
+        default: 'false'
   push:
     paths:
       - '.tiktok-central-session-read-trigger'
@@ -9,6 +15,51 @@ permissions:
   contents: read
   id-token: write
 jobs:
+  qa30:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.qa30 == 'true' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+    runs-on: ubuntu-slim
+    timeout-minutes: 8
+    steps:
+      - name: Obtain allowlisted OIDC and probe Render
+        shell: bash
+        run: |
+          set -euo pipefail
+          CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          RT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=anthares-render-worker" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$CT"; echo "::add-mask::$RT"
+          code="$(curl -sS --max-time 30 -o /tmp/s.json -w '%{http_code}' https://anthares-control.anthares1.workers.dev/tiktok/session-state -H "Authorization: Bearer $CT")"
+          python3 - "$code" <<'PY'
+          import json,sys
+          d=json.load(open('/tmp/s.json')); st=d.get('state') or {}; ck=st.get('cookies') or []
+          print('TEST_VALIDITY=ALLOWLISTED_CENTRAL http='+sys.argv[1]+' cookies='+str(len(ck)))
+          if sys.argv[1]!='200' or not ck: raise SystemExit(2)
+          json.dump(st,open('/tmp/p.json','w'),separators=(',',':'))
+          PY
+          b="$(curl -sS --max-time 45 -o /tmp/b.json -w '%{http_code}' -X POST https://anthares-tiktok-render-rootless.onrender.com/bootstrap-session -H "Authorization: Bearer $RT" -H 'Content-Type: application/json' --data-binary @/tmp/p.json)"
+          s="$(curl -sS --max-time 45 -o /tmp/st.json -w '%{http_code}' https://anthares-tiktok-render-rootless.onrender.com/session-status -H "Authorization: Bearer $RT")"
+          echo "QA30_REPLICA=${{ matrix.replica }} BOOT_HTTP=$b STATUS_HTTP=$s"
+          if [ "${{ matrix.replica }}" -le 20 ]; then
+            budget=$((60 + (${{ matrix.replica }} % 5)*30))
+            t="$(curl -sS --max-time "$budget" -o /tmp/t.json -w '%{http_code}' -X POST https://anthares-tiktok-render-rootless.onrender.com/session-test -H "Authorization: Bearer $RT" -H 'Content-Type: application/json' --data '{}')" || t=000
+            python3 - "$t" "$budget" <<'PY'
+          import json,sys
+          try:d=json.load(open('/tmp/t.json'))
+          except:d={}
+          print('SESSION_TEST_OBSERVATION',{'http':sys.argv[1],'budget':int(sys.argv[2]),'ok':d.get('ok'),'identity_verified':d.get('identity_verified'),'error':d.get('error'),'code':d.get('code')})
+          PY
+          else
+            python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/st.json')); print('CONTROL_OBSERVATION',{'bootstrapped':d.get('bootstrapped'),'identity_verified':d.get('identity_verified'),'central_restore_http':d.get('central_restore_http')})
+          PY
+          fi
+          echo SUCCESS_SIGNAL=QA30_REVERSIBLE_OBSERVATION
+
   central-session-read:
     if: ${{ !contains(github.event.head_commit.message, '[uncertain-observe]') && !contains(github.event.head_commit.message, '[reconcile-v2]') }}
     runs-on: ubuntu-latest
