@@ -87,7 +87,7 @@ jobs:
             set -Eeuo pipefail
             nohup emulator -avd anthares-kwai-api35               -no-window -no-audio -no-boot-anim -no-snapshot               -gpu swiftshader_indirect -accel on >/tmp/anthares-kwai-emulator.log 2>&1 &
             adb start-server
-            adb wait-for-device
+            timeout 60 adb wait-for-device
             for i in $(seq 1 120); do
               BOOTED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
               if [ "$BOOTED" = "1" ]; then break; fi
@@ -97,6 +97,8 @@ jobs:
             adb shell getprop ro.build.version.sdk
             adb shell getprop ro.product.cpu.abilist
             adb shell getprop ro.dalvik.vm.native.bridge
+            echo "BOOT_ADB_SERIAL=$(adb get-serialno)"
+            echo "BOOT_ADB_STATE=$(adb get-state)"
       - run:
           name: Install validated Kwai vault
           command: |
