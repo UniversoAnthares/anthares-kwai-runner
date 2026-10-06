@@ -2,7 +2,7 @@ name: TikTok Real Publish
 on:
   push:
     paths:
-      - '.tiktok-canary-run2'
+      - '.tiktok-canary-run3'
   workflow_dispatch:
     inputs:
       video_url:
@@ -16,7 +16,7 @@ permissions:
   id-token: write
 jobs:
   session-restore-probe:
-    if: false
+    if: ${{ false }}
     runs-on: ubuntu-slim
     timeout-minutes: 8
     steps:
