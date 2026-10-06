@@ -1,5 +1,5 @@
 # TikTok real canary v2 — UNCERTAIN after Render OOM
-STATUS: UNCERTAIN
+STATUS: RECONCILED_ABSENT
 DATE: 2026-10-06
 AREA: tiktok-publish
 RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37407210637
@@ -18,3 +18,7 @@ Evidence:
 - no positive remote_id/confirmation_evidence was returned to the workflow.
 Safety decision: NO RETRY until independent reconciliation proves absence of a new TikTok post. OOM occurred after publication_started, so duplicate risk is real.
 Root cause for transport failure: Render free instance exceeded 512Mi during /publish. This is now the infrastructure defect to remove after reconciliation.
+
+
+## Independent reconciliation
+User checked the target TikTok profile universo.anthares after the failed canary and reported that the diagnostic video did not appear. Treat v2 as reconciled absent for retry fencing purposes. Do not reuse v2 dedupe/job id; next attempt must use a fresh identity after the OOM defect is removed.
