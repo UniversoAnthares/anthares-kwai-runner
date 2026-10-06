@@ -9,7 +9,7 @@ permissions:
   id-token: write
 
 jobs:
-  browser-session-matrix:
+  session-forensics:
     strategy:
       fail-fast: false
       matrix:
@@ -20,45 +20,49 @@ jobs:
       id-token: write
     env:
       CONTROL: https://anthares-control.anthares1.workers.dev
-      EXPECTED_TIKTOK_USERNAME: universo.anthares
     steps:
       - uses: actions/checkout@v4
-      - name: Install runtime
-        shell: bash
+      - name: Runtime
         run: |
-          set -euo pipefail
           python3 -m pip install --disable-pip-version-check -q playwright requests
           command -v google-chrome
-      - name: Get OIDC
+      - name: OIDC
         id: oidc
         shell: bash
         run: |
-          set -euo pipefail
           TOKEN="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
-          echo "::add-mask::$TOKEN"
-          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-      - name: Fetch central session
+          echo "::add-mask::$TOKEN"; echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+      - name: Fetch session
         env:
           TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: |
-          set -euo pipefail
-          curl --fail-with-body -sS "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $TOKEN" >/tmp/session.json
+          curl -fsSL "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $TOKEN" >/tmp/s.json
           python3 - <<'PY'
           import json
-          d=json.load(open('/tmp/session.json')); s=d.get('state') or {}
-          assert d.get('available') is True and s.get('cookies')
-          json.dump(s,open('/tmp/tiktok-state.json','w'),separators=(',',':'))
+          d=json.load(open('/tmp/s.json')); s=d['state']; json.dump(s,open('/tmp/state.json','w'),separators=(',',':'))
+          print('cookies',len(s.get('cookies') or []),'origins',len(s.get('origins') or []))
           PY
-      - name: Browser identity preflight only
-        working-directory: direct-tiktok-publisher
+      - name: Read-only identity surfaces
         env:
-          ATD_MODE: session
-          ATD_FAST_SESSION: "0"
-          EXPECTED_TIKTOK_USERNAME: universo.anthares
           TIKTOK_CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
         shell: bash
         run: |
-          set -euo pipefail
-          export TIKTOK_STORAGE_STATE="$(cat /tmp/tiktok-state.json)"
-          python3 tiktok_worker.py
+          python3 - <<'PY'
+          import json,os,re
+          from playwright.sync_api import sync_playwright
+          st=json.load(open('/tmp/state.json'))
+          with sync_playwright() as p:
+            b=p.chromium.launch(headless=True,executable_path='/usr/bin/google-chrome')
+            ctx=b.new_context(storage_state=st)
+            page=ctx.new_page()
+            for url in ['https://www.tiktok.com/','https://www.tiktok.com/upload']:
+              try:
+                page.goto(url,wait_until='domcontentloaded',timeout=45000); page.wait_for_timeout(5000)
+                body=page.locator('body').inner_text(timeout=10000)
+                hits=sorted(set(re.findall(r'@[A-Za-z0-9._]{2,32}',body)))
+                print('SURFACE',url,'FINAL',page.url,'AT_HANDLES',hits[:20],'TITLE',page.title())
+              except Exception as e: print('SURFACE_ERROR',url,type(e).__name__,str(e)[:160])
+            print('COOKIE_NAMES',sorted(x.get('name','') for x in ctx.cookies()))
+            b.close()
+          PY
