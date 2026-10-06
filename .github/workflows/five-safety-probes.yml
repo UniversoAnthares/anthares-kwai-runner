@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  id-token: write
 jobs:
   probe:
     strategy:
@@ -45,7 +46,12 @@ jobs:
           #!/usr/bin/env bash
           set -euo pipefail
           echo "$(date +%s) $*" >> renew.log
-          [ "${FORCE_RENEW_FAIL:-0}" != 1 ]
+          if [ "${FAIL_AFTER_FIRST_RENEW:-0}" = 1 ]; then
+            n="$(wc -l < renew.log)"
+            [ "$n" -lt 2 ]
+          else
+            [ "${FORCE_RENEW_FAIL:-0}" != 1 ]
+          fi
           SH
           chmod +x *.sh
           export KWAI_QUEUE_JOB_ID=probe KWAI_LEASE_GENERATION=9
@@ -60,7 +66,7 @@ jobs:
               echo PROBE_FIRST_RENEW_OK
               ;;
             descendant-kill)
-              export KWAI_LEASE_RENEW_INTERVAL_SECONDS=15 KWAI_LEASE_RENEW_TTL_SECONDS=60 FORCE_RENEW_FAIL=1
+              export KWAI_LEASE_RENEW_INTERVAL_SECONDS=15 KWAI_LEASE_RENEW_TTL_SECONDS=60 FAIL_AFTER_FIRST_RENEW=1
               set +e
               ./kwai_queue_heartbeat.sh bash -c 'sleep 120 & echo $! > descendant.pid; wait' >out 2>&1
               rc=$?
