@@ -1,0 +1,51 @@
+name: Android Emulator Boot Diagnostic
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.android-boot-diagnostic-trigger']
+permissions: { contents: read }
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install API 35 image
+        run: |
+          set -euo pipefail
+          SDK=/usr/local/lib/android/sdk
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n diag -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force
+          sudo chmod 666 /dev/kvm
+      - name: Boot with diagnostics
+        shell: bash
+        run: |
+          set -u
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export PATH="$SDK/platform-tools:$SDK/emulator:$PATH"
+          adb start-server
+          nohup "$SDK/emulator/emulator" -avd diag -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 2 -accel on -no-snapshot-save > /tmp/emulator.log 2>&1 &
+          EPID=$!
+          echo "EMULATOR_PID=$EPID"
+          for i in $(seq 1 90); do
+            if adb devices | grep -q 'emulator-'; then echo "ADB_DEVICE_SEEN_AT=$i"; break; fi
+            if ! kill -0 "$EPID" 2>/dev/null; then echo "EMULATOR_PROCESS_EXITED_AT=$i"; break; fi
+            sleep 1
+          done
+          echo "=== PROCESS ==="
+          ps -ef | grep -E '[e]mulator|qemu' || true
+          echo "=== ADB ==="
+          adb devices -l || true
+          echo "=== EMULATOR LOG ==="
+          cat /tmp/emulator.log || true
+          echo "=== KVM ==="
+          ls -l /dev/kvm || true
+          if adb devices | grep -q 'emulator-'; then
+            timeout 180 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+            echo "ANDROID_BOOT_DIAGNOSTIC_OK"
+          else
+            echo "ANDROID_BOOT_DIAGNOSTIC_FAILED"
+            exit 42
+          fi
