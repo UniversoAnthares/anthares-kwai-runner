@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -eu
+P=${CI_PROVIDER:-unknown}
+echo PROVIDER=$P
+echo TEST_VALIDITY=PROVIDER_SHELL_READY
+echo SUCCESS_SIGNAL=PROVIDER_HUB_OK
