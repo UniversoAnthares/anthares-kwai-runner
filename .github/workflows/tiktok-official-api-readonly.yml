@@ -1,6 +1,10 @@
 name: TikTok Official API Read-Only Gate
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'tiktok_official_api.py'
+      - '.github/workflows/tiktok-official-api-readonly.yml'
 permissions:
   contents: read
 concurrency:
