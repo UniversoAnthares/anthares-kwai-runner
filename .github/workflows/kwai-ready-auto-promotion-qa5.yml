@@ -1,0 +1,44 @@
+name: Kwai READY Auto Promotion QA5
+on:
+  push:
+    branches: [main]
+    paths: ['.kwai-ready-auto-promotion-trigger']
+jobs:
+  gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [valid,missing,not-ready,account-mismatch,stale]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          now="$(date +%s)"
+          case="${{ matrix.case }}"
+          export KWAI_EXPECTED_ACCOUNT='anthares'
+          case "$case" in
+            valid) export KWAI_AUTH_READY_PROOF="{\"state\":\"READY\",\"account\":\"anthares\",\"observed_at\":$now,\"proof_id\":\"qa\"}"; want=0 ;;
+            missing) unset KWAI_AUTH_READY_PROOF || true; want=1 ;;
+            not-ready) export KWAI_AUTH_READY_PROOF="{\"state\":\"LOGIN_REQUIRED\",\"account\":\"anthares\",\"observed_at\":$now,\"proof_id\":\"qa\"}"; want=1 ;;
+            account-mismatch) export KWAI_AUTH_READY_PROOF="{\"state\":\"READY\",\"account\":\"other\",\"observed_at\":$now,\"proof_id\":\"qa\"}"; want=1 ;;
+            stale) old=$((now-3600)); export KWAI_AUTH_READY_PROOF="{\"state\":\"READY\",\"account\":\"anthares\",\"observed_at\":$old,\"proof_id\":\"qa\"}"; want=1 ;;
+          esac
+          set +e; python3 kwai_auth_ready_gate.py; rc=$?; set -e
+          if [ "$want" = 0 ]; then test "$rc" = 0; else test "$rc" != 0; fi
+          echo "READY_GATE_${case}_OK"
+  wiring:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("kwai_run_next_job.sh").read_text()
+          assert s.count("bash kwai_publish.sh")==1
+          assert s.index("kwai_auth_ready_gate.py") < s.index("bash kwai_publish.sh")
+          assert s.index("kwai_real_publish_promotion_gate.py") < s.index("kwai_auth_ready_gate.py")
+          print("READY_GATE_CANONICAL_WIRING_OK")
+          PY
