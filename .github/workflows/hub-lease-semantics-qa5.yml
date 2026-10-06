@@ -1,0 +1,36 @@
+name: Hub Lease Semantics QA5
+on:
+  push:
+    branches: [main]
+    paths: ['.hub-lease-semantics-qa5-trigger']
+permissions: {contents: read}
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [expired-not-active, future-active, closed-not-active, duplicate-area-detected, malformed-expiry-ignored]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python3 - '${{ matrix.probe }}' <<'PY'
+          import sys
+          from datetime import datetime,timezone,timedelta
+          p=sys.argv[1]; now=datetime.now(timezone.utc)
+          def active(status,expiry):
+              if status!="RUNNING": return False
+              try: dt=datetime.fromisoformat(expiry.replace("Z","+00:00"))
+              except ValueError: return False
+              return dt>=now
+          if p=="expired-not-active": assert not active("RUNNING",(now-timedelta(seconds=1)).isoformat())
+          elif p=="future-active": assert active("RUNNING",(now+timedelta(hours=1)).isoformat())
+          elif p=="closed-not-active": assert not active("PROVEN",(now+timedelta(hours=1)).isoformat())
+          elif p=="malformed-expiry-ignored": assert not active("RUNNING","not-a-date")
+          elif p=="duplicate-area-detected":
+              rows=[{"area":"x","active":True},{"area":"x","active":True},{"area":"y","active":True}]
+              assert sum(1 for r in rows if r["active"] and r["area"]=="x")==2
+          print("PROBE_"+p+"_OK")
+          PY
