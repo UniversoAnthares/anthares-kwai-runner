@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 ﻿const memory = new Map();
-const CONTROL_VERSION="2026-10-05-queue-lease-renew-v14";
+const CONTROL_VERSION="2026-10-05-queue-heartbeat-renew-v15";
 
 function json(data, status=200) {
   return Response.json(data, {status, headers: {
@@ -220,7 +220,10 @@ export class AntharesQueue extends DurableObject {
    const wrongOwnerRenew=await this.renew({executor:"selftest-renew-other",id:renewId,ttl_seconds:60});
    if(wrongOwnerRenew.ok||wrongOwnerRenew.error!=="lease_owner_mismatch")throw new Error("renew_wrong_owner_not_rejected");
    const validRenew=await this.renew({executor:"selftest-renew-owner",id:renewId,ttl_seconds:60});
-   if(!validRenew.ok||Date.parse(validRenew.job.lease_until)<=beforeRenew)throw new Error("renew_did_not_extend");
+   const afterRenew=Date.parse(validRenew.job?.lease_until||0);
+   if(!validRenew.ok||afterRenew<=beforeRenew)throw new Error("renew_did_not_extend");
+   const repeatedRenew=await this.renew({executor:"selftest-renew-owner",id:renewId,ttl_seconds:60});
+   if(!repeatedRenew.ok||Date.parse(repeatedRenew.job?.lease_until||0)<=afterRenew)throw new Error("repeated_renew_did_not_extend");
    this.sql.exec("UPDATE jobs SET status='queued' WHERE id=?",renewId);
    const wrongStateRenew=await this.renew({executor:"selftest-renew-owner",id:renewId,ttl_seconds:60});
    if(wrongStateRenew.ok||wrongStateRenew.error!=="invalid_state")throw new Error("renew_invalid_state_not_rejected");
@@ -261,7 +264,7 @@ export class AntharesQueue extends DurableObject {
    await this.started({executor:"selftest-f",id:l2.job.id});
    const confirmedAfterReconcile=await this.complete({executor:"selftest-f",id:l2.job.id,confirmed:true,remote_id:"selftest-reconciled"},localDay());
    if(!confirmedAfterReconcile.job||confirmedAfterReconcile.job.status!=="published"||!confirmedAfterReconcile.job.confirmed)throw new Error("reconciled_confirmation_failed");
-   return {ok:true,dedupe:true,timeline_overlap_dedupe:true,premature_complete_rejected:true,reconcile_without_evidence_rejected:true,complete_without_evidence_rejected:true,concurrent_unique:true,single_job_double_claim:true,lease_renew_owner_only:true,lease_renew_extended:true,lease_renew_invalid_state_rejected:true,lease_renew_expired_rejected:true,expired_unstarted_recovered:true,started_expiry_protected:true,failure_requeued:true,failed_job_recovered:true,confirmation_recorded:true,uncertain_reconciled:true,reconciled_job_recovered:true,consecutive_failure_threshold:true,failure_counter_reset:true};
+   return {ok:true,dedupe:true,timeline_overlap_dedupe:true,premature_complete_rejected:true,reconcile_without_evidence_rejected:true,complete_without_evidence_rejected:true,concurrent_unique:true,single_job_double_claim:true,lease_renew_owner_only:true,lease_renew_extended:true,lease_renew_repeated:true,lease_renew_invalid_state_rejected:true,lease_renew_expired_rejected:true,expired_unstarted_recovered:true,started_expiry_protected:true,failure_requeued:true,failed_job_recovered:true,confirmation_recorded:true,uncertain_reconciled:true,reconciled_job_recovered:true,consecutive_failure_threshold:true,failure_counter_reset:true};
   }finally{
    this.sql.exec("DELETE FROM jobs WHERE platform=? AND id LIKE ?",platform,prefix+"%");
    this.sql.exec("DELETE FROM jobs WHERE platform IN (?,?) AND id LIKE ?",claimPlatform,renewPlatform,prefix+"%");
