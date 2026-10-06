@@ -4,13 +4,6 @@ on:
     paths:
       - '.tiktok-canary-run5'
   workflow_dispatch:
-    inputs:
-      video_url:
-        required: true
-        type: string
-      video_title:
-        required: true
-        type: string
 permissions:
   contents: read
   id-token: write
@@ -115,7 +108,7 @@ jobs:
 
 
   synthetic-controlled-canary:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-slim
     timeout-minutes: 15
     steps:
