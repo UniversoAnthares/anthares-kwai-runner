@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-STATE_FILE="${KWAI_SESSION_FILE:-kwai-session.enc}"
+ACCOUNT_ID="${KWAI_ACCOUNT_ID:-primary}"
+case "$ACCOUNT_ID" in primary|secondary) ;; *) echo "invalid KWAI_ACCOUNT_ID" >&2; exit 2 ;; esac
+STATE_FILE="${KWAI_SESSION_FILE:-kwai-session-${ACCOUNT_ID}.enc}"
 PKG="com.kwai.video"
 
 log(){ printf '%s\n' "$*"; }
