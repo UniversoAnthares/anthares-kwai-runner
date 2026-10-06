@@ -16,15 +16,12 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import subprocess
 import sys
 import time
 import uuid
 from datetime import datetime, timezone
 
 HERE = Path(__file__).resolve().parent
-CLAUDE_RUNNER = HERE / "claude_hidden_runner.py"
-GENERIC_RUNNER = HERE / "hidden_chat_runner.py"
 DEFAULT_ORDER = ["claude", "grok", "gemini", "perplexity", "manus"]
 PROVIDERS = set(DEFAULT_ORDER)
 RETRYABLE = {
@@ -102,20 +99,6 @@ def strip_envelope(text: str, start: str, end: str) -> str:
     return text[a:b].strip()
 
 
-def json_from_stdout(stdout: str) -> dict:
-    for line in reversed((stdout or "").splitlines()):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-            if isinstance(obj, dict):
-                return obj
-        except json.JSONDecodeError:
-            continue
-    raise ValueError("runner produced no JSON object")
-
-
 def default_log_path() -> Path:
     override = os.environ.get("ANTHARES_AI_LOG")
     if override:
@@ -139,23 +122,38 @@ def append_log(path: Path, event: dict) -> None:
         f.write(json.dumps(safe, ensure_ascii=False) + "\n")
 
 
-def command_for(provider: str, prompt: str, start: str | None, end: str | None,
-                timeout: int, response_timeout: int) -> list[str]:
-    if provider == "claude":
-        return [
-            sys.executable, str(CLAUDE_RUNNER), "--prompt", prompt,
-            "--timeout", str(timeout), "--response-timeout", str(response_timeout),
-        ]
-    cmd = [
-        sys.executable, str(GENERIC_RUNNER), "--provider", provider,
-        "--prompt", prompt, "--timeout", str(timeout),
-        "--response-timeout", str(response_timeout),
-    ]
-    if start:
-        cmd += ["--expect", start]
-    if end:
-        cmd += ["--expect-end", end]
-    return cmd
+def invoke_runner(provider: str, prompt: str, start: str | None, end: str | None,
+                  timeout: int, response_timeout: int) -> dict:
+    """Invoke low-level runners in-process to avoid nested Python launch restrictions."""
+    try:
+        if provider == "claude":
+            import claude_hidden_runner as runner
+            return runner.run_once(
+                prompt,
+                runner.DEFAULT_PROFILE,
+                runner.DEFAULT_CHROME,
+                timeout,
+                response_timeout,
+                None,
+            )
+        import hidden_chat_runner as runner
+        return runner.run(
+            provider,
+            prompt,
+            timeout=timeout,
+            expect=start,
+            expect_end=end,
+            response_timeout=response_timeout,
+        )
+    except Exception as exc:
+        return {
+            "provider": provider,
+            "ok": False,
+            "status": "RUNNER_CRASH",
+            "response": "",
+            "elapsed_s": 0.0,
+            "error_type": type(exc).__name__,
+        }
 
 
 def normalize(provider: str, raw: dict, start: str | None, end: str | None) -> dict:
@@ -191,7 +189,6 @@ def normalize(provider: str, raw: dict, start: str | None, end: str | None) -> d
 
 def run_once(provider: str, user_prompt: str, timeout: int, response_timeout: int,
              envelope: bool = True, simulate_failure: bool = False) -> dict:
-    started = time.time()
     if simulate_failure:
         return {
             "provider": provider,
@@ -206,40 +203,7 @@ def run_once(provider: str, user_prompt: str, timeout: int, response_timeout: in
     else:
         prompt, start, end = user_prompt, None, None
 
-    cmd = command_for(provider, prompt, start, end, timeout, response_timeout)
-    hard_timeout = max(30, timeout + response_timeout + 30)
-    try:
-        cp = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=hard_timeout,
-            check=False,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-    except subprocess.TimeoutExpired:
-        return {
-            "provider": provider, "ok": False, "status": "RUNNER_TIMEOUT",
-            "response": "", "elapsed_s": round(time.time() - started, 2),
-        }
-
-    if cp.returncode != 0:
-        return {
-            "provider": provider, "ok": False, "status": "RUNNER_CRASH",
-            "response": "", "elapsed_s": round(time.time() - started, 2),
-            "exit_code": cp.returncode,
-        }
-
-    try:
-        raw = json_from_stdout(cp.stdout)
-    except ValueError:
-        return {
-            "provider": provider, "ok": False, "status": "INVALID_JSON",
-            "response": "", "elapsed_s": round(time.time() - started, 2),
-        }
+    raw = invoke_runner(provider, prompt, start, end, timeout, response_timeout)
     return normalize(provider, raw, start, end)
 
 
@@ -316,9 +280,7 @@ def health(provider: str, order: list[str], timeout: int, response_timeout: int,
     rows = []
     for name in targets:
         marker = f"HEALTH_{name.upper()}_{uuid.uuid4().hex[:8]}"
-        prompt = (
-            "Retorne exatamente o texto a seguir, sem explicações adicionais: " + marker
-        )
+        prompt = "Retorne exatamente o texto a seguir, sem explicações adicionais: " + marker
         row = execute(
             prompt, provider=name, retries=0, timeout=timeout,
             response_timeout=response_timeout, envelope=True, log_path=log_path,
