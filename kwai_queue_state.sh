@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-OP="${1:?usage: kwai_queue_state.sh started|complete|fail|reconcile [value]}"
+OP="${1:?usage: kwai_queue_state.sh started|complete|fail|reconcile|renew [value]}"
 VALUE="${2:-}"
 CONTROL_URL="${ANTHARES_CONTROL_URL:-https://anthares-control.anthares1.workers.dev}"
-EXPECTED_VERSION="${ANTHARES_CONTROL_EXPECTED_VERSION:-2026-10-05-queue-heartbeat-renew-v15}"
+EXPECTED_VERSION="${ANTHARES_CONTROL_EXPECTED_VERSION:-2026-10-05-queue-fencing-v16}"
 : "${KWAI_QUEUE_JOB_ID:?KWAI_QUEUE_JOB_ID is required}"
+: "${KWAI_LEASE_GENERATION:?KWAI_LEASE_GENERATION is required for fenced holder mutations}"
 
 health="$(curl --fail-with-body -fsS "$CONTROL_URL/health")"
 python3 - "$EXPECTED_VERSION" "$health" <<'PY'
@@ -74,7 +75,7 @@ import json,sys
 op=sys.argv[1]; d=json.loads(sys.argv[2])
 if d.get("ok") is not True: raise SystemExit("QUEUE_ACK_NOT_OK")
 j=d.get("job") or {}
-if op=="started" and j.get("publication_started") is not True:
+if op=="renew" and int(j.get("lease_generation",-1)) < 1:\n    raise SystemExit("QUEUE_RENEW_GENERATION_MISSING")\nif op=="started" and j.get("publication_started") is not True:
     raise SystemExit("QUEUE_STARTED_FLAG_MISSING")
 if op=="complete" and not (j.get("confirmed") is True and j.get("status")=="published"):
     raise SystemExit("QUEUE_COMPLETE_NOT_CONFIRMED")
