@@ -1,0 +1,14 @@
+version: 2.1
+jobs:
+  provider_smoke:
+    machine:
+      image: ubuntu-2204:current
+    steps:
+      - checkout
+      - run:
+          name: Provider hub smoke
+          command: CI_PROVIDER=circleci bash ci/shared/provider-smoke.sh
+workflows:
+  anthares_parallel:
+    jobs:
+      - provider_smoke
