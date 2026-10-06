@@ -2,9 +2,9 @@
 STATUS: RUNNING
 AREA: kwai
 DATE: 2026-10-06
-RUN: pending
+RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37395018657
 JOB: launcher recovery + single login router probe
-COMMIT: pending
+COMMIT: 5c8b7b72e7b962d1f8af8ca231a80a8f23be2146
 SUPERSEDES: test-hub/findings/20261006-0062-lease-kwai-state-driven-internal-login.md
 EXPIRES: 2026-10-06T01:03:00-04:00
 
