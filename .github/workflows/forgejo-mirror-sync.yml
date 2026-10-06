@@ -1,0 +1,19 @@
+name: Forgejo mirror sync
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"
+permissions:
+  contents: read
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync fixed Forgejo mirror
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error -X POST https://anthares.us/forgejo-sync.php
+          github_sha="$(git ls-remote https://github.com/UniversoAnthares/anthares-kwai-runner.git refs/heads/main | awk '{print $1}')"
+          forgejo_sha="$(git ls-remote https://anthares.us/forgejo/anthares-admin/anthares-kwai-runner.git refs/heads/main | awk '{print $1}')"
+          test "$github_sha" = "$forgejo_sha"
+          echo "CROSS_PROVIDER_SHA_CHECK=PROVEN sha=$github_sha"
