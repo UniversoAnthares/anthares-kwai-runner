@@ -18,6 +18,10 @@ jobs:
           import zipfile
           z=zipfile.ZipFile("/tmp/kwai-vault.zip")
           print("\n".join(z.namelist()))
+          print("=== ABI ===")
+          print(z.read("ABI.txt").decode())
+          print("=== MANIFEST ===")
+          print(z.read("MANIFEST.tsv").decode()[:12000])
           z.extractall("/tmp/kwai-vault")
           PY
           SCRIPT="$(find /tmp/kwai-vault -name kwai_vault_install.sh -print -quit)"
