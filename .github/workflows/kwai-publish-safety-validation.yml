@@ -16,7 +16,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash -n kwai_publish.sh kwai_queue_state.sh
+          bash -n kwai_publish.sh kwai_queue_state.sh kwai_reconcile_uncertain.sh
           python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py
           python3 - <<'PY'
           import os,sys,xml.etree.ElementTree as ET
@@ -50,6 +50,16 @@ jobs:
           grep -q 'kwai_publish_video.py commit' kwai_publish.sh
           grep -q '/github-queue/$endpoint' kwai_queue_state.sh
           grep -q 'CONTROL_VERSION_MISMATCH' kwai_queue_state.sh
+          grep -q 'reconcile)' kwai_queue_state.sh
+          grep -q 'RECONCILIATION_EVIDENCE_MISSING' kwai_queue_state.sh
+          grep -q 'QUEUE_RECONCILE_NOT_CONFIRMED' kwai_queue_state.sh
+          grep -q 'kwai_verify_publication.py' kwai_reconcile_uncertain.sh
+          grep -q 'kwai_queue_state.sh reconcile' kwai_reconcile_uncertain.sh
+          ! grep -q 'kwai_publish_video.py' kwai_reconcile_uncertain.sh
+          ! grep -qi 'input.*publish' kwai_reconcile_uncertain.sh
+          grep -q 'STATE=UNCERTAIN' kwai_reconcile_uncertain.sh
+          grep -q 'STATE=CONFIRMED SOURCE=RECONCILIATION' kwai_reconcile_uncertain.sh
+          echo 'KWAI_UNCERTAIN_RECONCILE_STATIC_OK'
           grep -q '2026-10-05-queue-lease-renew-v14' kwai_queue_state.sh
           ! grep -q '2026-10-05-no-pc-confirmation-v12' kwai_queue_state.sh
           grep -q 'QUEUE_STARTED_FLAG_MISSING' kwai_queue_state.sh
