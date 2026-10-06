@@ -19,16 +19,7 @@ jobs:
           t="$(mktemp -d)"; cp kwai_run_next_job.sh "$t/"; cd "$t"; : >calls
           cat > kwai_claim_job.sh <<'SH'
           [ "${CASE}" = claim-fails ] && exit 44
-          cat >>"$GITHUB_ENV" <<EOF
-KWAI_QUEUE_JOB_ID=j
-KWAI_LEASE_GENERATION=3
-KWAI_SOURCE_ID=s
-KWAI_SOURCE_START=1
-KWAI_SOURCE_END=2
-KWAI_VIDEO_URL=u
-KWAI_VIDEO_TITLE=t
-KWAI_EXPECTED_ACCOUNT=a
-EOF
+          printf '%s\n' 'KWAI_QUEUE_JOB_ID=j' 'KWAI_LEASE_GENERATION=3' 'KWAI_SOURCE_ID=s' 'KWAI_SOURCE_START=1' 'KWAI_SOURCE_END=2' 'KWAI_VIDEO_URL=u' 'KWAI_VIDEO_TITLE=t' 'KWAI_EXPECTED_ACCOUNT=a' >>"$GITHUB_ENV"
           SH
           cat > kwai_real_publish_promotion_gate.py <<'PY'
           pass
