@@ -2,7 +2,6 @@ name: TikTok Real Publish
 on:
   push:
     paths:
-      - '.tiktok-session-restore-probe'
       - '.tiktok-synthetic-canary-trigger'
   workflow_dispatch:
     inputs:
@@ -17,7 +16,7 @@ permissions:
   id-token: write
 jobs:
   session-restore-probe:
-    if: github.event_name == 'push'
+    if: false
     runs-on: ubuntu-slim
     timeout-minutes: 8
     steps:
@@ -116,7 +115,7 @@ jobs:
 
 
   synthetic-controlled-canary:
-    if: github.event_name == 'push' && contains(join(github.event.commits.*.modified, ','), '.tiktok-synthetic-canary-trigger')
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
