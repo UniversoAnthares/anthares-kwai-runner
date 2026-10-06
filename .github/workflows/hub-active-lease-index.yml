@@ -18,8 +18,22 @@ jobs:
           from datetime import datetime, timezone
           import re,json
           now=datetime.now(timezone.utc); active=[]; expired=[]
-          for p in Path("test-hub/findings").glob("*.md"):
+          findings=list(Path("test-hub/findings").glob("*.md"))
+          superseded=set()
+          closed_areas=set()
+          for p in findings:
               t=p.read_text(errors="replace")
+              sup=re.search(r"(?m)^SUPERSEDES:\\s*([^\\n]+)",t)
+              if sup and sup.group(1).strip().lower() not in ("none","pending"):
+                  raw=sup.group(1).strip()
+                  superseded.add(raw)
+                  superseded.add(Path(raw).name)
+              if re.search(r"(?m)^LEASE_CLOSED:\\s*\\S+",t):
+                  ar=re.search(r"(?m)^LEASE_AREA:\\s*([^\\n]+)",t)
+                  if ar: closed_areas.add(ar.group(1).strip())
+          for p in findings:
+              t=p.read_text(errors="replace")
+              if str(p) in superseded or p.name in superseded: continue
               st=re.search(r"(?m)^STATUS:\s*([^\n]+)",t)
               ex=re.search(r"(?m)^LEASE_EXPIRES:\s*([^\s]+)",t)
               area=re.search(r"(?m)^LEASE_AREA:\s*([^\n]+)",t)
