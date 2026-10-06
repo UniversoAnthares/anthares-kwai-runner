@@ -144,6 +144,18 @@ jobs:
               echo "SUCCESS_SIGNAL=KWAI_INSTALL_AND_LAUNCH_OK"
             else
               echo "FAILURE_SIGNAL=KWAI_RUNTIME_OR_UI_NOT_READY"
+              echo "PACKAGE_PATHS_BEGIN"
+              adb shell pm path com.kwai.video || true
+              echo "PACKAGE_PATHS_END"
+              echo "PACKAGE_SUMMARY_BEGIN"
+              adb shell dumpsys package com.kwai.video | grep -E 'versionName|versionCode|primaryCpuAbi|secondaryCpuAbi|enabled=|stopped=' | head -40 || true
+              echo "PACKAGE_SUMMARY_END"
+              echo "ACTIVITY_TOP_BEGIN"
+              adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|com.kwai.video' | head -80 || true
+              echo "ACTIVITY_TOP_END"
+              echo "CRASH_LOG_BEGIN"
+              adb logcat -d -t 600 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|com\.kwai\.video|UnsatisfiedLinkError|SIG(SEGV|ABRT)|native bridge|dlopen failed' | tail -160 || true
+              echo "CRASH_LOG_END"
               exit 51
             fi
       - run:
