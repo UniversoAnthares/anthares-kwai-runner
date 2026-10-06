@@ -1,0 +1,20 @@
+name: Email Queue Safety
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - email_queue.py
+      - tests/test_email_queue.py
+      - .github/workflows/email-queue-safety.yml
+jobs:
+  zero-send-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prove queue contracts without network send
+        run: |
+          python -m unittest discover -s tests -p 'test_email_queue.py' -v
+          echo 'SUCCESS_SIGNAL=EMAIL_QUEUE_ZERO_SEND_SAFETY_PROVEN'
