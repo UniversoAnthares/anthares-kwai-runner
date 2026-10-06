@@ -1,0 +1,34 @@
+name: Workflow Promotion Boundary QA5
+on:
+  push:
+    branches: [main]
+    paths: ['.workflow-promotion-boundary-qa5-trigger']
+permissions: {contents: read}
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [gate-before-publisher,ready-required,no-direct-publish,job-generation-required,queue-selftest-independent]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          python3 - '${{ matrix.probe }}' <<'PY'
+          from pathlib import Path
+          import sys
+          p=sys.argv[1]; s=Path('.github/workflows/kwai-real-publish.yml').read_text()
+          gate=Path('kwai_real_publish_promotion_gate.py').read_text()
+          if p=="gate-before-publisher":
+              assert 'kwai_publish.sh' not in s or 'kwai_real_publish_promotion_gate.py' in s
+          elif p=="ready-required":
+              assert 'enable_real_publish' in s and 'SESSION_READY' in s.upper()
+          elif p=="no-direct-publish":
+              assert 'kwai_publish_video.py commit' not in s
+          elif p=="job-generation-required":
+              assert 'KWAI_QUEUE_JOB_ID' in gate and 'KWAI_LEASE_GENERATION' in gate
+          elif p=="queue-selftest-independent":
+              assert 'queue-self-test' in s and 'queue_self_test' in s
+          print("PROBE_"+p+"_OK")
+          PY
