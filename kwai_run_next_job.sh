@@ -9,6 +9,7 @@ set -a
 source "$CLAIM_ENV"
 set +a
 python3 kwai_real_publish_promotion_gate.py
+python3 kwai_auth_ready_gate.py
 : "${KWAI_VIDEO_URL:?leased job lacks video_url}"
 : "${KWAI_VIDEO_TITLE:?leased job lacks video_title}"
 : "${KWAI_EXPECTED_ACCOUNT:?leased job lacks expected_account}"
