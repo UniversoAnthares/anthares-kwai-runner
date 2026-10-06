@@ -78,6 +78,30 @@ jobs:
           assert not bad, (bad,d)
           PY
           echo 'KWAI_PRODUCTION_QUEUE_OIDC_SELFTEST_OK'
+  queued-publication-contract:
+    if: ${{ github.event_name != 'push' && inputs.queue_self_test != 'YES' && inputs.enable_real_publish == 'YES' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Refuse unsafe queued publication until canonical job is loaded
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          j={
+            'source_id': os.environ.get('KWAI_SOURCE_ID',''),
+            'source_start': os.environ.get('KWAI_SOURCE_START'),
+            'source_end': os.environ.get('KWAI_SOURCE_END'),
+          }
+          source_id=str(j.get('source_id') or '').strip()
+          source_start=j.get('source_start'); source_end=j.get('source_end')
+          if not source_id or source_start is None or source_end is None:
+              raise SystemExit('queued Kwai job lacks canonical source_id/source_start/source_end; refusing unsafe publication')
+          try:
+              if float(source_end) <= float(source_start): raise ValueError()
+          except Exception:
+              raise SystemExit('queued Kwai job has invalid source interval; refusing unsafe publication')
+          PY
+          echo KWAI_CANONICAL_INTERVAL_GATE_OK
   guard:
     if: ${{ github.event_name != 'push' && inputs.queue_self_test != 'YES' }}
     runs-on: ubuntu-24.04
