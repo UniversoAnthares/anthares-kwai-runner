@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-$socket = getenv('HOME') . '/.anthares-forgejo/forgejo.sock';
+$socket = '/home/u566597497/.anthares-forgejo/forgejo.sock';
 $prefix = '/forgejo';
 $uri = $_SERVER['REQUEST_URI'] ?? '/';
 $path = substr($uri, strlen($prefix));
