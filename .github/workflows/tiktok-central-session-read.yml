@@ -1,11 +1,5 @@
 name: TikTok Central Session Read Probe
 on:
-  workflow_dispatch:
-    inputs:
-      qa30:
-        description: 'Run 30-way reversible Render session diagnostics'
-        required: false
-        default: 'false'
   push:
     paths:
       - '.tiktok-central-session-read-trigger'
