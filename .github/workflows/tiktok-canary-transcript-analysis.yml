@@ -13,22 +13,61 @@ permissions:
 jobs:
   analyze:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - name: Install yt-dlp
         run: python3 -m pip install --disable-pip-version-check -q yt-dlp
 
-      - name: Fetch owned-stream subtitles only
+      - name: Install Deno JavaScript runtime
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Fetch owned-stream subtitles through safe client matrix
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf /tmp/canary-subs
           mkdir -p /tmp/canary-subs
           cd /tmp/canary-subs
           URL='https://www.youtube.com/watch?v=a4w8KAOxANc'
-          echo '=== AVAILABLE SUBTITLES ==='
-          yt-dlp --list-subs "$URL" || true
-          yt-dlp --skip-download --write-auto-subs --write-subs --sub-langs 'pt.*,pt-BR,pt,en.*' --sub-format vtt -o 'source.%(ext)s' "$URL"
-          ls -lah
+
+          clients=(android_vr tv_embedded web_safari default)
+          success=''
+          for client in "${clients[@]}"; do
+            echo "=== SUBTITLE CLIENT: $client ==="
+            rm -f source*.vtt source*.json source*.srv* source*.ttml || true
+            args=(
+              --skip-download
+              --write-auto-subs
+              --write-subs
+              --sub-langs 'pt.*,pt-BR,pt,en.*'
+              --sub-format vtt
+              --js-runtimes deno
+              --no-warnings
+              -o 'source.%(ext)s'
+            )
+            if [[ "$client" != 'default' ]]; then
+              args+=(--extractor-args "youtube:player_client=$client")
+            fi
+            set +e
+            yt-dlp "${args[@]}" "$URL"
+            rc=$?
+            set -e
+            if compgen -G 'source*.vtt' >/dev/null; then
+              success="$client"
+              echo "SUBTITLE_CLIENT_SUCCESS=$client"
+              break
+            fi
+            echo "SUBTITLE_CLIENT_FAILED=$client rc=$rc"
+          done
+
+          if [[ -z "$success" ]]; then
+            echo 'NO_VTT_AFTER_CLIENT_MATRIX'
+            exit 21
+          fi
+          echo "SUBTITLE_MATRIX_WINNER=$success"
+          ls -lah source*.vtt
 
       - name: Rank continuous transcript candidates
         shell: bash
@@ -36,13 +75,12 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import html, re, json
+          import html, re
 
           root=Path('/tmp/canary-subs')
           files=sorted(root.glob('*.vtt'))
           if not files:
               raise SystemExit('NO_VTT_SUBTITLE')
-          # Prefer Portuguese variants; yt-dlp names usually include .pt/.pt-BR.
           files.sort(key=lambda p:(0 if '.pt' in p.name.lower() else 1, len(p.name)))
           path=files[0]
           print('TRANSCRIPT_FILE='+path.name)
@@ -72,7 +110,6 @@ jobs:
               txt=html.unescape(' '.join(text))
               txt=re.sub(r'\s+',' ',txt).strip()
               if txt:
-                  # auto-subs often repeat rolling phrases; keep each cue and de-duplicate later in windows
                   cues.append({'start':sec(a),'end':sec(b),'text':txt})
               i+=1
 
@@ -95,7 +132,6 @@ jobs:
             'obrigado':4,'obrigada':4,'espera aí':5,'espera ai':5,'gente':1,
           }
 
-          # Build 45-80 second continuous windows, starting after minute 5.
           windows=[]
           for idx,c in enumerate(cues):
               if c['start'] < 300: continue
@@ -108,7 +144,6 @@ jobs:
                   if last_end-c['start']>85: break
               dur=last_end-c['start']
               if dur<35 or dur>90: continue
-              # remove exact rolling duplicate lines
               out=[]
               for d in selected:
                   t=d['text']
@@ -121,8 +156,7 @@ jobs:
               score=0
               for k,v in positive.items(): score += low.count(k)*v
               for k,v in negative.items(): score -= low.count(k)*v
-              # reward argument markers and sentence closure; penalize question-heavy/chatty blocks
-              score += min(8, low.count(' porque ')+low.count(' então ')+low.count(' portanto ')+low.count(' que ' )//8)
+              score += min(8, low.count(' porque ')+low.count(' então ')+low.count(' portanto ')+low.count(' que ')//8)
               score -= max(0, text.count('?')-2)*2
               windows.append({'score':score,'start':c['start'],'end':last_end,'duration':dur,'text':text})
 
