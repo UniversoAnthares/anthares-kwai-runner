@@ -189,6 +189,7 @@ def main():
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
+            executable_path=os.getenv("TIKTOK_CHROMIUM_EXECUTABLE") or None,
             headless=True,
             args=["--disable-dev-shm-usage", "--no-sandbox"],
         )
