@@ -1,0 +1,115 @@
+name: TikTok Canary Caption Direct
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.tiktok-canary-caption-direct-trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  captions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe YouTube caption endpoints without media
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/canary-subs
+          python3 - <<'PY'
+          import html, json, re, urllib.parse, urllib.request
+          from pathlib import Path
+
+          vid='a4w8KAOxANc'
+          ua='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/154.0.0.0 Safari/537.36'
+          headers={'User-Agent':ua,'Accept-Language':'pt-BR,pt;q=0.9,en;q=0.7'}
+          out=Path('/tmp/canary-subs/direct.vtt')
+
+          def get(url,timeout=25):
+              req=urllib.request.Request(url,headers=headers)
+              with urllib.request.urlopen(req,timeout=timeout) as r:
+                  return r.status,r.headers.get('content-type',''),r.read()
+
+          candidates=[]
+          for lang in ('pt-BR','pt','en'):
+              for kind in ('asr',''):
+                  qs={'v':vid,'lang':lang,'fmt':'vtt'}
+                  if kind: qs['kind']=kind
+                  candidates.append('https://www.youtube.com/api/timedtext?'+urllib.parse.urlencode(qs))
+                  candidates.append('https://video.google.com/timedtext?'+urllib.parse.urlencode(qs))
+
+          for url in candidates:
+              try:
+                  status,ct,body=get(url)
+                  text=body.decode('utf-8','replace')
+                  print(json.dumps({'probe':'timedtext','host':urllib.parse.urlparse(url).netloc,'lang':urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get('lang',[''])[0],'kind':urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get('kind',[''])[0],'status':status,'bytes':len(body),'vtt':text.startswith('WEBVTT')},sort_keys=True))
+                  if text.startswith('WEBVTT') and len(text)>200:
+                      out.write_text(text,encoding='utf-8'); print('DIRECT_TIMEDTEXT=OK'); raise SystemExit(0)
+              except Exception as e:
+                  print('TIMEDTEXT_ERROR='+type(e).__name__)
+
+          watch='https://www.youtube.com/watch?'+urllib.parse.urlencode({'v':vid,'hl':'pt-BR','gl':'BR','bpctr':'9999999999','has_verified':'1'})
+          status,ct,body=get(watch,30)
+          text=body.decode('utf-8','replace')
+          print(json.dumps({'probe':'watch_html','status':status,'bytes':len(body),'captionTracks':('captionTracks' in text),'bot_phrase':('confirm you’re not a bot' in text.lower() or 'confirm you\'re not a bot' in text.lower())},sort_keys=True))
+          urls=[]
+          for m in re.finditer(r'"baseUrl":"(https:[^"\\]*(?:\\.[^"\\]*)*)"',text):
+              raw=m.group(1)
+              try:
+                  u=json.loads('"'+raw+'"')
+              except Exception:
+                  u=html.unescape(raw.replace('\\u0026','&'))
+              if 'timedtext' in u and u not in urls: urls.append(u)
+          print('CAPTION_BASEURL_COUNT='+str(len(urls)))
+          for u in urls:
+              sep='&' if '?' in u else '?'
+              for suffix in ('fmt=vtt','fmt=srv3'):
+                  try:
+                      status,ct,body=get(u+sep+suffix,30)
+                      tx=body.decode('utf-8','replace')
+                      print(json.dumps({'probe':'caption_baseurl','status':status,'bytes':len(body),'fmt':suffix},sort_keys=True))
+                      if tx.startswith('WEBVTT') and len(tx)>200:
+                          out.write_text(tx,encoding='utf-8'); print('WATCH_CAPTION_BASEURL=OK'); raise SystemExit(0)
+                      if len(tx)>200 and ('<text' in tx or '<p ' in tx):
+                          # Save XML for a later converter instead of claiming VTT.
+                          Path('/tmp/canary-subs/direct.xml').write_text(tx,encoding='utf-8'); print('WATCH_CAPTION_XML=OK'); raise SystemExit(0)
+                  except Exception as e:
+                      print('CAPTION_BASEURL_ERROR='+type(e).__name__)
+          raise SystemExit('NO_DIRECT_CAPTION_PATH')
+          PY
+      - name: Convert XML caption if needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f /tmp/canary-subs/direct.vtt ]; then exit 0; fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import html,re,xml.etree.ElementTree as ET
+          src=Path('/tmp/canary-subs/direct.xml')
+          if not src.exists(): raise SystemExit('NO_CAPTION_PAYLOAD')
+          root=ET.fromstring(src.read_text(encoding='utf-8'))
+          rows=[]
+          def hms(s):
+              ms=int(round(s*1000)); h=ms//3600000; ms%=3600000; m=ms//60000; ms%=60000; sec=ms//1000; ms%=1000
+              return f'{h:02d}:{m:02d}:{sec:02d}.{ms:03d}'
+          for el in root.iter():
+              if el.tag.rsplit('}',1)[-1] not in ('text','p'): continue
+              try: st=float(el.attrib.get('start',el.attrib.get('t','0'))); st=st/1000 if 't' in el.attrib else st
+              except: continue
+              try: dur=float(el.attrib.get('dur',el.attrib.get('d','2'))); dur=dur/1000 if 'd' in el.attrib else dur
+              except: dur=2
+              txt=re.sub(r'\s+',' ',html.unescape(''.join(el.itertext()))).strip()
+              if txt: rows.append((st,st+max(.2,dur),txt))
+          if not rows: raise SystemExit('EMPTY_XML_CAPTION')
+          v=['WEBVTT','']
+          for i,(a,b,t) in enumerate(rows,1): v += [str(i),f'{hms(a)} --> {hms(b)}',t,'']
+          Path('/tmp/canary-subs/direct.vtt').write_text('\n'.join(v),encoding='utf-8')
+          print('CAPTION_XML_CONVERTED=OK rows='+str(len(rows)))
+          PY
+      - name: Rank continuous candidates
+        run: python3 tools/tiktok_rank_vtt.py /tmp/canary-subs
