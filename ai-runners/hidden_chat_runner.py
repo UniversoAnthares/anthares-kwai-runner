@@ -6,9 +6,8 @@ through CDP/Playwright and kills only the isolated process tree. It never touche
 the user's normal Chrome profile.
 
 For deterministic integration use --expect plus --expect-end. The prompt should
-contain the markers as formatting instructions and the provider response should
-repeat them. Success requires both markers to appear at least twice in page text
-(prompt + response), then only the text between the final marker pair is returned.
+contain each marker once as formatting instructions. Success requires both markers
+to appear again in page text and a non-empty response between a valid marker pair.
 """
 import argparse
 import ctypes
@@ -109,14 +108,22 @@ def find_box(page):
 def extract_between_markers(text, start_marker, end_marker):
     if not start_marker or not end_marker:
         return ""
-    start = text.rfind(start_marker)
-    if start < 0:
-        return ""
-    start += len(start_marker)
-    end = text.find(end_marker, start)
-    if end < 0:
-        return ""
-    return text[start:end].strip()
+    candidates = []
+    pos = 0
+    while True:
+        start = text.find(start_marker, pos)
+        if start < 0:
+            break
+        content_start = start + len(start_marker)
+        end = text.find(end_marker, content_start)
+        if end < 0:
+            break
+        chunk = text[content_start:end].strip()
+        chunk = chunk.replace(start_marker, "").replace(end_marker, "").strip()
+        if chunk and chunk != "[sua resposta]":
+            candidates.append(chunk)
+        pos = content_start
+    return candidates[-1] if candidates else ""
 
 
 def extract_assistant_text(page, prompt):
@@ -203,18 +210,20 @@ def run(provider, prompt, timeout=90, expect=None, expect_end=None, response_tim
 
             if expect:
                 start_count = end_count = 0
-                last_body = ""
                 while time.time() < end_time:
                     try:
-                        last_body = page.locator("body").inner_text(timeout=2000)
-                        start_count = last_body.count(expect)
-                        end_count = last_body.count(expect_end) if expect_end else 0
+                        body = page.locator("body").inner_text(timeout=2000)
+                        start_count = body.count(expect)
+                        end_count = body.count(expect_end) if expect_end else 0
                         start_ok = start_count >= 2
                         end_ok = (not expect_end) or end_count >= 2
                         if start_ok and end_ok:
-                            response = extract_between_markers(last_body, expect, expect_end) if expect_end else extract_assistant_text(page, prompt)
+                            response = extract_between_markers(body, expect, expect_end) if expect_end else extract_assistant_text(page, prompt)
+                            if expect_end and not response:
+                                time.sleep(1.25)
+                                continue
                             result.update({
-                                "ok": True, "status": "SUCCESS", "response": response or expect,
+                                "ok": True, "status": "SUCCESS", "response": response,
                                 "marker_count": start_count, "end_marker_count": end_count,
                                 "url": page.url, "title": page.title(),
                             })
