@@ -180,7 +180,17 @@ jobs:
               print("SUCCESS_SIGNAL=LOGIN_SURFACE_REACHED")
               phone=next((x for x in nodes if label(x) in ("phone","telefone") or "phone" in label(x) or "telefone" in label(x)),None)
               if phone is not None:
-                  pm=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",phone.attrib.get("bounds",""))
+                  path=[]
+                  def walk(cur,anc):
+                      if cur is phone:
+                          path.extend(anc+[cur]); return True
+                      return any(walk(ch,anc+[cur]) for ch in list(cur))
+                  walk(after,[])
+                  for ix,x in enumerate(path):
+                      print("PHONE_PATH_"+str(ix)+"="+str({k:x.attrib.get(k,"") for k in ("class","resource-id","text","content-desc","clickable","focusable","enabled","bounds")}))
+                  target=next((x for x in reversed(path) if x.attrib.get("clickable")=="true" and x.attrib.get("enabled","true")=="true"),phone)
+                  print("PHONE_ACTION_TARGET="+str({k:target.attrib.get(k,"") for k in ("class","resource-id","clickable","focusable","enabled","bounds")}))
+                  pm=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",target.attrib.get("bounds",""))
                   if pm:
                       a,b,c,d=map(int,pm.groups());adb("shell","input","tap",str((a+c)//2),str((b+d)//2));time.sleep(4)
                       # Observe the legitimate chooser transition rather than guessing internal Activities.
