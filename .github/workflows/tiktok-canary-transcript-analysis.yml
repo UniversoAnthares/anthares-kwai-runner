@@ -1,0 +1,147 @@
+name: TikTok Canary Transcript Analysis
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.tiktok-canary-analysis-trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Install yt-dlp
+        run: python3 -m pip install --disable-pip-version-check -q yt-dlp
+
+      - name: Fetch owned-stream subtitles only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/canary-subs
+          cd /tmp/canary-subs
+          URL='https://www.youtube.com/watch?v=a4w8KAOxANc'
+          echo '=== AVAILABLE SUBTITLES ==='
+          yt-dlp --list-subs "$URL" || true
+          yt-dlp --skip-download --write-auto-subs --write-subs --sub-langs 'pt.*,pt-BR,pt,en.*' --sub-format vtt -o 'source.%(ext)s' "$URL"
+          ls -lah
+
+      - name: Rank continuous transcript candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import html, re, json
+
+          root=Path('/tmp/canary-subs')
+          files=sorted(root.glob('*.vtt'))
+          if not files:
+              raise SystemExit('NO_VTT_SUBTITLE')
+          # Prefer Portuguese variants; yt-dlp names usually include .pt/.pt-BR.
+          files.sort(key=lambda p:(0 if '.pt' in p.name.lower() else 1, len(p.name)))
+          path=files[0]
+          print('TRANSCRIPT_FILE='+path.name)
+
+          def sec(ts):
+              parts=ts.replace(',','.').split(':')
+              if len(parts)==3:
+                  h,m,s=parts
+              else:
+                  h='0';m,s=parts
+              return int(h)*3600+int(m)*60+float(s)
+
+          raw=path.read_text(encoding='utf-8',errors='replace').splitlines()
+          cues=[]; i=0
+          while i < len(raw):
+              line=raw[i].strip()
+              if '-->' not in line:
+                  i+=1; continue
+              a,b=line.split('-->',1)
+              a=a.strip().split()[0]; b=b.strip().split()[0]
+              text=[]; i+=1
+              while i<len(raw) and raw[i].strip():
+                  t=re.sub(r'<[^>]+>','',raw[i]).strip()
+                  if t and not t.startswith('NOTE'):
+                      text.append(t)
+                  i+=1
+              txt=html.unescape(' '.join(text))
+              txt=re.sub(r'\s+',' ',txt).strip()
+              if txt:
+                  # auto-subs often repeat rolling phrases; keep each cue and de-duplicate later in windows
+                  cues.append({'start':sec(a),'end':sec(b),'text':txt})
+              i+=1
+
+          if not cues:
+              raise SystemExit('EMPTY_TRANSCRIPT')
+
+          positive={
+            'conto':3,'história':2,'historia':2,'personagem':3,'personagens':3,'narrador':3,
+            'narrativa':3,'texto':2,'leitor':2,'cena':2,'conflito':3,'estrutura':3,
+            'escrita':2,'autor':2,'autora':2,'literatura':3,'tema':2,'diálogo':3,'dialogo':3,
+            'ponto de vista':4,'foco narrativo':4,'protagonista':3,'descrição':2,'descricao':2,
+            'tensão':3,'tensao':3,'ritmo':3,'final':2,'começo':2,'inicio':2,'início':2,
+            'porque':1,'portanto':1,'então':1,'entao':1,'significa':2,'funciona':2,'efeito':2,
+            'problema':2,'solução':2,'solucao':2,'escolha':2,'decisão':2,'decisao':2,
+          }
+          negative={
+            'boa noite':8,'bom dia':8,'boa tarde':8,'sejam bem':8,'inscreva':8,'like':8,
+            'telegram':8,'pix':8,'superchat':8,'chat':3,'comentário':3,'comentario':3,
+            'áudio':5,'audio':5,'microfone':5,'live':4,'ao vivo':4,'canal':3,'membro':3,
+            'obrigado':4,'obrigada':4,'espera aí':5,'espera ai':5,'gente':1,
+          }
+
+          # Build 45-80 second continuous windows, starting after minute 5.
+          windows=[]
+          for idx,c in enumerate(cues):
+              if c['start'] < 300: continue
+              end_target=c['start']+60
+              selected=[]; last_end=c['start']
+              for d in cues[idx:]:
+                  if d['start']-last_end>4: break
+                  selected.append(d); last_end=max(last_end,d['end'])
+                  if last_end>=end_target: break
+                  if last_end-c['start']>85: break
+              dur=last_end-c['start']
+              if dur<35 or dur>90: continue
+              # remove exact rolling duplicate lines
+              out=[]
+              for d in selected:
+                  t=d['text']
+                  if out and (t==out[-1] or t in out[-1]): continue
+                  out.append(t)
+              text=' '.join(out)
+              low=text.casefold()
+              words=re.findall(r'\w+',low)
+              if len(words)<55: continue
+              score=0
+              for k,v in positive.items(): score += low.count(k)*v
+              for k,v in negative.items(): score -= low.count(k)*v
+              # reward argument markers and sentence closure; penalize question-heavy/chatty blocks
+              score += min(8, low.count(' porque ')+low.count(' então ')+low.count(' portanto ')+low.count(' que ' )//8)
+              score -= max(0, text.count('?')-2)*2
+              windows.append({'score':score,'start':c['start'],'end':last_end,'duration':dur,'text':text})
+
+          windows.sort(key=lambda x:(-x['score'],x['start']))
+          picked=[]
+          for w in windows:
+              if any(max(w['start'],p['start']) < min(w['end'],p['end']) for p in picked):
+                  continue
+              picked.append(w)
+              if len(picked)>=8: break
+
+          if not picked:
+              raise SystemExit('NO_CANDIDATE_WINDOWS')
+
+          def hms(x):
+              x=int(x); return f'{x//3600:02d}:{(x%3600)//60:02d}:{x%60:02d}'
+          print('=== TOP CONTINUOUS CANDIDATES ===')
+          for n,w in enumerate(picked,1):
+              print(f'\n--- CANDIDATE {n} score={w["score"]} start={hms(w["start"])} end={hms(w["end"])} duration={w["duration"]:.1f}s ---')
+              print(w['text'][:5000])
+          print('\nTRANSCRIPT_CANDIDATES_READY='+str(len(picked)))
+          PY
