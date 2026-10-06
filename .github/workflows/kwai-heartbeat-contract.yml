@@ -1,0 +1,43 @@
+name: Kwai Queue Heartbeat Contract
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'kwai_queue_heartbeat.sh'
+      - '.github/workflows/kwai-heartbeat-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  heartbeat-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate heartbeat wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n kwai_queue_heartbeat.sh
+          tmp="$(mktemp -d)"
+          cp kwai_queue_heartbeat.sh "$tmp/"
+          cat >"$tmp/kwai_queue_state.sh" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          test "$1" = renew
+          echo "$1 $2 $KWAI_QUEUE_JOB_ID $KWAI_LEASE_GENERATION" >> renew.log
+          if [ "${FORCE_RENEW_FAIL:-0}" = 1 ]; then exit 77; fi
+          SH
+          chmod +x "$tmp/"*.sh
+          cd "$tmp"
+          export KWAI_QUEUE_JOB_ID=selftest-job KWAI_LEASE_GENERATION=7
+          export KWAI_LEASE_RENEW_INTERVAL_SECONDS=15 KWAI_LEASE_RENEW_TTL_SECONDS=60
+          ./kwai_queue_heartbeat.sh sleep 16
+          grep -q '^renew 60 selftest-job 7$' renew.log
+          set +e
+          FORCE_RENEW_FAIL=1 ./kwai_queue_heartbeat.sh sleep 30 >fail.log 2>&1
+          rc=$?
+          set -e
+          test "$rc" -eq 49
+          grep -q 'STATE=FAILED_SAFE REASON=lease-heartbeat-lost' fail.log
+          echo KWAI_HEARTBEAT_CONTRACT_OK
