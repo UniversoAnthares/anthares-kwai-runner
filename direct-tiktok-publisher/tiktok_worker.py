@@ -75,6 +75,7 @@ def main():
     try:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(
+                executable_path=os.getenv("TIKTOK_CHROMIUM_EXECUTABLE") or None,
                 headless=True,
                 args=["--disable-dev-shm-usage","--no-sandbox","--disable-gpu","--disable-extensions","--disable-background-networking","--disable-component-update","--disable-default-apps","--disable-sync","--no-first-run","--no-zygote","--renderer-process-limit=1"],
             )
