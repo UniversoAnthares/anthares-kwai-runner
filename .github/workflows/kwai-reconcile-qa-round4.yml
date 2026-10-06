@@ -1,0 +1,11 @@
+name: Kwai Reconcile QA Round 4
+on: {push: {paths: ['.github/workflows/kwai-reconcile-qa-round4.yml','tests/test_kwai_reconcile_qa_round4.py']}}
+permissions: {contents: read}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy: {fail-fast: false, matrix: {case: [truncated-token, leading-space-token, boolean-as-string, null-profile, padded-valid]}}
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n kwai_reconcile_uncertain.sh
+      - run: python3 tests/test_kwai_reconcile_qa_round4.py "${{ matrix.case }}"
