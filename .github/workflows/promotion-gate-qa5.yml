@@ -1,0 +1,27 @@
+name: Promotion Gate QA5
+on:
+  push:
+    branches: [main]
+    paths: ['.promotion-gate-qa5-trigger']
+permissions: {contents: read}
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [valid,zero-generation,reversed-interval,equal-interval,missing-source]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          export KWAI_QUEUE_JOB_ID=job42 KWAI_LEASE_GENERATION=9 KWAI_SOURCE_ID=src KWAI_SOURCE_START=10 KWAI_SOURCE_END=20
+          case '${{ matrix.probe }}' in
+            valid) python3 kwai_real_publish_promotion_gate.py >out; grep -q KWAI_REAL_PUBLISH_PROMOTION_CONTRACT_OK out ;;
+            zero-generation) export KWAI_LEASE_GENERATION=0; set +e; python3 kwai_real_publish_promotion_gate.py >out 2>&1; rc=$?; set -e; test "$rc" != 0 ;;
+            reversed-interval) export KWAI_SOURCE_START=20 KWAI_SOURCE_END=10; set +e; python3 kwai_real_publish_promotion_gate.py >out 2>&1; rc=$?; set -e; test "$rc" != 0 ;;
+            equal-interval) export KWAI_SOURCE_START=10 KWAI_SOURCE_END=10; set +e; python3 kwai_real_publish_promotion_gate.py >out 2>&1; rc=$?; set -e; test "$rc" != 0 ;;
+            missing-source) unset KWAI_SOURCE_ID; set +e; python3 kwai_real_publish_promotion_gate.py >out 2>&1; rc=$?; set -e; test "$rc" != 0 ;;
+          esac
+          echo "PROBE_${{ matrix.probe }}_OK"
