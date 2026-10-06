@@ -67,9 +67,26 @@ jobs:
       - name: Probe deployed controller read-only
         run: |
           set -euo pipefail
-          curl --fail-with-body -sS https://anthares-control.anthares1.workers.dev/health
-          echo
-          curl --fail-with-body -sS https://anthares-control.anthares1.workers.dev/strategy
-          echo
-          curl --fail-with-body -sS https://anthares-control.anthares1.workers.dev/failover-self-test
-          echo
+          BASE=https://anthares-control.anthares1.workers.dev
+          curl --fail-with-body -sS "$BASE/health" > /tmp/health.json
+          curl --fail-with-body -sS "$BASE/strategy" > /tmp/strategy.json
+          curl --fail-with-body -sS "$BASE/failover-self-test" > /tmp/failover.json
+          cat /tmp/health.json; echo
+          cat /tmp/strategy.json; echo
+          cat /tmp/failover.json; echo
+          python - <<'PY'
+          import json
+          h=json.load(open('/tmp/health.json')); s=json.load(open('/tmp/strategy.json')); f=json.load(open('/tmp/failover.json'))
+          assert h.get('pc_fallback') is False, h
+          assert h.get('routing_revision')=='2026-10-06-cloud-only-failover-r1', h
+          assert s.get('oracle') is False and s.get('google_compute') is False, s
+          retired={'local','pc','windows','oracle','google','google_compute'}
+          routes={x for values in s.get('execution_priority',{}).values() for x in values}
+          assert routes.isdisjoint(retired), (routes,retired)
+          assert retired.issubset(set(s.get('retired_executors',[]))), s
+          assert f.get('ok') is True, f
+          assert f.get('primary')=='render' and f.get('after_render_failure')=='github' and f.get('after_github_failure') is None, f
+          assert f.get('recovered_primary')=='render', f
+          assert f.get('checks') and all(f['checks'].values()), f
+          print('DEPLOYED_CLOUD_ONLY_FAILOVER=PROVEN')
+          PY
