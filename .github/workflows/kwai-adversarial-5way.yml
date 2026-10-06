@@ -3,7 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/kwai-adversarial-5way.yml'
-      - 'tests/test_kwai_adversarial-5way.sh'
+      - 'tests/test_kwai_adversarial_5way.sh'
       - '.kwai-adversarial-5way-trigger'
 permissions:
   contents: read
