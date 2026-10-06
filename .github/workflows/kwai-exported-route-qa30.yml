@@ -1,0 +1,64 @@
+name: Kwai Exported Auth Route QA30
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-exported-route-qa30-trigger']
+permissions: {contents: read}
+jobs:
+  route30:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch vault
+        run: |
+          curl -fL --retry 3 -o /tmp/v.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/v.zip" | sha256sum -c -
+          mkdir -p /tmp/v && python3 -c "import zipfile;zipfile.ZipFile('/tmp/v.zip').extractall('/tmp/v')"
+      - name: Android exported-route 30-way
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 4096M
+          cores: 2
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 4096
+          script: |
+            set -euo pipefail
+            adb install-multiple -r /tmp/v/*.apk
+            python3 - <<'PY'
+            import subprocess,time
+            def a(*x): return subprocess.run(["adb",*x],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True).stdout
+            routes=[
+              "ikwai://authorization","kwai://authorization","ikwaibulldog://authorization",
+              "ikwaipartner://auth","ikwai://authorization/","kwai://authorization/",
+              "ikwaibulldog://authorization/","ikwaipartner://auth/",
+              "ikwai://authorization?source=android","kwai://authorization?source=android",
+              "ikwaibulldog://authorization?source=android","ikwaipartner://auth?source=android",
+              "ikwai://authorization?redirect=1","kwai://authorization?redirect=1",
+              "ikwaibulldog://authorization?redirect=1","ikwaipartner://auth?redirect=1",
+              "ikwai://authorization?from=login","kwai://authorization?from=login",
+              "ikwaibulldog://authorization?from=login","ikwaipartner://auth?from=live",
+              "ikwai://authorization#login","kwai://authorization#login",
+              "ikwaibulldog://authorization#login","ikwaipartner://auth#live",
+              "ikwai://authorization?test=1","kwai://authorization?test=1",
+              "ikwaibulldog://authorization?test=1","ikwaipartner://auth?test=1",
+              "ikwai://authorization?source=kwai","ikwaipartner://auth?source=kwai"
+            ]
+            for i,u in enumerate(routes,1):
+              a("shell","am","force-stop","com.kwai.video")
+              out=a("shell","am","start","-W","-a","android.intent.action.VIEW","-d",u,"com.kwai.video")
+              time.sleep(2)
+              act=a("shell","dumpsys","activity","activities")
+              win=a("shell","dumpsys","window","windows")
+              a("shell","uiautomator","dump","/sdcard/r.xml")
+              ui=a("shell","cat","/sdcard/r.xml")
+              focus=" | ".join(z.strip() for z in act.splitlines() if "mResumedActivity" in z or "topResumedActivity" in z)
+              wfocus=" | ".join(z.strip() for z in win.splitlines() if "mCurrentFocus" in z or "mFocusedApp" in z)
+              print(f"ROUTE30_{i:02d} URI={u} START={out[-400:]} ACT={focus[-500:]} WIN={wfocus[-500:]} UI={ui[-800:]}")
+            print("SUCCESS_SIGNAL=EXPORTED_ROUTE_30_OBSERVED")
+            PY
