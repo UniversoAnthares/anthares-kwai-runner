@@ -1,0 +1,59 @@
+name: Android Runtime Harness 30-Way
+on:
+  push:
+    paths: ['.github/workflows/android-runtime-harness-30.yml']
+permissions: { contents: read }
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        variant: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Common proven SDK precondition
+        run: |
+          SDK=/usr/local/lib/android/sdk
+          SM=$SDK/cmdline-tools/latest/bin/sdkmanager
+          test -x "$SM"
+          "$SM" --version
+          "$SM" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64" >/dev/null
+          echo TEST_VALIDITY=SDK_AND_IMAGE_READY
+      - name: Distinct AVD boot strategy
+        env:
+          V: ${{ matrix.variant }}
+        shell: bash
+        run: |
+          set -e
+          SDK=/usr/local/lib/android/sdk
+          case "$V" in
+            1|2|3|4|5) AV="$SDK/cmdline-tools/latest/bin/avdmanager"; EM="$SDK/emulator/emulator"; AD="$SDK/platform-tools/adb";;
+            6|7|8|9|10) AV="$(find "$SDK" -type f -name avdmanager | head -1)"; EM="$(find "$SDK" -type f -name emulator -perm -111 | head -1)"; AD="$(find "$SDK" -type f -name adb -perm -111 | head -1)";;
+            11|12|13|14|15) AV="$SDK/cmdline-tools/latest/bin/avdmanager"; EM="$SDK/emulator/emulator"; AD="$(command -v adb || true)";;
+            16|17|18|19|20) AV="$(find "$SDK/cmdline-tools" -type f -name avdmanager | sort -V | tail -1)"; EM="$SDK/emulator/emulator"; AD="$SDK/platform-tools/adb";;
+            21|22|23|24|25) AV="$SDK/cmdline-tools/latest/bin/avdmanager"; EM="$(command -v emulator || echo "$SDK/emulator/emulator")"; AD="$SDK/platform-tools/adb";;
+            *) AV="$(find /usr/local/lib/android -type f -name avdmanager | head -1)"; EM="$(find /usr/local/lib/android -type f -name emulator -perm -111 | head -1)"; AD="$(find /usr/local/lib/android -type f -name adb -perm -111 | head -1)";;
+          esac
+          echo VARIANT=$V
+          echo AVDMANAGER=$AV
+          echo EMULATOR=$EM
+          echo ADB=$AD
+          test -x "$AV"; test -x "$EM"; test -x "$AD"
+          NAME="a$V"
+          echo no | "$AV" create avd -n "$NAME" -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force >/dev/null
+          ARGS="-avd $NAME -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 1536 -cores 2"
+          case "$V" in
+            2|7|12|17|22|27) ARGS="$ARGS -no-snapshot";;
+            3|8|13|18|23|28) ARGS="$ARGS -no-snapshot-save";;
+            4|9|14|19|24|29) ARGS="$ARGS -wipe-data";;
+            5|10|15|20|25|30) ARGS="$ARGS -accel on";;
+          esac
+          sudo chmod 666 /dev/kvm
+          nohup "$EM" $ARGS >/tmp/emu.log 2>&1 &
+          "$AD" wait-for-device
+          timeout 180 bash -c 'until [ "$('"$AD"' shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 3; done'
+          "$AD" shell getprop ro.build.version.release
+          echo RUNTIME_HARNESS_PROVEN=$V
