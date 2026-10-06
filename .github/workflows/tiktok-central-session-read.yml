@@ -309,8 +309,6 @@ jobs:
           PY
           )"
           echo "::add-mask::$TOKEN"
-          fail=$(curl --fail-with-body -sS -X POST "$CONTROL/github-queue/fail" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v2","lease_generation":3,"error_class":"reconciled_absent","error_message":"independent profile reconciliation confirmed no diagnostic post","published_possible":true}')
-          echo "$fail"
           rec=$(curl --fail-with-body -sS -X POST "$CONTROL/github-queue/reconcile" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data '{"id":"tiktok-canary-20261006-synthetic-v2","confirmed_absent":true}')
           echo "$rec"
           python3 - "$rec" <<'PY'
