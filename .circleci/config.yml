@@ -202,6 +202,59 @@ jobs:
           path: final-ui.xml
           destination: final-ui.xml
 
+
+  kwai_boundary_probe:
+    parameters:
+      replica:
+        type: integer
+    machine:
+      image: android:default
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Replica << parameters.replica >> boot and ADB boundary probe
+          command: |
+            set -Eeuo pipefail
+            R="<< parameters.replica >>"
+            SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
+            yes | sdkmanager --licenses >/dev/null 2>&1 || true
+            sdkmanager "$SYSTEM_IMAGE"
+            echo "no" | avdmanager create avd --force --name "anthares-boundary-$R" --package "$SYSTEM_IMAGE" --device "pixel_2"
+            nohup emulator -avd "anthares-boundary-$R" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >"/tmp/emulator-$R.log" 2>&1 &
+            adb start-server
+            timeout 60 adb wait-for-device
+            for i in $(seq 1 120); do
+              [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
+              sleep 2
+            done
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+            echo "REPLICA=$R"
+            echo "BOOT_SERIAL=$(adb get-serialno)"
+            echo "BOOT_STATE=$(adb get-state)"
+            echo "BOUNDARY_PRECONDITION_OK=1"
+      - run:
+          name: Replica << parameters.replica >> next-step ADB check
+          command: |
+            set -Eeuo pipefail
+            R="<< parameters.replica >>"
+            echo "REPLICA=$R"
+            adb devices -l
+            if timeout 15 adb wait-for-device; then
+              echo "NEXT_STEP_ADB_ALIVE=1"
+              echo "NEXT_SERIAL=$(adb get-serialno)"
+              echo "NEXT_STATE=$(adb get-state)"
+            else
+              echo "NEXT_STEP_ADB_ALIVE=0"
+              exit 20
+            fi
+      - run:
+          name: Replica << parameters.replica >> diagnostics
+          command: |
+            cat "/tmp/emulator-<< parameters.replica >>.log" || true
+            adb devices -l || true
+          when: always
+
 workflows:
   anthares_parallel:
     jobs:
@@ -211,3 +264,33 @@ workflows:
       - kwai_login_surface_smoke:
           requires:
             - kwai_install_smoke
+      - kwai_boundary_probe:
+          name: kwai_boundary_probe_01
+          replica: 1
+      - kwai_boundary_probe:
+          name: kwai_boundary_probe_02
+          replica: 2
+      - kwai_boundary_probe:
+          name: kwai_boundary_probe_03
+          replica: 3
+      - kwai_boundary_probe:
+          name: kwai_boundary_probe_04
+          replica: 4
+      - kwai_boundary_probe:
+          name: kwai_boundary_probe_05
+          replica: 5
+      - kwai_boundary_probe:
+          name: kwai_boundary_probe_06
+          replica: 6
+      - kwai_boundary_probe:
+          name: kwai_boundary_probe_07
+          replica: 7
+      - kwai_boundary_probe:
+          name: kwai_boundary_probe_08
+          replica: 8
+      - kwai_boundary_probe:
+          name: kwai_boundary_probe_09
+          replica: 9
+      - kwai_boundary_probe:
+          name: kwai_boundary_probe_10
+          replica: 10
