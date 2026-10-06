@@ -29,17 +29,17 @@ for i in range(45):
  if s=="MAIN":
   print("FSM_MAIN_REACHED");break
  if s=="PERMISSION":
-  n=rid(ns,"permission_deny_button") or rid(ns,"permission_allow_button")
-  if n:tap(n)
+  n=rid(ns,"permission_deny_button")\n  if n is None:n=rid(ns,"permission_allow_button")
+  if n is not None:tap(n)
  elif s=="START":
   n=rid(ns,"tiny_discovery_left_operation_btn")
-  if n:tap(n)
+  if n is not None:tap(n)
   ns2,t2=snap()
   if state(ns2,t2)=="START":
    adb("shell","am","force-stop","com.kwai.video");time.sleep(1);adb("shell","monkey","-p","com.kwai.video","1");time.sleep(7)
  elif s=="INTEREST":
-  n=rid(ns,"tiny_discovery_dislike_button") or rid(ns,"tiny_discovery_like_button")
-  if n:tap(n)
+  n=rid(ns,"tiny_discovery_dislike_button")\n  if n is None:n=rid(ns,"tiny_discovery_like_button")
+  if n is not None:tap(n)
   else:adb("shell","input","swipe","850","1100","180","1100","250");time.sleep(1)
  elif s=="INTEREST_SELECT":
   n=None
@@ -47,14 +47,14 @@ for i in range(45):
    label=(x.attrib.get("text","")+" "+x.attrib.get("content-desc","")).strip().lower()
    if label=="skip" or label.startswith("skip "):
     n=x;break
-  if n: tap(n)
+  if n is not None: tap(n)
   else:
    print("INTEREST_SELECT_SKIP_NOT_FOUND")
    adb("shell","input","keyevent","4");time.sleep(2)
  elif s=="LAUNCHER_ANR":
   print("LAUNCHER_RECOVERY_BEGIN")
-  n=rid(ns,"aerr_close") or rid(ns,"aerr_wait")
-  if n:tap(n)
+  n=rid(ns,"aerr_close")\n  if n is None:n=rid(ns,"aerr_wait")
+  if n is not None:tap(n)
   adb("shell","input","keyevent","3");time.sleep(4)
   nsr,tr=snap(); print("LAUNCHER_AFTER_HOME="+state(nsr,tr))
   adb("shell","am","force-stop","com.kwai.video");time.sleep(1)
@@ -66,6 +66,6 @@ else:
  print("FSM_TIMEOUT");raise SystemExit(20)
 # stabilize main and inspect real clickable Profile parent
 adb("shell","am","force-stop","com.kwai.video");time.sleep(1);adb("shell","monkey","-p","com.kwai.video","1");time.sleep(12)
-ns,t=snap(); n=rid(ns,"id_home_bottom_tab_me") or rid(ns,"ll_profile"); print("PROFILE_PARENT="+str(bool(n)))
-if n: tap(n);time.sleep(4)
+ns,t=snap(); n=rid(ns,"id_home_bottom_tab_me")\nif n is None:n=rid(ns,"ll_profile")\nprint("PROFILE_PARENT="+str(n is not None))
+if n is not None: tap(n);time.sleep(4)
 ns,t=snap();print("POST_PROFILE_UI="+t[:1800]);print("POST_PROFILE_IDS="+" ".join(n.attrib.get("resource-id","") for n in ns)[:4000])
