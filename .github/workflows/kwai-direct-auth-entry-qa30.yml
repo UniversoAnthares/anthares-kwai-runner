@@ -1,0 +1,72 @@
+name: Kwai Direct Auth Entry QA30
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-direct-auth-qa30-trigger']
+jobs:
+  qa30:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch vault
+        run: |
+          curl -fL --retry 3 -o /tmp/v.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/v.zip" | sha256sum -c -
+          mkdir -p /tmp/v && python3 -c "import zipfile;zipfile.ZipFile('/tmp/v.zip').extractall('/tmp/v')"
+      - name: Prepare manual Android
+        run: |
+          sudo chmod 666 /dev/kvm || true
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;x86_64" >/dev/null
+          export ANDROID_SDK_HOME="$HOME/.android"; export ANDROID_AVD_HOME="$HOME/.android/avd"; mkdir -p "$ANDROID_AVD_HOME"
+          echo no | $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd -n antharesqa30 -k "system-images;android-35;google_apis;x86_64" -d pixel_5 --force
+          nohup $ANDROID_HOME/emulator/emulator -avd antharesqa30 -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save -accel on -memory 4096 >/tmp/emu.log 2>&1 &
+          adb wait-for-device
+          for i in $(seq 1 150); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break; sleep 2; done
+          [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]
+          adb install-multiple -r /tmp/v/*.apk
+          echo MANUAL_RUNTIME_READY
+      - name: Run 30 direct auth entries
+        run: |
+          python3 - <<'PY'
+          import subprocess,time,xml.etree.ElementTree as ET
+          pkg="com.kwai.video"
+          entries=[
+          ("component","com.yxcorp.gifshow.login.PhoneAccountActivityV2"),
+          ("component","com.yxcorp.gifshow.login.LoginActivity"),
+          ("component","com.yxcorp.gifshow.login.activity.CommonLoginActivity"),
+          ("component","com.yxcorp.gifshow.login.PhoneVerifyActivity"),
+          ("component","com.yxcorp.gifshow.login.SetPasswordActivity"),
+          ("component","com.yxcorp.gifshow.login.PhoneResetPsdActivity"),
+          ("component","com.yxcorp.gifshow.login.SplashLoginActivity"),
+          ("component","com.yxcorp.gifshow.login.emaillogin.activity.EmailLoginActivity"),
+          ("uri","kwai://login/phone"),("uri","kwai://loginchannel/phone"),
+          ("uri","kwai://login"),("uri","kwai://loginchannel"),
+          ("uri","kwai://phone"),("uri","kwai://account/phone"),
+          ("uri","kwai://login/phone/"),("uri","kwai://loginchannel/phone/"),
+          ("uri","kwai://login?type=phone"),("uri","kwai://login?channel=phone"),
+          ("uri","kwai://loginchannel?type=phone"),("uri","kwai://loginchannel?channel=phone"),
+          ("uri","kwai://login/phone?source=login"),("uri","kwai://login/phone?from=login"),
+          ("uri","kwai://login/phone?type=phone"),("uri","kwai://login/phone?channel=phone"),
+          ("uri","kwai://loginchannel/phone?source=login"),("uri","kwai://loginchannel/phone?from=login"),
+          ("uri","kwai://loginchannel/phone?type=phone"),("uri","kwai://loginchannel/phone?channel=phone"),
+          ("component","com.yxcorp.gifshow.login.BindPhoneActivity"),("component","com.yxcorp.gifshow.login.ForcePhoneRegisterActivity")]
+          def sh(*a):return subprocess.run(["adb",*a],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=30).stdout
+          def ui():
+            sh("shell","uiautomator","dump","/sdcard/q.xml");x=sh("shell","cat","/sdcard/q.xml")
+            try:r=ET.fromstring(x)
+            except:return "",0
+            ns=list(r.iter("node"));t=" ".join((n.attrib.get("text","")+" "+n.attrib.get("content-desc","")).strip().lower() for n in ns)
+            ed=sum(n.attrib.get("editable")=="true" or n.attrib.get("class","").endswith("EditText") for n in ns)
+            return t,ed
+          for i,(kind,val) in enumerate(entries,1):
+            sh("shell","am","force-stop",pkg)
+            if kind=="component":out=sh("shell","am","start","-n",pkg+"/"+val)
+            else:out=sh("shell","am","start","-W","-a","android.intent.action.VIEW","-d",val,pkg)
+            time.sleep(3);t,ed=ui()
+            interesting=ed or any(k in t for k in ("phone number","verification code","get code","send code","country code","password"))
+            print(f"DIRECT30_{i:02d} KIND={kind} VALUE={val} EDITS={ed} INTERESTING={bool(interesting)} START={out[-240:]} UI={t[-700:]}")
+            if interesting:
+              print("DIRECT30_WINNER="+str(i));print("SUCCESS_SIGNAL=DIRECT_AUTH_FORM_REACHED");raise SystemExit(0)
+          print("FAILURE_SIGNAL=DIRECT30_EXHAUSTED");raise SystemExit(45)
+          PY
