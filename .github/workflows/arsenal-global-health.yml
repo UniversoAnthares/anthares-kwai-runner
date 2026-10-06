@@ -1,0 +1,40 @@
+name: Arsenal global health
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+permissions:
+  contents: read
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Global health
+        env:
+          ANTHARES_CLOUDFLARE_HEALTH_URL: ${{ secrets.ANTHARES_CLOUDFLARE_HEALTH_URL }}
+          ANTHARES_RENDER_HEALTH_URL: ${{ secrets.ANTHARES_RENDER_HEALTH_URL }}
+          ANTHARES_CIRCLECI_HEALTH_URL: ${{ secrets.ANTHARES_CIRCLECI_HEALTH_URL }}
+          CIRCLECI_TOKEN: ${{ secrets.CIRCLECI_TOKEN }}
+          ANTHARES_WORDPRESS_HEALTH_URL: ${{ secrets.ANTHARES_WORDPRESS_HEALTH_URL }}
+          ANTHARES_TELEGRAM_HEALTH_URL: ${{ secrets.ANTHARES_TELEGRAM_HEALTH_URL }}
+          ANTHARES_KWAI_HEALTH_URL: ${{ secrets.ANTHARES_KWAI_HEALTH_URL }}
+          ANTHARES_TIKTOK_HEALTH_URL: ${{ secrets.ANTHARES_TIKTOK_HEALTH_URL }}
+          ANTHARES_GITLAB_HEALTH_URL: ${{ secrets.ANTHARES_GITLAB_HEALTH_URL }}
+          ANTHARES_CODEBERG_HEALTH_URL: ${{ secrets.ANTHARES_CODEBERG_HEALTH_URL }}
+          ANTHARES_MESHCENTRAL_HEALTH_URL: ${{ secrets.ANTHARES_MESHCENTRAL_HEALTH_URL }}
+          ANTHARES_WINREMOTE_HEALTH_URL: ${{ secrets.ANTHARES_WINREMOTE_HEALTH_URL }}
+          ANTHARES_INSTAGRAM_HEALTH_URL: ${{ secrets.ANTHARES_INSTAGRAM_HEALTH_URL }}
+          ANTHARES_THREADS_HEALTH_URL: ${{ secrets.ANTHARES_THREADS_HEALTH_URL }}
+          ANTHARES_X_HEALTH_URL: ${{ secrets.ANTHARES_X_HEALTH_URL }}
+          ANTHARES_CLAUDE_HEALTH_URL: ${{ secrets.ANTHARES_CLAUDE_HEALTH_URL }}
+          ANTHARES_GROK_HEALTH_URL: ${{ secrets.ANTHARES_GROK_HEALTH_URL }}
+          ANTHARES_PERPLEXITY_HEALTH_URL: ${{ secrets.ANTHARES_PERPLEXITY_HEALTH_URL }}
+          ANTHARES_GEMINI_HEALTH_URL: ${{ secrets.ANTHARES_GEMINI_HEALTH_URL }}
+          ANTHARES_MANUS_HEALTH_URL: ${{ secrets.ANTHARES_MANUS_HEALTH_URL }}
+        run: python tools/arsenal_health.py | tee arsenal-health.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arsenal-health
+          path: arsenal-health.json
