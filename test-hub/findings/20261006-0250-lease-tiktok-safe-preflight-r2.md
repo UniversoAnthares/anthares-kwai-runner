@@ -1,5 +1,5 @@
 # TikTok safe preflight round 2 lease
-STATUS: RUNNING
+STATUS: CLOSED
 AREA: tiktok-safe-preflight-r2
 DATE: 2026-10-06
 OWNER: CHAT 3
@@ -9,3 +9,6 @@ FAILED_AVOIDED: do not retry the same queue-health identity. Round 2 varies auth
 SUCCESS_SIGNAL: five independent probes characterize allowed/denied OIDC surfaces and fail-closed behavior without queue mutation.
 FAILURE_SIGNAL: unexpected acceptance of invalid auth or loss of known-good Render identity.
 TEST_VALIDITY: no publication endpoint, no publication_started, no TikTok mutation.
+
+
+CLOSURE: CLOSED: superseded by rounds 3–5; auth/identity contracts characterized without mutation.
