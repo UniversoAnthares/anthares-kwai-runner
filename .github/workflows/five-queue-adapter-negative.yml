@@ -1,0 +1,42 @@
+name: Five Queue Adapter Negative Contracts
+on:
+  push:
+    branches: [main]
+    paths: ['.five-queue-adapter-negative-trigger']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [bad-generation, version-mismatch, malformed-health, malformed-ack, http-error]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          p='${{ matrix.probe }}'; tmp="$(mktemp -d)"; cp kwai_queue_state.sh "$tmp/"; cd "$tmp"
+          realcurl="$(command -v curl)"
+          cat > curl <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          a="$*"
+          if [[ "$a" == *"/health"* ]]; then
+            if [ "${CASE:-}" = malformed-health ]; then echo '{bad'; else echo "{"version":"${HEALTH_VERSION:-2026-10-05-queue-fencing-v16}","pc_fallback":false}"; fi
+          elif [[ "$a" == *"audience="* ]]; then echo '{"value":"stub-token"}'
+          elif [ "${CASE:-}" = http-error ]; then echo '{"error":"denied"}' >&2; exit 22
+          elif [ "${CASE:-}" = malformed-ack ]; then echo '{"ok":true,"job":{}}'
+          else echo '{"ok":true,"job":{"lease_generation":7}}'
+          fi
+          SH
+          chmod +x curl; export PATH="$tmp:$PATH" ACTIONS_ID_TOKEN_REQUEST_URL=https://oidc/token ACTIONS_ID_TOKEN_REQUEST_TOKEN=x KWAI_QUEUE_JOB_ID=j KWAI_LEASE_GENERATION=7
+          case "$p" in
+            bad-generation) export CASE=normal KWAI_LEASE_GENERATION=abc; set +e; ./kwai_queue_state.sh renew 60 >out 2>&1; rc=$?; set -e; test "$rc" != 0; ! grep -q CENTRAL_RENEW_ACK out; echo PROBE_BAD_GENERATION_OK ;;
+            version-mismatch) export HEALTH_VERSION=old; set +e; ./kwai_queue_state.sh renew 60 >out 2>&1; rc=$?; set -e; test "$rc" != 0; grep -q CONTROL_VERSION_MISMATCH out; echo PROBE_VERSION_MISMATCH_OK ;;
+            malformed-health) export CASE=malformed-health; set +e; ./kwai_queue_state.sh renew 60 >out 2>&1; rc=$?; set -e; test "$rc" != 0; ! grep -q CENTRAL_RENEW_ACK out; echo PROBE_MALFORMED_HEALTH_OK ;;
+            malformed-ack) export CASE=malformed-ack; set +e; ./kwai_queue_state.sh renew 60 >out 2>&1; rc=$?; set -e; test "$rc" != 0; grep -q QUEUE_RENEW_GENERATION_MISSING out; echo PROBE_MALFORMED_ACK_OK ;;
+            http-error) export CASE=http-error; set +e; ./kwai_queue_state.sh renew 60 >out 2>&1; rc=$?; set -e; test "$rc" != 0; ! grep -q CENTRAL_RENEW_ACK out; echo PROBE_HTTP_ERROR_OK ;;
+          esac
