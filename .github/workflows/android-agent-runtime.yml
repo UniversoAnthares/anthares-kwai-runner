@@ -119,38 +119,6 @@ jobs:
           else
             echo AGENT_SERVICE_UNAVAILABLE_UIAUTOMATOR_FALLBACK
           fi
-      - name: Prime Chrome before native Phone handoff
-        run: |
-          adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main >/dev/null 2>&1 || true
-          sleep 3
-          for i in 1 2 3 4 5; do
-            adb shell uiautomator dump /sdcard/fre.xml >/dev/null 2>&1 || true
-            adb pull /sdcard/fre.xml /tmp/fre.xml >/dev/null 2>&1 || true
-            python3 - <<'PY'
-          import os,re,subprocess,xml.etree.ElementTree as ET
-          p="/tmp/fre.xml"
-          if os.path.exists(p):
-              try:
-                  root=ET.parse(p).getroot()
-                  for n in root.iter("node"):
-                      lab=(n.attrib.get("text","")+" "+n.attrib.get("content-desc","")).lower()
-                      if "use without an account" in lab or n.attrib.get("resource-id","").endswith("signin_fre_dismiss_button"):
-                          m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.attrib.get("bounds",""))
-                          if m:
-                              a,b,c,d=map(int,m.groups())
-                              subprocess.run(["adb","shell","input","tap",str((a+c)//2),str((b+d)//2)])
-                              print("CHROME_FRE_DISMISS_ACTION=1")
-                              break
-              except Exception:
-                  pass
-          PY
-            sleep 2
-            if ! adb shell dumpsys activity activities | grep -q 'FirstRunActivity'; then break; fi
-          done
-          if adb shell dumpsys activity activities | grep -q 'FirstRunActivity'; then echo FAILURE_SIGNAL=CHROME_FRE_NOT_CLEARED; exit 47; fi
-          echo TEST_VALIDITY=CHROME_FRE_CLEARED
-          adb shell am force-stop com.android.chrome || true
-
       - name: Launch Kwai and normalize to MAIN
         run: |
           adb logcat -c
