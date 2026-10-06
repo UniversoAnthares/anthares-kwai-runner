@@ -3,6 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths: ['.kwai-interactive-login-trigger']
+  push:
+    branches: [main]
     paths:
       - '.kwai-interactive-login-trigger'
       - '.github/workflows/kwai-interactive-remote-login.yml'
