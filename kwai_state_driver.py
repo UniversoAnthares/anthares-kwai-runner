@@ -19,6 +19,7 @@ def state(ns,t):
  if "start now" in t or "you’re all set" in t or "you're all set" in t:return "START"
  if "profile" in t and ("home" in t or "discover" in t):return "MAIN"
  if "choose like or dislike" in t:return "INTEREST"
+ if "select your interests" in t and ("skip" in t or "selected and continue" in t):return "INTEREST_SELECT"
  if "pixel launcher isn't responding" in t:return "LAUNCHER_ANR"
  return "OTHER"
 adb("shell","pm","grant","com.kwai.video","android.permission.POST_NOTIFICATIONS")
@@ -40,6 +41,16 @@ for i in range(45):
   n=rid(ns,"tiny_discovery_dislike_button") or rid(ns,"tiny_discovery_like_button")
   if n:tap(n)
   else:adb("shell","input","swipe","850","1100","180","1100","250");time.sleep(1)
+ elif s=="INTEREST_SELECT":
+  n=None
+  for x in ns:
+   label=(x.attrib.get("text","")+" "+x.attrib.get("content-desc","")).strip().lower()
+   if label=="skip" or label.startswith("skip "):
+    n=x;break
+  if n: tap(n)
+  else:
+   print("INTEREST_SELECT_SKIP_NOT_FOUND")
+   adb("shell","input","keyevent","4");time.sleep(2)
  elif s=="LAUNCHER_ANR":
   print("LAUNCHER_RECOVERY_BEGIN")
   n=rid(ns,"aerr_close") or rid(ns,"aerr_wait")
