@@ -2,7 +2,7 @@ name: TikTok Real Publish
 on:
   push:
     paths:
-      - '.tiktok-synthetic-canary-trigger'
+      - '.tiktok-canary-run2'
   workflow_dispatch:
     inputs:
       video_url:
