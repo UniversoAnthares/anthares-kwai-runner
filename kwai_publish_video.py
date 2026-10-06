@@ -4,7 +4,8 @@ import json,os,re,subprocess,sys,time,xml.etree.ElementTree as ET
 TITLE=os.environ.get("KWAI_VIDEO_TITLE","").strip()
 MEDIA_NAME=os.environ.get("KWAI_MEDIA_NAME","").strip()
 VIDEO=os.environ.get("KWAI_ANDROID_VIDEO","").strip()
-JOB_ID=os.environ.get("KWAI_QUEUE_JOB_ID","").strip()\nMEDIA_SHA=os.environ.get("KWAI_MEDIA_SHA256","").strip()
+JOB_ID=os.environ.get("KWAI_QUEUE_JOB_ID","").strip()
+MEDIA_SHA=os.environ.get("KWAI_MEDIA_SHA256","").strip()
 PHASE=(sys.argv[1] if len(sys.argv)>1 else os.environ.get("KWAI_PUBLISH_PHASE","")).strip().lower()
 READY_FILE="/tmp/kwai-publish-ready.json"
 
