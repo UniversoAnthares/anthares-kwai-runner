@@ -9,6 +9,13 @@ TTL="${KWAI_LEASE_RENEW_TTL_SECONDS:-600}"
 [[ "$TTL" =~ ^[0-9]+$ ]] && [ "$TTL" -gt "$INTERVAL" ] || { echo "INVALID_RENEW_TTL"; exit 47; }
 [ "$#" -gt 0 ] || { echo "usage: kwai_queue_heartbeat.sh command [args...]"; exit 48; }
 
+# Fence the publication immediately. Do not wait one heartbeat interval before
+# proving that this holder still owns the current lease generation.
+if ! bash kwai_queue_state.sh renew "$TTL"; then
+  echo "STATE=FAILED_SAFE REASON=initial-lease-renew-failed"
+  exit 49
+fi
+
 tmp="$(mktemp)"
 cleanup(){ rm -f "$tmp"; }
 trap cleanup EXIT
