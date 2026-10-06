@@ -1,0 +1,15 @@
+name: Kwai Crash Restart No Republish
+on:
+  push:
+    paths: ['.github/workflows/kwai-crash-restart-qa.yml','tests/test_kwai_crash_restart.py']
+permissions: {contents: read}
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [crash-immediate, crash-before-started, restart-uncertain, double-restart, uncertain-positive-reconcile]
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/test_kwai_crash_restart.py "${{ matrix.case }}"
