@@ -9,7 +9,7 @@ permissions:
   id-token: write
 
 jobs:
-  session-forensics:
+  session-cookie-matrix:
     strategy:
       fail-fast: false
       matrix:
@@ -22,47 +22,44 @@ jobs:
       CONTROL: https://anthares-control.anthares1.workers.dev
     steps:
       - uses: actions/checkout@v4
-      - name: Runtime
-        run: |
-          python3 -m pip install --disable-pip-version-check -q playwright requests
-          command -v google-chrome
+      - run: python3 -m pip install --disable-pip-version-check -q playwright requests
       - name: OIDC
         id: oidc
         shell: bash
         run: |
           TOKEN="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           echo "::add-mask::$TOKEN"; echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-      - name: Fetch session
+      - name: Session diagnostics
         env:
           TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: |
           curl -fsSL "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $TOKEN" >/tmp/s.json
           python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/s.json')); s=d['state']; json.dump(s,open('/tmp/state.json','w'),separators=(',',':'))
-          print('cookies',len(s.get('cookies') or []),'origins',len(s.get('origins') or []))
+          import json,hashlib
+          d=json.load(open('/tmp/s.json')); s=d.get('state') or {}; cs=s.get('cookies') or []
+          auth=['sessionid','sessionid_ss','sid_tt','sid_guard','uid_tt','uid_tt_ss','multi_sids']
+          for n in auth:
+            vals=[str(x.get('value','')) for x in cs if x.get('name')==n]
+            print(n,'count='+str(len(vals)),'lens='+str([len(v) for v in vals]),'hashes='+str([hashlib.sha256(v.encode()).hexdigest()[:12] for v in vals]))
+          print('domains',sorted(set(str(x.get('domain','')) for x in cs)))
+          json.dump(s,open('/tmp/state.json','w'),separators=(',',':'))
           PY
-      - name: Read-only identity surfaces
-        env:
-          TIKTOK_CHROMIUM_EXECUTABLE: /usr/bin/google-chrome
+      - name: Browser auth boundary
         shell: bash
         run: |
           python3 - <<'PY'
-          import json,os,re
+          import json
           from playwright.sync_api import sync_playwright
           st=json.load(open('/tmp/state.json'))
           with sync_playwright() as p:
             b=p.chromium.launch(headless=True,executable_path='/usr/bin/google-chrome')
             ctx=b.new_context(storage_state=st)
-            page=ctx.new_page()
-            for url in ['https://www.tiktok.com/','https://www.tiktok.com/upload']:
+            pg=ctx.new_page()
+            for url in ['https://www.tiktok.com/upload','https://www.tiktok.com/setting','https://www.tiktok.com/creator-center/upload']:
               try:
-                page.goto(url,wait_until='domcontentloaded',timeout=45000); page.wait_for_timeout(5000)
-                body=page.locator('body').inner_text(timeout=10000)
-                hits=sorted(set(re.findall(r'@[A-Za-z0-9._]{2,32}',body)))
-                print('SURFACE',url,'FINAL',page.url,'AT_HANDLES',hits[:20],'TITLE',page.title())
-              except Exception as e: print('SURFACE_ERROR',url,type(e).__name__,str(e)[:160])
-            print('COOKIE_NAMES',sorted(x.get('name','') for x in ctx.cookies()))
+                r=pg.goto(url,wait_until='domcontentloaded',timeout=45000); pg.wait_for_timeout(3000)
+                print('CHECK',url,'status',r.status if r else None,'final',pg.url,'title',pg.title())
+              except Exception as e: print('ERR',url,type(e).__name__,str(e)[:120])
             b.close()
           PY
