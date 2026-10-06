@@ -3,7 +3,6 @@ on:
   push:
     paths:
       - '.tiktok-github-direct-v6-trigger'
-      - '.github/workflows/tiktok-github-direct-publisher.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -205,7 +204,7 @@ jobs:
           python3 tiktok_web_publish_local.py
 
       - name: Reconcile publication result
-        if: always()
+        if: always() && env.LEASE_ID != ''
         env:
           CONTROL_TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
