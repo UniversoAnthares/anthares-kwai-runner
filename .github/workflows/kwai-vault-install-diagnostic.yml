@@ -13,7 +13,13 @@ jobs:
           set -euo pipefail
           curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
           echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
-          rm -rf /tmp/kwai-vault && mkdir /tmp/kwai-vault && unzip -q /tmp/kwai-vault.zip -d /tmp/kwai-vault
+          rm -rf /tmp/kwai-vault && mkdir /tmp/kwai-vault
+          python3 - <<'PY'
+          import zipfile
+          z=zipfile.ZipFile("/tmp/kwai-vault.zip")
+          print("\n".join(z.namelist()))
+          z.extractall("/tmp/kwai-vault")
+          PY
           SCRIPT="$(find /tmp/kwai-vault -name kwai_vault_install.sh -print -quit)"
           test -n "$SCRIPT"
           echo "SCRIPT=$SCRIPT"
