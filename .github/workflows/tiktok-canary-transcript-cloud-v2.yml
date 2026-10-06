@@ -1,0 +1,59 @@
+name: TikTok Canary Transcript Cloud v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.tiktok-canary-analysis-v2-trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yt-dlp and Deno
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check -q yt-dlp
+          curl -fsSL https://deno.land/install.sh | sh
+          echo "$HOME/.deno/bin" >> "$GITHUB_PATH"
+          "$HOME/.deno/bin/deno" --version
+          yt-dlp --version
+      - name: Try subtitle-only cloud extraction matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://www.youtube.com/watch?v=a4w8KAOxANc'
+          ROOT=/tmp/canary-subs
+          mkdir -p "$ROOT"
+          cd "$ROOT"
+          ok=0
+          for client in android_vr tv web_safari mweb default; do
+            rm -f ./*.vtt ./*.srv* ./*.json 2>/dev/null || true
+            echo "=== PLAYER_CLIENT=$client ==="
+            extra=()
+            if [ "$client" != default ]; then extra+=(--extractor-args "youtube:player_client=$client"); fi
+            set +e
+            yt-dlp --js-runtimes "deno:$HOME/.deno/bin/deno" "${extra[@]}" \
+              --skip-download --write-auto-subs --write-subs \
+              --sub-langs 'pt-BR,pt,pt.*,en' --sub-format vtt \
+              -o 'source.%(ext)s' "$URL"
+            rc=$?
+            set -e
+            if ls ./*.vtt >/dev/null 2>&1; then
+              echo "SUBTITLE_EXTRACTION=OK client=$client"
+              ok=1
+              break
+            fi
+            echo "SUBTITLE_EXTRACTION=FAILED client=$client rc=$rc"
+          done
+          test "$ok" = 1
+          ls -lah
+      - name: Rank continuous candidates
+        run: python3 tools/tiktok_rank_vtt.py /tmp/canary-subs
