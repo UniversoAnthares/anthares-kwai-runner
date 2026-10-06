@@ -123,12 +123,29 @@ jobs:
           command: |
             set -Eeuo pipefail
             echo "POST_BOUNDARY_ADB_STATE=$(adb get-state 2>/dev/null || true)"
-            adb shell pidof com.kwai.video
-            adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null || true
-            adb pull /sdcard/kwai-ui.xml kwai-ui.xml >/dev/null || true
-            test -s kwai-ui.xml
-            grep -Eo 'text="[^"]*"|content-desc="[^"]*"' kwai-ui.xml | head -40 || true
-            echo "SUCCESS_SIGNAL=KWAI_INSTALL_AND_LAUNCH_OK"
+            PID="$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
+            echo "POST_BOUNDARY_KWAI_PID=$PID"
+            if [ -z "$PID" ]; then
+              echo "POST_BOUNDARY_KWAI_PROCESS_MISSING=1"
+              adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 || true
+              sleep 3
+              PID="$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
+              echo "POST_RELAUNCH_KWAI_PID=$PID"
+            fi
+            adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/kwai-ui.xml kwai-ui.xml >/dev/null 2>&1 || true
+            if [ -s kwai-ui.xml ]; then
+              echo "POST_BOUNDARY_UI_DUMP_OK=1"
+              grep -Eo 'text="[^"]*"|content-desc="[^"]*"' kwai-ui.xml | head -40 || true
+            else
+              echo "POST_BOUNDARY_UI_DUMP_OK=0"
+            fi
+            if [ -n "$PID" ] && [ -s kwai-ui.xml ]; then
+              echo "SUCCESS_SIGNAL=KWAI_INSTALL_AND_LAUNCH_OK"
+            else
+              echo "FAILURE_SIGNAL=KWAI_RUNTIME_OR_UI_NOT_READY"
+              exit 51
+            fi
       - run:
           name: Save diagnostics
           command: |
