@@ -99,12 +99,19 @@ jobs:
       - name: Enable AccessibilityService
         run: |
           SVC='us.anthares.agent/us.anthares.agent.AntharesAccessibilityService'
+          echo "DECLARED_SERVICES:"
+          adb shell dumpsys package us.anthares.agent | grep -i -A8 -B3 'AccessibilityService' || true
+          adb shell cmd package query-services --brief -a android.accessibilityservice.AccessibilityService us.anthares.agent 2>/dev/null || true
           adb shell settings put secure enabled_accessibility_services "$SVC"
           adb shell settings put secure accessibility_enabled 1
-          sleep 3
-          adb shell settings get secure enabled_accessibility_services | grep -q 'us.anthares.agent'
+          sleep 5
+          echo "ENABLED_SETTING=$(adb shell settings get secure enabled_accessibility_services | tr -d '\r')"
           adb shell dumpsys accessibility > /tmp/accessibility.txt
-          grep -E 'us.anthares.agent|AntharesAccessibilityService' /tmp/accessibility.txt
+          cat /tmp/accessibility.txt
+          if ! grep -q 'us.anthares.agent' /tmp/accessibility.txt; then
+            echo ACCESSIBILITY_SERVICE_NOT_BOUND
+            exit 31
+          fi
           echo AGENT_SERVICE_ENABLED
       - name: Launch Kwai and normalize to MAIN
         run: |
