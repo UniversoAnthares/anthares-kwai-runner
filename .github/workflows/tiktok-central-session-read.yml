@@ -260,7 +260,7 @@ jobs:
           python3 - "$INV_HTTP" <<'PY'
           import json,sys
           d=json.load(open('/tmp/inventory.json'))
-          print('PROFILE_INVENTORY_META',{'http':int(sys.argv[1]),'ok':d.get('ok'),'error':d.get('error'),'detail':d.get('detail'),'count':d.get('count')})
+          print('PROFILE_INVENTORY_META',{'http':int(sys.argv[1]),'ok':d.get('ok'),'error':d.get('error'),'detail':d.get('detail'),'message':d.get('message'),'count':d.get('count')})
           if int(sys.argv[1])!=200 or not d.get('ok'): raise SystemExit('PROFILE_INVENTORY_INVALID')
           PY
           REMOTE_ID="$(python3 - <<'PY'
