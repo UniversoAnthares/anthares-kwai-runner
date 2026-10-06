@@ -2,6 +2,15 @@ name: Kwai Autologin Real Acceptance
 
 on:
   workflow_dispatch:
+    inputs:
+      account_id:
+        description: 'Kwai account namespace'
+        required: true
+        default: 'primary'
+        type: choice
+        options:
+          - primary
+          - secondary
   push:
     paths:
       - '.autologin-trigger'
@@ -23,13 +32,24 @@ jobs:
           echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
           rm -rf kwai-vault && mkdir kwai-vault
           unzip -q kwai-vault.zip -d kwai-vault
-      - name: Verify credentials exist
+      - name: Select account credentials without cross-account fallback
         env:
-          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
-          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          ACCOUNT_ID: ${{ inputs.account_id || 'primary' }}
+          PRIMARY_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          PRIMARY_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          SECONDARY_LOGIN: ${{ secrets.KWAI_SECONDARY_LOGIN }}
+          SECONDARY_PASSWORD: ${{ secrets.KWAI_SECONDARY_PASSWORD }}
         run: |
-          test -n "$KWAI_LOGIN"
-          test -n "$KWAI_PASSWORD"
+          set -eu
+          case "$ACCOUNT_ID" in
+            primary) L="$PRIMARY_LOGIN"; P="$PRIMARY_PASSWORD" ;;
+            secondary) L="$SECONDARY_LOGIN"; P="$SECONDARY_PASSWORD" ;;
+            *) echo "invalid account_id"; exit 2 ;;
+          esac
+          test -n "$L" && test -n "$P"
+          echo "KWAI_ACCOUNT_ID=$ACCOUNT_ID" >> "$GITHUB_ENV"
+          echo "KWAI_LOGIN=$L" >> "$GITHUB_ENV"
+          echo "KWAI_PASSWORD=$P" >> "$GITHUB_ENV"
       - name: Enable KVM
         run: |
           test -e /dev/kvm
@@ -37,8 +57,9 @@ jobs:
       - name: Real disposable Android acceptance
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
-          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_ACCOUNT_ID: ${{ env.KWAI_ACCOUNT_ID }}
+          KWAI_LOGIN: ${{ env.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ env.KWAI_PASSWORD }}
         with:
           api-level: 35
           arch: x86_64
