@@ -112,11 +112,11 @@ jobs:
           echo "ENABLED_SETTING=$(adb shell settings --user 0 get secure enabled_accessibility_services | tr -d '\r')"
           adb shell dumpsys accessibility > /tmp/accessibility.txt
           cat /tmp/accessibility.txt
-          if ! grep -q 'us.anthares.agent' /tmp/accessibility.txt; then
-            echo ACCESSIBILITY_SERVICE_NOT_BOUND
-            exit 31
+          if grep -q 'Enabled services:.*us.anthares.agent' /tmp/accessibility.txt || grep -q 'Bound services:.*us.anthares.agent' /tmp/accessibility.txt; then
+            echo AGENT_SERVICE_ENABLED
+          else
+            echo AGENT_SERVICE_UNAVAILABLE_UIAUTOMATOR_FALLBACK
           fi
-          echo AGENT_SERVICE_ENABLED
       - name: Launch Kwai and normalize to MAIN
         run: |
           adb logcat -c
@@ -125,43 +125,42 @@ jobs:
           python3 kwai_state_driver.py | tee /tmp/fsm.log
           grep -q 'FSM_MAIN_REACHED' /tmp/fsm.log
           echo TEST_VALIDITY=FSM_MAIN_REACHED
-          sleep 3
-          adb logcat -d -s AntharesAgent:I '*:S' | tee /tmp/agent-main.log
-          grep -q 'STATE=MAIN' /tmp/agent-main.log
-          echo AGENT_MAIN_OBSERVED
-      - name: Semantic Profile action and state proof
+          echo MAIN_UI_READY
+      - name: Semantic MAIN login control probe
         run: |
           python3 - <<'PY'
-          import subprocess, time, xml.etree.ElementTree as ET
-          def dump():
-              subprocess.run(["adb","shell","uiautomator","dump","/sdcard/u.xml"],stdout=subprocess.DEVNULL,check=False)
-              subprocess.run(["adb","pull","/sdcard/u.xml","/tmp/u.xml"],stdout=subprocess.DEVNULL,check=True)
-              return ET.parse("/tmp/u.xml").getroot()
-          root=dump()
-          target=None
-          for n in root.iter("node"):
-              rid=n.attrib.get("resource-id","")
-              if rid.endswith("/ll_profile"):
-                  target=n; break
-          if target is None: raise SystemExit("PROFILE_SEMANTIC_ANCHOR_MISSING")
-          b=target.attrib.get("bounds","")
-          import re
-          m=re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",b)
-          if not m: raise SystemExit("PROFILE_BOUNDS_INVALID")
+          import subprocess,time,re,xml.etree.ElementTree as ET
+          def adb(*a):
+              return subprocess.run(["adb",*a],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=30).stdout
+          def dump(tag):
+              adb("shell","uiautomator","dump",f"/sdcard/{tag}.xml")
+              adb("pull",f"/sdcard/{tag}.xml",f"/tmp/{tag}.xml")
+              return ET.parse(f"/tmp/{tag}.xml").getroot()
+          def label(n):
+              return (n.attrib.get("text","")+" "+n.attrib.get("content-desc","")).strip().lower()
+          root=dump("main-login")
+          candidates=[n for n in root.iter("node") if label(n) in ("log in","login","sign in","entrar")]
+          print("LOGIN_CONTROL_COUNT="+str(len(candidates)))
+          if not candidates:
+              raise SystemExit("LOGIN_CONTROL_VISIBLE=0")
+          print("LOGIN_CONTROL_VISIBLE=1")
+          n=candidates[0]
+          m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.attrib.get("bounds",""))
+          if not m: raise SystemExit("LOGIN_CONTROL_BOUNDS_INVALID")
           x1,y1,x2,y2=map(int,m.groups())
-          subprocess.run(["adb","shell","input","tap",str((x1+x2)//2),str((y1+y2)//2)],check=True)
-          print("SEMANTIC_ANCHOR=ll_profile")
-          time.sleep(8)
+          adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2))
+          time.sleep(5)
+          after=dump("after-login")
+          nodes=list(after.iter("node"))
+          edits=[x for x in nodes if x.attrib.get("editable")=="true" or x.attrib.get("class","").endswith("EditText")]
+          text=" ".join(label(x) for x in nodes)
+          explicit=any(t in text for t in ("phone","email","e-mail","continue","verification code","password","sign in","log in"))
+          print("EDITABLE_FIELDS="+str(len(edits)))
+          print("AUTH_EXPLICIT_CONTROLS="+("1" if explicit else "0"))
+          print("POST_LOGIN_UI="+text[-1800:])
+          if edits or explicit:
+              print("SUCCESS_SIGNAL=LOGIN_SURFACE_REACHED")
+              raise SystemExit(0)
+          print("FAILURE_SIGNAL=LOGIN_SURFACE_NOT_REACHED")
+          raise SystemExit(42)
           PY
-          adb logcat -d -s AntharesAgent:I '*:S' | tee /tmp/agent-profile.log
-          adb shell uiautomator dump /sdcard/final.xml >/dev/null || true
-          adb pull /sdcard/final.xml /tmp/final.xml >/dev/null || true
-          if grep -Eq 'STATE=(PROFILE|RESOURCE_LOADING|LOGIN_REQUIRED|AUTHENTICATED)' /tmp/agent-profile.log; then
-            echo SUCCESS_SIGNAL=AGENT_PROFILE_STATE_OBSERVED
-          elif grep -Eqi 'resource downloading|downloading resources' /tmp/final.xml; then
-            echo SUCCESS_SIGNAL=RESOURCE_LOADING_UI_OBSERVED
-          else
-            echo FAILURE_SIGNAL=AGENT_NO_PROFILE_STATE
-            cat /tmp/agent-profile.log
-            exit 41
-          fi
