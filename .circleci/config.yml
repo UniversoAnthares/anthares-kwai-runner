@@ -339,9 +339,69 @@ jobs:
             echo "REPLICA=$R POST_BOUNDARY_ADB=$(adb get-state)"
             echo "REPLICA=$R POST_BOUNDARY_PID=$(adb shell pidof com.kwai.video || true)"
 
+  kwai_install_variants:
+    parameters:
+      variant:
+        type: string
+    machine:
+      image: android:default
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Kwai install variant << parameters.variant >>
+          no_output_timeout: 12m
+          command: |
+            set -Eeuo pipefail
+            V="<< parameters.variant >>"
+            IMG="system-images;android-35;google_apis;x86_64"
+            yes | sdkmanager --licenses >/dev/null 2>&1 || true
+            sdkmanager "$IMG"
+            echo no | avdmanager create avd --force --name "kv-$V" --package "$IMG" --device pixel_2
+            case "$V" in
+              cold) EMU_FLAGS="-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on" ;;
+              wait2) EMU_FLAGS="-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on" ;;
+              restart_adb) EMU_FLAGS="-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on" ;;
+              launch_retry) EMU_FLAGS="-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on" ;;
+              ui_delay) EMU_FLAGS="-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on" ;;
+            esac
+            nohup emulator -avd "kv-$V" $EMU_FLAGS >"/tmp/kv-$V.log" 2>&1 &
+            adb start-server
+            timeout 60 adb wait-for-device
+            for i in $(seq 1 120); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 2; done
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+            [ "$V" = wait2 ] && sleep 30 || true
+            if [ "$V" = restart_adb ]; then adb kill-server; adb start-server; timeout 30 adb wait-for-device; fi
+            curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+            echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+            rm -rf kwai-vault && mkdir kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+            bash kwai_vault_install.sh
+            if [ "$V" = launch_retry ] && ! adb shell pidof com.kwai.video >/dev/null 2>&1; then adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 || true; sleep 5; fi
+            [ "$V" = ui_delay ] && sleep 15 || true
+            echo "VARIANT=$V PID=$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
+            adb shell uiautomator dump /sdcard/v.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/v.xml "kwai-$V.xml" >/dev/null 2>&1 || true
+            if [ -s "kwai-$V.xml" ]; then echo "VARIANT=$V UI_DUMP_OK=1"; else echo "VARIANT=$V UI_DUMP_OK=0"; fi
+            adb logcat -d -t 400 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|com\.kwai\.video|UnsatisfiedLinkError|SIG(SEGV|ABRT)|native bridge|dlopen failed' | tail -100 || true
+
 workflows:
   anthares_parallel:
     jobs:
+      - kwai_install_variants:
+          name: kwai_install_variant_cold
+          variant: cold
+      - kwai_install_variants:
+          name: kwai_install_variant_wait2
+          variant: wait2
+      - kwai_install_variants:
+          name: kwai_install_variant_restart_adb
+          variant: restart_adb
+      - kwai_install_variants:
+          name: kwai_install_variant_launch_retry
+          variant: launch_retry
+      - kwai_install_variants:
+          name: kwai_install_variant_ui_delay
+          variant: ui_delay
       - kwai_same_step_probe:
           name: kwai_same_step_probe_01
           replica: 1
