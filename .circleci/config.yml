@@ -82,7 +82,7 @@ jobs:
             sdkmanager "$SYSTEM_IMAGE"
             echo "no" | avdmanager create avd --force --name anthares-kwai-api35 --package "$SYSTEM_IMAGE" --device "pixel_2"
       - run:
-          name: Boot API 35 emulator
+          name: Boot API 35 emulator and install Kwai
           command: |
             set -Eeuo pipefail
             nohup emulator -avd anthares-kwai-api35               -no-window -no-audio -no-boot-anim -no-snapshot               -gpu swiftshader_indirect -accel on >/tmp/anthares-kwai-emulator.log 2>&1 &
@@ -99,19 +99,16 @@ jobs:
             adb shell getprop ro.dalvik.vm.native.bridge
             echo "BOOT_ADB_SERIAL=$(adb get-serialno)"
             echo "BOOT_ADB_STATE=$(adb get-state)"
-      - run:
-          name: Install validated Kwai vault
-          command: |
-            set -Eeuo pipefail
-            curl -fL --retry 3 --connect-timeout 10 --max-time 180               -o kwai-vault.zip               https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+            echo "SAME_STEP_KWAI_INSTALL_START=1"
+            curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
             echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
-            rm -rf kwai-vault
-            mkdir kwai-vault
+            rm -rf kwai-vault && mkdir kwai-vault
             unzip -q kwai-vault.zip -d kwai-vault
             test -s kwai-vault/MANIFEST.tsv
             bash kwai_vault_install.sh
             adb shell pm path com.kwai.video
             adb shell dumpsys package com.kwai.video | grep -E 'versionName|versionCode|primaryCpuAbi' | head -20
+            echo "SAME_STEP_KWAI_INSTALL_OK=1"
       - run:
           name: Probe Kwai UI and process
           command: |
