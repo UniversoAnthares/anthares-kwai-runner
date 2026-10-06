@@ -199,14 +199,23 @@ jobs:
               a,b,c,d=map(int,m.groups());adb("shell","input","tap",str((a+c)//2),str((b+d)//2));return True
           url="https://studio.kwai.com/"
           adb("shell","am","start","-a","android.intent.action.VIEW","-d",url);time.sleep(4)
-          r=snap("chrome-fre")
-          if r is not None:
-              ns=list(r.iter("node"))
-              dismiss=next((n for n in ns if "use without an account" in lab(n)),None)
-              if dismiss is not None:
-                  print("CHROME_FRE_DETECTED=1");tap(dismiss);time.sleep(3)
-          # Force the official URL again after Chrome first-run is cleared.
-          adb("shell","am","start","-a","android.intent.action.VIEW","-d",url)
+          # Clear Chrome first-run deterministically before opening Studio.
+          # UI tap is attempted first; policy flags are a fallback for headless images.
+          for fre_try in range(1,6):
+              r=snap("chrome-fre-"+str(fre_try))
+              if r is None: break
+              ns=list(r.iter("node")); fre=" ".join(lab(n) for n in ns)
+              if "welcome to chrome" not in fre: break
+              dismiss=next((n for n in ns if "use without an account" in lab(n) or n.attrib.get("resource-id","").endswith("signin_fre_dismiss_button")),None)
+              print("CHROME_FRE_DETECTED="+str(fre_try))
+              if dismiss is not None and tap(dismiss):
+                  time.sleep(3); continue
+              adb("shell","am","force-stop","com.android.chrome")
+              adb("shell","pm","clear","com.android.chrome")
+              adb("shell","am","start","-n","com.android.chrome/com.google.android.apps.chrome.Main","--ez","disable-fre","true")
+              time.sleep(3)
+          # Launch URL explicitly in Chrome after FRE clearing.
+          adb("shell","am","start","-n","com.android.chrome/com.google.android.apps.chrome.Main","-a","android.intent.action.VIEW","-d",url)
           for attempt in range(1,16):
               time.sleep(2)
               r=snap("studio-"+str(attempt))
