@@ -1,0 +1,41 @@
+name: TikTok WP Inventory Forensics 5-Way
+on:
+  push:
+    paths: ['.github/workflows/tiktok-wp-inventory-forensics.yml']
+  workflow_dispatch:
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [source_hosts, mime_matrix, slug_search, date_path, content_fields]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect live inventory
+        env:
+          MODE: ${{ matrix.mode }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.parse,collections,re
+          h={'User-Agent':'Mozilla/5.0 AntharesInventoryForensics/1'}; rows=[]
+          for p in (1,2):
+            try:
+              with urllib.request.urlopen(urllib.request.Request(f'https://anthares.us/wp-json/wp/v2/media?media_type=video&per_page=100&page={p}',headers=h),timeout=30) as r: rows+=json.load(r)
+            except Exception as e:
+              if p==1: raise
+          if not rows: print('TEST_VALIDITY=INVALID'); raise SystemExit(3)
+          m=os.environ['MODE']; print('TEST_VALIDITY=OK COUNT',len(rows),'MODE',m)
+          if m=='source_hosts':
+            c=collections.Counter(urllib.parse.urlsplit(x.get('source_url','')).netloc for x in rows if x.get('source_url')); print('HOSTS',dict(c)); print('FORENSIC_SIGNAL=HOST_MAP')
+          elif m=='mime_matrix':
+            c=collections.Counter((x.get('mime_type'),x.get('media_type')) for x in rows); print('MIMES',dict(c)); print('FORENSIC_SIGNAL=MIME_MAP')
+          elif m=='slug_search':
+            vals=[(x.get('id'),x.get('slug'),x.get('source_url')) for x in rows if x.get('slug')]; print('SLUG_SAMPLE',vals[:8]); print('FORENSIC_SIGNAL=SLUGS',len(vals))
+          elif m=='date_path':
+            vals=[(x.get('date','')[:7],urllib.parse.urlsplit(x.get('source_url','')).path) for x in rows[:12]]; print('DATE_PATH_SAMPLE',vals); print('FORENSIC_SIGNAL=DATE_PATH')
+          else:
+            keys=collections.Counter(k for x in rows for k,v in x.items() if v not in (None,'',[],{})); print('FIELDS',dict(keys)); 
+            rich=[(x.get('id'), sorted(k for k,v in x.items() if v not in (None,'',[],{}) and k not in ('source_url','guid','link'))) for x in rows[:5]]; print('RICH',rich); print('FORENSIC_SIGNAL=CONTENT_FIELDS')
+          PY
