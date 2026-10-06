@@ -147,3 +147,10 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - Final SHA dedupe QA: run 37411496459 passed all 5 current cases with explicit PROVEN signals.
 - Whole-project audit: no unowned immediate implementation gap found. Final acceptance still requires independent real-post proof for TikTok and Kwai.
 - Canonical finding: `test-hub/findings/20261006-qa-four-fronts-execution-round.md`.
+
+
+## OIDC closure — 2026-10-06 05:31Z
+- PROVEN: the reviewed GitHub OIDC allowlist source was deployed to the Cloudflare control plane through Wrangler OAuth from a fresh clone.
+- PROVEN: protected TikTok Central Session Read Probe run 37418647980 completed SUCCESS post-deploy; the deployed-control HTTP 401 blocker is closed.
+- Preserve current queue-fencing v16 semantics. Continue TikTok only under the serialized tiktok-publish lease.
+- Canonical finding: test-hub/findings/20261006-0531-cloudflare-tiktok-oidc-deploy-proven.md.
