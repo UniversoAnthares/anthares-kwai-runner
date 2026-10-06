@@ -156,6 +156,13 @@ if not fill(LOGIN):
         # Last deterministic fallback: focus the lower-center form area and verify an editable field appeared.
         adb("shell","input","tap","540","1120"); time.sleep(1)
         if not fill(LOGIN): raise SystemExit(3)
+# Current Kwai build may use phone verification instead of password.
+if tap_matching(("get code","send code","obter código","enviar código")):
+    time.sleep(4)
+    r=dump(); txt=" ".join(label(n) for n in nodes(r))
+    if any(k in txt for k in ("verification code","enter code","code sent","código de verificação","digite o código")):
+        print("KWAI_OTP_CHALLENGE_REACHED")
+        raise SystemExit(6)
 # Move to password step if needed.
 tap_matching(("next","continue","continuar","avançar"))
 time.sleep(1)
