@@ -97,13 +97,13 @@ jobs:
               echo "UNEXPECTED_QUEUE_JOB=$id"
               exit 21
             fi
-            failed="$(curl --fail-with-body -sS -X POST "$CONTROL/heartbeat/github-oidc" -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data '{"executor":"github","queue_op":"fail",""{"id":"$id","executor":"github","lease_generation":$gen,"error_class":"reconciled_absent_retirement","error_message":"user independently confirmed no v5 post; retiring stale diagnostic job","published_possible":false}")"
+            failed="$(curl --fail-with-body -sS -X POST "$CONTROL/heartbeat/github-oidc" -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "{\"executor\":\"github\",\"queue_op\":\"fail\",\"id\":\"$id\",\"lease_generation\":$gen,\"error_class\":\"reconciled_absent_retirement\",\"error_message\":\"user independently confirmed no v5 post; retiring stale diagnostic job\",\"published_possible\":false}")"
             echo "$failed"
           done
           echo "V5_RETIREMENT_FAILED"
           exit 22
 
-      - name: Enqueue and acquire v9 exact canary
+      - name: Enqueue and acquire v11 exact canary
         if: env.LEASE_ID != env.JOB_ID
         env:
           CONTROL_TOKEN: ${{ steps.oidc.outputs.token }}
