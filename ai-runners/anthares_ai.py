@@ -80,12 +80,10 @@ def build_envelope(prompt: str) -> tuple[str, str, str]:
     start = f"ANTHARES_RESPONSE_START_{token}"
     end = f"ANTHARES_RESPONSE_END_{token}"
     wrapped = (
-        "Siga a solicitação do usuário abaixo. Para integração automática, sua resposta deve "
-        f"começar em uma linha com {start} e terminar em uma linha com {end}. "
-        "Não repita nem explique estas instruções de integração.\n\n"
+        "Siga a solicitação do usuário abaixo. Não repita nem explique estas instruções de integração.\n\n"
         "SOLICITAÇÃO DO USUÁRIO:\n"
         f"{prompt}\n\n"
-        "LEMBRETE DE FORMATO:\n"
+        "FORMATO OBRIGATÓRIO DA RESPOSTA:\n"
         f"{start}\n[sua resposta]\n{end}"
     )
     return wrapped, start, end
