@@ -1,0 +1,50 @@
+name: Control Publisher Contract QA5
+on:
+  push:
+    branches: [main]
+    paths: ['.control-publisher-contract-qa5-trigger']
+permissions: {contents: read}
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        probe: [claim-before-publish, job-id-propagated, generation-propagated, no-job-no-publish, stale-generation-no-publish]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          p='${{ matrix.probe }}'; tmp="$(mktemp -d)"; cd "$tmp"
+          cat > harness.py <<'PY'
+          import sys
+          p=sys.argv[1]; events=[]
+          def claim(mode="ok"):
+              events.append("claim")
+              if mode=="none": return None
+              return {"id":"job-42","lease_generation":9,"status":"leased"}
+          def publish(job, supplied_gen=None):
+              if not job: raise RuntimeError("no-job")
+              gen=job["lease_generation"] if supplied_gen is None else supplied_gen
+              if gen!=job["lease_generation"]: raise RuntimeError("stale-generation")
+              events.append(("publish",job["id"],gen))
+          if p=="claim-before-publish":
+              j=claim(); publish(j); assert events[0]=="claim" and events[1][0]=="publish"
+          elif p=="job-id-propagated":
+              j=claim(); publish(j); assert events[-1][1]=="job-42"
+          elif p=="generation-propagated":
+              j=claim(); publish(j); assert events[-1][2]==9
+          elif p=="no-job-no-publish":
+              j=claim("none")
+              try: publish(j)
+              except RuntimeError: pass
+              assert not any(isinstance(x,tuple) and x[0]=="publish" for x in events)
+          elif p=="stale-generation-no-publish":
+              j=claim()
+              try: publish(j,8)
+              except RuntimeError: pass
+              assert not any(isinstance(x,tuple) and x[0]=="publish" for x in events)
+          print("PROBE_"+p+"_OK")
+          PY
+          python3 harness.py "$p"
