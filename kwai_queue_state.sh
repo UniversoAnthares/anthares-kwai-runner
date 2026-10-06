@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-OP="${1:?usage: kwai_queue_state.sh started|complete|fail [value]}"
+OP="${1:?usage: kwai_queue_state.sh started|complete|fail|reconcile [value]}"
 VALUE="${2:-}"
 CONTROL_URL="${ANTHARES_CONTROL_URL:-https://anthares-control.anthares1.workers.dev}"
 EXPECTED_VERSION="${ANTHARES_CONTROL_EXPECTED_VERSION:-2026-10-05-queue-lease-renew-v14}"
@@ -52,6 +52,15 @@ print(json.dumps({"id":sys.argv[1],"published_possible":True,"error_class":"kwai
 PY
 )"
     ;;
+  reconcile)
+    test -n "$VALUE" || { echo 'RECONCILIATION_EVIDENCE_MISSING'; exit 45; }
+    endpoint='reconcile'
+    payload="$(python3 - "$KWAI_QUEUE_JOB_ID" "$VALUE" <<'PY'
+import json,sys
+print(json.dumps({"id":sys.argv[1],"confirmed":True,"remote_id":"kwai:"+sys.argv[1],"confirmation_evidence":sys.argv[2]},separators=(",",":")))
+PY
+)"
+    ;;
   *) echo "UNKNOWN_QUEUE_OP=$OP"; exit 44 ;;
 esac
 
@@ -71,6 +80,8 @@ if op=="complete" and not (j.get("confirmed") is True and j.get("status")=="publ
     raise SystemExit("QUEUE_COMPLETE_NOT_CONFIRMED")
 if op=="fail" and j.get("status")!="uncertain":
     raise SystemExit("QUEUE_FAIL_NOT_UNCERTAIN")
+if op=="reconcile" and not (j.get("confirmed") is True and j.get("status")=="published"):
+    raise SystemExit("QUEUE_RECONCILE_NOT_CONFIRMED")
 PY
 
 echo "STATE=CENTRAL_${OP^^}_ACK"
