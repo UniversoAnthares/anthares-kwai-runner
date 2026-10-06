@@ -1,0 +1,52 @@
+name: TikTok Five Safe Preflight Probes
+on:
+  push:
+    paths:
+      - '.tiktok-five-safe-probes-v1'
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [control-health, queue-health, render-health, session-status, session-test]
+    runs-on: ubuntu-slim
+    steps:
+      - name: Run independent safe probe
+        shell: bash
+        env:
+          CASE: ${{ matrix.case }}
+        run: |
+          set -euo pipefail
+          CONTROL=https://anthares-control.anthares1.workers.dev
+          RENDER=https://anthares-tiktok-render-rootless.onrender.com
+          control_token() {
+            python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'https://anthares-control.anthares1.workers.dev'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          }
+          render_token() {
+            python3 - <<'PY'
+          import json,os,urllib.parse,urllib.request
+          u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urllib.parse.urlencode({'audience':'anthares-render-worker'})
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r: print(json.load(r)['value'])
+          PY
+          }
+          case "$CASE" in
+            control-health) curl -sS --fail-with-body "$CONTROL/health" > /tmp/r.json ;;
+            queue-health) T="$(control_token)"; echo "::add-mask::$T"; curl -sS --fail-with-body "$CONTROL/github-queue/health" -H "Authorization: Bearer $T" > /tmp/r.json ;;
+            render-health) curl -sS --fail-with-body "$RENDER/health" > /tmp/r.json ;;
+            session-status) T="$(render_token)"; echo "::add-mask::$T"; curl -sS --fail-with-body "$RENDER/session-status" -H "Authorization: Bearer $T" > /tmp/r.json ;;
+            session-test) T="$(render_token)"; echo "::add-mask::$T"; curl -sS --fail-with-body -X POST "$RENDER/session-test" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' --data '{}' > /tmp/r.json ;;
+          esac
+          python3 - <<'PY'
+          import json,os
+          d=json.load(open('/tmp/r.json'))
+          safe={k:d.get(k) for k in ('ok','status','version','bootstrapped','ready_for_tiktok','identity_verified','service','revision','counts')}
+          print('SAFE_PROBE_RESULT '+os.environ['CASE']+' '+json.dumps(safe,sort_keys=True))
+          if d.get('ok') is False: raise SystemExit('probe returned ok=false')
+          PY
