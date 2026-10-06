@@ -19,7 +19,17 @@ jobs:
           CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           RT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=anthares-render-worker" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           curl --fail-with-body -sS "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $CT" >/tmp/c.json
-          curl --fail-with-body -sS "$RENDER/session-status" -H "Authorization: Bearer $RT" -H "X-Anthares-Control-OIDC: $CT" >/tmp/r.json
+          python3 - <<'PY'
+          import json
+          c=json.load(open('/tmp/c.json'))
+          state=c.get('state') or {}
+          assert state.get('cookies')
+          json.dump(state,open('/tmp/state.json','w'),separators=(',',':'))
+          PY
+          # Bootstrap directly: avoids replaying a delegated GitHub OIDC token
+          # from Render back into the control plane.
+          curl --fail-with-body -sS -X POST "$RENDER/bootstrap-session" -H "Authorization: Bearer $RT" -H 'Content-Type: application/json' --data-binary @/tmp/state.json >/tmp/boot.json
+          curl --fail-with-body -sS "$RENDER/session-status" -H "Authorization: Bearer $RT" >/tmp/r.json
           python3 - <<'PY'
           import json
           c=json.load(open('/tmp/c.json'));r=json.load(open('/tmp/r.json'))
@@ -32,6 +42,7 @@ jobs:
           print('SESSION_RESTORE=PROVEN')
           PY
   preflight:
+    needs: restore-session
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
