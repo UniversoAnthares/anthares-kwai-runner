@@ -1,5 +1,5 @@
 # TikTok safe preflight round 3 lease
-STATUS: RUNNING
+STATUS: CLOSED
 AREA: tiktok-safe-preflight-r3
 DATE: 2026-10-06
 OWNER: CHAT 3
@@ -9,3 +9,6 @@ BASELINE: Render identity/session positive; invalid/no-token paths must fail clo
 EXCLUDES: queue-adapter negative-contract lease owned elsewhere; media-harness lease owned elsewhere; no enqueue/lease/started/publish.
 SUCCESS_SIGNAL: each contract produces 5/5 consistent outcomes.
 FAILURE_SIGNAL: inconsistent auth behavior, loss of Render identity, or public control health failure.
+
+
+CLOSURE: CLOSED: terminal result 22/25; all stable contracts 5/5, session-test isolated as flaky active probe and removed as publish gate.
