@@ -174,12 +174,12 @@ jobs:
           curl --fail-with-body -sS "$RENDER/session-status" -H "Authorization: Bearer $RENDER_TOKEN" > /tmp/status.json
           curl --fail-with-body -sS --max-time 180 -X POST "$RENDER/browser-memory-test" -H "Authorization: Bearer $RENDER_TOKEN" > /tmp/memory.json
           python3 - <<'PY'
-import json
-d=json.load(open('/tmp/memory.json'))
-if not d.get('ok') or not d.get('no_publish'):
-    raise SystemExit('BROWSER_MEMORY_PROBE_FAILED')
-print('BROWSER_MEMORY_PROBE_OK')
-PY
+          import json
+          d=json.load(open('/tmp/memory.json'))
+          if not d.get('ok') or not d.get('no_publish'):
+              raise SystemExit('BROWSER_MEMORY_PROBE_FAILED')
+          print('BROWSER_MEMORY_PROBE_OK')
+          PY
           python3 - <<'PY'
           import json
           s=json.load(open('/tmp/status.json'))
