@@ -1,0 +1,43 @@
+name: Kwai READY Gate QA15
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-ready-gate-qa15-trigger']
+jobs:
+  qa15:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run 15 READY proof cases
+        run: |
+          python3 - <<'PY'
+          import subprocess,os,json,time
+          now=time.time()
+          base={"state":"READY","account":"acct","observed_at":now,"proof_id":"p1"}
+          cases=[
+           ("valid",base,0,{}),
+           ("missing",None,1,{}),
+           ("invalid_json","{",1,{}),
+           ("state_not_ready",{**base,"state":"LOGIN_REQUIRED"},1,{}),
+           ("empty_account",{**base,"account":""},1,{}),
+           ("empty_proof",{**base,"proof_id":""},1,{}),
+           ("bad_time",{**base,"observed_at":"x"},1,{}),
+           ("stale",{**base,"observed_at":now-901},1,{}),
+           ("future",{**base,"observed_at":now+61},1,{}),
+           ("expected_match",base,0,{"KWAI_EXPECTED_ACCOUNT":"acct"}),
+           ("expected_mismatch",base,1,{"KWAI_EXPECTED_ACCOUNT":"other"}),
+           ("custom_age_ok",{**base,"observed_at":now-10},0,{"KWAI_READY_MAX_AGE_SECONDS":"20"}),
+           ("custom_age_stale",{**base,"observed_at":now-21},1,{"KWAI_READY_MAX_AGE_SECONDS":"20"}),
+           ("numeric_time",{**base,"observed_at":str(now)},0,{}),
+           ("extra_fields",{**base,"extra":"ignored"},0,{})]
+          for i,(name,proof,want_fail,extra) in enumerate(cases,1):
+            env=os.environ.copy();env.update(extra)
+            if proof is None:env.pop("KWAI_AUTH_READY_PROOF",None)
+            elif isinstance(proof,str):env["KWAI_AUTH_READY_PROOF"]=proof
+            else:env["KWAI_AUTH_READY_PROOF"]=json.dumps(proof)
+            p=subprocess.run(["python3","kwai_auth_ready_gate.py"],env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+            passed=(p.returncode!=0)==bool(want_fail)
+            print(f"READY15_{i:02d} {name} RC={p.returncode} PASS={passed} OUT={p.stdout.strip()}")
+            if not passed:raise SystemExit(i)
+          print("KWAI_READY_GATE_QA15_OK=15")
+          PY
