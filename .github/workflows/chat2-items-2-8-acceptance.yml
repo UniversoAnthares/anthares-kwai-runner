@@ -1,0 +1,25 @@
+name: CHAT2 Items 2-8 Acceptance
+on:
+  push:
+    paths:
+      - 'tests/test_chat2_items_2_8_acceptance.py'
+      - 'kwai_publish.sh'
+      - 'kwai_publish_video.py'
+      - 'kwai_verify_publication.py'
+      - 'kwai_reconcile_uncertain.sh'
+      - 'kwai_queue_state.sh'
+      - 'kwai_queue_heartbeat.sh'
+      - 'kwai_claim_job.sh'
+      - 'kwai_real_publish_promotion_gate.py'
+      - '.github/workflows/kwai-real-publish.yml'
+      - 'android-agent/PROTOCOL.md'
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static and executable publisher acceptance
+        run: python3 tests/test_chat2_items_2_8_acceptance.py
