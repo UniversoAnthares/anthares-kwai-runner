@@ -36,9 +36,15 @@ hb=$!
 set +e
 wait "$child"
 rc=$?
-if kill -0 "$hb" 2>/dev/null; then kill -TERM "$hb" 2>/dev/null || true; fi
-wait "$hb" 2>/dev/null
-hrc=$?
+child_done=1
+if kill -0 "$hb" 2>/dev/null; then
+  kill -TERM "$hb" 2>/dev/null || true
+  wait "$hb" 2>/dev/null || true
+  hrc=0
+else
+  wait "$hb" 2>/dev/null
+  hrc=$?
+fi
 set -e
 
 if [ "$hrc" -ne 0 ]; then
