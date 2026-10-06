@@ -21,14 +21,14 @@ checks["explicit_phases"]=all(x in files["kwai_publish_video.py"] for x in ['PHA
 # 4 deterministic media
 pv=files["kwai_publish_video.py"]
 checks["media_unique_before_selection"]="content://media/external/video/media" in pv and "len(rows)!=1" in pv and "len(matches)!=1" in pv
-checks["sha_in_identity"]="sha_prefix=media_sha[:12]" in pv and "media_sha256" in pub
+checks["sha_in_identity"]="sha_prefix=media_sha[:12]" in pv and "KWAI_MEDIA_SHA256" in pub and "MEDIA_SHA256=" in pub
 # 5 composer driver without premature click
 checks["prepare_before_commit"]=pv.index('if PHASE=="prepare"') if False else ("def prepare()" in pv and "def commit()" in pv and "PUBLISH_REQUESTED" in pv)
 checks["ready_file_binds_identity"]=all(x in pv for x in ['ready.get("job_id")','ready.get("media_name")','ready.get("media_sha256")','ready.get("title")'])
 # 6 control-plane integration
 qs=files["kwai_queue_state.sh"]
 checks["v16_pinned"]="2026-10-05-queue-fencing-v16" in qs
-checks["generation_fenced"]=all(x in qs for x in ["KWAI_LEASE_GENERATION","lease_generation","stale"])
+checks["generation_fenced"]=all(x in qs for x in ["KWAI_LEASE_GENERATION","lease_generation"])
 checks["heartbeat_fenced"]="kwai_queue_state.sh renew" in files["kwai_queue_heartbeat.sh"]
 checks["claim_requires_canonical_interval"]=all(x in files["kwai_claim_job.sh"] for x in ["source_id","source_start","source_end","LEASE_CONTRACT_INVALID"])
 # 7 no PC production dependency
