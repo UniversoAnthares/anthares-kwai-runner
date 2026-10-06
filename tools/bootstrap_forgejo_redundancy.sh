@@ -24,6 +24,7 @@ HTTP_ADDR = 127.0.0.1
 HTTP_PORT = 3001
 ROOT_URL = http://127.0.0.1:3001/
 OFFLINE_MODE = true
+DISABLE_SSH = true
 [database]
 DB_TYPE = sqlite3
 PATH = $data/forgejo.db
