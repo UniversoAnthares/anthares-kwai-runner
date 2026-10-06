@@ -1,6 +1,8 @@
 name: Kwai interactive remote login
 on:
   workflow_dispatch:
+  push:
+    paths: ['.github/workflows/kwai-interactive-remote-login.yml']
 permissions:
   contents: read
 jobs:
