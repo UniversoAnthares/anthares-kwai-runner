@@ -1,0 +1,18 @@
+name: Kwai Reconcile QA Round 2
+on:
+  push:
+    paths:
+      - '.github/workflows/kwai-reconcile-qa-round2.yml'
+      - 'tests/test_kwai_reconcile_qa_round2.py'
+permissions: {contents: read}
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [observed-account-false, observed-title-false, profile-not-ready, evidence-empty-object, evidence-extra-valid]
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n kwai_reconcile_uncertain.sh
+      - run: python3 tests/test_kwai_reconcile_qa_round2.py "${{ matrix.case }}"
