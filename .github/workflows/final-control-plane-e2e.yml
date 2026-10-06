@@ -1,0 +1,50 @@
+name: Final Control Plane E2E Proof
+on:
+  push:
+    branches: [main]
+    paths: ['.final-control-e2e-trigger']
+permissions: {contents: read}
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify complete current control chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n kwai_claim_job.sh kwai_run_next_job.sh kwai_queue_state.sh kwai_queue_heartbeat.sh kwai_publish.sh kwai_reconcile_uncertain.sh
+          python3 -m py_compile kwai_real_publish_promotion_gate.py
+          python3 - <<'PY'
+          from pathlib import Path
+          worker=Path("cloudflare-worker/src/index.js").read_text()
+          claim=Path("kwai_claim_job.sh").read_text()
+          run=Path("kwai_run_next_job.sh").read_text()
+          pub=Path("kwai_publish.sh").read_text()
+          rec=Path("kwai_reconcile_uncertain.sh").read_text()
+          hb=Path("kwai_queue_heartbeat.sh").read_text()
+          state=Path("kwai_queue_state.sh").read_text()
+          gate=Path("kwai_real_publish_promotion_gate.py").read_text()
+          checks={
+            "worker-v16":'2026-10-05-queue-fencing-v16' in worker,
+            "atomic-lease":'lease_generation=lease_generation+1' in worker,
+            "stale-fence":'stale_lease_generation' in worker,
+            "uncertain-state":"status='uncertain'" in worker,
+            "reconcile-endpoint":'async reconcile' in worker,
+            "claim-oidc":'github-queue-get/lease?platform=kwai' in claim,
+            "claim-generation":'KWAI_LEASE_GENERATION' in claim,
+            "promotion-gate":'KWAI_QUEUE_JOB_ID' in gate and 'KWAI_LEASE_GENERATION' in gate,
+            "heartbeat-renew":'kwai_queue_state.sh renew' in hb,
+            "publisher-started":'kwai_queue_state.sh started' in pub,
+            "publisher-complete":'kwai_queue_state.sh complete' in pub,
+            "publisher-uncertain":'mark_uncertain' in pub,
+            "reconcile-specific":'KWAI_PUBLICATION_SPECIFICALLY_VERIFIED' in rec,
+            "single-publish":run.count('bash kwai_publish.sh')==1,
+            "uncertain-only-reconcile":'if [ "$rc" -ne 90 ]' in run and run.index('kwai_reconcile_uncertain.sh')>run.index('if [ "$rc" -ne 90 ]'),
+            "state-generation":'KWAI_LEASE_GENERATION' in state,
+          }
+          bad=[k for k,v in checks.items() if not v]
+          assert not bad,bad
+          for k in checks: print("E2E_"+k+"_OK")
+          print("FINAL_CONTROL_PLANE_E2E_CONTRACT_OK")
+          PY
