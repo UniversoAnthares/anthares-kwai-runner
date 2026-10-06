@@ -1,0 +1,37 @@
+name: Git provider redundancy
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 */6 * * *"
+permissions:
+  contents: read
+concurrency:
+  group: git-provider-redundancy
+  cancel-in-progress: false
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [gitlab, codeberg]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mirror independently
+        env:
+          ANTHARES_GITLAB_PUSH_URL: ${{ secrets.ANTHARES_GITLAB_PUSH_URL }}
+          ANTHARES_CODEBERG_PUSH_URL: ${{ secrets.ANTHARES_CODEBERG_PUSH_URL }}
+        run: bash tools/git-provider-sync.sh "${{ matrix.provider }}"
+  verify:
+    needs: mirror
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare provider SHAs
+        env:
+          ANTHARES_GITLAB_READ_URL: ${{ secrets.ANTHARES_GITLAB_READ_URL }}
+          ANTHARES_CODEBERG_READ_URL: ${{ secrets.ANTHARES_CODEBERG_READ_URL }}
+        run: python3 tools/cross-provider-sha-check.py
