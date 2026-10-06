@@ -1,4 +1,4 @@
-name: TikTok 15 Environment Replacement Matrix
+name: TikTok 30 Environment Replacement Matrix
 on:
   push:
     paths: ['.tiktok-15env-trigger']
@@ -27,6 +27,21 @@ jobs:
           - {id: 13, runner: ubuntu-latest, locale: en-US, viewport: "1536,864", mode: persistent}
           - {id: 14, runner: ubuntu-latest, locale: pt-BR, viewport: "1920,1080", mode: persistent}
           - {id: 15, runner: ubuntu-latest, locale: en-US, viewport: "1365,768", mode: noauto}
+          - {id: 16, runner: ubuntu-22.04, locale: pt-BR, viewport: "1536,864", mode: default}
+          - {id: 17, runner: ubuntu-22.04, locale: en-US, viewport: "1600,900", mode: noauto}
+          - {id: 18, runner: ubuntu-22.04, locale: pt-BR, viewport: "1440,900", mode: persistent}
+          - {id: 19, runner: ubuntu-22.04, locale: en-US, viewport: "1365,768", mode: persistent}
+          - {id: 20, runner: ubuntu-22.04, locale: pt-BR, viewport: "1280,800", mode: noauto}
+          - {id: 21, runner: ubuntu-24.04, locale: en-US, viewport: "1536,864", mode: default}
+          - {id: 22, runner: ubuntu-24.04, locale: pt-BR, viewport: "1600,900", mode: persistent}
+          - {id: 23, runner: ubuntu-24.04, locale: en-US, viewport: "1365,768", mode: noauto}
+          - {id: 24, runner: ubuntu-24.04, locale: pt-BR, viewport: "1920,1080", mode: default}
+          - {id: 25, runner: ubuntu-24.04, locale: en-US, viewport: "1280,800", mode: persistent}
+          - {id: 26, runner: ubuntu-latest, locale: pt-BR, viewport: "1280,720", mode: noauto}
+          - {id: 27, runner: ubuntu-latest, locale: en-US, viewport: "1280,900", mode: persistent}
+          - {id: 28, runner: ubuntu-latest, locale: pt-BR, viewport: "1440,900", mode: default}
+          - {id: 29, runner: ubuntu-latest, locale: en-US, viewport: "1600,900", mode: persistent}
+          - {id: 30, runner: ubuntu-latest, locale: pt-BR, viewport: "1536,864", mode: noauto}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     steps:
