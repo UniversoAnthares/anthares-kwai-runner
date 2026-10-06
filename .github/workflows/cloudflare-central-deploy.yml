@@ -18,8 +18,8 @@ jobs:
           test -s cloudflare-worker/src/index.js
           test -s cloudflare-worker/wrangler.toml
           grep -q 'tiktok-central-session-read.yml' cloudflare-worker/src/index.js
-          grep -q '2026-10-05-no-pc-confirmation-v12' cloudflare-worker/src/index.js
-          echo 'SNAPSHOT_VALID=no-pc-confirmation-v12'
+          grep -q '2026-10-05-queue-fencing-v16' cloudflare-worker/src/index.js
+          echo 'SNAPSHOT_VALID=queue-fencing-v16'
       - name: Deploy exact controller to Cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -35,6 +35,6 @@ jobs:
           out="$(curl --fail-with-body -sS https://anthares-control.anthares1.workers.dev/health)"
           echo "$out"
           echo "$out" | grep -q '"service":"anthares-control"'
-          echo "$out" | grep -q '"version":"2026-10-05-no-pc-confirmation-v12"'
+          echo "$out" | grep -q '"version":"2026-10-05-queue-fencing-v16"'
           echo "$out" | grep -q '"pc_fallback":false'
           echo 'CONTROL_HEALTH_OK=1'
