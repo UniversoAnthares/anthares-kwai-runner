@@ -162,25 +162,31 @@ jobs:
           curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json'             --data "{\"id\":\"$JOB_ID\",\"platform\":\"tiktok\",\"executor\":\"github\",\"dedupe_key\":\"$DEDUPE\",\"source_id\":\"synthetic-owned-canary-v13\",\"source_start\":0,\"source_end\":12}" > /tmp/enqueue.json
           cat /tmp/enqueue.json
 
-          postq lease '{"platform":"tiktok","ttl_seconds":900}' > /tmp/lease.json
-          cat /tmp/lease.json
-          read LEASE_ID LEASE_GEN < <(python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
-          print(j.get('id',''),j.get('lease_generation',''))
-          PY
-          )
-          if [ "$LEASE_ID" = "tiktok-canary-20261006-synthetic-v2" ] && [ -n "$LEASE_GEN" ]; then
-            echo "RECONCILING_CONFIRMED_ABSENT_V2"
-            postq fail "{\"id\":\"$LEASE_ID\",\"lease_generation\":$LEASE_GEN,\"error_class\":\"reconciled_absent\",\"error_message\":\"independent profile reconciliation confirmed no diagnostic post\",\"published_possible\":false}" >/tmp/reconcile-v2.json
+          for attempt in $(seq 1 10); do
             postq lease '{"platform":"tiktok","ttl_seconds":900}' > /tmp/lease.json
-            read LEASE_ID LEASE_GEN < <(python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
-          print(j.get('id',''),j.get('lease_generation',''))
-          PY
+            cat /tmp/lease.json
+            read LEASE_ID LEASE_GEN LEASE_STARTED < <(python3 - <<'PY'
+import json
+d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}
+print(j.get('id',''),j.get('lease_generation',''),str(bool(j.get('publication_started'))).lower())
+PY
             )
-          fi
+            if [ "$LEASE_ID" = "$JOB_ID" ] && [ -n "$LEASE_GEN" ]; then
+              echo "EXACT_V13_LEASE generation=$LEASE_GEN"
+              break
+            fi
+            if [ -z "$LEASE_ID" ]; then
+              echo "QUEUE_EMPTY_BEFORE_V13"
+              sleep 2
+              continue
+            fi
+            if [ "$LEASE_STARTED" = "true" ]; then
+              echo "STALE_JOB_MAY_HAVE_PUBLISHED id=$LEASE_ID; refusing automatic retirement"
+              exit 24
+            fi
+            echo "RETIRING_CONFIRMED_PREPUBLICATION_STALE_JOB id=$LEASE_ID generation=$LEASE_GEN"
+            postq fail "{\"id\":\"$LEASE_ID\",\"lease_generation\":$LEASE_GEN,\"error_class\":\"superseded_prepublish_canary\",\"error_message\":\"superseded diagnostic canary; publication_started=false\",\"published_possible\":false}" >/tmp/retire.json
+          done
           if [ "$LEASE_ID" != "$JOB_ID" ] || [ -z "$LEASE_GEN" ]; then
             echo "LEASE_NOT_OUR_CANARY id=$LEASE_ID"
             exit 20
