@@ -183,6 +183,13 @@ jobs:
                   pm=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",phone.attrib.get("bounds",""))
                   if pm:
                       a,b,c,d=map(int,pm.groups());adb("shell","input","tap",str((a+c)//2),str((b+d)//2));time.sleep(4)
+                      # Observe the legitimate chooser transition rather than guessing internal Activities.
+                      for obs in range(1,7):
+                          time.sleep(2)
+                          fg=adb("shell","dumpsys","window","windows")
+                          act=adb("shell","dumpsys","activity","activities")
+                          print("PHONE_OBS_"+str(obs)+"_WINDOW="+(" ".join([z.strip() for z in fg.splitlines() if "mCurrentFocus" in z or "mFocusedApp" in z])[-1000:]))
+                          print("PHONE_OBS_"+str(obs)+"_ACTIVITY="+(" ".join([z.strip() for z in act.splitlines() if "mResumedActivity" in z or "topResumedActivity" in z])[-1000:]))
                       phone_root=dump("after-phone")
                       pnodes=list(phone_root.iter("node"))
                       ptext=" ".join(label(x) for x in pnodes)
