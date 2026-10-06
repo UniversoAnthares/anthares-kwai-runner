@@ -2,7 +2,7 @@ name: TikTok Real Publish
 on:
   push:
     paths:
-      - '.tiktok-canary-run6'
+      - '.tiktok-canary-v2-go'
   workflow_dispatch:
 permissions:
   contents: read
