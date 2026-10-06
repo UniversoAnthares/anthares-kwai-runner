@@ -37,7 +37,7 @@ jobs:
           python3 - "$health" <<'PY'
           import json,sys
           d=json.loads(sys.argv[1])
-          assert d.get('version')=='2026-10-05-queue-heartbeat-renew-v15', d
+          assert d.get('version')=='2026-10-05-queue-fencing-v16', d
           assert d.get('pc_fallback') is False, d
           assert d.get('queue_bound') is True, d
           PY
@@ -68,6 +68,7 @@ jobs:
             'reconcile_without_evidence_rejected','complete_without_evidence_rejected',
             'concurrent_unique','single_job_double_claim','lease_renew_owner_only',
             'lease_renew_extended','lease_renew_repeated','lease_renew_invalid_state_rejected','lease_renew_expired_rejected',
+  'lease_generation_incremented','stale_generation_start_rejected','stale_generation_complete_rejected','stale_generation_fail_rejected',
             'expired_unstarted_recovered','started_expiry_protected',
             'failure_requeued','failed_job_recovered','confirmation_recorded',
             'uncertain_reconciled','reconciled_job_recovered',
