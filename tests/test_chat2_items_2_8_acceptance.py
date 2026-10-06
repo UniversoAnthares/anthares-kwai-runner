@@ -39,7 +39,7 @@ checks["production_path_has_no_pc_dependency"]=not any(violations.values())
 checks["pc_fallback_disabled"]="pc_fallback" in files["kwai_queue_state.sh"] or "pc_fallback" in files["kwai_claim_job.sh"]
 # 8 canary readiness
 wf=files[".github/workflows/kwai-real-publish.yml"]
-checks["manual_real_publish_gate"]='enable_real_publish == 'YES'' in wf and 'Type YES only after kwai-login reports READY' in wf
+checks["manual_real_publish_gate"]="enable_real_publish == 'YES'" in wf and 'Type YES only after kwai-login reports READY' in wf
 checks["serialized_publication"]="cancel-in-progress: false" in wf and "anthares-kwai-publish" in wf
 checks["push_path_never_publishes"]="queue-self-test:" in wf and "Real publication remains gated" in wf
 # syntax
