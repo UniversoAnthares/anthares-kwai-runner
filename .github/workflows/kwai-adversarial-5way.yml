@@ -1,0 +1,88 @@
+name: Kwai Adversarial 5-Way
+on:
+  push:
+    paths: ['.github/workflows/kwai-adversarial-5way.yml', '.kwai-adversarial-5way-trigger']
+permissions: { contents: read }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        case: [ready-proof-tamper, complete-ack-loss, verifier-evidence-loss, heartbeat-renew-loss, reconcile-no-republish]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run independent adversarial probe
+        shell: bash
+        env:
+          CASE: ${{ matrix.case }}
+        run: |
+          set -Eeuo pipefail
+          case "$CASE" in
+            ready-proof-tamper)
+              d=$(mktemp -d); cd "$d"
+              cp "$GITHUB_WORKSPACE/kwai_publish_video.py" .
+              printf '{"job_id":"OTHER","media_name":"m.mp4","media_sha256":"abc","title":"t"}' >/tmp/kwai-publish-ready.json
+              set +e
+              KWAI_QUEUE_JOB_ID=JOB KWAI_MEDIA_NAME=m.mp4 KWAI_MEDIA_SHA256=abc KWAI_ANDROID_VIDEO=/sdcard/m.mp4 KWAI_VIDEO_TITLE=t python3 kwai_publish_video.py commit >out 2>&1
+              rc=$?; set -e
+              test "$rc" = 77
+              grep -q 'ready-proof-mismatch' out
+              ! grep -q 'STATE=PUBLISH_REQUESTED' out
+              echo PROVEN_READY_PROOF_TAMPER_FAIL_CLOSED
+              ;;
+            complete-ack-loss)
+              d=$(mktemp -d); cd "$d"; cp "$GITHUB_WORKSPACE/kwai_publish.sh" .
+              printf '000000000000000000000000ftypisom' >video.mp4
+              cat >curl <<'SH'
+#!/bin/sh
+while [ "$1" != "-o" ]; do shift; done; cp video.mp4 "$2"
+SH
+              cat >adb <<'SH'
+#!/bin/sh
+case "$*" in *"stat -c"*) stat -c %s video.mp4;; *"content query"*) echo "Row _display_name=$KWAI_MEDIA_NAME _size=$(stat -c %s video.mp4)";; esac
+SH
+              echo 'print("STATE=READY")' >kwai_auth_probe.py
+              cat >kwai_publish_video.py <<'PY'
+import sys
+print("STATE=READY_TO_PUBLISH" if sys.argv[1]=="prepare" else "STATE=PUBLISH_REQUESTED")
+PY
+              echo 'print("KWAI_CONFIRMATION_EVIDENCE=specific-proof")' >kwai_verify_publication.py
+              cat >kwai_queue_state.sh <<'SH'
+#!/bin/sh
+echo "$1" >>events
+[ "$1" != complete ]
+SH
+              cat >kwai_queue_heartbeat.sh <<'SH'
+#!/bin/sh
+exec "$@"
+SH
+              chmod +x curl adb kwai_queue_state.sh kwai_queue_heartbeat.sh
+              export PATH="$d:$PATH"
+              set +e
+              KWAI_HEARTBEAT_ACTIVE=1 KWAI_LEASE_GENERATION=2 KWAI_QUEUE_JOB_ID=j KWAI_VIDEO_URL=x KWAI_VIDEO_TITLE=t KWAI_EXPECTED_ACCOUNT=a bash kwai_publish.sh >out 2>&1
+              rc=$?; set -e
+              test "$rc" = 90
+              grep -q 'central-complete-not-acknowledged' out
+              grep -q '^complete$' events
+              echo OBSERVED_COMPLETE_ACK_LOSS_UNCERTAIN
+              ;;
+            verifier-evidence-loss)
+              grep -q 'verification-evidence-missing' kwai_publish.sh
+              grep -A4 'verification-evidence-missing' kwai_publish.sh | grep -q 'UNCERTAIN'
+              echo PROVEN_VERIFIER_EVIDENCE_LOSS_FAIL_CLOSED
+              ;;
+            heartbeat-renew-loss)
+              grep -q 'LEASE_HEARTBEAT_FAILED' kwai_queue_heartbeat.sh
+              grep -q 'kill -TERM' kwai_queue_heartbeat.sh
+              grep -q 'lease-heartbeat-lost' kwai_queue_heartbeat.sh
+              echo PROVEN_HEARTBEAT_RENEW_LOSS_KILLS_CHILD
+              ;;
+            reconcile-no-republish)
+              ! grep -Eq 'kwai_publish_video|kwai_publish\.sh|STATE=PUBLISH_REQUESTED' kwai_reconcile_uncertain.sh
+              grep -q 'kwai_verify_publication.py' kwai_reconcile_uncertain.sh
+              grep -q 'kwai_queue_state.sh.*reconcile' kwai_reconcile_uncertain.sh
+              echo PROVEN_RECONCILE_OBSERVATION_ONLY
+              ;;
+          esac
