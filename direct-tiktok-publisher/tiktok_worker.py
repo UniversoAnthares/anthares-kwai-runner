@@ -472,7 +472,7 @@ def inventory_profile_videos(username=None):
                 walk(child)
 
     with sync_playwright() as p:
-        browser=p.chromium.launch(headless=True,args=["--disable-dev-shm-usage","--no-sandbox","--disable-gpu","--disable-extensions","--disable-background-networking","--disable-component-update","--disable-default-apps","--disable-sync","--no-first-run","--no-zygote","--renderer-process-limit=1"])
+        browser=p.chromium.launch(executable_path=os.getenv("TIKTOK_CHROMIUM_EXECUTABLE") or None,headless=True,args=["--disable-dev-shm-usage","--no-sandbox","--disable-gpu","--disable-extensions","--disable-background-networking","--disable-component-update","--disable-default-apps","--disable-sync","--no-first-run","--no-zygote","--renderer-process-limit=1"])
         context=browser.new_context(storage_state=storage_state(),viewport={"width":1440,"height":1000},locale="pt-BR")
         page=context.new_page()
 
