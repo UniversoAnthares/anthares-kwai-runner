@@ -123,7 +123,7 @@ def _new_profile_candidates(before_ids: set[str], inventory: list[dict]) -> list
 
 def main() -> None:
     if not PLAN_PATH.is_file():
-        raise RuntimeError(f"Plano local não existe: {PLAN_PATH}")
+        raise RuntimeError(f"Plano do job não existe: {PLAN_PATH}")
     plan = json.loads(PLAN_PATH.read_text(encoding="utf-8"))
     # The one-off failover proof has already been published. It is permanently
     # non-publishable now; this guard is inside the publisher so every caller
@@ -143,7 +143,7 @@ def main() -> None:
         raise RuntimeError("Publicação duplicada bloqueada pelo registro redundante: "+publish_key)
     media_path = Path(str(plan.get("media_path") or "")).resolve()
     if not media_path.is_file() or media_path.stat().st_size <= 0:
-        raise RuntimeError(f"Arquivo local do plano não existe: {media_path}")
+        raise RuntimeError(f"Arquivo de mídia do job não existe: {media_path}")
     media_hash = hashlib.sha256(media_path.read_bytes()).hexdigest()
     for prior_key, prior in published_keys.items():
         if isinstance(prior, dict) and prior.get("account") == account and prior.get("media_sha256") == media_hash:

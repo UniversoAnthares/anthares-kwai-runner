@@ -18,18 +18,9 @@ AUTO_QUEUE = os.getenv("ATD_AUTO_QUEUE", "").strip().lower() in {"1", "true", "y
 AUTO_GATE_MAX_WAIT_SECONDS = max(
     0, int(os.getenv("ATD_KWAI_GATE_MAX_WAIT_SECONDS", "300") or 300)
 )
-LEDGER_PATH = pathlib.Path(
-    os.getenv(
-        "ATD_KWAI_PUBLISHED_LEDGER",
-        r"D:\AntharesWork\kwai-publisher\kwai-published-ledger.json",
-    )
-)
-HALT_PATH = pathlib.Path(
-    os.getenv(
-        "ATD_KWAI_AUTOMATION_HALT",
-        r"D:\AntharesWork\kwai-publisher\KWAI_AUTOMATION_HALT.json",
-    )
-)
+RUNTIME_STATE_DIR = pathlib.Path(os.getenv("ANTHARES_RUNTIME_STATE_DIR") or os.getenv("RUNNER_TEMP") or tempfile.gettempdir()) / "anthares-runtime"
+LEDGER_PATH = pathlib.Path(os.getenv("ATD_KWAI_PUBLISHED_LEDGER") or (RUNTIME_STATE_DIR / "kwai-published-ledger.json"))
+HALT_PATH = pathlib.Path(os.getenv("ATD_KWAI_AUTOMATION_HALT") or (RUNTIME_STATE_DIR / "KWAI_AUTOMATION_HALT.json"))
 MAX_DEDUPE_SKIPS = 25
 MAX_DAILY_PUBLISHES = 100
 _RNG = random.SystemRandom()

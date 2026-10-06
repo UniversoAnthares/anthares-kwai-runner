@@ -191,7 +191,7 @@ jobs:
           json.dump(p,open('/tmp/tiktok-owned-plan.json','w'),ensure_ascii=False,separators=(',',':'))
           PY
           export TIKTOK_STORAGE_STATE="$(cat /tmp/tiktok-state.json)"
-          python3 tiktok_web_publish_local.py
+          python3 tiktok_cloud_publish.py
 
       - name: Reconcile publication result
         if: always() && env.LEASE_ID != ''

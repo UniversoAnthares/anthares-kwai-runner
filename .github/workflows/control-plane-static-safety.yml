@@ -2,7 +2,14 @@ name: Control Plane Static Safety Validation
 on:
   push:
     branches: [main]
-    paths: ['.control-plane-safety-trigger']
+    paths:
+      - '.control-plane-safety-trigger'
+      - 'cloudflare-worker/src/index.js'
+      - 'direct-tiktok-publisher/publisher_common.py'
+      - 'direct-tiktok-publisher/tiktok_cloud_publish.py'
+      - '.github/workflows/tiktok-github-direct-publisher.yml'
+      - 'tests/test_cloud_only_runtime.py'
+      - '.github/workflows/control-plane-static-safety.yml'
 permissions:
   contents: read
 jobs:
@@ -32,7 +39,8 @@ jobs:
           grep -q 'premature_complete_not_rejected' "$F"
           grep -q 'reconcile_without_evidence_not_rejected' "$F"
           grep -q 'missing_confirmation_proof_accepted' "$F"
-          grep -q 'if(id==="local") return false' "$F"
+          grep -q 'const RETIRED_EXECUTORS' "$F"
+          grep -q 'if(retiredExecutor(id)) return false' "$F"
           ! grep -q 'LOCAL_EXECUTOR' "$F"
           ! grep -q 'ANTHARES_LOCAL_HEALTH_URL' "$F"
           ! grep -q 'GOOGLE_HEALTH_URL' "$F"
@@ -48,12 +56,14 @@ jobs:
           assert 'tiktok:["render","github"]' in x
           assert 'kwai:["github"]' in x
           assert 'kwai_live:["hls_origin","github"]' in x
-          assert 'primary==="render"&&github==="github"&&none===null' in p
+          assert 'render_offline_github' in p and 'recovery_returns_render' in p
+          assert 'retired_injected_never_selected' in p
           assert 'const today=localDay()' in p
           assert 'anthares.us/wp-content' not in p
           assert 'complete_without_evidence_rejected:true' in p
           print('CONTROL_STATIC_SAFETY=OK')
           PY
+          python tests/test_cloud_only_runtime.py
       - name: Probe deployed controller read-only
         run: |
           set -euo pipefail
