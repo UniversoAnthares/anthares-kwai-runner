@@ -1,0 +1,21 @@
+name: Kwai APK Auth Component Discovery
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.kwai-apk-auth-discovery-trigger']
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch and inspect validated APK set
+        run: |
+          curl -fL --retry 3 -o /tmp/v.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          mkdir -p /tmp/v && python3 -c "import zipfile;zipfile.ZipFile('/tmp/v.zip').extractall('/tmp/v')"
+          SDKMANAGER=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+          $SDKMANAGER "build-tools;35.0.0" >/dev/null
+          AAPT=$ANDROID_HOME/build-tools/35.0.0/aapt
+          for f in /tmp/v/*.apk; do
+            echo "APK=$f"
+            $AAPT dump xmltree "$f" AndroidManifest.xml 2>/dev/null | grep -Ei -B4 -A8 'login|phone|auth|account|signin|sign_in|verification' || true
+          done
