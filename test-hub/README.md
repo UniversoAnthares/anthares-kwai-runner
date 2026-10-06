@@ -68,11 +68,11 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 - PROVEN STATIC CONTRACT: o Manifest válido também mostra `com.kscorp.oversea.platform.router.ui.UriRouterActivity` exported=true com `ikwai://login`/`ikwai://loginchannel` e ACTION_SEND/SEND_MULTIPLE `video/*`. Essas rotas são causalmente distintas das rotas `authorization` já falhas.
 - PARTIAL/HARNESS: run 37389749589 preservou o FSM e emitiu `TEST_VALIDITY=FSM_MAIN_REACHED`, alcançou Profile e o estado conhecido `resource downloading`; o workflow expirou enquanto a descoberta interna ainda aguardava o módulo. Ausência de controles de login não foi testada nesse run.
 - PROVEN STATIC/SIMULATED: run 37391014212 validou `prepare -> central started -> commit -> verificação específica -> central complete -> CONFIRMED`, com `KWAI_STARTED_BEFORE_COMMIT_STATIC_OK` e `KWAI_PUBLISH_SAFETY_STATIC_OK`. Verificador exige conta esperada + título específico em Profile estável e remove sucesso por marcador genérico de recência.
-- SUPERSEDED/HARNESS: antigos Direct SEND não fecharam a hipótese; o último rerun 37392541208 morreu em LAUNCHER_ANR antes do SEND. Agora há teste causal novo 37395018657, FSM-gated, com recovery endurecido e rotas `ikwai://login`/`loginchannel`; não abrir matriz concorrente enquanto estiver RUNNING.
+- FAILED: run 37395018657 foi válido após FSM_MAIN_REACHED; `ikwai://login` chegou ao UriRouterActivity mas terminou em TinyLaunchActivity/feed, EDITTEXT_COUNT=0, AUTH_HITS vazio. Não repetir bare login-router sem mudança causal. Profile ainda apresenta `resource downloading`; próximo caminho deve ser navegação interna/Agent/Accessibility após módulo disponível.
 - Publicação real continua em quarentena até identidade/autenticação READY do Kwai. O blocker Cloudflare v12 já foi fechado.
 
 ### TikTok: cadeia causal atual
-- PROVEN: run 37394495580 leu a sessão central via OIDC em produção, HTTP 200, available=true, cookie_count=21. O primeiro rehydrate público 37394851557 é INVALID/HARNESS: usou contrato/audience OIDC diferente e recebeu 401 no preflight, antes de qualquer mutação Render. Próximo rehydrate deve reutilizar literalmente o contrato OIDC PROVEN; publicação continua bloqueada até restore + identity_verified.
+- PROVEN: run 37395199814 reidratou 21 cookies no Render, confirmou bootstrapped=true e `identity_verified=true`, e persistiu a sessão atualizada no Cloudflare. Não repetir login/rehydrate. O blocker observado no fim do job é somente configuração de mídia: `ANTHARES_VIDEO_SECRET=false` enquanto endpoint/username/user_id estão configurados. Run 37395914027 testa readiness/source discovery sem publicar.
 - Modo DIAGNOSTIC atual: 3 posts/dia com observação 3–6h para investigar baixa distribuição. A meta/capacidade de produção 100/dia permanece separada; nenhum modo deve ser usado como prova do outro.
 - O caminho workflow_dispatch de tiktok-real-publish ainda não satisfaz aceitação production-PROVEN: precisa alinhar endpoint ativo, validar identidade imediatamente antes, verificar o novo post independentemente e fechar ledger/estado incerto.
 
@@ -85,8 +85,8 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 ### Control plane central
 - PROVEN EM PRODUÇÃO: Durable Object SQLite cobre enqueue/lease/started/complete/fail/reconcile, dedupe por chave e overlap temporal, UNCERTAIN e circuit breaker no Worker v12 implantado.
 - PROVEN EM PRODUÇÃO: allowlist OIDC, confirmação fail-closed, PC/Google/Oracle removidos e HLS sem fallback WordPress hardcoded estão ativos na versão `2026-10-05-no-pc-confirmation-v12`.
-- PROVEN EM PRODUÇÃO v14: `/health` retorna `version=2026-10-05-queue-lease-renew-v14`, `persistent_state=true`, `queue_bound=true`, `pc_fallback=false`; deploy Cloudflare Version ID `21f1cd93-9a62-426e-a2b4-7602de30355e`.
-- PROVEN EM PRODUÇÃO v14: lease de job possui renovação explícita fail-closed por owner/estado/expiração; o self-test de produção também prova disputa de exatamente um job por dois consumidores com exatamente um vencedor. Run 37394732038 / job 112047887652.
+- PROVEN EM PRODUÇÃO v15: `/health` retorna `version=2026-10-05-queue-heartbeat-renew-v15`, `persistent_state=true`, `queue_bound=true`, `pc_fallback=false`; run 37395158585.
+- PROVEN EM PRODUÇÃO v15: além de owner/estado/expiração e single-job double-claim, o self-test comprova `lease_renew_repeated=true`, isto é, renovação repetida/heartbeat durante execução longa. Run 37395158585 / job 112049276852.
 - PROVEN EM PRODUÇÃO v14: sucesso confirmado limpa o circuit breaker (`disabled_until=null`) junto com os contadores de falha; regressão detectada no run v13 37394632606 e fechada no v14.
 - O caminho automático conhecido via runner público continua sem `CLOUDFLARE_API_TOKEN`; isso deixou de bloquear a versão atual porque o deploy v12 foi concluído pela sessão Wrangler OAuth autorizada. Não reabrir o caminho de deploy antigo sem mudança causal.
 
