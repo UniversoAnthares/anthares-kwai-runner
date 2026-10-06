@@ -66,6 +66,6 @@ else:
  print("FSM_TIMEOUT");raise SystemExit(20)
 # stabilize main and inspect real clickable Profile parent
 adb("shell","am","force-stop","com.kwai.video");time.sleep(1);adb("shell","monkey","-p","com.kwai.video","1");time.sleep(12)
-ns,t=snap(); n=rid(ns,"ll_profile"); print("PROFILE_PARENT="+str(bool(n)))
+ns,t=snap(); n=rid(ns,"id_home_bottom_tab_me") or rid(ns,"ll_profile"); print("PROFILE_PARENT="+str(bool(n)))
 if n: tap(n);time.sleep(4)
 ns,t=snap();print("POST_PROFILE_UI="+t[:1800]);print("POST_PROFILE_IDS="+" ".join(n.attrib.get("resource-id","") for n in ns)[:4000])
