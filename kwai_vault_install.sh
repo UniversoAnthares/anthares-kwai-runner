@@ -5,7 +5,9 @@ REPORT=kwai-vault-install-status.txt
 log(){ echo "$*" | tee -a "$REPORT"; }
 # HOT-PATH CONTRACT: no store UI/browser/package acquisition here.
 # acceptance-revision: 3-arm64-vault
-adb wait-for-device
+log "STEP_ADB_WAIT_START"
+timeout 30 adb wait-for-device || { log FAIL_ADB_WAIT_TIMEOUT; exit 20; }
+log "STEP_ADB_WAIT_OK"
 [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] || { log FAIL_ANDROID_NOT_READY; exit 21; }
 ABI="$(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
 DENSITY="$(adb shell wm density | sed -n 's/.*: //p' | tail -1 | tr -d '\r')"
@@ -51,9 +53,15 @@ esac
 p="$(find kwai-vault -type f -name "config.$bucket.apk" | head -1 || true)"
 [ -z "$p" ] || APKS+=("$p")
 log "SELECTED_SPLITS=$(printf '%s ' "${APKS[@]##*/}")"
-adb install-multiple -r "${APKS[@]}" >>"$REPORT" 2>&1 || { log FAIL_INSTALL_MULTIPLE; exit 41; }
-adb shell pm path com.kwai.video >>"$REPORT" 2>&1 || { log FAIL_PACKAGE_NOT_PRESENT; exit 42; }
-adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >>"$REPORT" 2>&1 || { log FAIL_KWAI_LAUNCH; exit 43; }
+log "STEP_INSTALL_MULTIPLE_START"
+timeout 180 adb install-multiple -r "${APKS[@]}" >>"$REPORT" 2>&1 || { rc=$?; log "FAIL_INSTALL_MULTIPLE_RC=$rc"; exit 41; }
+log "STEP_INSTALL_MULTIPLE_OK"
+log "STEP_PM_PATH_START"
+timeout 30 adb shell pm path com.kwai.video >>"$REPORT" 2>&1 || { rc=$?; log "FAIL_PACKAGE_NOT_PRESENT_RC=$rc"; exit 42; }
+log "STEP_PM_PATH_OK"
+log "STEP_KWAI_LAUNCH_START"
+timeout 30 adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >>"$REPORT" 2>&1 || { rc=$?; log "FAIL_KWAI_LAUNCH_RC=$rc"; exit 43; }
+log "STEP_KWAI_LAUNCH_OK"
 sleep 2
 adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' >>"$REPORT" 2>&1 || true
 log KWAI_LAUNCHED
