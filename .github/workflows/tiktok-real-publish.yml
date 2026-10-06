@@ -136,8 +136,8 @@ jobs:
           set -euo pipefail
           CONTROL="https://anthares-control.anthares1.workers.dev"
           RENDER="https://anthares-tiktok-render-rootless.onrender.com"
-          JOB_ID="tiktok-canary-20261005-synthetic-v1"
-          DEDUPE="tiktok-canary-20261005-synthetic-v1"
+          JOB_ID="tiktok-canary-20261006-synthetic-v2"
+          DEDUPE="tiktok-canary-20261006-synthetic-v2"
           EXECUTOR="github"
           CONTROL_TOKEN="$(python3 - <<'PY'
           import json,os,urllib.parse,urllib.request
@@ -172,12 +172,11 @@ jobs:
           fi
 
           curl --fail-with-body -sS "$RENDER/session-status" -H "Authorization: Bearer $RENDER_TOKEN" > /tmp/status.json
-          curl --fail-with-body -sS -X POST "$RENDER/session-test" -H "Authorization: Bearer $RENDER_TOKEN" -H 'Content-Type: application/json' --data '{}' > /tmp/session-test.json
           python3 - <<'PY'
           import json
-          s=json.load(open('/tmp/status.json')); t=json.load(open('/tmp/session-test.json'))
-          print('PREPUBLISH_IDENTITY',json.dumps({'bootstrapped':s.get('bootstrapped'),'ready_for_tiktok':s.get('ready_for_tiktok'),'identity_verified':t.get('identity_verified'),'ok':t.get('ok')},sort_keys=True))
-          if not (s.get('bootstrapped') and t.get('ok') and t.get('identity_verified')):
+          s=json.load(open('/tmp/status.json'))
+          print('PREPUBLISH_IDENTITY',json.dumps({'bootstrapped':s.get('bootstrapped'),'ready_for_tiktok':s.get('ready_for_tiktok'),'identity_verified':s.get('identity_verified')},sort_keys=True))
+          if not (s.get('bootstrapped') and s.get('ready_for_tiktok') and s.get('identity_verified')):
               raise SystemExit('TIKTOK_IDENTITY_NOT_READY')
           PY
 
@@ -197,7 +196,7 @@ jobs:
           postq started "{\"id\":\"$JOB_ID\",\"lease_generation\":$LEASE_GEN}" > /tmp/started.json
           STARTED=1
 
-          printf '%s' '{"segment_id":"tiktok-canary-20261005-synthetic-v1","title":"Universo Anthares — teste técnico de publicação"}' > /tmp/plan.json
+          printf '%s' '{"segment_id":"tiktok-canary-20261006-synthetic-v2","title":"Universo Anthares — teste técnico de publicação"}' > /tmp/plan.json
           curl --fail-with-body -sS --max-time 600 -X POST "$RENDER/publish"             -H "Authorization: Bearer $RENDER_TOKEN"             -F "media=@/tmp/canary.mp4;type=video/mp4"             -F "plan=</tmp/plan.json" > /tmp/publish.json
           cat /tmp/publish.json
 
