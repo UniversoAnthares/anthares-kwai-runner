@@ -1,0 +1,18 @@
+name: Kwai Final SHA Dedupe QA
+on:
+  push:
+    paths:
+      - 'cloudflare-worker/src/index.js'
+      - 'tests/test_kwai_final_sha_dedupe.py'
+      - '.github/workflows/kwai-final-sha-dedupe.yml'
+permissions: {contents: read}
+jobs:
+  dedupe:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [same-sha-different-source, sha-case-normalized, failed-sha-retry-allowed, same-sha-other-platform, concurrent-equivalent]
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/test_kwai_final_sha_dedupe.py "${{ matrix.case }}"
