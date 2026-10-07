@@ -248,7 +248,7 @@ for i in range(10):
             if "resource downloading" not in txt and "can't connect to server" not in txt:
                 break
         continue
-    if "can't connect to server" in txt_low or "não foi possível conectar" in txt_low:
+    if "can't connect to server" in txt.lower() or "não foi possível conectar" in txt.lower():
         # Network error screen: try retry button, then Profile for login/logout.
         for suffix in ("fl_retry", "retry_network_icon"):
             n = rid(ns, suffix)
