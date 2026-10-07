@@ -17,13 +17,15 @@ Oito `origin/main` foram atualizados e auditados: `anthares-kwai-runner`, `antha
 
 3. O workload GitLab do Clipper ainda é somente código/importação. O finding de workload real registra ausência das variáveis protegidas `WP_SITE_URL`, `WP_USERNAME`, `WP_APP_PASSWORD`, `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` e `YOUTUBE_REFRESH_TOKEN`, impedindo publicação completa.
 
-4. A migração não é ainda failover simétrico: há dependências de GitHub Actions, GitHub Releases/Assets, GitHub Issues, claims OIDC do GitHub e GitHub como origem padrão. Kwai/Android ainda exige runner dedicado com KVM/ADB/emulador.
+4. O resultado versionado `anthares-clipper/tiktok-ci-result.txt` registra `tiktok_session=FAIL` e `tiktok_discovery=FAIL`: a conta TikTok esperada não foi confirmada e a publicação foi bloqueada. O gate deve ser revalidado em runner autorizado, sem contorno.
 
-5. `anthares-transcricao` versiona `__pycache__/app.cpython-312.pyc`; remover do Git e impedir reincidência via `.gitignore`.
+5. A migração não é ainda failover simétrico: há dependências de GitHub Actions, GitHub Releases/Assets, GitHub Issues, claims OIDC do GitHub e GitHub como origem padrão. Kwai/Android ainda exige runner dedicado com KVM/ADB/emulador.
 
-6. `github-slideshow` usa `reveal.js` 3.9.2. `npm audit` confirmou XSS moderado `GHSA-hhqj-cfjx-vj25`, corrigido a partir de 4.3.0; atualizar e testar compatibilidade.
+6. `anthares-transcricao` versiona `__pycache__/app.cpython-312.pyc`; remover do Git e impedir reincidência via `.gitignore`.
 
-7. O conector `GitLab API` está habilitado na configuração da sessão, mas a credencial está encapsulada e o navegador desta execução redireciona para login. A auditoria não deve declarar que todos os projetos/variáveis/pipelines GitLab foram verificados diretamente sem uma sessão GitLab autenticada disponível.
+7. `github-slideshow` usa `reveal.js` 3.9.2. `npm audit` confirmou XSS moderado `GHSA-hhqj-cfjx-vj25`, corrigido a partir de 4.3.0; atualizar e testar compatibilidade.
+
+8. O conector `GitLab API` está habilitado na configuração da sessão, mas a credencial está encapsulada e o navegador desta execução redireciona para login. A auditoria não deve declarar que todos os projetos/variáveis/pipelines GitLab foram verificados diretamente sem uma sessão GitLab autenticada disponível.
 
 ## Pendências de operação
 
