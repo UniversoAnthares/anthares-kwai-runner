@@ -228,12 +228,22 @@ r=dump(); txt=" ".join(label(n) for n in nodes(r))
 if not any(k in txt for k in ("log in","login","entrar","sign in","telefone","phone","email")):
     settle_preparation_gate()
     if tap_ll_profile():
-        # Entering Profile then returning to MAIN exposes the real login
-        # entrypoint; do not force-stop the app mid-flow (old behavior here
-        # threw away the authenticated-surface traversal).
+        # Profile tab after ll_profile tap: the earlier tap may have landed on
+        # the already-active tab (no-op). Read back: only when the Profile
+        # surface is confirmed (logged account or login entry) do we stay;
+        # otherwise TAP the profile-adjacent area by re-tapping ll_profile once
+        # more, then inspect what surfaced.
         time.sleep(3)
         dismiss_android_permission_dialogs()
         settle_preparation_gate()
+        r3 = dump(); txt3 = " ".join(label(n) for n in nodes(r3))
+        print("KWAI_POST_PROFILE_UI=" + txt3[:600])
+        ids3 = {n.attrib.get("resource-id","") for n in nodes(r3)}
+        if not any(k in txt3 for k in ("log in","login","entrar","sign in","settings","configura","log out","sair","account","conta","meu perfil","my profile")):
+            # Still the same feed: the tap was a no-op. Tap ll_profile once more
+            # explicitly, then continue to the chooser taps below.
+            tap_ll_profile()
+            time.sleep(2)
         # Profile tab may hold the logged account or its own login entry.
         # Give the password/phone chooser one chance before the generic path.
         tap_matching(("password","senha","phone","telefone","email","e-mail"))
