@@ -234,7 +234,14 @@ for i in range(10):
         adb("shell","am","start","-n","com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity")
         time.sleep(6)
         continue
-    if any(k in txt for k in ("log in","login","entrar","sign in","phone","telefone","email","verification code","código de verificação","profile","meu perfil","my profile")):
+    if kwai_ctx and "profile" in txt and ("home" in txt or "discover" in txt or "inbox" in txt):
+        # MAIN bottom nav proven by run 37568734201 artifact: enter Profile via
+        # the stable ll_profile id instead of stopping on the keyword.
+        n = rid(ns, "ll_profile")
+        if n is not None and tap_node(n):
+            time.sleep(3)
+        continue
+    if kwai_ctx and any(k in txt for k in ("log in","login","entrar","sign in","phone","telefone","email","verification code","código de verificação","senha","password","captcha")):
         break
     # Try tapping Profile if visible
     profile_node = None
