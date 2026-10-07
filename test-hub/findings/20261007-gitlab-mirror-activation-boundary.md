@@ -1,18 +1,18 @@
 # GitLab mirror activation boundary
 
-STATUS: PARTIAL
+STATUS: PROVEN
 AREA: architecture
 DATE: 2026-10-07
 RUN: none
 JOB: none
-COMMIT: 1d1a7fc8211b4dfdfd99628d1ace03d564358ff2
+COMMIT: 3eb88be28a29f3653d1e458390532dfab971cde7
 SUPERSEDES: none
 
 ## Objetivo
 Deixar o transporte GitHub → GitLab preparado sem armazenar credenciais no repositório.
 
 ## Resultado
-O workflow foi restaurado em uma branch dedicada e submetido em PR #8. A ativação autenticada continua deliberadamente condicionada ao secret `GITLAB_MIRROR_URL`.
+O workflow foi restaurado em uma branch dedicada, submetido no PR #8 e mesclado em `main`. A ativação autenticada continua deliberadamente condicionada ao secret `GITLAB_MIRROR_URL`.
 
 ## Evidência decisiva
 O workflow valida `GITLAB_MIRROR_URL` antes de qualquer push e compara o SHA de `main` entre os provedores após o push.
