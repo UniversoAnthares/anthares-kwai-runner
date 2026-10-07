@@ -26,8 +26,17 @@ def state(ns,t):
  return "OTHER"
 adb("shell","pm","grant","com.kwai.video","android.permission.POST_NOTIFICATIONS")
 last=None
+# Post-relaunch stabilization (run 37619473077): after a relaunch the app needs
+# seconds before the nav bar exists (FSM 8 UI empty, ll_profile missing).
+stable_empty = 0
 for i in range(45):
  ns,t=snap();s=state(ns,t);print(f"FSM {i} STATE={s} UI={t[:500]}")
+ if not t.strip():
+  stable_empty += 1
+  if stable_empty >= 2:
+   time.sleep(8); continue
+ else:
+  stable_empty = 0
  if s=="MAIN":
   print("FSM_MAIN_REACHED");break
  if s=="PERMISSION":
@@ -106,8 +115,14 @@ for i in range(45):
   adb("shell","input","swipe","850","1100","180","1100","250");time.sleep(1)
 else:
  print("FSM_TIMEOUT");raise SystemExit(20)
-# stabilize main and inspect real clickable Profile parent
-adb("shell","am","force-stop","com.kwai.video");time.sleep(1);adb("shell","monkey","-p","com.kwai.video","1");time.sleep(12)
-ns,t=snap(); n=rid(ns,"ll_profile"); print("PROFILE_PARENT="+str(bool(n)))
+# stabilize main and inspect real clickable Profile parent. Re-verify the nav
+# bar exists first; a dump taken while the feed is still loading has no bottom
+# nav (run 37619473077: PROFILE_PARENT=False on a transient tree).
+n = None
+for _stab in range(6):
+ ns,t=snap(); n=rid(ns,"ll_profile")
+ if n is not None: break
+ time.sleep(3)
+print("PROFILE_PARENT="+str(bool(n)))
 if n is not None: tap(n);time.sleep(4)
 ns,t=snap();print("POST_PROFILE_UI="+t[:1800]);print("POST_PROFILE_IDS="+" ".join(n.attrib.get("resource-id","") for n in ns)[:4000])
