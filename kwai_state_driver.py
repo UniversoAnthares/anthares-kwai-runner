@@ -57,28 +57,38 @@ for i in range(45):
    adb("shell","input","tap","90","250");time.sleep(3)
  elif s=="RESOURCE_LOADING":
   # 5% "sorry, the internet's a bit slow" gate (runs 37529160444/37613887885):
-  # bounded wait first, then the screen's own skip, then bring Kwai back in
-  # case the tap landed somewhere else. Never spin the full 45-iteration loop
-  # on a stuck download.
+  # bounded wait first, then act on whichever gate face is showing:
+  # - modal "Skip the preparation?": tap "Yes, skip" (run 37615623307 showed a
+  #   CLEARED false positive here because the modal needs an extra dump cycle).
+  # - dialog overlay with btn_cancel: tap cancel.
+  # - bare download screen: tap the screen's own skip.
+  # After acting, RE-READ until the gate text leaves for up to 30s; relaunch
+  # only if the gate is still present afterwards.
   print("RESOURCE_LOADING_WAIT")
   for _ in range(10):
    time.sleep(3);ns2,t2=snap()
-   if "resource downloading" not in t2 and "hang in there" not in t2:
+   if "resource downloading" not in t2 and "hang in there" not in t2 \
+      and "skip the preparation" not in t2:
     print("RESOURCE_LOADING_CLEARED");break
   else:
    print("RESOURCE_LOADING_STUCK_SEEK_SKIP")
-   n2=None
-   for x in ns2:
-    lab=(x.attrib.get("text","")+" "+x.attrib.get("content-desc","")).strip().lower()
-    if lab in ("skip","yes, skip","yes skip") and x.attrib.get("clickable","")=="true":
-     n2=x;break
-   if n2 is not None:
-    tap(n2)
+   ns3,t3 = ns2,t2
+   for _attempt in range(5):
+    n2=None
+    for x in ns3:
+     lab=(x.attrib.get("text","")+" "+x.attrib.get("content-desc","")).strip().lower()
+     if lab in ("yes, skip","yes skip","skip") and x.attrib.get("clickable","")=="true":
+      n2=x;break
+    if n2 is not None:
+     tap(n2)
+    else:
+     n2=rid(ns3,"btn_cancel")
+     if n2 is not None:tap(n2)
+    time.sleep(4);ns3,t3=snap()
+    if "resource downloading" not in t3 and "hang in there" not in t3 \
+       and "skip the preparation" not in t3:
+     print("RESOURCE_LOADING_SETTLED");break
    else:
-    n2=rid(ns2,"btn_cancel")
-    if n2 is not None:tap(n2)
-   time.sleep(3);ns3,t3=snap()
-   if "resource downloading" in t3 or "hang in there" in t3:
     print("RESOURCE_LOADING_RELAUNCH_KWAI")
     adb("shell","am","force-stop","com.kwai.video");time.sleep(1)
     adb("shell","monkey","-p","com.kwai.video","1");time.sleep(10)
