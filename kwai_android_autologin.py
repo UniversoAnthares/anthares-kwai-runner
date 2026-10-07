@@ -63,19 +63,33 @@ def fill(value, index=0):
 # cloud runners. It must not block credentialed login: tolerate the banner and
 # only dismiss a modal that offers its own skip ("Skip the preparation?").
 def settle_preparation_gate(max_rounds=6):
+    # Run 37610518267 showed the MAIN feed carrying a resource-download dialog
+    # overlay (ll_tiny_dialog_content + btn_cancel) while no modal "Skip the
+    # preparation?" is present. Dismiss via the dialog's own cancel button when
+    # the overlay exists; otherwise tolerate the banner and continue.
     for _ in range(max_rounds):
-        r = dump(); txt = " ".join(label(n) for n in nodes(r))
-        if "skip the preparation" not in txt and "hang in there" not in txt:
+        r = dump(); ns = nodes(r)
+        txt = " ".join(label(n) for n in ns)
+        if "resource downloading" not in txt and "skip the preparation" not in txt \
+           and "hang in there" not in txt:
             return True
-        # Modal with its own skip: prefer its "Yes, skip" before the background one.
-        acted = tap_matching(("yes, skip", "yes skip"))
+        ids = {n.attrib.get("resource-id", "") for n in ns}
+        acted = False
+        if "ll_tiny_dialog_content" in ids or "btn_cancel" in ",".join(ids):
+            if tap_resource_id("btn_cancel"):
+                acted = True
+            elif tap_matching(("hide", "skip", "pular")):
+                acted = True
+        elif "skip the preparation" in txt or "hang in there" in txt:
+            # Modal with its own skip: prefer its "Yes, skip" before the background one.
+            acted = tap_matching(("yes, skip", "yes skip"))
+            if not acted:
+                acted = tap_resource_id("tiny_discovery_right_operation_btn")
         if not acted:
-            acted = tap_resource_id("tiny_discovery_right_operation_btn")
-        if not acted:
-            return False
+            # Persistent banner without its own dismiss: tolerate and continue.
+            return True
         time.sleep(3)
-    r = dump(); txt = " ".join(label(n) for n in nodes(r))
-    return "skip the preparation" not in txt and "hang in there" not in txt
+    return True
 
 
 def tap_resource_id(suffix):
@@ -194,10 +208,22 @@ for _ in range(8):
     adb("shell","input","keyevent","4"); time.sleep(1)
 
 # If onboarding did not expose login directly, use the proven path to the
-# main navigation and open Profile semantically.
+# main navigation and open Profile semantically. Run 37610518267 showed the
+# semantic word "profile" exists but the tap is unreliable while the download
+# dialog overlays the nav: prefer the stable ll_profile id (proven by probe
+# artifact in run 37568734201).
+def tap_ll_profile():
+    r = dump()
+    for n in nodes(r):
+        if n.attrib.get("resource-id", "") == "com.kwai.video:id/ll_profile" and tap_node(n):
+            time.sleep(3)
+            return True
+    return False
+
 r=dump(); txt=" ".join(label(n) for n in nodes(r))
 if not any(k in txt for k in ("log in","login","entrar","sign in","telefone","phone","email")):
-    if reach_profile_semantically():
+    settle_preparation_gate()
+    if not tap_ll_profile() and reach_profile_semantically():
         # Entering Profile then returning to MAIN exposes the real login
         # entrypoint; do not force-stop the app mid-flow (old behavior here
         # threw away the authenticated-surface traversal).
