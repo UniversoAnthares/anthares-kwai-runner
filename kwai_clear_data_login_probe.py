@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Force Kwai login surface by clearing cached app data after vault install.
 
-Causal repair for 20261007-kwai-login-cached-session-found and
-20261007-kwai-login-pwa-no-native-surface: the app opens already authenticated.
-Clearing package data is the minimal causal change to re-expose the login UI
-already proven in run 37417286394 (LOGIN_SURFACE_REACHED).
+v2: after PARTIAL run 37638909906, clear-data is proven to drop cached MAIN and
+land on INTEREST onboarding. This version advances INTEREST/START/PERMISSION
+before declaring failure on missing login surface.
 
-No credentials are used. No publication.
+No credentials. No publication.
 """
 import json
 import os
@@ -60,20 +59,32 @@ def label_of(n):
     return (n.attrib.get("text", "") + " " + n.attrib.get("content-desc", "")).strip().lower()
 
 
+def rid(ns, suffix):
+    for n in ns:
+        if n.attrib.get("resource-id", "").endswith(suffix):
+            return n
+    return None
+
+
 def state_from_text(t):
     t = t.lower()
-    if any(k in t for k in ("welcome to kwai", "log in", "sign in", "continue with google",
-                            "use facebook", "phone", "entrar", "telefone")):
-        if any(k in t for k in ("log in", "sign in", "welcome to kwai", "continue with google",
-                                "use facebook", "entrar")):
-            return "LOGIN_SURFACE"
+    if any(k in t for k in ("welcome to kwai", "continue with google", "use facebook")):
+        return "LOGIN_SURFACE"
+    if any(k in t for k in ("log in", "sign in", "entrar")) and (
+        "phone" in t or "telefone" in t or "email" in t or "google" in t or "facebook" in t
+    ):
+        return "LOGIN_SURFACE"
+    if "choose like or dislike" in t:
+        return "INTEREST"
+    if "select your interests" in t:
+        return "INTEREST_SELECT"
     if "profile" in t and ("home" in t or "discover" in t or "inbox" in t):
         return "MAIN"
     if "resource downloading" in t or "hang in there" in t or "skip the preparation" in t:
         return "RESOURCE_LOADING"
-    if "send you notifications" in t or "permission" in t:
+    if "send you notifications" in t or "allow kwai" in t:
         return "PERMISSION"
-    if "start now" in t or "you're all set" in t:
+    if "start now" in t or "you're all set" in t or "tudo pronto" in t:
         return "START"
     return "OTHER"
 
@@ -83,13 +94,34 @@ def snapshot(tag):
     ns = nodes(root)
     txt = " ".join(label_of(n) for n in ns)
     s = state_from_text(txt)
-    editables = [node_info(n) for n in ns
-                 if n.attrib.get("editable") == "true" or n.attrib.get("class", "").endswith("EditText")]
-    login_like = [node_info(n) for n in ns
-                  if any(k in label_of(n) for k in (
-                      "log in", "login", "sign in", "entrar", "phone", "telefone",
-                      "email", "e-mail", "password", "senha", "continue with google",
-                      "use facebook", "welcome to kwai", "verification"))]
+    editables = [
+        node_info(n)
+        for n in ns
+        if n.attrib.get("editable") == "true" or n.attrib.get("class", "").endswith("EditText")
+    ]
+    login_like = [
+        node_info(n)
+        for n in ns
+        if any(
+            k in label_of(n)
+            for k in (
+                "log in",
+                "login",
+                "sign in",
+                "entrar",
+                "phone",
+                "telefone",
+                "email",
+                "e-mail",
+                "password",
+                "senha",
+                "continue with google",
+                "use facebook",
+                "welcome to kwai",
+                "verification",
+            )
+        )
+    ]
     out = {
         "label": tag,
         "state": s,
@@ -100,87 +132,109 @@ def snapshot(tag):
         "login_like": login_like[:12],
         "kwai_ctx": any("com.kwai.video" in (n.attrib.get("resource-id") or "") for n in ns),
     }
-    print(f"[CLEAR] {tag} state={s} edit={len(editables)} login_like={len(login_like)} kwai={out['kwai_ctx']}")
+    print(
+        f"[CLEAR] {tag} state={s} edit={len(editables)} login_like={len(login_like)} kwai={out['kwai_ctx']}"
+    )
     return out
+
+
+def tap_node(n):
+    b = n.attrib.get("bounds", "")
+    m = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", b or "")
+    if not m:
+        return False
+    x1, y1, x2, y2 = map(int, m.groups())
+    adb("shell", "input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2))
+    time.sleep(1.5)
+    return True
 
 
 def tap_matching(words):
     root = dump()
     for n in nodes(root):
         if any(w in label_of(n) for w in words) and n.attrib.get("clickable") == "true":
-            b = n.attrib.get("bounds", "")
-            m = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", b or "")
-            if not m:
-                continue
-            x1, y1, x2, y2 = map(int, m.groups())
-            adb("shell", "input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2))
-            time.sleep(1.5)
-            return True
+            if tap_node(n):
+                return True
     return False
 
 
-def dismiss_common():
-    for words in (
-        ("allow", "permitir"),
-        ("deny", "negar"),
-        ("start now", "começar agora"),
-        ("skip", "pular"),
-        ("yes, skip", "yes skip"),
-    ):
-        if tap_matching(words):
+def advance_onboarding(s, ns):
+    if s == "PERMISSION":
+        n = rid(ns, "permission_deny_button") or rid(ns, "permission_allow_button")
+        if n is not None and tap_node(n):
             return True
+        return tap_matching(("allow", "don’t allow", "dont allow", "permitir", "negar"))
+    if s == "START":
+        return tap_matching(("start now", "começar agora", "iniciar agora"))
+    if s == "INTEREST":
+        n = rid(ns, "tiny_discovery_dislike_button") or rid(ns, "tiny_discovery_like_button")
+        if n is not None and tap_node(n):
+            return True
+        # swipe through interest cards if buttons not found
+        adb("shell", "input", "swipe", "850", "1100", "180", "1100", "250")
+        time.sleep(1)
+        return True
+    if s == "INTEREST_SELECT":
+        if tap_matching(("skip", "pular")):
+            return True
+        adb("shell", "input", "tap", "90", "250")
+        time.sleep(2)
+        return True
+    if s == "RESOURCE_LOADING":
+        if tap_matching(("yes, skip", "yes skip", "skip", "pular", "hide")):
+            return True
+        n = rid(ns, "btn_cancel")
+        if n is not None and tap_node(n):
+            return True
+        time.sleep(3)
+        return True
     return False
 
 
-# --- Phase 0: confirm install state (may already be MAIN with cached session)
+# Phase 0: launch once (may be cached MAIN)
 adb("shell", "am", "force-stop", "com.kwai.video")
 time.sleep(1)
 adb("shell", "monkey", "-p", "com.kwai.video", "-c", "android.intent.category.LAUNCHER", "1")
 time.sleep(10)
 
 log = []
-pre = snapshot("pre-clear")
-log.append(pre)
+log.append(snapshot("pre-clear"))
 
-# Bounded onboarding dismiss before clear
-for i in range(6):
-    s = snapshot(f"pre-onboard-{i}")
-    log.append(s)
-    if s["state"] in ("LOGIN_SURFACE",):
-        break
-    if s["state"] in ("PERMISSION", "START", "RESOURCE_LOADING", "OTHER"):
-        dismiss_common()
-        time.sleep(2)
-        continue
-    if s["state"] == "MAIN":
-        break
-
-# Causal action: clear package data to drop cached auth
 print("[CLEAR] executing pm clear com.kwai.video")
 clear_out = adb("shell", "pm", "clear", "com.kwai.video", timeout=60)
 print("[CLEAR] pm_clear_out=" + clear_out.strip()[:200])
 time.sleep(2)
 
-# Relaunch after clear
 adb("shell", "monkey", "-p", "com.kwai.video", "-c", "android.intent.category.LAUNCHER", "1")
 time.sleep(12)
 
 found_surface = False
-for i in range(16):
+for i in range(24):
+    root = dump()
+    ns = nodes(root)
     s = snapshot(f"post-clear-{i}")
     log.append(s)
-    if s["state"] == "LOGIN_SURFACE" or s["editable_count"] > 0 or s["login_like_count"] > 0:
+    if s["state"] == "LOGIN_SURFACE" or s["editable_count"] > 0:
         found_surface = True
         break
-    if s["state"] in ("PERMISSION", "START", "RESOURCE_LOADING"):
-        dismiss_common()
-        time.sleep(2)
-        continue
+    if s["login_like_count"] > 0 and s["kwai_ctx"]:
+        # login-like labels on Kwai tree count as surface exposure
+        found_surface = True
+        break
     if not s["kwai_ctx"]:
+        # dismiss launcher permission or relaunch
+        advance_onboarding(s["state"], ns)
         adb("shell", "am", "start", "-n", "com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity")
-        time.sleep(6)
+        time.sleep(5)
         continue
-    # advance onboarding if any
+    if s["state"] in ("PERMISSION", "START", "INTEREST", "INTEREST_SELECT", "RESOURCE_LOADING"):
+        advance_onboarding(s["state"], ns)
+        time.sleep(1.5)
+        continue
+    if s["state"] == "MAIN":
+        # cleared session reached MAIN without login surface — still a useful signal
+        print("[CLEAR] reached MAIN after clear without login surface")
+        break
     adb("shell", "input", "swipe", "850", "1100", "180", "1100", "250")
     time.sleep(1.2)
 
