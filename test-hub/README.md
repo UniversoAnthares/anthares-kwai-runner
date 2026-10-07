@@ -154,3 +154,9 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - PROVEN: protected TikTok Central Session Read Probe run 37418647980 completed SUCCESS post-deploy; the deployed-control HTTP 401 blocker is closed.
 - Preserve current queue-fencing v16 semantics. Continue TikTok only under the serialized tiktok-publish lease.
 - Canonical finding: test-hub/findings/20261006-0531-cloudflare-tiktok-oidc-deploy-proven.md.
+
+
+### Arquitetura dual-provider — 2026-10-07
+- PROVEN: `tools/provider_router.py` implementa GitHub/GitLab como peers, seleção alternada, single-writer lease, lease generation, checkpoint fencing e failover condicionado a provider indisponível + HEAD idêntico.
+- PROVEN: workflow público `37675173709` / job `112976698070` executou os 6 testes do roteador e terminou `success`.
+- A persistência de lease/checkpoint permanece no `anthares-control`; o módulo do runner é a política determinística e não cria um segundo controller.
