@@ -58,6 +58,26 @@ def fill(value, index=0):
 
 
 
+# Preparation gate handling (findings 20261006-2241, run 37609315207): Kwai may
+# expose a persistent "resource downloading" bubble that never completes on
+# cloud runners. It must not block credentialed login: tolerate the banner and
+# only dismiss a modal that offers its own skip ("Skip the preparation?").
+def settle_preparation_gate(max_rounds=6):
+    for _ in range(max_rounds):
+        r = dump(); txt = " ".join(label(n) for n in nodes(r))
+        if "skip the preparation" not in txt and "hang in there" not in txt:
+            return True
+        # Modal with its own skip: prefer its "Yes, skip" before the background one.
+        acted = tap_matching(("yes, skip", "yes skip"))
+        if not acted:
+            acted = tap_resource_id("tiny_discovery_right_operation_btn")
+        if not acted:
+            return False
+        time.sleep(3)
+    r = dump(); txt = " ".join(label(n) for n in nodes(r))
+    return "skip the preparation" not in txt and "hang in there" not in txt
+
+
 def tap_resource_id(suffix):
     r=dump()
     for n in nodes(r):
@@ -122,6 +142,8 @@ def dismiss_system_anr():
 
 dismiss_android_permission_dialogs()
 dismiss_system_anr()
+if not settle_preparation_gate():
+    print("KWAI_PREPARATION_GATE_UNSETTLED")
 clear_interest_discovery()
 
 def accept_onboarding_completion():
@@ -176,9 +198,12 @@ for _ in range(8):
 r=dump(); txt=" ".join(label(n) for n in nodes(r))
 if not any(k in txt for k in ("log in","login","entrar","sign in","telefone","phone","email")):
     if reach_profile_semantically():
-        adb("shell","am","force-stop","com.kwai.video"); time.sleep(2)
-        adb("shell","monkey","-p","com.kwai.video","-c","android.intent.category.LAUNCHER","1"); time.sleep(15)
-        reach_profile_semantically()
+        # Entering Profile then returning to MAIN exposes the real login
+        # entrypoint; do not force-stop the app mid-flow (old behavior here
+        # threw away the authenticated-surface traversal).
+        time.sleep(3)
+        dismiss_android_permission_dialogs()
+        settle_preparation_gate()
 
 tap_matching(("log in","login","entrar","sign in"))
 time.sleep(1)
