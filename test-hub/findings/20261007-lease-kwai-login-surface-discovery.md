@@ -1,9 +1,5 @@
 # Lease — Kwai login surface discovery probe
 STATUS: RUNNING
-AREA: kwai-login
-DATE: 2026-10-07
-LEASE_AREA: kwai-login
-LEASE_EXPIRES: 2026-10-07T03:30:00Z
 BASELINE_PROVEN: remote Android/Kwai reaches FSM_MAIN deterministically; READY gate, promotion gate, queue fencing, heartbeat, publisher lifecycle, UNCERTAIN reconciliation and confirmation ledger are PROVEN.
 FAILED_AVOIDED: do not repeat bare ikwai://login, non-exported Activities, fixed-coordinate Phone taps, or treat Chrome first-run as Studio failure. Do not repeat credentialed autologin until the non-credentialed probe exposes the real login entrypoint.
 SUCCESS_SIGNAL: probe log contains at least one editable account/phone/email field or a clickable login control with stable resource-id/text before any credential is entered.
