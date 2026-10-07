@@ -44,7 +44,7 @@ def instagram(payload, publish=False):
     pub=req(f"{base}/{ver}/{uid}/media_publish","POST",{"creation_id":cid,"access_token":token})
     rid=pub.get("id")
     if not rid: raise AdapterError("instagram_remote_id_missing")
-    verify=req(f"{base}/{ver}/{rid}?fields=id,permalink&access_token={urllib.parse.quote(token)}")
+    verify=req(f"{base}/{ver}/{rid}?fields=id,permalink", token=token)
     if verify.get("id")!=rid: raise AdapterError("instagram_confirmation_failed")
     return {"status":"CONFIRMED","destination_key":dest,"remote_id":rid,"confirmation_evidence":{"verified_id":rid,"permalink":verify.get("permalink","")}}
 
@@ -64,7 +64,7 @@ def threads(payload, publish=False):
     if not cid: raise AdapterError("threads_container_missing")
     p=req(f"{base}/{ver}/{uid}/threads_publish","POST",{"creation_id":cid,"access_token":token}); rid=p.get("id")
     if not rid: raise AdapterError("threads_remote_id_missing")
-    verify=req(f"{base}/{ver}/{rid}?fields=id,permalink&access_token={urllib.parse.quote(token)}")
+    verify=req(f"{base}/{ver}/{rid}?fields=id,permalink", token=token)
     if verify.get("id")!=rid: raise AdapterError("threads_confirmation_failed")
     return {"status":"CONFIRMED","destination_key":dest,"remote_id":rid,"confirmation_evidence":{"verified_id":rid,"permalink":verify.get("permalink","")}}
 
