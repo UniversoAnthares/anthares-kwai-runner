@@ -39,7 +39,12 @@ def node_info(n):
 
 def state_from_text(t):
     t_low = t.lower()
-    if "permissioncontroller" in t_low:
+    # The notification permission dialog was seen in every snapshot of run
+    # 37567274644 (finding 20261006-2252 follow-up): its package string lives in
+    # resource-ids, never in the label text, so match the visible copy instead.
+    if ("permissioncontroller" in t_low or "send you notifications" in t_low
+            or "allow kwai" in t_low or "notificações" in t_low
+            or "notifications?" in t_low):
         return "PERMISSION"
     if "start now" in t_low or "you're all set" in t_low or "tudo pronto" in t_low:
         return "START"
@@ -201,6 +206,16 @@ for i in range(10):
     s = state_from_text(txt)
     snap = snapshot(f"main-{i}")
     probe_log.append(snap)
+    if s == "PERMISSION":
+        # The same dialog can reappear after relaunch; run 37567274644 spent all
+        # 10 main phases blocked on it because only phase 1 handled PERMISSION.
+        n = rid(ns, "permission_deny_button")
+        if n is None:
+            n = rid(ns, "permission_allow_button")
+        if n is not None:
+            tap_node(n)
+            time.sleep(1)
+        continue
     if any(k in txt for k in ("log in","login","entrar","sign in","phone","telefone","email","verification code","código de verificação","profile","meu perfil","my profile")):
         break
     # Try tapping Profile if visible
