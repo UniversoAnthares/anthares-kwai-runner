@@ -5,9 +5,9 @@ DATE: 2026-10-07
 LEASE_AREA: kwai-login
 LEASE_OWNER: grok-kwai-login-clear-data
 LEASE_EXPIRES: 2026-10-07T15:10:00Z
-RUN: pending
+RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37638909906
 JOB: pending
-COMMIT: pending
+COMMIT: 13c0d7101d6e59b1458fd0d885439f527e11f6a6
 SUPERSEDES: 20261007-lease-kwai-login-causal-repair.md
 
 BASELINE_PROVEN: run 37417286394 reached LOGIN_SURFACE_REACHED (Welcome to Kwai / phone / Google / Facebook) after FSM_MAIN; vault install + API35 emulator PROVEN; surface discovery runs today (37609057022, 37613550316) proved cached authenticated MAIN / PWA with zero editable nodes.
