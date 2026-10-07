@@ -227,10 +227,18 @@ def tap_ll_profile():
 r=dump(); txt=" ".join(label(n) for n in nodes(r))
 if not any(k in txt for k in ("log in","login","entrar","sign in","telefone","phone","email")):
     settle_preparation_gate()
-    if not tap_ll_profile() and reach_profile_semantically():
+    if tap_ll_profile():
         # Entering Profile then returning to MAIN exposes the real login
         # entrypoint; do not force-stop the app mid-flow (old behavior here
         # threw away the authenticated-surface traversal).
+        time.sleep(3)
+        dismiss_android_permission_dialogs()
+        settle_preparation_gate()
+        # Profile tab may hold the logged account or its own login entry.
+        # Give the password/phone chooser one chance before the generic path.
+        tap_matching(("password","senha","phone","telefone","email","e-mail"))
+        time.sleep(1)
+    elif reach_profile_semantically():
         time.sleep(3)
         dismiss_android_permission_dialogs()
         settle_preparation_gate()
@@ -245,9 +253,23 @@ if not fill(LOGIN):
     tap_matching(("other ways","other login","use phone","use email","phone number","mobile","account","outras formas","outra forma","usar telefone","usar e-mail","número de telefone","conta"))
     time.sleep(1)
     if not fill(LOGIN):
-        # Last deterministic fallback: focus the lower-center form area and verify an editable field appeared.
-        adb("shell","input","tap","540","1120"); time.sleep(1)
-        if not fill(LOGIN): raise SystemExit(3)
+        # Profile-tab context: a bottom sheet may offer "Log in" again, or the
+        # screen may expose settings/logout if a cached session is active.
+        r2 = dump(); txt2 = " ".join(label(n) for n in nodes(r2))
+        print("KWAI_FILL_DEBUG_UI=" + txt2[:600])
+        for n in nodes(r2):
+            rid2 = n.attrib.get("resource-id", "")
+            if rid2 in ("com.kwai.video:id/tv_login", "com.kwai.video:id/btn_login",
+                        "com.kwai.video:id/tv_to_login", "com.kwai.video:id/btn_to_login") \
+               and tap_node(n):
+                time.sleep(2)
+                break
+        tap_matching(("log in","login","entrar","sign in"))
+        time.sleep(1)
+        if not fill(LOGIN):
+            # Last deterministic fallback: focus the lower-center form area and verify an editable field appeared.
+            adb("shell","input","tap","540","1120"); time.sleep(1)
+            if not fill(LOGIN): raise SystemExit(3)
 # Current Kwai build may use phone verification instead of password.
 if tap_matching(("get code","send code","obter código","enviar código")):
     time.sleep(4)
