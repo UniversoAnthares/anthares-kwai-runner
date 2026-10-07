@@ -2,7 +2,7 @@
 STATUS: PARTIAL
 AREA: architecture
 DATE: 2026-10-07
-RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/2437650000523 (observado RUNNING em 2026-10-07 16:20:37Z; não iniciado nem tocado por esta auditoria)
+RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37652802571 (Kwai Emulator Boot Diagnostic; evento `push` em `main`, SHA `a405a57f45ddd7fe0971779590fcf707ce305c30`; ativo na consulta de 16:33:26Z; não tocado)
 JOB: Manus task fC58le6HtsUjTsBorwFbaA; workflow 8c83066a67ab; revisão final do relay
 COMMIT: HEADs individuais na tabela de cutoffs
 SUPERSEDES: 20261007-cross-repo-audit-unresolved.md; 20261007-cross-repo-audit-followup.md; 20261007-0000-comprehensive-audit-critical-issues.md
@@ -11,13 +11,13 @@ SUPERSEDES: 20261007-cross-repo-audit-unresolved.md; 20261007-cross-repo-audit-f
 
 Registrar no local append-only do test hub o inventário original de falhas dos oito repositórios, corrigir o status dos achados à luz dos deltas posteriores e destacar o que permanece aberto. Esta é uma auditoria **estática** e um corte temporal; não é aprovação de produção nem garantia de que `main` permaneça imutável depois do cutoff.
 
-**Resultado global: PARTIAL / RISCO ALTO.** Há achados de autenticação, fila, supply chain, exposição de segredos, publicação ambígua, runner Windows persistente, publicação destrutiva de HLS, endpoint de transcrição sem controles de abuso, Dockerfiles que não buildam e divergências entre o hub e os HEADs. Nenhum código foi alterado por esta auditoria, nenhum PR foi mesclado e nenhum workflow, build, deploy, login, API, upload ou publicação externa foi disparado por ela.
+**Resultado global: PARTIAL / RISCO ALTO.** Há achados de autenticação, fila, supply chain, exposição de segredos, publicação ambígua, runner Windows persistente, publicação destrutiva de HLS, endpoint de transcrição sem controles de abuso, Dockerfiles que não buildam e divergências entre o hub e os HEADs. Nenhum código foi alterado nem PR mesclado. A auditoria não disparou publisher, build, deploy, login, API, upload ou publicação; criar o PR documental #6 iniciou automaticamente o check GitLab redundancy sync, que falhou antes de conectar porque `GITLAB_MIRROR_URL` estava vazio. Separadamente, um push para `main` iniciou o run de diagnóstico citado acima; ele não foi acionado por esta auditoria e não foi tocado.
 
 O histórico integral abaixo preserva o que os auditores encontraram na primeira passagem. **Não interprete esses textos históricos como status atual:** as tabelas e reconciliações seguintes governam. Por exemplo, o `SyntaxError` reportado inicialmente em `tiktok_web_publish_local.py` não se reproduz no cutoff atual do clipper; esse ponto foi marcado STALE/NÃO CONFIRMADO, não como pendência atual.
 
 ## Cutoffs congelados por repositório
 
-Os agentes receberam SHAs fixos; commits posteriores a eles não foram considerados. O run ativo no runner foi observado às 16:20:37Z. A conta continuou recebendo commits durante esta tarefa; este arquivo não afirma que os HEADs permaneçam iguais após estes cortes.
+Os agentes receberam SHAs fixos; commits posteriores a eles não foram considerados. Depois dos cutoffs, `main` avançou para `a405a57f45ddd7fe0971779590fcf707ce305c30`; o push de 16:32:10Z iniciou o run `37652802571` em `main`, que ainda estava `in_progress` na consulta de 16:33:26Z. Essa revisão posterior não faz parte dos cutoffs abaixo. A conta continuou recebendo commits durante a tarefa; este arquivo não afirma que os HEADs permaneçam iguais.
 
 | Repositório | SHA de cutoff auditado |
 |---|---|
@@ -36,7 +36,7 @@ Os agentes receberam SHAs fixos; commits posteriores a eles não foram considera
 - As seções de reconciliação registram o status em HEADs mais novos, corrigem achados antigos que não se reproduzem e acrescentam findings novos. Um “corrigido estaticamente” não significa testado/deployado em produção.
 - Foram feitas validações locais sem rede **somente** nos branches já abertos runner PR #3 e clipper PR #39: `py_compile`, nove cenários sintéticos do harness no runner, teste de arquitetura do clipper e `bash -n` em dois scripts. Todas passaram. Não são validação de `main`, não fecham os demais achados e não acionam contas/serviços externos.
 - Na consulta de 16:01Z, `social-api-publisher.yml` não tinha runs listados; na consulta de 16:20:37Z a listagem continuou vazia. O código do cutoff do clipper tem cron de publicação social a cada 10 minutos, então ausência de runs no histórico consultado não prova ausência de execução futura.
-- O run `2437650000523` “Anthares Kwai Queue Publisher” apareceu ativo em 16:20:37Z. Não foi cancelado, reexecutado, observado por logs, nem alterado. Não fazer outra mutação de `kwai-publish` enquanto ele não tiver resultado e o lease correspondente não tiver sido conferido.
+- A saída textual de uma consulta às 16:20:37Z apresentou o ID `2437650000523`/nome “Anthares Kwai Queue Publisher”, mas `gh run view` e a API direta não confirmaram esse ID (HTTP 404); ele está excluído como run verificado. O run verificável é `37652802571`, “Kwai Emulator Boot Diagnostic”, iniciado por `push` em `main` (não publisher), em SHA posterior aos cutoffs; não foi observado, cancelado, reexecutado nem alterado.
 
 ## Reconciliação atual por repositório
 
@@ -47,7 +47,7 @@ Os agentes receberam SHAs fixos; commits posteriores a eles não foram considera
 - **ALTA — prova de identidade falsa/forjável:** `kwai_auth_probe.py:58-70,72-90,98-119`; `kwai_queue_publish_runtime.sh:10-18`; `kwai_auth_ready_gate.py:8-15`. Marcadores genéricos (“log out”, “my profile”) ou substring do texto agregado da UI, que inclui feed/navegação, podem satisfazer `strong_authenticated`. O runtime fabrica `KWAI_AUTH_READY_PROOF.account` a partir de `KWAI_EXPECTED_ACCOUNT`; o gate checa campos/igualdade/idade, não a identidade observada, origem, nonce ou geração de sessão. Conteúdo público ou a conta errada pode liberar publicação.
 - **MÉDIA — falta de regressão comportamental:** o workflow adicionado só usa `py_compile`; não cobre mismatch, feed contendo o nome esperado, UI dinâmica, profile sem identidade, proof stale ou marcador genérico.
 - **Hub incompleto/stale:** `test-hub/findings/` tem centenas de arquivos e o `README.md` foi marcado pela auditoria como desatualizado; p.ex. a linha 90 descreve `kwai_queue_state.sh` como v15 sem `lease_generation`/`renew`, embora o estado de código documentado seja v16 com ambos. Os findings do cutoff c7566 não foram incorporados por um registro completo. O finding corrente também contém afirmações contraditórias/inexatas sobre findings vazios e arquivos ausentes.
-- Não foi consultado nem tocado o run `2437650000523`; a atividade de publicação atual é um bloqueio para alterações concorrentes de fila/login/publicação.
+- O run verificável `37652802571` não foi consultado além de seus metadados, nem tocado. A atividade de diagnóstico e os novos commits em `main` são motivos para não fazer mutações concorrentes de fila/login/publicação nesta entrega.
 
 ### `anthares-clipper` — cutoff `26e6fb8b`
 
@@ -119,10 +119,16 @@ Os agentes receberam SHAs fixos; commits posteriores a eles não foram considera
 - Não foram executados scripts/testes/builds/workflows nos HEADs atuais. Houve somente as duas baterias sintéticas/offline indicadas acima em branches PR existentes; elas não provam produção.
 - Faltam binários/artefatos Kwai e APKs/splits para revisão de supply chain completa; partes dos históricos de findings não foram reconciliadas semanticamente antes deste corte.
 
+## Eventos GitHub após abrir o PR documental
+
+- O [PR #6](https://github.com/UniversoAnthares/anthares-kwai-runner/pull/6) contém somente este novo arquivo finding. O check automático `GitLab redundancy sync` falhou em `test -n "$GITLAB_MIRROR_URL"`; o valor estava vazio e o job encerrou antes de `git clone`/`git push`, portanto não houve escrita no GitLab.
+- Às 16:32:10Z, um push independente em `main`, SHA `a405a57f45ddd7fe0971779590fcf707ce305c30`, iniciou o run [Kwai Emulator Boot Diagnostic #37652802571](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/37652802571); o evento registrado é `push` com `head_branch=main`, não o PR documental. O run apareceu `in_progress` em 16:33:26Z. Não foi cancelado nem acessado.
+- A base observada do PR #6 era `c7566fea`, anterior ao novo push em `main`; o PR permanece aberto e não foi mesclado. O finding fixa os cutoffs da tabela e registra o novo SHA como pós-cutoff não auditado.
+
 ## Consequência e próximos passos seguros
 
 1. Não declarar auditoria aprovada nem executar publisher social/real. Priorizar correção reviewable dos bloqueios ALTA e testes mockados sem efeitos externos.
-2. Não cancelar o run ativo, não interagir com conta/sessão e não alterar fila enquanto `2437650000523` estiver em execução; após o término, reler status e lease antes de qualquer mutação.
+2. Não interagir com o run ativo `37652802571`, conta/sessão ou fila; após o término, reler status e lease antes de qualquer mutação.
 3. Tratar os schedules de social/TikTok/LIVE, os segredos em jobs, retries ambíguos e deploy manual em runner self-hosted como risco de publicação. A auditoria não os disparou nem desativou.
 4. Criar findings sucessores, um por correção/área, com baseline/lease quando envolver código, fila, sessão, deploy ou publicação e com testes que falhem antes de qualquer efeito real.
 5. Reconciliar este inventário novamente se algum `main` avançar além dos SHAs da tabela; os branches da conta mudaram durante a própria auditoria.
