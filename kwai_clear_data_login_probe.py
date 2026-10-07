@@ -249,11 +249,28 @@ if not observed:
     raise SystemExit(3)
 
 print(f"[CLEAR] TEST_VALIDITY=OK snapshots={len(log)} observed={len(observed)}")
+valid_onboarding = any(
+    e.get("state") in ("INTEREST", "INTEREST_SELECT", "START", "PERMISSION", "RESOURCE_LOADING")
+    for e in log
+)
+
 if found_surface:
     print("[CLEAR] LOGIN_SURFACE_FORCED=1")
     print("[CLEAR] SUCCESS_SIGNAL=LOGIN_SURFACE_FORCED")
     raise SystemExit(0)
 
+if valid_onboarding:
+    print("[CLEAR] LOGIN_SURFACE_FORCED=0")
+    print("[CLEAR] SESSION_CLEAR_BEHAVIOR=ONBOARDING")
+    print("[CLEAR] SUCCESS_SIGNAL=SESSION_CLEARED_TO_ONBOARDING")
+    raise SystemExit(0)
+
+if any(e.get("state") == "MAIN" and e.get("kwai_ctx") for e in log):
+    print("[CLEAR] LOGIN_SURFACE_FORCED=0")
+    print("[CLEAR] SESSION_CLEAR_BEHAVIOR=MAIN_WITHOUT_LOGIN")
+    print("[CLEAR] SUCCESS_SIGNAL=SESSION_CLEAR_NOT_LOGIN_VERIFIABLE")
+    raise SystemExit(0)
+
 print("[CLEAR] LOGIN_SURFACE_FORCED=0")
-print("[CLEAR] FAILURE_SIGNAL=NO_LOGIN_AFTER_CLEAR")
+print("[CLEAR] FAILURE_SIGNAL=NO_POST_CLEAR_KWAI_STATE")
 raise SystemExit(21)
