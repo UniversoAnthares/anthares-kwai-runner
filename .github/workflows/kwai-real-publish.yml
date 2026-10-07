@@ -85,6 +85,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate fenced canonical promotion contract
         shell: bash
+        env:
+          # Non-secret fixtures exercise the same required interval contract as a leased job:
+          # source_id, source_start and source_end, with source_end > source_start.
+          KWAI_QUEUE_JOB_ID: contract-test-job
+          KWAI_LEASE_GENERATION: "1"
+          KWAI_SOURCE_ID: contract-test-source
+          KWAI_SOURCE_START: "0"
+          KWAI_SOURCE_END: "1"
         run: |
           set -euo pipefail
           python3 kwai_real_publish_promotion_gate.py
