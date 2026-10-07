@@ -257,8 +257,18 @@ for i in range(10):
         if n is not None and tap_node(n):
             time.sleep(3)
         continue
-    if kwai_ctx and any(k in txt for k in ("log in","login","entrar","sign in","phone","telefone","email","verification code","código de verificação","senha","password","captcha")):
+    if kwai_ctx and any(k in txt for k in ("log in","login","entrar","sign in","phone","telefone","email","verification code","código de verificação","senha","password","captcha","settings","configurações","log out","sair","switch account","trocar conta")):
         break
+    # If MAIN shows cached account, try Profile/settings/logout before declaring no-login.
+    if kwai_ctx and s == "MAIN":
+        logout_keywords = ("settings","configurações","log out","sair","switch account","trocar conta","conta","account","meu perfil","my profile")
+        if any(k in txt for k in logout_keywords):
+            for n in ns:
+                label = (n.attrib.get("text","") + " " + n.attrib.get("content-desc","")).lower()
+                if any(k in label for k in logout_keywords) and n.attrib.get("clickable","") == "true":
+                    tap_node(n)
+                    time.sleep(2)
+                    break
     # Try tapping Profile if visible
     profile_node = None
     for n in ns:
