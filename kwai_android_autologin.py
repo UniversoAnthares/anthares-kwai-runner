@@ -72,6 +72,7 @@ def settle_preparation_gate(max_rounds=6):
         txt = " ".join(label(n) for n in ns)
         if "resource downloading" not in txt and "skip the preparation" not in txt \
            and "hang in there" not in txt:
+            print("KWAI_PREPARATION_GATE_CLEAR")
             return True
         ids = {n.attrib.get("resource-id", "") for n in ns}
         acted = False
@@ -213,11 +214,14 @@ for _ in range(8):
 # dialog overlays the nav: prefer the stable ll_profile id (proven by probe
 # artifact in run 37568734201).
 def tap_ll_profile():
+    print("KWAI_TAP_LL_PROFILE_START")
     r = dump()
     for n in nodes(r):
         if n.attrib.get("resource-id", "") == "com.kwai.video:id/ll_profile" and tap_node(n):
             time.sleep(3)
+            print("KWAI_TAP_LL_PROFILE_OK")
             return True
+    print("KWAI_TAP_LL_PROFILE_MISSING")
     return False
 
 r=dump(); txt=" ".join(label(n) for n in nodes(r))
