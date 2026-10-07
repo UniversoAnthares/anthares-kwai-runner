@@ -18,6 +18,7 @@ def state(ns,t):
  if "permissioncontroller" in " ".join(n.attrib.get("resource-id","") for n in ns):return "PERMISSION"
  if "start now" in t or "you’re all set" in t or "you're all set" in t:return "START"
  if "resource downloading" in t:return "RESOURCE_LOADING"
+ if "hang in there" in t or "skip the preparation" in t:return "RESOURCE_LOADING"
  if "profile" in t and ("home" in t or "discover" in t):return "MAIN"
  if "choose like or dislike" in t:return "INTEREST"
  if "select your interests" in t and ("skip" in t or "selected and continue" in t):return "INTEREST_SELECT"
@@ -55,13 +56,32 @@ for i in range(45):
    print("INTEREST_SELECT_SKIP_NOT_FOUND")
    adb("shell","input","tap","90","250");time.sleep(3)
  elif s=="RESOURCE_LOADING":
+  # 5% "sorry, the internet's a bit slow" gate (runs 37529160444/37613887885):
+  # bounded wait first, then the screen's own skip, then bring Kwai back in
+  # case the tap landed somewhere else. Never spin the full 45-iteration loop
+  # on a stuck download.
   print("RESOURCE_LOADING_WAIT")
-  for _ in range(30):
+  for _ in range(10):
    time.sleep(3);ns2,t2=snap()
-   if "resource downloading" not in t2:
+   if "resource downloading" not in t2 and "hang in there" not in t2:
     print("RESOURCE_LOADING_CLEARED");break
   else:
-   print("RESOURCE_LOADING_TIMEOUT");raise SystemExit(21)
+   print("RESOURCE_LOADING_STUCK_SEEK_SKIP")
+   n2=None
+   for x in ns2:
+    lab=(x.attrib.get("text","")+" "+x.attrib.get("content-desc","")).strip().lower()
+    if lab in ("skip","yes, skip","yes skip") and x.attrib.get("clickable","")=="true":
+     n2=x;break
+   if n2 is not None:
+    tap(n2)
+   else:
+    n2=rid(ns2,"btn_cancel")
+    if n2 is not None:tap(n2)
+   time.sleep(3);ns3,t3=snap()
+   if "resource downloading" in t3 or "hang in there" in t3:
+    print("RESOURCE_LOADING_RELAUNCH_KWAI")
+    adb("shell","am","force-stop","com.kwai.video");time.sleep(1)
+    adb("shell","monkey","-p","com.kwai.video","1");time.sleep(10)
  elif s=="LAUNCHER_ANR":
   print("LAUNCHER_RECOVERY_BEGIN")
   n=rid(ns,"aerr_close")
