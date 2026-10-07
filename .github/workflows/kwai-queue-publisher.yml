@@ -1,0 +1,136 @@
+name: Anthares Kwai Queue Publisher
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: anthares-kwai-queue-publisher
+  cancel-in-progress: false
+
+env:
+  ANTHARES_CONTROL_URL: https://anthares-control.anthares1.workers.dev
+  KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'anthares' }}
+  KWAI_LEASE_TTL_SECONDS: "600"
+  KWAI_LEASE_RENEW_INTERVAL_SECONDS: "120"
+  KWAI_LEASE_RENEW_TTL_SECONDS: "600"
+  KWAI_SESSION_FILE: kwai-session.enc
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate publisher scripts
+        run: |
+          set -euo pipefail
+          bash -n kwai_publish.sh kwai_claim_job.sh kwai_queue_heartbeat.sh kwai_queue_state.sh kwai_run_next_job.sh
+          python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py kwai_auth_ready_gate.py kwai_real_publish_promotion_gate.py
+
+      - name: Check Kwai session key
+        env:
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        run: |
+          test -n "$KWAI_PASSWORD" || { echo "KWAI_PASSWORD missing"; exit 42; }
+
+      - name: Download validated Kwai vault
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip             https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+          rm -rf kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+          test -s kwai-vault/MANIFEST.tsv
+
+      - name: Restore encrypted Kwai session cache
+        uses: actions/cache/restore@v4
+        with:
+          path: kwai-session.enc
+          key: kwai-session-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            kwai-session-${{ runner.os }}-
+
+      - name: Enable KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+
+      - name: Run canonical Kwai queue publisher
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            set -Eeuo pipefail
+            bash kwai_vault_install.sh
+            adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+
+            bash kwai_session_state.sh restore >/tmp/kwai-session-restore.log 2>&1 || true
+
+            if ! bash kwai_headless_login.sh; then
+              echo "KWAI_SESSION_NOT_READY=1"
+              cat kwai-headless-status.txt 2>/dev/null || true
+              exit 64
+            fi
+
+            AUTH_OUT="$(python3 kwai_auth_probe.py 2>&1)" || {
+              echo "$AUTH_OUT"
+              exit 65
+            }
+            echo "$AUTH_OUT"
+            echo "$AUTH_OUT" | grep -q 'KWAI_AUTH_STATE=AUTHENTICATED_UI' || exit 65
+
+            NOW="$(date +%s)"
+            export KWAI_AUTH_READY_PROOF="{\"state\":\"READY\",\"account\":\"${KWAI_EXPECTED_ACCOUNT}\",\"observed_at\":${NOW},\"proof_id\":\"run-${GITHUB_RUN_ID}\"}"
+
+            set +e
+            bash kwai_run_next_job.sh 2>&1 | tee kwai-publication.log
+            rc=${PIPESTATUS[0]}
+            set -e
+
+            if grep -q 'KWAI_QUEUE_EMPTY' kwai-publication.log; then
+              echo "KWAI_QUEUE_EMPTY_OK=1"
+              exit 0
+            fi
+
+            exit "$rc"
+
+      - name: Save encrypted Kwai session cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: kwai-session.enc
+          key: kwai-session-${{ runner.os }}-${{ github.run_id }}
+
+      - name: Upload publication diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-queue-publisher-${{ github.run_id }}
+          path: |
+            kwai-publication.log
+            kwai-publish-status.txt
+            kwai-reconcile-status.txt
+            kwai-headless-status.txt
+            kwai-headless-ready.png
+            kwai-session.enc
+          if-no-files-found: warn
+          retention-days: 3
