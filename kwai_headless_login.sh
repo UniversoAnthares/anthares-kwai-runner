@@ -50,18 +50,20 @@ fi
 log "KWAI_AUTO_LOGIN_ADVANCED"
 for _ in $(seq 1 15); do
   sleep 2
-  adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null 2>&1 || true
-  adb pull /sdcard/kwai-ui.xml /tmp/kwai-ui.xml >/dev/null 2>&1 || true
-  ui="$(tr '[:upper:]' '[:lower:]' </tmp/kwai-ui.xml 2>/dev/null || true)"
-  if echo "$ui" | grep -Eqi 'verification code|código de verificação|captcha|verify it.s you|senha|password|log in|login|entrar'; then
-    continue
-  fi
-  if echo "$ui" | grep -Eqi 'profile|perfil|following|seguindo|for you|para você|discover|descobrir|friends|amigos'; then
+  set +e
+  AUTH_AFTER="$(python3 kwai_auth_probe.py 2>&1)"
+  probe_rc=$?
+  set -e
+  printf '%s\n' "$AUTH_AFTER" >>"$REPORT"
+  if [ "$probe_rc" -eq 0 ] && echo "$AUTH_AFTER" | grep -q 'KWAI_AUTH_STATE=AUTHENTICATED_UI'; then
     log "KWAI_SESSION_AUTHENTICATED"
     adb shell pidof com.kwai.video >/dev/null || { log "FAIL: kwai-process-missing"; exit 62; }
     log "KWAI_HEALTH_OK"
     bash kwai_session_state.sh save >>"$REPORT" 2>&1 || log "KWAI_SESSION_SAVE_WARNING"
     exit 0
+  fi
+  if [ "$probe_rc" -eq 10 ]; then
+    log "KWAI_POST_LOGIN_AUTH_CHALLENGE"
   fi
 done
 log "KWAI_SESSION_UNCONFIRMED"
