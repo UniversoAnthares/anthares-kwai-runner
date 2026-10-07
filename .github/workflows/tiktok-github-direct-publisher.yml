@@ -80,7 +80,19 @@ jobs:
               echo "UNEXPECTED_QUEUE_JOB=$id"
               exit 21
             fi
-            failed="$(call fail "{"id":"$id","executor":"github","lease_generation":$gen,"error_class":"reconciled_absent_retirement","error_message":"user independently confirmed no v5 post; retiring stale diagnostic job","published_possible":false}")"
+            failed_payload="$(python3 - "$id" "$gen" <<'PY'
+          import json,sys
+          print(json.dumps({
+              'id': sys.argv[1],
+              'executor': 'github',
+              'lease_generation': int(sys.argv[2]),
+              'error_class': 'reconciled_absent_retirement',
+              'error_message': 'user independently confirmed no v5 post; retiring stale diagnostic job',
+              'published_possible': False,
+          }, separators=(',', ':')))
+          PY
+            )"
+            failed="$(call fail "$failed_payload")"
             echo "$failed"
           done
           echo "V5_RETIREMENT_FAILED"
@@ -93,7 +105,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "{"id":"$JOB_ID","platform":"tiktok","executor":"github","dedupe_key":"$DEDUPE","source_id":"synthetic-owned-canary-v6","source_start":0,"source_end":12}" > /tmp/enqueue.json
+          enqueue_payload="$(python3 - "$JOB_ID" "$DEDUPE" <<'PY'
+          import json,sys
+          print(json.dumps({
+              'id': sys.argv[1],
+              'platform': 'tiktok',
+              'executor': 'github',
+              'dedupe_key': sys.argv[2],
+              'source_id': 'synthetic-owned-canary-v6',
+              'source_start': 0,
+              'source_end': 12,
+          }, separators=(',', ':')))
+          PY
+          )"
+          curl --fail-with-body -sS -X POST "$CONTROL/job/enqueue"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "$enqueue_payload" > /tmp/enqueue.json
           cat /tmp/enqueue.json
           curl --fail-with-body -sS -X POST "$CONTROL/job/lease"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data '{"platform":"tiktok","executor":"github","ttl_seconds":900}' > /tmp/lease.json
           cat /tmp/lease.json
@@ -164,7 +189,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body -sS -X POST "$CONTROL/job/started"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "{"id":"$LEASE_ID","executor":"github","lease_generation":$LEASE_GEN}" > /tmp/started.json
+          started_payload="$(python3 - "$LEASE_ID" "$LEASE_GEN" <<'PY'
+          import json,sys
+          print(json.dumps({'id': sys.argv[1], 'executor': 'github', 'lease_generation': int(sys.argv[2])}, separators=(',', ':')))
+          PY
+          )"
+          curl --fail-with-body -sS -X POST "$CONTROL/job/started"             -H "Authorization: Bearer $CONTROL_TOKEN"             -H 'Content-Type: application/json'             --data "$started_payload" > /tmp/started.json
           cat /tmp/started.json
 
       - name: Publish directly from GitHub-hosted runner
@@ -212,7 +242,19 @@ jobs:
           PY
             )"
             [ -n "$remote_id" ] || { echo REMOTE_ID_MISSING; exit 31; }
-            curl --fail-with-body -sS -X POST "$CONTROL/job/complete"               -H "Authorization: Bearer $CONTROL_TOKEN"               -H 'Content-Type: application/json'               --data "{"id":"$LEASE_ID","executor":"github","lease_generation":$LEASE_GEN,"confirmed":true,"remote_id":"$remote_id","confirmation_evidence":"publisher_profile_new_post:$remote_id"}" > /tmp/complete.json
+            complete_payload="$(python3 - "$LEASE_ID" "$LEASE_GEN" "$remote_id" <<'PY'
+          import json,sys
+          print(json.dumps({
+              'id': sys.argv[1],
+              'executor': 'github',
+              'lease_generation': int(sys.argv[2]),
+              'confirmed': True,
+              'remote_id': sys.argv[3],
+              'confirmation_evidence': 'publisher_profile_new_post:' + sys.argv[3],
+          }, separators=(',', ':')))
+          PY
+            )"
+            curl --fail-with-body -sS -X POST "$CONTROL/job/complete"               -H "Authorization: Bearer $CONTROL_TOKEN"               -H 'Content-Type: application/json'               --data "$complete_payload" > /tmp/complete.json
             cat /tmp/complete.json
             python3 - <<'PY'
           import json
@@ -222,7 +264,19 @@ jobs:
           print('TIKTOK_CANARY_PRODUCTION_PROVEN remote_id='+str(j.get('remote_id')))
           PY
           else
-            curl --fail-with-body -sS -X POST "$CONTROL/job/fail"               -H "Authorization: Bearer $CONTROL_TOKEN"               -H 'Content-Type: application/json'               --data "{"id":"$LEASE_ID","executor":"github","lease_generation":$LEASE_GEN,"error_class":"direct_github_publish_failed","error_message":"GitHub-hosted direct publisher failed; reconcile profile before retry","published_possible":true}" > /tmp/fail.json || true
+            fail_payload="$(python3 - "$LEASE_ID" "$LEASE_GEN" <<'PY'
+          import json,sys
+          print(json.dumps({
+              'id': sys.argv[1],
+              'executor': 'github',
+              'lease_generation': int(sys.argv[2]),
+              'error_class': 'direct_github_publish_failed',
+              'error_message': 'GitHub-hosted direct publisher failed; reconcile profile before retry',
+              'published_possible': True,
+          }, separators=(',', ':')))
+          PY
+            )"
+            curl --fail-with-body -sS -X POST "$CONTROL/job/fail"               -H "Authorization: Bearer $CONTROL_TOKEN"               -H 'Content-Type: application/json'               --data "$fail_payload" > /tmp/fail.json || true
             cat /tmp/fail.json 2>/dev/null || true
             echo "DIRECT_GITHUB_CANARY=UNCERTAIN"
             exit 1
