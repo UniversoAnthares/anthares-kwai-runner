@@ -120,8 +120,9 @@ O agente deve:
 - encerrar o lease com novo finding append-only baseado em evidência.
 
 ### Lease candidato registrado em branch/PR (não mesclado)
-- Área serializada: `queue`; escopo: ACKs do publisher social em `anthares-clipper` e reclaim de delivery iniciado em `anthares-wordpress`.
+- Área serializada: `queue`; escopo: ACKs do publisher social em `anthares-clipper`, reclaim de delivery iniciado e ACK HTTP dos handlers `publisher_started`/`publisher_result` em `anthares-wordpress`.
 - Finding: `test-hub/findings/20261007-lease-queue-social-publisher-acks.md`; expira em `2026-10-07T17:10:00Z`.
+- Extensão append-only: `test-hub/findings/20261007-lease-queue-social-publisher-acks-addendum.md`.
 - Este registro está em branch/PR porque a instrução do usuário proíbe merge nesta tarefa; ele não altera o estado de `main`.
 
 Áreas de mutação são serializadas: `tiktok-session`, `tiktok-publish`, `kwai-login`, `kwai-publish`, `kwai-live`, `cloudflare-control`, `queue`.
