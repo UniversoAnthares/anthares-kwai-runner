@@ -8,12 +8,20 @@ import subprocess, time, xml.etree.ElementTree as ET, os, json
 adb = lambda *a: subprocess.run(["adb",*a], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=20).stdout
 
 def dump():
-    adb("shell","uiautomator","dump","/sdcard/kwai-login-probe.xml")
-    raw = adb("shell","cat","/sdcard/kwai-login.xml")
-    try:
-        return ET.fromstring(raw)
-    except Exception:
-        return None
+    # Causal repair (finding 20261006-2252): the dump target and the read-back path
+    # must be identical. The previous version dumped kwai-login-probe.xml but read
+    # kwai-login.xml, so every snapshot parsed as empty and logged state=OTHER.
+    target = "/sdcard/kwai-login-probe.xml"
+    for _ in range(3):
+        adb("shell", "uiautomator", "dump", target)
+        raw = adb("shell", "cat", target)
+        if raw.strip().startswith("<"):
+            try:
+                return ET.fromstring(raw)
+            except Exception:
+                pass
+        time.sleep(1)
+    return None
 
 def nodes(root):
     return list(root.iter("node")) if root is not None else []
@@ -36,6 +44,12 @@ def state_from_text(t):
     if "start now" in t_low or "you're all set" in t_low or "tudo pronto" in t_low:
         return "START"
     if "resource downloading" in t_low:
+        return "RESOURCE_LOADING"
+    # Preparation gate observed in run 37529160444 (finding 20261006-2241): Kwai
+    # blocks the UI on a download modal ("Skip the preparation?" / "Sorry, the
+    # internet's a bit slow. Hang in there!") before any login surface exists.
+    if ("skip the preparation" in t_low or "hang in there" in t_low
+            or "internet's a bit slow" in t_low or "preparation" in t_low):
         return "RESOURCE_LOADING"
     if "profile" in t_low and ("home" in t_low or "discover" in t_low or "inbox" in t_low):
         return "MAIN"
@@ -138,12 +152,25 @@ for i in range(12):
         time.sleep(2)
         continue
     if s["state"] == "RESOURCE_LOADING":
+        # Preparation gate (finding 20261006-2241): prefer waiting a bounded time
+        # for the resource download; if it is stuck (observed at 5%), accept the
+        # modal's own "Yes, skip" and continue to the real UI.
+        stuck = 0
         for _ in range(10):
             time.sleep(3)
             s2 = snapshot("resource-wait")
             probe_log.append(s2)
-            if "resource downloading" not in s2["text_preview"]:
+            txt2 = s2["text_preview"]
+            if "resource downloading" not in txt2 and "hang in there" not in txt2 \
+               and "skip the preparation" not in txt2 and "internet's a bit slow" not in txt2:
                 break
+            stuck += 1
+        if stuck >= 10:
+            if tap_matching(("yes, skip", "yes skip")):
+                time.sleep(3)
+            else:
+                tap_matching(("skip", "pular"))
+                time.sleep(3)
         continue
     if s["state"] == "LAUNCHER_ANR":
         n = rid(nodes(dump()), "aerr_close")
@@ -190,12 +217,26 @@ for i in range(10):
     adb("shell","input","swipe","850","1100","180","1100","250")
     time.sleep(1)
 
-# Save probe log
-out_path = os.path.join(os.environ.get("RUNNER_TEMP","/tmp"), "kwai-login-probe-log.json")
+# Save probe log where the workflow artifact path expects it (repo root);
+# the previous RUNNER_TEMP location meant kwai-login-probe-log.json was never
+# uploaded (finding 20261006-2252). Also emit an explicit validity signal so an
+# empty-tree run can never be mistaken for a valid negative again.
+out_path = os.path.join(os.getcwd(), "kwai-login-probe-log.json")
 with open(out_path, "w", encoding="utf-8") as f:
     json.dump(probe_log, f, ensure_ascii=False, indent=2)
 print(f"[PROBE] log saved to {out_path}")
+observed = [e for e in probe_log if e.get("resource_ids") or e.get("editable_nodes") or e.get("login_like_nodes") or e.get("text_preview")]
+if not observed:
+    print("[PROBE] TEST_VALIDITY=INVALID no UI tree was read")
+    raise SystemExit(3)
+print(f"[PROBE] TEST_VALIDITY=OK snapshots={len(probe_log)} observed={len(observed)}")
 print("[PROBE] final editable nodes and login-like nodes:")
-for entry in probe_log[-3:]:
+found = False
+for entry in probe_log:
     if entry["editable_nodes"] or entry["login_like_nodes"]:
-        print(json.dumps(entry, ensure_ascii=False, indent=2))
+        found = True
+        print(json.dumps({"label": entry["label"], "state": entry["state"],
+                          "editables": entry["editable_nodes"],
+                          "login_like": entry["login_like_nodes"]}, ensure_ascii=False, indent=2))
+if not found:
+    print("[PROBE] no editable/login-like nodes in any phase")
