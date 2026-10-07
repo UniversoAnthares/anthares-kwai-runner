@@ -194,8 +194,10 @@ for i in range(12):
         break
     # Only treat a login-like label as the login surface when the visible tree
     # belongs to Kwai. Run 37567761025 stopped on the Pixel launcher dock because
-    # its "Phone" icon matched the keyword while Kwai was not even foreground.
-    kwai_ctx = any("com.kwai.video" in r for r in s["resource_ids"]) or "kwai" in s["text_preview"].lower()
+    # its "Phone" icon matched, and run 37568284213 never relaunched because the
+    # launcher's "predicted app: kwai" text satisfied the context check. The
+    # package id in resource-ids is the only reliable signal.
+    kwai_ctx = any("com.kwai.video" in r for r in s["resource_ids"])
     if kwai_ctx and any(k in s["text_preview"] for k in ("log in","login","entrar","sign in","telefone","email")):
         break
     if not kwai_ctx:
@@ -225,9 +227,9 @@ for i in range(10):
             tap_node(n)
             time.sleep(1)
         continue
-    # Kwai context guard (same false-positive class as phase 1: the launcher dock
-    # contains "Phone" and "Profile"-like labels that must not end the probe).
-    kwai_ctx = any("com.kwai.video" in r for r in snap["resource_ids"]) or "kwai" in txt
+    # Kwai context guard: only the package id in resource-ids proves Kwai owns
+    # the visible tree (launcher text "predicted app: kwai" is a false positive).
+    kwai_ctx = any("com.kwai.video" in r for r in snap["resource_ids"])
     if not kwai_ctx:
         adb("shell","am","start","-n","com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity")
         time.sleep(6)
