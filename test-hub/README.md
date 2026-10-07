@@ -106,6 +106,11 @@ Não abrir nova matriz enquanto existir run causal relevante RUNNING, salvo cama
 ## Concorrência
 O diretório `findings/` é append-only. Antes de novo experimento, consultar findings recentes e runs em andamento. Se dois chats atuam na mesma cadeia causal, o run mais recente declarado RUNNING tem precedência até produzir evidência.
 
+### Auditoria cross-repo 2026-10-07
+- PARTIAL: a auditoria dos oito repositórios e o estado das correções locais estão em `test-hub/findings/20261007-cross-repo-audit-and-fix-closure.md`.
+- Correções offline confirmadas: sintaxe do publicador/teste, JSON dos workflows TikTok, redaction do serviço de transcrição, CI do relay, referências/manifesto do slideshow, documentação da wiki e bootstrap Android sem sucesso falso.
+- Permanecem bloqueados: revogação/saneamento de cookies históricos, publicação/login/deploy, escolhas de identidade/cadência, migração Android Keystore, File Bridge/produção WordPress, assets oficiais e contratos de autenticação/quota.
+
 
 ## Lease obrigatório para mutações
 

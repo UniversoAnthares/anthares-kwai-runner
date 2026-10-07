@@ -95,7 +95,18 @@ jobs:
           PY
           )"
           test -n "$REMOTE_ID"
-          curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "{"id":"tiktok-canary-20261006-synthetic-v5","executor":"github","confirmed":true,"remote_id":"$REMOTE_ID","confirmation_evidence":"profile_exact_caption:$REMOTE_ID"}" > /tmp/reconcile.json
+          reconcile_payload="$(python3 - "$REMOTE_ID" <<'PY'
+          import json,sys
+          print(json.dumps({
+              'id': 'tiktok-canary-20261006-synthetic-v5',
+              'executor': 'github',
+              'confirmed': True,
+              'remote_id': sys.argv[1],
+              'confirmation_evidence': 'profile_exact_caption:' + sys.argv[1],
+          }, separators=(',', ':')))
+          PY
+          )"
+          curl --fail-with-body -sS -X POST https://anthares-control.anthares1.workers.dev/job/reconcile -H "Authorization: Bearer $CONTROL_TOKEN" -H 'Content-Type: application/json' --data "$reconcile_payload" > /tmp/reconcile.json
           cat /tmp/reconcile.json
           python3 - <<'PY'
           import json
