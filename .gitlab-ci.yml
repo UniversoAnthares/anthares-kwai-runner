@@ -1,0 +1,16 @@
+stages:
+  - provider_failover
+
+provider_failover_acceptance:
+  stage: provider_failover
+  image: python:3.12-alpine
+  script:
+    - python tools/test_provider_router.py
+    - apk add --no-cache curl
+    - curl --fail --silent --show-error https://anthares-control.anthares1.workers.dev/git-provider-self-test | tee /tmp/control.json
+    - grep -q '"ok":true' /tmp/control.json
+    - grep -q '"provider":"gitlab"' /tmp/control.json
+    - grep -q '"provider":"github"' /tmp/control.json
+    - grep -q '"error":"no_ready_provider"' /tmp/control.json
+    - grep -q '"error":"checkpoint_diverged"' /tmp/control.json
+    - echo "GIT_PROVIDER_FAILOVER=PROVEN"
