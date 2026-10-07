@@ -20,3 +20,8 @@ The runner downloads the validated Kwai package from this repository's public `k
 ## External CI provider smoke
 
 CircleCI is configured through `.circleci/config.yml` with the shared provider smoke job. GitHub remains the source of truth; CircleCI is an interchangeable external executor.
+
+
+## Neutral dual-provider execution
+
+GitHub and GitLab are treated as peer execution providers. The provider-router state machine in `tools/provider_router.py` enforces single-writer leases, checkpoint fencing and quota/down failover. The contract is documented in `tools/DUAL_PROVIDER_ARCHITECTURE.md`. Durable lease/checkpoint persistence remains in the existing `anthares-control`; no second controller is introduced.
