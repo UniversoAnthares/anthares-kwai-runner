@@ -20,15 +20,15 @@ real_workload_clipper_validation:
   stage: workload
   image: python:3.12
   before_script:
-    - apt-get update -qq && apt-get install -y -qq ffmpeg
+    - apt-get update -qq && apt-get install -y -qq ffmpeg git
+    - git clone --depth 1 https://github.com/UniversoAnthares/anthares-clipper.git /tmp/anthares-clipper
+    - cd /tmp/anthares-clipper
     - python -m pip install --quiet --upgrade requests pillow "yt-dlp[default]" yt-dlp-ejs imageio-ffmpeg tzdata
   script:
+    - cd /tmp/anthares-clipper
     - python -m py_compile clipper.py
     - python -c "import clipper; print('GITLAB_REAL_WORKLOAD_CLIPPER_IMPORT=PROVEN', flush=True)"
     - python -c "import os; required=['WP_SITE_URL','WP_USERNAME','WP_APP_PASSWORD','YOUTUBE_CLIENT_ID','YOUTUBE_CLIENT_SECRET','YOUTUBE_REFRESH_TOKEN']; missing=[x for x in required if not os.getenv(x)]; print('GITLAB_CLIPPER_RUNTIME_SECRETS=' + ('READY' if not missing else 'MISSING:' + ','.join(missing)))"
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
 
 android_kwai_capability_gate:
   stage: validate
