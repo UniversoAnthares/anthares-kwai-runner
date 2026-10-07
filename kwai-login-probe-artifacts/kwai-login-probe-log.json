@@ -1,0 +1,206 @@
+[
+  {
+    "label": "onboarding-0",
+    "state": "PERMISSION",
+    "text_preview": "                  allow kwai to send you notifications?    allow  don’t allow ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.android.permissioncontroller:id/content_container",
+      "com.android.permissioncontroller:id/grant_dialog",
+      "com.android.permissioncontroller:id/grant_singleton",
+      "com.android.permissioncontroller:id/permission_allow_button",
+      "com.android.permissioncontroller:id/permission_deny_button",
+      "com.android.permissioncontroller:id/permission_icon",
+      "com.android.permissioncontroller:id/permission_message"
+    ]
+  },
+  {
+    "label": "onboarding-1",
+    "state": "OTHER",
+    "text_preview": "                       at a glance     wed, oct 7 wed, oct 7 gmail gmail photos photos youtube youtube  home       phone phone messages messages chrome chrome kwai predicted app: kwai  google search  google app    voice search  google lens  ",
+    "editable_nodes": [],
+    "login_like_nodes": [
+      {
+        "text": "Phone",
+        "content_desc": "Phone",
+        "class": "android.widget.TextView",
+        "resource_id": "",
+        "clickable": "true",
+        "editable": "",
+        "bounds": "[76,1788][258,1993]"
+      }
+    ],
+    "resource_ids": [
+      "android:id/content",
+      "com.google.android.apps.nexuslauncher:id/base_template_card_with_date",
+      "com.google.android.apps.nexuslauncher:id/bc_smartspace_view",
+      "com.google.android.apps.nexuslauncher:id/date",
+      "com.google.android.apps.nexuslauncher:id/drag_layer",
+      "com.google.android.apps.nexuslauncher:id/end_part",
+      "com.google.android.apps.nexuslauncher:id/g_icon",
+      "com.google.android.apps.nexuslauncher:id/hotseat",
+      "com.google.android.apps.nexuslauncher:id/launcher",
+      "com.google.android.apps.nexuslauncher:id/lens_icon",
+      "com.google.android.apps.nexuslauncher:id/mic_icon",
+      "com.google.android.apps.nexuslauncher:id/overview_actions_view",
+      "com.google.android.apps.nexuslauncher:id/page_indicator",
+      "com.google.android.apps.nexuslauncher:id/scrim_view",
+      "com.google.android.apps.nexuslauncher:id/search_container_hotseat",
+      "com.google.android.apps.nexuslauncher:id/search_container_workspace",
+      "com.google.android.apps.nexuslauncher:id/smartspace_card_pager",
+      "com.google.android.apps.nexuslauncher:id/text_group",
+      "com.google.android.apps.nexuslauncher:id/workspace"
+    ]
+  },
+  {
+    "label": "onboarding-2",
+    "state": "OTHER",
+    "text_preview": "                          loading...   ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/content_loading",
+      "com.kwai.video:id/iv_tiny_loading",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root",
+      "com.kwai.video:id/tv_tiny_loading",
+      "com.kwai.video:id/view_bottom_loading",
+      "com.kwai.video:id/view_top_loading"
+    ]
+  },
+  {
+    "label": "onboarding-3",
+    "state": "MAIN",
+    "text_preview": "              kwai-pwa                        unable to play media.              follow    2    0    0       @snizb105 حمودي الرقاوي  ...            unable to play media.              follow    67    0    8       @rmjts665 سارة  ...            unable to play media.              follow    6    0    0       @pauloantoniodi066 ana laura  ...        home    discover      inbox    profile ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root"
+    ]
+  },
+  {
+    "label": "main-0",
+    "state": "MAIN",
+    "text_preview": "              kwai-pwa                                      follow    2    0    0       @snizb105 حمودي الرقاوي  ...                          follow    67    0    8       @rmjts665 سارة  ...                          follow    6    0    0       @pauloantoniodi066 ana laura  ...        home    discover      inbox    profile ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root"
+    ]
+  },
+  {
+    "label": "main-1",
+    "state": "MAIN",
+    "text_preview": "              kwai-pwa                                      follow    2    0    0       @snizb105 حمودي الرقاوي  ...                          follow    67    0    8       @rmjts665 سارة  ...                          follow    6    0    0       @pauloantoniodi066 ana laura  ...        home    discover      inbox    profile ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root"
+    ]
+  },
+  {
+    "label": "main-2",
+    "state": "MAIN",
+    "text_preview": "              kwai-pwa                                      follow    2    0    0       @snizb105 حمودي الرقاوي  ...                          follow    67    0    8       @rmjts665 سارة  ...                          follow    6    0    0       @pauloantoniodi066 ana laura  ...        home    discover      inbox    profile ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root"
+    ]
+  },
+  {
+    "label": "main-3",
+    "state": "MAIN",
+    "text_preview": "              kwai-pwa                                      follow    2    0    0       @snizb105 حمودي الرقاوي  ...                          follow    67    0    8       @rmjts665 سارة  ...                          follow    6    0    0       @pauloantoniodi066 ana laura  ...        home    discover      inbox    profile ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root"
+    ]
+  },
+  {
+    "label": "main-4",
+    "state": "MAIN",
+    "text_preview": "              kwai-pwa                                      follow    2    0    0       @snizb105 حمودي الرقاوي  ...                          follow    67    0    8       @rmjts665 سارة  ...                          follow    6    0    0       @pauloantoniodi066 ana laura  ...        home    discover      inbox    profile ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root"
+    ]
+  },
+  {
+    "label": "main-5",
+    "state": "MAIN",
+    "text_preview": "              kwai-pwa                                      follow    2    0    0       @snizb105 حمودي الرقاوي  ...                          follow    67    0    8       @rmjts665 سارة  ...                          follow    6    0    0       @pauloantoniodi066 ana laura  ...        home    discover      inbox    profile ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root"
+    ]
+  },
+  {
+    "label": "main-6",
+    "state": "MAIN",
+    "text_preview": "              kwai-pwa                                      follow    2    0    0       @snizb105 حمودي الرقاوي  ...                          follow    67    0    8       @rmjts665 سارة  ...                          follow    6    0    0       @pauloantoniodi066 ana laura  ...        home    discover      inbox    profile ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root"
+    ]
+  },
+  {
+    "label": "main-7",
+    "state": "MAIN",
+    "text_preview": "              kwai-pwa                                      follow    2    0    0       @snizb105 حمودي الرقاوي  ...                          follow    67    0    8       @rmjts665 سارة  ...                          follow    6    0    0       @pauloantoniodi066 ana laura  ...        home    discover      inbox    profile ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root"
+    ]
+  },
+  {
+    "label": "main-8",
+    "state": "MAIN",
+    "text_preview": "              kwai-pwa                                      follow    2    0    0       @snizb105 حمودي الرقاوي  ...                          follow    67    0    8       @rmjts665 سارة  ...                          follow    6    0    0       @pauloantoniodi066 ana laura  ...        home    discover      inbox    profile ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root"
+    ]
+  },
+  {
+    "label": "main-9",
+    "state": "MAIN",
+    "text_preview": "              kwai-pwa                                      follow    2    0    0       @snizb105 حمودي الرقاوي  ...                          follow    67    0    8       @rmjts665 سارة  ...                          follow    6    0    0       @pauloantoniodi066 ana laura  ...        home    discover      inbox    profile ",
+    "editable_nodes": [],
+    "login_like_nodes": [],
+    "resource_ids": [
+      "android:id/content",
+      "com.kwai.video:id/tiny_yoda_refresh_layout",
+      "com.kwai.video:id/tiny_yoda_root"
+    ]
+  }
+]

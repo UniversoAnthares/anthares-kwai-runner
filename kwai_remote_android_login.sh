@@ -8,7 +8,8 @@ REPORT="kwai-remote-status.txt"; SHOT="kwai-remote-ready.png"; : > "$REPORT"
 log(){ printf '%s\n' "$*" | tee -a "$REPORT"; }
 capture(){ adb exec-out screencap -p > "$SHOT" 2>/dev/null || true; }
 finish_diag(){ { echo "=== adb ==="; adb devices -l || true; echo "=== package ==="; adb shell pm path com.kwai.video || true; echo "=== foreground ==="; adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | tail -4 || true; echo "=== tunnel ==="; tail -30 /tmp/tunnel.log 2>/dev/null || true; echo "=== ui ==="; tail -30 /tmp/android-ui.log 2>/dev/null || true; } >> "$REPORT"; capture; }
-trap finish_diag EXIT
+cleanup(){ finish_diag; [ -n "${UI_PID:-}" ] && kill "$UI_PID" 2>/dev/null || true; [ -n "${TUNNEL_PID:-}" ] && kill "$TUNNEL_PID" 2>/dev/null || true; }
+trap cleanup EXIT
 adb wait-for-device
 for _ in $(seq 1 30); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break; sleep 2; done
 [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { log "FAIL: android-not-ready"; exit 21; }
@@ -20,8 +21,8 @@ kill -0 "$UI_PID" 2>/dev/null || { log "FAIL: remote-ui-died"; exit 22; }
 URL=""
 for _ in $(seq 1 15); do URL=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log 2>/dev/null | head -1 || true); [ -n "$URL" ] && break; kill -0 "$TUNNEL_PID" 2>/dev/null || break; sleep 1; done
 [ -n "$URL" ] || { log "FAIL: tunnel-url-missing"; exit 23; }
-FULL="$URL/?t=$REMOTE_ANDROID_TOKEN"; log "REMOTE_URL=$FULL"
-printf '### Kwai Android remoto\n\n[Abrir Android remoto](%s)\n' "$FULL" >> "$GITHUB_STEP_SUMMARY"
+FULL="$URL/?t=$REMOTE_ANDROID_TOKEN"; log "REMOTE_BASE_URL=$URL"
+printf '### Kwai Android remoto\n\nAbra o URL-base abaixo e acrescente o token privado somente no navegador. O token não é escrito em logs.\n\n%s\n' "$URL" >> "$GITHUB_STEP_SUMMARY"
 if adb shell pm path com.kwai.video 2>/dev/null | grep -q 'package:'; then
   log "KWAI_ALREADY_INSTALLED"
 else
@@ -85,7 +86,7 @@ if [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
     log "KWAI_AUTO_LOGIN_NEEDS_INTERACTION_RC=$rc"
   fi
 fi
-LOGIN_DEADLINE=$((SECONDS+120))
+LOGIN_DEADLINE=$((SECONDS+600))
 while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   if [ -f /tmp/anthares-android-done ]; then
     log "DONE_SIGNAL_RECEIVED"
@@ -107,5 +108,5 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   kill -0 "$TUNNEL_PID" 2>/dev/null || { log "FAIL: tunnel-died-during-login"; exit 27; }
   sleep 1
 done
-log "FAIL: login-window-expired-120s"; exit 28
+log "FAIL: login-window-expired-600s"; exit 28
 

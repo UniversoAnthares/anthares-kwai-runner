@@ -18,6 +18,7 @@ def state(ns,t):
  if "permissioncontroller" in " ".join(n.attrib.get("resource-id","") for n in ns):return "PERMISSION"
  if "start now" in t or "you’re all set" in t or "you're all set" in t:return "START"
  if "resource downloading" in t:return "RESOURCE_LOADING"
+ if "hang in there" in t or "skip the preparation" in t:return "RESOURCE_LOADING"
  if "profile" in t and ("home" in t or "discover" in t):return "MAIN"
  if "choose like or dislike" in t:return "INTEREST"
  if "select your interests" in t and ("skip" in t or "selected and continue" in t):return "INTEREST_SELECT"
@@ -25,8 +26,17 @@ def state(ns,t):
  return "OTHER"
 adb("shell","pm","grant","com.kwai.video","android.permission.POST_NOTIFICATIONS")
 last=None
+# Post-relaunch stabilization (run 37619473077): after a relaunch the app needs
+# seconds before the nav bar exists (FSM 8 UI empty, ll_profile missing).
+stable_empty = 0
 for i in range(45):
  ns,t=snap();s=state(ns,t);print(f"FSM {i} STATE={s} UI={t[:500]}")
+ if not t.strip():
+  stable_empty += 1
+  if stable_empty >= 2:
+   time.sleep(8); continue
+ else:
+  stable_empty = 0
  if s=="MAIN":
   print("FSM_MAIN_REACHED");break
  if s=="PERMISSION":
@@ -55,13 +65,42 @@ for i in range(45):
    print("INTEREST_SELECT_SKIP_NOT_FOUND")
    adb("shell","input","tap","90","250");time.sleep(3)
  elif s=="RESOURCE_LOADING":
+  # 5% "sorry, the internet's a bit slow" gate (runs 37529160444/37613887885):
+  # bounded wait first, then act on whichever gate face is showing:
+  # - modal "Skip the preparation?": tap "Yes, skip" (run 37615623307 showed a
+  #   CLEARED false positive here because the modal needs an extra dump cycle).
+  # - dialog overlay with btn_cancel: tap cancel.
+  # - bare download screen: tap the screen's own skip.
+  # After acting, RE-READ until the gate text leaves for up to 30s; relaunch
+  # only if the gate is still present afterwards.
   print("RESOURCE_LOADING_WAIT")
-  for _ in range(30):
+  for _ in range(10):
    time.sleep(3);ns2,t2=snap()
-   if "resource downloading" not in t2:
+   if "resource downloading" not in t2 and "hang in there" not in t2 \
+      and "skip the preparation" not in t2:
     print("RESOURCE_LOADING_CLEARED");break
   else:
-   print("RESOURCE_LOADING_TIMEOUT");raise SystemExit(21)
+   print("RESOURCE_LOADING_STUCK_SEEK_SKIP")
+   ns3,t3 = ns2,t2
+   for _attempt in range(5):
+    n2=None
+    for x in ns3:
+     lab=(x.attrib.get("text","")+" "+x.attrib.get("content-desc","")).strip().lower()
+     if lab in ("yes, skip","yes skip","skip") and x.attrib.get("clickable","")=="true":
+      n2=x;break
+    if n2 is not None:
+     tap(n2)
+    else:
+     n2=rid(ns3,"btn_cancel")
+     if n2 is not None:tap(n2)
+    time.sleep(4);ns3,t3=snap()
+    if "resource downloading" not in t3 and "hang in there" not in t3 \
+       and "skip the preparation" not in t3:
+     print("RESOURCE_LOADING_SETTLED");break
+   else:
+    print("RESOURCE_LOADING_RELAUNCH_KWAI")
+    adb("shell","am","force-stop","com.kwai.video");time.sleep(1)
+    adb("shell","monkey","-p","com.kwai.video","1");time.sleep(10)
  elif s=="LAUNCHER_ANR":
   print("LAUNCHER_RECOVERY_BEGIN")
   n=rid(ns,"aerr_close")
@@ -76,8 +115,14 @@ for i in range(45):
   adb("shell","input","swipe","850","1100","180","1100","250");time.sleep(1)
 else:
  print("FSM_TIMEOUT");raise SystemExit(20)
-# stabilize main and inspect real clickable Profile parent
-adb("shell","am","force-stop","com.kwai.video");time.sleep(1);adb("shell","monkey","-p","com.kwai.video","1");time.sleep(12)
-ns,t=snap(); n=rid(ns,"ll_profile"); print("PROFILE_PARENT="+str(bool(n)))
+# stabilize main and inspect real clickable Profile parent. Re-verify the nav
+# bar exists first; a dump taken while the feed is still loading has no bottom
+# nav (run 37619473077: PROFILE_PARENT=False on a transient tree).
+n = None
+for _stab in range(6):
+ ns,t=snap(); n=rid(ns,"ll_profile")
+ if n is not None: break
+ time.sleep(3)
+print("PROFILE_PARENT="+str(bool(n)))
 if n is not None: tap(n);time.sleep(4)
 ns,t=snap();print("POST_PROFILE_UI="+t[:1800]);print("POST_PROFILE_IDS="+" ".join(n.attrib.get("resource-id","") for n in ns)[:4000])

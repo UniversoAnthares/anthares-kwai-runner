@@ -58,6 +58,41 @@ def fill(value, index=0):
 
 
 
+# Preparation gate handling (findings 20261006-2241, run 37609315207): Kwai may
+# expose a persistent "resource downloading" bubble that never completes on
+# cloud runners. It must not block credentialed login: tolerate the banner and
+# only dismiss a modal that offers its own skip ("Skip the preparation?").
+def settle_preparation_gate(max_rounds=6):
+    # Run 37610518267 showed the MAIN feed carrying a resource-download dialog
+    # overlay (ll_tiny_dialog_content + btn_cancel) while no modal "Skip the
+    # preparation?" is present. Dismiss via the dialog's own cancel button when
+    # the overlay exists; otherwise tolerate the banner and continue.
+    for _ in range(max_rounds):
+        r = dump(); ns = nodes(r)
+        txt = " ".join(label(n) for n in ns)
+        if "resource downloading" not in txt and "skip the preparation" not in txt \
+           and "hang in there" not in txt:
+            print("KWAI_PREPARATION_GATE_CLEAR")
+            return True
+        ids = {n.attrib.get("resource-id", "") for n in ns}
+        acted = False
+        if "ll_tiny_dialog_content" in ids or "btn_cancel" in ",".join(ids):
+            if tap_resource_id("btn_cancel"):
+                acted = True
+            elif tap_matching(("hide", "skip", "pular")):
+                acted = True
+        elif "skip the preparation" in txt or "hang in there" in txt:
+            # Modal with its own skip: prefer its "Yes, skip" before the background one.
+            acted = tap_matching(("yes, skip", "yes skip"))
+            if not acted:
+                acted = tap_resource_id("tiny_discovery_right_operation_btn")
+        if not acted:
+            # Persistent banner without its own dismiss: tolerate and continue.
+            return True
+        time.sleep(3)
+    return True
+
+
 def tap_resource_id(suffix):
     r=dump()
     for n in nodes(r):
@@ -122,7 +157,24 @@ def dismiss_system_anr():
 
 dismiss_android_permission_dialogs()
 dismiss_system_anr()
+if not settle_preparation_gate():
+    print("KWAI_PREPARATION_GATE_UNSETTLED")
 clear_interest_discovery()
+
+def accept_onboarding_completion():
+    # A fresh install may land on the final onboarding screen ("You're all set").
+    # This is not an authentication challenge. Enter MAIN before attempting Profile/login.
+    for _ in range(4):
+        r=dump(); txt=" ".join(label(n) for n in nodes(r))
+        if ("all set" in txt or "tudo pronto" in txt) and any(k in txt for k in ("start now","começar agora","iniciar agora")):
+            if tap_matching(("start now","começar agora","iniciar agora")):
+                time.sleep(4)
+                dismiss_android_permission_dialogs()
+                clear_interest_discovery()
+                continue
+        break
+
+accept_onboarding_completion()
 # Normalize the current chooser into the Phone authentication surface when present.
 subprocess.run(["python3","kwai_phone_surface_probe.py"],check=False)
 time.sleep(2)
@@ -157,13 +209,49 @@ for _ in range(8):
     adb("shell","input","keyevent","4"); time.sleep(1)
 
 # If onboarding did not expose login directly, use the proven path to the
-# main navigation and open Profile semantically.
+# main navigation and open Profile semantically. Run 37610518267 showed the
+# semantic word "profile" exists but the tap is unreliable while the download
+# dialog overlays the nav: prefer the stable ll_profile id (proven by probe
+# artifact in run 37568734201).
+def tap_ll_profile():
+    print("KWAI_TAP_LL_PROFILE_START")
+    r = dump()
+    for n in nodes(r):
+        if n.attrib.get("resource-id", "") == "com.kwai.video:id/ll_profile" and tap_node(n):
+            time.sleep(3)
+            print("KWAI_TAP_LL_PROFILE_OK")
+            return True
+    print("KWAI_TAP_LL_PROFILE_MISSING")
+    return False
+
 r=dump(); txt=" ".join(label(n) for n in nodes(r))
 if not any(k in txt for k in ("log in","login","entrar","sign in","telefone","phone","email")):
-    if reach_profile_semantically():
-        adb("shell","am","force-stop","com.kwai.video"); time.sleep(2)
-        adb("shell","monkey","-p","com.kwai.video","-c","android.intent.category.LAUNCHER","1"); time.sleep(15)
-        reach_profile_semantically()
+    settle_preparation_gate()
+    if tap_ll_profile():
+        # Profile tab after ll_profile tap: the earlier tap may have landed on
+        # the already-active tab (no-op). Read back: only when the Profile
+        # surface is confirmed (logged account or login entry) do we stay;
+        # otherwise TAP the profile-adjacent area by re-tapping ll_profile once
+        # more, then inspect what surfaced.
+        time.sleep(3)
+        dismiss_android_permission_dialogs()
+        settle_preparation_gate()
+        r3 = dump(); txt3 = " ".join(label(n) for n in nodes(r3))
+        print("KWAI_POST_PROFILE_UI=" + txt3[:600])
+        ids3 = {n.attrib.get("resource-id","") for n in nodes(r3)}
+        if not any(k in txt3 for k in ("log in","login","entrar","sign in","settings","configura","log out","sair","account","conta","meu perfil","my profile")):
+            # Still the same feed: the tap was a no-op. Tap ll_profile once more
+            # explicitly, then continue to the chooser taps below.
+            tap_ll_profile()
+            time.sleep(2)
+        # Profile tab may hold the logged account or its own login entry.
+        # Give the password/phone chooser one chance before the generic path.
+        tap_matching(("password","senha","phone","telefone","email","e-mail"))
+        time.sleep(1)
+    elif reach_profile_semantically():
+        time.sleep(3)
+        dismiss_android_permission_dialogs()
+        settle_preparation_gate()
 
 tap_matching(("log in","login","entrar","sign in"))
 time.sleep(1)
@@ -175,9 +263,23 @@ if not fill(LOGIN):
     tap_matching(("other ways","other login","use phone","use email","phone number","mobile","account","outras formas","outra forma","usar telefone","usar e-mail","número de telefone","conta"))
     time.sleep(1)
     if not fill(LOGIN):
-        # Last deterministic fallback: focus the lower-center form area and verify an editable field appeared.
-        adb("shell","input","tap","540","1120"); time.sleep(1)
-        if not fill(LOGIN): raise SystemExit(3)
+        # Profile-tab context: a bottom sheet may offer "Log in" again, or the
+        # screen may expose settings/logout if a cached session is active.
+        r2 = dump(); txt2 = " ".join(label(n) for n in nodes(r2))
+        print("KWAI_FILL_DEBUG_UI=" + txt2[:600])
+        for n in nodes(r2):
+            rid2 = n.attrib.get("resource-id", "")
+            if rid2 in ("com.kwai.video:id/tv_login", "com.kwai.video:id/btn_login",
+                        "com.kwai.video:id/tv_to_login", "com.kwai.video:id/btn_to_login") \
+               and tap_node(n):
+                time.sleep(2)
+                break
+        tap_matching(("log in","login","entrar","sign in"))
+        time.sleep(1)
+        if not fill(LOGIN):
+            # Last deterministic fallback: focus the lower-center form area and verify an editable field appeared.
+            adb("shell","input","tap","540","1120"); time.sleep(1)
+            if not fill(LOGIN): raise SystemExit(3)
 # Current Kwai build may use phone verification instead of password.
 if tap_matching(("get code","send code","obter código","enviar código")):
     time.sleep(4)
