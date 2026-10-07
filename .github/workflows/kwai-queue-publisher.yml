@@ -85,7 +85,7 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
-            set -Eeuo pipefail
+            set -eu
             bash kwai_vault_install.sh
             adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 
@@ -107,10 +107,12 @@ jobs:
             NOW="$(date +%s)"
             export KWAI_AUTH_READY_PROOF="{\"state\":\"READY\",\"account\":\"${KWAI_EXPECTED_ACCOUNT}\",\"observed_at\":${NOW},\"proof_id\":\"run-${GITHUB_RUN_ID}\"}"
 
-            set +e
-            bash kwai_run_next_job.sh 2>&1 | tee kwai-publication.log
-            rc=${PIPESTATUS[0]}
-            set -e
+            if bash kwai_run_next_job.sh >kwai-publication.log 2>&1; then
+              rc=0
+            else
+              rc=$?
+            fi
+            cat kwai-publication.log
 
             if grep -q 'KWAI_QUEUE_EMPTY' kwai-publication.log; then
               echo "KWAI_QUEUE_EMPTY_OK=1"
