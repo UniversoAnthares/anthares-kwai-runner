@@ -235,10 +235,8 @@ for i in range(10):
         time.sleep(6)
         continue
     if s == "RESOURCE_LOADING":
-        # The Profile entry (run 37608657199) exposes a "resource downloading ...
-        # hide" overlay that never completes. The run-37529160444 evidence showed
-        # the login surface only appears once this gate is settled: first try the
-        # overlay's own "hide"/"skip" affordance, bounded, then re-dump.
+        # The Profile entry exposes a "resource downloading ... hide" overlay.
+        # First try hide/cancel, bounded.
         for _ in range(6):
             n = rid(nodes(dump()), "btn_cancel")
             if n is None:
@@ -247,8 +245,25 @@ for i in range(10):
             time.sleep(3)
             root = dump(); ns = nodes(root)
             txt = " ".join((n2.attrib.get("text","") + " " + n2.attrib.get("content-desc","")).lower() for n2 in ns)
-            if "resource downloading" not in txt:
+            if "resource downloading" not in txt and "can't connect to server" not in txt:
                 break
+        continue
+    if "can't connect to server" in txt_low or "não foi possível conectar" in txt_low:
+        # Network error screen: try retry button, then Profile for login/logout.
+        for suffix in ("fl_retry", "retry_network_icon"):
+            n = rid(ns, suffix)
+            if n is not None and tap_node(n):
+                time.sleep(2)
+                break
+        # Also try Profile from the bottom nav
+        profile_node = None
+        for n in ns:
+            rid_val = n.attrib.get("resource-id","")
+            if rid_val.endswith("ll_profile") and n.attrib.get("clickable","") == "true":
+                profile_node = n
+                break
+        if profile_node is not None and tap_node(profile_node):
+            time.sleep(2)
         continue
     if kwai_ctx and "profile" in txt and ("home" in txt or "discover" in txt or "inbox" in txt):
         # MAIN bottom nav proven by run 37568734201 artifact: enter Profile via
