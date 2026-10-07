@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 import subprocess, time, xml.etree.ElementTree as ET, re, sys
 
-AUTH = ("log in","login","entrar","sign in","telefone","phone","password","senha",
-        "verification code","código de verificação","facebook","google")
+AUTH = (
+    "log in","login","entrar","sign in",
+    "password","senha",
+    "verification code","código de verificação",
+    "phone number","número de telefone",
+    "continue with google","continuar com google",
+    "continue with facebook","continuar com facebook"
+)
 HOME = ("following","seguindo","for you","para você","profile","perfil","discover",
         "descobrir","friends","amigos","create","criar")
 
