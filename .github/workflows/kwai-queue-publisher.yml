@@ -2,6 +2,10 @@ name: Anthares Kwai Queue Publisher
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/kwai-queue-publisher.yml"
+      - ".kwai-queue-trigger"
   schedule:
     - cron: "*/5 * * * *"
 
@@ -36,8 +40,10 @@ jobs:
 
       - name: Check Kwai session key
         env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
         run: |
+          test -n "$KWAI_LOGIN" || { echo "KWAI_LOGIN missing"; exit 42; }
           test -n "$KWAI_PASSWORD" || { echo "KWAI_PASSWORD missing"; exit 42; }
 
       - name: Download validated Kwai vault
