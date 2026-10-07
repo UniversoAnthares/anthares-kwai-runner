@@ -1,0 +1,64 @@
+name: Kwai Emulator Boot Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/kwai-emulator-boot-diagnostic.yml
+
+jobs:
+  boot:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 600
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            set -x
+            # Poll boot manually
+            for i in $(seq 1 90); do
+              BOOTED=$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null || echo "0")
+              if [ "$BOOTED" = "1" ]; then
+                echo "BOOTED after ${i} polls"
+                break
+              fi
+              sleep 2
+            done
+            BOOTED=$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null || echo "0")
+            echo "FINAL_BOOTED=$BOOTED"
+            if [ "$BOOTED" != "1" ]; then
+              echo "EMULATOR DID NOT BOOT"
+              exit 1
+            fi
+            bash kwai_vault_install.sh
+            sleep 8
+            adb -s emulator-5554 shell input tap 900 1200
+            sleep 3
+            adb -s emulator-5554 shell uiautomator dump /sdcard/ui.xml
+            adb -s emulator-5554 pull /sdcard/ui.xml /tmp/ui.xml
+            head -n 80 /tmp/ui.xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kwai-boot-diagnostic
+          path: /tmp/ui.xml
+          retention-days: 3
