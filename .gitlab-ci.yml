@@ -1,8 +1,9 @@
 stages:
-  - provider_failover
+  - validate
+  - workload
 
 provider_failover_acceptance:
-  stage: provider_failover
+  stage: validate
   image: python:3.12-alpine
   script:
     - python tools/test_provider_router.py
@@ -14,3 +15,24 @@ provider_failover_acceptance:
     - grep -q '"error":"no_ready_provider"' /tmp/control.json
     - grep -q '"error":"checkpoint_diverged"' /tmp/control.json
     - echo "GIT_PROVIDER_FAILOVER=PROVEN"
+
+real_workload_clipper_validation:
+  stage: workload
+  image: python:3.12
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq ffmpeg
+    - python -m pip install --quiet --upgrade requests pillow "yt-dlp[default]" yt-dlp-ejs imageio-ffmpeg tzdata
+  script:
+    - python -m py_compile clipper.py
+    - python -c "import clipper; print('GITLAB_REAL_WORKLOAD_CLIPPER_IMPORT=PROVEN', flush=True)"
+    - python -c "import os; required=['WP_SITE_URL','WP_USERNAME','WP_APP_PASSWORD','YOUTUBE_CLIENT_ID','YOUTUBE_CLIENT_SECRET','YOUTUBE_REFRESH_TOKEN']; missing=[x for x in required if not os.getenv(x)]; print('GITLAB_CLIPPER_RUNTIME_SECRETS=' + ('READY' if not missing else 'MISSING:' + ','.join(missing)))"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+android_kwai_capability_gate:
+  stage: validate
+  image: alpine:3.20
+  script:
+    - echo "ANDROID_KWAI_GITLAB_HOSTED_RUNNER=UNSUPPORTED_KVM_DEVICE_GATE"
+    - echo "Preserve Android/Kwai execution on a runner/device path proven to expose required virtualization; do not silently route to generic GitLab SaaS."
