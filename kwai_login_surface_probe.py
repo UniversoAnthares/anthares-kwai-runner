@@ -192,8 +192,17 @@ for i in range(12):
         continue
     if s["state"] == "MAIN":
         break
-    if any(k in s["text_preview"] for k in ("log in","login","entrar","sign in","phone","telefone","email")):
+    # Only treat a login-like label as the login surface when the visible tree
+    # belongs to Kwai. Run 37567761025 stopped on the Pixel launcher dock because
+    # its "Phone" icon matched the keyword while Kwai was not even foreground.
+    kwai_ctx = any("com.kwai.video" in r for r in s["resource_ids"]) or "kwai" in s["text_preview"].lower()
+    if kwai_ctx and any(k in s["text_preview"] for k in ("log in","login","entrar","sign in","telefone","email")):
         break
+    if not kwai_ctx:
+        # Kwai lost foreground (launcher/ANR recovery) -> bring it back.
+        adb("shell","am","start","-n","com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity")
+        time.sleep(6)
+        continue
     # Generic advance
     adb("shell","input","swipe","850","1100","180","1100","250")
     time.sleep(1)
@@ -215,6 +224,13 @@ for i in range(10):
         if n is not None:
             tap_node(n)
             time.sleep(1)
+        continue
+    # Kwai context guard (same false-positive class as phase 1: the launcher dock
+    # contains "Phone" and "Profile"-like labels that must not end the probe).
+    kwai_ctx = any("com.kwai.video" in r for r in snap["resource_ids"]) or "kwai" in txt
+    if not kwai_ctx:
+        adb("shell","am","start","-n","com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity")
+        time.sleep(6)
         continue
     if any(k in txt for k in ("log in","login","entrar","sign in","phone","telefone","email","verification code","código de verificação","profile","meu perfil","my profile")):
         break
