@@ -41,7 +41,7 @@ log "MEDIA_NAME=$KWAI_MEDIA_NAME"
 
 adb shell mkdir -p /sdcard/Movies/AntharesPublish
 # This directory is owned by this publication harness; never clear general user media.
-adb shell rm -f '/sdcard/Movies/AntharesPublish/*'
+adb shell 'rm -f /sdcard/Movies/AntharesPublish/* 2>/dev/null || true'
 adb push /tmp/anthares-upload.mp4 "$KWAI_ANDROID_VIDEO" >/dev/null
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$KWAI_ANDROID_VIDEO" >/dev/null
 sleep 2
