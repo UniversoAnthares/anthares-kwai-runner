@@ -9,7 +9,7 @@ SUPERSEDES: none
 
 ## Objetivo
 
-Mapear os recursos externos que os sistemas Anthares realmente usam através do GitHub/GitHub Actions e verificar se podem continuar operando sob GitLab CI/CD.
+Mapear os recursos externos do Anthares que usam GitHub/GitHub Actions e verificar se podem continuar operando sob GitLab CI/CD.
 
 ## Conclusão
 
@@ -73,7 +73,7 @@ A infraestrutura externa do Anthares é, em sua maior parte, independente do Git
 12. GitLab / Codeberg
     - O sistema já possui workflows de redundância para GitLab e Codeberg.
     - Hoje os workflows usam GitHub como origem principal.
-    - Ao tornar GitLab primário, o sentido da redundância deve ser invertido/redefinido.
+    - O desenho futuro não deve assumir GitLab como autoridade única: a direção de sincronização deverá ser definida pelo roteador de provedores da fase 2.
 
 13. GitHub-specific
     - actions/checkout, setup-python, setup-php, upload-artifact e github-script.
@@ -82,7 +82,7 @@ A infraestrutura externa do Anthares é, em sua maior parte, independente do Git
     - GitHub Releases/Assets: o smoke de cortes baixa kwai-daily-current-021.mp4 de uma GitHub Release usando gh/GH_TOKEN.
     - GitHub Issues: o QA cria/fecha incidentes automaticamente via actions/github-script.
     - GitHub OIDC: usado para autenticar jobs no anthares-control.
-    - Esses itens precisam ser substituídos, não apenas transportados.
+    - Esses itens precisam ser substituídos ou encapsulados pelo desenho de execução da fase 2.
 
 ## Particularidade crítica do Kwai/Android
 
@@ -111,22 +111,56 @@ Para equivalência operacional, a migração deve criar pelo menos um runner ded
 - GitHub OIDC claims hardcoded no anthares-control: NÃO sem alteração
 - Android/KVM: SIM, mas exige runner adequado; não presumir equivalência com runner hospedado
 
-## Bloqueio atual para autonomia do ChatGPT
+## Estado da integração GitLab — atualizado em 2026-10-07
 
-A conexão disponível nesta sessão é com GitHub. Não há uma ferramenta/conector GitLab instalado nesta sessão que permita ao ChatGPT editar, criar commits, executar pipelines ou administrar projetos privados no GitLab da mesma forma.
+A sessão agora possui integração operacional com GitLab. O bloqueio anterior deste finding sobre inexistência de conector GitLab está superado.
 
-Portanto, a migração técnica é viável, mas para preservar o modo de trabalho atual — ChatGPT editar código e atualizar sistemas sem intervenção manual — será necessário também disponibilizar uma integração operacional com GitLab.
+O GitLab autenticado é `UniversoAnthares`. Existe atualmente um projeto importado:
+- GitLab: `UniversoAnthares/anthares-kwai-runner`
+- import_type: github
+- import_status: finished
+- origem: `https://github.com/UniversoAnthares/anthares-kwai-runner.git`
 
-## Fontes técnicas consultadas
+A importação NÃO está sincronizada com o GitHub:
+- GitHub main: `3d1e4f55bfb6db974dfedb6ca7a77aa656a31b2b`
+- GitLab main: `25b26ead0dafd848a293959541a73b27407db794`
+- GitLab possui somente a branch `main` neste projeto no momento.
 
-- GitLab migration from GitHub / CI migration.
-- GitLab OIDC ID tokens.
-- GitLab CI/CD pipelines and runners.
-- Cloudflare Workers GitLab CI/CD.
-- Render Git provider documentation.
-- Railway CLI/CI deployment.
-- Firebase Test Lab CI documentation.
+A integração de GitLab disponível nesta sessão permite leitura e alterações de arquivos/commits, mas não expõe uma operação de importação GitHub→GitLab nem uma operação de configuração de mirror remoto. Portanto, não foi feito um falso "sync" por reconstrução de arquivos: isso perderia histórico/refs e seria inadequado.
 
-## Próximo passo
+## Fase 1 — resultado desta rodada
 
-Não apagar nem desativar o GitHub. Fazer a migração em paralelo, começando por uma matriz GitHub → GitLab dos workflows e pelas dependências GitHub-specific acima. O anthares-control OIDC/executor e os workflows Android/KVM são os dois pontos que exigem engenharia real antes de declarar equivalência.
+STATUS: PARTIAL
+
+Concluído:
+- integração GitLab autenticada e operacional verificada;
+- projetos GitLab existentes inventariados;
+- projeto `anthares-kwai-runner` importado do GitHub confirmado;
+- SHA, branch padrão e divergência GitHub/GitLab verificados;
+- nenhum GitHub foi apagado, desativado ou promovido/demovido como autoridade;
+- finding atualizado para não carregar a conclusão antiga de que não havia conector GitLab.
+
+Não concluído nesta rodada:
+- importação dos demais repositórios para GitLab;
+- sincronização integral de histórico/branches/tags;
+- configuração de mirror automático entre os dois provedores.
+
+Esses pontos exigem uma operação de import/mirror que não está exposta pelo conector GitLab desta sessão. Não serão simulados por cópia parcial de arquivos.
+
+## Fase 2 — desenho preliminar aprovado para estudo
+
+A direção proposta é melhor do que declarar GitHub ou GitLab como autoridade única.
+
+Os dois provedores devem ser tratados como **pares de execução/reposição**, enquanto a autoridade fica fora deles, no plano de controle. O `anthares-control` pode ser esse plano de controle, desde que passe a registrar:
+- provider disponível;
+- provider temporariamente bloqueado/sem quota;
+- último commit conhecido em cada provider;
+- operação em execução;
+- lease de escrita/execução por repositório;
+- checkpoint de sincronização antes do failover.
+
+O roteador então escolhe GitHub ou GitLab conforme saúde/capacidade e, se o provider escolhido falhar antes da conclusão, faz failover para o outro somente depois de verificar o checkpoint.
+
+Regra essencial: **não permitir dois escritores simultâneos para a mesma operação/branch**. Os dois podem permanecer com cópias equivalentes, mas a execução ativa deve ter um único lease por vez. Isso evita split-brain e concorrência.
+
+A implementação desse roteador/failover NÃO foi feita nesta rodada.
