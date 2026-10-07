@@ -234,6 +234,22 @@ for i in range(10):
         adb("shell","am","start","-n","com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity")
         time.sleep(6)
         continue
+    if s == "RESOURCE_LOADING":
+        # The Profile entry (run 37608657199) exposes a "resource downloading ...
+        # hide" overlay that never completes. The run-37529160444 evidence showed
+        # the login surface only appears once this gate is settled: first try the
+        # overlay's own "hide"/"skip" affordance, bounded, then re-dump.
+        for _ in range(6):
+            n = rid(nodes(dump()), "btn_cancel")
+            if n is None:
+                break
+            tap_node(n)
+            time.sleep(3)
+            root = dump(); ns = nodes(root)
+            txt = " ".join((n2.attrib.get("text","") + " " + n2.attrib.get("content-desc","")).lower() for n2 in ns)
+            if "resource downloading" not in txt:
+                break
+        continue
     if kwai_ctx and "profile" in txt and ("home" in txt or "discover" in txt or "inbox" in txt):
         # MAIN bottom nav proven by run 37568734201 artifact: enter Profile via
         # the stable ll_profile id instead of stopping on the keyword.
