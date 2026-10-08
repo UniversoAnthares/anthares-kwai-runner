@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
   id-token: write
+concurrency:
+  group: kwai-interactive-remote-login
+  cancel-in-progress: true
 jobs:
   remote-login:
     runs-on: ubuntu-24.04
