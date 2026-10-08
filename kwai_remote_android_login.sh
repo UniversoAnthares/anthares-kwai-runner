@@ -72,7 +72,7 @@ if [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
       if echo "$UI_TEXT" | grep -Eqi 'verification code|código de verificação|captcha|verify it.s you|senha|password|log in|login|entrar'; then
         continue
       fi
-      if echo "$UI_TEXT" | grep -Eqi 'profile|perfil|following|seguindo|for you|para você|discover|descobrir|friends|amigos'; then
+      if python3 kwai_auth_probe.py > /tmp/kwai-auth-probe.log 2>&1 && grep -qx "KWAI_AUTH_STATE=AUTHENTICATED_UI" /tmp/kwai-auth-probe.log; then
         log "KWAI_LOGIN_CONFIRMED_AUTOMATIC"
         capture
         adb shell run-as com.kwai.video id >>"$REPORT" 2>&1 && log "APP_STATE_RUN_AS_AVAILABLE" || log "APP_STATE_RUN_AS_UNAVAILABLE"
@@ -92,8 +92,8 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
     log "DONE_SIGNAL_RECEIVED"
     adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null 2>&1 || true
     adb pull /sdcard/kwai-ui.xml /tmp/kwai-ui.xml >/dev/null 2>&1 || true
-    if grep -Eqi 'login|log in|entrar|telefone|phone|código de verificação|verification code|facebook|google' /tmp/kwai-ui.xml 2>/dev/null; then
-      log "LOGIN_NOT_CONFIRMED_UI_STILL_AUTH"; rm -f /tmp/anthares-android-done
+    if ! python3 kwai_auth_probe.py > /tmp/kwai-auth-probe.log 2>&1 || ! grep -qx "KWAI_AUTH_STATE=AUTHENTICATED_UI" /tmp/kwai-auth-probe.log; then
+      log "LOGIN_NOT_CONFIRMED_IDENTITY_UNKNOWN"; rm -f /tmp/anthares-android-done
     else
       log "KWAI_LOGIN_CONFIRMED"
       capture
