@@ -10,7 +10,7 @@ permissions:
   contents: read
   id-token: write
 concurrency:
-  group: kwai-interactive-remote-login
+  group: kwai-interactive-remote-login-${{ github.run_id }}
   cancel-in-progress: false
 jobs:
   remote-login:
@@ -30,7 +30,7 @@ jobs:
         run: |
           date +%s > /tmp/kwai-interaction-start
           echo 'INTERACTION_BUDGET_SECONDS=120' >> "$GITHUB_STEP_SUMMARY"
-      - name: Prepare remote channel before Android
+      - name: Prepare remote channel silently
         env:
           REMOTE_ANDROID_TOKEN: ${{ secrets.REMOTE_ANDROID_TOKEN }}
         shell: bash
@@ -57,8 +57,7 @@ jobs:
           [ -n "$URL" ] || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_START_FAILED"; cat /tmp/tunnel.log || true; exit 23; }
           echo "REMOTE_BASE_URL=$URL" >> "$GITHUB_ENV"
           echo "REMOTE_CHANNEL_READY_AT=$(date +%s)" >> "$GITHUB_ENV"
-          echo "KWAI_REMOTE_ACCESS_AVAILABLE_EARLY"
-          printf '### Kwai Android remoto\n\n%s\n' "$URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "REMOTE_CHANNEL_PREPARED_NOT_YET_PUBLISHED"
       - name: Restore Android system image cache
         id: android-cache
         uses: actions/cache/restore@v4
@@ -144,6 +143,18 @@ jobs:
           START=$(cat /tmp/kwai-interaction-start); NOW=$(date +%s)
           ELAPSED=$((NOW-START)); echo "INTERACTION_ELAPSED_SECONDS=$ELAPSED" >> "$GITHUB_STEP_SUMMARY"
           [ "$ELAPSED" -lt 120 ] || { echo "FAILURE_SIGNAL=INTERACTION_BUDGET_EXCEEDED"; exit 124; }
+      - name: Publish ready remote access
+        shell: bash
+        run: |
+          set -euo pipefail
+          UI_PID=$(cat /tmp/android-ui.pid 2>/dev/null || true)
+          TUNNEL_PID=$(cat /tmp/cloudflared.pid 2>/dev/null || true)
+          [ -n "$UI_PID" ] && kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_NOT_ALIVE_AT_PUBLISH"; exit 25; }
+          [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_NOT_ALIVE_AT_PUBLISH"; cat /tmp/tunnel.log || true; exit 26; }
+          adb exec-out screencap -p >/tmp/publish-ready.png
+          test -s /tmp/publish-ready.png || { echo "FAILURE_SIGNAL=ANDROID_SCREEN_NOT_READY"; exit 27; }
+          echo "KWAI_REMOTE_ACCESS_READY"
+          printf '### Kwai Android remoto — PRONTO\n\n%s\n' "$REMOTE_BASE_URL" >> "$GITHUB_STEP_SUMMARY"
       - name: Download validated Kwai vault
         shell: bash
         run: |
