@@ -136,6 +136,26 @@ async def main():
                     result["desktop_login_probe"].append({"url":target,"login_controls":count,"after_url":dp.url,"inputs":await dp.locator('input').evaluate_all("(els)=>els.map(e=>({type:e.type,placeholder:e.placeholder})).slice(0,12)"),"dialogs":await dp.locator('[role=dialog]').count(),"body":(await dp.locator('body').inner_text())[:950],"qr_images":await dp.locator('img').evaluate_all("(els)=>els.filter(e=>/qr|code/i.test(e.src+' '+e.alt)).map(e=>e.src).slice(0,8)")})
                 except Exception as err:
                     result["desktop_login_probe"].append({"url":target,"error":str(err)[:170]})
+            result["desktop_auth_methods"]=[]
+            try:
+                await dp.goto("https://www.kwai.com/",wait_until="domcontentloaded",timeout=13000)
+                await dp.get_by_text("Fazer login",exact=True).first.click(timeout=2500)
+                await dp.wait_for_timeout(800)
+                for method in ["Use o telefone","Continue com o Google"]:
+                    try:
+                        locator=dp.get_by_text(method,exact=True)
+                        count=await locator.count()
+                        if count:
+                            await locator.first.click(timeout=2000)
+                            await dp.wait_for_timeout(750)
+                        result["desktop_auth_methods"].append({"method":method,"found":count,"url":dp.url,"dialog_text":(await dp.locator('[role=dialog]').all_inner_texts())[:2],"inputs":await dp.locator('input').evaluate_all("(els)=>els.map(e=>({type:e.type,placeholder:e.placeholder})).slice(0,8)")})
+                    except Exception as err:
+                        result["desktop_auth_methods"].append({"method":method,"error":str(err)[:140]})
+                    if method=="Use o telefone":
+                        await dp.goto("https://www.kwai.com/",wait_until="domcontentloaded",timeout=13000)
+                        await dp.get_by_text("Fazer login",exact=True).first.click(timeout=2500)
+            except Exception as err:
+                result["desktop_auth_methods"].append({"error":str(err)[:150]})
             await desktop.close()
             await page.screenshot(path=str(OUT/"mobile.png"),full_page=True)
         except Exception as e:
