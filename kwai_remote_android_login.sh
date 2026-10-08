@@ -14,12 +14,7 @@ trap cleanup EXIT
 python3 kwai_remote_android_ui.py >/tmp/android-ui.log 2>&1 & UI_PID=$!
 for _ in $(seq 1 8); do curl -fsS "http://127.0.0.1:8765/?t=\${REMOTE_ANDROID_TOKEN}" >/dev/null 2>&1 && break; sleep 1; done
 kill -0 "$UI_PID" 2>/dev/null || { log "FAIL: remote-ui-died"; exit 22; }
-/tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 >/tmp/tunnel.log 2>&1 & TUNNEL_PID=$!
-URL=""
-for _ in $(seq 1 15); do URL=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log 2>/dev/null | head -1 || true); [ -n "$URL" ] && break; kill -0 "$TUNNEL_PID" 2>/dev/null || break; sleep 1; done
-[ -n "$URL" ] || { log "FAIL: tunnel-url-missing"; exit 23; }
-FULL="$URL/?t=${REMOTE_ANDROID_TOKEN}"; log "REMOTE_BASE_URL=$URL"; log "KWAI_REMOTE_ACCESS_AVAILABLE_EARLY"
-printf '### Kwai Android remoto\n\n%s\n' "$URL" >> "$GITHUB_STEP_SUMMARY"
+# Remote channel is created by the workflow before Android boot.
 adb wait-for-device
 for _ in $(seq 1 30); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ] && break; sleep 2; done
 [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ] || { log "FAIL: android-not-ready"; exit 21; }
