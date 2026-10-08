@@ -123,6 +123,19 @@ async def main():
                     result["desktop_comparison"].append({"url":target,"status":response.status if response else None,"final_url":dp.url,"title":await dp.title(),"body":(await dp.locator("body").inner_text())[:650],"inputs":await dp.locator("input").count(),"file_inputs":await dp.locator('input[type=file]').count(),"login_mentions":await dp.get_by_text(re.compile("login|entrar|sign in|QR code",re.I)).count(),"links":(await dp.locator("a").all_text_contents())[:20]})
                 except Exception as err:
                     result["desktop_comparison"].append({"url":target,"error":str(err)[:150]})
+            result["desktop_login_probe"]=[]
+            for target in ["https://www.kwai.com/","https://www.kwai.com/@universo.anthares"]:
+                try:
+                    await dp.goto(target,wait_until="domcontentloaded",timeout=13000)
+                    await dp.wait_for_timeout(1300)
+                    login=dp.get_by_text("Fazer login",exact=True)
+                    count=await login.count()
+                    if count:
+                        await login.first.click(timeout=2500)
+                    await dp.wait_for_timeout(1300)
+                    result["desktop_login_probe"].append({"url":target,"login_controls":count,"after_url":dp.url,"inputs":await dp.locator('input').evaluate_all("(els)=>els.map(e=>({type:e.type,placeholder:e.placeholder})).slice(0,12)"),"dialogs":await dp.locator('[role=dialog]').count(),"body":(await dp.locator('body').inner_text())[:950],"qr_images":await dp.locator('img').evaluate_all("(els)=>els.filter(e=>/qr|code/i.test(e.src+' '+e.alt)).map(e=>e.src).slice(0,8)")})
+                except Exception as err:
+                    result["desktop_login_probe"].append({"url":target,"error":str(err)[:170]})
             await desktop.close()
             await page.screenshot(path=str(OUT/"mobile.png"),full_page=True)
         except Exception as e:
