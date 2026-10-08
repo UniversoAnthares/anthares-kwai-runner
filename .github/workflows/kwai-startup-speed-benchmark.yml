@@ -26,6 +26,12 @@ jobs:
         with:
           path: /usr/local/lib/android/sdk/emulator
           key: kwai-speed-emulator-ubuntu24-v1
+      - name: Restore portable AVD snapshot cache
+        id: avdcache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/kwai-portable-avd.tar.zst
+          key: kwai-speed-avd-snapshot-android35-v1
       - name: Cache validated vault
         id: vaultcache
         uses: actions/cache@v4
@@ -77,6 +83,15 @@ jobs:
           echo "COLD_BOOT_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
           "$SDK/platform-tools/adb" shell getprop ro.product.cpu.abilist | sed 's/^/DEVICE_ABI=/' >> "$GITHUB_STEP_SUMMARY"
           echo "TOTAL_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Validate portable snapshot archive on independent runner
+        shell: bash
+        run: |
+          if [ -s /tmp/kwai-portable-avd.tar.zst ]; then
+            echo "PORTABLE_SNAPSHOT_CACHE_HIT=true" | tee -a "$GITHUB_STEP_SUMMARY"
+            tar --zstd -tf /tmp/kwai-portable-avd.tar.zst | head -15 || true
+          else
+            echo "PORTABLE_SNAPSHOT_CACHE_HIT=false" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Experiment with reusable AVD snapshot
         shell: bash
         continue-on-error: true
@@ -94,6 +109,9 @@ jobs:
             exit 0
           fi
           echo "SNAPSHOT_SAVE_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ -d "$ANDROID_AVD_HOME/kwai-speed.avd/snapshots/kwai-ready" ]; then
+            echo "SNAPSHOT_DIR_PRESENT=true" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
           "$ADB" emu kill >/dev/null 2>&1 || true
           timeout 30 bash -c 'while "$1" get-state >/dev/null 2>&1; do sleep 1; done' _ "$ADB" || true
           t=$(date +%s)
@@ -105,6 +123,23 @@ jobs:
             echo "SNAPSHOT_RESTORE_RESULT=FAILED" | tee -a "$GITHUB_STEP_SUMMARY"
             tail -35 /tmp/kwai-snapshot-reboot.log || true
           fi
+      - name: Package AVD snapshot for cross-run cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          AVD="$HOME/.android/avd"
+          if [ -d "$AVD/kwai-speed.avd/snapshots/kwai-ready" ]; then
+            tar --zstd -cf /tmp/kwai-portable-avd.tar.zst -C "$HOME/.android" avd/kwai-speed.avd/snapshots/kwai-ready
+            echo "PORTABLE_SNAPSHOT_ARCHIVE_BYTES=$(stat -c%s /tmp/kwai-portable-avd.tar.zst)" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "PORTABLE_SNAPSHOT_ARCHIVE_MISSING=true" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Save portable AVD snapshot cache
+        if: success() && steps.avdcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/kwai-portable-avd.tar.zst
+          key: kwai-speed-avd-snapshot-android35-v1
       - name: Diagnostics
         if: always()
         run: |
