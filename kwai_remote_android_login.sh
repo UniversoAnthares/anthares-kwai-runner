@@ -23,6 +23,30 @@ dump_ui(){
   adb pull /sdcard/kwai-ui.xml /tmp/kwai-ui.xml >/dev/null 2>&1 || return 1
   [ -s /tmp/kwai-ui.xml ]
 }
+dismiss_notification_permission(){
+  dump_ui || return 0
+  grep -Eqi 'Allow Kwai to send you notifications|Don.t allow|Não permitir|Permitir notificações' /tmp/kwai-ui.xml || return 0
+  local xy
+  xy="$(python3 - <<'PY'
+import re, xml.etree.ElementTree as ET
+try:
+    root=ET.parse('/tmp/kwai-ui.xml').getroot()
+    for n in root.iter('node'):
+        label=((n.attrib.get('text') or '')+' '+(n.attrib.get('content-desc') or '')).strip().lower()
+        if 'don.t allow' in label or "don't allow" in label or 'não permitir' in label:
+            m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.attrib.get('bounds',''))
+            if m:
+                x1,y1,x2,y2=map(int,m.groups())
+                print((x1+x2)//2,(y1+y2)//2)
+                break
+except Exception: pass
+PY
+)"
+  if [ -n "$xy" ]; then
+    adb shell input tap $xy >/dev/null 2>&1 || true
+    log "KWAI_NOTIFICATION_PERMISSION_DISMISSED"
+  fi
+}
 dismiss_resource_overlay(){
   dump_ui || return 0
   grep -Eqi 'Resource downloading|access to all the features|resource.*download' /tmp/kwai-ui.xml || return 0
@@ -68,7 +92,7 @@ launch_kwai
 sleep 2
 for _ in $(seq 1 8); do
   capture
-  if kwai_foreground && ! google_sso_foreground; then dismiss_resource_overlay; fi
+  if kwai_foreground && ! google_sso_foreground; then dismiss_notification_permission; dismiss_resource_overlay; fi
   dump_ui || true
   if [ -s /tmp/kwai-ui.xml ] && grep -Eq 'text="[^"]+"|content-desc="[^"]+"' /tmp/kwai-ui.xml && ! grep -qi 'Make Everyone Shine' /tmp/kwai-ui.xml; then
     log "KWAI_UI_INTERACTIVE"; break
@@ -104,6 +128,7 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
     fi
     if kwai_foreground && [ $((SECONDS-OVERLAY_LAST_CHECK)) -ge 3 ]; then
       OVERLAY_LAST_CHECK=$SECONDS
+      dismiss_notification_permission
       dismiss_resource_overlay
     fi
   fi
