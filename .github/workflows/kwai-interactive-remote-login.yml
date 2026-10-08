@@ -73,14 +73,18 @@ jobs:
           START=$(cat /tmp/kwai-interaction-start)
           NOW=$(date +%s)
           if [ $((NOW-START)) -ge 110 ]; then echo "FAILURE_SIGNAL=INTERACTION_BUDGET_EXCEEDED_BEFORE_ANDROID"; exit 124; fi
-          SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager 2>/dev/null | head -1)"
-          AVDMANAGER="$(find "$SDK_ROOT" -type f -name avdmanager 2>/dev/null | head -1)"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          AVDMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
           [ -x "$SDKMANAGER" ] || { echo "FAILURE_SIGNAL=SDKMANAGER_NOT_FOUND"; exit 2; }
           [ -x "$AVDMANAGER" ] || { echo "FAILURE_SIGNAL=AVDMANAGER_NOT_FOUND"; exit 2; }
-          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          "$SDKMANAGER" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
-          EMULATOR="$(find "$SDK_ROOT" -type f -name emulator -perm -111 2>/dev/null | head -1)"
-          ADB="$(find "$SDK_ROOT" -type f -name adb -perm -111 2>/dev/null | head -1)"
+          if [ ! -f "$SDK_ROOT/system-images/android-35/google_apis/x86_64/system.img" ]; then
+            echo "ANDROID_CACHE_MISS_INSTALLING_WITH_90S_LIMIT"
+            timeout 90 "$SDKMANAGER" --install "system-images;android-35;google_apis;x86_64" || { echo "FAILURE_SIGNAL=ANDROID_IMAGE_INSTALL_TIMEOUT"; exit 124; }
+          else
+            echo "ANDROID_CACHE_HIT_SKIP_DOWNLOAD"
+          fi
+          EMULATOR="$SDK_ROOT/emulator/emulator"
+          ADB="$SDK_ROOT/platform-tools/adb"
           [ -x "$EMULATOR" ] || { echo "FAILURE_SIGNAL=EMULATOR_NOT_FOUND_AFTER_INSTALL"; exit 2; }
           [ -x "$ADB" ] || { echo "FAILURE_SIGNAL=ADB_NOT_FOUND_AFTER_INSTALL"; exit 2; }
           echo "$(dirname "$EMULATOR")" >> "$GITHUB_PATH"
