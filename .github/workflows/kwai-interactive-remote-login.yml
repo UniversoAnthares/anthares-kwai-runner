@@ -97,8 +97,9 @@ jobs:
           [ -x "$ADB" ] || { echo "FAILURE_SIGNAL=ADB_NOT_FOUND_AFTER_INSTALL"; exit 2; }
           echo "$(dirname "$EMULATOR")" >> "$GITHUB_PATH"
           echo "$(dirname "$ADB")" >> "$GITHUB_PATH"
-          rm -rf "$ANDROID_AVD_HOME/anthares-remote.avd" "$ANDROID_AVD_HOME/anthares-remote.ini"
-          echo no | "$AVDMANAGER" create avd -n anthares-remote -k "system-images;android-35;google_apis;x86_64" --device "pixel_5"
+          if [ ! -f "$ANDROID_AVD_HOME/anthares-remote.ini" ]; then
+            echo no | "$AVDMANAGER" create avd -n anthares-remote -k "system-images;android-35;google_apis;x86_64" --device "pixel_5"
+          fi
       - name: Save Android system image cache
         if: steps.android-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -122,19 +123,22 @@ jobs:
           export ANDROID_SDK_HOME="$HOME/.android"
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           EMULATOR="$(command -v emulator)"
-          nohup "$EMULATOR" -avd anthares-remote -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
+          BOOT_START=$(date +%s)
+          nohup "$EMULATOR" -avd anthares-remote -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
           echo $! > /tmp/emulator.pid
           if ! timeout 90 adb wait-for-device; then
             echo EMULATOR_WAIT_FOR_DEVICE_FAILED
             cat /tmp/emulator.log || true
             exit 124
           fi
-          if ! timeout 60 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 2; done'; then
+          if ! timeout 60 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 1; done'; then
             echo EMULATOR_BOOT_COMPLETION_FAILED
             cat /tmp/emulator.log || true
             exit 1
           fi
           adb shell input keyevent 82 || true
+          BOOT_END=$(date +%s)
+          echo "ANDROID_BOOT_SECONDS=$((BOOT_END-BOOT_START))" >> "$GITHUB_STEP_SUMMARY"
           echo TEST_VALIDITY=EMULATOR_BOOTED
       - name: Check interaction budget before remote access
         shell: bash
