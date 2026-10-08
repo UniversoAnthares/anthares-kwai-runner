@@ -19,3 +19,5 @@
 2026-10-08 owner requested retry after 37843482709 and 37843464768 failed at Prepare private browser tunnel
 
 2026-10-08 owner requested fresh attempt after blank screenshot while Android boot was in progress on 37843770823
+
+2026-10-08 corrected tunnel lifecycle, PID handoff, startup placeholder, and text-command feedback; fresh validation run
