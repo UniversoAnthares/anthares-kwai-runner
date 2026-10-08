@@ -143,7 +143,126 @@ PY
 if ! email_login_visible; then
   log "KWAI_EMAIL_LOGIN_NAVIGATION_STARTED"
   # The bottom-right Profile tab is a fallback when the feed's icons are not in UIAutomator.
-  tap_label '^(Profile|Perfil|Eu|Me)$' || adb shell input tap 990 1685 || true
+  # 50 reproducible navigation variations: alternate profile coordinates and labels.
+  variant=${KWAI_VARIANT:-1}
+  screen="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
+  width="${screen%x*}"; height="${screen#*x}"
+  [[ "$width" =~ ^[0-9]+$ ]] || width=1080
+  [[ "$height" =~ ^[0-9]+$ ]] || height=1920
+  xpercent=$((82 + (variant-1)%5*4))
+  ypercent=$((84 + (variant-1)/5%5*3))
+  log "KWAI_NAV_VARIANT=$variant PROFILE_TARGET=${xpercent}pct,${ypercent}pct"
+  if (( variant % 2 == 0 )); then
+    adb shell input tap $((width*xpercent/100)) $((height*ypercent/100)) || true
+  else
+    tap_label '^(Profile|Perfil|Eu|Me)
+  sleep 2
+  for _ in $(seq 1 $((3 + (variant-1)%5))); do
+    email_login_visible && break
+    if google_sso_foreground; then log "FAILURE_SIGNAL=UNEXPECTED_GOOGLE_SSO"; exit 34; fi
+    if (( variant % 3 == 0 )); then
+      tap_label '(other methods|other ways|more options|outras opções|outras formas)' || true
+    fi
+    tap_label '(log[ -]?in|sign[ -]?in|entrar|fazer login|cadastre-se|sign up|register)' || true
+    email_login_visible && break
+    tap_label '(other methods|other ways|more options|outras opções|outras formas|use another method)' || true
+    email_login_visible && break
+    tap_label '(e-?mail|email address|endereço de e-mail|continuar com e-mail)' || true
+  done
+fi
+if ! email_login_visible; then
+  log "FAILURE_SIGNAL=KWAI_EMAIL_LOGIN_NOT_VISIBLE"
+  dump_ui && cp /tmp/kwai-ui.xml kwai-login-navigation.xml || true
+  exit 35
+fi
+log "KWAI_EMAIL_LOGIN_FORM_VERIFIED"
+if [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
+  log "KWAI_SECRET_CREDENTIALS_PRESENT_AUTOFILL"
+  python3 - <<'PY' || true
+import os,re,subprocess,xml.etree.ElementTree as ET,time
+def call(*args,timeout=8):
+ return subprocess.run(['adb',*args],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=timeout,check=True).stdout
+def nodes():
+ call('shell','uiautomator','dump','/sdcard/kwai-fill.xml',timeout=15)
+ return list(ET.fromstring(call('exec-out','cat','/sdcard/kwai-fill.xml')).iter('node'))
+def tap(n):
+ m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+ if not m:return False
+ a,b,c,d=map(int,m.groups());call('shell','input','tap',str((a+c)//2),str((b+d)//2));return True
+def put(value):
+ # Do not print secrets. Android input text supports ASCII and encoded spaces.
+ if not value or any(ord(ch)<33 or ord(ch)>126 for ch in value):return False
+ call('shell','input','text',value.replace('%','%25'))
+ return True
+try:
+ fields=[n for n in nodes() if n.get('class','').endswith('EditText')]
+ if not fields:raise RuntimeError('no editable fields')
+ for field in fields:
+  label=' '.join((field.get('text',''),field.get('content-desc',''),field.get('resource-id',''),field.get('hint',''))).lower()
+  if any(x in label for x in ('password','senha')):continue
+  if tap(field) and put(os.environ['KWAI_LOGIN']):
+   print('KWAI_LOGIN_FIELD_FILLED')
+   break
+ else:
+  if tap(fields[0]) and put(os.environ['KWAI_LOGIN']):print('KWAI_LOGIN_FIELD_FILLED')
+ time.sleep(1)
+ fields=[n for n in nodes() if n.get('class','').endswith('EditText')]
+ pw=[n for n in fields if any(x in ' '.join((n.get('text',''),n.get('content-desc',''),n.get('resource-id',''))).lower() for x in ('password','senha')) or n.get('password')=='true']
+ if pw and tap(pw[0]) and put(os.environ['KWAI_PASSWORD']):
+  print('KWAI_PASSWORD_FIELD_FILLED')
+ else:print('KWAI_PASSWORD_FIELD_NOT_VISIBLE_MANUAL_STEP_REQUIRED')
+except Exception as e:
+ print('KWAI_AUTOFILL_FAILED',type(e).__name__)
+PY
+fi
+log "KWAI_LOGIN_UI_OPENED"
+log "KWAI_OWNER_INTERACTION_READY"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  printf '\n**KWAI_OWNER_INTERACTION_READY** — use the remote URL shown above.\n' >> "$GITHUB_STEP_SUMMARY"
+fi
+LOGIN_DEADLINE=$((SECONDS+900))
+SSO_WAS_ACTIVE=0
+SSO_STARTED_AT=0
+OVERLAY_LAST_CHECK=0
+while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
+  if google_sso_foreground; then
+    if [ "$SSO_WAS_ACTIVE" -eq 0 ]; then
+      SSO_WAS_ACTIVE=1; SSO_STARTED_AT=$SECONDS
+      log "GOOGLE_SSO_ACTIVE_DO_NOT_INTERRUPT"
+    elif [ $((SECONDS-SSO_STARTED_AT)) -eq 60 ]; then
+      log "GOOGLE_SSO_STILL_ACTIVE_60S_WAITING_FOR_CALLBACK"
+    fi
+  else
+    if [ "$SSO_WAS_ACTIVE" -eq 1 ]; then
+      SSO_WAS_ACTIVE=0
+      if kwai_foreground; then log "GOOGLE_SSO_RETURNED_TO_KWAI"; else log "GOOGLE_SSO_LEFT_FOREGROUND"; fi
+    fi
+    if kwai_foreground && [ $((SECONDS-OVERLAY_LAST_CHECK)) -ge 3 ]; then
+      OVERLAY_LAST_CHECK=$SECONDS
+      dismiss_notification_permission
+      dismiss_resource_overlay
+    fi
+  fi
+  if [ -f /tmp/anthares-android-done ]; then
+    log "DONE_SIGNAL_RECEIVED"
+    dump_ui || true
+    if ! python3 kwai_auth_probe.py > /tmp/kwai-auth-probe.log 2>&1 || ! grep -qx "KWAI_AUTH_STATE=AUTHENTICATED_UI" /tmp/kwai-auth-probe.log; then
+      log "LOGIN_NOT_CONFIRMED_IDENTITY_UNKNOWN"; rm -f /tmp/anthares-android-done
+    else
+      log "KWAI_LOGIN_CONFIRMED"
+      capture
+      adb shell run-as com.kwai.video id >>"$REPORT" 2>&1 && log "APP_STATE_RUN_AS_AVAILABLE" || log "APP_STATE_RUN_AS_UNAVAILABLE"
+      bash kwai_session_state.sh save >>"$REPORT" 2>&1 || log "KWAI_SESSION_SAVE_WARNING"
+      exit 0
+    fi
+  fi
+  kill -0 "$UI_PID" 2>/dev/null || { log "FAIL: remote-ui-died-during-login"; exit 26; }
+  kill -0 "$TUNNEL_PID" 2>/dev/null || { log "FAIL: tunnel-died-during-login"; exit 27; }
+  sleep 1
+done
+log "FAIL: login-window-expired-900s"; exit 28
+ || adb shell input tap $((width*xpercent/100)) $((height*ypercent/100)) || true
+  fi
   sleep 2
   for _ in $(seq 1 5); do
     email_login_visible && break
