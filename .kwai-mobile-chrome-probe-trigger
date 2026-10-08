@@ -11,3 +11,5 @@ retry mobile DOM probe 20261008-2
 DOM discovery retry
 
 click visible login controls test
+
+interaction diagnostics follow click
