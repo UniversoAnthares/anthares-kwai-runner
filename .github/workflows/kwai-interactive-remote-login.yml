@@ -229,6 +229,10 @@ jobs:
           path: |
             kwai-remote-status.txt
             kwai-remote-ready.png
+            kwai-login-navigation.xml
+            kwai-login-detected.xml
+            kwai-login-detected.png
+            kwai-login-focus.txt
             kwai-publication.log
             kwai-publish-status.txt
             kwai-reconcile-status.txt
