@@ -30,8 +30,8 @@ jobs:
         id: avdcache
         uses: actions/cache/restore@v4
         with:
-          path: /tmp/kwai-portable-avd.tar.zst
-          key: kwai-speed-avd-snapshot-android35-v1
+          path: /tmp/kwai-portable-avd-full.tar.zst
+          key: kwai-speed-avd-fullstate-android35-v2
       - name: Cache validated vault
         id: vaultcache
         uses: actions/cache@v4
@@ -86,9 +86,9 @@ jobs:
       - name: Validate portable snapshot archive on independent runner
         shell: bash
         run: |
-          if [ -s /tmp/kwai-portable-avd.tar.zst ]; then
+          if [ -s /tmp/kwai-portable-avd-full.tar.zst ]; then
             echo "PORTABLE_SNAPSHOT_CACHE_HIT=true" | tee -a "$GITHUB_STEP_SUMMARY"
-            tar --zstd -tf /tmp/kwai-portable-avd.tar.zst | head -15 || true
+            tar --zstd -tf /tmp/kwai-portable-avd-full.tar.zst | head -15 || true
           else
             echo "PORTABLE_SNAPSHOT_CACHE_HIT=false" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
@@ -97,18 +97,18 @@ jobs:
         continue-on-error: true
         run: |
           set -uo pipefail
-          if [ ! -s /tmp/kwai-portable-avd.tar.zst ]; then
+          if [ ! -s /tmp/kwai-portable-avd-full.tar.zst ]; then
             echo "CROSS_RUN_SNAPSHOT_RESULT=NO_ARCHIVE" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           ADB="$SDK/platform-tools/adb"
           AVD="$HOME/.android/avd"
-          echo "CROSS_RUN_SNAPSHOT_ARCHIVE_BYTES=$(stat -c%s /tmp/kwai-portable-avd.tar.zst)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "CROSS_RUN_SNAPSHOT_ARCHIVE_BYTES=$(stat -c%s /tmp/kwai-portable-avd-full.tar.zst)" | tee -a "$GITHUB_STEP_SUMMARY"
           "$ADB" emu kill >/dev/null 2>&1 || true
           timeout 30 bash -c 'while "$1" get-state >/dev/null 2>&1; do sleep 1; done' _ "$ADB" || true
           mkdir -p "$HOME/.android"
-          if ! tar --zstd -xf /tmp/kwai-portable-avd.tar.zst -C "$HOME/.android"; then
+          if ! tar --zstd -xf /tmp/kwai-portable-avd-full.tar.zst -C "$HOME/.android"; then
             echo "CROSS_RUN_SNAPSHOT_RESULT=EXTRACT_FAILED" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -125,6 +125,11 @@ jobs:
             echo "CROSS_RUN_SNAPSHOT_RESULT=BOOT_FAILED" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           grep -Ei 'snapshot|load|error' /tmp/kwai-cross-run-snapshot.log | tail -30 || true
+          if grep -Eq "Failed to load snapshot|performing a cold boot" /tmp/kwai-cross-run-snapshot.log; then
+            echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=false" | tee -a "$GITHUB_STEP_SUMMARY"
+          elif grep -q "Loading snapshot.*kwai-ready" /tmp/kwai-cross-run-snapshot.log; then
+            echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=likely" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
           "$ADB" emu kill >/dev/null 2>&1 || true
           timeout 30 bash -c 'while "$1" get-state >/dev/null 2>&1; do sleep 1; done' _ "$ADB" || true
       - name: Experiment with reusable AVD snapshot
@@ -164,8 +169,8 @@ jobs:
           set -euo pipefail
           AVD="$HOME/.android/avd"
           if [ -d "$AVD/kwai-speed.avd/snapshots/kwai-ready" ]; then
-            tar --zstd -cf /tmp/kwai-portable-avd.tar.zst -C "$HOME/.android" avd/kwai-speed.avd/snapshots/kwai-ready
-            echo "PORTABLE_SNAPSHOT_ARCHIVE_BYTES=$(stat -c%s /tmp/kwai-portable-avd.tar.zst)" | tee -a "$GITHUB_STEP_SUMMARY"
+            tar --zstd -cf /tmp/kwai-portable-avd-full.tar.zst -C "$HOME/.android" avd/kwai-speed.avd avd/kwai-speed.ini
+            echo "PORTABLE_SNAPSHOT_ARCHIVE_BYTES=$(stat -c%s /tmp/kwai-portable-avd-full.tar.zst)" | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo "PORTABLE_SNAPSHOT_ARCHIVE_MISSING=true" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
@@ -173,7 +178,7 @@ jobs:
         if: success() && steps.avdcache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: /tmp/kwai-portable-avd.tar.zst
+          path: /tmp/kwai-portable-avd-full.tar.zst
           key: kwai-speed-avd-snapshot-android35-v1
       - name: Diagnostics
         if: always()
