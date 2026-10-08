@@ -89,10 +89,14 @@ PY
     w="${dims%x*}"; h="${dims#*x}"
     [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]] || return 1
     # Interest-screen video occupies a centered viewport; right heart at ~75% width, ~94% height.
-    xy="$((w*75/100)) $((h*94/100))"
+    xy="$((w*75/100)) $((h*92/100))"
     adb shell input tap $xy >/dev/null 2>&1 || return 1
     log "KWAI_ONBOARDING_INTEREST_STEP=${step}/12"
     sleep 2
+    dump_ui || true
+    if grep -Eqi "Choose like or dislike|let us know you better" /tmp/kwai-ui.xml 2>/dev/null; then
+      log "KWAI_ONBOARDING_STEP_RECHECK_AFTER_TAP"
+    fi
   done
   log "KWAI_ONBOARDING_INTEREST_MAX_ATTEMPTS"
 }
