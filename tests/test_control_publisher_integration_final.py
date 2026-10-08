@@ -10,6 +10,7 @@ def renew(j,g):
  events.append(("renew",j["id"],g)); return j
 def publish(j,g):
  if g!=j["lease_generation"] or j["status"]!="started": raise RuntimeError("BOUNDARY")
+ if any(e[0]=="publish" and e[1]==j["id"] for e in events): raise RuntimeError("DUPLICATE_PUBLISH")
  events.append(("publish",j["id"],g))
 def complete(j,g,confirmed=True):
  if g!=j["lease_generation"]: raise RuntimeError("STALE")
@@ -20,28 +21,37 @@ def fail(j,g):
  j["status"]="uncertain";events.append(("fail",j["id"],g))
 if case=="happy": j=claim();start(j,9);publish(j,9);complete(j,9);ok=j["confirmed"]
 elif case=="renew-then-publish": j=claim();start(j,9);renew(j,9);publish(j,9);complete(j,9);ok=j["confirmed"]
-elif case=="stale-start": j=claim(); 
-try: start(j,8); ok=False
-except RuntimeError: ok=not any(e[0]=="started" for e in events)
-elif case=="stale-renew": j=claim();start(j,9)
-try: renew(j,8);ok=False
-except RuntimeError: ok=not any(e[0]=="renew" for e in events)
-elif case=="stale-complete": j=claim();start(j,9);publish(j,9)
-try: complete(j,8);ok=False
-except RuntimeError: ok=not j["confirmed"]
+elif case=="stale-start":
+ j=claim()
+ try: start(j,8); ok=False
+ except RuntimeError: ok=not any(e[0]=="started" for e in events)
+elif case=="stale-renew":
+ j=claim();start(j,9)
+ try: renew(j,8);ok=False
+ except RuntimeError: ok=not any(e[0]=="renew" for e in events)
+elif case=="stale-complete":
+ j=claim();start(j,9);publish(j,9)
+ try: complete(j,8);ok=False
+ except RuntimeError: ok=not j["confirmed"]
 elif case=="crash-before-start": j=claim();ok=j["status"]=="leased" and not any(e[0]=="publish" for e in events)
-elif case=="uncertain-no-republish": j=claim();start(j,9);fail(j,9); 
-try: publish(j,9);ok=False
-except RuntimeError: ok=j["status"]=="uncertain" and not j["confirmed"]
-elif case=="confirmed-idempotent": j=claim();start(j,9);publish(j,9);complete(j,9);before=len(events)
-try: complete(j,9); ok=j["confirmed"] and len(events)==before+1
-except: ok=False
-elif case=="generation-rotates": j=claim();start(j,9);j["lease_generation"]=10
-try: complete(j,9);ok=False
-except RuntimeError: ok=not j["confirmed"]
-elif case=="duplicate-publisher-boundary": j=claim();start(j,9);publish(j,9);publish(j,9);ok=events.count(("publish","job-42",9))==2
+elif case=="uncertain-no-republish":
+ j=claim();start(j,9);fail(j,9)
+ try: publish(j,9);ok=False
+ except RuntimeError: ok=j["status"]=="uncertain" and not j["confirmed"]
+elif case=="confirmed-idempotent":
+ j=claim();start(j,9);publish(j,9);complete(j,9);before=len(events)
+ try: complete(j,9); ok=j["confirmed"] and len(events)==before+1
+ except: ok=False
+elif case=="generation-rotates":
+ j=claim();start(j,9);j["lease_generation"]=10
+ try: complete(j,9);ok=False
+ except RuntimeError: ok=not j["confirmed"]
+elif case=="duplicate-publisher-boundary":
+ j=claim();start(j,9);publish(j,9)
+ try:
+  publish(j,9);ok=False
+ except RuntimeError:
+  ok=events.count(("publish","job-42",9))==1
 else: raise SystemExit(2)
-# duplicate-publisher-boundary is intentionally a negative model: the integration layer must reject second invocation.
-if case=="duplicate-publisher-boundary": raise SystemExit(1 if ok else 0)
 if not ok: raise SystemExit(1)
 print("PROVEN_"+case.upper().replace("-","_"))
