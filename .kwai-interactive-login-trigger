@@ -2,3 +2,4 @@
 2026-10-08 manual step1 requested: interactive remote login retry after 600s timeout
 2026-10-08 remote token rotated by owner; new login run
 2026-10-08 early remote access signal validation, 120s window; login only, no publishing
+2026-10-08 rerun after user-cancelled attempt; enforce 120s interaction target
