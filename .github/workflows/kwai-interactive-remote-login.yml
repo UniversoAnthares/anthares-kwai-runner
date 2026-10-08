@@ -8,12 +8,18 @@ on:
       - '.github/workflows/kwai-interactive-remote-login.yml'
 permissions:
   contents: read
+  id-token: write
 jobs:
   remote-login:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       KWAI_SESSION_FILE: kwai-session.enc
+      ANTHARES_CONTROL_URL: https://anthares-control.anthares1.workers.dev
+      KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'anthares' }}
+      KWAI_LEASE_TTL_SECONDS: "600"
+      KWAI_LEASE_RENEW_INTERVAL_SECONDS: "120"
+      KWAI_LEASE_RENEW_TTL_SECONDS: "600"
     steps:
       - uses: actions/checkout@v4
       - name: Prepare Android SDK
@@ -99,6 +105,14 @@ jobs:
         with:
           path: kwai-session.enc
           key: kwai-session-${{ runner.os }}-${{ github.run_id }}
+      - name: Publish one queued item in authenticated session
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash kwai_queue_publish_runtime.sh
       - name: Upload diagnostics only
         if: always()
         uses: actions/upload-artifact@v4
@@ -107,5 +121,9 @@ jobs:
           path: |
             kwai-remote-status.txt
             kwai-remote-ready.png
+            kwai-publication.log
+            kwai-publish-status.txt
+            kwai-reconcile-status.txt
+            kwai-headless-status.txt
           if-no-files-found: ignore
           retention-days: 1
