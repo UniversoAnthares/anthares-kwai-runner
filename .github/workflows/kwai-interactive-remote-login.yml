@@ -74,6 +74,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
+            kwai-network-diagnostics.txt
             ${{ env.ANDROID_HOME }}/system-images
             ${{ env.ANDROID_HOME }}/platforms
             ${{ env.ANDROID_HOME }}/platform-tools
@@ -215,6 +216,26 @@ jobs:
           kill -0 "$TUNNEL_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_NOT_ALIVE_BEFORE_LOGIN"; exit 26; }
           echo "KWAI_VARIANT=$KWAI_VARIANT"
           bash kwai_remote_android_login.sh
+      - name: Android network diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          {
+            echo "NETWORK_DIAGNOSTICS_BEGIN"
+            adb devices
+            adb shell dumpsys connectivity | grep -E 'VALIDATED|INTERNET|NetworkAgentInfo|DefaultNetwork' | head -45
+            adb shell getprop net.dns1
+            adb shell getprop net.dns2
+            adb shell settings get global private_dns_mode
+            adb shell ping -c 2 -W 3 1.1.1.1
+            adb shell ping -c 2 -W 3 google.com
+            adb shell 'date -u'
+            curl -sS -I --max-time 12 https://www.google.com | head -8
+            adb shell logcat -d -t 1200 | grep -Ei 'com.kwai.video|UnknownHostException|SSLHandshakeException|ConnectException|SocketTimeoutException|CLEARTEXT|NetworkSecurityConfig|DNS' | tail -100
+            echo "NETWORK_DIAGNOSTICS_END"
+          } > kwai-network-diagnostics.txt 2>&1
+          echo "NETWORK_DIAGNOSTICS_COLLECTED"
       - name: Save encrypted session cache
         if: success()
         uses: actions/cache/save@v4
