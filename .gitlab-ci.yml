@@ -17,7 +17,7 @@ real_workload_clipper_validation:
   image: python:3.12-alpine
   before_script:
     - apk add --no-cache git
-    - git clone --depth 1 https://github.com/UniversoAnthares/anthares-clipper.git /tmp/anthares-clipper
+    - git clone --depth 1 "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/UniversoAnthares/anthares-clipper.git" /tmp/anthares-clipper
     - cd /tmp/anthares-clipper
     - python -m pip install --quiet requests pillow yt-dlp imageio-ffmpeg tzdata
   script:
