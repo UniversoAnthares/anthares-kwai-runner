@@ -31,6 +31,16 @@ jobs:
       KWAI_LEASE_RENEW_TTL_SECONDS: "600"
     steps:
       - uses: actions/checkout@v4
+      - name: Select diagnostic variant
+        shell: bash
+        run: |
+          MSG="$(git log -1 --pretty=%s)"
+          if [[ "$MSG" =~ kwai-variant-([1-5]) ]]; then
+            echo "KWAI_VARIANT=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+            echo "KWAI_DIAGNOSTIC_VARIANT=${BASH_REMATCH[1]}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "KWAI_VARIANT=1" >> "$GITHUB_ENV"
+          fi
       - name: Start interaction clock
         shell: bash
         run: |
