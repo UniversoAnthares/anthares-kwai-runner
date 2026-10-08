@@ -22,6 +22,22 @@ jobs:
       KWAI_LEASE_RENEW_TTL_SECONDS: "600"
     steps:
       - uses: actions/checkout@v4
+      - name: Start interaction clock
+        shell: bash
+        run: |
+          date +%s > /tmp/kwai-interaction-start
+          echo 'INTERACTION_BUDGET_SECONDS=120' >> "$GITHUB_STEP_SUMMARY"
+      - name: Restore Android system image cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/system-images
+            ${{ env.ANDROID_HOME }}/platforms
+            ${{ env.ANDROID_HOME }}/platform-tools
+            ${{ env.ANDROID_HOME }}/emulator
+          key: android35-api-x86_64-${{ runner.os }}
+          restore-keys: |
+            android35-api-x86_64-${{ runner.os }}-
       - name: Prepare Android SDK
         shell: bash
         run: |
@@ -30,6 +46,9 @@ jobs:
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           mkdir -p "$ANDROID_AVD_HOME"
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          START=$(cat /tmp/kwai-interaction-start)
+          NOW=$(date +%s)
+          if [ $((NOW-START)) -ge 110 ]; then echo "FAILURE_SIGNAL=INTERACTION_BUDGET_EXCEEDED_BEFORE_ANDROID"; exit 124; fi
           SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager 2>/dev/null | head -1)"
           AVDMANAGER="$(find "$SDK_ROOT" -type f -name avdmanager 2>/dev/null | head -1)"
           [ -x "$SDKMANAGER" ] || { echo "FAILURE_SIGNAL=SDKMANAGER_NOT_FOUND"; exit 2; }
@@ -64,12 +83,19 @@ jobs:
             "$EMULATOR" -version || true
             exit 124
           fi
-          if ! timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 3; done'; then
+          if ! timeout 75 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 3; done'; then
             echo EMULATOR_BOOT_COMPLETION_FAILED
             cat /tmp/emulator.log || true
             exit 1
           fi
           echo TEST_VALIDITY=EMULATOR_BOOTED
+      - name: Check interaction budget before remote access
+        shell: bash
+        run: |
+          set -euo pipefail
+          START=$(cat /tmp/kwai-interaction-start); NOW=$(date +%s)
+          ELAPSED=$((NOW-START)); echo "INTERACTION_ELAPSED_SECONDS=$ELAPSED" >> "$GITHUB_STEP_SUMMARY"
+          [ "$ELAPSED" -lt 110 ] || { echo "FAILURE_SIGNAL=INTERACTION_BUDGET_EXCEEDED"; exit 124; }
       - name: Download validated Kwai vault
         shell: bash
         run: |
