@@ -1,0 +1,75 @@
+name: Kwai startup speed isolated benchmark
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-startup-speed-benchmark.yml']
+permissions:
+  contents: read
+jobs:
+  startup-benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start timing
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Cache Android image
+        id: sdkcache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_HOME }}/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+      - name: Cache validated vault
+        id: vaultcache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/kwai-speed-vault.zip
+          key: kwai-speed-vault-96650454576a2cf5-v1
+      - name: Prepare SDK and vault concurrently
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          t=$(date +%s)
+          (
+            if [ ! -s "$SDK/system-images/android-35/google_apis/x86_64/system.img" ]; then
+              yes | timeout 240 "$SDK/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-35;google_apis;x86_64" >/tmp/kwai-speed-sdk.log 2>&1 || true
+            fi
+            test -s "$SDK/system-images/android-35/google_apis/x86_64/system.img"
+            echo "SDK_READY_SECONDS=$(($(date +%s)-t))" >> "$GITHUB_STEP_SUMMARY"
+          ) & sdkpid=$!
+          (
+            if [ ! -s /tmp/kwai-speed-vault.zip ]; then
+              curl -fsSL --retry 3 -o /tmp/kwai-speed-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+            fi
+            echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-speed-vault.zip" | sha256sum -c -
+            echo "VAULT_READY_SECONDS=$(($(date +%s)-t))" >> "$GITHUB_STEP_SUMMARY"
+          ) & vaultpid=$!
+          wait "$sdkpid"; wait "$vaultpid"
+          echo "SDK_CACHE_HIT=${{ steps.sdkcache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "VAULT_CACHE_HIT=${{ steps.vaultcache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "PREP_TOTAL_SECONDS=$(($(date +%s)-t))" >> "$GITHUB_STEP_SUMMARY"
+      - name: Boot clean Android and measure
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n kwai-speed -k "system-images;android-35;google_apis;x86_64" --device pixel_5
+          sudo chmod 666 /dev/kvm
+          t=$(date +%s)
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/kwai-speed-emulator.log 2>&1 &
+          timeout 120 "$SDK/platform-tools/adb" wait-for-device
+          timeout 120 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$SDK/platform-tools/adb"
+          echo "COLD_BOOT_SECONDS=$(($(date +%s)-t))" >> "$GITHUB_STEP_SUMMARY"
+          "$SDK/platform-tools/adb" shell getprop ro.product.cpu.abilist | sed 's/^/DEVICE_ABI=/' >> "$GITHUB_STEP_SUMMARY"
+          echo "TOTAL_SECONDS=$(($(date +%s)-T0))" >> "$GITHUB_STEP_SUMMARY"
+      - name: Diagnostics
+        if: always()
+        run: |
+          echo "BENCHMARK_END_UTC=$(date -u +%FT%TZ)" >> "$GITHUB_STEP_SUMMARY"
+          tail -35 /tmp/kwai-speed-emulator.log 2>/dev/null || true
+          tail -35 /tmp/kwai-speed-sdk.log 2>/dev/null || true
