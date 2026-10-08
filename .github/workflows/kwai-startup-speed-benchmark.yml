@@ -168,6 +168,14 @@ jobs:
         run: |
           set -euo pipefail
           AVD="$HOME/.android/avd"
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          "$SDK/platform-tools/adb" emu kill >/dev/null 2>&1 || true
+          timeout 35 bash -c 'while pgrep -f "[q]emu-system.*kwai-speed" >/dev/null; do sleep 1; done' || true
+          if pgrep -f "[q]emu-system.*kwai-speed" >/dev/null; then
+            echo "AVD_ARCHIVE_RESULT=EMULATOR_STILL_RUNNING" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          sync
           if [ -d "$AVD/kwai-speed.avd/snapshots/kwai-ready" ]; then
             tar --zstd -cf /tmp/kwai-portable-avd-full.tar.zst -C "$HOME/.android" avd/kwai-speed.avd avd/kwai-speed.ini
             echo "PORTABLE_SNAPSHOT_ARCHIVE_BYTES=$(stat -c%s /tmp/kwai-portable-avd-full.tar.zst)" | tee -a "$GITHUB_STEP_SUMMARY"
