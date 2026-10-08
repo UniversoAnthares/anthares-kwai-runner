@@ -33,7 +33,7 @@ async def main():
             result["auth_discovery"]=[]
             for target in ["https://www.kwai.com/pt-BR","https://www.kwai.com/video/upload","https://www.kwai.com/pt-BR/creators/create","https://www.kwai.com/","https://www.kwai.com/@universo.anthares"]:
                 try:
-                    response=await page.goto(target,wait_until="networkidle",timeout=12000)
+                    response=await page.goto(target,wait_until="domcontentloaded",timeout=12000)
                     await page.wait_for_timeout(1000)
                     item={"url":target,"status":response.status if response else None,"final_url":page.url,"title":await page.title(),"links":await page.locator("a").evaluate_all("(els)=>els.map(e=>({text:e.innerText.slice(0,80),href:e.href})).slice(0,80)"),"buttons":await page.locator("button").evaluate_all("(els)=>els.map(e=>({text:e.innerText.slice(0,80),title:e.title,aria:e.getAttribute('aria-label')})).slice(0,80)"),"inputs":await page.locator("input").evaluate_all("(els)=>els.map(e=>({type:e.type,placeholder:e.placeholder})).slice(0,30)"),"login_mentions":await page.get_by_text(re.compile("entrar|login|cadastro|sign in|log in|QR code",re.I)).count(),"upload_inputs":await page.locator('input[type="file"]').count()}
                     result["auth_discovery"].append(item)
