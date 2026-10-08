@@ -143,53 +143,7 @@ PY
 if ! email_login_visible; then
   log "KWAI_EMAIL_LOGIN_NAVIGATION_STARTED"
   # The bottom-right Profile tab is a fallback when the feed's icons are not in UIAutomator.
-  tap_label '^(Profile|Perfil|Eu|Me)
-log "KWAI_OWNER_INTERACTION_READY"
-if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-  printf '\n**KWAI_OWNER_INTERACTION_READY** — use the remote URL shown above.\n' >> "$GITHUB_STEP_SUMMARY"
-fi
-LOGIN_DEADLINE=$((SECONDS+900))
-SSO_WAS_ACTIVE=0
-SSO_STARTED_AT=0
-OVERLAY_LAST_CHECK=0
-while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
-  if google_sso_foreground; then
-    if [ "$SSO_WAS_ACTIVE" -eq 0 ]; then
-      SSO_WAS_ACTIVE=1; SSO_STARTED_AT=$SECONDS
-      log "GOOGLE_SSO_ACTIVE_DO_NOT_INTERRUPT"
-    elif [ $((SECONDS-SSO_STARTED_AT)) -eq 60 ]; then
-      log "GOOGLE_SSO_STILL_ACTIVE_60S_WAITING_FOR_CALLBACK"
-    fi
-  else
-    if [ "$SSO_WAS_ACTIVE" -eq 1 ]; then
-      SSO_WAS_ACTIVE=0
-      if kwai_foreground; then log "GOOGLE_SSO_RETURNED_TO_KWAI"; else log "GOOGLE_SSO_LEFT_FOREGROUND"; fi
-    fi
-    if kwai_foreground && [ $((SECONDS-OVERLAY_LAST_CHECK)) -ge 3 ]; then
-      OVERLAY_LAST_CHECK=$SECONDS
-      dismiss_notification_permission
-      dismiss_resource_overlay
-    fi
-  fi
-  if [ -f /tmp/anthares-android-done ]; then
-    log "DONE_SIGNAL_RECEIVED"
-    dump_ui || true
-    if ! python3 kwai_auth_probe.py > /tmp/kwai-auth-probe.log 2>&1 || ! grep -qx "KWAI_AUTH_STATE=AUTHENTICATED_UI" /tmp/kwai-auth-probe.log; then
-      log "LOGIN_NOT_CONFIRMED_IDENTITY_UNKNOWN"; rm -f /tmp/anthares-android-done
-    else
-      log "KWAI_LOGIN_CONFIRMED"
-      capture
-      adb shell run-as com.kwai.video id >>"$REPORT" 2>&1 && log "APP_STATE_RUN_AS_AVAILABLE" || log "APP_STATE_RUN_AS_UNAVAILABLE"
-      bash kwai_session_state.sh save >>"$REPORT" 2>&1 || log "KWAI_SESSION_SAVE_WARNING"
-      exit 0
-    fi
-  fi
-  kill -0 "$UI_PID" 2>/dev/null || { log "FAIL: remote-ui-died-during-login"; exit 26; }
-  kill -0 "$TUNNEL_PID" 2>/dev/null || { log "FAIL: tunnel-died-during-login"; exit 27; }
-  sleep 1
-done
-log "FAIL: login-window-expired-900s"; exit 28
- || adb shell input tap 990 1685 || true
+  tap_label '^(Profile|Perfil|Eu|Me)$' || adb shell input tap 990 1685 || true
   sleep 2
   for _ in $(seq 1 5); do
     email_login_visible && break
