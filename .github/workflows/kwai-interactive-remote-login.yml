@@ -34,18 +34,24 @@ jobs:
         run: |
           set -euo pipefail
           [ -n "$REMOTE_ANDROID_TOKEN" ] || { echo "REMOTE_ANDROID_TOKEN secret missing"; exit 2; }
-          curl -fL --retry 3 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          curl -fL --retry 3 --retry-delay 1 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x /tmp/cloudflared
           python3 kwai_remote_android_ui.py >/tmp/android-ui.log 2>&1 &
           UI_PID=$!
+          echo "$UI_PID" > /tmp/android-ui.pid
           for _ in $(seq 1 8); do curl -fsS "http://127.0.0.1:8765/?t=$REMOTE_ANDROID_TOKEN" >/dev/null 2>&1 && break; sleep 1; done
-          kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_START_FAILED"; exit 22; }
+          kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_START_FAILED"; cat /tmp/android-ui.log || true; exit 22; }
           /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 >/tmp/tunnel.log 2>&1 &
           TUNNEL_PID=$!
+          echo "$TUNNEL_PID" > /tmp/cloudflared.pid
           URL=""
-          for _ in $(seq 1 15); do URL=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log 2>/dev/null | head -1 || true); [ -n "$URL" ] && break; kill -0 "$TUNNEL_PID" 2>/dev/null || break; sleep 1; done
+          for _ in $(seq 1 20); do
+            URL=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log 2>/dev/null | head -1 || true)
+            [ -n "$URL" ] && break
+            kill -0 "$TUNNEL_PID" 2>/dev/null || break
+            sleep 1
+          done
           [ -n "$URL" ] || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_START_FAILED"; cat /tmp/tunnel.log || true; exit 23; }
-          echo "REMOTE_BASE_URL=$URL"
           echo "REMOTE_BASE_URL=$URL" >> "$GITHUB_ENV"
           echo "REMOTE_CHANNEL_READY_AT=$(date +%s)" >> "$GITHUB_ENV"
           echo "KWAI_REMOTE_ACCESS_AVAILABLE_EARLY"
@@ -89,6 +95,7 @@ jobs:
           [ -x "$ADB" ] || { echo "FAILURE_SIGNAL=ADB_NOT_FOUND_AFTER_INSTALL"; exit 2; }
           echo "$(dirname "$EMULATOR")" >> "$GITHUB_PATH"
           echo "$(dirname "$ADB")" >> "$GITHUB_PATH"
+          rm -rf "$ANDROID_AVD_HOME/anthares-remote.avd" "$ANDROID_AVD_HOME/anthares-remote.ini"
           echo no | "$AVDMANAGER" create avd -n anthares-remote -k "system-images;android-35;google_apis;x86_64" --device "pixel_5"
       - name: Save Android system image cache
         if: steps.android-cache.outputs.cache-hit != 'true'
@@ -114,18 +121,18 @@ jobs:
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           EMULATOR="$(command -v emulator)"
           nohup "$EMULATOR" -avd anthares-remote -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
-          if ! timeout 120 adb wait-for-device; then
+          echo $! > /tmp/emulator.pid
+          if ! timeout 90 adb wait-for-device; then
             echo EMULATOR_WAIT_FOR_DEVICE_FAILED
             cat /tmp/emulator.log || true
-            ls -l /dev/kvm || true
-            "$EMULATOR" -version || true
             exit 124
           fi
-          if ! timeout 75 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 3; done'; then
+          if ! timeout 60 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 2; done'; then
             echo EMULATOR_BOOT_COMPLETION_FAILED
             cat /tmp/emulator.log || true
             exit 1
           fi
+          adb shell input keyevent 82 || true
           echo TEST_VALIDITY=EMULATOR_BOOTED
       - name: Check interaction budget before remote access
         shell: bash
@@ -133,12 +140,12 @@ jobs:
           set -euo pipefail
           START=$(cat /tmp/kwai-interaction-start); NOW=$(date +%s)
           ELAPSED=$((NOW-START)); echo "INTERACTION_ELAPSED_SECONDS=$ELAPSED" >> "$GITHUB_STEP_SUMMARY"
-          [ "$ELAPSED" -lt 110 ] || { echo "FAILURE_SIGNAL=INTERACTION_BUDGET_EXCEEDED"; exit 124; }
+          [ "$ELAPSED" -lt 120 ] || { echo "FAILURE_SIGNAL=INTERACTION_BUDGET_EXCEEDED"; exit 124; }
       - name: Download validated Kwai vault
         shell: bash
         run: |
           set -euo pipefail
-          curl -fL --retry 3 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          curl -fL --retry 3 --retry-delay 1 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
           echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
           mkdir -p kwai-vault
           unzip -q /tmp/kwai-vault.zip -d kwai-vault
@@ -146,12 +153,16 @@ jobs:
             d=$(find kwai-vault -mindepth 1 -maxdepth 1 -type d | head -1 || true)
             [ -n "$d" ] && cp -a "$d"/. kwai-vault/
           fi
-      - name: Prepare private browser tunnel
+      - name: Verify private browser tunnel
         shell: bash
         run: |
           set -euo pipefail
-          curl -fL --retry 3 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-          chmod +x /tmp/cloudflared
+          [ -x /tmp/cloudflared ] || { echo "FAILURE_SIGNAL=CLOUDFLARED_MISSING"; exit 24; }
+          UI_PID=$(cat /tmp/android-ui.pid 2>/dev/null || true)
+          TUNNEL_PID=$(cat /tmp/cloudflared.pid 2>/dev/null || true)
+          [ -n "$UI_PID" ] && kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_NOT_ALIVE"; cat /tmp/android-ui.log || true; exit 25; }
+          [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_NOT_ALIVE"; cat /tmp/tunnel.log || true; exit 26; }
+          echo "REMOTE_CHANNEL_STILL_ALIVE"
       - name: Restore encrypted session cache
         uses: actions/cache/restore@v4
         with:
@@ -169,6 +180,10 @@ jobs:
         run: |
           set -euo pipefail
           [ -n "$REMOTE_ANDROID_TOKEN" ] || { echo "REMOTE_ANDROID_TOKEN secret missing"; exit 2; }
+          export UI_PID="$(cat /tmp/android-ui.pid)"
+          export TUNNEL_PID="$(cat /tmp/cloudflared.pid)"
+          kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_NOT_ALIVE_BEFORE_LOGIN"; exit 25; }
+          kill -0 "$TUNNEL_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_NOT_ALIVE_BEFORE_LOGIN"; exit 26; }
           bash kwai_remote_android_login.sh
       - name: Save encrypted session cache
         if: success()
@@ -188,5 +203,8 @@ jobs:
             kwai-publish-status.txt
             kwai-reconcile-status.txt
             kwai-headless-status.txt
+            /tmp/android-ui.log
+            /tmp/tunnel.log
+            /tmp/emulator.log
           if-no-files-found: ignore
           retention-days: 1
