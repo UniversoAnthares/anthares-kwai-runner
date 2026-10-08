@@ -88,6 +88,13 @@ else
   bash kwai_vault_install.sh >>"$REPORT" 2>&1 || { log "FAIL: validated-vault-install"; exit 30; }
   log "KWAI_INSTALLED_FROM_VALIDATED_VAULT"
 fi
+# Resolve the Android 13+ notification permission before the first Kwai frame.
+# The permission dialog blocks onboarding and makes browser taps unreliable.
+if adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS >/dev/null 2>&1; then
+  log "KWAI_NOTIFICATION_PERMISSION_PREGRANTED"
+else
+  log "KWAI_NOTIFICATION_PERMISSION_PREGRANT_UNAVAILABLE"
+fi
 launch_kwai
 sleep 2
 for _ in $(seq 1 8); do
