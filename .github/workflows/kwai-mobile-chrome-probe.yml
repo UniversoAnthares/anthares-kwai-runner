@@ -1,0 +1,25 @@
+name: Kwai mobile Chrome web upload probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.kwai-mobile-chrome-probe-trigger']
+permissions:
+  contents: read
+jobs:
+  mobile-web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe Kwai mobile Chrome UI
+        run: |
+          python3 -m pip install --quiet playwright
+          python3 -m playwright install chromium --with-deps >/dev/null
+          python3 kwai_mobile_chrome_probe.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kwai-mobile-chrome-probe
+          path: kwai-mobile-chrome-results/
+          retention-days: 3
