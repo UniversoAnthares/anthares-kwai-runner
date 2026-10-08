@@ -1,0 +1,171 @@
+name: Kwai direct login discovery
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kwai-direct-login.yml'
+permissions:
+  contents: read
+jobs:
+  direct-login:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          AVDMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          yes | timeout 240 "$SDKMANAGER" --install "system-images;android-35;google_apis;x86_64" >/tmp/sdk.log 2>&1 || true
+          echo "$(dirname "$SDK_ROOT/emulator/emulator")" >> "$GITHUB_PATH"
+          echo "$(dirname "$SDK_ROOT/platform-tools/adb")" >> "$GITHUB_PATH"
+          if [ ! -f "$ANDROID_AVD_HOME/anthares-direct.ini" ]; then
+            echo no | "$AVDMANAGER" create avd -n anthares-direct -k "system-images;android-35;google_apis;x86_64" --device pixel_5
+          fi
+          sudo chmod 666 /dev/kvm
+      - name: Boot Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_SDK_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          nohup emulator -avd anthares-direct -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
+          timeout 100 adb wait-for-device
+          timeout 80 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 1; done'
+          adb shell input keyevent 82 || true
+      - name: Prepare remote access
+        env:
+          REMOTE_ANDROID_TOKEN: ${{ secrets.REMOTE_ANDROID_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x /tmp/cloudflared
+          python3 kwai_remote_android_ui.py >/tmp/android-ui.log 2>&1 & echo $! >/tmp/ui.pid
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 >/tmp/tunnel.log 2>&1 & echo $! >/tmp/tunnel.pid
+          for _ in $(seq 1 25); do URL=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log | head -1 || true); [ -n "$URL" ] && break; sleep 1; done
+          [ -n "${URL:-}" ] || exit 23
+          echo "REMOTE_BASE_URL=$URL" >> "$GITHUB_ENV"
+          printf '### Android remoto\n\n%s\n' "$URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Kwai
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
+          mkdir -p kwai-vault && unzip -q /tmp/kwai-vault.zip -d kwai-vault
+          if [ ! -s kwai-vault/MANIFEST.tsv ]; then d=$(find kwai-vault -mindepth 1 -maxdepth 1 -type d | head -1); cp -a "$d"/. kwai-vault/; fi
+          bash kwai_vault_install.sh
+          adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
+      - name: Discover and open login
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        shell: bash
+        run: |
+          set +e
+          REPORT=kwai-direct-login.txt; : > "$REPORT"
+          log(){ echo "$*" | tee -a "$REPORT"; }
+          dump(){ adb shell uiautomator dump /sdcard/u.xml >/dev/null 2>&1; adb exec-out cat /sdcard/u.xml > /tmp/u.xml 2>/dev/null; }
+          text_has(){ dump; grep -Eqi "$1" /tmp/u.xml; }
+          tap_text(){
+            dump
+            PAT="$1" python3 - <<'PY' >/tmp/xy
+import os,re,xml.etree.ElementTree as ET
+p=re.compile(os.environ['PAT'],re.I)
+try:
+ r=ET.parse('/tmp/u.xml').getroot()
+ for n in r.iter('node'):
+  t=(n.get('text','')+' '+n.get('content-desc','')).strip()
+  if p.search(t):
+   m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+   if m:
+    a,b,c,d=map(int,m.groups()); print((a+c)//2,(b+d)//2); break
+except Exception: pass
+PY
+            read x y </tmp/xy; [ -n "$x" ] && adb shell input tap "$x" "$y" && sleep 2
+          }
+          login_visible(){ text_has 'log.?in|sign.?in|email|e-mail|phone number|password|senha|verification code|continue'; }
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+          sleep 4
+          # clear known blockers, then finish the 12-slide onboarding using the proven RIGHT heart area
+          for i in $(seq 1 18); do
+            tap_text 'Don.t allow|Não permitir|Yes, skip|Hide' || true
+            if text_has 'Choose like or dislike|let us know you better'; then adb shell input tap 810 2164; sleep 2; continue; fi
+            if text_has 'Swipe up to watch more'; then adb shell input swipe 540 1800 540 700 450; sleep 2; continue; fi
+            break
+          done
+          log "MAIN_UI_READY"
+          # Profile center from the actual 1080x2340 screen is about x=944, not x=1015.
+          for x in 930 944 958; do for y in 2190 2210 2230; do adb shell input tap "$x" "$y"; sleep 2; login_visible && break 2; done; done
+          if login_visible; then log "LOGIN_AFTER_PROFILE=YES"; else log "LOGIN_AFTER_PROFILE=NO"; fi
+          # Do not depend on Profile: enumerate likely login/auth/account activities and try them directly.
+          adb shell dumpsys package com.kwai.video > /tmp/pkg.txt 2>/dev/null
+          grep -Eo 'com\.kwai\.video/[A-Za-z0-9_.$]+' /tmp/pkg.txt | sort -u | grep -Ei 'login|signin|sign.?in|auth|account' > /tmp/candidates.txt || true
+          grep -Ei 'login|signin|sign.?in|auth|account' /tmp/pkg.txt | tail -120 >> "$REPORT" || true
+          while read -r c; do
+            [ -n "$c" ] || continue
+            log "TRY_ACTIVITY=$c"
+            adb shell am start -n "$c" >>"$REPORT" 2>&1
+            sleep 2
+            if login_visible; then log "DIRECT_ACTIVITY_LOGIN_VISIBLE=$c"; break; fi
+          done </tmp/candidates.txt
+          # Try common app deep-link entry points as a final route.
+          if ! login_visible; then
+            for d in 'kwai://login' 'kwai://account/login' 'kwai://signin' 'kwai://user/login' 'kwai://profile'; do
+              log "TRY_DEEPLINK=$d"; adb shell am start -a android.intent.action.VIEW -d "$d" com.kwai.video >>"$REPORT" 2>&1; sleep 2; login_visible && break
+            done
+          fi
+          if login_visible; then
+            log "LOGIN_SURFACE_VISIBLE"
+            tap_text 'email|e-mail|continue with email|usar e-mail|entrar com e-mail' || true
+            sleep 2
+            # Fill available editable fields. Secrets are masked by Actions logs.
+            python3 - <<'PY' >>"$REPORT" 2>&1
+import os,re,subprocess,xml.etree.ElementTree as ET,time
+def run(*a): return subprocess.run(['adb',*a],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,check=False).stdout
+def nodes():
+ run('shell','uiautomator','dump','/sdcard/f.xml'); return list(ET.fromstring(run('exec-out','cat','/sdcard/f.xml')).iter('node'))
+def tap(n):
+ m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+ if not m:return
+ a,b,c,d=map(int,m.groups());run('shell','input','tap',str((a+c)//2),str((b+d)//2))
+def put(v): run('shell','input','text',v.replace('%','%25').replace(' ','%s'))
+fs=[n for n in nodes() if n.get('class','').endswith('EditText')]
+if fs and os.environ.get('KWAI_LOGIN'):
+ tap(fs[0]); put(os.environ['KWAI_LOGIN']); print('LOGIN_FIELD_FILLED')
+time.sleep(1); fs=[n for n in nodes() if n.get('class','').endswith('EditText')]
+pw=[n for n in fs if n.get('password')=='true' or re.search('password|senha',(n.get('resource-id','')+' '+n.get('text','')),re.I)]
+if pw and os.environ.get('KWAI_PASSWORD'):
+ tap(pw[0]); put(os.environ['KWAI_PASSWORD']); print('PASSWORD_FIELD_FILLED')
+PY
+          else
+            log "FAILURE_SIGNAL=DIRECT_LOGIN_SURFACE_NOT_FOUND"
+          fi
+          adb exec-out screencap -p > kwai-direct-final.png 2>/dev/null || true
+          dump; cp /tmp/u.xml kwai-direct-final.xml || true
+          # Keep the remote session alive for manual inspection even when discovery failed.
+          sleep 600
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-direct-login-diagnostics
+          path: |
+            kwai-direct-login.txt
+            kwai-direct-final.png
+            kwai-direct-final.xml
+            /tmp/pkg.txt
+            /tmp/candidates.txt
+            /tmp/android-ui.log
+            /tmp/tunnel.log
+            /tmp/emulator.log
+          if-no-files-found: ignore
+          retention-days: 1
