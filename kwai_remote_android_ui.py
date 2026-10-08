@@ -11,7 +11,16 @@ class H(BaseHTTPRequestHandler):
  def do_GET(self):
   if not self.ok(): self.send_response(403);self.end_headers();return
   if self.path.startswith("/shot"):
-   with SHOT_LOCK:\n    now=time.monotonic()\n    if now-SHOT_CACHE["at"]>2.5 or not SHOT_CACHE["bytes"]:\n     try:\n      b=adb("exec-out","screencap","-p")\n      if b.startswith(b"\\x89PNG"):\n       SHOT_CACHE["bytes"]=b;SHOT_CACHE["at"]=now\n     except (subprocess.TimeoutExpired,OSError): pass\n    b=SHOT_CACHE["bytes"]\n   self.send_response(200);self.send_header("Content-Type","image/png");self.send_header("Cache-Control","no-store");self.end_headers();self.wfile.write(b);return
+   with SHOT_LOCK:
+    now=time.monotonic()
+    if now-SHOT_CACHE["at"]>2.5 or not SHOT_CACHE["bytes"]:
+     try:
+      b=adb("exec-out","screencap","-p")
+      if b.startswith(b"\\x89PNG"):
+       SHOT_CACHE["bytes"]=b;SHOT_CACHE["at"]=now
+     except (subprocess.TimeoutExpired,OSError): pass
+    b=SHOT_CACHE["bytes"]
+   self.send_response(200);self.send_header("Content-Type","image/png");self.send_header("Cache-Control","no-store");self.end_headers();self.wfile.write(b);return
   if self.path.startswith("/diag"):
    cmds=[("activity",("shell","dumpsys","activity","activities")),("process",("shell","pidof","com.kwai.video")),("package",("shell","dumpsys","package","com.kwai.video")),("logcat",("logcat","-d","-t","350"))]
    parts=[]
