@@ -78,18 +78,18 @@ jobs:
           tap_text(){
             dump
             PAT="$1" python3 - <<'PY' >/tmp/xy
-import os,re,xml.etree.ElementTree as ET
-p=re.compile(os.environ['PAT'],re.I)
-try:
- r=ET.parse('/tmp/u.xml').getroot()
- for n in r.iter('node'):
-  t=(n.get('text','')+' '+n.get('content-desc','')).strip()
-  if p.search(t):
-   m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
-   if m:
-    a,b,c,d=map(int,m.groups()); print((a+c)//2,(b+d)//2); break
-except Exception: pass
-PY
+          import os,re,xml.etree.ElementTree as ET
+          p=re.compile(os.environ['PAT'],re.I)
+          try:
+           r=ET.parse('/tmp/u.xml').getroot()
+           for n in r.iter('node'):
+            t=(n.get('text','')+' '+n.get('content-desc','')).strip()
+            if p.search(t):
+             m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+             if m:
+              a,b,c,d=map(int,m.groups()); print((a+c)//2,(b+d)//2); break
+          except Exception: pass
+          PY
             read x y </tmp/xy; [ -n "$x" ] && adb shell input tap "$x" "$y" && sleep 2
           }
           login_visible(){ text_has 'log.?in|sign.?in|email|e-mail|phone number|password|senha|verification code|continue'; }
@@ -129,23 +129,23 @@ PY
             sleep 2
             # Fill available editable fields. Secrets are masked by Actions logs.
             python3 - <<'PY' >>"$REPORT" 2>&1
-import os,re,subprocess,xml.etree.ElementTree as ET,time
-def run(*a): return subprocess.run(['adb',*a],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,check=False).stdout
-def nodes():
- run('shell','uiautomator','dump','/sdcard/f.xml'); return list(ET.fromstring(run('exec-out','cat','/sdcard/f.xml')).iter('node'))
-def tap(n):
- m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
- if not m:return
- a,b,c,d=map(int,m.groups());run('shell','input','tap',str((a+c)//2),str((b+d)//2))
-def put(v): run('shell','input','text',v.replace('%','%25').replace(' ','%s'))
-fs=[n for n in nodes() if n.get('class','').endswith('EditText')]
-if fs and os.environ.get('KWAI_LOGIN'):
- tap(fs[0]); put(os.environ['KWAI_LOGIN']); print('LOGIN_FIELD_FILLED')
-time.sleep(1); fs=[n for n in nodes() if n.get('class','').endswith('EditText')]
-pw=[n for n in fs if n.get('password')=='true' or re.search('password|senha',(n.get('resource-id','')+' '+n.get('text','')),re.I)]
-if pw and os.environ.get('KWAI_PASSWORD'):
- tap(pw[0]); put(os.environ['KWAI_PASSWORD']); print('PASSWORD_FIELD_FILLED')
-PY
+          import os,re,subprocess,xml.etree.ElementTree as ET,time
+          def run(*a): return subprocess.run(['adb',*a],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,check=False).stdout
+          def nodes():
+           run('shell','uiautomator','dump','/sdcard/f.xml'); return list(ET.fromstring(run('exec-out','cat','/sdcard/f.xml')).iter('node'))
+          def tap(n):
+           m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+           if not m:return
+           a,b,c,d=map(int,m.groups());run('shell','input','tap',str((a+c)//2),str((b+d)//2))
+          def put(v): run('shell','input','text',v.replace('%','%25').replace(' ','%s'))
+          fs=[n for n in nodes() if n.get('class','').endswith('EditText')]
+          if fs and os.environ.get('KWAI_LOGIN'):
+           tap(fs[0]); put(os.environ['KWAI_LOGIN']); print('LOGIN_FIELD_FILLED')
+          time.sleep(1); fs=[n for n in nodes() if n.get('class','').endswith('EditText')]
+          pw=[n for n in fs if n.get('password')=='true' or re.search('password|senha',(n.get('resource-id','')+' '+n.get('text','')),re.I)]
+          if pw and os.environ.get('KWAI_PASSWORD'):
+           tap(pw[0]); put(os.environ['KWAI_PASSWORD']); print('PASSWORD_FIELD_FILLED')
+          PY
           else
             log "FAILURE_SIGNAL=DIRECT_LOGIN_SURFACE_NOT_FOUND"
           fi
