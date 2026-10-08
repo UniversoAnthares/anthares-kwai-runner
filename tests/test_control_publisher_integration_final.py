@@ -21,24 +21,24 @@ def fail(j,g):
 if case=="happy": j=claim();start(j,9);publish(j,9);complete(j,9);ok=j["confirmed"]
 elif case=="renew-then-publish": j=claim();start(j,9);renew(j,9);publish(j,9);complete(j,9);ok=j["confirmed"]
 elif case=="stale-start": j=claim(); 
- try: start(j,8); ok=False
- except RuntimeError: ok=not any(e[0]=="started" for e in events)
+  try: start(j,8); ok=False
+  except RuntimeError: ok=not any(e[0]=="started" for e in events)
 elif case=="stale-renew": j=claim();start(j,9)
- try: renew(j,8);ok=False
- except RuntimeError: ok=not any(e[0]=="renew" for e in events)
+  try: renew(j,8);ok=False
+  except RuntimeError: ok=not any(e[0]=="renew" for e in events)
 elif case=="stale-complete": j=claim();start(j,9);publish(j,9)
- try: complete(j,8);ok=False
- except RuntimeError: ok=not j["confirmed"]
+  try: complete(j,8);ok=False
+  except RuntimeError: ok=not j["confirmed"]
 elif case=="crash-before-start": j=claim();ok=j["status"]=="leased" and not any(e[0]=="publish" for e in events)
 elif case=="uncertain-no-republish": j=claim();start(j,9);fail(j,9); 
- try: publish(j,9);ok=False
- except RuntimeError: ok=j["status"]=="uncertain" and not j["confirmed"]
+  try: publish(j,9);ok=False
+  except RuntimeError: ok=j["status"]=="uncertain" and not j["confirmed"]
 elif case=="confirmed-idempotent": j=claim();start(j,9);publish(j,9);complete(j,9);before=len(events)
- try: complete(j,9); ok=j["confirmed"] and len(events)==before+1
- except: ok=False
+  try: complete(j,9); ok=j["confirmed"] and len(events)==before+1
+  except: ok=False
 elif case=="generation-rotates": j=claim();start(j,9);j["lease_generation"]=10
- try: complete(j,9);ok=False
- except RuntimeError: ok=not j["confirmed"]
+  try: complete(j,9);ok=False
+  except RuntimeError: ok=not j["confirmed"]
 elif case=="duplicate-publisher-boundary": j=claim();start(j,9);publish(j,9);publish(j,9);ok=events.count(("publish","job-42",9))==2
 else: raise SystemExit(2)
 # duplicate-publisher-boundary is intentionally a negative model: the integration layer must reject second invocation.
