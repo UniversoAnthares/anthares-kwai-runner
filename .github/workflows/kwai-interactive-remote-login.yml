@@ -27,6 +27,29 @@ jobs:
         run: |
           date +%s > /tmp/kwai-interaction-start
           echo 'INTERACTION_BUDGET_SECONDS=120' >> "$GITHUB_STEP_SUMMARY"
+      - name: Prepare remote channel before Android
+        env:
+          REMOTE_ANDROID_TOKEN: ${{ secrets.REMOTE_ANDROID_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "$REMOTE_ANDROID_TOKEN" ] || { echo "REMOTE_ANDROID_TOKEN secret missing"; exit 2; }
+          curl -fL --retry 3 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x /tmp/cloudflared
+          python3 kwai_remote_android_ui.py >/tmp/android-ui.log 2>&1 &
+          UI_PID=$!
+          for _ in $(seq 1 8); do curl -fsS "http://127.0.0.1:8765/?t=$REMOTE_ANDROID_TOKEN" >/dev/null 2>&1 && break; sleep 1; done
+          kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_START_FAILED"; exit 22; }
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 >/tmp/tunnel.log 2>&1 &
+          TUNNEL_PID=$!
+          URL=""
+          for _ in $(seq 1 15); do URL=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log 2>/dev/null | head -1 || true); [ -n "$URL" ] && break; kill -0 "$TUNNEL_PID" 2>/dev/null || break; sleep 1; done
+          [ -n "$URL" ] || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_START_FAILED"; cat /tmp/tunnel.log || true; exit 23; }
+          echo "REMOTE_BASE_URL=$URL"
+          echo "REMOTE_BASE_URL=$URL" >> "$GITHUB_ENV"
+          echo "REMOTE_CHANNEL_READY_AT=$(date +%s)" >> "$GITHUB_ENV"
+          echo "KWAI_REMOTE_ACCESS_AVAILABLE_EARLY"
+          printf '### Kwai Android remoto\n\n%s\n' "$URL" >> "$GITHUB_STEP_SUMMARY"
       - name: Restore Android system image cache
         id: android-cache
         uses: actions/cache/restore@v4
