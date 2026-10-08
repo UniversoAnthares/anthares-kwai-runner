@@ -60,7 +60,7 @@ log "KWAI_OWNER_INTERACTION_READY"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   printf '\n**KWAI_OWNER_INTERACTION_READY** — use the remote URL shown above.\n' >> "$GITHUB_STEP_SUMMARY"
 fi
-LOGIN_DEADLINE=$((SECONDS+120))
+LOGIN_DEADLINE=$((SECONDS+600))
 while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   if [ -f /tmp/anthares-android-done ]; then
     log "DONE_SIGNAL_RECEIVED"
@@ -82,5 +82,5 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   kill -0 "$TUNNEL_PID" 2>/dev/null || { log "FAIL: tunnel-died-during-login"; exit 27; }
   sleep 1
 done
-log "FAIL: login-window-expired-120s"; exit 28
+log "FAIL: login-window-expired-600s"; exit 28
 
