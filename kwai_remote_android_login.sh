@@ -108,35 +108,38 @@ dismiss_onboarding_right_heart(){
   sleep 1
 }
 dismiss_resource_overlay(){
-  dump_ui || return 0
-  grep -Eqi 'Resource downloading|access to all the features|resource.*download' /tmp/kwai-ui.xml || return 0
-  local xy
+  # Kwai's 5% modal is often rendered without accessible UIAutomator labels.
+  # First use the accessible Hide button, then device-relative fallback.
+  local xy dims w h
+  dump_ui || true
   xy="$(python3 - <<'PY'
-import re, xml.etree.ElementTree as ET
+import re,xml.etree.ElementTree as ET
 try:
-    root=ET.parse('/tmp/kwai-ui.xml').getroot()
-    for n in root.iter('node'):
-        text=(n.attrib.get('text') or n.attrib.get('content-desc') or '').strip().lower()
-        if text == 'hide':
-            m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', n.attrib.get('bounds',''))
-            if m:
-                x1,y1,x2,y2=map(int,m.groups())
-                print((x1+x2)//2, (y1+y2)//2)
-                break
-except Exception:
-    pass
+ root=ET.parse('/tmp/kwai-ui.xml').getroot()
+ for n in root.iter('node'):
+  label=((n.get('text') or '')+' '+(n.get('content-desc') or '')).strip().lower()
+  if label == 'hide' or label.startswith('hide '):
+   m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+   if m:
+    a,b,c,d=map(int,m.groups());print((a+c)//2,(b+d)//2);break
+except Exception:pass
 PY
 )"
   if [ -n "$xy" ]; then
     adb shell input tap $xy >/dev/null 2>&1 || true
-    log "KWAI_RESOURCE_DOWNLOAD_OVERLAY_DISMISSED"
+    log "KWAI_RESOURCE_HIDE_TAPPED_UI"
   else
-    adb shell input tap 540 920 >/dev/null 2>&1 || true
-    log "KWAI_RESOURCE_DOWNLOAD_OVERLAY_DISMISSED_FALLBACK"
+    dims="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
+    w="${dims%x*}"; h="${dims#*x}"
+    if [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]]; then
+      # Screenshot: Hide is centered at x=50%, y≈61% of the Android viewport.
+      adb shell input tap $((w*50/100)) $((h*61/100)) >/dev/null 2>&1 || true
+      log "KWAI_RESOURCE_HIDE_TAPPED_FALLBACK"
+    fi
   fi
   sleep 1
-  return 0
 }
+
 adb wait-for-device
 for _ in $(seq 1 30); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ] && break; sleep 2; done
 [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ] || { log "FAIL: android-not-ready"; exit 21; }
