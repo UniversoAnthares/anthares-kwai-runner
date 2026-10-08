@@ -14,9 +14,15 @@ concurrency:
   cancel-in-progress: false
 jobs:
   remote-login:
+    strategy:
+      fail-fast: false
+      max-parallel: 50
+      matrix:
+        variant: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
+      KWAI_VARIANT: ${{ matrix.variant }}
       KWAI_SESSION_FILE: kwai-session.enc
       ANTHARES_CONTROL_URL: https://anthares-control.anthares1.workers.dev
       KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'anthares' }}
@@ -191,8 +197,8 @@ jobs:
       - name: Interactive owner login
         env:
           REMOTE_ANDROID_TOKEN: ${{ secrets.REMOTE_ANDROID_TOKEN }}
-          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
-          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_LOGIN: ${{ matrix.variant == 1 && secrets.KWAI_LOGIN || '' }}
+          KWAI_PASSWORD: ${{ matrix.variant == 1 && secrets.KWAI_PASSWORD || '' }}
           KWAI_ACCOUNT_ID: primary
         shell: bash
         run: |
@@ -202,6 +208,7 @@ jobs:
           export TUNNEL_PID="$(cat /tmp/cloudflared.pid)"
           kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_NOT_ALIVE_BEFORE_LOGIN"; exit 25; }
           kill -0 "$TUNNEL_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_NOT_ALIVE_BEFORE_LOGIN"; exit 26; }
+          echo "KWAI_VARIANT=$KWAI_VARIANT"
           bash kwai_remote_android_login.sh
       - name: Save encrypted session cache
         if: success()
@@ -213,7 +220,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kwai-interactive-login-diagnostics
+          name: kwai-interactive-login-diagnostics-${{ matrix.variant }}
           path: |
             kwai-remote-status.txt
             kwai-remote-ready.png
