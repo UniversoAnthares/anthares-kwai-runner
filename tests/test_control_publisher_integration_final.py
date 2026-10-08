@@ -10,6 +10,7 @@ def renew(j,g):
  events.append(("renew",j["id"],g)); return j
 def publish(j,g):
  if g!=j["lease_generation"] or j["status"]!="started": raise RuntimeError("BOUNDARY")
+ if any(e[0]=="publish" and e[1]==j["id"] for e in events): raise RuntimeError("DUPLICATE_PUBLISH")
  events.append(("publish",j["id"],g))
 def complete(j,g,confirmed=True):
  if g!=j["lease_generation"]: raise RuntimeError("STALE")
@@ -45,9 +46,12 @@ elif case=="generation-rotates":
  j=claim();start(j,9);j["lease_generation"]=10
  try: complete(j,9);ok=False
  except RuntimeError: ok=not j["confirmed"]
-elif case=="duplicate-publisher-boundary": j=claim();start(j,9);publish(j,9);publish(j,9);ok=events.count(("publish","job-42",9))==2
+elif case=="duplicate-publisher-boundary":
+ j=claim();start(j,9);publish(j,9)
+ try:
+  publish(j,9);ok=False
+ except RuntimeError:
+  ok=events.count(("publish","job-42",9))==1
 else: raise SystemExit(2)
-# duplicate-publisher-boundary is intentionally a negative model: the integration layer must reject second invocation.
-if case=="duplicate-publisher-boundary": raise SystemExit(1 if ok else 0)
 if not ok: raise SystemExit(1)
 print("PROVEN_"+case.upper().replace("-","_"))
