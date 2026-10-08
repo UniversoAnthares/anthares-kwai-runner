@@ -11,11 +11,11 @@ permissions:
   id-token: write
 concurrency:
   group: kwai-interactive-remote-login
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   remote-login:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 30
     env:
       KWAI_SESSION_FILE: kwai-session.enc
       ANTHARES_CONTROL_URL: https://anthares-control.anthares1.workers.dev
