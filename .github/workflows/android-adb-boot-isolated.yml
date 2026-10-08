@@ -1,0 +1,34 @@
+name: Android ADB boot isolated diagnostics
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: KVM prerequisite
+        shell: bash
+        run: |
+          test -e /dev/kvm || { echo 'TEST_VALIDITY=INVALID_NO_KVM'; exit 2; }
+          sudo chmod 666 /dev/kvm
+      - name: Boot and verify ADB
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          emulator-boot-timeout: 300
+          script: |
+            set -euo pipefail
+            adb start-server
+            adb devices -l
+            timeout 45 adb wait-for-device
+            test "$(adb get-state)" = "device"
+            timeout 90 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+            echo 'TEST_VALIDITY=ANDROID_BOOTED'
+            echo 'ANDROID_ADB_BOOT=PROVEN'
