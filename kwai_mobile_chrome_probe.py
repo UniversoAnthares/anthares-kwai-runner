@@ -19,10 +19,10 @@ async def main():
             result["links"]=(await page.locator("a").all_text_contents())[:60]
             result["upload_inputs"]=await page.locator('input[type="file"]').count()
             result["routes"]=[]
-            for path in ["/", "/pt-BR", "/pt-BR/upload", "/upload", "/creator", "/creator/upload", "/pt-BR/creator", "/pt-BR/creator/upload", "/studio", "/pt-BR/studio", "/pt-BR/creators/create", "/pt-BR/support/video/how-do-i-post-a-video", "/pt-BR/support/creator-center", "/pt-BR/creators", "/pt-BR/profile"]:
+            for path in ["/","/pt-BR","/en","/pt","/home","/feed","/login","/signin","/account","/profile","/me","/user","/users","/settings","/upload","/upload/video","/video/upload","/videos/upload","/post","/post/create","/create","/create/video","/publish","/publish/video","/creator","/creator/upload","/creator/center","/creator-center","/creator-center/upload","/creators","/creators/create","/studio","/studio/upload","/dashboard","/dashboard/upload","/web/upload","/web/creator","/pt-BR/upload","/pt-BR/video/upload","/pt-BR/post","/pt-BR/create","/pt-BR/creator","/pt-BR/creator/upload","/pt-BR/creator-center","/pt-BR/creators","/pt-BR/creators/create","/pt-BR/studio","/pt-BR/studio/upload","/pt-BR/profile","/pt-BR/login"]:
                 try:
-                    response=await page.goto("https://www.kwai.com"+path,wait_until="domcontentloaded",timeout=12000)
-                    await page.wait_for_timeout(750)
+                    response=await page.goto("https://www.kwai.com"+path,wait_until="domcontentloaded",timeout=6500)
+                    await page.wait_for_timeout(250)
                     result["routes"].append({"path":path,"status":response.status if response else None,"final_url":page.url,"title":await page.title(),"file_inputs":await page.locator('input[type="file"]').count(),"upload_text":await page.get_by_text(re.compile("upload|enviar|publicar|postar|carregar vídeo",re.I)).count()})
                 except Exception as err:
                     result["routes"].append({"path":path,"error":str(err)[:120]})
