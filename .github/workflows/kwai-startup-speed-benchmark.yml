@@ -12,6 +12,7 @@ jobs:
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
+      # Cache warm-run validation: trigger a new hosted runner to verify both cache hits.
       - name: Start timing
         run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
       - name: Cache Android image
