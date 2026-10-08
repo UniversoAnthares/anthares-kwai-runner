@@ -36,3 +36,4 @@
 2026-10-08 five-parallel-user-request test 4 review-runs-47-51 no-cancellation
 2026-10-08 five-parallel-user-request test 5 review-runs-47-51 no-cancellation
 2026-10-08 distinct parallel retry 2 requested
+2026-10-08 distinct parallel retry 3 requested
