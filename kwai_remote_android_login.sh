@@ -54,39 +54,13 @@ if ! grep -Eq 'text="[^"]+"|content-desc="[^"]+"' /tmp/kwai-ui.xml 2>/dev/null; 
   exit 32
 fi
 log "KWAI_LOGIN_UI_OPENED"
-# Optional unattended credential entry. Values arrive only through the runner environment
-# and are never written to the report or echoed to logs.
-if [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
-  log "KWAI_AUTO_LOGIN_ATTEMPT"
-  adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null 2>&1 || true
-  adb pull /sdcard/kwai-ui.xml /tmp/kwai-ui.xml >/dev/null 2>&1 || true
-  # Prefer visible login controls, then fill focused fields without logging values.
-  if python3 kwai_android_autologin.py >>"$REPORT" 2>&1; then
-    log "KWAI_AUTO_LOGIN_ADVANCED"
-    # Validate authentication directly from the Android UI; no human "done" click required.
-    for _ in $(seq 1 12); do
-      sleep 2
-      adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null 2>&1 || true
-      adb pull /sdcard/kwai-ui.xml /tmp/kwai-ui.xml >/dev/null 2>&1 || true
-      UI_TEXT="$(tr '[:upper:]' '[:lower:]' </tmp/kwai-ui.xml 2>/dev/null || true)"
-      if echo "$UI_TEXT" | grep -Eqi 'verification code|código de verificação|captcha|verify it.s you|senha|password|log in|login|entrar'; then
-        continue
-      fi
-      if python3 kwai_auth_probe.py > /tmp/kwai-auth-probe.log 2>&1 && grep -qx "KWAI_AUTH_STATE=AUTHENTICATED_UI" /tmp/kwai-auth-probe.log; then
-        log "KWAI_LOGIN_CONFIRMED_AUTOMATIC"
-        capture
-        adb shell run-as com.kwai.video id >>"$REPORT" 2>&1 && log "APP_STATE_RUN_AS_AVAILABLE" || log "APP_STATE_RUN_AS_UNAVAILABLE"
-        bash kwai_session_state.sh save >>"$REPORT" 2>&1 || log "KWAI_SESSION_SAVE_WARNING"
-        exit 0
-      fi
-    done
-    log "KWAI_AUTO_LOGIN_UNCONFIRMED"
-  else
-    rc=$?
-    log "KWAI_AUTO_LOGIN_NEEDS_INTERACTION_RC=$rc"
-  fi
+# Interactive-first mode: never spend minutes trying credentials before the owner can act.
+# The tunnel URL and Kwai UI are available before entering this short interaction window.
+log "KWAI_OWNER_INTERACTION_READY"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  printf '\n**KWAI_OWNER_INTERACTION_READY** — use the remote URL shown above.\n' >> "$GITHUB_STEP_SUMMARY"
 fi
-LOGIN_DEADLINE=$((SECONDS+600))
+LOGIN_DEADLINE=$((SECONDS+120))
 while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   if [ -f /tmp/anthares-android-done ]; then
     log "DONE_SIGNAL_RECEIVED"
@@ -108,5 +82,5 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   kill -0 "$TUNNEL_PID" 2>/dev/null || { log "FAIL: tunnel-died-during-login"; exit 27; }
   sleep 1
 done
-log "FAIL: login-window-expired-600s"; exit 28
+log "FAIL: login-window-expired-120s"; exit 28
 
