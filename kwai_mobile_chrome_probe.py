@@ -54,6 +54,27 @@ async def main():
                     result["interactive_discovery"].append({"url":target,**data})
                 except Exception as err:
                     result["interactive_discovery"].append({"url":target,"error":str(err)[:140]})
+            result["login_click_probe"]=[]
+            for target in ["https://www.kwai.com/","https://www.kwai.com/video/upload","https://www.kwai.com/@universo.anthares"]:
+                try:
+                    await page.goto(target,wait_until="domcontentloaded",timeout=12000)
+                    await page.wait_for_timeout(1300)
+                    before=await page.locator('input').count()
+                    actions=await page.evaluate("""() => [...document.querySelectorAll('button,a,[role=button]')].filter(e=>/login|log in|sign in|entrar|acessar|publicar|seguir|curtir/i.test((e.innerText||'')+' '+(e.getAttribute('aria-label')||''))).slice(0,12).map(e=>({tag:e.tagName,text:(e.innerText||'').slice(0,80),aria:e.getAttribute('aria-label')}))""")
+                    clicked=False
+                    for term in ["Entrar","Login","Log in","Sign in","Seguir"]:
+                        locator=page.get_by_text(term,exact=True)
+                        if await locator.count()>0:
+                            try:
+                                await locator.first.click(timeout=2000)
+                                clicked=True
+                                break
+                            except Exception:
+                                pass
+                    await page.wait_for_timeout(900)
+                    result["login_click_probe"].append({"url":target,"actions":actions,"clicked":clicked,"inputs_before":before,"inputs_after":await page.locator('input').count(),"dialogs":await page.locator('[role=dialog]').count(),"body_after":(await page.locator("body").inner_text())[:450]})
+                except Exception as err:
+                    result["login_click_probe"].append({"url":target,"error":str(err)[:150]})
             await page.screenshot(path=str(OUT/"mobile.png"),full_page=True)
         except Exception as e:
             result["error"]=str(e)[:300]
