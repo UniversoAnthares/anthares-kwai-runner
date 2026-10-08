@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-# LATENCY CONTRACT: this workflow is interactive and must fail fast. Never reintroduce
-# multi-minute passive waits. Infrastructure phases are capped in seconds; the only
-# longer window is explicit human login, and it is bounded so a run cannot sit forever.
-# On timeout, preserve diagnostics/cache and resume with a new short run.
 REPORT="kwai-remote-status.txt"; SHOT="kwai-remote-ready.png"; : > "$REPORT"
 log(){ printf '%s\n' "$*" | tee -a "$REPORT"; }
 capture(){ adb exec-out screencap -p > "$SHOT" 2>/dev/null || true; }
-finish_diag(){ { echo "=== adb ==="; adb devices -l || true; echo "=== package ==="; adb shell pm path com.kwai.video || true; echo "=== foreground ==="; adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | tail -4 || true; echo "=== tunnel ==="; tail -30 /tmp/tunnel.log 2>/dev/null || true; echo "=== ui ==="; tail -30 /tmp/android-ui.log 2>/dev/null || true; } >> "$REPORT"; capture; }
+finish_diag(){ { echo "=== adb ==="; adb devices -l || true; echo "=== accounts ==="; adb shell dumpsys account 2>/dev/null | grep -E 'Account \{|type=com.google' | tail -20 || true; echo "=== package ==="; adb shell pm path com.kwai.video || true; echo "=== foreground ==="; adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | tail -6 || true; echo "=== tunnel ==="; tail -30 /tmp/tunnel.log 2>/dev/null || true; echo "=== ui ==="; tail -30 /tmp/android-ui.log 2>/dev/null || true; } >> "$REPORT"; capture; }
 cleanup(){ finish_diag; [ -n "${UI_PID:-}" ] && kill "$UI_PID" 2>/dev/null || true; [ -n "${TUNNEL_PID:-}" ] && kill "$TUNNEL_PID" 2>/dev/null || true; }
 trap cleanup EXIT
-# Remote channel is created by the workflow before Android boot.
+launch_kwai(){
+  local c
+  c="$(adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.kwai.video 2>/dev/null | tr -d '\r' | tail -1)"
+  if [ -n "$c" ] && [[ "$c" == com.kwai.video/* ]]; then
+    adb shell am start -n "$c" >/dev/null 2>&1 || true
+  else
+    adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+  fi
+}
+google_account_present(){ adb shell dumpsys account 2>/dev/null | grep -q 'type=com.google'; }
+google_login_foreground(){ adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | grep -Eq 'com\.google\.android\.(gms|gsf\.login)|com\.android\.settings'; }
+recover_google_to_kwai(){
+  log "GOOGLE_ACCOUNT_PRESENT_RETURNING_TO_KWAI"
+  adb shell am force-stop com.google.android.gsf.login >/dev/null 2>&1 || true
+  adb shell am force-stop com.android.settings >/dev/null 2>&1 || true
+  adb shell am force-stop com.google.android.gms >/dev/null 2>&1 || true
+  sleep 1
+  launch_kwai
+}
 adb wait-for-device
 for _ in $(seq 1 30); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ] && break; sleep 2; done
 [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ] || { log "FAIL: android-not-ready"; exit 21; }
@@ -22,15 +36,8 @@ else
   bash kwai_vault_install.sh >>"$REPORT" 2>&1 || { log "FAIL: validated-vault-install"; exit 30; }
   log "KWAI_INSTALLED_FROM_VALIDATED_VAULT"
 fi
-LAUNCH_COMPONENT="$(adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.kwai.video 2>/dev/null | tr -d '\r' | tail -1)"
-log "LAUNCH_COMPONENT=$LAUNCH_COMPONENT"
-if [ -n "$LAUNCH_COMPONENT" ] && [[ "$LAUNCH_COMPONENT" == com.kwai.video/* ]]; then
-  adb shell am start -n "$LAUNCH_COMPONENT" >>"$REPORT" 2>&1 || { log "FAIL: kwai-launch-component"; exit 31; }
-else
-  adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >>"$REPORT" 2>&1 || { log "FAIL: kwai-launch"; exit 31; }
-fi
+launch_kwai
 sleep 2
-# A launch is not acceptance. The app must leave the splash and expose a real UI.
 for _ in $(seq 1 8); do
   capture
   adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null 2>&1 || true
@@ -46,14 +53,22 @@ if ! grep -Eq 'text="[^"]+"|content-desc="[^"]+"' /tmp/kwai-ui.xml 2>/dev/null; 
   exit 32
 fi
 log "KWAI_LOGIN_UI_OPENED"
-# Interactive-first mode: never spend minutes trying credentials before the owner can act.
-# The tunnel URL and Kwai UI are available before entering this short interaction window.
 log "KWAI_OWNER_INTERACTION_READY"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   printf '\n**KWAI_OWNER_INTERACTION_READY** — use the remote URL shown above.\n' >> "$GITHUB_STEP_SUMMARY"
 fi
-LOGIN_DEADLINE=$((SECONDS+600))
+LOGIN_DEADLINE=$((SECONDS+900))
+GOOGLE_STUCK_COUNT=0
 while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
+  if google_account_present && google_login_foreground; then
+    GOOGLE_STUCK_COUNT=$((GOOGLE_STUCK_COUNT+1))
+    if [ "$GOOGLE_STUCK_COUNT" -ge 4 ]; then
+      recover_google_to_kwai
+      GOOGLE_STUCK_COUNT=0
+    fi
+  else
+    GOOGLE_STUCK_COUNT=0
+  fi
   if [ -f /tmp/anthares-android-done ]; then
     log "DONE_SIGNAL_RECEIVED"
     adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null 2>&1 || true
@@ -63,8 +78,6 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
     else
       log "KWAI_LOGIN_CONFIRMED"
       capture
-      # Do not persist a full AVD. Probe whether app-scoped state is exportable;
-      # if not, the next stage will use a rootable disposable image and encrypted app-data only.
       adb shell run-as com.kwai.video id >>"$REPORT" 2>&1 && log "APP_STATE_RUN_AS_AVAILABLE" || log "APP_STATE_RUN_AS_UNAVAILABLE"
       bash kwai_session_state.sh save >>"$REPORT" 2>&1 || log "KWAI_SESSION_SAVE_WARNING"
       exit 0
@@ -74,5 +87,4 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   kill -0 "$TUNNEL_PID" 2>/dev/null || { log "FAIL: tunnel-died-during-login"; exit 27; }
   sleep 1
 done
-log "FAIL: login-window-expired-600s"; exit 28
-
+log "FAIL: login-window-expired-900s"; exit 28
