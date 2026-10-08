@@ -43,19 +43,19 @@ jobs:
               yes | timeout 240 "$SDK/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-35;google_apis;x86_64" >/tmp/kwai-speed-sdk.log 2>&1 || true
             fi
             test -s "$SDK/system-images/android-35/google_apis/x86_64/system.img"
-            echo "SDK_READY_SECONDS=$(($(date +%s)-t))" >> "$GITHUB_STEP_SUMMARY"
+            echo "SDK_READY_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
           ) & sdkpid=$!
           (
             if [ ! -s /tmp/kwai-speed-vault.zip ]; then
               curl -fsSL --retry 3 -o /tmp/kwai-speed-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
             fi
             echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-speed-vault.zip" | sha256sum -c -
-            echo "VAULT_READY_SECONDS=$(($(date +%s)-t))" >> "$GITHUB_STEP_SUMMARY"
+            echo "VAULT_READY_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
           ) & vaultpid=$!
           wait "$sdkpid"; wait "$vaultpid"
           echo "SDK_CACHE_HIT=${{ steps.sdkcache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
           echo "VAULT_CACHE_HIT=${{ steps.vaultcache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "PREP_TOTAL_SECONDS=$(($(date +%s)-t))" >> "$GITHUB_STEP_SUMMARY"
+          echo "PREP_TOTAL_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Boot clean Android and measure
         shell: bash
         run: |
@@ -74,9 +74,9 @@ jobs:
           nohup "$SDK/emulator/emulator" -avd kwai-speed -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/kwai-speed-emulator.log 2>&1 &
           timeout 120 "$SDK/platform-tools/adb" wait-for-device
           timeout 120 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$SDK/platform-tools/adb"
-          echo "COLD_BOOT_SECONDS=$(($(date +%s)-t))" >> "$GITHUB_STEP_SUMMARY"
+          echo "COLD_BOOT_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
           "$SDK/platform-tools/adb" shell getprop ro.product.cpu.abilist | sed 's/^/DEVICE_ABI=/' >> "$GITHUB_STEP_SUMMARY"
-          echo "TOTAL_SECONDS=$(($(date +%s)-T0))" >> "$GITHUB_STEP_SUMMARY"
+          echo "TOTAL_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Diagnostics
         if: always()
         run: |
