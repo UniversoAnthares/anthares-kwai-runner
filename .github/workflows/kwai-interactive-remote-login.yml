@@ -12,6 +12,8 @@ jobs:
   remote-login:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      KWAI_SESSION_FILE: kwai-session.enc
     steps:
       - uses: actions/checkout@v4
       - name: Prepare Android SDK
@@ -91,6 +93,12 @@ jobs:
           set -euo pipefail
           [ -n "$REMOTE_ANDROID_TOKEN" ] || { echo "REMOTE_ANDROID_TOKEN secret missing"; exit 2; }
           bash kwai_remote_android_login.sh
+      - name: Save encrypted session cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: kwai-session.enc
+          key: kwai-session-${{ runner.os }}-${{ github.run_id }}
       - name: Upload diagnostics only
         if: always()
         uses: actions/upload-artifact@v4
