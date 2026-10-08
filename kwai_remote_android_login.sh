@@ -107,6 +107,17 @@ dismiss_onboarding_right_heart(){
   log "KWAI_ONBOARDING_RIGHT_HEART_TAPPED"
   sleep 1
 }
+dismiss_swipe_tutorial(){
+  dump_ui || return 0
+  if ! grep -Eqi 'Swipe up to watch more|Deslize para cima' /tmp/kwai-ui.xml; then return 0; fi
+  local dims w h
+  dims="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
+  w="${dims%x*}"; h="${dims#*x}"
+  [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]] || return 0
+  adb shell input swipe $((w*50/100)) $((h*75/100)) $((w*50/100)) $((h*30/100)) 450 >/dev/null 2>&1 || true
+  log "KWAI_SWIPE_TUTORIAL_DISMISSED"
+  sleep 2
+}
 dismiss_resource_overlay(){
   # Kwai's 5% modal is often rendered without accessible UIAutomator labels.
   # First use the accessible Hide button, then device-relative fallback.
@@ -162,7 +173,7 @@ launch_kwai
 sleep 2
 for _ in $(seq 1 8); do
   capture
-  if kwai_foreground && ! google_sso_foreground; then dismiss_notification_permission; complete_kwai_interest_onboarding; dismiss_resource_overlay; fi
+  if kwai_foreground && ! google_sso_foreground; then dismiss_notification_permission; complete_kwai_interest_onboarding; dismiss_resource_overlay; dismiss_swipe_tutorial; fi
   dump_ui || true
   if [ -s /tmp/kwai-ui.xml ] && grep -Eq 'text="[^"]+"|content-desc="[^"]+"' /tmp/kwai-ui.xml && ! grep -qi 'Make Everyone Shine' /tmp/kwai-ui.xml; then
     log "KWAI_UI_INTERACTIVE"; break
@@ -212,6 +223,7 @@ PY
 }
 if ! email_login_visible; then
   complete_kwai_interest_onboarding || true
+  dismiss_swipe_tutorial || true
   log "KWAI_EMAIL_LOGIN_NAVIGATION_STARTED"
   variant=${KWAI_VARIANT:-1}
   screen="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
@@ -238,6 +250,7 @@ if ! email_login_visible; then
   for _ in $(seq 1 5); do
     complete_kwai_interest_onboarding || true
     dismiss_resource_overlay || true
+    dismiss_swipe_tutorial || true
     email_login_visible && break
     if google_sso_foreground; then log "FAILURE_SIGNAL=UNEXPECTED_GOOGLE_SSO"; exit 34; fi
     tap_label '(log[ -]?in|sign[ -]?in|entrar|fazer login|cadastre-se|sign up|register)' || true
