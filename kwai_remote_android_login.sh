@@ -88,7 +88,8 @@ PY
     dims="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
     w="${dims%x*}"; h="${dims#*x}"
     [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]] || return 1
-    xy="$((w*75/100)) $((h*97/100))"
+    # Interest-screen video occupies a centered viewport; right heart at ~75% width, ~94% height.
+    xy="$((w*75/100)) $((h*94/100))"
     adb shell input tap $xy >/dev/null 2>&1 || return 1
     log "KWAI_ONBOARDING_INTEREST_STEP=${step}/12"
     sleep 2
@@ -103,7 +104,7 @@ dismiss_onboarding_right_heart(){
   w="${dims%x*}"; h="${dims#*x}"
   [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]] || return 0
   # The right-hand heart is centered at ~75% width and 97% height.
-  adb shell input tap $((w*75/100)) $((h*97/100)) >/dev/null 2>&1 || true
+  adb shell input tap $((w*75/100)) $((h*94/100)) >/dev/null 2>&1 || true
   log "KWAI_ONBOARDING_RIGHT_HEART_TAPPED"
   sleep 1
 }
