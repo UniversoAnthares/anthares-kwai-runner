@@ -76,8 +76,8 @@ import re,xml.etree.ElementTree as ET
 try:
  root=ET.parse('/tmp/kwai-ui.xml').getroot()
  txt=' '.join((n.get('text','')+' '+n.get('content-desc','')) for n in root.iter('node'))
- if re.search(r'choose like or dislike to\\s*let us know you better',txt,re.I):
-  m=re.search(r'\\b(1[0-2]|[1-9])\\s*/\\s*12\\b',txt)
+ if re.search(r'choose like or dislike to\s*let us know you better',txt,re.I):
+  m=re.search(r'\b(1[0-2]|[1-9])\s*/\s*12\b',txt)
   if m: print(m.group(1))
 except Exception: pass
 PY
@@ -92,7 +92,7 @@ try:
  for n in nodes:
   t=(n.get('text','')+' '+n.get('content-desc','')).lower()
   if ('like' in t or 'curtir' in t) and 'dislike' not in t and 'choose' not in t:
-   m=re.match(r'\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]',n.get('bounds',''))
+   m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
    if m:
     a,b,c,d=map(int,m.groups())
     if c>a and d>b and b>400:print((a+c)//2,(b+d)//2);break
