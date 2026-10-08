@@ -161,6 +161,45 @@ if ! email_login_visible; then
   exit 35
 fi
 log "KWAI_EMAIL_LOGIN_FORM_VERIFIED"
+if [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
+  log "KWAI_SECRET_CREDENTIALS_PRESENT_AUTOFILL"
+  python3 - <<'PY' || true
+import os,re,subprocess,xml.etree.ElementTree as ET,time
+def call(*args,timeout=8):
+ return subprocess.run(['adb',*args],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=timeout,check=True).stdout
+def nodes():
+ call('shell','uiautomator','dump','/sdcard/kwai-fill.xml',timeout=15)
+ return list(ET.fromstring(call('exec-out','cat','/sdcard/kwai-fill.xml')).iter('node'))
+def tap(n):
+ m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+ if not m:return False
+ a,b,c,d=map(int,m.groups());call('shell','input','tap',str((a+c)//2),str((b+d)//2));return True
+def put(value):
+ # Do not print secrets. Android input text supports ASCII and encoded spaces.
+ if not value or any(ord(ch)<33 or ord(ch)>126 for ch in value):return False
+ call('shell','input','text',value.replace('%','%25'))
+ return True
+try:
+ fields=[n for n in nodes() if n.get('class','').endswith('EditText')]
+ if not fields:raise RuntimeError('no editable fields')
+ for field in fields:
+  label=' '.join((field.get('text',''),field.get('content-desc',''),field.get('resource-id',''),field.get('hint',''))).lower()
+  if any(x in label for x in ('password','senha')):continue
+  if tap(field) and put(os.environ['KWAI_LOGIN']):
+   print('KWAI_LOGIN_FIELD_FILLED')
+   break
+ else:
+  if tap(fields[0]) and put(os.environ['KWAI_LOGIN']):print('KWAI_LOGIN_FIELD_FILLED')
+ time.sleep(1)
+ fields=[n for n in nodes() if n.get('class','').endswith('EditText')]
+ pw=[n for n in fields if any(x in ' '.join((n.get('text',''),n.get('content-desc',''),n.get('resource-id',''))).lower() for x in ('password','senha')) or n.get('password')=='true']
+ if pw and tap(pw[0]) and put(os.environ['KWAI_PASSWORD']):
+  print('KWAI_PASSWORD_FIELD_FILLED')
+ else:print('KWAI_PASSWORD_FIELD_NOT_VISIBLE_MANUAL_STEP_REQUIRED')
+except Exception as e:
+ print('KWAI_AUTOFILL_FAILED',type(e).__name__)
+PY
+fi
 log "KWAI_LOGIN_UI_OPENED"
 log "KWAI_OWNER_INTERACTION_READY"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
