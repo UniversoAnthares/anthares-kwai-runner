@@ -1,3 +1,4 @@
 2026-10-08T17:41:00Z item4-remote-auth-publish
 2026-10-08 manual step1 requested: interactive remote login retry after 600s timeout
 2026-10-08 remote token rotated by owner; new login run
+2026-10-08 early remote access signal validation, 120s window; login only, no publishing
