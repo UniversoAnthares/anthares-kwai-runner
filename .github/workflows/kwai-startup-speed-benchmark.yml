@@ -21,6 +21,11 @@ jobs:
         with:
           path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
           key: kwai-speed-android35-google-apis-x86_64-v1
+      - name: Cache emulator binary
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
       - name: Cache validated vault
         id: vaultcache
         uses: actions/cache@v4
@@ -59,6 +64,10 @@ jobs:
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           mkdir -p "$ANDROID_AVD_HOME"
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if [ ! -x "$SDK/emulator/emulator" ]; then
+            yes | timeout 120 "$SDK/cmdline-tools/latest/bin/sdkmanager" --install emulator >/tmp/kwai-speed-emulator-install.log 2>&1 || true
+          fi
+          test -x "$SDK/emulator/emulator" || { echo "FAILURE_SIGNAL=EMULATOR_PACKAGE_MISSING"; exit 2; }
           echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n kwai-speed -k "system-images;android-35;google_apis;x86_64" --device pixel_5
           sudo chmod 666 /dev/kvm
           t=$(date +%s)
