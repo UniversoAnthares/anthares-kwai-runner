@@ -13,3 +13,5 @@
 2026-10-08 retry after Python newline syntax repair c4d71c6fb72621a8cc856e4918af6a6423f33fad
 
 2026-10-08 owner requested another retry after run 37842647336 failure
+
+2026-10-08 fresh run with Android SDK cache/timeout fix commit 4ef2645fa9133f1d25893628d4ee748608e7370a
