@@ -179,15 +179,26 @@ fi
 email_login_visible(){
   dump_ui || return 1
   python3 - <<'PY'
-import xml.etree.ElementTree as ET
-root=ET.parse('/tmp/kwai-ui.xml').getroot()
-s=' '.join(((n.get('text') or '')+' '+(n.get('content-desc') or '')) for n in root.iter('node')).lower()
-email=('email' in s or 'e-mail' in s or 'e‑mail' in s or 'correio eletrônico' in s)
-entry=('password' in s or 'senha' in s or 'verification code' in s or 'código' in s or 'send code' in s or 'continue' in s or 'continuar' in s)
-google=('accounts.google.com' in s or 'google sign in' in s)
-raise SystemExit(0 if email and entry and not google else 1)
+import re,xml.etree.ElementTree as ET
+try: root=ET.parse('/tmp/kwai-ui.xml').getroot()
+except Exception: raise SystemExit(1)
+nodes=list(root.iter('node'))
+s=' '.join(' '.join((n.get('text',''),n.get('content-desc',''),n.get('resource-id',''))) for n in nodes).lower()
+fields=sum(n.get('class','').endswith('EditText') for n in nodes)
+auth=re.search(r'log.?in|sign.?in|entrar|password|senha|phone number|e-?mail|verification code|código de verificação|send code|continuar com',s)
+focus=__import__('subprocess').run(['adb','shell','dumpsys','window'],capture_output=True,text=True).stdout.lower()
+google='com.google.android.gms' in focus
+raise SystemExit(0 if (not google and (auth or (fields and re.search(r'continue|continuar|next|próximo',s)))) else 1)
 PY
 }
+login_lock(){
+  log "LOGIN_SURFACE_DETECTED"
+  log "LOCKED_ON_LOGIN"
+  adb exec-out screencap -p > kwai-login-detected.png 2>/dev/null || true
+  dump_ui && cp /tmp/kwai-ui.xml kwai-login-detected.xml || true
+  adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' > kwai-login-focus.txt || true
+}
+
 tap_label(){
   local pattern="$1" coords
   dump_ui || return 1
@@ -253,8 +264,10 @@ fi
 if ! email_login_visible; then
   log "FAILURE_SIGNAL=KWAI_EMAIL_LOGIN_NOT_VISIBLE"
   dump_ui && { cp /tmp/kwai-ui.xml kwai-login-navigation.xml; grep -Eo 'text="[^"]*"|content-desc="[^"]*"' /tmp/kwai-ui.xml | tail -65 >> "$REPORT" || true; } || true
+  log "LOGIN_DISCOVERY_DIAGNOSTIC_HOLD_900S"; sleep 900
   exit 35
 fi
+login_lock
 log "KWAI_EMAIL_LOGIN_FORM_VERIFIED"
 if [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
   log "KWAI_SECRET_CREDENTIALS_PRESENT_AUTOFILL"
@@ -320,8 +333,7 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
     if kwai_foreground && [ $((SECONDS-OVERLAY_LAST_CHECK)) -ge 3 ]; then
       OVERLAY_LAST_CHECK=$SECONDS
       dismiss_notification_permission
-      dismiss_resource_overlay
-      dismiss_onboarding_right_heart
+      # Login is locked: no automatic overlay or onboarding taps.
     fi
   fi
   if [ -f /tmp/anthares-android-done ]; then
