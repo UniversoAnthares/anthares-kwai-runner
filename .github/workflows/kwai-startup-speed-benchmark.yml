@@ -77,6 +77,34 @@ jobs:
           echo "COLD_BOOT_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
           "$SDK/platform-tools/adb" shell getprop ro.product.cpu.abilist | sed 's/^/DEVICE_ABI=/' >> "$GITHUB_STEP_SUMMARY"
           echo "TOTAL_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Experiment with reusable AVD snapshot
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          EMU="$SDK/emulator/emulator"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          echo "SNAPSHOT_TEST_VALIDITY=ISOLATED_NON_LOGIN" | tee -a "$GITHUB_STEP_SUMMARY"
+          t=$(date +%s)
+          if ! timeout 75 "$ADB" emu avd snapshot save kwai-ready >/tmp/kwai-snapshot-save.log 2>&1; then
+            echo "SNAPSHOT_SAVE_RESULT=FAILED" | tee -a "$GITHUB_STEP_SUMMARY"
+            cat /tmp/kwai-snapshot-save.log
+            exit 0
+          fi
+          echo "SNAPSHOT_SAVE_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
+          "$ADB" emu kill >/dev/null 2>&1 || true
+          timeout 30 bash -c 'while "$1" get-state >/dev/null 2>&1; do sleep 1; done' _ "$ADB" || true
+          t=$(date +%s)
+          nohup "$EMU" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/kwai-snapshot-reboot.log 2>&1 &
+          if timeout 110 "$ADB" wait-for-device && timeout 110 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"; then
+            echo "SNAPSHOT_RESTORE_BOOT_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "SNAPSHOT_RESTORE_RESULT=BOOTED" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "SNAPSHOT_RESTORE_RESULT=FAILED" | tee -a "$GITHUB_STEP_SUMMARY"
+            tail -35 /tmp/kwai-snapshot-reboot.log || true
+          fi
       - name: Diagnostics
         if: always()
         run: |
