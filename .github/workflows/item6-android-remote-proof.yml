@@ -1,0 +1,45 @@
+name: Item 6 Android remote executor proof
+on:
+  push:
+    branches: ['item6-android-remote-proof']
+    paths:
+      - '.github/workflows/item6-android-remote-proof.yml'
+      - '.item6-android-remote-proof-trigger'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android_remote_executor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate hosted KVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -e /dev/kvm ]; then
+            echo 'TEST_VALIDITY=INVALID_NO_KVM'
+            exit 2
+          fi
+          sudo chmod 666 /dev/kvm
+          echo 'TEST_VALIDITY=KVM_AVAILABLE'
+      - name: Boot Android 35 and prove ADB
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          emulator-boot-timeout: 300
+          script: |
+            adb devices -l
+            timeout 60 sh -c 'until [ "$(adb get-state 2>/dev/null)" = "device" ]; do sleep 2; done'
+            adb get-state | grep -qx device
+            adb shell getprop sys.boot_completed | tr -d '\r' | grep -qx 1
+            echo 'ADB_STATE=device'
+            echo 'SYS_BOOT_COMPLETED=1'
+            echo 'TEST_VALIDITY=ANDROID_BOOTED'
+            echo 'ANDROID_ADB_BOOT=PROVEN'
+            echo 'ITEM6_REMOTE_EXECUTOR=PROVEN'
