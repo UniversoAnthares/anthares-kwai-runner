@@ -10,20 +10,20 @@ capture(){ adb exec-out screencap -p > "$SHOT" 2>/dev/null || true; }
 finish_diag(){ { echo "=== adb ==="; adb devices -l || true; echo "=== package ==="; adb shell pm path com.kwai.video || true; echo "=== foreground ==="; adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | tail -4 || true; echo "=== tunnel ==="; tail -30 /tmp/tunnel.log 2>/dev/null || true; echo "=== ui ==="; tail -30 /tmp/android-ui.log 2>/dev/null || true; } >> "$REPORT"; capture; }
 cleanup(){ finish_diag; [ -n "${UI_PID:-}" ] && kill "$UI_PID" 2>/dev/null || true; [ -n "${TUNNEL_PID:-}" ] && kill "$TUNNEL_PID" 2>/dev/null || true; }
 trap cleanup EXIT
-adb wait-for-device
-for _ in $(seq 1 30); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break; sleep 2; done
-[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { log "FAIL: android-not-ready"; exit 21; }
-log "ANDROID_READY"
+# Start remote UI + tunnel before Android boot so the owner gets the URL immediately.
 python3 kwai_remote_android_ui.py >/tmp/android-ui.log 2>&1 & UI_PID=$!
-for _ in $(seq 1 8); do curl -fsS "http://127.0.0.1:8765/?t=${REMOTE_ANDROID_TOKEN}" >/dev/null 2>&1 && break; sleep 1; done
+for _ in $(seq 1 8); do curl -fsS "http://127.0.0.1:8765/?t=\${REMOTE_ANDROID_TOKEN}" >/dev/null 2>&1 && break; sleep 1; done
 kill -0 "$UI_PID" 2>/dev/null || { log "FAIL: remote-ui-died"; exit 22; }
 /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 >/tmp/tunnel.log 2>&1 & TUNNEL_PID=$!
 URL=""
 for _ in $(seq 1 15); do URL=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log 2>/dev/null | head -1 || true); [ -n "$URL" ] && break; kill -0 "$TUNNEL_PID" 2>/dev/null || break; sleep 1; done
 [ -n "$URL" ] || { log "FAIL: tunnel-url-missing"; exit 23; }
-FULL="$URL/?t=$REMOTE_ANDROID_TOKEN"; log "REMOTE_BASE_URL=$URL"; log "KWAI_REMOTE_ACCESS_AVAILABLE_EARLY"
-printf '### Kwai Android remoto\n\nAbra o URL-base abaixo e acrescente o token privado somente no navegador. O token não é escrito em logs.\n\n%s\n' "$URL" >> "$GITHUB_STEP_SUMMARY"
-if adb shell pm path com.kwai.video 2>/dev/null | grep -q 'package:'; then
+FULL="$URL/?t=${REMOTE_ANDROID_TOKEN}"; log "REMOTE_BASE_URL=$URL"; log "KWAI_REMOTE_ACCESS_AVAILABLE_EARLY"
+printf '### Kwai Android remoto\n\n%s\n' "$URL" >> "$GITHUB_STEP_SUMMARY"
+adb wait-for-device
+for _ in $(seq 1 30); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ] && break; sleep 2; done
+[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ] || { log "FAIL: android-not-ready"; exit 21; }
+log "ANDROID_READY"if adb shell pm path com.kwai.video 2>/dev/null | grep -q 'package:'; then
   log "KWAI_ALREADY_INSTALLED"
 else
   [ -s kwai-vault/MANIFEST.tsv ] || { log "FAIL: validated-vault-missing"; exit 29; }
