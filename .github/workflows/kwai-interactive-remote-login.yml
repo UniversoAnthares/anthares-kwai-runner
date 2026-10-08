@@ -97,8 +97,8 @@ jobs:
           [ -x "$SDKMANAGER" ] || { echo "FAILURE_SIGNAL=SDKMANAGER_NOT_FOUND"; exit 2; }
           [ -x "$AVDMANAGER" ] || { echo "FAILURE_SIGNAL=AVDMANAGER_NOT_FOUND"; exit 2; }
           if [ ! -f "$SDK_ROOT/system-images/android-35/google_apis/x86_64/system.img" ]; then
-            echo "ANDROID_CACHE_MISS_INSTALLING_WITH_90S_LIMIT"
-            timeout 90 "$SDKMANAGER" --install "system-images;android-35;google_apis;x86_64" || { echo "FAILURE_SIGNAL=ANDROID_IMAGE_INSTALL_TIMEOUT"; exit 124; }
+            echo "ANDROID_CACHE_MISS_INSTALLING_WITH_240S_LIMIT"
+            timeout 240 "$SDKMANAGER" --install "system-images;android-35;google_apis;x86_64" || { echo "FAILURE_SIGNAL=ANDROID_IMAGE_INSTALL_TIMEOUT"; exit 124; }
           else
             echo "ANDROID_CACHE_HIT_SKIP_DOWNLOAD"
           fi
