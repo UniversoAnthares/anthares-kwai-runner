@@ -18,6 +18,15 @@ async def main():
             result["buttons"]=(await page.locator("button").all_text_contents())[:60]
             result["links"]=(await page.locator("a").all_text_contents())[:60]
             result["upload_inputs"]=await page.locator('input[type="file"]').count()
+            result["routes"]=[]
+            for path in ["/", "/pt-BR", "/pt-BR/upload", "/upload", "/creator", "/creator/upload", "/pt-BR/creator", "/pt-BR/creator/upload", "/studio", "/pt-BR/studio"]:
+                try:
+                    response=await page.goto("https://www.kwai.com"+path,wait_until="domcontentloaded",timeout=12000)
+                    await page.wait_for_timeout(750)
+                    result["routes"].append({"path":path,"status":response.status if response else None,"final_url":page.url,"title":await page.title(),"file_inputs":await page.locator('input[type="file"]').count(),"upload_text":await page.get_by_text(re.compile("upload|enviar|publicar|postar|carregar vídeo",re.I)).count()})
+                except Exception as err:
+                    result["routes"].append({"path":path,"error":str(err)[:120]})
+            await page.goto("https://www.kwai.com/pt-BR",wait_until="domcontentloaded",timeout=15000)
             result["upload_candidates"]=await page.get_by_text(re.compile("upload|enviar|publicar|postar|carregar vídeo",re.I)).count()
             await page.screenshot(path=str(OUT/"mobile.png"),full_page=True)
         except Exception as e:
