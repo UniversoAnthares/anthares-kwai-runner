@@ -7,3 +7,5 @@
 2026-10-08 rerun after confirmed 1033; monitor and deliver remote URL immediately
 2026-10-08 tunnel-before-Android architecture test
 2026-10-08 restart after failed preboot tunnel attempt
+
+2026-10-08 restart requested after cancelled attempt; remote UI text encoding fixed in a53a600c3eff754603dbf931dcf7f0c5cdea6212
