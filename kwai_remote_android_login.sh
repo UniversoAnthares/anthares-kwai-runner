@@ -24,29 +24,47 @@ dump_ui(){
   [ -s /tmp/kwai-ui.xml ]
 }
 dismiss_notification_permission(){
-  dump_ui || return 0
-  grep -Eqi 'Allow Kwai to send you notifications|Don.t allow|Não permitir|Permitir notificações' /tmp/kwai-ui.xml || return 0
+  # Android runtime permission is a system modal; clear it before onboarding.
   local xy
-  xy="$(python3 - <<'PY'
-import re, xml.etree.ElementTree as ET
+  for attempt in 1 2 3; do
+    dump_ui || { sleep 1; continue; }
+    xy="$(python3 - <<'PY'
+import re,xml.etree.ElementTree as ET
 try:
-    root=ET.parse('/tmp/kwai-ui.xml').getroot()
-    for n in root.iter('node'):
-        label=((n.attrib.get('text') or '')+' '+(n.attrib.get('content-desc') or '')).strip().lower()
-        if 'don.t allow' in label or "don't allow" in label or 'não permitir' in label:
-            m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.attrib.get('bounds',''))
-            if m:
-                x1,y1,x2,y2=map(int,m.groups())
-                print((x1+x2)//2,(y1+y2)//2)
-                break
-except Exception: pass
+ root=ET.parse('/tmp/kwai-ui.xml').getroot()
+ for n in root.iter('node'):
+  label=((n.get('text') or '')+' '+(n.get('content-desc') or '')).strip().lower()
+  rid=(n.get('resource-id') or '').lower()
+  if ("don't allow" in label or "don’t allow" in label or "não permitir" in label or "not now" in label or "permission_deny_button" in rid):
+   m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+   if m:
+    a,b,c,d=map(int,m.groups());print((a+c)//2,(b+d)//2);break
+except Exception:pass
 PY
 )"
-  if [ -n "$xy" ]; then
-    adb shell input tap $xy >/dev/null 2>&1 || true
-    log "KWAI_NOTIFICATION_PERMISSION_DISMISSED"
-  fi
+    if [ -n "$xy" ]; then
+      adb shell input tap $xy >/dev/null 2>&1 || true
+      log "KWAI_NOTIFICATION_PERMISSION_DISMISSED"
+      sleep 1
+      return 0
+    fi
+    # If XML only exposes the modal heading, choose the lower denial button
+    # using device-relative coordinates, not the browser screenshot coordinates.
+    if grep -Eqi 'Allow Kwai to send you notifications|send you notifications|enviar notificações' /tmp/kwai-ui.xml; then
+      local dims w h
+      dims="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
+      w="${dims%x*}"; h="${dims#*x}"
+      if [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]]; then
+        adb shell input tap $((w*50/100)) $((h*62/100)) >/dev/null 2>&1 || true
+        log "KWAI_NOTIFICATION_PERMISSION_DISMISSED_FALLBACK"
+        sleep 1
+        return 0
+      fi
+    fi
+    return 0
+  done
 }
+
 dismiss_resource_overlay(){
   dump_ui || return 0
   grep -Eqi 'Resource downloading|access to all the features|resource.*download' /tmp/kwai-ui.xml || return 0
