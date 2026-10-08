@@ -3,7 +3,7 @@ set -Eeuo pipefail
 REPORT="kwai-remote-status.txt"; SHOT="kwai-remote-ready.png"; : > "$REPORT"
 log(){ printf '%s\n' "$*" | tee -a "$REPORT"; }
 capture(){ adb exec-out screencap -p > "$SHOT" 2>/dev/null || true; }
-finish_diag(){ { echo "=== adb ==="; adb devices -l || true; echo "=== accounts ==="; adb shell dumpsys account 2>/dev/null | grep -E 'Account \{|type=com.google' | tail -20 || true; echo "=== package ==="; adb shell pm path com.kwai.video || true; echo "=== foreground ==="; adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | tail -6 || true; echo "=== tunnel ==="; tail -30 /tmp/tunnel.log 2>/dev/null || true; echo "=== ui ==="; tail -30 /tmp/android-ui.log 2>/dev/null || true; } >> "$REPORT"; capture; }
+finish_diag(){ { echo "=== adb ==="; adb devices -l || true; echo "=== accounts ==="; adb shell dumpsys account 2>/dev/null | grep -E 'Account \{|type=com.google' | tail -20 || true; echo "=== package ==="; adb shell pm path com.kwai.video || true; echo "=== foreground ==="; adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | tail -8 || true; echo "=== activity ==="; adb shell dumpsys activity activities 2>/dev/null | grep -E 'TinyGoogleSSOActivity|SignInHubActivity|SignInActivity|TinyLoginActivity' | tail -20 || true; echo "=== tunnel ==="; tail -30 /tmp/tunnel.log 2>/dev/null || true; echo "=== ui ==="; tail -30 /tmp/android-ui.log 2>/dev/null || true; } >> "$REPORT"; capture; }
 cleanup(){ finish_diag; [ -n "${UI_PID:-}" ] && kill "$UI_PID" 2>/dev/null || true; [ -n "${TUNNEL_PID:-}" ] && kill "$TUNNEL_PID" 2>/dev/null || true; }
 trap cleanup EXIT
 launch_kwai(){
@@ -15,16 +15,9 @@ launch_kwai(){
     adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
   fi
 }
-google_account_present(){ adb shell dumpsys account 2>/dev/null | grep -q 'type=com.google'; }
-google_login_foreground(){ adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | grep -Eq 'com\.google\.android\.(gms|gsf\.login)|com\.android\.settings'; }
-recover_google_to_kwai(){
-  log "GOOGLE_ACCOUNT_PRESENT_RETURNING_TO_KWAI"
-  adb shell am force-stop com.google.android.gsf.login >/dev/null 2>&1 || true
-  adb shell am force-stop com.android.settings >/dev/null 2>&1 || true
-  adb shell am force-stop com.google.android.gms >/dev/null 2>&1 || true
-  sleep 1
-  launch_kwai
-}
+current_focus(){ adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | tail -2 | tr '\n' ' '; }
+google_sso_foreground(){ current_focus | grep -Eq 'com\.google\.android\.gms|TinyGoogleSSOActivity|SignInHubActivity|SignInActivity'; }
+kwai_foreground(){ current_focus | grep -q 'com\.kwai\.video'; }
 adb wait-for-device
 for _ in $(seq 1 30); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ] && break; sleep 2; done
 [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ] || { log "FAIL: android-not-ready"; exit 21; }
@@ -58,16 +51,19 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   printf '\n**KWAI_OWNER_INTERACTION_READY** — use the remote URL shown above.\n' >> "$GITHUB_STEP_SUMMARY"
 fi
 LOGIN_DEADLINE=$((SECONDS+900))
-GOOGLE_STUCK_COUNT=0
+SSO_WAS_ACTIVE=0
+SSO_STARTED_AT=0
 while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
-  if google_account_present && google_login_foreground; then
-    GOOGLE_STUCK_COUNT=$((GOOGLE_STUCK_COUNT+1))
-    if [ "$GOOGLE_STUCK_COUNT" -ge 4 ]; then
-      recover_google_to_kwai
-      GOOGLE_STUCK_COUNT=0
+  if google_sso_foreground; then
+    if [ "$SSO_WAS_ACTIVE" -eq 0 ]; then
+      SSO_WAS_ACTIVE=1; SSO_STARTED_AT=$SECONDS
+      log "GOOGLE_SSO_ACTIVE_DO_NOT_INTERRUPT"
+    elif [ $((SECONDS-SSO_STARTED_AT)) -eq 60 ]; then
+      log "GOOGLE_SSO_STILL_ACTIVE_60S_WAITING_FOR_CALLBACK"
     fi
-  else
-    GOOGLE_STUCK_COUNT=0
+  elif [ "$SSO_WAS_ACTIVE" -eq 1 ]; then
+    SSO_WAS_ACTIVE=0
+    if kwai_foreground; then log "GOOGLE_SSO_RETURNED_TO_KWAI"; else log "GOOGLE_SSO_LEFT_FOREGROUND"; fi
   fi
   if [ -f /tmp/anthares-android-done ]; then
     log "DONE_SIGNAL_RECEIVED"
