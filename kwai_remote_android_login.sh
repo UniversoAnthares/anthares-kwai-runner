@@ -253,7 +253,7 @@ if ! email_login_visible; then
     dismiss_resource_overlay || true
     dismiss_swipe_tutorial || true
     email_login_visible && break
-    if google_sso_foreground; then log "FAILURE_SIGNAL=UNEXPECTED_GOOGLE_SSO"; exit 34; fi
+    if google_sso_foreground; then log "GOOGLE_SSO_ACTIVE_DO_NOT_INTERRUPT"; break; fi
     tap_label '(log[ -]?in|sign[ -]?in|entrar|fazer login|cadastre-se|sign up|register)' || true
     email_login_visible && break
     tap_label '(other methods|other ways|more options|outras opções|outras formas|use another method)' || true
@@ -261,14 +261,13 @@ if ! email_login_visible; then
     tap_label '(e-?mail|email address|endereço de e-mail|continuar com e-mail)' || true
   done
 fi
-if ! email_login_visible; then
+if ! email_login_visible && ! google_sso_foreground; then
   log "FAILURE_SIGNAL=KWAI_EMAIL_LOGIN_NOT_VISIBLE"
   dump_ui && { cp /tmp/kwai-ui.xml kwai-login-navigation.xml; grep -Eo 'text="[^"]*"|content-desc="[^"]*"' /tmp/kwai-ui.xml | tail -65 >> "$REPORT" || true; } || true
   log "LOGIN_DISCOVERY_DIAGNOSTIC_HOLD_900S"; sleep 900
   exit 35
 fi
-login_lock
-log "KWAI_EMAIL_LOGIN_FORM_VERIFIED"
+if email_login_visible; then login_lock; log "KWAI_EMAIL_LOGIN_FORM_VERIFIED"; else log "GOOGLE_SSO_HANDOFF_WAITING"; fi
 if [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
   log "KWAI_SECRET_CREDENTIALS_PRESENT_AUTOFILL"
   python3 - <<'PY' || true
