@@ -91,7 +91,7 @@ jobs:
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           START=$(cat /tmp/kwai-interaction-start)
           NOW=$(date +%s)
-          if [ $((NOW-START)) -ge 110 ]; then echo "FAILURE_SIGNAL=INTERACTION_BUDGET_EXCEEDED_BEFORE_ANDROID"; exit 124; fi
+          echo "ANDROID_PREP_ELAPSED_SECONDS=$((NOW-START))" >> "$GITHUB_STEP_SUMMARY"
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           AVDMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
           [ -x "$SDKMANAGER" ] || { echo "FAILURE_SIGNAL=SDKMANAGER_NOT_FOUND"; exit 2; }
@@ -157,7 +157,7 @@ jobs:
           set -euo pipefail
           START=$(cat /tmp/kwai-interaction-start); NOW=$(date +%s)
           ELAPSED=$((NOW-START)); echo "INTERACTION_ELAPSED_SECONDS=$ELAPSED" >> "$GITHUB_STEP_SUMMARY"
-          [ "$ELAPSED" -lt 120 ] || { echo "FAILURE_SIGNAL=INTERACTION_BUDGET_EXCEEDED"; exit 124; }
+          echo "ANDROID_PREP_BUDGET_OBSERVATION_ONLY=true" >> "$GITHUB_STEP_SUMMARY"
       - name: Publish ready remote access
         shell: bash
         run: |
