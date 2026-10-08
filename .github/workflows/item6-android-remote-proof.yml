@@ -34,15 +34,11 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 300
           script: |
-            set -eu
-            adb kill-server || true
-            adb start-server
             adb devices -l
-            timeout 60 adb wait-for-device
-            state="$(adb get-state)"
-            echo "ADB_STATE=$state"
-            test "$state" = "device"
-            timeout 120 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+            timeout 60 sh -c 'until [ "$(adb get-state 2>/dev/null)" = "device" ]; do sleep 2; done'
+            adb get-state | grep -qx device
+            adb shell getprop sys.boot_completed | tr -d '\r' | grep -qx 1
+            echo 'ADB_STATE=device'
             echo 'SYS_BOOT_COMPLETED=1'
             echo 'TEST_VALIDITY=ANDROID_BOOTED'
             echo 'ANDROID_ADB_BOOT=PROVEN'
