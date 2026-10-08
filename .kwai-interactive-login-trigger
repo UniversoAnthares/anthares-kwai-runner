@@ -4,3 +4,4 @@
 2026-10-08 early remote access signal validation, 120s window; login only, no publishing
 2026-10-08 rerun after user-cancelled attempt; enforce 120s interaction target
 2026-10-08 retry after cache warm-up; target remote access under 120s
+2026-10-08 rerun after confirmed 1033; monitor and deliver remote URL immediately
