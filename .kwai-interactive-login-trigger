@@ -9,3 +9,5 @@
 2026-10-08 restart after failed preboot tunnel attempt
 
 2026-10-08 restart requested after cancelled attempt; remote UI text encoding fixed in a53a600c3eff754603dbf931dcf7f0c5cdea6212
+
+2026-10-08 retry after Python newline syntax repair c4d71c6fb72621a8cc856e4918af6a6423f33fad
