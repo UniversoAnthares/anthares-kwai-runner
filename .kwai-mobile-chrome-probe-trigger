@@ -15,3 +15,5 @@ click visible login controls test
 interaction diagnostics follow click
 
 inspect social dialog after follow
+
+retry social dialog forced click
