@@ -28,6 +28,7 @@ jobs:
           date +%s > /tmp/kwai-interaction-start
           echo 'INTERACTION_BUDGET_SECONDS=120' >> "$GITHUB_STEP_SUMMARY"
       - name: Restore Android system image cache
+        id: android-cache
         uses: actions/cache/restore@v4
         with:
           path: |
@@ -62,6 +63,16 @@ jobs:
           echo "$(dirname "$EMULATOR")" >> "$GITHUB_PATH"
           echo "$(dirname "$ADB")" >> "$GITHUB_PATH"
           echo no | "$AVDMANAGER" create avd -n anthares-remote -k "system-images;android-35;google_apis;x86_64" --device "pixel_5"
+      - name: Save Android system image cache
+        if: steps.android-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/system-images
+            ${{ env.ANDROID_HOME }}/platforms
+            ${{ env.ANDROID_HOME }}/platform-tools
+            ${{ env.ANDROID_HOME }}/emulator
+          key: android35-api-x86_64-${{ runner.os }}
       - name: Enable KVM
         shell: bash
         run: |
