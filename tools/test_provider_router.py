@@ -21,8 +21,8 @@ class Clock:
         self.value += seconds
 
 
-def snap(provider, head, status=ProviderStatus.READY):
-    return ProviderSnapshot(provider, "repo", "main", head, status)
+def snap(provider, head, status=ProviderStatus.READY, content_id=None):
+    return ProviderSnapshot(provider, "repo", "main", head, status, content_id)
 
 
 class RouterTests(unittest.TestCase):
@@ -60,6 +60,34 @@ class RouterTests(unittest.TestCase):
         self.router.update(snap("gitlab", "xyz"))
         with self.assertRaises(CheckpointDiverged):
             self.router.failover("op1", "agent")
+
+    def test_failover_allows_different_commits_with_same_content(self):
+        self.router.update(snap("github", "gh-commit", content_id="tree-1"))
+        self.router.update(snap("gitlab", "gl-commit", content_id="tree-1"))
+        self.router.acquire("op-eq", "agent", "repo", "main")
+        self.router.update(
+            snap("github", "gh-commit", ProviderStatus.BLOCKED_QUOTA, "tree-1")
+        )
+        lease = self.router.failover("op-eq", "agent")
+        self.assertEqual(lease.provider, "gitlab")
+        self.assertEqual(lease.generation, 2)
+
+    def test_failover_rejects_different_content_even_with_peer_ready(self):
+        self.router.update(snap("github", "gh-commit", content_id="tree-1"))
+        self.router.update(snap("gitlab", "gl-commit", content_id="tree-2"))
+        self.router.acquire("op-div", "agent", "repo", "main")
+        self.router.update(
+            snap("github", "gh-commit", ProviderStatus.BLOCKED_QUOTA, "tree-1")
+        )
+        with self.assertRaises(CheckpointDiverged):
+            self.router.failover("op-div", "agent")
+
+    def test_lease_still_fences_same_provider_head_movement(self):
+        self.router.update(snap("github", "a", content_id="tree"))
+        self.router.acquire("op-fence", "agent", "repo", "main")
+        self.router.update(snap("github", "b", content_id="tree"))
+        with self.assertRaises(CheckpointDiverged):
+            self.router.acquire("op-fence", "agent", "repo", "main")
 
     def test_no_provider_means_no_execution(self):
         self.router.update(snap("github", "abc", ProviderStatus.BLOCKED_QUOTA))
