@@ -116,7 +116,7 @@ PAGE="""<!doctype html><meta name=viewport content='width=device-width,initial-s
 const q=new URLSearchParams(location.search),t=q.get('t'),s=document.getElementById('s'),state=document.getElementById('state'),mark=document.getElementById('mark');let loading=false,errors=0,lastGood=0,tapBusy=false;
 async function timedFetch(url,opt={}){let c=new AbortController(),tm=setTimeout(()=>c.abort(),4500);try{return await fetch(url,{...opt,signal:c.signal,cache:'no-store'})}finally{clearTimeout(tm)}}
 async function refresh(){if(loading)return;loading=true;try{let r=await timedFetch('/shot?t='+encodeURIComponent(t)+'&v='+Date.now());if(!r.ok)throw Error(r.status);errors=0;let ready=r.headers.get('X-Android-Ready')==='1';state.textContent=ready?'Android pronto':'Android inicializando...';let b=await r.blob(),u=URL.createObjectURL(b),old=s.dataset.url;s.src=u;s.dataset.url=u;lastGood=Date.now();if(old)URL.revokeObjectURL(old)}catch(e){errors++;state.textContent=errors<3?'Reconectando à tela...':'Tela temporariamente indisponível — tentando novamente';console.warn('screenshot',e)}finally{loading=false}}
-setInterval(refresh,1000);refresh();
+setInterval(refresh,2500);refresh();
 async function sendTap(e){e.preventDefault();if(tapBusy)return;let r=s.getBoundingClientRect(),rx=(e.clientX-r.left)/r.width,ry=(e.clientY-r.top)/r.height;if(rx<0||rx>1||ry<0||ry>1)return;tapBusy=true;mark.style.left=(rx*100)+'%';mark.style.top=(ry*100)+'%';mark.style.display='block';state.textContent='Enviando toque...';try{let rr=await timedFetch('/tap?t='+encodeURIComponent(t)+'&rx='+rx.toFixed(6)+'&ry='+ry.toFixed(6),{method:'POST'});if(!rr.ok)throw Error(rr.status);state.textContent='Toque enviado';setTimeout(refresh,120);setTimeout(refresh,450);setTimeout(refresh,900)}catch(err){state.textContent='Falha no toque — tente novamente';console.warn('tap',err)}finally{setTimeout(()=>{tapBusy=false;mark.style.display='none'},180)}}
 s.addEventListener('pointerup',sendTap);s.addEventListener('dragstart',e=>e.preventDefault());
 function key(k){fetch('/key?t='+encodeURIComponent(t)+'&k='+k,{method:'POST'}).then(refresh)}function kwai(){fetch('/kwai?t='+encodeURIComponent(t),{method:'POST'}).then(()=>setTimeout(refresh,600))}function fixkwai(){fetch('/fixkwai?t='+encodeURIComponent(t),{method:'POST'}).then(()=>setTimeout(refresh,1200))}
@@ -134,7 +134,7 @@ class H(BaseHTTPRequestHandler):
     now=time.monotonic()
     if ready and (now-SHOT_CACHE["at"]>0.65 or not SHOT_CACHE["bytes"]):
      try:
-      b=adb("exec-out","screencap","-p",timeout=2.5)
+      b=adb("exec-out","screencap","-p",timeout=5)
       if b.startswith(b"\x89PNG"):
        SHOT_CACHE["bytes"]=b;SHOT_CACHE["at"]=now;SHOT_CACHE["ok_at"]=now
      except Exception:
