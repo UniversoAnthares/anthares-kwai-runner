@@ -6,3 +6,4 @@
 2026-10-08 retry after cache warm-up; target remote access under 120s
 2026-10-08 rerun after confirmed 1033; monitor and deliver remote URL immediately
 2026-10-08 tunnel-before-Android architecture test
+2026-10-08 restart after failed preboot tunnel attempt
