@@ -31,6 +31,7 @@ class H(BaseHTTPRequestHandler):
        SHOT_CACHE["bytes"]=b;SHOT_CACHE["at"]=now
      except (subprocess.TimeoutExpired,OSError): pass
     b=SHOT_CACHE["bytes"]
+    b=SHOT_CACHE["bytes"]
     ready=bool(b)
    if not b:
     b=waiting_svg();ctype="image/svg+xml"
