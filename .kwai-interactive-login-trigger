@@ -29,3 +29,9 @@
 2026-10-08 validate automatic repeated dismissal of Kwai Resource downloading 5% overlay without interrupting Google SSO
 
 2026-10-08 rerun after resilient screenshot/ADB boot handling fix 7400aeff0f5caf77fda662025f2375e0eee19611
+
+2026-10-08 five-parallel-user-request test 1 review-runs-47-51 no-cancellation
+2026-10-08 five-parallel-user-request test 2 review-runs-47-51 no-cancellation
+2026-10-08 five-parallel-user-request test 3 review-runs-47-51 no-cancellation
+2026-10-08 five-parallel-user-request test 4 review-runs-47-51 no-cancellation
+2026-10-08 five-parallel-user-request test 5 review-runs-47-51 no-cancellation
