@@ -66,40 +66,25 @@ PY
 }
 
 complete_kwai_interest_onboarding(){
-  # Kwai's 12-step like/dislike introduction must be completed before Profile.
-  # Read each step from the live UI; never tap blindly outside this screen.
-  local step xy attempts=0
-  for attempts in $(seq 1 18); do
-    dump_ui || { sleep 1; continue; }
-    step="$(python3 - <<'PY'
-import re,xml.etree.ElementTree as ET
-try:
- root=ET.parse('/tmp/kwai-ui.xml').getroot()
- txt=' '.join((n.get('text','')+' '+n.get('content-desc','')) for n in root.iter('node'))
- if re.search(r'choose like or dislike to\s*let us know you better',txt,re.I):
-  m=re.search(r'\b(1[0-2]|[1-9])\s*/\s*12\b',txt)
-  if m: print(m.group(1))
-except Exception: pass
-PY
-)"
-    [ -n "$step" ] || return 0
-    # The RIGHT heart is the dislike button. Use its center, never the left heart.
-    local dims w h
-    dims="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
-    w="${dims%x*}"; h="${dims#*x}"
-    [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]] || return 1
-    # Interest-screen video occupies a centered viewport; right heart at ~75% width, ~94% height.
-    xy="$((w*75/100)) $((h*92/100))"
-    adb shell input tap $xy >/dev/null 2>&1 || return 1
-    log "KWAI_ONBOARDING_INTEREST_STEP=${step}/12"
-    sleep 2
+  # Use UI text when available; on video overlays UIAutomator may omit text.
+  # The onboarding occupies 12 slides, always select RIGHT heart, never left.
+  local i dims w h
+  dims="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
+  w="${dims%x*}"; h="${dims#*x}"
+  [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]] || return 0
+  for i in $(seq 1 15); do
     dump_ui || true
-    if grep -Eqi "Choose like or dislike|let us know you better" /tmp/kwai-ui.xml 2>/dev/null; then
-      log "KWAI_ONBOARDING_STEP_RECHECK_AFTER_TAP"
+    if grep -Eqi 'Profile|Perfil|Discover|Descobrir|Inbox|Caixa de entrada' /tmp/kwai-ui.xml 2>/dev/null && ! grep -Eqi 'Choose like or dislike|let us know you better' /tmp/kwai-ui.xml 2>/dev/null; then
+      log "KWAI_ONBOARDING_MAIN_NAV_VISIBLE"; return 0
     fi
+    # Right heart from user screenshot: x≈75%, y≈92.5% of Android viewport.
+    adb shell input tap $((w*75/100)) $((h*925/1000)) >/dev/null 2>&1 || true
+    log "KWAI_ONBOARDING_RIGHT_HEART_ATTEMPT=$i"
+    sleep 2
   done
-  log "KWAI_ONBOARDING_INTEREST_MAX_ATTEMPTS"
+  log "KWAI_ONBOARDING_RIGHT_HEART_ATTEMPTS_EXHAUSTED"
 }
+
 dismiss_onboarding_right_heart(){
   dump_ui || return 0
   if ! grep -Eqi 'Choose like or dislike|let us know you better' /tmp/kwai-ui.xml; then return 0; fi
