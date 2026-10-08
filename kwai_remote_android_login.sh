@@ -21,7 +21,7 @@ kill -0 "$UI_PID" 2>/dev/null || { log "FAIL: remote-ui-died"; exit 22; }
 URL=""
 for _ in $(seq 1 15); do URL=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log 2>/dev/null | head -1 || true); [ -n "$URL" ] && break; kill -0 "$TUNNEL_PID" 2>/dev/null || break; sleep 1; done
 [ -n "$URL" ] || { log "FAIL: tunnel-url-missing"; exit 23; }
-FULL="$URL/?t=$REMOTE_ANDROID_TOKEN"; log "REMOTE_BASE_URL=$URL"
+FULL="$URL/?t=$REMOTE_ANDROID_TOKEN"; log "REMOTE_BASE_URL=$URL"; log "KWAI_REMOTE_ACCESS_AVAILABLE_EARLY"
 printf '### Kwai Android remoto\n\nAbra o URL-base abaixo e acrescente o token privado somente no navegador. O token não é escrito em logs.\n\n%s\n' "$URL" >> "$GITHUB_STEP_SUMMARY"
 if adb shell pm path com.kwai.video 2>/dev/null | grep -q 'package:'; then
   log "KWAI_ALREADY_INSTALLED"
