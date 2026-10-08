@@ -6,7 +6,9 @@ The router is deliberately provider-neutral:
 - No provider is intrinsically authoritative.
 - One operation can hold only one execution lease at a time.
 - Failover is allowed only when the current provider is unavailable and
-  the target provider has the same verified checkpoint commit.
+  the target provider has the same verified repository content checkpoint.
+- Different provider commit IDs are allowed when an explicit content ID
+  (for example the Git tree SHA) proves byte-equivalent repository content.
 - Durable persistence belongs to anthares-control; this module is the
   deterministic policy/state-machine layer used by adapters.
 """
@@ -55,6 +57,7 @@ class ProviderSnapshot:
     ref: str
     head: str
     status: ProviderStatus
+    content_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,7 @@ class Checkpoint:
     repository: str
     ref: str
     commit: str
+    content_id: Optional[str] = None
 
 
 @dataclass
@@ -100,6 +104,7 @@ class DualProviderRouter:
             snapshot.ref,
             snapshot.head,
             ProviderStatus(snapshot.status),
+            snapshot.content_id,
         )
 
     def snapshot(self, provider: str) -> ProviderSnapshot:
@@ -127,10 +132,7 @@ class DualProviderRouter:
         return lease
 
     def _next_ready_provider(self, repository: str, ref: str) -> Optional[str]:
-        ready = [
-            p for p in self.providers
-            if self._ready(p, repository, ref)
-        ]
+        ready = [p for p in self.providers if self._ready(p, repository, ref)]
         if not ready:
             return None
         start = (self._last_selected + 1) % len(self.providers)
@@ -140,6 +142,16 @@ class DualProviderRouter:
                 self._last_selected = self.providers.index(provider)
                 return provider
         return None
+
+    @staticmethod
+    def _same_checkpoint(target: ProviderSnapshot, checkpoint: Checkpoint) -> bool:
+        if target.head == checkpoint.commit:
+            return True
+        return bool(
+            target.content_id
+            and checkpoint.content_id
+            and target.content_id == checkpoint.content_id
+        )
 
     def acquire(
         self,
@@ -160,6 +172,8 @@ class DualProviderRouter:
                     f"current provider {active.provider} is no longer ready; use failover"
                 )
             current = self.snapshot(active.provider)
+            # A lease is fenced to the exact provider HEAD it acquired. Even a
+            # content-equivalent new commit means someone else wrote concurrently.
             if current.head != active.checkpoint.commit:
                 raise CheckpointDiverged(
                     f"current provider {active.provider} moved from "
@@ -178,7 +192,12 @@ class DualProviderRouter:
             owner=owner,
             provider=provider,
             generation=1,
-            checkpoint=Checkpoint(repository, ref, current.head),
+            checkpoint=Checkpoint(
+                repository,
+                ref,
+                current.head,
+                current.content_id,
+            ),
             expires_at=self.clock() + ttl_seconds,
         )
         self._leases[operation_id] = lease
@@ -209,7 +228,8 @@ class DualProviderRouter:
             )
 
         candidates = [
-            p for p in self.providers
+            p
+            for p in self.providers
             if p != lease.provider
             and self._ready(p, lease.checkpoint.repository, lease.checkpoint.ref)
         ]
@@ -222,9 +242,9 @@ class DualProviderRouter:
 
         target = candidates[0]
         target_snapshot = self.snapshot(target)
-        if target_snapshot.head != lease.checkpoint.commit:
+        if not self._same_checkpoint(target_snapshot, lease.checkpoint):
             raise CheckpointDiverged(
-                f"target {target} is at {target_snapshot.head}, expected "
+                f"target {target} content does not match checkpoint "
                 f"{lease.checkpoint.commit}"
             )
 
@@ -243,7 +263,7 @@ class DualProviderRouter:
                 f"provider {lease.provider} is not READY at completion"
             )
         del self._leases[operation_id]
-        return Checkpoint(final.repository, final.ref, final.head)
+        return Checkpoint(final.repository, final.ref, final.head, final.content_id)
 
     def release(self, operation_id: str, owner: str) -> None:
         lease = self._active_lease(operation_id)
@@ -259,4 +279,5 @@ def snapshot_from_dict(data: dict) -> ProviderSnapshot:
         ref=data["ref"],
         head=data["head"],
         status=ProviderStatus(data["status"]),
+        content_id=data.get("content_id"),
     )
