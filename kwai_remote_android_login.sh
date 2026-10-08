@@ -228,6 +228,13 @@ if ! email_login_visible; then
     *) tap_label '(Profile|Perfil|Me)' || true ;;
   esac
   sleep 2
+  # UIAutomator sometimes omits the bottom Profile label on Kwai's video feed.
+  # Tap the known rightmost bottom navigation item using screen-relative bounds.
+  if ! email_login_visible; then
+    log "KWAI_PROFILE_BOTTOM_RIGHT_FALLBACK"
+    adb shell input tap $((width*94/100)) $((height*95/100)) >/dev/null 2>&1 || true
+    sleep 3
+  fi
   for _ in $(seq 1 5); do
     complete_kwai_interest_onboarding || true
     dismiss_resource_overlay || true
