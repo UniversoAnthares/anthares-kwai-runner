@@ -39,6 +39,21 @@ async def main():
                     result["auth_discovery"].append(item)
                 except Exception as err:
                     result["auth_discovery"].append({"url":target,"error":str(err)[:180]})
+            result["interactive_discovery"]=[]
+            for target in ["https://www.kwai.com/video/upload","https://www.kwai.com/","https://www.kwai.com/@universo.anthares"]:
+                try:
+                    await page.goto(target,wait_until="domcontentloaded",timeout=12000)
+                    await page.wait_for_timeout(1800)
+                    data=await page.evaluate("""() => ({
+                        bodyText:document.body?.innerText?.slice(0,1800)||'',
+                        clickable:[...document.querySelectorAll('[role=button],[onclick],[tabindex],svg')].slice(0,50).map(e=>({tag:e.tagName,role:e.getAttribute('role'),aria:e.getAttribute('aria-label'),text:e.textContent?.slice(0,80)})),
+                        frames:[...document.querySelectorAll('iframe')].map(e=>e.src),
+                        scripts:[...document.scripts].map(e=>e.src).filter(Boolean).slice(0,25),
+                        nextData:!!document.querySelector('#__NEXT_DATA__')
+                    })""")
+                    result["interactive_discovery"].append({"url":target,**data})
+                except Exception as err:
+                    result["interactive_discovery"].append({"url":target,"error":str(err)[:140]})
             await page.screenshot(path=str(OUT/"mobile.png"),full_page=True)
         except Exception as e:
             result["error"]=str(e)[:300]
