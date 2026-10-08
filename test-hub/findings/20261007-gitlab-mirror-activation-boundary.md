@@ -12,7 +12,7 @@ SUPERSEDES: none
 Deixar o transporte GitHub → GitLab preparado sem armazenar credenciais no repositório.
 
 ## Resultado
-O workflow foi restaurado no repositório `anthares-kwai-runner`, submetido no PR #8 e mesclado em `main`.
+O workflow foi restaurado em uma branch dedicada, submetido no PR #8 e mesclado em `main`. A ativação autenticada continua deliberadamente condicionada ao secret `GITLAB_MIRROR_URL`.
 
 ## Evidência decisiva
 O workflow valida `GITLAB_MIRROR_URL` antes de qualquer push e compara o SHA de `main` entre os provedores após o push.
