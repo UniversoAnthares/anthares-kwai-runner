@@ -23,3 +23,5 @@
 2026-10-08 corrected tunnel lifecycle, PID handoff, startup placeholder, and text-command feedback; fresh validation run
 
 2026-10-08 parallel retry after diagnostics of exit 23, Android cache path and interaction budget
+
+2026-10-08 Google account setup completed but returned to sign-in; auto-detect account and force return to Kwai
