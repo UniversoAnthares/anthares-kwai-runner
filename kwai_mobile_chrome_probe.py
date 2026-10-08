@@ -75,6 +75,23 @@ async def main():
                     result["login_click_probe"].append({"url":target,"actions":actions,"clicked":clicked,"inputs_before":before,"inputs_after":await page.locator('input').count(),"dialogs":await page.locator('[role=dialog]').count(),"body_after":(await page.locator("body").inner_text())[:450]})
                 except Exception as err:
                     result["login_click_probe"].append({"url":target,"error":str(err)[:150]})
+            result["interaction_diagnostics"]=[]
+            for target in ["https://www.kwai.com/","https://www.kwai.com/@universo.anthares"]:
+                try:
+                    await page.goto(target,wait_until="domcontentloaded",timeout=12000)
+                    await page.wait_for_timeout(1600)
+                    elements=await page.evaluate("""() => [...document.querySelectorAll('*')].filter(e=>['Seguir','Publicar','Abrir o Kwai'].includes((e.textContent||'').trim()) && e.children.length===0).slice(0,12).map(e=>({tag:e.tagName,text:e.textContent,outer:e.parentElement?.outerHTML.slice(0,450)}))""")
+                    before=page.url
+                    follow=page.get_by_text("Seguir",exact=True)
+                    if await follow.count():
+                        try:
+                            await follow.first.click(timeout=2200)
+                        except Exception:
+                            pass
+                    await page.wait_for_timeout(1600)
+                    result["interaction_diagnostics"].append({"url":target,"elements":elements,"after_url":page.url,"changed_url":before!=page.url,"dialogs":await page.locator('[role=dialog]').count(),"inputs":await page.locator('input').count(),"visible_text":(await page.locator('body').inner_text())[:650]})
+                except Exception as err:
+                    result["interaction_diagnostics"].append({"url":target,"error":str(err)[:170]})
             await page.screenshot(path=str(OUT/"mobile.png"),full_page=True)
         except Exception as e:
             result["error"]=str(e)[:300]
