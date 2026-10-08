@@ -98,9 +98,8 @@ for _ in range(12):
     if any(x in text for x in AUTH):
         print("KWAI_AUTH_STATE=AUTH_REQUIRED")
         sys.exit(10)
-    if strong_authenticated(text,nodes):
-        print("KWAI_AUTH_STATE=AUTHENTICATED_UI")
-        sys.exit(0)
+    # Do not accept identity markers from feed cards or third-party profiles.
+    # Authentication can only be accepted after navigating to own Profile.
     # Anonymous MAIN is intentionally inconclusive. Use the proven semantic
     # Profile route to seek explicit account identity, while respecting dynamic
     # module loading and refusing to turn loading/timeouts into auth proof.
