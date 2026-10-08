@@ -12,7 +12,7 @@ permissions:
 jobs:
   remote-login:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 12
     env:
       KWAI_SESSION_FILE: kwai-session.enc
       ANTHARES_CONTROL_URL: https://anthares-control.anthares1.workers.dev
@@ -112,14 +112,6 @@ jobs:
         with:
           path: kwai-session.enc
           key: kwai-session-${{ runner.os }}-${{ github.run_id }}
-      - name: Publish one queued item in authenticated session
-        env:
-          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
-          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash kwai_queue_publish_runtime.sh
       - name: Upload diagnostics only
         if: always()
         uses: actions/upload-artifact@v4
