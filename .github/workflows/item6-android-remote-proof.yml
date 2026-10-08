@@ -34,7 +34,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 300
           script: |
-            set -euo pipefail
+            set -eu
             adb kill-server || true
             adb start-server
             adb devices -l
