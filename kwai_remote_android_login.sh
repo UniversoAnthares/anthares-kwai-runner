@@ -104,6 +104,109 @@ if ! grep -Eq 'text="[^"]+"|content-desc="[^"]+"' /tmp/kwai-ui.xml 2>/dev/null; 
   adb logcat -d -t 500 2>/dev/null | grep -Ei 'AndroidRuntime|FATAL EXCEPTION|UnsatisfiedLinkError|linker|com\.kwai\.video|gifshow' | tail -120 >>"$REPORT" || true
   exit 32
 fi
+# Navigate to Kwai's email login; do not mistake the feed for a login screen.
+email_login_visible(){
+  dump_ui || return 1
+  python3 - <<'PY'
+import xml.etree.ElementTree as ET
+root=ET.parse('/tmp/kwai-ui.xml').getroot()
+s=' '.join(((n.get('text') or '')+' '+(n.get('content-desc') or '')) for n in root.iter('node')).lower()
+email=('email' in s or 'e-mail' in s or 'e‑mail' in s or 'correio eletrônico' in s)
+entry=('password' in s or 'senha' in s or 'verification code' in s or 'código' in s or 'send code' in s or 'continue' in s or 'continuar' in s)
+google=('accounts.google.com' in s or 'google sign in' in s)
+raise SystemExit(0 if email and entry and not google else 1)
+PY
+}
+tap_label(){
+  local pattern="$1" coords
+  dump_ui || return 1
+  coords="$(LABEL_PATTERN="$pattern" python3 - <<'PY'
+import os,re,xml.etree.ElementTree as ET
+p=re.compile(os.environ['LABEL_PATTERN'],re.I)
+try:
+ root=ET.parse('/tmp/kwai-ui.xml').getroot()
+ for n in root.iter('node'):
+  t=(n.get('text') or '')+' '+(n.get('content-desc') or '')
+  if p.search(t):
+   m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
+   if m:
+    a,b,c,d=map(int,m.groups())
+    if c>a and d>b:
+     print((a+c)//2,(b+d)//2);break
+except Exception: pass
+PY
+)"
+  [ -n "$coords" ] || return 1
+  adb shell input tap $coords >/dev/null 2>&1
+  sleep 2
+}
+if ! email_login_visible; then
+  log "KWAI_EMAIL_LOGIN_NAVIGATION_STARTED"
+  # The bottom-right Profile tab is a fallback when the feed's icons are not in UIAutomator.
+  tap_label '^(Profile|Perfil|Eu|Me)
+log "KWAI_OWNER_INTERACTION_READY"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  printf '\n**KWAI_OWNER_INTERACTION_READY** — use the remote URL shown above.\n' >> "$GITHUB_STEP_SUMMARY"
+fi
+LOGIN_DEADLINE=$((SECONDS+900))
+SSO_WAS_ACTIVE=0
+SSO_STARTED_AT=0
+OVERLAY_LAST_CHECK=0
+while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
+  if google_sso_foreground; then
+    if [ "$SSO_WAS_ACTIVE" -eq 0 ]; then
+      SSO_WAS_ACTIVE=1; SSO_STARTED_AT=$SECONDS
+      log "GOOGLE_SSO_ACTIVE_DO_NOT_INTERRUPT"
+    elif [ $((SECONDS-SSO_STARTED_AT)) -eq 60 ]; then
+      log "GOOGLE_SSO_STILL_ACTIVE_60S_WAITING_FOR_CALLBACK"
+    fi
+  else
+    if [ "$SSO_WAS_ACTIVE" -eq 1 ]; then
+      SSO_WAS_ACTIVE=0
+      if kwai_foreground; then log "GOOGLE_SSO_RETURNED_TO_KWAI"; else log "GOOGLE_SSO_LEFT_FOREGROUND"; fi
+    fi
+    if kwai_foreground && [ $((SECONDS-OVERLAY_LAST_CHECK)) -ge 3 ]; then
+      OVERLAY_LAST_CHECK=$SECONDS
+      dismiss_notification_permission
+      dismiss_resource_overlay
+    fi
+  fi
+  if [ -f /tmp/anthares-android-done ]; then
+    log "DONE_SIGNAL_RECEIVED"
+    dump_ui || true
+    if ! python3 kwai_auth_probe.py > /tmp/kwai-auth-probe.log 2>&1 || ! grep -qx "KWAI_AUTH_STATE=AUTHENTICATED_UI" /tmp/kwai-auth-probe.log; then
+      log "LOGIN_NOT_CONFIRMED_IDENTITY_UNKNOWN"; rm -f /tmp/anthares-android-done
+    else
+      log "KWAI_LOGIN_CONFIRMED"
+      capture
+      adb shell run-as com.kwai.video id >>"$REPORT" 2>&1 && log "APP_STATE_RUN_AS_AVAILABLE" || log "APP_STATE_RUN_AS_UNAVAILABLE"
+      bash kwai_session_state.sh save >>"$REPORT" 2>&1 || log "KWAI_SESSION_SAVE_WARNING"
+      exit 0
+    fi
+  fi
+  kill -0 "$UI_PID" 2>/dev/null || { log "FAIL: remote-ui-died-during-login"; exit 26; }
+  kill -0 "$TUNNEL_PID" 2>/dev/null || { log "FAIL: tunnel-died-during-login"; exit 27; }
+  sleep 1
+done
+log "FAIL: login-window-expired-900s"; exit 28
+ || adb shell input tap 990 1685 || true
+  sleep 2
+  for _ in $(seq 1 5); do
+    email_login_visible && break
+    if google_sso_foreground; then log "FAILURE_SIGNAL=UNEXPECTED_GOOGLE_SSO"; exit 34; fi
+    tap_label '(log[ -]?in|sign[ -]?in|entrar|fazer login|cadastre-se|sign up|register)' || true
+    email_login_visible && break
+    tap_label '(other methods|other ways|more options|outras opções|outras formas|use another method)' || true
+    email_login_visible && break
+    tap_label '(e-?mail|email address|endereço de e-mail|continuar com e-mail)' || true
+  done
+fi
+if ! email_login_visible; then
+  log "FAILURE_SIGNAL=KWAI_EMAIL_LOGIN_NOT_VISIBLE"
+  dump_ui && cp /tmp/kwai-ui.xml kwai-login-navigation.xml || true
+  exit 35
+fi
+log "KWAI_EMAIL_LOGIN_FORM_VERIFIED"
 log "KWAI_LOGIN_UI_OPENED"
 log "KWAI_OWNER_INTERACTION_READY"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
