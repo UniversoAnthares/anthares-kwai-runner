@@ -88,6 +88,13 @@ jobs:
           set -euo pipefail
           curl -fL --retry 3 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x /tmp/cloudflared
+                - name: Restore encrypted session cache
+        uses: actions/cache/restore@v4
+        with:
+          path: kwai-session.enc
+          key: kwai-session-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            kwai-session-${{ runner.os }}-
       - name: Interactive owner login
         env:
           REMOTE_ANDROID_TOKEN: ${{ secrets.REMOTE_ANDROID_TOKEN }}
