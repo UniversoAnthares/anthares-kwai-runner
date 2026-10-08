@@ -229,6 +229,8 @@ if ! email_login_visible; then
   esac
   sleep 2
   for _ in $(seq 1 5); do
+    complete_kwai_interest_onboarding || true
+    dismiss_resource_overlay || true
     email_login_visible && break
     if google_sso_foreground; then log "FAILURE_SIGNAL=UNEXPECTED_GOOGLE_SSO"; exit 34; fi
     tap_label '(log[ -]?in|sign[ -]?in|entrar|fazer login|cadastre-se|sign up|register)' || true
@@ -240,7 +242,7 @@ if ! email_login_visible; then
 fi
 if ! email_login_visible; then
   log "FAILURE_SIGNAL=KWAI_EMAIL_LOGIN_NOT_VISIBLE"
-  dump_ui && cp /tmp/kwai-ui.xml kwai-login-navigation.xml || true
+  dump_ui && { cp /tmp/kwai-ui.xml kwai-login-navigation.xml; grep -Eo 'text="[^"]*"|content-desc="[^"]*"' /tmp/kwai-ui.xml | tail -65 >> "$REPORT" || true; } || true
   exit 35
 fi
 log "KWAI_EMAIL_LOGIN_FORM_VERIFIED"
