@@ -13,3 +13,5 @@ DOM discovery retry
 click visible login controls test
 
 interaction diagnostics follow click
+
+inspect social dialog after follow
