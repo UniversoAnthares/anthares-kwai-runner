@@ -112,6 +112,18 @@ PY
   done
   log "KWAI_ONBOARDING_INTEREST_MAX_ATTEMPTS"
 }
+dismiss_onboarding_right_heart(){
+  dump_ui || return 0
+  if ! grep -Eqi 'Choose like or dislike|let us know you better' /tmp/kwai-ui.xml; then return 0; fi
+  local dims w h
+  dims="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
+  w="${dims%x*}"; h="${dims#*x}"
+  [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]] || return 0
+  # The right-hand heart is centered at ~75% width and 97% height.
+  adb shell input tap $((w*75/100)) $((h*97/100)) >/dev/null 2>&1 || true
+  log "KWAI_ONBOARDING_RIGHT_HEART_TAPPED"
+  sleep 1
+}
 dismiss_resource_overlay(){
   dump_ui || return 0
   grep -Eqi 'Resource downloading|access to all the features|resource.*download' /tmp/kwai-ui.xml || return 0
@@ -311,6 +323,7 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
       OVERLAY_LAST_CHECK=$SECONDS
       dismiss_notification_permission
       dismiss_resource_overlay
+      dismiss_onboarding_right_heart
     fi
   fi
   if [ -f /tmp/anthares-android-done ]; then
