@@ -68,7 +68,7 @@ PY
 complete_kwai_interest_onboarding(){
   # Kwai's 12-step like/dislike introduction must be completed before Profile.
   # Read each step from the live UI; never tap blindly outside this screen.
-  local step xy previous="" attempts=0
+  local step xy attempts=0
   for attempts in $(seq 1 18); do
     dump_ui || { sleep 1; continue; }
     step="$(python3 - <<'PY'
@@ -83,29 +83,12 @@ except Exception: pass
 PY
 )"
     [ -n "$step" ] || return 0
-    xy="$(python3 - <<'PY'
-import re,xml.etree.ElementTree as ET
-try:
- root=ET.parse('/tmp/kwai-ui.xml').getroot()
- nodes=list(root.iter('node'))
- # Prefer the actual left (like) action if accessibility exposes its bounds.
- for n in nodes:
-  t=(n.get('text','')+' '+n.get('content-desc','')).lower()
-  if ('like' in t or 'curtir' in t) and 'dislike' not in t and 'choose' not in t:
-   m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds',''))
-   if m:
-    a,b,c,d=map(int,m.groups())
-    if c>a and d>b and b>400:print((a+c)//2,(b+d)//2);break
-except Exception: pass
-PY
-)"
-    if [ -z "$xy" ]; then
-      local dims w h
-      dims="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
-      w="${dims%x*}"; h="${dims#*x}"
-      [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]] || return 1
-      xy="$((w*25/100)) $((h*97/100))"
-    fi
+    # The RIGHT heart is the dislike button. Use its center, never the left heart.
+    local dims w h
+    dims="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
+    w="${dims%x*}"; h="${dims#*x}"
+    [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]] || return 1
+    xy="$((w*75/100)) $((h*97/100))"
     adb shell input tap $xy >/dev/null 2>&1 || return 1
     log "KWAI_ONBOARDING_INTEREST_STEP=${step}/12"
     sleep 2
