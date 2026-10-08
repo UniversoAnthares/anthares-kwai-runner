@@ -99,9 +99,13 @@ async def main():
                     await page.wait_for_timeout(1500)
                     follow=page.get_by_text("Seguir",exact=True)
                     if await follow.count():
-                        await follow.first.click(timeout=2400)
+                        try:
+                            await follow.first.click(timeout=1800,force=True)
+                        except Exception:
+                            await follow.first.evaluate("(el)=>el.click()")
                     await page.wait_for_timeout(1100)
                     info=await page.evaluate("""() => ({
+                        visibleOverlays:[...document.querySelectorAll('[class*=social-dialog],[class*=SocialDialog]')].slice(0,8).map(e=>({html:e.outerHTML.slice(0,1400),text:e.innerText?.slice(0,350)})),
                         dialogText:[...document.querySelectorAll('[class*=Dialog],[class*=dialog],[class*=modal],[class*=Modal]')].map(e=>({className:e.className,text:e.innerText?.slice(0,250),html:e.outerHTML.slice(0,550)})).filter(x=>x.text).slice(0,15),
                         images:[...document.images].filter(e=>/qr|login|code/i.test(e.src+' '+e.alt)).map(e=>({src:e.src,alt:e.alt})).slice(0,10),
                         externalLinks:[...document.querySelectorAll('a')].filter(e=>/login|entrar|app/i.test(e.href+' '+e.textContent)).map(e=>({href:e.href,text:e.textContent.slice(0,70)})).slice(0,12)
