@@ -1,0 +1,75 @@
+name: Kwai AVD prune probe isolated
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-avd-prune-probe.yml']
+permissions:
+  contents: read
+jobs:
+  prune-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Restore proven slim AVD v4
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+      - name: Restore Android image
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+      - name: Restore emulator
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
+      - name: Inspect QCOW backing chains and test pruning
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          QEMUIMG="$SDK/emulator/qemu-img"
+          AVD="$HOME/.android/avd"
+          ROOT="$AVD/kwai-speed.avd"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$AVD"
+          test -d "$ROOT/snapshots/kwai-ready"
+          echo '=== QCOW BACKING ==='
+          for f in userdata-qemu.img.qcow2 cache.img.qcow2 encryptionkey.img.qcow2; do
+            echo "--- $f"
+            "$QEMUIMG" info --backing-chain "$ROOT/$f" || true
+          done
+          rm -rf /tmp/kwai-baseline.avd
+          cp -a "$ROOT" /tmp/kwai-baseline.avd
+          sudo chmod 666 /dev/kvm
+          test_variant() {
+            name="$1"; remove="$2"
+            "$ADB" kill-server >/dev/null 2>&1 || true
+            rm -rf "$ROOT"
+            cp -a /tmp/kwai-baseline.avd "$ROOT"
+            rm -f "$ROOT/$remove"
+            echo "${name}_REMOVED=$remove"
+            echo "${name}_RAW_BYTES=$(du -sb "$ROOT" | awk '{print $1}')"
+            log="/tmp/${name}.log"
+            t=$(date +%s)
+            nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >"$log" 2>&1 &
+            ok=0
+            if timeout 45 "$ADB" wait-for-device && timeout 45 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"; then ok=1; fi
+            secs=$(($(date +%s)-t))
+            actual=false
+            if grep -q "Successfully loaded snapshot 'kwai-ready'" "$log" && ! grep -Eq "Failed to load snapshot 'kwai-ready'|performing a cold boot" "$log"; then actual=true; fi
+            echo "${name}_BOOTED=$ok"
+            echo "${name}_BOOT_SECONDS=$secs"
+            echo "${name}_ACTUAL_LOAD=$actual"
+            grep -Ei "Loading snapshot 'kwai-ready'|Successfully loaded snapshot 'kwai-ready'|Failed to load snapshot|cold boot|ERROR" "$log" | tail -30 || true
+            "$ADB" emu kill >/dev/null 2>&1 || true
+            timeout 20 bash -c 'while pgrep -f "[q]emu-system.*kwai-speed" >/dev/null; do sleep 1; done' || true
+          }
+          test_variant NO_USERDATA_QCOW userdata-qemu.img.qcow2
+          test_variant NO_CACHE_QCOW cache.img.qcow2
