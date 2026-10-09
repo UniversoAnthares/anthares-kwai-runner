@@ -1,0 +1,19 @@
+name: Kwai Existing Session Publisher QA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.devcontainer/kwai-existing-session-publisher.py'
+      - 'tests/test_kwai_existing_session_publisher.py'
+      - '.github/workflows/kwai-existing-session-publisher-qa.yml'
+permissions:
+  contents: read
+jobs:
+  publisher-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate fail-closed existing-session publisher
+        run: python3 -m unittest tests.test_kwai_existing_session_publisher -v
