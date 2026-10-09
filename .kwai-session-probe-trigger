@@ -4,3 +4,5 @@
 2026-10-09 recheck session secret and persistence
 
 2026-10-09 verify secret after user action
+
+2026-10-09 verify in-memory decrypted state and encrypted-only cache
