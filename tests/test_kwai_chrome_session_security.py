@@ -79,6 +79,9 @@ class ChromeSessionSecurityTests(unittest.TestCase):
         workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/kwai-chrome-session-probe.yml").read_text()
         self.assertEqual(workflow.count("path: .kwai-session-cache/kwai-session.enc"), 2)
         self.assertNotIn("path: .kwai-session-cache\\n", workflow)
+        self.assertIn("kwai-encrypted-session-v2-${{ github.run_id }}", workflow)
+        self.assertIn("kwai-encrypted-session-v2-", workflow)
+        self.assertNotIn("key: kwai-session-", workflow)
 
 
 if __name__ == "__main__":
