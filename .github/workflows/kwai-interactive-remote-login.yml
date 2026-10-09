@@ -20,7 +20,7 @@ concurrency:
 jobs:
   remote-login:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
       KWAI_VARIANT: '4'
       KWAI_SESSION_FILE: kwai-session.enc
@@ -206,7 +206,7 @@ jobs:
           echo "KWAI_NETWORK_TRACE_STARTED_BEFORE_AUTH"
 
       - name: Authentication first — owner login or validated restore
-        timeout-minutes: 12
+        timeout-minutes: 20
         env:
           REMOTE_ANDROID_TOKEN: ${{ secrets.REMOTE_ANDROID_TOKEN }}
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
