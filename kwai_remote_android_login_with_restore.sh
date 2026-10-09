@@ -93,6 +93,61 @@ else:
 src=src.replace("1) tap_label '^(Profile|Perfil|Eu|Me)$' || true ;;", "1) tap_label '^(Log In|Sign In|Entrar|Login)$' || tap_label '^(Profile|Perfil|Eu|Me)$' || true ;;", 1)
 print('KWAI_RUNTIME_FEED_LOGIN_TAB_FIRST')
 
+old3="""    if [ $((SECONDS-GOOGLE_AGREEMENT_LAST_CHECK)) -ge 5 ]; then
+      GOOGLE_AGREEMENT_LAST_CHECK=$SECONDS
+      dump_ui || true
+      if grep -Eqi 'Google services|Serviços do Google' /tmp/kwai-ui.xml 2>/dev/null && grep -Eqi 'Backup|storage|armazenamento|Privacy Policy|Política de Privacidade' /tmp/kwai-ui.xml 2>/dev/null; then
+        if tap_label '^(MORE|Mais)$'; then
+          log \"GOOGLE_SERVICES_MORE_TAPPED\"
+        elif tap_label '^(ACCEPT|Aceitar)$'; then
+          log \"GOOGLE_SERVICES_ACCEPT_TAPPED\"
+        else
+          log \"GOOGLE_SERVICES_ACTION_NOT_VISIBLE\"
+        fi
+      fi
+      if grep -Eqi 'I agree|Concordo' /tmp/kwai-ui.xml 2>/dev/null && grep -Eqi 'Google Terms of Service|Google Play Terms of Service|Google Privacy Policy|Termos de Serviço do Google' /tmp/kwai-ui.xml 2>/dev/null; then
+        if tap_label '^(I agree|Concordo)$'; then
+          log \"GOOGLE_WELCOME_AGREEMENT_BUTTON_TAPPED\"
+        fi
+      fi
+    fi"""
+new3="""    if [ $((SECONDS-GOOGLE_AGREEMENT_LAST_CHECK)) -ge 2 ]; then
+      GOOGLE_AGREEMENT_LAST_CHECK=$SECONDS
+      dump_ui || true
+      dims=\"$(adb shell wm size 2>/dev/null | grep -Eo '[0-9]+x[0-9]+' | tail -1)\"
+      gw=\"${dims%x*}\"; gh=\"${dims#*x}\"
+      google_bottom_right(){
+        if [[ \"$gw\" =~ ^[0-9]+$ && \"$gh\" =~ ^[0-9]+$ ]]; then
+          adb shell input tap $((gw*84/100)) $((gh*95/100)) >/dev/null 2>&1 || true
+          sleep 2
+          return 0
+        fi
+        return 1
+      }
+      if grep -Eqi 'I agree|Concordo|Google Terms of Service|Google Play Terms of Service|Google Privacy Policy|Welcome|Bem-vindo' /tmp/kwai-ui.xml 2>/dev/null; then
+        if tap_label '^(I agree|Concordo)$'; then
+          log \"GOOGLE_WELCOME_AGREEMENT_BUTTON_TAPPED\"
+        else
+          google_bottom_right || true
+          log \"GOOGLE_WELCOME_AGREEMENT_FALLBACK_TAPPED\"
+        fi
+      elif grep -Eqi 'Google services|Serviços do Google' /tmp/kwai-ui.xml 2>/dev/null; then
+        if tap_label '^(MORE|Mais)$'; then
+          log \"GOOGLE_SERVICES_MORE_TAPPED\"
+        elif tap_label '^(ACCEPT|Aceitar)$'; then
+          log \"GOOGLE_SERVICES_ACCEPT_TAPPED\"
+        else
+          google_bottom_right || true
+          log \"GOOGLE_SERVICES_BOTTOM_RIGHT_FALLBACK_TAPPED\"
+        fi
+      fi
+    fi"""
+if old3 in src:
+    src=src.replace(old3,new3,1)
+    print('KWAI_RUNTIME_GOOGLE_THREE_BUTTONS_AUTOMATED')
+else:
+    print('KWAI_RUNTIME_GOOGLE_THREE_BUTTONS_PATTERN_NOT_FOUND')
+
 Path('/tmp/kwai_remote_android_login.runtime.sh').write_text(src)
 PATCHPY
 
