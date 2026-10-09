@@ -16,7 +16,7 @@ REPO = "UniversoAnthares/anthares-kwai-runner"
 ISSUE = 12
 OWNER = "universoanthares"
 STATE = Path.home() / ".kwai-remote-private" / "bridge-seen.json"
-COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check|refresh_bridge|ui_probe|menu_probe) ([a-zA-Z0-9_-]{12,64})$")
+COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check|refresh_bridge|ui_probe|menu_probe|avatar_map) ([a-zA-Z0-9_-]{12,64})$")
 def gh(method, endpoint, data=None):
     args = ["gh", "api", "--method", method, endpoint]
     if data is not None:
@@ -37,6 +37,48 @@ async def browser_action(action):
                 page = await context.new_page()
                 await page.goto("https://www.kwai.com/", wait_until="domcontentloaded", timeout=15000)
                 await page.close()
+            if action == "avatar_map":
+                # Count-only map of possible account triggers in the visible
+                # header; does not read labels, text, attributes or URLs.
+                result = {"chrome_connected": True, "kwai_tab_present": False}
+                for tab in list(context.pages):
+                    u = urlsplit(tab.url)
+                    if u.scheme != "https" or u.hostname != "www.kwai.com":
+                        continue
+                    result["kwai_tab_present"] = True
+                    try:
+                        flags = await tab.evaluate(r"""() => {
+                          const topRight = el => {
+                            const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                            return r.width>=10&&r.height>=10&&r.left>innerWidth*.60&&
+                              r.top>=0&&r.top<230&&s.display!=='none'&&
+                              s.visibility!=='hidden';
+                          };
+                          const count=selector=>Math.min(20,
+                            [...document.querySelectorAll(selector)].filter(topRight).length);
+                          return {
+                            top_right_images:count('img'),
+                            top_right_buttons:count('button'),
+                            top_right_roles:count('[role="button"]'),
+                            top_right_links:count('a[href]'),
+                            top_right_avatar_class:count('[class*="avatar" i]'),
+                            top_right_user_class:count('[class*="user" i]'),
+                            top_right_account_label:count('[aria-label*="account" i]'),
+                            top_right_profile_label:count('[aria-label*="profile" i]'),
+                            top_right_user_label:count('[aria-label*="user" i]'),
+                            top_right_user_testid:count('[data-testid*="user" i]'),
+                            top_right_pointer:Math.min(20,[...document.querySelectorAll(
+                              'div,span,svg,button,img'
+                            )].filter(el=>topRight(el)&&getComputedStyle(el).cursor==='pointer').length)
+                          };
+                        }""")
+                        for key, val in flags.items():
+                            if isinstance(val, int) and not isinstance(val, bool):
+                                result[key] = min(20, max(0, val))
+                    except Exception:
+                        result["ui_inspection_failed"] = True
+                    break
+                return result
             if action == "menu_probe":
                 # UI-only test on the already-open Kwai tab. It never reads
                 # secrets, changes routes, or clicks a logout/login control.
@@ -241,7 +283,7 @@ def main():
     import asyncio
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     seen = set(json.loads(STATE.read_text())) if STATE.exists() else set()
-    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check,refresh_bridge,ui_probe,menu_probe;no_session_export", flush=True)
+    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check,refresh_bridge,ui_probe,menu_probe,avatar_map;no_session_export", flush=True)
     while True:
         try:
             comments = gh("GET", f"repos/{REPO}/issues/{ISSUE}/comments?per_page=100")
