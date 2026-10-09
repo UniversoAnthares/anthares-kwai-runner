@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      KWAI_VARIANT: '1'
+      KWAI_VARIANT: '2'
       KWAI_SESSION_FILE: kwai-session.enc
       KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'anthares' }}
 
