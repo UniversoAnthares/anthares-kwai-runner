@@ -2,8 +2,7 @@
 2026-10-08 manual step1 requested: interactive remote login retry after 600s timeout
 2026-10-08 remote token rotated by owner; new login run
 2026-10-08 early remote access signal validation, 120s window; login only, no publishing
-2026-10-08 rerun after user-cancelled attempt; enforce 120s interaction target
-2026-10-08 retry after cache warm-up; target remote access under 120s
+2026-10-08 rerun after cache warm-up; target remote access under 120s
 2026-10-08 rerun after confirmed 1033; monitor and deliver remote URL immediately
 2026-10-08 tunnel-before-Android architecture test
 2026-10-08 restart after failed preboot tunnel attempt
@@ -64,3 +63,4 @@ right-heart-split-ui-a4f8744
 2026-10-08 reliable-remote-tap-autowatch 903e38c60c2c30450e5746d0f5b7730dd67598f5
 2026-10-08 validate complete compatible split installation a16d3acfb70786a495fa0d0fc8e407db0e2b929e
 retry-google-sso-6070cc3
+2026-10-09 hardened-ui-network-diagnostics-session-restore 82324c39
