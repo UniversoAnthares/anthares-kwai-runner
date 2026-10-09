@@ -305,7 +305,12 @@ jobs:
           fi
           echo 'CLOUD_SHARE_TEST=KWAI_FOREGROUND_AFTER_VIDEO_SEND' | tee -a "$GITHUB_STEP_SUMMARY"
           adb shell uiautomator dump /sdcard/kwai-share-ui.xml >/tmp/kwai-uiautomator.log 2>&1 || true
-          adb shell cat /sdcard/kwai-share-ui.xml 2>/dev/null | sed -E 's/(text|content-desc)="[^"]*"/\1="[REDACTED]"/g' | head -c 1500 > /tmp/kwai-share-ui-redacted.txt || true
+          adb shell cat /sdcard/kwai-share-ui.xml 2>/dev/null | sed -E 's/(text|content-desc)="[^"]*"/\1="[REDACTED]"/g' | head -c 200000 > /tmp/kwai-share-ui-redacted.txt || true
+          if grep -Eq 'resource-id="[^"]*(editor|publish|upload|album|record)' /tmp/kwai-share-ui-redacted.txt; then
+            echo 'CLOUD_SHARE_EDITOR_CANDIDATE=FOUND_UNVERIFIED' | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'CLOUD_SHARE_EDITOR_CANDIDATE=NOT_FOUND' | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
           adb shell dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity' | tail -3 > /tmp/kwai-share-activity.txt || true
           echo 'CLOUD_SHARE_EDITOR=NOT_VERIFIED' | tee -a "$GITHUB_STEP_SUMMARY"
           echo 'CLOUD_SHARE_PUBLICATION=NOT_TESTED' | tee -a "$GITHUB_STEP_SUMMARY"
