@@ -2,6 +2,7 @@
 set -u
 PHASE="${1:-snapshot}"
 OUT="${KWAI_NETWORK_DIAGNOSTICS_FILE:-kwai-network-diagnostics.txt}"
+redact(){ sed -E 's/([?&](token|access_token|auth|password|cookie|session|sid)=)[^&[:space:]]+/\1<redacted>/Ig'; }
 {
   echo "===== KWAI_ANDROID_NETWORK phase=${PHASE} utc=$(date -u +%Y-%m-%dT%H:%M:%SZ) ====="
   echo "## adb"
@@ -26,9 +27,15 @@ OUT="${KWAI_NETWORK_DIAGNOSTICS_FILE:-kwai-network-diagnostics.txt}"
   timeout 10 adb shell dumpsys package com.kwai.video 2>&1 | grep -E 'userId=|android.permission.INTERNET|android.permission.ACCESS_NETWORK_STATE' | head -30 || true
   echo "## filtered network/tls errors"
   if [ -s /tmp/kwai-login-logcat.txt ]; then
-    grep -Ei 'UnknownHostException|SSLHandshakeException|SSLException|CertificateException|CertPath|ConnectException|SocketTimeoutException|ECONN|ENETUNREACH|EHOSTUNREACH|Cronet|OkHttp|NetworkSecurityConfig|dns[^ ]* (fail|error)|network[^ ]* (fail|error)|handshake[^ ]* (fail|error)' /tmp/kwai-login-logcat.txt | tail -220 | sed -E 's/([?&](token|access_token|auth|password|cookie|session|sid)=)[^&[:space:]]+/\1<redacted>/Ig' || true
+    grep -Ei -B4 -A12 'UnknownHostException|SSLHandshakeException|SSLException|CertificateException|CertPath|ConnectException|SocketTimeoutException|ECONN|ENETUNREACH|EHOSTUNREACH|Cronet|OkHttp|NetworkSecurityConfig|dns[^ ]* (fail|error)|network[^ ]* (fail|error)|handshake[^ ]* (fail|error)' /tmp/kwai-login-logcat.txt | tail -320 | redact || true
+    echo "## Kwai process network/error context"
+    kwai_pid="$(timeout 5 adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' | awk '{print $1}')"
+    echo "KWAI_PID=${kwai_pid:-none}"
+    if [ -n "${kwai_pid:-}" ]; then
+      grep -E "[[:space:]]${kwai_pid}[[:space:]]" /tmp/kwai-login-logcat.txt | grep -Ei 'System\.err|Aegon|retrofit|Cronet|OkHttp|network|dns|ssl|tls|http|Exception|error|fail|timeout|response' | tail -360 | redact || true
+    fi
   else
-    timeout 10 adb shell logcat -d -t 1800 2>&1 | grep -Ei 'UnknownHostException|SSLHandshakeException|SSLException|CertificateException|CertPath|ConnectException|SocketTimeoutException|ECONN|ENETUNREACH|EHOSTUNREACH|Cronet|OkHttp|NetworkSecurityConfig|dns[^ ]* (fail|error)|network[^ ]* (fail|error)|handshake[^ ]* (fail|error)' | tail -220 | sed -E 's/([?&](token|access_token|auth|password|cookie|session|sid)=)[^&[:space:]]+/\1<redacted>/Ig' || true
+    timeout 10 adb shell logcat -d -t 1800 2>&1 | grep -Ei -B4 -A12 'UnknownHostException|SSLHandshakeException|SSLException|CertificateException|CertPath|ConnectException|SocketTimeoutException|ECONN|ENETUNREACH|EHOSTUNREACH|Cronet|OkHttp|NetworkSecurityConfig|dns[^ ]* (fail|error)|network[^ ]* (fail|error)|handshake[^ ]* (fail|error)' | tail -320 | redact || true
   fi
   echo "===== END_KWAI_ANDROID_NETWORK phase=${PHASE} ====="
 } >> "$OUT"
