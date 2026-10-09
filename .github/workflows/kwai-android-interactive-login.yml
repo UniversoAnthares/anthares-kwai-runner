@@ -7,6 +7,7 @@ on:
       - .github/workflows/kwai-android-interactive-login.yml
 permissions:
   contents: read
+  statuses: write
 concurrency:
   group: kwai-android-interactive-login-${{ github.event_name }}
   cancel-in-progress: true
@@ -136,8 +137,13 @@ jobs:
             sleep 2
           done
           test "$READY" = 1
-          echo "ANDROID_REMOTE_GUI_URL=$URL/vnc.html?autoconnect=1&resize=scale"
+          GUI_URL="$URL/vnc.html?autoconnect=1&resize=scale"
+          echo "ANDROID_REMOTE_GUI_URL=$GUI_URL"
           echo 'ANDROID_REMOTE_GUI_PROTECTION=BASIC_AUTH_VERIFIED_401_200' >> "$GITHUB_STEP_SUMMARY"
+          payload=$(jq -nc --arg state pending --arg target_url "$GUI_URL" --arg description 'Protected Android login window ready' --arg context 'kwai/android-interactive-login' '{state:$state,target_url:$target_url,description:$description,context:$context}')
+          curl -fsS -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -d "$payload" "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" >/dev/null
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Keep private login window open and detect expected owner
         shell: bash
