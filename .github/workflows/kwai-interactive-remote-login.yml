@@ -1,4 +1,5 @@
 name: Kwai interactive remote login
+
 on:
   workflow_dispatch:
   push:
@@ -6,12 +7,15 @@ on:
     paths:
       - '.kwai-interactive-login-trigger'
       - '.github/workflows/kwai-interactive-remote-login.yml'
+
 permissions:
   contents: read
   id-token: write
+
 concurrency:
   group: kwai-interactive-remote-login-${{ github.run_id }}
   cancel-in-progress: false
+
 jobs:
   remote-login:
     runs-on: ubuntu-24.04
@@ -19,28 +23,11 @@ jobs:
     env:
       KWAI_VARIANT: '1'
       KWAI_SESSION_FILE: kwai-session.enc
-      ANTHARES_CONTROL_URL: https://anthares-control.anthares1.workers.dev
       KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'anthares' }}
-      KWAI_LEASE_TTL_SECONDS: "600"
-      KWAI_LEASE_RENEW_INTERVAL_SECONDS: "120"
-      KWAI_LEASE_RENEW_TTL_SECONDS: "600"
+
     steps:
       - uses: actions/checkout@v4
-      - name: Select diagnostic variant
-        shell: bash
-        run: |
-          MSG="$(git log -1 --pretty=%s)"
-          if [[ "$MSG" =~ kwai-variant-([1-5]) ]]; then
-            echo "KWAI_VARIANT=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
-            echo "KWAI_DIAGNOSTIC_VARIANT=${BASH_REMATCH[1]}" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "KWAI_VARIANT=1" >> "$GITHUB_ENV"
-          fi
-      - name: Start interaction clock
-        shell: bash
-        run: |
-          date +%s > /tmp/kwai-interaction-start
-          echo 'INTERACTION_BUDGET_SECONDS=120' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Prepare remote channel silently
         env:
           REMOTE_ANDROID_TOKEN: ${{ secrets.REMOTE_ANDROID_TOKEN }}
@@ -51,30 +38,30 @@ jobs:
           curl -fL --retry 3 --retry-delay 1 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x /tmp/cloudflared
           python3 kwai_remote_android_ui.py >/tmp/android-ui.log 2>&1 &
-          UI_PID=$!
-          echo "$UI_PID" > /tmp/android-ui.pid
-          for _ in $(seq 1 8); do curl -fsS "http://127.0.0.1:8765/?t=$REMOTE_ANDROID_TOKEN" >/dev/null 2>&1 && break; sleep 1; done
-          kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_START_FAILED"; cat /tmp/android-ui.log || true; exit 22; }
+          echo $! >/tmp/android-ui.pid
+          for _ in $(seq 1 8); do
+            curl -fsS "http://127.0.0.1:8765/?t=$REMOTE_ANDROID_TOKEN" >/dev/null 2>&1 && break
+            sleep 1
+          done
+          kill -0 "$(cat /tmp/android-ui.pid)" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_START_FAILED"; cat /tmp/android-ui.log || true; exit 22; }
           /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 >/tmp/tunnel.log 2>&1 &
-          TUNNEL_PID=$!
-          echo "$TUNNEL_PID" > /tmp/cloudflared.pid
+          echo $! >/tmp/cloudflared.pid
           URL=""
           for _ in $(seq 1 20); do
             URL=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log 2>/dev/null | head -1 || true)
             [ -n "$URL" ] && break
-            kill -0 "$TUNNEL_PID" 2>/dev/null || break
+            kill -0 "$(cat /tmp/cloudflared.pid)" 2>/dev/null || break
             sleep 1
           done
           [ -n "$URL" ] || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_START_FAILED"; cat /tmp/tunnel.log || true; exit 23; }
           echo "REMOTE_BASE_URL=$URL" >> "$GITHUB_ENV"
-          echo "REMOTE_CHANNEL_READY_AT=$(date +%s)" >> "$GITHUB_ENV"
-          echo "REMOTE_CHANNEL_PREPARED_NOT_YET_PUBLISHED"
+          echo "REMOTE_CHANNEL_PREPARED"
+
       - name: Restore Android system image cache
         id: android-cache
         uses: actions/cache/restore@v4
         with:
           path: |
-            kwai-network-diagnostics.txt
             ${{ env.ANDROID_HOME }}/system-images
             ${{ env.ANDROID_HOME }}/platforms
             ${{ env.ANDROID_HOME }}/platform-tools
@@ -82,6 +69,7 @@ jobs:
           key: android35-api-x86_64-${{ runner.os }}
           restore-keys: |
             android35-api-x86_64-${{ runner.os }}-
+
       - name: Prepare Android SDK
         shell: bash
         run: |
@@ -90,9 +78,6 @@ jobs:
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           mkdir -p "$ANDROID_AVD_HOME"
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          START=$(cat /tmp/kwai-interaction-start)
-          NOW=$(date +%s)
-          echo "ANDROID_PREP_ELAPSED_SECONDS=$((NOW-START))" >> "$GITHUB_STEP_SUMMARY"
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           AVDMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
           [ -x "$SDKMANAGER" ] || { echo "FAILURE_SIGNAL=SDKMANAGER_NOT_FOUND"; exit 2; }
@@ -103,15 +88,12 @@ jobs:
           else
             echo "ANDROID_CACHE_HIT_SKIP_DOWNLOAD"
           fi
-          EMULATOR="$SDK_ROOT/emulator/emulator"
-          ADB="$SDK_ROOT/platform-tools/adb"
-          [ -x "$EMULATOR" ] || { echo "FAILURE_SIGNAL=EMULATOR_NOT_FOUND_AFTER_INSTALL"; exit 2; }
-          [ -x "$ADB" ] || { echo "FAILURE_SIGNAL=ADB_NOT_FOUND_AFTER_INSTALL"; exit 2; }
-          echo "$(dirname "$EMULATOR")" >> "$GITHUB_PATH"
-          echo "$(dirname "$ADB")" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/emulator" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
           if [ ! -f "$ANDROID_AVD_HOME/anthares-remote.ini" ]; then
             echo no | "$AVDMANAGER" create avd -n anthares-remote -k "system-images;android-35;google_apis;x86_64" --device "pixel_5"
           fi
+
       - name: Save Android system image cache
         if: steps.android-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -122,55 +104,38 @@ jobs:
             ${{ env.ANDROID_HOME }}/platform-tools
             ${{ env.ANDROID_HOME }}/emulator
           key: android35-api-x86_64-${{ runner.os }}
+
       - name: Enable KVM
         shell: bash
         run: |
           set -euo pipefail
           sudo chmod 666 /dev/kvm
           ls -l /dev/kvm
+
       - name: Boot Android
         shell: bash
         run: |
           set -euo pipefail
           export ANDROID_SDK_HOME="$HOME/.android"
           export ANDROID_AVD_HOME="$HOME/.android/avd"
-          EMULATOR="$(command -v emulator)"
-          BOOT_START=$(date +%s)
-          nohup "$EMULATOR" -avd anthares-remote -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
-          echo $! > /tmp/emulator.pid
-          if ! timeout 90 adb wait-for-device; then
-            echo EMULATOR_WAIT_FOR_DEVICE_FAILED
-            cat /tmp/emulator.log || true
-            exit 124
-          fi
-          if ! timeout 60 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 1; done'; then
-            echo EMULATOR_BOOT_COMPLETION_FAILED
-            cat /tmp/emulator.log || true
-            exit 1
-          fi
+          nohup emulator -avd anthares-remote -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
+          echo $! >/tmp/emulator.pid
+          timeout 90 adb wait-for-device || { echo "FAILURE_SIGNAL=EMULATOR_WAIT_FOR_DEVICE_FAILED"; exit 124; }
+          timeout 60 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 1; done' || { echo "FAILURE_SIGNAL=EMULATOR_BOOT_COMPLETION_FAILED"; exit 1; }
           adb shell input keyevent 82 || true
-          BOOT_END=$(date +%s)
-          echo "ANDROID_BOOT_SECONDS=$((BOOT_END-BOOT_START))" >> "$GITHUB_STEP_SUMMARY"
-          echo TEST_VALIDITY=EMULATOR_BOOTED
-      - name: Check interaction budget before remote access
-        shell: bash
-        run: |
-          set -euo pipefail
-          START=$(cat /tmp/kwai-interaction-start); NOW=$(date +%s)
-          ELAPSED=$((NOW-START)); echo "INTERACTION_ELAPSED_SECONDS=$ELAPSED" >> "$GITHUB_STEP_SUMMARY"
-          echo "ANDROID_PREP_BUDGET_OBSERVATION_ONLY=true" >> "$GITHUB_STEP_SUMMARY"
+          echo "TEST_VALIDITY=EMULATOR_BOOTED"
+
       - name: Publish ready remote access
         shell: bash
         run: |
           set -euo pipefail
-          UI_PID=$(cat /tmp/android-ui.pid 2>/dev/null || true)
-          TUNNEL_PID=$(cat /tmp/cloudflared.pid 2>/dev/null || true)
-          [ -n "$UI_PID" ] && kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_NOT_ALIVE_AT_PUBLISH"; exit 25; }
-          [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_NOT_ALIVE_AT_PUBLISH"; cat /tmp/tunnel.log || true; exit 26; }
+          kill -0 "$(cat /tmp/android-ui.pid)" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_NOT_ALIVE_AT_PUBLISH"; exit 25; }
+          kill -0 "$(cat /tmp/cloudflared.pid)" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_NOT_ALIVE_AT_PUBLISH"; exit 26; }
           adb exec-out screencap -p >/tmp/publish-ready.png
           test -s /tmp/publish-ready.png || { echo "FAILURE_SIGNAL=ANDROID_SCREEN_NOT_READY"; exit 27; }
           echo "KWAI_REMOTE_ACCESS_READY"
           printf '### Kwai Android remoto — PRONTO\n\n%s\n' "$REMOTE_BASE_URL" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Download validated Kwai vault
         shell: bash
         run: |
@@ -183,16 +148,7 @@ jobs:
             d=$(find kwai-vault -mindepth 1 -maxdepth 1 -type d | head -1 || true)
             [ -n "$d" ] && cp -a "$d"/. kwai-vault/
           fi
-      - name: Verify private browser tunnel
-        shell: bash
-        run: |
-          set -euo pipefail
-          [ -x /tmp/cloudflared ] || { echo "FAILURE_SIGNAL=CLOUDFLARED_MISSING"; exit 24; }
-          UI_PID=$(cat /tmp/android-ui.pid 2>/dev/null || true)
-          TUNNEL_PID=$(cat /tmp/cloudflared.pid 2>/dev/null || true)
-          [ -n "$UI_PID" ] && kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_NOT_ALIVE"; cat /tmp/android-ui.log || true; exit 25; }
-          [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_NOT_ALIVE"; cat /tmp/tunnel.log || true; exit 26; }
-          echo "REMOTE_CHANNEL_STILL_ALIVE"
+
       - name: Restore encrypted session cache
         uses: actions/cache/restore@v4
         with:
@@ -200,7 +156,19 @@ jobs:
           key: kwai-session-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             kwai-session-${{ runner.os }}-
-      - name: Interactive owner login
+
+      - name: Start Android network trace
+        shell: bash
+        run: |
+          set +e
+          : > kwai-network-diagnostics.txt
+          adb logcat -c || true
+          nohup adb logcat -v threadtime >/tmp/kwai-login-logcat.txt 2>&1 &
+          echo $! >/tmp/kwai-login-logcat.pid
+          bash kwai_network_diagnostics.sh before-login
+          echo "KWAI_NETWORK_TRACE_STARTED"
+
+      - name: Interactive owner login or validated restore
         env:
           REMOTE_ANDROID_TOKEN: ${{ secrets.REMOTE_ANDROID_TOKEN }}
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
@@ -209,55 +177,42 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [ -n "$REMOTE_ANDROID_TOKEN" ] || { echo "REMOTE_ANDROID_TOKEN secret missing"; exit 2; }
           export UI_PID="$(cat /tmp/android-ui.pid)"
           export TUNNEL_PID="$(cat /tmp/cloudflared.pid)"
           kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_NOT_ALIVE_BEFORE_LOGIN"; exit 25; }
           kill -0 "$TUNNEL_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_NOT_ALIVE_BEFORE_LOGIN"; exit 26; }
-          echo "KWAI_VARIANT=$KWAI_VARIANT"
-          bash kwai_remote_android_login.sh
-      - name: Android network diagnostics
+          bash kwai_remote_android_login_with_restore.sh
+
+      - name: Final Android network diagnostics
         if: always()
         shell: bash
         run: |
           set +e
-          {
-            echo "NETWORK_DIAGNOSTICS_BEGIN"
-            adb devices
-            adb shell dumpsys connectivity | grep -E 'VALIDATED|INTERNET|NetworkAgentInfo|DefaultNetwork' | head -45
-            adb shell getprop net.dns1
-            adb shell getprop net.dns2
-            adb shell settings get global private_dns_mode
-            adb shell ping -c 2 -W 3 1.1.1.1
-            adb shell ping -c 2 -W 3 google.com
-            adb shell 'date -u'
-            curl -sS -I --max-time 12 https://www.google.com | head -8
-            adb shell logcat -d -t 1200 | grep -Ei 'com.kwai.video|UnknownHostException|SSLHandshakeException|ConnectException|SocketTimeoutException|CLEARTEXT|NetworkSecurityConfig|DNS' | tail -100
-            echo "NETWORK_DIAGNOSTICS_END"
-          } > kwai-network-diagnostics.txt 2>&1
-          echo "NETWORK_DIAGNOSTICS_COLLECTED"
+          bash kwai_network_diagnostics.sh after-login
+          [ -s /tmp/kwai-login-logcat.pid ] && kill "$(cat /tmp/kwai-login-logcat.pid)" 2>/dev/null || true
+          echo "KWAI_NETWORK_DIAGNOSTICS_COLLECTED"
+
       - name: Save encrypted session cache
-        if: success()
+        if: success() && hashFiles('kwai-session.enc') != ''
         uses: actions/cache/save@v4
         with:
           path: kwai-session.enc
           key: kwai-session-${{ runner.os }}-${{ github.run_id }}
+
       - name: Upload diagnostics only
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: kwai-interactive-login-diagnostics
           path: |
+            kwai-network-diagnostics.txt
             kwai-remote-status.txt
             kwai-remote-ready.png
             kwai-login-navigation.xml
             kwai-login-detected.xml
             kwai-login-detected.png
             kwai-login-focus.txt
-            kwai-publication.log
-            kwai-publish-status.txt
-            kwai-reconcile-status.txt
-            kwai-headless-status.txt
+            /tmp/kwai-restored-auth-probe.log
             /tmp/android-ui.log
             /tmp/tunnel.log
             /tmp/emulator.log
