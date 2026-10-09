@@ -182,11 +182,8 @@ class Handler(BaseHTTPRequestHandler):
                 adb("shell", "am", "force-stop", "com.kwai.video", timeout=5)
                 adb("shell", "monkey", "-p", "com.kwai.video", "-c", "android.intent.category.LAUNCHER", "1", timeout=8, check=True)
             elif u.path == "/clear":
-                # Long-press the focused field to select all, then delete once.
-                # Avoid 120 synthetic key events interfering with the IME.
-                adb("shell", "input", "keyevent", "KEYCODE_MOVE_END", timeout=5, check=True)
-                adb("shell", "input", "keyevent", "KEYCODE_CTRL_LEFT", timeout=5, check=True)
-                adb("shell", "input", "keyevent", "KEYCODE_A", timeout=5, check=True)
+                # Android input keycombination holds Ctrl and A together.
+                adb("shell", "input", "keycombination", "KEYCODE_CTRL_LEFT", "KEYCODE_A", timeout=5, check=True)
                 adb("shell", "input", "keyevent", "KEYCODE_DEL", timeout=5, check=True)
             elif u.path == "/text":
                 n = int(self.headers.get("Content-Length", "0"))
