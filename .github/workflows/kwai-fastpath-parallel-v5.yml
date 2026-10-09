@@ -65,6 +65,9 @@ jobs:
           RESTORE=$(find "$ACTIONS_ROOT" -path '*/dist/restore-only/index.js' -type f | head -1)
           test -n "$RESTORE" && test -f "$RESTORE"
           echo "PARALLEL_RESTORE_CLIENT=$RESTORE" | tee -a "$GITHUB_STEP_SUMMARY"
+          for v in ACTIONS_CACHE_URL ACTIONS_RESULTS_URL ACTIONS_RUNTIME_TOKEN ACTIONS_CACHE_SERVICE_V2; do
+            if [ -n "${!v:-}" ]; then echo "${v}_PRESENT=true"; else echo "${v}_PRESENT=false"; fi
+          done
           t=$(date +%s)
           restore_one() {
             name="$1"; path="$2"; key="$3"
@@ -89,8 +92,10 @@ jobs:
           wait "$p2" || fail=1
           wait "$p3" || fail=1
           for name in AVD IMAGE EMULATOR; do
+            echo "===== ${name} META ====="
             cat "/tmp/cache-${name}.meta" || true
-            grep -E 'Cache hit for:|Cache Size:|Cache restored successfully|Cache restored from key:|Failed|Error' "/tmp/cache-${name}.log" | tail -20 || true
+            echo "===== ${name} LOG ====="
+            sed -n '1,120p' "/tmp/cache-${name}.log" || true
           done
           test "$fail" -eq 0
           test -d "$HOME/.android/avd/kwai-speed.avd/snapshots/kwai-ready"
