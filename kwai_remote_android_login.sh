@@ -264,8 +264,8 @@ fi
 if ! email_login_visible && ! google_sso_foreground; then
   log "FAILURE_SIGNAL=KWAI_EMAIL_LOGIN_NOT_VISIBLE"
   dump_ui && { cp /tmp/kwai-ui.xml kwai-login-navigation.xml; grep -Eo 'text="[^"]*"|content-desc="[^"]*"' /tmp/kwai-ui.xml | tail -65 >> "$REPORT" || true; } || true
-  log "LOGIN_DISCOVERY_DIAGNOSTIC_HOLD_20S"; sleep 20
-  exit 35
+  log "LOGIN_DISCOVERY_MANUAL_HANDOFF_45_MINUTES"
+  # Do not abort: the owner may still navigate manually to email/password on a slow remote screen.
 fi
 if email_login_visible; then login_lock; log "KWAI_EMAIL_LOGIN_FORM_VERIFIED"; else log "GOOGLE_SSO_HANDOFF_WAITING"; fi
 if [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
@@ -312,7 +312,7 @@ log "KWAI_OWNER_INTERACTION_READY"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   printf '\n**KWAI_OWNER_INTERACTION_READY** — use the remote URL shown above.\n' >> "$GITHUB_STEP_SUMMARY"
 fi
-LOGIN_DEADLINE=$((SECONDS+900))
+LOGIN_DEADLINE=$((SECONDS+2700))
 SSO_WAS_ACTIVE=0
 SSO_STARTED_AT=0
 OVERLAY_LAST_CHECK=0
@@ -352,4 +352,4 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   kill -0 "$TUNNEL_PID" 2>/dev/null || { log "FAIL: tunnel-died-during-login"; exit 27; }
   sleep 1
 done
-log "FAIL: login-window-expired-900s"; exit 28
+log "FAIL: login-window-expired-2700s"; exit 28
