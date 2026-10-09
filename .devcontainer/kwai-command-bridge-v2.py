@@ -159,12 +159,18 @@ def main():
     print("KWAI_BRIDGE_V2_READY=latest_comments;no_session_export", flush=True)
     while True:
         try:
-            # Critical difference from v1: newest comments are requested first,
-            # so the bridge keeps working after issue #12 exceeds 100 comments.
-            comments = gh(
-                "GET",
-                f"repos/{REPO}/issues/{ISSUE}/comments?per_page=100&sort=created&direction=desc",
-            )
+            # GitHub issue comments are chronological even when sort=desc is sent.
+            # Explicitly traverse pages; otherwise new commands past 100 vanish.
+            comments = []
+            for page_number in range(1, 21):
+                batch = gh(
+                    "GET",
+                    f"repos/{REPO}/issues/{ISSUE}/comments?per_page=100&page={page_number}",
+                )
+                comments.extend(batch)
+                if len(batch) < 100:
+                    break
+            # Newest first so an old refresh command cannot starve new probes.
             for comment in reversed(comments):
                 cid = str(comment["id"])
                 if cid in seen:
