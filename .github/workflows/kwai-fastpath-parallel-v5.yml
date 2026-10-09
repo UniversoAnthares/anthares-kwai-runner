@@ -61,19 +61,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          RESTORE=$(find "$RUNNER_WORKSPACE/_actions/actions/cache" -path '*/dist/restore-only/index.js' -type f | head -1)
+          ACTIONS_ROOT="$(dirname "$RUNNER_WORKSPACE")/_actions/actions/cache"
+          RESTORE=$(find "$ACTIONS_ROOT" -path '*/dist/restore-only/index.js' -type f | head -1)
           test -n "$RESTORE" && test -f "$RESTORE"
           echo "PARALLEL_RESTORE_CLIENT=$RESTORE" | tee -a "$GITHUB_STEP_SUMMARY"
           t=$(date +%s)
           restore_one() {
             name="$1"; path="$2"; key="$3"
             echo "RESTORE_START_${name}=$(date +%s)" >> "/tmp/cache-${name}.meta"
+            set +e
             GITHUB_OUTPUT="/tmp/cache-${name}.out" GITHUB_STATE="/tmp/cache-${name}.state" \
               env "INPUT_PATH=$path" "INPUT_KEY=$key" 'INPUT_RESTORE-KEYS=' \
               'INPUT_ENABLECROSSOSARCHIVE=false' 'INPUT_FAIL-ON-CACHE-MISS=true' 'INPUT_LOOKUP-ONLY=false' \
               node "$RESTORE" >"/tmp/cache-${name}.log" 2>&1
             rc=$?
+            set -e
             echo "RESTORE_END_${name}=$(date +%s)" >> "/tmp/cache-${name}.meta"
+            echo "RESTORE_RC_${name}=$rc" >> "/tmp/cache-${name}.meta"
             return "$rc"
           }
           avd_paths="$HOME/.android/avd/kwai-speed.avd"$'\n'"$HOME/.android/avd/kwai-speed.ini"
