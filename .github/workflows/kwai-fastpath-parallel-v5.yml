@@ -1,0 +1,128 @@
+name: Kwai Android parallel-cache fast path v5
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-fastpath-parallel-v5.yml']
+permissions:
+  contents: read
+jobs:
+  fastpath-v5:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Start timing
+        shell: bash
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Lookup slim headless emulator cache v2
+        id: slimemu
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-headless-x86_64-v2
+          lookup-only: true
+
+      - name: Restore emulator v1 to build slim v2
+        if: steps.slimemu.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
+          fail-on-cache-miss: true
+
+      - name: Build exact proven headless emulator tree
+        if: steps.slimemu.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          E="${ANDROID_HOME:-/usr/local/lib/android/sdk}/emulator"
+          BEFORE=$(du -sb "$E" | awk '{print $1}')
+          rm -rf "$E/lib64/qt" "$E/resources"
+          Q="$E/qemu/linux-x86_64"
+          for f in qemu-system-aarch64 qemu-system-aarch64-headless qemu-system-armel qemu-system-armel-headless qemu-system-i386 qemu-system-i386-headless qemu-system-x86_64; do
+            rm -f "$Q/$f"
+          done
+          test -x "$Q/qemu-system-x86_64-headless"
+          AFTER=$(du -sb "$E" | awk '{print $1}')
+          echo "SLIM_EMU_RAW_BEFORE=$BEFORE" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "SLIM_EMU_RAW_AFTER=$AFTER" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "SLIM_EMU_RAW_REMOVED=$((BEFORE-AFTER))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Save slim headless emulator cache v2
+        if: steps.slimemu.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-headless-x86_64-v2
+
+      - name: Parallel restore AVD image and slim emulator
+        if: steps.slimemu.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESTORE=$(find "$RUNNER_WORKSPACE/_actions/actions/cache" -path '*/dist/restore-only/index.js' -type f | head -1)
+          test -n "$RESTORE" && test -f "$RESTORE"
+          echo "PARALLEL_RESTORE_CLIENT=$RESTORE" | tee -a "$GITHUB_STEP_SUMMARY"
+          t=$(date +%s)
+          restore_one() {
+            name="$1"; path="$2"; key="$3"
+            echo "RESTORE_START_${name}=$(date +%s)" >> "/tmp/cache-${name}.meta"
+            GITHUB_OUTPUT="/tmp/cache-${name}.out" GITHUB_STATE="/tmp/cache-${name}.state" \
+              env "INPUT_PATH=$path" "INPUT_KEY=$key" 'INPUT_RESTORE-KEYS=' \
+              'INPUT_ENABLECROSSOSARCHIVE=false' 'INPUT_FAIL-ON-CACHE-MISS=true' 'INPUT_LOOKUP-ONLY=false' \
+              node "$RESTORE" >"/tmp/cache-${name}.log" 2>&1
+            rc=$?
+            echo "RESTORE_END_${name}=$(date +%s)" >> "/tmp/cache-${name}.meta"
+            return "$rc"
+          }
+          avd_paths="$HOME/.android/avd/kwai-speed.avd"$'\n'"$HOME/.android/avd/kwai-speed.ini"
+          restore_one AVD "$avd_paths" 'kwai-speed-avd-direct-slim-android35-v4' & p1=$!
+          restore_one IMAGE '/usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64' 'kwai-speed-android35-google-apis-x86_64-v1' & p2=$!
+          restore_one EMULATOR '/usr/local/lib/android/sdk/emulator' 'kwai-speed-emulator-headless-x86_64-v2' & p3=$!
+          fail=0
+          wait "$p1" || fail=1
+          wait "$p2" || fail=1
+          wait "$p3" || fail=1
+          for name in AVD IMAGE EMULATOR; do
+            cat "/tmp/cache-${name}.meta" || true
+            grep -E 'Cache hit for:|Cache Size:|Cache restored successfully|Cache restored from key:|Failed|Error' "/tmp/cache-${name}.log" | tail -20 || true
+          done
+          test "$fail" -eq 0
+          test -d "$HOME/.android/avd/kwai-speed.avd/snapshots/kwai-ready"
+          test -s /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64/system.img
+          test -x /usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64-headless
+          echo "PARALLEL_RESTORE_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Boot kwai-ready and validate v5
+        if: steps.slimemu.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          sudo chmod 666 /dev/kvm
+          t=$(date +%s)
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/v5-emulator.log 2>&1 &
+          timeout 60 "$ADB" wait-for-device
+          timeout 60 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"
+          BOOT=$(($(date +%s)-t))
+          echo "V5_SNAPSHOT_BOOT_SECONDS=$BOOT" | tee -a "$GITHUB_STEP_SUMMARY"
+          if grep -q "Successfully loaded snapshot 'kwai-ready'" /tmp/v5-emulator.log && ! grep -Eq "Failed to load snapshot 'kwai-ready'|performing a cold boot" /tmp/v5-emulator.log; then
+            echo "V5_ACTUAL_LOAD=true" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "V5_ACTUAL_LOAD=false" | tee -a "$GITHUB_STEP_SUMMARY"
+            grep -Ei 'snapshot|cold boot|error' /tmp/v5-emulator.log | tail -50 || true
+            exit 4
+          fi
+          grep -E "Loading snapshot 'kwai-ready'|Successfully loaded snapshot 'kwai-ready'" /tmp/v5-emulator.log | tee -a "$GITHUB_STEP_SUMMARY"
+          TOTAL=$(($(date +%s)-T0))
+          echo "V5_TOTAL_SECONDS=$TOTAL" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$BOOT" -lt 10
+          echo "V5_RESULT=PROVEN_SUB10" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Build-only status
+        if: steps.slimemu.outputs.cache-hit != 'true'
+        run: echo "V5_RESULT=SLIM_EMULATOR_CACHE_BUILT_RERUN_REQUIRED" | tee -a "$GITHUB_STEP_SUMMARY"
