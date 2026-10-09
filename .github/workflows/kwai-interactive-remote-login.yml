@@ -35,6 +35,14 @@ jobs:
         run: |
           set -euo pipefail
           [ -n "$REMOTE_ANDROID_TOKEN" ] || { echo "REMOTE_ANDROID_TOKEN secret missing"; exit 2; }
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('kwai_remote_android_ui.py')
+          s = p.read_text()
+          s = s.replace("#mark{position:absolute;width:18px;height:18px;border:2px solid #ff3b30;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;display:none}", "#mark{display:none!important}")
+          p.write_text(s)
+          print('REMOTE_TAP_MARKER_DISABLED')
+          PY
           curl -fL --retry 3 --retry-delay 1 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x /tmp/cloudflared
           python3 kwai_remote_android_ui.py >/tmp/android-ui.log 2>&1 &
@@ -129,8 +137,16 @@ jobs:
           done
           timeout 90 adb wait-for-device || { echo "FAILURE_SIGNAL=EMULATOR_WAIT_FOR_DEVICE_FAILED"; cat /tmp/emulator.log | tail -60; exit 124; }
           timeout 60 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 1; done' || { echo "FAILURE_SIGNAL=EMULATOR_BOOT_COMPLETION_FAILED"; exit 1; }
+          adb shell settings put system show_touches 0
+          adb shell settings put system pointer_location 0
+          SHOW_TOUCHES="$(adb shell settings get system show_touches | tr -d '\r')"
+          POINTER_LOCATION="$(adb shell settings get system pointer_location | tr -d '\r')"
+          echo "ANDROID_SHOW_TOUCHES=$SHOW_TOUCHES"
+          echo "ANDROID_POINTER_LOCATION=$POINTER_LOCATION"
+          [ "$SHOW_TOUCHES" = "0" ] || { echo "FAILURE_SIGNAL=SHOW_TOUCHES_NOT_DISABLED"; exit 31; }
+          [ "$POINTER_LOCATION" = "0" ] || { echo "FAILURE_SIGNAL=POINTER_LOCATION_NOT_DISABLED"; exit 32; }
           adb shell input keyevent 82 || true
-          echo "TEST_VALIDITY=EMULATOR_BOOTED"
+          echo "TEST_VALIDITY=EMULATOR_BOOTED_TOUCH_MARKERS_DISABLED"
 
       - name: Publish ready remote access
         shell: bash
@@ -188,6 +204,10 @@ jobs:
           export TUNNEL_PID="$(cat /tmp/cloudflared.pid)"
           kill -0 "$UI_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_UI_NOT_ALIVE_BEFORE_LOGIN"; exit 25; }
           kill -0 "$TUNNEL_PID" 2>/dev/null || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_NOT_ALIVE_BEFORE_LOGIN"; exit 26; }
+          SHOW_TOUCHES="$(adb shell settings get system show_touches | tr -d '\r')"
+          POINTER_LOCATION="$(adb shell settings get system pointer_location | tr -d '\r')"
+          echo "PRELOGIN_SHOW_TOUCHES=$SHOW_TOUCHES PRELOGIN_POINTER_LOCATION=$POINTER_LOCATION"
+          [ "$SHOW_TOUCHES" = "0" ] && [ "$POINTER_LOCATION" = "0" ] || { echo "FAILURE_SIGNAL=TOUCH_MARKERS_REENABLED"; exit 33; }
           bash kwai_remote_android_login_with_restore.sh
 
       - name: Final Android network diagnostics
