@@ -16,7 +16,7 @@ REPO = "UniversoAnthares/anthares-kwai-runner"
 ISSUE = 12
 OWNER = "universoanthares"
 STATE = Path.home() / ".kwai-remote-private" / "bridge-seen.json"
-COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check|refresh_bridge|ui_probe|menu_probe|avatar_map|user_menu_probe|avatar_sweep) ([a-zA-Z0-9_-]{12,64})$")
+COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check|refresh_bridge|ui_probe|menu_probe|avatar_map|user_menu_probe|avatar_sweep|create_probe) ([a-zA-Z0-9_-]{12,64})$")
 def gh(method, endpoint, data=None):
     args = ["gh", "api", "--method", method, endpoint]
     if data is not None:
@@ -369,6 +369,18 @@ async def browser_action(action):
                     except Exception:
                         continue
                 return summary
+            if action == "create_probe":
+                # Reuse the tested, read-only classifier on existing tabs.
+                # No navigation, clicks, upload, or account/session extraction.
+                import importlib.util
+                probe_path = Path(__file__).with_name("kwai-create-surface-probe.py")
+                spec = importlib.util.spec_from_file_location(
+                    "kwai_create_surface_probe", probe_path
+                )
+                probe = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(probe)
+                flags = await probe.inspect_existing_pages(context)
+                return {"chrome_connected": True, **flags}
             if action == "profile_check":
                 # Reuse the tested private guard rather than searching a closed
                 # menu in an arbitrary Kwai tab (known false-negative).
@@ -418,7 +430,7 @@ def main():
     import asyncio
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     seen = set(json.loads(STATE.read_text())) if STATE.exists() else set()
-    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check,refresh_bridge,ui_probe,menu_probe,avatar_map,user_menu_probe,avatar_sweep;no_session_export", flush=True)
+    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check,refresh_bridge,ui_probe,menu_probe,avatar_map,user_menu_probe,avatar_sweep,create_probe;no_session_export", flush=True)
     while True:
         try:
             comments = gh("GET", f"repos/{REPO}/issues/{ISSUE}/comments?per_page=100")
