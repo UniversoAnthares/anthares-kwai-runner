@@ -124,6 +124,7 @@ jobs:
           from playwright.async_api import async_playwright
           mod=runpy.run_path(".devcontainer/kwai-identity-guard.py",run_name="kwai_menu_test")
           inspect=mod["inspect_open_account_menu"]
+          open_menu=mod["open_account_menu_in_probe_page"]
 
           async def main():
               async with async_playwright() as p:
@@ -153,9 +154,26 @@ jobs:
                       logged_out=await inspect(browser.contexts[0])
                       assert logged_out["account_menu_logout_visible"] is False,logged_out
                       assert logged_out["account_menu_profile_link_matches"] is False,logged_out
+                      await page.set_content(
+                          '<img id="avatar" alt="account avatar" '
+                          'style="position:fixed;top:8px;right:10px;width:32px;height:32px" '
+                          'src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" '
+                          'onclick="document.getElementById(\\'dropdown\\').style.display=\\'block\\'">'
+                          '<div id="dropdown" role="menu" style="display:none">'
+                          '<a href="/@wrong.account">Lucas Rosalem</a><button>Log out</button></div>'
+                      )
+                      before=await inspect(browser.contexts[0])
+                      assert before["account_menu_logout_visible"] is False,before
+                      assert await open_menu(page) is True
+                      after=await inspect(browser.contexts[0])
+                      assert after["account_menu_logout_visible"] is True,after
+                      assert after["account_menu_profile_link_matches"] is False,after
+                      await page.set_content('<div role="menu"><button>Log in</button></div>')
+                      assert await open_menu(page) is False
                       print("KWAI_CODESPACE_ACCOUNT_MENU_DOM="+json.dumps({
                           "display_name_only_detected":True,"wrong_account_rejected":True,
                           "exact_menu_profile_accepted":True,"signed_out_rejected":True,
+                          "closed_menu_auto_opened":True,"no_avatar_fails_closed":True,
                           "credentials_used":False,"synthetic_only":True
                       }))
                   finally:
