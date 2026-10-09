@@ -59,6 +59,9 @@ async def browser_action(action):
                     "logout_visible": bool(flags.get("account_menu_logout_visible")),
                     "profile_navigation_attempted": bool(flags.get("account_menu_profile_navigation_attempted")),
                     "independent_profile_navigation_attempted": bool(flags.get("profile_navigation_attempted")),
+                    "profile_menu_found": bool(flags.get("profile_menu_found")),
+                    "profile_candidate_found": bool(flags.get("profile_candidate_found")),
+                    "profile_navigation_reached": bool(flags.get("profile_navigation_reached")),
                     "independent_profile_matches": bool(flags.get("profile_navigation_matches")),
                     "owner_edit_control_visible": bool(flags.get("profile_owner_control_visible")),
                     "own_profile_matches_expected": bool(flags.get("account_menu_profile_navigation_matches")
