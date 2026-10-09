@@ -67,3 +67,4 @@ retry-google-sso-6070cc3
 2026-10-09 automated-credential-network-error-reproduction 15b1d6d5
 2026-10-09 bounded-autofill-failfast 2d31b721
 2026-10-09 bounded-android-network-probes ae3b90ed
+2026-10-09 skip-interest-picker-before-login 4829ae37
