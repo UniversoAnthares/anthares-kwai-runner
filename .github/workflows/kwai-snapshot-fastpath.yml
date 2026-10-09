@@ -1,0 +1,126 @@
+name: Kwai Android snapshot fast path
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-snapshot-fastpath.yml']
+permissions:
+  contents: read
+jobs:
+  snapshot-fastpath:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Start timing and probe hosted image
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if [ -x "$SDK/emulator/emulator" ]; then E=1; else E=0; fi
+          if [ -s "$SDK/system-images/android-35/google_apis/x86_64/system.img" ]; then I=1; else I=0; fi
+          echo "RUNNER_BASE_EMULATOR_PRESENT=$E" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "RUNNER_BASE_SYSTEM_IMAGE_PRESENT=$I" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "FASTPATH_RUNNER_REGION=${RUNNER_TRACKING_ID:-unknown}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore direct full AVD cache v3
+        id: directcache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-android35-v3
+
+      - name: Restore proven full AVD archive v2 fallback
+        id: archivecache
+        if: steps.directcache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/kwai-portable-avd-full.tar.zst
+          key: kwai-speed-avd-fullstate-android35-v2
+
+      - name: Convert v2 archive to direct AVD directory
+        if: steps.directcache.outputs.cache-hit != 'true' && steps.archivecache.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          t=$(date +%s)
+          mkdir -p "$HOME/.android"
+          tar --zstd -xf /tmp/kwai-portable-avd-full.tar.zst -C "$HOME/.android"
+          test -d "$HOME/.android/avd/kwai-speed.avd/snapshots/kwai-ready"
+          echo "V2_TO_DIRECT_EXTRACT_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate AVD state before SDK restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$HOME/.android/avd/kwai-speed.ini"
+          test -d "$HOME/.android/avd/kwai-speed.avd/snapshots/kwai-ready"
+          echo "DIRECT_AVD_CACHE_HIT=${{ steps.directcache.outputs.cache-hit }}" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "ARCHIVE_V2_CACHE_HIT=${{ steps.archivecache.outputs.cache-hit }}" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "AVD_READY_BEFORE_SDK_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Save direct AVD cache v3
+        if: steps.directcache.outputs.cache-hit != 'true' && steps.archivecache.outputs.cache-hit == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-android35-v3
+
+      - name: Restore Android system image
+        id: sdkcache
+        if: env.RUNNER_BASE_SYSTEM_IMAGE_PRESENT != '1'
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+
+      - name: Restore Android emulator binary
+        id: emucache
+        if: env.RUNNER_BASE_EMULATOR_PRESENT != '1'
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
+
+      - name: Boot proven snapshot and enforce sub-10s
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          test -x "$SDK/emulator/emulator" || { echo "FASTPATH_FAILURE=EMULATOR_MISSING"; exit 2; }
+          test -s "$SDK/system-images/android-35/google_apis/x86_64/system.img" || { echo "FASTPATH_FAILURE=SYSTEM_IMAGE_MISSING"; exit 3; }
+          sudo chmod 666 /dev/kvm
+          t=$(date +%s)
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/kwai-fastpath-emulator.log 2>&1 &
+          timeout 60 "$ADB" wait-for-device
+          timeout 60 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"
+          BOOT=$(($(date +%s)-t))
+          echo "CROSS_RUN_SNAPSHOT_BOOT_SECONDS=$BOOT" | tee -a "$GITHUB_STEP_SUMMARY"
+          if grep -q "Successfully loaded snapshot 'kwai-ready'" /tmp/kwai-fastpath-emulator.log && ! grep -Eq "Failed to load snapshot 'kwai-ready'|performing a cold boot" /tmp/kwai-fastpath-emulator.log; then
+            echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=true" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=false" | tee -a "$GITHUB_STEP_SUMMARY"
+            grep -Ei 'snapshot|cold boot|error' /tmp/kwai-fastpath-emulator.log | tail -40 || true
+            exit 4
+          fi
+          grep -E "Loading snapshot 'kwai-ready'|Successfully loaded snapshot 'kwai-ready'" /tmp/kwai-fastpath-emulator.log | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "FASTPATH_TOTAL_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$BOOT" -ge 10 ]; then
+            echo "FASTPATH_FAILURE=BOOT_NOT_SUB10" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 5
+          fi
+          echo "FASTPATH_RESULT=PROVEN_SUB10" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Diagnostics
+        if: always()
+        shell: bash
+        run: |
+          echo "FASTPATH_END_UTC=$(date -u +%FT%TZ)" >> "$GITHUB_STEP_SUMMARY"
+          grep -Ei 'snapshot|cold boot|error|Boot completed' /tmp/kwai-fastpath-emulator.log 2>/dev/null | tail -50 || true
