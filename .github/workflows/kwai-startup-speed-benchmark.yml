@@ -90,7 +90,7 @@ jobs:
         run: |
           if [ -s /tmp/kwai-portable-avd-full.tar.zst ]; then
             echo "PORTABLE_SNAPSHOT_CACHE_HIT=true" | tee -a "$GITHUB_STEP_SUMMARY"
-            tar --zstd -tf /tmp/kwai-portable-avd-full.tar.zst | head -15 || true
+            echo "PORTABLE_SNAPSHOT_ARCHIVE_BYTES=$(stat -c%s /tmp/kwai-portable-avd-full.tar.zst)" | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo "PORTABLE_SNAPSHOT_CACHE_HIT=false" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
@@ -107,14 +107,14 @@ jobs:
           ADB="$SDK/platform-tools/adb"
           AVD="$HOME/.android/avd"
           echo "CROSS_RUN_SNAPSHOT_ARCHIVE_BYTES=$(stat -c%s /tmp/kwai-portable-avd-full.tar.zst)" | tee -a "$GITHUB_STEP_SUMMARY"
-          "$ADB" emu kill >/dev/null 2>&1 || true
-          timeout 30 bash -c 'while "$1" get-state >/dev/null 2>&1; do sleep 1; done' _ "$ADB" || true
           sudo chmod 666 /dev/kvm
           mkdir -p "$HOME/.android"
+          extract_start=$(date +%s)
           if ! tar --zstd -xf /tmp/kwai-portable-avd-full.tar.zst -C "$HOME/.android"; then
             echo "CROSS_RUN_SNAPSHOT_RESULT=EXTRACT_FAILED" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
+          echo "CROSS_RUN_ARCHIVE_EXTRACT_SECONDS=$(($(date +%s)-extract_start))" | tee -a "$GITHUB_STEP_SUMMARY"
           if [ ! -d "$AVD/kwai-speed.avd/snapshots/kwai-ready" ]; then
             echo "CROSS_RUN_SNAPSHOT_RESULT=DIR_MISSING" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 1
