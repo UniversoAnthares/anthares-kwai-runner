@@ -2,3 +2,5 @@
 2026-10-08 resilient auth methods and encrypted cache
 2026-10-08 verify secure session-key wiring
 2026-10-09 recheck session secret and persistence
+
+2026-10-09 verify secret after user action
