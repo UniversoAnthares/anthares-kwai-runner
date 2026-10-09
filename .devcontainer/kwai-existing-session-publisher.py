@@ -6,6 +6,7 @@ reads/exports cookies, storage, tokens or screenshots. Publication is two-phase:
 prepare_upload() may attach media/caption only after strict gates; publish_prepared()
 requires the same gates plus an explicit final confirmation flag.
 """
+import re
 from pathlib import Path
 
 
@@ -65,7 +66,7 @@ async def publish_prepared(page, *, identity_verified, operational_create_surfac
     if not final_confirmation:
         raise PermissionError("explicit_final_confirmation_required")
 
-    button = page.get_by_role("button", name=r"^(Publish|Post|Publicar)$").first
+    button = page.get_by_role("button", name=re.compile(r"^(Publish|Post|Publicar)$", re.I)).first
     if await button.count() < 1 or not await button.is_visible():
         raise RuntimeError("publish_control_not_found")
     await button.click()
