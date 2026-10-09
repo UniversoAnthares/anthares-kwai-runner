@@ -103,3 +103,5 @@ network-validation-20261009-b
 network-validation-20261009-c
 
 2026-10-09 permanent-touch-marker-suppression-validation 8291bff
+
+2026-10-09 auth-first second independent acceptance run; compare against workflow commit be52eb7; no publish without verified identity
