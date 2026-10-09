@@ -58,8 +58,12 @@ async def browser_action(action):
                     "account_menu_open_attempted": bool(evidence.get("account_menu_open_attempted")),
                     "logout_visible": bool(flags.get("account_menu_logout_visible")),
                     "profile_navigation_attempted": bool(flags.get("account_menu_profile_navigation_attempted")),
+                    "independent_profile_navigation_attempted": bool(flags.get("profile_navigation_attempted")),
+                    "independent_profile_matches": bool(flags.get("profile_navigation_matches")),
+                    "owner_edit_control_visible": bool(flags.get("profile_owner_control_visible")),
                     "own_profile_matches_expected": bool(flags.get("account_menu_profile_navigation_matches")
-                                                         or flags.get("account_menu_profile_link_matches")),
+                                                         or flags.get("account_menu_profile_link_matches")
+                                                         or flags.get("profile_navigation_matches")),
                     "persistence_permitted": False,
                     "server_identity_verified": False,
                 }
