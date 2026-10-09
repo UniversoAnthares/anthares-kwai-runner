@@ -182,7 +182,11 @@ class Handler(BaseHTTPRequestHandler):
             result = {"identity_verified": False,
                       "error": type(exc).__name__,
                       "reason": "inspector_unavailable"}
-        self.send(200, page_html(json.dumps(result, indent=2, ensure_ascii=False)))
+        if self.headers.get("Accept", "").split(",")[0].strip() == "application/json":
+            self.send(200, json.dumps(result, ensure_ascii=False),
+                      "application/json; charset=utf-8")
+        else:
+            self.send(200, page_html(json.dumps(result, indent=2, ensure_ascii=False)))
 
 
 if __name__ == "__main__":
