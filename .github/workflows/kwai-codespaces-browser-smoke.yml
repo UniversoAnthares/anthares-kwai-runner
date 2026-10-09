@@ -53,3 +53,31 @@ jobs:
             'credentials_used':False,'synthetic_only':True
           }))
           PY
+      - name: Verify real Chrome inspector stays fail-closed without login
+        run: |
+          python3 - <<'PY'
+          import json,re,urllib.parse,urllib.request
+          with urllib.request.urlopen('http://127.0.0.1:8765/',timeout=4) as r:
+            page=r.read().decode()
+          match=re.search(r'name="csrf" value="([^"]+)"',page)
+          assert match, 'private CSRF field missing'
+          data=urllib.parse.urlencode({'csrf':match.group(1)}).encode()
+          req=urllib.request.Request(
+            'http://127.0.0.1:8765/check',
+            data=data,method='POST',
+            headers={'Accept':'application/json','Content-Type':'application/x-www-form-urlencoded'}
+          )
+          with urllib.request.urlopen(req,timeout=48) as r:
+            evidence=json.load(r)
+          assert evidence['chrome_connected'] is True, evidence
+          assert evidence['identity_verified'] is False, evidence
+          assert evidence['persistence_permitted'] is False, evidence
+          assert evidence['server_identity_verified'] is False, evidence
+          with urllib.request.urlopen('http://127.0.0.1:9222/json/version',timeout=4) as r:
+            assert 'Browser' in json.load(r), 'Chrome stopped after identity inspection'
+          print('KWAI_CODESPACE_IDENTITY_SMOKE='+json.dumps({
+            'inspector_connected':True,'identity_verified':False,
+            'persistence_permitted':False,'chrome_survived':True,
+            'credentials_used':False
+          }))
+          PY
