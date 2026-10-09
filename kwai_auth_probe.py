@@ -3,7 +3,7 @@ import os,re,subprocess,sys,time,xml.etree.ElementTree as ET
 
 AUTH=("log in","login","entrar","sign in","password","senha","verification code","código de verificação","phone number","número de telefone","continue with google","continuar com google","continue with facebook","continuar com facebook")
 OFFLINE=("please check your internet connection","download failed. try again","no internet connection","sem conexão","sem internet")
-CREATE=("record","camera","upload","post","create","album","gallery","photo","video","gravar","câmera","carregar","publicar","criar","álbum","galeria","foto","vídeo")
+CREATE=("record","camera","upload","post","create","album","gallery","photo","video","gravar","câmera","carregar","publicar","criar","álbum","galeria","foto","vídeo","allow kwai","photos and videos","take pictures","permission")
 
 def adb(*args):
     return subprocess.run(["adb",*args],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=25).stdout
@@ -39,32 +39,67 @@ def inspect_profile():
         time.sleep(1)
     return 11
 
-def inspect_create_surface():
-    adb("shell","input","keyevent","KEYCODE_BACK");time.sleep(2)
-    try:nodes,text=dump()
-    except Exception:return 11
-    if any(x in text for x in AUTH):return 10
-    candidate=None
+def tap_center_plus(nodes):
+    # Prefer semantic/resource-id match from the persistent bottom navigation.
     for n in nodes:
-        rid=n.attrib.get("resource-id","").lower(); desc=(n.attrib.get("content-desc","")+" "+n.attrib.get("text","")).lower()
+        rid=n.attrib.get("resource-id","").lower()
+        desc=(n.attrib.get("content-desc","")+" "+n.attrib.get("text","")).strip().lower()
         p=center(n.attrib.get("bounds",""))
         if not p:continue
-        if any(k in rid for k in ("camera","create","publish","post","record")) or desc.strip() in ("+","create","criar"):
-            candidate=n;break
-    if candidate:
-        tap_node(candidate)
-    else:
-        size=adb("shell","wm","size")
-        m=re.search(r"(\d+)x(\d+)",size)
-        if not m:return 11
-        w,h=map(int,m.groups());adb("shell","input","tap",str(w//2),str(int(h*0.94)));time.sleep(4)
+        if any(k in rid for k in ("camera","create","publish","post","record","ll_camera","btn_camera")) or desc in ("+","create","criar"):
+            return tap_node(n)
+    # User-proven screen geometry: '+' remains visible/clickable even while Profile
+    # shows the false offline page. Tap it directly without BACK, which can exit Kwai.
+    size=adb("shell","wm","size")
+    m=re.search(r"(\d+)x(\d+)",size)
+    if not m:return False
+    w,h=map(int,m.groups())
+    adb("shell","input","tap",str(w//2),str(int(h*0.955)))
+    time.sleep(4)
+    return True
+
+def inspect_create_surface():
     try:nodes,text=dump()
     except Exception:return 11
     if any(x in text for x in AUTH):return 10
+
+    # First bypass: open the central + directly from the broken Profile screen.
+    if not tap_center_plus(nodes):return 11
+    for _ in range(5):
+        try:nodes,text=dump()
+        except Exception:time.sleep(1);continue
+        if any(x in text for x in AUTH):return 10
+        focus=adb("shell","dumpsys","window").lower()
+        operational=any(x in text for x in CREATE) or any(x in focus for x in ("camera","record","publish","post","capture","editor","permissioncontroller"))
+        if operational:
+            print("KWAI_OPERATIONAL_BYPASS=DIRECT_PLUS_FROM_BROKEN_PROFILE")
+            adb("shell","input","keyevent","KEYCODE_BACK")
+            return 0
+        time.sleep(1)
+
+    # Fallback: if the overlay swallowed the first tap, go Home tab inside Kwai,
+    # never Android BACK, then hit + again.
+    try:nodes,text=dump()
+    except Exception:return 11
+    home=None
+    for n in nodes:
+        rid=n.attrib.get("resource-id","").lower(); desc=(n.attrib.get("content-desc","")+" "+n.attrib.get("text","")).strip().lower()
+        if rid.endswith("ll_home") or desc in ("home","início","inicio"):
+            home=n;break
+    if home:tap_node(home)
+    else:
+        size=adb("shell","wm","size");m=re.search(r"(\d+)x(\d+)",size)
+        if m:
+            w,h=map(int,m.groups());adb("shell","input","tap",str(int(w*0.09)),str(int(h*0.955)));time.sleep(3)
+    try:nodes,text=dump()
+    except Exception:return 11
+    if not tap_center_plus(nodes):return 11
+    try:nodes,text=dump()
+    except Exception:return 11
     focus=adb("shell","dumpsys","window").lower()
-    operational=any(x in text for x in CREATE) or any(x in focus for x in ("camera","record","publish","post","capture","editor"))
+    operational=any(x in text for x in CREATE) or any(x in focus for x in ("camera","record","publish","post","capture","editor","permissioncontroller"))
     if operational:
-        print("KWAI_OPERATIONAL_BYPASS=CREATE_SURFACE_READY")
+        print("KWAI_OPERATIONAL_BYPASS=HOME_PLUS_ROUTE_READY")
         adb("shell","input","keyevent","KEYCODE_BACK")
         return 0
     return 11
