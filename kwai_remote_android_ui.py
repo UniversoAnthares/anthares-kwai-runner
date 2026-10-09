@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 TOKEN = os.environ["REMOTE_ANDROID_TOKEN"]
 SHOT_LOCK = threading.Lock()
 SHOT_CACHE = {"bytes": b"", "at": 0.0}
+TOUCH_VISUALS_DISABLED = False
 
 
 def adb_bin():
@@ -40,6 +41,20 @@ def android_ready():
         return False
 
 
+def ensure_touch_visuals_disabled():
+    global TOUCH_VISUALS_DISABLED
+    if TOUCH_VISUALS_DISABLED or not android_ready():
+        return
+    try:
+        adb("shell", "settings", "put", "system", "show_touches", "0", timeout=4, check=True)
+        adb("shell", "settings", "put", "system", "pointer_location", "0", timeout=4, check=True)
+        show = adb("shell", "settings", "get", "system", "show_touches", timeout=4).decode("utf-8", "replace").strip()
+        pointer = adb("shell", "settings", "get", "system", "pointer_location", timeout=4).decode("utf-8", "replace").strip()
+        TOUCH_VISUALS_DISABLED = show == "0" and pointer == "0"
+    except Exception:
+        TOUCH_VISUALS_DISABLED = False
+
+
 def device_size():
     try:
         out = adb("shell", "wm", "size", timeout=3).decode("utf-8", "replace")
@@ -60,6 +75,8 @@ def safe_write(handler, data):
 
 def screenshot():
     ready = android_ready()
+    if ready:
+        ensure_touch_visuals_disabled()
     with SHOT_LOCK:
         now = time.monotonic()
         if ready and (not SHOT_CACHE["bytes"] or now - SHOT_CACHE["at"] >= 1.8):
@@ -78,7 +95,7 @@ PAGE = r"""<!doctype html><meta name=viewport content='width=device-width,initia
 <style>
 body{font-family:sans-serif;max-width:520px;margin:auto;background:#111;color:#eee}#wrap{position:relative}
 img{width:100%;touch-action:none;background:#111;user-select:none;-webkit-user-drag:none;cursor:crosshair}
-#mark{position:absolute;width:18px;height:18px;border:2px solid #ff3b30;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;display:none}
+#mark{display:none!important}
 button,input{font-size:18px;padding:10px;margin:4px}#state{padding:8px 4px;color:#bbb}pre{white-space:pre-wrap;font-size:12px}
 </style>
 <h3>Android remoto — Kwai</h3><div id=state>Conectando ao Android...</div>
@@ -90,7 +107,7 @@ const q=new URLSearchParams(location.search),t=q.get('t'),s=document.getElementB
 async function timedFetch(url,opt={}){let c=new AbortController(),tm=setTimeout(()=>c.abort(),7000);try{return await fetch(url,{...opt,signal:c.signal,cache:'no-store'})}finally{clearTimeout(tm)}}
 async function refresh(){if(loading)return;loading=true;try{let r=await timedFetch('/shot?t='+encodeURIComponent(t)+'&v='+Date.now());if(!r.ok)throw Error(r.status);let ready=r.headers.get('X-Android-Ready')==='1',b=await r.blob(),u=URL.createObjectURL(b),old=s.dataset.url;s.src=u;s.dataset.url=u;if(old)URL.revokeObjectURL(old);errors=0;state.textContent=ready?'Android pronto':'Android inicializando...'}catch(e){errors++;state.textContent=errors<3?'Reconectando à tela...':'Tela temporariamente indisponível — tentando novamente'}finally{loading=false}}
 setInterval(refresh,2500);refresh();
-async function sendTap(e){e.preventDefault();if(tapBusy)return;let r=s.getBoundingClientRect(),rx=(e.clientX-r.left)/r.width,ry=(e.clientY-r.top)/r.height;if(rx<0||rx>1||ry<0||ry>1)return;tapBusy=true;mark.style.left=(rx*100)+'%';mark.style.top=(ry*100)+'%';mark.style.display='block';try{let rr=await timedFetch('/tap?t='+encodeURIComponent(t)+'&rx='+rx.toFixed(6)+'&ry='+ry.toFixed(6),{method:'POST'});if(!rr.ok)throw Error(rr.status);state.textContent='Toque enviado';setTimeout(refresh,250)}catch(e){state.textContent='Falha no toque — tente novamente'}finally{setTimeout(()=>{tapBusy=false;mark.style.display='none'},220)}}
+async function sendTap(e){e.preventDefault();if(tapBusy)return;let r=s.getBoundingClientRect(),rx=(e.clientX-r.left)/r.width,ry=(e.clientY-r.top)/r.height;if(rx<0||rx>1||ry<0||ry>1)return;tapBusy=true;try{let rr=await timedFetch('/tap?t='+encodeURIComponent(t)+'&rx='+rx.toFixed(6)+'&ry='+ry.toFixed(6),{method:'POST'});if(!rr.ok)throw Error(rr.status);state.textContent='Toque enviado';setTimeout(refresh,250)}catch(e){state.textContent='Falha no toque — tente novamente'}finally{setTimeout(()=>{tapBusy=false},220)}}
 s.addEventListener('pointerup',sendTap);s.addEventListener('dragstart',e=>e.preventDefault());
 function key(k){timedFetch('/key?t='+encodeURIComponent(t)+'&k='+k,{method:'POST'}).then(refresh)}
 function kwai(){timedFetch('/kwai?t='+encodeURIComponent(t),{method:'POST'}).then(()=>setTimeout(refresh,600))}
@@ -189,11 +206,7 @@ class Handler(BaseHTTPRequestHandler):
                 n = int(self.headers.get("Content-Length", "0"))
                 v = self.rfile.read(n).decode("utf-8", "replace")
                 # Only type when the user explicitly presses Digitar.
-                # Clear the focused field with one Android selection command,
-                # avoiding repeated key events that may type unintended characters.
                 if v:
-                    # Do not inject 80 backspaces into a live Google form.
-                    # The caller can explicitly use Clear text first.
                     adb("shell", "input", "text", v.replace("%", "%25").replace(" ", "%s"), timeout=15, check=True)
             elif u.path == "/done":
                 with open("/tmp/anthares-android-done", "w") as f:
