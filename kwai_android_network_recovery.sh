@@ -45,7 +45,21 @@ for n in root.iter('node'):
         break
 PY
 )"
-  [ -n "$xy" ] || return 1
+  if [ -z "$xy" ]; then
+    # The Kwai offline screen sometimes renders Retry without accessibility labels.
+    # Fallback uses the stable central button location, scaled to the display.
+    local dims width height
+    dims="$(adb shell wm size 2>/dev/null | tr -d '\r' | tail -1)"
+    width="$(printf '%s' "$dims" | sed -nE 's/.* ([0-9]+)x([0-9]+).*/\1/p')"
+    height="$(printf '%s' "$dims" | sed -nE 's/.* ([0-9]+)x([0-9]+).*/\2/p')"
+    if [[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]]; then
+      xy="$((width/2)) $((height*55/100))"
+      log "KWAI_OFFLINE_RETRY_COORDINATE_FALLBACK"
+    else
+      log "KWAI_OFFLINE_RETRY_NO_COORDINATES"
+      return 1
+    fi
+  fi
   adb shell input tap $xy >/dev/null 2>&1 || return 1
   log "KWAI_OFFLINE_RETRY_TAPPED"
 }
@@ -130,7 +144,11 @@ watch(){
         normalize_network
         last_normalize="$now"
       fi
-      tap_retry || log "KWAI_OFFLINE_RETRY_NOT_ACCESSIBLE"
+      if ! tap_retry; then
+        log "KWAI_OFFLINE_RETRY_NOT_ACCESSIBLE"
+        adb shell dumpsys connectivity 2>/dev/null | grep -E 'VALIDATED|INTERNET|NetworkAgentInfo' | head -15 >> "$LOG" || true
+        adb logcat -d -t 250 2>/dev/null | grep -Ei 'Cronet|UnknownHost|SSLHandshake|ConnectException|ERR_|hodor|kwai' | tail -25 >> "$LOG" || true
+      fi
       sleep 5
       # Preserve a recently returned Google SSO callback. Only relaunch after
       # roughly a minute of a continuously visible, unrecoverable offline screen.
