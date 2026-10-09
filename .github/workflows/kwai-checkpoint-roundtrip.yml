@@ -1,0 +1,19 @@
+name: Kwai encrypted checkpoint two-restore acceptance
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - tools/kwai_android_checkpoint.sh
+      - tools/test_kwai_checkpoint.py
+      - .github/workflows/kwai-checkpoint-roundtrip.yml
+permissions:
+  contents: read
+jobs:
+  synthetic-two-restores:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Two independent encrypted restores
+        run: python3 tools/test_kwai_checkpoint.py
