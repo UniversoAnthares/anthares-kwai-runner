@@ -1,2 +1,3 @@
 2026-10-08 chrome session persistence preflight
 2026-10-08 resilient auth methods and encrypted cache
+2026-10-08 verify secure session-key wiring
