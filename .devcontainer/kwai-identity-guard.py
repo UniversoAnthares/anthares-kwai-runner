@@ -223,21 +223,12 @@ async def inspect_own_profile_navigation(context):
               // The avatar above 'Log out' is the account row. No other item
               // in the dropdown is clicked, especially not Log out.
               const ir = images[0].getBoundingClientRect();
-              // Kwai's image is decorative: the clickable account row
-              // normally receives pointer events beside the avatar.
-              let row = images[0].parentElement;
-              for (let i=0; i<5 && row; i++, row=row.parentElement) {
-                const rr=row.getBoundingClientRect();
-                const label=(row.innerText||'').trim();
-                if (rr.width>=100 && rr.width<=380 &&
-                    rr.height>=30 && rr.height<=120 &&
-                    rr.top>=lr.top-210 && rr.bottom<=lr.top-4 &&
-                    !/(log\s*out|logout|sair|upload|publicar|postar)/i.test(label)) {
-                  return {x:Math.min(rr.right-20,ir.right+55),
-                          y:ir.top+ir.height/2};
-                }
-              }
-              return {x:ir.right+28,y:ir.top+ir.height/2};
+              // Try the account avatar itself first (required for Kwai
+              // variants where the image is the actual click target).
+              // A separate pointer-offset fallback handles decorative avatars.
+              return {x:ir.left+ir.width/2, y:ir.top+ir.height/2,
+                      offset_x:ir.right+28};
+
             }
           }
           return false;
@@ -248,7 +239,14 @@ async def inspect_own_profile_navigation(context):
             outcome["account_menu_profile_navigation_attempted"] = True
         if not outcome["account_menu_profile_navigation_attempted"]:
             return outcome
-        for _ in range(12):
+        for iteration in range(12):
+            # Some live Kwai builds attach the handler to the account row
+            # rather than the avatar; do not use this fallback unless the
+            # initial safe avatar click has demonstrably not navigated.
+            if iteration == 3 and not outcome["account_menu_profile_route_changed"]:
+                if not any(p not in initial_pages and p != page for p in context.pages):
+                    await page.mouse.click(point["offset_x"], point["y"])
+
             await page.wait_for_timeout(350)
             opened = [p for p in context.pages
                       if p not in initial_pages and p != page]
