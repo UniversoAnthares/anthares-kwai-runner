@@ -1,0 +1,19 @@
+name: Kwai Codespaces Browser Security QA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.devcontainer/**'
+      - 'tests/test_kwai_codespaces_browser.py'
+      - '.github/workflows/kwai-codespaces-browser-qa.yml'
+permissions:
+  contents: read
+jobs:
+  browser-only-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Codespaces private-browser and identity guard
+        run: python3 -m unittest discover -s tests -p 'test_kwai_codespaces_browser.py' -v
