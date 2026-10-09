@@ -61,6 +61,48 @@ class CodespacesBrowserTests(unittest.TestCase):
         evidence["login_controls_absent"] = False
         self.assertFalse(self.mod["assess_evidence"](evidence))
 
+    def test_visible_logout_detects_authentication_but_not_handle(self):
+        evidence = {
+            "profile_url_matches": True,
+            "account_menu_logout_visible": True,
+            "account_menu_profile_link_matches": False,
+            "login_controls_absent": True,
+        }
+        self.assertTrue(self.mod["assess_authentication"](evidence))
+        self.assertFalse(self.mod["assess_evidence"](evidence))
+
+    def test_menu_profile_link_and_logout_can_verify_exact_ui_handle(self):
+        evidence = {
+            "profile_url_matches": True,
+            "account_menu_logout_visible": True,
+            "account_menu_profile_link_matches": True,
+            "login_controls_absent": True,
+        }
+        self.assertTrue(self.mod["assess_evidence"](evidence))
+        for key in ("account_menu_logout_visible", "account_menu_profile_link_matches",
+                    "profile_url_matches", "login_controls_absent"):
+            changed = {**evidence, key: False}
+            self.assertFalse(self.mod["assess_evidence"](changed), key)
+
+    def test_unrelated_account_and_display_name_do_not_verify_handle(self):
+        evidence = {
+            "profile_url_matches": True,
+            "account_menu_logout_visible": True,
+            "account_menu_profile_link_matches": False,
+            "account_menu_display_name": "Lucas Rosalem",
+            "login_controls_absent": True,
+        }
+        self.assertFalse(self.mod["assess_evidence"](evidence))
+
+    def test_account_menu_probe_never_exports_private_session(self):
+        source = GUARD.read_text()
+        self.assertIn("inspect_open_account_menu", source)
+        self.assertIn('"authenticated_ui_detected"', source)
+        self.assertIn('"persistence_permitted"] = False', source)
+        self.assertIn('"server_identity_verified"] = False', source)
+        self.assertNotIn("storage_state(", source)
+        self.assertNotIn("context.cookies(", source)
+
     def test_inspector_never_exports_browser_state(self):
         source = GUARD.read_text()
         self.assertIn('"persistence_permitted"] = False', source)
