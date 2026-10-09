@@ -32,7 +32,7 @@ jobs:
           print("::add-mask::"+token)
           action=os.environ["ACTION"]
           if action=="recent":
-              url="https://circleci.com/api/v2/project/gh/UniversoAnthares/anthares-kwai-runner/pipeline?page-token="
+              url="https://circleci.com/api/v2/project/circleci/AD1ogrgZSksHHasJt5oQWS/EzY5SP7UfkgqSdih1JT1sh/pipeline"
           elif action=="pipeline":
               pid=os.environ["PIPELINE_ID"]
               uuid.UUID(pid)
