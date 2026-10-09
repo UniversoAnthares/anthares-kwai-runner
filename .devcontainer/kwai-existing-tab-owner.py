@@ -1,95 +1,135 @@
 #!/usr/bin/env python3
-"""Fail-closed owner check on the *existing* Kwai CDP tab.
+"""Fail-closed exact-owner verification for the live Kwai Chrome session.
 
-No new tab, navigation, cookie/storage read, page-text export or publishing.
-Only boolean evidence is returned. The account menu may be opened in place.
+No cookies, storage, tokens, screenshots, page text, or credentials leave Chrome.
+Only boolean evidence is returned. Publication is never attempted here.
 """
-import re
+import importlib.util
+from pathlib import Path
 from urllib.parse import urlsplit
 
 EXPECTED = "universo.anthares"
 KWAI_HOSTS = {"kwai.com", "www.kwai.com"}
 
 
+def load_guard():
+    path = Path(__file__).with_name("kwai-identity-guard.py")
+    spec = importlib.util.spec_from_file_location("kwai_identity_guard_owner_fallback", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+async def inspect_menu(page):
+    """Return only boolean account-menu evidence from one existing Kwai tab."""
+    return await page.evaluate(r"""(expected) => {
+      const visible = el => {
+        if (!el) return false;
+        const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && s.display !== 'none' &&
+          s.visibility !== 'hidden';
+      };
+      const nodes = [...document.querySelectorAll(
+        'a[href],button,[role="button"],[role="menuitem"],span,div'
+      )].filter(visible);
+      const logoutRe = /^(log\s*out|logout|sign\s*out|sair|terminar sess[aã]o|encerrar sess[aã]o)$/i;
+      const loginRe = /^(log\s*in|sign\s*in|login|entrar|fazer login)$/i;
+      const text = el => (el.innerText || el.textContent || '').trim();
+      const logout = nodes.find(el => text(el).length <= 40 && logoutRe.test(text(el)));
+      const loginGate = nodes.some(el => text(el).length <= 40 && loginRe.test(text(el)));
+      if (!logout) return {logout:false, loginGate, exactHref:false, exactText:false};
+
+      let panel = logout;
+      for (let i = 0; i < 8 && panel; i++, panel = panel.parentElement) {
+        const r = panel.getBoundingClientRect();
+        if (!visible(panel) || r.width < 100 || r.width > 520 ||
+            r.height < 50 || r.height > 700 || r.right < innerWidth * .65) continue;
+
+        const exactHref = [...panel.querySelectorAll('a[href]')].some(a => {
+          try {
+            const u = new URL(a.getAttribute('href'), location.href);
+            return ['kwai.com','www.kwai.com'].includes(u.hostname) &&
+              u.pathname.replace(/\/$/, '').toLowerCase() === '/@' + expected;
+          } catch (_) { return false; }
+        });
+        const tokens = [...panel.querySelectorAll('a,span,div,button,[role="menuitem"]')]
+          .filter(visible)
+          .flatMap(el => text(el).split(/\s+/))
+          .map(t => t.replace(/^[,;|]+|[,;|]+$/g, '').toLowerCase());
+        const exactText = tokens.includes('@' + expected) || tokens.includes(expected);
+        if (exactHref || exactText) {
+          return {logout:true, loginGate, exactHref, exactText};
+        }
+      }
+      return {logout:true, loginGate, exactHref:false, exactText:false};
+    }""", EXPECTED)
+
+
 async def inspect_existing_tab(context):
-    for page in context.pages:
+    guard = load_guard()
+    authenticated = False
+    exact_href = False
+    exact_text = False
+
+    # First inspect the user's existing Kwai tabs. If the menu is closed, use
+    # the already-hardened pointer routine from the identity guard to open only
+    # the top-right account trigger; never click Log out or Publish.
+    for page in list(context.pages):
         url = urlsplit(page.url)
         if url.hostname not in KWAI_HOSTS:
             continue
         try:
-            # Open the real account menu if closed. Never click logout or publish.
-            result = await page.evaluate(r"""(expected) => {
-              const visible = el => {
-                if (!el) return false;
-                const r = el.getBoundingClientRect();
-                const s = getComputedStyle(el);
-                return r.width > 0 && r.height > 0 &&
-                  s.visibility !== 'hidden' && s.display !== 'none';
-              };
-              const nodes = [...document.querySelectorAll('a,button,[role="button"],[role="menuitem"]')].filter(visible);
-              const label = el => [
-                el.innerText || '', el.getAttribute('aria-label') || '',
-                el.getAttribute('title') || ''
-              ].join(' ').trim();
-              const logout = nodes.some(el => /^(log\s*out|logout|sair|encerrar sess[aã]o)$/i.test(label(el)));
-              const loginGate = nodes.some(el => /^(log\s*in|sign\s*in|entrar|fazer login)$/i.test(label(el)));
-              const menu = nodes.filter(el => el.closest('[role="menu"],[class*="menu"],[class*="popover"],[class*="dropdown"]'));
-              const exact = el => {
-                const href = el.getAttribute('href') || '';
-                try {
-                  const u = new URL(href, location.href);
-                  return ['kwai.com','www.kwai.com'].includes(u.hostname) &&
-                    u.pathname.replace(/\/$/,'').toLowerCase() === '/@' + expected;
-                } catch (_) { return false; }
-              };
-              // A public link in feed content is NOT identity evidence.
-              const ownLink = menu.some(el => exact(el) && visible(el));
-              const accountRow = menu.some(el => exact(el) &&
-                /profile|perfil|account|conta|avatar/i.test(
-                  label(el) + ' ' + (el.parentElement?.className || '')));
-              return {logout, loginGate, ownLink, accountRow};
-            }""", EXPECTED)
-            if not result["logout"]:
-                # The dropdown is normally closed. Open ONLY the top-right
-                # avatar with a real pointer click, never a menu action.
-                points = await page.evaluate(r"""() => [...document.querySelectorAll('header img,[role="banner"] img')].filter(el => {
-                    const r=el.getBoundingClientRect(),s=getComputedStyle(el);
-                    return r.width>=16 && r.width<=100 && r.height>=16 && r.height<=100 &&
-                      r.left>=innerWidth*.70 && r.top<=180 &&
-                      s.display!=='none' && s.visibility!=='hidden';
-                  }).sort((a,b)=>b.getBoundingClientRect().right-a.getBoundingClientRect().right)
-                  .slice(0,1).map(el=>{const r=el.getBoundingClientRect();
-                    return {x:r.left+r.width/2,y:r.top+r.height/2};})""")
-                if points:
-                    await page.mouse.click(points[0]["x"], points[0]["y"])
-                    await page.wait_for_timeout(400)
-                    result = await page.evaluate(r"""(expected) => {
-                      const visible=el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);
-                        return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'};
-                      const nodes=[...document.querySelectorAll('a,button,[role="menuitem"],span,div')].filter(visible);
-                      const logout=nodes.filter(el=>/^(log\\s*out|logout|sign\\s*out|sair)$/i.test((el.innerText||'').trim()) &&
-                        (el.innerText||'').length<=32);
-                      const exact=el=>{try{const u=new URL(el.getAttribute('href')||'',location.href);
-                        return ['kwai.com','www.kwai.com'].includes(u.hostname)&&
-                          u.pathname.replace(/\\/$/,'').toLowerCase()==='/@'+expected;}catch(_){return false}};
-                      const own=logout.some(el=>{let a=el;for(let i=0;i<6&&a;i++,a=a.parentElement){
-                        if(a.querySelectorAll&&[...a.querySelectorAll('a[href]')].some(exact))return true;
-                      }return false});
-                      const loginGate=nodes.some(el=>/^(log\\s*in|sign\\s*in|entrar|fazer login)$/i.test((el.innerText||'').trim()) &&
-                        (el.innerText||'').length<=32);
-                      return {logout:logout.length>0,loginGate,ownLink:own,accountRow:own};
-                    }""", EXPECTED)
-            if not result["logout"]:
-                return {"chrome_connected": True, "authenticated_ui_detected": False,
-                        "exact_owner_menu_link": False, "identity_verified": False,
-                        "session_exported": False}
-            exact = bool(result["ownLink"] and result["accountRow"])
-            verified = bool(result["logout"] and exact and not result["loginGate"])
-            return {"chrome_connected": True, "authenticated_ui_detected": bool(result["logout"]),
-                    "exact_owner_menu_link": exact, "identity_verified": verified,
-                    "session_exported": False}
+            evidence = await inspect_menu(page)
+            if not evidence["logout"]:
+                await guard.open_account_menu_in_probe_page(page)
+                await page.wait_for_timeout(500)
+                evidence = await inspect_menu(page)
+            authenticated |= bool(evidence["logout"] and not evidence["loginGate"])
+            exact_href |= bool(evidence["exactHref"])
+            exact_text |= bool(evidence["exactText"])
+            if authenticated and (exact_href or exact_text):
+                return {
+                    "chrome_connected": True,
+                    "authenticated_ui_detected": True,
+                    "exact_owner_menu_link": exact_href,
+                    "exact_owner_menu_text": exact_text,
+                    "exact_owner_navigation": False,
+                    "identity_verified": True,
+                    "session_exported": False,
+                }
         except Exception:
             continue
-    return {"chrome_connected": True, "authenticated_ui_detected": False,
-            "exact_owner_menu_link": False, "identity_verified": False,
-            "session_exported": False}
+
+    # Fallback 1: from an authenticated menu, follow only the account row in a
+    # disposable tab and accept an exact /@universo.anthares destination.
+    navigation = await guard.inspect_own_profile_navigation(context)
+    exact_navigation = bool(navigation.get("account_menu_profile_navigation_matches"))
+    if exact_navigation:
+        return {
+            "chrome_connected": True,
+            "authenticated_ui_detected": True,
+            "exact_owner_menu_link": exact_href,
+            "exact_owner_menu_text": exact_text,
+            "exact_owner_navigation": True,
+            "identity_verified": True,
+            "session_exported": False,
+        }
+
+    # Fallback 2: modern Kwai variants may omit Log out from the compact menu.
+    # In that case require exact own-profile navigation PLUS owner-only profile
+    # control and absence of login controls; this remains fail-closed.
+    independent = await guard.inspect_profile_without_logout(context)
+    independent_owner = bool(
+        independent.get("profile_navigation_matches") is True
+        and independent.get("profile_owner_control_visible") is True
+        and independent.get("profile_login_controls_absent") is True
+    )
+    return {
+        "chrome_connected": True,
+        "authenticated_ui_detected": bool(authenticated or independent_owner),
+        "exact_owner_menu_link": exact_href,
+        "exact_owner_menu_text": exact_text,
+        "exact_owner_navigation": bool(exact_navigation or independent_owner),
+        "identity_verified": independent_owner,
+        "session_exported": False,
+    }
