@@ -2,6 +2,16 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
+# The upstream devcontainer image can contain an unrelated Yarn APT source
+# with an expired/missing signing key. We do not install Yarn; disable only
+# that source rather than weakening apt signature verification globally.
+for source in /etc/apt/sources.list.d/*; do
+  if [[ -f "$source" ]] && grep -q 'dl.yarnpkg.com/debian' "$source"; then
+    sudo mv -- "$source" "${source}.disabled"
+    echo "KWAI_CODESPACE_UNUSED_YARN_SOURCE_DISABLED=true"
+  fi
+done
+
 # All installation occurs inside the GitHub Codespace, never on the user's PC.
 sudo apt-get update -qq
 sudo apt-get install -y -qq --no-install-recommends \
