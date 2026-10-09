@@ -45,5 +45,5 @@ start_once inspector "${PRIVATE_HOME}/venv/bin/python" -u .devcontainer/kwai-ide
 
 echo "KWAI_CODESPACE_PRIVATE_NOVNC=http://127.0.0.1:6080/vnc.html"
 echo "KWAI_CODESPACE_PRIVATE_IDENTITY=http://127.0.0.1:8765/"
-echo "KWAI_CODESPACE_SECURITY=GitHub-authenticated private forwarded ports only"
+echo "KWAI_CODESPACE_REQUIRED_PORT_VISIBILITY=private_check_in_GitHub_PORTS"
 echo "KWAI_CODESPACE_PROFILE_WARNING=contains_sensitive_browser_state;never_commit_or_publish"
