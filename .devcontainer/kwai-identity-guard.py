@@ -202,6 +202,83 @@ async def inspect_own_profile_navigation(context):
     return outcome
 
 
+async def inspect_profile_without_logout(context):
+    """Navigate only the account avatar row in a disposable tab.
+
+    Unlike the legacy route, the account menu need not expose a visible
+    logout label. A public profile URL alone is never proof of ownership.
+    """
+    result = {"profile_navigation_attempted": False,
+              "profile_navigation_matches": False,
+              "profile_owner_control_visible": False,
+              "profile_login_controls_absent": False}
+    page = await context.new_page()
+    try:
+        await page.goto("https://www.kwai.com/", wait_until="domcontentloaded",
+                        timeout=12000)
+        await page.wait_for_timeout(900)
+        if not await open_account_menu_in_probe_page(page):
+            return result
+        await page.wait_for_timeout(500)
+        # Select only a compact account row in the top-right dropdown.
+        # Do not interact with logout, login, uploads, or feed controls.
+        clicked = await page.evaluate(r"""() => {
+          const visible = el => {
+            const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+            return r.width >= 12 && r.height >= 12 &&
+              s.display !== 'none' && s.visibility !== 'hidden';
+          };
+          const candidates = [...document.querySelectorAll('img')].filter(img => {
+            const r = img.getBoundingClientRect();
+            return visible(img) && r.left > innerWidth * .65 &&
+              r.top > 40 && r.top < 370 && r.width <= 90 && r.height <= 90;
+          });
+          // Prefer an avatar inside a small floating menu, not the header
+          // avatar itself and never an avatar in the feed.
+          const rows = candidates.map(img => {
+            let node = img.parentElement;
+            for (let i=0; i<5 && node; i++, node=node.parentElement) {
+              const r = node.getBoundingClientRect();
+              if (r.width >= 75 && r.width <= 370 &&
+                  r.height >= 30 && r.height <= 110 &&
+                  r.right > innerWidth*.78 && r.top > 45 &&
+                  r.top < 340 && node.querySelector('img')) {
+                return {img, node, top:r.top};
+              }
+            }
+            return null;
+          }).filter(Boolean).sort((a,b)=>a.top-b.top);
+          const row = rows.find(x => x.top > 75);
+          if (!row) return false;
+          row.img.click();
+          return true;
+        }""")
+        result["profile_navigation_attempted"] = clicked is True
+        if not clicked:
+            return result
+        for _ in range(12):
+            await page.wait_for_timeout(350)
+            current = urlsplit(page.url)
+            if current.scheme == "https" and current.hostname == "www.kwai.com":
+                path = current.path.rstrip("/").lower()
+                if path.startswith("/@"):
+                    result["profile_navigation_matches"] = path == "/@" + EXPECTED
+                    break
+        if result["profile_navigation_matches"]:
+            owner = await page.get_by_text("Editar perfil", exact=True).count()
+            owner += await page.get_by_text("Edit profile", exact=True).count()
+            login = await page.get_by_text("Fazer login", exact=True).count()
+            login += await page.get_by_text("Log in", exact=True).count()
+            login += await page.get_by_text("Entrar", exact=True).count()
+            result["profile_owner_control_visible"] = owner > 0
+            result["profile_login_controls_absent"] = login == 0
+    except Exception:
+        pass
+    finally:
+        await page.close()
+    return result
+
+
 async def inspect_browser():
     from playwright.async_api import async_playwright
 
@@ -278,8 +355,21 @@ async def inspect_browser():
             if result["authenticated_ui_detected"] and not evidence["account_menu_profile_link_matches"]:
                 navigation = await inspect_own_profile_navigation(context)
                 evidence.update(navigation)
+            # Independent fallback: navigate the signed-in account row even
+            # when Kwai omits or hides the logout menu item.
+            if not evidence["account_menu_profile_link_matches"] and not evidence.get("account_menu_profile_navigation_matches"):
+                independent = await inspect_profile_without_logout(context)
+                evidence.update(independent)
             result["evidence"] = evidence
-            result["identity_verified"] = assess_evidence(evidence)
+            independent_owner = (
+                evidence.get("profile_navigation_matches") is True
+                and evidence.get("profile_owner_control_visible") is True
+                and evidence.get("profile_login_controls_absent") is True
+            )
+            result["identity_verified"] = assess_evidence(evidence) or independent_owner
+            result["authenticated_ui_detected"] = (
+                result["authenticated_ui_detected"] or independent_owner
+            )
             result["reason"] = (
                 "strict_ui_identity_proven"
                 if result["identity_verified"]
