@@ -32,10 +32,6 @@ fi
 echo "KWAI_SESSION_RESTORE_GATE_FALLBACK_INTERACTIVE"
 rm -f /tmp/kwai-auth-network-error-detected /tmp/anthares-android-done /tmp/kwai-autofill-watcher.log
 
-# During the stable login surface the original loop repeatedly calls UIAutomator
-# just to check a notification permission that was already pre-granted. Disable
-# that repeated probe in this run so the credential watcher is the sole UIAutomator
-# client and cannot hit the observed 'UiAutomationService already registered' race.
 python3 - <<'PY'
 from pathlib import Path
 src=Path('kwai_remote_android_login.sh').read_text()
@@ -64,12 +60,25 @@ while kill -0 "$LOGIN_PID" 2>/dev/null; do
     echo "FAILURE_SIGNAL=KWAI_POST_PASSWORD_NETWORK_ERROR"
     sleep 5
     kill "$LOGIN_PID" 2>/dev/null || true
-    set +e
-    wait "$LOGIN_PID"
-    set -e
+    set +e; wait "$LOGIN_PID"; set -e
     kill "$WATCHER_PID" 2>/dev/null || true
     cat /tmp/kwai-autofill-watcher.log 2>/dev/null || true
     exit 41
+  fi
+  if ! kill -0 "$WATCHER_PID" 2>/dev/null; then
+    set +e
+    wait "$WATCHER_PID"
+    WATCHER_RC=$?
+    set -e
+    cat /tmp/kwai-autofill-watcher.log 2>/dev/null || true
+    if [ "$WATCHER_RC" -eq 0 ] && [ -f /tmp/anthares-android-done ]; then
+      echo "KWAI_AUTOFILL_WATCHER_AUTH_SIGNAL_WAITING_FOR_MAIN"
+    else
+      echo "FAILURE_SIGNAL=KWAI_AUTOFILL_WATCHER_EXIT_${WATCHER_RC}"
+      kill "$LOGIN_PID" 2>/dev/null || true
+      set +e; wait "$LOGIN_PID"; set -e
+      exit "$WATCHER_RC"
+    fi
   fi
   sleep 1
 done
