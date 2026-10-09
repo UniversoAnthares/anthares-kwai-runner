@@ -273,6 +273,20 @@ jobs:
           echo 'CLOUD_SHARE_TEST=KWAI_FOREGROUND_AFTER_VIDEO_SEND' | tee -a "$GITHUB_STEP_SUMMARY"
           echo 'CLOUD_SHARE_EDITOR=NOT_VERIFIED' | tee -a "$GITHUB_STEP_SUMMARY"
           echo 'CLOUD_SHARE_PUBLICATION=NOT_TESTED' | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Fail-closed authenticated checkpoint readiness
+        shell: bash
+        env:
+          KWAI_CHECKPOINT_KEY: ${{ secrets.KWAI_CHECKPOINT_KEY }}
+          KWAI_PRIVATE_CHECKPOINT_URL: ${{ secrets.KWAI_PRIVATE_CHECKPOINT_URL }}
+          KWAI_PRIVATE_CHECKPOINT_TOKEN: ${{ secrets.KWAI_PRIVATE_CHECKPOINT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$KWAI_CHECKPOINT_KEY" || -z "$KWAI_PRIVATE_CHECKPOINT_URL" || -z "$KWAI_PRIVATE_CHECKPOINT_TOKEN" ]]; then
+            echo 'ANDROID_SESSION_PERSISTENCE=BLOCKED_PRIVATE_STORAGE_UNCONFIGURED' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo 'ANDROID_SESSION_PERSISTENCE=STORAGE_CONFIGURED_AUTH_UNVERIFIED' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo 'CHECKPOINT_SAVE=DISABLED_UNTIL_VERIFIED_ANDROID_LOGIN' | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Upload redacted cloud install evidence
         if: always()
         uses: actions/upload-artifact@v4
