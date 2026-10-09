@@ -203,56 +203,130 @@ async def inspect_own_profile_navigation(context):
 
 
 async def inspect_profile_without_logout(context):
-    """Navigate only the account avatar row in a disposable tab.
+    """Inspect own-profile navigation without requiring a logout item.
 
-    Unlike the legacy route, the account menu need not expose a visible
-    logout label. A public profile URL alone is never proof of ownership.
+    Uses a disposable tab, never the user's tab. Only profile-specific
+    controls in the small top-right account dropdown may be clicked.
     """
     result = {"profile_navigation_attempted": False,
               "profile_navigation_matches": False,
               "profile_owner_control_visible": False,
-              "profile_login_controls_absent": False}
+              "profile_login_controls_absent": False,
+              "profile_menu_found": False,
+              "profile_candidate_found": False,
+              "profile_navigation_reached": False}
     page = await context.new_page()
     try:
         await page.goto("https://www.kwai.com/", wait_until="domcontentloaded",
                         timeout=12000)
-        await page.wait_for_timeout(900)
+        await page.wait_for_timeout(1000)
         if not await open_account_menu_in_probe_page(page):
             return result
-        await page.wait_for_timeout(500)
-        # Select only a compact account row in the top-right dropdown.
-        # Do not interact with logout, login, uploads, or feed controls.
+        await page.wait_for_timeout(650)
+        # Classify the account dropdown by geometry. Neither names nor DOM
+        # content leave the private browser; only booleans are returned.
+        probe = await page.evaluate(r"""() => {
+          const visible = el => {
+            const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+            return r.width > 0 && r.height > 0 &&
+              s.display !== 'none' && s.visibility !== 'hidden';
+          };
+          const withinMenu = el => {
+            let node = el;
+            for (let i=0;i<7 && node;i++,node=node.parentElement) {
+              const r = node.getBoundingClientRect();
+              if (r.width >= 130 && r.width <= 440 &&
+                  r.height >= 65 && r.height <= 560 &&
+                  r.right >= innerWidth*.79 && r.top >= 25 &&
+                  r.top <= 220 && visible(node)) return true;
+            }
+            return false;
+          };
+          const nodes = [...document.querySelectorAll(
+            'a[href],button,[role="menuitem"],[role="button"],[tabindex],img'
+          )].filter(el => visible(el) && withinMenu(el));
+          const profile = /^(my\s*profile|view\s*profile|profile|meu\s*perfil|ver\s*perfil|perfil)$/i;
+          const forbidden = /(log\s*out|logout|sign\s*out|sair|sign\s*in|login|entrar|upload|publicar|postar)/i;
+          const matches = nodes.filter(el => {
+            const text = (el.innerText || el.getAttribute('aria-label') || '').trim();
+            if (forbidden.test(text)) return false;
+            if (profile.test(text)) return true;
+            if (el.tagName !== 'A') return false;
+            try {
+              const u = new URL(el.getAttribute('href'),location.href);
+              return u.hostname === 'www.kwai.com' &&
+                /^\/@[^/]+\/?$/i.test(u.pathname);
+            } catch { return false; }
+          });
+          return {menu_found:nodes.length>0,profile_candidate_found:matches.length>0};
+        }""")
+        result["profile_menu_found"] = bool(probe.get("menu_found"))
+        result["profile_candidate_found"] = bool(probe.get("profile_candidate_found"))
+        # First use an explicitly labeled Profile item or a direct /@ link.
         clicked = await page.evaluate(r"""() => {
           const visible = el => {
             const r = el.getBoundingClientRect(), s = getComputedStyle(el);
-            return r.width >= 12 && r.height >= 12 &&
+            return r.width > 0 && r.height > 0 &&
               s.display !== 'none' && s.visibility !== 'hidden';
           };
-          const candidates = [...document.querySelectorAll('img')].filter(img => {
-            const r = img.getBoundingClientRect();
-            return visible(img) && r.left > innerWidth * .65 &&
-              r.top > 40 && r.top < 370 && r.width <= 90 && r.height <= 90;
-          });
-          // Prefer an avatar inside a small floating menu, not the header
-          // avatar itself and never an avatar in the feed.
-          const rows = candidates.map(img => {
-            let node = img.parentElement;
-            for (let i=0; i<5 && node; i++, node=node.parentElement) {
-              const r = node.getBoundingClientRect();
-              if (r.width >= 75 && r.width <= 370 &&
-                  r.height >= 30 && r.height <= 110 &&
-                  r.right > innerWidth*.78 && r.top > 45 &&
-                  r.top < 340 && node.querySelector('img')) {
-                return {img, node, top:r.top};
-              }
+          const inMenu = el => {
+            let n=el;
+            for(let i=0;i<7 && n;i++,n=n.parentElement){
+              const r=n.getBoundingClientRect();
+              if(r.width>=130 && r.width<=440 && r.height>=65 &&
+                 r.height<=560 && r.right>=innerWidth*.79 &&
+                 r.top>=25 && r.top<=220 && visible(n))return true;
             }
-            return null;
-          }).filter(Boolean).sort((a,b)=>a.top-b.top);
-          const row = rows.find(x => x.top > 75);
-          if (!row) return false;
-          row.img.click();
-          return true;
+            return false;
+          };
+          const profile=/^(my\s*profile|view\s*profile|profile|meu\s*perfil|ver\s*perfil|perfil)$/i;
+          const forbidden=/(log\s*out|logout|sign\s*out|sair|sign\s*in|login|entrar|upload|publicar|postar)/i;
+          const nodes=[...document.querySelectorAll(
+            'a[href],button,[role="menuitem"],[role="button"],[tabindex]'
+          )].filter(el=>visible(el)&&inMenu(el));
+          let target=nodes.find(el=>{
+            const t=(el.innerText||el.getAttribute('aria-label')||'').trim();
+            return t.length<40 && profile.test(t) && !forbidden.test(t);
+          });
+          if(!target)target=nodes.find(el=>{
+            if(el.tagName!=='A')return false;
+            try {
+              const u=new URL(el.getAttribute('href'),location.href);
+              return u.hostname==='www.kwai.com' && /^\/@[^/]+\/?$/i.test(u.pathname);
+            }catch{return false;}
+          });
+          if(!target)return false;
+          target.click(); return true;
         }""")
+        if not clicked:
+            # Fallback: account-row avatar, but only within a compact
+            # dropdown in the top-right and never the global header avatar.
+            clicked = await page.evaluate(r"""() => {
+              const visible=el=>{
+                const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                return r.width>=14&&r.height>=14&&
+                  s.display!=='none'&&s.visibility!=='hidden';
+              };
+              const imgs=[...document.querySelectorAll('img')].filter(img=>{
+                const r=img.getBoundingClientRect();
+                return visible(img)&&r.left>innerWidth*.68&&
+                  r.top>85&&r.top<410&&r.width<=90&&r.height<=90;
+              });
+              for(const img of imgs){
+                let row=img.parentElement;
+                for(let i=0;i<5&&row;i++,row=row.parentElement){
+                  const r=row.getBoundingClientRect();
+                  if(r.width>=90&&r.width<=410&&r.height>=30&&
+                     r.height<=110&&r.right>innerWidth*.78&&
+                     r.top>70&&r.top<380){
+                    const text=(row.innerText||'').trim();
+                    if(/log\s*out|logout|sair|upload|publicar|postar|login/i.test(text))continue;
+                    img.click();return true;
+                  }
+                }
+              }
+              return false;
+            }""")
         result["profile_navigation_attempted"] = clicked is True
         if not clicked:
             return result
@@ -262,9 +336,10 @@ async def inspect_profile_without_logout(context):
             if current.scheme == "https" and current.hostname == "www.kwai.com":
                 path = current.path.rstrip("/").lower()
                 if path.startswith("/@"):
+                    result["profile_navigation_reached"] = True
                     result["profile_navigation_matches"] = path == "/@" + EXPECTED
                     break
-        if result["profile_navigation_matches"]:
+        if result["profile_navigation_reached"]:
             owner = await page.get_by_text("Editar perfil", exact=True).count()
             owner += await page.get_by_text("Edit profile", exact=True).count()
             login = await page.get_by_text("Fazer login", exact=True).count()
