@@ -229,6 +229,26 @@ jobs:
           trap cleanup_watchdog EXIT
           bash kwai_remote_android_login_with_restore.sh
 
+      - name: Verify Kwai survives relaunch after login
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "KWAI_POST_LOGIN_RELAUNCH_CHECK_BEGIN"
+          adb shell am force-stop com.kwai.video
+          sleep 2
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+          sleep 10
+          if python3 kwai_auth_probe.py > /tmp/kwai-post-relaunch-auth-probe.log 2>&1 &&
+             grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/kwai-post-relaunch-auth-probe.log; then
+            echo "KWAI_POST_RELAUNCH_AUTHENTICATED"
+          else
+            echo "FAILURE_SIGNAL=KWAI_SESSION_LOST_AFTER_RELAUNCH"
+            cat /tmp/kwai-post-relaunch-auth-probe.log || true
+            bash kwai_network_diagnostics.sh post-relaunch || true
+            exit 42
+          fi
+
       - name: Final Android network diagnostics
         if: always()
         shell: bash
@@ -259,6 +279,7 @@ jobs:
             kwai-login-detected.png
             kwai-login-focus.txt
             /tmp/kwai-restored-auth-probe.log
+            /tmp/kwai-post-relaunch-auth-probe.log
             /tmp/kwai-network-recovery.log
             /tmp/kwai-offline-watchdog.log
             /tmp/android-ui.log
