@@ -125,10 +125,17 @@ jobs:
             sleep 2
           done
           test -n "${URL:-}"
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "$URL/vnc.html")
-          test "$CODE" = 401
-          CODE_AUTH=$(curl -s -u "$REMOTE_USER:$REMOTE_PASSWORD" -o /dev/null -w '%{http_code}' "$URL/vnc.html")
-          test "$CODE_AUTH" = 200
+          READY=0
+          for i in $(seq 1 30); do
+            CODE=$(curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "$URL/vnc.html" || true)
+            CODE_AUTH=$(curl -s --connect-timeout 4 -u "$REMOTE_USER:$REMOTE_PASSWORD" -o /dev/null -w '%{http_code}' "$URL/vnc.html" || true)
+            if [ "$CODE" = 401 ] && [ "$CODE_AUTH" = 200 ]; then
+              READY=1
+              break
+            fi
+            sleep 2
+          done
+          test "$READY" = 1
           echo "ANDROID_REMOTE_GUI_URL=$URL/vnc.html?autoconnect=1&resize=scale"
           echo 'ANDROID_REMOTE_GUI_PROTECTION=BASIC_AUTH_VERIFIED_401_200' >> "$GITHUB_STEP_SUMMARY"
 
