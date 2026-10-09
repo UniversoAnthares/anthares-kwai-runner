@@ -21,6 +21,46 @@ start_once() {
   echo "KWAI_CODESPACE_${name}=started"
 }
 
+restart_current_bridge() {
+  local pidfile="${PRIVATE_HOME}/bridge.pid"
+  local pids=()
+  local pid cmd
+
+  # The bridge is stateless apart from its local seen-comment ledger. Restarting
+  # it must never restart Chrome or touch the persistent browser profile.
+  if [[ -f "$pidfile" ]]; then
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
+    if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+      pids+=("$pid")
+    fi
+  fi
+  while IFS= read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    [[ " ${pids[*]-} " == *" $pid "* ]] || pids+=("$pid")
+  done < <(pgrep -f 'python.*\.devcontainer/kwai-command-bridge\.py' || true)
+
+  for pid in "${pids[@]-}"; do
+    [[ -n "$pid" ]] || continue
+    cmd="$(tr '\0' ' ' <"/proc/${pid}/cmdline" 2>/dev/null || true)"
+    if [[ "$cmd" != *".devcontainer/kwai-command-bridge.py"* ]]; then
+      echo "KWAI_CODESPACE_bridge=pid_mismatch_refusing_to_kill" >&2
+      return 1
+    fi
+    kill "$pid"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.2
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "KWAI_CODESPACE_bridge=old_process_did_not_exit" >&2
+      return 1
+    fi
+  done
+  rm -f "$pidfile"
+  start_once bridge "${PRIVATE_HOME}/venv/bin/python" -u .devcontainer/kwai-command-bridge.py
+  echo "KWAI_CODESPACE_bridge=current_checkout_loaded;chrome_profile_untouched=true"
+}
+
 start_once xvfb Xvfb :99 -screen 0 1440x900x24 -nolisten tcp
 sleep 2
 start_once openbox openbox-session
@@ -42,6 +82,7 @@ start_once chrome chromium \
   https://www.kwai.com/
 
 start_once inspector "${PRIVATE_HOME}/venv/bin/python" -u .devcontainer/kwai-identity-guard.py
+restart_current_bridge
 
 echo "KWAI_CODESPACE_PRIVATE_NOVNC=http://127.0.0.1:6080/vnc.html"
 echo "KWAI_CODESPACE_PRIVATE_IDENTITY=http://127.0.0.1:8765/"
