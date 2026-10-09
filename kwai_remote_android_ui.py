@@ -123,7 +123,7 @@ function kwai(){timedFetch('/kwai?t='+encodeURIComponent(t),{method:'POST'}).the
 function fixkwai(){timedFetch('/fixkwai?t='+encodeURIComponent(t),{method:'POST'}).then(()=>setTimeout(refresh,1200))}
 async function diag(){let r=await timedFetch('/diag?t='+encodeURIComponent(t)),x=await r.text(),p=document.getElementById('diag');if(!p){p=document.createElement('pre');p.id='diag';document.body.appendChild(p)}p.textContent=x}
 let textSending=false;async function txt(){if(textSending)return;textSending=true;try{let f=document.getElementById('t'),v=f.value;let r=await timedFetch('/text?t='+encodeURIComponent(t),{method:'POST',body:v});state.textContent=r.ok?'Texto enviado ao Android':'Falha ao enviar texto — conteúdo preservado';setTimeout(refresh,350)}finally{textSending=false}}
-async function clearText(){let r=await timedFetch('/clear?t='+encodeURIComponent(t),{method:'POST'});state.textContent=r.ok?'Campo selecionado limpo':'Falha ao limpar campo';if(r.ok)document.getElementById('t').value='';setTimeout(refresh,350)}
+async function clearText(){let r=await timedFetch('/clear?t='+encodeURIComponent(t),{method:'POST'});state.textContent=r.ok?'Campo Android limpo; texto do navegador preservado':'Falha ao limpar campo; texto preservado';setTimeout(refresh,350)}
 async function done(){let r=await timedFetch('/done?t='+encodeURIComponent(t),{method:'POST'});if(r.ok){state.textContent='Confirmação enviada; validando autenticação no servidor.'}}
 </script>"""
 
