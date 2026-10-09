@@ -183,7 +183,7 @@ class Handler(BaseHTTPRequestHandler):
             elif u.path == "/text":
                 n = int(self.headers.get("Content-Length", "0"))
                 v = self.rfile.read(n).decode("utf-8", "replace")
-                adb("shell", "input", "text", v.replace("%", "%25").replace(" ", "%s"), timeout=8, check=True)
+                # Clear pre-existing characters (including stray dots) in the focused login field.\n                adb("shell", "input", "keyevent", "KEYCODE_MOVE_END", timeout=5, check=True)\n                for _ in range(120):\n                    adb("shell", "input", "keyevent", "KEYCODE_DEL", timeout=5, check=True)\n                adb("shell", "input", "text", v.replace("%", "%25").replace(" ", "%s"), timeout=15, check=True)
             elif u.path == "/done":
                 with open("/tmp/anthares-android-done", "w") as f:
                     f.write("1")
