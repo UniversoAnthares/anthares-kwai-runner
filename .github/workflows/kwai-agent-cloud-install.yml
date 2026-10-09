@@ -232,9 +232,11 @@ jobs:
           export PATH="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools:$PATH"
           echo 'CLOUD_SHARE_TEST_STARTED=true' | tee -a "$GITHUB_STEP_SUMMARY"
           if ! command -v ffmpeg >/dev/null; then
-            echo 'CLOUD_SHARE_TEST=BLOCKED_FFMPEG_MISSING' | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 8
+            echo 'CLOUD_SHARE_TEST=INSTALLING_MISSING_FFMPEG' | tee -a "$GITHUB_STEP_SUMMARY"
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg >/tmp/kwai-ffmpeg-install.log 2>&1
           fi
+          command -v ffmpeg >/dev/null
           # One-second black sample is local to this ephemeral test runner.
           ffmpeg -hide_banner -loglevel error -y -f lavfi -i 'color=c=black:s=320x240:r=12:d=1' -an -c:v mpeg4 -q:v 8 -f mp4 /tmp/anthares-smoke.mp4
           test -s /tmp/anthares-smoke.mp4
