@@ -19,6 +19,11 @@ focus_text(){
 google_sso_foreground(){ focus_text | grep -Eq 'com\.google\.android\.gms|GoogleSSOActivity|SignInHubActivity|SignInActivity'; }
 kwai_foreground(){ focus_text | grep -q 'com\.kwai\.video'; }
 
+google_duplicate_account_visible(){
+  dump_ui || return 1
+  grep -Eqi 'account already exists on your device|already exists on this device|conta já existe neste dispositivo|conta ja existe neste dispositivo' /tmp/kwai-network-ui.xml
+}
+
 offline_visible(){
   dump_ui || return 1
   grep -Eqi 'Please check your Internet connection|check your Internet connection|No Internet connection|No network connection|Sem conexão|Sem internet|Verifique sua conexão|Verifique a sua conexão|Download failed\. Try again|Falha no download' /tmp/kwai-network-ui.xml
@@ -102,10 +107,6 @@ normalize_network(){
   adb shell cmd connectivity airplane-mode disable >/dev/null 2>&1 || true
   adb shell settings put global airplane_mode_on 0 >/dev/null 2>&1 || true
   adb shell svc wifi enable >/dev/null 2>&1 || true
-
-  # The Kwai media stack advertises dual-channel support and this emulator exposes
-  # both synthetic CELLULAR and WIFI transports. Keep only the real validated Wi-Fi
-  # path so app-level API/session traffic cannot bind to the synthetic mobile route.
   adb shell svc data disable >/dev/null 2>&1 || true
   adb shell settings put global mobile_data 0 >/dev/null 2>&1 || true
   adb shell cmd netpolicy set restrict-background false >/dev/null 2>&1 || true
@@ -158,7 +159,14 @@ watch(){
   log "KWAI_OFFLINE_DIAGNOSTIC_WATCH_STARTED"
   while true; do
     if google_sso_foreground; then
-      sleep 4
+      if google_duplicate_account_visible; then
+        log "GOOGLE_DUPLICATE_ACCOUNT_SCREEN_DETECTED"
+        adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+        sleep 2
+        log "GOOGLE_DUPLICATE_ACCOUNT_SCREEN_DISMISSED"
+      else
+        sleep 4
+      fi
       continue
     fi
     if kwai_foreground && offline_visible; then
