@@ -17,9 +17,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .kwai-session-cache/kwai-session.enc
-          key: kwai-session-${{ github.run_id }}
+          key: kwai-encrypted-session-v2-${{ github.run_id }}
           restore-keys: |
-            kwai-session-
+            kwai-encrypted-session-v2-
 
       - name: Probe authentication and persistence readiness
         env:
@@ -45,7 +45,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .kwai-session-cache/kwai-session.enc
-          key: kwai-session-${{ github.run_id }}
+          key: kwai-encrypted-session-v2-${{ github.run_id }}
 
       - name: Upload non-sensitive probe report
         if: always()
