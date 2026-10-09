@@ -117,3 +117,49 @@ jobs:
                       await browser.close()
           asyncio.run(main())
           PY'
+      - name: Exercise actual Chrome DOM account menu without credentials
+        run: |
+          timeout 45s "$HOME/.kwai-remote-private/venv/bin/python" - <<'PY'
+          import asyncio,json,runpy
+          from playwright.async_api import async_playwright
+          mod=runpy.run_path(".devcontainer/kwai-identity-guard.py",run_name="kwai_menu_test")
+          inspect=mod["inspect_open_account_menu"]
+
+          async def main():
+              async with async_playwright() as p:
+                  browser=await p.chromium.connect_over_cdp("http://127.0.0.1:9222")
+                  page=await browser.contexts[0].new_page()
+                  await page.route("https://www.kwai.com/qa-account-menu",
+                                   lambda route: route.fulfill(status=200,content_type="text/html",
+                                       body="<html><body>synthetic fixture</body></html>"))
+                  try:
+                      await page.goto("https://www.kwai.com/qa-account-menu")
+                      await page.set_content('<div role="menu"><span>Lucas Rosalem</span><button>Log out</button></div>')
+                      display_name_only=await inspect(browser.contexts[0])
+                      assert display_name_only["account_menu_logout_visible"] is True,display_name_only
+                      assert display_name_only["account_menu_profile_link_matches"] is False,display_name_only
+
+                      await page.set_content('<div role="menu"><a href="/@wrong.account">Lucas Rosalem</a><button>Log out</button></div>')
+                      wrong_account=await inspect(browser.contexts[0])
+                      assert wrong_account["account_menu_logout_visible"] is True,wrong_account
+                      assert wrong_account["account_menu_profile_link_matches"] is False,wrong_account
+
+                      await page.set_content('<div role="menu"><a href="/@universo.anthares">Lucas Rosalem</a><button>Log out</button></div>')
+                      correct_account=await inspect(browser.contexts[0])
+                      assert correct_account["account_menu_logout_visible"] is True,correct_account
+                      assert correct_account["account_menu_profile_link_matches"] is True,correct_account
+
+                      await page.set_content('<div role="menu"><a href="/@universo.anthares">Lucas Rosalem</a><button>Log in</button></div>')
+                      logged_out=await inspect(browser.contexts[0])
+                      assert logged_out["account_menu_logout_visible"] is False,logged_out
+                      assert logged_out["account_menu_profile_link_matches"] is False,logged_out
+                      print("KWAI_CODESPACE_ACCOUNT_MENU_DOM="+json.dumps({
+                          "display_name_only_detected":True,"wrong_account_rejected":True,
+                          "exact_menu_profile_accepted":True,"signed_out_rejected":True,
+                          "credentials_used":False,"synthetic_only":True
+                      }))
+                  finally:
+                      await page.close()
+                      await browser.close()
+          asyncio.run(main())
+          PY
