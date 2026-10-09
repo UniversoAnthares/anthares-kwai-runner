@@ -255,6 +255,7 @@ jobs:
           adb shell mkdir -p /sdcard/Movies
           adb push /tmp/anthares-smoke.mp4 /sdcard/Movies/anthares-smoke-${GITHUB_RUN_ID}.mp4 >/dev/null
           adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Movies/anthares-smoke-${GITHUB_RUN_ID}.mp4" >/dev/null || true
+          adb shell content insert --uri content://media/external/video/media --bind "_display_name:s:anthares-smoke-${GITHUB_RUN_ID}.mp4" --bind 'mime_type:s:video/mp4' --bind "_data:s:/sdcard/Movies/anthares-smoke-${GITHUB_RUN_ID}.mp4" >/tmp/kwai-mediastore-insert.log 2>&1 || true
           video_id=''
           for attempt in 1 2 3 4 5; do
             rows="$(adb shell content query --uri content://media/external/video/media --projection _id:_display_name --where "_display_name='anthares-smoke-${GITHUB_RUN_ID}.mp4'" 2>/dev/null || true)"
@@ -263,7 +264,9 @@ jobs:
             sleep 2
           done
           if test -z "$video_id"; then
-            echo 'CLOUD_SHARE_TEST=MEDIASTORE_VIDEO_NOT_INDEXED' | tee -a "$GITHUB_STEP_SUMMARY"
+            adb shell content query --uri content://media/external/video/media --projection _id:_display_name 2>&1 | tail -15 || true
+            cat /tmp/kwai-mediastore-insert.log || true
+            echo 'CLOUD_SHARE_TEST=MEDIASTORE_VIDEO_NOT_INDEXED'  | tee -a "$GITHUB_STEP_SUMMARY"
             exit 9
           fi
           echo 'CLOUD_SHARE_MEDIASTORE_VIDEO=true' | tee -a "$GITHUB_STEP_SUMMARY"
