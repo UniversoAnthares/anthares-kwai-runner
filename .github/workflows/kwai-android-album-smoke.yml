@@ -1,9 +1,6 @@
 name: Kwai Android Album Smoke (cached compatible app)
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/kwai-android-album-smoke.yml']
 permissions:
   contents: read
 concurrency:
