@@ -102,10 +102,16 @@ async def probe_method(browser, method):
             from urllib.parse import urlsplit
             parsed = urlsplit(popup.url)
             item["popup_url"] = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
-            item["popup_title"] = await popup.title()
+            try:
+                item["popup_title"] = await asyncio.wait_for(popup.title(), timeout=3)
+            except Exception:
+                item["popup_title"] = "unavailable"
     except Exception as exc:
         item["error"] = str(exc)[:220]
-    await ctx.close()
+    try:
+        await asyncio.wait_for(ctx.close(), timeout=5)
+    except Exception:
+        item["context_close_timeout"] = True
     return item
 
 
@@ -117,7 +123,11 @@ async def main():
 
         result["auth_methods"] = []
         for method in ["Use o telefone", "Continue com o Google"]:
-            result["auth_methods"].append(await probe_method(browser, method))
+            try:
+                result["auth_methods"].append(await asyncio.wait_for(probe_method(browser, method), timeout=40))
+            except asyncio.TimeoutError:
+                result["auth_methods"].append({"method": method, "error": "method_timeout_40s"})
+            print("KWAI_CHROME_METHOD_DONE=" + method, flush=True)
 
         kwargs = {"viewport": {"width": 1440, "height": 900}, "locale": "pt-BR", "timezone_id": "America/Sao_Paulo"}
         if restored_state is not None:
@@ -139,7 +149,10 @@ async def main():
         except Exception as exc:
             result["verification_error"] = str(exc)[:220]
         await ctx.close()
-        await browser.close()
+        try:
+            await asyncio.wait_for(browser.close(), timeout=8)
+        except Exception:
+            result["browser_close_timeout"] = True
 
     if not result["authenticated"]:
         result["action_required"] = "authenticate_once_in_remote_chrome"
