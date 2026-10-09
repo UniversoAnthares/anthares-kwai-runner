@@ -344,11 +344,30 @@ OVERLAY_LAST_CHECK=0
 # Google account setup may show a separate consent page after credentials.
 # Automatically accept only the explicit Google welcome agreement screen.
 GOOGLE_AGREEMENT_LAST_CHECK=0
+GOOGLE_DUPLICATE_ACCOUNT_HANDLED=0
+GOOGLE_SSO_RETURN_COUNT=0
 while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   if google_sso_foreground; then
     if [ $((SECONDS-GOOGLE_AGREEMENT_LAST_CHECK)) -ge 5 ]; then
       GOOGLE_AGREEMENT_LAST_CHECK=$SECONDS
       dump_ui || true
+      if grep -Eqi 'This account already exists on your device|account already exists|esta conta já existe|conta já existe neste dispositivo' /tmp/kwai-ui.xml 2>/dev/null; then
+        log "GOOGLE_DUPLICATE_ACCOUNT_DETECTED"
+        if [ "$GOOGLE_DUPLICATE_ACCOUNT_HANDLED" -eq 0 ]; then
+          GOOGLE_DUPLICATE_ACCOUNT_HANDLED=1
+          log "GOOGLE_DUPLICATE_ACCOUNT_BACK_TO_EXISTING_ACCOUNT_PICKER"
+          adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+          sleep 2
+          adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+          sleep 3
+          dump_ui || true
+          if grep -Eqi 'Choose an account|Escolha uma conta|Use another account|Usar outra conta' /tmp/kwai-ui.xml 2>/dev/null; then
+            log "GOOGLE_EXISTING_ACCOUNT_PICKER_VISIBLE"
+          else
+            log "GOOGLE_ACCOUNT_PICKER_NOT_VISIBLE_AFTER_BACK"
+          fi
+        fi
+      fi
       if grep -Eqi 'Google services|Serviços do Google' /tmp/kwai-ui.xml 2>/dev/null && grep -Eqi 'Backup|storage|armazenamento|Privacy Policy|Política de Privacidade' /tmp/kwai-ui.xml 2>/dev/null; then
         if tap_label '^(MORE|Mais)$'; then
           log "GOOGLE_SERVICES_MORE_TAPPED"
@@ -374,7 +393,11 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
     if [ "$SSO_WAS_ACTIVE" -eq 1 ]; then
       SSO_WAS_ACTIVE=0
       if kwai_foreground; then
-        log "GOOGLE_SSO_RETURNED_TO_KWAI"
+        GOOGLE_SSO_RETURN_COUNT=$((GOOGLE_SSO_RETURN_COUNT+1))
+        log "GOOGLE_SSO_RETURNED_TO_KWAI count=$GOOGLE_SSO_RETURN_COUNT"
+        if [ "$GOOGLE_SSO_RETURN_COUNT" -ge 2 ]; then
+          log "GOOGLE_SSO_LOOP_DETECTED_SKIP_AUTOMATIC_RELOGIN"
+        fi
         (
           sleep 6
           echo "===== GOOGLE_SSO_RETURN_DIAGNOSTICS ====="
