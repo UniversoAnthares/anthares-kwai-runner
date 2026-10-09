@@ -10,7 +10,7 @@ INI_PATH="$AVD_DIR/$AVD_NAME.ini"
 : "${KWAI_CHECKPOINT_KEY:?Set a secret encryption passphrase in a protected runner secret}"
 : "${KWAI_PRIVATE_CHECKPOINT_URL:?Set private read/write checkpoint URL}"
 : "${KWAI_PRIVATE_CHECKPOINT_TOKEN:?Set private storage credential}"
-[[ "$KWAI_PRIVATE_CHECKPOINT_URL" == https://* ]] || { echo 'HTTPS_REQUIRED'; exit 3; }
+[[ "$KWAI_PRIVATE_CHECKPOINT_URL" == https://* ]] || { [[ "${KWAI_TEST_ALLOW_HTTP_LOOPBACK:-}" == 1 && "$KWAI_PRIVATE_CHECKPOINT_URL" == http://127.0.0.1:* ]] || { echo 'HTTPS_REQUIRED'; exit 3; }; }
 command -v openssl >/dev/null
 command -v curl >/dev/null
 command -v tar >/dev/null
