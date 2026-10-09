@@ -16,7 +16,7 @@ REPO = "UniversoAnthares/anthares-kwai-runner"
 ISSUE = 12
 OWNER = "universoanthares"
 STATE = Path.home() / ".kwai-remote-private" / "bridge-seen.json"
-COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check) ([a-zA-Z0-9_-]{12,64})$")
+COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check|refresh_bridge) ([a-zA-Z0-9_-]{12,64})$")
 def gh(method, endpoint, data=None):
     args = ["gh", "api", "--method", method, endpoint]
     if data is not None:
@@ -81,7 +81,7 @@ def main():
     import asyncio
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     seen = set(json.loads(STATE.read_text())) if STATE.exists() else set()
-    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check;no_session_export", flush=True)
+    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check,refresh_bridge;no_session_export", flush=True)
     while True:
         try:
             comments = gh("GET", f"repos/{REPO}/issues/{ISSUE}/comments?per_page=100")
@@ -98,12 +98,36 @@ def main():
                 if not match:
                     continue
                 action, nonce = match.groups()
-                try:
-                    result = asyncio.run(browser_action(action))
-                    outcome = {"nonce": nonce, "status": "ok", **result}
-                except Exception:
-                    outcome = {"nonce": nonce, "status": "error", "reason": "chrome_unavailable_or_navigation_failed"}
+                if action == "refresh_bridge":
+                    # Only the owner may request a fast-forward of the fixed
+                    # main branch. No arbitrary shell command is accepted.
+                    checkout = Path(__file__).resolve().parent.parent
+                    pull = subprocess.run(
+                        ["git", "pull", "--ff-only", "origin", "main"],
+                        cwd=checkout, capture_output=True, text=True, timeout=35,
+                    )
+                    outcome = {"nonce": nonce, "status": "ok" if pull.returncode == 0 else "error",
+                               "refresh_started": pull.returncode == 0,
+                               "chrome_profile_untouched": True}
+                else:
+                    try:
+                        result = asyncio.run(browser_action(action))
+                        outcome = {"nonce": nonce, "status": "ok", **result}
+                    except Exception:
+                        outcome = {"nonce": nonce, "status": "error", "reason": "chrome_unavailable_or_navigation_failed"}
                 gh("POST", f"repos/{REPO}/issues/{ISSUE}/comments", {"body": "KWAI_BRIDGE_RESULT " + json.dumps(outcome, sort_keys=True)})
+                if action == "refresh_bridge" and outcome["status"] == "ok":
+                    # Run after posting acknowledgement; this will replace
+                    # only the bridge process, not Chrome or its private state.
+                    log_path = STATE.parent / "bridge-refresh.log"
+                    with log_path.open("ab") as log:
+                        subprocess.Popen(
+                            ["bash", ".devcontainer/kwai-start.sh"],
+                            cwd=checkout, stdin=subprocess.DEVNULL,
+                            stdout=log, stderr=subprocess.STDOUT,
+                            start_new_session=True,
+                        )
+                    return
         except Exception:
             print("KWAI_BRIDGE_POLL_RETRY", flush=True)
         time.sleep(8)
