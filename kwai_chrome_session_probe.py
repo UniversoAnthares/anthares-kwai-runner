@@ -114,7 +114,10 @@ async def main():
             await page.wait_for_timeout(1500)
             login_controls = await page.get_by_text("Fazer login", exact=True).count()
             result["login_controls_after_restore"] = login_controls
-            result["authenticated"] = login_controls == 0 and result.get("session_restored", False)
+            # Login-button absence is not proof of account identity.
+            result["identity_verified"] = False
+            result["identity_verification_method"] = "not_configured"
+            result["authenticated"] = False
             if result["authenticated"]:
                 await ctx.storage_state(path=str(STATE), indexed_db=True)
                 persist_state(result)
