@@ -346,6 +346,8 @@ OVERLAY_LAST_CHECK=0
 GOOGLE_AGREEMENT_LAST_CHECK=0
 GOOGLE_DUPLICATE_ACCOUNT_HANDLED=0
 GOOGLE_SSO_RETURN_COUNT=0
+GOOGLE_HOME_RECOVERY_ATTEMPTS=0
+GOOGLE_HOME_RECOVERY_LAST=0
 while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   if google_sso_foreground; then
     if [ $((SECONDS-GOOGLE_AGREEMENT_LAST_CHECK)) -ge 5 ]; then
@@ -408,6 +410,21 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
         ) >> "$REPORT" 2>&1 &
       else
         log "GOOGLE_SSO_LEFT_FOREGROUND"
+        log "GOOGLE_SSO_POST_RETURN_FOCUS=$(current_focus)"
+      fi
+    fi
+    # Google account setup can finish at the Android launcher instead of handing
+    # control back to the calling Kwai activity. Relaunch without clearing app data.
+    if [ "$SSO_STARTED_AT" -gt 0 ] && ! kwai_foreground && ! google_sso_foreground && [ "$GOOGLE_HOME_RECOVERY_ATTEMPTS" -lt 2 ] && [ $((SECONDS-GOOGLE_HOME_RECOVERY_LAST)) -ge 15 ]; then
+      focus="$(current_focus)"
+      if printf '%s' "$focus" | grep -Eqi 'launcher|quickstep|homeactivity|nexuslauncher'; then
+        GOOGLE_HOME_RECOVERY_ATTEMPTS=$((GOOGLE_HOME_RECOVERY_ATTEMPTS+1))
+        GOOGLE_HOME_RECOVERY_LAST=$SECONDS
+        log "GOOGLE_SSO_RETURNED_TO_ANDROID_HOME_RECOVER_KWAI_ATTEMPT=$GOOGLE_HOME_RECOVERY_ATTEMPTS"
+        adb shell dumpsys activity activities 2>/dev/null | grep -E 'ResumedActivity|topResumedActivity|com.kwai.video|com.google.android.gms' | tail -18 >> "$REPORT" || true
+        launch_kwai
+        sleep 5
+        log "GOOGLE_HOME_RECOVERY_RESULT_FOCUS=$(current_focus)"
       fi
     fi
     if kwai_foreground && [ $((SECONDS-OVERLAY_LAST_CHECK)) -ge 3 ]; then
