@@ -7,6 +7,7 @@ on:
     paths:
       - '.kwai-interactive-login-trigger'
       - '.github/workflows/kwai-interactive-remote-login.yml'
+      - 'kwai_android_network_recovery.sh'
 
 permissions:
   contents: read
@@ -40,8 +41,11 @@ jobs:
           p = Path('kwai_remote_android_ui.py')
           s = p.read_text()
           s = s.replace("#mark{position:absolute;width:18px;height:18px;border:2px solid #ff3b30;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;display:none}", "#mark{display:none!important}")
+          s = s.replace("<input id=t placeholder='Texto'>", "<input id=t type=password autocomplete=off autocapitalize=off spellcheck=false placeholder='Texto (oculto)'>")
+          s = s.replace("async function txt(){let v=document.getElementById('t').value,r=await timedFetch", "async function txt(){let f=document.getElementById('t'),v=f.value;f.value='';let r=await timedFetch")
           p.write_text(s)
           print('REMOTE_TAP_MARKER_DISABLED')
+          print('REMOTE_TEXT_FIELD_REDACTED')
           PY
           curl -fL --retry 3 --retry-delay 1 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x /tmp/cloudflared
@@ -149,6 +153,14 @@ jobs:
           adb shell input keyevent 82 || true
           echo "TEST_VALIDITY=EMULATOR_BOOTED_TOUCH_MARKERS_DISABLED"
 
+      - name: Stabilize Android network before Kwai
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x kwai_android_network_recovery.sh
+          bash kwai_android_network_recovery.sh preflight
+          echo "KWAI_ANDROID_NETWORK_PREFLIGHT_DONE"
+
       - name: Publish ready remote access
         shell: bash
         run: |
@@ -182,6 +194,17 @@ jobs:
           restore-keys: |
             kwai-session-${{ runner.os }}-
 
+      - name: Start pre-auth Android network trace
+        shell: bash
+        run: |
+          set +e
+          : > kwai-network-diagnostics.txt
+          adb logcat -c || true
+          nohup adb logcat -v threadtime >/tmp/kwai-login-logcat.txt 2>&1 &
+          echo $! >/tmp/kwai-login-logcat.pid
+          bash kwai_network_diagnostics.sh before-login
+          echo "KWAI_NETWORK_TRACE_STARTED_BEFORE_AUTH"
+
       - name: Authentication first — owner login or validated restore
         timeout-minutes: 12
         env:
@@ -200,18 +223,11 @@ jobs:
           POINTER_LOCATION="$(adb shell settings get system pointer_location | tr -d '\r')"
           echo "PRELOGIN_SHOW_TOUCHES=$SHOW_TOUCHES PRELOGIN_POINTER_LOCATION=$POINTER_LOCATION"
           [ "$SHOW_TOUCHES" = "0" ] && [ "$POINTER_LOCATION" = "0" ] || { echo "FAILURE_SIGNAL=TOUCH_MARKERS_REENABLED"; exit 33; }
+          nohup bash kwai_android_network_recovery.sh watch >/tmp/kwai-offline-watchdog.log 2>&1 &
+          WATCHDOG_PID=$!
+          cleanup_watchdog(){ kill "$WATCHDOG_PID" 2>/dev/null || true; }
+          trap cleanup_watchdog EXIT
           bash kwai_remote_android_login_with_restore.sh
-
-      - name: Start post-auth Android network trace
-        shell: bash
-        run: |
-          set +e
-          : > kwai-network-diagnostics.txt
-          adb logcat -c || true
-          nohup adb logcat -v threadtime >/tmp/kwai-login-logcat.txt 2>&1 &
-          echo $! >/tmp/kwai-login-logcat.pid
-          bash kwai_network_diagnostics.sh before-login
-          echo "KWAI_NETWORK_TRACE_STARTED"
 
       - name: Final Android network diagnostics
         if: always()
@@ -243,6 +259,8 @@ jobs:
             kwai-login-detected.png
             kwai-login-focus.txt
             /tmp/kwai-restored-auth-probe.log
+            /tmp/kwai-network-recovery.log
+            /tmp/kwai-offline-watchdog.log
             /tmp/android-ui.log
             /tmp/tunnel.log
             /tmp/emulator.log
