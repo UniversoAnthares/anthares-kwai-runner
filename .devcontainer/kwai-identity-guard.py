@@ -150,7 +150,8 @@ async def inspect_own_profile_navigation(context):
               && st.visibility !== 'hidden';
           };
           const logout = /^(log\s*out|logout|sign\s*out|sair)$/i;
-          const nodes = [...document.querySelectorAll('button,a,span,div,[role="menuitem"]')];
+          const nodes = [...document.querySelectorAll('button,a,[role="menuitem"]'),
+                         ...document.querySelectorAll('span,div')];
           const logoutEl = nodes.find(el => visible(el) &&
             (el.innerText || '').length <= 32 &&
             logout.test((el.innerText || '').trim()));
