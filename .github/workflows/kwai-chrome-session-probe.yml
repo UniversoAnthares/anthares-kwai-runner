@@ -21,13 +21,16 @@ jobs:
           restore-keys: |
             kwai-encrypted-session-v2-
 
-      - name: Probe authentication and persistence readiness
+      - name: Install remote Chrome dependencies (bounded)
+        run: |
+          timeout 45s python3 -m pip install --quiet playwright cryptography
+          timeout 100s python3 -m playwright install chromium --with-deps >/dev/null
+
+      - name: Probe authentication and persistence readiness (bounded)
         env:
           KWAI_SESSION_KEY: ${{ secrets.KWAI_SESSION_KEY }}
         run: |
-          python3 -m pip install --quiet playwright cryptography
-          python3 -m playwright install chromium --with-deps >/dev/null
-          python3 kwai_chrome_session_probe.py
+          timeout 170s python3 -u kwai_chrome_session_probe.py
 
       - name: Detect encrypted session output
         id: encrypted
