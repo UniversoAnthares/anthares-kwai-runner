@@ -63,6 +63,7 @@ jobs:
           echo "VAULT_CACHE_HIT=${{ steps.vaultcache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
           echo "PREP_TOTAL_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Boot clean Android and measure
+        if: steps.avdcache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -107,6 +108,7 @@ jobs:
           echo "CROSS_RUN_SNAPSHOT_ARCHIVE_BYTES=$(stat -c%s /tmp/kwai-portable-avd-full.tar.zst)" | tee -a "$GITHUB_STEP_SUMMARY"
           "$ADB" emu kill >/dev/null 2>&1 || true
           timeout 30 bash -c 'while "$1" get-state >/dev/null 2>&1; do sleep 1; done' _ "$ADB" || true
+          sudo chmod 666 /dev/kvm
           mkdir -p "$HOME/.android"
           if ! tar --zstd -xf /tmp/kwai-portable-avd-full.tar.zst -C "$HOME/.android"; then
             echo "CROSS_RUN_SNAPSHOT_RESULT=EXTRACT_FAILED" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -117,10 +119,12 @@ jobs:
             exit 0
           fi
           t=$(date +%s)
+          echo "CROSS_RUN_SNAPSHOT_START_FROM_T0_SECONDS=$((t-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
           nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/kwai-cross-run-snapshot.log 2>&1 &
           if timeout 110 "$ADB" wait-for-device && timeout 110 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"; then
             echo "CROSS_RUN_SNAPSHOT_BOOT_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
             echo "CROSS_RUN_SNAPSHOT_RESULT=BOOTED" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "CROSS_RUN_TOTAL_TO_BOOT_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo "CROSS_RUN_SNAPSHOT_RESULT=BOOT_FAILED" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
