@@ -225,6 +225,52 @@ jobs:
           fi
           echo 'CLOUD_ANDROID_APPS_INSTALLED=PROVEN_NO_AUTH' | tee -a "$GITHUB_STEP_SUMMARY"
           echo 'CLOUD_KWAI_PUBLICATION=NOT_TESTED' | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Verify actual video handoff into official Kwai app (no publication)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools:$PATH"
+          echo 'CLOUD_SHARE_TEST_STARTED=true' | tee -a "$GITHUB_STEP_SUMMARY"
+          if ! command -v ffmpeg >/dev/null; then
+            echo 'CLOUD_SHARE_TEST=BLOCKED_FFMPEG_MISSING' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 8
+          fi
+          # One-second black sample is local to this ephemeral test runner.
+          ffmpeg -hide_banner -loglevel error -y -f lavfi -i 'color=c=black:s=320x240:r=12:d=1' -an -c:v mpeg4 -q:v 8 -f mp4 /tmp/anthares-smoke.mp4
+          test -s /tmp/anthares-smoke.mp4
+          adb shell mkdir -p /sdcard/Movies
+          adb push /tmp/anthares-smoke.mp4 /sdcard/Movies/anthares-smoke-${GITHUB_RUN_ID}.mp4 >/dev/null
+          adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Movies/anthares-smoke-${GITHUB_RUN_ID}.mp4" >/dev/null || true
+          video_id=''
+          for attempt in 1 2 3 4 5; do
+            rows="$(adb shell content query --uri content://media/external/video/media --projection _id:_display_name --where "_display_name='anthares-smoke-${GITHUB_RUN_ID}.mp4'" 2>/dev/null || true)"
+            video_id="$(printf '%s\n' "$rows" | sed -n 's/.*_id=\([0-9][0-9]*\).*/\1/p' | head -1)"
+            test -n "$video_id" && break
+            sleep 2
+          done
+          if test -z "$video_id"; then
+            echo 'CLOUD_SHARE_TEST=MEDIASTORE_VIDEO_NOT_INDEXED' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 9
+          fi
+          echo 'CLOUD_SHARE_MEDIASTORE_VIDEO=true' | tee -a "$GITHUB_STEP_SUMMARY"
+          media_uri="content://media/external/video/media/$video_id"
+          set +e
+          adb shell am start -W -a android.intent.action.SEND -t video/mp4 -p com.kwai.video --grant-read-uri-permission --eu android.intent.extra.STREAM "$media_uri" >/tmp/kwai-send-intent.log 2>&1
+          rc=$?
+          set -e
+          if test "$rc" -ne 0; then
+            echo 'CLOUD_SHARE_TEST=KWAI_INTENT_REJECTED' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 10
+          fi
+          sleep 4
+          resumed="$(adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | tail -3 || true)"
+          if ! grep -q 'com.kwai.video' <<< "$resumed"; then
+            echo 'CLOUD_SHARE_TEST=KWAI_NOT_FOREGROUND' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 11
+          fi
+          echo 'CLOUD_SHARE_TEST=KWAI_FOREGROUND_AFTER_VIDEO_SEND' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo 'CLOUD_SHARE_EDITOR=NOT_VERIFIED' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo 'CLOUD_SHARE_PUBLICATION=NOT_TESTED' | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Upload redacted cloud install evidence
         if: always()
         uses: actions/upload-artifact@v4
