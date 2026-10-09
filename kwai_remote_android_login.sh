@@ -373,7 +373,19 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   else
     if [ "$SSO_WAS_ACTIVE" -eq 1 ]; then
       SSO_WAS_ACTIVE=0
-      if kwai_foreground; then log "GOOGLE_SSO_RETURNED_TO_KWAI"; else log "GOOGLE_SSO_LEFT_FOREGROUND"; fi
+      if kwai_foreground; then
+        log "GOOGLE_SSO_RETURNED_TO_KWAI"
+        (
+          sleep 6
+          echo "===== GOOGLE_SSO_RETURN_DIAGNOSTICS ====="
+          adb shell pidof com.kwai.video 2>/dev/null || true
+          adb shell dumpsys connectivity 2>/dev/null | grep -E 'VALIDATED|DefaultNetwork' | head -15 || true
+          adb logcat -d -t 1200 2>/dev/null | grep -Ei 'Cronet|UnknownHost|SSLHandshake|CertPath|ConnectException|SocketTimeout|HTTP.?40[13]|HTTP.?50[0-9]|hodor|auth.*fail|login.*fail|download.*fail' | tail -100 || true
+          echo "===== END_GOOGLE_SSO_RETURN_DIAGNOSTICS ====="
+        ) >> "$REPORT" 2>&1 &
+      else
+        log "GOOGLE_SSO_LEFT_FOREGROUND"
+      fi
     fi
     if kwai_foreground && [ $((SECONDS-OVERLAY_LAST_CHECK)) -ge 3 ]; then
       OVERLAY_LAST_CHECK=$SECONDS
