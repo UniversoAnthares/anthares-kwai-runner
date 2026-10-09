@@ -1,0 +1,53 @@
+name: Kwai Android ATD speed probe isolated
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-atd-speed-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Restore emulator binary
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
+
+      - name: Install API30 AOSP ATD and measure
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          PKG='system-images;android-30;aosp_atd;x86_64'
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --list | grep -F "$PKG" | head -3 || true
+          t=$(date +%s)
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --install "$PKG" >/tmp/atd-install.log 2>&1 || true
+          INSTALL=$(($(date +%s)-t))
+          ROOT="$SDK/system-images/android-30/aosp_atd/x86_64"
+          test -s "$ROOT/system.img"
+          echo "ATD_INSTALL_SECONDS=$INSTALL"
+          echo "ATD_INSTALLED_BYTES=$(du -sb "$ROOT" | awk '{print $1}')"
+          find "$ROOT" -maxdepth 1 -type f -printf '%s\t%f\n' | sort -nr | head -20 || true
+
+      - name: Cold boot API30 AOSP ATD
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n kwai-atd30 -k 'system-images;android-30;aosp_atd;x86_64' --device pixel_5
+          sudo chmod 666 /dev/kvm
+          t=$(date +%s)
+          nohup "$SDK/emulator/emulator" -avd kwai-atd30 -no-snapshot-load -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 1536 -cores 2 >/tmp/atd-emulator.log 2>&1 &
+          timeout 120 "$SDK/platform-tools/adb" wait-for-device
+          timeout 120 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$SDK/platform-tools/adb"
+          echo "ATD_COLD_BOOT_SECONDS=$(($(date +%s)-t))"
+          "$SDK/platform-tools/adb" shell getprop ro.build.version.release | sed 's/^/ATD_ANDROID_RELEASE=/'
+          "$SDK/platform-tools/adb" shell getprop ro.product.cpu.abilist | sed 's/^/ATD_ABI=/'
+          grep -Ei 'Boot completed|error|snapshot' /tmp/atd-emulator.log | tail -30 || true
