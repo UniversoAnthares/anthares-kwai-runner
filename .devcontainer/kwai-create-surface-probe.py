@@ -3,8 +3,9 @@
 
 The module does not export cookies, tokens, storage, page text or screenshots.
 It may open disposable Kwai/Studio tabs in the same already-authenticated browser
-context, inspect only boolean UI signals, and close those tabs. It never uploads
-or publishes.
+context, inspect boolean UI signals, and activate a create/upload control only in
+a disposable tab to verify that it reaches an upload surface. It never uploads
+media or publishes anything.
 """
 from urllib.parse import urlsplit
 
@@ -26,8 +27,7 @@ def classify_page_signals(signals):
     create_or_upload_visible = bool(file_input_present or create_control_visible or upload_control_visible)
     operational_create_surface = any(
         (r.get("file_input_present") or r.get("create_control_visible") or r.get("upload_control_visible"))
-        and not r.get("login_gate_visible")
-        for r in rows
+        and not r.get("login_gate_visible") for r in rows
     )
     return {
         "kwai_tab_present": tab_present,
@@ -38,7 +38,6 @@ def classify_page_signals(signals):
         "create_or_upload_visible": create_or_upload_visible,
         "publish_control_visible": publish_control_visible,
         "operational_create_surface": bool(operational_create_surface),
-        "read_only_probe": True,
         "session_exported": False,
     }
 
@@ -52,8 +51,7 @@ async def inspect_page(page, *, mobile_probe=False):
             """() => {
               const visible = (el) => {
                 if (!el) return false;
-                const s = getComputedStyle(el);
-                const r = el.getBoundingClientRect();
+                const s = getComputedStyle(el), r = el.getBoundingClientRect();
                 return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0;
               };
               const nodes = [...document.querySelectorAll('button,a,[role=button],[role=menuitem],label')];
@@ -88,14 +86,58 @@ async def inspect_page(page, *, mobile_probe=False):
     }
 
 
+async def activate_create_in_disposable(context):
+    page = None
+    result = {"activation_probe_attempted": True, "activation_control_clicked": False,
+              "activation_file_input_present": False, "activation_login_gate_visible": False}
+    try:
+        page = await context.new_page()
+        await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=20000)
+        await page.wait_for_timeout(1800)
+        before = await inspect_page(page)
+        if not before or before.get("login_gate_visible"):
+            result["activation_login_gate_visible"] = bool(before and before.get("login_gate_visible"))
+            return result
+        point = await page.evaluate(
+            """() => {
+              const visible=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
+              const label=e=>((e.innerText||e.textContent||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('title')||'')).trim();
+              const nodes=[...document.querySelectorAll('button,a,[role=button],label')].filter(visible);
+              const candidate=nodes.find(e=>/^\s*\+\s*$/.test(label(e)) || /camera|record|gravar|create video|criar v[ií]deo|new post|novo post|upload|enviar|carregar/i.test(label(e)));
+              if(!candidate)return null; const r=candidate.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2};
+            }"""
+        )
+        if not point:
+            return result
+        await page.mouse.click(point["x"], point["y"])
+        result["activation_control_clicked"] = True
+        await page.wait_for_timeout(2500)
+        after = await inspect_page(page)
+        if after:
+            result["activation_file_input_present"] = bool(after.get("file_input_present"))
+            result["activation_login_gate_visible"] = bool(after.get("login_gate_visible"))
+            result["activation_create_or_upload_visible"] = bool(after.get("create_control_visible") or after.get("upload_control_visible"))
+            result["activation_publish_control_visible"] = bool(after.get("publish_control_visible"))
+            result["activation_surface_ready"] = bool((after.get("file_input_present") or after.get("create_control_visible") or after.get("upload_control_visible")) and not after.get("login_gate_visible"))
+        return result
+    except Exception:
+        result["activation_probe_failed"] = True
+        return result
+    finally:
+        if page is not None:
+            try: await page.close()
+            except Exception: pass
+
+
 async def inspect_existing_pages(context):
     rows = []
     for page in list(getattr(context, "pages", []) or []):
         row = await inspect_page(page)
-        if row:
-            rows.append(row)
+        if row: rows.append(row)
     result = classify_page_signals(rows)
+
     if result["operational_create_surface"]:
+        result.update(await activate_create_in_disposable(context))
         result["studio_disposable_probe_attempted"] = False
         result["mobile_disposable_probe_attempted"] = False
         return result
@@ -107,8 +149,7 @@ async def inspect_existing_pages(context):
         await studio.goto(STUDIO_URL, wait_until="domcontentloaded", timeout=20000)
         await studio.wait_for_timeout(2500)
         row = await inspect_page(studio)
-        if row:
-            rows.append(row)
+        if row: rows.append(row)
         result = classify_page_signals(rows)
         result["studio_disposable_probe_attempted"] = True
         result["studio_disposable_probe_loaded"] = bool(row)
@@ -117,12 +158,11 @@ async def inspect_existing_pages(context):
         result["studio_disposable_probe_loaded"] = False
     finally:
         if studio is not None:
-            try:
-                await studio.close()
-            except Exception:
-                pass
+            try: await studio.close()
+            except Exception: pass
 
     if result["operational_create_surface"]:
+        result.update(await activate_create_in_disposable(context))
         result["mobile_disposable_probe_attempted"] = False
         return result
 
@@ -134,13 +174,14 @@ async def inspect_existing_pages(context):
         await mobile.goto(HOME_URL, wait_until="domcontentloaded", timeout=20000)
         await mobile.wait_for_timeout(2500)
         row = await inspect_page(mobile, mobile_probe=True)
-        if row:
-            rows.append(row)
+        if row: rows.append(row)
         result = classify_page_signals(rows)
         result["studio_disposable_probe_attempted"] = True
         result["studio_disposable_probe_loaded"] = True
         result["mobile_disposable_probe_attempted"] = True
         result["mobile_disposable_probe_loaded"] = bool(row)
+        if result["operational_create_surface"]:
+            result.update(await activate_create_in_disposable(context))
         return result
     except Exception:
         result["mobile_disposable_probe_attempted"] = True
@@ -148,7 +189,5 @@ async def inspect_existing_pages(context):
         return result
     finally:
         if mobile is not None:
-            try:
-                await mobile.close()
-            except Exception:
-                pass
+            try: await mobile.close()
+            except Exception: pass
