@@ -23,6 +23,10 @@ redact(){ sed -E 's/([?&](token|access_token|auth|password|cookie|session|sid)=)
   timeout 10 adb shell 'ping -c 2 -W 3 connectivitycheck.gstatic.com' 2>&1 || true
   echo "## Android-side HTTPS capability"
   timeout 20 adb shell 'if command -v curl >/dev/null 2>&1; then curl -fsSIL --max-time 12 https://connectivitycheck.gstatic.com/generate_204 | head -12; elif command -v wget >/dev/null 2>&1; then wget -S -O /dev/null -T 12 https://connectivitycheck.gstatic.com/generate_204; elif toybox --list 2>/dev/null | grep -qx wget; then toybox wget -S -O /dev/null https://connectivitycheck.gstatic.com/generate_204; else echo ANDROID_HTTPS_CLIENT_UNAVAILABLE_USE_NET_CAPABILITY_VALIDATED; fi' 2>&1 || echo ANDROID_HTTPS_PROBE_TIMEOUT_OR_FAILURE
+  echo "## Kwai CDN reachability"
+  timeout 12 adb shell 'ping -c 1 -W 3 aws-br-cdn.kwai.net' 2>&1 || true
+  echo "## CDN HTTP status"
+  curl -sSIL --connect-timeout 5 --max-time 12 -o /dev/null -w 'CDN_HTTP=%{http_code} CDN_IP=%{remote_ip} TLS=%{ssl_verify_result}\n' https://aws-br-cdn.kwai.net/ 2>&1 || true
   echo "## Kwai package network permission"
   timeout 10 adb shell dumpsys package com.kwai.video 2>&1 | grep -E 'userId=|android.permission.INTERNET|android.permission.ACCESS_NETWORK_STATE' | head -30 || true
   echo "## filtered network/tls errors"
