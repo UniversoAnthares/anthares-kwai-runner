@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/kwai-codespaces-browser-smoke.yml'
       - '.kwai-codespaces-smoke-trigger'
+      - '.devcontainer/kwai-identity-guard.py'
 permissions:
   contents: read
 jobs:
