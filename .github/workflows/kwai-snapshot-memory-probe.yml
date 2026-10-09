@@ -1,0 +1,89 @@
+name: Kwai snapshot memory-size probe isolated
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-snapshot-memory-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Restore Android image v1
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+          fail-on-cache-miss: true
+      - name: Restore slim emulator v2
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-headless-x86_64-v2
+          fail-on-cache-miss: true
+      - name: Build and measure lower-memory snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          sudo chmod 666 /dev/kvm
+
+          stop_emulator() {
+            "$ADB" emu kill >/dev/null 2>&1 || true
+            timeout 25 bash -c 'while pgrep -f "[q]emu-system-x86_64-headless" >/dev/null; do sleep 1; done' || true
+            "$ADB" kill-server >/dev/null 2>&1 || true
+          }
+
+          test_memory() {
+            mem="$1"
+            name="kwai-mem${mem}"
+            avd="$ANDROID_AVD_HOME/${name}.avd"
+            ini="$ANDROID_AVD_HOME/${name}.ini"
+            rm -rf "$avd" "$ini"
+            echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n "$name" -k 'system-images;android-35;google_apis;x86_64' --device pixel_5
+            sed -i '/^hw.ramSize=/d' "$avd/config.ini"
+            printf '\nhw.ramSize=%s\n' "$mem" >> "$avd/config.ini"
+
+            t=$(date +%s)
+            nohup "$SDK/emulator/emulator" -avd "$name" -memory "$mem" -no-snapshot-load -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -cores 2 >"/tmp/${name}-cold.log" 2>&1 &
+            timeout 90 "$ADB" wait-for-device
+            timeout 90 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"
+            echo "MEM${mem}_COLD_BOOT_SECONDS=$(($(date +%s)-t))"
+            t=$(date +%s)
+            timeout 75 "$ADB" emu avd snapshot save kwai-ready >"/tmp/${name}-save.log" 2>&1
+            echo "MEM${mem}_SNAPSHOT_SAVE_SECONDS=$(($(date +%s)-t))"
+            test -d "$avd/snapshots/kwai-ready"
+            stop_emulator
+
+            echo "MEM${mem}_RAM_BIN_BYTES=$(stat -c%s "$avd/snapshots/kwai-ready/ram.bin")"
+            echo "MEM${mem}_SNAPSHOT_DIR_BYTES=$(du -sb "$avd/snapshots/kwai-ready" | awk '{print $1}')"
+            echo "MEM${mem}_AVD_RAW_BYTES=$(du -sb "$avd" | awk '{print $1}')"
+
+            t=$(date +%s)
+            nohup "$SDK/emulator/emulator" -avd "$name" -memory "$mem" -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -cores 2 >"/tmp/${name}-restore.log" 2>&1 &
+            timeout 60 "$ADB" wait-for-device
+            timeout 60 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"
+            boot=$(($(date +%s)-t))
+            echo "MEM${mem}_SNAPSHOT_BOOT_SECONDS=$boot"
+            actual=false
+            if grep -q "Successfully loaded snapshot 'kwai-ready'" "/tmp/${name}-restore.log" && ! grep -Eq "Failed to load snapshot 'kwai-ready'|performing a cold boot" "/tmp/${name}-restore.log"; then actual=true; fi
+            echo "MEM${mem}_ACTUAL_LOAD=$actual"
+            grep -E "Loading snapshot 'kwai-ready'|Successfully loaded snapshot 'kwai-ready'|Failed to load snapshot|cold boot" "/tmp/${name}-restore.log" | tail -20 || true
+            test "$actual" = true
+            test "$boot" -lt 10
+            stop_emulator
+
+            rm -rf "$avd/snapshots/default_boot"
+            sync
+            tar --zstd -cf "/tmp/${name}.tar.zst" -C "$HOME/.android" "avd/${name}.avd" "avd/${name}.ini"
+            echo "MEM${mem}_COMPRESSED_AVD_BYTES=$(stat -c%s "/tmp/${name}.tar.zst")"
+          }
+
+          test_memory 1024
+          test_memory 1536
