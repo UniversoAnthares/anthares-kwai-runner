@@ -84,5 +84,12 @@ class ChromeSessionSecurityTests(unittest.TestCase):
         self.assertNotIn("key: kwai-session-", workflow)
 
 
+    def test_login_button_absence_is_not_identity_proof(self):
+        source = (Path(__file__).resolve().parents[1] / "kwai_chrome_session_probe.py").read_text()
+        self.assertIn('result["identity_verified"] = False', source)
+        self.assertIn('result["authenticated"] = False', source)
+        self.assertNotIn('login_controls == 0 and result.get("session_restored"', source)
+
+
 if __name__ == "__main__":
     unittest.main()
