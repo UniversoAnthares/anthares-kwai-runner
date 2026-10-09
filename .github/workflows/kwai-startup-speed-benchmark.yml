@@ -128,11 +128,16 @@ jobs:
           if grep -Eq "Failed to load snapshot|performing a cold boot" /tmp/kwai-cross-run-snapshot.log; then
             echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=false" | tee -a "$GITHUB_STEP_SUMMARY"
           elif grep -q "Loading snapshot.*kwai-ready" /tmp/kwai-cross-run-snapshot.log; then
-            echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=likely" | tee -a "$GITHUB_STEP_SUMMARY"
+            if grep -q "Successfully loaded snapshot.*kwai-ready" /tmp/kwai-cross-run-snapshot.log; then
+            echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=true" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=unverified" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
           fi
           "$ADB" emu kill >/dev/null 2>&1 || true
           timeout 30 bash -c 'while "$1" get-state >/dev/null 2>&1; do sleep 1; done' _ "$ADB" || true
       - name: Experiment with reusable AVD snapshot
+        if: steps.avdcache.outputs.cache-hit != 'true'
         shell: bash
         continue-on-error: true
         run: |
@@ -164,6 +169,7 @@ jobs:
             tail -35 /tmp/kwai-snapshot-reboot.log || true
           fi
       - name: Package AVD snapshot for cross-run cache
+        if: steps.avdcache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
