@@ -1,0 +1,176 @@
+name: Kwai Android cached startup to app launch acceptance
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-cached-app-launch-acceptance.yml']
+permissions:
+  contents: read
+jobs:
+  fastpath-v5:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Start timing
+        shell: bash
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Lookup AVD v4
+        id: avd
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+          lookup-only: true
+
+      - name: Lookup Android image v1
+        id: image
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+          lookup-only: true
+
+      - name: Lookup slim emulator v2
+        id: emulator
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-headless-x86_64-v2
+          lookup-only: true
+
+      - name: Require all cache keys
+        shell: bash
+        run: |
+          test '${{ steps.avd.outputs.cache-hit }}' = true
+          test '${{ steps.image.outputs.cache-hit }}' = true
+          test '${{ steps.emulator.outputs.cache-hit }}' = true
+          echo 'V5_CACHE_LOOKUPS=all-hit' | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore three caches concurrently
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { spawn } = require('child_process');
+            if (!process.env.ACTIONS_RUNTIME_TOKEN || (!process.env.ACTIONS_CACHE_URL && !process.env.ACTIONS_RESULTS_URL)) {
+              throw new Error('CACHE_RUNTIME_ENV_NOT_AVAILABLE');
+            }
+            const actionRoot = path.join(path.dirname(process.env.RUNNER_WORKSPACE), '_actions', 'actions', 'cache', 'v4');
+            const restore = path.join(actionRoot, 'dist', 'restore-only', 'index.js');
+            if (!fs.existsSync(restore)) throw new Error(`restore client missing: ${restore}`);
+            const configs = [
+              {name:'AVD', path:'~/.android/avd/kwai-speed.avd\n~/.android/avd/kwai-speed.ini', key:'kwai-speed-avd-direct-slim-android35-v4'},
+              {name:'IMAGE', path:'/usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64', key:'kwai-speed-android35-google-apis-x86_64-v1'},
+              {name:'EMULATOR', path:'/usr/local/lib/android/sdk/emulator', key:'kwai-speed-emulator-headless-x86_64-v2'}
+            ];
+            const start = Date.now();
+            function restoreOne(c) {
+              return new Promise(resolve => {
+                const output = `/tmp/v5-${c.name}.out`;
+                const state = `/tmp/v5-${c.name}.state`;
+                fs.writeFileSync(output, '');
+                fs.writeFileSync(state, '');
+                const env = {
+                  ...process.env,
+                  GITHUB_OUTPUT: output,
+                  GITHUB_STATE: state,
+                  INPUT_PATH: c.path,
+                  INPUT_KEY: c.key,
+                  'INPUT_RESTORE-KEYS': '',
+                  INPUT_ENABLECROSSOSARCHIVE: 'false',
+                  'INPUT_FAIL-ON-CACHE-MISS': 'true',
+                  'INPUT_LOOKUP-ONLY': 'false'
+                };
+                const t0 = Date.now();
+                const child = spawn(process.execPath, [restore], {env});
+                let stdout = '', stderr = '';
+                child.stdout.on('data', d => stdout += d.toString());
+                child.stderr.on('data', d => stderr += d.toString());
+                child.on('close', code => resolve({name:c.name, code, seconds:Math.ceil((Date.now()-t0)/1000), stdout, stderr}));
+              });
+            }
+            const results = await Promise.all(configs.map(restoreOne));
+            for (const r of results) {
+              console.log(`V5_RESTORE_${r.name}_SECONDS=${r.seconds}`);
+              console.log(r.stdout.slice(-8000));
+              if (r.stderr) console.log(r.stderr.slice(-2000));
+            }
+            if (results.some(r => r.code !== 0)) throw new Error('PARALLEL_RESTORE_CHILD_FAILED');
+            const seconds = Math.ceil((Date.now()-start)/1000);
+            console.log(`PARALLEL_RESTORE_SECONDS=${seconds}`);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `PARALLEL_RESTORE_SECONDS=${seconds}\n`);
+            const required = [
+              `${process.env.HOME}/.android/avd/kwai-speed.avd/snapshots/kwai-ready`,
+              '/usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64/system.img',
+              '/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64-headless'
+            ];
+            for (const p of required) if (!fs.existsSync(p)) throw new Error(`restored path missing: ${p}`);
+
+      - name: Boot kwai-ready and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          sudo chmod 666 /dev/kvm
+          t=$(date +%s)
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/v5-emulator.log 2>&1 &
+          timeout 60 "$ADB" wait-for-device
+          timeout 60 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"
+          BOOT=$(($(date +%s)-t))
+          echo "V5_SNAPSHOT_BOOT_SECONDS=$BOOT" | tee -a "$GITHUB_STEP_SUMMARY"
+          if grep -q "Successfully loaded snapshot 'kwai-ready'" /tmp/v5-emulator.log && ! grep -Eq "Failed to load snapshot 'kwai-ready'|performing a cold boot" /tmp/v5-emulator.log; then
+            echo 'V5_ACTUAL_LOAD=true' | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'V5_ACTUAL_LOAD=false' | tee -a "$GITHUB_STEP_SUMMARY"
+            grep -Ei 'snapshot|cold boot|error' /tmp/v5-emulator.log | tail -50 || true
+            exit 4
+          fi
+          grep -E "Loading snapshot 'kwai-ready'|Successfully loaded snapshot 'kwai-ready'" /tmp/v5-emulator.log | tee -a "$GITHUB_STEP_SUMMARY"
+          TOTAL=$(($(date +%s)-T0))
+          echo "V5_TOTAL_SECONDS=$TOTAL" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$BOOT" -lt 10
+          echo 'V5_RESULT=PROVEN_SUB10' | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Kwai splits and launch application (no login)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          t=$(date +%s)
+          curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 -o /tmp/kwai-app-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-app-vault.zip' | sha256sum -c -
+          mkdir -p /tmp/kwai-app-vault
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('/tmp/kwai-app-vault.zip') as z:
+              names=[n for n in z.namelist() if n.endswith('.apk')]
+              if not names: raise SystemExit('VAULT_NO_APKS')
+              for name in names:
+                  if '/' in name.strip('/'): raise SystemExit('UNEXPECTED_NESTED_APK')
+              z.extractall('/tmp/kwai-app-vault')
+          PY
+          mapfile -t apks < <(find /tmp/kwai-app-vault -maxdepth 1 -type f -name '*.apk' | sort)
+          test "${#apks[@]}" -gt 0
+          timeout 120 "$ADB" install-multiple -r "${apks[@]}"
+          "$ADB" shell pm path com.kwai.video | grep -q 'package:'
+          echo 'KWAI_APP_INSTALL=PROVEN' | tee -a "$GITHUB_STEP_SUMMARY"
+          timeout 35 "$ADB" shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
+          sleep 8
+          current=$("$ADB" shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | tail -3 || true)
+          echo "$current"
+          if ! grep -q 'com.kwai.video' <<< "$current"; then
+            echo 'KWAI_APP_FOREGROUND=false' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo 'KWAI_APP_FOREGROUND=true' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "KWAI_APP_READY_TOTAL_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "KWAI_INSTALL_LAUNCH_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo 'KWAI_APP_LAUNCH_ACCEPTANCE=PROVEN_NO_AUTH_CLAIM' | tee -a "$GITHUB_STEP_SUMMARY"
