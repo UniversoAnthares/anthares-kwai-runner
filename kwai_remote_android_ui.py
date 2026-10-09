@@ -122,7 +122,7 @@ function key(k){timedFetch('/key?t='+encodeURIComponent(t)+'&k='+k,{method:'POST
 function kwai(){timedFetch('/kwai?t='+encodeURIComponent(t),{method:'POST'}).then(()=>setTimeout(refresh,600))}
 function fixkwai(){timedFetch('/fixkwai?t='+encodeURIComponent(t),{method:'POST'}).then(()=>setTimeout(refresh,1200))}
 async function diag(){let r=await timedFetch('/diag?t='+encodeURIComponent(t)),x=await r.text(),p=document.getElementById('diag');if(!p){p=document.createElement('pre');p.id='diag';document.body.appendChild(p)}p.textContent=x}
-async function txt(){let f=document.getElementById('t'),v=f.value;let r=await timedFetch('/text?t='+encodeURIComponent(t),{method:'POST',body:v});state.textContent=r.ok?'Texto enviado ao Android':'Falha ao enviar texto — conteúdo preservado';setTimeout(refresh,350)}
+let textSending=false;async function txt(){if(textSending)return;textSending=true;try{let f=document.getElementById('t'),v=f.value;let r=await timedFetch('/text?t='+encodeURIComponent(t),{method:'POST',body:v});state.textContent=r.ok?'Texto enviado ao Android':'Falha ao enviar texto — conteúdo preservado';setTimeout(refresh,350)}finally{textSending=false}}
 async function clearText(){let r=await timedFetch('/clear?t='+encodeURIComponent(t),{method:'POST'});state.textContent=r.ok?'Campo selecionado limpo':'Falha ao limpar campo';if(r.ok)document.getElementById('t').value='';setTimeout(refresh,350)}
 async function done(){let r=await timedFetch('/done?t='+encodeURIComponent(t),{method:'POST'});if(r.ok){state.textContent='Confirmação enviada; validando autenticação no servidor.'}}
 </script>"""
@@ -214,7 +214,14 @@ class Handler(BaseHTTPRequestHandler):
                 n = int(self.headers.get("Content-Length", "0"))
                 v = self.rfile.read(n).decode("utf-8", "replace")
                 if v:
-                    adb("shell", "input", "text", v.replace("%", "%25").replace(" ", "%s"), timeout=15, check=True)
+                    import itertools
+                    for space, chars in itertools.groupby(v, lambda c: c == " "):
+                        chunk = "".join(chars)
+                        if space:
+                            for _ in chunk:
+                                adb("shell", "input", "keyevent", "KEYCODE_SPACE", timeout=5, check=True)
+                        else:
+                            adb("shell", "input", "text", chunk.replace("%", "%25"), timeout=15, check=True)
             elif u.path == "/done":
                 with open("/tmp/anthares-android-done", "w") as f:
                     f.write("1")
