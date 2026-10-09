@@ -16,7 +16,7 @@ REPO = "UniversoAnthares/anthares-kwai-runner"
 ISSUE = 12
 OWNER = "universoanthares"
 STATE = Path.home() / ".kwai-remote-private" / "bridge-seen.json"
-COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check|refresh_bridge) ([a-zA-Z0-9_-]{12,64})$")
+COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check|refresh_bridge|ui_probe) ([a-zA-Z0-9_-]{12,64})$")
 def gh(method, endpoint, data=None):
     args = ["gh", "api", "--method", method, endpoint]
     if data is not None:
@@ -37,6 +37,57 @@ async def browser_action(action):
                 page = await context.new_page()
                 await page.goto("https://www.kwai.com/", wait_until="domcontentloaded", timeout=15000)
                 await page.close()
+            if action == "ui_probe":
+                # Read-only sanitized UI diagnostics from the EXISTING tabs.
+                # No DOM text, URL, username, cookie, or screenshot is returned.
+                summary = {
+                    "chrome_connected": True,
+                    "kwai_existing_tab_count": 0,
+                    "kwai_existing_app_loaded": False,
+                    "kwai_existing_header_avatar": False,
+                    "kwai_existing_logout_visible": False,
+                    "kwai_existing_login_visible": False,
+                    "kwai_existing_profile_link": False,
+                    "kwai_existing_owner_edit": False,
+                    "kwai_existing_expected_profile_route": False,
+                }
+                for tab in list(context.pages):
+                    u = urlsplit(tab.url)
+                    if u.scheme != "https" or u.hostname != "www.kwai.com":
+                        continue
+                    summary["kwai_existing_tab_count"] += 1
+                    try:
+                        flags = await tab.evaluate(r"""() => {
+                          const visible = el => {
+                            const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                            return r.width>0 && r.height>0 &&
+                              s.display!=='none' && s.visibility!=='hidden';
+                          };
+                          const nodes=[...document.querySelectorAll('a,button,span,[role="menuitem"],[role="button"]')]
+                            .filter(visible);
+                          const texts=nodes.map(n=>(n.innerText||'').trim()).filter(t=>t.length<=40);
+                          const images=[...document.querySelectorAll('img,[aria-label*="avatar" i]')];
+                          return {
+                            app_loaded: !!document.querySelector('main,header,[id="root"],[id="app"]'),
+                            header_avatar: images.some(n=>{const r=n.getBoundingClientRect();return visible(n)&&r.left>=innerWidth*.7&&r.top<200&&r.width<=100&&r.height<=100;}),
+                            logout_visible:texts.some(t=>/^(log\\s*out|logout|sign\\s*out|sair)$/i.test(t)),
+                            login_visible:texts.some(t=>/^(log\\s*in|sign\\s*in|entrar|fazer login)$/i.test(t)),
+                            profile_link:[...document.querySelectorAll('a[href]')].some(n=>{try{const u=new URL(n.getAttribute('href'),location.href);return u.hostname==='www.kwai.com'&&/^\\/@[^/]+\\/?$/i.test(u.pathname)}catch{return false}}),
+                            owner_edit:texts.some(t=>/^(edit profile|editar perfil)$/i.test(t))
+                          };
+                        }""")
+                        summary["kwai_existing_app_loaded"] |= bool(flags.get("app_loaded"))
+                        summary["kwai_existing_header_avatar"] |= bool(flags.get("header_avatar"))
+                        summary["kwai_existing_logout_visible"] |= bool(flags.get("logout_visible"))
+                        summary["kwai_existing_login_visible"] |= bool(flags.get("login_visible"))
+                        summary["kwai_existing_profile_link"] |= bool(flags.get("profile_link"))
+                        summary["kwai_existing_owner_edit"] |= bool(flags.get("owner_edit"))
+                        summary["kwai_existing_expected_profile_route"] |= (
+                            u.path.rstrip("/").lower() == "/@universo.anthares"
+                        )
+                    except Exception:
+                        continue
+                return summary
             if action == "profile_check":
                 # Reuse the tested private guard rather than searching a closed
                 # menu in an arbitrary Kwai tab (known false-negative).
@@ -81,7 +132,7 @@ def main():
     import asyncio
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     seen = set(json.loads(STATE.read_text())) if STATE.exists() else set()
-    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check,refresh_bridge;no_session_export", flush=True)
+    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check,refresh_bridge,ui_probe;no_session_export", flush=True)
     while True:
         try:
             comments = gh("GET", f"repos/{REPO}/issues/{ISSUE}/comments?per_page=100")
