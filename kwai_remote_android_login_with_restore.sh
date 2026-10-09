@@ -35,6 +35,7 @@ rm -f /tmp/kwai-auth-network-error-detected /tmp/anthares-android-done /tmp/kwai
 python3 - <<'PY'
 from pathlib import Path
 src=Path('kwai_remote_android_login.sh').read_text()
+
 old='''    if kwai_foreground && [ $((SECONDS-OVERLAY_LAST_CHECK)) -ge 3 ]; then
       OVERLAY_LAST_CHECK=$SECONDS
       dismiss_notification_permission
@@ -47,6 +48,44 @@ if old in src:
     print('KWAI_RUNTIME_UIAUTOMATOR_COLLISION_PATCHED')
 else:
     print('KWAI_RUNTIME_UIAUTOMATOR_PATCH_PATTERN_NOT_FOUND')
+
+old2='''    dump_ui || true
+    if grep -Eqi 'Profile|Perfil|Discover|Descobrir|Inbox|Caixa de entrada' /tmp/kwai-ui.xml 2>/dev/null && ! grep -Eqi 'Choose like or dislike|let us know you better' /tmp/kwai-ui.xml 2>/dev/null; then
+      log "KWAI_ONBOARDING_MAIN_NAV_VISIBLE"; return 0
+    fi'''
+new2='''    dump_ui || true
+    if grep -Eqi 'Select your interests|bt_interest_skip_top_right|selected and continue' /tmp/kwai-ui.xml 2>/dev/null; then
+      adb shell input tap $((w*90/100)) $((h*9/100)) >/dev/null 2>&1 || true
+      log "KWAI_INTEREST_SELECTION_SKIPPED"
+      sleep 3
+      continue
+    fi
+    if grep -Eqi 'Profile|Perfil|Discover|Descobrir|Inbox|Caixa de entrada' /tmp/kwai-ui.xml 2>/dev/null && ! grep -Eqi 'Choose like or dislike|let us know you better|Select your interests|selected and continue' /tmp/kwai-ui.xml 2>/dev/null; then
+      log "KWAI_ONBOARDING_MAIN_NAV_VISIBLE"; return 0
+    fi'''
+if old2 in src:
+    src=src.replace(old2,new2,1)
+    print('KWAI_RUNTIME_INTEREST_SKIP_PATCHED')
+else:
+    print('KWAI_RUNTIME_INTEREST_SKIP_PATTERN_NOT_FOUND')
+
+old3='''  dump_ui || true
+  xy="$(python3 - <<'PY' '''
+# Avoid blind center-screen Hide fallback while the explicit interest picker is visible.
+needle='''  dump_ui || true
+  xy="$(python3 - <<'PY'\n'''
+replacement='''  dump_ui || true
+  if grep -Eqi 'Select your interests|bt_interest_skip_top_right|selected and continue' /tmp/kwai-ui.xml 2>/dev/null; then
+    log "KWAI_RESOURCE_FALLBACK_SUPPRESSED_ON_INTERESTS"
+    return 0
+  fi
+  xy="$(python3 - <<'PY'\n'''
+if needle in src:
+    src=src.replace(needle,replacement,1)
+    print('KWAI_RUNTIME_RESOURCE_FALLBACK_GUARDED')
+else:
+    print('KWAI_RUNTIME_RESOURCE_GUARD_PATTERN_NOT_FOUND')
+
 Path('/tmp/kwai_remote_android_login.runtime.sh').write_text(src)
 PY
 
