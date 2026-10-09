@@ -85,7 +85,7 @@ async def open_account_menu_in_probe_page(page):
                el.closest('a[href]'))return false;
             const label=(el.parentElement?.innerText||'').trim();
             return label.length<70 &&
-              !/(upload|publicar|postar|log\\s*in|sign\\s*in|logout|log\\s*out|sair)/i.test(label);
+              !/(upload|publicar|postar|log\s*in|sign\s*in|logout|log\s*out|sair)/i.test(label);
           }).sort((a,b)=>b.getBoundingClientRect().right-
                             a.getBoundingClientRect().right).slice(0,3)
             .map(el=>{const r=el.getBoundingClientRect();
@@ -106,7 +106,7 @@ async def open_account_menu_in_probe_page(page):
               )].some(el=>{
                 const t=(el.innerText||'').trim();
                 return visible(el)&&t.length<=32&&
-                  /^(log\\s*out|logout|sign\\s*out|sair)$/i.test(t);
+                  /^(log\s*out|logout|sign\s*out|sair)$/i.test(t);
               });
             }""")
             if opened:
