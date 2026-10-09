@@ -70,6 +70,49 @@ async def open_account_menu_in_probe_page(page):
       return true;
     }"""
     try:
+        # Real pointer events are required by Kwai's account trigger.
+        # The older DOM .click() reported success but did not open the menu
+        # in the user's live Codespaces Chrome (issue #12 proof).
+        points = await page.evaluate(r"""() => {
+          const visible = el => {
+            const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+            return r.width>=16&&r.height>=16&&r.width<=100&&r.height<=100&&
+              s.display!=='none'&&s.visibility!=='hidden';
+          };
+          return [...document.querySelectorAll('img')].filter(el=>{
+            const r=el.getBoundingClientRect();
+            if(!visible(el)||r.left<innerWidth*.60||r.top>200||
+               el.closest('a[href]'))return false;
+            const label=(el.parentElement?.innerText||'').trim();
+            return label.length<70 &&
+              !/(upload|publicar|postar|log\\s*in|sign\\s*in|logout|log\\s*out|sair)/i.test(label);
+          }).sort((a,b)=>b.getBoundingClientRect().right-
+                            a.getBoundingClientRect().right).slice(0,3)
+            .map(el=>{const r=el.getBoundingClientRect();
+              return {x:r.left+r.width/2,y:r.top+r.height/2}});
+        }""")
+        for point in points:
+            await page.mouse.move(point["x"], point["y"])
+            await page.mouse.click(point["x"], point["y"])
+            await page.wait_for_timeout(450)
+            opened = await page.evaluate(r"""() => {
+              const visible=el=>{
+                const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                return r.width>0&&r.height>0&&s.display!=='none'&&
+                  s.visibility!=='hidden';
+              };
+              return [...document.querySelectorAll(
+                'a,button,span,div,[role="menuitem"]'
+              )].some(el=>{
+                const t=(el.innerText||'').trim();
+                return visible(el)&&t.length<=32&&
+                  /^(log\\s*out|logout|sign\\s*out|sair)$/i.test(t);
+              });
+            }""")
+            if opened:
+                return True
+            await page.mouse.click(12, 220)
+        # Keep the legacy DOM click as a last resort for older Kwai UIs.
         return await asyncio.wait_for(page.evaluate(script), timeout=3) is True
     except Exception:
         return False
@@ -173,15 +216,16 @@ async def inspect_own_profile_navigation(context):
             if (images.length) {
               // The avatar above 'Log out' is the account row. No other item
               // in the dropdown is clicked, especially not Log out.
-              images[0].click();
-              return true;
+              const r = images[0].getBoundingClientRect();
+              return {x:r.left+r.width/2,y:r.top+r.height/2};
             }
           }
           return false;
         }"""
-        outcome["account_menu_profile_navigation_attempted"] = (
-            await asyncio.wait_for(page.evaluate(script), timeout=3) is True
-        )
+        point = await asyncio.wait_for(page.evaluate(script), timeout=3)
+        if isinstance(point, dict):
+            await page.mouse.click(point["x"], point["y"])
+            outcome["account_menu_profile_navigation_attempted"] = True
         if not outcome["account_menu_profile_navigation_attempted"]:
             return outcome
         for _ in range(8):
