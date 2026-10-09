@@ -222,6 +222,17 @@ PY
   adb shell input tap $coords >/dev/null 2>&1
   sleep 2
 }
+# The Kwai welcome screen exposes a prominent "Continue with Google" button.
+# Click it automatically only while that exact welcome screen is visible.
+if dump_ui && grep -Eqi 'Welcome to Kwai' /tmp/kwai-ui.xml && grep -Eqi 'Continue with Google' /tmp/kwai-ui.xml; then
+  log "KWAI_WELCOME_GOOGLE_BUTTON_DETECTED"
+  if tap_label 'Continue with Google'; then
+    log "KWAI_WELCOME_GOOGLE_BUTTON_TAPPED"
+    sleep 4
+  else
+    log "KWAI_WELCOME_GOOGLE_BUTTON_TAP_FAILED"
+  fi
+fi
 if ! email_login_visible; then
   complete_kwai_interest_onboarding || true
   dismiss_swipe_tutorial || true
