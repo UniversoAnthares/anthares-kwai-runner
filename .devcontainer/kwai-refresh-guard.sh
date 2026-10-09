@@ -8,7 +8,7 @@ pidfile="${HOME}/.kwai-remote-private/inspector.pid"
 if [[ -f "$pidfile" ]]; then
   pid="$(cat "$pidfile")"
   if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
-    if [[ -r "/proc/${pid}/cmdline" ]] && tr '\0' ' ' <"/proc/${pid}/cmdline" | grep -Fq 'kwai-identity-guard.py'; then
+    if [[ -r "/proc/${pid}/cmdline" ]] && [[ "$(tr '\0' ' ' <"/proc/${pid}/cmdline")" == *kwai-identity-guard.py* ]]; then
       kill "$pid"
       for _ in 1 2 3 4 5 6 7 8 9 10; do
         kill -0 "$pid" 2>/dev/null || break
