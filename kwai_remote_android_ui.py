@@ -181,8 +181,8 @@ class Handler(BaseHTTPRequestHandler):
                 elif name == "connectivity":
                     out = "\n".join(x for x in out.splitlines() if any(k in x for k in ("VALIDATED", "INTERNET", "DefaultNetwork", "NetworkAgentInfo")))[-7000:]
                 elif name == "logcat":
-                    keys = ("kwai", "kuaishou", "unknownhost", "ssl", "cronet", "okhttp", "network", "connectexception", "sockettimeout")
-                    out = "\n".join(x for x in out.splitlines() if any(k in x.lower() for k in keys))[-12000:]
+                    keys = ("kwai", "kuaishou", "unknownhost", "ssl", "cronet", "okhttp", "network", "connectexception", "sockettimeout", "http 401", "http 403", "http 500", "error_code", "onfailed", "auth", "api", "login", "aegon")
+                    out = "\n".join(x for x in out.splitlines() if any(k in x.lower() for k in keys))[-30000:]
                 parts.append("## " + name + "\n" + out)
             self.send_bytes("\n".join(parts).encode())
             return
