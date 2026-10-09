@@ -40,8 +40,6 @@ def inspect_profile():
     return 11
 
 def inspect_create_surface():
-    # Return to main surface first, then use the center '+' route. This route is
-    # independent from the broken profile API and is the path the publisher needs.
     adb("shell","input","keyevent","KEYCODE_BACK");time.sleep(2)
     try:nodes,text=dump()
     except Exception:return 11
@@ -85,11 +83,10 @@ for _ in range(8):
         if rc==12:break
     time.sleep(1)
 
-# Profile endpoint is known to fail in the emulator while feed traffic still works.
-# Validate the actual publishing path instead of making Profile a hard dependency.
 rc=inspect_create_surface()
 if rc==0:
     print("KWAI_AUTH_STATE=AUTHENTICATED_OPERATIONAL")
+    print("KWAI_AUTH_STATE=AUTHENTICATED_UI")
     sys.exit(0)
 if rc==10:
     print("KWAI_AUTH_STATE=AUTH_REQUIRED")
