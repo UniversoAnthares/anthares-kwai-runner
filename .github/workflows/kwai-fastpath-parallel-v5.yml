@@ -56,52 +56,70 @@ jobs:
           path: /usr/local/lib/android/sdk/emulator
           key: kwai-speed-emulator-headless-x86_64-v2
 
-      - name: Parallel restore AVD image and slim emulator
+      - name: Parallel restore AVD image and slim emulator in JS action context
         if: steps.slimemu.outputs.cache-hit == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          ACTIONS_ROOT="$(dirname "$RUNNER_WORKSPACE")/_actions/actions/cache"
-          RESTORE=$(find "$ACTIONS_ROOT" -path '*/dist/restore-only/index.js' -type f | head -1)
-          test -n "$RESTORE" && test -f "$RESTORE"
-          echo "PARALLEL_RESTORE_CLIENT=$RESTORE" | tee -a "$GITHUB_STEP_SUMMARY"
-          for v in ACTIONS_CACHE_URL ACTIONS_RESULTS_URL ACTIONS_RUNTIME_TOKEN ACTIONS_CACHE_SERVICE_V2; do
-            if [ -n "${!v:-}" ]; then echo "${v}_PRESENT=true"; else echo "${v}_PRESENT=false"; fi
-          done
-          t=$(date +%s)
-          restore_one() {
-            name="$1"; path="$2"; key="$3"
-            echo "RESTORE_START_${name}=$(date +%s)" >> "/tmp/cache-${name}.meta"
-            set +e
-            GITHUB_OUTPUT="/tmp/cache-${name}.out" GITHUB_STATE="/tmp/cache-${name}.state" \
-              env "INPUT_PATH=$path" "INPUT_KEY=$key" 'INPUT_RESTORE-KEYS=' \
-              'INPUT_ENABLECROSSOSARCHIVE=false' 'INPUT_FAIL-ON-CACHE-MISS=true' 'INPUT_LOOKUP-ONLY=false' \
-              node "$RESTORE" >"/tmp/cache-${name}.log" 2>&1
-            rc=$?
-            set -e
-            echo "RESTORE_END_${name}=$(date +%s)" >> "/tmp/cache-${name}.meta"
-            echo "RESTORE_RC_${name}=$rc" >> "/tmp/cache-${name}.meta"
-            return "$rc"
-          }
-          avd_paths="$HOME/.android/avd/kwai-speed.avd"$'\n'"$HOME/.android/avd/kwai-speed.ini"
-          restore_one AVD "$avd_paths" 'kwai-speed-avd-direct-slim-android35-v4' & p1=$!
-          restore_one IMAGE '/usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64' 'kwai-speed-android35-google-apis-x86_64-v1' & p2=$!
-          restore_one EMULATOR '/usr/local/lib/android/sdk/emulator' 'kwai-speed-emulator-headless-x86_64-v2' & p3=$!
-          fail=0
-          wait "$p1" || fail=1
-          wait "$p2" || fail=1
-          wait "$p3" || fail=1
-          for name in AVD IMAGE EMULATOR; do
-            echo "===== ${name} META ====="
-            cat "/tmp/cache-${name}.meta" || true
-            echo "===== ${name} LOG ====="
-            sed -n '1,120p' "/tmp/cache-${name}.log" || true
-          done
-          test "$fail" -eq 0
-          test -d "$HOME/.android/avd/kwai-speed.avd/snapshots/kwai-ready"
-          test -s /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64/system.img
-          test -x /usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64-headless
-          echo "PARALLEL_RESTORE_SECONDS=$(($(date +%s)-t))" | tee -a "$GITHUB_STEP_SUMMARY"
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { spawn } = require('child_process');
+            const envNames = ['ACTIONS_CACHE_URL','ACTIONS_RESULTS_URL','ACTIONS_RUNTIME_TOKEN','ACTIONS_CACHE_SERVICE_V2'];
+            for (const n of envNames) console.log(`${n}_PRESENT=${Boolean(process.env[n])}`);
+            if (!process.env.ACTIONS_RUNTIME_TOKEN || (!process.env.ACTIONS_CACHE_URL && !process.env.ACTIONS_RESULTS_URL)) {
+              throw new Error('CACHE_RUNTIME_ENV_NOT_EXPOSED_TO_JS_ACTION');
+            }
+            const root = path.join(path.dirname(process.env.RUNNER_WORKSPACE), '_actions', 'actions', 'cache', 'v4');
+            const restore = path.join(root, 'dist', 'restore-only', 'index.js');
+            if (!fs.existsSync(restore)) throw new Error(`restore client missing: ${restore}`);
+            console.log(`PARALLEL_RESTORE_CLIENT=${restore}`);
+            const configs = [
+              {name:'AVD', path:`${process.env.HOME}/.android/avd/kwai-speed.avd\n${process.env.HOME}/.android/avd/kwai-speed.ini`, key:'kwai-speed-avd-direct-slim-android35-v4'},
+              {name:'IMAGE', path:'/usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64', key:'kwai-speed-android35-google-apis-x86_64-v1'},
+              {name:'EMULATOR', path:'/usr/local/lib/android/sdk/emulator', key:'kwai-speed-emulator-headless-x86_64-v2'}
+            ];
+            const start = Date.now();
+            function restoreOne(c) {
+              return new Promise((resolve) => {
+                const out = `/tmp/cache-${c.name}.out`;
+                const state = `/tmp/cache-${c.name}.state`;
+                fs.writeFileSync(out, '');
+                fs.writeFileSync(state, '');
+                const childEnv = {
+                  ...process.env,
+                  GITHUB_OUTPUT: out,
+                  GITHUB_STATE: state,
+                  INPUT_PATH: c.path,
+                  INPUT_KEY: c.key,
+                  'INPUT_RESTORE-KEYS': '',
+                  INPUT_ENABLECROSSOSARCHIVE: 'false',
+                  'INPUT_FAIL-ON-CACHE-MISS': 'true',
+                  'INPUT_LOOKUP-ONLY': 'false'
+                };
+                const t0 = Date.now();
+                const child = spawn(process.execPath, [restore], {env: childEnv});
+                let stdout = '', stderr = '';
+                child.stdout.on('data', d => stdout += d.toString());
+                child.stderr.on('data', d => stderr += d.toString());
+                child.on('close', code => resolve({name:c.name, code, seconds:Math.ceil((Date.now()-t0)/1000), stdout, stderr}));
+              });
+            }
+            const results = await Promise.all(configs.map(restoreOne));
+            for (const r of results) {
+              console.log(`===== ${r.name} seconds=${r.seconds} rc=${r.code} =====`);
+              console.log(r.stdout.slice(-12000));
+              if (r.stderr) console.log(r.stderr.slice(-4000));
+            }
+            if (results.some(r => r.code !== 0)) throw new Error('PARALLEL_RESTORE_CHILD_FAILED');
+            const seconds = Math.ceil((Date.now()-start)/1000);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `PARALLEL_RESTORE_SECONDS=${seconds}\n`);
+            console.log(`PARALLEL_RESTORE_SECONDS=${seconds}`);
+            const must = [
+              `${process.env.HOME}/.android/avd/kwai-speed.avd/snapshots/kwai-ready`,
+              '/usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64/system.img',
+              '/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64-headless'
+            ];
+            for (const p of must) if (!fs.existsSync(p)) throw new Error(`restored path missing: ${p}`);
 
       - name: Boot kwai-ready and validate v5
         if: steps.slimemu.outputs.cache-hit == 'true'
