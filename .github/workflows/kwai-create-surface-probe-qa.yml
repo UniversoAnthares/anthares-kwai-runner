@@ -1,0 +1,19 @@
+name: Kwai Codespaces Create Surface QA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.devcontainer/kwai-create-surface-probe.py'
+      - 'tests/test_kwai_create_surface_probe.py'
+      - '.github/workflows/kwai-create-surface-probe-qa.yml'
+permissions:
+  contents: read
+jobs:
+  read-only-create-surface-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate read-only existing-tab create-surface classifier
+        run: python3 -m unittest tests.test_kwai_create_surface_probe -v
