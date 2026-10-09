@@ -120,7 +120,14 @@ jobs:
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           nohup emulator -avd anthares-remote -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
           echo $! >/tmp/emulator.pid
-          timeout 90 adb wait-for-device || { echo "FAILURE_SIGNAL=EMULATOR_WAIT_FOR_DEVICE_FAILED"; exit 124; }
+          adb kill-server || true
+          for attempt in 1 2 3 4 5; do
+            if timeout 15 adb start-server && timeout 30 adb wait-for-device; then break; fi
+            echo "ADB_START_RETRY=$attempt"
+            adb kill-server || true
+            sleep 5
+          done
+          timeout 90 adb wait-for-device || { echo "FAILURE_SIGNAL=EMULATOR_WAIT_FOR_DEVICE_FAILED"; cat /tmp/emulator.log | tail -60; exit 124; }
           timeout 60 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 1; done' || { echo "FAILURE_SIGNAL=EMULATOR_BOOT_COMPLETION_FAILED"; exit 1; }
           adb shell input keyevent 82 || true
           echo "TEST_VALIDITY=EMULATOR_BOOTED"
