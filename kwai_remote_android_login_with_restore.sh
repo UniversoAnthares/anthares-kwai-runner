@@ -32,7 +32,7 @@ fi
 echo "KWAI_SESSION_RESTORE_GATE_FALLBACK_INTERACTIVE"
 rm -f /tmp/kwai-auth-network-error-detected /tmp/anthares-android-done /tmp/kwai-autofill-watcher.log
 
-python3 - <<'PY'
+python3 - <<'PATCHPY'
 from pathlib import Path
 src=Path('kwai_remote_android_login.sh').read_text()
 
@@ -69,8 +69,32 @@ if old2 in src:
 else:
     print('KWAI_RUNTIME_INTEREST_SKIP_PATTERN_NOT_FOUND')
 
-Path('/tmp/kwai_remote_android_login.runtime.sh').write_text(src)
+start=src.find('email_login_visible(){')
+end=src.find('\nlogin_lock(){', start)
+if start >= 0 and end > start:
+    strict="""email_login_visible(){
+  dump_ui || return 1
+  python3 - <<'PY'
+import xml.etree.ElementTree as ET
+try: root=ET.parse('/tmp/kwai-ui.xml').getroot()
+except Exception: raise SystemExit(1)
+nodes=list(root.iter('node'))
+fields=[n for n in nodes if n.get('class','').endswith('EditText')]
+focus=__import__('subprocess').run(['adb','shell','dumpsys','window'],capture_output=True,text=True).stdout.lower()
+google='com.google.android.gms' in focus
+raise SystemExit(0 if (not google and len(fields)>0) else 1)
 PY
+}"""
+    src=src[:start]+strict+src[end:]
+    print('KWAI_RUNTIME_STRICT_LOGIN_FORM_PATCHED')
+else:
+    print('KWAI_RUNTIME_STRICT_LOGIN_FORM_PATTERN_NOT_FOUND')
+
+src=src.replace("1) tap_label '^(Profile|Perfil|Eu|Me)$' || true ;;", "1) tap_label '^(Log In|Sign In|Entrar|Login)$' || tap_label '^(Profile|Perfil|Eu|Me)$' || true ;;", 1)
+print('KWAI_RUNTIME_FEED_LOGIN_TAB_FIRST')
+
+Path('/tmp/kwai_remote_android_login.runtime.sh').write_text(src)
+PATCHPY
 
 python3 kwai_login_autofill_watcher.py >/tmp/kwai-autofill-watcher.log 2>&1 &
 WATCHER_PID=$!
