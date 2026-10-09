@@ -19,7 +19,7 @@ concurrency:
 jobs:
   remote-login:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 25
     env:
       KWAI_VARIANT: '4'
       KWAI_SESSION_FILE: kwai-session.enc
@@ -64,6 +64,7 @@ jobs:
           [ -n "$URL" ] || { echo "FAILURE_SIGNAL=REMOTE_TUNNEL_START_FAILED"; cat /tmp/tunnel.log || true; exit 23; }
           echo "REMOTE_BASE_URL=$URL" >> "$GITHUB_ENV"
           echo "REMOTE_CHANNEL_PREPARED"
+          printf '### Canal remoto criado — aguardando Android\n\n%s\n' "$URL" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Restore Android system image cache
         id: android-cache
@@ -157,6 +158,7 @@ jobs:
           adb exec-out screencap -p >/tmp/publish-ready.png
           test -s /tmp/publish-ready.png || { echo "FAILURE_SIGNAL=ANDROID_SCREEN_NOT_READY"; exit 27; }
           echo "KWAI_REMOTE_ACCESS_READY"
+          echo "AUTH_FIRST_REMOTE_READY=TRUE"
           printf '### Kwai Android remoto — PRONTO\n\n%s\n' "$REMOTE_BASE_URL" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Download validated Kwai vault
@@ -180,18 +182,8 @@ jobs:
           restore-keys: |
             kwai-session-${{ runner.os }}-
 
-      - name: Start Android network trace
-        shell: bash
-        run: |
-          set +e
-          : > kwai-network-diagnostics.txt
-          adb logcat -c || true
-          nohup adb logcat -v threadtime >/tmp/kwai-login-logcat.txt 2>&1 &
-          echo $! >/tmp/kwai-login-logcat.pid
-          bash kwai_network_diagnostics.sh before-login
-          echo "KWAI_NETWORK_TRACE_STARTED"
-
-      - name: Interactive owner login or validated restore
+      - name: Authentication first — owner login or validated restore
+        timeout-minutes: 12
         env:
           REMOTE_ANDROID_TOKEN: ${{ secrets.REMOTE_ANDROID_TOKEN }}
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
@@ -209,6 +201,17 @@ jobs:
           echo "PRELOGIN_SHOW_TOUCHES=$SHOW_TOUCHES PRELOGIN_POINTER_LOCATION=$POINTER_LOCATION"
           [ "$SHOW_TOUCHES" = "0" ] && [ "$POINTER_LOCATION" = "0" ] || { echo "FAILURE_SIGNAL=TOUCH_MARKERS_REENABLED"; exit 33; }
           bash kwai_remote_android_login_with_restore.sh
+
+      - name: Start post-auth Android network trace
+        shell: bash
+        run: |
+          set +e
+          : > kwai-network-diagnostics.txt
+          adb logcat -c || true
+          nohup adb logcat -v threadtime >/tmp/kwai-login-logcat.txt 2>&1 &
+          echo $! >/tmp/kwai-login-logcat.pid
+          bash kwai_network_diagnostics.sh before-login
+          echo "KWAI_NETWORK_TRACE_STARTED"
 
       - name: Final Android network diagnostics
         if: always()
