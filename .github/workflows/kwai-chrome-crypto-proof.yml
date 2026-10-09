@@ -1,0 +1,45 @@
+name: Kwai Chrome Synthetic Crypto Cross Runner
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.kwai-chrome-crypto-trigger']
+permissions:
+  contents: read
+jobs:
+  create:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate encrypted synthetic Chrome state
+        env:
+          KWAI_SESSION_KEY: ${{ secrets.KWAI_SESSION_KEY }}
+          PROOF_MODE: create
+        run: |
+          python3 -m pip install --quiet cryptography playwright
+          python3 -m playwright install chromium --with-deps >/dev/null
+          python3 kwai_chrome_crypto_proof.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kwai-synthetic-encrypted-state
+          path: .kwai-crypto-proof/synthetic.enc
+          include-hidden-files: true
+          retention-days: 1
+  verify:
+    needs: create
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: kwai-synthetic-encrypted-state
+          path: .kwai-crypto-proof
+      - name: Decrypt in independent runner and reject tampering
+        env:
+          KWAI_SESSION_KEY: ${{ secrets.KWAI_SESSION_KEY }}
+          PROOF_MODE: verify
+        run: |
+          python3 -m pip install --quiet cryptography playwright
+          python3 kwai_chrome_crypto_proof.py
