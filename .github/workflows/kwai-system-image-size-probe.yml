@@ -1,0 +1,30 @@
+name: Kwai Android system image size probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-system-image-size-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Compare published Google APIs image downloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe() {
+            name="$1"; url="$2"
+            headers=$(curl -fsSIL --retry 2 "$url")
+            bytes=$(printf '%s\n' "$headers" | tr -d '\r' | awk 'tolower($1)=="content-length:" {v=$2} END{print v}')
+            echo "${name}_URL=$url"
+            echo "${name}_CONTENT_LENGTH=${bytes:-unknown}"
+          }
+          probe API30_GOOGLE_APIS https://dl.google.com/android/repository/sys-img/google_apis/x86_64-30_r16.zip
+          probe API35_GOOGLE_APIS https://dl.google.com/android/repository/sys-img/google_apis/x86_64-35_r09.zip
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "RUNNER_EMULATOR_PRESENT=$([ -x "$SDK/emulator/emulator" ] && echo 1 || echo 0)"
+          echo "RUNNER_API30_IMAGE_PRESENT=$([ -s "$SDK/system-images/android-30/google_apis/x86_64/system.img" ] && echo 1 || echo 0)"
+          echo "RUNNER_API35_IMAGE_PRESENT=$([ -s "$SDK/system-images/android-35/google_apis/x86_64/system.img" ] && echo 1 || echo 0)"
