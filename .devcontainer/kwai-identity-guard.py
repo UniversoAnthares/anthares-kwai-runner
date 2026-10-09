@@ -26,13 +26,14 @@ def assess_evidence(evidence):
         return False
     if evidence.get("login_controls_absent") is not True:
         return False
-    # Old owner-control evidence is retained for backwards compatibility.
+    # A visible signed-in menu is required on BOTH verification paths.
+    if not assess_authentication(evidence):
+        return False
     legacy = (evidence.get("owner_edit_control_visible") is True
               and evidence.get("account_menu_handle_matches") is True)
-    # Modern Kwai menu may show a display name, not @handle. The menu must
-    # expose a genuine profile link to the expected handle beside Log out.
-    menu = (evidence.get("account_menu_profile_link_matches") is True
-            and assess_authentication(evidence))
+    # Modern Kwai menu shows a display name; require an exact account
+    # profile link next to the authenticated Log out control instead.
+    menu = evidence.get("account_menu_profile_link_matches") is True
     return legacy or menu
 
 
