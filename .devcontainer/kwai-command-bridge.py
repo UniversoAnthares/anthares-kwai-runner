@@ -16,7 +16,7 @@ REPO = "UniversoAnthares/anthares-kwai-runner"
 ISSUE = 12
 OWNER = "universoanthares"
 STATE = Path.home() / ".kwai-remote-private" / "bridge-seen.json"
-COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check|refresh_bridge|ui_probe|menu_probe|avatar_map|user_menu_probe) ([a-zA-Z0-9_-]{12,64})$")
+COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check|refresh_bridge|ui_probe|menu_probe|avatar_map|user_menu_probe|avatar_sweep) ([a-zA-Z0-9_-]{12,64})$")
 def gh(method, endpoint, data=None):
     args = ["gh", "api", "--method", method, endpoint]
     if data is not None:
@@ -37,6 +37,73 @@ async def browser_action(action):
                 page = await context.new_page()
                 await page.goto("https://www.kwai.com/", wait_until="domcontentloaded", timeout=15000)
                 await page.close()
+            if action == "avatar_sweep":
+                # Real pointer events (not DOM .click()) on up to three
+                # non-link header images. Never click login/logout/upload.
+                result = {"chrome_connected": True, "kwai_tab_present": False,
+                          "candidate_count": 0, "pointer_clicks": 0,
+                          "logout_detected": False, "profile_detected": False,
+                          "navigation_changed": False, "matched_candidate_index": -1}
+                for tab in list(context.pages):
+                    original = tab.url
+                    u = urlsplit(original)
+                    if u.scheme != "https" or u.hostname != "www.kwai.com":
+                        continue
+                    result["kwai_tab_present"] = True
+                    try:
+                        coords = await tab.evaluate(r"""() => {
+                          const nodes=[...document.querySelectorAll('img')].filter(el=>{
+                            const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                            if(!(r.width>=16&&r.height>=16&&r.width<=100&&
+                              r.height<=100&&r.left>innerWidth*.60&&r.top<200&&
+                              s.display!=='none'&&s.visibility!=='hidden'&&
+                              !el.closest('a[href]')))return false;
+                            const parent=(el.parentElement?.innerText||'').trim();
+                            return parent.length<70 &&
+                              !/(upload|publicar|postar|log\s*in|sign\s*in|logout|log\s*out|sair)/i.test(parent);
+                          }).sort((a,b)=>b.getBoundingClientRect().right-a.getBoundingClientRect().right);
+                          return nodes.slice(0,3).map(el=>{
+                            const r=el.getBoundingClientRect();
+                            return {x:r.left+r.width/2,y:r.top+r.height/2};
+                          });
+                        }""")
+                        result["candidate_count"] = len(coords)
+                        for index, coord in enumerate(coords):
+                            await tab.mouse.move(coord["x"], coord["y"])
+                            await tab.mouse.click(coord["x"], coord["y"])
+                            result["pointer_clicks"] += 1
+                            await tab.wait_for_timeout(550)
+                            if tab.url != original:
+                                result["navigation_changed"] = True
+                                break
+                            evidence = await tab.evaluate(r"""() => {
+                              const visible=el=>{
+                                const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                                return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';
+                              };
+                              const texts=[...document.querySelectorAll(
+                                'a,button,span,div,[role="menuitem"]'
+                              )].filter(visible).map(el=>(el.innerText||'').trim())
+                                .filter(t=>t.length<=40);
+                              return {
+                                logout:texts.some(t=>/^(log\s*out|logout|sign\s*out|sair)$/i.test(t)),
+                                profile:texts.some(t=>/^(my\s*profile|view\s*profile|profile|meu\s*perfil|ver\s*perfil|perfil)$/i.test(t))
+                              };
+                            }""")
+                            if evidence.get("logout") or evidence.get("profile"):
+                                result["logout_detected"] = bool(evidence.get("logout"))
+                                result["profile_detected"] = bool(evidence.get("profile"))
+                                result["matched_candidate_index"] = index
+                                break
+                            # Close any opened dropdown before trying another
+                            # candidate; the next click must not hit an overlay.
+                            await tab.mouse.click(12, 220)
+                        if tab.url == original:
+                            await tab.mouse.click(12, 220)
+                    except Exception:
+                        pass
+                    break
+                return result
             if action == "user_menu_probe":
                 # Target the unique top-right account/user-class control
                 # instead of the rightmost image, which may be unrelated.
@@ -346,7 +413,7 @@ def main():
     import asyncio
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     seen = set(json.loads(STATE.read_text())) if STATE.exists() else set()
-    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check,refresh_bridge,ui_probe,menu_probe,avatar_map,user_menu_probe;no_session_export", flush=True)
+    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check,refresh_bridge,ui_probe,menu_probe,avatar_map,user_menu_probe,avatar_sweep;no_session_export", flush=True)
     while True:
         try:
             comments = gh("GET", f"repos/{REPO}/issues/{ISSUE}/comments?per_page=100")
