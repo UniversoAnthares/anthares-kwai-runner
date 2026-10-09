@@ -1,0 +1,106 @@
+name: Kwai Android snapshot fast path v4 slim AVD
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-snapshot-fastpath-v4.yml']
+permissions:
+  contents: read
+jobs:
+  slim-build-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Start timing
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Restore slim AVD v4
+        id: slim
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+
+      - name: Restore proven direct AVD v3 fallback
+        id: base
+        if: steps.slim.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-android35-v3
+
+      - name: Slim redundant default snapshot
+        if: steps.slim.outputs.cache-hit != 'true' && steps.base.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$HOME/.android/avd/kwai-speed.avd"
+          test -d "$ROOT/snapshots/kwai-ready"
+          BEFORE=$(du -sb "$ROOT" | awk '{print $1}')
+          DEFAULT=0
+          if [ -d "$ROOT/snapshots/default_boot" ]; then
+            DEFAULT=$(du -sb "$ROOT/snapshots/default_boot" | awk '{print $1}')
+            rm -rf "$ROOT/snapshots/default_boot"
+          fi
+          AFTER=$(du -sb "$ROOT" | awk '{print $1}')
+          echo "V4_RAW_BEFORE_BYTES=$BEFORE" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "V4_REMOVED_DEFAULT_BOOT_BYTES=$DEFAULT" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "V4_RAW_AFTER_BYTES=$AFTER" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Save slim AVD v4
+        if: steps.slim.outputs.cache-hit != 'true' && steps.base.outputs.cache-hit == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+
+      - name: Restore Android system image
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+
+      - name: Restore emulator
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
+
+      - name: Boot kwai-ready and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          test -d "$ANDROID_AVD_HOME/kwai-speed.avd/snapshots/kwai-ready"
+          if [ -d "$ANDROID_AVD_HOME/kwai-speed.avd/snapshots/default_boot" ]; then
+            echo "V4_DEFAULT_BOOT_PRESENT=true" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "V4_DEFAULT_BOOT_PRESENT=false" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          sudo chmod 666 /dev/kvm
+          t=$(date +%s)
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/v4-emulator.log 2>&1 &
+          timeout 60 "$ADB" wait-for-device
+          timeout 60 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"
+          BOOT=$(($(date +%s)-t))
+          echo "V4_SNAPSHOT_BOOT_SECONDS=$BOOT" | tee -a "$GITHUB_STEP_SUMMARY"
+          if grep -q "Successfully loaded snapshot 'kwai-ready'" /tmp/v4-emulator.log && ! grep -Eq "Failed to load snapshot 'kwai-ready'|performing a cold boot" /tmp/v4-emulator.log; then
+            echo "V4_ACTUAL_LOAD=true" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "V4_ACTUAL_LOAD=false" | tee -a "$GITHUB_STEP_SUMMARY"
+            grep -Ei 'snapshot|cold boot|error' /tmp/v4-emulator.log | tail -40 || true
+            exit 4
+          fi
+          grep -E "Loading snapshot 'kwai-ready'|Successfully loaded snapshot 'kwai-ready'" /tmp/v4-emulator.log | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "V4_TOTAL_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$BOOT" -lt 10
+          echo "V4_RESULT=PROVEN_SUB10" | tee -a "$GITHUB_STEP_SUMMARY"
