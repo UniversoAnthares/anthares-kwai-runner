@@ -264,7 +264,7 @@ fi
 if ! email_login_visible && ! google_sso_foreground; then
   log "FAILURE_SIGNAL=KWAI_EMAIL_LOGIN_NOT_VISIBLE"
   dump_ui && { cp /tmp/kwai-ui.xml kwai-login-navigation.xml; grep -Eo 'text="[^"]*"|content-desc="[^"]*"' /tmp/kwai-ui.xml | tail -65 >> "$REPORT" || true; } || true
-  log "LOGIN_DISCOVERY_DIAGNOSTIC_HOLD_900S"; sleep 900
+  log "LOGIN_DISCOVERY_DIAGNOSTIC_HOLD_20S"; sleep 20
   exit 35
 fi
 if email_login_visible; then login_lock; log "KWAI_EMAIL_LOGIN_FORM_VERIFIED"; else log "GOOGLE_SSO_HANDOFF_WAITING"; fi
