@@ -21,7 +21,7 @@ if [ -s "$STATE_FILE" ]; then
       exit 0
     fi
     echo "KWAI_SESSION_RESTORE_NOT_AUTHENTICATED"
-    cat /tmp/kwai-restored-auth-probe.log 2>/dev/null | grep -E '^KWAI_AUTH_STATE=' || true
+    grep -E '^KWAI_AUTH_STATE=' /tmp/kwai-restored-auth-probe.log 2>/dev/null || true
   else
     echo "KWAI_SESSION_RESTORE_APPLY_FAILED"
   fi
@@ -30,4 +30,55 @@ else
 fi
 
 echo "KWAI_SESSION_RESTORE_GATE_FALLBACK_INTERACTIVE"
-exec bash kwai_remote_android_login.sh
+rm -f /tmp/kwai-auth-network-error-detected /tmp/anthares-android-done /tmp/kwai-autofill-watcher.log
+
+# During the stable login surface the original loop repeatedly calls UIAutomator
+# just to check a notification permission that was already pre-granted. Disable
+# that repeated probe in this run so the credential watcher is the sole UIAutomator
+# client and cannot hit the observed 'UiAutomationService already registered' race.
+python3 - <<'PY'
+from pathlib import Path
+src=Path('kwai_remote_android_login.sh').read_text()
+old='''    if kwai_foreground && [ $((SECONDS-OVERLAY_LAST_CHECK)) -ge 3 ]; then
+      OVERLAY_LAST_CHECK=$SECONDS
+      dismiss_notification_permission
+      # Login is locked: no automatic overlay or onboarding taps.
+    fi'''
+new='''    # Stable owner-login phase: notification permission was pre-granted.
+    # Do not start another UIAutomator client here.'''
+if old in src:
+    src=src.replace(old,new,1)
+    print('KWAI_RUNTIME_UIAUTOMATOR_COLLISION_PATCHED')
+else:
+    print('KWAI_RUNTIME_UIAUTOMATOR_PATCH_PATTERN_NOT_FOUND')
+Path('/tmp/kwai_remote_android_login.runtime.sh').write_text(src)
+PY
+
+python3 kwai_login_autofill_watcher.py >/tmp/kwai-autofill-watcher.log 2>&1 &
+WATCHER_PID=$!
+bash /tmp/kwai_remote_android_login.runtime.sh &
+LOGIN_PID=$!
+
+while kill -0 "$LOGIN_PID" 2>/dev/null; do
+  if [ -f /tmp/kwai-auth-network-error-detected ]; then
+    echo "FAILURE_SIGNAL=KWAI_POST_PASSWORD_NETWORK_ERROR"
+    sleep 5
+    kill "$LOGIN_PID" 2>/dev/null || true
+    set +e
+    wait "$LOGIN_PID"
+    set -e
+    kill "$WATCHER_PID" 2>/dev/null || true
+    cat /tmp/kwai-autofill-watcher.log 2>/dev/null || true
+    exit 41
+  fi
+  sleep 1
+done
+
+set +e
+wait "$LOGIN_PID"
+RC=$?
+set -e
+kill "$WATCHER_PID" 2>/dev/null || true
+wait "$WATCHER_PID" 2>/dev/null || true
+cat /tmp/kwai-autofill-watcher.log 2>/dev/null || true
+exit "$RC"
