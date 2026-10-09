@@ -110,7 +110,7 @@ button,input{font-size:18px;padding:10px;margin:4px}#state{padding:8px 4px;color
 <h3>Android remoto — Kwai</h3><div id=state>Conectando ao Android...</div>
 <div id=wrap><img id=s draggable=false><div id=mark></div></div>
 <div><button onclick="key(4)">Voltar</button><button onclick="key(3)">Home</button><button onclick="kwai()">Abrir Kwai</button><button onclick="fixkwai()">Reiniciar Kwai</button><button onclick="diag()">Diagnosticar</button><button onclick="done()">Concluir login</button></div>
-<input id=t type=password autocomplete=off autocapitalize=off spellcheck=false placeholder='Texto (oculto)'><button onclick="txt()">Digitar</button><button onclick="clearText()">Limpar texto</button>
+<input id=t type=text autocomplete=off autocapitalize=off spellcheck=false placeholder='Texto para digitar no Android'><button onclick="txt()">Digitar</button><button onclick="clearText()">Limpar texto</button>
 <script>
 const q=new URLSearchParams(location.search),t=q.get('t'),s=document.getElementById('s'),state=document.getElementById('state'),mark=document.getElementById('mark');let loading=false,errors=0,tapBusy=false;
 async function timedFetch(url,opt={}){let c=new AbortController(),tm=setTimeout(()=>c.abort(),7000);try{return await fetch(url,{...opt,signal:c.signal,cache:'no-store'})}finally{clearTimeout(tm)}}
@@ -122,7 +122,7 @@ function key(k){timedFetch('/key?t='+encodeURIComponent(t)+'&k='+k,{method:'POST
 function kwai(){timedFetch('/kwai?t='+encodeURIComponent(t),{method:'POST'}).then(()=>setTimeout(refresh,600))}
 function fixkwai(){timedFetch('/fixkwai?t='+encodeURIComponent(t),{method:'POST'}).then(()=>setTimeout(refresh,1200))}
 async function diag(){let r=await timedFetch('/diag?t='+encodeURIComponent(t)),x=await r.text(),p=document.getElementById('diag');if(!p){p=document.createElement('pre');p.id='diag';document.body.appendChild(p)}p.textContent=x}
-async function txt(){let f=document.getElementById('t'),v=f.value;f.value='';let r=await timedFetch('/text?t='+encodeURIComponent(t),{method:'POST',body:v});state.textContent=r.ok?'Texto enviado ao Android':'Falha ao enviar texto';setTimeout(refresh,350)}
+async function txt(){let f=document.getElementById('t'),v=f.value;let r=await timedFetch('/text?t='+encodeURIComponent(t),{method:'POST',body:v});state.textContent=r.ok?'Texto enviado ao Android':'Falha ao enviar texto — conteúdo preservado';setTimeout(refresh,350)}
 async function clearText(){let r=await timedFetch('/clear?t='+encodeURIComponent(t),{method:'POST'});state.textContent=r.ok?'Campo selecionado limpo':'Falha ao limpar campo';if(r.ok)document.getElementById('t').value='';setTimeout(refresh,350)}
 async function done(){let r=await timedFetch('/done?t='+encodeURIComponent(t),{method:'POST'});if(r.ok){state.textContent='Confirmação enviada; validando autenticação no servidor.'}}
 </script>"""
