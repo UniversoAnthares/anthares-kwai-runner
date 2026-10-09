@@ -282,7 +282,17 @@ jobs:
             echo 'CLOUD_SHARE_TEST=KWAI_INTENT_REJECTED' | tee -a "$GITHUB_STEP_SUMMARY"
             exit 10
           fi
-          sleep 4
+          sleep 2
+          for attempt in 1 2 3; do
+            foreground="$(adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | tail -3 || true)"
+            if ! grep -q 'com.google.android.permissioncontroller' <<< "$foreground"; then
+              break
+            fi
+            adb shell pm grant com.kwai.video android.permission.READ_MEDIA_VIDEO 2>/dev/null || true
+            adb shell pm grant com.kwai.video android.permission.READ_EXTERNAL_STORAGE 2>/dev/null || true
+            adb shell input keyevent 66 || true
+            sleep 2
+          done
           resumed="$(adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | tail -3 || true)"
           echo "CLOUD_SHARE_FOREGROUND_ACTIVITY=$resumed" | tee -a "$GITHUB_STEP_SUMMARY"
           echo 'CLOUD_SHARE_INTENT_DIAGNOSTICS_BEGIN'
