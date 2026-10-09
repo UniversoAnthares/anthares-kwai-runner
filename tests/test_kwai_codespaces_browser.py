@@ -53,6 +53,7 @@ class CodespacesBrowserTests(unittest.TestCase):
             "profile_url_matches": True,
             "owner_edit_control_visible": True,
             "account_menu_handle_matches": False,
+            "account_menu_logout_visible": True,
             "login_controls_absent": True,
         }
         self.assertFalse(self.mod["assess_evidence"](evidence))
