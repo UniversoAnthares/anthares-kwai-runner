@@ -71,8 +71,6 @@ normalize_network(){
   adb shell settings put global airplane_mode_on 0 >/dev/null 2>&1 || true
   adb shell svc wifi enable >/dev/null 2>&1 || true
 
-  # A stale explicit Private DNS/proxy setting can make app API calls fail while
-  # some already-open CDN connections still succeed. The CI emulator requires no proxy.
   private_mode="$(adb shell settings get global private_dns_mode 2>/dev/null | tr -d '\r' || true)"
   private_spec="$(adb shell settings get global private_dns_specifier 2>/dev/null | tr -d '\r' || true)"
   proxy="$(adb shell settings get global http_proxy 2>/dev/null | tr -d '\r' || true)"
@@ -103,7 +101,6 @@ normalize_network(){
 preflight(){
   : > "$LOG"
   normalize_network
-  # Give Android's network validator time to settle before Kwai starts login/API traffic.
   for i in $(seq 1 15); do
     if adb shell dumpsys connectivity 2>/dev/null | grep -q 'VALIDATED'; then
       log "ANDROID_NETWORK_PREFLIGHT_VALIDATED_ATTEMPT=$i"
@@ -111,8 +108,6 @@ preflight(){
     fi
     sleep 2
   done
-  # Do not hard-fail here: observed Kwai CDN traffic can work even when the
-  # framework's validation flag is absent. The watchdog will recover the app UI.
   log "ANDROID_NETWORK_PREFLIGHT_VALIDATION_PENDING"
   return 0
 }
@@ -137,9 +132,9 @@ watch(){
       fi
       tap_retry || log "KWAI_OFFLINE_RETRY_NOT_ACCESSIBLE"
       sleep 5
-      # If the same stale offline surface survives several verified retries,
-      # relaunch only Kwai. Never do this while Google SSO owns the foreground.
-      if [ "$consecutive" -ge 4 ] && ! google_sso_foreground; then
+      # Preserve a recently returned Google SSO callback. Only relaunch after
+      # roughly a minute of a continuously visible, unrecoverable offline screen.
+      if [ "$consecutive" -ge 10 ] && ! google_sso_foreground; then
         log "KWAI_OFFLINE_PERSISTENT_RELAUNCH"
         adb shell am force-stop com.kwai.video >/dev/null 2>&1 || true
         sleep 2
