@@ -1,0 +1,26 @@
+name: Kwai Chrome Session Probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.kwai-session-probe-trigger']
+permissions:
+  contents: read
+jobs:
+  session-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe authentication and persistence readiness
+        run: |
+          python3 -m pip install --quiet playwright cryptography
+          python3 -m playwright install chromium --with-deps >/dev/null
+          python3 kwai_chrome_session_probe.py
+      - name: Upload non-sensitive probe report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-chrome-session-probe
+          path: kwai-session-results/session-probe.json
+          retention-days: 3
