@@ -1,0 +1,24 @@
+name: Kwai Chrome Session Security QA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kwai-chrome-session-safety-qa.yml'
+      - 'tests/test_kwai_chrome_session_security.py'
+      - 'kwai_chrome_session_probe.py'
+      - '.github/workflows/kwai-chrome-session-probe.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-session-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install offline-only Python test dependencies
+        run: python3 -m pip install --quiet cryptography playwright
+      - name: Verify encryption, tamper rejection, no plaintext and cache scope
+        env:
+          PYTHONPATH: .
+        run: python3 -m unittest discover -s tests -p 'test_kwai_chrome_session_security.py' -v
