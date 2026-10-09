@@ -1,0 +1,55 @@
+name: Kwai Codespaces Chrome Desktop Smoke
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kwai-codespaces-browser-smoke.yml'
+      - '.kwai-codespaces-smoke-trigger'
+permissions:
+  contents: read
+jobs:
+  debian-desktop-smoke:
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cloud desktop in Codespaces-equivalent container
+        run: bash .devcontainer/kwai-install.sh
+      - name: Launch private noVNC and Chrome (no Android)
+        run: bash .devcontainer/kwai-start.sh
+      - name: Verify actual cloud desktop, Chrome CDP and private guard
+        run: |
+          python3 - <<'PY'
+          import json,socket,time,urllib.request
+          targets={
+            'novnc':'http://127.0.0.1:6080/vnc.html',
+            'guard':'http://127.0.0.1:8765/health',
+            'chrome_cdp':'http://127.0.0.1:9222/json/version',
+          }
+          results={}
+          for name,url in targets.items():
+            for attempt in range(35):
+              try:
+                with urllib.request.urlopen(url,timeout=3) as r:
+                  body=r.read(4096)
+                  assert r.status==200
+                  if name=='novnc': assert b'noVNC' in body or b'vnc' in body.lower()
+                  if name=='guard': assert json.loads(body)['identity_verified'] is False
+                  if name=='chrome_cdp': assert 'Browser' in json.loads(body)
+                  results[name]='ok'
+                  break
+              except Exception as exc:
+                if attempt==34: raise RuntimeError(name+' failed: '+type(exc).__name__) from exc
+                time.sleep(1)
+          for port in (5900,):
+            with socket.create_connection(('127.0.0.1',port),timeout=4): pass
+          assert len(results)==3
+          print('KWAI_CODESPACE_DESKTOP_SMOKE='+json.dumps({
+            'novnc':True,'guard':True,'chrome_cdp':True,'vnc_loopback':True,
+            'identity_verified':False,'android_used':False,
+            'credentials_used':False,'synthetic_only':True
+          }))
+          PY
