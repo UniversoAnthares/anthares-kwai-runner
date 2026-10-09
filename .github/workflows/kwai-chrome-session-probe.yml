@@ -12,11 +12,39 @@ jobs:
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore encrypted Kwai session cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .kwai-session-cache
+          key: kwai-session-${{ github.run_id }}
+          restore-keys: |
+            kwai-session-
+
       - name: Probe authentication and persistence readiness
         run: |
           python3 -m pip install --quiet playwright cryptography
           python3 -m playwright install chromium --with-deps >/dev/null
           python3 kwai_chrome_session_probe.py
+
+      - name: Detect encrypted session output
+        id: encrypted
+        if: always()
+        shell: bash
+        run: |
+          if [ -f .kwai-session-cache/kwai-session.enc ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save encrypted Kwai session cache
+        if: steps.encrypted.outputs.present == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .kwai-session-cache
+          key: kwai-session-${{ github.run_id }}
+
       - name: Upload non-sensitive probe report
         if: always()
         uses: actions/upload-artifact@v4
