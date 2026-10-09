@@ -63,14 +63,115 @@ async def authenticated_menu_probe(context, guard):
             pass
 
 
-async def probe_named_self_profile(context):
-    """Click only a Profile/Perfil navigation control in a disposable tab.
+async def probe_hydrated_owner_state(context, authenticated):
+    """Verify exact self/owner state on the expected profile using booleans only.
 
-    Because this fallback is called only after authenticated-menu proof, an
-    exact expected handle reached from a first-party self-profile navigation is
-    independent ownership evidence even when Kwai exposes no Edit profile link
-    in the compact account dropdown.
+    The scan never reads cookies/storage and never returns raw hydration data.
+    A positive result requires an already authenticated session, exact profile
+    route, no login gate, and either an owner-only edit control or a self/owner
+    flag paired with the exact handle inside the same bounded state object.
     """
+    if not authenticated:
+        return False
+    page = await context.new_page()
+    try:
+        await page.goto(
+            f"https://www.kwai.com/@{EXPECTED}",
+            wait_until="domcontentloaded",
+            timeout=15000,
+        )
+        await page.wait_for_timeout(1200)
+        result = await page.evaluate(r"""(expected) => {
+          const norm = v => String(v == null ? '' : v).trim().replace(/^@/, '').toLowerCase();
+          const exactRoute = location.hostname === 'www.kwai.com' &&
+            location.pathname.replace(/\/$/, '').toLowerCase() === '/@' + expected;
+          const text = el => [el.innerText||'', el.textContent||'',
+            el.getAttribute?.('aria-label')||'', el.getAttribute?.('title')||''].join(' ').trim();
+          const loginRe = /^(log\s*in|sign\s*in|login|entrar|fazer login)$/i;
+          const loginGate = [...document.querySelectorAll('a,button,[role="button"],input')].some(el => {
+            const t=text(el);
+            const type=(el.getAttribute?.('type')||'').toLowerCase();
+            return (t.length<=50 && loginRe.test(t)) || ['email','tel','password'].includes(type);
+          });
+          const ownerControl = [...document.querySelectorAll('a,button,[role="button"],[role="link"],*[data-testid]')].some(el => {
+            const t=text(el);
+            const href=el.getAttribute?.('href')||'';
+            const testid=el.getAttribute?.('data-testid')||'';
+            return /^(edit profile|editar perfil)$/i.test(t) ||
+              /edit[-_ ]?profile|profile[-_ ]?edit/i.test(testid) ||
+              /\/(profile|account)\/(edit|settings)(\/|$)/i.test(href);
+          });
+
+          const selfKeys = new Set(['isself','isme','isowner','ismine','iscurrentuser','self','owner']);
+          const handleKeys = new Set(['username','user_name','handle','accountname','account_name','kwaiid','kwai_id']);
+          const shallowHasExactHandle = (obj, depth=0) => {
+            if (!obj || typeof obj !== 'object' || depth > 2) return false;
+            try {
+              for (const [k,v] of Object.entries(obj)) {
+                const key=k.toLowerCase();
+                if (handleKeys.has(key) && norm(v) === expected) return true;
+              }
+              if (depth < 2) {
+                for (const v of Object.values(obj)) {
+                  if (v && typeof v === 'object' && shallowHasExactHandle(v, depth+1)) return true;
+                }
+              }
+            } catch (_) {}
+            return false;
+          };
+          const objectIsSelf = obj => {
+            if (!obj || typeof obj !== 'object') return false;
+            try {
+              return Object.entries(obj).some(([k,v]) => selfKeys.has(k.toLowerCase()) && v === true);
+            } catch (_) { return false; }
+          };
+          const scan = root => {
+            const queue=[root], seen=new WeakSet();
+            let visited=0;
+            while(queue.length && visited < 12000) {
+              const obj=queue.shift();
+              if (!obj || typeof obj !== 'object') continue;
+              if (seen.has(obj)) continue;
+              seen.add(obj); visited++;
+              if (objectIsSelf(obj) && shallowHasExactHandle(obj)) return true;
+              try {
+                for (const v of Object.values(obj)) if (v && typeof v === 'object') queue.push(v);
+              } catch (_) {}
+            }
+            return false;
+          };
+
+          let ownerStateMatch=false;
+          const globalNames=['__NEXT_DATA__','__INITIAL_STATE__','__PRELOADED_STATE__','__NUXT__','__APOLLO_STATE__'];
+          for (const name of globalNames) {
+            try { if (scan(window[name])) { ownerStateMatch=true; break; } } catch (_) {}
+          }
+          if (!ownerStateMatch) {
+            const scripts=[...document.querySelectorAll('script[type="application/json"],script#__NEXT_DATA__,script[id*="state" i],script[id*="data" i]')].slice(0,24);
+            for (const script of scripts) {
+              const raw=script.textContent||'';
+              if (!raw || raw.length > 4000000) continue;
+              try { if (scan(JSON.parse(raw))) { ownerStateMatch=true; break; } } catch (_) {}
+            }
+          }
+          return {exactRoute,loginGate,ownerControl,ownerStateMatch};
+        }""", EXPECTED)
+        return bool(
+            result.get("exactRoute")
+            and not result.get("loginGate")
+            and (result.get("ownerControl") or result.get("ownerStateMatch"))
+        )
+    except Exception:
+        return False
+    finally:
+        try:
+            await page.close()
+        except Exception:
+            pass
+
+
+async def probe_named_self_profile(context):
+    """Click only a Profile/Perfil navigation control in a disposable tab."""
     for candidate_index in range(4):
         before = list(context.pages)
         page = await context.new_page()
@@ -83,7 +184,7 @@ async def probe_named_self_profile(context):
               const text=el=>[(el.innerText||el.textContent||''),(el.getAttribute('aria-label')||''),(el.getAttribute('title')||'')]
                 .join(' ').replace(/\s+/g,' ').trim();
               const exact=/^(profile|perfil|my profile|meu perfil)$/i;
-              const items=[...document.querySelectorAll('a[href],button,[role="button"],[role="link"]')]
+              return [...document.querySelectorAll('a[href],button,[role="button"],[role="link"]')]
                 .filter(el=>{
                   if(!visible(el))return false;
                   const r=el.getBoundingClientRect();
@@ -99,36 +200,25 @@ async def probe_named_self_profile(context):
                   return profileish;
                 })
                 .map(el=>{const r=el.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,top:r.top,left:r.left};})
-                .sort((a,b)=>a.left-b.left||a.top-b.top);
-              return items.slice(0,4).map(({x,y})=>({x,y}));
+                .sort((a,b)=>a.left-b.left||a.top-b.top).slice(0,4).map(({x,y})=>({x,y}));
             }""")
-            if candidate_index >= len(candidates):
-                break
+            if candidate_index >= len(candidates): break
             point = candidates[candidate_index]
             await page.mouse.click(point["x"], point["y"])
             for _ in range(14):
                 await page.wait_for_timeout(350)
                 opened = [p for p in context.pages if p not in before and p != page]
                 for candidate in [page] + opened:
-                    url = urlsplit(candidate.url)
-                    if url.hostname not in KWAI_HOSTS:
-                        continue
+                    if urlsplit(candidate.url).hostname not in KWAI_HOSTS: continue
                     proof = await verify_profile_page(candidate)
-                    if proof["loginGate"]:
-                        continue
-                    # Source control is authenticated first-party Profile/Perfil;
-                    # exact route OR exact visible handle therefore proves self.
-                    if proof["exactRoute"] or proof["exactHandle"]:
-                        return True
+                    if not proof["loginGate"] and (proof["exactRoute"] or proof["exactHandle"]): return True
         except Exception:
             pass
         finally:
             for extra in list(context.pages):
                 if extra not in before:
-                    try:
-                        await extra.close()
-                    except Exception:
-                        pass
+                    try: await extra.close()
+                    except Exception: pass
     return False
 
 
@@ -140,8 +230,7 @@ async def probe_account_row_candidates(context, guard):
         try:
             await page.goto("https://www.kwai.com/", wait_until="domcontentloaded", timeout=12000)
             await page.wait_for_timeout(700)
-            if not await guard.open_account_menu_in_probe_page(page):
-                continue
+            if not await guard.open_account_menu_in_probe_page(page): continue
             await page.wait_for_timeout(450)
             candidates = await page.evaluate(r"""() => {
               const visible=el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);
@@ -169,28 +258,23 @@ async def probe_account_row_candidates(context, guard):
                 for(let i=0;i<5&&n&&panel.contains(n);i++,n=n.parentElement)add(n);});
               return rows.sort((a,b)=>a.top-b.top||a.area-b.area).slice(0,8).map(({x,y})=>({x,y}));
             }""")
-            if candidate_index >= len(candidates):
-                break
+            if candidate_index >= len(candidates): break
             point = candidates[candidate_index]
             await page.mouse.click(point["x"], point["y"])
             for _ in range(12):
                 await page.wait_for_timeout(350)
                 opened = [p for p in context.pages if p not in before and p != page]
                 for candidate in [page] + opened:
-                    if urlsplit(candidate.url).hostname not in KWAI_HOSTS:
-                        continue
+                    if urlsplit(candidate.url).hostname not in KWAI_HOSTS: continue
                     proof = await verify_profile_page(candidate)
-                    if not proof["loginGate"] and (proof["exactRoute"] or (proof["exactHandle"] and proof["ownerControl"])):
-                        return True
+                    if not proof["loginGate"] and (proof["exactRoute"] or (proof["exactHandle"] and proof["ownerControl"])): return True
         except Exception:
             pass
         finally:
             for extra in list(context.pages):
                 if extra not in before:
-                    try:
-                        await extra.close()
-                    except Exception:
-                        pass
+                    try: await extra.close()
+                    except Exception: pass
     return False
 
 
@@ -201,73 +285,51 @@ async def inspect_existing_tab(context):
     exact_link = bool(menu["exact_link"])
 
     if authenticated and exact_link:
-        return {
-            "chrome_connected": True,
-            "authenticated_ui_detected": True,
-            "exact_owner_menu_link": True,
-            "exact_owner_menu_text": False,
-            "exact_owner_navigation": False,
-            "identity_verified": True,
-            "session_exported": False,
-        }
+        return {"chrome_connected": True, "authenticated_ui_detected": True,
+                "exact_owner_menu_link": True, "exact_owner_menu_text": False,
+                "exact_owner_navigation": False, "owner_state_match": False,
+                "identity_verified": True, "session_exported": False}
 
-    # Existing hardened account-row path.
     navigation = await guard.inspect_own_profile_navigation(context)
     exact_navigation = bool(navigation.get("account_menu_profile_navigation_matches"))
     if authenticated and exact_navigation:
-        return {
-            "chrome_connected": True,
-            "authenticated_ui_detected": True,
-            "exact_owner_menu_link": exact_link,
-            "exact_owner_menu_text": False,
-            "exact_owner_navigation": True,
-            "identity_verified": True,
-            "session_exported": False,
-        }
+        return {"chrome_connected": True, "authenticated_ui_detected": True,
+                "exact_owner_menu_link": exact_link, "exact_owner_menu_text": False,
+                "exact_owner_navigation": True, "owner_state_match": False,
+                "identity_verified": True, "session_exported": False}
 
-    # Independent self-profile route from the authenticated main navigation.
-    named_navigation = False
-    if authenticated:
-        named_navigation = await probe_named_self_profile(context)
+    named_navigation = await probe_named_self_profile(context) if authenticated else False
     if named_navigation:
-        return {
-            "chrome_connected": True,
-            "authenticated_ui_detected": True,
-            "exact_owner_menu_link": exact_link,
-            "exact_owner_menu_text": False,
-            "exact_owner_navigation": True,
-            "identity_verified": True,
-            "session_exported": False,
-        }
+        return {"chrome_connected": True, "authenticated_ui_detected": True,
+                "exact_owner_menu_link": exact_link, "exact_owner_menu_text": False,
+                "exact_owner_navigation": True, "owner_state_match": False,
+                "identity_verified": True, "session_exported": False}
 
-    # React account rows may attach handlers above/beside the visible avatar.
-    candidate_navigation = False
-    if authenticated:
-        candidate_navigation = await probe_account_row_candidates(context, guard)
+    candidate_navigation = await probe_account_row_candidates(context, guard) if authenticated else False
     if candidate_navigation:
-        return {
-            "chrome_connected": True,
-            "authenticated_ui_detected": True,
-            "exact_owner_menu_link": exact_link,
-            "exact_owner_menu_text": False,
-            "exact_owner_navigation": True,
-            "identity_verified": True,
-            "session_exported": False,
-        }
+        return {"chrome_connected": True, "authenticated_ui_detected": True,
+                "exact_owner_menu_link": exact_link, "exact_owner_menu_text": False,
+                "exact_owner_navigation": True, "owner_state_match": False,
+                "identity_verified": True, "session_exported": False}
 
-    # Modern compact menus may omit Log out; keep a strict owner-only fallback.
+    owner_state = await probe_hydrated_owner_state(context, authenticated)
+    if owner_state:
+        return {"chrome_connected": True, "authenticated_ui_detected": True,
+                "exact_owner_menu_link": exact_link, "exact_owner_menu_text": False,
+                "exact_owner_navigation": False, "owner_state_match": True,
+                "identity_verified": True, "session_exported": False}
+
     independent = await guard.inspect_profile_without_logout(context)
     independent_owner = bool(
         independent.get("profile_navigation_matches") is True
         and independent.get("profile_owner_control_visible") is True
         and independent.get("profile_login_controls_absent") is True
     )
-    return {
-        "chrome_connected": True,
-        "authenticated_ui_detected": bool(authenticated or independent_owner),
-        "exact_owner_menu_link": exact_link,
-        "exact_owner_menu_text": False,
-        "exact_owner_navigation": bool(exact_navigation or named_navigation or candidate_navigation or independent_owner),
-        "identity_verified": independent_owner,
-        "session_exported": False,
-    }
+    return {"chrome_connected": True,
+            "authenticated_ui_detected": bool(authenticated or independent_owner),
+            "exact_owner_menu_link": exact_link,
+            "exact_owner_menu_text": False,
+            "exact_owner_navigation": bool(exact_navigation or named_navigation or candidate_navigation or independent_owner),
+            "owner_state_match": False,
+            "identity_verified": independent_owner,
+            "session_exported": False}
