@@ -349,6 +349,15 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
     if [ $((SECONDS-GOOGLE_AGREEMENT_LAST_CHECK)) -ge 5 ]; then
       GOOGLE_AGREEMENT_LAST_CHECK=$SECONDS
       dump_ui || true
+      if grep -Eqi 'Google services|Serviços do Google' /tmp/kwai-ui.xml 2>/dev/null && grep -Eqi 'Backup|storage|armazenamento|Privacy Policy|Política de Privacidade' /tmp/kwai-ui.xml 2>/dev/null; then
+        if tap_label '^(MORE|Mais)$'; then
+          log "GOOGLE_SERVICES_MORE_TAPPED"
+        elif tap_label '^(ACCEPT|Aceitar)$'; then
+          log "GOOGLE_SERVICES_ACCEPT_TAPPED"
+        else
+          log "GOOGLE_SERVICES_ACTION_NOT_VISIBLE"
+        fi
+      fi
       if grep -Eqi 'I agree|Concordo' /tmp/kwai-ui.xml 2>/dev/null && grep -Eqi 'Google Terms of Service|Google Play Terms of Service|Google Privacy Policy|Termos de Serviço do Google' /tmp/kwai-ui.xml 2>/dev/null; then
         if tap_label '^(I agree|Concordo)
       SSO_WAS_ACTIVE=1; SSO_STARTED_AT=$SECONDS
