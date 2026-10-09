@@ -81,3 +81,39 @@ jobs:
             'credentials_used':False
           }))
           PY
+      - name: Verify remote Chrome can load Kwai login site (no credentials)
+        run: |
+          timeout 55s bash -c '"$HOME/.kwai-remote-private/venv/bin/python" - <<'"'"'PY'"'"'
+          import asyncio,json
+          from urllib.parse import urlsplit
+          from playwright.async_api import async_playwright
+
+          async def main():
+              async with async_playwright() as p:
+                  browser=await asyncio.wait_for(
+                      p.chromium.connect_over_cdp("http://127.0.0.1:9222"),timeout=8)
+                  page=await browser.contexts[0].new_page()
+                  try:
+                      response=await page.goto(
+                          "https://www.kwai.com/",wait_until="domcontentloaded",timeout=25000)
+                      await page.wait_for_timeout(1000)
+                      url=urlsplit(page.url)
+                      result={
+                          "origin": url.scheme+"://"+(url.hostname or ""),
+                          "http_status": response.status if response else None,
+                          "page_title": (await page.title())[:80],
+                          "login_controls_found": (
+                              await page.get_by_text("Fazer login",exact=True).count()
+                              +await page.get_by_text("Log in",exact=True).count()
+                          )>0,
+                          "authenticated":False,
+                          "credentials_used":False,
+                      }
+                      print("KWAI_CODESPACE_WEB_REACH="+json.dumps(result,ensure_ascii=False))
+                      assert url.scheme=="https" and url.hostname=="www.kwai.com",result
+                      assert response and response.status<400,result
+                  finally:
+                      await page.close()
+                      await browser.close()
+          asyncio.run(main())
+          PY'
