@@ -1,0 +1,47 @@
+name: Kwai Android Album Smoke (no publish)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kwai-android-album-smoke
+  cancel-in-progress: false
+jobs:
+  album-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch integrity-checked Kwai app package
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+          test -s kwai-vault/MANIFEST.tsv
+      - name: Enable Android virtualization
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Boot app and inspect media gallery without publishing
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -camera-back none -camera-front none
+          script: bash scripts/kwai-album-smoke.sh
+      - name: Save redacted evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-android-album-smoke-${{ github.run_id }}
+          path: |
+            kwai-album-smoke-status.txt
+            kwai-vault-install-status.txt
+          retention-days: 2
+          if-no-files-found: warn
