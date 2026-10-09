@@ -150,4 +150,5 @@ async def main():
     print("KWAI_SESSION_PROBE=" + json.dumps(result, ensure_ascii=False))
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
