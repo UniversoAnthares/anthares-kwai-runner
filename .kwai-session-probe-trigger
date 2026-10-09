@@ -6,3 +6,5 @@
 2026-10-09 verify secret after user action
 
 2026-10-09 verify in-memory decrypted state and encrypted-only cache
+
+2026-10-09 bounded browser-only Chrome retry after cancelled run 37935956989
