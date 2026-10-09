@@ -38,32 +38,31 @@ async def browser_action(action):
                 await page.goto("https://www.kwai.com/", wait_until="domcontentloaded", timeout=15000)
                 await page.close()
             if action == "profile_check":
-                kwai_pages = [t for t in context.pages
-                              if urlsplit(t.url).hostname in ("www.kwai.com", "kwai.com")]
-                if not kwai_pages:
-                    return {"chrome_connected": True, "kwai_tab_present": False,
-                            "profile_check": "no_kwai_tab"}
-                page = kwai_pages[0]
-                try:
-                    await page.bring_to_front()
-                    # Read only boolean indicators, never profile text or session material.
-                    evidence = await page.evaluate("""() => ({
-                      logout_visible: [...document.querySelectorAll('a,button,[role=menuitem]')]
-                        .some(e => /^(log out|logout|sair)$/i.test((e.innerText||'').trim())),
-                      login_visible: [...document.querySelectorAll('a,button,[role=button]')]
-                        .some(e => /^(log in|login|sign in|entrar)$/i.test((e.innerText||'').trim())),
-                      profile_link_present: [...document.querySelectorAll('a[href]')]
-                        .some(e => /kwai.com\\/(?:@|profile|user)/i.test(e.href||''))
-                    })""")
-                except Exception:
-                    return {"chrome_connected": True, "kwai_tab_present": True,
-                            "profile_check": "ui_inspection_failed"}
-                return {"chrome_connected": True, "kwai_tab_present": True,
-                        "profile_check": "complete",
-                        "logout_visible": bool(evidence.get("logout_visible")),
-                        "login_visible": bool(evidence.get("login_visible")),
-                        "profile_link_present": bool(evidence.get("profile_link_present")),
-                        "identity_verified": False}
+                # Reuse the tested private guard rather than searching a closed
+                # menu in an arbitrary Kwai tab (known false-negative).
+                import importlib.util
+                guard_path = Path(__file__).with_name("kwai-identity-guard.py")
+                spec = importlib.util.spec_from_file_location("kwai_identity_guard", guard_path)
+                guard = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(guard)
+                # The guard creates disposable tabs, opens the account menu,
+                # follows only the own-profile avatar and closes its probes.
+                # Return booleans only; no names, handles, URLs or page content.
+                evidence = await guard.inspect_browser()
+                flags = evidence.get("evidence") or {}
+                return {
+                    "chrome_connected": bool(evidence.get("chrome_connected")),
+                    "profile_check": "complete",
+                    "authenticated_ui_detected": bool(evidence.get("authenticated_ui_detected")),
+                    "identity_verified": bool(evidence.get("identity_verified")),
+                    "account_menu_open_attempted": bool(evidence.get("account_menu_open_attempted")),
+                    "logout_visible": bool(flags.get("account_menu_logout_visible")),
+                    "profile_navigation_attempted": bool(flags.get("account_menu_profile_navigation_attempted")),
+                    "own_profile_matches_expected": bool(flags.get("account_menu_profile_navigation_matches")
+                                                         or flags.get("account_menu_profile_link_matches")),
+                    "persistence_permitted": False,
+                    "server_identity_verified": False,
+                }
             hosts = sorted({urlsplit(t.url).hostname for t in context.pages
                             if urlsplit(t.url).hostname in ("www.kwai.com", "kwai.com")})
             return {"chrome_connected": True, "kwai_tab_present": bool(hosts),
