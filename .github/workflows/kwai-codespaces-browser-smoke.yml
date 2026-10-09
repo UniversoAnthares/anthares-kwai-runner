@@ -170,10 +170,37 @@ jobs:
                       assert after["account_menu_profile_link_matches"] is False,after
                       await page.set_content('<div role="menu"><button>Log in</button></div>')
                       assert await open_menu(page) is False
+                      # The account row has no href, only a clickable avatar.
+                      # Navigation must prove the actual handle; a wrong handle
+                      # must never be accepted just because 'Log out' exists.
+                      navigate=mod["inspect_own_profile_navigation"]
+                      for handle,expected in (("wrong.account",False),("universo.anthares",True)):
+                          html=(
+                              '<img alt="header avatar" '
+                              'style="position:fixed;top:8px;right:10px;width:32px;height:32px" '
+                              'src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" '
+                              'onclick="document.getElementById(\\'dropdown\\').style.display=\\'block\\'">'
+                              '<div id="dropdown" role="menu" '
+                              'style="display:none;position:fixed;top:65px;right:10px;width:180px;height:95px">'
+                              '<div style="height:45px"><img alt="account row" '
+                              'style="width:28px;height:28px" '
+                              'src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" '
+                              'onclick="history.pushState({},\\'\\',\\'/@'+handle+'\\')"></div>'
+                              '<button>Log out</button></div>'
+                          )
+                          await browser.contexts[0].route(
+                              "https://www.kwai.com/",
+                              lambda route: route.fulfill(status=200,content_type="text/html",body=html))
+                          outcome=await navigate(browser.contexts[0])
+                          assert outcome["account_menu_profile_navigation_attempted"] is True,outcome
+                          assert outcome["account_menu_profile_navigation_matches"] is expected,outcome
+                          await browser.contexts[0].unroute("https://www.kwai.com/")
                       print("KWAI_CODESPACE_ACCOUNT_MENU_DOM="+json.dumps({
                           "display_name_only_detected":True,"wrong_account_rejected":True,
                           "exact_menu_profile_accepted":True,"signed_out_rejected":True,
                           "closed_menu_auto_opened":True,"no_avatar_fails_closed":True,
+                          "own_profile_wrong_handle_rejected":True,
+                          "own_profile_exact_handle_verified":True,
                           "credentials_used":False,"synthetic_only":True
                       }))
                   finally:
