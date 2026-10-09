@@ -30,7 +30,7 @@ class CodespacesBrowserTests(unittest.TestCase):
         self.assertIn("kwai-start.sh", config["postStartCommand"])
 
     def test_shell_scripts_parse(self):
-        for name in ("kwai-install.sh", "kwai-start.sh", "kwai-clear-session.sh"):
+        for name in ("kwai-install.sh", "kwai-start.sh", "kwai-clear-session.sh", "kwai-refresh-guard.sh"):
             result = subprocess.run(["bash", "-n", str(DEV / name)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, name + ": " + result.stderr)
 
