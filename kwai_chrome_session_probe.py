@@ -23,24 +23,36 @@ def fernet():
 
 
 def restore_state(result):
+    # Never materialize decrypted browser cookies or tokens on disk.
+    STATE.unlink(missing_ok=True)  # Remove any legacy plaintext from older runs.
     result["session_key_present"] = bool(SECRET)
     result["encrypted_session_found"] = ENC.exists()
     result["session_restored"] = False
     if not (SECRET and ENC.exists()):
-        return
+        return None
     try:
-        STATE.write_bytes(fernet().decrypt(ENC.read_bytes()))
+        state = json.loads(fernet().decrypt(ENC.read_bytes()))
+        if not isinstance(state, dict) or not isinstance(state.get("cookies"), list) or not isinstance(state.get("origins"), list):
+            raise ValueError("invalid storage-state structure")
         result["session_restored"] = True
-    except (InvalidToken, ValueError) as exc:
+        return state
+    except (InvalidToken, ValueError, UnicodeDecodeError) as exc:
         result["session_restore_error"] = type(exc).__name__
+        return None
 
 
-def persist_state(result):
-    if not SECRET or not STATE.exists():
+def persist_state(result, state):
+    if not SECRET:
         return
-    ENC.write_bytes(fernet().encrypt(STATE.read_bytes()))
-    STATE.unlink(missing_ok=True)
-    result["encrypted_session_written"] = True
+    if not isinstance(state, dict) or not isinstance(state.get("cookies"), list) or not isinstance(state.get("origins"), list):
+        raise ValueError("refusing to persist invalid storage state")
+    tmp = ENC.with_suffix(".tmp")
+    try:
+        tmp.write_bytes(fernet().encrypt(json.dumps(state, ensure_ascii=False).encode()))
+        tmp.replace(ENC)
+        result["encrypted_session_written"] = True
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 async def open_login(page):
@@ -86,7 +98,10 @@ async def probe_method(browser, method):
                 await popup.wait_for_load_state("domcontentloaded", timeout=5000)
             except Exception:
                 pass
-            item["popup_url"] = popup.url
+            # OAuth URLs can contain sensitive one-time parameters: never log queries.
+            from urllib.parse import urlsplit
+            parsed = urlsplit(popup.url)
+            item["popup_url"] = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
             item["popup_title"] = await popup.title()
     except Exception as exc:
         item["error"] = str(exc)[:220]
@@ -96,7 +111,7 @@ async def probe_method(browser, method):
 
 async def main():
     result = {"mode": "remote_chrome_session", "authenticated": False}
-    restore_state(result)
+    restored_state = restore_state(result)
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
 
@@ -105,8 +120,8 @@ async def main():
             result["auth_methods"].append(await probe_method(browser, method))
 
         kwargs = {"viewport": {"width": 1440, "height": 900}, "locale": "pt-BR", "timezone_id": "America/Sao_Paulo"}
-        if result.get("session_restored") and STATE.exists():
-            kwargs["storage_state"] = str(STATE)
+        if restored_state is not None:
+            kwargs["storage_state"] = restored_state
         ctx = await browser.new_context(**kwargs)
         page = await ctx.new_page()
         try:
@@ -119,8 +134,8 @@ async def main():
             result["identity_verification_method"] = "not_configured"
             result["authenticated"] = False
             if result["authenticated"]:
-                await ctx.storage_state(path=str(STATE), indexed_db=True)
-                persist_state(result)
+                state = await ctx.storage_state(indexed_db=True)
+                persist_state(result, state)
         except Exception as exc:
             result["verification_error"] = str(exc)[:220]
         await ctx.close()
