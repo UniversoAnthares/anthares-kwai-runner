@@ -85,6 +85,7 @@ jobs:
           "$SDK/platform-tools/adb" shell getprop ro.product.cpu.abilist | sed 's/^/DEVICE_ABI=/' >> "$GITHUB_STEP_SUMMARY"
           echo "TOTAL_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Validate portable snapshot archive on independent runner
+        if: steps.avdcache.outputs.cache-hit == 'true'
         shell: bash
         run: |
           if [ -s /tmp/kwai-portable-avd-full.tar.zst ]; then
@@ -94,13 +95,13 @@ jobs:
             echo "PORTABLE_SNAPSHOT_CACHE_HIT=false" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
       - name: Cross-run restore archived snapshot on clean AVD
+        if: steps.avdcache.outputs.cache-hit == 'true'
         shell: bash
-        continue-on-error: true
         run: |
           set -uo pipefail
           if [ ! -s /tmp/kwai-portable-avd-full.tar.zst ]; then
             echo "CROSS_RUN_SNAPSHOT_RESULT=NO_ARCHIVE" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
+            exit 1
           fi
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           ADB="$SDK/platform-tools/adb"
@@ -112,11 +113,11 @@ jobs:
           mkdir -p "$HOME/.android"
           if ! tar --zstd -xf /tmp/kwai-portable-avd-full.tar.zst -C "$HOME/.android"; then
             echo "CROSS_RUN_SNAPSHOT_RESULT=EXTRACT_FAILED" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
+            exit 1
           fi
           if [ ! -d "$AVD/kwai-speed.avd/snapshots/kwai-ready" ]; then
             echo "CROSS_RUN_SNAPSHOT_RESULT=DIR_MISSING" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
+            exit 1
           fi
           t=$(date +%s)
           echo "CROSS_RUN_SNAPSHOT_START_FROM_T0_SECONDS=$((t-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -127,17 +128,14 @@ jobs:
             echo "CROSS_RUN_TOTAL_TO_BOOT_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo "CROSS_RUN_SNAPSHOT_RESULT=BOOT_FAILED" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
           grep -Ei 'snapshot|load|error' /tmp/kwai-cross-run-snapshot.log | tail -30 || true
-          if grep -Eq "Failed to load snapshot|performing a cold boot" /tmp/kwai-cross-run-snapshot.log; then
+          if grep -Eq "Failed to load snapshot|performing a cold boot" /tmp/kwai-cross-run-snapshot.log || ! grep -q "Successfully loaded snapshot.*kwai-ready" /tmp/kwai-cross-run-snapshot.log; then
             echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=false" | tee -a "$GITHUB_STEP_SUMMARY"
-          elif grep -q "Loading snapshot.*kwai-ready" /tmp/kwai-cross-run-snapshot.log; then
-            if grep -q "Successfully loaded snapshot.*kwai-ready" /tmp/kwai-cross-run-snapshot.log; then
-            echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=true" | tee -a "$GITHUB_STEP_SUMMARY"
-          else
-            echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=unverified" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
-          fi
+          echo "CROSS_RUN_SNAPSHOT_ACTUAL_LOAD=true" | tee -a "$GITHUB_STEP_SUMMARY"
           "$ADB" emu kill >/dev/null 2>&1 || true
           timeout 30 bash -c 'while "$1" get-state >/dev/null 2>&1; do sleep 1; done' _ "$ADB" || true
       - name: Experiment with reusable AVD snapshot
