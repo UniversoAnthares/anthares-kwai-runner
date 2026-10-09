@@ -44,14 +44,16 @@ def persist_state(result):
 
 
 async def open_login(page):
-    await page.goto("https://www.kwai.com/", wait_until="domcontentloaded", timeout=15000)
-    await page.wait_for_timeout(1400)
-    login = page.get_by_text("Fazer login", exact=True)
-    if await login.count():
-        await login.first.click(timeout=3000, force=True)
-        await page.wait_for_timeout(900)
-        return True
-    return False
+    targets = ["https://www.kwai.com/", "https://www.kwai.com/@universo.anthares"]
+    for target in targets:
+        await page.goto(target, wait_until="domcontentloaded", timeout=15000)
+        await page.wait_for_timeout(1400)
+        login = page.get_by_text("Fazer login", exact=True)
+        if await login.count():
+            await login.first.click(timeout=3000, force=True)
+            await page.wait_for_timeout(900)
+            return {"opened": True, "source": target}
+    return {"opened": False, "source": None}
 
 
 async def probe_method(browser, method):
@@ -59,7 +61,9 @@ async def probe_method(browser, method):
     page = await ctx.new_page()
     item = {"method": method, "opened_login": False, "found": 0}
     try:
-        item["opened_login"] = await open_login(page)
+        opened = await open_login(page)
+        item["opened_login"] = opened["opened"]
+        item["login_source"] = opened["source"]
         locator = page.get_by_text(method, exact=True)
         item["found"] = await locator.count()
         before_pages = len(ctx.pages)
@@ -106,7 +110,7 @@ async def main():
         ctx = await browser.new_context(**kwargs)
         page = await ctx.new_page()
         try:
-            await page.goto("https://www.kwai.com/", wait_until="domcontentloaded", timeout=15000)
+            await page.goto("https://www.kwai.com/@universo.anthares", wait_until="domcontentloaded", timeout=15000)
             await page.wait_for_timeout(1500)
             login_controls = await page.get_by_text("Fazer login", exact=True).count()
             result["login_controls_after_restore"] = login_controls
