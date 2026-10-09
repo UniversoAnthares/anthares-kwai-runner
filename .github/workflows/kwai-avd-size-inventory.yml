@@ -1,0 +1,38 @@
+name: Kwai AVD size inventory isolated
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-avd-size-inventory.yml']
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Restore proven direct AVD v3
+        id: avd
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-android35-v3
+      - name: Inventory AVD files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$HOME/.android/avd/kwai-speed.avd"
+          test -d "$ROOT/snapshots/kwai-ready"
+          echo "AVD_CACHE_HIT=${{ steps.avd.outputs.cache-hit }}"
+          echo "AVD_TOTAL_BYTES=$(du -sb "$ROOT" | awk '{print $1}')"
+          echo "SNAPSHOT_TOTAL_BYTES=$(du -sb "$ROOT/snapshots/kwai-ready" | awk '{print $1}')"
+          echo '=== TOP_FILES_BYTES ==='
+          find "$ROOT" -type f -printf '%s\t%p\n' | sort -nr | head -40
+          echo '=== TOP_LEVEL_BYTES ==='
+          du -sb "$ROOT"/* 2>/dev/null | sort -nr | head -30
+          echo '=== SNAPSHOT_FILES_BYTES ==='
+          find "$ROOT/snapshots/kwai-ready" -type f -printf '%s\t%p\n' | sort -nr | head -30
+          echo '=== CONFIG_REFERENCES ==='
+          grep -E '^(image\.sysdir|disk\.|hw\.|snapshot|path|skin|tag|abi|target)' "$ROOT/config.ini" 2>/dev/null || true
