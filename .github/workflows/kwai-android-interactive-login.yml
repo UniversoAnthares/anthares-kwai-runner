@@ -1,0 +1,160 @@
+name: Kwai Android protected interactive login
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/kwai-android-interactive-login.yml
+permissions:
+  contents: read
+concurrency:
+  group: kwai-android-interactive-login-${{ github.event_name }}
+  cancel-in-progress: true
+jobs:
+  interactive-login:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      REMOTE_USER: anthares
+      REMOTE_PASSWORD: ${{ secrets.KWAI_REMOTE_GUI_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require protected GUI credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$REMOTE_PASSWORD"
+          echo 'REMOTE_GUI_CREDENTIAL=CONFIGURED' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore AVD
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+          fail-on-cache-miss: true
+
+      - name: Restore Android image
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+          fail-on-cache-miss: true
+
+      - name: Restore emulator
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-headless-x86_64-v2
+          fail-on-cache-miss: true
+
+      - name: Install remote-display components
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb x11vnc novnc websockify nginx apache2-utils scrcpy
+          curl -fsSL --retry 3 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x /tmp/cloudflared
+
+      - name: Boot hosted Android and official Kwai
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          sudo chmod 666 /dev/kvm
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/kwai-emulator.log 2>&1 &
+          timeout 60 "$ADB" wait-for-device
+          timeout 60 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"
+          curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 -o /tmp/kwai-app-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-app-vault.zip' | sha256sum -c -
+          mkdir -p /tmp/kwai-app-vault
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('/tmp/kwai-app-vault.zip') as z:
+              apks=[n for n in z.namelist() if n.endswith('.apk')]
+              if not apks: raise SystemExit('VAULT_NO_APKS')
+              z.extractall('/tmp/kwai-app-vault')
+          PY
+          mapfile -t apks < <(find /tmp/kwai-app-vault -maxdepth 1 -type f -name '*.apk' | sort)
+          timeout 120 "$ADB" install-multiple -r "${apks[@]}"
+          "$ADB" shell pm path com.kwai.video | grep -q package:
+          "$ADB" shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+          echo 'OFFICIAL_KWAI_ANDROID=READY' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Start protected Android remote GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DISPLAY=:99
+          nohup Xvfb :99 -screen 0 1280x800x24 -ac >/tmp/xvfb.log 2>&1 &
+          sleep 2
+          nohup scrcpy --no-audio --stay-awake --max-size=1080 --window-title='Kwai Android' >/tmp/scrcpy.log 2>&1 &
+          sleep 4
+          nohup x11vnc -display :99 -forever -shared -nopw -localhost -rfbport 5900 >/tmp/x11vnc.log 2>&1 &
+          nohup websockify --web=/usr/share/novnc 6081 127.0.0.1:5900 >/tmp/websockify.log 2>&1 &
+          sudo htpasswd -bc /etc/nginx/.kwai-htpasswd "$REMOTE_USER" "$REMOTE_PASSWORD" >/dev/null
+          sudo tee /etc/nginx/sites-available/default >/dev/null <<'NGINX'
+          server {
+            listen 6080;
+            server_name _;
+            auth_basic "Anthares private Android";
+            auth_basic_user_file /etc/nginx/.kwai-htpasswd;
+            location / {
+              proxy_pass http://127.0.0.1:6081;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+              proxy_set_header Host $host;
+              proxy_read_timeout 3600;
+            }
+          }
+          NGINX
+          sudo nginx -t
+          sudo systemctl restart nginx
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:6080/vnc.html)" = 401
+          test "$(curl -s -u "$REMOTE_USER:$REMOTE_PASSWORD" -o /dev/null -w '%{http_code}' http://127.0.0.1:6080/vnc.html)" = 200
+          nohup /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 >/tmp/cloudflared.log 2>&1 &
+          for i in $(seq 1 40); do
+            URL=$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | tail -1 || true)
+            [ -n "$URL" ] && break
+            sleep 2
+          done
+          test -n "${URL:-}"
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' "$URL/vnc.html")
+          test "$CODE" = 401
+          CODE_AUTH=$(curl -s -u "$REMOTE_USER:$REMOTE_PASSWORD" -o /dev/null -w '%{http_code}' "$URL/vnc.html")
+          test "$CODE_AUTH" = 200
+          echo "ANDROID_REMOTE_GUI_URL=$URL/vnc.html?autoconnect=1&resize=scale"
+          echo 'ANDROID_REMOTE_GUI_PROTECTION=BASIC_AUTH_VERIFIED_401_200' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep private login window open and detect expected owner
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADB="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb"
+          deadline=$((SECONDS+1500))
+          found=0
+          while [ $SECONDS -lt $deadline ]; do
+            if ! kill -0 $(pgrep -f 'cloudflared tunnel' | head -1) 2>/dev/null; then
+              echo 'REMOTE_GUI_TUNNEL_DIED' >&2
+              exit 7
+            fi
+            "$ADB" shell uiautomator dump /sdcard/kwai-window.xml >/dev/null 2>&1 || true
+            "$ADB" pull /sdcard/kwai-window.xml /tmp/kwai-window.xml >/dev/null 2>&1 || true
+            if grep -Fqi 'universo.anthares' /tmp/kwai-window.xml 2>/dev/null; then
+              found=1
+              echo 'EXPECTED_OWNER_VISIBLE_IN_OFFICIAL_ANDROID_UI=true' | tee -a "$GITHUB_STEP_SUMMARY"
+              break
+            fi
+            sleep 10
+          done
+          if [ "$found" != 1 ]; then
+            echo 'EXPECTED_OWNER_VISIBLE_IN_OFFICIAL_ANDROID_UI=false' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 8
+          fi
+          echo 'ANDROID_AUTH_INTERACTIVE_SIGNAL=PROVEN' | tee -a "$GITHUB_STEP_SUMMARY"
