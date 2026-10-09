@@ -1,0 +1,76 @@
+name: Kwai cache key inventory isolated
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-cache-key-inventory.yml']
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Lookup Android image v1
+        id: image
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+          lookup-only: true
+      - name: Lookup emulator v1
+        id: emu1
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
+          lookup-only: true
+      - name: Lookup emulator slim v2
+        id: emu2
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-headless-x86_64-v2
+          lookup-only: true
+      - name: Lookup archive full v2
+        id: avd2
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/kwai-portable-avd-full.tar.zst
+          key: kwai-speed-avd-fullstate-android35-v2
+          lookup-only: true
+      - name: Lookup direct AVD v3
+        id: avd3
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-android35-v3
+          lookup-only: true
+      - name: Lookup slim AVD v4
+        id: avd4
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+          lookup-only: true
+      - name: Lookup vault
+        id: vault
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/kwai-speed-vault.zip
+          key: kwai-speed-vault-96650454576a2cf5-v1
+          lookup-only: true
+      - name: Report
+        shell: bash
+        run: |
+          echo "IMAGE_V1_HIT=${{ steps.image.outputs.cache-hit }}"
+          echo "EMULATOR_V1_HIT=${{ steps.emu1.outputs.cache-hit }}"
+          echo "EMULATOR_SLIM_V2_HIT=${{ steps.emu2.outputs.cache-hit }}"
+          echo "AVD_FULL_ARCHIVE_V2_HIT=${{ steps.avd2.outputs.cache-hit }}"
+          echo "AVD_DIRECT_V3_HIT=${{ steps.avd3.outputs.cache-hit }}"
+          echo "AVD_SLIM_V4_HIT=${{ steps.avd4.outputs.cache-hit }}"
+          echo "VAULT_HIT=${{ steps.vault.outputs.cache-hit }}"
