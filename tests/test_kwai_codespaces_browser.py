@@ -85,6 +85,28 @@ class CodespacesBrowserTests(unittest.TestCase):
             changed = {**evidence, key: False}
             self.assertFalse(self.mod["assess_evidence"](changed), key)
 
+    def test_own_profile_navigation_is_an_independent_exact_handle_proof(self):
+        evidence = {
+            "profile_url_matches": True,
+            "login_controls_absent": True,
+            "account_menu_logout_visible": True,
+            "account_menu_profile_link_matches": False,
+            "account_menu_profile_navigation_matches": True,
+        }
+        self.assertTrue(self.mod["assess_evidence"](evidence))
+        for key in ("account_menu_logout_visible", "account_menu_profile_navigation_matches",
+                    "profile_url_matches", "login_controls_absent"):
+            self.assertFalse(self.mod["assess_evidence"]({**evidence, key: False}), key)
+
+    def test_profile_navigation_is_confined_to_disposable_tab(self):
+        source = GUARD.read_text()
+        self.assertIn("async def inspect_own_profile_navigation(context)", source)
+        self.assertIn("page = await context.new_page()", source)
+        self.assertIn("await page.close()", source)
+        self.assertNotIn("logoutEl.click()", source)
+        self.assertNotIn("storage_state(", source)
+        self.assertNotIn("context.cookies(", source)
+
     def test_unrelated_account_and_display_name_do_not_verify_handle(self):
         evidence = {
             "profile_url_matches": True,
