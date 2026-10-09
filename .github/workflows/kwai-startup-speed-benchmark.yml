@@ -187,7 +187,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /tmp/kwai-portable-avd-full.tar.zst
-          key: kwai-speed-avd-snapshot-android35-v1
+          key: kwai-speed-avd-fullstate-android35-v2
       - name: Diagnostics
         if: always()
         run: |
