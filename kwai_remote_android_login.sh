@@ -222,17 +222,31 @@ PY
   adb shell input tap $coords >/dev/null 2>&1
   sleep 2
 }
-# The Kwai welcome screen exposes a prominent "Continue with Google" button.
-# Click it automatically only while that exact welcome screen is visible.
-if dump_ui && grep -Eqi 'Welcome to Kwai' /tmp/kwai-ui.xml && grep -Eqi 'Continue with Google' /tmp/kwai-ui.xml; then
-  log "KWAI_WELCOME_GOOGLE_BUTTON_DETECTED"
-  if tap_label 'Continue with Google'; then
-    log "KWAI_WELCOME_GOOGLE_BUTTON_TAPPED"
-    sleep 4
-  else
-    log "KWAI_WELCOME_GOOGLE_BUTTON_TAP_FAILED"
+# Welcome screen auto-entry: retry while the exact button is present.
+# Do this before login-form detection; the welcome page also contains auth words.
+for welcome_attempt in 1 2 3 4 5 6; do
+  if google_sso_foreground; then
+    log "KWAI_GOOGLE_SSO_REACHED_AFTER_WELCOME_CLICK"
+    break
   fi
-fi
+  dump_ui || true
+  if grep -Eqi 'Continue with Google' /tmp/kwai-ui.xml 2>/dev/null; then
+    log "KWAI_WELCOME_GOOGLE_BUTTON_DETECTED_ATTEMPT_$welcome_attempt"
+    if tap_label 'Continue with Google'; then
+      log "KWAI_WELCOME_GOOGLE_BUTTON_TAPPED_ATTEMPT_$welcome_attempt"
+    else
+      screen="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
+      ww="${screen%x*}"; hh="${screen#*x}"
+      if [[ "$ww" =~ ^[0-9]+$ && "$hh" =~ ^[0-9]+$ ]]; then
+        adb shell input tap $((ww*50/100)) $((hh*53/100)) || true
+        log "KWAI_WELCOME_GOOGLE_BUTTON_COORDINATE_FALLBACK"
+      fi
+    fi
+    sleep 5
+  else
+    sleep 2
+  fi
+done
 if ! email_login_visible; then
   complete_kwai_interest_onboarding || true
   dismiss_swipe_tutorial || true
