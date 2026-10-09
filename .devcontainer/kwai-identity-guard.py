@@ -37,6 +37,43 @@ def assess_evidence(evidence):
     return legacy or menu
 
 
+async def open_account_menu_in_probe_page(page):
+    """Click only the top-right avatar in the disposable inspection tab.
+
+    This is a UI-only operation. Never click Log out, submit credentials, or
+    navigate a user's existing tab. Failure to locate the avatar fails closed.
+    """
+    script = r"""() => {
+      const visible = el => {
+        const r = el.getBoundingClientRect();
+        const st = getComputedStyle(el);
+        return r.width >= 16 && r.height >= 16 && r.width <= 100
+          && r.height <= 100 && st.visibility !== 'hidden'
+          && st.display !== 'none';
+      };
+      // The Kwai desktop header places the signed-in avatar at far right.
+      // Restrict candidates to the header, excluding feed avatars and menus.
+      const avatars = [...document.querySelectorAll(
+        'header img, [role="banner"] img, img, [aria-label*="avatar" i], [data-testid*="avatar" i]'
+      )].filter(el => {
+        const r = el.getBoundingClientRect();
+        return visible(el) && r.left >= innerWidth * .75
+          && r.top >= 0 && r.top <= 180;
+      }).sort((a,b) => b.getBoundingClientRect().right
+                        - a.getBoundingClientRect().right);
+      const avatar = avatars[0];
+      if (!avatar) return false;
+      // Dispatch the click to the avatar itself; React receives the bubbled
+      // event on the menu trigger. Never click any item in the dropdown.
+      avatar.click();
+      return true;
+    }"""
+    try:
+        return await asyncio.wait_for(page.evaluate(script), timeout=3) is True
+    except Exception:
+        return False
+
+
 async def inspect_open_account_menu(context):
     """Read the existing authenticated Chrome tabs without clicking Log out.
 
@@ -108,11 +145,15 @@ async def inspect_browser():
             result["reason"] = "no_chrome_context"
             return result
         context = browser.contexts[0]
-        account_menu = await inspect_open_account_menu(context)
         page = await context.new_page()
         try:
             await page.goto(PROFILE_URL, wait_until="domcontentloaded", timeout=12000)
             await page.wait_for_timeout(1600)
+            menu_open_attempted = await open_account_menu_in_probe_page(page)
+            if menu_open_attempted:
+                await page.wait_for_timeout(500)
+            account_menu = await inspect_open_account_menu(context)
+            result["account_menu_open_attempted"] = menu_open_attempted
             current = urlsplit(page.url)
             profile_matches = (
                 current.scheme == "https"
