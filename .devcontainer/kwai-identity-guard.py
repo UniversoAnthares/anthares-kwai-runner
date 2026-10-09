@@ -15,15 +15,77 @@ PORT = 8765
 PROFILE_URL = "https://www.kwai.com/@" + EXPECTED
 
 
+def assess_authentication(evidence):
+    """Visible account-menu logout proves signed-in UI, not account ownership."""
+    return evidence.get("account_menu_logout_visible") is True
+
+
 def assess_evidence(evidence):
-    """Fail closed: absence of login button alone NEVER proves authentication."""
-    required = (
-        "profile_url_matches",
-        "owner_edit_control_visible",
-        "account_menu_handle_matches",
-        "login_controls_absent",
-    )
-    return all(evidence.get(key) is True for key in required)
+    """Verify exact account identity; a display name or public URL is insufficient."""
+    if evidence.get("profile_url_matches") is not True:
+        return False
+    if evidence.get("login_controls_absent") is not True:
+        return False
+    # Old owner-control evidence is retained for backwards compatibility.
+    legacy = (evidence.get("owner_edit_control_visible") is True
+              and evidence.get("account_menu_handle_matches") is True)
+    # Modern Kwai menu may show a display name, not @handle. The menu must
+    # expose a genuine profile link to the expected handle beside Log out.
+    menu = (evidence.get("account_menu_profile_link_matches") is True
+            and assess_authentication(evidence))
+    return legacy or menu
+
+
+async def inspect_open_account_menu(context):
+    """Read the existing authenticated Chrome tabs without clicking Log out.
+
+    A visible logout control proves only signed-in UI. Account identity is
+    verified only if a link to the expected @handle is in the same menu.
+    No cookies, tokens, DOM text or display names are returned or logged.
+    """
+    result = {"account_menu_logout_visible": False,
+              "account_menu_profile_link_matches": False}
+    script = r"""(expected) => {
+      const visible = (el) => {
+        const style = getComputedStyle(el), box = el.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden'
+          && box.width > 0 && box.height > 0;
+      };
+      const logout = /^(log\\s*out|logout|sign\\s*out|sair|terminar sess[aã]o)$/i;
+      const leaves = [...document.querySelectorAll('a,button,[role="menuitem"],span,div')];
+      let signedIn = false, exactProfile = false;
+      for (const el of leaves) {
+        if (!visible(el) || !logout.test((el.innerText || '').trim())) continue;
+        // Do not mistake a whole page containing 'Log out' for a menu item.
+        if ((el.innerText || '').length > 32) continue;
+        signedIn = true;
+        let ancestor = el;
+        for (let depth = 0; depth < 6 && ancestor; depth++, ancestor = ancestor.parentElement) {
+          const links = [...ancestor.querySelectorAll('a[href]')];
+          if (links.some(a => {
+            try {
+              const url = new URL(a.getAttribute('href'), location.href);
+              return url.hostname === 'www.kwai.com'
+                && url.pathname.replace(/\\/$/, '').toLowerCase() === '/@' + expected;
+            } catch { return false; }
+          })) { exactProfile = true; break; }
+        }
+      }
+      return {account_menu_logout_visible: signedIn,
+              account_menu_profile_link_matches: exactProfile};
+    }"""
+    for tab in list(context.pages):
+        try:
+            url = urlsplit(tab.url)
+            if url.scheme != "https" or url.hostname != "www.kwai.com":
+                continue
+            observed = await asyncio.wait_for(tab.evaluate(script, EXPECTED), timeout=3)
+            for key in result:
+                result[key] = result[key] or observed.get(key) is True
+        except Exception:
+            # A closed tab must not turn missing evidence into a positive result.
+            continue
+    return result
 
 
 async def inspect_browser():
@@ -45,6 +107,7 @@ async def inspect_browser():
             result["reason"] = "no_chrome_context"
             return result
         context = browser.contexts[0]
+        account_menu = await inspect_open_account_menu(context)
         page = await context.new_page()
         try:
             await page.goto(PROFILE_URL, wait_until="domcontentloaded", timeout=12000)
@@ -88,13 +151,18 @@ async def inspect_browser():
                 "owner_edit_control_visible": owner_controls > 0,
                 "account_menu_handle_matches": bool(menu_evidence),
                 "login_controls_absent": login_controls == 0,
+                "account_menu_logout_visible": account_menu["account_menu_logout_visible"],
+                "account_menu_profile_link_matches": account_menu["account_menu_profile_link_matches"],
             }
+            result["authenticated_ui_detected"] = assess_authentication(evidence)
             result["evidence"] = evidence
             result["identity_verified"] = assess_evidence(evidence)
             result["reason"] = (
                 "strict_ui_identity_proven"
                 if result["identity_verified"]
-                else "insufficient_authenticated_owner_evidence"
+                else ("authenticated_account_handle_unconfirmed"
+                      if result["authenticated_ui_detected"]
+                      else "insufficient_authenticated_owner_evidence")
             )
             result["persistence_permitted"] = False
             result["server_identity_verified"] = False
