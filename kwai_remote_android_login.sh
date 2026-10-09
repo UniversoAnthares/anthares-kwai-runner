@@ -341,8 +341,57 @@ LOGIN_DEADLINE=$((SECONDS+2700))
 SSO_WAS_ACTIVE=0
 SSO_STARTED_AT=0
 OVERLAY_LAST_CHECK=0
+# Google account setup may show a separate consent page after credentials.
+# Automatically accept only the explicit Google welcome agreement screen.
+GOOGLE_AGREEMENT_LAST_CHECK=0
 while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   if google_sso_foreground; then
+    if [ $((SECONDS-GOOGLE_AGREEMENT_LAST_CHECK)) -ge 5 ]; then
+      GOOGLE_AGREEMENT_LAST_CHECK=$SECONDS
+      dump_ui || true
+      if grep -Eqi 'I agree|Concordo' /tmp/kwai-ui.xml 2>/dev/null && grep -Eqi 'Google Terms of Service|Google Play Terms of Service|Google Privacy Policy|Termos de Serviço do Google' /tmp/kwai-ui.xml 2>/dev/null; then
+        if tap_label '^(I agree|Concordo)
+      SSO_WAS_ACTIVE=1; SSO_STARTED_AT=$SECONDS
+      log "GOOGLE_SSO_ACTIVE_DO_NOT_INTERRUPT"
+    elif [ $((SECONDS-SSO_STARTED_AT)) -eq 60 ]; then
+      log "GOOGLE_SSO_STILL_ACTIVE_60S_WAITING_FOR_CALLBACK"
+    fi
+  else
+    if [ "$SSO_WAS_ACTIVE" -eq 1 ]; then
+      SSO_WAS_ACTIVE=0
+      if kwai_foreground; then log "GOOGLE_SSO_RETURNED_TO_KWAI"; else log "GOOGLE_SSO_LEFT_FOREGROUND"; fi
+    fi
+    if kwai_foreground && [ $((SECONDS-OVERLAY_LAST_CHECK)) -ge 3 ]; then
+      OVERLAY_LAST_CHECK=$SECONDS
+      dismiss_notification_permission
+      # Login is locked: no automatic overlay or onboarding taps.
+    fi
+  fi
+  if [ -f /tmp/anthares-android-done ]; then
+    log "DONE_SIGNAL_RECEIVED"
+    dump_ui || true
+    if ! python3 kwai_auth_probe.py > /tmp/kwai-auth-probe.log 2>&1 || ! grep -qx "KWAI_AUTH_STATE=AUTHENTICATED_UI" /tmp/kwai-auth-probe.log; then
+      log "LOGIN_NOT_CONFIRMED_IDENTITY_UNKNOWN"; rm -f /tmp/anthares-android-done
+    else
+      log "KWAI_LOGIN_CONFIRMED"
+      capture
+      adb shell run-as com.kwai.video id >>"$REPORT" 2>&1 && log "APP_STATE_RUN_AS_AVAILABLE" || log "APP_STATE_RUN_AS_UNAVAILABLE"
+      bash kwai_session_state.sh save >>"$REPORT" 2>&1 || log "KWAI_SESSION_SAVE_WARNING"
+      exit 0
+    fi
+  fi
+  kill -0 "$UI_PID" 2>/dev/null || { log "FAIL: remote-ui-died-during-login"; exit 26; }
+  kill -0 "$TUNNEL_PID" 2>/dev/null || { log "FAIL: tunnel-died-during-login"; exit 27; }
+  sleep 1
+done
+log "FAIL: login-window-expired-2700s"; exit 28
+; then
+          log "GOOGLE_WELCOME_AGREEMENT_BUTTON_TAPPED"
+        else
+          log "GOOGLE_WELCOME_AGREEMENT_BUTTON_NOT_CLICKED"
+        fi
+      fi
+    fi
     if [ "$SSO_WAS_ACTIVE" -eq 0 ]; then
       SSO_WAS_ACTIVE=1; SSO_STARTED_AT=$SECONDS
       log "GOOGLE_SSO_ACTIVE_DO_NOT_INTERRUPT"
