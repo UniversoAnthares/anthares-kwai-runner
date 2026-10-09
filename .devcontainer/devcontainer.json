@@ -1,0 +1,32 @@
+{
+  "name": "Kwai Chrome remoto privado (sem Android)",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "postCreateCommand": "bash .devcontainer/kwai-install.sh",
+  "postStartCommand": "bash .devcontainer/kwai-start.sh",
+  "forwardPorts": [
+    6080,
+    8765
+  ],
+  "portsAttributes": {
+    "6080": {
+      "label": "Kwai Chrome remoto (noVNC, acesso privado)",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    },
+    "8765": {
+      "label": "Kwai verificação de identidade (privado)",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    }
+  },
+  "remoteEnv": {
+    "KWAI_EXPECTED_HANDLE": "universo.anthares"
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "remote.autoForwardPorts": false
+      }
+    }
+  }
+}
