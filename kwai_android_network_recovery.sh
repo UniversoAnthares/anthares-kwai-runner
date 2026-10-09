@@ -29,6 +29,48 @@ offline_visible(){
   grep -Eqi 'Please check your Internet connection|check your Internet connection|No Internet connection|No network connection|Sem conexão|Sem internet|Verifique sua conexão|Verifique a sua conexão|Download failed\. Try again|Falha no download' /tmp/kwai-network-ui.xml
 }
 
+create_surface_visible(){
+  dump_ui || return 1
+  grep -Eqi 'record|camera|upload|post|create|album|gallery|photo|video|gravar|câmera|carregar|publicar|criar|álbum|galeria|foto|vídeo' /tmp/kwai-network-ui.xml &&
+    ! grep -Eqi 'Continue with Google|Continuar com Google|Log in|Sign in|Entrar|Login' /tmp/kwai-network-ui.xml
+}
+
+bypass_offline_to_create(){
+  local dims w h
+  dims="$(adb shell wm size 2>/dev/null | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
+  w="${dims%x*}"; h="${dims#*x}"
+  [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]] || return 1
+
+  log "KWAI_FALSE_OFFLINE_BYPASS_BEGIN"
+  # First leave the broken Profile surface through Kwai's own Home tab.
+  adb shell input tap $((w*10/100)) $((h*95/100)) >/dev/null 2>&1 || true
+  sleep 3
+  # Then invoke the central create route, which is independent of Profile.
+  adb shell input tap $((w*50/100)) $((h*95/100)) >/dev/null 2>&1 || true
+  sleep 4
+  if create_surface_visible; then
+    log "KWAI_FALSE_OFFLINE_BYPASS_CREATE_READY"
+    : > /tmp/kwai-operational-bypass
+    : > /tmp/anthares-android-done
+    return 0
+  fi
+
+  # Some builds swallow the first Home/Plus pair while the offline overlay is
+  # still attached. Try one clean navigation cycle without restarting the app.
+  adb shell input tap $((w*10/100)) $((h*95/100)) >/dev/null 2>&1 || true
+  sleep 2
+  adb shell input tap $((w*50/100)) $((h*95/100)) >/dev/null 2>&1 || true
+  sleep 4
+  if create_surface_visible; then
+    log "KWAI_FALSE_OFFLINE_BYPASS_CREATE_READY_SECOND_ATTEMPT"
+    : > /tmp/kwai-operational-bypass
+    : > /tmp/anthares-android-done
+    return 0
+  fi
+  log "KWAI_FALSE_OFFLINE_BYPASS_NOT_READY"
+  return 1
+}
+
 tap_retry(){
   dump_ui || return 1
   local xy
@@ -155,7 +197,7 @@ preflight(){
 
 watch(){
   : >> "$LOG"
-  local total=0 last_snapshot=0
+  local total=0 last_snapshot=0 last_bypass=0
   log "KWAI_OFFLINE_DIAGNOSTIC_WATCH_STARTED"
   while true; do
     if google_sso_foreground; then
@@ -173,6 +215,10 @@ watch(){
       total=$((total+1))
       log "KWAI_OFFLINE_SCREEN_STILL_PRESENT count=$total"
       now="$(date +%s)"
+      if [ $((now-last_bypass)) -ge 20 ]; then
+        last_bypass="$now"
+        bypass_offline_to_create || true
+      fi
       if [ $((now-last_snapshot)) -ge 25 ]; then
         connectivity_snapshot
         adb logcat -d -t 2000 2>/dev/null | grep -Ei 'UnknownHost|SSLHandshake|CertPath|ConnectException|SocketTimeout|ERR_|Cronet|hodor|kwai|download failed|resource|HTTP.?40[13]|HTTP.?50[0-9]|auth.*fail|login.*fail|OnFailed|error_code' | tail -160 >> "$LOG" || true
@@ -191,7 +237,10 @@ case "$MODE" in
   once)
     connectivity_snapshot
     capture_kwai_hosts
-    if offline_visible; then log "KWAI_OFFLINE_SCREEN_PRESENT_MANUAL_RETRY_INEFFECTIVE"; fi
+    if offline_visible; then
+      log "KWAI_OFFLINE_SCREEN_PRESENT_MANUAL_RETRY_INEFFECTIVE"
+      bypass_offline_to_create || true
+    fi
     ;;
   *) echo "usage: $0 {preflight|watch|once}" >&2; exit 2 ;;
 esac
