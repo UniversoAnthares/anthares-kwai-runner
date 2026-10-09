@@ -33,7 +33,8 @@ def assess_evidence(evidence):
               and evidence.get("account_menu_handle_matches") is True)
     # Modern Kwai menu shows a display name; require an exact account
     # profile link next to the authenticated Log out control instead.
-    menu = evidence.get("account_menu_profile_link_matches") is True
+    menu = (evidence.get("account_menu_profile_link_matches") is True
+            or evidence.get("account_menu_profile_navigation_matches") is True)
     return legacy or menu
 
 
@@ -126,6 +127,80 @@ async def inspect_open_account_menu(context):
     return result
 
 
+async def inspect_own_profile_navigation(context):
+    """Follow the signed-in account row from a NEW tab, never a user's tab.
+
+    This can prove the exact handle when Kwai's menu shows only a display name
+    without an href. No logout, credentials, cookies or session exports.
+    """
+    outcome = {"account_menu_profile_navigation_attempted": False,
+               "account_menu_profile_navigation_matches": False}
+    page = await context.new_page()
+    try:
+        await page.goto("https://www.kwai.com/", wait_until="domcontentloaded",
+                        timeout=12000)
+        await page.wait_for_timeout(700)
+        if not await open_account_menu_in_probe_page(page):
+            return outcome
+        await page.wait_for_timeout(350)
+        script = r"""() => {
+          const visible = el => {
+            const r = el.getBoundingClientRect(), st = getComputedStyle(el);
+            return r.width > 0 && r.height > 0 && st.display !== 'none'
+              && st.visibility !== 'hidden';
+          };
+          const logout = /^(log\s*out|logout|sign\s*out|sair)$/i;
+          const nodes = [...document.querySelectorAll('button,a,span,div,[role="menuitem"]')];
+          const logoutEl = nodes.find(el => visible(el) &&
+            (el.innerText || '').length <= 32 &&
+            logout.test((el.innerText || '').trim()));
+          if (!logoutEl) return false;
+          const lr = logoutEl.getBoundingClientRect();
+          let ancestor = logoutEl.parentElement;
+          for (let depth = 0; depth < 6 && ancestor; depth++, ancestor = ancestor.parentElement) {
+            const ar = ancestor.getBoundingClientRect();
+            // Only the small dropdown panel near the top-right may be used.
+            if (ar.width > 360 || ar.height > 360 ||
+                ar.right < innerWidth * .7) continue;
+            const images = [...ancestor.querySelectorAll('img')].filter(img => {
+              const r = img.getBoundingClientRect();
+              return visible(img) && r.width >= 16 && r.height >= 16
+                && r.top < lr.top && r.bottom >= lr.top - 150
+                && r.left >= innerWidth * .65;
+            }).sort((a,b) => b.getBoundingClientRect().bottom -
+                             a.getBoundingClientRect().bottom);
+            if (images.length) {
+              // The avatar above 'Log out' is the account row. No other item
+              // in the dropdown is clicked, especially not Log out.
+              images[0].click();
+              return true;
+            }
+          }
+          return false;
+        }"""
+        outcome["account_menu_profile_navigation_attempted"] = (
+            await asyncio.wait_for(page.evaluate(script), timeout=3) is True
+        )
+        if not outcome["account_menu_profile_navigation_attempted"]:
+            return outcome
+        for _ in range(8):
+            await page.wait_for_timeout(300)
+            current = urlsplit(page.url)
+            if current.scheme == "https" and current.hostname == "www.kwai.com":
+                path = current.path.rstrip("/").lower()
+                if path.startswith("/@"):
+                    outcome["account_menu_profile_navigation_matches"] = (
+                        path == "/@" + EXPECTED
+                    )
+                    break
+    except Exception:
+        # Navigation failure is not identity evidence.
+        pass
+    finally:
+        await page.close()
+    return outcome
+
+
 async def inspect_browser():
     from playwright.async_api import async_playwright
 
@@ -197,6 +272,11 @@ async def inspect_browser():
                 "account_menu_profile_link_matches": account_menu["account_menu_profile_link_matches"],
             }
             result["authenticated_ui_detected"] = assess_authentication(evidence)
+            # If the menu has no direct @handle link, follow only its avatar
+            # row in a separate temporary tab to verify the real own-profile URL.
+            if result["authenticated_ui_detected"] and not evidence["account_menu_profile_link_matches"]:
+                navigation = await inspect_own_profile_navigation(context)
+                evidence.update(navigation)
             result["evidence"] = evidence
             result["identity_verified"] = assess_evidence(evidence)
             result["reason"] = (
