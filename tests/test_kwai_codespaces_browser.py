@@ -95,6 +95,17 @@ class CodespacesBrowserTests(unittest.TestCase):
         }
         self.assertFalse(self.mod["assess_evidence"](evidence))
 
+    def test_account_menu_auto_open_is_disposable_and_fail_closed(self):
+        source = GUARD.read_text()
+        self.assertIn("async def open_account_menu_in_probe_page(page)", source)
+        self.assertIn("avatar.click();", source)
+        self.assertIn("account_menu_open_attempted", source)
+        self.assertIn("page = await context.new_page()", source)
+        self.assertIn("await page.close()", source)
+        self.assertNotIn("logout.click()", source.lower())
+        self.assertNotIn("storage_state(", source)
+        self.assertNotIn("context.cookies(", source)
+
     def test_account_menu_probe_never_exports_private_session(self):
         source = GUARD.read_text()
         self.assertIn("inspect_open_account_menu", source)
