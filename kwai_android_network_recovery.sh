@@ -46,17 +46,13 @@ for n in root.iter('node'):
 PY
 )"
   if [ -z "$xy" ]; then
-    # The Kwai offline screen sometimes renders Retry without accessibility labels.
-    # Fallback uses the stable central button location, scaled to the display.
     local dims width height
     dims="$(adb shell wm size 2>/dev/null | tr -d '\r' | tail -1)"
     width="$(printf '%s' "$dims" | sed -nE 's/.* ([0-9]+)x([0-9]+).*/\1/p')"
     height="$(printf '%s' "$dims" | sed -nE 's/.* ([0-9]+)x([0-9]+).*/\2/p')"
     if [[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]]; then
-      xy="$((width/2)) $((height*55/100))"
-      log "KWAI_OFFLINE_RETRY_COORDINATE_FALLBACK"
+      xy="$((width/2)) $((height*46/100))"
     else
-      log "KWAI_OFFLINE_RETRY_NO_COORDINATES"
       return 1
     fi
   fi
@@ -72,10 +68,32 @@ connectivity_snapshot(){
   else
     log "ANDROID_NETWORK_VALIDATED=0"
   fi
+  if printf '%s\n' "$d" | grep -E 'Transports: WIFI.*VALIDATED|VALIDATED.*Transports: WIFI' >/dev/null; then
+    log "ANDROID_WIFI_VALIDATED=1"
+  else
+    log "ANDROID_WIFI_VALIDATED=0"
+  fi
   if adb shell ip route 2>/dev/null | grep -q '^default\| default '; then
     log "ANDROID_DEFAULT_ROUTE=1"
   else
     log "ANDROID_DEFAULT_ROUTE=0"
+  fi
+}
+
+capture_kwai_hosts(){
+  local tmp=/tmp/kwai-hosts.txt
+  adb logcat -d -t 3000 2>/dev/null | grep -Eio '([a-z0-9-]+\.)+(kwai\.com|kwai\.net|kwai-pro\.com|kuaishou\.com)' | tr 'A-Z' 'a-z' | sort -u | tail -40 > "$tmp" || true
+  if [ -s "$tmp" ]; then
+    log "KWAI_HOST_PROBE_BEGIN"
+    while read -r host; do
+      [ -n "$host" ] || continue
+      if adb shell ping -c 1 -W 2 "$host" >/dev/null 2>&1; then
+        log "KWAI_HOST_DNS_OK=$host"
+      else
+        log "KWAI_HOST_DNS_OR_ICMP_FAIL=$host"
+      fi
+    done < "$tmp"
+    log "KWAI_HOST_PROBE_END"
   fi
 }
 
@@ -84,6 +102,14 @@ normalize_network(){
   adb shell cmd connectivity airplane-mode disable >/dev/null 2>&1 || true
   adb shell settings put global airplane_mode_on 0 >/dev/null 2>&1 || true
   adb shell svc wifi enable >/dev/null 2>&1 || true
+
+  # The Kwai media stack advertises dual-channel support and this emulator exposes
+  # both synthetic CELLULAR and WIFI transports. Keep only the real validated Wi-Fi
+  # path so app-level API/session traffic cannot bind to the synthetic mobile route.
+  adb shell svc data disable >/dev/null 2>&1 || true
+  adb shell settings put global mobile_data 0 >/dev/null 2>&1 || true
+  adb shell cmd netpolicy set restrict-background false >/dev/null 2>&1 || true
+  log "ANDROID_NETWORK_MODE=WIFI_ONLY"
 
   private_mode="$(adb shell settings get global private_dns_mode 2>/dev/null | tr -d '\r' || true)"
   private_spec="$(adb shell settings get global private_dns_specifier 2>/dev/null | tr -d '\r' || true)"
@@ -102,8 +128,8 @@ normalize_network(){
   fi
 
   for i in $(seq 1 12); do
-    if adb shell ip route 2>/dev/null | grep -q '^default\| default '; then
-      log "ANDROID_NETWORK_ROUTE_READY_ATTEMPT=$i"
+    if adb shell dumpsys connectivity 2>/dev/null | grep -E 'Transports: WIFI.*VALIDATED|VALIDATED.*Transports: WIFI' >/dev/null; then
+      log "ANDROID_WIFI_VALIDATED_ATTEMPT=$i"
       break
     fi
     sleep 2
@@ -116,13 +142,13 @@ preflight(){
   : > "$LOG"
   normalize_network
   for i in $(seq 1 15); do
-    if adb shell dumpsys connectivity 2>/dev/null | grep -q 'VALIDATED'; then
-      log "ANDROID_NETWORK_PREFLIGHT_VALIDATED_ATTEMPT=$i"
+    if adb shell dumpsys connectivity 2>/dev/null | grep -E 'Transports: WIFI.*VALIDATED|VALIDATED.*Transports: WIFI' >/dev/null; then
+      log "ANDROID_NETWORK_PREFLIGHT_WIFI_VALIDATED_ATTEMPT=$i"
       return 0
     fi
     sleep 2
   done
-  log "ANDROID_NETWORK_PREFLIGHT_VALIDATION_PENDING"
+  log "ANDROID_NETWORK_PREFLIGHT_WIFI_VALIDATION_PENDING"
   return 0
 }
 
@@ -141,8 +167,9 @@ watch(){
       now="$(date +%s)"
       if [ $((now-last_snapshot)) -ge 25 ]; then
         connectivity_snapshot
-        adb logcat -d -t 1500 2>/dev/null | grep -Ei 'UnknownHost|SSLHandshake|CertPath|ConnectException|SocketTimeout|ERR_|Cronet|hodor|kwai|download failed|resource' | tail -90 >> "$LOG" || true
-        adb shell dumpsys package com.kwai.video 2>/dev/null | grep -E 'versionName=|versionCode=|primaryCpuAbi=|android.permission.INTERNET' | head -15 >> "$LOG" || true
+        adb logcat -d -t 2000 2>/dev/null | grep -Ei 'UnknownHost|SSLHandshake|CertPath|ConnectException|SocketTimeout|ERR_|Cronet|hodor|kwai|download failed|resource|HTTP.?40[13]|HTTP.?50[0-9]|auth.*fail|login.*fail|OnFailed|error_code' | tail -160 >> "$LOG" || true
+        adb shell dumpsys package com.kwai.video 2>/dev/null | grep -E 'versionName=|versionCode=|primaryCpuAbi=|secondaryCpuAbi=|android.permission.INTERNET' | head -20 >> "$LOG" || true
+        capture_kwai_hosts
         last_snapshot="$now"
       fi
     fi
@@ -155,6 +182,7 @@ case "$MODE" in
   watch) watch ;;
   once)
     connectivity_snapshot
+    capture_kwai_hosts
     if offline_visible; then log "KWAI_OFFLINE_SCREEN_PRESENT_MANUAL_RETRY_INEFFECTIVE"; fi
     ;;
   *) echo "usage: $0 {preflight|watch|once}" >&2; exit 2 ;;
