@@ -12,9 +12,10 @@ if [[ -f "$pidfile" ]]; then
       kill "$pid"
       for _ in 1 2 3 4 5 6 7 8 9 10; do
         kill -0 "$pid" 2>/dev/null || break
+        [[ "$(ps -o stat= -p "$pid" 2>/dev/null)" != Z* ]] || break
         sleep 0.2
       done
-      if kill -0 "$pid" 2>/dev/null; then
+      if kill -0 "$pid" 2>/dev/null && [[ "$(ps -o stat= -p "$pid" 2>/dev/null)" != Z* ]]; then
         echo "KWAI_GUARD_REFRESH=inspector_did_not_exit" >&2
         exit 1
       fi
