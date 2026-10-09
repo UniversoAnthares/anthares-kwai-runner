@@ -6,6 +6,7 @@ TOKEN = os.environ["REMOTE_ANDROID_TOKEN"]
 SHOT_LOCK = threading.Lock()
 SHOT_CACHE = {"bytes": b"", "at": 0.0}
 TOUCH_VISUALS_DISABLED = False
+TOUCH_VISUALS_LAST_CHECK = 0.0
 
 
 def adb_bin():
@@ -42,12 +43,20 @@ def android_ready():
 
 
 def ensure_touch_visuals_disabled():
-    global TOUCH_VISUALS_DISABLED
-    if TOUCH_VISUALS_DISABLED or not android_ready():
+    global TOUCH_VISUALS_DISABLED, TOUCH_VISUALS_LAST_CHECK
+    if not android_ready():
         return
+    now = time.monotonic()
+    if TOUCH_VISUALS_DISABLED and now - TOUCH_VISUALS_LAST_CHECK < 2.0:
+        return
+    TOUCH_VISUALS_LAST_CHECK = now
     try:
-        adb("shell", "settings", "put", "system", "show_touches", "0", timeout=4, check=True)
-        adb("shell", "settings", "put", "system", "pointer_location", "0", timeout=4, check=True)
+        show = adb("shell", "settings", "get", "system", "show_touches", timeout=4).decode("utf-8", "replace").strip()
+        pointer = adb("shell", "settings", "get", "system", "pointer_location", timeout=4).decode("utf-8", "replace").strip()
+        if show != "0":
+            adb("shell", "settings", "put", "system", "show_touches", "0", timeout=4, check=True)
+        if pointer != "0":
+            adb("shell", "settings", "put", "system", "pointer_location", "0", timeout=4, check=True)
         show = adb("shell", "settings", "get", "system", "show_touches", timeout=4).decode("utf-8", "replace").strip()
         pointer = adb("shell", "settings", "get", "system", "pointer_location", timeout=4).decode("utf-8", "replace").strip()
         TOUCH_VISUALS_DISABLED = show == "0" and pointer == "0"
@@ -101,19 +110,19 @@ button,input{font-size:18px;padding:10px;margin:4px}#state{padding:8px 4px;color
 <h3>Android remoto — Kwai</h3><div id=state>Conectando ao Android...</div>
 <div id=wrap><img id=s draggable=false><div id=mark></div></div>
 <div><button onclick="key(4)">Voltar</button><button onclick="key(3)">Home</button><button onclick="kwai()">Abrir Kwai</button><button onclick="fixkwai()">Reiniciar Kwai</button><button onclick="diag()">Diagnosticar</button><button onclick="done()">Concluir login</button></div>
-<input id=t placeholder='Texto'><button onclick="txt()">Digitar</button><button onclick="clearText()">Limpar texto</button>
+<input id=t type=password autocomplete=off autocapitalize=off spellcheck=false placeholder='Texto (oculto)'><button onclick="txt()">Digitar</button><button onclick="clearText()">Limpar texto</button>
 <script>
 const q=new URLSearchParams(location.search),t=q.get('t'),s=document.getElementById('s'),state=document.getElementById('state'),mark=document.getElementById('mark');let loading=false,errors=0,tapBusy=false;
 async function timedFetch(url,opt={}){let c=new AbortController(),tm=setTimeout(()=>c.abort(),7000);try{return await fetch(url,{...opt,signal:c.signal,cache:'no-store'})}finally{clearTimeout(tm)}}
 async function refresh(){if(loading)return;loading=true;try{let r=await timedFetch('/shot?t='+encodeURIComponent(t)+'&v='+Date.now());if(!r.ok)throw Error(r.status);let ready=r.headers.get('X-Android-Ready')==='1',b=await r.blob(),u=URL.createObjectURL(b),old=s.dataset.url;s.src=u;s.dataset.url=u;if(old)URL.revokeObjectURL(old);errors=0;state.textContent=ready?'Android pronto':'Android inicializando...'}catch(e){errors++;state.textContent=errors<3?'Reconectando à tela...':'Tela temporariamente indisponível — tentando novamente'}finally{loading=false}}
 setInterval(refresh,2500);refresh();
 async function sendTap(e){e.preventDefault();if(tapBusy)return;let r=s.getBoundingClientRect(),rx=(e.clientX-r.left)/r.width,ry=(e.clientY-r.top)/r.height;if(rx<0||rx>1||ry<0||ry>1)return;tapBusy=true;try{let rr=await timedFetch('/tap?t='+encodeURIComponent(t)+'&rx='+rx.toFixed(6)+'&ry='+ry.toFixed(6),{method:'POST'});if(!rr.ok)throw Error(rr.status);state.textContent='Toque enviado';setTimeout(refresh,250)}catch(e){state.textContent='Falha no toque — tente novamente'}finally{setTimeout(()=>{tapBusy=false},220)}}
-s.addEventListener('pointerup',sendTap);s.addEventListener('dragstart',e=>e.preventDefault());
+s.addEventListener('pointerup',sendTap);s.addEventListener('pointerdown',e=>e.preventDefault());s.addEventListener('contextmenu',e=>e.preventDefault());s.addEventListener('dragstart',e=>e.preventDefault());
 function key(k){timedFetch('/key?t='+encodeURIComponent(t)+'&k='+k,{method:'POST'}).then(refresh)}
 function kwai(){timedFetch('/kwai?t='+encodeURIComponent(t),{method:'POST'}).then(()=>setTimeout(refresh,600))}
 function fixkwai(){timedFetch('/fixkwai?t='+encodeURIComponent(t),{method:'POST'}).then(()=>setTimeout(refresh,1200))}
 async function diag(){let r=await timedFetch('/diag?t='+encodeURIComponent(t)),x=await r.text(),p=document.getElementById('diag');if(!p){p=document.createElement('pre');p.id='diag';document.body.appendChild(p)}p.textContent=x}
-async function txt(){let v=document.getElementById('t').value,r=await timedFetch('/text?t='+encodeURIComponent(t),{method:'POST',body:v});state.textContent=r.ok?'Texto enviado ao Android':'Falha ao enviar texto';setTimeout(refresh,350)}
+async function txt(){let f=document.getElementById('t'),v=f.value;f.value='';let r=await timedFetch('/text?t='+encodeURIComponent(t),{method:'POST',body:v});state.textContent=r.ok?'Texto enviado ao Android':'Falha ao enviar texto';setTimeout(refresh,350)}
 async function clearText(){let r=await timedFetch('/clear?t='+encodeURIComponent(t),{method:'POST'});state.textContent=r.ok?'Campo selecionado limpo':'Falha ao limpar campo';if(r.ok)document.getElementById('t').value='';setTimeout(refresh,350)}
 async function done(){let r=await timedFetch('/done?t='+encodeURIComponent(t),{method:'POST'});if(r.ok){state.textContent='Confirmação enviada; validando autenticação no servidor.'}}
 </script>"""
@@ -199,13 +208,11 @@ class Handler(BaseHTTPRequestHandler):
                 adb("shell", "am", "force-stop", "com.kwai.video", timeout=5)
                 adb("shell", "monkey", "-p", "com.kwai.video", "-c", "android.intent.category.LAUNCHER", "1", timeout=8, check=True)
             elif u.path == "/clear":
-                # Android input keycombination holds Ctrl and A together.
                 adb("shell", "input", "keycombination", "KEYCODE_CTRL_LEFT", "KEYCODE_A", timeout=5, check=True)
                 adb("shell", "input", "keyevent", "KEYCODE_DEL", timeout=5, check=True)
             elif u.path == "/text":
                 n = int(self.headers.get("Content-Length", "0"))
                 v = self.rfile.read(n).decode("utf-8", "replace")
-                # Only type when the user explicitly presses Digitar.
                 if v:
                     adb("shell", "input", "text", v.replace("%", "%25").replace(" ", "%s"), timeout=15, check=True)
             elif u.path == "/done":
