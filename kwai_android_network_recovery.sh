@@ -128,42 +128,25 @@ preflight(){
 
 watch(){
   : >> "$LOG"
-  local consecutive=0 total=0 last_normalize=0
-  log "KWAI_OFFLINE_WATCHDOG_STARTED"
+  local total=0 last_snapshot=0
+  log "KWAI_OFFLINE_DIAGNOSTIC_WATCH_STARTED"
   while true; do
     if google_sso_foreground; then
-      consecutive=0
-      sleep 3
+      sleep 4
       continue
     fi
     if kwai_foreground && offline_visible; then
-      total=$((total+1)); consecutive=$((consecutive+1))
-      log "KWAI_OFFLINE_SCREEN_DETECTED total=$total consecutive=$consecutive"
+      total=$((total+1))
+      log "KWAI_OFFLINE_SCREEN_STILL_PRESENT count=$total"
       now="$(date +%s)"
-      if [ $((now-last_normalize)) -ge 30 ]; then
-        normalize_network
-        last_normalize="$now"
+      if [ $((now-last_snapshot)) -ge 25 ]; then
+        connectivity_snapshot
+        adb logcat -d -t 1500 2>/dev/null | grep -Ei 'UnknownHost|SSLHandshake|CertPath|ConnectException|SocketTimeout|ERR_|Cronet|hodor|kwai|download failed|resource' | tail -90 >> "$LOG" || true
+        adb shell dumpsys package com.kwai.video 2>/dev/null | grep -E 'versionName=|versionCode=|primaryCpuAbi=|android.permission.INTERNET' | head -15 >> "$LOG" || true
+        last_snapshot="$now"
       fi
-      if ! tap_retry; then
-        log "KWAI_OFFLINE_RETRY_NOT_ACCESSIBLE"
-        adb shell dumpsys connectivity 2>/dev/null | grep -E 'VALIDATED|INTERNET|NetworkAgentInfo' | head -15 >> "$LOG" || true
-        adb logcat -d -t 250 2>/dev/null | grep -Ei 'Cronet|UnknownHost|SSLHandshake|ConnectException|ERR_|hodor|kwai' | tail -25 >> "$LOG" || true
-      fi
-      sleep 5
-      # Preserve a recently returned Google SSO callback. Only relaunch after
-      # roughly a minute of a continuously visible, unrecoverable offline screen.
-      if [ "$consecutive" -ge 10 ] && ! google_sso_foreground; then
-        log "KWAI_OFFLINE_PERSISTENT_RELAUNCH"
-        adb shell am force-stop com.kwai.video >/dev/null 2>&1 || true
-        sleep 2
-        adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
-        consecutive=0
-        sleep 6
-      fi
-    else
-      consecutive=0
-      sleep 3
     fi
+    sleep 5
   done
 }
 
@@ -171,8 +154,8 @@ case "$MODE" in
   preflight) preflight ;;
   watch) watch ;;
   once)
-    normalize_network
-    if offline_visible; then tap_retry || true; fi
+    connectivity_snapshot
+    if offline_visible; then log "KWAI_OFFLINE_SCREEN_PRESENT_MANUAL_RETRY_INEFFECTIVE"; fi
     ;;
   *) echo "usage: $0 {preflight|watch|once}" >&2; exit 2 ;;
 esac
