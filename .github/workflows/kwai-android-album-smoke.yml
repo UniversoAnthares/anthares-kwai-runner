@@ -293,12 +293,16 @@ jobs:
             adb shell input keyevent 66 || true
             sleep 2
           done
-          resumed="$(adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | tail -3 || true)"
+          resumed="$(adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity:|mFocusedApp=' | tail -6 || true)"
           echo "CLOUD_SHARE_FOREGROUND_ACTIVITY=$resumed" | tee -a "$GITHUB_STEP_SUMMARY"
           echo 'CLOUD_SHARE_INTENT_DIAGNOSTICS_BEGIN'
           cat /tmp/kwai-send-intent.log || true
           adb shell dumpsys activity activities | grep -E 'Resumed|resumed|mFocusedApp|topActivity' | tail -15 || true
           echo 'CLOUD_SHARE_INTENT_DIAGNOSTICS_END' 
+          if ! grep -q 'com.kwai.video' <<< "$resumed"; then
+            sleep 3
+            resumed="$(adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity:|mFocusedApp=' | tail -6 || true)"
+          fi
           if ! grep -q 'com.kwai.video' <<< "$resumed"; then
             echo 'CLOUD_SHARE_TEST=KWAI_NOT_FOREGROUND' | tee -a "$GITHUB_STEP_SUMMARY"
             exit 11
