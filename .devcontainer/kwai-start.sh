@@ -37,12 +37,12 @@ restart_current_bridge() {
   while IFS= read -r pid; do
     [[ "$pid" =~ ^[0-9]+$ ]] || continue
     [[ " ${pids[*]-} " == *" $pid "* ]] || pids+=("$pid")
-  done < <(pgrep -f 'python.*\.devcontainer/kwai-command-bridge\.py' || true)
+  done < <(pgrep -f 'python.*\.devcontainer/kwai-command-bridge(-v2)?\.py' || true)
 
   for pid in "${pids[@]-}"; do
     [[ -n "$pid" ]] || continue
     cmd="$(tr '\0' ' ' <"/proc/${pid}/cmdline" 2>/dev/null || true)"
-    if [[ "$cmd" != *".devcontainer/kwai-command-bridge.py"* ]]; then
+    if [[ "$cmd" != *".devcontainer/kwai-command-bridge.py"* && "$cmd" != *".devcontainer/kwai-command-bridge-v2.py"* ]]; then
       echo "KWAI_CODESPACE_bridge=pid_mismatch_refusing_to_kill" >&2
       return 1
     fi
@@ -57,8 +57,8 @@ restart_current_bridge() {
     fi
   done
   rm -f "$pidfile"
-  start_once bridge "${PRIVATE_HOME}/venv/bin/python" -u .devcontainer/kwai-command-bridge.py
-  echo "KWAI_CODESPACE_bridge=current_checkout_loaded;chrome_profile_untouched=true"
+  start_once bridge "${PRIVATE_HOME}/venv/bin/python" -u .devcontainer/kwai-command-bridge-v2.py
+  echo "KWAI_CODESPACE_bridge=v2_latest_comments_loaded;chrome_profile_untouched=true"
 }
 
 start_once xvfb Xvfb :99 -screen 0 1440x900x24 -nolisten tcp
