@@ -72,22 +72,21 @@ def auth_ok():
 
 if not LOGIN or not PASSWORD:
     print("KWAI_AUTOFILL_WATCHER_SECRETS_MISSING", flush=True)
-    raise SystemExit(0)
+    raise SystemExit(44)
 
-# The main login script handles onboarding and the identifier first. Wait until it
-# declares the owner-interaction surface stable, then take over credential progression.
-deadline = time.time() + 420
+# Let the main script complete onboarding and identifier autofill first.
+deadline = time.time() + 240
 while time.time() < deadline and not status_contains("KWAI_OWNER_INTERACTION_READY"):
     time.sleep(1)
 if time.time() >= deadline:
     print("KWAI_AUTOFILL_WATCHER_LOGIN_SURFACE_TIMEOUT", flush=True)
-    raise SystemExit(0)
+    raise SystemExit(43)
 
 print("KWAI_AUTOFILL_WATCHER_READY", flush=True)
 time.sleep(2)
 identifier_advanced = False
 password_submitted = False
-end = time.time() + 180
+end = time.time() + 120
 while time.time() < end:
     try:
         nodes = dump_nodes()
@@ -98,7 +97,7 @@ while time.time() < end:
     if re.search(r"please check your internet connection|check your internet|verifique sua conex[aã]o|sem conex[aã]o", page, re.I):
         open("/tmp/kwai-auth-network-error-detected", "w").write("1")
         print("KWAI_POST_PASSWORD_NETWORK_ERROR_DETECTED", flush=True)
-        raise SystemExit(0)
+        raise SystemExit(41)
     if auth_ok():
         open("/tmp/anthares-android-done", "w").write("1")
         print("KWAI_AUTOFILL_AUTHENTICATED_SIGNALLED", flush=True)
@@ -118,7 +117,6 @@ while time.time() < end:
                 time.sleep(4)
                 continue
     if not password_fields and not identifier_advanced:
-        # Identifier is already filled by the main script. Advance to password.
         b = find_button(nodes, [r"^continue$", r"^continuar$", r"^next$", r"^pr[oó]ximo$"])
         if b and tap(b):
             identifier_advanced = True
@@ -128,3 +126,4 @@ while time.time() < end:
     time.sleep(2)
 
 print("KWAI_AUTOFILL_WATCHER_TIMEOUT", flush=True)
+raise SystemExit(42)
