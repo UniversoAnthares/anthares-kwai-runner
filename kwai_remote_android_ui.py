@@ -192,9 +192,8 @@ class Handler(BaseHTTPRequestHandler):
                 # Clear the focused field with one Android selection command,
                 # avoiding repeated key events that may type unintended characters.
                 if v:
-                    adb("shell", "input", "keyevent", "KEYCODE_MOVE_END", timeout=5, check=True)
-                    for _ in range(80):
-                        adb("shell", "input", "keyevent", "KEYCODE_DEL", timeout=5, check=True)
+                    # Do not inject 80 backspaces into a live Google form.
+                    # The caller can explicitly use Clear text first.
                     adb("shell", "input", "text", v.replace("%", "%25").replace(" ", "%s"), timeout=15, check=True)
             elif u.path == "/done":
                 with open("/tmp/anthares-android-done", "w") as f:
