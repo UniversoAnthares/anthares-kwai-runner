@@ -1,0 +1,75 @@
+name: Kwai system image prune probe isolated
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-system-image-prune-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Restore proven slim AVD v4
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+      - name: Restore Android 35 Google APIs image
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+      - name: Restore emulator
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
+      - name: Inventory and test safe image pruning
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ROOT="$SDK/system-images/android-35/google_apis/x86_64"
+          ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          echo "SYSIMG_RAW_BYTES=$(du -sb "$ROOT" | awk '{print $1}')"
+          echo '=== SYSIMG TOP FILES ==='
+          find "$ROOT" -type f -printf '%s\t%p\n' | sort -nr | head -30 || true
+          echo '=== SYSIMG TOP LEVEL ==='
+          du -sb "$ROOT"/* 2>/dev/null | sort -nr | head -30 || true
+          sudo chmod 666 /dev/kvm
+          boot_test() {
+            name="$1"
+            "$ADB" kill-server >/dev/null 2>&1 || true
+            log="/tmp/${name}.log"
+            t=$(date +%s)
+            nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >"$log" 2>&1 &
+            ok=0
+            if timeout 45 "$ADB" wait-for-device && timeout 45 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"; then ok=1; fi
+            secs=$(($(date +%s)-t))
+            actual=false
+            if grep -q "Successfully loaded snapshot 'kwai-ready'" "$log" && ! grep -Eq "Failed to load snapshot 'kwai-ready'|performing a cold boot" "$log"; then actual=true; fi
+            echo "${name}_BOOTED=$ok"
+            echo "${name}_BOOT_SECONDS=$secs"
+            echo "${name}_ACTUAL_LOAD=$actual"
+            grep -Ei "Successfully loaded snapshot|Failed to load snapshot|cold boot|ERROR" "$log" | tail -30 || true
+            "$ADB" emu kill >/dev/null 2>&1 || true
+            timeout 20 bash -c 'while pgrep -f "[q]emu-system.*kwai-speed" >/dev/null; do sleep 1; done' || true
+          }
+          NOTICE=0
+          [ -f "$ROOT/NOTICE.txt" ] && NOTICE=$(stat -c%s "$ROOT/NOTICE.txt")
+          rm -f "$ROOT/NOTICE.txt"
+          echo "PRUNE_NOTICE_BYTES=$NOTICE"
+          echo "AFTER_NOTICE_RAW_BYTES=$(du -sb "$ROOT" | awk '{print $1}')"
+          boot_test NO_NOTICE
+          DATA=0
+          [ -d "$ROOT/data" ] && DATA=$(du -sb "$ROOT/data" | awk '{print $1}')
+          rm -rf "$ROOT/data"
+          echo "PRUNE_DATA_BYTES=$DATA"
+          echo "AFTER_NOTICE_DATA_RAW_BYTES=$(du -sb "$ROOT" | awk '{print $1}')"
+          boot_test NO_NOTICE_DATA
