@@ -177,7 +177,13 @@ async def inspect_own_profile_navigation(context):
     without an href. No logout, credentials, cookies or session exports.
     """
     outcome = {"account_menu_profile_navigation_attempted": False,
-               "account_menu_profile_navigation_matches": False}
+               "account_menu_profile_navigation_matches": False,
+               "account_menu_profile_popup_opened": False,
+               "account_menu_profile_route_reached": False,
+               "account_menu_profile_route_changed": False,
+               "account_menu_profile_owner_edit_visible": False,
+               "account_menu_profile_handle_text_matches": False}
+    initial_pages = list(context.pages)
     page = await context.new_page()
     try:
         await page.goto("https://www.kwai.com/", wait_until="domcontentloaded",
@@ -228,20 +234,58 @@ async def inspect_own_profile_navigation(context):
             outcome["account_menu_profile_navigation_attempted"] = True
         if not outcome["account_menu_profile_navigation_attempted"]:
             return outcome
-        for _ in range(8):
-            await page.wait_for_timeout(300)
-            current = urlsplit(page.url)
-            if current.scheme == "https" and current.hostname == "www.kwai.com":
+        for _ in range(12):
+            await page.wait_for_timeout(350)
+            opened = [p for p in context.pages
+                      if p not in initial_pages and p != page]
+            outcome["account_menu_profile_popup_opened"] |= bool(opened)
+            for candidate in [page] + opened:
+                current = urlsplit(candidate.url)
+                if current.scheme != "https" or current.hostname != "www.kwai.com":
+                    continue
                 path = current.path.rstrip("/").lower()
-                if path.startswith("/@"):
-                    outcome["account_menu_profile_navigation_matches"] = (
-                        path == "/@" + EXPECTED
-                    )
-                    break
+                outcome["account_menu_profile_route_changed"] |= (
+                    path not in ("", "/")
+                )
+                profile_route = (
+                    path.startswith("/@")
+                    or path.startswith("/profile")
+                    or path.startswith("/user/")
+                )
+                if not profile_route:
+                    continue
+                outcome["account_menu_profile_route_reached"] = True
+                exact_route = path == "/@" + EXPECTED
+                try:
+                    owner_edit = await candidate.get_by_text(
+                        "Editar perfil", exact=True
+                    ).count() + await candidate.get_by_text(
+                        "Edit profile", exact=True
+                    ).count()
+                    handle_text = await candidate.get_by_text(
+                        "@" + EXPECTED, exact=True
+                    ).count()
+                except Exception:
+                    owner_edit, handle_text = 0, 0
+                outcome["account_menu_profile_owner_edit_visible"] |= owner_edit > 0
+                outcome["account_menu_profile_handle_text_matches"] |= handle_text > 0
+                # Exact own-profile navigation from the authenticated menu
+                # is independent of the public expected-profile page.
+                outcome["account_menu_profile_navigation_matches"] |= (
+                    exact_route or (owner_edit > 0 and handle_text > 0)
+                )
+            if outcome["account_menu_profile_navigation_matches"]:
+                break
     except Exception:
         # Navigation failure is not identity evidence.
         pass
     finally:
+        for candidate in list(context.pages):
+            if candidate not in initial_pages and candidate != page:
+                try:
+                    await candidate.close()
+                except Exception:
+                    pass
         await page.close()
     return outcome
 
