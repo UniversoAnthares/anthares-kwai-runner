@@ -19,7 +19,7 @@ concurrency:
 jobs:
   remote-login:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       KWAI_VARIANT: '4'
       KWAI_SESSION_FILE: kwai-session.enc
