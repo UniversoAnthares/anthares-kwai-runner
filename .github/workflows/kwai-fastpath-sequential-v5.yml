@@ -1,0 +1,61 @@
+name: Kwai Android sequential slim fast path v5 control
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-fastpath-sequential-v5.yml']
+permissions:
+  contents: read
+jobs:
+  control:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Start timing
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Restore AVD v4
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+          fail-on-cache-miss: true
+      - name: Restore Android image v1
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+          fail-on-cache-miss: true
+      - name: Restore slim emulator v2
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-headless-x86_64-v2
+          fail-on-cache-miss: true
+      - name: Boot kwai-ready and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          echo "SEQ_RESTORE_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
+          sudo chmod 666 /dev/kvm
+          t=$(date +%s)
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/seq-v5.log 2>&1 &
+          timeout 60 "$ADB" wait-for-device
+          timeout 60 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"
+          BOOT=$(($(date +%s)-t))
+          echo "SEQ_SNAPSHOT_BOOT_SECONDS=$BOOT" | tee -a "$GITHUB_STEP_SUMMARY"
+          if grep -q "Successfully loaded snapshot 'kwai-ready'" /tmp/seq-v5.log && ! grep -Eq "Failed to load snapshot 'kwai-ready'|performing a cold boot" /tmp/seq-v5.log; then
+            echo 'SEQ_ACTUAL_LOAD=true' | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'SEQ_ACTUAL_LOAD=false' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 4
+          fi
+          grep -E "Loading snapshot 'kwai-ready'|Successfully loaded snapshot 'kwai-ready'" /tmp/seq-v5.log | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "SEQ_TOTAL_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$BOOT" -lt 10
+          echo 'SEQ_RESULT=PROVEN_SUB10' | tee -a "$GITHUB_STEP_SUMMARY"
