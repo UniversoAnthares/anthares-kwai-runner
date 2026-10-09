@@ -70,9 +70,9 @@ async def browser_action(action):
                           return {
                             app_loaded: !!document.querySelector('main,header,[id="root"],[id="app"]'),
                             header_avatar: images.some(n=>{const r=n.getBoundingClientRect();return visible(n)&&r.left>=innerWidth*.7&&r.top<200&&r.width<=100&&r.height<=100;}),
-                            logout_visible:texts.some(t=>/^(log\\s*out|logout|sign\\s*out|sair)$/i.test(t)),
-                            login_visible:texts.some(t=>/^(log\\s*in|sign\\s*in|entrar|fazer login)$/i.test(t)),
-                            profile_link:[...document.querySelectorAll('a[href]')].some(n=>{try{const u=new URL(n.getAttribute('href'),location.href);return u.hostname==='www.kwai.com'&&/^\\/@[^/]+\\/?$/i.test(u.pathname)}catch{return false}}),
+                            logout_visible:texts.some(t=>/^(log\s*out|logout|sign\s*out|sair)$/i.test(t)),
+                            login_visible:texts.some(t=>/^(log\s*in|sign\s*in|entrar|fazer login)$/i.test(t)),
+                            profile_link:[...document.querySelectorAll('a[href]')].some(n=>{try{const u=new URL(n.getAttribute('href'),location.href);return u.hostname==='www.kwai.com'&&/^\/@[^/]+\/?$/i.test(u.pathname)}catch{return false}}),
                             owner_edit:texts.some(t=>/^(edit profile|editar perfil)$/i.test(t))
                           };
                         }""")
