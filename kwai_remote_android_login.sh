@@ -293,7 +293,7 @@ if ! email_login_visible && ! google_sso_foreground; then
   # Do not abort: the owner may still navigate manually to email/password on a slow remote screen.
 fi
 if email_login_visible; then login_lock; log "KWAI_EMAIL_LOGIN_FORM_VERIFIED"; else log "GOOGLE_SSO_HANDOFF_WAITING"; fi
-if [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
+if [ "${KWAI_AUTOFILL_ENABLED:-0}" = "1" ] && [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
   log "KWAI_SECRET_CREDENTIALS_PRESENT_AUTOFILL"
   python3 - <<'PY' || true
 import os,re,subprocess,xml.etree.ElementTree as ET,time
