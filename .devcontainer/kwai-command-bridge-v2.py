@@ -140,7 +140,8 @@ async def browser_action(action):
                     "session_exported": False,
                 }
             if action == "owner_probe":
-                return await owner_probe(context)
+                helper = load_module("kwai-existing-tab-owner.py", "kwai_existing_tab_owner_v2")
+                return await helper.inspect_existing_tab(context)
             if action == "create_probe":
                 probe = load_module("kwai-create-surface-probe.py", "kwai_create_surface_probe_v2")
                 return {"chrome_connected": True, **(await probe.inspect_existing_pages(context))}
