@@ -222,8 +222,22 @@ async def inspect_own_profile_navigation(context):
             if (images.length) {
               // The avatar above 'Log out' is the account row. No other item
               // in the dropdown is clicked, especially not Log out.
-              const r = images[0].getBoundingClientRect();
-              return {x:r.left+r.width/2,y:r.top+r.height/2};
+              const ir = images[0].getBoundingClientRect();
+              // Kwai's image is decorative: the clickable account row
+              // normally receives pointer events beside the avatar.
+              let row = images[0].parentElement;
+              for (let i=0; i<5 && row; i++, row=row.parentElement) {
+                const rr=row.getBoundingClientRect();
+                const label=(row.innerText||'').trim();
+                if (rr.width>=100 && rr.width<=380 &&
+                    rr.height>=30 && rr.height<=120 &&
+                    rr.top>=lr.top-210 && rr.bottom<=lr.top-4 &&
+                    !/(log\s*out|logout|sair|upload|publicar|postar)/i.test(label)) {
+                  return {x:Math.min(rr.right-20,ir.right+55),
+                          y:ir.top+ir.height/2};
+                }
+              }
+              return {x:ir.right+28,y:ir.top+ir.height/2};
             }
           }
           return false;
