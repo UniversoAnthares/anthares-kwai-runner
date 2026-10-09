@@ -158,7 +158,7 @@ jobs:
                           '<img id="avatar" alt="account avatar" '
                           'style="position:fixed;top:8px;right:10px;width:32px;height:32px" '
                           'src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" '
-                          'onclick="document.getElementById(\\'dropdown\\').style.display=\\'block\\'">'
+                          'onclick="document.getElementById(\'dropdown\').style.display=\'block\'">'
                           '<div id="dropdown" role="menu" style="display:none">'
                           '<a href="/@wrong.account">Lucas Rosalem</a><button>Log out</button></div>'
                       )
