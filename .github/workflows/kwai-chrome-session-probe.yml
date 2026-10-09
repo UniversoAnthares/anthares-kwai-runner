@@ -16,7 +16,7 @@ jobs:
       - name: Restore encrypted Kwai session cache
         uses: actions/cache/restore@v4
         with:
-          path: .kwai-session-cache
+          path: .kwai-session-cache/kwai-session.enc
           key: kwai-session-${{ github.run_id }}
           restore-keys: |
             kwai-session-
@@ -44,7 +44,7 @@ jobs:
         if: steps.encrypted.outputs.present == 'true'
         uses: actions/cache/save@v4
         with:
-          path: .kwai-session-cache
+          path: .kwai-session-cache/kwai-session.enc
           key: kwai-session-${{ github.run_id }}
 
       - name: Upload non-sensitive probe report
