@@ -16,7 +16,7 @@ REPO = "UniversoAnthares/anthares-kwai-runner"
 ISSUE = 12
 OWNER = "universoanthares"
 STATE = Path.home() / ".kwai-remote-private" / "bridge-seen.json"
-COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check|refresh_bridge|ui_probe) ([a-zA-Z0-9_-]{12,64})$")
+COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|open_home|profile_check|refresh_bridge|ui_probe|menu_probe) ([a-zA-Z0-9_-]{12,64})$")
 def gh(method, endpoint, data=None):
     args = ["gh", "api", "--method", method, endpoint]
     if data is not None:
@@ -37,6 +37,93 @@ async def browser_action(action):
                 page = await context.new_page()
                 await page.goto("https://www.kwai.com/", wait_until="domcontentloaded", timeout=15000)
                 await page.close()
+            if action == "menu_probe":
+                # UI-only test on the already-open Kwai tab. It never reads
+                # secrets, changes routes, or clicks a logout/login control.
+                result = {"chrome_connected": True, "kwai_existing_tab_present": False,
+                          "existing_avatar_candidate": False,
+                          "existing_avatar_clicked": False,
+                          "existing_menu_visible": False,
+                          "existing_logout_visible": False,
+                          "existing_profile_candidate": False,
+                          "existing_login_visible": False}
+                for tab in list(context.pages):
+                    u = urlsplit(tab.url)
+                    if u.scheme != "https" or u.hostname != "www.kwai.com":
+                        continue
+                    result["kwai_existing_tab_present"] = True
+                    try:
+                        before = await tab.evaluate(r"""() => {
+                          const visible=el=>{
+                            const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                            return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';
+                          };
+                          const nodes=[...document.querySelectorAll('a,button,[role="menuitem"],span,div')]
+                            .filter(visible);
+                          const logout=nodes.some(n=>{const t=(n.innerText||'').trim();return t.length<=32&&/^(log\s*out|logout|sign\s*out|sair)$/i.test(t)});
+                          return {logout};
+                        }""")
+                        if before.get("logout"):
+                            result["existing_menu_visible"] = True
+                            result["existing_logout_visible"] = True
+                            break
+                        clicked = await tab.evaluate(r"""() => {
+                          const visible=el=>{
+                            const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                            return r.width>=16&&r.height>=16&&r.width<=100&&r.height<=100&&
+                              s.display!=='none'&&s.visibility!=='hidden';
+                          };
+                          const imgs=[...document.querySelectorAll(
+                            'header img,[role="banner"] img,img,[aria-label*="avatar" i],[data-testid*="avatar" i]'
+                          )].filter(el=>{
+                            const r=el.getBoundingClientRect();
+                            return visible(el)&&r.left>innerWidth*.7&&r.top<180&&
+                              !el.closest('a[href]');
+                          }).sort((a,b)=>b.getBoundingClientRect().right-a.getBoundingClientRect().right);
+                          if(!imgs.length)return {candidate:false,clicked:false};
+                          imgs[0].click();return {candidate:true,clicked:true};
+                        }""")
+                        result["existing_avatar_candidate"] = bool(clicked.get("candidate"))
+                        result["existing_avatar_clicked"] = bool(clicked.get("clicked"))
+                        if not result["existing_avatar_clicked"]:
+                            break
+                        await tab.wait_for_timeout(650)
+                        after = await tab.evaluate(r"""() => {
+                          const visible=el=>{
+                            const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                            return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';
+                          };
+                          const nodes=[...document.querySelectorAll(
+                            'a,button,[role="menuitem"],[role="button"],span,div'
+                          )].filter(visible);
+                          const texts=nodes.map(n=>(n.innerText||'').trim()).filter(t=>t.length<=40);
+                          const logout=texts.some(t=>/^(log\s*out|logout|sign\s*out|sair)$/i.test(t));
+                          const login=texts.some(t=>/^(log\s*in|sign\s*in|entrar|fazer login)$/i.test(t));
+                          const profile=texts.some(t=>/^(my\s*profile|view\s*profile|profile|meu\s*perfil|ver\s*perfil|perfil)$/i.test(t));
+                          return {logout,login,profile,menu:!!document.querySelector(
+                            '[role="menu"],[data-testid*="account"],[data-testid*="user-menu"]'
+                          )};
+                        }""")
+                        result["existing_menu_visible"] = bool(after.get("menu")) or bool(after.get("logout"))
+                        result["existing_logout_visible"] = bool(after.get("logout"))
+                        result["existing_login_visible"] = bool(after.get("login"))
+                        result["existing_profile_candidate"] = bool(after.get("profile"))
+                        # Restore the UI by toggling the same non-link avatar.
+                        if tab.url == u.geturl():
+                            await tab.evaluate(r"""() => {
+                              const imgs=[...document.querySelectorAll('img')].filter(el=>{
+                                const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                                return r.width>=16&&r.height>=16&&r.width<=100&&r.height<=100&&
+                                  r.left>innerWidth*.7&&r.top<180&&
+                                  s.display!=='none'&&s.visibility!=='hidden'&&
+                                  !el.closest('a[href]');
+                              }).sort((a,b)=>b.getBoundingClientRect().right-a.getBoundingClientRect().right);
+                              if(imgs.length)imgs[0].click();
+                            }""")
+                    except Exception:
+                        pass
+                    break
+                return result
             if action == "ui_probe":
                 # Read-only sanitized UI diagnostics from the EXISTING tabs.
                 # No DOM text, URL, username, cookie, or screenshot is returned.
@@ -132,7 +219,7 @@ def main():
     import asyncio
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     seen = set(json.loads(STATE.read_text())) if STATE.exists() else set()
-    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check,refresh_bridge,ui_probe;no_session_export", flush=True)
+    print("KWAI_BRIDGE_READY=issue-12;commands=inspect,open_home,profile_check,refresh_bridge,ui_probe,menu_probe;no_session_export", flush=True)
     while True:
         try:
             comments = gh("GET", f"repos/{REPO}/issues/{ISSUE}/comments?per_page=100")
