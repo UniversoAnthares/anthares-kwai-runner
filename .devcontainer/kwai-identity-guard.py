@@ -51,7 +51,7 @@ async def inspect_open_account_menu(context):
         return style.display !== 'none' && style.visibility !== 'hidden'
           && box.width > 0 && box.height > 0;
       };
-      const logout = /^(log\\s*out|logout|sign\\s*out|sair|terminar sess[aã]o)$/i;
+      const logout = /^(log\s*out|logout|sign\s*out|sair|terminar sess[aã]o)$/i;
       const leaves = [...document.querySelectorAll('a,button,[role="menuitem"],span,div')];
       let signedIn = false, exactProfile = false;
       for (const el of leaves) {
@@ -66,7 +66,7 @@ async def inspect_open_account_menu(context):
             try {
               const url = new URL(a.getAttribute('href'), location.href);
               return url.hostname === 'www.kwai.com'
-                && url.pathname.replace(/\\/$/, '').toLowerCase() === '/@' + expected;
+                && url.pathname.replace(/\/$/, '').toLowerCase() === '/@' + expected;
             } catch { return false; }
           })) { exactProfile = true; break; }
         }
