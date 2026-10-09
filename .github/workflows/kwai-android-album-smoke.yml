@@ -184,6 +184,7 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools:$PATH"
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
           ffmpeg -hide_banner -loglevel error -f lavfi -i 'color=c=black:s=320x568:r=15:d=2' -f lavfi -i 'anullsrc=r=44100:cl=mono' -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac -y /tmp/kwai-album-test.mp4
           adb shell mkdir -p /sdcard/Movies
           adb push /tmp/kwai-album-test.mp4 /sdcard/Movies/kwai-album-test.mp4
