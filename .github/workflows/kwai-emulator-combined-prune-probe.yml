@@ -1,0 +1,71 @@
+name: Kwai emulator combined prune probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-emulator-combined-prune-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Restore slim AVD v4
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+      - name: Restore Android image
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+      - name: Restore emulator v1
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
+      - name: Prune combined headless-only emulator and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          E="$SDK/emulator"
+          ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          BEFORE=$(du -sb "$E" | awk '{print $1}')
+          echo "EMU_COMBINED_RAW_BEFORE=$BEFORE"
+          rm -rf "$E/lib64/qt" "$E/resources"
+          Q="$E/qemu/linux-x86_64"
+          for f in qemu-system-aarch64 qemu-system-aarch64-headless qemu-system-armel qemu-system-armel-headless qemu-system-i386 qemu-system-i386-headless qemu-system-x86_64; do
+            rm -f "$Q/$f"
+          done
+          AFTER=$(du -sb "$E" | awk '{print $1}')
+          echo "EMU_COMBINED_RAW_AFTER=$AFTER"
+          echo "EMU_COMBINED_RAW_REMOVED=$((BEFORE-AFTER))"
+          echo '=== REMAINING QEMU SYSTEM BINARIES ==='
+          find "$Q" -maxdepth 1 -type f -name 'qemu-system-*' -printf '%s %f\n' | sort -nr
+          sudo chmod 666 /dev/kvm
+          t=$(date +%s)
+          nohup "$E/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator-combined.log 2>&1 &
+          timeout 60 "$ADB" wait-for-device
+          timeout 60 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"
+          BOOT=$(($(date +%s)-t))
+          echo "EMU_COMBINED_BOOT_SECONDS=$BOOT"
+          if grep -q "Successfully loaded snapshot 'kwai-ready'" /tmp/emulator-combined.log && ! grep -Eq "Failed to load snapshot 'kwai-ready'|performing a cold boot" /tmp/emulator-combined.log; then
+            echo "EMU_COMBINED_ACTUAL_LOAD=true"
+          else
+            echo "EMU_COMBINED_ACTUAL_LOAD=false"
+            grep -Ei 'snapshot|cold boot|No such file|error while loading|ERROR' /tmp/emulator-combined.log | tail -50 || true
+            exit 4
+          fi
+          grep -Ei "Successfully loaded snapshot|Loading snapshot 'kwai-ready'" /tmp/emulator-combined.log | tail -20
+          "$ADB" emu kill >/dev/null 2>&1 || true
+          timeout 20 bash -c 'while pgrep -f "[q]emu-system.*kwai-speed" >/dev/null; do sleep 1; done' || true
+          sync
+          tar --zstd -cf /tmp/emulator-slim.tar.zst -C "$SDK" emulator
+          echo "EMU_COMBINED_COMPRESSED_BYTES=$(stat -c%s /tmp/emulator-slim.tar.zst)"
