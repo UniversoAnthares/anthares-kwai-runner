@@ -137,6 +137,12 @@ async def browser_action(action):
                     "kwai_existing_profile_link": False,
                     "kwai_existing_owner_edit": False,
                     "kwai_existing_expected_profile_route": False,
+                    "kwai_existing_document_complete": False,
+                    "kwai_existing_body_nonempty": False,
+                    "kwai_existing_has_next_root": False,
+                    "kwai_existing_known_display_name_visible": False,
+                    "kwai_existing_has_signin_wall": False,
+                    "kwai_existing_candidate_inside_button": False,
                 }
                 for tab in list(context.pages):
                     u = urlsplit(tab.url)
@@ -160,7 +166,17 @@ async def browser_action(action):
                             logout_visible:texts.some(t=>/^(log\s*out|logout|sign\s*out|sair)$/i.test(t)),
                             login_visible:texts.some(t=>/^(log\s*in|sign\s*in|entrar|fazer login)$/i.test(t)),
                             profile_link:[...document.querySelectorAll('a[href]')].some(n=>{try{const u=new URL(n.getAttribute('href'),location.href);return u.hostname==='www.kwai.com'&&/^\/@[^/]+\/?$/i.test(u.pathname)}catch{return false}}),
-                            owner_edit:texts.some(t=>/^(edit profile|editar perfil)$/i.test(t))
+                            owner_edit:texts.some(t=>/^(edit profile|editar perfil)$/i.test(t)),
+                            document_complete:document.readyState==='complete',
+                            body_nonempty:(document.body?.innerText||'').trim().length>50,
+                            has_next_root:!!document.querySelector('#__next,[data-reactroot],#__nuxt'),
+                            known_display_name_visible:(document.body?.innerText||'').includes('Lucas Rosalem'),
+                            has_signin_wall:/please\s*(log\s*in|sign\s*in)|faça\s*login\s*para/i.test((document.body?.innerText||'').slice(0,4000)),
+                            candidate_inside_button:images.some(n=>{
+                              const r=n.getBoundingClientRect();
+                              return visible(n)&&r.left>=innerWidth*.7&&r.top<200&&
+                                !!n.closest('button,[role="button"]');
+                            })
                           };
                         }""")
                         summary["kwai_existing_app_loaded"] |= bool(flags.get("app_loaded"))
@@ -169,6 +185,12 @@ async def browser_action(action):
                         summary["kwai_existing_login_visible"] |= bool(flags.get("login_visible"))
                         summary["kwai_existing_profile_link"] |= bool(flags.get("profile_link"))
                         summary["kwai_existing_owner_edit"] |= bool(flags.get("owner_edit"))
+                        summary["kwai_existing_document_complete"] |= bool(flags.get("document_complete"))
+                        summary["kwai_existing_body_nonempty"] |= bool(flags.get("body_nonempty"))
+                        summary["kwai_existing_has_next_root"] |= bool(flags.get("has_next_root"))
+                        summary["kwai_existing_known_display_name_visible"] |= bool(flags.get("known_display_name_visible"))
+                        summary["kwai_existing_has_signin_wall"] |= bool(flags.get("has_signin_wall"))
+                        summary["kwai_existing_candidate_inside_button"] |= bool(flags.get("candidate_inside_button"))
                         summary["kwai_existing_expected_profile_route"] |= (
                             u.path.rstrip("/").lower() == "/@universo.anthares"
                         )
