@@ -63,7 +63,7 @@ jobs:
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
           KWAI_SESSION_FILE: kwai-session.enc
         with:
-          api-level: 33
+          api-level: 35
           arch: x86_64
           target: google_apis
           profile: pixel_5
