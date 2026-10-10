@@ -73,7 +73,7 @@ done
 log "SELECTED_SPLIT_COUNT=${#APKS[@]}"
 printf 'SELECTED_SPLITS=' >>"$REPORT"; printf '%s ' "${APKS[@]##*/}" >>"$REPORT"; printf '\n' >>"$REPORT"
 log "STEP_INSTALL_MULTIPLE_START"
-timeout 240 adb install-multiple -r "${APKS[@]}" >>"$REPORT" 2>&1 || { rc=$?; log "FAIL_INSTALL_MULTIPLE_RC=$rc"; exit 41; }
+timeout 240 adb install-multiple -r "${APKS[@]}" >>"$REPORT" 2>&1 || { rc=$?; log "FAIL_INSTALL_MULTIPLE_RC=$rc"; cat "$REPORT"; adb shell getprop ro.build.version.sdk || true; exit 41; }
 log "STEP_INSTALL_MULTIPLE_OK"
 log "STEP_PM_PATH_START"
 timeout 30 adb shell pm path com.kwai.video >>"$REPORT" 2>&1 || { rc=$?; log "FAIL_PACKAGE_NOT_PRESENT_RC=$rc"; exit 42; }
