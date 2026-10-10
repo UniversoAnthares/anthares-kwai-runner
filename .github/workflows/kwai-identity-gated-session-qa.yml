@@ -1,0 +1,26 @@
+name: Kwai Identity Gated Session QA
+on:
+  push:
+    branches: [fix/kwai-session-identity-gate]
+  pull_request:
+    paths: [kwai_session_state.sh]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          bash -n kwai_session_state.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('kwai_session_state.sh').read_text()
+          save=s[s.index('save_state(){'):s.index('\ncase "${1:-}" in')]
+          assert 'KWAI_SESSION_SAVE_REFUSED_IDENTITY_UNVERIFIED' in save
+          assert 'KWAI_IDENTITY_PROFILE_MATCH=1' in save
+          assert 'KWAI_EXPECTED_ACCOUNT' in save
+          assert save.index('KWAI_IDENTITY_PROFILE_MATCH=1') < save.index('openssl enc -aes-256-cbc')
+          PY
