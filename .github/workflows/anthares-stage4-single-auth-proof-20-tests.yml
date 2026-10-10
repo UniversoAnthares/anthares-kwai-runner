@@ -1,0 +1,143 @@
+name: Anthares Stage 4 - Single Credentialed Auth Proof 20 Tests
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-stage4-single-auth-proof-20-tests.yml'
+      - 'kwai_auth_probe.py'
+      - 'tools/kwai_credential_login.py'
+      - 'kwai_android_autologin.py'
+      - 'kwai_vault_install.sh'
+      - 'kwai_session_state.sh'
+      - 'tools/kwai_session_vault_client.py'
+permissions:
+  contents: read
+jobs:
+  credentialed-proof-preflight:
+    name: "Credentialed auth proof check ${{ matrix.test }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        test: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate real-login inputs without exposing secrets
+        shell: bash
+        env:
+          TEST: ${{ matrix.test }}
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$KWAI_LOGIN"
+          test -n "$KWAI_PASSWORD"
+          unset KWAI_LOGIN KWAI_PASSWORD
+          echo "CREDENTIAL_INPUTS_PRESENT_TEST_${TEST}=PASS"
+      - name: Validate authentication and identity proof scripts
+        shell: bash
+        env:
+          TEST: ${{ matrix.test }}
+        run: |
+          set -Eeuo pipefail
+          test -s kwai_auth_probe.py
+          test -s tools/kwai_credential_login.py
+          test -s kwai_android_autologin.py
+          test -s kwai_vault_install.sh
+          test -s kwai_session_state.sh
+          test -s tools/kwai_session_vault_client.py
+          python3 -m py_compile kwai_auth_probe.py tools/kwai_credential_login.py kwai_android_autologin.py tools/kwai_session_vault_client.py
+          bash -n kwai_vault_install.sh
+          bash -n kwai_session_state.sh
+          grep -q 'KWAI_AUTH_STATE=AUTHENTICATED_UI' kwai_auth_probe.py
+          grep -q 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai_auth_probe.py
+          grep -q 'KWAI_PASSWORD' tools/kwai_credential_login.py
+          echo "AUTH_IDENTITY_SCRIPT_CONTRACT_TEST_${TEST}=PASS"
+      - name: Validate session persistence contract
+        shell: bash
+        env:
+          TEST: ${{ matrix.test }}
+        run: |
+          set -Eeuo pipefail
+          grep -q 'KWAI_SESSION_FILE' kwai_session_state.sh
+          grep -q 'save' kwai_session_state.sh
+          grep -q 'push' tools/kwai_session_vault_client.py
+          grep -q 'kwai-session-primary.enc' .github/workflows/anthares-stage4-20-auth-tests.yml
+          echo "AUTH_SESSION_PERSISTENCE_CONTRACT_TEST_${TEST}=PASS"
+      - name: Report isolated readiness result
+        env:
+          TEST: ${{ matrix.test }}
+        run: |
+          echo "SINGLE_CREDENTIALLED_AUTH_PROOF_TEST_${TEST}=PASS"
+  one-real-auth-proof:
+    name: Single controlled real credential submission
+    needs: credentialed-proof-preflight
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gate real login on all 20 readiness tests
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          PREFLIGHT_RESULT: ${{ needs.credentialed-proof-preflight.result }}
+        run: |
+          set -eu
+          test "$PREFLIGHT_RESULT" = success
+          test -n "$KWAI_LOGIN"
+          test -n "$KWAI_PASSWORD"
+          echo 'ALL_20_CREDENTIALLED_AUTH_PREFLIGHT_TESTS=PASS'
+          echo 'REAL_AUTH_ATTEMPT_READY=PASS'
+      - name: Install verified Kwai package
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+      - name: Perform one real authentication and verify account identity
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'universo.anthares' }}
+          KWAI_ACCOUNT_ID: primary
+          KWAI_SESSION_FILE: kwai-session-primary.enc
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            set -eu
+            bash kwai_vault_install.sh
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+            sleep 8
+            python3 kwai_android_autologin.py || rc=$?
+            python3 tools/kwai_credential_login.py
+            sleep 6
+            KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee kwai-stage4-auth-proof.txt
+            grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' kwai-stage4-auth-proof.txt
+            grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-stage4-auth-proof.txt
+            bash kwai_session_state.sh save | tee kwai-stage4-session-save.txt
+            test -s kwai-session-primary.enc
+            echo 'STAGE4_AUTHENTICATION_AND_IDENTITY=PASS'
+      - name: Persist encrypted session
+        shell: bash
+        env:
+          KWAI_SESSION_FILE: kwai-session-primary.enc
+        run: |
+          set -Eeuo pipefail
+          test -s kwai-session-primary.enc
+          python3 tools/kwai_session_vault_client.py push --path kwai-session-primary.enc
+          echo 'STAGE4_SESSION_PERSISTENCE=PASS'
