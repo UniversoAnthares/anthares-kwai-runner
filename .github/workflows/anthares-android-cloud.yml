@@ -14,11 +14,12 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
       - name: Test controller offline
-        run: python -m unittest discover -s tests -p test_controller.py -v
+        run: python -m unittest discover -s tests -p 'test_android_cloud_20.py' -v
+          python -m unittest discover -s tests -p 'test_controller.py' -v
       - name: Enable KVM
         run: |
           set -euo pipefail
-          sudo chmod 666 /dev/kvm
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; else echo "KVM unavailable"; exit 1; fi
           test -r /dev/kvm
       - name: Install Android system image
         run: |
@@ -26,13 +27,13 @@ jobs:
           SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           echo "$SDK/emulator" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses </dev/null >/dev/null 2>&1 || true
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
           "$SDK/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "emulator" "system-images;android-30;google_apis;x86_64"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
       - name: Create isolated AVD
         run: |
           set -euo pipefail
-          printf 'no\n' | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager" create avd -n anthares-cloud -k 'system-images;android-30;google_apis;x86_64' --force
+          echo no | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager" create avd -n anthares-cloud -k 'system-images;android-30;google_apis;x86_64' --force
       - name: Run 20 host diagnostics
         run: bash scripts/android_cloud_40_checks.sh host
       - name: Boot and verify Android
@@ -46,7 +47,8 @@ jobs:
           done
           test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
           adb shell getprop ro.build.version.release
-          adb shell pm list packages | head -20
+          adb shell pm list packages > /tmp/anthares-packages.txt
+          head -20 /tmp/anthares-packages.txt
           bash scripts/android_cloud_40_checks.sh device
           echo "ANDROID_BOOT_OK"
       - name: Diagnostic logs (no user data)
