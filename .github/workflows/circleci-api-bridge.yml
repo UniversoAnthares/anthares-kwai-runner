@@ -6,7 +6,7 @@ on:
         description: Read-only CircleCI API operation
         required: true
         type: choice
-        options: [recent, pipeline]
+        options: [diagnose, recent, pipeline]
       pipeline_id:
         description: CircleCI pipeline UUID (only for pipeline action)
         required: false
@@ -31,6 +31,23 @@ jobs:
               raise SystemExit("CIRCLECI_API_TOKEN missing")
           print("::add-mask::"+token)
           action=os.environ["ACTION"]
+          if action=="diagnose":
+              urls={
+                "identity":"https://circleci.com/api/v2/me",
+                "project_github_app":"https://circleci.com/api/v2/project/circleci/AD1ogrgZSksHHasJt5oQWS/EzY5SP7UfkgqSdih1JT1sh",
+                "project_legacy":"https://circleci.com/api/v2/project/gh/UniversoAnthares/anthares-kwai-runner",
+              }
+              for label,endpoint in urls.items():
+                  request=urllib.request.Request(endpoint,headers={"Circle-Token":token,"Accept":"application/json"})
+                  try:
+                      with urllib.request.urlopen(request,timeout=20) as response:
+                          data=json.load(response)
+                          print("PROBE",label,"HTTP",response.status,"keys",sorted(data.keys()) if isinstance(data,dict) else "non-object")
+                  except urllib.error.HTTPError as e:
+                      print("PROBE",label,"HTTP",e.code)
+                  except Exception as e:
+                      print("PROBE",label,"ERROR",type(e).__name__)
+              raise SystemExit(0)
           if action=="recent":
               url="https://circleci.com/api/v2/project/circleci/AD1ogrgZSksHHasJt5oQWS/EzY5SP7UfkgqSdih1JT1sh/pipeline"
           elif action=="pipeline":
