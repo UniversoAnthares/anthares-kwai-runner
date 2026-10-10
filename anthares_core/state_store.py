@@ -7,7 +7,13 @@ It is not a secret store: payloads placed in the queue must not contain credenti
 import argparse
 import json
 import sqlite3
+import sys
 from pathlib import Path
+
+# Allow direct execution as `python3 anthares_core/state_store.py ...` from repo root.
+ROOT=Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0,str(ROOT))
 
 FIELDS=("id","kind","payload","status","attempts","lease_owner","lease_token","lease_until","result","created_at","updated_at")
 
