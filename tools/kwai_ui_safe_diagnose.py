@@ -37,6 +37,11 @@ def classify(xml):
         "resource_overlay":anyof("resource downloading","downloading resources","resource download"),
         "main_navigation":anyof("id_home_bottom_tab_me","/ll_profile","profile","perfil","inbox","discover"),
         "login_form":anyof("login_email_input","login_password_input","login_phone_input"),
+        "verification_challenge":anyof("verification code","verification_code","código de verificação","sms code","otp"),
+        "captcha_challenge":anyof("captcha","slide to verify","arraste para verificar","security verification"),
+        "phone_login_option":anyof("login_phone","phone number","número de telefone","continue with phone"),
+        "google_login_option":anyof("continue with google","login_google","google sign in"),
+        "email_login_option":anyof("login_email","continue with email","entrar com e-mail"),
         "system_error":anyof("isn't responding","keeps stopping","app info","fechar app"),
     }
 
