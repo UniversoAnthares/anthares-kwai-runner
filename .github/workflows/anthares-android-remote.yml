@@ -18,5 +18,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate provisioner
         run: bash -n anthares-android/scripts/provision.sh
+      - name: Enable hardware virtualization access
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
       - name: Boot Android using Anthares provisioner
         run: bash anthares-android/scripts/provision.sh
