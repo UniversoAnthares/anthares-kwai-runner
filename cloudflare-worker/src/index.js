@@ -16,7 +16,7 @@ async function verifyRenderSessionSignature(request,body){
  if(!ts||Math.abs(Date.now()-ts)>300000||!sig)return false;
  try{const b64=RENDER_SESSION_PUBLIC_KEY.replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\\s+/g,"");const bin=atob(b64),der=Uint8Array.from(bin,c=>c.charCodeAt(0));const key=await crypto.subtle.importKey("spki",der,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);const raw=Uint8Array.from(atob(sig),c=>c.charCodeAt(0));const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(body));const hex=[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");return await crypto.subtle.verify("RSASSA-PKCS1-v1_5",key,raw,new TextEncoder().encode(String(ts)+"."+hex));}catch(e){return false;}
 }
-import {handleKwaiSessionVault} from "./kwai_session_vault.js";
+import {handleKwaiSessionVault,handleKwaiVaultSelftest} from "./kwai_session_vault.js";
 
 async function tiktokSessionState(request,env){
  if(request.method==="GET"){
@@ -349,6 +349,7 @@ export default {
   const url=new URL(request.url);
   if(url.pathname==="/tiktok/session-state") return await tiktokSessionState(request,env);
   if(url.pathname==="/kwai/session-vault") return await handleKwaiSessionVault(request,env,verifyGithubOidc);
+  if(url.pathname==="/kwai/session-vault-selftest") return await handleKwaiVaultSelftest(request,env,verifyGithubOidc);
   if(url.pathname==="/failover-self-test") return json(await failoverSelfTest());
   if(url.pathname==="/health") return json({ok:true,service:"anthares-control",provider:"cloudflare",role:"control-plane",version:CONTROL_VERSION,persistent_state:!!env.ANTHARES_STATE,queue_bound:!!env.ANTHARES_QUEUE,pc_fallback:false,routing_revision:ROUTING_REVISION,ts:now()});
   if(url.pathname==="/strategy") return json({ok:true,strategy:"split-executors-v12-no-pc-failclosed",execution_priority:priorities(),retired_executors:[...RETIRED_EXECUTORS],oracle:false,google_compute:false,routing_revision:ROUTING_REVISION});
