@@ -74,7 +74,7 @@ def native_chooser_visible(nodes,xml_text=""):
         for n in nodes
     ):
         return True
-    return semantic_action(xml_text,"email") is not None
+    return any(not (n.get("class") or "").endswith("EditText") and EMAIL.fullmatch(label(n)) and bounds(n) for n in nodes) or (semantic_action(xml_text,"email") is not None and not any((n.get("class") or "").endswith("EditText") for n in nodes))
 
 
 def email_entry(nodes,xml_text=""):
