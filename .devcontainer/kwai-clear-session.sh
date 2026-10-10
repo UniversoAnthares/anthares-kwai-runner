@@ -2,10 +2,11 @@
 set -euo pipefail
 
 # Run INSIDE the GitHub Codespace to terminate remote Chrome and erase its
-# local unencrypted browser profile. This does not affect GitHub Actions caches.
-PRIVATE_HOME="${HOME}/.kwai-remote-private"
+# local browser profile. The safety check is anchored to the persistent root.
+PERSISTENT_ROOT="${ANTHARES_PERSISTENT_ROOT:-/workspaces/.anthares-private}"
+PRIVATE_HOME="${KWAI_PRIVATE_HOME:-${PERSISTENT_ROOT}/kwai}"
 PROFILE="${PRIVATE_HOME}/chrome-profile"
-for name in inspector chrome novnc vnc openbox xvfb; do
+for name in inspector bridge chrome novnc vnc openbox xvfb; do
   pidfile="${PRIVATE_HOME}/${name}.pid"
   if [[ -f "$pidfile" ]]; then
     pid="$(cat "$pidfile")"
@@ -16,7 +17,8 @@ for name in inspector chrome novnc vnc openbox xvfb; do
   fi
 done
 sleep 2
-if [[ "$PROFILE" != "${HOME}/.kwai-remote-private/chrome-profile" ]]; then
+expected="${PERSISTENT_ROOT}/kwai/chrome-profile"
+if [[ "$PROFILE" != "$expected" ]]; then
   echo "Refusing unsafe profile deletion" >&2
   exit 1
 fi
