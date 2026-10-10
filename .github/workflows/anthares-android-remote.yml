@@ -1,0 +1,22 @@
+name: Anthares Android Remote Stage 2
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'anthares-android/**'
+      - '.github/workflows/anthares-android-remote.yml'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-android-stage2
+  cancel-in-progress: false
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate provisioner
+        run: bash -n anthares-android/scripts/provision.sh
+      - name: Boot Android using Anthares provisioner
+        run: bash anthares-android/scripts/provision.sh
