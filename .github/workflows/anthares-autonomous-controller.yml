@@ -1,0 +1,99 @@
+name: Anthares autonomous controller
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: anthares-autonomous-controller
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect and recover safe workflows
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const allowlist = [
+              'kwai-interactive-remote-login.yml',
+              'kwai-private-persistence-bridge.yml'
+            ];
+            const recoverable = new Set(['failure', 'timed_out', 'stale', 'action_required']);
+            const active = new Set(['queued', 'in_progress', 'waiting', 'requested', 'pending']);
+            const now = Date.now();
+            const maxAgeMs = 24 * 60 * 60 * 1000;
+            const maxAttempts = 3;
+
+            for (const workflow_id of allowlist) {
+              let runs;
+              try {
+                const response = await github.rest.actions.listWorkflowRuns({
+                  owner,
+                  repo,
+                  workflow_id,
+                  per_page: 10
+                });
+                runs = response.data.workflow_runs;
+              } catch (error) {
+                core.warning(`${workflow_id}: cannot list runs: ${error.message}`);
+                continue;
+              }
+
+              if (!runs.length) {
+                core.info(`${workflow_id}: no prior runs; nothing to resume`);
+                continue;
+              }
+
+              const live = runs.find(run => active.has(run.status));
+              if (live) {
+                core.info(`${workflow_id}: active run #${live.run_number} (${live.status}); skip`);
+                continue;
+              }
+
+              const latest = runs[0];
+              const ageMs = now - new Date(latest.updated_at || latest.created_at).getTime();
+              const attempt = latest.run_attempt || 1;
+              core.info(`${workflow_id}: latest #${latest.run_number} status=${latest.status} conclusion=${latest.conclusion} attempt=${attempt}`);
+
+              if (!recoverable.has(latest.conclusion)) continue;
+              if (ageMs > maxAgeMs) {
+                core.info(`${workflow_id}: failure is older than 24h; no autonomous replay`);
+                continue;
+              }
+              if (attempt >= maxAttempts) {
+                core.warning(`${workflow_id}: autonomous retry cap reached (${attempt}/${maxAttempts})`);
+                continue;
+              }
+
+              try {
+                await github.rest.actions.reRunWorkflowFailedJobs({
+                  owner,
+                  repo,
+                  run_id: latest.id
+                });
+                core.notice(`${workflow_id}: failed jobs rerun requested, attempt ${attempt + 1}/${maxAttempts}`);
+              } catch (error) {
+                core.warning(`${workflow_id}: failed-jobs rerun unavailable (${error.message}); trying full rerun`);
+                await github.rest.actions.reRunWorkflow({
+                  owner,
+                  repo,
+                  run_id: latest.id
+                });
+                core.notice(`${workflow_id}: full rerun requested, attempt ${attempt + 1}/${maxAttempts}`);
+              }
+            }
+
+      - name: Controller heartbeat
+        run: |
+          echo "ANTHARES_CONTROLLER_OK=1"
+          echo "UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
