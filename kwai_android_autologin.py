@@ -175,9 +175,10 @@ def accept_onboarding_completion():
         break
 
 accept_onboarding_completion()
-# Normalize the current chooser into the Phone authentication surface when present.
-subprocess.run(["python3","kwai_phone_surface_probe.py"],check=False)
-time.sleep(2)
+# Select the exact native Email/Phone segment, not the center of a combined label.
+# The old phone probe logged raw UI text and could tap the Facebook segment.
+subprocess.run(["python3","tools/kwai_android_login_entry.py","auto"],check=False)
+time.sleep(1)
 # Stabilization matrix showed restart-after-nav is the strongest causal path.
 
 def reach_profile_semantically():
@@ -253,16 +254,25 @@ if not any(k in txt for k in ("log in","login","entrar","sign in","telefone","ph
         dismiss_android_permission_dialogs()
         settle_preparation_gate()
 
-tap_matching(("log in","login","entrar","sign in"))
-time.sleep(1)
-# Prefer password/email/phone login over social providers.
-tap_matching(("password","senha","phone","telefone","email","e-mail"))
-time.sleep(1)
-if "@" in LOGIN:
-    tap_matching(("email","e-mail"))
-else:
-    tap_matching(("phone","telefone","mobile"))
-time.sleep(2)
+if not editable_nodes(dump()):
+    tap_matching(("log in","login","entrar","sign in"))
+    time.sleep(1)
+if not editable_nodes(dump()):
+    # Return code 4 means the native chooser was tapped but no form appeared.
+    # Never fall back to a center tap on the Facebook|Phone|Email combined label.
+    method_rc=subprocess.run(["python3","tools/kwai_android_login_entry.py","auto"],check=False).returncode
+    if method_rc == 4:
+        print("KWAI_NATIVE_LOGIN_FORM_BLOCKED")
+        raise SystemExit(3)
+    if method_rc == 3:
+        # Only the legacy separate-button UI may use generic text matching.
+        tap_matching(("password","senha","other login","other ways","outras formas"))
+        time.sleep(1)
+        if "@" in LOGIN:
+            tap_matching(("email","e-mail"))
+        else:
+            tap_matching(("phone","telefone","mobile"))
+        time.sleep(1)
 if not fill(LOGIN):
     # Some Kwai builds expose the account field only after choosing the generic login method.
     tap_matching(("other ways","other login","use phone","use email","phone number","mobile","account","outras formas","outra forma","usar telefone","usar e-mail","número de telefone","conta"))
@@ -271,7 +281,7 @@ if not fill(LOGIN):
         # Profile-tab context: a bottom sheet may offer "Log in" again, or the
         # screen may expose settings/logout if a cached session is active.
         r2 = dump(); txt2 = " ".join(label(n) for n in nodes(r2))
-        print("KWAI_FILL_DEBUG_UI=" + txt2[:600])
+        print("KWAI_FILL_DEBUG_EDITTEXT_COUNT=" + str(len(editable_nodes(r2))))
         for n in nodes(r2):
             rid2 = n.attrib.get("resource-id", "")
             if rid2 in ("com.kwai.video:id/tv_login", "com.kwai.video:id/btn_login",
