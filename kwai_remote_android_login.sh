@@ -337,7 +337,8 @@ log "KWAI_OWNER_INTERACTION_READY"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   printf '\n**KWAI_OWNER_INTERACTION_READY** — use the remote URL shown above.\n' >> "$GITHUB_STEP_SUMMARY"
 fi
-LOGIN_DEADLINE=$((SECONDS+2700))
+LOGIN_DEADLINE=$((SECONDS+480))
+AUTO_PROBE_LAST=0
 SSO_WAS_ACTIVE=0
 SSO_STARTED_AT=0
 OVERLAY_LAST_CHECK=0
@@ -349,6 +350,15 @@ GOOGLE_SSO_RETURN_COUNT=0
 GOOGLE_HOME_RECOVERY_ATTEMPTS=0
 GOOGLE_HOME_RECOVERY_LAST=0
 while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
+  if kwai_foreground && [ $((SECONDS-AUTO_PROBE_LAST)) -ge 60 ]; then
+    AUTO_PROBE_LAST=$SECONDS
+    if python3 kwai_auth_probe.py >/tmp/kwai-periodic-auth-probe.log 2>&1 && grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/kwai-periodic-auth-probe.log; then
+      log "KWAI_LOGIN_CONFIRMED_ACCOUNT=${KWAI_EXPECTED_ACCOUNT:-unknown}"
+      bash kwai_session_state.sh save >>"$REPORT" 2>&1 || log "KWAI_SESSION_SAVE_WARNING"
+      exit 0
+    fi
+    log "KWAI_ACCOUNT_IDENTITY_NOT_YET_VERIFIED"
+  fi
   if google_sso_foreground; then
     if [ $((SECONDS-GOOGLE_AGREEMENT_LAST_CHECK)) -ge 5 ]; then
       GOOGLE_AGREEMENT_LAST_CHECK=$SECONDS
@@ -450,4 +460,4 @@ while [ "$SECONDS" -lt "$LOGIN_DEADLINE" ]; do
   kill -0 "$TUNNEL_PID" 2>/dev/null || { log "FAIL: tunnel-died-during-login"; exit 27; }
   sleep 1
 done
-log "FAIL: login-window-expired-2700s"; exit 28
+log "FAILURE_SIGNAL=KWAI_ACCOUNT_LOGIN_NOT_VERIFIED_480S"; exit 28
