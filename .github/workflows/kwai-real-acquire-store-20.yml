@@ -79,7 +79,6 @@ jobs:
             bash kwai_session_state.sh restore || true
             bash scripts/kwai_real_acquire_store.sh
             grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-mobile-auth-proof.txt
-            bash kwai_session_state.sh save | tee kwai-mobile-session-save.txt
             test -s kwai-session.enc
             echo ANTHARES_MOBILE_ACQUIRE=PASS
       - name: Store the real encrypted session in the private vault
