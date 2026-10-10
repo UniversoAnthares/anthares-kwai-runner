@@ -1,0 +1,112 @@
+name: Kwai Publication Proof
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore AVD
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+      - name: Restore image
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+      - name: Restore emulator
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-headless-x86_64-v2
+      - name: Boot Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          sudo chmod 666 /dev/kvm
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
+          timeout 60 "$SDK/platform-tools/adb" wait-for-device
+          timeout 60 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$SDK/platform-tools/adb"
+      - name: Install Kwai
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools:$PATH"
+          curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 -o /tmp/kwai.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai.zip' | sha256sum -c -
+          mkdir -p /tmp/kwai && unzip -q /tmp/kwai.zip -d /tmp/kwai
+          mapfile -t apks < <(find /tmp/kwai -maxdepth 1 -type f -name '*.apk' | sort)
+          adb install-multiple -r "${apks[@]}"
+      - name: Publish proof video
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools:$PATH"
+          if ! command -v ffmpeg >/dev/null 2>&1; then sudo apt-get update -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=12 && sudo apt-get install -y -qq ffmpeg >/dev/null; fi
+          ffmpeg -hide_banner -loglevel error -y -f lavfi -i 'color=c=black:s=320x568:r=15:d=2' -f lavfi -i 'anullsrc=r=44100:cl=mono' -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac /tmp/proof.mp4
+          adb shell mkdir -p /sdcard/Movies
+          adb push /tmp/proof.mp4 /sdcard/Movies/anthares-proof-${GITHUB_RUN_ID}.mp4 >/dev/null
+          adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Movies/anthares-proof-${GITHUB_RUN_ID}.mp4" >/dev/null || true
+          sleep 3
+          rows="$(adb shell content query --uri content://media/external/video/media --projection _id:_display_name 2>/dev/null || true)"
+          id="$(printf '%s\n' "$rows" | grep -F "_display_name=anthares-proof-${GITHUB_RUN_ID}.mp4" | sed -n 's/.*_id=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          test -n "$id"
+          adb shell am start -W -a android.intent.action.SEND -t video/mp4 -p com.kwai.video --grant-read-uri-permission --eu android.intent.extra.STREAM "content://media/external/video/media/$id" >/tmp/send.log 2>&1 || true
+          sleep 2
+          adb shell pm grant com.kwai.video android.permission.READ_MEDIA_VIDEO 2>/dev/null || true
+          adb shell input keyevent 66 || true
+          sleep 5
+          python3 - <<'PY'
+          import re,subprocess,xml.etree.ElementTree as ET,sys,time
+          def dump():
+              subprocess.run(['adb','shell','uiautomator','dump','/sdcard/ui.xml'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+              subprocess.run(['adb','pull','/sdcard/ui.xml','/tmp/ui.xml'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+              return ET.parse('/tmp/ui.xml').getroot()
+          def texts(root):
+              return '\n'.join((n.attrib.get('text','')+' '+n.attrib.get('content-desc','')).strip() for n in root.iter('node'))
+          def click(root,words):
+              for n in root.iter('node'):
+                  t=(n.attrib.get('text','')+' '+n.attrib.get('content-desc','')).casefold()
+                  if any(w in t for w in words):
+                      m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.attrib.get('bounds',''))
+                      if m:
+                          x=(int(m.group(1))+int(m.group(3)))//2; y=(int(m.group(2))+int(m.group(4)))//2
+                          subprocess.run(['adb','shell','input','tap',str(x),str(y)])
+                          return True
+              return False
+          root=dump(); t=texts(root); open('/tmp/ui-before.txt','w').write(t)
+          if re.search(r'log in|login|sign in|entrar|iniciar sess',t,re.I):
+              print('KWAI_AUTH_REQUIRED'); sys.exit(20)
+          for _ in range(3):
+              root=dump()
+              if click(root,['next','próximo','avançar','continue','continuar','usar','use']): time.sleep(3)
+          root=dump(); t=texts(root); open('/tmp/ui-editor.txt','w').write(t)
+          if re.search(r'log in|login|sign in|entrar|iniciar sess',t,re.I):
+              print('KWAI_AUTH_REQUIRED'); sys.exit(20)
+          if not click(root,['post','publish','publicar','compartilhar','share']):
+              print('KWAI_PUBLISH_BUTTON_NOT_FOUND'); sys.exit(21)
+          print('KWAI_PUBLISH_CLICKED'); time.sleep(18)
+          root=dump(); open('/tmp/ui-after.txt','w').write(texts(root))
+          PY
+      - name: Upload proof diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-publication-proof-${{ github.run_id }}
+          path: |
+            /tmp/send.log
+            /tmp/ui-before.txt
+            /tmp/ui-editor.txt
+            /tmp/ui-after.txt
+          if-no-files-found: warn
+          retention-days: 1
