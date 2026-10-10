@@ -1,0 +1,39 @@
+name: Anthares Android Cloud - stage 3 app probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [experiment/anthares-android-cloud-20261010]
+    paths:
+      - '.github/workflows/anthares-android-stage3.yml'
+      - 'scripts/android_stage3_app_probe.sh'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-android-stage3-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  android-app-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable virtualization
+        run: sudo chmod 666 /dev/kvm
+      - name: Boot and verify Android application lifecycle
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -no-metrics
+          script: bash scripts/android_stage3_app_probe.sh
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-stage3-probe
+          path: /tmp/anthares-stage3/
+          if-no-files-found: warn
+          retention-days: 7
