@@ -51,9 +51,6 @@ def wait_password_or_challenge(seconds=12):
         if challenge(ns): return 'challenge',ns
         es=edits(ns)
         if any(is_password(n) for n in es): return 'password',ns
-        # Some builds expose one generic field on the password page.
-        t=' '.join(txt(n) for n in ns)
-        if es and ('password' in t or 'senha' in t): return 'password',ns
         time.sleep(.5)
     return 'stuck',snap()
 
@@ -64,7 +61,10 @@ if r not in (0,):
 ns=snap(); es=edits(ns)
 if not es: print('KWAI_EMAIL_FIELD_MISSING'); raise SystemExit(3)
 # Email screen should contain a non-password field.
-email_field=next((n for n in es if not is_password(n)),es[0])
+email_field=next((n for n in es if not is_password(n)),None)
+if email_field is None:
+    print('KWAI_ACCOUNT_FIELD_NOT_VERIFIED')
+    raise SystemExit(3)
 if not clear_and_type(email_field,LOGIN): raise SystemExit(3)
 ns=snap(); b=exact_button(ns,('Next','Continue','Avançar','Continuar'))
 if b: tap(b)
@@ -73,8 +73,11 @@ state,ns=wait_password_or_challenge()
 if state=='challenge': print('KWAI_LOGIN_CHALLENGE_AFTER_ACCOUNT'); raise SystemExit(6)
 if state!='password': print('KWAI_ACCOUNT_STEP_DID_NOT_ADVANCE'); raise SystemExit(3)
 
-es=edits(ns); pwd=next((n for n in es if is_password(n)), es[-1] if es else None)
-if pwd is None or not clear_and_type(pwd,PASSWORD): print('KWAI_PASSWORD_FIELD_MISSING'); raise SystemExit(4)
+es=edits(ns); verified=[n for n in es if is_password(n)]
+if len(verified)!=1:
+    print('KWAI_PASSWORD_FIELD_NOT_VERIFIED')
+    raise SystemExit(4)
+if not clear_and_type(verified[0],PASSWORD): print('KWAI_PASSWORD_FIELD_MISSING'); raise SystemExit(4)
 ns=snap(); b=exact_button(ns,('Log in','Login','Sign in','Entrar','Continue','Continuar','Next','Avançar'))
 if b: tap(b)
 else: adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(1)
