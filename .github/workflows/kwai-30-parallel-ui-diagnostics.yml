@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - "tests/kwai_30_ui_diagnostics.py"
+      - "tools/kwai_login_ui_locator.py"
+      - "tools/kwai_ui_safe_diagnose.py"
       - ".github/workflows/kwai-30-parallel-ui-diagnostics.yml"
   workflow_dispatch:
 permissions:
