@@ -1,0 +1,26 @@
+name: Kwai Codespace start static test
+on:
+  push:
+    branches: [fix-codespace-stale-pids-20261010]
+    paths:
+      - .devcontainer/kwai-start.sh
+      - .github/workflows/kwai-start-static-test.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax
+        run: bash -n .devcontainer/kwai-start.sh
+      - name: Stale PID safety contract
+        run: |
+          set -euo pipefail
+          grep -q 'stale_pidfile_ignored' .devcontainer/kwai-start.sh
+          grep -q 'unrelated_pid_ignored' .devcontainer/kwai-start.sh
+          grep -q 'pid_matches_service' .devcontainer/kwai-start.sh
+          grep -q 'chrome-profile' .devcontainer/kwai-start.sh
+          ! grep -Eq 'rm -rf .*chrome-profile|rm -r .*chrome-profile' .devcontainer/kwai-start.sh
+          echo 'KWAI_STALE_PID_RECOVERY_STATIC=PROVEN'
