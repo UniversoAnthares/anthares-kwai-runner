@@ -27,15 +27,24 @@ restore_state(){
   if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:KWAI_PASSWORD -in "$STATE_FILE" -out "$archive" 2>/dev/null; then
     log "KWAI_SESSION_DECRYPT_FAILED"; return 1
   fi
-  if ! tar -tf "$archive" 2>/dev/null | python3 -c '
-import sys
+  if ! python3 - "$archive" <<'PY'
+import sys, tarfile
 from pathlib import PurePosixPath
-paths=[line.strip() for line in sys.stdin if line.strip()]
-if not paths: sys.exit(1)
-for name in paths:
- p=PurePosixPath(name)
- if p.is_absolute() or ".." in p.parts or not p.parts or p.parts[0]!="com.kwai.video": sys.exit(2)
-'; then
+try:
+    with tarfile.open(sys.argv[1]) as tf:
+        members=tf.getmembers()
+        if not members:
+            raise ValueError("empty")
+        for member in members:
+            p=PurePosixPath(member.name)
+            if (p.is_absolute() or ".." in p.parts or not p.parts
+                    or p.parts[0]!="com.kwai.video"
+                    or not (member.isfile() or member.isdir())):
+                raise ValueError("unsafe archive member")
+except (OSError, ValueError, tarfile.TarError):
+    sys.exit(1)
+PY
+  then
     log "KWAI_SESSION_ARCHIVE_INVALID"; return 1
   fi
   adb shell mkdir -p "$staging"
