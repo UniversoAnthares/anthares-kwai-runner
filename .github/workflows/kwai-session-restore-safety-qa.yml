@@ -1,0 +1,26 @@
+name: Kwai Session Restore Safety QA
+on:
+  push:
+    branches: [fix/kwai-session-archive-integrity-atomic-restore]
+  pull_request:
+    paths:
+      - kwai_session_state.sh
+      - .github/workflows/kwai-session-restore-safety-qa.yml
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell and archive security contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n kwai_session_state.sh
+          grep -Fq 'KWAI_SESSION_ARCHIVE_INVALID' kwai_session_state.sh
+          grep -Fq 'member.isfile() or member.isdir()' kwai_session_state.sh
+          grep -Fq 'KWAI_SESSION_DECRYPT_FAILED' kwai_session_state.sh
+          grep -Fq 'KWAI_SESSION_STAGE_FAILED' kwai_session_state.sh
+          grep -Fq 'KWAI_SESSION_SAVED_ENCRYPTED' kwai_session_state.sh
