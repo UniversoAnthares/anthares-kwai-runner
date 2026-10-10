@@ -6,6 +6,7 @@ import json
 import sqlite3
 import time
 from pathlib import Path
+from anthares_publisher.contract import PublicationEvidence, validate_evidence
 
 SCHEMA="""
 CREATE TABLE IF NOT EXISTS publications(
@@ -60,8 +61,10 @@ def fail(db,pid,retry=True):
     return db.execute("UPDATE publications SET status=?,updated_at=? WHERE id=? AND status='publishing'",(status,now,pid)).rowcount==1
 
 def confirm(db,pid,external_id,public_url):
-    if not external_id or not public_url or not public_url.startswith(('https://','http://')):
-        raise ValueError("verified external_id and public_url are required")
+    row=db.execute("SELECT platform,account FROM publications WHERE id=?",(pid,)).fetchone()
+    if row is None:
+        return False
+    validate_evidence(PublicationEvidence(row[0],row[1],external_id,public_url),row[0],row[1])
     now=int(time.time())
     return db.execute("""UPDATE publications SET status='published',external_id=?,public_url=?,updated_at=?
       WHERE id=? AND status='publishing'""",(external_id,public_url,now,pid)).rowcount==1
