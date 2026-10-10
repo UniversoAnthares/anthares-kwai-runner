@@ -19,4 +19,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Boot Android with Anthares-owned script
-        run: bash independent_android/boot.sh
+        run: |
+          case "${{ matrix.variant }}" in
+            1) export ANTHARES_EMU_EXTRA="-gpu swiftshader_indirect" ;;
+            2) export ANTHARES_EMU_EXTRA="-gpu swiftshader" ;;
+            3) export ANTHARES_EMU_EXTRA="-gpu off" ;;
+            4) export ANTHARES_EMU_EXTRA="-gpu host" ;;
+            5) export ANTHARES_EMU_EXTRA="-no-snapshot-load" ;;
+            6) export ANTHARES_EMU_EXTRA="-no-snapshot-save" ;;
+            7) export ANTHARES_EMU_EXTRA="-memory 2048" ;;
+            8) export ANTHARES_EMU_EXTRA="-memory 3072" ;;
+            9) export ANTHARES_EMU_EXTRA="-cores 2" ;;
+            10) export ANTHARES_EMU_EXTRA="-cores 4" ;;
+            11) export ANTHARES_EMU_EXTRA="-no-boot-anim" ;;
+            12) export ANTHARES_EMU_EXTRA="-no-window" ;;
+            13) export ANTHARES_EMU_EXTRA="-no-audio" ;;
+            14) export ANTHARES_EMU_EXTRA="-accel on" ;;
+            15) export ANTHARES_EMU_EXTRA="-accel auto" ;;
+            16) export ANTHARES_EMU_EXTRA="-netfast" ;;
+            17) export ANTHARES_EMU_EXTRA="-wipe-data" ;;
+            18) export ANTHARES_EMU_EXTRA="-no-snapshot" ;;
+            19) export ANTHARES_EMU_EXTRA="-verbose" ;;
+            20) export ANTHARES_EMU_EXTRA="-debug init" ;;
+          esac
+          bash independent_android/boot.sh
