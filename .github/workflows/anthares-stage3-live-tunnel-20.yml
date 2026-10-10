@@ -5,31 +5,37 @@ on:
     paths:
       - '.github/workflows/anthares-stage3-live-tunnel-20.yml'
       - '.anthares-stage3-live-tunnel-trigger'
+concurrency:
+  group: anthares-stage3-live-bridge-20
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
-  live-bridge:
+  live-bridge-test:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        test_id: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
     steps:
       - uses: actions/checkout@v4
-      - name: Install ADB tools and cloudflared
+      - name: Install tunnel prerequisites
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq adb curl ca-certificates
-          curl -fLsS --retry 3 --connect-timeout 10 --max-time 45 https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+          sudo apt-get install -y -qq curl ca-certificates
+          curl -fLsS --retry 2 --connect-timeout 8 --max-time 35 https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
           sudo install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared
-          cloudflared --version
-      - name: Start isolated bridge with emulator test double
+      - name: Start isolated authenticated bridge and HTTPS tunnel
         env:
-          ANTHARES_BRIDGE_TOKEN: ${{ secrets.ANTHARES_BRIDGE_TEST_TOKEN }}
+          BRIDGE_TEST_ID: ${{ matrix.test_id }}
+          PROVIDED_TOKEN: ${{ secrets.ANTHARES_BRIDGE_TEST_TOKEN }}
         run: |
           set -euo pipefail
-          export ANTHARES_BRIDGE_TOKEN="${ANTHARES_BRIDGE_TOKEN:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')}"
+          export ANTHARES_BRIDGE_TOKEN="${PROVIDED_TOKEN:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')}"
           echo "ANTHARES_BRIDGE_TOKEN=$ANTHARES_BRIDGE_TOKEN" >> "$GITHUB_ENV"
-          python3 -m py_compile independent_session/remote_android_bridge.py
-          # For tunnel transport acceptance, mock only adb process output; exercise real HTTP auth, screenshot, input routes and TLS tunnel.
           mkdir -p /tmp/stage3
           cat >/tmp/stage3/adb <<'SH'
           #!/bin/sh
@@ -41,103 +47,86 @@ jobs:
           SH
           chmod +x /tmp/stage3/adb
           export PATH="/tmp/stage3:$PATH"
+          python3 -m py_compile independent_session/remote_android_bridge.py
           python3 independent_session/remote_android_bridge.py >/tmp/stage3/bridge.log 2>&1 &
           echo $! >/tmp/stage3/bridge.pid
-          for i in $(seq 1 15); do curl -fsS -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" http://127.0.0.1:8765/health >/tmp/stage3/health.json && break || sleep 1; done
-          cat /tmp/stage3/health.json
+          for i in $(seq 1 12); do
+            curl -fsS --max-time 2 -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" http://127.0.0.1:8765/health >/tmp/stage3/health.json && break
+            sleep 1
+          done
           cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 >/tmp/stage3/tunnel.log 2>&1 &
           echo $! >/tmp/stage3/tunnel.pid
-          for i in $(seq 1 30); do
+          for i in $(seq 1 25); do
             URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/stage3/tunnel.log | head -1 || true)"
             if [ -n "$URL" ] && curl -fsS --max-time 3 -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" "$URL/health" >/tmp/stage3/public-health.json; then break; fi
             sleep 1
           done
           test -n "${URL:-}" || { cat /tmp/stage3/tunnel.log; exit 1; }
-          echo "$URL" >/tmp/stage3/public-url.txt
-          echo "TUNNEL_URL_READY"
-          curl -fsS --max-time 5 -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" "$URL/screen" -o /tmp/stage3/screen.png
-          grep -q 'image/png' /tmp/stage3/bridge.log 2>/dev/null || true
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('/tmp/stage3/screen.png').read_bytes()
-          assert p.startswith(b'\x89PNG\r\n\x1a\n'), 'PNG_CAPTURE_FAILED'
-          print('REMOTE_SCREEN_OVER_TUNNEL_PASS')
-          PY
-          echo "ANTHARES_TUNNEL_ACCEPTANCE_PASS"
-      - name: Twenty concurrent tests against the live tunnel
+          echo "BRIDGE_URL=$URL" >> "$GITHUB_ENV"
+          echo "LIVE_BRIDGE_TUNNEL_READY test_id=$BRIDGE_TEST_ID"
+      - name: Run this job's distinct live-bridge test
         env:
-          ANTHARES_BRIDGE_TOKEN: ${{ secrets.ANTHARES_BRIDGE_TEST_TOKEN }}
+          TEST_ID: ${{ matrix.test_id }}
         run: |
           set -euo pipefail
-          URL="$(cat /tmp/stage3/public-url.txt)"
-          export URL
           python3 - <<'PY'
-          import concurrent.futures, json, os, urllib.request, urllib.error
-          url=os.environ['URL']; token=os.environ['ANTHARES_BRIDGE_TOKEN']
-          def request(path, method='GET', data=None, tok=token):
-              headers={'Authorization':'Bearer '+tok}
-              if data is not None: headers['Content-Type']='application/json'
-              req=urllib.request.Request(url+path,data=data,headers=headers,method=method)
-              return urllib.request.urlopen(req,timeout=12)
-          def probe(i):
+          import json, os, urllib.request, urllib.error
+          i=int(os.environ['TEST_ID']); url=os.environ['BRIDGE_URL']; token=os.environ['ANTHARES_BRIDGE_TOKEN']
+          def req(path,method='GET',data=None,tok=token):
+              h={'Authorization':'Bearer '+tok}
+              if data is not None: h['Content-Type']='application/json'
+              return urllib.request.urlopen(urllib.request.Request(url+path,data=data,headers=h,method=method),timeout=10)
+          def check():
               if i==1:
-                  with request('/health') as r: assert r.status==200
+                  with req('/health') as r: assert r.status==200
               elif i==2:
-                  with request('/health') as r: assert json.loads(r.read()).get('service')=='anthares-bridge'
+                  with req('/health') as r: assert json.loads(r.read()).get('service')=='anthares-bridge'
               elif i==3:
-                  with request('/health') as r: assert json.loads(r.read()).get('adb_online') is True
+                  with req('/health') as r: assert json.loads(r.read()).get('adb_online') is True
               elif i==4:
-                  with request('/screen') as r: assert r.headers.get_content_type()=='image/png'
+                  with req('/screen') as r: assert r.headers.get_content_type()=='image/png'
               elif i==5:
-                  with request('/screen') as r: assert r.read().startswith(b'\\x89PNG\\r\\n\\x1a\\n')
-              elif i==6:
-                  with request('/input','POST',json.dumps({'action':'key','key':'BACK'}).encode()) as r: assert json.loads(r.read()).get('ok') is True
-              elif i==7:
-                  with request('/input','POST',json.dumps({'action':'key','key':'HOME'}).encode()) as r: assert json.loads(r.read()).get('ok') is True
+                  with req('/screen') as r: assert r.read().startswith(b'\\x89PNG\\r\\n\\x1a\\n')
+              elif i in (6,7,19,20):
+                  keys={6:'BACK',7:'HOME',19:'ENTER',20:'DPAD_DOWN'}
+                  data=json.dumps({'action':'key','key':keys[i]}).encode()
+                  with req('/input','POST',data) as r: assert json.loads(r.read()).get('ok') is True
               elif i==8:
-                  with request('/input','POST',json.dumps({'action':'tap','x':320,'y':640}).encode()) as r: assert json.loads(r.read()).get('ok') is True
+                  with req('/input','POST',json.dumps({'action':'tap','x':320,'y':640}).encode()) as r: assert json.loads(r.read()).get('ok') is True
               elif i==9:
-                  with request('/input','POST',json.dumps({'action':'swipe','x1':100,'y1':200,'x2':300,'y2':400}).encode()) as r: assert json.loads(r.read()).get('ok') is True
-              elif i==10:
-                  try: request('/health',tok='invalid-token')
+                  with req('/input','POST',json.dumps({'action':'swipe','x1':100,'y1':200,'x2':300,'y2':400}).encode()) as r: assert json.loads(r.read()).get('ok') is True
+              elif i in (10,):
+                  try: req('/health',tok='invalid-token')
                   except urllib.error.HTTPError as e: assert e.code==401
-                  else: raise AssertionError('invalid bearer accepted')
+                  else: raise AssertionError('invalid token accepted')
               elif i==11:
-                  try: request('/input','POST',b'{"action":"tap","x":-1,"y":3}')
+                  try: req('/input','POST',b'{"action":"tap","x":-1,"y":3}')
                   except urllib.error.HTTPError as e: assert e.code==400
                   else: raise AssertionError('negative tap accepted')
               elif i==12:
-                  try: request('/input','POST',b'{"action":"tap","x":10001,"y":3}')
+                  try: req('/input','POST',b'{"action":"tap","x":10001,"y":3}')
                   except urllib.error.HTTPError as e: assert e.code==400
                   else: raise AssertionError('out-of-range tap accepted')
               elif i==13:
-                  try: request('/input','POST',b'{"action":"key","key":"SHELL"}')
+                  try: req('/input','POST',b'{"action":"key","key":"SHELL"}')
                   except urllib.error.HTTPError as e: assert e.code==400
                   else: raise AssertionError('unsupported key accepted')
               elif i==14:
-                  try: request('/input','POST',b'{"action":"shell","cmd":"id"}')
+                  try: req('/input','POST',b'{"action":"shell","cmd":"id"}')
                   except urllib.error.HTTPError as e: assert e.code==400
                   else: raise AssertionError('shell action accepted')
               elif i==15:
-                  try: request('/unknown-route')
+                  try: req('/invalid-route')
                   except urllib.error.HTTPError as e: assert e.code in (401,404)
                   else: raise AssertionError('unknown route accepted')
               elif i==16:
-                  try: request('/input','POST',b'not-json')
+                  try: req('/input','POST',b'not-json')
                   except urllib.error.HTTPError as e: assert e.code in (400,503)
                   else: raise AssertionError('malformed JSON accepted')
               elif i==17:
-                  with request('/screen') as r: assert int(r.headers.get('Content-Length','0'))>8
+                  with req('/screen') as r: assert int(r.headers.get('Content-Length','0'))>8
               elif i==18:
-                  with request('/health') as r: assert r.headers.get('Cache-Control')=='no-store'
-              elif i==19:
-                  with request('/input','POST',json.dumps({'action':'key','key':'ENTER'}).encode()) as r: assert r.status==200
-              elif i==20:
-                  with request('/input','POST',json.dumps({'action':'key','key':'DPAD_DOWN'}).encode()) as r: assert r.status==200
+                  with req('/health') as r: assert r.headers.get('Cache-Control')=='no-store'
               print(f'LIVE_BRIDGE_TEST_{i:02d}=PASS',flush=True)
-              return i
-          with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
-              results=list(ex.map(probe,range(1,21)))
-          assert len(set(results))==20
-          print('LIVE_BRIDGE_20_DISTINCT_TESTS_PASS')
+          check()
           PY
