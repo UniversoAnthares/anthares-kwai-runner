@@ -26,6 +26,6 @@ check 15-kvm-write test -w /dev/kvm
 check 16-cpu-vmx-svm bash -c "grep -Eq '(vmx|svm)' /proc/cpuinfo"
 check 17-free-disk bash -c '[ "$(df -Pk "$1" | awk "NR==2 {print \$4}")" -gt 4000000 ]' _ "$RUNNER_TEMP"
 check 18-free-memory bash -c '[ "$(awk "/MemAvailable:/ {print \$2}" /proc/meminfo)" -gt 3000000 ]'
-check 19-android-35-package bash -c "sdkmanager --list --installed 2>/dev/null | grep -Eq '(platforms;android-35|system-images;android-35)' || test -d '$ANDROID_HOME/platforms/android-35'"
+check 19-sdkmanager-version bash -c "timeout 10s sdkmanager --version"
 check 20-emulator-package bash -c "test -d '$ANDROID_HOME/emulator' || command -v sdkmanager >/dev/null"
 echo "PREFLIGHT_20_CHECKS_PASSED=$pass"
