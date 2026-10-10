@@ -241,8 +241,9 @@ jobs:
           adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
           sleep 10
           if python3 kwai_auth_probe.py > /tmp/kwai-post-relaunch-auth-probe.log 2>&1 &&
-             grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/kwai-post-relaunch-auth-probe.log; then
-            echo "KWAI_POST_RELAUNCH_AUTHENTICATED"
+             grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/kwai-post-relaunch-auth-probe.log &&
+             [ "${KWAI_EXPECTED_ACCOUNT}" = 'lucasrosalem' ]; then
+            echo "KWAI_POST_RELAUNCH_IDENTITY_VERIFIED=lucasrosalem"
           else
             echo "FAILURE_SIGNAL=KWAI_SESSION_LOST_AFTER_RELAUNCH"
             cat /tmp/kwai-post-relaunch-auth-probe.log || true
