@@ -42,6 +42,7 @@ PY
     test -n "$VALUE" || { echo 'CONFIRMATION_EVIDENCE_MISSING'; exit 43; }
     : "${KWAI_REMOTE_POST_ID:?KWAI_REMOTE_POST_ID must come from observed Kwai post}"
     : "${KWAI_PUBLIC_POST_URL:?KWAI_PUBLIC_POST_URL must be an observed public Kwai URL}"
+    python3 -m anthares_publisher.public_verify --url "$KWAI_PUBLIC_POST_URL" --post-id "$KWAI_REMOTE_POST_ID" --account "${KWAI_EXPECTED_ACCOUNT:-lucasrosalem}" >/dev/null || { echo 'KWAI_PUBLIC_URL_NOT_INDEPENDENTLY_REACHABLE'; exit 46; }
     endpoint='complete'
     payload="$(python3 - "$KWAI_QUEUE_JOB_ID" "$VALUE" "$KWAI_LEASE_GENERATION" "$KWAI_REMOTE_POST_ID" "$KWAI_PUBLIC_POST_URL" "${KWAI_EXPECTED_ACCOUNT:-lucasrosalem}" <<'PY'
 import json,sys
@@ -76,6 +77,7 @@ PY
     # A queue job ID is NOT a Kwai post ID. Never synthesize remote identity.
     : "${KWAI_REMOTE_POST_ID:?KWAI_REMOTE_POST_ID must be independently observed before reconciliation}"
     : "${KWAI_PUBLIC_POST_URL:?KWAI_PUBLIC_POST_URL must be independently observed before reconciliation}"
+    python3 -m anthares_publisher.public_verify --url "$KWAI_PUBLIC_POST_URL" --post-id "$KWAI_REMOTE_POST_ID" --account "${KWAI_EXPECTED_ACCOUNT:-lucasrosalem}" >/dev/null || { echo 'KWAI_PUBLIC_URL_NOT_INDEPENDENTLY_REACHABLE'; exit 46; }
     endpoint='reconcile'
     payload="$(python3 - "$KWAI_QUEUE_JOB_ID" "$VALUE" "$KWAI_REMOTE_POST_ID" "$KWAI_PUBLIC_POST_URL" "${KWAI_EXPECTED_ACCOUNT:-lucasrosalem}" <<'PY'
 import json,re,sys
