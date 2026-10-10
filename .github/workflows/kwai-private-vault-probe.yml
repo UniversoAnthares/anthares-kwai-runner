@@ -6,6 +6,7 @@ on:
       - .github/workflows/kwai-private-vault-probe.yml
       - tools/kwai_session_vault_client.py
       - tests/test_kwai_session_vault_client.py
+      - tools/kwai_vault_selftest.py
       - .kwai-private-vault-probe-trigger
   workflow_dispatch:
 permissions:
@@ -27,3 +28,12 @@ jobs:
           python3 -m py_compile tools/kwai_session_vault_client.py
       - name: Verify GitHub OIDC access to private Cloudflare KV without reading session
         run: python3 tools/kwai_session_vault_client.py probe
+      - name: Prove isolated private KV durability across cloud runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            if python3 tools/kwai_vault_selftest.py; then exit 0; fi
+            sleep 8
+          done
+          exit 1
