@@ -18,6 +18,10 @@ class QueueBridgeTests(unittest.TestCase):
     def test_publisher_does_not_synthesize_remote_post_id(self):
         s=(ROOT/"kwai_queue_state.sh").read_text()
         self.assertNotIn('"remote_id":"kwai:"+sys.argv[1]',s)
+    def test_queue_confirmation_requires_unauthenticated_public_http(self):
+        s=(ROOT/"kwai_queue_state.sh").read_text()
+        self.assertEqual(s.count("python3 -m anthares_publisher.public_verify"),2)
+        self.assertIn("KWAI_PUBLIC_URL_NOT_INDEPENDENTLY_REACHABLE",s)
     def test_unknown_post_result_does_not_republish(self):
         s=(ROOT/"kwai_run_next_job.sh").read_text()
         self.assertIn("Never call the publisher again",s)
