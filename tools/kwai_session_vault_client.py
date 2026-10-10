@@ -18,7 +18,7 @@ import urllib.request
 BASE="https://anthares-control.anthares1.workers.dev"
 AUDIENCE=BASE
 ACCOUNT="lucasrosalem"
-MAX_BYTES=4_500_000
+MAX_BYTES=17_900_000
 EXPECTED_VERSION="2026-10-05-queue-fencing-v16"
 
 def get_json(url,headers=None,data=None,timeout=20):
@@ -69,7 +69,7 @@ def pull(headers,path):
     if d.get("schema")!="anthares.kwai.vault.v1" or d.get("account")!=ACCOUNT:
         raise RuntimeError("unexpected vault schema or account")
     text=d.get("ciphertext","")
-    if not isinstance(text,str) or len(text)>6_000_000:
+    if not isinstance(text,str) or len(text)>24_000_000:
         raise RuntimeError("invalid encrypted session payload")
     if hashlib.sha256(text.encode("ascii")).hexdigest()!=d.get("sha256"):
         raise RuntimeError("session ciphertext digest mismatch")
