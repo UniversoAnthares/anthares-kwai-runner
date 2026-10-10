@@ -4,6 +4,10 @@ on:
     branches: [main]
     paths:
       - .github/workflows/kwai-native-login-targeted-diagnostic.yml
+      - tools/kwai_login_ui_locator.py
+      - tools/kwai_ui_safe_diagnose.py
+      - tests/test_kwai_login_ui_locator.py
+      - tests/test_kwai_ui_safe_diagnose.py
   workflow_dispatch:
 permissions:
   contents: read
