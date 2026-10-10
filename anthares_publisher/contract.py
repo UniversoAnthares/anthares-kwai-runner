@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Safety contract joining Anthares Mobile identity proof to Publisher execution."""
 from dataclasses import dataclass
-from typing import Optional
+from urllib.parse import urlsplit
 
 @dataclass(frozen=True)
 class IdentityProof:
@@ -41,5 +41,14 @@ def validate_evidence(evidence: PublicationEvidence, platform: str, account: str
         raise ValueError("publication account mismatch")
     if not evidence.external_id.strip():
         raise ValueError("external publication id missing")
-    if not evidence.public_url.startswith(('https://','http://')):
-        raise ValueError("public publication URL missing")
+    try:
+        parsed=urlsplit(evidence.public_url)
+        host=(parsed.hostname or "").lower()
+        port=parsed.port
+    except ValueError as exc:
+        raise ValueError("invalid publication URL") from exc
+    domains={"kwai":{"kwai.com","www.kwai.com","s.kwai.app","www.kwai.app"},
+             "tiktok":{"tiktok.com","www.tiktok.com","vm.tiktok.com"}}
+    if (parsed.scheme!="https" or parsed.username or parsed.password or
+            port not in (None,443) or host not in domains.get(platform.casefold(),set())):
+        raise ValueError("publication URL must use the target platform's HTTPS domain")
