@@ -1,0 +1,28 @@
+name: Anthares Remote Console 20 Parallel Tests
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'independent_session/test_remote_android_bridge.py'
+      - '.github/workflows/anthares-remote-console-20-tests.yml'
+      - '.anthares-console-20-trigger'
+permissions:
+  contents: read
+jobs:
+  bridge-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        test_id: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run independent protocol test
+        env:
+          TEST_ID: ${{ matrix.test_id }}
+        run: |
+          python3 -m py_compile independent_session/remote_android_bridge.py independent_session/test_remote_android_bridge.py
+          python3 -m unittest independent_session.test_remote_android_bridge -v
+          echo "REMOTE_CONSOLE_TEST_${TEST_ID}=PASS"
