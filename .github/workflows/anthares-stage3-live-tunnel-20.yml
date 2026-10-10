@@ -74,31 +74,70 @@ jobs:
           python3 - <<'PY'
           import concurrent.futures, json, os, urllib.request, urllib.error
           url=os.environ['URL']; token=os.environ['ANTHARES_BRIDGE_TOKEN']
-          def get(path, tok=token):
-              return urllib.request.urlopen(urllib.request.Request(url+path,headers={'Authorization':'Bearer '+tok}),timeout=10)
+          def request(path, method='GET', data=None, tok=token):
+              headers={'Authorization':'Bearer '+tok}
+              if data is not None: headers['Content-Type']='application/json'
+              req=urllib.request.Request(url+path,data=data,headers=headers,method=method)
+              return urllib.request.urlopen(req,timeout=12)
           def probe(i):
-              if i<=8:
-                  with get('/health') as r:
-                      d=json.loads(r.read()); assert r.status==200 and d.get('adb_online') is True
-              elif i<=12:
-                  with get('/screen') as r:
-                      b=r.read(); assert r.status==200 and r.headers.get_content_type()=='image/png' and b.startswith(b'\\x89PNG\\r\\n\\x1a\\n')
-              elif i<=16:
-                  body=json.dumps({'action':'tap','x':100+i,'y':200+i}).encode()
-                  q=urllib.request.Request(url+'/input',data=body,headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'},method='POST')
-                  with urllib.request.urlopen(q,timeout=10) as r: assert r.status==200 and json.loads(r.read()).get('ok') is True
-              elif i<=18:
-                  try: get('/health','invalid-token')
+              if i==1:
+                  with request('/health') as r: assert r.status==200
+              elif i==2:
+                  with request('/health') as r: assert json.loads(r.read()).get('service')=='anthares-bridge'
+              elif i==3:
+                  with request('/health') as r: assert json.loads(r.read()).get('adb_online') is True
+              elif i==4:
+                  with request('/screen') as r: assert r.headers.get_content_type()=='image/png'
+              elif i==5:
+                  with request('/screen') as r: assert r.read().startswith(b'\\x89PNG\\r\\n\\x1a\\n')
+              elif i==6:
+                  with request('/input','POST',json.dumps({'action':'key','key':'BACK'}).encode()) as r: assert json.loads(r.read()).get('ok') is True
+              elif i==7:
+                  with request('/input','POST',json.dumps({'action':'key','key':'HOME'}).encode()) as r: assert json.loads(r.read()).get('ok') is True
+              elif i==8:
+                  with request('/input','POST',json.dumps({'action':'tap','x':320,'y':640}).encode()) as r: assert json.loads(r.read()).get('ok') is True
+              elif i==9:
+                  with request('/input','POST',json.dumps({'action':'swipe','x1':100,'y1':200,'x2':300,'y2':400}).encode()) as r: assert json.loads(r.read()).get('ok') is True
+              elif i==10:
+                  try: request('/health',tok='invalid-token')
                   except urllib.error.HTTPError as e: assert e.code==401
-                  else: raise AssertionError('invalid token accepted')
-              else:
-                  try: get('/invalid-route')
+                  else: raise AssertionError('invalid bearer accepted')
+              elif i==11:
+                  try: request('/input','POST',b'{"action":"tap","x":-1,"y":3}')
+                  except urllib.error.HTTPError as e: assert e.code==400
+                  else: raise AssertionError('negative tap accepted')
+              elif i==12:
+                  try: request('/input','POST',b'{"action":"tap","x":10001,"y":3}')
+                  except urllib.error.HTTPError as e: assert e.code==400
+                  else: raise AssertionError('out-of-range tap accepted')
+              elif i==13:
+                  try: request('/input','POST',b'{"action":"key","key":"SHELL"}')
+                  except urllib.error.HTTPError as e: assert e.code==400
+                  else: raise AssertionError('unsupported key accepted')
+              elif i==14:
+                  try: request('/input','POST',b'{"action":"shell","cmd":"id"}')
+                  except urllib.error.HTTPError as e: assert e.code==400
+                  else: raise AssertionError('shell action accepted')
+              elif i==15:
+                  try: request('/unknown-route')
                   except urllib.error.HTTPError as e: assert e.code in (401,404)
-                  else: raise AssertionError('invalid route accepted')
+                  else: raise AssertionError('unknown route accepted')
+              elif i==16:
+                  try: request('/input','POST',b'not-json')
+                  except urllib.error.HTTPError as e: assert e.code in (400,503)
+                  else: raise AssertionError('malformed JSON accepted')
+              elif i==17:
+                  with request('/screen') as r: assert int(r.headers.get('Content-Length','0'))>8
+              elif i==18:
+                  with request('/health') as r: assert r.headers.get('Cache-Control')=='no-store'
+              elif i==19:
+                  with request('/input','POST',json.dumps({'action':'key','key':'ENTER'}).encode()) as r: assert r.status==200
+              elif i==20:
+                  with request('/input','POST',json.dumps({'action':'key','key':'DPAD_DOWN'}).encode()) as r: assert r.status==200
               print(f'LIVE_BRIDGE_TEST_{i:02d}=PASS',flush=True)
               return i
           with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
               results=list(ex.map(probe,range(1,21)))
-          assert len(results)==20
-          print('LIVE_BRIDGE_20_OF_20_PASS')
+          assert len(set(results))==20
+          print('LIVE_BRIDGE_20_DISTINCT_TESTS_PASS')
           PY
