@@ -1,5 +1,8 @@
 name: CircleCI API bridge
 on:
+  push:
+    paths:
+      - '.github/workflows/circleci-api-bridge.yml'
   workflow_dispatch:
     inputs:
       action:
@@ -21,7 +24,7 @@ jobs:
       - name: Query CircleCI without exposing credentials
         env:
           CIRCLECI_API_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
-          ACTION: ${{ inputs.action }}
+          ACTION: ${{ inputs.action || 'recent' }}
           PIPELINE_ID: ${{ inputs.pipeline_id }}
         run: |
           python3 - <<'PY'
