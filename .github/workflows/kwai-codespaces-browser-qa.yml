@@ -7,6 +7,11 @@ on:
       - '.devcontainer/**'
       - 'tests/test_kwai_codespaces_browser.py'
       - '.github/workflows/kwai-codespaces-browser-qa.yml'
+  pull_request:
+    paths:
+      - '.devcontainer/**'
+      - 'tests/test_kwai_codespaces_browser.py'
+      - '.github/workflows/kwai-codespaces-browser-qa.yml'
 permissions:
   contents: read
 jobs:
