@@ -139,6 +139,5 @@ jobs:
             kwai-publish-status.txt
             kwai-reconcile-status.txt
             kwai-headless-status.txt
-            kwai-headless-ready.png
           if-no-files-found: warn
           retention-days: 3
