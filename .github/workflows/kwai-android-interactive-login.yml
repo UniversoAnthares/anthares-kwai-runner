@@ -138,7 +138,7 @@ jobs:
             fi
             sleep 2
           done
-          test "$READY" = 1
+          if [ "$READY" != 1 ]; then echo "TUNNEL_PROBE_FAILED"; tail -40 /tmp/cloudflared.log || true; exit 12; fi
           # Verify that the WebSocket upgrade also accepts the protected credential.
           WS_CODE=$(curl -s --http1.1 --connect-timeout 8 -u "$REMOTE_USER:$REMOTE_PASSWORD" -o /dev/null -w '%{http_code}' -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" "$URL/websockify" || true)
           echo "ANDROID_REMOTE_WEBSOCKET_HTTP=$WS_CODE" >> "$GITHUB_STEP_SUMMARY"
