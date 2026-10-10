@@ -8,7 +8,7 @@ command -v sdkmanager >/dev/null || { echo 'SDKMANAGER_MISSING'; exit 2; }
 command -v avdmanager >/dev/null || { echo 'AVDMANAGER_MISSING'; exit 2; }
 if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then echo 'KVM_UNAVAILABLE'; exit 2; fi
 SDK_IMAGE="system-images;android-35;google_apis;x86_64"
-sdkmanager --install 'platform-tools' 'emulator' "$SDK_IMAGE" >/dev/null
+timeout 150s sdkmanager --install 'platform-tools' 'emulator' "$SDK_IMAGE" >/dev/null
 command -v emulator >/dev/null || { echo 'EMULATOR_INSTALL_FAILED'; exit 2; }
 printf 'no\n' | avdmanager create avd -n anthares_owned -k "$SDK_IMAGE" -d pixel_6 --force >/dev/null
 "$ANDROID_HOME/emulator/emulator" -avd anthares_owned -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-save -port 5554 >/tmp/anthares-emulator.log 2>&1 &
@@ -16,7 +16,7 @@ pid=$!
 trap 'kill "$pid" 2>/dev/null || true' EXIT
 adb wait-for-device
 ready=0
-for i in $(seq 1 120); do
+for i in $(seq 1 45); do
   if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]; then ready=1; break; fi
   sleep 2
 done
