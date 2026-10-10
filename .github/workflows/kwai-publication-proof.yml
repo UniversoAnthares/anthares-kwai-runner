@@ -63,10 +63,11 @@ jobs:
           rows="$(adb shell content query --uri content://media/external/video/media --projection _id:_display_name 2>/dev/null || true)"
           id="$(printf '%s\n' "$rows" | grep -F "_display_name=anthares-proof-${GITHUB_RUN_ID}.mp4" | sed -n 's/.*_id=\([0-9][0-9]*\).*/\1/p' | head -1)"
           test -n "$id"
-          adb shell am start -W -a android.intent.action.SEND -t video/mp4 -p com.kwai.video --grant-read-uri-permission --eu android.intent.extra.STREAM "content://media/external/video/media/$id" >/tmp/send.log 2>&1 || true
+          export MEDIA_URI="content://media/external/video/media/$id"
+          adb shell am start -W -a android.intent.action.SEND -t video/mp4 -p com.kwai.video --grant-read-uri-permission --eu android.intent.extra.STREAM "$MEDIA_URI" >/tmp/send.log 2>&1 || true
           sleep 5
           python3 - <<'PY'
-          import re,subprocess,xml.etree.ElementTree as ET,sys,time
+          import os,re,subprocess,xml.etree.ElementTree as ET,sys,time
           def dump():
               subprocess.run(['adb','shell','uiautomator','dump','/sdcard/ui.xml'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
               subprocess.run(['adb','pull','/sdcard/ui.xml','/tmp/ui.xml'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -84,12 +85,22 @@ jobs:
               return False
           root=dump(); before=text(root); open('/tmp/ui-before.txt','w').write(before)
           if click(root,['allow all','permitir tudo','allow access to all photos','permitir acesso a todas']):
-              time.sleep(4); root=dump(); before=text(root)
+              time.sleep(3); root=dump(); before=text(root)
+          if re.search(r'select your interests|get personalized videos|0 selected and continue',before,re.I):
+              if not click(root,['skip','pular']):
+                  print('KWAI_ONBOARDING_SKIP_NOT_FOUND'); sys.exit(22)
+              time.sleep(4)
+              subprocess.run(['adb','shell','am','start','-W','-a','android.intent.action.SEND','-t','video/mp4','-p','com.kwai.video','--grant-read-uri-permission','--eu','android.intent.extra.STREAM',os.environ['MEDIA_URI']],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+              time.sleep(5)
+              root=dump(); before=text(root); open('/tmp/ui-after-onboarding.txt','w').write(before)
           if re.search(r'log in|login|sign in|entrar|iniciar sess',before,re.I):
               print('KWAI_AUTH_REQUIRED'); sys.exit(20)
-          for _ in range(4):
-              root=dump()
-              if click(root,['next','próximo','avançar','continue','continuar','usar','use']): time.sleep(3)
+          for _ in range(5):
+              root=dump(); current=text(root)
+              if click(root,['next','próximo','avançar','continue','continuar','usar','use']):
+                  time.sleep(3)
+              else:
+                  break
           root=dump(); editor=text(root); open('/tmp/ui-editor.txt','w').write(editor)
           if re.search(r'log in|login|sign in|entrar|iniciar sess',editor,re.I):
               print('KWAI_AUTH_REQUIRED'); sys.exit(20)
@@ -106,6 +117,7 @@ jobs:
           path: |
             /tmp/send.log
             /tmp/ui-before.txt
+            /tmp/ui-after-onboarding.txt
             /tmp/ui-editor.txt
             /tmp/ui-after.txt
           if-no-files-found: warn
