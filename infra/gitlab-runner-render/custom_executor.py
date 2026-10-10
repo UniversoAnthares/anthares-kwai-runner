@@ -39,7 +39,7 @@ ALLOWED_IMAGES = {
 }
 BASH_IMAGES = {"php:8.5-cli", "node:22-bookworm-slim", "ubuntu:24.04"}
 CONTAINER_STAGES = {"build_script", "step_script", "after_script"}
-HOST_STAGE_TIMEOUT = 600
+HOST_STAGE_TIMEOUT = 180
 IMAGE_META_TIMEOUT = 60
 IMAGE_EXPORT_TIMEOUT = 180
 IMAGE_EXPORT_ATTEMPTS = 3
@@ -255,6 +255,9 @@ def _run_on_host(script_path: str, stage: str) -> int:
     env = os.environ.copy()
     env["PATH"] = f"{RUNNER_ROOT}:{env.get('PATH', '')}"
     env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GIT_CONFIG_COUNT"] = "1"
+    env["GIT_CONFIG_KEY_0"] = "http.version"
+    env["GIT_CONFIG_VALUE_0"] = "HTTP/1.1"
     env["GCM_INTERACTIVE"] = "Never"
     env["SSH_ASKPASS"] = "/bin/false"
     print(f"Anthares custom executor: stage={stage} host", flush=True)
