@@ -96,7 +96,7 @@ esac
 echo "ANTHARES_BOOT_VARIANT=${ANTHARES_BOOT_VARIANT:-1}"
 emulator -avd anthares_android -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on "${extra[@]}" > /tmp/anthares-emulator.log 2>&1 &
 pid=$!
-trap 'kill "$pid" 2>/dev/null || true' EXIT
+if [[ "${ANTHARES_KEEP_EMULATOR:-0}" != "1" ]]; then trap 'kill "$pid" 2>/dev/null || true' EXIT; fi
 echo 'ANTHARES_ANDROID_WAIT_START=1'
 if ! timeout 120s adb wait-for-device; then
   echo 'ANTHARES_ANDROID_ADB_TIMEOUT=1'
