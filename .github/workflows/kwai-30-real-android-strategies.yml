@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/kwai-30-real-android-strategies.yml"
+      - "tools/kwai_real_30_strategy_probe.sh"
   workflow_dispatch:
 permissions:
   contents: read
