@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {handleKwaiSessionVault} from '../cloudflare-worker/src/kwai_session_vault.js';
+import {handleKwaiSessionVault,handleKwaiVaultSelftest} from '../cloudflare-worker/src/kwai_session_vault.js';
 
 const URL='https://anthares-control.anthares1.workers.dev/kwai/session-vault';
 const workflow='UniversoAnthares/anthares-kwai-runner/.github/workflows/kwai-queue-publisher.yml@refs/heads/main';
@@ -77,4 +77,19 @@ test('tampered stored ciphertext is rejected',async()=>{
   const [key,raw]=[...e.store.entries()][0];
   const row=JSON.parse(raw);row.ciphertext+='A';e.store.set(key,JSON.stringify(row));
   assert.equal((await handleKwaiSessionVault(req(),e,ok)).status,409);
+});
+
+test('isolated canary stores only run IDs and proves next-run continuity',async()=>{
+  const e=env();
+  const probeWorkflow='UniversoAnthares/anthares-kwai-runner/.github/workflows/kwai-private-vault-probe.yml@refs/heads/main';
+  const auth=async()=>({ok:true,claims:{...claims,job_workflow_ref:probeWorkflow}});
+  const url=URL+'-selftest';
+  const post=new Request(url,{method:'POST',headers:{Authorization:'Bearer valid'},body:JSON.stringify({run_id:'38083420842'})});
+  assert.equal((await handleKwaiVaultSelftest(post,e,auth)).status,200);
+  const get=new Request(url,{headers:{Authorization:'Bearer valid'}});
+  const response=await handleKwaiVaultSelftest(get,e,auth);
+  assert.equal((await response.json()).previous_run_id,'38083420842');
+  assert.equal(e.store.size,1);
+  assert.equal(JSON.stringify([...e.store.values()]).includes('ciphertext'),false);
+  assert.equal((await handleKwaiVaultSelftest(get,e,denied)).status,401);
 });
