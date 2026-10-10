@@ -16,6 +16,8 @@ async function verifyRenderSessionSignature(request,body){
  if(!ts||Math.abs(Date.now()-ts)>300000||!sig)return false;
  try{const b64=RENDER_SESSION_PUBLIC_KEY.replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\\s+/g,"");const bin=atob(b64),der=Uint8Array.from(bin,c=>c.charCodeAt(0));const key=await crypto.subtle.importKey("spki",der,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);const raw=Uint8Array.from(atob(sig),c=>c.charCodeAt(0));const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(body));const hex=[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");return await crypto.subtle.verify("RSASSA-PKCS1-v1_5",key,raw,new TextEncoder().encode(String(ts)+"."+hex));}catch(e){return false;}
 }
+import {handleKwaiSessionVault} from "./kwai_session_vault.js";
+
 async function tiktokSessionState(request,env){
  if(request.method==="GET"){
   const token=(request.headers.get("Authorization")||"").replace(/^Bearer\s+/i,""); const auth=await verifyGithubOidc(token,env); if(!auth.ok)return json({error:"unauthorized"},401);
@@ -39,7 +41,7 @@ function b64urlBytes(s){
 }
 function b64urlJson(s){ return JSON.parse(atob(s.replace(/-/g,"+").replace(/_/g,"/").padEnd(Math.ceil(s.length/4)*4,"="))); }
 let ghJwksCache=null,ghJwksAt=0;
-async function verifyGithubOidc(token,env){
+async function verifyGithubOidc(token,env,extraAllowedWorkflows=[]){
   const parts=String(token||"").split(".");
   if(parts.length!==3)return {ok:false,error:"jwt_format"};
   let header,claims;
@@ -52,7 +54,7 @@ async function verifyGithubOidc(token,env){
   if(claims.exp<=nowSec||claims.nbf>nowSec+30)return {ok:false,error:"jwt_time"};
   if(!["UniversoAnthares/anthares-clipper","UniversoAnthares/anthares-kwai-runner"].includes(claims.repository))return {ok:false,error:"jwt_repository"};
   if(claims.ref!=="refs/heads/main")return {ok:false,error:"jwt_ref"};
-  const allowedWorkflows=["anthares-cloud-failover.yml","anthares-tiktok-owned-youtube.yml","anthares-tiktok-github-hosted.yml","anthares-central-queue-smoke.yml","anthares-item5-cloud-acceptance.yml","anthares-item6-session-persistence.yml","kwai-real-publish.yml","anthares-kwai-real-seed.yml","anthares-tiktok-alt-real.yml","tiktok-real-publish.yml","tiktok-reconcile-v2.yml","tiktok-central-session-read.yml","tiktok-v15-reconcile-30.yml","tiktok-15env-replacement.yml","kwai-live-6h.yml"]; const wf=String(claims.job_workflow_ref||claims.workflow_ref||claims.workflow||""); const allowedRepo=claims.repository==="UniversoAnthares/anthares-kwai-runner"?"UniversoAnthares/anthares-kwai-runner":"UniversoAnthares/anthares-clipper"; const workflowOk=allowedWorkflows.some(name=>wf.includes(allowedRepo+"/.github/workflows/"+name+"@refs/heads/main")||wf.includes(allowedRepo+"/.github/workflows/"+name+"@")); if(!workflowOk)return {ok:false,error:"jwt_workflow"};
+  const allowedWorkflows=["anthares-cloud-failover.yml","anthares-tiktok-owned-youtube.yml","anthares-tiktok-github-hosted.yml","anthares-central-queue-smoke.yml","anthares-item5-cloud-acceptance.yml","anthares-item6-session-persistence.yml","kwai-real-publish.yml","anthares-kwai-real-seed.yml","anthares-tiktok-alt-real.yml","tiktok-real-publish.yml","tiktok-reconcile-v2.yml","tiktok-central-session-read.yml","tiktok-v15-reconcile-30.yml","tiktok-15env-replacement.yml","kwai-live-6h.yml"]; const wf=String(claims.job_workflow_ref||claims.workflow_ref||claims.workflow||""); const allowedRepo=claims.repository==="UniversoAnthares/anthares-kwai-runner"?"UniversoAnthares/anthares-kwai-runner":"UniversoAnthares/anthares-clipper"; const workflowOk=allowedWorkflows.concat(extraAllowedWorkflows).some(name=>wf.includes(allowedRepo+"/.github/workflows/"+name+"@refs/heads/main")||wf.includes(allowedRepo+"/.github/workflows/"+name+"@")); if(!workflowOk)return {ok:false,error:"jwt_workflow"};
   if(!["schedule","workflow_dispatch","push"].includes(claims.event_name))return {ok:false,error:"jwt_event"};
   try{
     if(!ghJwksCache||Date.now()-ghJwksAt>3600000){
@@ -346,6 +348,7 @@ export default {
  async fetch(request,env={}){
   const url=new URL(request.url);
   if(url.pathname==="/tiktok/session-state") return await tiktokSessionState(request,env);
+  if(url.pathname==="/kwai/session-vault") return await handleKwaiSessionVault(request,env,verifyGithubOidc);
   if(url.pathname==="/failover-self-test") return json(await failoverSelfTest());
   if(url.pathname==="/health") return json({ok:true,service:"anthares-control",provider:"cloudflare",role:"control-plane",version:CONTROL_VERSION,persistent_state:!!env.ANTHARES_STATE,queue_bound:!!env.ANTHARES_QUEUE,pc_fallback:false,routing_revision:ROUTING_REVISION,ts:now()});
   if(url.pathname==="/strategy") return json({ok:true,strategy:"split-executors-v12-no-pc-failclosed",execution_priority:priorities(),retired_executors:[...RETIRED_EXECUTORS],oracle:false,google_compute:false,routing_revision:ROUTING_REVISION});
