@@ -10,7 +10,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: anthares-android-stage4-${{ github.ref }}
+  group: anthares-android-stage4-${{ github.run_id }}
   cancel-in-progress: false
 jobs:
   kwai-install:
