@@ -144,6 +144,35 @@ def profile_tab(nodes,xml_text=""):
         score+=10 if node.get("clickable")=="true" else 0
         score+=5 if cy>=height*.85 else 0
         candidates.append((score,(x1+x2)//2,cy))
+    # Alternative to tapping the label itself: some Android trees expose the
+    # profile icon as a non-clickable child and the parent as the actual target.
+    # Resolve only a bottom-navigation ancestor, never arbitrary content.
+    try:
+        root=ET.fromstring(xml_text)
+        parent_of={child:parent for parent in root.iter() for child in parent}
+        width=max((bounds(n)[2] for n in nodes if bounds(n)),default=1)
+        for node in nodes:
+            rid=(node.get("resource-id") or "").casefold().split("/")[-1]
+            text=label(node).casefold().strip()
+            if not (rid in explicit or text in ("profile","perfil","me","eu")):
+                continue
+            child_bounds=bounds(node)
+            if not child_bounds or (child_bounds[1]+child_bounds[3])//2 < height*.72:
+                continue
+            ancestor=parent_of.get(node)
+            for depth in range(3):
+                if ancestor is None:
+                    break
+                b=bounds(ancestor)
+                if b and ancestor.get("clickable")=="true":
+                    x1,y1,x2,y2=b
+                    cy=(y1+y2)//2
+                    if cy>=height*.72 and x2-x1<=width*.35:
+                        candidates.append((120-depth,(x1+x2)//2,cy))
+                        break
+                ancestor=parent_of.get(ancestor)
+    except ET.ParseError:
+        pass
     if not candidates:
         return None
     candidates.sort(reverse=True)
