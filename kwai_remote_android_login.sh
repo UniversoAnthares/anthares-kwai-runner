@@ -178,19 +178,23 @@ fi
 # Navigate to Kwai's email login; do not mistake the feed for a login screen.
 email_login_visible(){
   dump_ui || return 1
-  python3 - <<'PY'
-import re,xml.etree.ElementTree as ET
-try: root=ET.parse('/tmp/kwai-ui.xml').getroot()
-except Exception: raise SystemExit(1)
-nodes=list(root.iter('node'))
-s=' '.join(' '.join((n.get('text',''),n.get('content-desc',''),n.get('resource-id',''))) for n in nodes).lower()
-fields=sum(n.get('class','').endswith('EditText') for n in nodes)
-auth=re.search(r'log.?in|sign.?in|entrar|password|senha|phone number|e-?mail|verification code|código de verificação|send code|continuar com',s)
-focus=__import__('subprocess').run(['adb','shell','dumpsys','window'],capture_output=True,text=True).stdout.lower()
-google='com.google.android.gms' in focus
-raise SystemExit(0 if (not google and (auth or (fields and re.search(r'continue|continuar|next|próximo',s)))) else 1)
-PY
+  python3 tools/kwai_login_ui_locator.py email-form /tmp/kwai-ui.xml >/dev/null
 }
+native_login_chooser_visible(){
+  dump_ui || return 1
+  python3 tools/kwai_login_ui_locator.py native-chooser /tmp/kwai-ui.xml >/dev/null
+}
+open_native_email_entry(){
+  local coords
+  dump_ui || return 1
+  coords="$(python3 tools/kwai_login_ui_locator.py email-entry /tmp/kwai-ui.xml)" || return 1
+  [ -n "$coords" ] || return 1
+  adb shell input tap $coords >/dev/null 2>&1 || return 1
+  log "KWAI_NATIVE_EMAIL_ENTRY_TAPPED"
+  sleep 2
+  email_login_visible
+}
+
 login_lock(){
   log "LOGIN_SURFACE_DETECTED"
   log "LOCKED_ON_LOGIN"
@@ -226,51 +230,46 @@ PY
 # native profile screen contains Google (center 540,900) and Email (750,1025).
 # Use only after confirming the profile surface; never tap blindly on the feed.
 kwai_profile_visual_login(){
-  local method="${1:-email}" screen width height
-  screen="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
-  width="${screen%x*}"; height="${screen#*x}"
-  [[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] || return 1
-  adb exec-out screencap -p > kwai-login-visual-before.png 2>/dev/null || true
-  dump_ui && cp /tmp/kwai-ui.xml kwai-login-visual-before.xml || true
-  # Profile tab is the rightmost bottom navigation entry in the captured layout.
-  adb shell input tap $((width*93/100)) $((height*94/100)) >/dev/null 2>&1 || return 1
-  sleep 3
-  if [ "$method" = "google" ]; then
-    adb shell input tap $((width*50/100)) $((height*39/100)) >/dev/null 2>&1 || return 1
-  else
-    adb shell input tap $((width*69/100)) $((height*44/100)) >/dev/null 2>&1 || return 1
+  local coords
+  dump_ui || return 1
+  coords="$(python3 tools/kwai_login_ui_locator.py profile-tab /tmp/kwai-ui.xml)" || return 1
+  adb shell input tap $coords >/dev/null 2>&1 || return 1
+  sleep 2
+  if native_login_chooser_visible; then
+    open_native_email_entry && return 0
   fi
-  sleep 3
-  adb exec-out screencap -p > kwai-login-visual-after.png 2>/dev/null || true
-  dump_ui && cp /tmp/kwai-ui.xml kwai-login-visual-after.xml || true
-  log "KWAI_VISUAL_LOGIN_FALLBACK_METHOD=$method"
+  log "KWAI_PROFILE_LOGIN_SELECTOR_NOT_FOUND"
+  return 1
 }
 
-# Retry Google entry across delayed screens and transient UIAutomator failures.
-# Never infer success from a tap alone: require Google SSO foreground.
-for welcome_attempt in $(seq 1 24); do
-  if google_sso_foreground; then
-    log "KWAI_GOOGLE_SSO_REACHED_AFTER_WELCOME_CLICK"
-    break
-  fi
-  dump_ui || true
-  if grep -Eqi 'Continue with Google|Continuar com Google|Google' /tmp/kwai-ui.xml 2>/dev/null; then
-    log "KWAI_GOOGLE_ENTRY_DETECTED_ATTEMPT_$welcome_attempt"
-    if tap_label '(Continue with Google|Continuar com Google)' || tap_label 'Google'; then
-      log "KWAI_GOOGLE_ENTRY_TAP_SENT_ATTEMPT_$welcome_attempt"
-    else
-      log "KWAI_GOOGLE_ENTRY_LABEL_TAP_FAILED_$welcome_attempt"
-    fi
+# Prefer the native email entry proven by actual Android UIAutomator XML.
+# The chooser label is NOT a login form; a real EditText must be visible.
+if native_login_chooser_visible; then
+  log "KWAI_NATIVE_LOGIN_CHOOSER_DETECTED"
+  if open_native_email_entry; then
+    log "KWAI_EMAIL_FORM_OPENED_FROM_CHOOSER"
   else
-    log "KWAI_GOOGLE_ENTRY_NOT_VISIBLE_ATTEMPT_$welcome_attempt"
+    log "KWAI_NATIVE_EMAIL_ENTRY_DID_NOT_OPEN_FORM"
   fi
-  sleep 3
-done
-if google_sso_foreground; then
-  log "KWAI_GOOGLE_ENTRY_VERIFIED"
-else
-  log "KWAI_GOOGLE_ENTRY_UNVERIFIED_MANUAL_HANDOFF"
 fi
+# Google SSO is opt-in only; do not burn 24 attempts when Email is available.
+if [ "${KWAI_LOGIN_METHOD:-email}" = "google" ] && ! email_login_visible; then
+  for welcome_attempt in 1 2 3; do
+    google_sso_foreground && break
+    dump_ui || true
+    coords="$(python3 tools/kwai_login_ui_locator.py google-entry /tmp/kwai-ui.xml 2>/dev/null)" || break
+    [ -n "$coords" ] || break
+    adb shell input tap $coords >/dev/null 2>&1 || true
+    log "KWAI_GOOGLE_ENTRY_TAP_SENT_ATTEMPT_$welcome_attempt"
+    sleep 2
+  done
+  if google_sso_foreground; then
+    log "KWAI_GOOGLE_ENTRY_VERIFIED"
+  else
+    log "KWAI_GOOGLE_ENTRY_UNVERIFIED"
+  fi
+fi
+
 if ! email_login_visible; then
   complete_kwai_interest_onboarding || true
   dismiss_swipe_tutorial || true
@@ -307,7 +306,7 @@ if ! email_login_visible; then
     email_login_visible && break
     tap_label '(other methods|other ways|more options|outras opções|outras formas|use another method)' || true
     email_login_visible && break
-    tap_label '(e-?mail|email address|endereço de e-mail|continuar com e-mail)' || true
+    open_native_email_entry || tap_label '(e-?mail|email address|endereço de e-mail|continuar com e-mail)' || true
   done
 fi
 if ! email_login_visible && ! google_sso_foreground; then
@@ -365,7 +364,7 @@ log "KWAI_OWNER_INTERACTION_READY"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   printf '\n**KWAI_OWNER_INTERACTION_READY** — use the remote URL shown above.\n' >> "$GITHUB_STEP_SUMMARY"
 fi
-LOGIN_DEADLINE=$((SECONDS+480))
+LOGIN_DEADLINE=$((SECONDS+${KWAI_LOGIN_DEADLINE_SECONDS:-180}))
 AUTO_PROBE_LAST=0
 SSO_WAS_ACTIVE=0
 SSO_STARTED_AT=0
