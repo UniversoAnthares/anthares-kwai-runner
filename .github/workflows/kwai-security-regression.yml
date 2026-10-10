@@ -1,0 +1,35 @@
+name: Kwai security regression (no credentials)
+on:
+  push:
+    paths:
+      - 'kwai_android_autologin.py'
+      - 'kwai_headless_login.sh'
+      - '.github/workflows/kwai-queue-publisher.yml'
+      - '.github/workflows/kwai-security-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static login safety and syntax
+        run: |
+          set -euo pipefail
+          python3 -m py_compile kwai_android_autologin.py
+          bash -n kwai_headless_login.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('kwai_android_autologin.py').read_text()
+          w=Path('.github/workflows/kwai-queue-publisher.yml').read_text()
+          assert 'KWAI_PASSWORD_FIELD_NOT_VERIFIED' in p
+          assert 'len(fields)!=1' in p
+          assert 'KWAI_PASSWORD_STEP_NOT_REACHED' in p
+          assert "vars.KWAI_CREDENTIALS_ROTATED == 'true'" in w
+          assert 'KWAI_EXPECTED_ACCOUNT' in w
+          assert '2026-10-05-queue-fencing-v16' in w
+          assert 'pc_fallback' in w
+          print('STATIC_SECURITY_GATES_OK')
+          PY
