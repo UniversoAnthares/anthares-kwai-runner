@@ -8,13 +8,42 @@ install -d -m 700 "${PRIVATE_HOME}" "${LOGS}" "${PRIVATE_HOME}/chrome-profile"
 chmod 700 "${PRIVATE_HOME}" "${PRIVATE_HOME}/chrome-profile"
 export DISPLAY=:99
 
+service_marker() {
+  case "$1" in
+    xvfb) echo 'Xvfb' ;;
+    openbox) echo 'openbox' ;;
+    vnc) echo 'x11vnc' ;;
+    novnc) echo 'websockify' ;;
+    chrome) echo 'chromium' ;;
+    inspector) echo 'kwai-identity-guard.py' ;;
+    bridge) echo 'kwai-command-bridge-v2.py' ;;
+    *) return 1 ;;
+  esac
+}
+
+pid_matches_service() {
+  local name="$1" pid="$2" marker cmd
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  marker="$(service_marker "$name")" || return 1
+  cmd="$(tr '\0' ' ' <"/proc/${pid}/cmdline" 2>/dev/null || true)"
+  [[ -n "$cmd" && "$cmd" == *"$marker"* ]]
+}
+
 start_once() {
   local name="$1"
   shift
-  local pidfile="${PRIVATE_HOME}/${name}.pid"
-  if [[ -f "$pidfile" ]] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+  local pidfile="${PRIVATE_HOME}/${name}.pid" pid
+  pid="$(cat "$pidfile" 2>/dev/null || true)"
+  if pid_matches_service "$name" "$pid"; then
     echo "KWAI_CODESPACE_${name}=already_running"
     return
+  fi
+  if [[ -n "$pid" ]]; then
+    # PID files live in persistent home while Linux PIDs do not survive a
+    # Codespace stop/start. Never trust a reused PID without cmdline evidence.
+    echo "KWAI_CODESPACE_${name}=stale_pidfile_ignored"
+    rm -f "$pidfile"
   fi
   nohup "$@" >"${LOGS}/${name}.log" 2>&1 </dev/null &
   echo "$!" >"$pidfile"
@@ -30,8 +59,11 @@ restart_current_bridge() {
   # it must never restart Chrome or touch the persistent browser profile.
   if [[ -f "$pidfile" ]]; then
     pid="$(cat "$pidfile" 2>/dev/null || true)"
-    if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+    if pid_matches_service bridge "$pid"; then
       pids+=("$pid")
+    elif [[ -n "$pid" ]]; then
+      echo "KWAI_CODESPACE_bridge=stale_pidfile_ignored"
+      rm -f "$pidfile"
     fi
   fi
   while IFS= read -r pid; do
@@ -43,8 +75,10 @@ restart_current_bridge() {
     [[ -n "$pid" ]] || continue
     cmd="$(tr '\0' ' ' <"/proc/${pid}/cmdline" 2>/dev/null || true)"
     if [[ "$cmd" != *".devcontainer/kwai-command-bridge.py"* && "$cmd" != *".devcontainer/kwai-command-bridge-v2.py"* ]]; then
-      echo "KWAI_CODESPACE_bridge=pid_mismatch_refusing_to_kill" >&2
-      return 1
+      # A stale persistent PID may now belong to another process. Ignore it;
+      # never kill a process unless its cmdline proves it is our bridge.
+      echo "KWAI_CODESPACE_bridge=unrelated_pid_ignored"
+      continue
     fi
     kill "$pid"
     for _ in 1 2 3 4 5 6 7 8 9 10; do
@@ -75,12 +109,13 @@ recover_novnc() {
   if novnc_healthy; then return 0; fi
   local pidfile="${PRIVATE_HOME}/novnc.pid" pid cmd
   pid="$(cat "$pidfile" 2>/dev/null || true)"
-  if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+  if pid_matches_service novnc "$pid"; then
     cmd="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
-    [[ "$cmd" == *websockify* && "$cmd" == *127.0.0.1:6080* ]] || return 1
-    kill "$pid" || return 1
-    for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
-    kill -0 "$pid" 2>/dev/null && return 1
+    if [[ "$cmd" == *"127.0.0.1:6080"* ]]; then
+      kill "$pid" || return 1
+      for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
+      kill -0 "$pid" 2>/dev/null && return 1
+    fi
   fi
   rm -f "$pidfile"
   start_once novnc websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900
