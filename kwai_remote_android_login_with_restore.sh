@@ -69,26 +69,9 @@ if old2 in src:
 else:
     print('KWAI_RUNTIME_INTEREST_SKIP_PATTERN_NOT_FOUND')
 
-start=src.find('email_login_visible(){')
-end=src.find('\nlogin_lock(){', start)
-if start >= 0 and end > start:
-    strict="""email_login_visible(){
-  dump_ui || return 1
-  python3 - <<'PY'
-import xml.etree.ElementTree as ET
-try: root=ET.parse('/tmp/kwai-ui.xml').getroot()
-except Exception: raise SystemExit(1)
-nodes=list(root.iter('node'))
-fields=[n for n in nodes if n.get('class','').endswith('EditText')]
-focus=__import__('subprocess').run(['adb','shell','dumpsys','window'],capture_output=True,text=True).stdout.lower()
-google='com.google.android.gms' in focus
-raise SystemExit(0 if (not google and len(fields)>0) else 1)
-PY
-}"""
-    src=src[:start]+strict+src[end:]
-    print('KWAI_RUNTIME_STRICT_LOGIN_FORM_PATCHED')
-else:
-    print('KWAI_RUNTIME_STRICT_LOGIN_FORM_PATTERN_NOT_FOUND')
+if "python3 tools/kwai_login_ui_locator.py email-form" not in src:
+    raise RuntimeError("native login form selector missing; refuse legacy override")
+print('KWAI_RUNTIME_NATIVE_LOGIN_SELECTOR_PRESERVED')
 
 src=src.replace("1) tap_label '^(Profile|Perfil|Eu|Me)$' || true ;;", "1) tap_label '^(Log In|Sign In|Entrar|Login)$' || tap_label '^(Profile|Perfil|Eu|Me)$' || true ;;", 1)
 print('KWAI_RUNTIME_FEED_LOGIN_TAB_FIRST')
