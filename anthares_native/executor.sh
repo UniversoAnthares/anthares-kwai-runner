@@ -7,7 +7,7 @@ log(){ echo "$*" | tee -a "$REPORT"; }
 export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
 export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 
-log ANTHARES_EXECUTOR=V1
+log ANTHARES_EXECUTOR=V2
 log EXECUTOR_BACKEND=RAW_ANDROID_SDK
 
 test -e /dev/kvm || { log FAIL_NO_KVM; exit 20; }
@@ -17,32 +17,49 @@ yes | sdkmanager --licenses >/dev/null 2>&1 || true
 sdkmanager --install "platform-tools" "emulator" "system-images;android-30;google_apis;x86_64" >/dev/null
 
 echo no | avdmanager create avd --force --name anthares_native_30 --package "system-images;android-30;google_apis;x86_64" --device "pixel_5" >/dev/null
+emulator -list-avds | grep -qx anthares_native_30 || { log FAIL_AVD_NOT_CREATED; exit 22; }
+emulator -accel-check >>/tmp/anthares-accel.log 2>&1 || true
+adb start-server >/dev/null 2>&1 || true
 
-nohup emulator -avd anthares_native_30 \
-  -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect \
-  -accel on -memory 2048 -cores 2 -camera-back none -camera-front none \
+nohup emulator -avd anthares_native_30 -port 5554 \
+  -no-window -no-audio -no-boot-anim -no-snapshot-load -no-snapshot-save \
+  -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 \
   > /tmp/anthares-emulator.log 2>&1 &
 EMU_PID=$!
-trap 'kill "$EMU_PID" 2>/dev/null || true' EXIT
+cleanup(){ kill "$EMU_PID" 2>/dev/null || true; }
+trap cleanup EXIT
 
-timeout 180 adb wait-for-device
-for _ in $(seq 1 90); do
-  [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] && break
+for _ in $(seq 1 60); do
+  if adb devices | grep -q '^emulator-5554[[:space:]]\+device$'; then break; fi
+  if ! kill -0 "$EMU_PID" 2>/dev/null; then
+    log FAIL_EMULATOR_PROCESS_EXITED
+    tail -80 /tmp/anthares-emulator.log || true
+    cat /tmp/anthares-accel.log || true
+    exit 23
+  fi
   sleep 2
 done
-[[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] || { log FAIL_BOOT_TIMEOUT; exit 21; }
+adb devices | grep -q '^emulator-5554[[:space:]]\+device$' || {
+  log FAIL_ADB_DEVICE_TIMEOUT
+  tail -80 /tmp/anthares-emulator.log || true
+  cat /tmp/anthares-accel.log || true
+  exit 24
+}
+for _ in $(seq 1 90); do
+  [[ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] && break
+  sleep 2
+done
+[[ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] || { log FAIL_BOOT_TIMEOUT; tail -80 /tmp/anthares-emulator.log || true; exit 21; }
+export ANDROID_SERIAL=emulator-5554
 log ANDROID_BOOTED=1
 
-curl -fsSL --retry 3 --connect-timeout 10 --max-time 180 \
-  -o /tmp/kwai-vault.zip \
-  https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+curl -fsSL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
 printf '%s  %s\n' '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543' /tmp/kwai-vault.zip | sha256sum -c -
 rm -rf /tmp/kwai-vault && mkdir -p /tmp/kwai-vault
 unzip -q /tmp/kwai-vault.zip -d /tmp/kwai-vault
 
 BASE="$(find /tmp/kwai-vault -type f \( -name 'com.kwai.video.apk' -o -name 'base.apk' \) | head -1)"
 [[ -n "$BASE" ]] || { log FAIL_NO_BASE_APK; exit 30; }
-ABI="$(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
 BRIDGE="$(adb shell getprop ro.dalvik.vm.native.bridge | tr -d '\r')"
 DENSITY="$(adb shell wm density | sed -n 's/.*: //p' | tail -1 | tr -d '\r')"
 selected_abi=x86_64
