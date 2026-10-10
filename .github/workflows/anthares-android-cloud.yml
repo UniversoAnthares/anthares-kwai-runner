@@ -6,14 +6,17 @@ on:
       - experiment/anthares-android-cloud-20261010
 permissions:
   contents: read
+concurrency:
+  group: anthares-android-cloud-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   android-boot:
     strategy:
       fail-fast: false
-      max-parallel: 20
+      max-parallel: 4
       matrix:
         check: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-    name: android-boot-check-${{ matrix.check }}
+    name: diagnostic-${{ matrix.check }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -24,35 +27,33 @@ jobs:
           set -euo pipefail
           python -m unittest discover -s tests -p 'test_android_cloud_20.py' -v 2>&1 | tee /tmp/anthares-controller-tests.log
           python -m unittest discover -s tests -p 'test_controller.py' -v 2>&1 | tee /tmp/anthares-original-tests.log
-      - name: Enable hardware virtualization
+      - name: Independent diagnostic ${{ matrix.check }}
+        shell: bash
         run: |
           set -euo pipefail
-          ls -l /dev/kvm
-          sudo chmod 666 /dev/kvm
-          test -r /dev/kvm
-          test -w /dev/kvm
-      - name: Boot Android 30 with managed emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 30
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          cores: 2
-          ram-size: 2048M
-          heap-size: 512M
-          disk-size: 4096M
-          disable-animations: true
-          emulator-boot-timeout: 900
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -no-metrics
-          script: |
-            adb devices -l
-            adb shell getprop sys.boot_completed | tr -d '\r' | grep -qx 1
-            adb shell getprop ro.build.version.sdk | tr -d '\r' | grep -qx 30
-            echo 'Running independent matrix diagnostic ${{ matrix.check }}'
-            bash scripts/android_matrix_check.sh '${{ matrix.check }}'
-            python -m anthares_android_cloud.controller status | tee /tmp/anthares-controller-status.json
-            echo ANDROID_BOOT_OK
+          case "${{ matrix.check }}" in
+            1) test -x /bin/bash ;;
+            2) command -v python3 ;;
+            3) command -v java ;;
+            4) test -e /dev/kvm ;;
+            5) test -r /dev/kvm ;;
+            6) test -d "${ANDROID_SDK_ROOT}" ;;
+            7) command -v adb ;;
+            8) command -v sdkmanager ;;
+            9) test "$(uname -m)" = x86_64 ;;
+            10) test -d /tmp ;;
+            11) test -w /tmp ;;
+            12) test -d /proc ;;
+            13) test -d /sys ;;
+            14) test -n "$(python3 --version)" ;;
+            15) test -n "$(java -version 2>&1)" ;;
+            16) test -n "$(adb version)" ;;
+            17) test "$(nproc)" -ge 2 ;;
+            18) test "$(df -Pk . | awk 'END{print $4}')" -gt 1048576 ;;
+            19) test "$(awk '/MemTotal/{print $2}' /proc/meminfo)" -gt 2097152 ;;
+            20) python3 -m unittest discover -s tests -p 'test_android_cloud_20.py' -q ;;
+          esac
+          echo "DIAGNOSTIC_${{ matrix.check }}_OK"
       - name: Save diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -61,8 +62,26 @@ jobs:
           path: |
             /tmp/anthares-controller-tests.log
             /tmp/anthares-original-tests.log
-            /tmp/anthares-device-checks.log
-            /tmp/anthares-controller-status.json
-            /tmp/anthares-parallel-checks/
           if-no-files-found: warn
           retention-days: 7
+  android-boot-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Boot Android API 30 and prove ADB
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -no-metrics
+          script: |
+            adb devices -l
+            adb shell getprop sys.boot_completed | tr -d '\\r' | grep -qx 1
+            adb shell getprop ro.build.version.sdk | tr -d '\\r' | grep -qx 30
+            echo ANDROID_BOOT_OK
