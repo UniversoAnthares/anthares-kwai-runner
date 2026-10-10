@@ -67,7 +67,38 @@ start_once openbox openbox-session
 
 # VNC and Chrome DevTools listen on loopback only; do NOT make forwarded ports public.
 start_once vnc x11vnc -display :99 -localhost -rfbport 5900 -nopw -forever -shared -quiet
+# Repair a dead noVNC listener without touching Chromium or its saved profile.
+novnc_healthy() {
+  curl --noproxy '*' -fsS --max-time 3 http://127.0.0.1:6080/vnc.html -o /dev/null
+}
+recover_novnc() {
+  if novnc_healthy; then return 0; fi
+  local pidfile="${PRIVATE_HOME}/novnc.pid" pid cmd
+  pid="$(cat "$pidfile" 2>/dev/null || true)"
+  if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+    cmd="$(tr '\\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
+    [[ "$cmd" == *websockify* && "$cmd" == *127.0.0.1:6080* ]] || return 1
+    kill "$pid" || return 1
+    for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
+    kill -0 "$pid" 2>/dev/null && return 1
+  fi
+  rm -f "$pidfile"
+  start_once novnc websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900
+  sleep 1
+  novnc_healthy
+}
 start_once novnc websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900
+recover_novnc || echo "KWAI_CODESPACE_novnc=unhealthy_check_logs" >&2
+# Periodic local health check: the Codespaces forwarding proxy itself is external.
+if [[ ! -f "${PRIVATE_HOME}/novnc-watchdog.pid" ]] || ! kill -0 "$(cat "${PRIVATE_HOME}/novnc-watchdog.pid")" 2>/dev/null; then
+  (
+    while true; do
+      sleep 20
+      recover_novnc || true
+    done
+  ) >"${LOGS}/novnc-watchdog.log" 2>&1 </dev/null &
+  echo "$!" >"${PRIVATE_HOME}/novnc-watchdog.pid"
+fi
 
 start_once chrome chromium \
   --no-sandbox \
