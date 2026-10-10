@@ -64,3 +64,41 @@ jobs:
           curl -fsS -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" http://127.0.0.1:8765/screen -o /tmp/bridge-screen.png
           file /tmp/bridge-screen.png | grep -q PNG
           echo ANTHARES_REMOTE_SCREEN_ENDPOINT_PASS
+      - name: Expose real Android bridge through temporary HTTPS tunnel
+        run: |
+          set -Eeuo pipefail
+          curl -fLsS --retry 2 --connect-timeout 8 --max-time 35 https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+          sudo install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared
+          cloudflared --version
+          cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 >/tmp/anthares-tunnel.log 2>&1 &
+          TP=$!
+          trap 'kill "$TP" 2>/dev/null || true' EXIT
+          URL=""
+          for i in $(seq 1 40); do
+            URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/anthares-tunnel.log | head -1 || true)"
+            if [ -n "$URL" ] && curl -fsS --max-time 4 -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" "$URL/health" >/tmp/public-bridge-health.json; then break; fi
+            sleep 1
+          done
+          test -n "$URL" || { cat /tmp/anthares-tunnel.log; exit 1; }
+          python3 - "$URL" <<'PY'
+          import json,sys,urllib.request
+          url=sys.argv[1]; token=__import__('os').environ['ANTHARES_BRIDGE_TOKEN']
+          def req(path,method='GET',data=None):
+              headers={'Authorization':'Bearer '+token}
+              if data is not None: headers['Content-Type']='application/json'
+              with urllib.request.urlopen(urllib.request.Request(url+path,data=data,headers=headers,method=method),timeout=12) as r:
+                  return r.status,r.headers,r.read()
+          status,_,body=req('/health')
+          health=json.loads(body)
+          assert status==200 and health.get('adb_online') is True,health
+          status,hdr,png=req('/screen')
+          assert status==200 and hdr.get_content_type()=='image/png' and png.startswith(b'\\x89PNG\\r\\n\\x1a\\n')
+          status,_,body=req('/input','POST',b'{"action":"key","key":"HOME"}')
+          assert status==200 and json.loads(body).get('ok') is True
+          try: req('/health',method='GET')
+          except Exception: pass
+          else: raise AssertionError('authenticated route test unexpectedly failed')
+          print('ANTHARES_REAL_ANDROID_PUBLIC_HTTPS_SCREEN_CONTROL_PASS')
+          print('ANTHARES_PUBLIC_TUNNEL_URL='+url)
+          PY
+
