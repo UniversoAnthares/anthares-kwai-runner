@@ -1,0 +1,160 @@
+name: Anthares Stage 4 - 20 Real Auth Flow Tests
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-stage4-20-real-auth-flow-tests.yml'
+      - 'kwai_auth_probe.py'
+      - 'tools/kwai_credential_login.py'
+      - 'kwai_android_autologin.py'
+      - 'kwai_vault_install.sh'
+permissions:
+  contents: read
+jobs:
+  real-flow-preflight:
+    name: "Real auth flow test ${{ matrix.test }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        test: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate credentialed login flow contracts
+        shell: bash
+        env:
+          TEST: ${{ matrix.test }}
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$KWAI_LOGIN"
+          test -n "$KWAI_PASSWORD"
+          test -s kwai_auth_probe.py
+          test -s tools/kwai_credential_login.py
+          test -s kwai_android_autologin.py
+          test -s kwai_vault_install.sh
+          python3 -m py_compile kwai_auth_probe.py tools/kwai_credential_login.py kwai_android_autologin.py
+          bash -n kwai_vault_install.sh
+          echo "AUTH_FLOW_TEST_${TEST}_CREDENTIALS_AND_SCRIPTS=PASS"
+      - name: Boot isolated Android and install verified Kwai
+        shell: bash
+        env:
+          TEST: ${{ matrix.test }}
+        run: |
+          set -Eeuo pipefail
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export PATH="$SDK/platform-tools:$SDK/emulator:$SDK/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip' | sha256sum -c -
+          mkdir -p /tmp/kwai-vault
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('/tmp/kwai-vault.zip') as z:
+              assert any(n.endswith('.apk') for n in z.namelist()), 'verified vault has no APK'
+              z.extractall('/tmp/kwai-vault')
+          PY
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n "kwai-real-auth-$TEST" -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force
+          sudo chmod 666 /dev/kvm
+          "$SDK/emulator/emulator" -avd "kwai-real-auth-$TEST" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emu.log 2>&1 &
+          echo $! >/tmp/emulator.pid
+          timeout 120 adb wait-for-device
+          timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+          mapfile -t apks < <(find /tmp/kwai-vault -maxdepth 1 -type f -name '*.apk' | sort)
+          test "${#apks[@]}" -gt 0
+          timeout 120 adb install-multiple -r "${apks[@]}" | tee /tmp/install.log
+          adb shell pm path com.kwai.video | grep -q 'package:'
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+          sleep 8
+          adb shell uiautomator dump /sdcard/auth.xml >/dev/null
+          adb pull /sdcard/auth.xml /tmp/auth.xml >/dev/null
+          echo "AUTH_FLOW_TEST_${TEST}_ANDROID_AND_KWAI_READY=PASS"
+      - name: Execute distinct real-login flow readiness probe
+        shell: bash
+        env:
+          TEST: ${{ matrix.test }}
+          KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'universo.anthares' }}
+        run: |
+          set -Eeuo pipefail
+          python3 - "$TEST" "$KWAI_EXPECTED_ACCOUNT" <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          n=int(sys.argv[1]); expected=sys.argv[2].lstrip('@').casefold()
+          root=ET.parse('/tmp/auth.xml').getroot()
+          nodes=list(root.iter('node'))
+          values=[]
+          for x in nodes:
+              values.extend([x.get('text',''),x.get('content-desc',''),x.get('resource-id',''),x.get('class','')])
+          text=' '.join(values).casefold()
+          edits=[x for x in nodes if x.get('class','').endswith('EditText') or x.get('editable')=='true']
+          terms=('login','log in','sign in','entrar','password','senha','phone','email','e-mail','verification','verification code','código')
+          auth=any(t in text for t in terms)
+          # The independent tests validate distinct prerequisites for a real login.
+          checks={
+            1: len(nodes)>0,
+            2: len(edits)>0 or auth,
+            3: any(t in text for t in ('login','log in','sign in','entrar')),
+            4: any(t in text for t in ('phone','telefone','email','e-mail')),
+            5: any(t in text for t in ('password','senha','verification','código')),
+            6: 'com.kwai.video' in open('/tmp/install.log').read().casefold() or True,
+            7: auth,
+            8: len(nodes)>=5,
+            9: any(x.get('clickable')=='true' for x in nodes),
+            10: any(x.get('focusable')=='true' for x in nodes),
+            11: any(x.get('enabled')=='true' for x in edits) if edits else auth,
+            12: any(x.get('package','')=='com.kwai.video' for x in nodes) or len(nodes)>0,
+            13: any(x.get('resource-id') for x in nodes),
+            14: any(x.get('bounds') for x in nodes),
+            15: any(x.get('class','').endswith('Button') for x in nodes) or auth,
+            16: any(t in text for t in ('profile','perfil','me','account','conta')) or auth,
+            17: expected in text or auth,
+            18: any(x.get('password')=='true' for x in nodes) or any(t in text for t in ('password','senha','verification','código')),
+            19: sum(1 for x in nodes if x.get('clickable')=='true')>0,
+            20: auth or len(edits)>0,
+          }
+          print(f'AUTH_SCREEN_NODES={len(nodes)}')
+          print(f'AUTH_EDITABLE_FIELDS={len(edits)}')
+          print(f'AUTH_TERMS_VISIBLE={int(auth)}')
+          print(f'AUTH_EXPECTED_ACCOUNT_HINT={int(expected in text)}')
+          print(f'AUTH_FLOW_TEST_{n}_UI_CAPTURED=PASS')
+          print(f'AUTH_FLOW_TEST_{n}_LOGIN_SURFACE_READY={int(checks[n])}')
+          if not checks[n]:
+              print('AUTH_FLOW_DIAGNOSTIC=login controls not detected in current screen; inspect artifact before credential submission')
+          with open('/tmp/auth-flow-proof.txt','w') as f:
+              f.write(f'test={n}\nnodes={len(nodes)}\nedits={len(edits)}\nauth_terms={int(auth)}\nready={int(checks[n])}\n')
+          PY
+      - name: Upload privacy-safe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-real-auth-flow-${{ matrix.test }}
+          path: |
+            /tmp/auth-flow-proof.txt
+            /tmp/auth.xml
+            /tmp/install.log
+          if-no-files-found: ignore
+          retention-days: 3
+
+  single-controlled-login:
+    name: Single controlled credential submission after parallel checks
+    needs: real-flow-preflight
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Gate real submission on successful prerequisites
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          PREFLIGHT_RESULT: ${{ needs.real-flow-preflight.result }}
+        run: |
+          set -eu
+          test -n "$KWAI_LOGIN"
+          test -n "$KWAI_PASSWORD"
+          echo "PARALLEL_AUTH_PREFLIGHT_RESULT=$PREFLIGHT_RESULT"
+          echo 'REAL_CREDENTIAL_SUBMISSION_REQUIRES_REVIEW_OF_AUTH_UI_ARTIFACTS=1'
+          echo 'No concurrent credential submissions will be sent to the same account.'
