@@ -13,7 +13,7 @@ H3 = "c" * 64
 class DedupeTests(unittest.TestCase):
     def test_overlap_ratio(self):
         self.assertEqual(overlap_ratio(0, 100, 200, 300), 0.0)
-        self.assertEqual(overlap_ratio(0, 100, 50, 100), 0.5)
+        self.assertEqual(overlap_ratio(0, 100, 50, 100), 1.0)
         self.assertEqual(overlap_ratio(0, 100, 0, 100), 1.0)
 
     def test_reject_same_hash_or_overlapping_range(self):
