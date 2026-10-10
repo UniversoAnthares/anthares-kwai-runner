@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 REPORT="kwai-remote-status.txt"; SHOT="kwai-remote-ready.png"; : > "$REPORT"
 log(){ printf '%s\n' "$*" | tee -a "$REPORT"; }
-capture(){ adb exec-out screencap -p > "$SHOT" 2>/dev/null || true; }
+capture(){ :; } # No screenshots of login or credential surfaces.
 finish_diag(){ { echo "=== adb ==="; adb devices -l || true; echo "=== accounts ==="; adb shell dumpsys account 2>/dev/null | grep -E 'Account \{|type=com.google' | tail -20 || true; echo "=== package ==="; adb shell pm path com.kwai.video || true; echo "=== foreground ==="; adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | tail -8 || true; echo "=== activity ==="; adb shell dumpsys activity activities 2>/dev/null | grep -E 'TinyGoogleSSOActivity|SignInHubActivity|SignInActivity|TinyLoginActivity' | tail -20 || true; echo "=== tunnel ==="; tail -30 /tmp/tunnel.log 2>/dev/null || true; echo "=== ui ==="; tail -30 /tmp/android-ui.log 2>/dev/null || true; } >> "$REPORT"; capture; }
 cleanup(){ finish_diag; [ -n "${UI_PID:-}" ] && kill "$UI_PID" 2>/dev/null || true; [ -n "${TUNNEL_PID:-}" ] && kill "$TUNNEL_PID" 2>/dev/null || true; }
 trap cleanup EXIT
@@ -198,8 +198,8 @@ open_native_email_entry(){
 login_lock(){
   log "LOGIN_SURFACE_DETECTED"
   log "LOCKED_ON_LOGIN"
-  adb exec-out screencap -p > kwai-login-detected.png 2>/dev/null || true
-  dump_ui && cp /tmp/kwai-ui.xml kwai-login-detected.xml || true
+  # Never persist screenshots or raw UI XML containing credentials.
+  dump_ui >/dev/null 2>&1 || true
   adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' > kwai-login-focus.txt || true
 }
 
