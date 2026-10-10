@@ -312,7 +312,23 @@ def _cleanup_job() -> None:
     shutil.rmtree(root, ignore_errors=True)
 
 
+def _configure_job() -> int:
+    """Provide a private checkout root for each GitLab job."""
+    job_id = os.environ.get("CUSTOM_ENV_CI_JOB_ID", "").strip()
+    if not job_id.isdigit():
+        print("invalid CI job id for isolated workspace", file=sys.stderr)
+        return _build_failure_code()
+    print(json.dumps({
+        "builds_dir": str(BUILDS_ROOT / job_id),
+        "cache_dir": str(CACHE_ROOT / job_id),
+        "builds_dir_is_shared": False,
+    }))
+    return 0
+
+
 def main() -> int:
+    if len(sys.argv) == 2 and sys.argv[1] == "config":
+        return _configure_job()
     if len(sys.argv) < 3:
         print("custom executor requires script path and stage", file=sys.stderr)
         return _build_failure_code()
