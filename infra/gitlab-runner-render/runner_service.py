@@ -38,8 +38,9 @@ def register_command(binary, config, token):
     if token.startswith("glrt-"):
         return cmd + ["--token", token]
 
-    # Projects still exposing a legacy registration token can bootstrap a
-    # project-scoped protected runner. New authentication token stays in config.
+    # Keep the runner project-scoped, locked and tag-only. QA/MR branches may
+    # execute on it, while GitLab protected variables remain unavailable to
+    # unprotected refs.
     return cmd + [
         "--registration-token",
         token,
@@ -49,7 +50,7 @@ def register_command(binary, config, token):
         "render-qa",
         "--run-untagged=false",
         "--locked=true",
-        "--access-level=ref_protected",
+        "--access-level=not_protected",
     ]
 
 
