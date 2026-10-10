@@ -48,6 +48,7 @@ onboarding_taps=0
 profile_taps=0
 valid_dumps=0
 invalid_dumps=0
+app_error_restarts=0
 while [ "$SECONDS" -lt "$deadline" ]; do
   if ! dump_ui; then
     invalid_dumps=$((invalid_dumps+1))
@@ -94,7 +95,15 @@ while [ "$SECONDS" -lt "$deadline" ]; do
     break
   fi
   if [ "$(state_flag "$state" system_error)" = 1 ]; then
-    signal "BLOCKER=ANDROID_APP_ERROR"
+    if [ "$app_error_restarts" -lt 1 ]; then
+      app_error_restarts=$((app_error_restarts+1))
+      signal "RECOVERY=BOUNDED_APP_RELAUNCH"
+      adb shell am force-stop com.kwai.video >/dev/null 2>&1 || true
+      adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+      sleep 4
+      continue
+    fi
+    signal "BLOCKER=ANDROID_APP_ERROR_AFTER_RELAUNCH"
     break
   fi
   if [ "$(state_flag "$state" interest_onboarding)" = 1 ]; then
