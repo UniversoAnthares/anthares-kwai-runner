@@ -56,6 +56,18 @@ class KwaiNativeLoginSelectorTests(unittest.TestCase):
         xml = '<hierarchy><node class="android.widget.FrameLayout" resource-id="com.kwai.video:id/ll_profile" bounds="[1080,2274][864,2123]"/></hierarchy>'
         self.assertIsNone(selector.profile_tab(selector.parse(xml)))
 
+    def test_bottom_label_profile_without_resource_id(self):
+        xml = '<hierarchy><node class="android.view.View" bounds="[0,0][1080,2340]"/><node class="android.widget.TextView" text="Profile" bounds="[864,2123][1080,2274]"/></hierarchy>'
+        self.assertEqual(selector.profile_tab(selector.parse(xml)),(972,2198))
+
+    def test_create_profile_heading_not_bottom_navigation(self):
+        xml = '<hierarchy><node class="android.view.View" bounds="[0,0][1080,2340]"/><node class="android.widget.TextView" text="Create your profile" bounds="[70,734][763,845]"/></hierarchy>'
+        self.assertIsNone(selector.profile_tab(selector.parse(xml)))
+
+    def test_profile_label_in_middle_is_not_bottom_navigation(self):
+        xml = '<hierarchy><node class="android.view.View" bounds="[0,0][1080,2340]"/><node class="android.widget.TextView" text="Profile" bounds="[70,734][763,845]"/></hierarchy>'
+        self.assertIsNone(selector.profile_tab(selector.parse(xml)))
+
     def test_form_requires_real_edittext(self):
         self.assertTrue(selector.email_form_visible(selector.parse(FORM)))
 
