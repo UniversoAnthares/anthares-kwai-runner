@@ -62,6 +62,15 @@ test('wrong workflow cannot access stored session',async()=>{
   const bad=async()=>({ok:true,claims:{...claims,job_workflow_ref:'other.yml'}});
   assert.equal((await handleKwaiSessionVault(req(),e,bad)).status,401);
 });
+test('dedicated probe workflow cannot read or write any session ciphertext',async()=>{
+  const e=env();
+  const probeWorkflow='UniversoAnthares/anthares-kwai-runner/.github/workflows/kwai-private-vault-probe.yml@refs/heads/main';
+  const probeAuth=async()=>({ok:true,claims:{...claims,job_workflow_ref:probeWorkflow}});
+  const health=new Request(URL+'?probe=1',{headers:{Authorization:'Bearer test-oidc-token'}});
+  assert.equal((await handleKwaiSessionVault(health,e,probeAuth)).status,200);
+  assert.equal((await handleKwaiSessionVault(req(),e,probeAuth)).status,401);
+  assert.equal((await handleKwaiSessionVault(req('POST',{account:'lucasrosalem',ciphertext,sha256}),e,probeAuth)).status,401);
+});
 test('tampered stored ciphertext is rejected',async()=>{
   const e=env();
   await handleKwaiSessionVault(req('POST',{account:'lucasrosalem',ciphertext,sha256}),e,ok);
