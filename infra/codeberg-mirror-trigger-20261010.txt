@@ -1,0 +1,2 @@
+Codeberg mirror initial synchronization trigger, 2026-10-10.
+No credentials stored here.
