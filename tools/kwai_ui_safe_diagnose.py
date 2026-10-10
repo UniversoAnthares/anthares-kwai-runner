@@ -19,7 +19,16 @@ def classify(xml):
     profile_hints=[n for n in nodes if "profile" in (n.get("resource-id") or "").casefold()]
     hint_bounded=[n for n in profile_hints if node_bounds(n)]
     bottom_hints=[n for n in hint_bounded if sum(node_bounds(n)[1::2])//2 >= screen_height*.76]
+    # An "app info" label is not evidence of a crash.
+    system_nodes=[n for n in nodes if (n.get("package") or "").startswith(
+        ("com.android.systemui","com.google.android.permissioncontroller","com.android.permissioncontroller"))]
+    system_labels=" ".join(((n.get("text") or "")+" "+(n.get("content-desc") or "")) for n in system_nodes).lower()
+    crash_phrases=("isn't responding","is not responding","keeps stopping","não está respondendo","continua parando")
+    explicit_crash=any(term in system_labels for term in crash_phrases)
+    ambiguous_error=any(term in labels for term in crash_phrases) and not explicit_crash
     return {
+        "system_error_unattributed":ambiguous_error,
+        "system_dialog_node_count":len(system_nodes),
         "profile_hint_bounded_count":len(hint_bounded),
         "profile_hint_bottom_count":len(bottom_hints),
         "profile_hint_unbounded_count":len(profile_hints)-len(hint_bounded),
@@ -42,7 +51,7 @@ def classify(xml):
         "phone_login_option":anyof("login_phone","phone number","número de telefone","continue with phone"),
         "google_login_option":anyof("continue with google","login_google","google sign in"),
         "email_login_option":anyof("login_email","continue with email","entrar com e-mail"),
-        "system_error":anyof("isn't responding","keeps stopping","app info","fechar app"),
+        "system_error":explicit_crash,
     }
 
 def main():
