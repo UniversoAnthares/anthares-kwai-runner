@@ -327,9 +327,19 @@ jobs:
             bash kwai_vault_install.sh
             echo "REPLICA=$R INSTALL_OK=1"
             adb shell pidof com.kwai.video || true
-            adb shell uiautomator dump /sdcard/full.xml >/dev/null 2>&1 || true
-            adb pull /sdcard/full.xml "kwai-full-$R.xml" >/dev/null 2>&1 || true
-            test -s "kwai-full-$R.xml"
+            # UIAutomator may transiently fail while Android finishes rendering.
+            # Retry the UI probe without reinstalling or restarting the AVD.
+            UI_OK=0
+            for attempt in 1 2 3; do
+              adb shell rm -f /sdcard/full.xml || true
+              if timeout 35 adb shell uiautomator dump /sdcard/full.xml >/dev/null 2>&1 && adb pull /sdcard/full.xml "kwai-full-$R.xml" >/dev/null 2>&1 && test -s "kwai-full-$R.xml"; then
+                UI_OK=1
+                break
+              fi
+              echo "UI_DUMP_RETRY=$attempt"
+              sleep 5
+            done
+            test "$UI_OK" = 1
             echo "REPLICA=$R UI_DUMP_OK=1"
       - run:
           name: Replica << parameters.replica >> post-install liveness
