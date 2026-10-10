@@ -49,7 +49,7 @@ def main():
     name, label, resource, kind=SCENARIOS[idx]
     y1,y2=(40,100) if kind=="top" else (750,850)
     if kind=="tiny": y1,y2=200,280
-    bounds="[0,0][0,0]" if kind=="invalid" else f"[20,{y1}][320,{y2}]"
+    bounds="[0,0][0,0]" if kind=="invalid" else f"[220,{y1}][320,{y2}]"
     klass="android.widget.EditText" if kind=="edit" else "android.widget.TextView"
     root=ET.Element("hierarchy")
     ET.SubElement(root,"node",{"text":label,"resource-id":"com.kwai.video:id/"+resource if resource else "", "class":klass,"bounds":bounds})
