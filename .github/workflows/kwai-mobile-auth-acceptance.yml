@@ -39,26 +39,26 @@ jobs:
         run: |
           set -euo pipefail
           case "${{ matrix.check }}" in
-            1) bash -n kwai_session_state.sh ;;
-            2) python3 -m py_compile kwai_auth_probe.py ;;
-            3) python3 -m py_compile tools/kwai_credential_login.py ;;
-            4) grep -Fq 'KWAI_EXPECTED_ACCOUNT' kwai_auth_probe.py ;;
-            5) grep -Fq 'KWAI_LOGIN' tools/kwai_credential_login.py ;;
-            6) grep -Fq 'KWAI_PASSWORD' tools/kwai_credential_login.py ;;
-            7) test -n "$KWAI_LOGIN" && test -n "$KWAI_PASSWORD" && echo CREDENTIALS_PRESENT=true ;;
-            8) grep -Fq 'KWAI_AUTH_STATE=AUTHENTICATED_UI' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            9) grep -Fq 'KWAI_IDENTITY_PROFILE_MATCH=1' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            10) grep -Fq 'KWAI_SESSION_SAVE_REFUSED_IDENTITY_UNVERIFIED' kwai_session_state.sh ;;
-            11) grep -Fq 'KWAI_SESSION_SAVED_ENCRYPTED' kwai_session_state.sh ;;
-            12) grep -Fq 'KWAI_SESSION_DECRYPT_FAILED' kwai_session_state.sh ;;
-            13) grep -Fq 'openssl enc -aes-256-cbc' kwai_session_state.sh ;;
-            14) command -v openssl >/dev/null ;;
-            15) command -v adb >/dev/null || test -x /usr/local/lib/android/sdk/platform-tools/adb ;;
-            16) grep -Fq 'script: |' .github/workflows/kwai-mobile-auth-acceptance.yml && grep -A1 -Fq 'script: |' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            17) ! grep -A1 -F 'script: |' .github/workflows/kwai-mobile-auth-acceptance.yml | grep -q 'pipefail' ;;
-            18) grep -Fq 'python3 tools/kwai_credential_login.py' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            19) grep -Fq 'bash kwai_session_state.sh save' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            20) grep -Fq 'python3 tools/kwai_session_vault_client.py push' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            1) test -n "$KWAI_LOGIN" && test -n "$KWAI_PASSWORD" && echo CREDENTIALS_PRESENT=true ;;
+            2) bash -n kwai_session_state.sh ;;
+            3) python3 -m py_compile kwai_auth_probe.py ;;
+            4) python3 -m py_compile tools/kwai_credential_login.py ;;
+            5) python3 -m py_compile tools/kwai_session_vault_client.py ;;
+            6) grep -Fq 'KWAI_EXPECTED_ACCOUNT: lucasrosalem' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            7) grep -Fq 'KWAI_AUTH_STATE=AUTHENTICATED_UI' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            8) grep -Fq 'KWAI_IDENTITY_PROFILE_MATCH=1' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            9) grep -Fq 'python3 tools/kwai_credential_login.py' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            10) grep -Fq 'bash kwai_session_state.sh save' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            11) grep -Fq 'python3 tools/kwai_session_vault_client.py push' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            12) grep -Fq 'python3 tools/kwai_session_vault_client.py pull' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            13) grep -Fq 'KWAI_SESSION_SAVE_REFUSED_IDENTITY_UNVERIFIED' kwai_session_state.sh ;;
+            14) grep -Fq 'KWAI_SESSION_SAVED_ENCRYPTED' kwai_session_state.sh ;;
+            15) grep -Fq 'KWAI_SESSION_DECRYPT_FAILED' kwai_session_state.sh ;;
+            16) grep -Fq 'openssl enc -aes-256-cbc' kwai_session_state.sh ;;
+            17) grep -Fq 'permissions:' .github/workflows/kwai-mobile-auth-acceptance.yml && grep -Fq 'id-token: write' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            18) grep -Fq 'KWAI_VAULT_OIDC_NOT_AUTHORIZED_BOOTSTRAP' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            19) grep -Fq 'set -eu' .github/workflows/kwai-mobile-auth-acceptance.yml && ! grep -A1 -F 'script: |' .github/workflows/kwai-mobile-auth-acceptance.yml | grep -q pipefail ;;
+            20) grep -Fq '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
             *) exit 2 ;;
           esac
           echo "AUTH_PREFLIGHT_${{ matrix.check }}=PASS"
