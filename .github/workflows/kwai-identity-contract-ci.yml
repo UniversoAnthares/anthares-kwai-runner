@@ -1,0 +1,38 @@
+name: Kwai identity contract (free hosted QA)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kwai-identity-contract-ci.yml'
+      - '.github/workflows/kwai-interactive-remote-login.yml'
+      - 'kwai_auth_probe.py'
+  pull_request:
+    paths:
+      - '.github/workflows/kwai-identity-contract-ci.yml'
+      - '.github/workflows/kwai-interactive-remote-login.yml'
+      - 'kwai_auth_probe.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  identity-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate probe syntax and exact account gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile kwai_auth_probe.py
+          python3 - <<'PY'
+          from pathlib import Path
+          wf = Path(".github/workflows/kwai-interactive-remote-login.yml").read_text()
+          probe = Path("kwai_auth_probe.py").read_text()
+          assert "KWAI_EXPECTED_ACCOUNT: 'lucasrosalem'" in wf
+          assert "KWAI_AUTH_STATE=AUTHENTICATED_UI" in wf
+          assert "KWAI_POST_RELAUNCH_IDENTITY_VERIFIED=lucasrosalem" in wf
+          assert "strong_identity" in probe
+          assert "KWAI_AUTH_STATE=AUTHENTICATED_UI" in probe
+          print("KWAI_IDENTITY_STATIC_CONTRACT=PASS")
+          PY
