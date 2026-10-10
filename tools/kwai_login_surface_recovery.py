@@ -54,6 +54,7 @@ def select(ns):
 seen=set()
 system_waits=0
 app_relaunches=0
+native_error_waits=0
 for i in range(22):
     try:ns=snap()
     except (subprocess.CalledProcessError,subprocess.TimeoutExpired,ET.ParseError):
@@ -93,6 +94,17 @@ for i in range(22):
         print("KWAI_RECOVERY_SYSTEM_SETUP_WAIT="+str(system_waits))
         time.sleep(5)
         continue
+    # Observed on real Android run 38086491351: the Kwai-owned alert
+    # aerr_wait/aerr_close blocked every profile/login control. Wait only
+    # once through the explicit app-owned wait action; never accept consent,
+    # dismiss security challenges, or tap unknown geometry.
+    if {"aerr_wait", "aerr_close"}.issubset(ids) and native_error_waits < 1:
+        wait_nodes=[n for n in ns if (n.get("resource-id") or "").endswith("/aerr_wait")]
+        if wait_nodes and tap(wait_nodes[0]):
+            native_error_waits+=1
+            print("KWAI_RECOVERY_NATIVE_ERROR_WAIT=1")
+            time.sleep(6)
+            continue
     if email_form_visible(ns) or native_chooser_visible(ns):
         print("KWAI_RECOVERY_LOGIN_SURFACE_READY");raise SystemExit(0)
     # Fingerprint only resource IDs/classes, never personal data or screen text.
