@@ -1,4 +1,4 @@
-name: Anthares Stage 3 - 20 Each Remaining Item
+name: Anthares Stage 3 - 20 Each Remaining Item - Retry
 on:
   workflow_dispatch:
   push:
