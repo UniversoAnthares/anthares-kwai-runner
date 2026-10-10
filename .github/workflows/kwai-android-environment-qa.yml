@@ -1,0 +1,29 @@
+name: Kwai Android Environment QA
+on:
+  push:
+    branches: [feat/mobile-android-environment-fingerprint]
+  pull_request:
+    paths:
+      - tools/kwai_android_environment_probe.py
+      - kwai_native_email_smoke.sh
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          bash -n kwai_native_email_smoke.sh
+          python3 -m py_compile tools/kwai_android_environment_probe.py
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,"tools")
+          import kwai_android_environment_probe as probe
+          assert probe.sanitize("sdk","35")=="35"
+          assert probe.sanitize("sdk","35 SECRET")=="unknown"
+          assert probe.sanitize("abi","x86_64")=="x86_64"
+          assert probe.sanitize("abi","SECRET")=="unknown"
+          PY
