@@ -1,0 +1,78 @@
+name: Anthares Stage 3 - 20 Each Remaining Item
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-stage3-final-items-20-each.yml'
+permissions:
+  contents: read
+jobs:
+  real-android-console:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        item: [screen, control]
+        repetition: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot real Android
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          ANDROID_AVD_HOME: ${{ runner.temp }}/.android/avd
+          ANTHARES_BOOT_VARIANT: 25
+          ANTHARES_KEEP_EMULATOR: '1'
+        run: |
+          set -Eeuo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          sudo chmod 666 /dev/kvm
+          bash anthares-android/scripts/provision.sh
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+      - name: Start real ADB bridge and public HTTPS tunnel
+        run: |
+          set -Eeuo pipefail
+          export ANTHARES_BRIDGE_TOKEN="$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')"
+          python3 independent_session/remote_android_bridge.py >/tmp/bridge.log 2>&1 &
+          for i in $(seq 1 25); do
+            if curl -fsS --max-time 3 -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" http://127.0.0.1:8765/health >/tmp/health.json; then break; fi
+            sleep 1
+          done
+          python3 -c 'import json;assert json.load(open("/tmp/health.json"))["adb_online"]'
+          curl -fLsS --connect-timeout 10 --max-time 40 https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+          chmod +x /tmp/cloudflared
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 >/tmp/tunnel.log 2>&1 &
+          for i in $(seq 1 45); do
+            URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/tunnel.log | head -1 || true)"
+            if [ -n "$URL" ] && curl -fsS --max-time 4 -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" "$URL/health" >/dev/null; then break; fi
+            sleep 1
+          done
+          test -n "${URL:-}"
+          echo "ANTHARES_PUBLIC_URL=$URL" >> "$GITHUB_ENV"
+          echo "ANTHARES_BRIDGE_TOKEN=$ANTHARES_BRIDGE_TOKEN" >> "$GITHUB_ENV"
+      - name: Verify the missing item against real remote Android
+        env:
+          TEST_ITEM: ${{ matrix.item }}
+          TEST_REPETITION: ${{ matrix.repetition }}
+        run: |
+          python3 - <<'PY'
+          import os,urllib.request,json
+          base=os.environ["ANTHARES_PUBLIC_URL"]; token=os.environ["ANTHARES_BRIDGE_TOKEN"]
+          def call(path,data=None):
+            headers={"Authorization":"Bearer "+token}
+            if data is not None: headers["Content-Type"]="application/json"
+            req=urllib.request.Request(base+path,data=json.dumps(data).encode() if data else None,headers=headers,method="POST" if data else "GET")
+            with urllib.request.urlopen(req,timeout=15) as r:return r.status,r.headers.get_content_type(),r.read()
+          item=os.environ["TEST_ITEM"]; n=int(os.environ["TEST_REPETITION"])
+          if item=="screen":
+            status,typ,raw=call("/screen")
+            assert status==200 and typ=="image/png" and raw.startswith(bytes.fromhex("89504e470d0a1a0a")) and len(raw)>1024
+          else:
+            status,_,raw=call("/input",{"action":"key","key":"HOME"})
+            assert status==200 and json.loads(raw).get("ok") is True
+            status,typ,png=call("/screen")
+            assert status==200 and typ=="image/png" and png.startswith(bytes.fromhex("89504e470d0a1a0a"))
+          print(f"STAGE3_REAL_ANDROID_{item.upper()}_{n:02d}=PASS")
+          PY
