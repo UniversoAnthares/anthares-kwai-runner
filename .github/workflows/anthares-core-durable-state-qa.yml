@@ -1,0 +1,32 @@
+name: Anthares Core Durable State QA
+on:
+  pull_request:
+    paths:
+      - 'anthares_core/**'
+      - 'tests/test_anthares_core_state_store.py'
+      - '.github/workflows/anthares-core-durable-state-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  state:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -p 'test_anthares_core_*.py' -v
+      - name: Simulate durable text state across fresh database
+        run: |
+          set -euo pipefail
+          python3 anthares_core/queue.py --db /tmp/a.sqlite3 enqueue probe '{"durable":true}' --id durable-check
+          python3 anthares_core/state_store.py export --db /tmp/a.sqlite3 --out /tmp/state.json
+          rm -f /tmp/a.sqlite3
+          python3 anthares_core/state_store.py import --state /tmp/state.json --db /tmp/b.sqlite3
+          python3 - <<'PY'
+          from anthares_core.queue import connect,claim
+          db=connect('/tmp/b.sqlite3')
+          t=claim(db,'fresh-runner')
+          assert t and t['id']=='durable-check'
+          print('TEXT_STATE_RESTORE=PASS')
+          PY
