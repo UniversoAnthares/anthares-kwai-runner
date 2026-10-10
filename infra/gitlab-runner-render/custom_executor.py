@@ -36,6 +36,7 @@ ALLOWED_IMAGES = {
 }
 
 CONTAINER_STAGES = {"build_script", "step_script", "after_script"}
+HOST_STAGE_TIMEOUT = 60
 
 
 def _build_failure_code() -> int:
@@ -45,8 +46,8 @@ def _build_failure_code() -> int:
         return 1
 
 
-def _run(cmd, *, env=None, stdin=None, capture=False):
-    kwargs = {"env": env, "stdin": stdin, "check": False}
+def _run(cmd, *, env=None, stdin=None, capture=False, timeout=None):
+    kwargs = {"env": env, "stdin": stdin, "check": False, "timeout": timeout}
     if capture:
         kwargs.update({"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "text": True})
     return subprocess.run(cmd, **kwargs)
@@ -178,8 +179,21 @@ def _prepare_container(image: str):
     return udocker_bin, env, container_name, metadata
 
 
-def _run_on_host(script_path: str) -> int:
-    result = _run(["bash", script_path])
+def _run_on_host(script_path: str, stage: str) -> int:
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GCM_INTERACTIVE"] = "Never"
+    env["SSH_ASKPASS"] = "/bin/false"
+    print(f"Anthares custom executor: stage={stage} host", flush=True)
+    try:
+        result = _run(["bash", script_path], env=env, timeout=HOST_STAGE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        print(
+            f"Anthares custom executor: host stage timed out after {HOST_STAGE_TIMEOUT}s: {stage}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return _build_failure_code()
     return result.returncode
 
 
@@ -201,9 +215,6 @@ def _run_in_container(script_path: str, image: str) -> int:
         if isinstance(item, str) and "=" in item:
             cmd.extend(["-e", item])
 
-    # All allowlisted Linux images provide /bin/sh. GitLab's generated Bash
-    # scripts for these jobs use POSIX-compatible commands, while this avoids
-    # injecting extra packages merely to obtain bash in Alpine images.
     cmd.extend([container_name, "/bin/sh", "-s"])
 
     print(f"Anthares custom executor: image={image} stage=container", flush=True)
@@ -236,7 +247,7 @@ def main() -> int:
         if in_container and image:
             rc = _run_in_container(script_path, image)
         else:
-            rc = _run_on_host(script_path)
+            rc = _run_on_host(script_path, stage)
 
         if stage == "cleanup_file_variables":
             _cleanup_job()
