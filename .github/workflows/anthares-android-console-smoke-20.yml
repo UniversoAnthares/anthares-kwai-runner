@@ -1,0 +1,85 @@
+name: Anthares Android Console Smoke - 20 Targeted Parallel Tests
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'independent_session/android_console_smoke_probe.py'
+      - 'anthares-android/scripts/provision.sh'
+      - '.github/workflows/anthares-android-console-smoke-20.yml'
+permissions:
+  contents: read
+jobs:
+  android-console-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        probe: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision and keep real Android emulator running
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          ANDROID_AVD_HOME: ${{ runner.temp }}/.android/avd
+          ANTHARES_BOOT_VARIANT: 25
+          ANTHARES_KEEP_EMULATOR: '1'
+        run: |
+          set -Eeuo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+          bash anthares-android/scripts/provision.sh 2>&1 | tee /tmp/android-boot.log
+          grep -Fx 'ANTHARES_ANDROID_BOOT=PASS' /tmp/android-boot.log
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+      - name: Install verified Kwai split package and confirm foreground
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        run: |
+          set -Eeuo pipefail
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
+          mkdir -p kwai-vault
+          python3 -c 'import zipfile; zipfile.ZipFile("/tmp/kwai-vault.zip").extractall("kwai-vault")'
+          bash kwai_vault_install.sh
+          adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep -q 'com.kwai.video'
+      - name: Start authenticated bridge and public HTTPS tunnel
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        run: |
+          set -Eeuo pipefail
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          export ANTHARES_BRIDGE_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          python3 independent_session/remote_android_bridge.py >/tmp/bridge.log 2>&1 &
+          echo "$!" >/tmp/bridge.pid
+          for i in $(seq 1 25); do
+            if curl -fsS -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" http://127.0.0.1:8765/health >/tmp/health.json; then break; fi
+            sleep 1
+          done
+          python3 -c 'import json; assert json.load(open("/tmp/health.json")).get("adb_online") is True'
+          curl -fLsS --connect-timeout 10 --max-time 40 https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+          sudo install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared
+          cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 >/tmp/tunnel.log 2>&1 &
+          echo "$!" >/tmp/tunnel.pid
+          URL=""
+          for i in $(seq 1 45); do
+            URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/tunnel.log | head -1 || true)"
+            if [ -n "$URL" ] && curl -fsS --max-time 5 -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" "$URL/health" >/dev/null; then break; fi
+            sleep 1
+          done
+          test -n "$URL" || { cat /tmp/tunnel.log; cat /tmp/bridge.log; exit 1; }
+          echo "ANTHARES_PUBLIC_URL=$URL" >> "$GITHUB_ENV"
+          echo "ANTHARES_BRIDGE_TOKEN=$ANTHARES_BRIDGE_TOKEN" >> "$GITHUB_ENV"
+          echo "REAL_ANDROID_HTTPS_TUNNEL_READY"
+      - name: Execute the distinct missing requirement probe
+        run: timeout 50 python3 independent_session/android_console_smoke_probe.py "${{ matrix.probe }}"
+      - name: Clean up bridge and tunnel
+        if: always()
+        run: |
+          kill "$(cat /tmp/tunnel.pid 2>/dev/null)" "$(cat /tmp/bridge.pid 2>/dev/null)" 2>/dev/null || true
