@@ -62,3 +62,32 @@ export async function handleKwaiSessionVault(request,env,verifyGithubOidc){
   }
   return json({ok:false,error:"method_not_allowed"},405);
 }
+
+// Non-sensitive durable-state canary. The dedicated probe workflow cannot
+// read or write the real session key; only an isolated run-ID record.
+export async function handleKwaiVaultSelftest(request,env,verifyGithubOidc){
+  const token=(request.headers.get("Authorization")||"").replace(/^Bearer\\s+/i,"");
+  const auth=await verifyGithubOidc(token,env,["kwai-private-vault-probe.yml"]);
+  const claims=auth.claims||{};
+  const workflow=String(claims.job_workflow_ref||claims.workflow_ref||"");
+  if(!auth.ok||claims.repository!=="UniversoAnthares/anthares-kwai-runner"||
+      !workflow.includes("UniversoAnthares/anthares-kwai-runner/.github/workflows/kwai-private-vault-probe.yml@refs/heads/main"))
+    return json({ok:false,error:"unauthorized"},401);
+  if(!env.ANTHARES_STATE)return json({ok:false,error:"persistent_state_unavailable"},503);
+  const key="kwai:mobile:vault-selftest:v1";
+  if(request.method==="GET"){
+    const row=await env.ANTHARES_STATE.get(key,"json");
+    return json({ok:true,persistent:true,previous_run_id:row?.run_id||null});
+  }
+  if(request.method==="POST"){
+    const raw=await request.text();
+    if(raw.length>128)return json({ok:false,error:"payload_too_large"},413);
+    let data;try{data=JSON.parse(raw)}catch{return json({ok:false,error:"invalid_json"},400)}
+    if(!/^\\d{8,20}$/.test(String(data?.run_id||"")))
+      return json({ok:false,error:"invalid_run_id"},422);
+    const previous=await env.ANTHARES_STATE.get(key,"json");
+    await env.ANTHARES_STATE.put(key,JSON.stringify({run_id:String(data.run_id)}));
+    return json({ok:true,stored:true,previous_run_id:previous?.run_id||null});
+  }
+  return json({ok:false,error:"method_not_allowed"},405);
+}
