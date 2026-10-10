@@ -1,0 +1,183 @@
+name: Anthares Stage 4 - 20 Parallel Kwai Auth Tests
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-stage4-20-auth-tests.yml'
+      - 'kwai_auth_probe.py'
+      - 'tools/kwai_credential_login.py'
+permissions:
+  contents: read
+jobs:
+  auth-surface:
+    name: "Auth surface probe ${{ matrix.probe }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        probe: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify credential flow and auth-probe contracts
+        shell: bash
+        env:
+          PROBE: ${{ matrix.probe }}
+        run: |
+          set -Eeuo pipefail
+          test -s kwai_auth_probe.py
+          test -s tools/kwai_credential_login.py
+          test -s kwai_vault_install.sh
+          python3 -m py_compile kwai_auth_probe.py tools/kwai_credential_login.py
+          grep -q 'KWAI_EXPECTED_ACCOUNT' kwai_auth_probe.py
+          grep -q 'KWAI_AUTH_STATE=AUTHENTICATED_UI' kwai_auth_probe.py
+          grep -q 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai_auth_probe.py
+          grep -q 'EditText' tools/kwai_credential_login.py
+          grep -q 'KWAI_PASSWORD' tools/kwai_credential_login.py
+          echo "AUTH_STATIC_CONTRACT_${PROBE}=PASS"
+      - name: Boot Android, install official Kwai and inspect auth entry surface
+        shell: bash
+        env:
+          PROBE: ${{ matrix.probe }}
+        run: |
+          set -Eeuo pipefail
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export PATH="$SDK/platform-tools:$SDK/emulator:$SDK/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip' | sha256sum -c -
+          mkdir -p /tmp/kwai-vault
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('/tmp/kwai-vault.zip') as z:
+              assert any(n.endswith('.apk') for n in z.namelist()), 'vault contains no APK'
+              z.extractall('/tmp/kwai-vault')
+          PY
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n "kwai-auth-${PROBE}" -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force
+          sudo chmod 666 /dev/kvm
+          "$SDK/emulator/emulator" -avd "kwai-auth-${PROBE}" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emu.log 2>&1 &
+          timeout 120 adb wait-for-device
+          timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+          mapfile -t apks < <(find /tmp/kwai-vault -maxdepth 1 -type f -name '*.apk' | sort)
+          timeout 120 adb install-multiple -r "${apks[@]}" | tee /tmp/install.log
+          adb shell pm path com.kwai.video | grep -q 'package:'
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+          sleep 8
+          adb shell uiautomator dump /sdcard/kwai-stage4.xml >/dev/null
+          adb pull /sdcard/kwai-stage4.xml /tmp/kwai-stage4.xml >/dev/null
+          python3 - "$PROBE" <<'PY'
+          import sys,xml.etree.ElementTree as ET
+          probe=int(sys.argv[1]); root=ET.parse('/tmp/kwai-stage4.xml').getroot()
+          nodes=list(root.iter('node'))
+          text=' '.join(' '.join((n.get('text',''),n.get('content-desc',''),n.get('resource-id',''))) for n in nodes).casefold()
+          edits=[n for n in nodes if n.get('class','').endswith('EditText') or n.get('editable')=='true']
+          auth_words=('login','log in','sign in','entrar','senha','password','phone','email','e-mail','verification code','código de verificação')
+          has_auth=any(w in text for w in auth_words)
+          has_profile=any(w in text for w in ('profile','perfil','me','eu','account','conta'))
+          print(f'AUTH_UI_NODES={len(nodes)}')
+          print(f'AUTH_EDITABLE_FIELDS={len(edits)}')
+          print(f'AUTH_TERMS_DETECTED={int(has_auth)}')
+          print(f'PROFILE_TERMS_DETECTED={int(has_profile)}')
+          print(f'AUTH_SURFACE_PROBE_{probe}=CAPTURED')
+          # Every probe captures the surface and reports its classification;
+          # missing login controls are diagnostic findings, not masked as passes.
+          with open('/tmp/auth-surface.txt','w') as f:
+              f.write(f'probe={probe}\nnodes={len(nodes)}\nedits={len(edits)}\nauth_terms={int(has_auth)}\nprofile_terms={int(has_profile)}\n')
+          PY
+          adb shell dumpsys activity activities | tail -80 > /tmp/activity.txt
+          adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | tail -5 > /tmp/focus.txt || true
+          cat /tmp/auth-surface.txt
+      - name: Upload privacy-safe auth surface diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-stage4-auth-surface-${{ matrix.probe }}
+          path: |
+            /tmp/auth-surface.txt
+            /tmp/activity.txt
+            /tmp/focus.txt
+          if-no-files-found: ignore
+          retention-days: 3
+
+  authenticate-once:
+    name: "Single credentialed authentication and identity proof"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require primary account credentials
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$KWAI_LOGIN"
+          test -n "$KWAI_PASSWORD"
+          echo 'KWAI_CREDENTIALS_PRESENT=PASS'
+      - name: Install validated package vault
+        run: |
+          set -Eeuo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          unzip -q kwai-vault.zip -d kwai-vault
+          sudo chmod 666 /dev/kvm
+      - name: Perform one real login and verify identity
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'universo.anthares' }}
+          KWAI_ACCOUNT_ID: primary
+          KWAI_SESSION_FILE: kwai-session-primary.enc
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            set -Eeuo pipefail
+            bash kwai_vault_install.sh
+            adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+            sleep 8
+            set +e
+            python3 kwai_android_autologin.py
+            rc=$?
+            set -e
+            if [ "$rc" -ne 0 ] && [ "$rc" -ne 6 ]; then
+              echo "KWAI_AUTOLOGIN_RC=$rc"
+            fi
+            python3 tools/kwai_credential_login.py
+            sleep 6
+            KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee kwai-stage4-auth-proof.txt
+            grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' kwai-stage4-auth-proof.txt
+            grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-stage4-auth-proof.txt
+            bash kwai_session_state.sh save | tee kwai-stage4-session-save.txt
+            test -s kwai-session-primary.enc
+            echo 'STAGE4_AUTHENTICATION_AND_IDENTITY=PASS'
+      - name: Store authenticated session in private vault
+        run: |
+          set -Eeuo pipefail
+          test -s kwai-session-primary.enc
+          python3 tools/kwai_session_vault_client.py push --path kwai-session-primary.enc
+          echo 'STAGE4_SESSION_PERSISTENCE=PASS'
+      - name: Upload non-secret evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-stage4-auth-proof
+          path: |
+            kwai-stage4-auth-proof.txt
+            kwai-stage4-session-save.txt
+          if-no-files-found: warn
+          retention-days: 3
