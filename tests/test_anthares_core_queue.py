@@ -31,6 +31,13 @@ class CoreQueueTests(unittest.TestCase):
         self.assertFalse(finish(self.db,'recover',a['token'],{}))
         self.assertTrue(finish(self.db,'recover',b['token'],{'recovered':True}))
 
+    def test_idempotency_key_collision_fails_closed(self):
+        enqueue(self.db,'probe',{'target':'A'},'same-key')
+        with self.assertRaisesRegex(ValueError,'idempotency key'):
+            enqueue(self.db,'probe',{'target':'B'},'same-key')
+        with self.assertRaisesRegex(ValueError,'idempotency key'):
+            enqueue(self.db,'kwai_publish',{'target':'A'},'same-key')
+        self.assertEqual(self.db.execute("SELECT count(*) FROM tasks").fetchone()[0],1)
     def test_expired_irreversible_job_is_quarantined(self):
         enqueue(self.db,'kwai_publish',{'video':'opaque-id'},'post-1')
         first=claim(self.db,'runner-1',120)
