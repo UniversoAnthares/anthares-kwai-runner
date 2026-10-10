@@ -39,4 +39,7 @@ jobs:
           cat /tmp/install.log
           test "$RC" = 0
           adb shell pm list packages | grep -q 'package:com.kwai.video'
-          echo KWAI_DIRECT_INSTALL_OK
+          adb shell monkey -p com.kwai.video 1
+          sleep 8
+          adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep -q 'com.kwai.video'
+          echo KWAI_INSTALL_LAUNCH_AND_FOREGROUND_OK
