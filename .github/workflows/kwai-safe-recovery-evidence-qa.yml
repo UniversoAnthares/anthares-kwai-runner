@@ -1,0 +1,25 @@
+name: Kwai Safe Recovery Evidence QA
+on:
+  push:
+    branches: [fix/kwai-recovery-safe-observability]
+  pull_request:
+    paths: [kwai_native_email_smoke.sh]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          bash -n kwai_native_email_smoke.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('kwai_native_email_smoke.sh').read_text()
+          assert 'KWAI_RECOVERY_WIDGET_IDS=*' in s
+          assert 'KWAI_RECOVERY_STATE_LOOP=*' in s
+          assert 'done < /tmp/kwai-safe-recovery.log' in s
+          assert 'signal "$recovery_line"' in s
+          PY
