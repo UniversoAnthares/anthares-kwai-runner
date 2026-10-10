@@ -1,0 +1,41 @@
+name: Anthares Native Executor v1
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "anthares_native/executor.sh"
+      - "anthares_native/surface_driver.py"
+      - ".github/workflows/anthares-native-executor.yml"
+permissions:
+  contents: read
+jobs:
+  prove-remote-auth-surface:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        attempt: [1, 2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute independent raw Android executor
+        run: bash anthares_native/executor.sh
+      - name: Verify acceptance evidence
+        run: |
+          grep -qx 'AUTH_SURFACE_REACHED=1' anthares-native-executor-status.txt
+          python3 - <<'PY'
+          import json
+          x=json.load(open('anthares-native-surface.json'))
+          assert x['auth_surface_reached'] is True
+          print('ITEM1_EXECUTOR_ACCEPTANCE=PASS')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: anthares-native-executor-${{ matrix.attempt }}
+          path: |
+            anthares-native-executor-status.txt
+            anthares-native-surface.json
+          retention-days: 3
