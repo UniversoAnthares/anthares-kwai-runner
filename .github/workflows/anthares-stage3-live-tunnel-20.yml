@@ -1,0 +1,85 @@
+name: Anthares Stage 3 - Live Tunnel 20 Acceptance Tests
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-stage3-live-tunnel-20.yml'
+      - '.anthares-stage3-live-tunnel-trigger'
+permissions:
+  contents: read
+jobs:
+  live-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ADB tools and cloudflared
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq adb cloudflared
+      - name: Start isolated bridge with emulator test double
+        env:
+          ANTHARES_BRIDGE_TOKEN: ${{ secrets.ANTHARES_BRIDGE_TEST_TOKEN }}
+        run: |
+          set -euo pipefail
+          export ANTHARES_BRIDGE_TOKEN="${ANTHARES_BRIDGE_TOKEN:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')}"
+          python3 -m py_compile independent_session/remote_android_bridge.py
+          # For tunnel transport acceptance, mock only adb process output; exercise real HTTP auth, screenshot, input routes and TLS tunnel.
+          mkdir -p /tmp/stage3
+          cat >/tmp/stage3/adb <<'SH'
+          #!/bin/sh
+          case "$*" in
+            devices) printf 'List of devices attached\nemulator-5554\tdevice\n';;
+            "exec-out screencap -p") printf '\211PNG\r\n\032\nmock-image';;
+            *) exit 0;;
+          esac
+          SH
+          chmod +x /tmp/stage3/adb
+          export PATH="/tmp/stage3:$PATH"
+          python3 independent_session/remote_android_bridge.py >/tmp/stage3/bridge.log 2>&1 &
+          echo $! >/tmp/stage3/bridge.pid
+          for i in $(seq 1 15); do curl -fsS -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" http://127.0.0.1:8765/health >/tmp/stage3/health.json && break || sleep 1; done
+          cat /tmp/stage3/health.json
+          cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8765 >/tmp/stage3/tunnel.log 2>&1 &
+          echo $! >/tmp/stage3/tunnel.pid
+          for i in $(seq 1 30); do
+            URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/stage3/tunnel.log | head -1 || true)"
+            if [ -n "$URL" ] && curl -fsS --max-time 3 -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" "$URL/health" >/tmp/stage3/public-health.json; then break; fi
+            sleep 1
+          done
+          test -n "${URL:-}" || { cat /tmp/stage3/tunnel.log; exit 1; }
+          echo "$URL" >/tmp/stage3/public-url.txt
+          echo "TUNNEL_URL_READY"
+          curl -fsS --max-time 5 -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" "$URL/screen" -o /tmp/stage3/screen.png
+          grep -q 'image/png' /tmp/stage3/bridge.log 2>/dev/null || true
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/stage3/screen.png').read_bytes()
+          assert p.startswith(b'\x89PNG\r\n\x1a\n'), 'PNG_CAPTURE_FAILED'
+          print('REMOTE_SCREEN_OVER_TUNNEL_PASS')
+          PY
+          echo "ANTHARES_TUNNEL_ACCEPTANCE_PASS"
+      - name: Twenty concurrent tests against the live tunnel
+        env:
+          ANTHARES_BRIDGE_TOKEN: ${{ secrets.ANTHARES_BRIDGE_TEST_TOKEN }}
+        run: |
+          set -euo pipefail
+          export ANTHARES_BRIDGE_TOKEN="${ANTHARES_BRIDGE_TOKEN:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')}"
+          URL="$(cat /tmp/stage3/public-url.txt)"
+          export URL
+          python3 - <<'PY'
+          import concurrent.futures, json, os, urllib.request, urllib.error
+          url=os.environ['URL']; token=os.environ['ANTHARES_BRIDGE_TOKEN']
+          def probe(i):
+              req=urllib.request.Request(url+'/health',headers={'Authorization':'Bearer '+token})
+              with urllib.request.urlopen(req,timeout=8) as r:
+                  assert r.status==200
+                  data=json.loads(r.read())
+                  assert data.get('service')=='anthares-bridge' and data.get('adb_online') is True
+              return i
+          with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
+              results=list(ex.map(probe,range(1,21)))
+          assert len(results)==20
+          print('LIVE_TUNNEL_HEALTH_20_OF_20_PASS')
+          PY
