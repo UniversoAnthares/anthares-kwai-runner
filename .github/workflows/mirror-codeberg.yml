@@ -20,7 +20,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Push mirror to Codeberg
+      - name: Push branches and tags safely to Codeberg
         env:
           CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
         shell: bash
@@ -32,4 +32,5 @@ jobs:
           fi
           git remote remove codeberg 2>/dev/null || true
           git remote add codeberg "$CODEBERG_PUSH_URL"
-          git push --mirror codeberg
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+          git push codeberg '+refs/remotes/origin/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
