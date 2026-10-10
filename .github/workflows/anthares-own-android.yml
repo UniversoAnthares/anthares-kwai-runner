@@ -4,28 +4,15 @@ on:
   push:
     branches: [main]
     paths:
-      - independent_android/**
-      - .github/workflows/anthares-own-android.yml
+      - 'independent_android/**'
+      - '.github/workflows/anthares-own-android.yml'
 permissions:
   contents: read
 jobs:
   boot:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
-      - name: Enable hardware acceleration
-        run: |
-          test -e /dev/kvm
-          sudo chmod 666 /dev/kvm
-      - name: Boot Android with Anthares diagnostic
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_5
-          disable-animations: true
-          emulator-boot-timeout: 300
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -accel on
-          script: python3 independent_android/preflight.py
+      - name: Boot Android with Anthares-owned script
+        run: bash independent_android/boot.sh
