@@ -32,6 +32,11 @@ class KwaiCredentialSafetyTests(unittest.TestCase):
         self.assertNotIn("cron:",s)
         self.assertIn("vars.KWAI_CREDENTIALS_ROTATED == 'true'",s)
         self.assertNotIn("kwai-headless-ready.png\n",s)
+    def test_reconciliation_cannot_fabricate_remote_post_id(self):
+        s=src("kwai_queue_state.sh")
+        self.assertIn("KWAI_REMOTE_POST_ID must be independently observed",s)
+        self.assertIn("RECONCILIATION_REMOTE_ID_INVALID",s)
+        self.assertNotIn('"remote_id":"kwai:"+sys.argv[1]',s)
     def test_safe_android_diagnostic_uses_no_credentials(self):
         s=src(".github/workflows/kwai-native-login-targeted-diagnostic.yml")
         self.assertNotIn("secrets.KWAI_PASSWORD",s)
