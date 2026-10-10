@@ -117,6 +117,19 @@ def profile_tab(nodes,xml_text=""):
     height=max((bounds(n)[3] for n in nodes if bounds(n)),default=0)
     if height < 500:
         return None
+    # Some Kwai builds expose a profile-related resource ID without the
+    # standard bottom-tab IDs or a localized visible label. Accept only a
+    # bounded candidate in the bottom navigation region; never tap a heading.
+    for node in nodes:
+        rid=(node.get("resource-id") or "").casefold()
+        b=bounds(node)
+        if not b or "profile" not in rid:
+            continue
+        if any(word in rid for word in ("avatar","image","photo","header","title","edit","follow","setting")):
+            continue
+        x1,y1,x2,y2=b
+        if (y1+y2)//2 >= height*.76:
+            return (x1+x2)//2,(y1+y2)//2
     for node in nodes:
         text=label(node).casefold().strip()
         b=bounds(node)
