@@ -23,10 +23,20 @@ def parse(xml_text,expected=""):
         if text:items.append(text)
     blob=" ".join(items).casefold()
     expected=expected.strip().lstrip("@").casefold()
-    identity=bool(expected and re.search(r"(?<![a-z0-9_.])@?"+re.escape(expected)+r"(?![a-z0-9_.])",blob))
-    if identity: state="AUTHENTICATED_PROFILE"
-    elif any(x in blob for x in CREATE_PROFILE): state="CREATE_PROFILE"
-    elif any(x in blob for x in AUTH_WORDS): state="AUTH_REQUIRED"
+    # A username typed into a login form or shown in a feed is NOT proof
+    # of an authenticated account. Require visible, non-editable profile UI.
+    static_labels=" ".join(
+        " ".join(filter(None,[n.get("text",""),n.get("content-desc","")]))
+        for n in nodes if not (n.get("class","").endswith("EditText"))
+    ).casefold()
+    login_visible=any(x in blob for x in AUTH_WORDS)
+    onboarding_visible=any(x in blob for x in CREATE_PROFILE)
+    profile_context=any(x in static_labels for x in ("profile","perfil","followers","following","seguidores","seguindo"))
+    identity=bool(expected and profile_context and not login_visible and not onboarding_visible
+                  and re.search(r"(?<![a-z0-9_.])@?"+re.escape(expected)+r"(?![a-z0-9_.])",static_labels))
+    if onboarding_visible: state="CREATE_PROFILE"
+    elif login_visible: state="AUTH_REQUIRED"
+    elif identity: state="AUTHENTICATED_PROFILE"
     elif any(x in blob for x in PROFILE_WORDS): state="PROFILE_UNKNOWN"
     elif any(x in blob for x in FEED_WORDS): state="FEED"
     else: state="UNKNOWN"
