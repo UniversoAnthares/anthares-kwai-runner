@@ -63,6 +63,7 @@ valid_dumps=0
 invalid_dumps=0
 app_error_restarts=0
 profile_route_fallbacks=0
+nav_transition_attempts=0
 stagnant_dumps=0
 while [ "$SECONDS" -lt "$deadline" ]; do
   if ! dump_ui; then
@@ -82,6 +83,7 @@ while [ "$SECONDS" -lt "$deadline" ]; do
     signal "UI_STATE=${signature:-unclassified};FOCUS=$(focus_package)"
     signal "PROFILE_CANDIDATES=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print("exact=%s,bottom=%s,idhint=%s"%(d.get("profile_exact_label_count",0),d.get("profile_bottom_label_count",0),d.get("profile_resource_hint_count",0)))' "$state")"
     signal "AUTH_ROUTES=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print("phone=%d,google=%d,email=%d,otp=%d,captcha=%d"%tuple(int(bool(d.get(k))) for k in ("phone_login_option","google_login_option","email_login_option","verification_challenge","captcha_challenge")))' "$state")"
+    signal "NAVIGATION_STATE=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print("nodes=%d,edits=%d,profile=%d,chooser=%d,form=%d"%(d.get("node_count",0),d.get("edittext_count",0),int(bool(d.get("profile_tab"))),int(bool(d.get("login_chooser"))),int(bool(d.get("login_form")))))' "$state")"
     signal "PROFILE_GEOMETRY=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print("bounded=%s,bottom=%s,unbounded=%s,height=%s"%(d.get("profile_hint_bounded_count",0),d.get("profile_hint_bottom_count",0),d.get("profile_hint_unbounded_count",0),d.get("screen_height_bucket","unknown")))' "$state")"
     previous="$signature"
     stagnant_dumps=0
@@ -155,6 +157,7 @@ while [ "$SECONDS" -lt "$deadline" ]; do
       tap_coords "$coords" || true
       profile_taps=$((profile_taps+1))
       signal "KWAI_PROFILE_TAP_COUNT=$profile_taps"
+      signal "NAVIGATION_TRANSITION=SEMANTIC_PROFILE_TAP"
       sleep 2
       continue
     fi
@@ -171,6 +174,7 @@ while [ "$SECONDS" -lt "$deadline" ]; do
       adb shell input tap $((w*90/100)) $((h*95/100)) >/dev/null 2>&1 || true
       profile_route_fallbacks=$((profile_route_fallbacks+1))
       signal "RECOVERY=BOUNDED_BOTTOM_RIGHT_PROFILE_TAB"
+      signal "NAVIGATION_TRANSITION=GEOMETRY_PROFILE_TAP"
       sleep 3
       continue
     fi
