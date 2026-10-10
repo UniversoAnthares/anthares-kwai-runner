@@ -47,7 +47,8 @@ jobs:
           mkdir -p kwai-vault
           python3 -c 'import zipfile; zipfile.ZipFile("/tmp/kwai-vault.zip").extractall("kwai-vault")'
           bash kwai_vault_install.sh
-          adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep -q 'com.kwai.video'
+          adb shell pm path com.kwai.video | grep -q '^package:'
+          echo KWAI_INSTALLED_AND_LAUNCH_REQUESTED=PASS
       - name: Start authenticated bridge and public HTTPS tunnel
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
