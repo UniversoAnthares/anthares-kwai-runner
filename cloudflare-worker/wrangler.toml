@@ -1,5 +1,6 @@
 name = "anthares-control"
 main = "src/index.js"
+account_id = "5c24be052e5144391f73a8e03491e88e"
 compatibility_date = "2026-10-04"
 workers_dev = true
 
@@ -17,4 +18,3 @@ new_sqlite_classes = ["AntharesQueue"]
 
 [triggers]
 crons = ["*/5 * * * *"]
-
