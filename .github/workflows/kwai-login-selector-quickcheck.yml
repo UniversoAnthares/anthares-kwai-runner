@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - kwai_remote_android_login.sh
+      - kwai_remote_android_login_with_restore.sh
+      - kwai_native_email_smoke.sh
       - tools/kwai_login_ui_locator.py
       - tests/test_kwai_login_ui_locator.py
       - .github/workflows/kwai-login-selector-quickcheck.yml
@@ -20,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash -n kwai_remote_android_login.sh
+          bash -n kwai_remote_android_login.sh kwai_remote_android_login_with_restore.sh kwai_native_email_smoke.sh
           python3 -m py_compile tools/kwai_login_ui_locator.py
           python3 -m unittest discover -s tests -p test_kwai_login_ui_locator.py -v
           echo "KWAI_NATIVE_EMAIL_SELECTOR_CONTRACT=PROVEN"
