@@ -227,6 +227,16 @@ if timeout 40 python3 tools/kwai_login_surface_recovery.py >/tmp/kwai-safe-recov
     fi
   fi
 fi
+# Emit only allowlisted, nonidentifying recovery diagnostics. The recovery
+# helper itself prints resource-id suffixes and counts, never UI text.
+if [ -f /tmp/kwai-safe-recovery.log ]; then
+  while IFS= read -r recovery_line; do
+    case "$recovery_line" in
+      KWAI_RECOVERY_STEP=*|KWAI_RECOVERY_STATE_LOOP=*|KWAI_RECOVERY_WIDGET_IDS=*|KWAI_RECOVERY_NODE_COUNT=*|KWAI_RECOVERY_SYSTEM_SETUP_WAIT=*|KWAI_RECOVERY_SYSTEM_SETUP_TIMEOUT|KWAI_RECOVERY_CHOOSER_NOT_REACHED|KWAI_RECOVERY_UI_UNAVAILABLE)
+        signal "$recovery_line" ;;
+    esac
+  done < /tmp/kwai-safe-recovery.log
+fi
 signal "UI_DUMPS_VALID=$valid_dumps;INVALID=$invalid_dumps;ONBOARDING_TAPS=$onboarding_taps;PROFILE_TAPS=$profile_taps"
 signal "FAILURE_SIGNAL=KWAI_NATIVE_CHOOSER_NOT_REACHED_DIAGNOSED"
 exit 34
