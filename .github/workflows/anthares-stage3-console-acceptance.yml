@@ -1,0 +1,48 @@
+name: Anthares Stage 3 - 20 Remote Console Acceptance Tests
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'independent_session/remote_console_acceptance.py'
+      - '.github/workflows/anthares-stage3-console-acceptance.yml'
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        probe: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot Android
+        env:
+          ANTHARES_BOOT_VARIANT: 25
+        run: |
+          set -Eeuo pipefail
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+          bash anthares-android/scripts/provision.sh 2>&1 | tee /tmp/anthares-boot.log
+          grep -Fx 'ANTHARES_ANDROID_BOOT=PASS' /tmp/anthares-boot.log
+      - name: Test real remote console behavior
+        run: |
+          set -Eeuo pipefail
+          export ANDROID_HOME="$HOME/android-sdk" ANDROID_SDK_ROOT="$HOME/android-sdk"
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          adb wait-for-device
+          timeout 90 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done'
+          adb shell pm path com.kwai.video | grep -q '^package:'
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
+          export ANTHARES_BRIDGE_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          python3 -m py_compile independent_session/remote_android_bridge.py independent_session/remote_console_acceptance.py
+          python3 independent_session/remote_android_bridge.py >/tmp/bridge.log 2>&1 &
+          BP=$!
+          trap 'kill "$BP" 2>/dev/null || true' EXIT
+          for i in $(seq 1 20); do
+            if curl -fsS -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" http://127.0.0.1:8765/health >/dev/null; then break; fi
+            sleep 1
+          done
+          python3 independent_session/remote_console_acceptance.py "${{ matrix.probe }}"
