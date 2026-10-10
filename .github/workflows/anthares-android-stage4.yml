@@ -11,7 +11,7 @@ permissions:
   contents: read
 concurrency:
   group: anthares-android-stage4-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   kwai-install:
     name: kwai-install-check-${{ matrix.check }}
@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 25
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 20
       matrix:
         check: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
