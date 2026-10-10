@@ -1,8 +1,8 @@
 {
   "executor": "github-hosted",
-  "observed_at": "2026-10-10T20:11:40.144517+00:00",
+  "observed_at": "2026-10-10T20:29:51.960304+00:00",
   "ok": true,
   "run_attempt": "1",
-  "run_id": "38082768556",
+  "run_id": "38083961951",
   "schema": "anthares.core.health.v1"
 }
