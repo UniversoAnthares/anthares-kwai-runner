@@ -257,7 +257,7 @@ if not any(k in txt for k in ("log in","login","entrar","sign in","telefone","ph
         dismiss_android_permission_dialogs()
         settle_preparation_gate()
         r3 = dump(); txt3 = " ".join(label(n) for n in nodes(r3))
-        print("KWAI_POST_PROFILE_UI=" + txt3[:600])
+        print("KWAI_POST_PROFILE_EDITTEXT_COUNT=" + str(len(editable_nodes(r3))))
         ids3 = {n.attrib.get("resource-id","") for n in nodes(r3)}
         if not any(k in txt3 for k in ("log in","login","entrar","sign in","settings","configura","log out","sair","account","conta","meu perfil","my profile")):
             # Still the same feed: the tap was a no-op. Tap ll_profile once more
