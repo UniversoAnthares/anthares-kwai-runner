@@ -12,6 +12,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  actions: write
 concurrency:
   group: anthares-core-state-writer
   cancel-in-progress: false
@@ -30,6 +31,15 @@ jobs:
         with:
           ref: anthares-state
           path: state-branch
+      - name: Self-heal Cloudflare v16 using throttled GitHub deploy
+        id: watchdog
+        working-directory: code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 anthares_core/control_watchdog.py \
+            --state "$GITHUB_WORKSPACE/state-branch/runtime/anthares-control-recovery.json" \
+            --github-output "$GITHUB_OUTPUT"
       - name: Validate Core queue fencing before handling persisted state
         working-directory: code
         run: python3 -m unittest discover -s tests -p 'test_anthares_core_*.py' -q
@@ -66,7 +76,7 @@ jobs:
           set -euo pipefail
           git config user.name 'anthares-core-bot'
           git config user.email 'anthares-core-bot@users.noreply.github.com'
-          git add runtime/anthares-core-state.json runtime/anthares-core-health.json
+          git add runtime/anthares-core-state.json runtime/anthares-core-health.json runtime/anthares-control-recovery.json
           if git diff --cached --quiet; then
             echo 'STATE_UNCHANGED=true'
           else
