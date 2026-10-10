@@ -1,0 +1,30 @@
+name: Anthares Core Capability Inventory
+on:
+  pull_request:
+    paths:
+      - 'anthares_core/capabilities.py'
+      - '.github/workflows/anthares-core-capabilities.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inventory remote runner capabilities
+        run: |
+          python3 anthares_core/capabilities.py > capabilities.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('capabilities.json'))
+          assert data['schema']=='anthares.core.capabilities.v1'
+          assert data['providers']['github_actions']['available'] is True
+          print('GITHUB_REMOTE_EXECUTOR_CONFIRMED=true')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anthares-core-capabilities
+          path: capabilities.json
+          retention-days: 7
