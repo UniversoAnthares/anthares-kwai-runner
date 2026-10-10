@@ -13,7 +13,14 @@ if ! command -v sdkmanager >/dev/null; then
 fi
 yes | sdkmanager --licenses >/dev/null || true
 sdkmanager 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64'
-echo no | avdmanager create avd --force -n anthares_android -k 'system-images;android-35;google_apis;x86_64' --device pixel_5
+set +o pipefail
+printf 'no\n' | avdmanager create avd --force -n anthares_android -k 'system-images;android-35;google_apis;x86_64' --device pixel_5
+avd_rc=$?
+set -o pipefail
+if [[ $avd_rc -ne 0 || ! -f "$HOME/.android/avd/anthares_android.ini" ]]; then
+  echo "ANTHARES_AVD_CREATION_FAILED=$avd_rc"
+  exit 8
+fi
 echo 'ANTHARES_AVD_CREATED=1'
 emulator -avd anthares_android -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on > /tmp/anthares-emulator.log 2>&1 &
 pid=$!
