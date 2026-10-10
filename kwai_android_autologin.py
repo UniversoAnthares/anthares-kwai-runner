@@ -258,6 +258,11 @@ time.sleep(1)
 # Prefer password/email/phone login over social providers.
 tap_matching(("password","senha","phone","telefone","email","e-mail"))
 time.sleep(1)
+if "@" in LOGIN:
+    tap_matching(("email","e-mail"))
+else:
+    tap_matching(("phone","telefone","mobile"))
+time.sleep(2)
 if not fill(LOGIN):
     # Some Kwai builds expose the account field only after choosing the generic login method.
     tap_matching(("other ways","other login","use phone","use email","phone number","mobile","account","outras formas","outra forma","usar telefone","usar e-mail","número de telefone","conta"))
