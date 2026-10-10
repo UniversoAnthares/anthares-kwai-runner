@@ -59,3 +59,9 @@ done
 actual="$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
 [[ "$actual" == "$api" ]] || { echo "SDK_MISMATCH:$actual"; exit 1; }
 echo "OWN_ANDROID_RUNTIME_BOOT_VERIFIED scenario=$scenario sdk=$actual"
+# Stage 2: real official APK installation and foreground launch, never credentials.
+if [[ -d kwai-vault ]]; then
+  timeout 95s bash kwai_vault_install.sh || { echo KWAI_INSTALL_OR_LAUNCH_FAILED; exit 1; }
+  adb shell pm path com.kwai.video | grep -q package: || { echo KWAI_PACKAGE_NOT_INSTALLED; exit 1; }
+  echo "KWAI_OFFICIAL_APK_INSTALLED_AND_LAUNCHED scenario=$scenario"
+fi
