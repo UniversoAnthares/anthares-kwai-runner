@@ -10,6 +10,10 @@ class PublisherContractTests(unittest.TestCase):
             authorize(IdentityProof('kwai','lucasrosalem','other',True,'session'),'kwai','lucasrosalem')
         with self.assertRaises(PermissionError):
             authorize(IdentityProof('kwai','lucasrosalem','lucasrosalem',False,'session'),'kwai','lucasrosalem')
+    def test_rejects_untrusted_publication_urls(self):
+        for url in ('http://www.kwai.com/v/1','https://kwai.com.evil.test/v/1','https://example.org/v/1'):
+            with self.subTest(url=url),self.assertRaises(ValueError):
+                validate_evidence(PublicationEvidence('kwai','lucasrosalem','v1',url),'kwai','lucasrosalem')
     def test_evidence_must_match_target_account(self):
         validate_evidence(PublicationEvidence('kwai','lucasrosalem','v1','https://www.kwai.com/v/v1'),'kwai','lucasrosalem')
         with self.assertRaises(ValueError):
