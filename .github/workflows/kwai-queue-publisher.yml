@@ -26,7 +26,40 @@ env:
   KWAI_SESSION_FILE: kwai-session.enc
 
 jobs:
+  control_preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      ready: ${{ steps.health.outputs.ready }}
+    steps:
+      - name: Validate deployed Cloudflare queue control
+        id: health
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl -fsS --connect-timeout 8 --max-time 20 https://anthares-control.anthares1.workers.dev/health)"
+          if HEALTH_BODY="$body" python3 - <<'PY'
+          import json, os, sys
+          try:
+              d = json.loads(os.environ["HEALTH_BODY"])
+              assert d.get("version") == "2026-10-05-queue-fencing-v16"
+              assert d.get("pc_fallback") is False
+              assert d.get("persistent_state") is True
+              assert d.get("queue_bound") is True
+          except (AssertionError, ValueError, KeyError) as exc:
+              print("CLOUDFLARE_QUEUE_CONTROL_NOT_READY", exc)
+              sys.exit(1)
+          print("CLOUDFLARE_QUEUE_CONTROL_READY")
+          PY
+          then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Kwai publisher disabled until Cloudflare queue-fencing-v16 is deployed."
+          fi
   publish:
+    needs: control_preflight
+    if: needs.control_preflight.outputs.ready == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -108,6 +141,5 @@ jobs:
             kwai-reconcile-status.txt
             kwai-headless-status.txt
             kwai-headless-ready.png
-            kwai-session.enc
           if-no-files-found: warn
           retention-days: 3
