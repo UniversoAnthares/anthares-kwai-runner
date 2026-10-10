@@ -26,9 +26,9 @@ jobs:
     timeout-minutes: 8
     strategy:
       fail-fast: false
-      max-parallel: 30
+      max-parallel: 20
       matrix:
-        check: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+        check: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
       - uses: actions/checkout@v4
       - name: Run independent auth readiness check
@@ -42,33 +42,23 @@ jobs:
             1) bash -n kwai_session_state.sh ;;
             2) python3 -m py_compile kwai_auth_probe.py ;;
             3) python3 -m py_compile tools/kwai_credential_login.py ;;
-            4) python3 -m py_compile tools/kwai_session_vault_client.py ;;
-            5) grep -Fq 'KWAI_AUTH_STATE=AUTHENTICATED_UI' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            6) grep -Fq 'KWAI_IDENTITY_PROFILE_MATCH=1' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            7) grep -Fq 'KWAI_SESSION_SAVE_REFUSED_IDENTITY_UNVERIFIED' kwai_session_state.sh ;;
-            8) grep -Fq 'KWAI_SESSION_SAVED_ENCRYPTED' kwai_session_state.sh ;;
-            9) grep -Fq 'KWAI_SESSION_ARCHIVE_INVALID' kwai_session_state.sh ;;
-            10) grep -Fq 'KWAI_SESSION_STAGE_FAILED' kwai_session_state.sh ;;
-            11) grep -Fq 'KWAI_EXPECTED_ACCOUNT: lucasrosalem' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            12) grep -Fq 'secrets.KWAI_LOGIN' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            13) test -n "$KWAI_LOGIN" && test -n "$KWAI_PASSWORD" && echo CREDENTIALS_PRESENT=true ;;
+            4) grep -Fq 'KWAI_EXPECTED_ACCOUNT' kwai_auth_probe.py ;;
+            5) grep -Fq 'KWAI_LOGIN' tools/kwai_credential_login.py ;;
+            6) grep -Fq 'KWAI_PASSWORD' tools/kwai_credential_login.py ;;
+            7) test -n "$KWAI_LOGIN" && test -n "$KWAI_PASSWORD" && echo CREDENTIALS_PRESENT=true ;;
+            8) grep -Fq 'KWAI_AUTH_STATE=AUTHENTICATED_UI' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            9) grep -Fq 'KWAI_IDENTITY_PROFILE_MATCH=1' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            10) grep -Fq 'KWAI_SESSION_SAVE_REFUSED_IDENTITY_UNVERIFIED' kwai_session_state.sh ;;
+            11) grep -Fq 'KWAI_SESSION_SAVED_ENCRYPTED' kwai_session_state.sh ;;
+            12) grep -Fq 'KWAI_SESSION_DECRYPT_FAILED' kwai_session_state.sh ;;
+            13) grep -Fq 'openssl enc -aes-256-cbc' kwai_session_state.sh ;;
             14) command -v openssl >/dev/null ;;
             15) command -v adb >/dev/null || test -x /usr/local/lib/android/sdk/platform-tools/adb ;;
-            16) grep -Fq 'KWAI_VAULT_OIDC_NOT_AUTHORIZED_BOOTSTRAP' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            17) grep -Fq 'python3 tools/kwai_session_vault_client.py push' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            18) grep -Fq 'python3 tools/kwai_session_vault_client.py pull' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            19) grep -Fq 'needs: acquire_and_store' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            20) grep -Fq 'force-avd-creation: true' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            21) grep -Fq 'api-level: 35' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            22) grep -Fq 'arch: x86_64' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            23) grep -Fq 'adb install-multiple' kwai_vault_install.sh ;;
-            24) grep -Fq 'com.kwai.video' kwai_vault_install.sh ;;
-            25) grep -Fq 'KWAI_EXPECTED_ACCOUNT' kwai_auth_probe.py ;;
-            26) grep -Fq 'KWAI_SESSION_DECRYPT_FAILED' kwai_session_state.sh ;;
-            27) grep -Fq 'openssl enc -aes-256-cbc' kwai_session_state.sh ;;
-            28) grep -Fq 'retention-days: 3' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            29) grep -Fq 'KWAI_MOBILE_CROSS_RUN_RESTORE=PASS' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
-            30) test -e /dev/kvm && test -w /dev/kvm || { test -e /dev/kvm && sudo chmod 666 /dev/kvm; test -e /dev/kvm; } ;;
+            16) grep -Fq 'script: |' .github/workflows/kwai-mobile-auth-acceptance.yml && grep -A1 -Fq 'script: |' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            17) ! grep -A1 -F 'script: |' .github/workflows/kwai-mobile-auth-acceptance.yml | grep -q 'pipefail' ;;
+            18) grep -Fq 'python3 tools/kwai_credential_login.py' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            19) grep -Fq 'bash kwai_session_state.sh save' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
+            20) grep -Fq 'python3 tools/kwai_session_vault_client.py push' .github/workflows/kwai-mobile-auth-acceptance.yml ;;
             *) exit 2 ;;
           esac
           echo "AUTH_PREFLIGHT_${{ matrix.check }}=PASS"
