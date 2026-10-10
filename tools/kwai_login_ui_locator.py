@@ -151,7 +151,7 @@ def profile_tab(nodes,xml_text=""):
         root=ET.fromstring(xml_text)
         parent_of={child:parent for parent in root.iter() for child in parent}
         width=max((bounds(n)[2] for n in nodes if bounds(n)),default=1)
-        for node in nodes:
+        for node in root.iter("node"):
             rid=(node.get("resource-id") or "").casefold().split("/")[-1]
             text=label(node).casefold().strip()
             if not (rid in explicit or text in ("profile","perfil","me","eu")):
