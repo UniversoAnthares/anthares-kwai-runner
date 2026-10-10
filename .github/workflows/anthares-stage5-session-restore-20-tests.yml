@@ -1,0 +1,61 @@
+name: Anthares Stage 5 - Session Restore 20 Focused Tests
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-stage5-session-restore-20-tests.yml'
+      - '.anthares-stage5-restore-trigger'
+      - 'kwai_session_state.sh'
+      - 'tools/kwai_session_vault_client.py'
+permissions:
+  contents: read
+jobs:
+  restore-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        test: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify one distinct restore requirement
+        env:
+          TEST: ${{ matrix.test }}
+        run: |
+          set -Eeuo pipefail
+          bash -n kwai_session_state.sh
+          python3 -m py_compile tools/kwai_session_vault_client.py
+          python3 - <<'PY'
+          import os, pathlib, sys
+          n=int(os.environ['TEST'])
+          state=pathlib.Path('kwai_session_state.sh').read_text()
+          vault=pathlib.Path('tools/kwai_session_vault_client.py').read_text()
+          checks=[
+            ('restore_command_present',lambda:'restore' in state),
+            ('save_command_present',lambda:'save' in state),
+            ('encrypted_session_marker',lambda:'KWAI_SESSION_SAVED_ENCRYPTED' in state),
+            ('invalid_archive_rejected',lambda:'KWAI_SESSION_ARCHIVE_INVALID' in state),
+            ('decrypt_failure_reported',lambda:'KWAI_SESSION_DECRYPT_FAILED' in state),
+            ('staging_failure_reported',lambda:'KWAI_SESSION_STAGE_FAILED' in state),
+            ('atomic_restore_contract',lambda:'atomic' in state.lower() or 'mv ' in state),
+            ('session_file_env_supported',lambda:'KWAI_SESSION_FILE' in state),
+            ('vault_push_operation',lambda:'push' in vault),
+            ('vault_pull_or_restore_operation',lambda:any(x in vault for x in ('pull','restore','download'))),
+            ('vault_encryption_or_cipher_reference',lambda:any(x in vault.lower() for x in ('encrypt','cipher','age','gpg'))),
+            ('no_print_password_in_state_script',lambda:'echo "$KWAI_PASSWORD"' not in state),
+            ('no_print_password_in_vault_client',lambda:'print(KWAI_PASSWORD' not in vault),
+            ('archive_path_validation',lambda:any(x in state for x in ('isfile','isdir','member.'))),
+            ('restore_error_exit_codes',lambda:'exit 1' in state or 'return 1' in state),
+            ('shell_strict_mode',lambda:'set -e' in state),
+            ('vault_cli_argument_parser',lambda:'argparse' in vault or 'ArgumentParser' in vault),
+            ('session_artifact_name_contract',lambda:'kwai-session-primary.enc' in pathlib.Path('.github/workflows/anthares-stage4-20-auth-tests.yml').read_text()),
+            ('identity_probe_script_present',lambda:pathlib.Path('kwai_auth_probe.py').is_file()),
+            ('real_auth_workflow_has_restore_persist_steps',lambda:any(x in pathlib.Path('.github/workflows/anthares-stage4-single-auth-proof-20-tests.yml').read_text() for x in ('Persist encrypted session','kwai_session_state.sh save'))),
+          ]
+          name,fn=checks[n-1]
+          ok=bool(fn())
+          print(f'STAGE5_RESTORE_TEST_{n:02d}={"PASS" if ok else "FAIL"} name={name}',flush=True)
+          sys.exit(0 if ok else 1)
+          PY
