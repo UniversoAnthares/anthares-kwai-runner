@@ -53,7 +53,8 @@ def select(ns):
     return None
 seen=set()
 system_waits=0
-for i in range(18):
+app_relaunches=0
+for i in range(22):
     try:ns=snap()
     except (subprocess.CalledProcessError,subprocess.TimeoutExpired,ET.ParseError):
         print("KWAI_RECOVERY_UI_UNAVAILABLE");raise SystemExit(3)
@@ -63,7 +64,23 @@ for i in range(18):
     ids={(n.get("resource-id") or "").split("/")[-1] for n in ns}
     if "minute_maid" in ids and ("progress_bar_layout" in ids or "sud_layout_template_content" in ids):
         if system_waits >= 12:
-            print("KWAI_RECOVERY_SYSTEM_SETUP_TIMEOUT");break
+            # A Google setup interstitial can stall indefinitely on an
+            # ephemeral emulator. Return HOME and relaunch the *installed*
+            # Kwai package once; never click through account/security UI.
+            if app_relaunches:
+                print("KWAI_RECOVERY_SYSTEM_SETUP_TIMEOUT");break
+            app_relaunches+=1
+            print("KWAI_RECOVERY_APP_RELAUNCH_AFTER_SETUP_STALL=1")
+            try:
+                adb("shell","input","keyevent","KEYCODE_HOME")
+                time.sleep(2)
+                adb("shell","monkey","-p","com.kwai.video","-c","android.intent.category.LAUNCHER","1")
+                time.sleep(6)
+            except (subprocess.CalledProcessError,subprocess.TimeoutExpired):
+                print("KWAI_RECOVERY_APP_RELAUNCH_FAILED");break
+            system_waits=0
+            seen.clear()
+            continue
         system_waits+=1
         print("KWAI_RECOVERY_SYSTEM_SETUP_WAIT="+str(system_waits))
         time.sleep(5)
