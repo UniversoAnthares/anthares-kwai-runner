@@ -316,7 +316,16 @@ jobs:
             echo 'CLOUD_SHARE_EDITOR_CANDIDATE=NOT_FOUND' | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           adb shell dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity' | tail -3 > /tmp/kwai-share-activity.txt || true
-          echo 'CLOUD_SHARE_EDITOR=NOT_VERIFIED' | tee -a "$GITHUB_STEP_SUMMARY"
+          # A foreground Kwai activity only proves intent routing, not video import.
+          # Do not report a passing handoff until the editor is positively identified.
+          editor_activity="$(adb shell dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:|mFocusedApp=' | tail -6 || true)"
+          if grep -Eiq 'editor|videoedit|publish|postactivity|photoedit' <<< "$editor_activity"; then
+            echo 'CLOUD_SHARE_EDITOR=ACTIVITY_CANDIDATE_UNVERIFIED' | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'CLOUD_SHARE_EDITOR=NOT_VERIFIED' | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          echo 'CLOUD_SHARE_TEST=VIDEO_IMPORT_NOT_PROVEN' | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 12
           echo 'CLOUD_SHARE_PUBLICATION=NOT_TESTED' | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Upload redacted cloud install evidence
         if: always()
