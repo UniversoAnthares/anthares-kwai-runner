@@ -153,3 +153,5 @@ jobs:
             kwai-headless-status.txt
           if-no-files-found: warn
           retention-days: 3
+
+# Kwai first-run sign-in continuation recovery validated by login_recovery_syntax.
