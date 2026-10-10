@@ -1,0 +1,29 @@
+name: Security purge of public Kwai login screenshots
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/security-purge-kwai-artifacts.yml
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: read
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Delete potentially sensitive public Kwai publisher artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ids="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("kwai-queue-publisher-")) | .id')"
+          deleted=0
+          while IFS= read -r id; do
+            [[ "$id" =~ ^[0-9]+$ ]] || continue
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" >/dev/null
+            deleted=$((deleted+1))
+          done <<< "$ids"
+          echo "KWAI_PUBLIC_SCREENSHOT_ARTIFACTS_DELETED=$deleted"
