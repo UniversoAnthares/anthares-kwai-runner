@@ -6,8 +6,7 @@ on:
     paths:
       - ".github/workflows/kwai-queue-publisher.yml"
       - ".kwai-queue-trigger"
-  schedule:
-    - cron: "*/5 * * * *"
+  # Scheduled publication paused until exposed login credential is rotated.
 
 permissions:
   contents: read
@@ -59,7 +58,7 @@ jobs:
           fi
   publish:
     needs: control_preflight
-    if: needs.control_preflight.outputs.ready == 'true'
+    if: needs.control_preflight.outputs.ready == 'true' && vars.KWAI_CREDENTIALS_ROTATED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
