@@ -1,26 +1,57 @@
 #!/usr/bin/env bash
-# Owned AVD bootstrap: no third-party Android runner action, no account access.
 set -euo pipefail
 : "${ANDROID_HOME:=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
 export ANDROID_HOME
 export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
-command -v sdkmanager >/dev/null || { echo 'SDKMANAGER_MISSING'; exit 2; }
-command -v avdmanager >/dev/null || { echo 'AVDMANAGER_MISSING'; exit 2; }
-if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then echo 'KVM_UNAVAILABLE'; exit 2; fi
-SDK_IMAGE="system-images;android-35;google_apis;x86_64"
-timeout 150s sdkmanager --install 'platform-tools' 'emulator' "$SDK_IMAGE" >/dev/null
-command -v emulator >/dev/null || { echo 'EMULATOR_INSTALL_FAILED'; exit 2; }
-printf 'no\n' | avdmanager create avd -n anthares_owned -k "$SDK_IMAGE" -d pixel_6 --force >/dev/null
-"$ANDROID_HOME/emulator/emulator" -avd anthares_owned -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-save -port 5554 >/tmp/anthares-emulator.log 2>&1 &
+scenario="${ANDROID_SCENARIO:-1}"
+[[ "$scenario" =~ ^([1-9]|1[0-9]|20)$ ]] || exit 2
+echo "SCENARIO=$scenario"
+command -v sdkmanager >/dev/null || { echo SDKMANAGER_MISSING; exit 2; }
+command -v avdmanager >/dev/null || { echo AVDMANAGER_MISSING; exit 2; }
+[[ -r /dev/kvm && -w /dev/kvm ]] || { echo KVM_UNAVAILABLE; exit 2; }
+# All scenarios exercise a different boot or host parameter.
+api=35; image=google_apis; device=pixel_6; gpu=swiftshader_indirect
+cores=2; memory=2048; disk=2048; boot_timeout=80
+extra=()
+case "$scenario" in
+  1) : ;;
+  2) api=34 ;;
+  3) image=default ;;
+  4) device=pixel_5 ;;
+  5) device=pixel_4 ;;
+  6) gpu=off ;;
+  7) gpu=auto ;;
+  8) cores=1 ;;
+  9) cores=4 ;;
+  10) memory=1536 ;;
+  11) memory=3072 ;;
+  12) disk=1024 ;;
+  13) disk=4096 ;;
+  14) extra+=(-no-snapshot) ;;
+  15) extra+=(-no-boot-anim) ;;
+  16) extra+=(-no-metrics) ;;
+  17) extra+=(-netdelay none) ;;
+  18) extra+=(-netspeed full) ;;
+  19) extra+=(-camera-back none) ;;
+  20) extra+=(-camera-front none) ;;
+esac
+sdk_image="system-images;android-$api;$image;x86_64"
+echo "SDK_IMAGE=$sdk_image DEVICE=$device GPU=$gpu CORES=$cores MEMORY=$memory DISK=$disk"
+timeout 125s sdkmanager --install 'platform-tools' 'emulator' "$sdk_image" >/dev/null || { echo SDK_INSTALL_FAILED; exit 1; }
+command -v emulator >/dev/null || { echo EMULATOR_INSTALL_FAILED; exit 1; }
+printf 'no\n' | timeout 20s avdmanager create avd -n anthares_owned -k "$sdk_image" -d "$device" --force >/dev/null || { echo AVD_CREATE_FAILED; exit 1; }
+timeout 10s emulator -accel-check || { echo ACCELERATION_FAILED; exit 1; }
+emulator -avd anthares_owned -no-window -no-audio -no-boot-anim -no-snapshot-save -gpu "$gpu" -cores "$cores" -memory "$memory" -partition-size "$disk" "${extra[@]}" -port 5554 >/tmp/anthares-emulator.log 2>&1 &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true' EXIT
-adb wait-for-device
+timeout 25s adb wait-for-device || { echo ADB_CONNECT_TIMEOUT; tail -30 /tmp/anthares-emulator.log; exit 1; }
 ready=0
-for i in $(seq 1 45); do
-  if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]; then ready=1; break; fi
+for i in $(seq 1 40); do
+  if [[ "$(timeout 3s adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]; then ready=1; break; fi
+  kill -0 "$pid" 2>/dev/null || { echo EMULATOR_EXITED; tail -30 /tmp/anthares-emulator.log; exit 1; }
   sleep 2
 done
-[[ "$ready" == 1 ]] || { echo 'ANDROID_BOOT_TIMEOUT'; exit 1; }
-adb shell getprop ro.build.version.sdk | grep -qx '35'
-echo 'OWN_ANDROID_RUNTIME_BOOT_VERIFIED'
-# No account session or snapshot leaves this runner in the smoke test.
+[[ "$ready" == 1 ]] || { echo ANDROID_BOOT_TIMEOUT; tail -30 /tmp/anthares-emulator.log; exit 1; }
+actual="$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
+[[ "$actual" == "$api" ]] || { echo "SDK_MISMATCH:$actual"; exit 1; }
+echo "OWN_ANDROID_RUNTIME_BOOT_VERIFIED scenario=$scenario sdk=$actual"
