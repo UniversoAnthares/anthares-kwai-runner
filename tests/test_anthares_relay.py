@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from anthares_relay.engine import Relay
+from anthares_relay.adapters import IdentityProof, PublicationProof, AuthenticatedAdapter
 
 class RelayTests(unittest.TestCase):
  def setUp(self):
@@ -32,5 +33,18 @@ class RelayTests(unittest.TestCase):
   self.r.db.execute("UPDATE jobs SET expires=0 WHERE id=?",(job,))
   self.assertEqual(self.r.quarantine_expired(),1)
   self.assertEqual(self.r.status(),{"uncertain":1})
+
+class AdapterTests(unittest.TestCase):
+ def test_identity_rejects_truthy_string(self):
+  self.assertFalse(IdentityProof("kwai","lucasrosalem","yes",True).valid_for("kwai","lucasrosalem"))
+  self.assertFalse(IdentityProof("kwai","other",True,True).valid_for("kwai","lucasrosalem"))
+ def test_publication_rejects_untrusted_host(self):
+  self.assertFalse(PublicationProof("id","https://kwai.com.evil.example/video",True).valid())
+  self.assertFalse(PublicationProof("id","https://www.kwai.com/video","yes").valid())
+ def test_adapter_refuses_unimplemented_post(self):
+  with self.assertRaises(PermissionError):
+   AuthenticatedAdapter().publish(b"video",IdentityProof("kwai","other",True,True))
+  with self.assertRaises(NotImplementedError):
+   AuthenticatedAdapter().publish(b"video",IdentityProof("kwai","lucasrosalem",True,True))
 
 if __name__=="__main__": unittest.main()
