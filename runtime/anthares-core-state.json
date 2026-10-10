@@ -1,4 +1,27 @@
 {
   "schema": "anthares.core.state.v1",
-  "tasks": []
+  "tasks": [
+    {
+      "attempts": 1,
+      "created_at": 1791659875,
+      "id": "core-bootstrap-probe-v1",
+      "kind": "probe",
+      "lease_owner": null,
+      "lease_token": null,
+      "lease_until": null,
+      "payload": {
+        "target": "github-hosted-supervisor"
+      },
+      "result": {
+        "completed_at": "2026-10-10T19:17:55.445901+00:00",
+        "github_actions": true,
+        "kind": "probe",
+        "ok": true,
+        "target": "github-hosted-supervisor",
+        "worker_os": "Linux"
+      },
+      "status": "done",
+      "updated_at": 1791659875
+    }
+  ]
 }
