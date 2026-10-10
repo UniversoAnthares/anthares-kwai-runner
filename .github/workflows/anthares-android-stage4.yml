@@ -1,0 +1,48 @@
+name: Anthares Android Cloud - stage 4 Kwai install
+on:
+  workflow_dispatch:
+  push:
+    branches: [experiment/anthares-android-cloud-20261010]
+    paths:
+      - '.github/workflows/anthares-android-stage4.yml'
+      - 'scripts/android_stage4_kwai_install.sh'
+      - 'scripts/android_stage4_20_checks.sh'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-android-stage4-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  kwai-install:
+    name: kwai-install-check-${{ matrix.check }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        check: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable virtualization
+        run: sudo chmod 666 /dev/kvm
+      - name: Boot Android and install Kwai, independent diagnostic
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -no-metrics
+          script: |
+            bash scripts/android_stage4_kwai_install.sh
+            bash scripts/android_stage4_20_checks.sh '${{ matrix.check }}'
+      - name: Upload independent evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage4-kwai-${{ matrix.check }}
+          path: /tmp/anthares-stage4/
+          if-no-files-found: warn
+          retention-days: 7
