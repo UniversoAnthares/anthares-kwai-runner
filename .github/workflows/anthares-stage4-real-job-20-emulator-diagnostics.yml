@@ -30,8 +30,8 @@ jobs:
           export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
           export ANDROID_ADB_SERVER_PORT=$((5037 + TEST))
           mkdir -p "$ANDROID_AVD_HOME"
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-35" "system-images;android-35;google_apis;x86_64"
-          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n "stage4-realjob-$TEST" -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-30" "system-images;android-30;google_apis;x86_64"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n "stage4-realjob-$TEST" -k "system-images;android-30;google_apis;x86_64" --device pixel_2 --force
           sudo chmod 666 /dev/kvm
           case "$TEST" in
             1) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2048 -cores 2" ;;
@@ -62,10 +62,28 @@ jobs:
           trap 'kill "$EP" 2>/dev/null || true; adb kill-server >/dev/null 2>&1 || true' EXIT
           adb start-server
           timeout 120 adb wait-for-device
-          timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+          timeout 600 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
           adb get-state | grep -qx device
           adb shell getprop ro.build.version.sdk | grep -Eq '^[0-9]+$'
-          echo "REAL_JOB_EMULATOR_ADB_BOOT_TEST_$TEST=PASS"
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip' | sha256sum -c -
+          mkdir -p /tmp/kwai-vault
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('/tmp/kwai-vault.zip') as z:
+              assert any(n.endswith('.apk') for n in z.namelist()), 'verified Kwai APK missing'
+              z.extractall('/tmp/kwai-vault')
+          PY
+          mapfile -t APKS < <(find /tmp/kwai-vault -type f -name '*.apk' | sort)
+          test "${#APKS[@]}" -gt 0
+          timeout 240 adb install-multiple -r "${APKS[@]}"
+          adb shell pm path com.kwai.video | grep -q '^package:'
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+          sleep 8
+          adb shell uiautomator dump /sdcard/stage4-realjob.xml >/dev/null
+          adb exec-out cat /sdcard/stage4-realjob.xml > /tmp/stage4-realjob.xml
+          grep -q '<hierarchy' /tmp/stage4-realjob.xml
+          echo "REAL_JOB_ANDROID_KWAI_UI_READY_TEST_$TEST=PASS"
       - name: Capture real-job failure evidence
         if: failure()
         shell: bash
