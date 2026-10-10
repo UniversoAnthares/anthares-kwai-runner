@@ -35,6 +35,10 @@ class KwaiSafeDiagnosisTests(unittest.TestCase):
         state=mod.classify(ui(node("","com.kwai.video:id/ll_profile")))
         self.assertTrue(state["profile_tab"])
         self.assertTrue(state["main_navigation"])
+    def test_profile_label_at_bottom(self):
+        xml='<hierarchy><node class="android.view.View" bounds="[0,0][1080,2340]"/><node class="android.widget.TextView" text="Profile" bounds="[864,2123][1080,2274]"/></hierarchy>'
+        self.assertTrue(mod.classify(xml)["profile_tab"])
+
     def test_system_error(self):
         self.assertTrue(mod.classify(ui(node("Kwai keeps stopping")))["system_error"])
     def test_no_false_form_from_email_label(self):
