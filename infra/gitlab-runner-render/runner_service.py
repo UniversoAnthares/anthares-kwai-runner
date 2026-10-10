@@ -83,6 +83,15 @@ def worker():
     config.unlink(missing_ok=True)
     (ROOT / "connected").unlink(missing_ok=True)
     subprocess.run(register_command(binary, config, token), check=True)
+    # The custom executor uses a shared project checkout path. Until per-job
+    # build directories are implemented, allow only one checkout per runner
+    # process to prevent concurrent git fetch/reset corruption.
+    current = config.read_text(encoding="utf-8")
+    import re
+    current, count = re.subn(r"(?m)^concurrent\\s*=\\s*\\d+", "concurrent = 1", current, count=1)
+    if count != 1:
+        raise RuntimeError("runner config lacks a concurrent setting")
+    config.write_text(current, encoding="utf-8")
     # GitLab's authentication-token registration ignores legacy --tag-list and
     # --access-level flags. The runner must be configured in GitLab UI/API with
     # render-qa tags and an explicit protected-ref policy. Fail closed rather
