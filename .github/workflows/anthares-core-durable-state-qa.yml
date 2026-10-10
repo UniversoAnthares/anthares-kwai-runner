@@ -1,5 +1,11 @@
 name: Anthares Core Durable State QA
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'anthares_core/**'
+      - 'tests/test_anthares_core_*.py'
+      - '.github/workflows/anthares-core-durable-state-qa.yml'
   pull_request:
     paths:
       - 'anthares_core/**'
