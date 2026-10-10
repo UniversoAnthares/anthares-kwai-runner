@@ -31,6 +31,34 @@ class PublisherLedgerTests(unittest.TestCase):
         self.assertTrue(mark_attempt(self.db,p['id']))
         self.assertTrue(fail(self.db,p['id'],True))
         self.assertEqual(self.db.execute('SELECT status FROM publications WHERE id=?',(p['id'],)).fetchone()[0],'retry')
+    def test_unknown_outcome_is_quarantined_and_not_retried(self):
+        p=reserve(self.db,'live-uncertain',0,5000,'kwai','lucasrosalem','f'*64)
+        self.assertTrue(mark_attempt(self.db,p['id']))
+        self.assertTrue(fail(self.db,p['id']))
+        self.assertEqual(self.db.execute('SELECT status FROM publications WHERE id=?',(p['id'],)).fetchone()[0],'uncertain')
+        self.assertFalse(mark_attempt(self.db,p['id']))
+        self.assertFalse(confirm(self.db,p['id'],'fake','https://www.kwai.com/v/fake'))
+    def test_overlapping_timecode_rejected_even_with_different_hash(self):
+        reserve(self.db,'same-live',1000,9000,'kwai','lucasrosalem','1'*64)
+        with self.assertRaisesRegex(ValueError,'overlapping'):
+            reserve(self.db,'same-live',8500,14000,'kwai','lucasrosalem','2'*64)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM publications').fetchone()[0],1)
+    def test_duplicate_content_rejected_across_different_lives(self):
+        reserve(self.db,'live-A',0,1000,'kwai','lucasrosalem','3'*64)
+        with self.assertRaisesRegex(ValueError,'identical video'):
+            reserve(self.db,'live-B',0,1000,'kwai','lucasrosalem','3'*64)
+    def test_same_clip_can_target_other_platform(self):
+        reserve(self.db,'live-A',0,1000,'kwai','lucasrosalem','4'*64)
+        reserve(self.db,'live-A',0,1000,'tiktok','lucasrosalem','4'*64)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM publications').fetchone()[0],2)
+    def test_explicit_pre_submit_failure_can_be_retried(self):
+        p=reserve(self.db,'live-pre-submit',0,5000,'kwai','lucasrosalem','5'*64)
+        self.assertTrue(mark_attempt(self.db,p['id']))
+        self.assertTrue(fail(self.db,p['id'],retry=True))
+        self.assertTrue(mark_attempt(self.db,p['id']))
+    def test_bad_hash_is_rejected(self):
+        with self.assertRaisesRegex(ValueError,'hex digest'):
+            reserve(self.db,'live-X',0,1000,'kwai','lucasrosalem','not-a-digest')
     def test_durable_state_round_trip_preserves_evidence(self):
         p=reserve(self.db,'live-4',100,6000,'kwai','lucasrosalem','e'*64)
         self.assertTrue(mark_attempt(self.db,p['id']))
