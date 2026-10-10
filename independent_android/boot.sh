@@ -20,10 +20,12 @@ AVD_INI="$(find "$HOME/.android/avd" "$HOME/.config/.android/avd" "$ANDROID_HOME
 if [ -z "$AVD_INI" ]; then echo ANTHARES_AVD_CREATION_FAILED=1; avdmanager list avd || true; exit 8; fi
 test -e /dev/kvm
 sudo chmod 666 /dev/kvm
+echo "ANTHARES_AVD_PATH=$AVD_INI"
+echo "ANTHARES_EMULATOR_BINARY=$(command -v emulator)"
 emulator -avd anthares_35 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -no-metrics >"$RUNNER_TEMP/anthares-emulator.log" 2>&1 &
 PID=$!
 trap 'adb emu kill >/dev/null 2>&1 || true; kill "$PID" >/dev/null 2>&1 || true' EXIT
-timeout 150 adb wait-for-device || { echo ANTHARES_ADB_DEVICE_TIMEOUT=1; exit 6; }
+timeout 150 adb wait-for-device || { echo ANTHARES_ADB_DEVICE_TIMEOUT=1; adb devices -l || true; tail -100 "$RUNNER_TEMP/anthares-emulator.log" || true; exit 6; }
 for i in $(seq 1 90); do
   if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then
     echo ANTHARES_ANDROID_BOOT=PASS
