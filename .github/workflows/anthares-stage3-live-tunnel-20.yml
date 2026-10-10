@@ -17,7 +17,10 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq adb cloudflared
+          sudo apt-get install -y -qq adb curl ca-certificates
+          curl -fLsS --retry 3 --connect-timeout 10 --max-time 45 https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+          sudo install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared
+          cloudflared --version
       - name: Start isolated bridge with emulator test double
         env:
           ANTHARES_BRIDGE_TOKEN: ${{ secrets.ANTHARES_BRIDGE_TEST_TOKEN }}
