@@ -1,0 +1,29 @@
+name: Kwai Private Vault QA
+on:
+  push:
+    branches: [feat/kwai-private-gitlab-vault]
+  pull_request:
+    paths: ['independent_session/gitlab_vault.py', '.github/workflows/kwai-private-vault-qa.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          python3 -m py_compile independent_session/gitlab_vault.py
+          python3 - <<'PY'
+          import importlib.util, json, tempfile
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('v','independent_session/gitlab_vault.py')
+          m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+          good={"schema":"anthares.session.v1","identity_hash":"a"*64,"salt":"b"*32,"nonce":"c"*24,"ciphertext":"d"*64}
+          assert m.validate_envelope(json.dumps(good).encode())["schema"]=="anthares.session.v1"
+          bad=dict(good); bad["schema"]="legacy"
+          try: m.validate_envelope(json.dumps(bad).encode())
+          except SystemExit: pass
+          else: raise AssertionError('legacy envelope accepted')
+          PY
