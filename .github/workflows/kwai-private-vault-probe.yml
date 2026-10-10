@@ -1,0 +1,28 @@
+name: Kwai private Cloudflare vault OIDC proof
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/kwai-private-vault-probe.yml
+      - tools/kwai_session_vault_client.py
+      - tests/test_kwai_session_vault_client.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: kwai-private-vault-oidc-probe
+  cancel-in-progress: true
+jobs:
+  vault:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify no plaintext session can be stored
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_kwai_session_vault_client.py -q
+          python3 -m py_compile tools/kwai_session_vault_client.py
+      - name: Verify GitHub OIDC access to private Cloudflare KV without reading session
+        run: python3 tools/kwai_session_vault_client.py probe
