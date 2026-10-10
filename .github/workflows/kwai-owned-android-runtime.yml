@@ -10,7 +10,7 @@ permissions:
 jobs:
   boot:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Enable KVM
@@ -18,5 +18,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Twenty independent fast-fail checks
+        run: bash independent_session/owned_android_preflight20.sh
       - name: Owned Android bootstrap
         run: bash independent_session/owned_android_runtime.sh
