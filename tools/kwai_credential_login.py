@@ -56,7 +56,12 @@ def wait_password_or_challenge(seconds=12):
 
 # Enter native email/phone surface using the proven selector helper.
 r=subprocess.run(['python3','tools/kwai_android_login_entry.py','auto']).returncode
-if r not in (0,):
+if r == 3:
+    # Native chooser is absent on fresh installs; recover by semantic navigation.
+    recovered=subprocess.run(['python3','tools/kwai_login_surface_recovery.py']).returncode
+    if recovered == 0:
+        r=subprocess.run(['python3','tools/kwai_android_login_entry.py','auto']).returncode
+if r != 0:
     print('KWAI_CREDENTIAL_METHOD_NOT_READY'); raise SystemExit(3)
 ns=snap(); es=edits(ns)
 if not es: print('KWAI_EMAIL_FIELD_MISSING'); raise SystemExit(3)
