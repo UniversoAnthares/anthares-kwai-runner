@@ -6,6 +6,7 @@ on:
       - .github/workflows/kwai-private-vault-probe.yml
       - tools/kwai_session_vault_client.py
       - tests/test_kwai_session_vault_client.py
+      - .kwai-private-vault-probe-trigger
   workflow_dispatch:
 permissions:
   contents: read
