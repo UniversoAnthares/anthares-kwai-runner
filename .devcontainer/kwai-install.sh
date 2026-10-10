@@ -30,8 +30,26 @@ else
   exit 1
 fi
 
-PRIVATE_HOME="${HOME}/.kwai-remote-private"
+PERSISTENT_ROOT="${ANTHARES_PERSISTENT_ROOT:-/workspaces/.anthares-private}"
+PRIVATE_HOME="${KWAI_PRIVATE_HOME:-${PERSISTENT_ROOT}/kwai}"
+LEGACY_PRIVATE_HOME="${HOME}/.kwai-remote-private"
+install -d -m 700 "${PERSISTENT_ROOT}" "${PRIVATE_HOME}"
+
+# One-time in-place migration from the earlier Codespaces-only location. The
+# profile stays inside the same Codespace account and is never exported.
+if [[ -d "${LEGACY_PRIVATE_HOME}/chrome-profile" && ! -e "${PRIVATE_HOME}/.legacy-profile-migrated" ]]; then
+  if [[ ! -d "${PRIVATE_HOME}/chrome-profile/Default" ]]; then
+    cp -a "${LEGACY_PRIVATE_HOME}/." "${PRIVATE_HOME}/"
+    echo "KWAI_CODESPACE_LEGACY_PROFILE_MIGRATED=true"
+  else
+    echo "KWAI_CODESPACE_LEGACY_PROFILE_MIGRATED=skipped_existing_persistent_profile"
+  fi
+  : > "${PRIVATE_HOME}/.legacy-profile-migrated"
+  chmod 600 "${PRIVATE_HOME}/.legacy-profile-migrated"
+fi
 install -d -m 700 "${PRIVATE_HOME}" "${PRIVATE_HOME}/logs" "${PRIVATE_HOME}/chrome-profile"
+chmod 700 "${PERSISTENT_ROOT}" "${PRIVATE_HOME}" "${PRIVATE_HOME}/chrome-profile"
+
 if [[ ! -x "${PRIVATE_HOME}/venv/bin/python" ]]; then
   if ! python3 -m venv "${PRIVATE_HOME}/venv" 2>/dev/null; then
     virtualenv "${PRIVATE_HOME}/venv"
@@ -69,5 +87,6 @@ command -v websockify >/dev/null
 
 echo "KWAI_CODESPACE_INSTALL_OK=true"
 echo "KWAI_CODESPACE_PRIVATE_PORTS=6080,8765"
-echo "KWAI_CODESPACE_BROWSER_PROFILE=private_untracked_directory"
+echo "KWAI_CODESPACE_BROWSER_PROFILE=persistent_private_workspace_directory"
+echo "KWAI_CODESPACE_PERSISTENT_ROOT=${PERSISTENT_ROOT}"
 echo "KWAI_CODESPACE_NOVNC_WEB=$NOVNC_WEB"
