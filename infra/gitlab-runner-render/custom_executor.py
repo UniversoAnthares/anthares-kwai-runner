@@ -11,8 +11,9 @@ import urllib.request
 
 TOOLS_ROOT = pathlib.Path("/tmp/anthares-gitlab-custom-tools")
 JOBS_ROOT = pathlib.Path("/tmp/anthares-gitlab-custom-jobs")
-BUILDS_ROOT = pathlib.Path("/tmp/anthares-gitlab-runner/builds-custom")
-CACHE_ROOT = pathlib.Path("/tmp/anthares-gitlab-runner/cache-custom")
+RUNNER_ROOT = pathlib.Path("/tmp/anthares-gitlab-runner")
+BUILDS_ROOT = RUNNER_ROOT / "builds-custom"
+CACHE_ROOT = RUNNER_ROOT / "cache-custom"
 
 UDOCKER_VERSION = "1.3.17"
 UDOCKER_URL = (
@@ -200,6 +201,7 @@ def _prepare_container(image: str):
 
 def _run_on_host(script_path: str, stage: str) -> int:
     env = os.environ.copy()
+    env["PATH"] = f"{RUNNER_ROOT}:{env.get('PATH', '')}"
     env["GIT_TERMINAL_PROMPT"] = "0"
     env["GCM_INTERACTIVE"] = "Never"
     env["SSH_ASKPASS"] = "/bin/false"
