@@ -22,7 +22,7 @@ avd_rc=$?
 echo "ANTHARES_AVD_MANAGER_EXIT=$avd_rc"
 avdmanager list avd || true
 emulator -list-avds || true
-if [[ $avd_rc -ne 0 ]] || ! emulator -list-avds | grep -Fxq anthares_android; then
+if [[ $avd_rc -ne 0 ]] || ! emulator -list-avds | grep -q 'anthares_android'; then
   echo "AVD_REGISTRY_DIAGNOSTIC: ANDROID_USER_HOME=$ANDROID_USER_HOME ANDROID_AVD_HOME=$ANDROID_AVD_HOME XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-unset}"
   find "$HOME" -maxdepth 5 -name "anthares_android.ini" -o -name "config.ini" 2>/dev/null | head -30 || true
   echo "ANTHARES_AVD_CREATION_FAILED=$avd_rc"
@@ -71,6 +71,26 @@ case "${ANTHARES_BOOT_VARIANT:-1}" in
   38) extra=(-no-metrics -cores 1) ;;
   39) extra=(-memory 1792 -cores 2) ;;
   40) extra=(-memory 2304 -cores 2) ;;
+41) extra=(-memory 1280 -cores 1) ;;
+42) extra=(-memory 1792 -cores 1) ;;
+43) extra=(-memory 2304 -cores 1) ;;
+44) extra=(-memory 3072 -cores 1) ;;
+45) extra=(-memory 1280 -cores 2) ;;
+46) extra=(-memory 1792 -cores 2) ;;
+47) extra=(-memory 2304 -cores 2) ;;
+48) extra=(-memory 3072 -cores 2) ;;
+49) extra=(-memory 1280 -cores 3) ;;
+50) extra=(-memory 2048 -cores 3) ;;
+51) extra=(-memory 3072 -cores 3) ;;
+52) extra=(-gpu swiftshader_indirect -memory 1280 -cores 1) ;;
+53) extra=(-gpu swiftshader_indirect -memory 1792 -cores 2) ;;
+54) extra=(-gpu off -memory 1280 -cores 1) ;;
+55) extra=(-gpu off -memory 1792 -cores 2) ;;
+56) extra=(-no-snapshot -memory 1280 -cores 1) ;;
+57) extra=(-no-boot-anim -memory 1792 -cores 2) ;;
+58) extra=(-netfast -memory 1280 -cores 1) ;;
+59) extra=(-no-metrics -memory 1792 -cores 2) ;;
+60) extra=(-camera-back none -memory 1280 -cores 1) ;;
   *) echo 'ANTHARES_INVALID_VARIANT'; exit 9 ;;
 esac
 echo "ANTHARES_BOOT_VARIANT=${ANTHARES_BOOT_VARIANT:-1}"
