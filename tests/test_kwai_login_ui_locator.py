@@ -52,6 +52,14 @@ class KwaiNativeLoginSelectorTests(unittest.TestCase):
         xml = '<hierarchy><node class="android.widget.FrameLayout" resource-id="com.kwai.video:id/ll_profile" clickable="true" bounds="[864,2123][1080,2274]"/></hierarchy>'
         self.assertEqual(selector.profile_tab(selector.parse(xml)), (972,2198))
 
+    def test_profile_resource_hint_bottom_nav(self):
+        xml = '<hierarchy><node class="android.view.View" bounds="[0,0][1080,2340]"/><node class="android.widget.FrameLayout" resource-id="com.kwai.video:id/bottom_profile_tab" bounds="[864,2123][1080,2274]"/></hierarchy>'
+        self.assertEqual(selector.profile_tab(selector.parse(xml)),(972,2198))
+
+    def test_profile_resource_hint_heading_is_not_navigation(self):
+        xml = '<hierarchy><node class="android.view.View" bounds="[0,0][1080,2340]"/><node class="android.widget.FrameLayout" resource-id="com.kwai.video:id/profile_header" bounds="[864,212][1080,274]"/></hierarchy>'
+        self.assertIsNone(selector.profile_tab(selector.parse(xml)))
+
     def test_profile_requires_valid_bounds(self):
         xml = '<hierarchy><node class="android.widget.FrameLayout" resource-id="com.kwai.video:id/ll_profile" bounds="[1080,2274][864,2123]"/></hierarchy>'
         self.assertIsNone(selector.profile_tab(selector.parse(xml)))
