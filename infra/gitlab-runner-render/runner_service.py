@@ -8,7 +8,12 @@ import urllib.request
 PORT = int(os.environ.get("PORT", "10000"))
 RUNNER_VERSION = "v17.11.1"
 ROOT = pathlib.Path("/tmp/anthares-gitlab-runner")
+BUILDS = ROOT / "builds-custom"
+CACHE = ROOT / "cache-custom"
+DRIVER = pathlib.Path(__file__).with_name("custom_executor.py").resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
+BUILDS.mkdir(parents=True, exist_ok=True)
+CACHE.mkdir(parents=True, exist_ok=True)
 
 
 class Health(http.server.BaseHTTPRequestHandler):
@@ -23,6 +28,7 @@ class Health(http.server.BaseHTTPRequestHandler):
 
 
 def register_command(binary, config, token):
+    DRIVER.chmod(0o700)
     cmd = [
         str(binary),
         "register",
@@ -30,7 +36,13 @@ def register_command(binary, config, token):
         "--url",
         "https://gitlab.com/",
         "--executor",
-        "shell",
+        "custom",
+        "--builds-dir",
+        str(BUILDS),
+        "--cache-dir",
+        str(CACHE),
+        "--custom-run-exec",
+        str(DRIVER),
         "--config",
         str(config),
     ]
@@ -38,9 +50,8 @@ def register_command(binary, config, token):
     if token.startswith("glrt-"):
         return cmd + ["--token", token]
 
-    # Keep the runner project-scoped, locked and tag-only. QA/MR branches may
-    # execute on it, while GitLab protected variables remain unavailable to
-    # unprotected refs.
+    # Project-scoped, locked and tag-only. QA/MR refs can execute on the
+    # runner; GitLab still withholds protected variables from unprotected refs.
     return cmd + [
         "--registration-token",
         token,
@@ -69,6 +80,8 @@ def worker():
     )
     binary.chmod(0o700)
     config = ROOT / "config.toml"
+    config.unlink(missing_ok=True)
+    (ROOT / "connected").unlink(missing_ok=True)
     subprocess.run(register_command(binary, config, token), check=True)
     (ROOT / "connected").touch()
     subprocess.run(
