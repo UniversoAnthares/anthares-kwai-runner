@@ -1,0 +1,41 @@
+name: Anthares Core MVP QA
+on:
+  pull_request:
+    paths:
+      - 'anthares_core/**'
+      - 'tests/test_anthares_core_queue.py'
+      - '.github/workflows/anthares-core-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  queue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate queue recovery and fencing
+        run: python3 -m unittest discover -s tests -p test_anthares_core_queue.py -v
+      - name: Exercise remote queue lifecycle
+        run: |
+          set -euo pipefail
+          DB="${RUNNER_TEMP}/anthares-core.sqlite3"
+          python3 anthares_core/queue.py --db "$DB" enqueue probe '{"target":"github-actions"}' --id qa-probe
+          python3 anthares_core/queue.py --db "$DB" claim --worker github-hosted
+          python3 anthares_core/queue.py --db "$DB" list
+      - name: Prepare state snapshot for independent run
+        run: |
+          set -euo pipefail
+          DB="${RUNNER_TEMP}/anthares-core-snapshot.sqlite3"
+          python3 anthares_core/queue.py --db "$DB" enqueue persistence '{"test":"cross-run"}' --id persistence-probe
+          mkdir -p state-snapshot
+          python3 - "$DB" <<'PY'
+          import sqlite3,sys
+          src=sqlite3.connect(sys.argv[1]);dst=sqlite3.connect('state-snapshot/anthares-core.sqlite3')
+          src.backup(dst);dst.close();src.close()
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anthares-core-state-snapshot
+          path: state-snapshot/anthares-core.sqlite3
+          retention-days: 7
