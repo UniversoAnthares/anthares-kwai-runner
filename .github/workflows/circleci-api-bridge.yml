@@ -54,7 +54,7 @@ jobs:
           if action=="recent":
               url="https://circleci.com/api/v2/project/gh/UniversoAnthares/anthares-kwai-runner/pipeline"
           elif action=="workflow_status":
-              url="https://circleci.com/api/v2/pipeline/4e1694f6-3e42-4ad8-a3ee-161d22bb1739/workflow"
+              url="https://circleci.com/api/v2/project/gh/UniversoAnthares/anthares-kwai-runner/pipeline"
           elif action=="pipeline":
               pid=os.environ["PIPELINE_ID"]
               uuid.UUID(pid)
@@ -72,9 +72,14 @@ jobs:
               for p in data.get("items",[])[:3]:
                   print(json.dumps({k:p.get(k) for k in ("id","number","state","created_at","updated_at","trigger")},ensure_ascii=False))
           elif action=="workflow_status":
-              for w in data.get("items",[]):
-                  print(json.dumps({k:w.get(k) for k in ("id","name","status","created_at","stopped_at","pipeline_id")},ensure_ascii=False))
-              if not data.get("items"): print("NO_WORKFLOWS_FOUND")
+              for p in data.get("items",[])[:3]:
+                  pid=p["id"]
+                  req2=urllib.request.Request(f"https://circleci.com/api/v2/pipeline/{pid}/workflow",headers={"Circle-Token":token,"Accept":"application/json"})
+                  with urllib.request.urlopen(req2,timeout=20) as response2:
+                      workflows=json.load(response2).get("items",[])
+                  print("PIPELINE",p.get("number"),pid,"WORKFLOWS",len(workflows))
+                  for w in workflows:
+                      print(json.dumps({k:w.get(k) for k in ("id","name","status","created_at","stopped_at","pipeline_id")},ensure_ascii=False))
           else:
               print(json.dumps({k:data.get(k) for k in ("id","number","state","created_at","updated_at")},ensure_ascii=False))
           PY
