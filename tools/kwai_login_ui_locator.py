@@ -114,7 +114,7 @@ def profile_tab(nodes,xml_text=""):
     builds expose the child outside the bottom band while the clickable parent
     is the actual tab. Never tap account content, headings, or login forms.
     """
-    if email_form_visible(nodes) or native_chooser_visible(nodes,xml_text):
+    if email_form_visible(nodes):
         return None
     height=max((bounds(n)[3] for n in nodes if bounds(n)),default=0)
     if height < 500:
