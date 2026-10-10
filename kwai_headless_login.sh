@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 REPORT="kwai-headless-status.txt"
+# Never persist login screenshots: they may contain credentials on failed steps.
 SHOT="kwai-headless-ready.png"
+rm -f "$SHOT"
 : >"$REPORT"
 log(){ printf '%s\n' "$*" | tee -a "$REPORT"; }
-capture(){ adb exec-out screencap -p >"$SHOT" 2>/dev/null || true; }
-trap capture EXIT
+trap 'rm -f "$SHOT"' EXIT
 adb wait-for-device
 for _ in $(seq 1 45); do
   [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
