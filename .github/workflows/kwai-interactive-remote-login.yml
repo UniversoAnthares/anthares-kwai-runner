@@ -24,7 +24,7 @@ jobs:
     env:
       KWAI_VARIANT: '4'
       KWAI_SESSION_FILE: kwai-session.enc
-      KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'anthares' }}
+      KWAI_EXPECTED_ACCOUNT: 'lucasrosalem'
 
     steps:
       - uses: actions/checkout@v4
