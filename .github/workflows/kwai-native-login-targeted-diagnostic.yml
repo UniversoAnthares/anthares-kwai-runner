@@ -8,6 +8,7 @@ on:
       - tools/kwai_login_surface_recovery.py
       - tools/kwai_ui_safe_diagnose.py
       - tools/kwai_android_causal_probe.py
+      - tools/kwai_android_startup_fingerprint.py
       - tools/kwai_android_environment_probe.py
       - kwai_native_email_smoke.sh
       - tests/test_kwai_login_ui_locator.py
