@@ -1,0 +1,64 @@
+name: Anthares Stage 3 - Fast 20 Targeted Diagnostics
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'independent_session/remote_android_bridge.py'
+      - 'independent_session/remote_android_console.html'
+      - 'independent_session/remote_console_acceptance.py'
+      - '.github/workflows/anthares-stage3-fast-20-diagnostics.yml'
+      - '.anthares-stage3-fast20-trigger'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        probe: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Diagnose one specific stage 3 requirement
+        env:
+          PROBE: ${{ matrix.probe }}
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import os,pathlib,ast,re,sys
+          n=int(os.environ["PROBE"])
+          root=pathlib.Path(".")
+          bridge=(root/"independent_session/remote_android_bridge.py").read_text()
+          html=(root/"independent_session/remote_android_console.html").read_text()
+          accept=(root/"independent_session/remote_console_acceptance.py").read_text()
+          workflow=(root/".github/workflows/anthares-stage3-console-acceptance.yml").read_text()
+          checks=[
+            ("bridge_python_syntax",lambda: ast.parse(bridge) is not None),
+            ("console_html_present",lambda: "<html" in html.lower()),
+            ("health_route",lambda: 'route=="/health"' in bridge),
+            ("screen_route",lambda: 'route=="/screen"' in bridge),
+            ("input_route",lambda: 'path!="/input"' in bridge),
+            ("bearer_auth",lambda: 'Authorization' in html and 'Bearer ' in html),
+            ("constant_time_token_compare",lambda: "compare_digest" in bridge),
+            ("localhost_default_bind",lambda: '127.0.0.1' in bridge),
+            ("screenshot_png_endpoint",lambda: 'screencap' in bridge and 'image/png' in bridge),
+            ("tap_command_allowlisted",lambda: '"tap"' in bridge and '"input","tap"' in bridge),
+            ("swipe_command_allowlisted",lambda: '"swipe"' in bridge and '"input","swipe"' in bridge),
+            ("restricted_keyevents",lambda: "KEY_NOT_ALLOWED" in bridge),
+            ("bounded_body_size",lambda: "MAX_BODY" in bridge),
+            ("no_store_cache_policy",lambda: "no-store" in bridge),
+            ("https_required_for_remote_ui",lambda: "https://" in html),
+            ("click_to_tap_handler",lambda: 'addEventListener("click"' in html),
+            ("screen_refresh_control",lambda: 'id="refresh"' in html),
+            ("health_probe_in_acceptance",lambda: '"/health"' in accept),
+            ("workflow_adb_resolution_fix",lambda: 'ADB_BIN=' in workflow and 'ADB_BINARY_NOT_FOUND' in workflow),
+            ("workflow_has_external_tunnel",lambda: any(x in workflow.lower() for x in ("cloudflared","tunnel","tailscale","wireguard","frp","ngrok"))),
+          ]
+          name,fn=checks[n-1]
+          try: ok=bool(fn())
+          except Exception: ok=False
+          print(f"STAGE3_DIAGNOSTIC_{n:02d}={ 'PASS' if ok else 'FAIL' } name={name}")
+          sys.exit(0 if ok else 1)
+          PY
