@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Anthares Android Console</title>
+<style>
+body{font:16px system-ui;max-width:900px;margin:20px auto;padding:0 14px;background:#111827;color:#e5e7eb}input,button{font:inherit;padding:9px;margin:4px;border-radius:6px;border:1px solid #4b5563;background:#1f2937;color:#f9fafb}button{cursor:pointer}#screen{display:block;max-width:min(100%,480px);max-height:70vh;object-fit:contain;border:1px solid #4b5563;background:#000;touch-action:none}small{color:#9ca3af}.row{display:flex;flex-wrap:wrap;align-items:center}#status{padding:10px 0;color:#93c5fd}
+</style>
+<h1>Anthares — Android remoto</h1>
+<p><small>Cliente de controle ADB próprio. Use somente por conexão privada HTTPS/VPN ou túnel autenticado. O token fica apenas em memória nesta página.</small></p>
+<div class="row"><label>Bridge URL <input id="url" placeholder="https://endereco-privado" size="30"></label><label>Token <input id="token" type="password" autocomplete="off" size="24"></label><button id="connect">Conectar</button></div>
+<div id="status">Desconectado.</div>
+<div class="row"><button data-key="BACK">Voltar</button><button data-key="HOME">Início</button><button data-key="ENTER">Enter</button><button data-key="TAB">Tab</button><button data-key="DPAD_UP">↑</button><button data-key="DPAD_DOWN">↓</button><button data-key="DPAD_LEFT">←</button><button data-key="DPAD_RIGHT">→</button><button id="refresh">Atualizar tela</button></div>
+<img id="screen" alt="Captura de tela Android; conecte para carregar">
+<p><small>Clique ou toque na imagem para enviar toque ao dispositivo. O servidor valida coordenadas e limita os comandos aceitos.</small></p>
+<script>
+(()=>{const $=id=>document.getElementById(id);let base="",token="",busy=false;
+function say(s){$("status").textContent=s}
+async function req(path,opts={}){const r=await fetch(base+path,{...opts,headers:{"Authorization":"Bearer "+token,...(opts.headers||{})},cache:"no-store"});if(!r.ok)throw Error("HTTP "+r.status);return r}
+async function refresh(){if(!base||busy)return;busy=true;try{const r=await req("/screen");$("screen").src=URL.createObjectURL(await r.blob());say("Conectado; tela atualizada.")}catch(e){say("Falha de conexão: "+e.message)}finally{busy=false}}
+async function input(data){try{await req("/input",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});setTimeout(refresh,250)}catch(e){say("Comando falhou: "+e.message)}}
+$("connect").onclick=async()=>{base=$("url").value.trim().replace(/\/$/,"");token=$("token").value;if(!base.startsWith("https://")&&!/^https?:\/\/localhost(:\d+)?$/.test(base)){say("Exija HTTPS, exceto localhost para teste.");return}try{const r=await req("/health");const j=await r.json();say(j.adb_online?"Android conectado.":"Bridge disponível; ADB ainda sem dispositivo.");await refresh()}catch(e){say("Conexão falhou: "+e.message)}};
+$("refresh").onclick=refresh;document.querySelectorAll("[data-key]").forEach(b=>b.onclick=()=>input({action:"key",key:b.dataset.key}));
+$("screen").addEventListener("click",e=>{const r=e.currentTarget.getBoundingClientRect();const x=Math.round((e.clientX-r.left)*e.currentTarget.naturalWidth/r.width);const y=Math.round((e.clientY-r.top)*e.currentTarget.naturalHeight/r.height);input({action:"tap",x,y})});
+})();
+</script></html>
