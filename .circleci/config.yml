@@ -22,33 +22,22 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Inspect Android executor
+          name: Inspect and boot API 35 Android executor
+          no_output_timeout: 12m
           command: |
-            set -eu
-            uname -a
+            set -Eeuo pipefail
             test -n "${ANDROID_HOME:-}"
             adb version
             emulator -version
-      - run:
-          name: Create API 35 x86_64 emulator
-          command: |
-            set -eu
             SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
             yes | sdkmanager --licenses >/dev/null 2>&1 || true
             sdkmanager "$SYSTEM_IMAGE"
-            echo "no" | avdmanager create avd --force --name anthares-api35 --package "$SYSTEM_IMAGE" --device "pixel_2"
-      - run:
-          name: Boot API 35 emulator
-          command: |
-            set -eu
-            nohup emulator -avd anthares-api35               -no-window               -no-audio               -no-boot-anim               -no-snapshot               -gpu swiftshader_indirect               -accel on               >/tmp/anthares-emulator.log 2>&1 &
+            echo no | avdmanager create avd --force --name anthares-api35 --package "$SYSTEM_IMAGE" --device pixel_2
+            nohup emulator -avd anthares-api35 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >/tmp/anthares-emulator.log 2>&1 &
             adb start-server
-            adb wait-for-device
-            for i in $(seq 1 90); do
-              BOOTED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-              if [ "$BOOTED" = "1" ]; then
-                break
-              fi
+            timeout 60 adb wait-for-device
+            for i in $(seq 1 120); do
+              [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
               sleep 2
             done
             test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
@@ -57,12 +46,11 @@ jobs:
             echo "TEST_VALIDITY=ANDROID_EXECUTOR_BOOT"
             echo "SUCCESS_SIGNAL=ANDROID_API35_BOOT_OK"
       - run:
-          name: Save emulator diagnostics
+          name: Save Android executor diagnostics
           command: |
             cat /tmp/anthares-emulator.log || true
             adb devices || true
           when: always
-
 
   kwai_install_smoke:
     machine:
@@ -71,106 +59,61 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Inspect Android executor
-          command: |
-            set -Eeuo pipefail
-            uname -a
-            test -n "${ANDROID_HOME:-}"
-            adb version
-            emulator -version
-      - run:
-          name: Create API 35 x86_64 emulator
+          name: Boot, install and verify Kwai in one Android lifecycle
+          no_output_timeout: 12m
           command: |
             set -Eeuo pipefail
             SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
             yes | sdkmanager --licenses >/dev/null 2>&1 || true
             sdkmanager "$SYSTEM_IMAGE"
-            echo "no" | avdmanager create avd --force --name anthares-kwai-api35 --package "$SYSTEM_IMAGE" --device "pixel_2"
-      - run:
-          name: Boot API 35 emulator and install Kwai
-          command: |
-            set -Eeuo pipefail
-            nohup emulator -avd anthares-kwai-api35               -no-window -no-audio -no-boot-anim -no-snapshot               -gpu swiftshader_indirect -accel on >/tmp/anthares-kwai-emulator.log 2>&1 &
+            echo no | avdmanager create avd --force --name anthares-kwai-api35 --package "$SYSTEM_IMAGE" --device pixel_2
+            nohup emulator -avd anthares-kwai-api35 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >/tmp/anthares-kwai-emulator.log 2>&1 &
             adb start-server
             timeout 60 adb wait-for-device
             for i in $(seq 1 120); do
-              BOOTED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-              if [ "$BOOTED" = "1" ]; then break; fi
+              [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
               sleep 2
             done
             test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
-            adb shell getprop ro.build.version.sdk
-            adb shell getprop ro.product.cpu.abilist
-            adb shell getprop ro.dalvik.vm.native.bridge
             echo "BOOT_ADB_SERIAL=$(adb get-serialno)"
             echo "BOOT_ADB_STATE=$(adb get-state)"
-            echo "SAME_STEP_KWAI_INSTALL_START=1"
             curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
             echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
             rm -rf kwai-vault && mkdir kwai-vault
             unzip -q kwai-vault.zip -d kwai-vault
             test -s kwai-vault/MANIFEST.tsv
             bash kwai_vault_install.sh
-            adb shell pm path com.kwai.video
-            adb shell dumpsys package com.kwai.video | grep -E 'versionName|versionCode|primaryCpuAbi' | head -20
-            echo "SAME_STEP_KWAI_INSTALL_OK=1"
-            echo "SAME_STEP_KWAI_PROCESS=$(adb shell pidof com.kwai.video || true)"
-            adb shell uiautomator dump /sdcard/kwai-same-step.xml >/dev/null 2>&1 || true
-            adb pull /sdcard/kwai-same-step.xml kwai-same-step.xml >/dev/null 2>&1 || true
-            if [ -s kwai-same-step.xml ]; then
-              echo "SAME_STEP_UI_DUMP_OK=1"
-              grep -Eo 'text="[^"]*"|content-desc="[^"]*"' kwai-same-step.xml | head -40 || true
-            else
-              echo "SAME_STEP_UI_DUMP_OK=0"
-            fi
-      - run:
-          name: Probe Kwai UI and process
-          command: |
-            set -Eeuo pipefail
-            echo "POST_BOUNDARY_ADB_STATE=$(adb get-state 2>/dev/null || true)"
-            PID="$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
-            echo "POST_BOUNDARY_KWAI_PID=$PID"
-            if [ -z "$PID" ]; then
-              echo "POST_BOUNDARY_KWAI_PROCESS_MISSING=1"
-              adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 || true
-              sleep 3
-              PID="$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
-              echo "POST_RELAUNCH_KWAI_PID=$PID"
-            fi
-            adb shell uiautomator dump /sdcard/kwai-ui.xml >/dev/null 2>&1 || true
-            adb pull /sdcard/kwai-ui.xml kwai-ui.xml >/dev/null 2>&1 || true
-            if [ -s kwai-ui.xml ]; then
-              echo "POST_BOUNDARY_UI_DUMP_OK=1"
-              grep -Eo 'text="[^"]*"|content-desc="[^"]*"' kwai-ui.xml | head -40 || true
-            else
-              echo "POST_BOUNDARY_UI_DUMP_OK=0"
-            fi
-            if [ -n "$PID" ] && [ -s kwai-ui.xml ]; then
-              echo "SUCCESS_SIGNAL=KWAI_POST_BOUNDARY_RUNTIME_OK"
-            else
-              echo "DIAGNOSTIC_SIGNAL=KWAI_POST_BOUNDARY_RUNTIME_NOT_READY"
-              echo "PACKAGE_PATHS_BEGIN"
-              adb shell pm path com.kwai.video || true
-              echo "PACKAGE_PATHS_END"
-              echo "PACKAGE_SUMMARY_BEGIN"
-              adb shell dumpsys package com.kwai.video | grep -E 'versionName|versionCode|primaryCpuAbi|secondaryCpuAbi|enabled=|stopped=' | head -40 || true
-              echo "PACKAGE_SUMMARY_END"
-              echo "ACTIVITY_TOP_BEGIN"
-              adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|com.kwai.video' | head -80 || true
-              echo "ACTIVITY_TOP_END"
-              echo "CRASH_LOG_BEGIN"
-              adb logcat -d -t 600 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|com\.kwai\.video|UnsatisfiedLinkError|SIG(SEGV|ABRT)|native bridge|dlopen failed' | tail -160 || true
-              echo "CRASH_LOG_END"
-            fi
             adb shell pm path com.kwai.video >/dev/null
+            adb shell dumpsys package com.kwai.video | grep -E 'versionName|versionCode|primaryCpuAbi' | head -20
+            PID="$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
+            if [ -z "$PID" ]; then
+              adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+              sleep 5
+              PID="$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
+            fi
+            test -n "$PID"
+            UI_OK=0
+            for attempt in 1 2 3; do
+              adb shell rm -f /sdcard/kwai-smoke.xml || true
+              if timeout 35 adb shell uiautomator dump /sdcard/kwai-smoke.xml >/dev/null 2>&1 && adb pull /sdcard/kwai-smoke.xml kwai-smoke.xml >/dev/null 2>&1 && test -s kwai-smoke.xml; then
+                UI_OK=1
+                break
+              fi
+              echo "UI_DUMP_RETRY=$attempt"
+              sleep 5
+            done
+            test "$UI_OK" = 1
+            echo "SAME_STEP_KWAI_PROCESS=$PID"
             echo "SUCCESS_SIGNAL=KWAI_INSTALL_PROVEN"
       - run:
-          name: Save diagnostics
+          name: Save Kwai install diagnostics
           command: |
             cat /tmp/anthares-kwai-emulator.log || true
             adb devices || true
           when: always
-
+      - store_artifacts:
+          path: kwai-smoke.xml
+          destination: kwai-smoke.xml
 
   kwai_login_surface_smoke:
     machine:
@@ -179,43 +122,29 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Create API 35 x86_64 emulator
+          name: Boot, install and probe Kwai login surface in one Android lifecycle
+          no_output_timeout: 12m
           command: |
             set -Eeuo pipefail
             SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
             yes | sdkmanager --licenses >/dev/null 2>&1 || true
             sdkmanager "$SYSTEM_IMAGE"
-            echo "no" | avdmanager create avd --force --name anthares-kwai-login --package "$SYSTEM_IMAGE" --device "pixel_2"
-      - run:
-          name: Boot emulator with bounded ADB wait
-          command: |
-            set -Eeuo pipefail
-            nohup emulator -avd anthares-kwai-login               -no-window -no-audio -no-boot-anim -no-snapshot               -gpu swiftshader_indirect -accel on >/tmp/anthares-kwai-login-emulator.log 2>&1 &
+            echo no | avdmanager create avd --force --name anthares-kwai-login --package "$SYSTEM_IMAGE" --device pixel_2
+            nohup emulator -avd anthares-kwai-login -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >/tmp/anthares-kwai-login-emulator.log 2>&1 &
             adb start-server
             timeout 60 adb wait-for-device
             for i in $(seq 1 120); do
-              BOOTED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-              if [ "$BOOTED" = "1" ]; then break; fi
+              [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
               sleep 2
             done
             test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
-            echo "EMULATOR_BOOTED"
-      - run:
-          name: Install validated Kwai bundle
-          command: |
-            set -Eeuo pipefail
-            curl -fL --retry 3 --connect-timeout 10 --max-time 180               -o kwai-vault.zip               https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+            curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
             echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
             rm -rf kwai-vault && mkdir kwai-vault
             unzip -q kwai-vault.zip -d kwai-vault
             test -s kwai-vault/MANIFEST.tsv
             bash kwai_vault_install.sh
-            adb shell pm path com.kwai.video
-            echo "APPS_INSTALLED"
-      - run:
-          name: Probe proven Profile to login surface
-          command: |
-            set -Eeuo pipefail
+            adb shell pm path com.kwai.video >/dev/null
             set +e
             python3 kwai_login_control_discovery.py | tee kwai-login-surface.txt
             rc=$?
@@ -244,7 +173,6 @@ jobs:
           path: final-ui.xml
           destination: final-ui.xml
 
-
   kwai_boundary_probe:
     parameters:
       replica:
@@ -256,13 +184,14 @@ jobs:
       - checkout
       - run:
           name: Replica << parameters.replica >> boot and ADB boundary probe
+          no_output_timeout: 12m
           command: |
             set -Eeuo pipefail
             R="<< parameters.replica >>"
             SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
             yes | sdkmanager --licenses >/dev/null 2>&1 || true
             sdkmanager "$SYSTEM_IMAGE"
-            echo "no" | avdmanager create avd --force --name "anthares-boundary-$R" --package "$SYSTEM_IMAGE" --device "pixel_2"
+            echo no | avdmanager create avd --force --name "anthares-boundary-$R" --package "$SYSTEM_IMAGE" --device pixel_2
             nohup emulator -avd "anthares-boundary-$R" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >"/tmp/emulator-$R.log" 2>&1 &
             adb start-server
             timeout 60 adb wait-for-device
@@ -271,25 +200,18 @@ jobs:
               sleep 2
             done
             test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
-            echo "REPLICA=$R"
-            echo "BOOT_SERIAL=$(adb get-serialno)"
-            echo "BOOT_STATE=$(adb get-state)"
+            echo "REPLICA=$R BOOT_SERIAL=$(adb get-serialno)"
             echo "BOUNDARY_PRECONDITION_OK=1"
       - run:
           name: Replica << parameters.replica >> next-step ADB check
           command: |
             set -Eeuo pipefail
             R="<< parameters.replica >>"
-            echo "REPLICA=$R"
             adb devices -l
-            if timeout 15 adb wait-for-device; then
-              echo "NEXT_STEP_ADB_ALIVE=1"
-              echo "NEXT_SERIAL=$(adb get-serialno)"
-              echo "NEXT_STATE=$(adb get-state)"
-            else
-              echo "NEXT_STEP_ADB_ALIVE=0"
-              exit 20
-            fi
+            timeout 15 adb wait-for-device
+            echo "REPLICA=$R NEXT_STEP_ADB_ALIVE=1"
+            echo "NEXT_SERIAL=$(adb get-serialno)"
+            echo "NEXT_STATE=$(adb get-state)"
       - run:
           name: Replica << parameters.replica >> diagnostics
           command: |
@@ -315,7 +237,7 @@ jobs:
             SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
             yes | sdkmanager --licenses >/dev/null 2>&1 || true
             sdkmanager "$SYSTEM_IMAGE"
-            echo "no" | avdmanager create avd --force --name "anthares-kwai-full-$R" --package "$SYSTEM_IMAGE" --device "pixel_2"
+            echo no | avdmanager create avd --force --name "anthares-kwai-full-$R" --package "$SYSTEM_IMAGE" --device pixel_2
             nohup emulator -avd "anthares-kwai-full-$R" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >"/tmp/kwai-full-$R.log" 2>&1 &
             adb start-server
             timeout 60 adb wait-for-device
@@ -331,7 +253,6 @@ jobs:
             unzip -q kwai-vault.zip -d kwai-vault
             bash kwai_vault_install.sh
             echo "REPLICA=$R INSTALL_OK=1"
-            adb shell pidof com.kwai.video || true
             UI_OK=0
             for attempt in 1 2 3; do
               adb shell rm -f /sdcard/full.xml || true
@@ -343,15 +264,9 @@ jobs:
               sleep 5
             done
             test "$UI_OK" = 1
+            adb shell pm path com.kwai.video >/dev/null
             echo "REPLICA=$R UI_DUMP_OK=1"
-      - run:
-          name: Replica << parameters.replica >> post-install liveness
-          command: |
-            set -Eeuo pipefail
-            R="<< parameters.replica >>"
-            timeout 15 adb wait-for-device
-            echo "REPLICA=$R POST_BOUNDARY_ADB=$(adb get-state)"
-            echo "REPLICA=$R POST_BOUNDARY_PID=$(adb shell pidof com.kwai.video || true)"
+            echo "SUCCESS_SIGNAL=KWAI_SAME_STEP_PROVEN"
 
   kwai_install_variants:
     parameters:
@@ -372,26 +287,28 @@ jobs:
             yes | sdkmanager --licenses >/dev/null 2>&1 || true
             sdkmanager "$IMG"
             echo no | avdmanager create avd --force --name "kv-$V" --package "$IMG" --device pixel_2
-            case "$V" in
-              cold) EMU_FLAGS="-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on" ;;
-              wait2) EMU_FLAGS="-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on" ;;
-              restart_adb) EMU_FLAGS="-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on" ;;
-              launch_retry) EMU_FLAGS="-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on" ;;
-              ui_delay) EMU_FLAGS="-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on" ;;
-            esac
+            EMU_FLAGS="-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on"
             nohup emulator -avd "kv-$V" $EMU_FLAGS >"/tmp/kv-$V.log" 2>&1 &
             adb start-server
             timeout 60 adb wait-for-device
-            for i in $(seq 1 120); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 2; done
-            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+            for i in $(seq 1 120); do
+              [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
+              sleep 2
+            done
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
             [ "$V" = wait2 ] && sleep 30 || true
             if [ "$V" = restart_adb ]; then adb kill-server; adb start-server; timeout 30 adb wait-for-device; fi
             curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
             echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
-            rm -rf kwai-vault && mkdir kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+            rm -rf kwai-vault && mkdir kwai-vault
+            unzip -q kwai-vault.zip -d kwai-vault
             bash kwai_vault_install.sh
-            if [ "$V" = launch_retry ] && ! adb shell pidof com.kwai.video >/dev/null 2>&1; then adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 || true; sleep 5; fi
+            if [ "$V" = launch_retry ] && ! adb shell pidof com.kwai.video >/dev/null 2>&1; then
+              adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+              sleep 5
+            fi
             [ "$V" = ui_delay ] && sleep 15 || true
+            adb shell pm path com.kwai.video >/dev/null
             echo "VARIANT=$V PID=$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
             adb shell uiautomator dump /sdcard/v.xml >/dev/null 2>&1 || true
             adb pull /sdcard/v.xml "kwai-$V.xml" >/dev/null 2>&1 || true
