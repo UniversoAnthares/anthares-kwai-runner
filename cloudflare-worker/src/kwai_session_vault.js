@@ -3,7 +3,7 @@
 // raw UI XML, screenshots, passwords or Android app data.
 const KEY="kwai:mobile:session:lucasrosalem:v1";
 const ACCOUNT="lucasrosalem";
-const MAX_BASE64=6_000_000;
+const MAX_BASE64=24_000_000;
 const HEADER="U2FsdGVkX1"; // base64(OpenSSL 'Salted__' archive)
 function json(data,status=200){
   return new Response(JSON.stringify(data),{status,headers:{
