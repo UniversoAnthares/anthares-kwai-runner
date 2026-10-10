@@ -3,7 +3,7 @@ STATUS: RUNNING
 AREA: kwai-login
 DATE: 2026-10-10
 OWNER: chatgpt-kwai-persistence-proof
-LEASE_UNTIL: 2026-10-10T03:31:00Z
+LEASE_UNTIL: 2026-10-10T04:15:00Z
 HEAD_BASELINE: 68d788606d5e050544669332c6eb2786db6bc826
 RESOURCES: .github/workflows/kwai-interactive-remote-login.yml; kwai_session_state.sh; private checkpoint storage provisioning
 BASELINE_PROVEN: hosted Android boots; official Kwai APK is installed; secret-backed login flow and encrypted local session save/restore code exist; current run 38018952625 is authenticating and no real publication is part of this proof.
