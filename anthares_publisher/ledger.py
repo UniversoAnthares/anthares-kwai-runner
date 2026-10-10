@@ -56,8 +56,14 @@ def mark_attempt(db,pid):
     cur=db.execute("UPDATE publications SET attempts=attempts+1,status='publishing',updated_at=? WHERE id=? AND status IN ('queued','retry')",(now,pid))
     return cur.rowcount==1
 
-def fail(db,pid,retry=True):
-    now=int(time.time());status='retry' if retry else 'failed'
+def fail(db,pid,retry=False):
+    """Unknown post outcome must NEVER be retried automatically.
+
+    retry=True is reserved for a positively established pre-submit failure.
+    A failed attempt after upload may already be public; quarantine it until
+    independent external publication evidence resolves the uncertainty.
+    """
+    now=int(time.time());status='retry' if retry else 'uncertain'
     return db.execute("UPDATE publications SET status=?,updated_at=? WHERE id=? AND status='publishing'",(status,now,pid)).rowcount==1
 
 def confirm(db,pid,external_id,public_url):
@@ -74,13 +80,13 @@ def main():
     sub=p.add_subparsers(dest='cmd',required=True)
     r=sub.add_parser('reserve');r.add_argument('source_id');r.add_argument('start_ms',type=int);r.add_argument('end_ms',type=int);r.add_argument('platform');r.add_argument('account');r.add_argument('content_sha256')
     a=sub.add_parser('attempt');a.add_argument('id')
-    f=sub.add_parser('fail');f.add_argument('id');f.add_argument('--terminal',action='store_true')
+    f=sub.add_parser('fail');f.add_argument('id');f.add_argument('--safe-pre-submit',action='store_true',help='only if no upload or submit request was sent')
     c=sub.add_parser('confirm');c.add_argument('id');c.add_argument('external_id');c.add_argument('public_url')
     sub.add_parser('list')
     x=p.parse_args();db=connect(x.db)
     if x.cmd=='reserve': out=reserve(db,x.source_id,x.start_ms,x.end_ms,x.platform,x.account,x.content_sha256)
     elif x.cmd=='attempt': out={'accepted':mark_attempt(db,x.id)}
-    elif x.cmd=='fail': out={'accepted':fail(db,x.id,not x.terminal)}
+    elif x.cmd=='fail': out={'accepted':fail(db,x.id,x.safe_pre_submit)}
     elif x.cmd=='confirm': out={'accepted':confirm(db,x.id,x.external_id,x.public_url)}
     else:
         rows=db.execute("SELECT id,source_id,start_ms,end_ms,platform,account,status,external_id,public_url,attempts FROM publications ORDER BY created_at,id")
