@@ -1,5 +1,10 @@
 version: 2.1
 
+parameters:
+  full_android_matrix:
+    type: boolean
+    default: false
+
 jobs:
   provider_smoke:
     machine:
@@ -327,8 +332,6 @@ jobs:
             bash kwai_vault_install.sh
             echo "REPLICA=$R INSTALL_OK=1"
             adb shell pidof com.kwai.video || true
-            # UIAutomator may transiently fail while Android finishes rendering.
-            # Retry the UI probe without reinstalling or restarting the AVD.
             UI_OK=0
             for attempt in 1 2 3; do
               adb shell rm -f /sdcard/full.xml || true
@@ -396,71 +399,29 @@ jobs:
             adb logcat -d -t 400 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|com\.kwai\.video|UnsatisfiedLinkError|SIG(SEGV|ABRT)|native bridge|dlopen failed' | tail -100 || true
 
 workflows:
-  anthares_parallel:
+  quick_validation:
     jobs:
-      - kwai_install_variants:
-          name: kwai_install_variant_cold
-          variant: cold
-      - kwai_install_variants:
-          name: kwai_install_variant_wait2
-          variant: wait2
-      - kwai_install_variants:
-          name: kwai_install_variant_restart_adb
-          variant: restart_adb
-      - kwai_install_variants:
-          name: kwai_install_variant_launch_retry
-          variant: launch_retry
-      - kwai_install_variants:
-          name: kwai_install_variant_ui_delay
-          variant: ui_delay
-      - kwai_same_step_probe:
-          name: kwai_same_step_probe_01
-          replica: 1
-      - kwai_same_step_probe:
-          name: kwai_same_step_probe_02
-          replica: 2
-      - kwai_same_step_probe:
-          name: kwai_same_step_probe_03
-          replica: 3
-      - kwai_same_step_probe:
-          name: kwai_same_step_probe_04
-          replica: 4
-      - kwai_same_step_probe:
-          name: kwai_same_step_probe_05
-          replica: 5
+      - provider_smoke
+      - kwai_install_smoke
+
+  full_android_matrix:
+    when: << pipeline.parameters.full_android_matrix >>
+    jobs:
       - provider_smoke
       - android_executor_smoke
       - kwai_install_smoke
       - kwai_login_surface_smoke:
           requires:
             - kwai_install_smoke
+      - kwai_install_variants:
+          matrix:
+            parameters:
+              variant: [cold, wait2, restart_adb, launch_retry, ui_delay]
+      - kwai_same_step_probe:
+          matrix:
+            parameters:
+              replica: [1, 2, 3, 4, 5]
       - kwai_boundary_probe:
-          name: kwai_boundary_probe_01
-          replica: 1
-      - kwai_boundary_probe:
-          name: kwai_boundary_probe_02
-          replica: 2
-      - kwai_boundary_probe:
-          name: kwai_boundary_probe_03
-          replica: 3
-      - kwai_boundary_probe:
-          name: kwai_boundary_probe_04
-          replica: 4
-      - kwai_boundary_probe:
-          name: kwai_boundary_probe_05
-          replica: 5
-      - kwai_boundary_probe:
-          name: kwai_boundary_probe_06
-          replica: 6
-      - kwai_boundary_probe:
-          name: kwai_boundary_probe_07
-          replica: 7
-      - kwai_boundary_probe:
-          name: kwai_boundary_probe_08
-          replica: 8
-      - kwai_boundary_probe:
-          name: kwai_boundary_probe_09
-          replica: 9
-      - kwai_boundary_probe:
-          name: kwai_boundary_probe_10
-          replica: 10
+          matrix:
+            parameters:
+              replica: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
