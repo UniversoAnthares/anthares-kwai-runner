@@ -111,6 +111,8 @@ jobs:
               proxy_set_header Upgrade $http_upgrade;
               proxy_set_header Connection "upgrade";
               proxy_set_header Host $host;
+              proxy_set_header Authorization $http_authorization;
+              proxy_set_header X-Forwarded-Proto $scheme;
               proxy_read_timeout 3600;
             }
           }
@@ -137,6 +139,10 @@ jobs:
             sleep 2
           done
           test "$READY" = 1
+          # Verify that the WebSocket upgrade also accepts the protected credential.
+          WS_CODE=$(curl -s --http1.1 --connect-timeout 8 -u "$REMOTE_USER:$REMOTE_PASSWORD" -o /dev/null -w '%{http_code}' -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" "$URL/websockify" || true)
+          echo "ANDROID_REMOTE_WEBSOCKET_HTTP=$WS_CODE" >> "$GITHUB_STEP_SUMMARY"
+          test "$WS_CODE" = 101
           GUI_URL="$URL/vnc.html?autoconnect=1&resize=scale"
           echo "ANDROID_REMOTE_GUI_URL=$GUI_URL"
           echo 'ANDROID_REMOTE_GUI_PROTECTION=BASIC_AUTH_VERIFIED_401_200' >> "$GITHUB_STEP_SUMMARY"
