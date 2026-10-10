@@ -165,7 +165,7 @@ jobs:
             fi
             "$ADB" shell uiautomator dump /sdcard/kwai-window.xml >/dev/null 2>&1 || true
             "$ADB" pull /sdcard/kwai-window.xml /tmp/kwai-window.xml >/dev/null 2>&1 || true
-            if grep -Fqi 'universo.anthares' /tmp/kwai-window.xml 2>/dev/null; then
+            if grep -Fqi 'lucasrosalem' /tmp/kwai-window.xml 2>/dev/null; then
               found=1
               echo 'EXPECTED_OWNER_VISIBLE_IN_OFFICIAL_ANDROID_UI=true' | tee -a "$GITHUB_STEP_SUMMARY"
               break
