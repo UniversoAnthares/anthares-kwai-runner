@@ -116,6 +116,19 @@ def _job_root() -> pathlib.Path:
     return root
 
 
+def _reset_workspace() -> None:
+    raw = os.environ.get("CUSTOM_ENV_CI_PROJECT_DIR", "").strip()
+    if not raw:
+        return
+    project_dir = pathlib.Path(raw).resolve()
+    builds_root = BUILDS_ROOT.resolve()
+    if project_dir == builds_root or builds_root not in project_dir.parents:
+        raise RuntimeError("refusing to reset workspace outside controlled builds root")
+    shutil.rmtree(project_dir, ignore_errors=True)
+    project_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Anthares custom executor: reset workspace {project_dir}", flush=True)
+
+
 def _image_config(crane_bin: pathlib.Path, image: str) -> dict:
     result = _run(
         [str(crane_bin), "config", "--platform", "linux/amd64", image],
@@ -248,6 +261,9 @@ def main() -> int:
     image = os.environ.get("CUSTOM_ENV_CI_JOB_IMAGE", "").strip()
 
     try:
+        if stage == "prepare_script":
+            _reset_workspace()
+
         in_container = stage in CONTAINER_STAGES or (
             stage.startswith("step_") and stage != "prepare_script"
         )
