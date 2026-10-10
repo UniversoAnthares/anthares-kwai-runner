@@ -206,12 +206,13 @@ jobs:
           echo "KWAI_NETWORK_TRACE_STARTED_BEFORE_AUTH"
 
       - name: Authentication first — owner login or validated restore
-        timeout-minutes: 20
+        timeout-minutes: 12
         env:
           REMOTE_ANDROID_TOKEN: ${{ secrets.REMOTE_ANDROID_TOKEN }}
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
           KWAI_ACCOUNT_ID: primary
+          KWAI_AUTOFILL_ENABLED: '1'
         shell: bash
         run: |
           set -euo pipefail
