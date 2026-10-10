@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/anthares-stage4-single-auth-proof-20-tests.yml'
+      - '.anthares-stage4-auth-trigger'
       - 'kwai_auth_probe.py'
       - 'tools/kwai_credential_login.py'
       - 'kwai_android_autologin.py'
