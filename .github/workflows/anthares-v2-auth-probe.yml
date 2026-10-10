@@ -1,0 +1,25 @@
+name: Anthares Publisher V2 - Auth Capability Probe
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'publisher_v2/provider_adapter.py'
+      - '.github/workflows/anthares-v2-auth-probe.yml'
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  capability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check encrypted private session vault without downloading session
+        run: python3 tools/kwai_session_vault_client.py probe
+      - name: Check independent provider authentication capability
+        run: |
+          set +e
+          python3 publisher_v2/provider_adapter.py
+          rc=$?
+          echo "V2_PROVIDER_ADAPTER_EXIT=$rc"
+          test "$rc" -eq 0
