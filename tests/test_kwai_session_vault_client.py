@@ -37,6 +37,13 @@ class VaultClientTests(unittest.TestCase):
         payload=req.call_args.kwargs["data"].decode()
         self.assertIn(self.ciphertext,payload)
         self.assertNotIn("KWAI_PASSWORD",payload)
+    def test_publisher_uses_private_vault_not_public_actions_cache(self):
+        workflow=(Path(__file__).resolve().parents[1]/".github/workflows/kwai-queue-publisher.yml").read_text()
+        self.assertIn("tools/kwai_session_vault_client.py pull",workflow)
+        self.assertIn("tools/kwai_session_vault_client.py push",workflow)
+        self.assertNotIn("actions/cache/restore@",workflow)
+        self.assertNotIn("actions/cache/save@",workflow)
+        self.assertIn("KWAI_IDENTITY_PROFILE_MATCH=1",workflow)
     def test_probe_only_reports_availability(self):
         with patch.object(vault,"get_json",return_value={"ok":True,"persistent":True,"available":False}):
             vault.probe({})
