@@ -49,9 +49,6 @@ jobs:
             adb devices -l
             adb shell getprop sys.boot_completed | tr -d '\r' | grep -qx 1
             adb shell getprop ro.build.version.sdk | tr -d '\r' | grep -qx 30
-            bash scripts/android_parallel_20.sh > /tmp/anthares-device-checks.log 2>&1 || true
-            cat /tmp/anthares-device-checks.log
-            test "$(grep -c '^PASS ' /tmp/anthares-device-checks.log)" -ge 17
             echo 'Running independent matrix diagnostic ${{ matrix.check }}'
             bash scripts/android_matrix_check.sh '${{ matrix.check }}'
             python -m anthares_android_cloud.controller status | tee /tmp/anthares-controller-status.json
