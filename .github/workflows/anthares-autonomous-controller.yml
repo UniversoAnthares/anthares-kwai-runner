@@ -2,7 +2,7 @@ name: Anthares autonomous controller
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -28,7 +28,7 @@ jobs:
               'kwai-interactive-remote-login.yml',
               'kwai-private-persistence-bridge.yml'
             ];
-            const recoverable = new Set(['failure', 'timed_out', 'stale', 'action_required']);
+            const recoverable = new Set(['failure', 'timed_out']);
             const active = new Set(['queued', 'in_progress', 'waiting', 'requested', 'pending']);
             const now = Date.now();
             const maxAgeMs = 24 * 60 * 60 * 1000;
@@ -61,6 +61,9 @@ jobs:
               }
 
               const latest = runs[0];
+              if (latest.event === 'schedule' && latest.status === 'completed' && latest.conclusion === 'success') {
+                core.info(`${workflow_id}: healthy scheduled execution`);
+              }
               const ageMs = now - new Date(latest.updated_at || latest.created_at).getTime();
               const attempt = latest.run_attempt || 1;
               core.info(`${workflow_id}: latest #${latest.run_number} status=${latest.status} conclusion=${latest.conclusion} attempt=${attempt}`);
@@ -84,12 +87,7 @@ jobs:
                 core.notice(`${workflow_id}: failed jobs rerun requested, attempt ${attempt + 1}/${maxAttempts}`);
               } catch (error) {
                 core.warning(`${workflow_id}: failed-jobs rerun unavailable (${error.message}); trying full rerun`);
-                await github.rest.actions.reRunWorkflow({
-                  owner,
-                  repo,
-                  run_id: latest.id
-                });
-                core.notice(`${workflow_id}: full rerun requested, attempt ${attempt + 1}/${maxAttempts}`);
+                core.warning(`${workflow_id}: full rerun suppressed to avoid repeating side effects`);
               }
             }
 
