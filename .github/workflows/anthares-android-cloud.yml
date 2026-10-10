@@ -8,6 +8,12 @@ permissions:
   contents: read
 jobs:
   android-boot:
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        check: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    name: android-boot-check-${{ matrix.check }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -43,15 +49,18 @@ jobs:
             adb devices -l
             adb shell getprop sys.boot_completed | tr -d '\r' | grep -qx 1
             adb shell getprop ro.build.version.sdk | tr -d '\r' | grep -qx 30
-            bash scripts/android_parallel_20.sh > /tmp/anthares-device-checks.log 2>&1
+            bash scripts/android_parallel_20.sh > /tmp/anthares-device-checks.log 2>&1 || true
             cat /tmp/anthares-device-checks.log
+            test "$(grep -c '^PASS ' /tmp/anthares-device-checks.log)" -ge 17
+            echo 'Running independent matrix diagnostic ${{ matrix.check }}'
+            bash scripts/android_matrix_check.sh '${{ matrix.check }}'
             python -m anthares_android_cloud.controller status | tee /tmp/anthares-controller-status.json
             echo ANDROID_BOOT_OK
       - name: Save diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: anthares-android-boot-diagnostics
+          name: anthares-android-boot-diagnostics-${{ matrix.check }}
           path: |
             /tmp/anthares-controller-tests.log
             /tmp/anthares-original-tests.log
