@@ -23,19 +23,19 @@ def tap(n):
 def tag(n):
     return ((n.get("text") or "")+" "+(n.get("content-desc") or "")).strip().casefold()
 def select(ns):
-    # Only deterministic native navigation; no guesses at screen coordinates.
-    for suffix in ("ll_profile","tab_profile","btn_profile"):
-        for n in ns:
-            if (n.get("resource-id") or "").endswith(suffix) and tap(n):
-                return suffix
-    for n in ns:
-        if tag(n) in ("profile","perfil","me","eu") and tap(n):return "profile_label"
+    # Prefer explicit login action before navigating into Profile.
     for n in ns:
         if tag(n) in ("log in","login","sign in","entrar","fazer login","log in / sign up","log in or sign up") and tap(n):
             return "login_label"
     for suffix in ("tv_login","btn_login","tv_to_login","btn_to_login"):
         for n in ns:
             if (n.get("resource-id") or "").endswith(suffix) and tap(n):return suffix
+    for suffix in ("ll_profile","tab_profile","btn_profile"):
+        for n in ns:
+            if (n.get("resource-id") or "").endswith(suffix) and tap(n):
+                return suffix
+    for n in ns:
+        if tag(n) in ("profile","perfil","me","eu") and tap(n):return "profile_label"
     return None
 seen=set()
 for i in range(8):
