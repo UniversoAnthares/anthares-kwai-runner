@@ -149,22 +149,7 @@ jobs:
             echo 'KWAI_PRIVATE_VAULT_SAVE_SKIPPED_NO_SESSION=1'
             exit 0
           fi
-          if ! grep -Eq '^KWAI_SESSION_AUTHENTICATED(_RESTORED)?
-      - name: Upload publication diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kwai-queue-publisher-${{ github.run_id }}
-          path: |
-            kwai-publication.log
-            kwai-publish-status.txt
-            kwai-reconcile-status.txt
-            kwai-headless-status.txt
-          if-no-files-found: warn
-          retention-days: 3
-
-# Kwai first-run sign-in continuation and bounded SetupWizard wait validated by login_recovery_syntax.
- kwai-headless-status.txt ||
+          if ! grep -Eq '^KWAI_SESSION_AUTHENTICATED(_RESTORED)?$' kwai-headless-status.txt ||
              ! grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-headless-status.txt; then
             echo 'KWAI_PRIVATE_VAULT_SAVE_SKIPPED_NO_IDENTITY_PROOF=1'
             exit 0
@@ -184,4 +169,4 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
-# Kwai first-run sign-in continuation recovery validated by login_recovery_syntax.
+# Kwai first-run sign-in continuation and bounded SetupWizard wait validated by login_recovery_syntax.
