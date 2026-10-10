@@ -58,8 +58,8 @@ jobs:
           fi
   publish:
     needs: control_preflight
-    # Owner confirmed password rotation; secrets and independent UI identity remain mandatory.
-    if: needs.control_preflight.outputs.ready == 'true'
+    # Require an explicit repository-variable confirmation of credential rotation.
+    if: needs.control_preflight.outputs.ready == 'true' && vars.KWAI_CREDENTIALS_ROTATED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
