@@ -4,8 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "anthares_native/executor.sh"
-      - "anthares_native/surface_driver.py"
+      - "anthares_native/**"
       - ".github/workflows/anthares-native-executor.yml"
 permissions:
   contents: read
@@ -38,4 +37,6 @@ jobs:
           path: |
             anthares-native-executor-status.txt
             anthares-native-surface.json
+            anthares-native-profile-entry.json
+            anthares-native-direct-entry.json
           retention-days: 3
