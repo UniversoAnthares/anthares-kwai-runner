@@ -35,6 +35,12 @@ ALLOWED_IMAGES = {
     "ubuntu:24.04",
 }
 
+BASH_IMAGES = {
+    "php:8.5-cli",
+    "node:22-bookworm-slim",
+    "ubuntu:24.04",
+}
+
 CONTAINER_STAGES = {"build_script", "step_script", "after_script"}
 HOST_STAGE_TIMEOUT = 600
 
@@ -215,9 +221,10 @@ def _run_in_container(script_path: str, image: str) -> int:
         if isinstance(item, str) and "=" in item:
             cmd.extend(["-e", item])
 
-    cmd.extend([container_name, "/bin/sh", "-s"])
+    shell = "/bin/bash" if image in BASH_IMAGES else "/bin/sh"
+    cmd.extend([container_name, shell, "-s"])
 
-    print(f"Anthares custom executor: image={image} stage=container", flush=True)
+    print(f"Anthares custom executor: image={image} shell={shell} stage=container", flush=True)
     with open(script_path, "rb") as script:
         result = _run(cmd, env=env, stdin=script)
     return result.returncode
