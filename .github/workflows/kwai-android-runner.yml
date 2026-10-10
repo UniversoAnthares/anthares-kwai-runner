@@ -74,7 +74,6 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
-            set -o pipefail
             if timeout 240s bash kwai_headless_login.sh; then
               echo "HEADLESS_KWAI_ACCEPTANCE=OK"
             else
