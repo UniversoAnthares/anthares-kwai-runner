@@ -3,6 +3,7 @@
 import json
 import sys
 import xml.etree.ElementTree as ET
+from kwai_login_ui_locator import profile_tab as profile_coords
 
 def classify(xml):
     nodes=list(ET.fromstring(xml).iter("node"))
@@ -12,7 +13,7 @@ def classify(xml):
     return {
         "node_count":len(nodes),
         "edittext_count":sum((n.get("class") or "").endswith("EditText") for n in nodes),
-        "profile_tab":anyof("id_home_bottom_tab_me","/ll_profile"),
+        "profile_tab":anyof("id_home_bottom_tab_me","/ll_profile") or profile_coords(nodes,xml) is not None,
         "login_chooser":anyof("login_platform_expand_text"),
         "permission_modal":anyof("permission_allow_button","permission_deny_button","allow kwai to send","enviar notificações"),
         "interest_onboarding":anyof("choose like or dislike","let us know you better","choose what you like"),
