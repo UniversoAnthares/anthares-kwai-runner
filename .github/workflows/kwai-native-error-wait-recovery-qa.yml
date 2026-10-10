@@ -1,0 +1,24 @@
+name: Kwai Native Error Wait Recovery QA
+on:
+  push:
+    branches: [fix/kwai-native-error-wait-recovery]
+  pull_request:
+    paths: [tools/kwai_login_surface_recovery.py]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          python3 -m py_compile tools/kwai_login_surface_recovery.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('tools/kwai_login_surface_recovery.py').read_text()
+          assert 'native_error_waits < 1' in s
+          assert '{"aerr_wait", "aerr_close"}.issubset(ids)' in s
+          assert 'KWAI_RECOVERY_NATIVE_ERROR_WAIT=1' in s
+          PY
