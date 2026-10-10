@@ -167,6 +167,25 @@ while [ "$SECONDS" -lt "$deadline" ]; do
   fi
   sleep 2
 done
+# Final bounded recovery uses the observed native platform widget and no secrets.
+if timeout 40 python3 tools/kwai_login_surface_recovery.py >/tmp/kwai-safe-recovery.log 2>&1; then
+  signal "RECOVERY=KWAI_NATIVE_LOGIN_SURFACE_REACHED"
+  if dump_ui && python3 tools/kwai_login_ui_locator.py email-form /tmp/kwai-email-smoke.xml >/dev/null; then
+    signal "SUCCESS_SIGNAL=KWAI_NATIVE_EMAIL_FORM_VISIBLE"
+    exit 0
+  fi
+  if dump_ui && python3 tools/kwai_login_ui_locator.py native-chooser /tmp/kwai-email-smoke.xml >/dev/null; then
+    coords="$(python3 tools/kwai_login_ui_locator.py email-entry /tmp/kwai-email-smoke.xml)" || coords=""
+    if [ -n "$coords" ]; then
+      tap_coords "$coords" || true
+      sleep 2
+      if dump_ui && python3 tools/kwai_login_ui_locator.py email-form /tmp/kwai-email-smoke.xml >/dev/null; then
+        signal "SUCCESS_SIGNAL=KWAI_NATIVE_EMAIL_FORM_VISIBLE"
+        exit 0
+      fi
+    fi
+  fi
+fi
 signal "UI_DUMPS_VALID=$valid_dumps;INVALID=$invalid_dumps;ONBOARDING_TAPS=$onboarding_taps;PROFILE_TAPS=$profile_taps"
 signal "FAILURE_SIGNAL=KWAI_NATIVE_CHOOSER_NOT_REACHED_DIAGNOSED"
 exit 34
