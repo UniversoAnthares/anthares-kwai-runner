@@ -91,7 +91,20 @@ jobs:
               }
             }
 
-      - name: Controller heartbeat
+      - name: Controller heartbeat and diagnostics
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
-          echo "ANTHARES_CONTROLLER_OK=1"
-          echo "UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p controller-diagnostics
+          printf 'event=%s\nrun_id=%s\nattempt=%s\nutc=%s\n' "$EVENT_NAME" "$RUN_ID" "$RUN_ATTEMPT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee controller-diagnostics/heartbeat.txt
+          cat controller-diagnostics/heartbeat.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload controller diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: anthares-controller-${{ github.run_id }}-${{ github.run_attempt }}
+          path: controller-diagnostics/heartbeat.txt
+          retention-days: 7
