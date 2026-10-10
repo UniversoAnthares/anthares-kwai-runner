@@ -2,7 +2,7 @@
 set -euo pipefail
 mkdir -p /tmp/anthares-stage4
 curl -fL --retry 3 --connect-timeout 15 --max-time 180 -o /tmp/anthares-stage4/kwai-vault.zip 'https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip'
-echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/anthares-stage4/kwai-vault.zip' | sha1sum -c -
+echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/anthares-stage4/kwai-vault.zip' | sha256sum -c -
 python3 - <<'PY'
 import zipfile
 from pathlib import Path
