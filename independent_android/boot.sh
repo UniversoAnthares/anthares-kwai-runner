@@ -16,7 +16,7 @@ fi
 yes | sdkmanager --licenses >/dev/null 2>&1 || true
 sdkmanager --install "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;x86_64"
 printf 'no\n' | avdmanager create avd -n anthares_35 -k 'system-images;android-35;google_apis;x86_64' --force
-AVD_INI="$(find "$HOME/.android/avd" "$ANDROID_HOME/avd" -name config.ini -path "*/anthares_35.avd/*" -print -quit 2>/dev/null || true)"
+AVD_INI="$(find "$HOME/.android/avd" "$HOME/.config/.android/avd" "$ANDROID_HOME/avd" -name config.ini -path "*/anthares_35.avd/*" -print -quit 2>/dev/null || true)"
 if [ -z "$AVD_INI" ]; then echo ANTHARES_AVD_CREATION_FAILED=1; avdmanager list avd || true; exit 8; fi
 test -e /dev/kvm
 sudo chmod 666 /dev/kvm
