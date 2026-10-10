@@ -26,8 +26,13 @@ class CodespacesBrowserTests(unittest.TestCase):
         self.assertNotIn(5900, config["forwardPorts"])
         self.assertNotIn(9222, config["forwardPorts"])
         self.assertEqual(config["remoteEnv"]["KWAI_EXPECTED_HANDLE"], "lucasrosalem")
+        self.assertEqual(config["remoteEnv"]["ANTHARES_PERSISTENT_ROOT"], "/workspaces/.anthares-private")
+        self.assertEqual(config["remoteEnv"]["KWAI_PRIVATE_HOME"], "/workspaces/.anthares-private/kwai")
         self.assertIn("kwai-install.sh", config["postCreateCommand"])
+        self.assertIn("persistence_probe.py kwai", config["postStartCommand"])
         self.assertIn("kwai-start.sh", config["postStartCommand"])
+        self.assertEqual(config["portsAttributes"]["6080"]["visibility"], "private")
+        self.assertEqual(config["portsAttributes"]["8765"]["visibility"], "private")
 
     def test_shell_scripts_parse(self):
         for name in ("kwai-install.sh", "kwai-start.sh", "kwai-clear-session.sh", "kwai-refresh-guard.sh"):
@@ -147,12 +152,23 @@ class CodespacesBrowserTests(unittest.TestCase):
         self.assertIn("hmac.compare_digest", source)
         self.assertIn("Cache-Control", source)
 
-    def test_private_profile_not_in_repository(self):
+    def test_private_profile_uses_codespaces_persistent_workspace_and_stays_out_of_git(self):
+        config = json.loads((DEV / "devcontainer.json").read_text())
         start = (DEV / "kwai-start.sh").read_text()
-        self.assertIn('${HOME}/.kwai-remote-private', start)
-        self.assertIn("--user-data-dir=", start)
+        install = (DEV / "kwai-install.sh").read_text()
+        clear = (DEV / "kwai-clear-session.sh").read_text()
+        persistent_root = config["remoteEnv"]["ANTHARES_PERSISTENT_ROOT"]
+        private_home = config["remoteEnv"]["KWAI_PRIVATE_HOME"]
+        self.assertEqual(persistent_root, "/workspaces/.anthares-private")
+        self.assertEqual(private_home, "/workspaces/.anthares-private/kwai")
+        self.assertIn('ANTHARES_PERSISTENT_ROOT:-/workspaces/.anthares-private', start)
+        self.assertIn('${PERSISTENT_ROOT}/kwai', start)
+        self.assertIn('--user-data-dir="${PRIVATE_HOME}/chrome-profile"', start)
+        self.assertIn('install -d -m 700 "${PERSISTENT_ROOT}"', install)
+        self.assertIn('chmod 700 "${PERSISTENT_ROOT}"', install)
         self.assertNotIn("git add", start)
-        self.assertIn("chrome-profile", (DEV / "kwai-clear-session.sh").read_text())
+        self.assertNotIn("git add", install)
+        self.assertIn("chrome-profile", clear)
 
     def test_guard_local_http_smoke(self):
         # Run in the hosted GitHub runner, not on the user's PC.
