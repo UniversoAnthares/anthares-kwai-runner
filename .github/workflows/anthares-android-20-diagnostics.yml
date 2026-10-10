@@ -27,8 +27,8 @@ jobs:
           case "$PROBE" in
             1) bash -n anthares-android/scripts/provision.sh ;;
             2) test -e /dev/kvm ;;
-            3) test -r /dev/kvm ;;
-            4) test -w /dev/kvm || sudo test -w /dev/kvm ;;
+            3) sudo chmod 666 /dev/kvm && test -r /dev/kvm ;;
+            4) sudo chmod 666 /dev/kvm && test -w /dev/kvm ;;
             5) command -v curl ;;
             6) command -v unzip ;;
             7) command -v python3 ;;
