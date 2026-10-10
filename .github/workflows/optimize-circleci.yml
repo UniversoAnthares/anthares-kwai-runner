@@ -1,0 +1,87 @@
+name: Optimize CircleCI quota usage
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/optimize-circleci.yml
+
+permissions:
+  contents: write
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Split quick validation from full Android matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.circleci/config.yml')
+          text = path.read_text(encoding='utf-8')
+
+          parameter_block = '''parameters:\n  full_android_matrix:\n    type: boolean\n    default: false\n\n'''
+          if 'full_android_matrix:' not in text.split('jobs:', 1)[0]:
+              text = text.replace('version: 2.1\n\n', 'version: 2.1\n\n' + parameter_block, 1)
+
+          marker = '\nworkflows:\n'
+          if marker not in text:
+              raise SystemExit('CircleCI workflows marker not found')
+          prefix = text.split(marker, 1)[0].rstrip() + '\n\n'
+
+          workflows = r'''workflows:
+  # Default path: one cheap provider check plus one representative Android/Kwai run.
+  # This prevents every push from launching the entire Android matrix.
+  quick_validation:
+    jobs:
+      - provider_smoke
+      - kwai_install_smoke
+
+  # Explicit opt-in path. Trigger a pipeline with full_android_matrix=true
+  # when the exhaustive Android/Kwai diagnostics are actually needed.
+  full_android_matrix:
+    when: << pipeline.parameters.full_android_matrix >>
+    jobs:
+      - provider_smoke
+      - android_executor_smoke
+      - kwai_install_smoke
+      - kwai_login_surface_smoke:
+          requires:
+            - kwai_install_smoke
+      - kwai_install_variants:
+          matrix:
+            parameters:
+              variant: [cold, wait2, restart_adb, launch_retry, ui_delay]
+      - kwai_same_step_probe:
+          matrix:
+            parameters:
+              replica: [1, 2, 3, 4, 5]
+      - kwai_boundary_probe:
+          matrix:
+            parameters:
+              replica: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+'''
+
+          path.write_text(prefix + workflows, encoding='utf-8')
+          PY
+
+          # Validate the intended structural changes before committing.
+          grep -q 'full_android_matrix:' .circleci/config.yml
+          grep -q '^  quick_validation:' .circleci/config.yml
+          grep -q '^  full_android_matrix:' .circleci/config.yml
+          grep -q 'variant: \[cold, wait2, restart_adb, launch_retry, ui_delay\]' .circleci/config.yml
+          grep -q 'replica: \[1, 2, 3, 4, 5, 6, 7, 8, 9, 10\]' .circleci/config.yml
+
+          rm -f .github/workflows/optimize-circleci.yml
+          git config user.name 'anthares-ci-automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .circleci/config.yml .github/workflows/optimize-circleci.yml
+          git diff --cached --check
+          git commit -m 'Optimize CircleCI default workflow usage'
+          git push origin HEAD:main
