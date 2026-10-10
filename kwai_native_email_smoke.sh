@@ -116,7 +116,21 @@ while [ "$SECONDS" -lt "$deadline" ]; do
       signal "AUTH_ROUTE_AVAILABLE=GOOGLE"
     fi
     if [ "$(state_flag "$state" email_login_option)" != 1 ]; then
-      signal "BLOCKER=EMAIL_ROUTE_NOT_EXPOSED_ON_INITIAL_CHOOSER"
+      signal "AUTH_ACTION=EXPAND_NATIVE_LOGIN_PLATFORMS"
+      if timeout 35 python3 tools/kwai_login_surface_recovery.py >/tmp/kwai-safe-expand.log 2>&1; then
+        if dump_ui && python3 tools/kwai_login_ui_locator.py native-chooser /tmp/kwai-email-smoke.xml >/dev/null; then
+          coords="$(python3 tools/kwai_login_ui_locator.py email-entry /tmp/kwai-email-smoke.xml)" || coords=""
+          if [ -n "$coords" ]; then
+            tap_coords "$coords" || true
+            sleep 2
+            if dump_ui && python3 tools/kwai_login_ui_locator.py email-form /tmp/kwai-email-smoke.xml >/dev/null; then
+              signal "SUCCESS_SIGNAL=KWAI_NATIVE_EMAIL_FORM_VISIBLE"
+              exit 0
+            fi
+          fi
+        fi
+      fi
+      signal "BLOCKER=EMAIL_ROUTE_NOT_EXPOSED_AFTER_EXPANSION"
     fi
     exit 0
   fi

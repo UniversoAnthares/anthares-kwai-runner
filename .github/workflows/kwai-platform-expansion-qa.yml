@@ -1,0 +1,24 @@
+name: Kwai Platform Expansion QA
+on:
+  push:
+    branches: [fix/mobile-expand-google-only-login-platforms]
+  pull_request:
+    paths: [kwai_native_email_smoke.sh]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          bash -n kwai_native_email_smoke.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("kwai_native_email_smoke.sh").read_text()
+          assert 'AUTH_ACTION=EXPAND_NATIVE_LOGIN_PLATFORMS' in s
+          assert 'BLOCKER=EMAIL_ROUTE_NOT_EXPOSED_AFTER_EXPANSION' in s
+          assert s.index('AUTH_ACTION=EXPAND_NATIVE_LOGIN_PLATFORMS') < s.index('if [ "$profile_taps" -lt 2 ]; then')
+          PY
