@@ -26,7 +26,11 @@ class PersistenceProbeTests(unittest.TestCase):
             state = observe_restart("tiktok", root=tmp, boot_id="boot-b")
             self.assertTrue(state["persistence_verified"])
             self.assertEqual(state["restart_count"], 1)
-            self.assertIn("browser-profiles", state["profile_dir"])
+            self.assertTrue(state["profile_dir"].endswith("tiktok/chrome-profile"))
+
+    def test_kwai_profile_matches_runtime_layout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertTrue(str(profile_dir("kwai", tmp)).endswith("kwai/chrome-profile"))
 
     def test_platform_validation(self):
         with tempfile.TemporaryDirectory() as tmp:
