@@ -1,0 +1,73 @@
+name: QA 40 concurrent runner contracts
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/qa-40-runner-contracts.yml
+      - tests/test_render_runner_40_contracts.py
+      - infra/gitlab-runner-render/custom_executor.py
+      - infra/gitlab-runner-render/runner_service.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    name: ${{ matrix.test }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        test:
+          - test_01_failure_default
+          - test_02_failure_custom
+          - test_03_failure_invalid_fallback
+          - test_04_job_root_isolated
+          - test_05_job_root_rejects_letters
+          - test_06_job_root_rejects_traversal
+          - test_07_configure_isolated_paths
+          - test_08_configure_rejects_bad_job_id
+          - test_09_reset_without_project_is_noop
+          - test_10_reset_rejects_outside_root
+          - test_11_reset_rejects_build_root_itself
+          - test_12_reset_requires_checkout_token
+          - test_13_reset_rejects_project_traversal
+          - test_14_reset_rejects_unexpected_host
+          - test_15_reset_initializes_origin
+          - test_16_reset_encodes_token
+          - test_17_reset_removes_stale_checkout
+          - test_18_host_success
+          - test_19_host_propagates_failure
+          - test_20_host_timeout_fails
+          - test_21_host_disables_interactive_prompts
+          - test_22_host_uses_http11
+          - test_23_php_container_uses_bash
+          - test_24_alpine_container_uses_sh
+          - test_25_container_passes_image_environment
+          - test_26_container_mounts_isolated_roots
+          - test_27_container_timeout_fails
+          - test_28_cleanup_removes_job_directory
+          - test_29_cleanup_invalid_id_safe
+          - test_30_rejects_unapproved_image
+          - test_31_cached_container_metadata
+          - test_32_image_config_parses_json
+          - test_33_image_config_nonzero_raises
+          - test_34_image_config_timeout_raises
+          - test_35_local_command_success
+          - test_36_local_command_failure
+          - test_37_local_command_timeout
+          - test_38_export_rootfs_success
+          - test_39_export_rootfs_retries_then_fails
+          - test_40_registration_uses_auth_token
+    steps:
+      - name: Checkout isolated source
+        uses: actions/checkout@v4
+      - name: Run one independent security or executor contract
+        shell: bash
+        env:
+          TEST_METHOD: ${{ matrix.test }}
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/gitlab-runner-render/custom_executor.py
+          python3 tests/test_render_runner_40_contracts.py "RunnerContractTests.${TEST_METHOD}" -v
