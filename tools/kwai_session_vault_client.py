@@ -22,7 +22,9 @@ MAX_BYTES=4_500_000
 EXPECTED_VERSION="2026-10-05-queue-fencing-v16"
 
 def get_json(url,headers=None,data=None,timeout=20):
-    req=urllib.request.Request(url,headers=headers or {},data=data,
+    safe_headers={"User-Agent":"curl/8.5.0","Accept":"application/json"}
+    safe_headers.update(headers or {})
+    req=urllib.request.Request(url,headers=safe_headers,data=data,
                                method="POST" if data is not None else "GET")
     with urllib.request.urlopen(req,timeout=timeout) as response:
         return json.load(response)
