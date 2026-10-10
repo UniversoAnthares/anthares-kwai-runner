@@ -1,0 +1,43 @@
+name: Anthares Android 20 Real Boot Retry
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'anthares-android/scripts/provision.sh'
+      - '.github/workflows/anthares-android-20-boots-retry.yml'
+permissions:
+  contents: read
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        variant: [21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Boot Android and capture proof
+        shell: bash
+        env:
+          ANTHARES_BOOT_VARIANT: ${{ matrix.variant }}
+        run: |
+          set -Eeuo pipefail
+          bash -n anthares-android/scripts/provision.sh
+          bash anthares-android/scripts/provision.sh 2>&1 | tee "/tmp/android-${ANTHARES_BOOT_VARIANT}.log"
+          grep -Fx 'ANTHARES_ANDROID_BOOT=PASS' "/tmp/android-${ANTHARES_BOOT_VARIANT}.log"
+          echo "ANDROID_BOOT_PROOF=${ANTHARES_BOOT_VARIANT}:PASS"
+      - name: Diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          export ANDROID_HOME="$HOME/android-sdk"
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          tail -100 /tmp/anthares-emulator.log 2>/dev/null || true
+          adb devices -l 2>/dev/null || true
