@@ -279,6 +279,10 @@ jobs:
             kwai-login-navigation.xml
             kwai-login-detected.xml
             kwai-login-detected.png
+            kwai-login-visual-before.png
+            kwai-login-visual-after.png
+            kwai-login-visual-before.xml
+            kwai-login-visual-after.xml
             kwai-login-focus.txt
             /tmp/kwai-restored-auth-probe.log
             /tmp/kwai-post-relaunch-auth-probe.log
