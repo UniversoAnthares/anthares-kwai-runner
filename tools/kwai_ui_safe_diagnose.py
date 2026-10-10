@@ -15,7 +15,15 @@ def classify(xml):
     screen_height=max((node_bounds(n)[3] for n in nodes if node_bounds(n)),default=0)
     exact_profile=[n for n in nodes if ((n.get("text") or "")+" "+(n.get("content-desc") or "")).strip().casefold() in ("profile","perfil","me","eu")]
     bottom_profile=[n for n in exact_profile if node_bounds(n) and screen_height>=500 and sum(node_bounds(n)[1::2])//2>=screen_height*.76]
+    # Aggregate geometry only: no raw UI text, resource identifiers or screenshots.
+    profile_hints=[n for n in nodes if "profile" in (n.get("resource-id") or "").casefold()]
+    hint_bounded=[n for n in profile_hints if node_bounds(n)]
+    bottom_hints=[n for n in hint_bounded if sum(node_bounds(n)[1::2])//2 >= screen_height*.76]
     return {
+        "profile_hint_bounded_count":len(hint_bounded),
+        "profile_hint_bottom_count":len(bottom_hints),
+        "profile_hint_unbounded_count":len(profile_hints)-len(hint_bounded),
+        "screen_height_bucket":("small" if screen_height < 500 else "normal"),
         "node_count":len(nodes),
         "edittext_count":sum((n.get("class") or "").endswith("EditText") for n in nodes),
         "profile_tab":anyof("id_home_bottom_tab_me","/ll_profile") or profile_coords(nodes,xml) is not None,
