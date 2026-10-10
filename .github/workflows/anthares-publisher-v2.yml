@@ -1,0 +1,22 @@
+name: Anthares Publisher V2 - Independent Control Plane
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'publisher_v2/**'
+      - '.github/workflows/anthares-publisher-v2.yml'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-publisher-v2
+  cancel-in-progress: false
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run 30 fail-closed contract tests
+        run: python3 -m unittest discover -s publisher_v2 -p 'test_contract.py' -v
+      - name: Publish architecture discovery state
+        run: python3 publisher_v2/control.py
