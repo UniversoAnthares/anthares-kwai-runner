@@ -5,6 +5,7 @@ browser cookies, tokens, local storage or credentials.
 """
 from __future__ import annotations
 
+import argparse
 from datetime import datetime, timezone
 import json
 import os
@@ -41,7 +42,7 @@ def profile_dir(platform: str, root: str | Path | None = None) -> Path:
     platform = platform.lower().strip()
     if platform not in ALLOWED_PLATFORMS:
         raise ValueError("platform_invalid")
-    target = persistent_root(root) / "browser-profiles" / platform
+    target = persistent_root(root) / platform / "chrome-profile"
     target.mkdir(parents=True, exist_ok=True)
     try:
         target.chmod(0o700)
@@ -77,8 +78,8 @@ def observe_restart(
     first_observed_at = previous.get("first_observed_at", now) if previous else now
     first_boot_id = previous.get("first_boot_id", current_boot) if previous else current_boot
     previous_boot_id = previous.get("last_boot_id") if previous else None
-    persistence_verified = bool(previous and previous_boot_id and previous_boot_id != current_boot)
-    if persistence_verified:
+    restart_observed = bool(previous and previous_boot_id and previous_boot_id != current_boot)
+    if restart_observed:
         restart_count += 1
 
     row = {
@@ -88,7 +89,7 @@ def observe_restart(
         "first_observed_at": first_observed_at,
         "last_observed_at": now,
         "restart_count": restart_count,
-        "persistence_verified": persistence_verified or bool(previous and previous.get("persistence_verified")),
+        "persistence_verified": restart_observed or bool(previous and previous.get("persistence_verified")),
     }
     tmp = marker.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(row, sort_keys=True, indent=2), encoding="utf-8")
@@ -101,3 +102,16 @@ def observe_restart(
         "first_observed_at": row["first_observed_at"],
         "last_observed_at": row["last_observed_at"],
     }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("platform", choices=sorted(ALLOWED_PLATFORMS))
+    parser.add_argument("--root", default=None)
+    args = parser.parse_args()
+    print(json.dumps(observe_restart(args.platform, root=args.root), sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
