@@ -1,0 +1,28 @@
+name: Anthares Control Plane
+on:
+  push:
+    paths:
+      - 'control_plane/**'
+      - '.github/workflows/anthares-control-plane.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit tests
+        run: python -m unittest discover -s control_plane -p 'test_*.py' -v
+      - name: Evidence gate (expected blocked until proof)
+        run: |
+          python control_plane/engine.py > control-plane-state.json && rc=0 || rc=$?
+          cat control-plane-state.json
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then exit "$rc"; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anthares-control-plane-state
+          path: control-plane-state.json
