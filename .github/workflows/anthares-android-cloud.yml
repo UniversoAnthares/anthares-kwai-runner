@@ -1,0 +1,45 @@
+name: Anthares Android Cloud - boot proof
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Enable KVM
+        run: |
+          set -euo pipefail
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm
+      - name: Install Android system image
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "$SDK/emulator" >> "$GITHUB_PATH"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "emulator" "system-images;android-30;google_apis;x86_64"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+      - name: Create isolated AVD
+        run: |
+          set -euo pipefail
+          printf 'no\n' | avdmanager create avd -n anthares-cloud -k 'system-images;android-30;google_apis;x86_64' --force
+      - name: Boot and verify Android
+        run: |
+          set -euo pipefail
+          emulator -avd anthares-cloud -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -accel on > /tmp/anthares-emulator.log 2>&1 &
+          adb wait-for-device
+          for i in $(seq 1 100); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then break; fi
+            sleep 5
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          adb shell getprop ro.build.version.release
+          adb shell pm list packages | head -20
+          echo "ANDROID_BOOT_OK"
+      - name: Diagnostic logs (no user data)
+        if: always()
+        run: |
+          tail -50 /tmp/anthares-emulator.log 2>/dev/null || true
