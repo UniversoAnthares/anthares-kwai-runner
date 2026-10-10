@@ -88,7 +88,7 @@ def worker():
     # process to prevent concurrent git fetch/reset corruption.
     current = config.read_text(encoding="utf-8")
     import re
-    current, count = re.subn(r"(?m)^concurrent\\s*=\\s*\\d+", "concurrent = 1", current, count=1)
+    current, count = re.subn(r"(?m)^concurrent\s*=\s*\d+", "concurrent = 1", current, count=1)
     if count != 1:
         raise RuntimeError("runner config lacks a concurrent setting")
     config.write_text(current, encoding="utf-8")
