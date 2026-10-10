@@ -16,10 +16,19 @@ jobs:
         with:
           python-version: '3.12'
       - name: Unit tests
-        run: python -m unittest discover -s control_plane -p 'test_*.py' -v
+        id: tests
+        shell: bash
+        run: |
+          set +e
+          python -m unittest discover -s control_plane -p 'test_*.py' -v 2>&1 | tee unit-tests.txt
+          rc=${PIPESTATUS[0]}
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
       - name: Collect cloud executor evidence
+        if: always() && steps.tests.outputs.rc == '0'
         run: python control_plane/collect_ci_evidence.py --output runtime-evidence.json
       - name: Evaluate evidence gates
+        if: always() && steps.tests.outputs.rc == '0'
         run: |
           python control_plane/engine.py runtime-evidence.json > control-plane-state.json && rc=0 || rc=$?
           cat control-plane-state.json
@@ -29,9 +38,13 @@ jobs:
           state=json.load(open('control-plane-state.json', encoding='utf-8'))
           assert state['tasks']['remote_identity']['status']=='verified'
           PY
-      - uses: actions/upload-artifact@v4
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: anthares-control-plane-state
+          if-no-files-found: warn
           path: |
+            unit-tests.txt
             control-plane-state.json
             runtime-evidence.json
