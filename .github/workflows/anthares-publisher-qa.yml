@@ -1,5 +1,11 @@
 name: Anthares Publisher QA
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'anthares_publisher/**'
+      - 'tests/test_anthares_publisher_*.py'
+      - '.github/workflows/anthares-publisher-qa.yml'
   pull_request:
     paths:
       - 'anthares_publisher/**'
