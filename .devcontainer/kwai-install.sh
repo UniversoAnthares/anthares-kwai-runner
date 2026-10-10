@@ -2,7 +2,9 @@
 set -euo pipefail
 
 # All installation occurs inside the GitHub Codespace, never on the user's PC.
+IS_ALPINE=false
 if command -v apk >/dev/null 2>&1; then
+  IS_ALPINE=true
   sudo apk add --no-cache \
     chromium xvfb openbox x11vnc novnc websockify \
     ttf-liberation ca-certificates python3 py3-pip py3-virtualenv >/dev/null
@@ -35,7 +37,18 @@ if [[ ! -x "${PRIVATE_HOME}/venv/bin/python" ]]; then
     virtualenv "${PRIVATE_HOME}/venv"
   fi
 fi
-"${PRIVATE_HOME}/venv/bin/python" -m pip install --quiet --disable-pip-version-check 'playwright>=1.55,<2'
+
+if [[ "$IS_ALPINE" == true ]]; then
+  # Python Playwright does not publish musllinux wheels. Use the native
+  # Chromium DevTools Protocol client dependencies instead.
+  "${PRIVATE_HOME}/venv/bin/python" -m pip install --quiet --disable-pip-version-check \
+    websocket-client requests
+  echo "KWAI_CODESPACE_BROWSER_CONTROL=cdp"
+else
+  "${PRIVATE_HOME}/venv/bin/python" -m pip install --quiet --disable-pip-version-check \
+    'playwright>=1.55,<2'
+  echo "KWAI_CODESPACE_BROWSER_CONTROL=playwright"
+fi
 
 NOVNC_WEB=""
 for candidate in /usr/share/novnc /usr/share/webapps/novnc; do
