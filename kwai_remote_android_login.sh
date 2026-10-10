@@ -289,8 +289,9 @@ fi
 if ! email_login_visible && ! google_sso_foreground; then
   log "FAILURE_SIGNAL=KWAI_EMAIL_LOGIN_NOT_VISIBLE"
   dump_ui && { cp /tmp/kwai-ui.xml kwai-login-navigation.xml; grep -Eo 'text="[^"]*"|content-desc="[^"]*"' /tmp/kwai-ui.xml | tail -65 >> "$REPORT" || true; } || true
-  log "LOGIN_DISCOVERY_MANUAL_HANDOFF_45_MINUTES"
-  # Do not abort: the owner may still navigate manually to email/password on a slow remote screen.
+  log "KWAI_LOGIN_NAVIGATION_BLOCKED_NO_FORM_OR_GOOGLE_SSO"
+  log "KWAI_LOGIN_UI_DIAGNOSTICS_SAVED=kwai-login-navigation.xml"
+  exit 37
 fi
 if email_login_visible; then login_lock; log "KWAI_EMAIL_LOGIN_FORM_VERIFIED"; else log "GOOGLE_SSO_HANDOFF_WAITING"; fi
 if [ "${KWAI_AUTOFILL_ENABLED:-0}" = "1" ] && [ -n "${KWAI_LOGIN:-}" ] && [ -n "${KWAI_PASSWORD:-}" ]; then
