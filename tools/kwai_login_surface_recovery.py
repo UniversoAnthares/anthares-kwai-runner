@@ -23,6 +23,13 @@ def tap(n):
 def tag(n):
     return ((n.get("text") or "")+" "+(n.get("content-desc") or "")).strip().casefold()
 def select(ns):
+    # Observed first-run experience (run 38082791155): after expanding
+    # login platforms, Kwai launches its own FRE consent/continuation screen.
+    # Advance only the exact native Continue control, never consent by
+    # guessing coordinates or dismiss a security challenge.
+    for n in ns:
+        if (n.get("resource-id") or "").endswith("/signin_fre_continue_button") and tap(n):
+            return "native_first_run_continue"
     # Prefer explicit login action before navigating into Profile.
     for n in ns:
         if tag(n) in ("log in","login","sign in","entrar","fazer login","log in / sign up","log in or sign up") and tap(n):
