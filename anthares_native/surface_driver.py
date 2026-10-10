@@ -7,7 +7,19 @@ def adb(*args, timeout=15):
     if p.returncode: raise RuntimeError("adb")
     return p.stdout
 def snapshot(path="/sdcard/anthares.xml"):
-    adb("shell","uiautomator","dump",path); xml=adb("exec-out","cat",path); return list(ET.fromstring(xml).iter("node"))
+    last=None
+    for _ in range(6):
+        try:
+            # File-based dump is more stable on hosted emulators than /dev/tty.
+            adb("shell","uiautomator","dump","--compressed",path,timeout=12)
+            xml=adb("exec-out","cat",path,timeout=8)
+            root=ET.fromstring(xml)
+            nodes=list(root.iter("node"))
+            if nodes:return nodes
+        except Exception as exc:
+            last=exc
+        time.sleep(2)
+    raise RuntimeError("uiautomator_snapshot_unavailable") from last
 def fullrid(n): return (n.get("resource-id") or "").casefold()
 def rid(n): return fullrid(n).split("/")[-1]
 def label(n): return ((n.get("text") or "")+" "+(n.get("content-desc") or "")).strip().casefold()
@@ -54,15 +66,13 @@ def bottom_profile_candidate(ns):
     if not kwai_tree(ns):return None,None
     bs=[bounds(n) for n in ns if bounds(n)]
     if not bs:return None,None
-    width=max(b[2] for b in bs); height=max(b[3] for b in bs)
-    candidates=[]
+    width=max(b[2] for b in bs);height=max(b[3] for b in bs);candidates=[]
     for n in ns:
         if n.get("clickable")!="true":continue
         b=bounds(n)
         if not b:continue
-        x1,y1,x2,y2=b; cx=(x1+x2)//2; cy=(y1+y2)//2
-        if cx>=width*.72 and height*.76<=cy<=height*.94 and (x2-x1)<=width*.32:
-            candidates.append((cx,cy,-((x2-x1)*(y2-y1)),n))
+        x1,y1,x2,y2=b;cx=(x1+x2)//2;cy=(y1+y2)//2
+        if cx>=width*.72 and height*.76<=cy<=height*.94 and (x2-x1)<=width*.32:candidates.append((cx,cy,-((x2-x1)*(y2-y1)),n))
     if not candidates:return None,None
     candidates.sort(reverse=True,key=lambda z:(z[0],z[1],z[2]));return candidates[0][3],"bounded-kwai-bottom-right"
 def safe_signature(ns): return tuple(sorted((rid(n),(n.get("class") or ""),n.get("clickable") or "") for n in ns))
@@ -76,11 +86,15 @@ def relaunch():
     adb("shell","am","force-stop",PKG);time.sleep(1);adb("shell","monkey","-p",PKG,"1");time.sleep(5)
 def main():
     ap=argparse.ArgumentParser();ap.add_argument("--attempts",type=int,default=18);ap.add_argument("--output",required=True);a=ap.parse_args()
-    result={"schema":"anthares.native.surface.v3","auth_surface_reached":False,"steps":0,"last_action":"none","profile_fallback_used":False,"kwai_foreground":False,"kwai_tree":False,"safe_widget_ids":[]}
-    seen={}; relaunches=0
+    result={"schema":"anthares.native.surface.v4","auth_surface_reached":False,"steps":0,"last_action":"none","profile_fallback_used":False,"kwai_foreground":False,"kwai_tree":False,"safe_widget_ids":[],"snapshot_failures":0}
+    seen={};relaunches=0
     for i in range(a.attempts):
         try:ns=snapshot()
-        except Exception:break
+        except Exception:
+            result["snapshot_failures"]+=1
+            if relaunches>=2:break
+            try:relaunch();relaunches+=1;result["last_action"]="snapshot-relaunch";continue
+            except Exception:break
         result["steps"]=i+1;result["kwai_foreground"]=foreground_kwai();result["kwai_tree"]=kwai_tree(ns);result["safe_widget_ids"]=safe_ids(ns)
         if auth_surface(ns):result["auth_surface_reached"]=True;result["last_action"]="detected";break
         sig=safe_signature(ns);seen[sig]=seen.get(sig,0)+1
@@ -93,13 +107,11 @@ def main():
             try:relaunch();relaunches+=1;result["last_action"]="fresh-relaunch";continue
             except Exception:break
         if not tap(node):break
-        # A profile candidate is invalid if it leaves Kwai; immediately restore and
-        # continue rather than interacting with launcher/system surfaces.
         if action.startswith("bounded") and not foreground_kwai():
             try:relaunch();relaunches+=1;result["last_action"]="reject-profile-candidate";continue
             except Exception:break
         result["last_action"]=action;time.sleep(2)
     Path(a.output).write_text(json.dumps(result,sort_keys=True)+"\n")
-    print("ANTHARES_SURFACE="+("AUTH" if result["auth_surface_reached"] else "UNREACHED"));print("ANTHARES_SURFACE_STEPS="+str(result["steps"]));print("ANTHARES_SURFACE_LAST_ACTION="+result["last_action"]);print("ANTHARES_SURFACE_PROFILE_FALLBACK="+("1" if result["profile_fallback_used"] else "0"));print("ANTHARES_SURFACE_KWAI_TREE="+("1" if result["kwai_tree"] else "0"));print("ANTHARES_SURFACE_SAFE_IDS="+",".join(result["safe_widget_ids"]))
+    print("ANTHARES_SURFACE="+("AUTH" if result["auth_surface_reached"] else "UNREACHED"));print("ANTHARES_SURFACE_STEPS="+str(result["steps"]));print("ANTHARES_SURFACE_LAST_ACTION="+result["last_action"]);print("ANTHARES_SURFACE_PROFILE_FALLBACK="+("1" if result["profile_fallback_used"] else "0"));print("ANTHARES_SURFACE_KWAI_TREE="+("1" if result["kwai_tree"] else "0"));print("ANTHARES_SURFACE_SNAPSHOT_FAILURES="+str(result["snapshot_failures"]));print("ANTHARES_SURFACE_SAFE_IDS="+",".join(result["safe_widget_ids"]))
     raise SystemExit(0 if result["auth_surface_reached"] else 3)
 if __name__=="__main__":main()
