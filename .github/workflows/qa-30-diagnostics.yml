@@ -1,0 +1,79 @@
+name: QA 30 independent remote diagnostics
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/qa-30-diagnostics.yml
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    name: ${{ matrix.test.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        test:
+          - {name: "render-health", index: 1}
+          - {name: "gitlab-main-api", index: 2}
+          - {name: "gitlab-qa-api", index: 3}
+          - {name: "runner-source", index: 4}
+          - {name: "custom-executor-source", index: 5}
+          - {name: "php-image-manifest", index: 6}
+          - {name: "node-image-manifest", index: 7}
+          - {name: "alpine-image-manifest", index: 8}
+          - {name: "composer-image-manifest", index: 9}
+          - {name: "python-image-manifest", index: 10}
+          - {name: "ubuntu-image-manifest", index: 11}
+          - {name: "github-api", index: 12}
+          - {name: "gitlab-api", index: 13}
+          - {name: "render-tls", index: 14}
+          - {name: "gitlab-tls", index: 15}
+          - {name: "github-tls", index: 16}
+          - {name: "runner-health-response", index: 17}
+          - {name: "gitlab-main-head", index: 18}
+          - {name: "gitlab-qa-head", index: 19}
+          - {name: "gitlab-mr-head", index: 20}
+          - {name: "php-version-spec", index: 21}
+          - {name: "node-version-spec", index: 22}
+          - {name: "alpine-version-spec", index: 23}
+          - {name: "composer-version-spec", index: 24}
+          - {name: "python-version-spec", index: 25}
+          - {name: "ubuntu-version-spec", index: 26}
+          - {name: "source-compile", index: 27}
+          - {name: "runner-compile", index: 28}
+          - {name: "source-security-scan", index: 29}
+          - {name: "checkout-isolation", index: 30}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute independent diagnostic
+        env:
+          CASE: ${{ matrix.test.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$CASE" in
+            render-health) curl -fsSL --max-time 20 https://anthares-gitlab-qa-runner.onrender.com/ >/dev/null ;;
+            gitlab-main-api) curl -fsSL --max-time 20 'https://gitlab.com/api/v4/projects/87361776/repository/branches/main' >/dev/null ;;
+            gitlab-qa-api) curl -fsSL --max-time 20 'https://gitlab.com/api/v4/projects/87361776/repository/branches/qa%2Frender-runner-migration-20261010' >/dev/null ;;
+            runner-source) test -s infra/gitlab-runner-render/runner_service.py ;;
+            custom-executor-source) test -s infra/gitlab-runner-render/custom_executor.py ;;
+            *-image-manifest) image="${CASE%-image-manifest}"; case "$image" in php) image=php:8.5-cli;; node) image=node:22-bookworm-slim;; alpine) image=alpine:3.20;; composer) image=composer:2;; python) image=python:3.12-alpine;; ubuntu) image=ubuntu:24.04;; esac; docker manifest inspect "$image" >/dev/null ;;
+            github-api) curl -fsSL --max-time 20 https://api.github.com/zen >/dev/null ;;
+            gitlab-api) curl -fsSL --max-time 20 https://gitlab.com/api/v4/version >/dev/null ;;
+            render-tls) echo | openssl s_client -connect anthares-gitlab-qa-runner.onrender.com:443 -servername anthares-gitlab-qa-runner.onrender.com 2>/dev/null | openssl x509 -noout -dates ;;
+            gitlab-tls) echo | openssl s_client -connect gitlab.com:443 -servername gitlab.com 2>/dev/null | openssl x509 -noout -dates ;;
+            github-tls) echo | openssl s_client -connect github.com:443 -servername github.com 2>/dev/null | openssl x509 -noout -dates ;;
+            runner-health-response) curl -sS --max-time 20 -o /tmp/body -w '%{http_code}\n' https://anthares-gitlab-qa-runner.onrender.com/ | grep -E '^[234][0-9][0-9]$' ;;
+            gitlab-main-head) git ls-remote https://gitlab.com/UniversoAnthares/anthares-wordpress.git refs/heads/main | grep -q . ;;
+            gitlab-qa-head) git ls-remote https://gitlab.com/UniversoAnthares/anthares-wordpress.git refs/heads/qa/render-runner-migration-20261010 | grep -q . ;;
+            gitlab-mr-head) curl -fsSL --max-time 20 'https://gitlab.com/api/v4/projects/87361776/merge_requests/34' >/dev/null ;;
+            *-version-spec) grep -Fq "${CASE%-version-spec}" infra/gitlab-runner-render/custom_executor.py ;;
+            source-compile) python -m py_compile infra/gitlab-runner-render/custom_executor.py ;;
+            runner-compile) python -m py_compile infra/gitlab-runner-render/runner_service.py ;;
+            source-security-scan) ! grep -nE '(eval\(|shell=True|verify=False)' infra/gitlab-runner-render/custom_executor.py ;;
+            checkout-isolation) grep -q 'BUILDS_ROOT' infra/gitlab-runner-render/custom_executor.py && grep -q 'reset workspace' infra/gitlab-runner-render/custom_executor.py ;;
+            *) echo "Unknown diagnostic: $CASE"; exit 2 ;;
+          esac
