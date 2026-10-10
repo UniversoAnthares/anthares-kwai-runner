@@ -30,6 +30,13 @@ def select(ns):
     for suffix in ("tv_login","btn_login","tv_to_login","btn_to_login"):
         for n in ns:
             if (n.get("resource-id") or "").endswith(suffix) and tap(n):return suffix
+    # Observed live login surface exposes a collapsed platform selector without
+    # an Email label (run 38081779193). Expand it before looking for the chooser.
+    # Only exact Kwai login widget IDs are eligible, never arbitrary screen taps.
+    for suffix in ("login_platform_expand_text",):
+        for n in ns:
+            if (n.get("resource-id") or "").endswith("/"+suffix) and tap(n):
+                return "expand_native_login_platforms"
     for suffix in ("ll_profile","tab_profile","btn_profile"):
         for n in ns:
             if (n.get("resource-id") or "").endswith(suffix) and tap(n):
