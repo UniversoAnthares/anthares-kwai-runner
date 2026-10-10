@@ -66,7 +66,7 @@ export async function handleKwaiSessionVault(request,env,verifyGithubOidc){
 // Non-sensitive durable-state canary. The dedicated probe workflow cannot
 // read or write the real session key; only an isolated run-ID record.
 export async function handleKwaiVaultSelftest(request,env,verifyGithubOidc){
-  const token=(request.headers.get("Authorization")||"").replace(/^Bearer\\s+/i,"");
+  const token=(request.headers.get("Authorization")||"").replace(/^Bearer\s+/i,"");
   const auth=await verifyGithubOidc(token,env,["kwai-private-vault-probe.yml"]);
   const claims=auth.claims||{};
   const workflow=String(claims.job_workflow_ref||claims.workflow_ref||"");
@@ -83,7 +83,7 @@ export async function handleKwaiVaultSelftest(request,env,verifyGithubOidc){
     const raw=await request.text();
     if(raw.length>128)return json({ok:false,error:"payload_too_large"},413);
     let data;try{data=JSON.parse(raw)}catch{return json({ok:false,error:"invalid_json"},400)}
-    if(!/^\\d{8,20}$/.test(String(data?.run_id||"")))
+    if(!/^\d{8,20}$/.test(String(data?.run_id||"")))
       return json({ok:false,error:"invalid_run_id"},422);
     const previous=await env.ANTHARES_STATE.get(key,"json");
     await env.ANTHARES_STATE.put(key,JSON.stringify({run_id:String(data.run_id)}));
