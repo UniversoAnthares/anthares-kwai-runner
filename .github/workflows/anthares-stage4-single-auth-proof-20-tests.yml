@@ -109,16 +109,16 @@ jobs:
           KWAI_ACCOUNT_ID: primary
           KWAI_SESSION_FILE: kwai-session-primary.enc
         with:
-          api-level: 35
+          api-level: 30
           arch: x86_64
           target: google_apis
-          profile: pixel_5
+          profile: pixel_2
           ram-size: 2048M
           cores: 2
           disable-animations: true
-          emulator-boot-timeout: 300
+          emulator-boot-timeout: 600
           force-avd-creation: true
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none
           script: |
             set -eu
             bash kwai_vault_install.sh
