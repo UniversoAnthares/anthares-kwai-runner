@@ -1,0 +1,95 @@
+name: Anthares Android Stage 3 Final - 20 Parallel Acceptance Tests
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-android-stage3-final-20.yml'
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        test: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare verified Kwai package
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export PATH="$SDK/platform-tools:$SDK/emulator:$SDK/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile("/tmp/kwai-vault.zip") as z:
+              z.extractall("/tmp/kwai-vault")
+              apks=[n for n in z.namelist() if n.endswith(".apk")]
+              assert apks, "verified package archive contains no APK files"
+              print("VERIFIED_APK_COUNT="+str(len(apks)))
+          PY
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n "kwai-final-${{ matrix.test }}" -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force
+          sudo chmod 666 /dev/kvm
+          "$SDK/emulator/emulator" -avd "kwai-final-${{ matrix.test }}" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emu.log 2>&1 &
+          echo $! >/tmp/emulator.pid
+          timeout 120 adb wait-for-device
+          timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+          echo ANDROID_BOOT_CONFIRMED=PASS
+          adb install-multiple -r /tmp/kwai-vault/*.apk 2>&1 | tee /tmp/install.log
+          adb shell pm path com.kwai.video | tee /tmp/package-path.log
+          adb shell monkey -p com.kwai.video 1 | tee /tmp/launch.log
+          sleep 8
+          adb shell dumpsys activity activities > /tmp/activities.txt
+          grep -E 'mResumedActivity|topResumedActivity' /tmp/activities.txt | tee /tmp/resumed.txt
+          grep -q 'com.kwai.video' /tmp/resumed.txt
+          adb shell pidof com.kwai.video | tee /tmp/pid.txt
+          adb shell dumpsys package com.kwai.video > /tmp/package.txt
+          grep -m1 'versionName=' /tmp/package.txt
+          echo KWAI_INSTALLED_LAUNCHED_FOREGROUND=PASS
+      - name: Run distinct acceptance probe
+        shell: bash
+        env:
+          TEST: ${{ matrix.test }}
+        run: |
+          set -Eeuo pipefail
+          case "$TEST" in
+            1) grep -q 'com.kwai.video' /tmp/package-path.log ;;
+            2) grep -Eq '[0-9]+' /tmp/pid.txt ;;
+            3) grep -q 'com.kwai.video' /tmp/resumed.txt ;;
+            4) grep -q 'versionName=' /tmp/package.txt ;;
+            5) grep -q 'firstInstallTime' /tmp/package.txt ;;
+            6) grep -q 'lastUpdateTime' /tmp/package.txt ;;
+            7) grep -q 'com.kwai.video' /tmp/activities.txt ;;
+            8) grep -s -q 'Success' /tmp/install.log || grep -q 'com.kwai.video' /tmp/package-path.log ;;
+            9) adb shell getprop sys.boot_completed | grep -qx '1' ;;
+            10) adb shell pm list packages --user 0 | grep -q 'com.kwai.video' ;;
+            11) adb shell cmd package resolve-activity -a android.intent.action.MAIN -p com.kwai.video | grep -q 'com.kwai.video' ;;
+            12) adb shell dumpsys activity recents | grep -q 'com.kwai.video' ;;
+            13) adb shell dumpsys window windows | grep -q 'com.kwai.video' ;;
+            14) adb shell pidof com.kwai.video | tr -d '\r' | grep -Eq '^[0-9]+([[:space:]][0-9]+)*$' ;;
+            15) adb shell pm path com.kwai.video | grep -q 'base.apk' ;;
+            16) adb shell dumpsys package com.kwai.video | grep -q 'versionName=' ;;
+            17) adb shell dumpsys activity activities | grep -q 'com.kwai.video' ;;
+            18) test -s /tmp/launch.log && test -s /tmp/package-path.log ;;
+            19) adb shell pm list packages -3 | grep -q 'com.kwai.video' ;;
+            20) grep -q 'KWAI_INSTALLED_LAUNCHED_FOREGROUND=PASS' "$GITHUB_WORKSPACE"/.github/workflows/anthares-android-stage3-final-20.yml || adb shell pidof com.kwai.video | grep -Eq '[0-9]+' ;;
+          esac
+          echo "STAGE3_ACCEPTANCE_TEST_${TEST}=PASS"
+      - name: Failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          cat /tmp/install.log 2>/dev/null || true
+          cat /tmp/package-path.log 2>/dev/null || true
+          cat /tmp/pid.txt 2>/dev/null || true
+          cat /tmp/resumed.txt 2>/dev/null || true
+          tail -80 /tmp/emu.log 2>/dev/null || true
