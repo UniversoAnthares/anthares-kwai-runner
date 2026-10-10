@@ -7,6 +7,10 @@ on:
     paths:
       - '.github/workflows/kwai-real-acquire-store-20.yml'
 
+concurrency:
+  group: kwai-real-acquire-store-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   id-token: write
