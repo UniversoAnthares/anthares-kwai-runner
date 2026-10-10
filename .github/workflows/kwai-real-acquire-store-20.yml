@@ -77,25 +77,7 @@ jobs:
             bash kwai_vault_install.sh
             adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
             bash kwai_session_state.sh restore || true
-            : > kwai-mobile-login.txt
-            login_ok=0
-            for attempt in 1 2 3; do
-              echo "KWAI_REAL_LOGIN_ATTEMPT=$attempt"
-              if python3 tools/kwai_credential_login.py 2>&1 | tee -a kwai-mobile-login.txt; then
-                login_ok=1
-                break
-              fi
-              adb shell dumpsys window >/dev/null 2>&1 || true
-              adb shell am force-stop com.kwai.video || true
-              sleep 3
-              adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
-              sleep 10
-              python3 tools/kwai_login_surface_recovery.py || true
-            done
-            test "$login_ok" -eq 1
-            sleep 5
-            KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee kwai-mobile-auth-proof.txt
-            grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' kwai-mobile-auth-proof.txt
+            bash scripts/kwai_real_acquire_store.sh
             grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-mobile-auth-proof.txt
             bash kwai_session_state.sh save | tee kwai-mobile-session-save.txt
             test -s kwai-session.enc
