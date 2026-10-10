@@ -113,7 +113,10 @@ for _ in range(8):
         if n.attrib.get("resource-id","").endswith("ll_profile") and n.attrib.get("clickable","")=="true":profile=n;break
     if profile and tap_node(profile):
         rc=inspect_profile()
-        if rc==0:\n            print("KWAI_AUTH_STATE=AUTHENTICATED_UI")\n            print("KWAI_IDENTITY_PROFILE_MATCH=1")\n            sys.exit(0)
+        if rc==0:
+            print("KWAI_AUTH_STATE=AUTHENTICATED_UI")
+            print("KWAI_IDENTITY_PROFILE_MATCH=1")
+            sys.exit(0)
         if rc==10:print("KWAI_AUTH_STATE=AUTH_REQUIRED");sys.exit(10)
         if rc==12:break
     time.sleep(1)
