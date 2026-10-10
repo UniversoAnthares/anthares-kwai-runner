@@ -24,7 +24,7 @@ jobs:
       - name: Query CircleCI without exposing credentials
         env:
           CIRCLECI_API_TOKEN: ${{ secrets.CIRCLECI_API_TOKEN }}
-          ACTION: ${{ inputs.action || 'recent' }}
+          ACTION: ${{ inputs.action || 'workflow_status' }}
           PIPELINE_ID: ${{ inputs.pipeline_id }}
         run: |
           python3 - <<'PY'
