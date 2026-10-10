@@ -73,7 +73,6 @@ jobs:
           esac
           echo "AUTH_PREFLIGHT_${{ matrix.check }}=PASS"
   acquire_and_store:
-    needs: auth-preflight-30
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     steps:
