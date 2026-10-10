@@ -64,6 +64,14 @@ for i in range(22):
     ids={(n.get("resource-id") or "").split("/")[-1] for n in ns}
     if "minute_maid" in ids and ("progress_bar_layout" in ids or "sud_layout_template_content" in ids):
         if system_waits >= 12:
+            # The Google SetupWizard interstitial is not Kwai's login UI.
+            # Capture only its Android package identity (no screen text).
+            try:
+                focus=adb("shell","dumpsys","window","windows").decode(errors="replace")
+                m=re.search(r"mCurrentFocus[^\\n]*?([a-zA-Z][a-zA-Z0-9_.]+)/(?:[a-zA-Z0-9_.$]+)",focus)
+                print("KWAI_RECOVERY_STALLED_FOREGROUND_PACKAGE="+(m.group(1) if m else "unknown"))
+            except (subprocess.CalledProcessError,subprocess.TimeoutExpired):
+                print("KWAI_RECOVERY_STALLED_FOREGROUND_PACKAGE=unavailable")
             # A Google setup interstitial can stall indefinitely on an
             # ephemeral emulator. Return HOME and relaunch the *installed*
             # Kwai package once; never click through account/security UI.
