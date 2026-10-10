@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   android:
+    if: vars.KWAI_CREDENTIALS_ROTATED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -87,8 +88,6 @@ jobs:
           name: kwai-runner-diagnostics-${{ github.run_id }}
           path: |
             kwai-headless-status.txt
-            kwai-headless-ready.png
             kwai-remote-status.txt
-            kwai-remote-ready.png
           if-no-files-found: warn
           retention-days: 1
