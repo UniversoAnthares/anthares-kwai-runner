@@ -1,5 +1,11 @@
 name: Anthares Mobile State Machine QA
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'anthares_mobile/**'
+      - 'tests/test_anthares_mobile_ui_state.py'
+      - '.github/workflows/anthares-mobile-state-machine-qa.yml'
   pull_request:
     paths:
       - 'anthares_mobile/**'
