@@ -1,0 +1,61 @@
+name: Anthares Remote Console Runtime
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-console-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Boot Android
+        env:
+          ANTHARES_BOOT_VARIANT: 25
+        run: |
+          set -Eeuo pipefail
+          bash anthares-android/scripts/provision.sh 2>&1 | tee /tmp/anthares-boot.log
+          grep -Fx 'ANTHARES_ANDROID_BOOT=PASS' /tmp/anthares-boot.log
+      - name: Verify device and app
+        run: |
+          set -Eeuo pipefail
+          export ANDROID_HOME="$HOME/android-sdk" ANDROID_SDK_ROOT="$HOME/android-sdk"
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          adb wait-for-device
+          adb shell getprop sys.boot_completed | tr -d '\r' | grep -qx 1
+          adb shell pm path com.kwai.video | grep -q '^package:'
+          adb shell monkey -p com.kwai.video 1
+          sleep 8
+          adb shell screencap -p /sdcard/anthares-screen.png
+          adb pull /sdcard/anthares-screen.png /tmp/anthares-screen.png
+          file /tmp/anthares-screen.png | grep -q PNG
+          echo ANTHARES_ANDROID_KWAI_SCREEN_CAPTURE_PASS
+      - name: Validate and start private bridge
+        env:
+          ANTHARES_BRIDGE_TOKEN: ${{ secrets.ANTHARES_BRIDGE_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          python3 -m py_compile independent_session/remote_android_bridge.py
+          test "${#ANTHARES_BRIDGE_TOKEN}" -ge 32 || { echo 'BRIDGE_TOKEN_SECRET_MISSING'; exit 20; }
+          export PATH="$HOME/android-sdk/platform-tools:$PATH"
+          python3 independent_session/remote_android_bridge.py >/tmp/anthares-bridge.log 2>&1 &
+          BP=$!
+          trap 'kill "$BP" 2>/dev/null || true' EXIT
+          for i in $(seq 1 20); do
+            if curl -fsS -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" http://127.0.0.1:8765/health >/tmp/bridge-health.json; then break; fi
+            sleep 1
+          done
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/bridge-health.json'))
+          assert d.get('service')=='anthares-bridge' and d.get('adb_online') is True, d
+          print('ANTHARES_REMOTE_BRIDGE_HEALTH_PASS')
+          PY
+          curl -fsS -H "Authorization: Bearer $ANTHARES_BRIDGE_TOKEN" http://127.0.0.1:8765/screen -o /tmp/bridge-screen.png
+          file /tmp/bridge-screen.png | grep -q PNG
+          echo ANTHARES_REMOTE_SCREEN_ENDPOINT_PASS
