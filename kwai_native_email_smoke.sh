@@ -54,6 +54,7 @@ bash kwai_vault_install.sh >/tmp/kwai-vault-install-smoke.log 2>&1 || {
 adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
 adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 signal "TEST_VALIDITY=KWAI_APP_LAUNCHED"
+python3 tools/kwai_android_startup_fingerprint.py || true
 deadline=$((SECONDS+95))
 previous=""
 onboarding_taps=0
@@ -132,6 +133,7 @@ while [ "$SECONDS" -lt "$deadline" ]; do
       sleep 4
       continue
     fi
+    python3 tools/kwai_android_startup_fingerprint.py || true
     signal "BLOCKER=ANDROID_APP_ERROR_AFTER_RELAUNCH"
     break
   fi
