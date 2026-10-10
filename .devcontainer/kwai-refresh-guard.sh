@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Codespaces only. Restart the private identity inspector, not Chrome or VNC.
-# Never erase the authenticated Chrome profile or copy its session anywhere.
+# Codespaces only. Restart the private identity inspector while preserving Chrome.
 cd "$(dirname "$0")/.."
-pidfile="${HOME}/.kwai-remote-private/inspector.pid"
+PERSISTENT_ROOT="${ANTHARES_PERSISTENT_ROOT:-/workspaces/.anthares-private}"
+PRIVATE_HOME="${KWAI_PRIVATE_HOME:-${PERSISTENT_ROOT}/kwai}"
+pidfile="${PRIVATE_HOME}/inspector.pid"
 if [[ -f "$pidfile" ]]; then
   pid="$(cat "$pidfile")"
   if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
