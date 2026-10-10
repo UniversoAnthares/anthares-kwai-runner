@@ -26,7 +26,7 @@ jobs:
       - name: Validate lifecycle client
         run: |
           python -m py_compile control_plane/codespace_lifecycle.py
-          python -m unittest control_plane/test_codespace_lifecycle.py -v
+          python -m unittest discover -s control_plane -p 'test_codespace_lifecycle.py' -v
   wake:
     if: >-
       github.event_name == 'workflow_dispatch' ||
