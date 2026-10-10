@@ -5,9 +5,11 @@ REPORT=anthares-native-executor-status.txt
 log(){ echo "$*" | tee -a "$REPORT"; }
 
 export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+export ANDROID_AVD_HOME="${RUNNER_TEMP:-/tmp}/anthares-avd"
+mkdir -p "$ANDROID_AVD_HOME"
 export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 
-log ANTHARES_EXECUTOR=V2
+log ANTHARES_EXECUTOR=V3
 log EXECUTOR_BACKEND=RAW_ANDROID_SDK
 
 test -e /dev/kvm || { log FAIL_NO_KVM; exit 20; }
@@ -16,8 +18,13 @@ sudo chmod 666 /dev/kvm
 yes | sdkmanager --licenses >/dev/null 2>&1 || true
 sdkmanager --install "platform-tools" "emulator" "system-images;android-30;google_apis;x86_64" >/dev/null
 
-echo no | avdmanager create avd --force --name anthares_native_30 --package "system-images;android-30;google_apis;x86_64" --device "pixel_5" >/dev/null
-emulator -list-avds | grep -qx anthares_native_30 || { log FAIL_AVD_NOT_CREATED; exit 22; }
+echo no | avdmanager create avd --force --name anthares_native_30 --package "system-images;android-30;google_apis;x86_64" --device "pixel_5" >/tmp/anthares-avdmanager.log 2>&1
+if ! emulator -list-avds | grep -qx anthares_native_30; then
+  log FAIL_AVD_NOT_CREATED
+  cat /tmp/anthares-avdmanager.log || true
+  find "$ANDROID_AVD_HOME" -maxdepth 2 -type f -print || true
+  exit 22
+fi
 emulator -accel-check >>/tmp/anthares-accel.log 2>&1 || true
 adb start-server >/dev/null 2>&1 || true
 
@@ -39,12 +46,7 @@ for _ in $(seq 1 60); do
   fi
   sleep 2
 done
-adb devices | grep -q '^emulator-5554[[:space:]]\+device$' || {
-  log FAIL_ADB_DEVICE_TIMEOUT
-  tail -80 /tmp/anthares-emulator.log || true
-  cat /tmp/anthares-accel.log || true
-  exit 24
-}
+adb devices | grep -q '^emulator-5554[[:space:]]\+device$' || { log FAIL_ADB_DEVICE_TIMEOUT; tail -80 /tmp/anthares-emulator.log || true; cat /tmp/anthares-accel.log || true; exit 24; }
 for _ in $(seq 1 90); do
   [[ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] && break
   sleep 2
