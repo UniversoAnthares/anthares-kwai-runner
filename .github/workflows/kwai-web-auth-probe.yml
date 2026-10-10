@@ -19,52 +19,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Inspect interactive Kwai login modal
+      - name: Inspect Kwai phone authentication path
         shell: bash
         run: |
           set -euo pipefail
           CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
-          "$CHROME" --version
           npm install --no-save playwright-core >/tmp/npm-playwright.log 2>&1
           cat >kwai-probe.mjs <<'JS'
           import { chromium } from 'playwright-core';
           import fs from 'fs';
-          const chrome = process.env.CHROME_BIN;
-          const browser = await chromium.launch({headless:true, executablePath:chrome, args:['--no-sandbox','--disable-dev-shm-usage']});
+          const browser = await chromium.launch({headless:true, executablePath:process.env.CHROME_BIN, args:['--no-sandbox','--disable-dev-shm-usage']});
           const context = await browser.newContext({viewport:{width:1440,height:1000}, locale:'en-US'});
           const page = await context.newPage();
           await page.goto('https://www.kwai.com/', {waitUntil:'domcontentloaded', timeout:90000});
           await page.waitForTimeout(4000);
-          let login = page.locator('.login-logo').first();
-          if (!(await login.count())) login = page.getByText('Log in',{exact:true}).first();
-          console.log('KWAI_LOGIN_TRIGGER_COUNT='+await login.count());
-          if (!(await login.count())) throw new Error('KWAI_LOGIN_TRIGGER_NOT_FOUND');
-          await login.click({timeout:10000});
-          await page.waitForTimeout(2500);
-          const modal = page.locator('.ant-modal:visible,.model:visible').first();
-          console.log('KWAI_MODAL_VISIBLE='+(await modal.count()>0));
-          const visibleText = await page.locator('body').innerText();
-          const clean = visibleText.split('\n').map(x=>x.trim()).filter(Boolean);
-          const relevant = [...new Set(clean.filter(x=>/log|phone|email|google|qr|scan|code|facebook|account|sign/i.test(x)))].slice(0,120);
-          console.log('KWAI_MODAL_RELEVANT='+JSON.stringify(relevant));
-          const inputs = await page.locator('input:visible').evaluateAll(es=>es.map(e=>({type:e.type,placeholder:e.placeholder,name:e.name,autocomplete:e.autocomplete,aria:e.getAttribute('aria-label')})));
-          console.log('KWAI_VISIBLE_INPUTS='+JSON.stringify(inputs));
-          const controls = await page.locator('button:visible,[role=button]:visible,.content-opt:visible').evaluateAll(es=>es.map(e=>({text:(e.innerText||e.textContent||'').trim().replace(/\s+/g,' ').slice(0,120),cls:String(e.className||'')})).filter(x=>x.text).slice(0,80));
-          console.log('KWAI_VISIBLE_CONTROLS='+JSON.stringify(controls));
-          await page.screenshot({path:'/tmp/kwai-login-modal.png',fullPage:true});
-          fs.writeFileSync('/tmp/kwai-login-modal.html', await page.content());
+          await page.locator('.login-logo').first().click({timeout:10000});
+          await page.waitForTimeout(1500);
+          const usePhone = page.getByText('Use Phone',{exact:true}).first();
+          console.log('KWAI_USE_PHONE_COUNT='+await usePhone.count());
+          if (!(await usePhone.count())) throw new Error('KWAI_USE_PHONE_NOT_FOUND');
+          await usePhone.click({timeout:10000});
+          await page.waitForTimeout(2000);
+          const body = await page.locator('body').innerText();
+          const lines=[...new Set(body.split('\n').map(x=>x.trim()).filter(Boolean))];
+          console.log('KWAI_PHONE_RELEVANT='+JSON.stringify(lines.filter(x=>/phone|mobile|code|password|log|sign|country|sms|verification|email|continue|next|send/i.test(x)).slice(0,120)));
+          const inputs=await page.locator('input:visible').evaluateAll(es=>es.map((e,i)=>({i,type:e.type,placeholder:e.placeholder,name:e.name,autocomplete:e.autocomplete,maxLength:e.maxLength,aria:e.getAttribute('aria-label')})));
+          console.log('KWAI_PHONE_INPUTS='+JSON.stringify(inputs));
+          const controls=await page.locator('button:visible,[role=button]:visible,.ant-btn:visible,.login-btn:visible').evaluateAll(es=>es.map(e=>({text:(e.innerText||e.textContent||'').trim().replace(/\s+/g,' ').slice(0,120),cls:String(e.className||'')})).filter(x=>x.text).slice(0,80));
+          console.log('KWAI_PHONE_CONTROLS='+JSON.stringify(controls));
+          await page.screenshot({path:'/tmp/kwai-phone-path.png',fullPage:true});
+          fs.writeFileSync('/tmp/kwai-phone-path.html',await page.content());
           await browser.close();
           JS
           CHROME_BIN="$CHROME" timeout 150 node ./kwai-probe.mjs
 
-      - name: Upload modal diagnostics
+      - name: Upload phone-path diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kwai-web-login-modal
+          name: kwai-web-phone-path
           path: |
-            /tmp/kwai-login-modal.html
-            /tmp/kwai-login-modal.png
+            /tmp/kwai-phone-path.html
+            /tmp/kwai-phone-path.png
             /tmp/npm-playwright.log
           if-no-files-found: ignore
           retention-days: 1
