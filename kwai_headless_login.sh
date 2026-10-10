@@ -41,9 +41,13 @@ if python3 kwai_auth_probe.py >>"$REPORT" 2>&1; then
 fi
 log "KWAI_AUTO_LOGIN_ATTEMPT"
 set +e
-python3 kwai_android_autologin.py >>"$REPORT" 2>&1
+python3 tools/kwai_credential_login.py >>"$REPORT" 2>&1
 rc=$?
 set -e
+if [ "$rc" -eq 6 ]; then
+  log "KWAI_VERIFICATION_ACTION_REQUIRED"
+  exit 66
+fi
 if [ "$rc" -ne 0 ]; then
   log "KWAI_AUTO_LOGIN_FALLBACK_REQUIRED_RC=$rc"
   exit 60
