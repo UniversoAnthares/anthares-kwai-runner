@@ -41,6 +41,11 @@ def parse(xml_text,expected=""):
     return {"schema":"anthares.mobile.ui-state.v1","state":state,"identity_verified":identity,"actions":actions}
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument("xml");p.add_argument("--expected",default="")
-    a=p.parse_args();print(json.dumps(parse(Path(a.xml).read_text(encoding="utf-8",errors="replace"),a.expected),sort_keys=True))
-if __name__=="__main__":main()
+    p=argparse.ArgumentParser();p.add_argument("xml");p.add_argument("--expected",default="");p.add_argument("--action",choices=("google","email","phone","profile"))
+    a=p.parse_args();result=parse(Path(a.xml).read_text(encoding="utf-8",errors="replace"),a.expected)
+    if a.action:
+        match=next((x for x in result["actions"] if x["action"]==a.action),None)
+        if not match:return 1
+        print(*match["center"]);return 0
+    print(json.dumps(result,sort_keys=True));return 0
+if __name__=="__main__":raise SystemExit(main())
