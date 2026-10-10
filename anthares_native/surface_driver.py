@@ -49,13 +49,15 @@ def clickable_container(ns,child):
         if n.get("clickable")!="true":continue
         b=bounds(n)
         if not b:continue
-        if b[0]<=cb[0] and b[1]<=cb[1] and b[2]>=cb[2] and b[3]>=cb[3]:
-            candidates.append((area(b),n))
+        if b[0]<=cb[0] and b[1]<=cb[1] and b[2]>=cb[2] and b[3]>=cb[3]:candidates.append((area(b),n))
     return min(candidates,key=lambda x:x[0])[1] if candidates else child
 def explicit_pick(ns):
+    onboarding_ids=("bt_interest_skip_top_right",)
     login_ids=("signin_fre_continue_button","login_platform_expand_text","tv_login","btn_login","tv_to_login","btn_to_login")
     profile_ids=("id_home_bottom_tab_me","ll_profile","tab_profile","btn_profile")
     byid={rid(n):n for n in ns}
+    for k in onboarding_ids:
+        if k in byid:return clickable_container(ns,byid[k]),"onboarding:"+k
     for k in login_ids:
         if k in byid:return clickable_container(ns,byid[k]),k
     for k in profile_ids:
@@ -97,7 +99,7 @@ def relaunch():
     adb("shell","am","force-stop",PKG);time.sleep(1);adb("shell","monkey","-p",PKG,"1");time.sleep(5)
 def main():
     ap=argparse.ArgumentParser();ap.add_argument("--attempts",type=int,default=18);ap.add_argument("--output",required=True);a=ap.parse_args()
-    result={"schema":"anthares.native.surface.v5","auth_surface_reached":False,"steps":0,"last_action":"none","profile_fallback_used":False,"kwai_foreground":False,"kwai_tree":False,"safe_widget_ids":[],"snapshot_failures":0,"profile_rejections":0}
+    result={"schema":"anthares.native.surface.v6","auth_surface_reached":False,"steps":0,"last_action":"none","profile_fallback_used":False,"kwai_foreground":False,"kwai_tree":False,"safe_widget_ids":[],"snapshot_failures":0,"profile_rejections":0}
     seen={};relaunches=0
     for i in range(a.attempts):
         try:ns=snapshot()
