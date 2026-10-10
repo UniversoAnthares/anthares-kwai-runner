@@ -1,0 +1,19 @@
+name: Kwai Clickable Parent Navigation QA
+on:
+  push:
+    branches: [feat/mobile-exported-auth-route-probe]
+  pull_request:
+    paths:
+      - tools/kwai_login_ui_locator.py
+      - tests/test_kwai_login_ui_locator.py
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_kwai_login_ui_locator.py -v
