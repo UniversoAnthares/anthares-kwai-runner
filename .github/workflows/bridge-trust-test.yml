@@ -1,0 +1,19 @@
+name: Bridge trust contract
+on:
+  push:
+    branches: [bridge-recovery-orchestrator-20261010]
+    paths:
+      - .devcontainer/kwai-command-bridge-v2.py
+      - .github/workflows/bridge-trust-test.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate syntax and trust contract
+        run: |
+          python -m py_compile .devcontainer/kwai-command-bridge-v2.py
+          python -c "import importlib.util,pathlib; p=pathlib.Path('.devcontainer/kwai-command-bridge-v2.py'); s=importlib.util.spec_from_file_location('bridge',p); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); issue='https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/issues/12'; owner={'user':{'login':'UniversoAnthares'},'issue_url':issue}; bot={'user':{'login':'github-actions[bot]'},'issue_url':issue,'performed_via_github_app':{'id':15368,'slug':'github-actions'}}; evil={'user':{'login':'github-actions[bot]'},'issue_url':issue,'performed_via_github_app':{'id':999,'slug':'other'}}; assert m.authorized_command(owner,'create_probe','ownerNonce20261010'); assert m.authorized_command(bot,'inspect','recover123456789'); assert m.authorized_command(bot,'profile_check','verify123456789'); assert not m.authorized_command(bot,'create_probe','recover123456789'); assert not m.authorized_command(bot,'inspect','random123456789'); assert not m.authorized_command(evil,'inspect','recover123456789'); print('BRIDGE_TRUST_CONTRACT=PROVEN')"
