@@ -1,0 +1,51 @@
+name: Kwai 30 simultaneous real Android strategy probes
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/kwai-30-real-android-strategies.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real:
+    name: API ${{ matrix.api }} launch ${{ matrix.strategy }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        api: [30,33,35]
+        strategy: [0,1,2,3,4,5,6,7,8,9]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate launch strategy
+        run: |
+          bash -n tools/kwai_real_30_strategy_probe.sh kwai_vault_install.sh
+          python3 -m py_compile tools/kwai_android_startup_fingerprint.py tools/kwai_android_causal_probe.py
+      - name: Retrieve verified split APK vault
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --connect-timeout 10 --max-time 55 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q /tmp/kwai-vault.zip -d kwai-vault
+      - name: Enable hosted KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Run independent real Android strategy
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 145
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: bash tools/kwai_real_30_strategy_probe.sh ${{ matrix.strategy }}
