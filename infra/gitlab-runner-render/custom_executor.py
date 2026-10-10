@@ -9,6 +9,7 @@ import sys
 import tarfile
 import time
 import urllib.request
+import urllib.parse
 
 TOOLS_ROOT = pathlib.Path("/tmp/anthares-gitlab-custom-tools")
 JOBS_ROOT = pathlib.Path("/tmp/anthares-gitlab-custom-jobs")
@@ -127,6 +128,25 @@ def _reset_workspace() -> None:
     shutil.rmtree(project_dir, ignore_errors=True)
     project_dir.mkdir(parents=True, exist_ok=True)
     print(f"Anthares custom executor: reset workspace {project_dir}", flush=True)
+
+    # The custom executor does not receive the Docker executor's preconfigured
+    # Git remote. GitLab's generated get_sources script fetches origin directly.
+    project_path = os.environ.get("CUSTOM_ENV_CI_PROJECT_PATH", "").strip()
+    job_token = os.environ.get("CUSTOM_ENV_CI_JOB_TOKEN", "").strip()
+    server_host = os.environ.get("CUSTOM_ENV_CI_SERVER_HOST", "gitlab.com").strip()
+    if not project_path or not job_token or server_host != "gitlab.com":
+        raise RuntimeError("missing GitLab job checkout credentials or unexpected host")
+    if any(part in ("", ".", "..") for part in project_path.split("/")):
+        raise RuntimeError("invalid GitLab project path")
+    safe_path = "/".join(urllib.parse.quote(part, safe="") for part in project_path.split("/"))
+    safe_token = urllib.parse.quote(job_token, safe="")
+    remote_url = f"https://gitlab-ci-token:{safe_token}@{server_host}/{safe_path}.git"
+    subprocess.run(["git", "init", "-q", str(project_dir)], check=True)
+    subprocess.run(
+        ["git", "-C", str(project_dir), "remote", "add", "origin", remote_url],
+        check=True,
+    )
+    print("Anthares custom executor: authenticated origin prepared", flush=True)
 
 
 def _image_config(crane_bin: pathlib.Path, image: str) -> dict:
