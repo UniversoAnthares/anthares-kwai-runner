@@ -40,11 +40,12 @@ jobs:
           emulator-boot-timeout: 900
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -no-metrics
           script: |
-            set -euo pipefail
+            bash -euo pipefail -c 'adb devices -l && test "$(adb shell getprop sys.boot_completed | tr -d "\\r")" = 1'
             adb devices -l
             adb shell getprop sys.boot_completed | tr -d '\r' | grep -qx 1
             adb shell getprop ro.build.version.sdk | tr -d '\r' | grep -qx 30
-            bash scripts/android_cloud_40_checks.sh device | tee /tmp/anthares-device-checks.log
+            bash scripts/android_cloud_40_checks.sh device > /tmp/anthares-device-checks.log
+            cat /tmp/anthares-device-checks.log
             python -m anthares_android_cloud.controller status | tee /tmp/anthares-controller-status.json
             echo ANDROID_BOOT_OK
       - name: Save diagnostic evidence
