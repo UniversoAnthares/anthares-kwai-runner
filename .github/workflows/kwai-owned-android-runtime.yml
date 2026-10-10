@@ -4,13 +4,19 @@ on:
   pull_request:
     paths:
       - 'independent_session/owned_android_runtime.sh'
+      - 'independent_session/owned_android_preflight20.sh'
       - '.github/workflows/kwai-owned-android-runtime.yml'
 permissions:
   contents: read
 jobs:
-  boot:
+  android-20-independent-scenarios:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        scenario: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
       - uses: actions/checkout@v4
       - name: Enable KVM
@@ -18,7 +24,9 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Twenty independent fast-fail checks
+      - name: Twenty fast-fail environment checks
         run: bash independent_session/owned_android_preflight20.sh
-      - name: Owned Android bootstrap
+      - name: Independent Android boot scenario
+        env:
+          ANDROID_SCENARIO: ${{ matrix.scenario }}
         run: bash independent_session/owned_android_runtime.sh
