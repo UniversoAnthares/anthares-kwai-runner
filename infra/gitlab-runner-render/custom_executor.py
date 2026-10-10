@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import time
 import urllib.request
 
 TOOLS_ROOT = pathlib.Path("/tmp/anthares-gitlab-custom-tools")
@@ -35,15 +36,14 @@ ALLOWED_IMAGES = {
     "python:3.12-alpine",
     "ubuntu:24.04",
 }
-
-BASH_IMAGES = {
-    "php:8.5-cli",
-    "node:22-bookworm-slim",
-    "ubuntu:24.04",
-}
-
+BASH_IMAGES = {"php:8.5-cli", "node:22-bookworm-slim", "ubuntu:24.04"}
 CONTAINER_STAGES = {"build_script", "step_script", "after_script"}
 HOST_STAGE_TIMEOUT = 600
+IMAGE_META_TIMEOUT = 60
+IMAGE_EXPORT_TIMEOUT = 180
+IMAGE_EXPORT_ATTEMPTS = 3
+LOCAL_PREP_TIMEOUT = 180
+CONTAINER_RUN_TIMEOUT = 1200
 
 
 def _build_failure_code() -> int:
@@ -70,9 +70,9 @@ def _sha256(path: pathlib.Path) -> str:
 
 def _download(url: str, destination: pathlib.Path) -> None:
     tmp = destination.with_suffix(destination.suffix + ".tmp")
-    if tmp.exists():
-        tmp.unlink()
-    urllib.request.urlretrieve(url, tmp)
+    tmp.unlink(missing_ok=True)
+    with urllib.request.urlopen(url, timeout=60) as response, tmp.open("wb") as out:
+        shutil.copyfileobj(response, out)
     tmp.replace(destination)
 
 
@@ -96,8 +96,7 @@ def _ensure_tools():
     if not crane_bin.exists():
         archive = TOOLS_ROOT / f"crane-{CRANE_VERSION}.tar.gz"
         _download(CRANE_URL, archive)
-        actual = _sha256(archive)
-        if actual != CRANE_SHA256:
+        if _sha256(archive) != CRANE_SHA256:
             archive.unlink(missing_ok=True)
             raise RuntimeError("crane release checksum mismatch")
         with tarfile.open(archive, "r:gz") as tf:
@@ -131,13 +130,52 @@ def _reset_workspace() -> None:
 
 
 def _image_config(crane_bin: pathlib.Path, image: str) -> dict:
-    result = _run(
-        [str(crane_bin), "config", "--platform", "linux/amd64", image],
-        capture=True,
-    )
+    try:
+        result = _run(
+            [str(crane_bin), "config", "--platform", "linux/amd64", image],
+            capture=True,
+            timeout=IMAGE_META_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"image metadata timed out for {image}") from exc
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "failed to read image config")
+        raise RuntimeError(result.stderr.strip() or f"failed to read image config for {image}")
     return json.loads(result.stdout)
+
+
+def _export_rootfs(crane_bin: pathlib.Path, image: str, rootfs: pathlib.Path) -> None:
+    last_error = "unknown export failure"
+    for attempt in range(1, IMAGE_EXPORT_ATTEMPTS + 1):
+        rootfs.unlink(missing_ok=True)
+        print(
+            f"Anthares custom executor: exporting image={image} attempt={attempt}/{IMAGE_EXPORT_ATTEMPTS}",
+            flush=True,
+        )
+        try:
+            result = _run(
+                [str(crane_bin), "export", "--platform", "linux/amd64", image, str(rootfs)],
+                capture=True,
+                timeout=IMAGE_EXPORT_TIMEOUT,
+            )
+            if result.returncode == 0 and rootfs.exists() and rootfs.stat().st_size > 0:
+                return
+            last_error = (result.stderr or result.stdout or "crane export failed").strip()
+        except subprocess.TimeoutExpired:
+            last_error = f"timed out after {IMAGE_EXPORT_TIMEOUT}s"
+        rootfs.unlink(missing_ok=True)
+        if attempt < IMAGE_EXPORT_ATTEMPTS:
+            time.sleep(2 * attempt)
+    raise RuntimeError(f"failed to export rootfs for {image}: {last_error}")
+
+
+def _checked_local(cmd, *, env=None, label: str):
+    try:
+        result = _run(cmd, env=env, timeout=LOCAL_PREP_TIMEOUT)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"{label} timed out after {LOCAL_PREP_TIMEOUT}s") from exc
+    if result.returncode != 0:
+        raise RuntimeError(f"{label} failed")
+    return result
 
 
 def _prepare_container(image: str):
@@ -157,37 +195,31 @@ def _prepare_container(image: str):
         if metadata.get("image") == image:
             return udocker_bin, env, container_name, metadata
 
-    install = _run([str(udocker_bin), "install"], env=env)
-    if install.returncode != 0:
-        raise RuntimeError("udocker install failed")
-
+    _checked_local([str(udocker_bin), "install"], env=env, label="udocker install")
     image_cfg = _image_config(crane_bin, image)
     rootfs = root / "rootfs.tar"
-    exported = _run(
-        [str(crane_bin), "export", "--platform", "linux/amd64", image, str(rootfs)]
-    )
-    if exported.returncode != 0:
-        raise RuntimeError(f"failed to export rootfs for {image}")
+    _export_rootfs(crane_bin, image, rootfs)
 
     repo_name = "anthares/job:runtime"
-    imported = _run(
-        [str(udocker_bin), "import", "--platform=linux/amd64", str(rootfs), repo_name],
+    try:
+        _checked_local(
+            [str(udocker_bin), "import", "--platform=linux/amd64", str(rootfs), repo_name],
+            env=env,
+            label=f"udocker import for {image}",
+        )
+    finally:
+        rootfs.unlink(missing_ok=True)
+
+    _checked_local(
+        [str(udocker_bin), "create", f"--name={container_name}", repo_name],
         env=env,
+        label=f"udocker create for {image}",
     )
-    rootfs.unlink(missing_ok=True)
-    if imported.returncode != 0:
-        raise RuntimeError(f"failed to import rootfs for {image}")
-
-    created = _run([str(udocker_bin), "create", f"--name={container_name}", repo_name], env=env)
-    if created.returncode != 0:
-        raise RuntimeError(f"failed to create rootless container for {image}")
-
-    setup = _run(
+    _checked_local(
         [str(udocker_bin), "setup", "--execmode=P2", container_name],
         env=env,
+        label=f"udocker setup for {image}",
     )
-    if setup.returncode != 0:
-        raise RuntimeError(f"failed to configure PRoot P2 for {image}")
 
     cfg = image_cfg.get("config") or {}
     metadata = {
@@ -220,7 +252,6 @@ def _run_on_host(script_path: str, stage: str) -> int:
 
 def _run_in_container(script_path: str, image: str) -> int:
     udocker_bin, env, container_name, metadata = _prepare_container(image)
-
     cmd = [
         str(udocker_bin),
         "run",
@@ -231,17 +262,22 @@ def _run_in_container(script_path: str, image: str) -> int:
         "-v",
         f"{CACHE_ROOT}:{CACHE_ROOT}",
     ]
-
     for item in metadata.get("env", []):
         if isinstance(item, str) and "=" in item:
             cmd.extend(["-e", item])
-
     shell = "/bin/bash" if image in BASH_IMAGES else "/bin/sh"
     cmd.extend([container_name, shell, "-s"])
-
     print(f"Anthares custom executor: image={image} shell={shell} stage=container", flush=True)
-    with open(script_path, "rb") as script:
-        result = _run(cmd, env=env, stdin=script)
+    try:
+        with open(script_path, "rb") as script:
+            result = _run(cmd, env=env, stdin=script, timeout=CONTAINER_RUN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        print(
+            f"Anthares custom executor: container stage timed out after {CONTAINER_RUN_TIMEOUT}s image={image}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return _build_failure_code()
     return result.returncode
 
 
@@ -265,21 +301,13 @@ def main() -> int:
     try:
         if stage == "prepare_script":
             _reset_workspace()
-
         in_container = stage in CONTAINER_STAGES or (
             stage.startswith("step_") and stage != "prepare_script"
         )
-        if in_container and image:
-            rc = _run_in_container(script_path, image)
-        else:
-            rc = _run_on_host(script_path, stage)
-
+        rc = _run_in_container(script_path, image) if in_container and image else _run_on_host(script_path, stage)
         if stage == "cleanup_file_variables":
             _cleanup_job()
-
-        if rc != 0:
-            return _build_failure_code()
-        return 0
+        return 0 if rc == 0 else _build_failure_code()
     except Exception as exc:
         print(f"Anthares custom executor error: {exc}", file=sys.stderr, flush=True)
         if stage == "cleanup_file_variables":
