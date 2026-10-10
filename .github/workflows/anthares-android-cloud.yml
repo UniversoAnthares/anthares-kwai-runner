@@ -14,8 +14,15 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
       - name: Test controller offline
-        run: python -m unittest discover -s tests -p 'test_android_cloud_20.py' -v
+        run: |
+          python -m unittest discover -s tests -p 'test_android_cloud_20.py' -v
           python -m unittest discover -s tests -p 'test_controller.py' -v
+      - name: Python and SDK preflight
+        run: |
+          python --version
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+          ls -ld /dev/kvm || true
       - name: Enable KVM
         run: |
           set -euo pipefail
