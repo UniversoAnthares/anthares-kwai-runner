@@ -17,8 +17,13 @@ printf 'no\n' | avdmanager create avd --force -n anthares_android -k 'system-ima
 emulator -avd anthares_android -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on > /tmp/anthares-emulator.log 2>&1 &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true' EXIT
-adb wait-for-device
-for i in $(seq 1 90); do
+echo 'ANTHARES_ANDROID_WAIT_START=1'
+if ! timeout 120s adb wait-for-device; then
+  echo 'ANTHARES_ANDROID_ADB_TIMEOUT=1'
+  tail -80 /tmp/anthares-emulator.log || true
+  exit 6
+fi
+for i in $(seq 1 45); do
   if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then
     echo 'ANTHARES_ANDROID_BOOT=PASS'
     adb shell getprop ro.build.version.release
