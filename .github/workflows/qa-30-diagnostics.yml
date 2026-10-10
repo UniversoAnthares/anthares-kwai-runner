@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - .github/workflows/qa-30-diagnostics.yml
+      - infra/gitlab-runner-render/**
 permissions:
   contents: read
 jobs:
