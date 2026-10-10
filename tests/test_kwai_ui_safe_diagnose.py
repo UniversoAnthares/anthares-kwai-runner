@@ -61,7 +61,11 @@ class KwaiSafeDiagnosisTests(unittest.TestCase):
         self.assertTrue(mod.classify(ui(node("Continue with Email")))["email_login_option"])
 
     def test_system_error(self):
-        self.assertTrue(mod.classify(ui(node("Kwai keeps stopping")))["system_error"])
+        self.assertFalse(mod.classify(ui(node("Kwai keeps stopping")))["system_error"])
+        self.assertTrue(mod.classify(ui(node("Kwai keeps stopping")))["system_error_unattributed"])
+        owned='<hierarchy><node package="com.android.systemui" text="Kwai keeps stopping"/></hierarchy>'
+        self.assertTrue(mod.classify(owned)["system_error"])
+        self.assertFalse(mod.classify(ui(node("App info")))["system_error"])
     def test_no_false_form_from_email_label(self):
         self.assertFalse(mod.classify(ui(node("Email")))["login_form"])
 
