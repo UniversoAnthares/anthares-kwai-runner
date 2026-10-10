@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 5
     strategy:
       fail-fast: false
-      max-parallel: 10
+      max-parallel: 20
       matrix:
         scenario: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
@@ -26,6 +26,12 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Twenty fast-fail environment checks
         run: bash independent_session/owned_android_preflight20.sh
+      - name: Retrieve official Kwai APK vault
+        run: |
+          curl -fLsS --retry 1 --connect-timeout 8 --max-time 40 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q /tmp/kwai-vault.zip -d kwai-vault
       - name: Independent Android boot scenario
         env:
           ANDROID_SCENARIO: ${{ matrix.scenario }}
