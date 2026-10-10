@@ -76,7 +76,7 @@ recover_novnc() {
   local pidfile="${PRIVATE_HOME}/novnc.pid" pid cmd
   pid="$(cat "$pidfile" 2>/dev/null || true)"
   if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
-    cmd="$(tr '\\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
+    cmd="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
     [[ "$cmd" == *websockify* && "$cmd" == *127.0.0.1:6080* ]] || return 1
     kill "$pid" || return 1
     for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
