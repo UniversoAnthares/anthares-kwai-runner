@@ -21,7 +21,7 @@ sudo chmod 666 /dev/kvm
 emulator -avd anthares_35 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -no-metrics >"$RUNNER_TEMP/anthares-emulator.log" 2>&1 &
 PID=$!
 trap 'adb emu kill >/dev/null 2>&1 || true; kill "$PID" >/dev/null 2>&1 || true' EXIT
-adb wait-for-device
+timeout 150 adb wait-for-device || { echo ANTHARES_ADB_DEVICE_TIMEOUT=1; exit 6; }
 for i in $(seq 1 90); do
   if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then
     echo ANTHARES_ANDROID_BOOT=PASS
