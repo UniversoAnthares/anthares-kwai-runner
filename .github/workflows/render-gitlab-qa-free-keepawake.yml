@@ -5,7 +5,7 @@ on:
     paths: [.github/workflows/render-gitlab-qa-free-keepawake.yml]
   workflow_dispatch:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
 permissions:
   contents: read
 concurrency:
