@@ -1,0 +1,29 @@
+name: Anthares Android 20 APK Install Diagnostics
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'independent_android/diagnose_apk.sh'
+      - '.github/workflows/anthares-android-apk-diagnostics.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: ['01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot isolated Android without installing Kwai
+        run: ANTHARES_SKIP_KWAI_INSTALL=1 bash independent_android/boot.sh
+      - name: Retrieve the existing verified APK vault
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 10 --max-time 180 --silent --show-error --output kwai-vault.zip 'https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip'
+          printf '%s  %s\n' '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543' kwai-vault.zip | sha256sum --check
+          mkdir -p kwai-vault && unzip -oq kwai-vault.zip -d kwai-vault
+      - name: Run distinct APK compatibility diagnostic
+        run: timeout 90 bash independent_android/diagnose_apk.sh "${{ matrix.case }}"
