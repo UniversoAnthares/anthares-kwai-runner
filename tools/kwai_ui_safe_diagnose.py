@@ -12,13 +12,13 @@ def classify(xml):
     return {
         "node_count":len(nodes),
         "edittext_count":sum((n.get("class") or "").endswith("EditText") for n in nodes),
-        "profile_tab":anyof("id_home_bottom_tab_me"),
+        "profile_tab":anyof("id_home_bottom_tab_me","/ll_profile"),
         "login_chooser":anyof("login_platform_expand_text"),
         "permission_modal":anyof("permission_allow_button","permission_deny_button","allow kwai to send","enviar notificações"),
         "interest_onboarding":anyof("choose like or dislike","let us know you better","choose what you like"),
         "swipe_tutorial":anyof("swipe up to watch more","deslize para cima"),
         "resource_overlay":anyof("resource downloading","downloading resources","resource download"),
-        "main_navigation":anyof("id_home_bottom_tab_me","profile","perfil","inbox","discover"),
+        "main_navigation":anyof("id_home_bottom_tab_me","/ll_profile","profile","perfil","inbox","discover"),
         "login_form":anyof("login_email_input","login_password_input","login_phone_input"),
         "system_error":anyof("isn't responding","keeps stopping","app info","fechar app"),
     }
