@@ -39,16 +39,47 @@ def publication_id(source_id,start_ms,end_ms,platform,account):
     return hashlib.sha256(raw).hexdigest()
 
 def reserve(db,source_id,start_ms,end_ms,platform,account,content_sha256):
-    if int(end_ms)<=int(start_ms): raise ValueError("end_ms must be greater than start_ms")
+    """Atomically reserve a clip without overlapping or duplicate publication."""
+    if not source_id or not source_id.strip():
+        raise ValueError("source_id is required")
+    if int(start_ms)<0 or int(end_ms)<=int(start_ms):
+        raise ValueError("end_ms must be greater than nonnegative start_ms")
+    if len(content_sha256)!=64 or any(c not in "0123456789abcdef" for c in content_sha256.lower()):
+        raise ValueError("content_sha256 must be a 64-character hex digest")
+    platform=platform.casefold()
+    account=account.strip().lstrip("@").casefold()
+    if not account or platform not in ("kwai","tiktok"):
+        raise ValueError("unsupported platform or missing account")
     pid=publication_id(source_id,start_ms,end_ms,platform,account)
     now=int(time.time())
-    db.execute("""INSERT OR IGNORE INTO publications
-      (id,source_id,start_ms,end_ms,platform,account,content_sha256,status,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,'queued',?,?)""",
-      (pid,source_id,int(start_ms),int(end_ms),platform,account,content_sha256,now,now))
-    row=db.execute("SELECT id,status,content_sha256,external_id,public_url,attempts FROM publications WHERE id=?",(pid,)).fetchone()
-    if row[2] != content_sha256:
-        raise ValueError("same source/timecode target maps to different content hash")
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        existing=db.execute("SELECT id,status,content_sha256,external_id,public_url,attempts FROM publications WHERE id=?",(pid,)).fetchone()
+        if existing:
+            if existing[2].lower()!=content_sha256.lower():
+                raise ValueError("same source/timecode target maps to different content hash")
+            row=existing
+        else:
+            overlap=db.execute("""SELECT id FROM publications
+              WHERE source_id=? AND platform=? AND account=?
+              AND start_ms<? AND end_ms>? LIMIT 1""",
+              (source_id,platform,account,int(end_ms),int(start_ms))).fetchone()
+            if overlap:
+                raise ValueError("overlapping clip already reserved for this source and account")
+            duplicate=db.execute("""SELECT id FROM publications
+              WHERE content_sha256=? AND platform=? AND account=? LIMIT 1""",
+              (content_sha256.lower(),platform,account)).fetchone()
+            if duplicate:
+                raise ValueError("identical video already reserved for this platform and account")
+            db.execute("""INSERT INTO publications
+              (id,source_id,start_ms,end_ms,platform,account,content_sha256,status,created_at,updated_at)
+              VALUES(?,?,?,?,?,?,?,'queued',?,?)""",
+              (pid,source_id,int(start_ms),int(end_ms),platform,account,content_sha256.lower(),now,now))
+            row=(pid,"queued",content_sha256.lower(),None,None,0)
+        db.execute("COMMIT")
+    except BaseException:
+        db.execute("ROLLBACK")
+        raise
     return {"id":row[0],"status":row[1],"external_id":row[3],"public_url":row[4],"attempts":row[5],"already_published":row[1]=="published"}
 
 def mark_attempt(db,pid):
