@@ -63,7 +63,7 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none
           script: |
-            set -eu
+            set -euo pipefail
             bash kwai_vault_install.sh
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
             sleep 8
