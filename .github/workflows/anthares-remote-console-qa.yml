@@ -1,0 +1,29 @@
+name: Anthares Remote Console QA
+on:
+  push:
+    paths:
+      - 'independent_session/remote_android_bridge.py'
+      - 'independent_session/remote_android_console.html'
+      - '.github/workflows/anthares-remote-console-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax and fail-closed startup
+        run: |
+          python3 -m py_compile independent_session/remote_android_bridge.py
+          if ANTHARES_BRIDGE_TOKEN=short python3 independent_session/remote_android_bridge.py 2>/tmp/bridge-error; then exit 1; fi
+          grep -q BRIDGE_REFUSED /tmp/bridge-error
+          echo BRIDGE_FAIL_CLOSED_PASS
+      - name: Browser console structure
+        run: |
+          grep -q 'Authorization.*Bearer' independent_session/remote_android_console.html
+          grep -q 'https://' independent_session/remote_android_console.html
+          grep -q 'data-key="BACK"' independent_session/remote_android_console.html
+          grep -q 'action:"tap"' independent_session/remote_android_console.html
+          echo REMOTE_CONSOLE_STATIC_CHECKS_PASS
