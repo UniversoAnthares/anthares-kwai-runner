@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - "tools/kwai_login_surface_recovery.py"
+      - ".github/workflows/kwai-queue-publisher.yml"
       - "tests/test_kwai_login_platform_expansion.py"
       - ".github/workflows/kwai-login-platform-recovery-qa.yml"
 permissions:
