@@ -40,10 +40,17 @@ PY
     ;;
   complete)
     test -n "$VALUE" || { echo 'CONFIRMATION_EVIDENCE_MISSING'; exit 43; }
+    : "${KWAI_REMOTE_POST_ID:?KWAI_REMOTE_POST_ID must come from observed Kwai post}"
+    : "${KWAI_PUBLIC_POST_URL:?KWAI_PUBLIC_POST_URL must be an observed public Kwai URL}"
     endpoint='complete'
-    payload="$(python3 - "$KWAI_QUEUE_JOB_ID" "$VALUE" "$KWAI_LEASE_GENERATION" <<'PY'
+    payload="$(python3 - "$KWAI_QUEUE_JOB_ID" "$VALUE" "$KWAI_LEASE_GENERATION" "$KWAI_REMOTE_POST_ID" "$KWAI_PUBLIC_POST_URL" "${KWAI_EXPECTED_ACCOUNT:-lucasrosalem}" <<'PY'
 import json,sys
-print(json.dumps({"id":sys.argv[1],"confirmed":True,"confirmation_evidence":sys.argv[2],"lease_generation":int(sys.argv[3])},separators=(",",":")))
+from anthares_publisher.contract import PublicationEvidence,validate_evidence
+job,evidence,generation,remote,url,account=sys.argv[1:]
+if remote in (job,"kwai:"+job) or len(remote)<6:
+    raise SystemExit("REMOTE_POST_ID_NOT_INDEPENDENT")
+validate_evidence(PublicationEvidence("kwai",account,remote,url),"kwai",account)
+print(json.dumps({"id":job,"confirmed":True,"confirmation_evidence":evidence,"lease_generation":int(generation),"remote_id":remote,"public_url":url},separators=(",",":")))
 PY
 )"
     ;;
