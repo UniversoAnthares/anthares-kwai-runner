@@ -11,9 +11,17 @@ on:
 permissions:
   contents: read
 
+# Every invocation mirrors the complete ref set. Serializing globally prevents
+# two runners from racing on the same Codeberg ref and producing stale-lock
+# rejections such as "incorrect old value provided".
+concurrency:
+  group: codeberg-complete-repository-mirror
+  cancel-in-progress: false
+
 jobs:
   mirror:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout complete repository
         uses: actions/checkout@v4
@@ -33,4 +41,16 @@ jobs:
           git remote remove codeberg 2>/dev/null || true
           git remote add codeberg "$CODEBERG_PUSH_URL"
           git fetch origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
-          git push codeberg '+refs/remotes/origin/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
+
+          for attempt in 1 2 3; do
+            if git push codeberg '+refs/remotes/origin/*:refs/heads/*' '+refs/tags/*:refs/tags/*'; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Codeberg mirror failed after 3 serialized attempts." >&2
+              exit 1
+            fi
+            echo "Transient mirror collision detected; refreshing refs before retry $((attempt + 1))."
+            sleep "$attempt"
+            git fetch origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+          done
