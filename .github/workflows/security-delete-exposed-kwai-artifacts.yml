@@ -1,0 +1,30 @@
+name: Security purge exposed Kwai artifacts
+on:
+  push:
+    paths:
+      - '.github/workflows/security-delete-exposed-kwai-artifacts.yml'
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: read
+jobs:
+  purge:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Delete credential-bearing diagnostic artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for artifact in 11678514902 11680015168; do
+            code="$(curl -sS -o /tmp/out -w '%{http_code}' \
+              -X DELETE \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              "https://api.github.com/repos/$REPO/actions/artifacts/$artifact")"
+            case "$code" in
+              204|404) echo "ARTIFACT_PURGED_OR_ABSENT=$artifact" ;;
+              *) cat /tmp/out; exit 1 ;;
+            esac
+          done
