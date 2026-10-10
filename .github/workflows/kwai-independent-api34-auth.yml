@@ -1,0 +1,71 @@
+name: Kwai independent Android API34 authentication diagnostic
+on:
+  push:
+    branches: [feat/mobile-independent-api34-validation]
+    paths:
+      - .github/workflows/kwai-native-login-targeted-diagnostic.yml
+      - tools/kwai_login_ui_locator.py
+      - tools/kwai_login_surface_recovery.py
+      - tools/kwai_ui_safe_diagnose.py
+      - tools/kwai_android_causal_probe.py
+      - tools/kwai_android_startup_fingerprint.py
+      - tools/kwai_android_environment_probe.py
+      - kwai_native_email_smoke.sh
+      - tests/test_kwai_login_ui_locator.py
+      - tests/test_kwai_ui_safe_diagnose.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kwai-independent-api34-auth
+  cancel-in-progress: false
+jobs:
+  targeted:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native method regression and privacy checks
+        run: |
+          set -euo pipefail
+          bash -n kwai_native_email_smoke.sh kwai_vault_install.sh
+          python3 -m unittest discover -s tests -p test_kwai_android_causal_probe.py -v
+          python3 -m py_compile tools/kwai_android_environment_probe.py tools/kwai_android_causal_probe.py tools/kwai_ui_safe_diagnose.py tools/kwai_android_login_entry.py kwai_android_autologin.py
+          export PYTHONPATH="$PWD/tools:$PWD${PYTHONPATH:+:$PYTHONPATH}"
+          python3 -m unittest discover -s tests -p test_kwai_login_ui_locator.py -q
+          python3 -m unittest discover -s tests -p test_kwai_ui_safe_diagnose.py -q
+          python3 -m unittest discover -s tests -p test_kwai_android_login_entry.py -q
+      - name: Download validated Kwai package
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --connect-timeout 10 --max-time 40 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q /tmp/kwai-vault.zip -d kwai-vault
+          test -s kwai-vault/MANIFEST.tsv
+      - name: Enable KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Diagnose actual Android login blocker
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 140
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: bash kwai_native_email_smoke.sh
+      - name: Upload safe diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-independent-api34-auth-${{ github.run_id }}
+          path: kwai-native-email-status.txt
+          if-no-files-found: ignore
+          retention-days: 3
