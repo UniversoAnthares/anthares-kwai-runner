@@ -86,7 +86,7 @@ jobs:
                 });
                 core.notice(`${workflow_id}: failed jobs rerun requested, attempt ${attempt + 1}/${maxAttempts}`);
               } catch (error) {
-                core.warning(`${workflow_id}: failed-jobs rerun unavailable (${error.message}); trying full rerun`);
+                core.warning(`${workflow_id}: failed-jobs rerun unavailable (${error.message})`);
                 core.warning(`${workflow_id}: full rerun suppressed to avoid repeating side effects`);
               }
             }
