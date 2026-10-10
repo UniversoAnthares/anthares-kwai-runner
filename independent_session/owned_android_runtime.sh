@@ -2,6 +2,8 @@
 set -euo pipefail
 : "${ANDROID_HOME:=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
 export ANDROID_HOME
+export ANDROID_AVD_HOME="${RUNNER_TEMP:-/tmp}/anthares-avds"
+mkdir -p "$ANDROID_AVD_HOME"
 export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
 scenario="${ANDROID_SCENARIO:-1}"
 [[ "$scenario" =~ ^([1-9]|1[0-9]|20)$ ]] || exit 2
@@ -39,7 +41,9 @@ sdk_image="system-images;android-$api;$image;x86_64"
 echo "SDK_IMAGE=$sdk_image DEVICE=$device GPU=$gpu CORES=$cores MEMORY=$memory DISK=$disk"
 timeout 125s sdkmanager --install 'platform-tools' 'emulator' "$sdk_image" >/dev/null || { echo SDK_INSTALL_FAILED; exit 1; }
 command -v emulator >/dev/null || { echo EMULATOR_INSTALL_FAILED; exit 1; }
-printf 'no\n' | timeout 20s avdmanager create avd -n anthares_owned -k "$sdk_image" -d "$device" --force >/dev/null || { echo AVD_CREATE_FAILED; exit 1; }
+printf 'no\n' | timeout 20s avdmanager create avd -n anthares_owned -k "$sdk_image" -d "$device" --force -p "$ANDROID_AVD_HOME/anthares_owned.avd" >/dev/null || { echo AVD_CREATE_FAILED; exit 1; }
+[[ -f "$ANDROID_AVD_HOME/anthares_owned.ini" ]] || { echo AVD_INI_MISSING; ls -la "$ANDROID_AVD_HOME"; exit 1; }
+emulator -list-avds | grep -qx anthares_owned || { echo AVD_NOT_DISCOVERABLE; exit 1; }
 timeout 10s emulator -accel-check || { echo ACCELERATION_FAILED; exit 1; }
 emulator -avd anthares_owned -no-window -no-audio -no-boot-anim -no-snapshot-save -gpu "$gpu" -cores "$cores" -memory "$memory" -partition-size "$disk" "${extra[@]}" -port 5554 >/tmp/anthares-emulator.log 2>&1 &
 pid=$!
