@@ -1,0 +1,20 @@
+name: Kwai Navigation Causal Trace QA
+on:
+  push:
+    branches: [feat/mobile-navigation-causal-trace]
+  pull_request:
+    paths: [kwai_native_email_smoke.sh]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          bash -n kwai_native_email_smoke.sh
+          python3 -m unittest discover -s tests -p test_kwai_ui_safe_diagnose.py -q
+          grep -q NAVIGATION_TRANSITION=SEMANTIC_PROFILE_TAP kwai_native_email_smoke.sh
+          grep -q NAVIGATION_STATE= kwai_native_email_smoke.sh
