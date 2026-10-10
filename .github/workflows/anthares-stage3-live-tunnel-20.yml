@@ -27,6 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           export ANTHARES_BRIDGE_TOKEN="${ANTHARES_BRIDGE_TOKEN:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')}"
+          echo "ANTHARES_BRIDGE_TOKEN=$ANTHARES_BRIDGE_TOKEN" >> "$GITHUB_ENV"
           python3 -m py_compile independent_session/remote_android_bridge.py
           # For tunnel transport acceptance, mock only adb process output; exercise real HTTP auth, screenshot, input routes and TLS tunnel.
           mkdir -p /tmp/stage3
@@ -68,21 +69,36 @@ jobs:
           ANTHARES_BRIDGE_TOKEN: ${{ secrets.ANTHARES_BRIDGE_TEST_TOKEN }}
         run: |
           set -euo pipefail
-          export ANTHARES_BRIDGE_TOKEN="${ANTHARES_BRIDGE_TOKEN:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')}"
           URL="$(cat /tmp/stage3/public-url.txt)"
           export URL
           python3 - <<'PY'
           import concurrent.futures, json, os, urllib.request, urllib.error
           url=os.environ['URL']; token=os.environ['ANTHARES_BRIDGE_TOKEN']
+          def get(path, tok=token):
+              return urllib.request.urlopen(urllib.request.Request(url+path,headers={'Authorization':'Bearer '+tok}),timeout=10)
           def probe(i):
-              req=urllib.request.Request(url+'/health',headers={'Authorization':'Bearer '+token})
-              with urllib.request.urlopen(req,timeout=8) as r:
-                  assert r.status==200
-                  data=json.loads(r.read())
-                  assert data.get('service')=='anthares-bridge' and data.get('adb_online') is True
+              if i<=8:
+                  with get('/health') as r:
+                      d=json.loads(r.read()); assert r.status==200 and d.get('adb_online') is True
+              elif i<=12:
+                  with get('/screen') as r:
+                      b=r.read(); assert r.status==200 and r.headers.get_content_type()=='image/png' and b.startswith(b'\\x89PNG\\r\\n\\x1a\\n')
+              elif i<=16:
+                  body=json.dumps({'action':'tap','x':100+i,'y':200+i}).encode()
+                  q=urllib.request.Request(url+'/input',data=body,headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'},method='POST')
+                  with urllib.request.urlopen(q,timeout=10) as r: assert r.status==200 and json.loads(r.read()).get('ok') is True
+              elif i<=18:
+                  try: get('/health','invalid-token')
+                  except urllib.error.HTTPError as e: assert e.code==401
+                  else: raise AssertionError('invalid token accepted')
+              else:
+                  try: get('/invalid-route')
+                  except urllib.error.HTTPError as e: assert e.code in (401,404)
+                  else: raise AssertionError('invalid route accepted')
+              print(f'LIVE_BRIDGE_TEST_{i:02d}=PASS',flush=True)
               return i
           with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
               results=list(ex.map(probe,range(1,21)))
           assert len(results)==20
-          print('LIVE_TUNNEL_HEALTH_20_OF_20_PASS')
+          print('LIVE_BRIDGE_20_OF_20_PASS')
           PY
