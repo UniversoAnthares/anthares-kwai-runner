@@ -83,6 +83,10 @@ def worker():
     config.unlink(missing_ok=True)
     (ROOT / "connected").unlink(missing_ok=True)
     subprocess.run(register_command(binary, config, token), check=True)
+    # GitLab's authentication-token registration ignores legacy --tag-list and
+    # --access-level flags. The runner must be configured in GitLab UI/API with
+    # render-qa tags and an explicit protected-ref policy. Fail closed rather
+    # than silently running jobs with an unexpected configuration.
     (ROOT / "connected").touch()
     subprocess.run(
         [str(binary), "run", "--config", str(config), "--working-directory", str(ROOT)],
