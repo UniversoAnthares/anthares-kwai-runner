@@ -49,7 +49,7 @@ jobs:
                       print("PROBE",label,"ERROR",type(e).__name__)
               raise SystemExit(0)
           if action=="recent":
-              url="https://circleci.com/api/v2/project/circleci/AD1ogrgZSksHHasJt5oQWS/EzY5SP7UfkgqSdih1JT1sh/pipeline"
+              url="https://circleci.com/api/v2/project/gh/UniversoAnthares/anthares-kwai-runner/pipeline"
           elif action=="pipeline":
               pid=os.environ["PIPELINE_ID"]
               uuid.UUID(pid)
