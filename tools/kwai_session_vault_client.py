@@ -113,6 +113,10 @@ def main():
         if a.action=="probe":probe(headers);return 0
         if a.action=="pull":return pull(headers,a.path)
         return push(headers,a.path)
+    except urllib.error.HTTPError as exc:
+        # HTTP status is safe diagnostic metadata; never log token or body.
+        print("KWAI_PRIVATE_VAULT_HTTP_STATUS="+str(exc.code))
+        return 1
     except (OSError,ValueError,RuntimeError,urllib.error.URLError) as exc:
         # No exception strings: network errors may include sensitive URLs.
         print("KWAI_PRIVATE_VAULT_ERROR="+type(exc).__name__)
