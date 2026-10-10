@@ -15,12 +15,15 @@ yes | sdkmanager --licenses >/dev/null || true
 sdkmanager 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64'
 avdmanager create avd --force -n anthares_android -k 'system-images;android-35;google_apis;x86_64' --device pixel_5 --sdcard 512M </dev/null
 avd_rc=$?
-if [[ $avd_rc -ne 0 || ! -f "$HOME/.android/avd/anthares_android.ini" ]]; then
+echo "ANTHARES_AVD_MANAGER_EXIT=$avd_rc"
+avdmanager list avd || true
+emulator -list-avds || true
+if [[ $avd_rc -ne 0 ]] || ! emulator -list-avds | grep -Fxq anthares_android; then
   echo "ANTHARES_AVD_CREATION_FAILED=$avd_rc"
   exit 8
 fi
 echo 'ANTHARES_AVD_CREATED=1'
-ls -l "$HOME/.android/avd/" || true
+ls -la "$HOME/.android/avd/" 2>/dev/null || true
 case "${ANTHARES_BOOT_VARIANT:-1}" in
   1) extra=(-memory 1536 -cores 2) ;;
   2) extra=(-memory 2048 -cores 2) ;;
