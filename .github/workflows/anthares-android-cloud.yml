@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
       - name: Test controller offline
         run: python -m unittest discover -s tests -p test_controller.py -v
       - name: Enable KVM
@@ -24,18 +26,20 @@ jobs:
           SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           echo "$SDK/emulator" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
-          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses </dev/null >/dev/null 2>&1 || true
           "$SDK/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "emulator" "system-images;android-30;google_apis;x86_64"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
       - name: Create isolated AVD
         run: |
           set -euo pipefail
           printf 'no\n' | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager" create avd -n anthares-cloud -k 'system-images;android-30;google_apis;x86_64' --force
+      - name: Run 20 host diagnostics
+        run: bash scripts/android_cloud_40_checks.sh host
       - name: Boot and verify Android
         run: |
           set -euo pipefail
           emulator -avd anthares-cloud -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -accel on > /tmp/anthares-emulator.log 2>&1 &
-          adb wait-for-device
+          timeout 180 adb wait-for-device
           for i in $(seq 1 100); do
             if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then break; fi
             sleep 5
@@ -43,6 +47,7 @@ jobs:
           test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
           adb shell getprop ro.build.version.release
           adb shell pm list packages | head -20
+          bash scripts/android_cloud_40_checks.sh device
           echo "ANDROID_BOOT_OK"
       - name: Diagnostic logs (no user data)
         if: always()
