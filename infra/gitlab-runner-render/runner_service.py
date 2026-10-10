@@ -83,11 +83,6 @@ def worker():
     config.unlink(missing_ok=True)
     (ROOT / "connected").unlink(missing_ok=True)
     subprocess.run(register_command(binary, config, token), check=True)
-
-    text = config.read_text(encoding="utf-8")
-    text = text.replace("concurrent = 1", "concurrent = 2", 1)
-    config.write_text(text, encoding="utf-8")
-
     (ROOT / "connected").touch()
     subprocess.run(
         [str(binary), "run", "--config", str(config), "--working-directory", str(ROOT)],
