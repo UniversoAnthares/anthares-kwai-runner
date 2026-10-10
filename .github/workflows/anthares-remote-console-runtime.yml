@@ -81,7 +81,7 @@ jobs:
           done
           test -n "$URL" || { cat /tmp/anthares-tunnel.log; exit 1; }
           python3 - "$URL" <<'PY'
-          import json,sys,urllib.request
+          import json,sys,urllib.request,urllib.error
           url=sys.argv[1]; token=__import__('os').environ['ANTHARES_BRIDGE_TOKEN']
           def req(path,method='GET',data=None):
               headers={'Authorization':'Bearer '+token}
@@ -95,9 +95,10 @@ jobs:
           assert status==200 and hdr.get_content_type()=='image/png' and png.startswith(b'\\x89PNG\\r\\n\\x1a\\n')
           status,_,body=req('/input','POST',b'{"action":"key","key":"HOME"}')
           assert status==200 and json.loads(body).get('ok') is True
-          try: req('/health',method='GET')
-          except Exception: pass
-          else: raise AssertionError('authenticated route test unexpectedly failed')
+          try:
+              with urllib.request.urlopen(url+'/health',timeout=8) as r: raise AssertionError('unauthenticated health accepted')
+          except urllib.error.HTTPError as e:
+              assert e.code==401,e.code
           print('ANTHARES_REAL_ANDROID_PUBLIC_HTTPS_SCREEN_CONTROL_PASS')
           print('ANTHARES_PUBLIC_TUNNEL_URL='+url)
           PY
