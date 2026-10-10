@@ -48,6 +48,14 @@ class KwaiNativeLoginSelectorTests(unittest.TestCase):
     def test_profile_tab_coordinates(self):
         self.assertEqual(selector.profile_tab(selector.parse(CHOOSER)), (972, 2198))
 
+    def test_alternate_profile_tab_ll_profile(self):
+        xml = '<hierarchy><node class="android.widget.FrameLayout" resource-id="com.kwai.video:id/ll_profile" clickable="true" bounds="[864,2123][1080,2274]"/></hierarchy>'
+        self.assertEqual(selector.profile_tab(selector.parse(xml)), (972,2198))
+
+    def test_profile_requires_valid_bounds(self):
+        xml = '<hierarchy><node class="android.widget.FrameLayout" resource-id="com.kwai.video:id/ll_profile" bounds="[1080,2274][864,2123]"/></hierarchy>'
+        self.assertIsNone(selector.profile_tab(selector.parse(xml)))
+
     def test_form_requires_real_edittext(self):
         self.assertTrue(selector.email_form_visible(selector.parse(FORM)))
 
