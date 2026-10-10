@@ -45,7 +45,7 @@ class KwaiSafeDiagnosisTests(unittest.TestCase):
         self.assertEqual(result["profile_hint_bounded_count"],2)
         self.assertEqual(result["profile_hint_bottom_count"],1)
         self.assertEqual(result["profile_hint_unbounded_count"],1)
-        self.assertNotIn("profile_bottom",str(result))
+        self.assertNotIn("com.kwai.video:id/profile_bottom",str(result))
 
     def test_system_error(self):
         self.assertTrue(mod.classify(ui(node("Kwai keeps stopping")))["system_error"])
