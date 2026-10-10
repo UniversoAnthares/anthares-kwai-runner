@@ -106,7 +106,7 @@ def google_entry(nodes,xml_text=""):
 
 def profile_tab(nodes,xml_text=""):
     for node in nodes:
-        if "id_home_bottom_tab_me" in (node.get("resource-id") or "") and bounds(node):
+        if any((node.get("resource-id") or "").endswith("/"+rid) for rid in ("id_home_bottom_tab_me","ll_profile")) and bounds(node):
             x1, y1, x2, y2 = bounds(node)
             return (x1 + x2) // 2, (y1 + y2) // 2
     return semantic_action(xml_text,"profile")
