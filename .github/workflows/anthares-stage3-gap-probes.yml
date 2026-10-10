@@ -1,0 +1,24 @@
+name: Anthares Stage 3 - 20 Focused Gap Probes
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'independent_session/stage3_gap_probe.py'
+      - 'independent_session/remote_android_bridge.py'
+      - 'independent_session/remote_android_console.html'
+      - '.github/workflows/anthares-stage3-gap-probes.yml'
+permissions:
+  contents: read
+jobs:
+  stage3-gap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        probe: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test one distinct missing Stage 3 requirement
+        run: python3 independent_session/stage3_gap_probe.py "${{ matrix.probe }}"
