@@ -1,0 +1,34 @@
+name: Keep free Render GitLab QA runner reachable
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/render-gitlab-qa-free-keepawake.yml]
+  workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"
+permissions:
+  contents: read
+concurrency:
+  group: render-gitlab-qa-keepawake
+  cancel-in-progress: true
+jobs:
+  ping:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Wake free Render custom GitLab runner without secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          url=https://anthares-gitlab-qa-runner.onrender.com/
+          for attempt in 1 2 3 4 5 6; do
+            status="$(curl -LsS -o /tmp/runner-health -w '%{http_code}' --connect-timeout 8 --max-time 25 "$url" || true)"
+            if [ "$status" = 200 ] && grep -qx connected /tmp/runner-health; then
+              echo "RENDER_GITLAB_RUNNER_REACHABLE=PROVEN"
+              exit 0
+            fi
+            echo "RENDER_GITLAB_RUNNER_WAKING attempt=$attempt http=${status:-unknown}"
+            sleep 10
+          done
+          echo "RENDER_GITLAB_RUNNER_WAKE_PENDING"
+          exit 1
