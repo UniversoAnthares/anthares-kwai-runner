@@ -38,8 +38,18 @@ def claim(db, worker, ttl=120):
     token = str(uuid.uuid4())
     db.execute("BEGIN IMMEDIATE")
     try:
+        # An expired lease does not prove that an irreversible action failed.
+        # Only idempotent probe tasks can be reclaimed; quarantine other kinds.
+        db.execute("""UPDATE tasks SET status='uncertain',lease_owner=NULL,
+            lease_token=NULL,lease_until=NULL,updated_at=?
+            WHERE status='running' AND lease_until<=? AND kind!='probe'""",(now,now))
+        db.execute("""UPDATE tasks SET status='failed',result=?,
+            lease_owner=NULL,lease_token=NULL,lease_until=NULL,updated_at=?
+            WHERE status='running' AND lease_until<=? AND kind='probe'
+            AND attempts>=3""",(json.dumps({"error":"probe_retry_exhausted"}),now,now))
         row = db.execute("""SELECT id,kind,payload,attempts FROM tasks
-            WHERE status='queued' OR (status='running' AND lease_until<=?)
+            WHERE status='queued' OR (status='running' AND kind='probe'
+              AND lease_until<=? AND attempts<3)
             ORDER BY created_at,id LIMIT 1""", (now,)).fetchone()
         if row:
             db.execute("""UPDATE tasks SET status='running',attempts=attempts+1,
