@@ -36,6 +36,12 @@ def select(ns):
                 return suffix
     for n in ns:
         if tag(n) in ("profile","perfil","me","eu") and tap(n):return "profile_label"
+    # Custom discovery: expand the native platform selector when the chooser
+    # is rendered as a collapsed login-platform row without accessible labels.
+    for suffix in ("login_platform_expand_text","login_platform_item_layout"):
+        for n in ns:
+            if (n.get("resource-id") or "").endswith(suffix) and tap(n):
+                return "expand_"+suffix
     return None
 seen=set()
 for i in range(8):
