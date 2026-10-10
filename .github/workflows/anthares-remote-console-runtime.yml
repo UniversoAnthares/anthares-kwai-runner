@@ -30,6 +30,8 @@ jobs:
           set -Eeuo pipefail
           export ANDROID_HOME="$HOME/android-sdk" ANDROID_SDK_ROOT="$HOME/android-sdk"
           export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          export ANDROID_HOME="$HOME/android-sdk" ANDROID_SDK_ROOT="$HOME/android-sdk"
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
           adb wait-for-device
           adb shell getprop sys.boot_completed | tr -d '\r' | grep -qx 1
           adb shell pm path com.kwai.video | grep -q '^package:'
