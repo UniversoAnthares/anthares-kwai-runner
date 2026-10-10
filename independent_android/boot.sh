@@ -26,6 +26,7 @@ for i in $(seq 1 90); do
   if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then
     echo ANTHARES_ANDROID_BOOT=PASS
     python3 independent_android/preflight.py
+    bash independent_android/install_kwai.sh
     exit $?
   fi
   if ! kill -0 "$PID" 2>/dev/null; then echo ANTHARES_EMULATOR_EXITED=1; exit 4; fi
