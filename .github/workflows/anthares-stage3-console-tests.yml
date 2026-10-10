@@ -1,0 +1,25 @@
+name: Anthares Stage 3 - 20 Remote Console Prerequisite Tests
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'independent_android/console_preflight.py'
+      - '.github/workflows/anthares-stage3-console-tests.yml'
+permissions:
+  contents: read
+jobs:
+  console-prerequisite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        probe: ['01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot independent Android for device-specific probes
+        if: contains(fromJSON('["05","06","07","08","09","10"]'), matrix.probe)
+        run: ANTHARES_SKIP_KWAI_INSTALL=1 bash independent_android/boot.sh
+      - name: Run one isolated console prerequisite test
+        run: timeout 90 python3 independent_android/console_preflight.py "${{ matrix.probe }}"
