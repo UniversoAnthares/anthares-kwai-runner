@@ -288,4 +288,4 @@ jobs:
             /tmp/tunnel.log
             /tmp/emulator.log
           if-no-files-found: ignore
-          retention-days: 1
+          retention-days: 7
