@@ -222,6 +222,30 @@ PY
   adb shell input tap $coords >/dev/null 2>&1
   sleep 2
 }
+# Visual fallback calibrated from the 1080x2340 diagnostic screenshot: the
+# native profile screen contains Google (center 540,900) and Email (750,1025).
+# Use only after confirming the profile surface; never tap blindly on the feed.
+kwai_profile_visual_login(){
+  local method="${1:-email}" screen width height
+  screen="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1)"
+  width="${screen%x*}"; height="${screen#*x}"
+  [[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] || return 1
+  adb exec-out screencap -p > kwai-login-visual-before.png 2>/dev/null || true
+  dump_ui && cp /tmp/kwai-ui.xml kwai-login-visual-before.xml || true
+  # Profile tab is the rightmost bottom navigation entry in the captured layout.
+  adb shell input tap $((width*93/100)) $((height*94/100)) >/dev/null 2>&1 || return 1
+  sleep 3
+  if [ "$method" = "google" ]; then
+    adb shell input tap $((width*50/100)) $((height*39/100)) >/dev/null 2>&1 || return 1
+  else
+    adb shell input tap $((width*69/100)) $((height*44/100)) >/dev/null 2>&1 || return 1
+  fi
+  sleep 3
+  adb exec-out screencap -p > kwai-login-visual-after.png 2>/dev/null || true
+  dump_ui && cp /tmp/kwai-ui.xml kwai-login-visual-after.xml || true
+  log "KWAI_VISUAL_LOGIN_FALLBACK_METHOD=$method"
+}
+
 # Retry Google entry across delayed screens and transient UIAutomator failures.
 # Never infer success from a tap alone: require Google SSO foreground.
 for welcome_attempt in $(seq 1 24); do
@@ -285,6 +309,9 @@ if ! email_login_visible; then
     email_login_visible && break
     tap_label '(e-?mail|email address|endereço de e-mail|continuar com e-mail)' || true
   done
+fi
+if ! email_login_visible && ! google_sso_foreground; then
+  kwai_profile_visual_login email || true
 fi
 if ! email_login_visible && ! google_sso_foreground; then
   log "FAILURE_SIGNAL=KWAI_EMAIL_LOGIN_NOT_VISIBLE"
