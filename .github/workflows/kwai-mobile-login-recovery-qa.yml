@@ -1,5 +1,7 @@
 name: Kwai Mobile Login Recovery Static QA
 on:
+  push:
+    branches: ['feat/kwai-mobile-profile-route-diagnostics']
   pull_request:
     paths:
       - 'kwai_native_email_smoke.sh'
