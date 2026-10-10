@@ -15,7 +15,10 @@ jobs:
       matrix:
         variant: [01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     runs-on: ubuntu-24.04
-    timeout-minutes: 18
+    timeout-minutes: 12
+    concurrency:
+      group: anthares-own-android-retry-${{ matrix.variant }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - name: Boot Android with Anthares-owned script
