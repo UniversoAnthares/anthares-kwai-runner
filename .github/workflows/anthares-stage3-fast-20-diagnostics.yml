@@ -8,27 +8,25 @@ on:
       - 'independent_session/remote_console_acceptance.py'
       - '.github/workflows/anthares-stage3-fast-20-diagnostics.yml'
       - '.anthares-stage3-fast20-trigger'
+concurrency:
+  group: anthares-stage3-fast-diagnostics
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 2
-    strategy:
-      fail-fast: false
-      max-parallel: 20
-      matrix:
-        probe: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - name: Diagnose one specific stage 3 requirement
-        env:
-          PROBE: ${{ matrix.probe }}
+      - name: Run 20 different checks concurrently on one runner
+        shell: bash
         run: |
-          set -eu
-          python3 - <<'PY'
-          import os,pathlib,ast,re,sys
-          n=int(os.environ["PROBE"])
+          set -uo pipefail
+          mkdir -p /tmp/stage3-checks
+          python3 -m py_compile independent_session/remote_android_bridge.py independent_session/remote_console_acceptance.py
+          cat > /tmp/stage3-checks/run.py <<'PY'
+          import ast, pathlib, sys
           root=pathlib.Path(".")
           bridge=(root/"independent_session/remote_android_bridge.py").read_text()
           html=(root/"independent_session/remote_android_console.html").read_text()
@@ -54,11 +52,20 @@ jobs:
             ("screen_refresh_control",lambda: 'id="refresh"' in html),
             ("health_probe_in_acceptance",lambda: '"/health"' in accept),
             ("workflow_adb_resolution_fix",lambda: 'ADB_BIN=' in workflow and 'ADB_BINARY_NOT_FOUND' in workflow),
-            ("workflow_has_external_tunnel",lambda: any(x in workflow.lower() for x in ("cloudflared","tunnel","tailscale","wireguard","frp","ngrok"))),
+            ("external_tunnel_present",lambda: any(x in workflow.lower() for x in ("cloudflared","tunnel","tailscale","wireguard","frp","ngrok"))),
           ]
-          name,fn=checks[n-1]
-          try: ok=bool(fn())
+          i=int(sys.argv[1])-1
+          try: ok=bool(checks[i][1]())
           except Exception: ok=False
-          print(f"STAGE3_DIAGNOSTIC_{n:02d}={ 'PASS' if ok else 'FAIL' } name={name}")
+          print(f"CHECK_{i+1:02d}={'PASS' if ok else 'FAIL'} name={checks[i][0]}",flush=True)
           sys.exit(0 if ok else 1)
           PY
+          pids=()
+          for i in $(seq 1 20); do
+            python3 /tmp/stage3-checks/run.py "$i" >"/tmp/stage3-checks/$i.log" 2>&1 &
+            pids+=("$!")
+          done
+          fail=0
+          for pid in "${pids[@]}"; do wait "$pid" || fail=1; done
+          cat /tmp/stage3-checks/*.log
+          test "$fail" -eq 0
