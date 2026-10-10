@@ -64,6 +64,9 @@ def email_form_visible(nodes):
 
 
 def native_chooser_visible(nodes,xml_text=""):
+    # A credential form is not the chooser, even if semantic email action exists.
+    if email_form_visible(nodes):
+        return False
     if any(
         "login_platform_expand_text" in (n.get("resource-id") or "")
         and EMAIL.search(label(n))
