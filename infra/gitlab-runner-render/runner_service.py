@@ -37,6 +37,8 @@ def register_command(binary, config, token):
         "https://gitlab.com/",
         "--executor",
         "custom",
+        "--shell",
+        "sh",
         "--builds-dir",
         str(BUILDS),
         "--cache-dir",
