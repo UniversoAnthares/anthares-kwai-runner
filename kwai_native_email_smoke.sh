@@ -3,6 +3,13 @@
 set -Eeuo pipefail
 STATUS=kwai-native-email-status.txt
 : > "$STATUS"
+causal_probe(){
+  local report
+  report="$(python3 tools/kwai_android_causal_probe.py 2>/dev/null)" || return 0
+  # JSON contains only counts and boolean health flags.
+  signal "ANDROID_CAUSAL=$report"
+}
+trap 'causal_probe' EXIT
 signal(){ printf '%s\n' "$1" | tee -a "$STATUS"; }
 dump_ui(){
   timeout 8 adb shell uiautomator dump /sdcard/kwai-email-smoke.xml >/dev/null 2>&1 || return 1

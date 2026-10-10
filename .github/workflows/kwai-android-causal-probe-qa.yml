@@ -1,0 +1,21 @@
+name: Kwai Android Causal Probe QA
+on:
+  push:
+    branches: [feat/mobile-causal-android-instrumentation]
+  pull_request:
+    paths:
+      - tools/kwai_android_causal_probe.py
+      - tests/test_kwai_android_causal_probe.py
+      - kwai_native_email_smoke.sh
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          bash -n kwai_native_email_smoke.sh
+          python3 -m unittest discover -s tests -p test_kwai_android_causal_probe.py -v
