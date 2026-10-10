@@ -1,0 +1,22 @@
+name: Kwai Owned Android Runtime Smoke
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'independent_session/owned_android_runtime.sh'
+      - '.github/workflows/kwai-owned-android-runtime.yml'
+permissions:
+  contents: read
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Owned Android bootstrap
+        run: bash independent_session/owned_android_runtime.sh
