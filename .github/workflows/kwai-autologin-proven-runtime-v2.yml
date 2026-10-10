@@ -6,6 +6,7 @@ on:
 permissions: {contents: read}
 jobs:
   autologin:
+    if: vars.KWAI_CREDENTIALS_ROTATED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     env:
