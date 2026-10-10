@@ -5,9 +5,10 @@ on:
     paths:
       - '.github/workflows/anthares-core-supervisor.yml'
       - 'anthares_core/worker.py'
+      - 'anthares_core/queue.py'
       - 'anthares_core/state_store.py'
   schedule:
-    - cron: '17 * * * *'
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
 permissions:
   contents: write
@@ -29,6 +30,9 @@ jobs:
         with:
           ref: anthares-state
           path: state-branch
+      - name: Validate Core queue fencing before handling persisted state
+        working-directory: code
+        run: python3 -m unittest discover -s tests -p 'test_anthares_core_*.py' -q
       - name: Restore queue, process allowlisted tasks and export state
         working-directory: code
         run: |
