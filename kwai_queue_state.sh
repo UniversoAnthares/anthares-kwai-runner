@@ -75,13 +75,16 @@ PY
     test -n "$VALUE" || { echo 'RECONCILIATION_EVIDENCE_MISSING'; exit 45; }
     # A queue job ID is NOT a Kwai post ID. Never synthesize remote identity.
     : "${KWAI_REMOTE_POST_ID:?KWAI_REMOTE_POST_ID must be independently observed before reconciliation}"
+    : "${KWAI_PUBLIC_POST_URL:?KWAI_PUBLIC_POST_URL must be independently observed before reconciliation}"
     endpoint='reconcile'
-    payload="$(python3 - "$KWAI_QUEUE_JOB_ID" "$VALUE" "$KWAI_REMOTE_POST_ID" <<'PY'
+    payload="$(python3 - "$KWAI_QUEUE_JOB_ID" "$VALUE" "$KWAI_REMOTE_POST_ID" "$KWAI_PUBLIC_POST_URL" "${KWAI_EXPECTED_ACCOUNT:-lucasrosalem}" <<'PY'
 import json,re,sys
-job,evidence,remote=sys.argv[1:]
+from anthares_publisher.contract import PublicationEvidence,validate_evidence
+job,evidence,remote,url,account=sys.argv[1:]
 if len(remote)<6 or remote in (job,"kwai:"+job) or not re.fullmatch(r"[A-Za-z0-9_:/?&.=%-]+",remote):
     raise SystemExit("RECONCILIATION_REMOTE_ID_INVALID")
-print(json.dumps({"id":job,"confirmed":True,"remote_id":remote,"confirmation_evidence":evidence},separators=(",",":")))
+validate_evidence(PublicationEvidence("kwai",account,remote,url),"kwai",account)
+print(json.dumps({"id":job,"confirmed":True,"remote_id":remote,"public_url":url,"confirmation_evidence":evidence},separators=(",",":")))
 PY
 )"
     ;;
