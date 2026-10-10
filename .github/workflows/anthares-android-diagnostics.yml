@@ -1,0 +1,21 @@
+name: Anthares Android 20 Diagnostics
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'independent_android/diagnose.sh'
+      - '.github/workflows/anthares-android-diagnostics.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20']
+    steps:
+      - uses: actions/checkout@v4
+      - run: timeout 90 bash independent_android/diagnose.sh "${{ matrix.case }}"
