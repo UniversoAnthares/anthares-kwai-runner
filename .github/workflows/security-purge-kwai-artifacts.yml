@@ -19,7 +19,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ids="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("kwai-queue-publisher-")) | .id')"
+          ids="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("kwai-queue-publisher-") or startswith("kwai-runner-diagnostics-") or startswith("kwai-interactive-login-diagnostics")) | .id')"
           deleted=0
           while IFS= read -r id; do
             [[ "$id" =~ ^[0-9]+$ ]] || continue
