@@ -108,8 +108,11 @@ def main():
     p.add_argument("--path",default="kwai-session.enc")
     a=p.parse_args()
     try:
+        print("KWAI_PRIVATE_VAULT_STAGE=control_health")
         preflight()
+        print("KWAI_PRIVATE_VAULT_STAGE=github_oidc")
         headers=oidc()
+        print("KWAI_PRIVATE_VAULT_STAGE=vault_request")
         if a.action=="probe":probe(headers);return 0
         if a.action=="pull":return pull(headers,a.path)
         return push(headers,a.path)
