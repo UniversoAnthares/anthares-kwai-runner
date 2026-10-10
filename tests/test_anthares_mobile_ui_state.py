@@ -19,4 +19,25 @@ class KwaiUiStateTests(unittest.TestCase):
         self.assertEqual(r['state'],'PROFILE_UNKNOWN')
         self.assertFalse(r['identity_verified'])
 
+    def test_typed_username_on_login_screen_is_not_identity(self):
+        xml='''<hierarchy><node class="android.widget.EditText" text="lucasrosalem" bounds="[0,0][100,100]"/><node text="Password" bounds="[0,200][100,300]"/><node text="Profile" bounds="[0,400][100,500]"/></hierarchy>'''
+        r=parse(xml,'lucasrosalem')
+        self.assertEqual(r['state'],'AUTH_REQUIRED')
+        self.assertFalse(r['identity_verified'])
+    def test_username_in_feed_not_identity(self):
+        xml='''<hierarchy><node text="@lucasrosalem" bounds="[0,0][100,100]"/><node text="For you" bounds="[0,300][100,400]"/></hierarchy>'''
+        r=parse(xml,'lucasrosalem')
+        self.assertEqual(r['state'],'FEED')
+        self.assertFalse(r['identity_verified'])
+    def test_profile_username_with_login_prompt_not_identity(self):
+        xml='''<hierarchy><node text="Profile @lucasrosalem Followers 10" bounds="[0,0][1080,300]"/><node text="Log in" bounds="[0,400][100,500]"/></hierarchy>'''
+        r=parse(xml,'lucasrosalem')
+        self.assertEqual(r['state'],'AUTH_REQUIRED')
+        self.assertFalse(r['identity_verified'])
+    def test_create_profile_with_typed_username_not_identity(self):
+        xml='''<hierarchy><node text="Create your profile @lucasrosalem" bounds="[0,0][1080,300]"/></hierarchy>'''
+        r=parse(xml,'lucasrosalem')
+        self.assertEqual(r['state'],'CREATE_PROFILE')
+        self.assertFalse(r['identity_verified'])
+
 if __name__=='__main__':unittest.main()
