@@ -131,7 +131,8 @@ while [ "$SECONDS" -lt "$deadline" ]; do
     sleep 2
     continue
   fi
-  if [ "$(state_flag "$state" profile_tab)" = 1 ] && [ "$profile_taps" -lt 2 ]; then
+  # The semantic locator, not a broad classifier flag, decides tap safety.
+  if [ "$profile_taps" -lt 2 ]; then
     coords="$(python3 tools/kwai_login_ui_locator.py profile-tab /tmp/kwai-email-smoke.xml 2>/dev/null)" || coords=""
     if [ -n "$coords" ]; then
       tap_coords "$coords" || true

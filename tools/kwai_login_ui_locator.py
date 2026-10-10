@@ -108,37 +108,46 @@ def google_entry(nodes,xml_text=""):
 
 
 def profile_tab(nodes,xml_text=""):
-    # Stable resource IDs are preferred. Alternate builds expose only the
-    # visible bottom-nav label; never tap a "Create your profile" heading.
-    for node in nodes:
-        if any((node.get("resource-id") or "").endswith("/"+rid) for rid in ("id_home_bottom_tab_me","ll_profile")) and bounds(node):
-            x1, y1, x2, y2 = bounds(node)
-            return (x1 + x2) // 2, (y1 + y2) // 2
+    """Locate the real navigation target without treating a profile heading as a tab.
+
+    Prefer a bounded, clickable ancestor for profile-related resource IDs. Some
+    builds expose the child outside the bottom band while the clickable parent
+    is the actual tab. Never tap account content, headings, or login forms.
+    """
+    if email_form_visible(nodes):
+        return None
     height=max((bounds(n)[3] for n in nodes if bounds(n)),default=0)
     if height < 500:
         return None
-    # Some Kwai builds expose a profile-related resource ID without the
-    # standard bottom-tab IDs or a localized visible label. Accept only a
-    # bounded candidate in the bottom navigation region; never tap a heading.
+    explicit=("id_home_bottom_tab_me","ll_profile","tab_profile","btn_profile")
+    forbidden=("avatar","image","photo","header","title","edit","follow","setting",
+               "create_profile","profile_name","profile_user","profile_info")
+    candidates=[]
     for node in nodes:
-        rid=(node.get("resource-id") or "").casefold()
+        rid=(node.get("resource-id") or "").casefold().split("/")[-1]
         b=bounds(node)
-        if not b or "profile" not in rid:
+        if not b or any(w in rid for w in forbidden):
             continue
-        if any(word in rid for word in ("avatar","image","photo","header","title","edit","follow","setting")):
-            continue
-        x1,y1,x2,y2=b
-        if (y1+y2)//2 >= height*.76:
-            return (x1+x2)//2,(y1+y2)//2
-    for node in nodes:
         text=label(node).casefold().strip()
-        b=bounds(node)
-        if text not in ("profile","perfil","me","eu") or not b:
+        is_explicit=rid in explicit
+        is_profile=("profile" in rid or rid.endswith("_me")) and not is_explicit
+        is_label=text in ("profile","perfil","me","eu")
+        if not (is_explicit or is_profile or is_label):
             continue
         x1,y1,x2,y2=b
-        if (y1+y2)//2 >= height*0.76:
-            return (x1+x2)//2,(y1+y2)//2
-    return None
+        cy=(y1+y2)//2
+        if cy < height*.72:
+            continue
+        if (x2-x1) > 0.55*max((bounds(n)[2] for n in nodes if bounds(n)),default=1):
+            continue
+        score=(100 if is_explicit else 40 if is_profile else 20)
+        score+=10 if node.get("clickable")=="true" else 0
+        score+=5 if cy>=height*.85 else 0
+        candidates.append((score,(x1+x2)//2,cy))
+    if not candidates:
+        return None
+    candidates.sort(reverse=True)
+    return candidates[0][1],candidates[0][2]
 
 
 def main(argv):

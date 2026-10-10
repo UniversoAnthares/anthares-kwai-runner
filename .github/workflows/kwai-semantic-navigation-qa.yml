@@ -1,0 +1,19 @@
+name: Kwai semantic navigation QA
+on:
+  push:
+    paths:
+      - "tools/kwai_login_ui_locator.py"
+      - "kwai_native_email_smoke.sh"
+      - "tests/test_kwai_semantic_profile.py"
+      - ".github/workflows/kwai-semantic-navigation-qa.yml"
+permissions:
+  contents: read
+jobs:
+  navigation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n kwai_native_email_smoke.sh
+      - run: python3 -m unittest discover -s tests -p test_kwai_semantic_profile.py -v
+      - run: python3 -m unittest discover -s tests -p test_kwai_login_ui_locator.py -v
