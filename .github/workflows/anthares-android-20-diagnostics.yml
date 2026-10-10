@@ -1,0 +1,49 @@
+name: Anthares Android 20 Parallel Diagnostics
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'anthares-android/scripts/provision.sh'
+      - '.github/workflows/anthares-android-20-diagnostics.yml'
+permissions:
+  contents: read
+jobs:
+  diagnostics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        probe: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run independent Android environment hypothesis
+        shell: bash
+        env:
+          PROBE: ${{ matrix.probe }}
+        run: |
+          set -euo pipefail
+          case "$PROBE" in
+            1) bash -n anthares-android/scripts/provision.sh ;;
+            2) test -e /dev/kvm ;;
+            3) test -r /dev/kvm ;;
+            4) test -w /dev/kvm || sudo test -w /dev/kvm ;;
+            5) command -v curl ;;
+            6) command -v unzip ;;
+            7) command -v python3 ;;
+            8) command -v java ;;
+            9) test -d /opt/android-sdk || test -d "$HOME/android-sdk" || test -d /usr/local/lib/android/sdk ;;
+            10) df -Pk . | awk 'NR==2 {exit ($4 < 8000000)}' ;;
+            11) free -m | awk '/Mem:/ {exit ($2 < 4000)}' ;;
+            12) test "$(uname -m)" = x86_64 ;;
+            13) grep -Eq '(vmx|svm)' /proc/cpuinfo ;;
+            14) command -v timeout ;;
+            15) command -v sha256sum ;;
+            16) command -v tar ;;
+            17) command -v git ;;
+            18) command -v bash ;;
+            19) test -d /tmp && test -w /tmp ;;
+            20) ! grep -Eq '(^|[[:space:]])adb wait-for-device([[:space:]]|$)' anthares-android/scripts/provision.sh ;;
+          esac
+          echo "ANTHARES_ANDROID_DIAGNOSTIC_${PROBE}=PASS"
