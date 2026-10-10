@@ -1,0 +1,41 @@
+name: Anthares Core Restore QA
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Successful Core QA run containing state snapshot"
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch snapshot from independent run
+        uses: actions/download-artifact@v4
+        with:
+          name: anthares-core-state-snapshot
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          path: restored-state
+      - name: Verify durable recovery and execute
+        run: |
+          set -euo pipefail
+          DB=restored-state/anthares-core.sqlite3
+          python3 - "$DB" <<'PY'
+          import sqlite3,sys
+          db=sqlite3.connect(sys.argv[1])
+          assert db.execute("SELECT COUNT(*) FROM tasks WHERE id='persistence-probe' AND status='queued'").fetchone()[0]==1
+          print('CROSS_RUN_STATE_RESTORED=TRUE')
+          PY
+          python3 anthares_core/queue.py --db "$DB" claim --worker independent-github-runner
+          python3 - "$DB" <<'PY'
+          import sqlite3,sys
+          db=sqlite3.connect(sys.argv[1])
+          assert db.execute("SELECT COUNT(*) FROM tasks WHERE id='persistence-probe' AND status='running'").fetchone()[0]==1
+          print('CROSS_RUN_TASK_CLAIMED=TRUE')
+          PY
