@@ -69,7 +69,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n kwai_publish.sh kwai_claim_job.sh kwai_queue_heartbeat.sh kwai_queue_state.sh kwai_queue_publish_runtime.sh android_executor_api30_runtime.sh kwai_run_next_job.sh
-          python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py kwai_auth_probe.py kwai_auth_ready_gate.py kwai_real_publish_promotion_gate.py tools/kwai_login_surface_recovery.py tools/kwai_credential_login.py tools/kwai_android_login_entry.py
+          python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py kwai_auth_probe.py kwai_auth_ready_gate.py kwai_real_publish_promotion_gate.py kwai_auth_probe.py tools/kwai_login_surface_recovery.py tools/kwai_credential_login.py tools/kwai_android_login_entry.py
 
       - name: Check Kwai session key
         env:
