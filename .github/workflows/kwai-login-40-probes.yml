@@ -1,9 +1,6 @@
 name: Kwai login navigation 40-way diagnostics
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/kwai-login-40-probes.yml']
 permissions:
   contents: read
 jobs:
