@@ -67,6 +67,20 @@ PY
 }
 
 save_state(){
+  # Never cache an anonymous onboarding profile or a different account.
+  # Identity proof must come from the real Kwai profile UI, not a success
+  # code from the emulator or the mere presence of an authenticated-looking app.
+  [ -n "${KWAI_EXPECTED_ACCOUNT:-}" ] || { log "KWAI_SESSION_IDENTITY_UNCONFIGURED"; return 1; }
+  local proof
+  proof="$(mktemp)"
+  if ! python3 kwai_auth_probe.py >"$proof" 2>/dev/null ||
+     ! grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' "$proof" ||
+     ! grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' "$proof"; then
+    rm -f "$proof"
+    log "KWAI_SESSION_SAVE_REFUSED_IDENTITY_UNVERIFIED"
+    return 1
+  fi
+  rm -f "$proof"
   [ -n "${KWAI_PASSWORD:-}" ] || { log "KWAI_SESSION_KEY_MISSING"; return 1; }
   root_ready || { log "KWAI_SESSION_ROOT_UNAVAILABLE"; return 1; }
   local tmp archive
