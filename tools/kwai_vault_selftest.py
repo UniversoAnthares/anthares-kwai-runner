@@ -31,6 +31,8 @@ def main():
             print("KWAI_VAULT_PRIOR_RUN_ID="+str(prior))
         else:
             print("KWAI_VAULT_CROSS_RUN_PERSISTENCE=BOOTSTRAP")
+            if os.environ.get("KWAI_VAULT_REQUIRE_PRIOR_RUN") == "1":
+                return 3
         print("KWAI_VAULT_CURRENT_RUN_ID="+run_id)
         return 0
     except (OSError,ValueError,RuntimeError,urllib.error.URLError):
