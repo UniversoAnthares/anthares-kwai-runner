@@ -3,6 +3,12 @@ on:
   push:
     paths:
       - 'control_plane/**'
+      - '.devcontainer/**'
+      - '.github/workflows/anthares-control-plane.yml'
+  pull_request:
+    paths:
+      - 'control_plane/**'
+      - '.devcontainer/**'
       - '.github/workflows/anthares-control-plane.yml'
   workflow_dispatch:
 permissions:
@@ -10,11 +16,18 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Validate persistent runtime files
+        shell: bash
+        run: |
+          python -m json.tool .devcontainer/devcontainer.json >/dev/null
+          python -m py_compile .devcontainer/*.py control_plane/*.py
+          for script in .devcontainer/*.sh; do bash -n "$script"; done
       - name: Unit tests
         id: tests
         shell: bash

@@ -2,10 +2,11 @@
 set -euo pipefail
 
 # Codespaces-only, private-port desktop. Never launch an Android emulator.
-PRIVATE_HOME="${HOME}/.kwai-remote-private"
+PERSISTENT_ROOT="${ANTHARES_PERSISTENT_ROOT:-/workspaces/.anthares-private}"
+PRIVATE_HOME="${KWAI_PRIVATE_HOME:-${PERSISTENT_ROOT}/kwai}"
 LOGS="${PRIVATE_HOME}/logs"
-install -d -m 700 "${PRIVATE_HOME}" "${LOGS}" "${PRIVATE_HOME}/chrome-profile"
-chmod 700 "${PRIVATE_HOME}" "${PRIVATE_HOME}/chrome-profile"
+install -d -m 700 "${PERSISTENT_ROOT}" "${PRIVATE_HOME}" "${LOGS}" "${PRIVATE_HOME}/chrome-profile"
+chmod 700 "${PERSISTENT_ROOT}" "${PRIVATE_HOME}" "${PRIVATE_HOME}/chrome-profile"
 export DISPLAY=:99
 
 service_marker() {
@@ -40,7 +41,7 @@ start_once() {
     return
   fi
   if [[ -n "$pid" ]]; then
-    # PID files live in persistent home while Linux PIDs do not survive a
+    # PID files live in persistent storage while Linux PIDs do not survive a
     # Codespace stop/start. Never trust a reused PID without cmdline evidence.
     echo "KWAI_CODESPACE_${name}=stale_pidfile_ignored"
     rm -f "$pidfile"
@@ -75,8 +76,6 @@ restart_current_bridge() {
     [[ -n "$pid" ]] || continue
     cmd="$(tr '\0' ' ' <"/proc/${pid}/cmdline" 2>/dev/null || true)"
     if [[ "$cmd" != *".devcontainer/kwai-command-bridge.py"* && "$cmd" != *".devcontainer/kwai-command-bridge-v2.py"* ]]; then
-      # A stale persistent PID may now belong to another process. Ignore it;
-      # never kill a process unless its cmdline proves it is our bridge.
       echo "KWAI_CODESPACE_bridge=unrelated_pid_ignored"
       continue
     fi
@@ -99,9 +98,8 @@ start_once xvfb Xvfb :99 -screen 0 1440x900x24 -nolisten tcp
 sleep 2
 start_once openbox openbox-session
 
-# VNC and Chrome DevTools listen on loopback only; do NOT make forwarded ports public.
+# VNC and Chrome DevTools listen on loopback only; forwarded ports remain private.
 start_once vnc x11vnc -display :99 -localhost -rfbport 5900 -nopw -forever -shared -quiet
-# Repair a dead noVNC listener without touching Chromium or its saved profile.
 novnc_healthy() {
   curl --noproxy '*' -fsS --max-time 3 http://127.0.0.1:6080/vnc.html -o /dev/null
 }
@@ -124,7 +122,6 @@ recover_novnc() {
 }
 start_once novnc websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900
 recover_novnc || echo "KWAI_CODESPACE_novnc=unhealthy_check_logs" >&2
-# Periodic local health check: the Codespaces forwarding proxy itself is external.
 if [[ ! -f "${PRIVATE_HOME}/novnc-watchdog.pid" ]] || ! kill -0 "$(cat "${PRIVATE_HOME}/novnc-watchdog.pid")" 2>/dev/null; then
   (
     while true; do
@@ -153,4 +150,5 @@ restart_current_bridge
 echo "KWAI_CODESPACE_PRIVATE_NOVNC=http://127.0.0.1:6080/vnc.html"
 echo "KWAI_CODESPACE_PRIVATE_IDENTITY=http://127.0.0.1:8765/"
 echo "KWAI_CODESPACE_REQUIRED_PORT_VISIBILITY=private_check_in_GitHub_PORTS"
+echo "KWAI_CODESPACE_PROFILE_STORAGE=${PRIVATE_HOME}/chrome-profile"
 echo "KWAI_CODESPACE_PROFILE_WARNING=contains_sensitive_browser_state;never_commit_or_publish"

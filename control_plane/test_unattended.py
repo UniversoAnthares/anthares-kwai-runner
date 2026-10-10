@@ -15,20 +15,69 @@ def capsule(domain="kwai.com"):
     return base64.b64encode(json.dumps(raw).encode("utf-8")).decode("ascii")
 
 
-class UnattendedTests(unittest.TestCase):
-    def test_missing_session_blocks(self):
-        state = readiness(session_value=None, executors=[{"name": "gh", "priority": 1, "healthy": True}])
-        self.assertFalse(state["ready"])
-        self.assertIn("session_capsule_missing", state["blockers"])
+def profiles():
+    return json.dumps({"profiles": [
+        {
+            "provider": "codespaces",
+            "profile_id": "tiktok-profile",
+            "platform": "tiktok",
+            "account_handle": "@universo.anthares",
+            "checked_at": "2026-10-10T20:00:00Z",
+            "authenticated": True,
+            "persistence_verified": True,
+        },
+        {
+            "provider": "codespaces",
+            "profile_id": "kwai-profile",
+            "platform": "kwai",
+            "account_handle": "@lucasrosalem",
+            "checked_at": "2026-10-10T20:00:00Z",
+            "authenticated": True,
+            "persistence_verified": True,
+        },
+    ]})
 
-    def test_valid_session_and_executor_are_ready(self):
-        state = readiness(session_value=capsule(), executors=[{"name": "gh", "priority": 1, "healthy": True}])
+
+class UnattendedTests(unittest.TestCase):
+    def test_missing_authentication_blocks(self):
+        state = readiness(executors=[{"name": "gh", "priority": 1, "healthy": True}])
+        self.assertFalse(state["ready"])
+        self.assertIn("authentication_proof_missing", state["blockers"])
+
+    def test_managed_profiles_are_primary_and_ready(self):
+        state = readiness(
+            managed_profiles_value=profiles(),
+            session_value=capsule(),
+            executors=[{"name": "codespace", "priority": 1, "healthy": True}],
+        )
         self.assertTrue(state["ready"])
-        self.assertEqual(state["executor"], "gh")
+        self.assertEqual(state["executor"], "codespace")
+        self.assertEqual(state["auth_mode"], "managed_profiles")
+        self.assertEqual(state["authenticated_platforms"], ["kwai", "tiktok"])
+
+    def test_single_platform_capsule_is_valid_fallback_for_single_target(self):
+        state = readiness(
+            session_value=capsule(),
+            executors=[{"name": "gh", "priority": 1, "healthy": True}],
+            required_platforms=("kwai",),
+        )
+        self.assertTrue(state["ready"])
+        self.assertEqual(state["auth_mode"], "session_capsule")
         self.assertEqual(state["session_domain"], "kwai.com")
 
+    def test_single_capsule_cannot_claim_two_platforms(self):
+        state = readiness(
+            session_value=capsule(),
+            executors=[{"name": "gh", "priority": 1, "healthy": True}],
+        )
+        self.assertFalse(state["ready"])
+        self.assertIn("session_capsule_missing_platforms:tiktok", state["blockers"])
+
     def test_dead_executor_blocks(self):
-        state = readiness(session_value=capsule(), executors=[{"name": "gh", "priority": 1, "healthy": False}])
+        state = readiness(
+            managed_profiles_value=profiles(),
+            executors=[{"name": "codespace", "priority": 1, "healthy": False}],
+        )
         self.assertFalse(state["ready"])
         self.assertIn("no_healthy_executor", state["blockers"])
 

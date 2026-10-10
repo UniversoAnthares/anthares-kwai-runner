@@ -18,7 +18,9 @@ jobs:
         id: readiness
         shell: bash
         env:
+          ANTHARES_MANAGED_PROFILES_JSON: ${{ secrets.ANTHARES_MANAGED_PROFILES_JSON }}
           ANTHARES_SESSION_B64: ${{ secrets.ANTHARES_SESSION_B64 }}
+          ANTHARES_REQUIRED_PLATFORMS: tiktok,kwai
           ANTHARES_EXECUTOR_NAME: github-hosted
           ANTHARES_EXECUTOR_HEALTHY: '1'
         run: |

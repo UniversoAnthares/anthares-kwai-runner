@@ -7,7 +7,7 @@
     }
   },
   "postCreateCommand": "bash .devcontainer/kwai-install.sh",
-  "postStartCommand": "bash .devcontainer/kwai-start.sh",
+  "postStartCommand": "python control_plane/persistence_probe.py kwai && bash .devcontainer/kwai-start.sh",
   "forwardPorts": [
     6080,
     8765
@@ -16,16 +16,20 @@
     "6080": {
       "label": "Kwai Chrome remoto (noVNC, acesso privado)",
       "onAutoForward": "notify",
-      "protocol": "http"
+      "protocol": "http",
+      "visibility": "private"
     },
     "8765": {
       "label": "Kwai verificação de identidade (privado)",
       "onAutoForward": "notify",
-      "protocol": "http"
+      "protocol": "http",
+      "visibility": "private"
     }
   },
   "remoteEnv": {
-    "KWAI_EXPECTED_HANDLE": "lucasrosalem"
+    "KWAI_EXPECTED_HANDLE": "lucasrosalem",
+    "ANTHARES_PERSISTENT_ROOT": "/workspaces/.anthares-private",
+    "KWAI_PRIVATE_HOME": "/workspaces/.anthares-private/kwai"
   },
   "customizations": {
     "vscode": {
