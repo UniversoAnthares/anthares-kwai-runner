@@ -9,7 +9,7 @@ on:
         description: Read-only CircleCI API operation
         required: true
         type: choice
-        options: [diagnose, recent, pipeline]
+        options: [diagnose, recent, pipeline, workflow_status]
       pipeline_id:
         description: CircleCI pipeline UUID (only for pipeline action)
         required: false
@@ -53,7 +53,9 @@ jobs:
               raise SystemExit(0)
           if action=="recent":
               url="https://circleci.com/api/v2/project/gh/UniversoAnthares/anthares-kwai-runner/pipeline"
-          elif action=="pipeline":
+          elif action=="workflow_status":
+    url="https://circleci.com/api/v2/pipeline/4e1694f6-3e42-4ad8-a3ee-161d22bb1739/workflow"
+elif action=="pipeline":
               pid=os.environ["PIPELINE_ID"]
               uuid.UUID(pid)
               url=f"https://circleci.com/api/v2/pipeline/{pid}"
