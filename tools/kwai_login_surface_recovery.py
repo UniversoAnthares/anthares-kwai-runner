@@ -52,7 +52,13 @@ for i in range(8):
     seen.add(digest)
     action=select(ns)
     print("KWAI_RECOVERY_STEP="+str(i)+" ACTION="+str(action)+" SHAPE="+digest)
-    if action is None:break
+    if action is None:
+        # Public widget identifiers only; never emit UI text or credential values.
+        ids=sorted(set((n.get("resource-id") or "").split("/")[-1] for n in ns if n.get("resource-id")))
+        safe=[x for x in ids if re.fullmatch(r"[a-zA-Z0-9_]{1,64}",x)]
+        print("KWAI_RECOVERY_WIDGET_IDS="+",".join(safe[:65]))
+        print("KWAI_RECOVERY_NODE_COUNT="+str(len(ns)))
+        break
     time.sleep(1)
 print("KWAI_RECOVERY_CHOOSER_NOT_REACHED")
 raise SystemExit(3)
