@@ -1,0 +1,22 @@
+name: Kwai Mobile Login Recovery Static QA
+on:
+  push:
+    branches: ['feat/kwai-mobile-profile-route-diagnostics']
+  pull_request:
+    paths:
+      - 'kwai_native_email_smoke.sh'
+      - 'tools/kwai_ui_safe_diagnose.py'
+      - 'tests/test_kwai_ui_safe_diagnose.py'
+      - '.github/workflows/kwai-mobile-login-recovery-qa.yml'
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          bash -n kwai_native_email_smoke.sh
+          python3 -m unittest discover -s tests -p test_kwai_ui_safe_diagnose.py -v
+          python3 -m unittest discover -s tests -p test_kwai_login_ui_locator.py -v
