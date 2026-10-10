@@ -47,6 +47,19 @@ class KwaiSafeDiagnosisTests(unittest.TestCase):
         self.assertEqual(result["profile_hint_unbounded_count"],1)
         self.assertNotIn("com.kwai.video:id/profile_bottom",str(result))
 
+    def test_otp_challenge_without_private_code(self):
+        state=mod.classify(ui(node("Enter verification code 123456")))
+        self.assertTrue(state["verification_challenge"])
+        self.assertNotIn("123456",str(state))
+    def test_captcha_requires_human(self):
+        self.assertTrue(mod.classify(ui(node("Slide to verify")))["captcha_challenge"])
+    def test_phone_login_option(self):
+        self.assertTrue(mod.classify(ui(node("Continue with phone")))["phone_login_option"])
+    def test_google_login_option(self):
+        self.assertTrue(mod.classify(ui(node("Continue with Google")))["google_login_option"])
+    def test_email_login_option(self):
+        self.assertTrue(mod.classify(ui(node("Continue with Email")))["email_login_option"])
+
     def test_system_error(self):
         self.assertTrue(mod.classify(ui(node("Kwai keeps stopping")))["system_error"])
     def test_no_false_form_from_email_label(self):
