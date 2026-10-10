@@ -19,6 +19,11 @@ OWNER = "universoanthares"
 EXPECTED = "lucasrosalem"
 STATE = Path.home() / ".kwai-remote-private" / "bridge-v2-seen.json"
 COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|refresh_bridge|profile_check|owner_probe|create_probe|mobile_cdp_probe) ([a-zA-Z0-9_-]{12,64})$")
+ACTIONS_BOT = "github-actions[bot]"
+ACTIONS_APP_ID = 15368
+ACTIONS_APP_SLUG = "github-actions"
+ACTIONS_ALLOWED = {"inspect", "refresh_bridge", "profile_check", "owner_probe"}
+ACTIONS_NONCE_PREFIXES = ("recover", "verify")
 
 
 def gh(method, endpoint, data=None):
@@ -42,6 +47,23 @@ def load_module(filename, name):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def authorized_command(comment, action, nonce):
+    login = (comment.get("user") or {}).get("login", "").lower()
+    if login == OWNER:
+        return True
+    if login != ACTIONS_BOT:
+        return False
+    app = comment.get("performed_via_github_app") or {}
+    expected_issue = f"https://api.github.com/repos/{REPO}/issues/{ISSUE}"
+    return bool(
+        app.get("id") == ACTIONS_APP_ID
+        and app.get("slug") == ACTIONS_APP_SLUG
+        and comment.get("issue_url") == expected_issue
+        and action in ACTIONS_ALLOWED
+        and nonce.startswith(ACTIONS_NONCE_PREFIXES)
+    )
 
 
 async def owner_probe(context):
@@ -178,12 +200,12 @@ def main():
                 seen.add(cid)
                 STATE.write_text(json.dumps(sorted(seen)[-800:]))
                 STATE.chmod(0o600)
-                if (comment.get("user") or {}).get("login", "").lower() != OWNER:
-                    continue
                 match = COMMAND.fullmatch((comment.get("body") or "").strip())
                 if not match:
                     continue
                 action, nonce = match.groups()
+                if not authorized_command(comment, action, nonce):
+                    continue
                 if action == "refresh_bridge":
                     checkout = Path(__file__).resolve().parent.parent
                     pull = subprocess.run(

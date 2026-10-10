@@ -1,0 +1,138 @@
+name: Kwai bridge recovery orchestrator
+
+on:
+  push:
+    branches: [bridge-recovery-orchestrator-20261010]
+    paths:
+      - .github/workflows/kwai-bridge-recovery.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  REPO: UniversoAnthares/anthares-kwai-runner
+  ISSUE: '12'
+  EXPECTED_KWAI: lucasrosalem
+  CLOUDFLARE_HEALTH: https://anthares-control.anthares1.workers.dev/health
+
+jobs:
+  recover-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select best available GitHub credential
+        id: auth
+        shell: bash
+        env:
+          CODESPACES_PAT: ${{ secrets.CODESPACES_PAT }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          REPO_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${CODESPACES_PAT:-}" ]]; then TOKEN="$CODESPACES_PAT"; SRC=CODESPACES_PAT
+          elif [[ -n "${GH_PAT:-}" ]]; then TOKEN="$GH_PAT"; SRC=GH_PAT
+          else TOKEN="$REPO_GITHUB_TOKEN"; SRC=GITHUB_TOKEN
+          fi
+          echo "token_source=$SRC" >> "$GITHUB_OUTPUT"
+          echo "GH_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: Probe current bridge
+        id: first_probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          nonce="recover$(date +%s)A"
+          echo "nonce=$nonce" >> "$GITHUB_OUTPUT"
+          gh api --method POST "repos/$REPO/issues/$ISSUE/comments" -f body="KWAI_BRIDGE_CMD inspect $nonce" >/dev/null
+          for i in {1..8}; do
+            sleep 8
+            body="$(gh api "repos/$REPO/issues/$ISSUE/comments?per_page=100" --paginate --jq '.[] | select(.body|contains("KWAI_BRIDGE_RESULT")) | .body' | grep "$nonce" | tail -1 || true)"
+            if [[ "$body" == *'"chrome_connected": true'* ]]; then
+              echo "alive=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "alive=false" >> "$GITHUB_OUTPUT"
+
+      - name: Recover Codespace lifecycle when bridge is silent
+        if: steps.first_probe.outputs.alive != 'true'
+        id: codespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/codespaces.json -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            https://api.github.com/user/codespaces || true)"
+          echo "list_http=$code" >> "$GITHUB_OUTPUT"
+          if [[ "$code" != 200 ]]; then
+            echo "CODESPACE_API_AUTH=UNAVAILABLE http=$code token=${{ steps.auth.outputs.token_source }}"
+            exit 0
+          fi
+          name="$(jq -r '.codespaces[] | select(.repository.full_name==env.REPO) | .name' /tmp/codespaces.json | head -1)"
+          state="$(jq -r --arg n "$name" '.codespaces[] | select(.name==$n) | .state' /tmp/codespaces.json | head -1)"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          [[ -n "$name" ]] || exit 0
+          if [[ "$state" == "Shutdown" || "$state" == "Archived" || "$state" == "Unavailable" ]]; then
+            curl -fsS -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/user/codespaces/$name/start" >/tmp/start.json || true
+            echo "start_attempted=true" >> "$GITHUB_OUTPUT"
+            sleep 75
+          else
+            echo "start_attempted=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ask refreshed bridge to reload latest code
+        if: steps.first_probe.outputs.alive != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          nonce="recover$(date +%s)R"
+          gh api --method POST "repos/$REPO/issues/$ISSUE/comments" -f body="KWAI_BRIDGE_CMD refresh_bridge $nonce" >/dev/null
+          sleep 20
+          echo "RECOVERY_REFRESH_NONCE=$nonce"
+
+      - name: Verify Chrome, auth and exact Kwai identity
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="verify$(date +%s)"
+          n1="${base}P"; n2="${base}O"
+          gh api --method POST "repos/$REPO/issues/$ISSUE/comments" -f body="KWAI_BRIDGE_CMD profile_check $n1" >/dev/null
+          gh api --method POST "repos/$REPO/issues/$ISSUE/comments" -f body="KWAI_BRIDGE_CMD owner_probe $n2" >/dev/null
+          ok_profile=false; ok_owner=false
+          for i in {1..15}; do
+            sleep 8
+            all="$(gh api "repos/$REPO/issues/$ISSUE/comments?per_page=100" --paginate --jq '.[].body')"
+            p="$(printf '%s\n' "$all" | grep "$n1" | tail -1 || true)"
+            o="$(printf '%s\n' "$all" | grep "$n2" | tail -1 || true)"
+            [[ "$p" == *'"chrome_connected": true'* && "$p" == *'"authenticated_ui_detected": true'* ]] && ok_profile=true
+            [[ "$o" == *'"identity_verified": true'* ]] && ok_owner=true
+            if [[ "$ok_profile" == true && "$ok_owner" == true ]]; then
+              echo "KWAI_IDENTITY_VERIFIED=PROVEN account=@$EXPECTED_KWAI"
+              echo "identity_verified=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "identity_verified=false" >> "$GITHUB_OUTPUT"
+          echo "KWAI_IDENTITY_VERIFIED=NOT_PROVEN"
+          exit 1
+
+      - name: Cloudflare control-plane health
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 "$CLOUDFLARE_HEALTH" | tee /tmp/cloudflare-health.json
+          jq -e '.persistent_state == true and .queue_bound == true and .pc_fallback == false' /tmp/cloudflare-health.json >/dev/null
+          echo 'CLOUDFLARE_CONTROL=READY'
