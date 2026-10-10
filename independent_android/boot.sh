@@ -3,6 +3,8 @@
 set -Eeuo pipefail
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/android-sdk}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export ANDROID_AVD_HOME="$HOME/.config/.android/avd"
+mkdir -p "$ANDROID_AVD_HOME"
 export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 SDK_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
 SDK_SHA256="2a7f1e7e6e6d5f8b3cf4e66a6e0a7df3c1b3c40b7e2f4d1c2a7e3e9a7c6e2f3a"
@@ -16,11 +18,13 @@ fi
 yes | sdkmanager --licenses >/dev/null 2>&1 || true
 sdkmanager --install "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;x86_64"
 printf 'no\n' | avdmanager create avd -n anthares_35 -k 'system-images;android-35;google_apis;x86_64' --force
-AVD_INI="$(find "$HOME/.android/avd" "$HOME/.config/.android/avd" "$ANDROID_HOME/avd" -name config.ini -path "*/anthares_35.avd/*" -print -quit 2>/dev/null || true)"
+AVD_INI="$(find "$ANDROID_AVD_HOME" "$HOME/.android/avd" "$ANDROID_HOME/avd" -name config.ini -path "*/anthares_35.avd/*" -print -quit 2>/dev/null || true)"
 if [ -z "$AVD_INI" ]; then echo ANTHARES_AVD_CREATION_FAILED=1; avdmanager list avd || true; exit 8; fi
 test -e /dev/kvm
 sudo chmod 666 /dev/kvm
 echo "ANTHARES_AVD_PATH=$AVD_INI"
+ls -la "$ANDROID_AVD_HOME"
+export ANDROID_AVD_HOME
 echo "ANTHARES_EMULATOR_BINARY=$(command -v emulator)"
 emulator -avd anthares_35 -no-window -no-audio -no-boot-anim -no-snapshot -accel on -no-metrics ${ANTHARES_EMU_EXTRA:--gpu swiftshader_indirect} >"$RUNNER_TEMP/anthares-emulator.log" 2>&1 &
 PID=$!
