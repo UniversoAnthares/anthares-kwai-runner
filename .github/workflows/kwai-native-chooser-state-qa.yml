@@ -1,0 +1,25 @@
+name: Kwai Native Chooser State Regression QA
+on:
+  push:
+    branches: [fix/mobile-recognize-google-chooser]
+  pull_request:
+    paths: [kwai_native_email_smoke.sh]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          bash -n kwai_native_email_smoke.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("kwai_native_email_smoke.sh").read_text()
+          assert 'SUCCESS_SIGNAL=KWAI_NATIVE_LOGIN_CHOOSER_VISIBLE' in s
+          assert 'BLOCKER=EMAIL_ROUTE_NOT_EXPOSED_ON_INITIAL_CHOOSER' in s
+          assert s.index('SUCCESS_SIGNAL=KWAI_NATIVE_LOGIN_CHOOSER_VISIBLE') < s.index('if [ "$(state_flag "$state" verification_challenge)" = 1 ]; then')
+          assert s.index('SUCCESS_SIGNAL=KWAI_NATIVE_LOGIN_CHOOSER_VISIBLE') < s.index('if [ "$profile_taps" -lt 2 ]; then')
+          PY
