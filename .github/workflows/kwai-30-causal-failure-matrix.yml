@@ -1,0 +1,23 @@
+name: Kwai 30 parallel causal failure diagnostics
+on:
+  push:
+    paths:
+      - "tests/kwai_30_causal_diagnostics.py"
+      - "tools/kwai_android_causal_probe.py"
+      - "tools/kwai_login_ui_locator.py"
+      - ".github/workflows/kwai-30-causal-failure-matrix.yml"
+permissions:
+  contents: read
+jobs:
+  causal:
+    name: Causal hypothesis ${{ matrix.id }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        id: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/kwai_30_causal_diagnostics.py ${{ matrix.id }}
