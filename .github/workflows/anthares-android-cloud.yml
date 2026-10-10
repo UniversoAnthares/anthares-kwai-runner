@@ -1,6 +1,9 @@
 name: Anthares Android Cloud - boot proof
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - experiment/anthares-android-cloud-20261010
 permissions:
   contents: read
 jobs:
@@ -8,6 +11,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
+      - name: Test controller offline
+        run: python -m unittest discover -s tests -p test_controller.py -v
       - name: Enable KVM
         run: |
           set -euo pipefail
@@ -25,7 +30,7 @@ jobs:
       - name: Create isolated AVD
         run: |
           set -euo pipefail
-          printf 'no\n' | avdmanager create avd -n anthares-cloud -k 'system-images;android-30;google_apis;x86_64' --force
+          printf 'no\n' | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager" create avd -n anthares-cloud -k 'system-images;android-30;google_apis;x86_64' --force
       - name: Boot and verify Android
         run: |
           set -euo pipefail
