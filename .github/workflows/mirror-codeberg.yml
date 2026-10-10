@@ -1,0 +1,35 @@
+name: Mirror to Codeberg
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout complete repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push mirror to Codeberg
+        env:
+          CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CODEBERG_PUSH_URL:-}" ]; then
+            echo "CODEBERG_PUSH_URL is not configured; mirror is pending authorization."
+            exit 0
+          fi
+          git remote remove codeberg 2>/dev/null || true
+          git remote add codeberg "$CODEBERG_PUSH_URL"
+          git push --mirror codeberg
