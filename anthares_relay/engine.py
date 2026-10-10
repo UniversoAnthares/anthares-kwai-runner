@@ -31,10 +31,8 @@ class Relay:
   now=int(time.time())
   self.db.execute("INSERT OR IGNORE INTO jobs(id,account,digest,state,updated) VALUES(?,?,?,?,?)",
                   (uuid.uuid4().hex,account,digest,"queued",now))
-  return dict(self.db.execute("SELECT id,state FROM jobs WHERE account=? AND digest=?",
-                              (account,digest)).fetchone() and zip(("id","state"),self.db.execute(
-                              "SELECT id,state FROM jobs WHERE account=? AND digest=?",
-                              (account,digest)).fetchone()))
+  row=self.db.execute("SELECT id,state FROM jobs WHERE account=? AND digest=?", (account,digest)).fetchone()
+  return {"id":row[0],"state":row[1]}
 
  def lease(self, job_id, identity_verified, seconds=180):
   if not identity_verified: raise PermissionError("verified account identity required")
