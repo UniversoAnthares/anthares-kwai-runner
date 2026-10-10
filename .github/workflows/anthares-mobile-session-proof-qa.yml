@@ -1,0 +1,20 @@
+name: Anthares Mobile Independent Session Proof QA
+on:
+  pull_request:
+    paths:
+      - 'anthares_mobile/session_proof.py'
+      - 'tests/test_anthares_mobile_session_proof.py'
+      - '.github/workflows/anthares-mobile-session-proof-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify cross-run evidence contract
+        run: |
+          python3 -m unittest discover -s tests -p test_anthares_mobile_session_proof.py -v
+          python3 -m py_compile anthares_mobile/session_proof.py
