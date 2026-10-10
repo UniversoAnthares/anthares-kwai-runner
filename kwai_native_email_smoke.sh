@@ -68,6 +68,7 @@ while [ "$SECONDS" -lt "$deadline" ]; do
   if [ "$signature" != "$previous" ]; then
     signal "UI_STATE=${signature:-unclassified};FOCUS=$(focus_package)"
     signal "PROFILE_CANDIDATES=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print("exact=%s,bottom=%s,idhint=%s"%(d.get("profile_exact_label_count",0),d.get("profile_bottom_label_count",0),d.get("profile_resource_hint_count",0)))' "$state")"
+    signal "AUTH_ROUTES=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print("phone=%d,google=%d,email=%d,otp=%d,captcha=%d"%tuple(int(bool(d.get(k))) for k in ("phone_login_option","google_login_option","email_login_option","verification_challenge","captcha_challenge")))' "$state")"
     signal "PROFILE_GEOMETRY=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print("bounded=%s,bottom=%s,unbounded=%s,height=%s"%(d.get("profile_hint_bounded_count",0),d.get("profile_hint_bottom_count",0),d.get("profile_hint_unbounded_count",0),d.get("screen_height_bucket","unknown")))' "$state")"
     previous="$signature"
     stagnant_dumps=0
@@ -90,6 +91,14 @@ while [ "$SECONDS" -lt "$deadline" ]; do
       signal "SUCCESS_SIGNAL=KWAI_NATIVE_EMAIL_FORM_VISIBLE"; exit 0
     fi
     signal "FAILURE_SIGNAL=EMAIL_TAP_NO_FORM"; exit 33
+  fi
+  if [ "$(state_flag "$state" verification_challenge)" = 1 ]; then
+    signal "BLOCKER=ACCOUNT_OTP_VERIFICATION_REQUIRED"
+    exit 36
+  fi
+  if [ "$(state_flag "$state" captcha_challenge)" = 1 ]; then
+    signal "BLOCKER=ACCOUNT_CAPTCHA_VERIFICATION_REQUIRED"
+    exit 37
   fi
   if [ "$(state_flag "$state" permission_modal)" = 1 ]; then
     signal "BLOCKER=ANDROID_PERMISSION_MODAL"
