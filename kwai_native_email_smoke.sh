@@ -64,6 +64,7 @@ while [ "$SECONDS" -lt "$deadline" ]; do
   signature="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print(",".join(k for k,v in d.items() if v is True))' "$state")"
   if [ "$signature" != "$previous" ]; then
     signal "UI_STATE=${signature:-unclassified};FOCUS=$(focus_package)"
+    signal "PROFILE_CANDIDATES=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print("exact=%s,bottom=%s,idhint=%s"%(d.get("profile_exact_label_count",0),d.get("profile_bottom_label_count",0),d.get("profile_resource_hint_count",0)))' "$state")"
     previous="$signature"
   fi
   if python3 tools/kwai_login_ui_locator.py email-form /tmp/kwai-email-smoke.xml >/dev/null; then
