@@ -26,7 +26,26 @@ env:
   KWAI_SESSION_FILE: kwai-session.enc
 
 jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require deployed Cloudflare queue fencing v16
+        run: |
+          set -euo pipefail
+          health="$(curl -fsS --retry 3 --connect-timeout 10 --max-time 30 "$ANTHARES_CONTROL_URL/health")"
+          python3 - "$health" <<'PY'
+          import json, sys
+          d = json.loads(sys.argv[1])
+          assert d.get("version") == "2026-10-05-queue-fencing-v16", d
+          assert d.get("pc_fallback") is False, d
+          assert d.get("persistent_state") not in (None, False, "", "false"), d
+          assert d.get("queue_bound") not in (None, False, "", "false"), d
+          print("KWAI_CONTROL_PREFLIGHT=PROVEN")
+          PY
+
   publish:
+    needs: preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -49,7 +68,7 @@ jobs:
       - name: Download validated Kwai vault
         run: |
           set -euo pipefail
-          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip             https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
           echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
           rm -rf kwai-vault
           unzip -q kwai-vault.zip -d kwai-vault
