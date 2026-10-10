@@ -2,16 +2,19 @@
 STATUS: PARTIAL
 AREA: architecture
 DATE: 2026-10-10
-RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/38082768556
+RUN: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/38087104230
 SUPERSEDES: none
 
-## 1. Anthares Core — PROVEN for autonomous durable safe tasks
-- Core persists state in the `anthares-state` branch and has completed on two independent GitHub-hosted runs 38079229078 and 38082768556, without the user's PC.
-- Scheduled supervisor now every 15 minutes, plus push/manual triggers. Schedule delivery can be delayed by GitHub; not a hard real-time guarantee.
-- SQLite fenced leases, heartbeat, atomic idempotency-key collision detection and safe retry budgets implemented.
-- Expired irreversible jobs transition to `uncertain` rather than auto-republishing. Probe tasks retry at most three times.
-- Tests: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/38082797061 SUCCESS.
-- Cloudflare v16 `/health` independently verified HTTP 200 with queue_bound=true, persistent_state=true, pc_fallback=false.
+## 1. Anthares Core — COMPLETE / PROVEN autonomous durable safe tasks
+- Final acceptance run: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/38087104230 SUCCESS.
+- Cross-run durable-state proof succeeded from prior cloud run `38083961951` into independent cloud run `38087104230`: `ANTHARES_CORE_CROSS_RUN_PERSISTENCE=PASS`.
+- The current run restored persisted state from `anthares-state`, imported it into a fresh SQLite database, processed allowlisted work, exported state and committed it back to `anthares-state` as commit `a7cb833`.
+- Final gates emitted `AUTONOMOUS_CORE_SUPERVISOR=PASS` and `ANTHARES_CORE_ACCEPTANCE=PASS`.
+- Cloud control watchdog emitted `ANTHARES_CORE_CONTROL=HEALTHY`.
+- 13 Core tests passed in the final acceptance run, covering fenced leases, heartbeat, idempotency-key collision failure, bounded retries, expired-lease recovery, irreversible-job quarantine, state import/export and control watchdog behavior.
+- Supervisor is scheduled every 15 minutes at minutes 7,22,37,52, with push/manual triggers. Schedule delivery is subject to GitHub scheduling latency and is not a hard real-time guarantee.
+- Executor is GitHub-hosted Ubuntu; no local PC fallback is used by Core.
+- Historical independent successful runs remain 38079229078, 38082768556 and state test 38082797061.
 
 ## 2. Anthares Mobile — PARTIAL, no live authentication
 - UI parser now refuses to treat a typed username, feed text or onboarding page as authenticated profile.
