@@ -1,0 +1,54 @@
+name: Anthares Core Automated Recovery QA
+on:
+  pull_request:
+    paths:
+      - 'anthares_core/**'
+      - '.github/workflows/anthares-core-recovery.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build durable task snapshot
+        run: |
+          python3 anthares_core/queue.py --db state/core.sqlite3 enqueue recovery '{"origin":"remote"}' --id recovery-check
+          mkdir -p snapshots
+          python3 - <<'PY'
+          import sqlite3
+          src=sqlite3.connect('state/core.sqlite3')
+          dst=sqlite3.connect('snapshots/core.sqlite3')
+          src.backup(dst)
+          dst.close()
+          src.close()
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anthares-core-recovery-snapshot
+          path: snapshots/core.sqlite3
+          retention-days: 7
+  restore:
+    needs: snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: anthares-core-recovery-snapshot
+          path: snapshot
+      - name: Restore and claim on independent runner
+        run: |
+          python3 anthares_core/restore.py --source snapshot/core.sqlite3 --target state/restored.sqlite3
+          python3 - <<'PY'
+          from anthares_core.queue import connect,claim,finish
+          db=connect('state/restored.sqlite3')
+          job=claim(db,'independent-remote-runner')
+          assert job and job['id']=='recovery-check'
+          assert finish(db,job['id'],job['token'],{'restored':True})
+          print('INDEPENDENT_RUNNER_RECOVERY=PASS')
+          PY
