@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: feat/anthares-core-mvp
       - name: Fetch snapshot from independent run
         uses: actions/download-artifact@v4
         with:
