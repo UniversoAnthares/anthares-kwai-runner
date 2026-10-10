@@ -9,7 +9,7 @@ import importlib.util
 from pathlib import Path
 from urllib.parse import urlsplit
 
-EXPECTED = "universo.anthares"
+EXPECTED = "lucasrosalem"
 KWAI_HOSTS = {"kwai.com", "www.kwai.com", "studio.kwai.com"}
 
 

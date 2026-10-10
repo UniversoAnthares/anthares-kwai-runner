@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 REPO = "UniversoAnthares/anthares-kwai-runner"
 ISSUE = 12
 OWNER = "universoanthares"
-EXPECTED = "universo.anthares"
+EXPECTED = "lucasrosalem"
 STATE = Path.home() / ".kwai-remote-private" / "bridge-v2-seen.json"
 COMMAND = re.compile(r"^KWAI_BRIDGE_CMD (inspect|refresh_bridge|profile_check|owner_probe|create_probe|mobile_cdp_probe) ([a-zA-Z0-9_-]{12,64})$")
 
