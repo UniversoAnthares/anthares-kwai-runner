@@ -26,6 +26,7 @@ jobs:
           set -euo pipefail
           bash -n kwai_native_email_smoke.sh kwai_vault_install.sh
           python3 -m py_compile tools/kwai_ui_safe_diagnose.py tools/kwai_android_login_entry.py kwai_android_autologin.py
+          export PYTHONPATH="$PWD/tools:$PWD${PYTHONPATH:+:$PYTHONPATH}"
           python3 -m unittest discover -s tests -p test_kwai_login_ui_locator.py -q
           python3 -m unittest discover -s tests -p test_kwai_ui_safe_diagnose.py -q
           python3 -m unittest discover -s tests -p test_kwai_android_login_entry.py -q
