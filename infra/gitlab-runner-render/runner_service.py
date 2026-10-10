@@ -93,7 +93,7 @@ def worker():
         raise RuntimeError("runner config lacks custom executor section")
     current = current.replace(
         "[runners.custom]",
-        '[runners.custom]\n  config_exec = "' + str(DRIVER) + '"\n  config_args = ["config"]',
+        '[runners.custom]\\n  config_exec = "' + str(DRIVER) + '"\\n  config_args = ["config"]',
         1,
     )
     config.write_text(current, encoding="utf-8")
