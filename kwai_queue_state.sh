@@ -66,10 +66,15 @@ PY
     ;;
   reconcile)
     test -n "$VALUE" || { echo 'RECONCILIATION_EVIDENCE_MISSING'; exit 45; }
+    # A queue job ID is NOT a Kwai post ID. Never synthesize remote identity.
+    : "${KWAI_REMOTE_POST_ID:?KWAI_REMOTE_POST_ID must be independently observed before reconciliation}"
     endpoint='reconcile'
-    payload="$(python3 - "$KWAI_QUEUE_JOB_ID" "$VALUE" <<'PY'
-import json,sys
-print(json.dumps({"id":sys.argv[1],"confirmed":True,"remote_id":"kwai:"+sys.argv[1],"confirmation_evidence":sys.argv[2]},separators=(",",":")))
+    payload="$(python3 - "$KWAI_QUEUE_JOB_ID" "$VALUE" "$KWAI_REMOTE_POST_ID" <<'PY'
+import json,re,sys
+job,evidence,remote=sys.argv[1:]
+if len(remote)<6 or remote in (job,"kwai:"+job) or not re.fullmatch(r"[A-Za-z0-9_:/?&.=%-]+",remote):
+    raise SystemExit("RECONCILIATION_REMOTE_ID_INVALID")
+print(json.dumps({"id":job,"confirmed":True,"remote_id":remote,"confirmation_evidence":evidence},separators=(",",":")))
 PY
 )"
     ;;
