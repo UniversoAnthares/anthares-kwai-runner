@@ -49,6 +49,8 @@ profile_taps=0
 valid_dumps=0
 invalid_dumps=0
 app_error_restarts=0
+profile_route_fallbacks=0
+stagnant_dumps=0
 while [ "$SECONDS" -lt "$deadline" ]; do
   if ! dump_ui; then
     invalid_dumps=$((invalid_dumps+1))
@@ -68,6 +70,9 @@ while [ "$SECONDS" -lt "$deadline" ]; do
     signal "PROFILE_CANDIDATES=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print("exact=%s,bottom=%s,idhint=%s"%(d.get("profile_exact_label_count",0),d.get("profile_bottom_label_count",0),d.get("profile_resource_hint_count",0)))' "$state")"
     signal "PROFILE_GEOMETRY=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print("bounded=%s,bottom=%s,unbounded=%s,height=%s"%(d.get("profile_hint_bounded_count",0),d.get("profile_hint_bottom_count",0),d.get("profile_hint_unbounded_count",0),d.get("screen_height_bucket","unknown")))' "$state")"
     previous="$signature"
+    stagnant_dumps=0
+  else
+    stagnant_dumps=$((stagnant_dumps+1))
   fi
   if python3 tools/kwai_login_ui_locator.py email-form /tmp/kwai-email-smoke.xml >/dev/null; then
     signal "SUCCESS_SIGNAL=KWAI_NATIVE_EMAIL_FORM_VISIBLE"
@@ -124,6 +129,22 @@ while [ "$SECONDS" -lt "$deadline" ]; do
       profile_taps=$((profile_taps+1))
       signal "KWAI_PROFILE_TAP_COUNT=$profile_taps"
       sleep 2
+      continue
+    fi
+  fi
+  # If the app is on the main feed but no semantic profile node is
+  # actionable, try exactly one geometry-based bottom-right tab tap.
+  # The action is constrained to the nav band and is never repeated blindly.
+  if [ "$(state_flag "$state" main_navigation)" = 1 ] &&
+     [ "$(state_flag "$state" profile_tab)" != 1 ] &&
+     [ "$profile_route_fallbacks" -lt 1 ] && [ "$stagnant_dumps" -ge 3 ]; then
+    dims="$(adb shell wm size | grep -Eo '[0-9]+x[0-9]+' | tail -1 || true)"
+    if [[ "$dims" =~ ^[0-9]+x[0-9]+$ ]]; then
+      w="${dims%x*}"; h="${dims#*x}"
+      adb shell input tap $((w*90/100)) $((h*95/100)) >/dev/null 2>&1 || true
+      profile_route_fallbacks=$((profile_route_fallbacks+1))
+      signal "RECOVERY=BOUNDED_BOTTOM_RIGHT_PROFILE_TAB"
+      sleep 3
       continue
     fi
   fi
