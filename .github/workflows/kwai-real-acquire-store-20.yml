@@ -1,0 +1,105 @@
+name: Kwai Real acquire_and_store x20
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [experiment/anthares-android-cloud-20261010]
+    paths:
+      - '.github/workflows/kwai-real-acquire-store-20.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  acquire_and_store_real:
+    name: acquire_and_store-real-${{ matrix.attempt }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    env:
+      KWAI_EXPECTED_ACCOUNT: lucasrosalem
+      KWAI_SESSION_FILE: kwai-session.enc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require credentials for the real test
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        run: |
+          set -eu
+          test -n "$KWAI_LOGIN"
+          test -n "$KWAI_PASSWORD"
+      - name: Download and verify the actual Kwai package vault
+        run: |
+          set -eu
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          unzip -q kwai-vault.zip -d kwai-vault
+      - name: Pull session if the private vault authorizes this runner
+        run: |
+          set +e
+          python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
+          rc=$?
+          set -e
+          if [ "$rc" -eq 1 ]; then
+            echo KWAI_VAULT_OIDC_NOT_AUTHORIZED_BOOTSTRAP=1
+            rm -f kwai-session.enc
+          elif [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then
+            exit "$rc"
+          fi
+      - name: Enable KVM for the real Android test
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Execute real Kwai login, identity proof, and encrypted session capture
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            set -eu
+            bash kwai_vault_install.sh
+            adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+            bash kwai_session_state.sh restore || true
+            python3 tools/kwai_credential_login.py | tee kwai-mobile-login.txt
+            sleep 5
+            KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee kwai-mobile-auth-proof.txt
+            grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' kwai-mobile-auth-proof.txt
+            grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-mobile-auth-proof.txt
+            bash kwai_session_state.sh save | tee kwai-mobile-session-save.txt
+            test -s kwai-session.enc
+            echo ANTHARES_MOBILE_ACQUIRE=PASS
+      - name: Store the real encrypted session in the private vault
+        run: |
+          set -eu
+          test -s kwai-session.enc
+          python3 tools/kwai_session_vault_client.py push --path kwai-session.enc
+          echo ANTHARES_MOBILE_VAULT_STORE=PASS
+      - name: Preserve evidence for this real test only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-real-acquire-store-${{ matrix.attempt }}-${{ github.run_id }}
+          path: |
+            kwai-mobile-auth-proof.txt
+            kwai-mobile-login.txt
+            kwai-mobile-session-save.txt
+            kwai-vault-install-status.txt
+          if-no-files-found: warn
+          retention-days: 3
