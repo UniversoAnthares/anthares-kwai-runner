@@ -1,0 +1,83 @@
+name: Anthares Core Supervisor
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/anthares-core-supervisor.yml'
+      - 'anthares_core/worker.py'
+      - 'anthares_core/state_store.py'
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: anthares-core-state-writer
+  cancel-in-progress: false
+jobs:
+  supervise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: code
+      - name: Checkout durable state
+        uses: actions/checkout@v4
+        with:
+          ref: anthares-state
+          path: state-branch
+      - name: Restore queue, process allowlisted tasks and export state
+        working-directory: code
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$PWD"
+          STATE="$GITHUB_WORKSPACE/state-branch/runtime/anthares-core-state.json"
+          DB="$RUNNER_TEMP/anthares-core.sqlite3"
+          python3 anthares_core/state_store.py import --state "$STATE" --db "$DB"
+          python3 - "$DB" <<'PY'
+          import sqlite3,sys,time,json
+          from anthares_core.queue import enqueue
+          db=sqlite3.connect(sys.argv[1])
+          exists=db.execute("SELECT 1 FROM tasks WHERE id='core-bootstrap-probe-v1'").fetchone()
+          db.close()
+          if not exists:
+              from anthares_core.queue import connect
+              q=connect(sys.argv[1]);enqueue(q,'probe',{'target':'github-hosted-supervisor'},'core-bootstrap-probe-v1');q.close()
+          PY
+          python3 -m anthares_core.worker --db "$DB" --worker "github:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"
+          python3 anthares_core/state_store.py export --db "$DB" --out "$STATE"
+          python3 - "$GITHUB_WORKSPACE/state-branch/runtime/anthares-core-health.json" <<'PY'
+          import json,os,sys
+          from datetime import datetime,timezone
+          p=sys.argv[1]
+          data={"schema":"anthares.core.health.v1","ok":True,"observed_at":datetime.now(timezone.utc).isoformat(),"run_id":os.getenv('GITHUB_RUN_ID'),"run_attempt":os.getenv('GITHUB_RUN_ATTEMPT'),"executor":"github-hosted"}
+          open(p,'w',encoding='utf-8').write(json.dumps(data,sort_keys=True,indent=2)+'\n')
+          PY
+      - name: Persist durable state with serialized writer
+        working-directory: state-branch
+        run: |
+          set -euo pipefail
+          git config user.name 'anthares-core-bot'
+          git config user.email 'anthares-core-bot@users.noreply.github.com'
+          git add runtime/anthares-core-state.json runtime/anthares-core-health.json
+          if git diff --cached --quiet; then
+            echo 'STATE_UNCHANGED=true'
+          else
+            git commit -m "state: supervisor run ${GITHUB_RUN_ID}"
+            git push origin HEAD:anthares-state
+          fi
+      - name: Assert bootstrap probe is complete
+        working-directory: code
+        run: |
+          python3 - "$GITHUB_WORKSPACE/state-branch/runtime/anthares-core-state.json" <<'PY'
+          import json,sys
+          doc=json.load(open(sys.argv[1],encoding='utf-8'))
+          matches=[t for t in doc['tasks'] if t['id']=='core-bootstrap-probe-v1']
+          assert len(matches)==1 and matches[0]['status']=='done', matches
+          result=matches[0]['result'] or {}
+          assert result.get('ok') is True and result.get('github_actions') is True, result
+          print('AUTONOMOUS_CORE_SUPERVISOR=PASS')
+          PY
