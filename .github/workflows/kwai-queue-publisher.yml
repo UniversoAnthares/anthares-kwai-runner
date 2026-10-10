@@ -163,7 +163,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
-# Kwai first-run sign-in continuation recovery validated by login_recovery_syntax.
+# Kwai first-run sign-in continuation and bounded SetupWizard wait validated by login_recovery_syntax.
  kwai-headless-status.txt ||
              ! grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-headless-status.txt; then
             echo 'KWAI_PRIVATE_VAULT_SAVE_SKIPPED_NO_IDENTITY_PROOF=1'
