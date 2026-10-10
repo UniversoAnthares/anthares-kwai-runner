@@ -22,7 +22,7 @@ test -e /dev/kvm
 sudo chmod 666 /dev/kvm
 echo "ANTHARES_AVD_PATH=$AVD_INI"
 echo "ANTHARES_EMULATOR_BINARY=$(command -v emulator)"
-emulator -avd anthares_35 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -no-metrics >"$RUNNER_TEMP/anthares-emulator.log" 2>&1 &
+emulator -avd anthares_35 -no-window -no-audio -no-boot-anim -no-snapshot -accel on -no-metrics ${ANTHARES_EMU_EXTRA:--gpu swiftshader_indirect} >"$RUNNER_TEMP/anthares-emulator.log" 2>&1 &
 PID=$!
 trap 'adb emu kill >/dev/null 2>&1 || true; kill "$PID" >/dev/null 2>&1 || true' EXIT
 timeout 150 adb wait-for-device || { echo ANTHARES_ADB_DEVICE_TIMEOUT=1; adb devices -l || true; tail -100 "$RUNNER_TEMP/anthares-emulator.log" || true; exit 6; }
