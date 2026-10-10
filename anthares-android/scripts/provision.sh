@@ -2,6 +2,10 @@
 set -Eeuo pipefail
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/android-sdk}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
+# Keep avdmanager and emulator on the same AVD registry; this runner sets XDG_CONFIG_HOME.
+export ANDROID_USER_HOME="${ANDROID_USER_HOME:-$HOME/.android}"
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$ANDROID_USER_HOME/avd}"
+mkdir -p "$ANDROID_AVD_HOME"
 export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then echo 'ANTHARES_KVM=UNAVAILABLE'; exit 3; fi
 mkdir -p "$ANDROID_HOME/cmdline-tools/latest"
@@ -19,6 +23,8 @@ echo "ANTHARES_AVD_MANAGER_EXIT=$avd_rc"
 avdmanager list avd || true
 emulator -list-avds || true
 if [[ $avd_rc -ne 0 ]] || ! emulator -list-avds | grep -Fxq anthares_android; then
+  echo "AVD_REGISTRY_DIAGNOSTIC: ANDROID_USER_HOME=$ANDROID_USER_HOME ANDROID_AVD_HOME=$ANDROID_AVD_HOME XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-unset}"
+  find "$HOME" -maxdepth 5 -name "anthares_android.ini" -o -name "config.ini" 2>/dev/null | head -30 || true
   echo "ANTHARES_AVD_CREATION_FAILED=$avd_rc"
   exit 8
 fi
