@@ -19,7 +19,7 @@ concurrency:
 
 env:
   ANTHARES_CONTROL_URL: https://anthares-control.anthares1.workers.dev
-  KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'anthares' }}
+  KWAI_EXPECTED_ACCOUNT: ${{ 'lucasrosalem' }}
   KWAI_LEASE_TTL_SECONDS: "600"
   KWAI_LEASE_RENEW_INTERVAL_SECONDS: "120"
   KWAI_LEASE_RENEW_TTL_SECONDS: "600"
