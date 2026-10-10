@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
-from tools.kwai_login_ui_locator import bounds, email_entry, email_form_visible, label, native_chooser_visible
+from kwai_login_ui_locator import bounds, email_entry, email_form_visible, label, native_chooser_visible
 
 METHODS={"email":re.compile(r"e[ -]?mail",re.I),"phone":re.compile(r"phone|telefone|celular",re.I)}
 
