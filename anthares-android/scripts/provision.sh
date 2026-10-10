@@ -21,7 +21,31 @@ if [[ $avd_rc -ne 0 || ! -f "$HOME/.android/avd/anthares_android.ini" ]]; then
 fi
 echo 'ANTHARES_AVD_CREATED=1'
 ls -l "$HOME/.android/avd/" || true
-emulator -avd anthares_android -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on > /tmp/anthares-emulator.log 2>&1 &
+case "${ANTHARES_BOOT_VARIANT:-1}" in
+  1) extra=(-memory 1536 -cores 2) ;;
+  2) extra=(-memory 2048 -cores 2) ;;
+  3) extra=(-memory 3072 -cores 2) ;;
+  4) extra=(-memory 1536 -cores 4) ;;
+  5) extra=(-memory 2048 -cores 4) ;;
+  6) extra=(-gpu swiftshader_indirect -memory 1536) ;;
+  7) extra=(-gpu swiftshader_indirect -memory 2048) ;;
+  8) extra=(-gpu off -memory 1536) ;;
+  9) extra=(-gpu off -memory 2048) ;;
+  10) extra=(-no-boot-anim -memory 1536) ;;
+  11) extra=(-no-boot-anim -memory 2048) ;;
+  12) extra=(-no-snapshot -memory 1536) ;;
+  13) extra=(-no-snapshot -memory 2048) ;;
+  14) extra=(-netfast -memory 1536) ;;
+  15) extra=(-netfast -memory 2048) ;;
+  16) extra=(-camera-back none -memory 1536) ;;
+  17) extra=(-camera-front none -memory 1536) ;;
+  18) extra=(-no-metrics -memory 1536) ;;
+  19) extra=(-no-metrics -memory 2048) ;;
+  20) extra=(-memory 4096 -cores 2) ;;
+  *) echo 'ANTHARES_INVALID_VARIANT'; exit 9 ;;
+esac
+echo "ANTHARES_BOOT_VARIANT=${ANTHARES_BOOT_VARIANT:-1}"
+emulator -avd anthares_android -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on "${extra[@]}" > /tmp/anthares-emulator.log 2>&1 &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true' EXIT
 echo 'ANTHARES_ANDROID_WAIT_START=1'
