@@ -105,11 +105,24 @@ def google_entry(nodes,xml_text=""):
 
 
 def profile_tab(nodes,xml_text=""):
+    # Stable resource IDs are preferred. Alternate builds expose only the
+    # visible bottom-nav label; never tap a "Create your profile" heading.
     for node in nodes:
         if any((node.get("resource-id") or "").endswith("/"+rid) for rid in ("id_home_bottom_tab_me","ll_profile")) and bounds(node):
             x1, y1, x2, y2 = bounds(node)
             return (x1 + x2) // 2, (y1 + y2) // 2
-    return semantic_action(xml_text,"profile")
+    height=max((bounds(n)[3] for n in nodes if bounds(n)),default=0)
+    if height < 500:
+        return None
+    for node in nodes:
+        text=label(node).casefold().strip()
+        b=bounds(node)
+        if text not in ("profile","perfil","me","eu") or not b:
+            continue
+        x1,y1,x2,y2=b
+        if (y1+y2)//2 >= height*0.76:
+            return (x1+x2)//2,(y1+y2)//2
+    return None
 
 
 def main(argv):
