@@ -10,11 +10,11 @@ jobs:
   navigation:
     strategy:
       fail-fast: false
-      max-parallel: 40
+      max-parallel: 8
       matrix:
         variant: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40]
     runs-on: ubuntu-24.04
-    timeout-minutes: 9
+    timeout-minutes: 16
     env:
       KWAI_EXPECTED_ACCOUNT: lucasrosalem
     steps:
@@ -29,6 +29,7 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -camera-back none -camera-front none
           script: |
             set -eu
+            trap 'mkdir -p kwai-probe-evidence; adb exec-out screencap -p > kwai-probe-evidence/screen.png 2>/dev/null || true; adb shell uiautomator dump /sdcard/final.xml >/dev/null 2>&1 || true; adb pull /sdcard/final.xml kwai-probe-evidence/final.xml >/dev/null 2>&1 || true' EXIT
             curl -fsSL --retry 2 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
             echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
             mkdir -p kwai-vault
@@ -85,3 +86,12 @@ jobs:
             PY
         env:
           MATRIX_VARIANT: ${{ matrix.variant }}
+
+      - name: Save UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-login-probe-${{ matrix.variant }}
+          path: kwai-probe-evidence/
+          if-no-files-found: ignore
+          retention-days: 1
