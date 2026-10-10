@@ -1,0 +1,84 @@
+name: Kwai Web Auth Probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kwai-web-auth-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      KWAI_EXPECTED_ACCOUNT: lucasrosalem
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe Kwai web login surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v google-chrome || command -v chromium || command -v chromium-browser
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          "$CHROME" --version
+          rm -rf /tmp/kwai-web-profile /tmp/kwai-web.html /tmp/kwai-web.png
+          timeout 90 "$CHROME" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --window-size=1440,1000 \
+            --user-data-dir=/tmp/kwai-web-profile \
+            --dump-dom https://www.kwai.com/ > /tmp/kwai-web.html 2>/tmp/kwai-web.err || true
+          echo "KWAI_WEB_HTML_BYTES=$(wc -c </tmp/kwai-web.html 2>/dev/null || echo 0)"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,json
+          p=Path('/tmp/kwai-web.html')
+          s=p.read_text(errors='ignore') if p.exists() else ''
+          low=s.lower()
+          signals={
+            'kwai': 'kwai' in low,
+            'login': any(x in low for x in ['login','log in','sign in','entrar']),
+            'phone': any(x in low for x in ['phone','telefone','mobile']),
+            'email': 'email' in low or 'e-mail' in low,
+            'password': 'password' in low or 'senha' in low,
+            'qr': 'qr' in low,
+            'captcha': 'captcha' in low,
+          }
+          print('KWAI_WEB_SIGNALS='+json.dumps(signals,sort_keys=True))
+          texts=[]
+          for m in re.finditer(r'>([^<>]{1,100})<',s):
+            t=re.sub(r'\s+',' ',m.group(1)).strip()
+            if t and any(k in t.lower() for k in ['login','log in','sign in','entrar','phone','telefone','email','google','qr','code','código']):
+              texts.append(t)
+          print('KWAI_WEB_RELEVANT_TEXT='+json.dumps(texts[:80],ensure_ascii=False))
+          PY
+          timeout 90 "$CHROME" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --window-size=1440,1000 \
+            --user-data-dir=/tmp/kwai-web-profile-shot \
+            --screenshot=/tmp/kwai-web.png https://www.kwai.com/ >/tmp/kwai-shot.out 2>/tmp/kwai-shot.err || true
+          test -s /tmp/kwai-web.html
+          echo KWAI_WEB_PUBLIC_SURFACE_REACHED
+
+      - name: Upload public-surface diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-web-auth-probe
+          path: |
+            /tmp/kwai-web.html
+            /tmp/kwai-web.png
+            /tmp/kwai-web.err
+            /tmp/kwai-shot.err
+          if-no-files-found: ignore
+          retention-days: 1
