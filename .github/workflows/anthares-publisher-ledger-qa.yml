@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - 'anthares_publisher/**'
-      - 'tests/test_anthares_publisher_ledger.py'
+      - 'tests/test_anthares_publisher_*.py'
       - '.github/workflows/anthares-publisher-ledger-qa.yml'
   workflow_dispatch:
 permissions:
@@ -14,5 +14,5 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Validate publisher dedupe and evidence ledger
-        run: python3 -m unittest discover -s tests -p 'test_anthares_publisher_ledger.py' -v
+      - name: Validate publisher dedupe, durable state and identity contract
+        run: python3 -m unittest discover -s tests -p 'test_anthares_publisher_*.py' -v
