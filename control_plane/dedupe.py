@@ -52,22 +52,25 @@ class CutLedger:
     def seen_hash(self, media_sha256: str) -> bool:
         return any(row.media_sha256 == media_sha256 for row in self.rows)
 
-    def overlaps(self, source_id: str, start_ms: int, end_ms: int, *, threshold: float = 0.20) -> bool:
-        if not 0 < threshold <= 1:
+    def overlaps(self, source_id: str, start_ms: int, end_ms: int, *, threshold: float = 0.0) -> bool:
+        """Reject any repeated source interval by default; threshold may relax this explicitly."""
+        if not 0 <= threshold <= 1:
             raise ValueError("threshold_out_of_range")
-        return any(
-            row.source_id == source_id
-            and overlap_ratio(start_ms, end_ms, row.start_ms, row.end_ms) >= threshold
-            for row in self.rows
-        )
+        for row in self.rows:
+            if row.source_id != source_id:
+                continue
+            ratio = overlap_ratio(start_ms, end_ms, row.start_ms, row.end_ms)
+            if (threshold == 0 and ratio > 0) or (threshold > 0 and ratio >= threshold):
+                return True
+        return False
 
-    def eligible(self, cut: Cut, *, overlap_threshold: float = 0.20) -> bool:
+    def eligible(self, cut: Cut, *, overlap_threshold: float = 0.0) -> bool:
         cut.validate()
         return not self.seen_hash(cut.media_sha256) and not self.overlaps(
             cut.source_id, cut.start_ms, cut.end_ms, threshold=overlap_threshold
         )
 
-    def reserve(self, cut: Cut, *, overlap_threshold: float = 0.20) -> None:
+    def reserve(self, cut: Cut, *, overlap_threshold: float = 0.0) -> None:
         if not self.eligible(cut, overlap_threshold=overlap_threshold):
             raise RuntimeError("duplicate_cut")
         self.rows.append(cut)
