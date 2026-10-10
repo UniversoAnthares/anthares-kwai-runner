@@ -12,7 +12,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: kwai-mobile-auth-acceptance
+  group: kwai-mobile-auth-acceptance-${{ github.run_id }}
   cancel-in-progress: false
 
 env:
