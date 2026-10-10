@@ -1,0 +1,54 @@
+name: Kwai native Email live smoke (5 min)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/kwai-native-email-live-smoke.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-email:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate native selector scripts
+        run: |
+          set -euo pipefail
+          bash -n kwai_native_email_smoke.sh kwai_remote_android_login.sh
+          python3 -m unittest discover -s tests -p test_kwai_login_ui_locator.py -q
+      - name: Download validated Kwai vault
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 2 --connect-timeout 10 --max-time 40 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q /tmp/kwai-vault.zip -d kwai-vault
+          test -s kwai-vault/MANIFEST.tsv
+      - name: Enable KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Test native Email chooser on official Android app
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 150
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: bash kwai_native_email_smoke.sh
+      - name: Upload redacted status only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-native-email-status-${{ github.run_id }}
+          path: kwai-native-email-status.txt
+          if-no-files-found: ignore
+          retention-days: 3
