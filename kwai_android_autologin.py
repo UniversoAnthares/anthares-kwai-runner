@@ -44,6 +44,25 @@ def tap_matching(words):
 def editable_nodes(r):
     return [n for n in nodes(r) if n.attrib.get("class","").endswith("EditText") or n.attrib.get("editable","")=="true"]
 
+def password_fields(root):
+    # A generic email/phone EditText must NEVER receive the password.
+    return [n for n in editable_nodes(root) if
+        n.attrib.get("password","").lower()=="true" or
+        "password" in (" ".join((n.attrib.get("resource-id",""),n.attrib.get("content-desc",""),n.attrib.get("hint","")))).lower() or
+        "senha" in (" ".join((n.attrib.get("resource-id",""),n.attrib.get("content-desc",""),n.attrib.get("hint","")))).lower()]
+
+def fill_verified_password(value):
+    r=dump()
+    fields=password_fields(r)
+    if len(fields)!=1:
+        print("KWAI_PASSWORD_FIELD_NOT_VERIFIED")
+        return False
+    tap_node(fields[0])
+    safe=value.replace("%","%25").replace(" ","%s").replace("&","\\&").replace("(","\\(").replace(")","\\)")
+    adb("shell","input","text",safe)
+    time.sleep(.7)
+    return True
+
 def fill(value, index=0):
     r=dump()
     edits=editable_nodes(r)
@@ -305,10 +324,18 @@ if tap_matching(("get code","send code","obter código","enviar código")):
 # Move to password step if needed.
 tap_matching(("next","continue","continuar","avançar"))
 time.sleep(1)
-r=dump(); edits=editable_nodes(r)
-if len(edits)>=2:
-    if not fill(PASSWORD, 1): raise SystemExit(4)
-elif not fill(PASSWORD, 0):
+# Security boundary: never enter the password unless a password-specific
+# EditText is positively identified. A prior run appended it to the email field.
+r=dump()
+if not password_fields(r):
+    adb("shell","input","keyevent","KEYCODE_BACK")
+    time.sleep(.5)
+    tap_matching(("next","continue","continuar","avançar"))
+    time.sleep(1)
+if not password_fields(dump()):
+    print("KWAI_PASSWORD_STEP_NOT_REACHED")
+    raise SystemExit(6)
+if not fill_verified_password(PASSWORD):
     raise SystemExit(4)
 tap_matching(("log in","login","entrar","sign in","continue","continuar"))
 time.sleep(4)
