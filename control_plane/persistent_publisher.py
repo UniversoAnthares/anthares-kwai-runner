@@ -158,8 +158,12 @@ class PublishReceipt:
             if not getattr(receipt, field):
                 raise RuntimeError(f"receipt_{field}_missing")
         parsed = urlparse(receipt.post_url)
-        if parsed.scheme != "https" or not parsed.netloc:
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
             raise RuntimeError("receipt_post_url_invalid")
+        domain = PLATFORMS[platform]
+        hostname = parsed.hostname.lower().rstrip(".")
+        if hostname != domain and not hostname.endswith("." + domain):
+            raise RuntimeError("receipt_post_url_platform_mismatch")
         _parse_time(receipt.published_at)
         if not _SHA256_RE.fullmatch(receipt.content_sha256):
             raise RuntimeError("receipt_content_sha256_invalid")
