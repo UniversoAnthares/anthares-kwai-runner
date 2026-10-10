@@ -52,10 +52,22 @@ def select(ns):
         if tag(n) in ("profile","perfil","me","eu") and tap(n):return "profile_label"
     return None
 seen=set()
-for i in range(8):
+system_waits=0
+for i in range(18):
     try:ns=snap()
     except (subprocess.CalledProcessError,subprocess.TimeoutExpired,ET.ParseError):
         print("KWAI_RECOVERY_UI_UNAVAILABLE");raise SystemExit(3)
+    # Android SetupWizard may display an asynchronous "minute_maid"
+    # progress interstitial after the native first-run Continue action.
+    # Wait for its completion without interacting with security dialogs.
+    ids={(n.get("resource-id") or "").split("/")[-1] for n in ns}
+    if "minute_maid" in ids and ("progress_bar_layout" in ids or "sud_layout_template_content" in ids):
+        if system_waits >= 12:
+            print("KWAI_RECOVERY_SYSTEM_SETUP_TIMEOUT");break
+        system_waits+=1
+        print("KWAI_RECOVERY_SYSTEM_SETUP_WAIT="+str(system_waits))
+        time.sleep(5)
+        continue
     if email_form_visible(ns) or native_chooser_visible(ns):
         print("KWAI_RECOVERY_LOGIN_SURFACE_READY");raise SystemExit(0)
     # Fingerprint only resource IDs/classes, never personal data or screen text.
