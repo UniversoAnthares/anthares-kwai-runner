@@ -68,6 +68,20 @@ class KwaiNativeLoginSelectorTests(unittest.TestCase):
         xml = '<hierarchy><node class="android.view.View" bounds="[0,0][1080,2340]"/><node class="android.widget.TextView" text="Profile" bounds="[864,2123][1080,2274]"/></hierarchy>'
         self.assertEqual(selector.profile_tab(selector.parse(xml)),(972,2198))
 
+    def test_clickable_bottom_navigation_parent_is_preferred(self):
+        xml = ('<hierarchy><node bounds="[0,0][1080,2340]">'
+               '<node clickable="true" bounds="[810,2070][1080,2340]">'
+               '<node text="Profile" clickable="false" bounds="[900,2180][970,2220]"/>'
+               '</node></node></hierarchy>')
+        self.assertEqual(selector.profile_tab(selector.parse(xml),xml),(945,2205))
+
+    def test_never_follow_profile_parent_outside_bottom_band(self):
+        xml = ('<hierarchy><node bounds="[0,0][1080,2340]">'
+               '<node clickable="true" bounds="[0,0][1080,2340]">'
+               '<node text="Profile" bounds="[900,2180][970,2220]"/>'
+               '</node></node></hierarchy>')
+        self.assertEqual(selector.profile_tab(selector.parse(xml),xml),(935,2200))
+
     def test_create_profile_heading_not_bottom_navigation(self):
         xml = '<hierarchy><node class="android.view.View" bounds="[0,0][1080,2340]"/><node class="android.widget.TextView" text="Create your profile" bounds="[70,734][763,845]"/></hierarchy>'
         self.assertIsNone(selector.profile_tab(selector.parse(xml)))
