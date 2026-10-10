@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/kwai-native-login-targeted-diagnostic.yml
       - tools/kwai_login_ui_locator.py
+      - tools/kwai_login_surface_recovery.py
       - tools/kwai_ui_safe_diagnose.py
       - tools/kwai_android_causal_probe.py
       - kwai_native_email_smoke.sh
