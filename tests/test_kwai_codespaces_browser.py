@@ -25,7 +25,7 @@ class CodespacesBrowserTests(unittest.TestCase):
         self.assertEqual(config["forwardPorts"], [6080, 8765])
         self.assertNotIn(5900, config["forwardPorts"])
         self.assertNotIn(9222, config["forwardPorts"])
-        self.assertEqual(config["remoteEnv"]["KWAI_EXPECTED_HANDLE"], "universo.anthares")
+        self.assertEqual(config["remoteEnv"]["KWAI_EXPECTED_HANDLE"], "lucasrosalem")
         self.assertIn("kwai-install.sh", config["postCreateCommand"])
         self.assertIn("kwai-start.sh", config["postStartCommand"])
 
@@ -160,7 +160,7 @@ class CodespacesBrowserTests(unittest.TestCase):
             [sys.executable, str(GUARD)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            env={**os.environ, "KWAI_EXPECTED_HANDLE": "universo.anthares"},
+            env={**os.environ, "KWAI_EXPECTED_HANDLE": "lucasrosalem"},
         )
         try:
             ready = False
