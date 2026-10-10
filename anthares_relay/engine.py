@@ -35,7 +35,7 @@ class Relay:
   return {"id":row[0],"state":row[1]}
 
  def lease(self, job_id, identity_verified, seconds=180):
-  if not identity_verified: raise PermissionError("verified account identity required")
+  if identity_verified is not True: raise PermissionError("verified account identity required")
   if not 30 <= seconds <= 900: raise ValueError("lease outside safe bounds")
   token=uuid.uuid4().hex
   now=int(time.time())
@@ -65,9 +65,10 @@ class Relay:
    raise
 
  def verify(self, job_id, external_id, public_url, independent_check):
-  if not external_id or not public_url.startswith("https://"):
+  if not isinstance(external_id,str) or not external_id or not isinstance(public_url,str) or not public_url.startswith("https://"):
+
    raise ValueError("external evidence required")
-  if not independent_check(external_id, public_url):
+  if independent_check(external_id, public_url) is not True:
    raise ValueError("independent public verification failed")
   row=self.db.execute("SELECT state FROM jobs WHERE id=?",(job_id,)).fetchone()
   if not row or row[0]!="uncertain": raise ValueError("no submitted job to verify")
