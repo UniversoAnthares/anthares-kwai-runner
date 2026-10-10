@@ -61,7 +61,7 @@ def register_command(binary, config, token):
         "render-qa",
         "--run-untagged=false",
         "--locked=true",
-        "--access-level=not_protected",
+        "--access-level=ref_protected",
     ]
 
 
