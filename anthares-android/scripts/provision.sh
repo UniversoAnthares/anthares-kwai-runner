@@ -45,6 +45,26 @@ case "${ANTHARES_BOOT_VARIANT:-1}" in
   18) extra=(-no-metrics -memory 1536) ;;
   19) extra=(-no-metrics -memory 2048) ;;
   20) extra=(-memory 4096 -cores 2) ;;
+  21) extra=(-memory 1024 -cores 1) ;;
+  22) extra=(-memory 1536 -cores 1) ;;
+  23) extra=(-memory 2048 -cores 1) ;;
+  24) extra=(-memory 1024 -cores 2) ;;
+  25) extra=(-memory 2560 -cores 2) ;;
+  26) extra=(-memory 3584 -cores 2) ;;
+  27) extra=(-memory 1024 -cores 4) ;;
+  28) extra=(-memory 2560 -cores 4) ;;
+  29) extra=(-gpu host -memory 1536) ;;
+  30) extra=(-gpu software -memory 1536) ;;
+  31) extra=(-gpu swiftshader_indirect -cores 1) ;;
+  32) extra=(-gpu off -cores 1) ;;
+  33) extra=(-no-snapshot-load -memory 1536) ;;
+  34) extra=(-no-snapshot-save -memory 1536) ;;
+  35) extra=(-no-boot-anim -cores 1) ;;
+  36) extra=(-netfast -cores 1) ;;
+  37) extra=(-camera-back none -camera-front none) ;;
+  38) extra=(-no-metrics -cores 1) ;;
+  39) extra=(-memory 1792 -cores 2) ;;
+  40) extra=(-memory 2304 -cores 2) ;;
   *) echo 'ANTHARES_INVALID_VARIANT'; exit 9 ;;
 esac
 echo "ANTHARES_BOOT_VARIANT=${ANTHARES_BOOT_VARIANT:-1}"
