@@ -1,0 +1,19 @@
+name: Kwai Independent Session Engine
+on:
+  push:
+    branches: [feat/kwai-independent-session-engine]
+  pull_request:
+    paths: ['independent_session/**', '.github/workflows/kwai-independent-session-engine.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  crypto:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 -m pip install --disable-pip-version-check 'cryptography>=42,<47'
+          python3 -m unittest discover -s independent_session -p 'test_*.py' -v
+          python3 -m py_compile independent_session/engine.py
