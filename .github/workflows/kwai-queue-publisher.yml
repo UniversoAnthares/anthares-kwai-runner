@@ -80,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n kwai_publish.sh kwai_claim_job.sh kwai_queue_heartbeat.sh kwai_queue_state.sh kwai_queue_publish_runtime.sh android_executor_api30_runtime.sh kwai_run_next_job.sh
-          python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py kwai_auth_probe.py kwai_auth_ready_gate.py kwai_real_publish_promotion_gate.py kwai_auth_probe.py tools/kwai_login_surface_recovery.py tools/kwai_credential_login.py tools/kwai_android_login_entry.py
+          python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py kwai_auth_probe.py kwai_auth_ready_gate.py kwai_real_publish_promotion_gate.py kwai_auth_probe.py tools/kwai_login_surface_recovery.py tools/kwai_credential_login.py tools/kwai_android_login_entry.py tools/kwai_session_vault_client.py
 
       - name: Check Kwai session key
         env:
@@ -99,13 +99,19 @@ jobs:
           unzip -q kwai-vault.zip -d kwai-vault
           test -s kwai-vault/MANIFEST.tsv
 
-      - name: Restore encrypted Kwai session cache
-        uses: actions/cache/restore@v4
-        with:
-          path: kwai-session.enc
-          key: kwai-session-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            kwai-session-${{ runner.os }}-
+      - name: Restore encrypted Kwai session from private Cloudflare KV
+        shell: bash
+        run: |
+          set +e
+          python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
+          rc=$?
+          set -e
+          if [ "$rc" -eq 3 ]; then
+            echo 'KWAI_PRIVATE_VAULT_EMPTY_BOOTSTRAP=1'
+          elif [ "$rc" -ne 0 ]; then
+            echo 'KWAI_PRIVATE_VAULT_RESTORE_BLOCKED=1'
+            exit "$rc"
+          fi
 
       - name: Enable KVM
         run: |
@@ -134,12 +140,36 @@ jobs:
             bash kwai_session_state.sh restore >/tmp/kwai-session-restore.log 2>&1 || true
             bash kwai_queue_publish_runtime.sh
 
-      - name: Save encrypted Kwai session cache
-        if: success()
-        uses: actions/cache/save@v4
+      - name: Persist positively authenticated encrypted session to private Cloudflare KV
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -s kwai-session.enc ] || [ ! -s kwai-headless-status.txt ]; then
+            echo 'KWAI_PRIVATE_VAULT_SAVE_SKIPPED_NO_SESSION=1'
+            exit 0
+          fi
+          if ! grep -Eq '^KWAI_SESSION_AUTHENTICATED(_RESTORED)?
+      - name: Upload publication diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          path: kwai-session.enc
-          key: kwai-session-${{ runner.os }}-${{ github.run_id }}
+          name: kwai-queue-publisher-${{ github.run_id }}
+          path: |
+            kwai-publication.log
+            kwai-publish-status.txt
+            kwai-reconcile-status.txt
+            kwai-headless-status.txt
+          if-no-files-found: warn
+          retention-days: 3
+
+# Kwai first-run sign-in continuation recovery validated by login_recovery_syntax.
+ kwai-headless-status.txt ||
+             ! grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-headless-status.txt; then
+            echo 'KWAI_PRIVATE_VAULT_SAVE_SKIPPED_NO_IDENTITY_PROOF=1'
+            exit 0
+          fi
+          python3 tools/kwai_session_vault_client.py push --path kwai-session.enc
 
       - name: Upload publication diagnostics
         if: always()
