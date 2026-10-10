@@ -9,7 +9,7 @@ import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
-EXPECTED = os.getenv("KWAI_EXPECTED_HANDLE", "universo.anthares").lstrip("@").lower()
+EXPECTED = os.getenv("KWAI_EXPECTED_HANDLE", "lucasrosalem").lstrip("@").lower()
 CSRF = secrets.token_urlsafe(32)
 PORT = 8765
 PROFILE_URL = "https://www.kwai.com/@" + EXPECTED
