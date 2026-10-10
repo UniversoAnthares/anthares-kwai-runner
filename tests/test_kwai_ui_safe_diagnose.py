@@ -39,6 +39,14 @@ class KwaiSafeDiagnosisTests(unittest.TestCase):
         xml='<hierarchy><node class="android.view.View" bounds="[0,0][1080,2340]"/><node class="android.widget.TextView" text="Profile" bounds="[864,2123][1080,2274]"/></hierarchy>'
         self.assertTrue(mod.classify(xml)["profile_tab"])
 
+    def test_profile_geometry_diagnostic(self):
+        xml='<hierarchy><node class="android.view.View" bounds="[0,0][1080,2340]"/><node resource-id="com.kwai.video:id/profile_bottom" bounds="[864,2123][1080,2274]"/><node resource-id="com.kwai.video:id/profile_header" bounds="[70,50][700,150]"/><node resource-id="com.kwai.video:id/profile_hidden"/></hierarchy>'
+        result=mod.classify(xml)
+        self.assertEqual(result["profile_hint_bounded_count"],2)
+        self.assertEqual(result["profile_hint_bottom_count"],1)
+        self.assertEqual(result["profile_hint_unbounded_count"],1)
+        self.assertNotIn("profile_bottom",str(result))
+
     def test_system_error(self):
         self.assertTrue(mod.classify(ui(node("Kwai keeps stopping")))["system_error"])
     def test_no_false_form_from_email_label(self):
