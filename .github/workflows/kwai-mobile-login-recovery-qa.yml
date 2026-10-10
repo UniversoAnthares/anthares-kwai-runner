@@ -1,7 +1,7 @@
 name: Kwai Mobile Login Recovery Static QA
 on:
   push:
-    branches: ['feat/kwai-mobile-profile-route-diagnostics', 'feat/kwai-mobile-multiroute-login-recovery']
+    branches: ['feat/kwai-mobile-profile-route-diagnostics', 'feat/kwai-mobile-multiroute-login-recovery', 'feat/kwai-mobile-auth-challenge-classifier']
   pull_request:
     paths:
       - 'kwai_native_email_smoke.sh'
