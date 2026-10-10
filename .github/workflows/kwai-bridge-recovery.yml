@@ -2,9 +2,10 @@ name: Kwai bridge recovery orchestrator
 
 on:
   push:
-    branches: [bridge-recovery-orchestrator-20261010]
+    branches: [main]
     paths:
       - .github/workflows/kwai-bridge-recovery.yml
+      - .devcontainer/kwai-command-bridge-v2.py
   workflow_dispatch:
 
 permissions:
