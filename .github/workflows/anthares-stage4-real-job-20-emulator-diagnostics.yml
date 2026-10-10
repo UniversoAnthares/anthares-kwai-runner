@@ -1,0 +1,75 @@
+name: Stage 4 Real Job - 20 Emulator and ADB Diagnostics
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-stage4-real-job-20-emulator-diagnostics.yml'
+permissions:
+  contents: read
+jobs:
+  real-job-boot:
+    name: "Real-job emulator diagnostic ${{ matrix.test }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        test: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reproduce the real authentication job emulator boot path
+        shell: bash
+        env:
+          TEST: ${{ matrix.test }}
+        run: |
+          set -Eeuo pipefail
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export PATH="$SDK/platform-tools:$SDK/emulator:$SDK/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
+          export ANDROID_ADB_SERVER_PORT=$((5037 + TEST))
+          mkdir -p "$ANDROID_AVD_HOME"
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n "stage4-realjob-$TEST" -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force
+          sudo chmod 666 /dev/kvm
+          case "$TEST" in
+            1) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2048 -cores 2" ;;
+            2) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 3072 -cores 2" ;;
+            3) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 1536 -cores 2" ;;
+            4) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2048 -cores 4" ;;
+            5) EXTRA="-no-snapshot -gpu off -memory 2048 -cores 2" ;;
+            6) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2048 -cores 1" ;;
+            7) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2560 -cores 2" ;;
+            8) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 1792 -cores 2" ;;
+            9) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2304 -cores 2" ;;
+            10) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2048 -cores 3" ;;
+            11) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 3072 -cores 4" ;;
+            12) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 1536 -cores 1" ;;
+            13) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2560 -cores 4" ;;
+            14) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 1792 -cores 3" ;;
+            15) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2304 -cores 4" ;;
+            16) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2048 -cores 2 -no-boot-anim" ;;
+            17) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2048 -cores 2 -no-audio" ;;
+            18) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2048 -cores 2 -no-window" ;;
+            19) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 2560 -cores 3" ;;
+            20) EXTRA="-no-snapshot -gpu swiftshader_indirect -memory 3072 -cores 3" ;;
+          esac
+          # Split flags safely; variants contain only fixed emulator flags.
+          read -r -a OPTS <<< "$EXTRA"
+          "$SDK/emulator/emulator" -avd "stage4-realjob-$TEST" -no-window -no-audio -no-boot-anim -accel on "${OPTS[@]}" >/tmp/emulator.log 2>&1 &
+          EP=$!
+          trap 'kill "$EP" 2>/dev/null || true; adb kill-server >/dev/null 2>&1 || true' EXIT
+          adb start-server
+          timeout 120 adb wait-for-device
+          timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+          adb get-state | grep -qx device
+          adb shell getprop ro.build.version.sdk | grep -Eq '^[0-9]+$'
+          echo "REAL_JOB_EMULATOR_ADB_BOOT_TEST_$TEST=PASS"
+      - name: Capture real-job failure evidence
+        if: failure()
+        shell: bash
+        run: |
+          adb devices -l || true
+          adb get-state || true
+          tail -100 /tmp/emulator.log 2>/dev/null || true
