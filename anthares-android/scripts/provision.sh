@@ -13,7 +13,7 @@ if ! command -v sdkmanager >/dev/null; then
 fi
 yes | sdkmanager --licenses >/dev/null || true
 sdkmanager 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64'
-avdmanager create avd --force -n anthares_android -k 'system-images;android-35;google_apis;x86_64' --device pixel_5 --sdcard 512M </dev/null
+printf 'no\n' | avdmanager create avd --force -n anthares_android -k 'system-images;android-35;google_apis;x86_64' --device pixel_5 --sdcard 512M
 avd_rc=$?
 echo "ANTHARES_AVD_MANAGER_EXIT=$avd_rc"
 avdmanager list avd || true
