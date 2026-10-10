@@ -31,6 +31,23 @@ jobs:
         with:
           ref: anthares-state
           path: state-branch
+      - name: Prove state survived a different cloud execution
+        run: |
+          set -euo pipefail
+          python3 - "$GITHUB_WORKSPACE/state-branch/runtime/anthares-core-state.json" "$GITHUB_WORKSPACE/state-branch/runtime/anthares-core-health.json" <<'PY'
+          import json,os,sys
+          state=json.load(open(sys.argv[1],encoding='utf-8'))
+          health=json.load(open(sys.argv[2],encoding='utf-8'))
+          previous=str(health.get('run_id') or '')
+          current=str(os.environ['GITHUB_RUN_ID'])
+          assert previous.isdigit() and previous != current, (previous,current)
+          assert isinstance(state.get('tasks'),list) and state['tasks'], state
+          probe=[t for t in state['tasks'] if t.get('id')=='core-bootstrap-probe-v1']
+          assert len(probe)==1 and probe[0].get('status')=='done', probe
+          print('ANTHARES_CORE_CROSS_RUN_PERSISTENCE=PASS')
+          print('ANTHARES_CORE_PREVIOUS_RUN_ID='+previous)
+          print('ANTHARES_CORE_CURRENT_RUN_ID='+current)
+          PY
       - name: Self-heal Cloudflare v16 using throttled GitHub deploy
         id: watchdog
         working-directory: code
@@ -52,7 +69,7 @@ jobs:
           DB="$RUNNER_TEMP/anthares-core.sqlite3"
           python3 anthares_core/state_store.py import --state "$STATE" --db "$DB"
           python3 - "$DB" <<'PY'
-          import sqlite3,sys,time,json
+          import sqlite3,sys
           from anthares_core.queue import enqueue
           db=sqlite3.connect(sys.argv[1])
           exists=db.execute("SELECT 1 FROM tasks WHERE id='core-bootstrap-probe-v1'").fetchone()
@@ -83,15 +100,20 @@ jobs:
             git commit -m "state: supervisor run ${GITHUB_RUN_ID}"
             git push origin HEAD:anthares-state
           fi
-      - name: Assert bootstrap probe is complete
+      - name: Assert autonomous Core acceptance
         working-directory: code
         run: |
-          python3 - "$GITHUB_WORKSPACE/state-branch/runtime/anthares-core-state.json" <<'PY'
-          import json,sys
-          doc=json.load(open(sys.argv[1],encoding='utf-8'))
-          matches=[t for t in doc['tasks'] if t['id']=='core-bootstrap-probe-v1']
+          python3 - "$GITHUB_WORKSPACE/state-branch/runtime/anthares-core-state.json" "$GITHUB_WORKSPACE/state-branch/runtime/anthares-core-health.json" <<'PY'
+          import json,os,sys
+          state=json.load(open(sys.argv[1],encoding='utf-8'))
+          health=json.load(open(sys.argv[2],encoding='utf-8'))
+          matches=[t for t in state['tasks'] if t['id']=='core-bootstrap-probe-v1']
           assert len(matches)==1 and matches[0]['status']=='done', matches
           result=matches[0]['result'] or {}
           assert result.get('ok') is True and result.get('github_actions') is True, result
+          assert health.get('ok') is True, health
+          assert str(health.get('run_id'))==str(os.environ['GITHUB_RUN_ID']), health
+          assert health.get('executor')=='github-hosted', health
           print('AUTONOMOUS_CORE_SUPERVISOR=PASS')
+          print('ANTHARES_CORE_ACCEPTANCE=PASS')
           PY
