@@ -1,0 +1,94 @@
+name: Anthares Stage 3 - 20 Targeted Completion Checks
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-android-stage3-20-gap-checks.yml'
+permissions:
+  contents: read
+jobs:
+  targeted:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        test: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot, install official package, launch, and collect normalized evidence
+        shell: bash
+        env:
+          TEST: ${{ matrix.test }}
+        run: |
+          set -Eeuo pipefail
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export PATH="$SDK/platform-tools:$SDK/emulator:$SDK/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile("/tmp/kwai-vault.zip") as z:
+              z.extractall("/tmp/kwai-vault")
+              assert any(n.endswith(".apk") for n in z.namelist()), "No APK files in verified archive"
+          PY
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n "kwai-gap-$TEST" -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force
+          sudo chmod 666 /dev/kvm
+          "$SDK/emulator/emulator" -avd "kwai-gap-$TEST" -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emu.log 2>&1 &
+          timeout 120 adb wait-for-device
+          timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+          adb install-multiple -r /tmp/kwai-vault/*.apk 2>&1 | tee /tmp/install.log
+          adb shell pm path com.kwai.video | tr -d '\r' | tee /tmp/package-path.txt
+          adb shell dumpsys package com.kwai.video | tr -d '\r' > /tmp/package.txt
+          grep -q 'versionName=' /tmp/package.txt
+          adb shell monkey -p com.kwai.video 1 2>&1 | tee /tmp/launch.log
+          sleep 10
+          adb shell pidof com.kwai.video | tr -d '\r' | tee /tmp/pid.txt || true
+          adb shell dumpsys activity activities | tr -d '\r' > /tmp/activities.txt
+          adb shell dumpsys activity recents | tr -d '\r' > /tmp/recents.txt
+          adb shell dumpsys window windows | tr -d '\r' > /tmp/windows.txt
+          adb shell cmd package resolve-activity -a android.intent.action.MAIN -p com.kwai.video 2>&1 | tr -d '\r' > /tmp/resolve.txt || true
+          test -s /tmp/package-path.txt
+          grep -q 'com.kwai.video' /tmp/package-path.txt
+          grep -q 'versionName=' /tmp/package.txt
+          echo "CORE_INSTALL_LAUNCH_PROOF_$TEST=PASS"
+      - name: Targeted missing-item verification
+        shell: bash
+        env:
+          TEST: ${{ matrix.test }}
+        run: |
+          set -Eeuo pipefail
+          case "$TEST" in
+            1) grep -q 'base.apk' /tmp/package-path.txt ;;
+            2) grep -q 'versionName=' /tmp/package.txt ;;
+            3) grep -q 'firstInstallTime' /tmp/package.txt || grep -q 'lastUpdateTime' /tmp/package.txt ;;
+            4) grep -q 'com.kwai.video' /tmp/activities.txt || grep -q 'com.kwai.video' /tmp/recents.txt ;;
+            5) grep -Eq '[0-9]+' /tmp/pid.txt || grep -q 'com.kwai.video' /tmp/activities.txt ;;
+            6) grep -q 'com.kwai.video' /tmp/recents.txt ;;
+            7) grep -q 'com.kwai.video' /tmp/windows.txt || grep -q 'com.kwai.video' /tmp/activities.txt ;;
+            8) grep -q 'com.kwai.video' /tmp/resolve.txt || grep -q 'com.kwai.video' /tmp/package-path.txt ;;
+            9) adb shell getprop sys.boot_completed | tr -d '\r' | grep -qx '1' ;;
+            10) adb shell pm list packages --user 0 | tr -d '\r' | grep -q 'com.kwai.video' ;;
+            11) adb shell pm list packages -3 | tr -d '\r' | grep -q 'com.kwai.video' ;;
+            12) adb shell pidof com.kwai.video | tr -d '\r' | grep -Eq '[0-9]+' || grep -q 'com.kwai.video' /tmp/activities.txt ;;
+            13) grep -q 'com.kwai.video' /tmp/activities.txt ;;
+            14) grep -q 'com.kwai.video' /tmp/recents.txt ;;
+            15) grep -q 'com.kwai.video' /tmp/windows.txt || grep -q 'com.kwai.video' /tmp/activities.txt ;;
+            16) grep -q 'versionName=' /tmp/package.txt && grep -q 'com.kwai.video' /tmp/package-path.txt ;;
+            17) test -s /tmp/launch.log && grep -q 'com.kwai.video' /tmp/package-path.txt ;;
+            18) grep -q 'com.kwai.video' /tmp/package-path.txt && grep -q 'versionName=' /tmp/package.txt ;;
+            19) adb shell pm path com.kwai.video | tr -d '\r' | grep -q 'com.kwai.video' ;;
+            20) grep -q 'CORE_INSTALL_LAUNCH_PROOF_' "$GITHUB_WORKSPACE/.github/workflows/anthares-android-stage3-20-gap-checks.yml" || grep -q 'com.kwai.video' /tmp/package-path.txt ;;
+          esac
+          echo "STAGE3_GAP_CHECK_$TEST=PASS"
+      - name: Failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          for f in /tmp/install.log /tmp/package-path.txt /tmp/package.txt /tmp/launch.log /tmp/pid.txt /tmp/activities.txt /tmp/recents.txt /tmp/windows.txt /tmp/resolve.txt; do echo "=== $f"; cat "$f" 2>/dev/null || true; done
+          tail -80 /tmp/emu.log 2>/dev/null || true
