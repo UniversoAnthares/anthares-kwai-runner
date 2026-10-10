@@ -36,7 +36,7 @@ ALLOWED_IMAGES = {
 }
 
 CONTAINER_STAGES = {"build_script", "step_script", "after_script"}
-HOST_STAGE_TIMEOUT = 60
+HOST_STAGE_TIMEOUT = 600
 
 
 def _build_failure_code() -> int:
