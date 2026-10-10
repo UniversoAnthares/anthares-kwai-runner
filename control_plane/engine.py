@@ -7,7 +7,9 @@ from pathlib import Path
 TASKS = {
     "remote_identity": (),
     "persistent_session": ("remote_identity",),
-    "publish_proof": ("persistent_session",),
+    "tiktok_publish_proof": ("persistent_session",),
+    "kwai_publish_proof": ("persistent_session",),
+    "publish_proof": ("tiktok_publish_proof", "kwai_publish_proof"),
     "unattended_runner": ("publish_proof",),
 }
 VALID = {"pending", "blocked", "verified"}
