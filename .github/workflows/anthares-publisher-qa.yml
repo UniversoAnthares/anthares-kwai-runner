@@ -4,11 +4,13 @@ on:
     branches: [main]
     paths:
       - 'anthares_publisher/**'
+      - 'kwai_queue_state.sh'
       - 'tests/test_anthares_publisher_*.py'
       - '.github/workflows/anthares-publisher-qa.yml'
   pull_request:
     paths:
       - 'anthares_publisher/**'
+      - 'kwai_queue_state.sh'
       - 'tests/test_anthares_publisher_*.py'
       - '.github/workflows/anthares-publisher-qa.yml'
   workflow_dispatch:
@@ -21,4 +23,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate Anthares Publisher contracts
-        run: python3 -m unittest discover -s tests -p 'test_anthares_publisher_*.py' -v
+        run: |
+          bash -n kwai_queue_state.sh
+          python3 -m unittest discover -s tests -p 'test_anthares_publisher_*.py' -v
