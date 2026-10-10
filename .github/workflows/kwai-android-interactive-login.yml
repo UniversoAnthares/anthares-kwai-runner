@@ -1,10 +1,6 @@
 name: Kwai Android protected interactive login
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/kwai-android-interactive-login.yml
 permissions:
   contents: read
   statuses: write
