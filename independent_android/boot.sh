@@ -16,6 +16,7 @@ fi
 yes | sdkmanager --licenses >/dev/null 2>&1 || true
 sdkmanager --install "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;x86_64"
 printf 'no\n' | avdmanager create avd -n anthares_35 -k 'system-images;android-35;google_apis;x86_64' --force
+test -f "$HOME/.android/avd/anthares_35.avd/config.ini" || { echo ANTHARES_AVD_CREATION_FAILED=1; exit 8; }
 test -e /dev/kvm
 sudo chmod 666 /dev/kvm
 emulator -avd anthares_35 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -no-metrics >"$RUNNER_TEMP/anthares-emulator.log" 2>&1 &
