@@ -1,0 +1,21 @@
+name: Anthares Relay independent engine tests
+on:
+  push:
+    branches: [anthares-fixed-three-vault-proof-20261010]
+    paths:
+      - 'anthares_relay/**'
+      - 'tests/test_anthares_relay.py'
+      - '.github/workflows/anthares-relay-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  relay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile relay
+        run: python3 -m py_compile anthares_relay/engine.py
+      - name: Test relay
+        run: python3 -m unittest discover -s tests -p test_anthares_relay.py -v
