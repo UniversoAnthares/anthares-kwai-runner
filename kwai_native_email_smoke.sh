@@ -115,6 +115,9 @@ while [ "$SECONDS" -lt "$deadline" ]; do
     signal "BLOCKER=KWAI_RESOURCE_OVERLAY"
     break
   fi
+  if [ "$(state_flag "$state" system_error_unattributed)" = 1 ]; then
+    signal "ANDROID_ERROR_ATTRIBUTION=UNCONFIRMED"
+  fi
   if [ "$(state_flag "$state" system_error)" = 1 ]; then
     if [ "$app_error_restarts" -lt 1 ]; then
       app_error_restarts=$((app_error_restarts+1))
