@@ -3,28 +3,24 @@ set -Eeuo pipefail
 REPORT=anthares-native-executor-status.txt
 : > "$REPORT"
 log(){ echo "$*" | tee -a "$REPORT"; }
-
 export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
 export ANDROID_AVD_HOME="${RUNNER_TEMP:-/tmp}/anthares-avd"
 mkdir -p "$ANDROID_AVD_HOME"
 export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-
-log ANTHARES_EXECUTOR=V4
+log ANTHARES_EXECUTOR=V5
 log EXECUTOR_BACKEND=RAW_ANDROID_SDK
 
 test -e /dev/kvm || { log FAIL_NO_KVM; exit 20; }
 sudo chmod 666 /dev/kvm
-
 yes | sdkmanager --licenses >/dev/null 2>&1 || true
 sdkmanager --install "platform-tools" "emulator" "system-images;android-30;google_apis;x86_64" >/dev/null
-
 echo no | avdmanager create avd --force --name anthares_native_30 --package "system-images;android-30;google_apis;x86_64" --device "pixel_5" >/tmp/anthares-avdmanager.log 2>&1
-if ! emulator -list-avds | grep -qx anthares_native_30; then log FAIL_AVD_NOT_CREATED; cat /tmp/anthares-avdmanager.log || true; exit 22; fi
+emulator -list-avds | grep -qx anthares_native_30 || { log FAIL_AVD_NOT_CREATED; exit 22; }
 adb start-server >/dev/null 2>&1 || true
-nohup emulator -avd anthares_native_30 -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot-load -no-snapshot-save -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 > /tmp/anthares-emulator.log 2>&1 &
+nohup emulator -avd anthares_native_30 -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot-load -no-snapshot-save -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/anthares-emulator.log 2>&1 &
 EMU_PID=$!
 trap 'kill "$EMU_PID" 2>/dev/null || true' EXIT
-for _ in $(seq 1 60); do adb devices | grep -q '^emulator-5554[[:space:]]\+device$' && break; kill -0 "$EMU_PID" 2>/dev/null || { log FAIL_EMULATOR_PROCESS_EXITED; tail -80 /tmp/anthares-emulator.log || true; exit 23; }; sleep 2; done
+for _ in $(seq 1 60); do adb devices | grep -q '^emulator-5554[[:space:]]\+device$' && break; kill -0 "$EMU_PID" 2>/dev/null || { log FAIL_EMULATOR_PROCESS_EXITED; exit 23; }; sleep 2; done
 adb devices | grep -q '^emulator-5554[[:space:]]\+device$' || { log FAIL_ADB_DEVICE_TIMEOUT; exit 24; }
 for _ in $(seq 1 90); do [[ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] && break; sleep 2; done
 [[ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]] || { log FAIL_BOOT_TIMEOUT; exit 21; }
@@ -51,15 +47,16 @@ timeout 240 adb install-multiple -r "${APKS[@]}" >/tmp/anthares-install.log 2>&1
 adb shell pm path com.kwai.video >/dev/null || { log FAIL_PACKAGE_NOT_PRESENT; exit 33; }
 log KWAI_INSTALLED=1
 
-# Owned deterministic launch sequence: a cold launch followed by a fresh restart.
 adb shell am force-stop com.kwai.video >/dev/null 2>&1 || true
 adb shell monkey -p com.kwai.video 1 >/dev/null 2>&1 || true
 sleep 3
 adb shell am force-stop com.kwai.video >/dev/null 2>&1 || true
 adb shell monkey -p com.kwai.video 1 >/dev/null 2>&1 || true
 sleep 6
-if ! adb shell pidof com.kwai.video >/dev/null 2>&1; then log FAIL_KWAI_NOT_RUNNING_AFTER_LAUNCH; exit 34; fi
+adb shell pidof com.kwai.video >/dev/null 2>&1 || { log FAIL_KWAI_NOT_RUNNING_AFTER_LAUNCH; exit 34; }
 log KWAI_RUNNING=1
+# First route is package-manager-resolved and requires no screen traversal.
+python3 -m anthares_native.direct_auth_entry || true
 python3 -m anthares_native.surface_driver --attempts 18 --output anthares-native-surface.json
 python3 - <<'PY'
 import json
