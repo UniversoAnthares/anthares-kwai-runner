@@ -80,6 +80,14 @@ jobs:
                   print("PIPELINE",p.get("number"),pid,"WORKFLOWS",len(workflows))
                   for w in workflows:
                       print(json.dumps({k:w.get(k) for k in ("id","name","status","created_at","stopped_at","pipeline_id")},ensure_ascii=False))
+                      wid=w.get("id")
+                      if wid:
+                          jobreq=urllib.request.Request(f"https://circleci.com/api/v2/workflow/{wid}/job",headers={"Circle-Token":token,"Accept":"application/json"})
+                          with urllib.request.urlopen(jobreq,timeout=20) as jr:
+                              jobs=json.load(jr).get("items",[])
+                          print("WORKFLOW_JOBS",wid,len(jobs))
+                          for job in jobs:
+                              print("JOB",json.dumps({k:job.get(k) for k in ("name","status","job_number","started_at","stopped_at","type")},ensure_ascii=False))
           else:
               print(json.dumps({k:data.get(k) for k in ("id","number","state","created_at","updated_at")},ensure_ascii=False))
           PY
