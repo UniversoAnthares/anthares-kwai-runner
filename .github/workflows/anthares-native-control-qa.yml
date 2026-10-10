@@ -1,0 +1,26 @@
+name: Anthares Native independent controller QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - "anthares_native/**"
+      - "tests/test_anthares_native_*.py"
+      - ".github/workflows/anthares-native-control-qa.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-control:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate independent controller and evidence adapter
+        run: |
+          python3 -m unittest discover -s tests -p 'test_anthares_native_*.py' -v
+          python3 -m compileall -q anthares_native
+      - name: Verify fail-closed state
+        run: |
+          printf '%s\n' '{}' > /tmp/anthares-evidence.json
+          python3 -m anthares_native.controller --evidence /tmp/anthares-evidence.json --output /tmp/anthares-state.json
+          python3 -c 'import json; assert json.load(open("/tmp/anthares-state.json"))["stage"] == "needs_auth"'
