@@ -29,8 +29,20 @@ def connect(path):
 def enqueue(db, kind, payload, task_id=None):
     now = int(time.time())
     task_id = task_id or str(uuid.uuid4())
-    db.execute("INSERT OR IGNORE INTO tasks(id,kind,payload,status,created_at,updated_at) VALUES(?,?,?,'queued',?,?)",
-               (task_id, kind, json.dumps(payload, sort_keys=True), now, now))
+    serialized=json.dumps(payload,sort_keys=True,separators=(",",":"))
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        row=db.execute("SELECT kind,payload FROM tasks WHERE id=?",(task_id,)).fetchone()
+        if row:
+            if row[0]!=kind or json.loads(row[1])!=payload:
+                raise ValueError("idempotency key reused with different task payload")
+        else:
+            db.execute("INSERT INTO tasks(id,kind,payload,status,created_at,updated_at) VALUES(?,?,?,'queued',?,?)",
+                       (task_id,kind,serialized,now,now))
+        db.execute("COMMIT")
+    except BaseException:
+        db.execute("ROLLBACK")
+        raise
     return task_id
 
 def claim(db, worker, ttl=120):
