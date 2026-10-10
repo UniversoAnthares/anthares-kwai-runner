@@ -27,7 +27,7 @@ def tap_node(n):
 
 def strong_identity(text):
     expected=os.getenv("KWAI_EXPECTED_ACCOUNT","").strip().casefold()
-    return any(x in text for x in ("log out","logout","sair","sign out","my profile","meu perfil")) or (expected and expected in text)
+    return bool(expected and re.search(r"(?<![a-z0-9_.])@?"+re.escape(expected)+r"(?![a-z0-9_.])",text))
 
 def inspect_profile():
     for _ in range(10):
@@ -121,8 +121,8 @@ for _ in range(8):
 rc=inspect_create_surface()
 if rc==0:
     print("KWAI_AUTH_STATE=AUTHENTICATED_OPERATIONAL")
-    print("KWAI_AUTH_STATE=AUTHENTICATED_UI")
-    sys.exit(0)
+    print("KWAI_AUTH_STATE=UNKNOWN_CREATE_SURFACE_NOT_IDENTITY_PROOF")
+    sys.exit(11)
 if rc==10:
     print("KWAI_AUTH_STATE=AUTH_REQUIRED")
     sys.exit(10)
