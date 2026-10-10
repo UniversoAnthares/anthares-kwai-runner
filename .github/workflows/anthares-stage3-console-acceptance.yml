@@ -31,7 +31,9 @@ jobs:
         run: |
           set -Eeuo pipefail
           export ANDROID_HOME="$HOME/android-sdk" ANDROID_SDK_ROOT="$HOME/android-sdk"
-          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          ADB_BIN="$(find "$HOME" /usr/local/lib/android/sdk -type f -name adb -perm -u+x 2>/dev/null | head -1)"
+          test -n "$ADB_BIN" || { echo "ADB_BINARY_NOT_FOUND"; find "$HOME/android-sdk" -maxdepth 4 -type f | head -50; exit 127; }
+          export PATH="$(dirname "$ADB_BIN"):$(dirname "$ADB_BIN")/../emulator:$ANDROID_HOME/emulator:$PATH"
           adb wait-for-device
           timeout 90 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done'
           adb shell pm path com.kwai.video | grep -q '^package:'
