@@ -1,0 +1,53 @@
+name: Anthares Android Stage 3 - Kwai Install
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-android-stage3-kwai-install.yml'
+      - 'anthares-android/scripts/provision.sh'
+permissions:
+  contents: read
+jobs:
+  install-and-open:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Boot Android
+        env:
+          ANTHARES_BOOT_VARIANT: 25
+        run: |
+          set -Eeuo pipefail
+          bash anthares-android/scripts/provision.sh 2>&1 | tee /tmp/anthares-boot.log
+          grep -Fx 'ANTHARES_ANDROID_BOOT=PASS' /tmp/anthares-boot.log
+      - name: Verify official Kwai package
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          export ANDROID_HOME="$HOME/android-sdk"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          adb wait-for-device
+          if ! adb shell pm path com.kwai.video | grep -q '^package:'; then
+            adb shell am start -a android.intent.action.VIEW -d 'https://play.google.com/store/apps/details?id=com.kwai.video' || true
+            echo 'KWAI_INSTALL_BLOCKED=official Google Play installation requires a Play-Store-enabled image and authenticated interactive store session; no third-party APK will be installed'
+            exit 20
+          fi
+          adb shell monkey -p com.kwai.video 1
+          sleep 15
+          adb shell pidof com.kwai.video
+          adb shell dumpsys package com.kwai.video | grep -m1 'versionName='
+          echo 'ANTHARES_STAGE3_KWAI_INSTALL_OPEN=PASS'
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          export ANDROID_HOME="$HOME/android-sdk"
+          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          adb devices -l || true
+          adb shell pm path com.kwai.video || true
+          tail -80 /tmp/anthares-emulator.log 2>/dev/null || true
