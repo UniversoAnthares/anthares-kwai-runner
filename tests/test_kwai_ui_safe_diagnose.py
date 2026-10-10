@@ -31,6 +31,10 @@ class KwaiSafeDiagnosisTests(unittest.TestCase):
         self.assertNotIn("123",str(mod.classify(raw)))
     def test_profile_tab(self):
         self.assertTrue(mod.classify(ui(node("","com.kwai.video:id/id_home_bottom_tab_me")))["profile_tab"])
+    def test_alternate_profile_tab(self):
+        state=mod.classify(ui(node("","com.kwai.video:id/ll_profile")))
+        self.assertTrue(state["profile_tab"])
+        self.assertTrue(state["main_navigation"])
     def test_system_error(self):
         self.assertTrue(mod.classify(ui(node("Kwai keeps stopping")))["system_error"])
     def test_no_false_form_from_email_label(self):
