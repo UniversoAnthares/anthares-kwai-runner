@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   remote-login:
+    if: vars.KWAI_CREDENTIALS_ROTATED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
@@ -267,7 +268,7 @@ jobs:
           path: kwai-session.enc
           key: kwai-session-${{ runner.os }}-${{ github.run_id }}
 
-      - name: Upload diagnostics only
+      - name: Upload redacted diagnostic statuses only
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -275,21 +276,6 @@ jobs:
           path: |
             kwai-network-diagnostics.txt
             kwai-remote-status.txt
-            kwai-remote-ready.png
-            kwai-login-navigation.xml
-            kwai-login-detected.xml
-            kwai-login-detected.png
-            kwai-login-visual-before.png
-            kwai-login-visual-after.png
-            kwai-login-visual-before.xml
-            kwai-login-visual-after.xml
             kwai-login-focus.txt
-            /tmp/kwai-restored-auth-probe.log
-            /tmp/kwai-post-relaunch-auth-probe.log
-            /tmp/kwai-network-recovery.log
-            /tmp/kwai-offline-watchdog.log
-            /tmp/android-ui.log
-            /tmp/tunnel.log
-            /tmp/emulator.log
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 3
