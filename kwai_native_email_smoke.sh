@@ -107,6 +107,19 @@ while [ "$SECONDS" -lt "$deadline" ]; do
     fi
     signal "FAILURE_SIGNAL=EMAIL_TAP_NO_FORM"; exit 33
   fi
+  # A real native chooser can initially expose Google only; do not mistake
+  # absence of the email item for absence of the login screen. Do not tap the
+  # profile tab again after reaching the chooser.
+  if [ "$(state_flag "$state" login_chooser)" = 1 ]; then
+    signal "SUCCESS_SIGNAL=KWAI_NATIVE_LOGIN_CHOOSER_VISIBLE"
+    if [ "$(state_flag "$state" google_login_option)" = 1 ]; then
+      signal "AUTH_ROUTE_AVAILABLE=GOOGLE"
+    fi
+    if [ "$(state_flag "$state" email_login_option)" != 1 ]; then
+      signal "BLOCKER=EMAIL_ROUTE_NOT_EXPOSED_ON_INITIAL_CHOOSER"
+    fi
+    exit 0
+  fi
   if [ "$(state_flag "$state" verification_challenge)" = 1 ]; then
     signal "BLOCKER=ACCOUNT_OTP_VERIFICATION_REQUIRED"
     exit 36
