@@ -7,7 +7,7 @@
     }
   },
   "postCreateCommand": "bash .devcontainer/kwai-install.sh",
-  "postStartCommand": "bash .devcontainer/kwai-start.sh",
+  "postStartCommand": "python control_plane/persistence_probe.py kwai && bash .devcontainer/kwai-start.sh",
   "forwardPorts": [
     6080,
     8765
