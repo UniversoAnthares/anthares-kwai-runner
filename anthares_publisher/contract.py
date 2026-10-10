@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Safety contract joining Anthares Mobile identity proof to Publisher execution."""
 from dataclasses import dataclass
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, unquote
 
 @dataclass(frozen=True)
 class IdentityProof:
@@ -52,3 +52,10 @@ def validate_evidence(evidence: PublicationEvidence, platform: str, account: str
     if (parsed.scheme!="https" or parsed.username or parsed.password or
             port not in (None,443) or host not in domains.get(platform.casefold(),set())):
         raise ValueError("publication URL must use the target platform's HTTPS domain")
+    # A homepage or arbitrary platform link cannot establish publication.
+    # For direct post URLs the observed external ID must occur in the path.
+    path=unquote(parsed.path or "")
+    if (not path or path=="/" or
+            evidence.external_id.strip() not in path.split("/")):
+        raise ValueError("publication URL must identify the observed post")
+
