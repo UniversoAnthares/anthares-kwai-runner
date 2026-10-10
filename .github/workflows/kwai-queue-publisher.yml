@@ -169,4 +169,4 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
-# Kwai first-run recovery now includes bounded HOME and Kwai package relaunch after stalled Android setup.
+# Kwai first-run recovery logs only foreground Android package to diagnose setup stall.
