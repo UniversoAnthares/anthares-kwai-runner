@@ -33,6 +33,8 @@ jobs:
             set -eu
             adb wait-for-device
             test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+            adb devices -l
+            adb shell df -h /data
             bash kwai_vault_install.sh
             adb shell pm path com.kwai.video | grep -q package:
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
