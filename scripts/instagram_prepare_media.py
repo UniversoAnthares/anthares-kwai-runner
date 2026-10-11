@@ -20,7 +20,8 @@ PAUSE_KEEP = float(os.getenv("INSTAGRAM_PAUSE_KEEP_SECONDS", "0.16") or 0.16)
 FILLER_MIN = float(os.getenv("INSTAGRAM_FILLER_MIN_SECONDS", "0.45") or 0.45)
 MAX_REMOVAL_RATIO = float(os.getenv("INSTAGRAM_MAX_REMOVAL_RATIO", "0.30") or 0.30)
 MIN_FINAL_SECONDS = float(os.getenv("INSTAGRAM_MIN_FINAL_SECONDS", "30") or 30)
-FILLERS = {"ah", "ahn", "ha", "ham", "hum", "hmm", "eh", "e", "er", "uh", "uhm"}
+FILLERS = {"ah", "ahn", "ha", "ham", "hum", "hmm", "eh", "e", "er", "uh", "uhm", "ne", "tipo"}
+MIN_MICROCUT_SECONDS = float(os.getenv("INSTAGRAM_MIN_MICROCUT_SECONDS", "0.20"))
 
 
 def ffmpeg() -> str:
@@ -141,6 +142,13 @@ def repeated_phrase_removals(words: list[dict[str, Any]]) -> list[dict[str, Any]
                 i += 2 * size
             else:
                 i += 1
+    # Repeated discourse restart with a short hesitation between the two phrases.
+    for size in range(6, 1, -1):
+        for i in range(len(tokens) - 2 * size + 1):
+            left = tokens[i:i + size]
+            right = tokens[i + size:i + 2 * size]
+            if all(left) and left == right and words[i + size]["start"] - words[i + size - 1]["end"] <= 1.2:
+                out.append({"start": float(words[i]["start"]), "end": float(words[i + size - 1]["end"]), "reason": "restart"})
     return out
 
 
@@ -214,9 +222,9 @@ def microcut(path: Path, output: Path) -> dict[str, Any]:
         shutil.copy2(path, output)
     final = duration(output)
     if final < MIN_FINAL_SECONDS:
-        shutil.copy2(path, output)
-        final = original
-        removals = []
+        raise RuntimeError("microcut duration below minimum; source must be reselected")
+    if original - final < MIN_MICROCUT_SECONDS:
+        raise RuntimeError("no meaningful microcuts detected; refusing unedited clip")
     reasons: dict[str, int] = {}
     for row in removals:
         for reason in row.get("reasons", []):
@@ -236,7 +244,7 @@ def verticalize(path: Path, output: Path) -> dict[str, Any]:
     before = duration(path)
     w, h = dimensions(path)
     # Preserve existing 9:16 media exactly; future TikTok microcuts arrive here already vertical.
-    if h > 0 and abs((w / h) - (9 / 16)) < 0.025:
+    if h > 0 and abs((w / h) - (9 / 16)) < 0.001:
         shutil.copy2(path, output)
         return {"source_dimensions": [w, h], "output_dimensions": [w, h], "reencoded": False}
     subprocess.run(
@@ -282,20 +290,10 @@ def prepare() -> dict[str, Any]:
         return plan
     source_is_microcut = "-microcut" in source_url.casefold()
     micro = WORK_DIR / "microcut.mp4"
-    if source_is_microcut:
-        shutil.copy2(source, micro)
-        micro_meta = {
-            "original_duration": round(duration(source), 3),
-            "final_duration": round(duration(source), 3),
-            "removed_seconds": 0.0,
-            "removed_ratio": 0.0,
-            "intervals": 0,
-            "reasons": {},
-            "reused_existing_tiktok_microcut": True,
-        }
-    else:
-        micro_meta = microcut(source, micro)
-        micro_meta["reused_existing_tiktok_microcut"] = False
+    # A filename alone cannot prove that TikTok microcuts were applied.
+    micro_meta = microcut(source, micro)
+    micro_meta["reused_existing_tiktok_microcut"] = False
+    micro_meta["source_marked_microcut"] = source_is_microcut
 
     final = WORK_DIR / f"instagram-{row.get('id') or 'clip'}-microcut.mp4"
     layout_meta = verticalize(micro, final)
