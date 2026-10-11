@@ -9,6 +9,7 @@ on:
       - 'social_adapters/personal_browser.py'
       - 'social_adapters/threads_browser.py'
       - 'social_adapters/pinterest_browser.py'
+      - 'social_adapters/bilibili_browser.py'
       - 'social_adapters/pinterest_strategy.py'
       - 'social_adapters/community_browser.py'
       - 'social_adapters/publish_clip.py'
@@ -17,6 +18,7 @@ on:
       - 'tests/test_personal_social_browser.py'
       - 'tests/test_threads_browser.py'
       - 'tests/test_pinterest_browser.py'
+      - 'tests/test_bilibili_browser.py'
       - 'tests/test_community_browser.py'
       - '.github/workflows/personal-social-browser-contract.yml'
   pull_request:
@@ -24,6 +26,7 @@ on:
       - 'social_adapters/personal_browser.py'
       - 'social_adapters/threads_browser.py'
       - 'social_adapters/pinterest_browser.py'
+      - 'social_adapters/bilibili_browser.py'
       - 'social_adapters/pinterest_strategy.py'
       - 'social_adapters/community_browser.py'
       - 'social_adapters/publish_clip.py'
@@ -32,6 +35,7 @@ on:
       - 'tests/test_personal_social_browser.py'
       - 'tests/test_threads_browser.py'
       - 'tests/test_pinterest_browser.py'
+      - 'tests/test_bilibili_browser.py'
       - 'tests/test_community_browser.py'
       - '.github/workflows/personal-social-browser-contract.yml'
 
@@ -74,6 +78,7 @@ jobs:
           python social_adapters/personal_browser.py --platform facebook --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/facebook
           python social_adapters/threads_browser.py --platform threads --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/threads
           python social_adapters/pinterest_browser.py --account contract-test --video /tmp/anthares-clip.mp4 --caption 'Como escrever diálogos naturais' --destination-url https://anthares.us/como-escrever-dialogos --profile /tmp/anthares-profile/pinterest
+          python social_adapters/bilibili_browser.py --account 123456 --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/bilibili
           python social_adapters/community_browser.py --platform discord --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/discord --destination https://discord.com/channels/111/222
           python social_adapters/community_browser.py --platform linkedin --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/linkedin
           python social_adapters/community_browser.py --platform medium --account contract-test --video /tmp/anthares-clip.mp4 --caption test --title test --media-url https://example.com/video --profile /tmp/anthares-profile/medium
