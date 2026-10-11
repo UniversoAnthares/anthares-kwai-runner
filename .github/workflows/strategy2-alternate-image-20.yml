@@ -1,0 +1,43 @@
+name: Strategy 2 Alternate Android Image x20
+on:
+  push:
+    branches: [experiment/anthares-android-cloud-20261010]
+    paths:
+      - .github/workflows/strategy2-alternate-image-20.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  alternate_image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -accel on -memory 2048
+          script: |
+            set -eu
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+            adb shell getprop ro.build.version.sdk
+            adb shell getprop ro.product.cpu.abilist
+            bash kwai_vault_install.sh
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
+            sleep 8
+            adb shell pm path com.kwai.video
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity'
+            echo STRATEGY2_ALTERNATE_ANDROID_IMAGE=PASS
