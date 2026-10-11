@@ -8,10 +8,12 @@ from anthares_publisher.contract import PublicationEvidence, validate_evidence
 from anthares_publisher.ledger import confirm, connect, fail, mark_attempt, reserve
 from social_adapters.personal_browser import file_sha256, publish as publish_personal
 from social_adapters.threads_browser import publish as publish_threads
+from social_adapters.pinterest_browser import publish as publish_pinterest
 from social_adapters.community_browser import canonical_platform, publish as publish_community
 
 PERSONAL_PLATFORMS = frozenset(("x", "instagram", "facebook"))
 THREADS_PLATFORMS = frozenset(("threads",))
+PINTEREST_PLATFORMS = frozenset(("pinterest",))
 COMMUNITY_PLATFORMS = frozenset(("discord", "linkedin", "medium", "rumble", "odysee"))
 
 
@@ -28,6 +30,21 @@ def _publish(args, platform, commit):
         return publish_personal(**common, headless=not args.headed) if commit else publish_personal(**common)
     if platform in THREADS_PLATFORMS:
         return publish_threads(**common, headless=not args.headed) if commit else publish_threads(**common)
+    if platform in PINTEREST_PLATFORMS:
+        kwargs = dict(
+            video=common["video"],
+            caption=args.caption,
+            account=args.account,
+            profile=args.profile,
+            destination_url=args.destination_url,
+            title=args.title,
+            description=args.description,
+            board=args.board,
+            commit=commit,
+        )
+        if commit:
+            kwargs["headless"] = not args.headed
+        return publish_pinterest(**kwargs)
     if platform in COMMUNITY_PLATFORMS:
         return publish_community(
             **common,
@@ -100,15 +117,18 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument(
         "--platform",
-        choices=["x", "instagram", "facebook", "threads", "discord", "linkedin", "medium", "rumble", "odysee", "odyssey"],
+        choices=["x", "instagram", "facebook", "threads", "pinterest", "discord", "linkedin", "medium", "rumble", "odysee", "odyssey"],
         required=True,
     )
     p.add_argument("--account", required=True)
     p.add_argument("--video", required=True)
     p.add_argument("--caption", default="")
     p.add_argument("--title", default="")
+    p.add_argument("--description", default="", help="Pinterest SEO description override")
+    p.add_argument("--board", default="", help="Pinterest board override; otherwise selected strategically")
     p.add_argument("--profile", required=True)
     p.add_argument("--destination", default="", help="Discord channel URL; optional destination/profile URL for other adapters")
+    p.add_argument("--destination-url", default="", help="Direct related landing-page URL required for Pinterest")
     p.add_argument("--media-url", default="", help="Public media URL used by Medium embed/link publication")
     p.add_argument("--source-id", required=True)
     p.add_argument("--start-ms", type=int, required=True)
@@ -117,7 +137,7 @@ def main():
     p.add_argument("--commit", action="store_true")
     p.add_argument("--headed", action="store_true")
     args = p.parse_args()
-    print(json.dumps(run(args), sort_keys=True))
+    print(json.dumps(run(args), sort_keys=True, ensure_ascii=False))
 
 
 if __name__ == "__main__":
