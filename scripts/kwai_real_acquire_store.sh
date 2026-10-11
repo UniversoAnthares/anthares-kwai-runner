@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Real Kwai credential login recovery. This file is invoked with bash explicitly,
 # avoiding the Android emulator action's POSIX /usr/bin/sh wrapper.
-set -eu
+set -euo pipefail
 : "${KWAI_LOGIN:?KWAI_LOGIN secret is required}"
 : "${KWAI_PASSWORD:?KWAI_PASSWORD secret is required}"
 : > kwai-mobile-login.txt
