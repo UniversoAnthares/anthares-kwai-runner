@@ -14,7 +14,9 @@ while [ "$attempt" -le 3 ]; do
     break
   fi
   adb shell am force-stop com.kwai.video >/dev/null 2>&1 || true
-  sleep 3
+  adb shell svc wifi enable >/dev/null 2>&1 || true
+  adb shell svc data enable >/dev/null 2>&1 || true
+  sleep 4
   adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
   sleep 10
   python3 tools/kwai_login_surface_recovery.py || true
