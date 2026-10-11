@@ -27,10 +27,19 @@ def edits(ns): return [n for n in ns if (n.get('class') or '').endswith('EditTex
 def is_password(n): return n.get('password')=='true' or 'password' in txt(n) or 'senha' in txt(n)
 def clear_and_type(n,value):
     if not tap(n): return False
-    adb('shell','input','keyevent','KEYCODE_MOVE_END')
-    for _ in range(160): adb('shell','input','keyevent','KEYCODE_DEL')
-    safe=value.replace('%','%25').replace(' ','%s').replace('&','\\&').replace('(','\\(').replace(')','\\)')
-    adb('shell','input','text',safe);time.sleep(1);return True
+    # One ADB call replaces 160 separate delete processes that consumed the
+    # transition timeout before the Next button could be tapped.
+    adb('shell','input','keyevent','KEYCODE_MOVE_END','KEYCODE_CTRL_LEFT','KEYCODE_A','KEYCODE_DEL')
+    safe=value.replace('%','%25').replace(' ','%s').replace('&','\\\\&').replace('(','\\\\(').replace(')','\\\\)')
+    adb('shell','input','text',safe);time.sleep(.5);return True
+
+def resource_button(ns,ids):
+    wanted=set(ids)
+    for n in ns:
+        rid=(n.get('resource-id') or '').split('/')[-1]
+        if rid in wanted and bounds(n) and n.get('clickable')=='true':
+            return n
+    return None
 
 def exact_button(ns,words):
     pats={w.casefold() for w in words}
@@ -77,6 +86,8 @@ if email_field is None:
     raise SystemExit(3)
 if not clear_and_type(email_field,LOGIN): raise SystemExit(3)
 ns=snap(); b=exact_button(ns,('Next','Continue','Avançar','Continuar'))
+if b is None:
+    b=resource_button(ns,('btn_next','candidate_btn'))
 if b is not None:
     tap(b)
 else:
