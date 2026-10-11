@@ -1,0 +1,29 @@
+name: Stage 4 Own Identity Proof 20
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-stage4-owned-proof-20.yml'
+permissions:
+  contents: read
+jobs:
+  identity-evidence:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check actual authenticated identity evidence
+        env:
+          EXPECTED: lucasrosalem
+          CASE: ${{ matrix.case }}
+        run: |
+          set -euo pipefail
+          test "$EXPECTED" = lucasrosalem
+          test -f kwai_auth_probe.py
+          python3 -m py_compile kwai_auth_probe.py
+          echo "Identity evidence verification requires real authenticated UI; source checks are not identity proof."
+          exit 1
