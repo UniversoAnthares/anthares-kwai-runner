@@ -26,6 +26,7 @@ PLATFORM_DOMAINS = {
     "tiktok": {"tiktok.com", "www.tiktok.com", "vm.tiktok.com"},
     "x": {"x.com", "www.x.com", "twitter.com", "www.twitter.com"},
     "instagram": {"instagram.com", "www.instagram.com"},
+    "facebook": {"facebook.com", "www.facebook.com", "m.facebook.com"},
 }
 
 
@@ -78,3 +79,5 @@ def validate_evidence(evidence: PublicationEvidence, platform: str, account: str
         raise ValueError("X publication URL must be a status URL")
     if platform == "instagram" and not ({"reel", "p"} & set(path_parts)):
         raise ValueError("Instagram publication URL must identify a reel or post")
+    if platform == "facebook" and "reel" not in path_parts:
+        raise ValueError("Facebook publication URL must identify a reel")
