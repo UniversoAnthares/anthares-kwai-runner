@@ -28,6 +28,7 @@ PLATFORM_DOMAINS = {
     "instagram": {"instagram.com", "www.instagram.com"},
     "facebook": {"facebook.com", "www.facebook.com", "m.facebook.com"},
     "threads": {"threads.com", "www.threads.com", "threads.net", "www.threads.net"},
+    "bilibili": {"www.bilibili.com", "bilibili.com"},
     "pinterest": {"pinterest.com", "www.pinterest.com"},
     "discord": {"discord.com", "www.discord.com"},
     "linkedin": {"linkedin.com", "www.linkedin.com"},
@@ -112,6 +113,11 @@ def validate_evidence(evidence: PublicationEvidence, platform: str, account: str
             raise ValueError("Threads publication URL must identify a personal post")
         if normalize_account(path_parts[0]) != expected:
             raise ValueError("Threads publication URL must belong to the expected account")
+        return
+
+    if platform == "bilibili":
+        if len(path_parts) != 2 or path_parts[0] != "video" or path_parts[1] != external_id or not external_id.startswith("BV") or not external_id[2:].isalnum():
+            raise ValueError("Bilibili publication URL must identify a BV video")
         return
 
     if platform == "pinterest":
