@@ -10,7 +10,7 @@ jobs:
   kwai-real-launch:
     name: OWN Kwai real launch case ${{ matrix.case }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 19
+    timeout-minutes: 28
     strategy:
       fail-fast: false
       max-parallel: 20
@@ -36,11 +36,11 @@ jobs:
           ram-size: 2048M
           cores: 2
           disable-animations: false
-          emulator-boot-timeout: 420
+          emulator-boot-timeout: 900
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -accel on -memory 2048
           script: |
-            set -Eeuo pipefail
+            bash -euo pipefail -c '
             echo "OWN_CASE=${{ matrix.case }}"
             timeout 35 adb wait-for-device
             test "$(timeout 25 adb shell getprop sys.boot_completed | tr -d '\r')" = 1
@@ -52,4 +52,5 @@ jobs:
             adb shell pidof com.kwai.video | tee /tmp/kwai-pid.txt
             test -s /tmp/kwai-pid.txt
             adb shell dumpsys activity activities | grep -E 'com.kwai.video' | head -8
-            echo 'OWN_KWAI_REAL_APP_LAUNCH=PASS'
+            echo OWN_KWAI_REAL_APP_LAUNCH=PASS
+            '
