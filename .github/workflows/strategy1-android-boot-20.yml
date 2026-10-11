@@ -1,0 +1,48 @@
+name: Strategy 1 - Android boot and Kwai launch x20
+
+on:
+  push:
+    branches: [experiment/anthares-android-cloud-20261010]
+    paths: ['.github/workflows/strategy1-android-boot-20.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boot_and_launch:
+    name: strategy1-boot-launch-${{ matrix.n }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Android boot and launch the already validated official package
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -accel on -memory 2048
+          script: |
+            set -eu
+            adb wait-for-device
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+            state="$(adb shell dumpsys window | grep -E 'mDreamingLockscreen|isStatusBarKeyguard|mCurrentFocus' | tail -5 || true)"
+            printf '%s\n' "$state" | sed -E 's/[[:space:]]+/ /g'
+            bash kwai_vault_install.sh
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
+            sleep 5
+            adb shell pm path com.kwai.video
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity'
+            echo STRATEGY1_ANDROID_BOOT_AND_KWAI_LAUNCH=PASS
