@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Browser UI publisher for personal X and Instagram accounts.
+"""Browser UI publisher for personal X, Instagram and Facebook accounts.
 
 The adapter behaves like an ordinary signed-in user through the web UI. It is
 fail-closed around identity, authentication challenges and publication evidence:
@@ -55,31 +55,47 @@ def external_id_from_url(platform, url):
             if marker in parts:
                 idx = parts.index(marker)
                 return parts[idx + 1] if idx + 1 < len(parts) else ""
+    if platform == "facebook" and "reel" in parts:
+        idx = parts.index("reel")
+        return parts[idx + 1] if idx + 1 < len(parts) else ""
     return ""
 
 
 def canonical_post_url(platform, account, href):
     if not href:
         return ""
+    bases = {
+        "x": "https://x.com",
+        "instagram": "https://www.instagram.com",
+        "facebook": "https://www.facebook.com",
+    }
     if href.startswith("/"):
-        href = urljoin("https://x.com" if platform == "x" else "https://www.instagram.com", href)
+        href = urljoin(bases.get(platform, ""), href)
     parsed = urlsplit(href)
     if parsed.scheme != "https":
         return ""
+    host = (parsed.hostname or "").lower()
     if platform == "x":
-        if (parsed.hostname or "").lower() not in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}:
+        if host not in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}:
             return ""
         match = re.search(r"/status/([0-9]+)", parsed.path)
         if not match:
             return ""
         return f"https://x.com/{normalize_account(account)}/status/{match.group(1)}"
     if platform == "instagram":
-        if (parsed.hostname or "").lower() not in {"instagram.com", "www.instagram.com"}:
+        if host not in {"instagram.com", "www.instagram.com"}:
             return ""
         match = re.search(r"/(reel|p)/([^/?#]+)/?", parsed.path)
         if not match:
             return ""
         return f"https://www.instagram.com/{match.group(1)}/{match.group(2)}/"
+    if platform == "facebook":
+        if host not in {"facebook.com", "www.facebook.com", "m.facebook.com"}:
+            return ""
+        match = re.search(r"/reel/([0-9]+)", parsed.path)
+        if not match:
+            return ""
+        return f"https://www.facebook.com/reel/{match.group(1)}"
     return ""
 
 
@@ -93,16 +109,26 @@ def _first_visible(locators, timeout_ms=1200):
     return None
 
 
+def _body_text(page):
+    try:
+        return (page.locator("body").inner_text(timeout=3000) or "").lower()
+    except Exception:
+        return ""
+
+
 def _auth_wall(page, platform):
     url = page.url.lower()
     if platform == "x" and ("/i/flow/login" in url or "/login" in url):
         return True
-    if platform == "instagram" and "/accounts/login" in url:
+    if platform == "instagram" and ("/accounts/login" in url or "/challenge" in url):
         return True
-    text = (page.locator("body").inner_text(timeout=3000) or "").lower()
+    if platform == "facebook" and any(marker in url for marker in ("/login", "/checkpoint", "/recover")):
+        return True
+    text = _body_text(page)
     needles = (
         "log in to x", "sign in to x", "entrar no x",
         "log in to instagram", "entrar no instagram",
+        "log into facebook", "log in to facebook", "entrar no facebook",
         "challenge", "verify your identity", "confirme sua identidade",
     )
     return any(n in text for n in needles)
@@ -110,7 +136,13 @@ def _auth_wall(page, platform):
 
 def _profile_url(platform, account):
     account = normalize_account(account)
-    return f"https://x.com/{account}" if platform == "x" else f"https://www.instagram.com/{account}/"
+    if platform == "x":
+        return f"https://x.com/{account}"
+    if platform == "instagram":
+        return f"https://www.instagram.com/{account}/"
+    if platform == "facebook":
+        return f"https://www.facebook.com/{account}/"
+    raise ValueError("unsupported platform")
 
 
 def _ensure_expected_account(page, platform, account):
@@ -118,30 +150,34 @@ def _ensure_expected_account(page, platform, account):
     page.wait_for_timeout(1800)
     if _auth_wall(page, platform):
         raise AuthenticationRequired(f"{platform}: login/session challenge detected")
-    if platform == "x":
-        own_controls = [
-            page.get_by_role("link", name=re.compile(r"Edit profile|Editar perfil", re.I)),
-            page.get_by_role("button", name=re.compile(r"Edit profile|Editar perfil", re.I)),
-        ]
-    else:
-        own_controls = [
-            page.get_by_role("link", name=re.compile(r"Edit profile|Editar perfil", re.I)),
-            page.get_by_role("button", name=re.compile(r"Edit profile|Editar perfil", re.I)),
-        ]
+    labels = r"Edit profile|Editar perfil"
+    if platform == "facebook":
+        labels = r"Edit profile|Editar perfil|Edit details|Editar detalhes"
+    own_controls = [
+        page.get_by_role("link", name=re.compile(labels, re.I)),
+        page.get_by_role("button", name=re.compile(labels, re.I)),
+    ]
     if _first_visible(own_controls, timeout_ms=1800) is None:
-        raise IdentityMismatch(f"{platform}: expected account @{normalize_account(account)} is not verified as the signed-in owner")
+        raise IdentityMismatch(
+            f"{platform}: expected account @{normalize_account(account)} is not verified as the signed-in owner"
+        )
 
 
 def _latest_post_url(page, platform, account):
-    page.goto(_profile_url(platform, account), wait_until="domcontentloaded", timeout=45000)
+    target = _profile_url(platform, account)
+    if platform == "facebook":
+        target = target.rstrip("/") + "/reels/"
+    page.goto(target, wait_until="domcontentloaded", timeout=45000)
     page.wait_for_timeout(1500)
     if _auth_wall(page, platform):
         raise AuthenticationRequired(f"{platform}: authentication required while checking profile")
     if platform == "x":
         links = page.locator('a[href*="/status/"]')
-    else:
+    elif platform == "instagram":
         links = page.locator('a[href*="/reel/"], a[href*="/p/"]')
-    count = min(links.count(), 30)
+    else:
+        links = page.locator('a[href*="/reel/"]')
+    count = min(links.count(), 40)
     for i in range(count):
         href = links.nth(i).get_attribute("href")
         url = canonical_post_url(platform, account, href or "")
@@ -229,7 +265,69 @@ def _publish_instagram(page, video, caption):
     share.click()
 
 
-def _wait_for_new_post(page, platform, account, previous_url, timeout_seconds=90):
+def _facebook_caption_box(page):
+    return _first_visible([
+        page.get_by_role("textbox", name=re.compile(r"Describe your reel|Descrição|Descreva|Say something|Diga algo", re.I)),
+        page.locator('textarea[aria-label*="reel" i]'),
+        page.locator('textarea'),
+        page.locator('[contenteditable="true"][role="textbox"]'),
+    ], timeout_ms=1200)
+
+
+def _publish_facebook(page, video, caption):
+    page.goto("https://www.facebook.com/reels/create/", wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(1500)
+    if _auth_wall(page, "facebook"):
+        raise AuthenticationRequired("facebook: Reel creator requires authentication")
+
+    file_input = page.locator('input[type="file"]').first
+    try:
+        file_input.wait_for(state="attached", timeout=5000)
+    except Exception as exc:
+        raise BrowserPublishError("facebook: Reel upload input not found") from exc
+    file_input.set_input_files(str(video))
+    page.wait_for_timeout(2200)
+
+    caption_box = _facebook_caption_box(page)
+    for _ in range(3):
+        if caption_box is not None:
+            break
+        nxt = _first_visible([
+            page.get_by_role("button", name=re.compile(r"^Next$|^Avançar$|^Próximo$", re.I)),
+            page.get_by_text(re.compile(r"^Next$|^Avançar$|^Próximo$", re.I)),
+        ], timeout_ms=3500)
+        if nxt is None:
+            break
+        nxt.click()
+        page.wait_for_timeout(1200)
+        if _auth_wall(page, "facebook"):
+            raise AuthenticationRequired("facebook: authentication challenge during Reel creation")
+        caption_box = _facebook_caption_box(page)
+
+    if caption_box is None:
+        raise BrowserPublishError("facebook: Reel description editor not found")
+    caption_box.fill(caption)
+
+    publish_button = _first_visible([
+        page.get_by_role("button", name=re.compile(r"^Publish$|^Publicar$|^Share$|^Compartilhar$", re.I)),
+        page.get_by_text(re.compile(r"^Publish$|^Publicar$|^Share$|^Compartilhar$", re.I)),
+    ], timeout_ms=4000)
+    if publish_button is None:
+        raise BrowserPublishError("facebook: Reel publish control not found")
+
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        try:
+            if publish_button.is_enabled():
+                publish_button.click()
+                return
+        except Exception:
+            pass
+        page.wait_for_timeout(900)
+    raise BrowserPublishError("facebook: publish control never became enabled after upload")
+
+
+def _wait_for_new_post(page, platform, account, previous_url, timeout_seconds=120):
     deadline = time.time() + timeout_seconds
     last = ""
     while time.time() < deadline:
@@ -244,12 +342,14 @@ def _wait_for_new_post(page, platform, account, previous_url, timeout_seconds=90
         except Exception:
             pass
         page.wait_for_timeout(2500)
-    raise PublicationUnverified(f"{platform}: submit completed but no new public post was independently observed; last={last!r}")
+    raise PublicationUnverified(
+        f"{platform}: submit completed but no new public post was independently observed; last={last!r}"
+    )
 
 
 def publish(platform, video, caption, account, profile, commit=False, headless=True):
     platform = platform.casefold()
-    if platform not in ("x", "instagram"):
+    if platform not in ("x", "instagram", "facebook"):
         raise ValueError("unsupported platform")
     video = Path(video).resolve()
     profile = Path(profile).resolve()
@@ -280,10 +380,12 @@ def publish(platform, video, caption, account, profile, commit=False, headless=T
         try:
             _ensure_expected_account(page, platform, account)
             previous_url = _latest_post_url(page, platform, account)
-            if platform == "x":
-                _publish_x(page, video, caption)
-            else:
-                _publish_instagram(page, video, caption)
+            publishers = {
+                "x": _publish_x,
+                "instagram": _publish_instagram,
+                "facebook": _publish_facebook,
+            }
+            publishers[platform](page, video, caption)
             evidence = _wait_for_new_post(page, platform, account, previous_url)
             return {
                 **summary,
@@ -301,7 +403,7 @@ def publish(platform, video, caption, account, profile, commit=False, headless=T
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--platform", choices=["x", "instagram"], required=True)
+    parser.add_argument("--platform", choices=["x", "instagram", "facebook"], required=True)
     parser.add_argument("--video", required=True)
     parser.add_argument("--caption", required=True)
     parser.add_argument("--account", required=True)
