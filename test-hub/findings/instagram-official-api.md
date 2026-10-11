@@ -1,7 +1,7 @@
 # Instagram official API
 
-- UTC: 2026-10-11T21:27:10Z
-- Status: PARTIAL
+- UTC: 2026-10-11T21:30:30Z
+- Status: BLOCKED-RUNTIME-CREDENTIALS
 - Area: official Instagram content publishing
 
 ## Evidence
@@ -12,9 +12,15 @@ Added `.github/workflows/instagram-official-publish.yml` with `workflow_dispatch
 
 Added `test-hub/test_instagram_publish.py` covering runtime quota parsing, container creation parameters, processing status, exhausted-quota protection, publish flow, and token transport through the Authorization header.
 
+PR #95 was squash-merged into `main` as `0d9898b609ccd9776f080fa8470aa56113b2bcc0`.
+
+GitHub Actions run `38176495445` completed successfully. `py_compile` passed and all Instagram unit tests passed.
+
+Main run `38176566522` completed the unit-test stage successfully. Its credential probe found both `INSTAGRAM_USER_ID` and `INSTAGRAM_ACCESS_TOKEN` absent from GitHub Actions secrets, so the live quota query was skipped. No Instagram content was published during validation.
+
 ## Security
 
-The access token is never emitted by the publisher and is sent through the Authorization header. Tests use synthetic credentials only.
+The access token is never emitted by the publisher and is sent through the Authorization header. Tests use synthetic credentials only. Live publishing is restricted to explicit `workflow_dispatch` or `repository_dispatch` execution.
 
 ## Required runtime configuration
 
@@ -25,4 +31,4 @@ The access token is never emitted by the publisher and is sent through the Autho
 
 ## Next validation
 
-Run the pull-request unit-test workflow. After the two Instagram secrets exist on the repository, dispatch `quota` to verify the account's live `quota_total`, then perform one controlled `publish-reel` with a public MP4 URL.
+Configure the two Instagram secrets, dispatch `quota` to read the account's live `quota_total`, then perform one controlled `publish-reel` with a public MP4 URL.
