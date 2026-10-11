@@ -56,12 +56,12 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_2
-          ram-size: 3072M
+          ram-size: 2048M
           cores: 2
           disable-animations: false
           emulator-boot-timeout: 900
           force-avd-creation: true
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none
+          emulator-options: -no-snapshot -no-window -gpu off -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none
           script: |
             set -eu
             bash kwai_vault_install.sh
