@@ -177,11 +177,28 @@ jobs:
           adb shell am force-stop com.kwai.video || true
           adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
           sleep 8
-          if [ "$KWAI_CREDENTIALS_MISSING" = 0 ]; then
-            python3 kwai_android_autologin.py
-            python3 tools/kwai_credential_login.py
+          echo 'STAGE4_STRATEGY=PROFILE_FIRST_NO_BLIND_AUTOLOGIN' | tee -a "$GITHUB_STEP_SUMMARY"
+          set +e
+          KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" timeout 110 python3 kwai_auth_probe.py > /tmp/stage4-pre-probe.txt 2>&1
+          PROBE_RC=$?
+          set -e
+          grep '^KWAI_AUTH_STATE=' /tmp/stage4-pre-probe.txt | tail -3 || true
+          if [ "$PROBE_RC" -eq 0 ] && grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/stage4-pre-probe.txt; then
+            echo 'STAGE4_AUTH=PASS_FROM_RESTORED_SESSION' | tee -a "$GITHUB_STEP_SUMMARY"
+          elif [ "$KWAI_CREDENTIALS_MISSING" = 0 ]; then
+            echo 'STAGE4_AUTH=LOGIN_ROUTE_RECOVERY' | tee -a "$GITHUB_STEP_SUMMARY"
+            set +e
+            timeout 110 python3 tools/kwai_credential_login.py > /tmp/stage4-login.txt 2>&1
+            LOGIN_RC=$?
+            set -e
+            echo "STAGE4_LOGIN_EXIT=$LOGIN_RC" | tee -a "$GITHUB_STEP_SUMMARY"
+            grep '^KWAI_' /tmp/stage4-login.txt | tail -12 || true
+            test "$LOGIN_RC" -eq 0
+            timeout 110 python3 kwai_auth_probe.py | tee /tmp/stage4-auth-proof.txt
+            grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/stage4-auth-proof.txt
+            grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/stage4-auth-proof.txt
+          else
+            echo 'STAGE4_AUTH=BLOCKED_NO_RESTORED_IDENTITY_OR_CREDENTIALS' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 24
           fi
-          KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee /tmp/stage4-auth-proof.txt
-          grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/stage4-auth-proof.txt
-          grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/stage4-auth-proof.txt
           echo STAGE4_IDENTITY_AUTHENTICATION=PASS
