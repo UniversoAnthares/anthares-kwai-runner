@@ -1,4 +1,4 @@
-name: Kwai Real acquire_and_store x50
+name: Strategy 3 - Real acquire_and_store x20
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
       - 'tools/kwai_credential_login.py'
 
 concurrency:
-  group: kwai-real-acquire-store-${{ github.ref }}
+  group: strategy3-real-acquire-store-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -24,9 +24,9 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
-      max-parallel: 50
+      max-parallel: 20
       matrix:
-        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     env:
       KWAI_EXPECTED_ACCOUNT: lucasrosalem
       KWAI_SESSION_FILE: kwai-session.enc
