@@ -1,0 +1,36 @@
+name: Anthares S3 Persistent Android Executor Feasibility x20
+on:
+  push:
+    paths:
+      - '.github/workflows/anthares-strategy-persistent-20.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    name: persistent proof ${{ matrix.case }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    env:
+      ANDROID_EXECUTOR_URL: ${{ vars.ANDROID_EXECUTOR_URL }}
+    steps:
+      - name: Verify actual feasibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GITHUB_RUN_ID:-}" || exit 31
+          echo "RUN_ID=$GITHUB_RUN_ID"
+          echo "HOSTED_RUNNER_EPHEMERAL=YES"
+          if [ -n "${ANDROID_EXECUTOR_URL:-}" ]; then
+            curl -fsS --connect-timeout 5 --max-time 15 "${ANDROID_EXECUTOR_URL%/}/health" > health.json
+            python3 -c 'import json; x=json.load(open("health.json")); assert x.get("android_ready") is True and x.get("persistent") is True'
+            echo PERSISTENT_ANDROID_EXECUTOR=VERIFIED
+          else
+            echo PERSISTENT_ANDROID_EXECUTOR=NOT_CONFIGURED
+            exit 32
+          fi
