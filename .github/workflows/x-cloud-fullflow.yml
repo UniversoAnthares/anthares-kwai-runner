@@ -1,0 +1,194 @@
+name: X Cloud Full Flow
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.x-cloud-fullflow-trigger'
+  issue_comment:
+    types: [created]
+  schedule:
+    - cron: '7 * * * *'
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  X_DAILY_TARGET: '10'
+  X_SOURCE_CHANNEL: 'https://www.youtube.com/@UniversoAnthares/streams'
+  X_SCAN_START: '600'
+  X_SCAN_SECONDS: '300'
+  X_WHISPER_MODEL: 'base'
+  PYTHONUTF8: '1'
+
+concurrency:
+  group: x-cloud-fullflow
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gate at 10 confirmed X posts and one in-flight item
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          repo=os.environ['GITHUB_REPOSITORY']; tok=os.environ['GH_TOKEN']; tz=ZoneInfo('America/Campo_Grande'); today=datetime.now(tz).date()
+          req=urllib.request.Request(f'https://api.github.com/repos/{repo}/issues?state=all&per_page=100&sort=updated&direction=desc',headers={'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json','User-Agent':'anthares-x'})
+          with urllib.request.urlopen(req,timeout=30) as r: rows=json.load(r)
+          confirmed=0; pending=0
+          for x in rows:
+            if 'pull_request' in x: continue
+            title=str(x.get('title') or '')
+            if x.get('state')=='open' and (title.startswith('[X-MICROCUT]') or title.startswith('[X-PUBLISH]')): pending+=1
+            if title.startswith('[X-PUBLISH]') and x.get('closed_at'):
+              try: dt=datetime.fromisoformat(x['closed_at'].replace('Z','+00:00')).astimezone(tz)
+              except Exception: continue
+              if dt.date()==today: confirmed+=1
+          due=confirmed<int(os.environ['X_DAILY_TARGET']) and pending==0
+          print(f'X_GATE confirmed={confirmed} pending={pending} due={due}')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('due='+('true' if due else 'false')+'\n')
+          PY
+      - uses: denoland/setup-deno@v2
+        if: steps.gate.outputs.due == 'true'
+        with:
+          deno-version: lts
+      - name: Install transcript dependencies
+        if: steps.gate.outputs.due == 'true'
+        run: python -m pip install --disable-pip-version-check 'yt-dlp[default]' yt-dlp-ejs faster-whisper
+      - name: Prepare timestamped transcript request
+        if: steps.gate.outputs.due == 'true'
+        run: python -u x_cloud_prepare.py
+      - name: Create microcut planning issue
+        if: steps.gate.outputs.due == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          p=json.load(open('x-microcut-request.json',encoding='utf-8'))
+          vid=p['source']['video_id']; body='```json\n'+json.dumps(p,ensure_ascii=False,separators=(',',':'))+'\n```'
+          data=json.dumps({'title':f'[X-MICROCUT] {vid}-{os.environ["GITHUB_RUN_ID"]}','body':body},ensure_ascii=False).encode()
+          req=urllib.request.Request(f'https://api.github.com/repos/{os.environ["GITHUB_REPOSITORY"]}/issues',data=data,method='POST',headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json','User-Agent':'anthares-x'})
+          with urllib.request.urlopen(req,timeout=30) as r: out=json.load(r)
+          print('X_MICROCUT_ISSUE='+out['html_url'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.gate.outputs.due == 'true'
+        with:
+          name: x-transcript-${{ github.run_id }}
+          retention-days: 2
+          if-no-files-found: ignore
+          path: x-microcut-request.json
+
+  render:
+    if: github.event_name == 'issue_comment' && startsWith(github.event.issue.title, '[X-MICROCUT]') && contains(github.event.comment.body, 'X_MICROCUT_PLAN_V1')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate and extract AI plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          python - <<'PY'
+          import json,os,re,urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; n=os.environ['ISSUE_NUMBER']; tok=os.environ['GH_TOKEN']
+          req=urllib.request.Request(f'https://api.github.com/repos/{repo}/issues/{n}',headers={'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json','User-Agent':'anthares-x'})
+          with urllib.request.urlopen(req,timeout=30) as r: issue=json.load(r)
+          if issue.get('state')!='open' or not str(issue.get('title') or '').startswith('[X-MICROCUT]'): raise SystemExit('issue is not eligible')
+          def parse(text):
+            blocks=re.findall(r'```(?:json)?\s*(\{.*?\})\s*```',text,re.S|re.I)
+            candidates=blocks+[text]
+            for raw in candidates:
+              try:
+                obj=json.loads(raw.strip())
+                if isinstance(obj,dict): return obj
+              except Exception: pass
+            raise ValueError('JSON object not found')
+          request=parse(str(issue.get('body') or '')); plan=parse(os.environ['COMMENT_BODY'])
+          if request.get('kind')!='X_MICROCUT_REQUEST_V1' or plan.get('kind')!='X_MICROCUT_PLAN_V1': raise SystemExit('wrong contract')
+          open('x-microcut-request.json','w',encoding='utf-8').write(json.dumps(request,ensure_ascii=False))
+          open('x-microcut-plan.json','w',encoding='utf-8').write(json.dumps(plan,ensure_ascii=False))
+          print('X_PLAN_VALIDATED')
+          PY
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: lts
+      - name: Install render dependencies
+        run: python -m pip install --disable-pip-version-check 'yt-dlp[default]' yt-dlp-ejs
+      - name: Render AI-directed semantic microcut
+        env:
+          X_ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: python -u x_cloud_render.py
+      - name: Publish temporary public media branch
+        id: media
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -e
+          cp x-cloud-output.mp4 /tmp/x-cloud-output.mp4
+          cp x-render-result.json /tmp/x-render-result.json
+          git config user.name 'Anthares X Cloud'
+          git config user.email '81930373+UniversoAnthares@users.noreply.github.com'
+          if git ls-remote --exit-code --heads origin x-media >/dev/null 2>&1; then
+            git fetch origin x-media
+            git checkout -B x-media origin/x-media
+          else
+            git checkout --orphan x-media
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+          mkdir -p public/x
+          name="issue-${ISSUE_NUMBER}-${GITHUB_RUN_ID}.mp4"
+          cp /tmp/x-cloud-output.mp4 "public/x/$name"
+          cp /tmp/x-render-result.json "public/x/${name%.mp4}.json"
+          git add public/x
+          git commit -m "X media issue ${ISSUE_NUMBER} [skip ci]"
+          git push origin HEAD:x-media
+          url="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/x-media/public/x/$name"
+          echo "media_url=$url" >> "$GITHUB_OUTPUT"
+          echo "X_MEDIA_URL=$url"
+      - name: Create X publish queue and close planning issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          MEDIA_URL: ${{ steps.media.outputs.media_url }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; tok=os.environ['GH_TOKEN']; n=os.environ['ISSUE_NUMBER']; media=os.environ['MEDIA_URL']
+          result=json.load(open('/tmp/x-render-result.json',encoding='utf-8'))
+          body_obj={'platform':'x','account':'lucasyahn','caption':result['caption'],'media_url':media,'source_id':result['source']['video_id'],'source_url':result['source']['source_url'],'segment_start':result['segment_start'],'segment_end':result['segment_end'],'microedit':result['microedit'],'origin_issue':int(n)}
+          payload=json.dumps({'title':f'[X-PUBLISH] {result["source"]["video_id"]}-{n}','body':'```json\n'+json.dumps(body_obj,ensure_ascii=False,indent=2)+'\n```'},ensure_ascii=False).encode()
+          headers={'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json','Content-Type':'application/json','User-Agent':'anthares-x'}
+          req=urllib.request.Request(f'https://api.github.com/repos/{repo}/issues',data=payload,method='POST',headers=headers)
+          with urllib.request.urlopen(req,timeout=30) as r: pub=json.load(r)
+          evidence=json.dumps({'status':'RENDERED','media_url':media,'publish_issue':pub['html_url'],'microedit':result['microedit']},ensure_ascii=False)
+          req=urllib.request.Request(f'https://api.github.com/repos/{repo}/issues/{n}/comments',data=json.dumps({'body':'```json\n'+evidence+'\n```'}).encode(),method='POST',headers=headers)
+          urllib.request.urlopen(req,timeout=30).read()
+          req=urllib.request.Request(f'https://api.github.com/repos/{repo}/issues/{n}',data=json.dumps({'state':'closed'}).encode(),method='PATCH',headers=headers)
+          urllib.request.urlopen(req,timeout=30).read()
+          print('X_PUBLISH_ISSUE='+pub['html_url'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: x-render-${{ github.event.issue.number }}-${{ github.run_id }}
+          retention-days: 3
+          if-no-files-found: ignore
+          path: |
+            x-render-result.json
+            x-cloud-output.mp4
