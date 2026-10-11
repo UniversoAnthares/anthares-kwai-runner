@@ -10,7 +10,7 @@ from pathlib import Path
 from anthares_publisher.contract import PublicationEvidence, validate_evidence
 
 SUPPORTED_PLATFORMS = frozenset((
-    "kwai", "tiktok", "x", "instagram", "facebook", "threads", "pinterest",
+    "kwai", "tiktok", "x", "instagram", "facebook", "threads", "pinterest", "bilibili",
     "discord", "linkedin", "medium", "rumble", "odysee",
 ))
 
