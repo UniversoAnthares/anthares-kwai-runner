@@ -28,6 +28,7 @@ PLATFORM_DOMAINS = {
     "instagram": {"instagram.com", "www.instagram.com"},
     "facebook": {"facebook.com", "www.facebook.com", "m.facebook.com"},
     "threads": {"threads.com", "www.threads.com", "threads.net", "www.threads.net"},
+    "pinterest": {"pinterest.com", "www.pinterest.com"},
     "discord": {"discord.com", "www.discord.com"},
     "linkedin": {"linkedin.com", "www.linkedin.com"},
     "medium": {"medium.com", "www.medium.com"},
@@ -111,6 +112,12 @@ def validate_evidence(evidence: PublicationEvidence, platform: str, account: str
             raise ValueError("Threads publication URL must identify a personal post")
         if normalize_account(path_parts[0]) != expected:
             raise ValueError("Threads publication URL must belong to the expected account")
+        return
+
+    if platform == "pinterest":
+        _require_path_part(path_parts, external_id, "Pinterest URL must identify the observed Pin")
+        if len(path_parts) < 2 or path_parts[0] != "pin" or not external_id.isdigit():
+            raise ValueError("Pinterest publication URL must identify a numeric Pin ID")
         return
 
     if platform == "discord":
