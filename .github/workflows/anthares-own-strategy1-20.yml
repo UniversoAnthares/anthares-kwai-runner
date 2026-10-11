@@ -1,0 +1,43 @@
+name: Anthares Strategy 1 - Manual Emulator Controller x20
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-own-strategy1-20.yml'
+permissions:
+  contents: read
+jobs:
+  decisive-test:
+    name: Decisive test ${{ matrix.case }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Direct SDK AVD emulator and ADB boot proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          command -v sdkmanager; command -v avdmanager; command -v emulator; command -v adb
+          test -r /dev/kvm && test -w /dev/kvm || sudo chmod a+rw /dev/kvm
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "emulator" "platforms;android-30" "system-images;android-30;google_apis;x86_64"
+          printf 'no\n' | avdmanager create avd -n decisive -k "system-images;android-30;google_apis;x86_64" --force
+          emulator -avd decisive -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -memory 2048 >emulator.log 2>&1 &
+          EMU_PID=$!
+          trap 'kill "$EMU_PID" 2>/dev/null || true; tail -40 emulator.log || true' EXIT
+          deadline=$((SECONDS+540))
+          while ((SECONDS < deadline)); do
+            kill -0 "$EMU_PID" || { echo EMULATOR_PROCESS_DIED; exit 1; }
+            if timeout 12 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | grep -qx 1; then break; fi
+            sleep 6
+          done
+          test "$(timeout 15 adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          for i in 1 2 3 4 5; do timeout 15 adb shell getprop ro.build.version.sdk | grep -q 30; sleep 3; done
+          echo STRATEGY1_DIRECT_CONTROLLER=PASS
