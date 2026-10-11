@@ -1,4 +1,4 @@
-name: Stage 4 Own Identity Proof 20
+name: Stage 4 Own Real Identity Proof 20
 on:
   workflow_dispatch:
   push:
@@ -9,6 +9,7 @@ permissions:
 jobs:
   identity-evidence:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       max-parallel: 20
@@ -16,14 +17,33 @@ jobs:
         case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
     steps:
       - uses: actions/checkout@v4
-      - name: Check actual authenticated identity evidence
-        env:
-          EXPECTED: lucasrosalem
-          CASE: ${{ matrix.case }}
+      - name: Download verified Kwai package
         run: |
           set -euo pipefail
-          test "$EXPECTED" = lucasrosalem
-          test -f kwai_auth_probe.py
-          python3 -m py_compile kwai_auth_probe.py
-          echo "Identity evidence verification requires real authenticated UI; source checks are not identity proof."
-          exit 1
+          curl -fLsS --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+      - name: Real Android account identity verification
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_EXPECTED_ACCOUNT: lucasrosalem
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          emulator-boot-timeout: 600
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            bash kwai_vault_install.sh
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+            sleep 8
+            python3 kwai_android_autologin.py
+            python3 tools/kwai_credential_login.py
+            KWAI_EXPECTED_ACCOUNT=lucasrosalem python3 kwai_auth_probe.py | tee /tmp/stage4-proof.txt
+            grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/stage4-proof.txt
+            grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/stage4-proof.txt
+            echo "STAGE4_REAL_IDENTITY_CASE_${{ matrix.case }}=PASS"
