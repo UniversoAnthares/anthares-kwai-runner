@@ -108,19 +108,30 @@ for i in range(22):
     # Recovery of an app-owned transient network error dialog. Never dismiss a
     # verification challenge or claim authentication from this action. Retry
     # only once after the explicit Wait action has already been attempted.
-    if {"aerr_wait", "aerr_close"}.issubset(ids) and native_error_waits >= 1 and app_relaunches < 1:
-        print("KWAI_RECOVERY_NATIVE_ERROR_RELAUNCH=1")
-        app_relaunches += 1
-        try:
-            adb("shell", "am", "force-stop", "com.kwai.video")
-            time.sleep(2)
-            adb("shell", "monkey", "-p", "com.kwai.video", "-c", "android.intent.category.LAUNCHER", "1")
-            time.sleep(8)
-            seen.clear()
-            continue
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            print("KWAI_RECOVERY_NATIVE_ERROR_RELAUNCH_FAILED")
-            break
+    if {"aerr_wait", "aerr_close"}.issubset(ids) and native_error_waits >= 1:
+        # This is Kwai's transient app-owned network error dialog, not an
+        # authentication/security challenge. Close only its explicit Close
+        # control after the explicit Wait action has already been attempted.
+        close_nodes=[n for n in ns if (n.get("resource-id") or "").endswith("/aerr_close")]
+        if close_nodes:
+            print("KWAI_RECOVERY_NATIVE_ERROR_CLOSE=1")
+            if tap(close_nodes[0]):
+                time.sleep(3)
+                seen.clear()
+                continue
+        if app_relaunches < 1:
+            print("KWAI_RECOVERY_NATIVE_ERROR_RELAUNCH=1")
+            app_relaunches += 1
+            try:
+                adb("shell", "am", "force-stop", "com.kwai.video")
+                time.sleep(2)
+                adb("shell", "monkey", "-p", "com.kwai.video", "-c", "android.intent.category.LAUNCHER", "1")
+                time.sleep(8)
+                seen.clear()
+                continue
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                print("KWAI_RECOVERY_NATIVE_ERROR_RELAUNCH_FAILED")
+                break
     if email_form_visible(ns) or native_chooser_visible(ns):
         print("KWAI_RECOVERY_LOGIN_SURFACE_READY");raise SystemExit(0)
     # Fingerprint only resource IDs/classes, never personal data or screen text.
