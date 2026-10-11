@@ -160,7 +160,18 @@ jobs:
           fi
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           export PATH="$SDK/platform-tools:$PATH"
-          adb shell pm list packages | grep -F 'com.kwai.video'
+          if ! adb shell pm path com.kwai.video | grep -q 'package:'; then
+            echo 'STAGE4_KWAI_MISSING_IN_SNAPSHOT=1' | tee -a "$GITHUB_STEP_SUMMARY"
+            echo 'STAGE4_INSTALL_ATTEMPT=VAULT' | tee -a "$GITHUB_STEP_SUMMARY"
+            if bash independent_android/install_kwai.sh > /tmp/kwai-install.log 2>&1; then
+              echo 'STAGE4_KWAI_INSTALL=PASS' | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo 'STAGE4_KWAI_INSTALL=FAIL' | tee -a "$GITHUB_STEP_SUMMARY"
+              grep -Ei 'INSTALL_FAILED|ABI|architecture|incompatible|error|failed|not supported|sha256' /tmp/kwai-install.log | tail -20 | tee -a "$GITHUB_STEP_SUMMARY" || true
+              exit 22
+            fi
+          fi
+          adb shell pm path com.kwai.video | grep -q 'package:'
           adb shell settings put secure enabled_accessibility_services us.anthares.agent/.AntharesAccessibilityService
           adb shell settings put secure accessibility_enabled 1
           adb shell am force-stop com.kwai.video || true
