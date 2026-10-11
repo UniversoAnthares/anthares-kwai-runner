@@ -42,9 +42,10 @@ jobs:
             anthares_publisher/ledger.py
       - name: Run personal social publisher contract tests
         run: python -m unittest -v tests.test_personal_social_browser
-      - name: Dry-run both personal account adapters
+      - name: Dry-run all personal account adapters
         run: |
           mkdir -p /tmp/anthares-profile
           printf 'synthetic-video' >/tmp/anthares-clip.mp4
-          python social_adapters/personal_browser.py --platform x --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile
-          python social_adapters/personal_browser.py --platform instagram --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile
+          python social_adapters/personal_browser.py --platform x --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/x
+          python social_adapters/personal_browser.py --platform instagram --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/instagram
+          python social_adapters/personal_browser.py --platform facebook --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/facebook
