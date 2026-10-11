@@ -2,14 +2,16 @@
 import importlib.util
 import json
 from pathlib import Path
+import sys
 import unittest
 from unittest.mock import patch
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "instagram_publish.py"
 spec = importlib.util.spec_from_file_location("instagram_publish", MODULE_PATH)
-instagram_publish = importlib.util.module_from_spec(spec)
 assert spec and spec.loader
+instagram_publish = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = instagram_publish
 spec.loader.exec_module(instagram_publish)
 
 InstagramClient = instagram_publish.InstagramClient
