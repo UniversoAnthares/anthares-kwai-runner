@@ -27,6 +27,7 @@ PLATFORM_DOMAINS = {
     "x": {"x.com", "www.x.com", "twitter.com", "www.twitter.com"},
     "instagram": {"instagram.com", "www.instagram.com"},
     "facebook": {"facebook.com", "www.facebook.com", "m.facebook.com"},
+    "threads": {"threads.com", "www.threads.com", "threads.net", "www.threads.net"},
     "discord": {"discord.com", "www.discord.com"},
     "linkedin": {"linkedin.com", "www.linkedin.com"},
     "medium": {"medium.com", "www.medium.com"},
@@ -102,6 +103,14 @@ def validate_evidence(evidence: PublicationEvidence, platform: str, account: str
         _require_path_part(path_parts, external_id, "publication URL must identify the observed post")
         if "reel" not in path_parts:
             raise ValueError("Facebook publication URL must identify a reel")
+        return
+
+    if platform == "threads":
+        _require_path_part(path_parts, external_id, "Threads URL must identify the observed post")
+        if len(path_parts) < 3 or not path_parts[0].startswith("@") or path_parts[1] != "post":
+            raise ValueError("Threads publication URL must identify a personal post")
+        if normalize_account(path_parts[0]) != expected:
+            raise ValueError("Threads publication URL must belong to the expected account")
         return
 
     if platform == "discord":
