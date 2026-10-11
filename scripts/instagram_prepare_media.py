@@ -290,21 +290,10 @@ def prepare() -> dict[str, Any]:
         return plan
     source_is_microcut = "-microcut" in source_url.casefold()
     micro = WORK_DIR / "microcut.mp4"
-    if source_is_microcut:
-        raise RuntimeError("unverified microcut marker: provenance and cut evidence required")
-        shutil.copy2(source, micro)
-        micro_meta = {
-            "original_duration": round(duration(source), 3),
-            "final_duration": round(duration(source), 3),
-            "removed_seconds": 0.0,
-            "removed_ratio": 0.0,
-            "intervals": 0,
-            "reasons": {},
-            "reused_existing_tiktok_microcut": True,
-        }
-    else:
-        micro_meta = microcut(source, micro)
-        micro_meta["reused_existing_tiktok_microcut"] = False
+    # A filename alone cannot prove that TikTok microcuts were applied.
+    micro_meta = microcut(source, micro)
+    micro_meta["reused_existing_tiktok_microcut"] = False
+    micro_meta["source_marked_microcut"] = source_is_microcut
 
     final = WORK_DIR / f"instagram-{row.get('id') or 'clip'}-microcut.mp4"
     layout_meta = verticalize(micro, final)
