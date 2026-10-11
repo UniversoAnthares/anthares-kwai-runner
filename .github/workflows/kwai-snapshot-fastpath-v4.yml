@@ -1,4 +1,4 @@
-name: Kwai Android snapshot fast path v4 slim AVD
+name: Strategy 3 - Restored Kwai Snapshot x20
 on:
   workflow_dispatch:
   push:
@@ -8,6 +8,11 @@ permissions:
   contents: read
 jobs:
   slim-build-test:
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
