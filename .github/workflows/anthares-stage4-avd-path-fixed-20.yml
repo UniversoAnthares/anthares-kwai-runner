@@ -1,0 +1,51 @@
+name: Anthares Stage4 AVD Path Fix 20
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-stage4-avd-path-fixed-20.yml'
+permissions:
+  contents: read
+jobs:
+  boot:
+    name: AVD path fixed real boot ${{ matrix.case }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDK emulator binaries
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools emulator'
+      - name: Repair AVD path and test actual boot
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          export ANDROID_USER_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          test -e /dev/kvm && sudo chmod a+rw /dev/kvm
+          sdkmanager --install 'system-images;android-30;google_apis;x86_64' 'platforms;android-30'
+          printf 'no\n' | avdmanager create avd -n decisive -k 'system-images;android-30;google_apis;x86_64' --force
+          echo "AVD_DIRECTORY=$ANDROID_AVD_HOME"
+          ls -la "$ANDROID_AVD_HOME"
+          emulator -list-avds | tee avds.txt
+          grep -qx decisive avds.txt
+          emulator -avd decisive -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -memory 2048 >emulator.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true; tail -60 emulator.log || true' EXIT
+          deadline=$((SECONDS+480))
+          until timeout 15 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | grep -qx 1; do
+            kill -0 "$PID" || { echo EMULATOR_PROCESS_DIED; exit 1; }
+            ((SECONDS < deadline)) || { echo BOOT_TIMEOUT; exit 1; }
+            sleep 8
+          done
+          for i in 1 2 3; do timeout 15 adb shell getprop ro.build.version.sdk | tr -d '\r' | grep -qx 30; sleep 3; done
+          echo STRATEGY1_AVD_PATH_BOOT=PASS
