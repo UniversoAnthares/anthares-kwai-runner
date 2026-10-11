@@ -1,4 +1,4 @@
-name: Strategies 2+3 - Snapshot Agent Integration x20
+name: Stage 4 - Kwai Auth Identity Proof on Snapshot
 on:
   workflow_dispatch:
   push:
@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       max-parallel: 20
       matrix:
-        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+        case: [1]
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -141,3 +141,27 @@ jobs:
           echo SNAPSHOT_AGENT_INSTALLED=PASS
           echo AUTHENTICATED_KWAI_IDENTITY=NOT_TESTED
           echo ENCRYPTED_SESSION_RESTORE=NOT_TESTED
+
+      - name: Stage 4 real Kwai login and strict identity proof
+        shell: bash
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'universo.anthares' }}
+        run: |
+          set -euo pipefail
+          test -n "$KWAI_LOGIN" && test -n "$KWAI_PASSWORD"
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export PATH="$SDK/platform-tools:$PATH"
+          adb shell pm list packages | grep -F 'com.kwai.video'
+          adb shell settings put secure enabled_accessibility_services us.anthares.agent/.AntharesAccessibilityService
+          adb shell settings put secure accessibility_enabled 1
+          adb shell am force-stop com.kwai.video || true
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
+          sleep 8
+          python3 kwai_android_autologin.py
+          python3 tools/kwai_credential_login.py
+          KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee /tmp/stage4-auth-proof.txt
+          grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/stage4-auth-proof.txt
+          grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/stage4-auth-proof.txt
+          echo STAGE4_IDENTITY_AUTHENTICATION=PASS
