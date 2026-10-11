@@ -1,0 +1,103 @@
+name: Instagram official API publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Operation"
+        required: true
+        default: "quota"
+        type: choice
+        options:
+          - quota
+          - publish-reel
+      video_url:
+        description: "Public Reel URL (required for publish-reel)"
+        required: false
+        type: string
+      caption:
+        description: "Reel caption"
+        required: false
+        type: string
+      share_to_feed:
+        description: "Also show Reel in Feed"
+        required: false
+        default: true
+        type: boolean
+  repository_dispatch:
+    types: [instagram_publish]
+  push:
+    paths:
+      - "scripts/instagram_publish.py"
+      - "test-hub/test_instagram_publish.py"
+      - ".github/workflows/instagram-official-publish.yml"
+  pull_request:
+    paths:
+      - "scripts/instagram_publish.py"
+      - "test-hub/test_instagram_publish.py"
+      - ".github/workflows/instagram-official-publish.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: instagram-official-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile publisher
+        run: python -m py_compile scripts/instagram_publish.py
+      - name: Run Instagram unit tests
+        run: python -m unittest -v test-hub/test_instagram_publish.py
+
+  execute:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || github.event.client_payload.mode || 'quota' }}
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+      INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+      INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
+      INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST || 'graph.instagram.com' }}
+      OPERATION: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || github.event.client_payload.mode || 'quota' }}
+      VIDEO_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.video_url || github.event.client_payload.video_url || '' }}
+      CAPTION: ${{ github.event_name == 'workflow_dispatch' && inputs.caption || github.event.client_payload.caption || '' }}
+      SHARE_TO_FEED: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.share_to_feed) || format('{0}', github.event.client_payload.share_to_feed || true) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate credentials
+        shell: bash
+        run: |
+          test -n "$INSTAGRAM_USER_ID" || { echo "Missing INSTAGRAM_USER_ID secret" >&2; exit 2; }
+          test -n "$INSTAGRAM_ACCESS_TOKEN" || { echo "Missing INSTAGRAM_ACCESS_TOKEN secret" >&2; exit 2; }
+      - name: Query live publishing quota
+        if: env.OPERATION == 'quota'
+        run: python scripts/instagram_publish.py quota
+      - name: Publish Reel
+        if: env.OPERATION == 'publish-reel'
+        shell: bash
+        run: |
+          test -n "$VIDEO_URL" || { echo "video_url is required for publish-reel" >&2; exit 2; }
+          ARGS=(publish-reel --video-url "$VIDEO_URL" --caption "$CAPTION")
+          case "${SHARE_TO_FEED,,}" in
+            true|1|yes) ARGS+=(--share-to-feed) ;;
+            *) ARGS+=(--no-share-to-feed) ;;
+          esac
+          python scripts/instagram_publish.py "${ARGS[@]}"
+      - name: Reject unsupported operation
+        if: env.OPERATION != 'quota' && env.OPERATION != 'publish-reel'
+        run: |
+          echo "Unsupported operation: $OPERATION" >&2
+          exit 2
