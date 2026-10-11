@@ -1,0 +1,90 @@
+name: Instagram auto 10 per day
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Select media without publishing"
+        required: false
+        default: false
+        type: boolean
+      allow_legacy:
+        description: "Allow pre-microcut Anthares clips"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    # America/Campo_Grande: 08,10,12,14,16,18,20,21,22,23 local (UTC-4).
+    - cron: "0 0,1,2,3,12,14,16,18,20,22 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: instagram-auto-10day
+  cancel-in-progress: false
+
+env:
+  INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+  INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+  INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
+  INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST || 'graph.instagram.com' }}
+  INSTAGRAM_LEDGER: .state/instagram-published.json
+  INSTAGRAM_MICROCUT_MARKER: -microcut
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Unit tests
+        run: |
+          python -m py_compile scripts/instagram_publish.py scripts/instagram_autopublish.py
+          python -m unittest -v test-hub/test_instagram_publish.py test-hub/test_instagram_autopublish.py
+
+      - name: Validate runtime credentials
+        if: github.event_name == 'schedule' || inputs.dry_run != true
+        shell: bash
+        run: |
+          test -n "$INSTAGRAM_USER_ID" || { echo "Missing INSTAGRAM_USER_ID secret" >&2; exit 2; }
+          test -n "$INSTAGRAM_ACCESS_TOKEN" || { echo "Missing INSTAGRAM_ACCESS_TOKEN secret" >&2; exit 2; }
+
+      - name: Publish next strict microcut
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+          ALLOW_LEGACY: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_legacy && 'true' || 'false' }}
+        shell: bash
+        run: |
+          args=()
+          [[ "$DRY_RUN" == "true" ]] && args+=(--dry-run)
+          [[ "$ALLOW_LEGACY" == "true" ]] && args+=(--allow-legacy)
+          python scripts/instagram_autopublish.py "${args[@]}"
+
+      - name: Persist dedupe ledger
+        if: github.event_name == 'schedule' || inputs.dry_run != true
+        shell: bash
+        run: |
+          if git diff --quiet -- "$INSTAGRAM_LEDGER"; then
+            echo "No ledger change; no Reel was published."
+            exit 0
+          fi
+          git config user.name "Anthares Instagram Worker"
+          git config user.email "81930373+UniversoAnthares@users.noreply.github.com"
+          git add "$INSTAGRAM_LEDGER"
+          git commit -m "Record Instagram Reel publication [skip ci]"
+          ok=0
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && { ok=1; break; }
+            git rebase --abort >/dev/null 2>&1 || true
+            sleep $((2*attempt))
+          done
+          test "$ok" = 1
