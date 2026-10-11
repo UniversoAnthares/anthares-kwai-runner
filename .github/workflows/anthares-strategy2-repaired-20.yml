@@ -1,0 +1,38 @@
+name: Anthares anthares-strategy2-repaired-20
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-strategy2-repaired-20.yml'
+permissions:
+  contents: read
+jobs:
+  decisive-test:
+    name: Decisive test ${{ matrix.case }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test actual container Android host prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "CONTAINER_TEST_CASE=${{ matrix.case }}"
+          uname -a
+          docker info --format 'DockerServer={{.ServerVersion}}'
+          sudo modprobe binder_linux devices=binder,hwbinder,vndbinder || true
+          sudo mkdir -p /dev/binderfs
+          sudo mount -t binder binder /dev/binderfs || true
+          test -e /dev/binder || test -e /dev/binderfs/binder || { echo 'BLOCKED_NO_ANDROID_BINDER_DEVICE'; exit 1; }
+          test -e /dev/ashmem || grep -q memfd /proc/filesystems || { echo 'BLOCKED_NO_ASHMEM_OR_MEMFD'; exit 1; }
+          docker pull redroid/redroid:12.0.0-latest
+          CID=$(docker run -d --privileged --rm --name "anthares-redroid-${{ matrix.case }}" -p 5555:5555 redroid/redroid:12.0.0-latest)
+          trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 24); do if docker logs "$CID" 2>&1 | grep -Eiq 'boot completed|android'; then break; fi; sleep 5; done
+          docker ps --format '{{.ID}}' | grep -q "${CID:0:12}"
+          echo STRATEGY2_CONTAINER_ANDROID_RUNNING=PASS
