@@ -27,11 +27,14 @@ def edits(ns): return [n for n in ns if (n.get('class') or '').endswith('EditTex
 def is_password(n): return n.get('password')=='true' or 'password' in txt(n) or 'senha' in txt(n)
 def clear_and_type(n,value):
     if not tap(n): return False
-    # One ADB call replaces 160 separate delete processes that consumed the
-    # transition timeout before the Next button could be tapped.
-    adb('shell','input','keyevent','KEYCODE_MOVE_END','KEYCODE_CTRL_LEFT','KEYCODE_A','KEYCODE_DEL')
+    # Send the delete keycodes in one ADB invocation. This avoids 160 separate
+    # subprocesses and does not depend on emulator Ctrl+A handling.
+    adb('shell','input','keyevent','KEYCODE_MOVE_END','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL','KEYCODE_DEL')
     safe=value.replace('%','%25').replace(' ','%s').replace('&','\\\\&').replace('(','\\\\(').replace(')','\\\\)')
-    adb('shell','input','text',safe);time.sleep(.5);return True
+    adb('shell','input','text',safe);time.sleep(.5)
+    # Confirm entry in memory only; never print or log the credential value.
+    ns=snap()
+    return any((n.get('text') or '') == value for n in edits(ns))
 
 def resource_button(ns,ids):
     wanted=set(ids)
