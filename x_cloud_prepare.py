@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 CHANNEL_URL = os.getenv("X_SOURCE_CHANNEL", "https://www.youtube.com/@UniversoAnthares/streams")
@@ -12,6 +15,12 @@ SCAN_START = int(os.getenv("X_SCAN_START", "600"))
 SCAN_SECONDS = int(os.getenv("X_SCAN_SECONDS", "300"))
 WORK = Path(os.getenv("X_CLOUD_WORK", "x-cloud-work"))
 MODEL = os.getenv("X_WHISPER_MODEL", "base")
+INVIDIOUS_BASES = tuple(
+    x.strip().rstrip("/") for x in os.getenv(
+        "X_INVIDIOUS_BASES",
+        "https://invidious.f5.si,https://iv.ggtyler.dev,https://inv.nadeko.net,https://yewtu.be",
+    ).split(",") if x.strip()
+)
 
 
 def discover_source() -> dict:
@@ -47,8 +56,82 @@ def discover_source() -> dict:
     raise RuntimeError("Nenhuma live concluída adequada encontrada no canal.")
 
 
+def _video_id(source_url: str) -> str:
+    p = urllib.parse.urlparse(source_url)
+    if p.hostname in {"youtu.be", "www.youtu.be"}:
+        value = p.path.strip("/")
+    else:
+        value = urllib.parse.parse_qs(p.query).get("v", [""])[0]
+    if not re.fullmatch(r"[A-Za-z0-9_-]{11}", value or ""):
+        raise RuntimeError("URL de origem do YouTube sem video id válido.")
+    return value
+
+
+def _format_height(row: dict) -> int:
+    try:
+        return int(row.get("height") or 0)
+    except Exception:
+        return 0
+
+
+def _fetch_invidious_streams(video_id: str) -> tuple[str, str, str]:
+    errors = []
+    for base in INVIDIOUS_BASES:
+        for local in ("true", "false"):
+            try:
+                url = f"{base}/api/v1/videos/{video_id}?local={local}"
+                req = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
+                )
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    data = json.load(r)
+                adaptive = [x for x in (data.get("adaptiveFormats") or []) if isinstance(x, dict) and x.get("url")]
+                videos = [x for x in adaptive if str(x.get("type") or x.get("mimeType") or "").startswith("video/")]
+                audios = [x for x in adaptive if str(x.get("type") or x.get("mimeType") or "").startswith("audio/")]
+                # Some instances expose codec/type strings differently. Fall back to dimensions/bitrate.
+                if not videos:
+                    videos = [x for x in adaptive if _format_height(x) > 0 and str(x.get("audioQuality") or "") == ""]
+                if not audios:
+                    audios = [x for x in adaptive if _format_height(x) == 0 and int(x.get("bitrate") or 0) > 0]
+                if not videos or not audios:
+                    errors.append(f"{base} local={local}: no split streams")
+                    continue
+                eligible = [x for x in videos if 0 < _format_height(x) <= 720]
+                if not eligible:
+                    eligible = videos
+                video = max(eligible, key=lambda x: (_format_height(x), int(x.get("bitrate") or 0)))
+                audio = max(audios, key=lambda x: int(x.get("bitrate") or 0))
+                print(
+                    f"X_SOURCE_FALLBACK=INVIDIOUS base={base} local={local} "
+                    f"height={_format_height(video)} audio_bitrate={int(audio.get('bitrate') or 0)}",
+                    flush=True,
+                )
+                return str(video["url"]), str(audio["url"]), f"{base}|local={local}"
+            except Exception as exc:
+                errors.append(f"{base} local={local}: {type(exc).__name__}: {str(exc)[:120]}")
+    raise RuntimeError("Invidious sem stream utilizável: " + " | ".join(errors[-8:]))
+
+
+def _download_scan_invidious(source_url: str, out: Path) -> None:
+    video_id = _video_id(source_url)
+    video_url, audio_url, route = _fetch_invidious_streams(video_id)
+    cmd = [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-ss", str(SCAN_START), "-i", video_url,
+        "-ss", str(SCAN_START), "-i", audio_url,
+        "-t", str(SCAN_SECONDS),
+        "-map", "0:v:0", "-map", "1:a:0",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
+        "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(out),
+    ]
+    subprocess.run(cmd, check=True, timeout=900)
+    print("X_SOURCE_ROUTE=" + route, flush=True)
+
+
 def download_scan(source_url: str, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
+    out.unlink(missing_ok=True)
     end = SCAN_START + SCAN_SECONDS
     cmd = [
         sys.executable, "-m", "yt_dlp",
@@ -60,7 +143,13 @@ def download_scan(source_url: str, out: Path) -> None:
         "-o", str(out),
         source_url,
     ]
-    subprocess.run(cmd, check=True, timeout=900)
+    try:
+        subprocess.run(cmd, check=True, timeout=900)
+        print("X_SOURCE_ROUTE=YTDLP_DIRECT", flush=True)
+    except Exception as exc:
+        print(f"X_SOURCE_DIRECT_FAILED={type(exc).__name__}; trying Invidious adaptive streams", flush=True)
+        out.unlink(missing_ok=True)
+        _download_scan_invidious(source_url, out)
     if not out.exists() or out.stat().st_size < 100_000:
         raise RuntimeError("Trecho de varredura não foi baixado corretamente.")
 
