@@ -35,9 +35,10 @@ jobs:
           target: google_apis
           profile: pixel_2
           emulator-boot-timeout: 600
-          disable-animations: true
+          disable-animations: false
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics
           script: |
-            set -euo pipefail
+            set -eu
             bash kwai_vault_install.sh
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
             sleep 8
