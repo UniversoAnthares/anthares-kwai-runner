@@ -13,7 +13,10 @@ import time
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
-from social_adapters.pinterest_strategy import build_strategy
+try:
+    from social_adapters.pinterest_strategy import build_strategy
+except ModuleNotFoundError:  # direct execution: python social_adapters/pinterest_browser.py
+    from pinterest_strategy import build_strategy
 
 
 class BrowserPublishError(RuntimeError):
