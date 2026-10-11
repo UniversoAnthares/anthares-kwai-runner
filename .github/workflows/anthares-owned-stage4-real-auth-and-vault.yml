@@ -1,0 +1,87 @@
+name: Anthares OWN Stage4 Real Auth and Vault
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-owned-stage4-real-auth-and-vault.yml'
+permissions:
+  contents: read
+jobs:
+  boot:
+    name: Real identity and encrypted cross-run session
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify official Kwai split APK package
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip' | sha256sum -c -
+          python3 -c 'import zipfile;zipfile.ZipFile("/tmp/kwai-vault.zip").extractall("/tmp/kwai-vault")'
+      - name: Install SDK emulator binaries
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools emulator'
+      - name: Repair AVD path and test actual boot
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_EXPECTED_ACCOUNT: universo.anthares
+          KWAI_SESSION_ENCRYPTION_KEY: ${{ secrets.KWAI_SESSION_ENCRYPTION_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+          export ANDROID_USER_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          test -e /dev/kvm && sudo chmod a+rw /dev/kvm
+          sdkmanager --install 'system-images;android-30;google_apis;x86_64' 'platforms;android-30'
+          printf 'no\n' | avdmanager create avd -n decisive -k 'system-images;android-30;google_apis;x86_64' --force
+          echo "AVD_DIRECTORY=$ANDROID_AVD_HOME"
+          ls -la "$ANDROID_AVD_HOME"
+          emulator -list-avds | tee avds.txt
+          grep -qx decisive avds.txt
+          emulator -avd decisive -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -memory 2048 >emulator.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true; tail -60 emulator.log || true' EXIT
+          deadline=$((SECONDS+480))
+          until timeout 15 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | grep -qx 1; do
+            kill -0 "$PID" || { echo EMULATOR_PROCESS_DIED; exit 1; }
+            ((SECONDS < deadline)) || { echo BOOT_TIMEOUT; exit 1; }
+            sleep 8
+          done
+          for i in 1 2 3; do timeout 15 adb shell getprop ro.build.version.sdk | tr -d '\r' | grep -qx 30; sleep 3; done
+          echo OWN_ANDROID_BOOT=PASS
+          adb shell getprop ro.product.cpu.abilist
+          adb install-multiple -r /tmp/kwai-vault/*.apk
+          adb shell pm path com.kwai.video | grep -q package:
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
+          sleep 12
+          adb shell pidof com.kwai.video | tee /tmp/kwai-pid.txt
+          test -s /tmp/kwai-pid.txt
+          echo OWN_KWAI_APP_LAUNCH=PASS
+          if KWAI_EXPECTED_ACCOUNT=universo.anthares python3 kwai_auth_probe.py | tee /tmp/kwai-auth.txt; then
+            grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/kwai-auth.txt && grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/kwai-auth.txt && exit 0
+          fi
+          test -n "$KWAI_LOGIN" && test -n "$KWAI_PASSWORD" || { echo 'STAGE4_BLOCKED_MISSING_LOGIN_SECRETS'; exit 8; }
+          python3 tools/kwai_credential_login.py
+          sleep 8
+          KWAI_EXPECTED_ACCOUNT=universo.anthares python3 kwai_auth_probe.py | tee /tmp/kwai-auth.txt
+          grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/kwai-auth.txt
+          grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/kwai-auth.txt
+          echo OWN_KWAI_VERIFIED_IDENTITY=PASS
+          bash kwai_session_state.sh save
+          test -s kwai-session.enc
+          echo OWN_KWAI_ENCRYPTED_SESSION=PASS
+      - name: Store encrypted session privately
+        env:
+          KWAI_SESSION_ENCRYPTION_KEY: ${{ secrets.KWAI_SESSION_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          test -s kwai-session.enc
+          python3 tools/kwai_session_vault_client.py push --path kwai-session.enc
+          echo OWN_STAGE4_VAULT_STORED=PASS
