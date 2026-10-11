@@ -1,0 +1,44 @@
+name: X Invidious Source Probe
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.x-invidious-probe-trigger'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe current official Invidious instances
+        env:
+          VIDEO_ID: xcRGdBfHX0E
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          vid=os.environ['VIDEO_ID']
+          bases=['https://yewtu.be','https://inv.nadeko.net','https://invidious.nerdvpn.de','https://iv.ggtyler.dev','https://invidious.jing.rocks','https://invidious.f5.si','https://yt.chocolatemoo53.com','https://invidious.tiekoetter.com']
+          ok=[]
+          for base in bases:
+            for local in ('false','true'):
+              try:
+                url=f'{base}/api/v1/videos/{vid}?local={local}'
+                req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0','Accept':'application/json'})
+                with urllib.request.urlopen(req,timeout=15) as r:data=json.load(r)
+                fs=[x for x in (data.get('formatStreams') or []) if x.get('url')]
+                af=[x for x in (data.get('adaptiveFormats') or []) if x.get('url')]
+                print('INV_PROBE',base,'local',local,'format',len(fs),'adaptive',len(af),'title',str(data.get('title') or '')[:80])
+                if fs:
+                  ok.append((base,local,fs[0]['url']))
+                  break
+              except Exception as e: print('INV_FAIL',base,'local',local,type(e).__name__,str(e)[:160])
+          print('INV_SUCCESS_COUNT='+str(len(ok)))
+          if ok:
+            print('INV_SUCCESS_BASE='+ok[0][0]); print('INV_LOCAL='+ok[0][1]); print('INV_URL='+ok[0][2])
+          assert ok,'no Invidious format stream available'
+          PY
