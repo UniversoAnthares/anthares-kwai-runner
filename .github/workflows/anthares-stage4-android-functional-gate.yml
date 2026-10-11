@@ -1,0 +1,42 @@
+name: Anthares Stage4 Functional Android APK Gate
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-stage4-android-functional-gate.yml'
+permissions:
+  contents: read
+jobs:
+  android-apk-real:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify APK archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fLsS --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+      - name: Boot real Android and verify Kwai launch
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          emulator-boot-timeout: 900
+          disable-animations: false
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics
+          script: |
+            set -eu
+            adb wait-for-device
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+            bash kwai_vault_install.sh
+            adb shell pm path com.kwai.video | grep -q package:
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
+            sleep 8
+            adb shell dumpsys activity activities > /tmp/kwai-activity.txt
+            grep -q 'com.kwai.video' /tmp/kwai-activity.txt
+            echo KWAI_INSTALL_AND_LAUNCH=PASS
