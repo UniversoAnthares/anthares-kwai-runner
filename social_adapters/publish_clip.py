@@ -8,10 +8,12 @@ from anthares_publisher.contract import PublicationEvidence, validate_evidence
 from anthares_publisher.ledger import confirm, connect, fail, mark_attempt, reserve
 from social_adapters.personal_browser import file_sha256, publish as publish_personal
 from social_adapters.threads_browser import publish as publish_threads
+from social_adapters.bilibili_browser import publish as publish_bilibili
 from social_adapters.pinterest_browser import publish as publish_pinterest
 from social_adapters.community_browser import canonical_platform, publish as publish_community
 
 PERSONAL_PLATFORMS = frozenset(("x", "instagram", "facebook"))
+BILIBILI_PLATFORMS = frozenset(("bilibili",))
 THREADS_PLATFORMS = frozenset(("threads",))
 PINTEREST_PLATFORMS = frozenset(("pinterest",))
 COMMUNITY_PLATFORMS = frozenset(("discord", "linkedin", "medium", "rumble", "odysee"))
@@ -28,6 +30,8 @@ def _publish(args, platform, commit):
     )
     if platform in PERSONAL_PLATFORMS:
         return publish_personal(**common, headless=not args.headed) if commit else publish_personal(**common)
+    if platform in BILIBILI_PLATFORMS:
+        return publish_bilibili(**common, title=args.title, headless=not args.headed) if commit else publish_bilibili(**common, title=args.title)
     if platform in THREADS_PLATFORMS:
         return publish_threads(**common, headless=not args.headed) if commit else publish_threads(**common)
     if platform in PINTEREST_PLATFORMS:
@@ -117,7 +121,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument(
         "--platform",
-        choices=["x", "instagram", "facebook", "threads", "pinterest", "discord", "linkedin", "medium", "rumble", "odysee", "odyssey"],
+        choices=["x", "instagram", "facebook", "threads", "pinterest", "bilibili", "discord", "linkedin", "medium", "rumble", "odysee", "odyssey"],
         required=True,
     )
     p.add_argument("--account", required=True)
