@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reserve, publish and confirm one X/Instagram clip through the durable ledger."""
+"""Reserve, publish and confirm one X/Instagram/Facebook clip through the durable ledger."""
 import argparse
 import json
 from pathlib import Path
@@ -73,7 +73,7 @@ def run(args):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--platform", choices=["x", "instagram"], required=True)
+    p.add_argument("--platform", choices=["x", "instagram", "facebook"], required=True)
     p.add_argument("--account", required=True)
     p.add_argument("--video", required=True)
     p.add_argument("--caption", required=True)
