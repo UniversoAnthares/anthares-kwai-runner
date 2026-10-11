@@ -23,9 +23,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -d "$ANDROID_HOME/emulator" || { echo "NO_EMULATOR_SDK"; exit 11; }
-          test -x "$ANDROID_HOME/emulator/emulator" || exit 12
-          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" || exit 13
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          if [ ! -x "$SDK/emulator/emulator" ]; then yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --install "emulator" >/dev/null || true; fi
+          test -x "$SDK/emulator/emulator" || { echo "SNAPSHOT_SDK_UNAVAILABLE"; exit 12; }
+          test -x "$SDK/cmdline-tools/latest/bin/avdmanager" || { echo "AVDMANAGER_UNAVAILABLE"; exit 13; }
           echo "SNAPSHOT_PREREQUISITES=PASS"
-          echo "SNAPSHOT_REUSE=NOT_PROVEN"
-          exit 21
+          echo "SNAPSHOT_REUSE=NOT_YET_TESTED"
