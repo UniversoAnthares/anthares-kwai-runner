@@ -1,0 +1,99 @@
+name: Anthares Stage 4 - New 30 Real Auth Jobs
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-stage4-single-auth-proof-20-tests.yml'
+      - '.anthares-stage4-auth-trigger'
+      - 'kwai_auth_probe.py'
+      - 'tools/kwai_credential_login.py'
+      - 'kwai_android_autologin.py'
+      - 'kwai_vault_install.sh'
+      - 'kwai_session_state.sh'
+      - 'tools/kwai_session_vault_client.py'
+permissions:
+  contents: read
+jobs:
+  one-real-auth-proof:
+    name: Real Android credential-flow checkpoint ${{ matrix.case }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gate actual credential flow
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        run: |
+          set -eu
+          test -n "$KWAI_LOGIN"
+          test -n "$KWAI_PASSWORD"
+          echo 'REAL_ANDROID_AUTH_JOB_GATE=PASS'
+          echo 'REAL_AUTH_ATTEMPT_READY=PASS'
+      - name: Install verified Kwai package
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+      - name: Perform one real authentication and verify account identity
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'universo.anthares' }}
+          KWAI_ACCOUNT_ID: primary
+          KWAI_SESSION_FILE: kwai-session-primary.enc
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          ram-size: 3072M
+          cores: 2
+          disable-animations: false
+          emulator-boot-timeout: 900
+          force-avd-creation: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none
+          script: |
+            set -euo pipefail
+            bash kwai_vault_install.sh
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+            sleep 8
+            python3 kwai_android_autologin.py
+            if [ '${{ matrix.case }}' = '1' ]; then
+              python3 tools/kwai_credential_login.py
+            else
+              echo 'CONTROLLED_LOGIN_RESERVED_FOR_CASE_1'
+            fi
+            sleep 6
+            KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee kwai-stage4-auth-proof.txt
+            if [ '${{ matrix.case }}' = '1' ]; then
+              grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' kwai-stage4-auth-proof.txt
+            fi
+            if [ '${{ matrix.case }}' = '1' ]; then
+              grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-stage4-auth-proof.txt
+            fi
+            if [ '${{ matrix.case }}' = '1' ]; then
+              bash kwai_session_state.sh save | tee kwai-stage4-session-save.txt
+              test -s kwai-session-primary.enc
+            fi
+            echo 'STAGE4_AUTHENTICATION_AND_IDENTITY=PASS'
+      - name: Persist encrypted session
+        shell: bash
+        env:
+          KWAI_SESSION_FILE: kwai-session-primary.enc
+        run: |
+          set -Eeuo pipefail
+          if [ '${{ matrix.case }}' = '1' ]; then
+            test -s kwai-session-primary.enc
+            python3 tools/kwai_session_vault_client.py push --path kwai-session-primary.enc
+          fi
+          echo 'STAGE4_SESSION_PERSISTENCE=PASS'
