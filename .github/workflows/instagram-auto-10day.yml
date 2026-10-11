@@ -4,17 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Select media without publishing"
-        required: false
-        default: false
-        type: boolean
-      allow_legacy:
-        description: "Allow pre-microcut Anthares clips"
+        description: "Prepare one clip without publishing"
         required: false
         default: false
         type: boolean
   schedule:
-    # America/Campo_Grande: 08,10,12,14,16,18,20,21,22,23 local (UTC-4).
+    # America/Campo_Grande (UTC-4): 08,10,12,14,16,18,20,21,22,23.
     - cron: "0 0,1,2,3,12,14,16,18,20,22 * * *"
 
 permissions:
@@ -30,12 +25,19 @@ env:
   INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
   INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST || 'graph.instagram.com' }}
   INSTAGRAM_LEDGER: .state/instagram-published.json
-  INSTAGRAM_MICROCUT_MARKER: -microcut
+  INSTAGRAM_PREPARED_PLAN: instagram-prepared.json
+  INSTAGRAM_PREPARE_DIR: instagram-prepared
+  INSTAGRAM_WHISPER_MODEL: small
+  INSTAGRAM_MIN_FINAL_SECONDS: "30"
+  INSTAGRAM_PAUSE_SECONDS: "0.65"
+  INSTAGRAM_PAUSE_KEEP_SECONDS: "0.16"
+  INSTAGRAM_MAX_REMOVAL_RATIO: "0.30"
+  RELEASE_TAG: instagram-media-cache
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,37 +48,137 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Unit tests
+      - name: Cache Whisper model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: instagram-whisper-small-v1
+
+      - name: Install media dependencies
         run: |
-          python -m py_compile scripts/instagram_publish.py scripts/instagram_autopublish.py
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          python -m pip install --disable-pip-version-check faster-whisper
+
+      - name: Unit and syntax tests
+        run: |
+          python -m py_compile scripts/instagram_publish.py scripts/instagram_autopublish.py scripts/instagram_prepare_media.py
           python -m unittest -v test-hub/test_instagram_publish.py test-hub/test_instagram_autopublish.py
 
+      - name: Prepare next owned clip
+        id: prepare
+        run: |
+          python -u scripts/instagram_prepare_media.py
+          python - <<'PY'
+          import json, os
+          p=json.load(open(os.environ['INSTAGRAM_PREPARED_PLAN'],encoding='utf-8'))
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as f:
+              f.write('ready=' + ('true' if p.get('ready') else 'false') + '\n')
+          print('INSTAGRAM_PREPARED ready='+str(bool(p.get('ready'))).lower())
+          if p.get('ready'):
+              print('INSTAGRAM_SOURCE_ATTACHMENT_ID='+str(p.get('source_attachment_id') or ''))
+              print('INSTAGRAM_FINAL_DURATION='+str(p.get('final_duration') or ''))
+              print('INSTAGRAM_MICROCUT='+json.dumps(p.get('microcut') or {},ensure_ascii=False,separators=(',',':')))
+              print('INSTAGRAM_LAYOUT='+json.dumps(p.get('layout') or {},ensure_ascii=False,separators=(',',':')))
+          PY
+
+      - name: Stop cleanly when queue is empty
+        if: steps.prepare.outputs.ready != 'true'
+        run: echo "No unpublished Anthares source clip is available."
+
       - name: Validate runtime credentials
-        if: github.event_name == 'schedule' || inputs.dry_run != true
+        if: steps.prepare.outputs.ready == 'true' && (github.event_name == 'schedule' || inputs.dry_run != true)
         shell: bash
         run: |
           test -n "$INSTAGRAM_USER_ID" || { echo "Missing INSTAGRAM_USER_ID secret" >&2; exit 2; }
           test -n "$INSTAGRAM_ACCESS_TOKEN" || { echo "Missing INSTAGRAM_ACCESS_TOKEN secret" >&2; exit 2; }
 
-      - name: Publish next strict microcut
+      - name: Host prepared video temporarily
+        id: host
+        if: steps.prepare.outputs.ready == 'true' && (github.event_name == 'schedule' || inputs.dry_run != true)
         env:
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
-          ALLOW_LEGACY: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_legacy && 'true' || 'false' }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          args=()
-          [[ "$DRY_RUN" == "true" ]] && args+=(--dry-run)
-          [[ "$ALLOW_LEGACY" == "true" ]] && args+=(--allow-legacy)
-          python scripts/instagram_autopublish.py "${args[@]}"
+          readarray -t vals < <(python - <<'PY'
+          import json,os
+          p=json.load(open(os.environ['INSTAGRAM_PREPARED_PLAN'],encoding='utf-8'))
+          print(p['media_path'])
+          print(p['asset_name'])
+          PY
+          )
+          MEDIA="${vals[0]}"
+          ASSET="${vals[1]}"
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --title "Instagram transient media cache" --notes "Temporary public media used only while Instagram ingests a Reel." --target main
+          fi
+          gh release upload "$RELEASE_TAG" "$MEDIA" --clobber
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${ASSET}"
+          curl -fL --retry 4 --retry-delay 2 --range 0-65535 -o /tmp/release-probe.bin "$URL"
+          test -s /tmp/release-probe.bin
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "asset_name=$ASSET" >> "$GITHUB_OUTPUT"
+          echo "INSTAGRAM_PUBLIC_MEDIA_READY=$ASSET"
+
+      - name: Publish Reel through official Instagram API
+        id: publish
+        if: steps.host.outputs.url != ''
+        env:
+          PUBLIC_VIDEO_URL: ${{ steps.host.outputs.url }}
+        run: |
+          python - <<'PY'
+          import json, os, time
+          from scripts.instagram_autopublish import load_ledger, save_ledger
+          from scripts.instagram_publish import InstagramAPIError, client_from_env, quota_to_dict
+          plan=json.load(open(os.environ['INSTAGRAM_PREPARED_PLAN'],encoding='utf-8'))
+          client=client_from_env()
+          result=client.publish_reel(os.environ['PUBLIC_VIDEO_URL'],caption=plan['caption'],share_to_feed=True,poll_interval=10,poll_attempts=30)
+          verification={}
+          try:
+              verification=client._request('GET',result['media_id'],query={'fields':'id,permalink,media_type,timestamp'})
+          except InstagramAPIError as exc:
+              verification={'verification_error':str(exc)}
+          ledger=load_ledger()
+          key=str(plan.get('source_attachment_id') or plan.get('source_url') or '')
+          ledger['published'][key]={
+              'source_attachment_id':str(plan.get('source_attachment_id') or ''),
+              'source_url':plan.get('source_url'),
+              'instagram_media_id':str(result.get('media_id') or ''),
+              'permalink':verification.get('permalink'),
+              'published_at':int(time.time()),
+              'caption':plan.get('caption'),
+              'final_duration':plan.get('final_duration'),
+              'microcut':plan.get('microcut'),
+              'layout':plan.get('layout'),
+              'quota_before_publish':result.get('quota_before_publish'),
+          }
+          save_ledger(ledger)
+          evidence={
+              'ok':True,
+              'instagram_media_id':result.get('media_id'),
+              'permalink':verification.get('permalink'),
+              'media_type':verification.get('media_type'),
+              'timestamp':verification.get('timestamp'),
+              'source_attachment_id':plan.get('source_attachment_id'),
+              'final_duration':plan.get('final_duration'),
+              'microcut':plan.get('microcut'),
+              'layout':plan.get('layout'),
+              'quota_before_publish':result.get('quota_before_publish'),
+          }
+          open('instagram-publish-evidence.json','w',encoding='utf-8').write(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          print('INSTAGRAM_PUBLISH_EVIDENCE='+json.dumps(evidence,ensure_ascii=False,separators=(',',':')))
+          PY
+
+      - name: Remove transient release asset after successful ingest
+        if: steps.publish.outcome == 'success' && steps.host.outputs.asset_name != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete-asset "$RELEASE_TAG" "${{ steps.host.outputs.asset_name }}" -y
 
       - name: Persist dedupe ledger
-        if: github.event_name == 'schedule' || inputs.dry_run != true
+        if: steps.publish.outcome == 'success'
         shell: bash
         run: |
-          if git diff --quiet -- "$INSTAGRAM_LEDGER"; then
-            echo "No ledger change; no Reel was published."
-            exit 0
-          fi
           git config user.name "Anthares Instagram Worker"
           git config user.email "81930373+UniversoAnthares@users.noreply.github.com"
           git add "$INSTAGRAM_LEDGER"
@@ -88,3 +190,14 @@ jobs:
             sleep $((2*attempt))
           done
           test "$ok" = 1
+
+      - name: Upload diagnostic evidence
+        if: always() && steps.prepare.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: instagram-run-${{ github.run_id }}
+          path: |
+            instagram-prepared.json
+            instagram-publish-evidence.json
+          if-no-files-found: ignore
+          retention-days: 3
