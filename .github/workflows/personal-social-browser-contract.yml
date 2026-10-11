@@ -7,18 +7,22 @@ on:
       - feature/personal-social-browser-publish
     paths:
       - 'social_adapters/personal_browser.py'
+      - 'social_adapters/community_browser.py'
       - 'social_adapters/publish_clip.py'
       - 'anthares_publisher/contract.py'
       - 'anthares_publisher/ledger.py'
       - 'tests/test_personal_social_browser.py'
+      - 'tests/test_community_browser.py'
       - '.github/workflows/personal-social-browser-contract.yml'
   pull_request:
     paths:
       - 'social_adapters/personal_browser.py'
+      - 'social_adapters/community_browser.py'
       - 'social_adapters/publish_clip.py'
       - 'anthares_publisher/contract.py'
       - 'anthares_publisher/ledger.py'
       - 'tests/test_personal_social_browser.py'
+      - 'tests/test_community_browser.py'
       - '.github/workflows/personal-social-browser-contract.yml'
 
 permissions:
@@ -37,15 +41,25 @@ jobs:
         run: |
           python -m py_compile \
             social_adapters/personal_browser.py \
+            social_adapters/community_browser.py \
             social_adapters/publish_clip.py \
             anthares_publisher/contract.py \
             anthares_publisher/ledger.py
-      - name: Run personal social publisher contract tests
-        run: python -m unittest -v tests.test_personal_social_browser
-      - name: Dry-run X, Instagram and Facebook adapters
+      - name: Run social publisher contract tests
+        run: |
+          python -m unittest -v \
+            tests.test_personal_social_browser \
+            tests.test_community_browser
+      - name: Dry-run all browser adapters
         run: |
           mkdir -p /tmp/anthares-profile
           printf 'synthetic-video' >/tmp/anthares-clip.mp4
           python social_adapters/personal_browser.py --platform x --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/x
           python social_adapters/personal_browser.py --platform instagram --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/instagram
           python social_adapters/personal_browser.py --platform facebook --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/facebook
+          python social_adapters/community_browser.py --platform discord --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/discord --destination https://discord.com/channels/111/222
+          python social_adapters/community_browser.py --platform linkedin --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile/linkedin
+          python social_adapters/community_browser.py --platform medium --account contract-test --video /tmp/anthares-clip.mp4 --caption test --title test --media-url https://example.com/video --profile /tmp/anthares-profile/medium
+          python social_adapters/community_browser.py --platform rumble --account contract-test --video /tmp/anthares-clip.mp4 --caption test --title test --profile /tmp/anthares-profile/rumble
+          python social_adapters/community_browser.py --platform odysee --account contract-test --video /tmp/anthares-clip.mp4 --caption test --title test --profile /tmp/anthares-profile/odysee
+          python social_adapters/community_browser.py --platform odyssey --account contract-test --video /tmp/anthares-clip.mp4 --caption test --title test --profile /tmp/anthares-profile/odyssey
