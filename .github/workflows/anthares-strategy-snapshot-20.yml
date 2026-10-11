@@ -1,0 +1,31 @@
+name: Anthares S1 Snapshot Android Reuse x20
+on:
+  push:
+    paths:
+      - '.github/workflows/anthares-strategy-snapshot-20.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    name: snapshot proof ${{ matrix.case }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    env:
+      ANDROID_EXECUTOR_URL: ${{ vars.ANDROID_EXECUTOR_URL }}
+    steps:
+      - name: Verify actual feasibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$ANDROID_HOME/emulator" || { echo "NO_EMULATOR_SDK"; exit 11; }
+          test -x "$ANDROID_HOME/emulator/emulator" || exit 12
+          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" || exit 13
+          echo "SNAPSHOT_PREREQUISITES=PASS"
+          echo "SNAPSHOT_REUSE=NOT_PROVEN"
+          exit 21
