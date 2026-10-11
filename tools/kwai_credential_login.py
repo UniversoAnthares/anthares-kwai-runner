@@ -77,11 +77,21 @@ if email_field is None:
     raise SystemExit(3)
 if not clear_and_type(email_field,LOGIN): raise SystemExit(3)
 ns=snap(); b=exact_button(ns,('Next','Continue','Avançar','Continuar'))
-if b: tap(b)
-else: adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(1)
-state,ns=wait_password_or_challenge()
+if b is not None:
+    tap(b)
+else:
+    adb('shell','input','keyevent','KEYCODE_ENTER')
+    time.sleep(1)
+state,ns=wait_password_or_challenge(seconds=18)
 if state=='challenge': print('KWAI_LOGIN_CHALLENGE_AFTER_ACCOUNT'); raise SystemExit(6)
-if state!='password': print('KWAI_ACCOUNT_STEP_DID_NOT_ADVANCE'); raise SystemExit(3)
+if state!='password':
+    # Safe diagnostics only: field classes, editable/password flags and resource
+    # IDs. Never print entered values, labels, or full UI hierarchy.
+    print('KWAI_ACCOUNT_STEP_DID_NOT_ADVANCE')
+    print('KWAI_ACCOUNT_STEP_EDIT_FIELDS='+str(len(edits(ns))))
+    print('KWAI_ACCOUNT_STEP_PASSWORD_FIELDS='+str(sum(1 for n in edits(ns) if is_password(n))))
+    print('KWAI_ACCOUNT_STEP_BUTTON_IDS='+','.join(sorted(set((n.get('resource-id') or '').split('/')[-1] for n in ns if (n.get('clickable')=='true' and n.get('resource-id'))))[:500])
+    raise SystemExit(3)
 
 es=edits(ns); verified=[n for n in es if is_password(n)]
 if len(verified)!=1:
@@ -89,8 +99,11 @@ if len(verified)!=1:
     raise SystemExit(4)
 if not clear_and_type(verified[0],PASSWORD): print('KWAI_PASSWORD_FIELD_MISSING'); raise SystemExit(4)
 ns=snap(); b=exact_button(ns,('Log in','Login','Sign in','Entrar','Continue','Continuar','Next','Avançar'))
-if b: tap(b)
-else: adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(1)
+if b is not None:
+    tap(b)
+else:
+    adb('shell','input','keyevent','KEYCODE_ENTER')
+    time.sleep(1)
 
 # Return success only after credential fields disappear. Challenges are explicit.
 for _ in range(20):
