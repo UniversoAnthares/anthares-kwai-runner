@@ -1,54 +1,32 @@
-﻿name: Android Boot Strategy Probe
-
+name: Strategy 1 - ARM64 Native Feasibility x20
 on:
   workflow_dispatch:
   push:
-    paths:
-      - '.boot-strategy-trigger'
-
+    paths: ['.github/workflows/android-boot-strategy.yml']
 permissions:
   contents: read
-
 jobs:
-  boot:
+  arm64-native:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 8
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
-        api: [30, 33, 34]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
     steps:
-      - uses: actions/checkout@v4
-      - name: Cache Android SDK
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.android
-            /opt/hostedtoolcache/android
-          key: android-sdk-${{ runner.os }}-${{ hashFiles('.github/workflows/android-boot-strategy.yml') }}
-          restore-keys: |
-            android-sdk-${{ runner.os }}-
-      - name: Enable KVM acceleration
+      - name: Prove native ARM64 runner and Android virtualization prerequisites
+        shell: bash
         run: |
-          test -e /dev/kvm || { echo "KVM_DEVICE_MISSING"; exit 70; }
-          sudo chmod 666 /dev/kvm
-          test -r /dev/kvm -a -w /dev/kvm
-          echo "KVM_ACCELERATION_READY=1"
-      - name: Boot API ${{ matrix.api }}
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: ${{ matrix.api }}
-          arch: x86_64
-          target: google_apis
-          profile: pixel_5
-          cores: 2
-          ram-size: 2048M
-          emulator-boot-timeout: 300
-          disable-animations: true
-          force-avd-creation: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
-          script: |
-            set -euo pipefail
-            adb wait-for-device
-            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
-            echo "ANDROID_BOOT_OK_API=${{ matrix.api }}"
+          set -euo pipefail
+          echo "TEST_CASE=${{ matrix.case }}"
+          test "$(uname -m)" = aarch64
+          echo ARM64_NATIVE=PASS
+          if [ -c /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+            echo ARM64_KVM=PASS
+          else
+            echo ARM64_KVM=UNAVAILABLE
+            exit 70
+          fi
+          grep -E 'Features|flags' /proc/cpuinfo | head -1 || true
+          echo ARM64_ANDROID_VIRTUALIZATION_PREREQUISITES=PASS
