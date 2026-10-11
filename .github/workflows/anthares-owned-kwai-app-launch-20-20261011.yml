@@ -40,7 +40,7 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -accel on -memory 2048
           script: |
-            bash -euo pipefail -c '
+            bash -euo pipefail <<'BASH_SCRIPT'
             echo "OWN_CASE=${{ matrix.case }}"
             timeout 35 adb wait-for-device
             test "$(timeout 25 adb shell getprop sys.boot_completed | tr -d '\r')" = 1
@@ -53,4 +53,4 @@ jobs:
             test -s /tmp/kwai-pid.txt
             adb shell dumpsys activity activities | grep -E 'com.kwai.video' | head -8
             echo OWN_KWAI_REAL_APP_LAUNCH=PASS
-            '
+            BASH_SCRIPT
