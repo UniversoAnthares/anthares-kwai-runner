@@ -150,7 +150,14 @@ jobs:
           KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'universo.anthares' }}
         run: |
           set -euo pipefail
-          test -n "$KWAI_LOGIN" && test -n "$KWAI_PASSWORD"
+          if [ -z "$KWAI_LOGIN" ] || [ -z "$KWAI_PASSWORD" ]; then
+            echo "STAGE4_BLOCKER=MISSING_KWAI_CREDENTIAL_SECRETS" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "STAGE4_CREDENTIAL_LOGIN=NOT_ATTEMPTED"
+            echo "STAGE4_PROBE=CHECKING_RESTORED_SNAPSHOT"
+            export KWAI_CREDENTIALS_MISSING=1
+          else
+            export KWAI_CREDENTIALS_MISSING=0
+          fi
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           export PATH="$SDK/platform-tools:$PATH"
           adb shell pm list packages | grep -F 'com.kwai.video'
@@ -159,8 +166,10 @@ jobs:
           adb shell am force-stop com.kwai.video || true
           adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
           sleep 8
-          python3 kwai_android_autologin.py
-          python3 tools/kwai_credential_login.py
+          if [ "$KWAI_CREDENTIALS_MISSING" = 0 ]; then
+            python3 kwai_android_autologin.py
+            python3 tools/kwai_credential_login.py
+          fi
           KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee /tmp/stage4-auth-proof.txt
           grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/stage4-auth-proof.txt
           grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/stage4-auth-proof.txt
