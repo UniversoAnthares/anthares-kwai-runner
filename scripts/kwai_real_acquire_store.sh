@@ -9,6 +9,9 @@ login_ok=0
 attempt=1
 while [ "$attempt" -le 3 ]; do
   echo "KWAI_REAL_LOGIN_ATTEMPT=$attempt"
+  # Resolve the observed app-owned transient network-error dialog before
+  # entering credentials; recovery only taps Kwai's explicit wait/close controls.
+  python3 tools/kwai_login_surface_recovery.py || true
   if python3 tools/kwai_credential_login.py 2>&1 | tee -a kwai-mobile-login.txt; then
     login_ok=1
     break
