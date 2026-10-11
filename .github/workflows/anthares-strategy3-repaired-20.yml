@@ -1,0 +1,42 @@
+name: Anthares Strategy 3 Repaired - Persistent Executor Discovery x20
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-strategy3-repaired-20.yml'
+permissions:
+  contents: read
+jobs:
+  decisive:
+    name: Decisive check ${{ matrix.case }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Discover configured executor and validate actual endpoint
+        shell: bash
+        env:
+          EXECUTOR_URL: ${{ vars.ANTHARES_ANDROID_EXECUTOR_URL }}
+          EXECUTOR_TOKEN: ${{ secrets.ANTHARES_ANDROID_EXECUTOR_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "DISCOVERY_CASE=${{ matrix.case }}"
+          if [ -z "$EXECUTOR_URL" ]; then
+            echo 'PERSISTENT_EXECUTOR_NOT_PROVISIONED=TRUE'
+            echo 'STRATEGY3_BLOCKED_AT_PROVISIONING_NOT_ANDROID=TRUE'
+            exit 1
+          fi
+          case "$EXECUTOR_URL" in https://*) ;; *) echo 'EXECUTOR_URL_MUST_USE_HTTPS'; exit 1;; esac
+          test -n "$EXECUTOR_TOKEN" || { echo 'EXECUTOR_TOKEN_NOT_CONFIGURED'; exit 1; }
+          for i in 1 2 3; do
+            curl -fsS --retry 2 --connect-timeout 8 --max-time 15 -H "Authorization: Bearer $EXECUTOR_TOKEN" "$EXECUTOR_URL/health" > "health-$i.json"
+            python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x.get("android_ready") is True and x.get("adb_ready") is True and x.get("instance_id")' "health-$i.json"
+            sleep 2
+          done
+          python3 -c 'import json; d=[json.load(open("health-%s.json"%i)) for i in (1,2,3)]; assert len(set(x["instance_id"] for x in d))==1'
+          echo STRATEGY3_PERSISTENT_INSTANCE=PASS
