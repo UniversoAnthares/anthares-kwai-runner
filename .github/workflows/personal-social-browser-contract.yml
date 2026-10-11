@@ -1,0 +1,50 @@
+name: Personal social browser contract
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/personal-social-browser-publish
+    paths:
+      - 'social_adapters/personal_browser.py'
+      - 'social_adapters/publish_clip.py'
+      - 'anthares_publisher/contract.py'
+      - 'anthares_publisher/ledger.py'
+      - 'tests/test_personal_social_browser.py'
+      - '.github/workflows/personal-social-browser-contract.yml'
+  pull_request:
+    paths:
+      - 'social_adapters/personal_browser.py'
+      - 'social_adapters/publish_clip.py'
+      - 'anthares_publisher/contract.py'
+      - 'anthares_publisher/ledger.py'
+      - 'tests/test_personal_social_browser.py'
+      - '.github/workflows/personal-social-browser-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile changed publisher modules
+        run: |
+          python -m py_compile \
+            social_adapters/personal_browser.py \
+            social_adapters/publish_clip.py \
+            anthares_publisher/contract.py \
+            anthares_publisher/ledger.py
+      - name: Run personal social publisher contract tests
+        run: python -m unittest -v tests.test_personal_social_browser
+      - name: Dry-run both personal account adapters
+        run: |
+          mkdir -p /tmp/anthares-profile
+          printf 'synthetic-video' >/tmp/anthares-clip.mp4
+          python social_adapters/personal_browser.py --platform x --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile
+          python social_adapters/personal_browser.py --platform instagram --account contract-test --video /tmp/anthares-clip.mp4 --caption test --profile /tmp/anthares-profile
