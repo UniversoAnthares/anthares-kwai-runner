@@ -256,15 +256,30 @@ def verticalize(path: Path, output: Path) -> dict[str, Any]:
 def prepare() -> dict[str, Any]:
     WORK_DIR.mkdir(parents=True, exist_ok=True)
     ledger = load_ledger()
-    row = select_next(fetch_media(), ledger, allow_legacy=True)
+    rows = fetch_media()
+    probe_ledger = json.loads(json.dumps(ledger))
+    row = None
+    source_url = ""
+    source = WORK_DIR / "source.mp4"
+    while True:
+        candidate = select_next(rows, probe_ledger, allow_legacy=True)
+        if candidate is None:
+            break
+        candidate_url = str(candidate.get("source_url") or "")
+        try:
+            download(candidate_url, source)
+            row = candidate
+            source_url = candidate_url
+            break
+        except Exception as exc:
+            key = str(candidate.get("id") or candidate_url)
+            probe_ledger.setdefault("published", {})[key] = {"source_url": candidate_url}
+            print(f"INSTAGRAM_SOURCE_SKIP id={candidate.get('id')} error={type(exc).__name__}: {exc}", flush=True)
+            source.unlink(missing_ok=True)
     if row is None:
-        plan = {"ready": False, "reason": "no_unpublished_owned_media"}
+        plan = {"ready": False, "reason": "no_reachable_unpublished_owned_media"}
         PLAN_PATH.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return plan
-
-    source_url = str(row.get("source_url") or "")
-    source = WORK_DIR / "source.mp4"
-    download(source_url, source)
     source_is_microcut = "-microcut" in source_url.casefold()
     micro = WORK_DIR / "microcut.mp4"
     if source_is_microcut:
