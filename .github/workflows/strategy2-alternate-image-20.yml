@@ -1,4 +1,4 @@
-name: Strategy 2 Alternate Android Image x20
+name: Strategy 2 Alternate Android Image x30
 on:
   push:
     branches: [experiment/anthares-android-cloud-20261010]
