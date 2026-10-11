@@ -1,0 +1,55 @@
+name: Anthares OWN Kwai APK Launch Proof 20 Oct11
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-owned-kwai-app-launch-20-20261011.yml'
+permissions:
+  contents: read
+jobs:
+  kwai-real-launch:
+    name: OWN Kwai real launch case ${{ matrix.case }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 19
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch and checksum real Kwai APK vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip' | sha256sum -c -
+          python3 -c 'import zipfile;zipfile.ZipFile("/tmp/kwai-vault.zip").extractall("/tmp/kwai-vault")'
+          ls -lh /tmp/kwai-vault/*.apk
+      - name: Install and launch actual Kwai UI
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: false
+          emulator-boot-timeout: 420
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -accel on -memory 2048
+          script: |
+            set -Eeuo pipefail
+            echo "OWN_CASE=${{ matrix.case }}"
+            timeout 35 adb wait-for-device
+            test "$(timeout 25 adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+            adb shell getprop ro.product.cpu.abilist
+            adb install-multiple -r /tmp/kwai-vault/*.apk
+            adb shell pm path com.kwai.video | grep -q package:
+            timeout 30 adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 | tee /tmp/kwai-launch.txt
+            sleep 12
+            adb shell pidof com.kwai.video | tee /tmp/kwai-pid.txt
+            test -s /tmp/kwai-pid.txt
+            adb shell dumpsys activity activities | grep -E 'com.kwai.video' | head -8
+            echo 'OWN_KWAI_REAL_APP_LAUNCH=PASS'
