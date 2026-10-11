@@ -1,4 +1,4 @@
-name: Strategy 3 - Real acquire_and_store x20
+name: Strategy 3 - Real acquire_and_store x30
 
 on:
   workflow_dispatch:
