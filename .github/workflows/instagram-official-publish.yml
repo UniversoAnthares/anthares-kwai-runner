@@ -66,7 +66,7 @@ jobs:
       OPERATION: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || github.event.client_payload.mode || 'quota' }}
       VIDEO_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.video_url || github.event.client_payload.video_url || '' }}
       CAPTION: ${{ github.event_name == 'workflow_dispatch' && inputs.caption || github.event.client_payload.caption || '' }}
-      SHARE_TO_FEED: ${{ github.event_name == 'workflow_dispatch' && inputs.share_to_feed || github.event.client_payload.share_to_feed || true }}
+      SHARE_TO_FEED: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.share_to_feed) || format('{0}', github.event.client_payload.share_to_feed || true) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
