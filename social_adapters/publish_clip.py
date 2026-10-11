@@ -1,26 +1,51 @@
 #!/usr/bin/env python3
-"""Reserve, publish and confirm one X/Instagram/Facebook clip through the durable ledger."""
+"""Reserve, publish and confirm one clip through the durable multi-platform ledger."""
 import argparse
 import json
 from pathlib import Path
 
 from anthares_publisher.contract import PublicationEvidence, validate_evidence
 from anthares_publisher.ledger import confirm, connect, fail, mark_attempt, reserve
-from social_adapters.personal_browser import file_sha256, publish
+from social_adapters.personal_browser import file_sha256, publish as publish_personal
+from social_adapters.community_browser import canonical_platform, publish as publish_community
+
+PERSONAL_PLATFORMS = frozenset(("x", "instagram", "facebook"))
+COMMUNITY_PLATFORMS = frozenset(("discord", "linkedin", "medium", "rumble", "odysee"))
+
+
+def _publish(args, platform, commit):
+    common = dict(
+        platform=platform,
+        video=str(Path(args.video).resolve()),
+        caption=args.caption,
+        account=args.account,
+        profile=args.profile,
+        commit=commit,
+    )
+    if platform in PERSONAL_PLATFORMS:
+        return publish_personal(**common, headless=not args.headed) if commit else publish_personal(**common)
+    if platform in COMMUNITY_PLATFORMS:
+        return publish_community(
+            **common,
+            headless=not args.headed,
+            destination=args.destination,
+            media_url=args.media_url,
+            title=args.title,
+        ) if commit else publish_community(
+            **common,
+            destination=args.destination,
+            media_url=args.media_url,
+            title=args.title,
+        )
+    raise ValueError("unsupported platform")
 
 
 def run(args):
+    platform = canonical_platform(args.platform)
     video = Path(args.video).resolve()
     digest = file_sha256(video)
     if not args.commit:
-        return publish(
-            args.platform,
-            str(video),
-            args.caption,
-            args.account,
-            args.profile,
-            commit=False,
-        )
+        return _publish(args, platform, commit=False)
 
     db = connect(args.db)
     reservation = reserve(
@@ -28,7 +53,7 @@ def run(args):
         args.source_id,
         args.start_ms,
         args.end_ms,
-        args.platform,
+        platform,
         args.account,
         digest,
     )
@@ -37,15 +62,11 @@ def run(args):
     if not mark_attempt(db, reservation["id"]):
         return {"status": "NOT_ELIGIBLE", **reservation}
 
-    result = publish(
-        args.platform,
-        str(video),
-        args.caption,
-        args.account,
-        args.profile,
-        commit=True,
-        headless=not args.headed,
-    )
+    try:
+        result = _publish(args, platform, commit=True)
+    except Exception:
+        fail(db, reservation["id"], retry=True)
+        raise
     result["publication_id"] = reservation["id"]
 
     if result.get("status") == "CONFIRMED":
@@ -53,8 +74,8 @@ def run(args):
         remote_id = str(result.get("remote_id") or "")
         permalink = str(evidence.get("permalink") or "")
         validate_evidence(
-            PublicationEvidence(args.platform, args.account, remote_id, permalink),
-            args.platform,
+            PublicationEvidence(platform, args.account, remote_id, permalink),
+            platform,
             args.account,
         )
         if not confirm(db, reservation["id"], remote_id, permalink):
@@ -73,11 +94,18 @@ def run(args):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--platform", choices=["x", "instagram", "facebook"], required=True)
+    p.add_argument(
+        "--platform",
+        choices=["x", "instagram", "facebook", "discord", "linkedin", "medium", "rumble", "odysee", "odyssey"],
+        required=True,
+    )
     p.add_argument("--account", required=True)
     p.add_argument("--video", required=True)
-    p.add_argument("--caption", required=True)
+    p.add_argument("--caption", default="")
+    p.add_argument("--title", default="")
     p.add_argument("--profile", required=True)
+    p.add_argument("--destination", default="", help="Discord channel URL; optional destination/profile URL for other adapters")
+    p.add_argument("--media-url", default="", help="Public media URL used by Medium embed/link publication")
     p.add_argument("--source-id", required=True)
     p.add_argument("--start-ms", type=int, required=True)
     p.add_argument("--end-ms", type=int, required=True)
