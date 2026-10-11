@@ -48,7 +48,7 @@ jobs:
         env:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
-          KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'universo.anthares' }}
+          KWAI_EXPECTED_ACCOUNT: lucasrosalem
           KWAI_ACCOUNT_ID: primary
           KWAI_SESSION_FILE: kwai-session-primary.enc
         with:
