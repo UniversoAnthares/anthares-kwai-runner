@@ -1,0 +1,100 @@
+name: X YouTube Live Relay
+
+on:
+  workflow_dispatch:
+    inputs:
+      youtube_url:
+        description: "Public YouTube Live URL"
+        required: true
+        type: string
+      video_height:
+        description: "Output height"
+        required: false
+        default: "720"
+        type: choice
+        options:
+          - "720"
+          - "1080"
+      video_fps:
+        description: "Output FPS"
+        required: false
+        default: "30"
+        type: choice
+        options:
+          - "30"
+          - "60"
+      max_minutes:
+        description: "Maximum relay duration in minutes (GitHub-hosted runners cap jobs at 6h)"
+        required: false
+        default: "330"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: x-youtube-live-relay
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate X ingest secrets
+        env:
+          X_RTMP_URL: ${{ secrets.X_RTMP_URL }}
+          X_RTMP_STREAM_KEY: ${{ secrets.X_RTMP_STREAM_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$X_RTMP_URL" || { echo "Missing X_RTMP_URL repository secret"; exit 1; }
+          test -n "$X_RTMP_STREAM_KEY" || { echo "Missing X_RTMP_STREAM_KEY repository secret"; exit 1; }
+          case "$X_RTMP_URL" in
+            rtmp://*|rtmps://*) ;;
+            *) echo "X_RTMP_URL must start with rtmp:// or rtmps://"; exit 1;;
+          esac
+      - name: Install yt-dlp
+        run: python -m pip install --disable-pip-version-check --quiet --upgrade yt-dlp
+      - name: Verify YouTube live is resolvable
+        env:
+          YOUTUBE_URL: ${{ inputs.youtube_url }}
+        run: |
+          set -euo pipefail
+          yt-dlp --no-warnings --no-playlist --simulate "$YOUTUBE_URL"
+      - name: Validate relay script syntax
+        run: bash -n scripts/x_youtube_live_relay.sh
+
+  relay:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yt-dlp and verify FFmpeg
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet --upgrade yt-dlp
+          ffmpeg -version | head -n 1
+          yt-dlp --version
+      - name: Relay YouTube Live to X Producer
+        env:
+          YOUTUBE_URL: ${{ inputs.youtube_url }}
+          X_RTMP_URL: ${{ secrets.X_RTMP_URL }}
+          X_RTMP_STREAM_KEY: ${{ secrets.X_RTMP_STREAM_KEY }}
+          VIDEO_HEIGHT: ${{ inputs.video_height }}
+          VIDEO_FPS: ${{ inputs.video_fps }}
+          VIDEO_BITRATE: ${{ inputs.video_height == '1080' && '7000k' || '4500k' }}
+          AUDIO_BITRATE: "128k"
+          MAX_MINUTES: ${{ inputs.max_minutes }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/x_youtube_live_relay.sh
+          case "$MAX_MINUTES" in
+            ''|*[!0-9]*) echo "max_minutes must be an integer"; exit 2;;
+          esac
+          if [ "$MAX_MINUTES" -lt 1 ] || [ "$MAX_MINUTES" -gt 350 ]; then
+            echo "max_minutes must be between 1 and 350"
+            exit 2
+          fi
+          timeout --signal=INT --kill-after=20s "${MAX_MINUTES}m" scripts/x_youtube_live_relay.sh
