@@ -90,7 +90,8 @@ if state!='password':
     print('KWAI_ACCOUNT_STEP_DID_NOT_ADVANCE')
     print('KWAI_ACCOUNT_STEP_EDIT_FIELDS='+str(len(edits(ns))))
     print('KWAI_ACCOUNT_STEP_PASSWORD_FIELDS='+str(sum(1 for n in edits(ns) if is_password(n))))
-    print('KWAI_ACCOUNT_STEP_BUTTON_IDS='+','.join(sorted(set((n.get('resource-id') or '').split('/')[-1] for n in ns if (n.get('clickable')=='true' and n.get('resource-id'))))[:500])
+    button_ids = sorted({(n.get('resource-id') or '').split('/')[-1] for n in ns if n.get('clickable') == 'true' and n.get('resource-id')})
+    print('KWAI_ACCOUNT_STEP_BUTTON_IDS=' + ','.join(button_ids)[:500])
     raise SystemExit(3)
 
 es=edits(ns); verified=[n for n in es if is_password(n)]
