@@ -26,6 +26,25 @@ jobs:
           echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip' | sha256sum -c -
           python3 -c 'import zipfile;zipfile.ZipFile("/tmp/kwai-vault.zip").extractall("/tmp/kwai-vault")'
           ls -lh /tmp/kwai-vault/*.apk
+      - name: Prepare standalone bash APK test
+        shell: bash
+        env:
+          APK_TEST_SCRIPT: |
+            #!/usr/bin/env bash
+            set -Eeuo pipefail
+            echo "OWN_CASE=${{ matrix.case }}"
+            timeout 35 adb wait-for-device
+            test "$(timeout 25 adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+            adb shell getprop ro.product.cpu.abilist
+            adb install-multiple -r /tmp/kwai-vault/*.apk
+            adb shell pm path com.kwai.video | grep -q package:
+            timeout 30 adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 | tee /tmp/kwai-launch.txt
+            sleep 12
+            adb shell pidof com.kwai.video | tee /tmp/kwai-pid.txt
+            test -s /tmp/kwai-pid.txt
+            adb shell dumpsys activity activities | grep -E 'com.kwai.video' | head -8
+            echo OWN_KWAI_REAL_APP_LAUNCH=PASS
+        run: printf '%s\n' "$APK_TEST_SCRIPT" > /tmp/kwai-real-test.sh
       - name: Install and launch actual Kwai UI
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -39,18 +58,4 @@ jobs:
           emulator-boot-timeout: 900
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -accel on -memory 2048
-          script: |
-            bash -euo pipefail <<'BASH_SCRIPT'
-            echo "OWN_CASE=${{ matrix.case }}"
-            timeout 35 adb wait-for-device
-            test "$(timeout 25 adb shell getprop sys.boot_completed | tr -d '\r')" = 1
-            adb shell getprop ro.product.cpu.abilist
-            adb install-multiple -r /tmp/kwai-vault/*.apk
-            adb shell pm path com.kwai.video | grep -q package:
-            timeout 30 adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 | tee /tmp/kwai-launch.txt
-            sleep 12
-            adb shell pidof com.kwai.video | tee /tmp/kwai-pid.txt
-            test -s /tmp/kwai-pid.txt
-            adb shell dumpsys activity activities | grep -E 'com.kwai.video' | head -8
-            echo OWN_KWAI_REAL_APP_LAUNCH=PASS
-            BASH_SCRIPT
+          script: bash /tmp/kwai-real-test.sh
