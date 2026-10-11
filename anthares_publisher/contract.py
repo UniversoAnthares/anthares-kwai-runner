@@ -27,6 +27,11 @@ PLATFORM_DOMAINS = {
     "x": {"x.com", "www.x.com", "twitter.com", "www.twitter.com"},
     "instagram": {"instagram.com", "www.instagram.com"},
     "facebook": {"facebook.com", "www.facebook.com", "m.facebook.com"},
+    "discord": {"discord.com", "www.discord.com"},
+    "linkedin": {"linkedin.com", "www.linkedin.com"},
+    "medium": {"medium.com", "www.medium.com"},
+    "rumble": {"rumble.com", "www.rumble.com"},
+    "odysee": {"odysee.com", "www.odysee.com"},
 }
 
 
@@ -46,6 +51,11 @@ def authorize(identity: IdentityProof, platform: str, account: str) -> None:
         raise PermissionError("observed account mismatch")
     if not identity.session_fingerprint:
         raise PermissionError("session fingerprint missing")
+
+
+def _require_path_part(path_parts, value, message):
+    if value not in path_parts:
+        raise ValueError(message)
 
 
 def validate_evidence(evidence: PublicationEvidence, platform: str, account: str) -> None:
@@ -72,12 +82,58 @@ def validate_evidence(evidence: PublicationEvidence, platform: str, account: str
         or host not in PLATFORM_DOMAINS.get(platform, set())
     ):
         raise ValueError("publication URL must use the target platform's HTTPS domain")
-    path_parts = [part for part in unquote(parsed.path or "").split("/") if part]
-    if external_id not in path_parts:
-        raise ValueError("publication URL must identify the observed post")
-    if platform == "x" and "status" not in path_parts:
-        raise ValueError("X publication URL must be a status URL")
-    if platform == "instagram" and not ({"reel", "p"} & set(path_parts)):
-        raise ValueError("Instagram publication URL must identify a reel or post")
-    if platform == "facebook" and "reel" not in path_parts:
-        raise ValueError("Facebook publication URL must identify a reel")
+
+    decoded_path = unquote(parsed.path or "")
+    path_parts = [part for part in decoded_path.split("/") if part]
+
+    if platform == "x":
+        _require_path_part(path_parts, external_id, "publication URL must identify the observed post")
+        if "status" not in path_parts:
+            raise ValueError("X publication URL must be a status URL")
+        return
+
+    if platform == "instagram":
+        _require_path_part(path_parts, external_id, "publication URL must identify the observed post")
+        if not ({"reel", "p"} & set(path_parts)):
+            raise ValueError("Instagram publication URL must identify a reel or post")
+        return
+
+    if platform == "facebook":
+        _require_path_part(path_parts, external_id, "publication URL must identify the observed post")
+        if "reel" not in path_parts:
+            raise ValueError("Facebook publication URL must identify a reel")
+        return
+
+    if platform == "discord":
+        _require_path_part(path_parts, external_id, "Discord URL must identify the observed message")
+        if len(path_parts) < 4 or path_parts[0] != "channels":
+            raise ValueError("Discord publication URL must identify a channel message")
+        return
+
+    if platform == "linkedin":
+        markers = (f"urn:li:activity:{external_id}", f"activity-{external_id}")
+        if external_id not in path_parts and not any(marker in decoded_path for marker in markers):
+            raise ValueError("LinkedIn URL must identify the observed post")
+        if "/feed/update/" not in decoded_path and "/posts/" not in decoded_path:
+            raise ValueError("LinkedIn publication URL must identify a feed update or post")
+        return
+
+    if platform == "medium":
+        _require_path_part(path_parts, external_id, "Medium URL must identify the observed story")
+        if not path_parts or not path_parts[0].startswith("@"):
+            raise ValueError("Medium publication URL must identify a personal story")
+        return
+
+    if platform == "rumble":
+        _require_path_part(path_parts, external_id, "Rumble URL must identify the observed video")
+        if not external_id.startswith("v") or not external_id.endswith(".html"):
+            raise ValueError("Rumble publication URL must identify a video page")
+        return
+
+    if platform == "odysee":
+        _require_path_part(path_parts, external_id, "Odysee URL must identify the observed publication")
+        if not any(part.startswith("@") for part in path_parts):
+            raise ValueError("Odysee publication URL must identify a channel publication")
+        return
+
+    _require_path_part(path_parts, external_id, "publication URL must identify the observed post")
