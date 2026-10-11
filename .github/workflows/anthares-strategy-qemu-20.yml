@@ -1,0 +1,33 @@
+name: Anthares S2 Android x86 QEMU Feasibility x20
+on:
+  push:
+    paths:
+      - '.github/workflows/anthares-strategy-qemu-20.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    name: qemu proof ${{ matrix.case }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    env:
+      ANDROID_EXECUTOR_URL: ${{ vars.ANDROID_EXECUTOR_URL }}
+    steps:
+      - name: Verify actual feasibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 >/dev/null
+          qemu-system-x86_64 --version
+          test -e /dev/kvm && echo KVM_AVAILABLE=YES || echo KVM_AVAILABLE=NO
+          test -r /dev/kvm && test -w /dev/kvm || { echo KVM_USABLE=NO; exit 22; }
+          echo KVM_USABLE=YES
+          echo ANDROID_X86_KWAI_COMPATIBILITY=NOT_PROVEN
+          exit 23
