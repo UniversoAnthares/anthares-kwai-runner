@@ -1,4 +1,4 @@
-name: Stage 4 Own Real Identity Proof 20
+name: Stage 4 Own Real Identity Proof 30
 on:
   workflow_dispatch:
   push:
@@ -8,13 +8,44 @@ permissions:
   contents: read
 jobs:
   identity-evidence:
+    name: "Stage4 case ${{ matrix.case }} - ${{ matrix.launch }} - wait${{ matrix.wait }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 30
       matrix:
-        case: [1]
+        include:
+          - { case: 1,  launch: monkey,          wait: 4 }
+          - { case: 2,  launch: monkey,          wait: 6 }
+          - { case: 3,  launch: monkey,          wait: 8 }
+          - { case: 4,  launch: monkey,          wait: 10 }
+          - { case: 5,  launch: monkey,          wait: 12 }
+          - { case: 6,  launch: monkey,          wait: 14 }
+          - { case: 7,  launch: component,       wait: 4 }
+          - { case: 8,  launch: component,       wait: 6 }
+          - { case: 9,  launch: component,       wait: 8 }
+          - { case: 10, launch: component,       wait: 10 }
+          - { case: 11, launch: component,       wait: 12 }
+          - { case: 12, launch: component,       wait: 14 }
+          - { case: 13, launch: force_monkey,    wait: 4 }
+          - { case: 14, launch: force_monkey,    wait: 6 }
+          - { case: 15, launch: force_monkey,    wait: 8 }
+          - { case: 16, launch: force_monkey,    wait: 10 }
+          - { case: 17, launch: force_monkey,    wait: 12 }
+          - { case: 18, launch: force_monkey,    wait: 14 }
+          - { case: 19, launch: force_component, wait: 4 }
+          - { case: 20, launch: force_component, wait: 6 }
+          - { case: 21, launch: force_component, wait: 8 }
+          - { case: 22, launch: force_component, wait: 10 }
+          - { case: 23, launch: force_component, wait: 12 }
+          - { case: 24, launch: force_component, wait: 14 }
+          - { case: 25, launch: monkey_twice,    wait: 4 }
+          - { case: 26, launch: monkey_twice,    wait: 6 }
+          - { case: 27, launch: monkey_twice,    wait: 8 }
+          - { case: 28, launch: monkey_twice,    wait: 10 }
+          - { case: 29, launch: monkey_twice,    wait: 12 }
+          - { case: 30, launch: monkey_twice,    wait: 14 }
     steps:
       - uses: actions/checkout@v4
       - name: Enable KVM
@@ -34,6 +65,9 @@ jobs:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
           KWAI_EXPECTED_ACCOUNT: lucasrosalem
+          CASE_ID: ${{ matrix.case }}
+          LAUNCH_MODE: ${{ matrix.launch }}
+          WAIT_SECS: ${{ matrix.wait }}
         with:
           api-level: 30
           arch: x86_64
@@ -51,29 +85,12 @@ jobs:
             bash kwai_vault_install.sh
             adb shell pm path com.kwai.video | grep -q '^package:'
             echo KWAI_PACKAGE_INSTALLED=PASS
-            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null || true
-            launch_ok=0
-            i=0
-            while [ "$i" -lt 10 ]; do
-              if adb shell pidof com.kwai.video 2>/dev/null | grep -q '[0-9]'; then
-                launch_ok=1
-                break
-              fi
-              if adb shell dumpsys window windows 2>/dev/null | grep -q 'com.kwai.video'; then
-                launch_ok=1
-                break
-              fi
-              i=$((i+1))
-              sleep 2
-            done
-            if [ "$launch_ok" -eq 1 ]; then
-              echo KWAI_APP_LAUNCHED=PASS
-            else
-              echo KWAI_APP_LAUNCH_SIGNAL=NOT_DETECTED_CONTINUING_TO_UI_PROBE
-            fi
+            if [ "$LAUNCH_MODE" = "monkey" ]; then adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null || true; elif [ "$LAUNCH_MODE" = "component" ]; then adb shell am start -n com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity >/dev/null || true; elif [ "$LAUNCH_MODE" = "force_monkey" ]; then adb shell am force-stop com.kwai.video; adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null || true; elif [ "$LAUNCH_MODE" = "force_component" ]; then adb shell am force-stop com.kwai.video; adb shell am start -n com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity >/dev/null || true; else adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null || true; sleep 1; adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null || true; fi
+            sleep "$WAIT_SECS"
+            if adb shell pidof com.kwai.video 2>/dev/null | grep -q '[0-9]' || adb shell dumpsys window windows 2>/dev/null | grep -q 'com.kwai.video'; then echo KWAI_APP_LAUNCHED=PASS; else echo KWAI_APP_LAUNCH_SIGNAL=NOT_DETECTED_CONTINUING_TO_UI_PROBE; fi
             python3 kwai_android_autologin.py
             python3 tools/kwai_credential_login.py || true
             KWAI_EXPECTED_ACCOUNT=lucasrosalem python3 kwai_auth_probe.py | tee /tmp/stage4-proof.txt
             grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/stage4-proof.txt
             grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/stage4-proof.txt
-            echo "STAGE4_REAL_IDENTITY_CASE_${{ matrix.case }}=PASS"
+            echo "STAGE4_REAL_IDENTITY_CASE_${CASE_ID}=PASS"
