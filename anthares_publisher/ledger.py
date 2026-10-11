@@ -9,7 +9,7 @@ from pathlib import Path
 
 from anthares_publisher.contract import PublicationEvidence, validate_evidence
 
-SUPPORTED_PLATFORMS = frozenset(("kwai", "tiktok", "x", "instagram"))
+SUPPORTED_PLATFORMS = frozenset(("kwai", "tiktok", "x", "instagram", "facebook"))
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS publications(
