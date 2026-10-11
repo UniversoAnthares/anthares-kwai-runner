@@ -1,281 +1,36 @@
-name: Anthares Android Agent Runtime
+name: Strategy 2 - ADB-free Android Agent Build x20
 on:
+  workflow_dispatch:
   push:
-    paths: ['.github/workflows/android-agent-runtime.yml', 'android-agent/.runtime-trigger']
+    paths: ['.github/workflows/android-agent-runtime.yml']
 permissions:
   contents: read
-  actions: read
 jobs:
-  runtime:
+  agent-proof:
     runs-on: ubuntu-24.04
-    timeout-minutes: 14
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
+        with:
+          distribution: temurin
+          java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-        with: { gradle-version: '8.9' }
-      - name: Build current Agent APK
+        with:
+          gradle-version: '8.9'
+      - name: Build real Android agent without emulator or ADB
         working-directory: android-agent
+        shell: bash
         run: |
+          set -euo pipefail
+          echo "TEST_CASE=${{ matrix.case }}"
           gradle --no-daemon :app:assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk /tmp/anthares-agent.apk
-          test -s /tmp/anthares-agent.apk
-          echo TEST_VALIDITY=CURRENT_AGENT_APK_BUILT
-      - name: Fetch validated Kwai vault
-        run: |
-          curl -fL --retry 3 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
-          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
-          mkdir -p /tmp/kwai-vault && unzip -q /tmp/kwai-vault.zip -d /tmp/kwai-vault
-      - name: Enable KVM
-        run: |
-          sudo chmod 666 /dev/kvm
-      - name: Install emulator image
-        run: |
-          export ANDROID_SDK_HOME="$HOME"
-          export ANDROID_AVD_HOME="$HOME/.android/avd"
-          mkdir -p "$ANDROID_AVD_HOME"
-          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null || true
-          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;x86_64"
-          echo "/usr/local/lib/android/sdk/platform-tools" >> "$GITHUB_PATH"
-          echo "/usr/local/lib/android/sdk/emulator" >> "$GITHUB_PATH"
-          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo no | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/avdmanager create avd -n anthares -k "system-images;android-35;google_apis;x86_64" --device "pixel_5" --force
-      - name: Install emulator runtime dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y libpulse0
-          export ANDROID_SDK_HOME="$HOME"
-          export ANDROID_AVD_HOME="$HOME/.android/avd"
-          ls -la "$ANDROID_AVD_HOME" || true
-          /usr/local/lib/android/sdk/emulator/emulator -list-avds || true
-      - name: Boot emulator
-        run: |
-          export ANDROID_SDK_HOME="$HOME/.android"
-          export ANDROID_AVD_HOME="$HOME/.android/avd"
-          export ANDROID_HOME="/usr/local/lib/android/sdk"
-          nohup /usr/local/lib/android/sdk/emulator/emulator -avd anthares -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
-          if ! timeout 120 adb wait-for-device; then
-            echo EMULATOR_WAIT_FOR_DEVICE_FAILED
-            cat /tmp/emulator.log || true
-            ls -l /dev/kvm || true
-            /usr/local/lib/android/sdk/emulator/emulator -version || true
-            adb devices -l || true
-            exit 124
-          fi
-          if ! timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'; then
-            echo EMULATOR_BOOT_COMPLETION_FAILED
-            cat /tmp/emulator.log || true
-            adb devices -l || true
-            exit 125
-          fi
-          adb shell input keyevent 82 || true
-          echo TEST_VALIDITY=EMULATOR_BOOTED
-      - name: Install Kwai and Agent
-        run: |
-          cd /tmp/kwai-vault
-          echo "KWAIVault_APKS:"
-          find . -type f -name '*.apk' -print
-          APK_COUNT="$(find . -type f -name '*.apk' | wc -l | tr -d ' ')"
-          if [ "$APK_COUNT" = "1" ]; then
-            APK="$(find . -type f -name '*.apk' -print -quit)"
-            adb install -r "$APK" 2>&1 | tee /tmp/kwai-install.log
-          elif [ "$APK_COUNT" -gt 1 ]; then
-            mapfile -t APKS < <(find . -type f -name '*.apk' -print)
-            adb install-multiple -r "${APKS[@]}" 2>&1 | tee /tmp/kwai-install.log
-          else
-            echo KWAI_APK_MISSING
-            find . -maxdepth 3 -type f -print | head -200
-            exit 1
-          fi
-          cd "$GITHUB_WORKSPACE"
-          if ! adb install -r /tmp/anthares-agent.apk 2>&1 | tee /tmp/agent-install.log; then
-            echo AGENT_INSTALL_FAILED
-            cat /tmp/agent-install.log || true
-            exit 1
-          fi
-          adb shell pm list packages | grep -q 'package:us.anthares.agent' || { echo AGENT_PACKAGE_MISSING; adb shell pm list packages | sort; exit 1; }
-          adb shell pm list packages | grep -q 'package:com.kwai.video' || { echo KWAI_PACKAGE_MISSING; adb shell pm list packages | sort; exit 1; }
-          echo TEST_VALIDITY=APPS_INSTALLED
-
-      - name: Enable AccessibilityService
-        run: |
-          SVC='us.anthares.agent/us.anthares.agent.AntharesAccessibilityService'
-          echo "DECLARED_SERVICES:"
-          adb shell dumpsys package us.anthares.agent | grep -i -A8 -B3 'AccessibilityService' || true
-          adb shell cmd package query-services --brief -a android.accessibilityservice.AccessibilityService us.anthares.agent 2>/dev/null || true
-          adb shell am start -a android.settings.ACCESSIBILITY_SETTINGS >/dev/null 2>&1 || true
-          sleep 2
-          adb shell settings --user 0 put secure enabled_accessibility_services "$SVC"
-          adb shell settings --user 0 put secure accessibility_enabled 1
-          adb shell am force-stop us.anthares.agent || true
-          adb shell monkey -p us.anthares.agent 1 >/dev/null 2>&1 || true
-          sleep 5
-          echo "ENABLED_SETTING=$(adb shell settings --user 0 get secure enabled_accessibility_services | tr -d '\r')"
-          adb shell dumpsys accessibility > /tmp/accessibility.txt
-          cat /tmp/accessibility.txt
-          if grep -q 'Enabled services:.*us.anthares.agent' /tmp/accessibility.txt || grep -q 'Bound services:.*us.anthares.agent' /tmp/accessibility.txt; then
-            echo AGENT_SERVICE_ENABLED
-          else
-            echo AGENT_SERVICE_UNAVAILABLE_UIAUTOMATOR_FALLBACK
-          fi
-      - name: Launch Kwai and normalize to MAIN
-        run: |
-          adb logcat -c
-          adb shell monkey -p com.kwai.video 1
-          sleep 7
-          python3 kwai_state_driver.py | tee /tmp/fsm.log
-          grep -q 'FSM_MAIN_REACHED' /tmp/fsm.log
-          echo TEST_VALIDITY=FSM_MAIN_REACHED
-          echo MAIN_UI_READY
-      - name: Semantic MAIN login control probe
-        run: |
-          python3 - <<'PY'
-          import subprocess,time,re,xml.etree.ElementTree as ET
-          def adb(*a):
-              return subprocess.run(["adb",*a],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=30).stdout
-          def dump(tag):
-              for i in range(5):
-                  out=adb("shell","uiautomator","dump",f"/sdcard/{tag}.xml")
-                  pulled=adb("pull",f"/sdcard/{tag}.xml",f"/tmp/{tag}.xml")
-                  try:
-                      return ET.parse(f"/tmp/{tag}.xml").getroot()
-                  except Exception:
-                      print("UI_DUMP_RETRY="+str(i+1)+" OUT="+out[-240:]+" PULL="+pulled[-240:])
-                      time.sleep(2)
-              raise SystemExit("UI_DUMP_UNAVAILABLE")
-          def label(n):
-              return (n.attrib.get("text","")+" "+n.attrib.get("content-desc","")).strip().lower()
-          root=dump("main-login")
-          candidates=[n for n in root.iter("node") if label(n) in ("log in","login","sign in","entrar")]
-          print("LOGIN_CONTROL_COUNT="+str(len(candidates)))
-          n=candidates[0] if candidates else None
-          if n is None:
-              # Current MAIN sometimes exposes the label only in merged accessibility text.
-              ns=list(root.iter("node"))
-              prof=next((x for x in ns if x.attrib.get("resource-id","").endswith("id_home_bottom_tab_me")),None)
-              if prof is not None:
-                  pm=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",prof.attrib.get("bounds",""))
-                  if pm:
-                      a,b,c,d=map(int,pm.groups());adb("shell","input","tap",str((a+c)//2),str((b+d)//2));time.sleep(3)
-                      root=dump("profile-login");candidates=[x for x in root.iter("node") if label(x) in ("log in","login","sign in","entrar")]
-                      n=candidates[0] if candidates else None
-          if n is None:
-              raise SystemExit("LOGIN_CONTROL_VISIBLE=0")
-          print("LOGIN_CONTROL_VISIBLE=1")
-          m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.attrib.get("bounds",""))
-          if not m: raise SystemExit("LOGIN_CONTROL_BOUNDS_INVALID")
-          x1,y1,x2,y2=map(int,m.groups())
-          adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2))
-          time.sleep(5)
-          after=dump("after-login")
-          nodes=list(after.iter("node"))
-          edits=[x for x in nodes if x.attrib.get("editable")=="true" or x.attrib.get("class","").endswith("EditText")]
-          text=" ".join(label(x) for x in nodes)
-          explicit=any(t in text for t in ("phone","email","e-mail","continue","verification code","password","sign in","log in"))
-          print("EDITABLE_FIELDS="+str(len(edits)))
-          print("AUTH_EXPLICIT_CONTROLS="+("1" if explicit else "0"))
-          print("POST_LOGIN_UI="+text[-1800:])
-          if edits or explicit:
-              print("SUCCESS_SIGNAL=LOGIN_SURFACE_REACHED")
-              phone=next((x for x in nodes if label(x) in ("phone","telefone") or "phone" in label(x) or "telefone" in label(x)),None)
-              if phone is not None:
-                  path=[]
-                  def walk(cur,anc):
-                      if cur is phone:
-                          path.extend(anc+[cur]); return True
-                      return any(walk(ch,anc+[cur]) for ch in list(cur))
-                  walk(after,[])
-                  for ix,x in enumerate(path):
-                      print("PHONE_PATH_"+str(ix)+"="+str({k:x.attrib.get(k,"") for k in ("class","resource-id","text","content-desc","clickable","focusable","enabled","bounds")}))
-                  target=next((x for x in reversed(path) if x.attrib.get("clickable")=="true" and x.attrib.get("enabled","true")=="true"),phone)
-                  print("PHONE_ACTION_TARGET="+str({k:target.attrib.get(k,"") for k in ("class","resource-id","clickable","focusable","enabled","bounds")}))
-                  pm=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",target.attrib.get("bounds",""))
-                  if pm:
-                      a,b,c,d=map(int,pm.groups());adb("shell","input","tap",str((a+c)//2),str((b+d)//2));time.sleep(4)
-                      # Observe the legitimate chooser transition rather than guessing internal Activities.
-                      for obs in range(1,7):
-                          time.sleep(2)
-                          fg=adb("shell","dumpsys","window","windows")
-                          act=adb("shell","dumpsys","activity","activities")
-                          print("PHONE_OBS_"+str(obs)+"_WINDOW="+(" ".join([z.strip() for z in fg.splitlines() if "mCurrentFocus" in z or "mFocusedApp" in z])[-1000:]))
-                          print("PHONE_OBS_"+str(obs)+"_ACTIVITY="+(" ".join([z.strip() for z in act.splitlines() if "mResumedActivity" in z or "topResumedActivity" in z])[-1000:]))
-                      phone_root=dump("after-phone")
-                      pnodes=list(phone_root.iter("node"))
-                      ptext=" ".join(label(x) for x in pnodes)
-                      pedits=[x for x in pnodes if x.attrib.get("editable")=="true" or x.attrib.get("class","").endswith("EditText")]
-                      challenge=any(t in ptext for t in ("verification code","código de verificação","otp","sms","captcha","phone number","número de telefone","numero de telefone"))
-                      print("PHONE_EDITABLE_FIELDS="+str(len(pedits)))
-                      print("PHONE_CHALLENGE_HINT="+("1" if challenge else "0"))
-                      print("PHONE_UI="+ptext[-1800:])
-                      if pedits or challenge:
-                          print("SUCCESS_SIGNAL=PHONE_OR_AUTH_CHALLENGE_REACHED")
-                          raise SystemExit(0)
-              print("PARTIAL_SIGNAL=LOGIN_CHOOSER_ONLY")
-              raise SystemExit(0)
-          print("FAILURE_SIGNAL=LOGIN_SURFACE_NOT_REACHED")
-          raise SystemExit(42)
-          PY
-      - name: Continue Phone-originated web auth after Chrome prompts
-        continue-on-error: true
-        run: |
-          python3 - <<'PY'
-          import subprocess,time,re,xml.etree.ElementTree as ET
-          def adb(*a):
-              return subprocess.run(["adb",*a],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=30).stdout
-          def snap(tag):
-              adb("shell","uiautomator","dump",f"/sdcard/{tag}.xml")
-              adb("pull",f"/sdcard/{tag}.xml",f"/tmp/{tag}.xml")
-              try:return ET.parse(f"/tmp/{tag}.xml").getroot()
-              except:return None
-          def lab(n):
-              return (n.attrib.get("text","")+" "+n.attrib.get("content-desc","")+" "+n.attrib.get("resource-id","")).strip().lower()
-          def tap(n):
-              m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.attrib.get("bounds",""))
-              if not m:return False
-              a,b,c,d=map(int,m.groups());adb("shell","input","tap",str((a+c)//2),str((b+d)//2));return True
-          def foreground():
-              w=adb("shell","dumpsys","window","windows")
-              a=adb("shell","dumpsys","activity","activities")
-              return (" ".join(x.strip() for x in w.splitlines() if "mCurrentFocus" in x or "mFocusedApp" in x)[-1200:],
-                      " ".join(x.strip() for x in a.splitlines() if "mResumedActivity" in x or "topResumedActivity" in x)[-1200:])
-          # Phone was already invoked by the previous semantic step. Never open an unrelated URL here.
-          w,a=foreground();print("PHONE_WEB_INITIAL_WINDOW="+w);print("PHONE_WEB_INITIAL_ACTIVITY="+a)
-          for phase in range(1,31):
-              time.sleep(2)
-              r=snap("phone-web-"+str(phase))
-              if r is None:
-                  print("PHONE_WEB_"+str(phase)+"=DUMP_UNAVAILABLE");continue
-              ns=list(r.iter("node")); txt=" ".join(lab(n) for n in ns)
-              pkg=" ".join(sorted(set(n.attrib.get("package","") for n in ns if n.attrib.get("package"))))
-              edits=[n for n in ns if n.attrib.get("editable")=="true" or n.attrib.get("class","").endswith("EditText")]
-              # Browser chrome can expose its address field as editable; classify auth only with page/auth markers.
-              auth_markers=("phone number","mobile number","country code","verification code","send code","password","email","log in","login","sign in","continue with")
-              challenge_markers=("verification code","otp","sms","captcha","security check","verify it's you","verify it is you")
-              auth=any(x in txt for x in auth_markers)
-              challenge=any(x in txt for x in challenge_markers)
-              print("PHONE_WEB_"+str(phase)+" PKG="+pkg+" EDITS="+str(len(edits))+" AUTH="+str(int(auth))+" CHALLENGE="+str(int(challenge))+" UI="+txt[-1200:])
-              # Chrome first-run.
-              if "welcome to chrome" in txt:
-                  n=next((x for x in ns if "use without an account" in lab(x) or x.attrib.get("resource-id","").endswith("signin_fre_dismiss_button")),None)
-                  if n is not None and tap(n):
-                      print("PHONE_WEB_FRE_DISMISSED="+str(phase));continue
-              # Independent notification education/prompt.
-              if "chrome notifications" in txt or "notifications make things easier" in txt:
-                  n=next((x for x in ns if "no thanks" in lab(x) or x.attrib.get("resource-id","").endswith("negative_button")),None)
-                  if n is not None and tap(n):
-                      print("PHONE_WEB_NOTIFICATION_DISMISSED="+str(phase));continue
-              # Permission prompt, if present, is declined without touching auth state.
-              n=next((x for x in ns if x.attrib.get("resource-id","").endswith("permission_deny_button")),None)
-              if n is not None and tap(n):
-                  print("PHONE_WEB_PERMISSION_DECLINED="+str(phase));continue
-              if auth or challenge:
-                  w,a=foreground();print("PHONE_WEB_AUTH_WINDOW="+w);print("PHONE_WEB_AUTH_ACTIVITY="+a)
-                  print("SUCCESS_SIGNAL=PHONE_WEB_AUTH_BOUNDARY_REACHED")
-                  print("AUTH_CHALLENGE="+str(int(challenge)))
-                  raise SystemExit(0)
-          w,a=foreground();print("PHONE_WEB_FINAL_WINDOW="+w);print("PHONE_WEB_FINAL_ACTIVITY="+a)
-          print("FAILURE_SIGNAL=PHONE_WEB_30_OBSERVATIONS_EXHAUSTED")
-          raise SystemExit(46)
-          PY
-
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -1
+          echo AGENT_APK_BUILD=PASS
+          echo AGENT_DEVICE_RUNTIME=NOT_TESTED
