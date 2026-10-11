@@ -108,8 +108,12 @@ def _truncate(text, limit):
     text = _clean(text)
     if len(text) <= limit:
         return text
-    cut = text[: limit + 1].rsplit(" ", 1)[0].rstrip(" ,;:.-")
-    return (cut or text[:limit]).strip()
+    sample = text[:limit]
+    if " " in sample:
+        candidate = sample.rsplit(" ", 1)[0].rstrip(" ,;:.-")
+        if candidate:
+            return candidate
+    return sample.rstrip(" ,;:.-")
 
 
 def classify(text):
