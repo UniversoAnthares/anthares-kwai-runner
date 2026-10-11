@@ -1,0 +1,70 @@
+name: X Publish Queue
+
+on:
+  workflow_dispatch:
+    inputs:
+      caption:
+        description: Caption to publish on X
+        required: true
+        type: string
+      media_url:
+        description: Optional public MP4 URL
+        required: false
+        default: ''
+        type: string
+      account:
+        description: Expected X handle
+        required: false
+        default: lucasyahn
+        type: string
+      source_id:
+        description: Source identifier
+        required: false
+        default: manual
+        type: string
+  workflow_call:
+    inputs:
+      caption:
+        required: true
+        type: string
+      media_url:
+        required: false
+        default: ''
+        type: string
+      account:
+        required: false
+        default: lucasyahn
+        type: string
+      source_id:
+        required: false
+        default: pipeline
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  enqueue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enqueue X publication
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const payload = {
+              platform: 'x',
+              account: '${{ inputs.account }}',
+              caption: ${{ toJSON(inputs.caption) }},
+              media_url: '${{ inputs.media_url }}',
+              source_id: '${{ inputs.source_id }}',
+              queued_at: new Date().toISOString()
+            };
+            const marker = `[X-PUBLISH] ${payload.source_id} ${Date.now()}`;
+            const { data: issue } = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: marker,
+              body: '```json\n' + JSON.stringify(payload, null, 2) + '\n```'
+            });
+            core.notice(`queued issue #${issue.number}`);
