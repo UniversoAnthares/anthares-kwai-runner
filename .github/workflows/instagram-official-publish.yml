@@ -26,6 +26,11 @@ on:
         type: boolean
   repository_dispatch:
     types: [instagram_publish]
+  push:
+    paths:
+      - "scripts/instagram_publish.py"
+      - "test-hub/test_instagram_publish.py"
+      - ".github/workflows/instagram-official-publish.yml"
   pull_request:
     paths:
       - "scripts/instagram_publish.py"
@@ -55,7 +60,7 @@ jobs:
 
   execute:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || github.event.client_payload.mode || 'quota' }}
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     needs: test
     runs-on: ubuntu-latest
     env:
