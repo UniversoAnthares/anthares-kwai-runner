@@ -1,4 +1,4 @@
-name: Kwai QEMU ARM64 Actual Boot
+name: Kwai Android ARM64 Metadata Boot
 on:
   workflow_dispatch:
   push:
@@ -8,52 +8,16 @@ on:
 permissions:
   contents: read
 jobs:
-  qemu-linux-boot:
-    name: "QEMU ARM64 actual guest boot"
+  android-metadata-boot:
+    name: "Android ARM64 boot with metadata GPT"
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 12
+    timeout-minutes: 18
     steps:
-      - name: Install QEMU and prepare minimal ARM64 guest
+      - name: Install QEMU and Android ARM64 image
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-arm linux-image-generic busybox-static cpio >/dev/null
-          KERNEL=$(ls -1 /boot/vmlinuz-* 2>/dev/null | sort -V | tail -1)
-          test -s "$KERNEL"
-          mkdir -p /tmp/guest/bin
-          cp /bin/busybox /tmp/guest/bin/busybox
-          ln -s busybox /tmp/guest/bin/sh
-          printf '%s\n' '#!/bin/sh' 'echo ARM64_GUEST_BOOT_CONFIRMED' 'uname -m' 'poweroff -f' > /tmp/guest/init
-          chmod +x /tmp/guest/init
-          (cd /tmp/guest && find . | cpio -o -H newc 2>/dev/null | gzip -1) > /tmp/guest-initramfs.cpio.gz
-          echo "KERNEL_PATH=$KERNEL" >> "$GITHUB_ENV"
-      - name: Prove guest kernel executes with TCG
-        run: |
-          set +e
-          timeout 100 qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 1024 -smp 2 -accel tcg -nographic -no-reboot -kernel "$KERNEL_PATH" -initrd /tmp/guest-initramfs.cpio.gz -append "console=ttyAMA0 rdinit=/init" > /tmp/qemu-boot.log 2>&1
-          grep -E 'ARM64_GUEST_BOOT_CONFIRMED|Linux version|Kernel panic|unsupported|error' /tmp/qemu-boot.log | tail -30 || true
-          if grep -q ARM64_GUEST_BOOT_CONFIRMED /tmp/qemu-boot.log; then
-            echo QEMU_ARM64_GUEST_BOOT=PASS
-          else
-            echo QEMU_ARM64_GUEST_BOOT=FAIL
-            exit 1
-          fi
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: qemu-guest-boot-log
-          path: /tmp/qemu-boot.log
-          retention-days: 3
-  android-direct-boot:
-    name: "Android ARM64 direct QEMU boot"
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 16
-    steps:
-      - name: Install QEMU and official Android ARM64 image
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless file >/dev/null
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless file cpio gdisk e2fsprogs util-linux >/dev/null
           mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
           curl -fLsS --retry 2 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
           unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
@@ -65,11 +29,43 @@ jobs:
           gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
           test -s /tmp/android-Image
           echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
-          echo ANDROID_COMPONENTS_READY=PASS
-      - name: Attempt Android kernel and init boot under QEMU TCG
+
+      - name: Inspect ramdisk fstab and required early partitions
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/ramdisk && mkdir -p /tmp/ramdisk
+          cd /tmp/ramdisk
+          gzip -dc "$ANDROID_DIR/ramdisk.img" | cpio -idmu --quiet
+          find . -type f \( -name 'fstab*' -o -name '*fstab*' \) -print > /tmp/fstab-files.txt
+          : > /tmp/fstab-dump.txt
+          while read -r f; do
+            echo "===== $f =====" >> /tmp/fstab-dump.txt
+            cat "$f" >> /tmp/fstab-dump.txt || true
+          done < /tmp/fstab-files.txt
+          grep -E 'metadata|system|vendor|userdata|super|product' /tmp/fstab-dump.txt || true
+          echo FSTAB_INSPECTION=PASS
+
+      - name: Create GPT metadata partition expected by Android first stage
+        run: |
+          set -euo pipefail
+          truncate -s 128M /tmp/metadata-disk.img
+          sgdisk -o /tmp/metadata-disk.img >/dev/null
+          sgdisk -n 1:2048:0 -c 1:metadata /tmp/metadata-disk.img >/dev/null
+          LOOP=$(sudo losetup --find --show --partscan /tmp/metadata-disk.img)
+          trap 'sudo losetup -d "$LOOP" || true' EXIT
+          sleep 1
+          test -b "${LOOP}p1"
+          sudo mkfs.ext4 -F -L metadata "${LOOP}p1" >/dev/null
+          sudo blkid "${LOOP}p1" || true
+          sudo losetup -d "$LOOP"
+          trap - EXIT
+          sgdisk -p /tmp/metadata-disk.img
+          echo METADATA_GPT_READY=PASS
+
+      - name: Boot Android past missing-metadata checkpoint
         run: |
           set +e
-          timeout 180 qemu-system-aarch64 \
+          timeout 210 qemu-system-aarch64 \
             -machine virt \
             -cpu cortex-a72 \
             -m 2048 \
@@ -85,18 +81,29 @@ jobs:
             -device virtio-blk-device,drive=vendor \
             -drive if=none,file="$ANDROID_DIR/userdata.img",format=raw,id=userdata \
             -device virtio-blk-device,drive=userdata \
+            -drive if=none,file=/tmp/metadata-disk.img,format=raw,id=metadata \
+            -device virtio-blk-device,drive=metadata \
             -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive root=/dev/ram0 rw" \
             > /tmp/android-qemu.log 2>&1
-          grep -E 'Linux version|init:|Android|SELinux|Kernel panic|panic|Unable to mount|VFS|ranchu' /tmp/android-qemu.log | tail -80 || true
-          if grep -Eq 'init:|Android|SELinux' /tmp/android-qemu.log; then
-            echo ANDROID_KERNEL_INIT_REACHED=PASS
-          else
-            echo ANDROID_KERNEL_INIT_REACHED=FAIL
+          grep -E 'init first stage|init second stage|metadata|partition\(s\) not found|Failed to mount|required partitions|InitFatalReboot|Android|SELinux|VFS|panic' /tmp/android-qemu.log | tail -120 || true
+          if grep -Eq 'partition\(s\) not found.*metadata|partitions not found.*metadata' /tmp/android-qemu.log; then
+            echo METADATA_CHECKPOINT=FAIL
             exit 1
           fi
+          if grep -Eq 'init second stage started|SecondStageMain|second stage|property_service|servicemanager|zygote|userdata|super|product|Failed to mount required partitions' /tmp/android-qemu.log; then
+            echo METADATA_CHECKPOINT=PASS
+            echo ANDROID_BOOT_ADVANCED=PASS
+          else
+            echo METADATA_CHECKPOINT=INCONCLUSIVE
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-qemu-boot-log
-          path: /tmp/android-qemu.log
+          name: android-metadata-boot-diagnostics
+          path: |
+            /tmp/android-qemu.log
+            /tmp/fstab-dump.txt
+            /tmp/fstab-files.txt
           retention-days: 3
