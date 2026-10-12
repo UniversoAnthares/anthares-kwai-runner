@@ -31,12 +31,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: x-native-live-android
+  group: x-native-live-android-x86
   cancel-in-progress: false
 
 jobs:
   relay:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 360
     env:
       VIDEO_DEVICE: /dev/video10
@@ -56,13 +56,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download current signed X Android bundle
+      - name: Download signer-compatible universal X Android bundle
         if: ${{ inputs.mode != 'camera-probe' }}
         id: xapk
         uses: Yakov5776/gh-apkmirror-dl@v1.3
         with:
           org: x-corp
           repo: twitter
+          version: 12.19.1-release.0
           bundle: true
           filename: x-current.apkm
 
@@ -88,11 +89,11 @@ jobs:
           "$ANDROID_SDK_ROOT/emulator/emulator" -webcam-list 2>&1 | tee "$EVIDENCE_DIR/emulator-webcams.txt"
           grep -qi 'webcam0' "$EVIDENCE_DIR/emulator-webcams.txt"
 
-      - name: Boot ARM Android and run native X live bridge
+      - name: Boot x86 Android and run native X live bridge
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          arch: arm64-v8a
+          arch: x86_64
           target: google_apis
           profile: pixel_5
           disable-animations: true
