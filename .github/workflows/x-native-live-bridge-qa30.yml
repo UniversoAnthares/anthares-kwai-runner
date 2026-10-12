@@ -1,0 +1,100 @@
+name: X native live Android bridge QA30
+
+on:
+  pull_request:
+    paths:
+      - "scripts/x_android_media_bridge.sh"
+      - "scripts/x_android_live_ui.py"
+      - ".github/workflows/x-native-live-bridge-qa30.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bridge:
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        variant: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    env:
+      MATRIX_VARIANT: ${{ matrix.variant }}
+      VIDEO_DEVICE: /dev/video10
+      VIDEO_NR: "10"
+      PULSE_SINK: anthares_x_live
+      EVIDENCE_DIR: x-live-evidence
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select media profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          case $(( (MATRIX_VARIANT - 1) % 6 )) in
+            0) echo 'WIDTH=640' >> "$GITHUB_ENV"; echo 'HEIGHT=360' >> "$GITHUB_ENV"; echo 'FPS=15' >> "$GITHUB_ENV" ;;
+            1) echo 'WIDTH=854' >> "$GITHUB_ENV"; echo 'HEIGHT=480' >> "$GITHUB_ENV"; echo 'FPS=24' >> "$GITHUB_ENV" ;;
+            2) echo 'WIDTH=1280' >> "$GITHUB_ENV"; echo 'HEIGHT=720' >> "$GITHUB_ENV"; echo 'FPS=30' >> "$GITHUB_ENV" ;;
+            3) echo 'WIDTH=640' >> "$GITHUB_ENV"; echo 'HEIGHT=360' >> "$GITHUB_ENV"; echo 'FPS=30' >> "$GITHUB_ENV" ;;
+            4) echo 'WIDTH=960' >> "$GITHUB_ENV"; echo 'HEIGHT=540' >> "$GITHUB_ENV"; echo 'FPS=24' >> "$GITHUB_ENV" ;;
+            5) echo 'WIDTH=1280' >> "$GITHUB_ENV"; echo 'HEIGHT=720' >> "$GITHUB_ENV"; echo 'FPS=24' >> "$GITHUB_ENV" ;;
+          esac
+
+      - name: Install virtual camera and audio dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            v4l2loopback-dkms v4l-utils pulseaudio pulseaudio-utils ffmpeg \
+            "linux-headers-$(uname -r)"
+          python3 -m pip install --disable-pip-version-check --quiet --upgrade yt-dlp
+          sudo chmod 666 /dev/kvm
+          chmod +x scripts/x_android_media_bridge.sh
+
+      - name: Create host virtual camera and microphone
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/x_android_media_bridge.sh prepare
+          mkdir -p "$EVIDENCE_DIR"
+          v4l2-ctl -D -d "$VIDEO_DEVICE" | tee "$EVIDENCE_DIR/v4l2-device.txt"
+          "$ANDROID_SDK_ROOT/emulator/emulator" -webcam-list 2>&1 | tee "$EVIDENCE_DIR/emulator-webcams.txt"
+          grep -qi 'webcam0' "$EVIDENCE_DIR/emulator-webcams.txt"
+          pactl info | tee "$EVIDENCE_DIR/pulse-info.txt"
+          pactl list short sources | tee "$EVIDENCE_DIR/pulse-sources.txt"
+          grep -F "${PULSE_SINK}.monitor" "$EVIDENCE_DIR/pulse-sources.txt"
+
+      - name: Boot Android with Anthares virtual A/V input
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          emulator-options: >-
+            -no-window -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+            -camera-back webcam0 -camera-front none -allow-host-audio
+          script: |
+            set -Eeuo pipefail
+            trap 'scripts/x_android_media_bridge.sh stop || true; mkdir -p "$EVIDENCE_DIR"; adb exec-out screencap -p > "$EVIDENCE_DIR/final.png" 2>/dev/null || true; adb shell dumpsys media.camera > "$EVIDENCE_DIR/media-camera.txt" 2>/dev/null || true' EXIT
+            scripts/x_android_media_bridge.sh start
+            adb emu avd hostmicon || true
+            scripts/x_android_media_bridge.sh verify
+            python3 scripts/x_android_live_ui.py camera-probe
+            adb shell dumpsys media.camera | tee "$EVIDENCE_DIR/media-camera-live.txt"
+            echo "QA30_VARIANT=$MATRIX_VARIANT PROFILE=${WIDTH}x${HEIGHT}@${FPS}" | tee "$EVIDENCE_DIR/result.txt"
+            echo 'X_ANDROID_BRIDGE_QA=PASS' | tee -a "$EVIDENCE_DIR/result.txt"
+
+      - name: Save evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-native-live-bridge-${{ matrix.variant }}
+          path: x-live-evidence/
+          if-no-files-found: ignore
+          retention-days: 2
