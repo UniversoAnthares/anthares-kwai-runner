@@ -183,3 +183,34 @@ NEXT:
 
 RISKS OF CONCURRENCY:
 Do not overwrite either recovered `anthares-clipper` copy. Other agents should consume the hashes and commit history above and coordinate through this file before restoring anything.
+
+## 2026-10-12 14:25 -04:00 — Agent 3
+
+ACTION:
+Inspected two historical Kwai commits in the recovered primary repository and probed default-branch code search for TikTok self-hosted anchors.
+
+COMMITS EXAMINED:
+- 33c1596895b0ceaaabceaaf938632b9263befaa6 — Move Kwai started marker to publisher boundary
+- 106dff4ce8c98b073e594d4ad16a1d628d1c544e — Preservar publicador Kwai invisivel e sem console
+
+FOUND:
+1. Commit 33c1596 removed `run("started")` from `central_start()` immediately after lease acquisition. This is the historical fix that prevented `publication_started` from being marked before the irreversible publish boundary. The exact later boundary still must be located in adjacent commits/current queue client.
+2. Commit 106dff4 introduced the hidden-background behavior for the Kwai daemon: `CREATE_NO_WINDOW`, `hide_memu_ui()`, a 0.5-second background UI guard thread, shorter success/preclick delays, and hidden MEmu recovery. At that commit the daemon still targeted VM 2; later recovered source now targets VM 3, so VM index changed in later history and must be treated as runtime configuration/history rather than assumed constant.
+3. A default-branch GitHub code search in `UniversoAnthares/anthares-clipper` for combined self-hosted/TikTok workflow terms returned no direct result. TikTok workflow recovery should therefore use local git history and `.github/workflows` inventory rather than relying on current code search.
+
+EVIDENCE:
+- GitHub commit objects for 33c1596 and 106dff4.
+
+CHANGED:
+None.
+
+STATE IMPACT:
+- `publication_started` early-marking fix = PROVEN in history.
+- hidden/background daemon behavior = PROVEN in history.
+- exact current/proven MEmu VM index = still to reconcile (historical VM2; mature recovered source VM3).
+
+NEXT:
+Inspect local `.github/workflows` plus git log for TikTok workflow/self-hosted references; inspect history around VM2→VM3 and daemon Scheduled Task creation; locate the exact command used to register/start the Windows daemon task.
+
+RISKS OF CONCURRENCY:
+Do not hard-code VM2 or VM3 into a rebuilt launcher until current MEmu inventory and the last proven runtime are reconciled.
