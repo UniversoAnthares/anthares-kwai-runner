@@ -3,7 +3,13 @@ set -Eeuo pipefail
 
 ACCOUNT_ID="${KWAI_ACCOUNT_ID:-primary}"
 case "$ACCOUNT_ID" in primary|secondary) ;; *) echo "invalid KWAI_ACCOUNT_ID" >&2; exit 2 ;; esac
-STATE_FILE="${KWAI_SESSION_FILE:-kwai-session-${ACCOUNT_ID}.enc}"
+if [ -n "${KWAI_SESSION_FILE:-}" ]; then
+  STATE_FILE="$KWAI_SESSION_FILE"
+elif [ "$ACCOUNT_ID" = primary ]; then
+  STATE_FILE="kwai-session.enc"
+else
+  STATE_FILE="kwai-session-secondary.enc"
+fi
 PKG="com.kwai.video"
 
 log(){ printf '%s\n' "$*"; }
@@ -14,8 +20,6 @@ root_ready(){
   adb shell id 2>/dev/null | grep -q 'uid=0'
 }
 
-# Never decrypt directly into the live application directory: a wrong key or
-# truncated archive can otherwise leave an unusable partially restored profile.
 restore_state(){
   [ -s "$STATE_FILE" ] || { log "KWAI_SESSION_CACHE_MISS"; return 1; }
   [ -n "${KWAI_SESSION_ENCRYPTION_KEY:-}" ] || { log "KWAI_SESSION_KEY_MISSING"; return 1; }
@@ -51,13 +55,10 @@ PY
   if ! adb push "$archive" "$staging/session.tar" >/dev/null 2>&1; then
     log "KWAI_SESSION_TRANSFER_FAILED"; return 1
   fi
-  # Extract to a sandbox first. The app is stopped only after the archive
-  # has passed integrity and path checks.
   if ! adb shell "mkdir -p '$staging/unpacked' && tar -C '$staging/unpacked' -xpf '$staging/session.tar' && test -d '$staging/unpacked/$PKG'" >/dev/null 2>&1; then
     log "KWAI_SESSION_STAGE_FAILED"; return 1
   fi
   adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
-  # Preserve existing data until staged contents are complete.
   if ! adb shell "test -d /data/user/0/$PKG && mv /data/user/0/$PKG '$staging/backup' || true; mv '$staging/unpacked/$PKG' /data/user/0/$PKG" >/dev/null 2>&1; then
     adb shell "test -d '$staging/backup' && mv '$staging/backup' /data/user/0/$PKG || true" >/dev/null 2>&1 || true
     log "KWAI_SESSION_APPLY_FAILED"; return 1
@@ -67,9 +68,22 @@ PY
 }
 
 save_state(){
-  # Never cache an anonymous onboarding profile or a different account.
-  # Identity proof must come from the real Kwai profile UI, not a success
-  # code from the emulator or the mere presence of an authenticated-looking app.
+  # Existing Stage4 workflow already writes a non-secret proof file for the
+  # winning identity candidate. Recover only that verified handle when the
+  # caller did not export KWAI_EXPECTED_ACCOUNT, then re-prove it live below.
+  if [ -z "${KWAI_EXPECTED_ACCOUNT:-}" ]; then
+    local candidate proof_file
+    for candidate in lucasrosalem universo.anthares; do
+      proof_file="auth-${candidate}.txt"
+      if [ -s "$proof_file" ] &&
+         grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' "$proof_file" &&
+         grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' "$proof_file"; then
+        export KWAI_EXPECTED_ACCOUNT="$candidate"
+        log "KWAI_SESSION_IDENTITY_RECOVERED_FROM_PROOF"
+        break
+      fi
+    done
+  fi
   [ -n "${KWAI_EXPECTED_ACCOUNT:-}" ] || { log "KWAI_SESSION_IDENTITY_UNCONFIGURED"; return 1; }
   local proof
   proof="$(mktemp)"
