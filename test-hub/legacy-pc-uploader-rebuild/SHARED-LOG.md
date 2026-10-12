@@ -878,3 +878,13 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - `legacy_tiktok_upload_prepare.py` is confirmed no-post: it stops after enabled Post + public visibility and closes the browser.
 - No publication occurred in this inspection.
 - Next action: re-read this log and inspect the historical real publisher's click/confirmation/ledger-complete path; only then create/run the smallest controlled one-post wrapper.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — historical TikTok real-post confirmation path inspected
+- Canonical log was re-read immediately before inspection.
+- `tiktok_web_publish_local.py` is the real local publisher path: opens upload, attaches the plan media, fills caption, enforces public visibility, clicks Post once, checks platform-block strings, then calls the patched `t.wait_confirmation(page, before)`.
+- `tiktok_web_publish_v3.py` first handles possible `Publicar agora/Publish now/Continuar publicando` confirmation buttons, then delegates to the historical confirmation implementation.
+- If confirmation is ambiguous, the publisher raises and intentionally leaves ledger state as `attempted`, preventing automatic duplicate publication.
+- The publisher itself does not close the ledger; completion is orchestrated outside this file and must be identified before the controlled post.
+- No publication occurred in this inspection.
+- Next action: re-read this log and locate the exact historical caller/gate that converts publisher success into ledger `published/complete`; then run one controlled post through that complete path.
