@@ -1180,3 +1180,10 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Current activity is still `TinyWebHomeActivity`, awaiting only the onboarding completion action.
 - No publication action occurred.
 - Next: re-read canonical log, identify/tap only `Começar agora`, then rerun the safe publisher `probe` to see whether native create controls appear or authentication is required.
+
+## 2026-10-12 — Agent 3 — Kwai onboarding completion action accepted
+- Canonical log was re-read before recording this action.
+- Pulled the current UI hierarchy and identified `Começar agora` as clickable/enabled resource `com.kwai.video:id/tiny_discovery_left_operation_btn`, bounds `[29,1151][691,1235]`.
+- Tapped only the center of that control through ADB. The action was accepted without error; activity remained `TinyWebHomeActivity` immediately afterward, so the resulting surface must be inspected before assuming native home readiness.
+- No publication action occurred.
+- Next: re-read canonical log, dump the post-onboarding UI hierarchy and classify whether it is feed/home, login, permission prompt or another tiny/web gate; then rerun safe publisher `probe` only if the create surface is present.
