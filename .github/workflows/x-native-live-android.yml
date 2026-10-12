@@ -1,165 +1,130 @@
-name: X native live from YouTube via Android
+name: X authenticated native-live preview fast
 
 on:
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths:
+      - .github/workflows/x-native-live-android.yml
   workflow_dispatch:
-    inputs:
-      youtube_url:
-        description: "Public YouTube Live URL; leave empty only for synthetic camera probe"
-        required: false
-        type: string
-      mode:
-        description: "Validation or native X live"
-        required: true
-        default: "camera-probe"
-        type: choice
-        options:
-          - camera-probe
-          - x-preview
-          - x-go-live
-      max_minutes:
-        description: "Maximum public live duration"
-        required: true
-        default: "330"
-        type: string
-      allow_public_live:
-        description: "Explicitly authorize pressing the final Go Live control"
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: x-native-live-android-x86
-  cancel-in-progress: false
+  group: x-auth-preview-fast
+  cancel-in-progress: true
 
 jobs:
-  relay:
+  auth-preview:
     runs-on: ubuntu-24.04
-    timeout-minutes: 360
-    env:
-      VIDEO_DEVICE: /dev/video10
-      VIDEO_NR: "10"
-      PULSE_SINK: anthares_x_live
-      WIDTH: "1280"
-      HEIGHT: "720"
-      FPS: "30"
-      EVIDENCE_DIR: x-live-evidence
-      SOURCE_URL: ${{ inputs.youtube_url }}
-      X_ANDROID_SESSION_KEY: ${{ secrets.X_ANDROID_SESSION_KEY }}
-      GH_TOKEN: ${{ github.token }}
-      ALLOW_PUBLIC_LIVE: ${{ inputs.allow_public_live && '1' || '0' }}
-      LIVE_MODE: ${{ inputs.mode }}
-      MAX_MINUTES: ${{ inputs.max_minutes }}
-
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download signer-compatible universal X Android bundle
-        if: ${{ inputs.mode != 'camera-probe' }}
-        id: xapk
-        uses: Yakov5776/gh-apkmirror-dl@v1.3
-        with:
-          org: x-corp
-          repo: twitter
-          version: 12.19.1-release.0
-          bundle: true
-          filename: x-current.apkm
-
-      - name: Install host media bridge dependencies
+      - name: Enable KVM
         shell: bash
         run: |
           set -Eeuo pipefail
-          mkdir -p "$EVIDENCE_DIR"
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            build-essential v4l-utils pulseaudio pulseaudio-utils ffmpeg gnupg unzip \
-            "linux-headers-$(uname -r)"
-          rm -rf /tmp/v4l2loopback
-          git clone --depth 1 https://github.com/v4l2loopback/v4l2loopback.git /tmp/v4l2loopback
-          make -C /tmp/v4l2loopback -j2
-          sudo make -C /tmp/v4l2loopback install
-          sudo depmod -a
-          modinfo v4l2loopback | tee "$EVIDENCE_DIR/v4l2loopback-modinfo.txt"
-          python3 -m pip install --disable-pip-version-check --quiet --upgrade yt-dlp
           if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
-          chmod +x scripts/x_android_media_bridge.sh scripts/x_install_apkm_bundle.sh scripts/x_android_session_vault.sh
-          scripts/x_android_media_bridge.sh prepare
-          "$ANDROID_SDK_ROOT/emulator/emulator" -webcam-list 2>&1 | tee "$EVIDENCE_DIR/emulator-webcams.txt"
-          grep -qi 'webcam0' "$EVIDENCE_DIR/emulator-webcams.txt"
 
-      - name: Boot x86 Android and run native X live bridge
+      - name: Acquire and verify official X Android splits
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence/prep /tmp/apkeep-out /tmp/xout
+          timeout 150 docker run --rm -v /tmp/apkeep-out:/output ghcr.io/efforg/apkeep:stable \
+            -a com.twitter.android -d apk-pure \
+            -o 'acknowledge_dangers=true,arch=x86_64' /output \
+            > evidence/prep/apkeep.txt 2>&1
+          find /tmp/apkeep-out -type f -name '*.apk' -exec cp '{}' /tmp/xout/ \;
+          while IFS= read -r -d '' b; do unzip -qo "$b" -d /tmp/xout; done < <(find /tmp/apkeep-out -type f \( -name '*.xapk' -o -name '*.apkm' \) -print0)
+          mapfile -t APKS < <(find /tmp/xout -type f -name '*.apk' -print | sort)
+          ((${#APKS[@]} > 0)) || { echo NO_APK_DOWNLOADED | tee evidence/prep/verdict.txt; exit 70; }
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          BT="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          AAPT="$BT/aapt"; APKSIGNER="$BT/apksigner"
+          OFFICIAL_SHA256=0fd9a0cfb07b65950997b4eaebdc53931392391aa406538a3b04073bc2ce2fe9
+          for apk in "${APKS[@]}"; do
+            base="$(basename "$apk")"
+            "$AAPT" dump badging "$apk" > "evidence/prep/badging-$base.txt" 2>&1
+            pkg="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" "evidence/prep/badging-$base.txt" | head -1)"
+            [[ "$pkg" == com.twitter.android ]] || { echo WRONG_PACKAGE; exit 71; }
+            "$APKSIGNER" verify --verbose --print-certs "$apk" > "evidence/prep/apksigner-$base.txt" 2>&1
+            grep -Eqi "certificate SHA-256 digest:[[:space:]]*$OFFICIAL_SHA256([[:space:]]|$)" "evidence/prep/apksigner-$base.txt" || { echo OFFICIAL_CERT_NOT_CONFIRMED; exit 73; }
+          done
+          printf '%s\n' "${APKS[@]}" > evidence/prep/apks.txt
+          echo VERIFIED_OFFICIAL_X_APK | tee evidence/prep/verdict.txt
+
+      - name: Install X, authenticate, and reach native Live preview
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          X_ANDROID_USERNAME: ${{ secrets.X_ANDROID_USERNAME }}
+          X_ANDROID_PASSWORD: ${{ secrets.X_ANDROID_PASSWORD }}
+          X_ANDROID_CHALLENGE_ID: ${{ secrets.X_ANDROID_CHALLENGE_ID }}
+          X_ANDROID_OTP: ${{ secrets.X_ANDROID_OTP }}
         with:
-          api-level: 35
+          api-level: 30
           arch: x86_64
           target: google_apis
-          profile: pixel_5
+          cores: 2
+          emulator-boot-timeout: 240
           disable-animations: true
-          emulator-options: >-
-            -no-window -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-            -camera-back webcam0 -camera-front none -allow-host-audio
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: |
+            bash -s <<'BASH'
             set -Eeuo pipefail
-            trap 'python3 scripts/x_android_live_ui.py x-stop-live >/dev/null 2>&1 || true; scripts/x_android_media_bridge.sh stop || true; adb exec-out screencap -p > "$EVIDENCE_DIR/final.png" 2>/dev/null || true' EXIT
+            mkdir -p evidence/runtime evidence/login evidence/live
+            adb wait-for-device
+            adb shell pm uninstall com.twitter.android >/dev/null 2>&1 || true
+            mapfile -t APKS < <(find /tmp/xout -type f -name '*.apk' -print | sort)
+            ((${#APKS[@]} > 0)) || { echo NO_APKS_AT_INSTALL | tee evidence/runtime/verdict.txt; exit 79; }
 
-            case "$MAX_MINUTES" in ''|*[!0-9]*) echo 'max_minutes must be an integer'; exit 2;; esac
-            if (( MAX_MINUTES < 1 || MAX_MINUTES > 350 )); then echo 'max_minutes must be 1..350'; exit 2; fi
+            set +e
+            adb install-multiple --no-streaming -r "${APKS[@]}" > evidence/runtime/install.txt 2>&1
+            irc=$?
+            if [[ "$irc" -ne 0 ]]; then
+              adb install-multiple -r -d "${APKS[@]}" >> evidence/runtime/install.txt 2>&1
+              irc=$?
+            fi
+            set -e
+            [[ "$irc" -eq 0 ]] || { echo INSTALL_FAILED | tee evidence/runtime/verdict.txt; exit 80; }
 
-            if [[ "$LIVE_MODE" != 'camera-probe' ]]; then
-              test -s x-current.apkm
-              scripts/x_install_apkm_bundle.sh x-current.apkm | tee "$EVIDENCE_DIR/x-install.txt"
+            adb shell pm path com.twitter.android | tee evidence/runtime/pm-path.txt
+            activity="$(adb shell cmd package resolve-activity --brief com.twitter.android 2>/dev/null | tr -d '\r' | tail -1 || true)"
+            echo "$activity" > evidence/runtime/activity.txt
+            if [[ "$activity" == */* ]]; then adb shell am start -W -n "$activity" > evidence/runtime/launch.txt 2>&1 || true; else adb shell monkey -p com.twitter.android 1 > evidence/runtime/launch.txt 2>&1 || true; fi
+            sleep 5
+            pid="$(adb shell pidof com.twitter.android 2>/dev/null | tr -d '\r' || true)"
+            echo "$pid" > evidence/runtime/pid.txt
+            [[ -n "$pid" ]] || { echo X_DID_NOT_LAUNCH | tee evidence/runtime/verdict.txt; exit 81; }
+            echo X_INSTALL_AND_LAUNCH_OK | tee evidence/runtime/verdict.txt
 
-              if [[ -z "${X_ANDROID_SESSION_KEY:-}" ]]; then
-                echo 'X_ANDROID_SESSION_KEY is missing; authenticated Android session bootstrap is required.' >&2
-                exit 20
-              fi
-              rm -f /tmp/x-session.gpg
-              if ! gh release download x-android-session-v1 -p x-session.gpg -D /tmp >/dev/null 2>&1; then
-                echo 'Encrypted X Android session vault release x-android-session-v1 is missing.' >&2
-                exit 21
-              fi
-              scripts/x_android_session_vault.sh import /tmp/x-session.gpg | tee "$EVIDENCE_DIR/x-session-import.txt"
+            timeout 10 adb shell uiautomator dump /sdcard/x-preauth.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/x-preauth.xml evidence/runtime/preauth.xml >/dev/null 2>&1 || true
+            adb exec-out screencap -p > evidence/runtime/preauth.png 2>/dev/null || true
+
+            if [[ -z "${X_ANDROID_USERNAME:-}" || -z "${X_ANDROID_PASSWORD:-}" ]]; then
+              echo X_AUTH_CREDENTIALS_ABSENT | tee evidence/runtime/auth-verdict.txt
+              exit 90
             fi
 
-            scripts/x_android_media_bridge.sh start | tee "$EVIDENCE_DIR/bridge-start.txt"
-            adb emu avd hostmicon || true
+            set +e
+            EVIDENCE_DIR=evidence/login python3 scripts/x_android_login_ui.py > evidence/runtime/login-driver.txt 2>&1
+            lrc=$?
+            set -e
+            cat evidence/runtime/login-driver.txt
+            [[ "$lrc" -eq 0 ]] || { echo X_AUTHENTICATION_NOT_CONFIRMED | tee evidence/runtime/auth-verdict.txt; exit "$lrc"; }
+            echo X_AUTHENTICATION_CONFIRMED | tee evidence/runtime/auth-verdict.txt
 
-            if [[ "$LIVE_MODE" == 'camera-probe' ]]; then
-              python3 scripts/x_android_live_ui.py camera-probe
-              exit 0
-            fi
-
-            if [[ "$LIVE_MODE" == 'x-preview' ]]; then
-              python3 scripts/x_android_live_ui.py x-preview
-              exit 0
-            fi
-
-            if [[ "$ALLOW_PUBLIC_LIVE" != '1' ]]; then
-              echo 'x-go-live requires allow_public_live=true' >&2
-              exit 22
-            fi
-            test -n "$SOURCE_URL" || { echo 'youtube_url is required for x-go-live' >&2; exit 23; }
-
-            python3 scripts/x_android_live_ui.py x-go-live
-            started=$(date +%s)
-            deadline=$((started + MAX_MINUTES * 60))
-            while (( $(date +%s) < deadline )); do
-              vp=$(cat /tmp/anthares-x-live/video.pid 2>/dev/null || true)
-              ap=$(cat /tmp/anthares-x-live/audio.pid 2>/dev/null || true)
-              [[ -n "$vp" && -n "$ap" ]] || break
-              kill -0 "$vp" 2>/dev/null || break
-              kill -0 "$ap" 2>/dev/null || break
-              sleep 15
-            done
-            python3 scripts/x_android_live_ui.py x-stop-live
+            EVIDENCE_DIR=evidence/live MATRIX_VARIANT=1 ALLOW_PUBLIC_LIVE=0 python3 scripts/x_android_live_ui.py x-preview | tee evidence/runtime/live-preview.txt
+            echo X_NATIVE_LIVE_PREVIEW_CONFIRMED | tee evidence/runtime/final.txt
+            BASH
 
       - name: Save evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: x-native-live-android-evidence
-          path: x-live-evidence/
-          if-no-files-found: ignore
+          name: x-auth-preview-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: warn
           retention-days: 3
