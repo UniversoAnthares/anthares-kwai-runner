@@ -235,7 +235,7 @@ jobs:
             adb shell getprop | grep -E 'dns|proxy' | head -15 || true
             adb shell logcat -d -t 1200 | grep -Ei 'UnknownHostException|SSLHandshakeException|ConnectException|SocketTimeoutException|fre_native_and_policy|NetworkSecurityConfig' | tail -25 || true
             echo 'STAGE4_DIAGNOSTIC=FRE_BOOTSTRAP_NOT_READY' | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
+            exit 25
             timeout 110 python3 tools/kwai_credential_login.py > /tmp/stage4-login.txt 2>&1
             LOGIN_RC=$?
             set -e
