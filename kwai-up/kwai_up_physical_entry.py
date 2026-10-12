@@ -10,6 +10,21 @@ import kwai_up_physical_safe as ps
 ku = ps.ku
 
 
+def _visible_center(raw: str):
+    bounds = ku.bounds_tuple(raw)
+    if not bounds:
+        return None
+    x1, y1, x2, y2 = bounds
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return ((x1 + x2) // 2, (y1 + y2) // 2)
+
+
+# The Kwai album keeps recycled preview nodes at [0,0][0,0]. Treat those as
+# invisible everywhere so fail-closed selectors never click the screen origin.
+ku.center = _visible_center
+
+
 def _uhid_available(self) -> bool:
     raw = self.adb.run("shell", "ls", "-l", "/dev/uhid", check=False)
     return "/dev/uhid" in raw and "No such file" not in raw
