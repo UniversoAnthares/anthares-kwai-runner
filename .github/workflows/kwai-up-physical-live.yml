@@ -1,0 +1,77 @@
+name: Kwai-up physical live proof
+
+on:
+  push:
+    branches: [kwai-up]
+    paths:
+      - '.github/workflows/kwai-up-physical-live.yml'
+  workflow_dispatch:
+
+jobs:
+  physical-live:
+    runs-on: self-hosted
+    timeout-minutes: 12
+    env:
+      KWAI_UP_ADB_BIN: 'C:\Users\Lucas\.kwai-up\platform-tools\adb.exe'
+      KWAI_UP_ADB_SERIAL: '192.168.1.35:5555'
+      KWAI_UP_PACKAGE: 'kwai.lite.video'
+      KWAI_UP_EXPECTED_ACCOUNT: 'lucasrosalem'
+      KWAI_UP_ARTIFACT_DIR: 'C:\Users\Lucas\.kwai-up\artifacts-live-proof'
+      KWAI_UP_MEDIA: 'C:\Users\Lucas\.kwai-up\runtime\kwaiup_probe_2s.mp4'
+      KWAI_UP_JOB_ID: 'physical-live-proof-20261012'
+      KWAI_UP_CAPTION: 'Teste Kwai-up 2026-10-12'
+      KWAI_UP_WAIT: '8'
+      KWAI_UP_VERIFY_TIMEOUT: '180'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment proof
+        shell: powershell
+        run: |
+          Write-Host "HOST=$env:COMPUTERNAME USER=$env:USERNAME"
+          python --version
+          & $env:KWAI_UP_ADB_BIN devices -l
+          if (-not (Test-Path $env:KWAI_UP_MEDIA)) { throw "probe media missing" }
+
+      - name: Physical probe
+        shell: powershell
+        run: python .\kwai-up\kwai_up_physical.py probe
+
+      - name: Authenticated account proof
+        shell: powershell
+        run: python .\kwai-up\kwai_up_physical.py auth
+
+      - name: Prepare exact public publication boundary
+        shell: powershell
+        run: python .\kwai-up\kwai_up_physical.py prepare
+
+      - name: Commit publication and verify
+        id: commit
+        continue-on-error: true
+        shell: powershell
+        run: |
+          python .\kwai-up\kwai_up_physical.py commit
+          $rc=$LASTEXITCODE
+          Write-Host "KWAI_UP_COMMIT_RC=$rc"
+          exit 0
+
+      - name: Post-publication profile proof
+        if: always()
+        shell: powershell
+        run: |
+          python .\kwai-up\kwai_up_physical.py auth
+          & $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL shell uiautomator dump /sdcard/kwai_live_profile.xml | Out-Host
+          & $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL pull /sdcard/kwai_live_profile.xml "$env:KWAI_UP_ARTIFACT_DIR\post-profile.xml" | Out-Host
+          & $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL exec-out screencap -p > "$env:KWAI_UP_ARTIFACT_DIR\post-profile.png"
+          $xml = Get-Content "$env:KWAI_UP_ARTIFACT_DIR\post-profile.xml" -Raw
+          $thumbs = ([regex]::Matches($xml,'resource-id="kwai\.lite\.video\.basis:id/thumb"')).Count
+          Write-Host "KWAI_UP_POST_PROFILE_THUMBS=$thumbs"
+          if ($xml -notmatch 'lucasrosalem') { throw 'identity missing from post profile proof' }
+
+      - name: Upload physical proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-up-physical-live-proof
+          path: C:\Users\Lucas\.kwai-up\artifacts-live-proof
+          if-no-files-found: warn
