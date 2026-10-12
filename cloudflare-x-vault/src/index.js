@@ -1,31 +1,23 @@
 const KEY = "x:web:session:lucasyahn:opaque:v1";
 const MAX_BODY = 500000;
-const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsJyt+7jLEyrHO8Q0Agg2
-hcBQRO5EW4aNckRxrMgKfJJwqAxzWrsu10RvYanfzvadpBJjJEQTdePiEnEKLMuX
-q/dJn2TzQTR/4ftJ/GWsBlUMG6+vv03Qk1mOHG+M68ALd7eJUBIxtdeWLdrUnN7c
-L+0p2CSBlYF2bXm4RoLMf0aO3FIn0FZK/1HlRPJWheiuKy5bLU7QFPkurwJHlKRC
-pVZrFf8ueBTq4dRY6hHQ1gLYeyF8Bgy5a8u93rxMzLLiZF1IGeJtoNZxuH8fB4es
-bcq2sS3haMuBccLeYfCBQty8X0u1oSs6FPe1ErEYglEQJKrdE2ENkv/ySDDr+DX8
-NQIDAQAB
------END PUBLIC KEY-----`;
+const PUBLIC_JWK = {"kty":"EC","crv":"P-256","x":"oljQWjUajvbTS5Lyc0ElhK2nN_h6kJo-bhJ6F5mnf_4","y":"lBVZd8W28jEMd2A0oDs_PrGAkaDUbuzqb9WoerAVrmQ","ext":true};
 
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json;charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}})}
-function b64bytes(s){const raw=atob(s);return Uint8Array.from(raw,c=>c.charCodeAt(0));}
+function b64bytes(s){s=s.replace(/-/g,"+").replace(/_/g,"/");while(s.length%4)s+="=";const raw=atob(s);return Uint8Array.from(raw,c=>c.charCodeAt(0));}
 async function sha256hex(s){const d=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,"0")).join("");}
-async function importKey(){const b64=PUBLIC_KEY.replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\s+/g,"");return crypto.subtle.importKey("spki",b64bytes(b64),{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);}
+async function importKey(){return crypto.subtle.importKey("jwk",PUBLIC_JWK,{name:"ECDSA",namedCurve:"P-256"},false,["verify"]);}
 async function authorized(request,body){
   const ts=Number(request.headers.get("X-Anthares-Timestamp")||0);
   const sig=String(request.headers.get("X-Anthares-Signature")||"");
   if(!ts||Math.abs(Date.now()-ts)>300000||!sig)return false;
-  try{const hex=await sha256hex(body);return await crypto.subtle.verify("RSASSA-PKCS1-v1_5",await importKey(),b64bytes(sig),new TextEncoder().encode(String(ts)+"."+hex));}catch{return false;}
+  try{const hex=await sha256hex(body);return await crypto.subtle.verify({name:"ECDSA",hash:"SHA-256"},await importKey(),b64bytes(sig),new TextEncoder().encode(String(ts)+"."+hex));}catch{return false;}
 }
-function validEnvelope(x){return !!x&&x.schema==="anthares.encrypted-browser-state.v1"&&typeof x.ciphertext==="string"&&x.ciphertext.length>=64&&x.ciphertext.length<=MAX_BODY-1000&&/^[A-Za-z0-9+/=]+$/.test(x.ciphertext)&&typeof x.sha256==="string"&&/^[0-9a-f]{64}$/.test(x.sha256);}
+function validEnvelope(x){return !!x&&x.schema==="anthares.encrypted-browser-state.v1"&&typeof x.ciphertext==="string"&&x.ciphertext.length>=64&&x.ciphertext.length<=MAX_BODY-1000&&/^[A-Za-z0-9+/_=-]+$/.test(x.ciphertext)&&typeof x.sha256==="string"&&/^[0-9a-f]{64}$/.test(x.sha256);}
 
 export default {
   async fetch(request,env){
     const url=new URL(request.url);
-    if(url.pathname==="/health")return json({ok:true,service:"anthares-x-vault",version:"x-vault-v1",persistent_state:!!env.ANTHARES_STATE});
+    if(url.pathname==="/health")return json({ok:true,service:"anthares-x-vault",version:"x-vault-v2",persistent_state:!!env.ANTHARES_STATE});
     if(url.pathname!=="/state")return json({ok:false,error:"not_found"},404);
     if(!env.ANTHARES_STATE)return json({ok:false,error:"persistent_state_unavailable"},503);
     const body=request.method==="POST"?await request.text():"";
