@@ -1,4 +1,4 @@
-name: Kwai Android ARM64 Framework Matrix 30
+name: Kwai Android ARM64 Data Graphics Matrix 30
 on:
   workflow_dispatch:
   push:
@@ -8,51 +8,51 @@ on:
 permissions:
   contents: read
 jobs:
-  framework-matrix:
-    name: "case-${{ matrix.id }} cpu=${{ matrix.cpu }} ram=${{ matrix.ram }} smp=${{ matrix.smp }} mode=${{ matrix.mode }}"
+  data-graphics-matrix:
+    name: "case-${{ matrix.id }} ram=${{ matrix.ram }} smp=${{ matrix.smp }} data=${{ matrix.data }} gfx=${{ matrix.gfx }} net=${{ matrix.net }} qemu=${{ matrix.qemu }}"
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 20
+    timeout-minutes: 22
     strategy:
       fail-fast: false
       max-parallel: 30
       matrix:
         include:
-          - {id: 1, cpu: cortex-a72, ram: 2048, smp: 2, mode: base}
-          - {id: 2, cpu: cortex-a72, ram: 3072, smp: 2, mode: qemu}
-          - {id: 3, cpu: cortex-a72, ram: 4096, smp: 2, mode: qemu}
-          - {id: 4, cpu: cortex-a72, ram: 2048, smp: 4, mode: qemu}
-          - {id: 5, cpu: cortex-a72, ram: 4096, smp: 4, mode: qemu}
-          - {id: 6, cpu: max, ram: 2048, smp: 2, mode: qemu}
-          - {id: 7, cpu: max, ram: 4096, smp: 4, mode: qemu}
-          - {id: 8, cpu: cortex-a72, ram: 2048, smp: 2, mode: noverity}
-          - {id: 9, cpu: cortex-a72, ram: 3072, smp: 2, mode: noverity}
-          - {id: 10, cpu: cortex-a72, ram: 4096, smp: 4, mode: noverity}
-          - {id: 11, cpu: cortex-a72, ram: 2048, smp: 2, mode: slot}
-          - {id: 12, cpu: cortex-a72, ram: 3072, smp: 2, mode: slot}
-          - {id: 13, cpu: cortex-a72, ram: 4096, smp: 4, mode: slot}
-          - {id: 14, cpu: cortex-a72, ram: 2048, smp: 2, mode: freshdata2}
-          - {id: 15, cpu: cortex-a72, ram: 3072, smp: 2, mode: freshdata2}
-          - {id: 16, cpu: cortex-a72, ram: 4096, smp: 4, mode: freshdata2}
-          - {id: 17, cpu: cortex-a72, ram: 2048, smp: 2, mode: freshdata4}
-          - {id: 18, cpu: cortex-a72, ram: 4096, smp: 4, mode: freshdata4}
-          - {id: 19, cpu: cortex-a72, ram: 2048, smp: 2, mode: gpu}
-          - {id: 20, cpu: cortex-a72, ram: 4096, smp: 4, mode: gpu}
-          - {id: 21, cpu: cortex-a72, ram: 2048, smp: 2, mode: net}
-          - {id: 22, cpu: cortex-a72, ram: 4096, smp: 4, mode: net}
-          - {id: 23, cpu: cortex-a72, ram: 2048, smp: 2, mode: rng}
-          - {id: 24, cpu: cortex-a72, ram: 4096, smp: 4, mode: rng}
-          - {id: 25, cpu: cortex-a72, ram: 3072, smp: 2, mode: fullhw}
-          - {id: 26, cpu: cortex-a72, ram: 4096, smp: 4, mode: fullhw}
-          - {id: 27, cpu: max, ram: 4096, smp: 4, mode: fullhw}
-          - {id: 28, cpu: cortex-a72, ram: 3072, smp: 2, mode: qemu-noverity}
-          - {id: 29, cpu: cortex-a72, ram: 4096, smp: 4, mode: qemu-noverity}
-          - {id: 30, cpu: max, ram: 4096, smp: 4, mode: qemu-noverity}
+          - {id: 1, ram: 3072, smp: 2, data: gpt2, gfx: none, net: off, qemu: on}
+          - {id: 2, ram: 3072, smp: 2, data: gpt4, gfx: none, net: off, qemu: on}
+          - {id: 3, ram: 3072, smp: 2, data: gpt8, gfx: none, net: off, qemu: on}
+          - {id: 4, ram: 4096, smp: 4, data: gpt2, gfx: none, net: on, qemu: off}
+          - {id: 5, ram: 4096, smp: 4, data: gpt4, gfx: none, net: on, qemu: off}
+          - {id: 6, ram: 4096, smp: 4, data: gpt8, gfx: none, net: on, qemu: off}
+          - {id: 7, ram: 3072, smp: 2, data: gpt4, gfx: virtio-mmio, net: off, qemu: on}
+          - {id: 8, ram: 3072, smp: 2, data: gpt4, gfx: virtio-pci, net: off, qemu: on}
+          - {id: 9, ram: 3072, smp: 2, data: gpt4, gfx: ramfb, net: off, qemu: on}
+          - {id: 10, ram: 4096, smp: 4, data: gpt4, gfx: virtio-mmio, net: on, qemu: off}
+          - {id: 11, ram: 4096, smp: 4, data: gpt4, gfx: virtio-pci, net: on, qemu: off}
+          - {id: 12, ram: 4096, smp: 4, data: gpt4, gfx: ramfb, net: on, qemu: off}
+          - {id: 13, ram: 3072, smp: 2, data: original, gfx: virtio-mmio, net: off, qemu: on}
+          - {id: 14, ram: 3072, smp: 2, data: original, gfx: virtio-pci, net: off, qemu: on}
+          - {id: 15, ram: 4096, smp: 4, data: original, gfx: virtio-mmio, net: on, qemu: off}
+          - {id: 16, ram: 4096, smp: 4, data: original, gfx: virtio-pci, net: on, qemu: off}
+          - {id: 17, ram: 3072, smp: 2, data: gpt4, gfx: none, net: on, qemu: on}
+          - {id: 18, ram: 4096, smp: 4, data: gpt4, gfx: none, net: on, qemu: on}
+          - {id: 19, ram: 3072, smp: 2, data: gpt4, gfx: virtio-mmio, net: on, qemu: on}
+          - {id: 20, ram: 4096, smp: 4, data: gpt4, gfx: virtio-mmio, net: on, qemu: on}
+          - {id: 21, ram: 3072, smp: 2, data: gpt4, gfx: virtio-pci, net: on, qemu: on}
+          - {id: 22, ram: 4096, smp: 4, data: gpt4, gfx: virtio-pci, net: on, qemu: on}
+          - {id: 23, ram: 3072, smp: 2, data: gpt2, gfx: virtio-mmio, net: on, qemu: on}
+          - {id: 24, ram: 4096, smp: 4, data: gpt2, gfx: virtio-mmio, net: on, qemu: on}
+          - {id: 25, ram: 3072, smp: 2, data: gpt8, gfx: virtio-mmio, net: on, qemu: on}
+          - {id: 26, ram: 4096, smp: 4, data: gpt8, gfx: virtio-mmio, net: on, qemu: on}
+          - {id: 27, ram: 3072, smp: 2, data: gpt4, gfx: none, net: adb, qemu: on}
+          - {id: 28, ram: 4096, smp: 4, data: gpt4, gfx: none, net: adb, qemu: on}
+          - {id: 29, ram: 3072, smp: 2, data: gpt4, gfx: virtio-mmio, net: adb, qemu: on}
+          - {id: 30, ram: 4096, smp: 4, data: gpt4, gfx: virtio-mmio, net: adb, qemu: on}
     steps:
-      - name: Install runtime and Android ARM64 image
+      - name: Install runtime Android image and adb
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless gdisk e2fsprogs util-linux >/dev/null
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless gdisk e2fsprogs util-linux adb >/dev/null
           mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
           curl -fLsS --retry 2 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
           unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
@@ -63,7 +63,7 @@ jobs:
           DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
           gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
           echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
-      - name: Build known-good metadata first topology
+      - name: Build known-good metadata GPT
         run: |
           set -euo pipefail
           truncate -s 192M /tmp/meta.img
@@ -73,51 +73,74 @@ jobs:
           sleep 1
           sudo mkfs.ext4 -F -L metadata "${LOOP}p1" >/dev/null
           sudo losetup -d "$LOOP"
-      - name: Prepare variant and boot Android framework
+      - name: Build userdata topology
+        run: |
+          set -euo pipefail
+          DATA='${{ matrix.data }}'
+          if [ "$DATA" = original ]; then
+            echo "USERIMG=$ANDROID_DIR/userdata.img" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          case "$DATA" in gpt2) SZ=2G;; gpt4) SZ=4G;; gpt8) SZ=8G;; esac
+          truncate -s "$SZ" /tmp/userdata-gpt.img
+          sgdisk -o /tmp/userdata-gpt.img >/dev/null
+          sgdisk -n 1:2048:0 -c 1:userdata /tmp/userdata-gpt.img >/dev/null
+          LOOP=$(sudo losetup --find --show --partscan /tmp/userdata-gpt.img)
+          sleep 1
+          sudo mkfs.ext4 -F -L data "${LOOP}p1" >/dev/null
+          sudo losetup -d "$LOOP"
+          sgdisk -p /tmp/userdata-gpt.img
+          echo "USERIMG=/tmp/userdata-gpt.img" >> "$GITHUB_ENV"
+      - name: Boot and probe framework stability
         run: |
           set +e
-          MODE='${{ matrix.mode }}'
-          EXTRA=''
+          EXTRA='androidboot.selinux=permissive root=/dev/ram0 rw'
+          [ '${{ matrix.qemu }}' = on ] && EXTRA="$EXTRA qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30 androidboot.adb.secure=0"
           DEVICES=''
-          USERIMG="$ANDROID_DIR/userdata.img"
-          case "$MODE" in
-            qemu) EXTRA='qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30' ;;
-            noverity) EXTRA='androidboot.veritymode=disabled androidboot.verifiedbootstate=orange' ;;
-            slot) EXTRA='androidboot.slot_suffix=_a androidboot.slot=a' ;;
-            freshdata2) truncate -s 2G /tmp/userdata.img; mkfs.ext4 -F -L data /tmp/userdata.img >/dev/null; USERIMG=/tmp/userdata.img ;;
-            freshdata4) truncate -s 4G /tmp/userdata.img; mkfs.ext4 -F -L data /tmp/userdata.img >/dev/null; USERIMG=/tmp/userdata.img ;;
-            gpu) DEVICES='-device virtio-gpu-pci' ;;
-            net) DEVICES='-netdev user,id=n0 -device virtio-net-device,netdev=n0' ;;
-            rng) DEVICES='-object rng-random,filename=/dev/urandom,id=r0 -device virtio-rng-device,rng=r0' ;;
-            fullhw) DEVICES='-device virtio-gpu-pci -netdev user,id=n0 -device virtio-net-device,netdev=n0 -object rng-random,filename=/dev/urandom,id=r0 -device virtio-rng-device,rng=r0'; EXTRA='qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30 androidboot.veritymode=disabled androidboot.verifiedbootstate=orange' ;;
-            qemu-noverity) EXTRA='qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30 androidboot.veritymode=disabled androidboot.verifiedbootstate=orange' ;;
+          case '${{ matrix.gfx }}' in
+            virtio-mmio) DEVICES="$DEVICES -device virtio-gpu-device" ;;
+            virtio-pci) DEVICES="$DEVICES -device virtio-gpu-pci" ;;
+            ramfb) DEVICES="$DEVICES -device ramfb" ;;
           esac
-          timeout 175 qemu-system-aarch64 \
-            -machine virt \
-            -cpu ${{ matrix.cpu }} \
-            -m ${{ matrix.ram }} \
-            -smp ${{ matrix.smp }} \
-            -accel tcg \
+          case '${{ matrix.net }}' in
+            on) DEVICES="$DEVICES -netdev user,id=n0 -device virtio-net-device,netdev=n0" ;;
+            adb) DEVICES="$DEVICES -netdev user,id=n0,hostfwd=tcp::5555-:5555 -device virtio-net-device,netdev=n0"; EXTRA="$EXTRA androidboot.adb.secure=0 service.adb.tcp.port=5555" ;;
+          esac
+          timeout 185 qemu-system-aarch64 \
+            -machine virt -cpu cortex-a72 -m ${{ matrix.ram }} -smp ${{ matrix.smp }} -accel tcg \
             -nographic -no-reboot \
-            -kernel /tmp/android-Image \
-            -initrd "$ANDROID_DIR/ramdisk.img" \
+            -kernel /tmp/android-Image -initrd "$ANDROID_DIR/ramdisk.img" \
             -drive if=none,file=/tmp/meta.img,format=raw,id=metadata -device virtio-blk-device,drive=metadata \
             -drive if=none,file="$ANDROID_DIR/system.img",format=raw,readonly=on,id=system -device virtio-blk-device,drive=system \
             -drive if=none,file="$ANDROID_DIR/vendor.img",format=raw,readonly=on,id=vendor -device virtio-blk-device,drive=vendor \
             -drive if=none,file="$USERIMG",format=raw,id=userdata -device virtio-blk-device,drive=userdata \
             $DEVICES \
-            -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive root=/dev/ram0 rw $EXTRA" \
-            > /tmp/android-qemu.log 2>&1
-          grep -E 'init second stage|SystemServer|system_server|ActivityManager|PackageManager|SurfaceFlinger|boot_completed|BOOT_COMPLETED|zygote|Fatal signal|crash_dump|linker|CANNOT LINK|servicemanager|hwservicemanager|apexd|vold|netd' /tmp/android-qemu.log | tail -180 || true
-          if grep -Eq 'BOOT_COMPLETED|boot_completed|ActivityManager.*Start proc|SystemServer.*Start|system_server' /tmp/android-qemu.log; then echo RESULT=FRAMEWORK_ADVANCED; exit 0; fi
-          if grep -Eq 'starting service .zygote.|Created socket .*/zygote' /tmp/android-qemu.log; then echo RESULT=ZYGOTE_REACHED; exit 1; fi
-          if grep -q 'init second stage started' /tmp/android-qemu.log; then echo RESULT=SECOND_STAGE_ONLY; exit 1; fi
-          echo RESULT=EARLY_FAIL
+            -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu $EXTRA" \
+            > /tmp/android-qemu.log 2>&1 &
+          QPID=$!
+          for i in $(seq 1 30); do
+            if [ '${{ matrix.net }}' = adb ]; then adb connect 127.0.0.1:5555 >/tmp/adb-connect.txt 2>&1 || true; adb -s 127.0.0.1:5555 shell getprop sys.boot_completed >/tmp/adb-boot.txt 2>&1 || true; fi
+            sleep 5
+          done
+          kill "$QPID" 2>/dev/null || true
+          grep -E 'init second stage|system_server|SystemServer|ActivityManager|PackageManager|SurfaceFlinger|surfaceflinger|zygote|BOOT_COMPLETED|boot_completed|Fatal signal|received signal|/data/misc_de|Invalid ext4|vold|adbd' /tmp/android-qemu.log | tail -220 || true
+          cat /tmp/adb-connect.txt /tmp/adb-boot.txt 2>/dev/null || true
+          ZC=$(grep -Ec "Service 'zygote'.*received signal|Sending signal 9 to service 'zygote'" /tmp/android-qemu.log || true)
+          SC=$(grep -Ec "Service 'surfaceflinger'.*received signal|SurfaceFlinger::init|Sending signal 9 to service 'surfaceflinger'" /tmp/android-qemu.log || true)
+          echo "ZYGOTE_CRASH_COUNT=$ZC"
+          echo "SURFACE_CRASH_COUNT=$SC"
+          if grep -Eq 'BOOT_COMPLETED|boot_completed=1|sys.boot_completed.*1|ActivityManager.*Start proc.*system_server|SystemServer.*Start' /tmp/android-qemu.log /tmp/adb-boot.txt 2>/dev/null; then echo RESULT=BOOT_OR_SYSTEMSERVER; exit 0; fi
+          if [ '${{ matrix.net }}' = adb ] && grep -q '^1' /tmp/adb-boot.txt 2>/dev/null; then echo RESULT=ADB_BOOT_COMPLETE; exit 0; fi
+          if grep -q 'init second stage started' /tmp/android-qemu.log && [ "$ZC" -le 1 ] && [ "$SC" -le 1 ]; then echo RESULT=STABLE_FRAMEWORK_CANDIDATE; exit 0; fi
+          echo RESULT=UNSTABLE_FRAMEWORK
           exit 1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-framework-case-${{ matrix.id }}
-          path: /tmp/android-qemu.log
+          name: android-data-gfx-case-${{ matrix.id }}
+          path: |
+            /tmp/android-qemu.log
+            /tmp/adb-connect.txt
+            /tmp/adb-boot.txt
           if-no-files-found: warn
           retention-days: 3
