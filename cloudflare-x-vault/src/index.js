@@ -1,13 +1,13 @@
 const KEY = "x:web:session:lucasyahn:opaque:v1";
 const MAX_BODY = 500000;
 const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvMGOSYs+YvDkqjPCCc3Q
-VvUCRyMXjZiHReuZ2dFtnzBv/4RXiZIk4zFy95ovyeKr02OpWs46QlLUcgRF8nNN
-Lk2ek6S2aAmwm4FHxbsJuwzgwPvVkGI2irbyOsXgBFL+GwgfgBxgeJjYX/tCqP7v
-5iHte0En2u5Kshx/WkJicYtAUiC9j7E8Km6mS/gDT91VXvsUDOnbb1wVIw16EyCe
-/RsdJKXpyGjVRJUY42MaFYbYEhhG68Yz8mWBDdMJBzEzM2Bf0yif0V9mdxzrNcxp
-jgEnrbQ3Xl3JxMJ76OLyT6IW7xyIfWuC7yFLORxrb4yohEU//hQfaO76nfRP6tD4
-OQIDAQAB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsJyt+7jLEyrHO8Q0Agg2
+hcBQRO5EW4aNckRxrMgKfJJwqAxzWrsu10RvYanfzvadpBJjJEQTdePiEnEKLMuX
+q/dJn2TzQTR/4ftJ/GWsBlUMG6+vv03Qk1mOHG+M68ALd7eJUBIxtdeWLdrUnN7c
+L+0p2CSBlYF2bXm4RoLMf0aO3FIn0FZK/1HlRPJWheiuKy5bLU7QFPkurwJHlKRC
+pVZrFf8ueBTq4dRY6hHQ1gLYeyF8Bgy5a8u93rxMzLLiZF1IGeJtoNZxuH8fB4es
+bcq2sS3haMuBccLeYfCBQty8X0u1oSs6FPe1ErEYglEQJKrdE2ENkv/ySDDr+DX8
+NQIDAQAB
 -----END PUBLIC KEY-----`;
 
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json;charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}})}
