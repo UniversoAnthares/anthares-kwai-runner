@@ -1059,3 +1059,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - `memuc create` without extra arguments is an actual create operation, not a help screen; it completed successfully and created VM index 1. This was harmless but was an unintended consequence of probing syntax.
 - No app was installed and no publication action occurred.
 - Next: deliberately create VM2 and VM3 with the same MEmu default Android profile so the reconstructed daemon can keep its historical VM index 3, then start VM3 and validate ADB/package state.
+
+## 2026-10-12 — Agent 3 — historical Kwai VM index 3 restored
+- Canonical log was re-read immediately before this step.
+- Deliberately created two additional MEmu VMs with the installed default Android profile. `memuc create` returned `index:2` and `index:3` successfully.
+- Current inventory: VM0 running; VM1/VM2/VM3 present and stopped. `memuc listvms` reports `3,MEmu3,0,0,0`.
+- The reconstructed daemon/publisher can now retain its historical target index `VM=3` without code changes.
+- No Kwai app was installed and no publication action occurred.
+- Next: re-read canonical log, start VM3, wait for Android boot/ADB readiness, verify Android version/ABI and confirm Kwai package is absent before restoring the app/session.
