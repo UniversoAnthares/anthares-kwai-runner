@@ -4,15 +4,15 @@ Status values: UNKNOWN / FOUND / RESTORED / PROVEN / FAILED / BLOCKED
 
 ## TikTok
 Executor: PROVEN — reconstructed local-PC controller executed the real publisher successfully on 2026-10-12
-Session: PROVEN — authenticated session revalidated immediately before post; intended account confirmed as @universo.anthares
+Session: PROVEN — authenticated session revalidated; actual posting identity verified in authenticated TikTok Studio as @lucasrosalem4. Previous public-profile navigation to @universo.anthares did not establish login identity.
 Queue: FOUND — historical queue/workflow family recovered; current controlled reconstruction uses the owned-source local ledger/plan path
 Ledger: PROVEN — segment reservation, attempted safety state, published completion and cleanup all executed successfully
 Upload page: PROVEN — media attachment, caption and public visibility validated repeatedly
 Publish: PROVEN — real controlled Post succeeded for segment `xcRGdBfHX0E:100:190`
 Confirmation: PROVEN — `TIKTOK_OWNED_PUBLISH=OK` followed by `LEGACY_TIKTOK_PUBLISH=CONFIRMED_AND_COMPLETED`
-Last proven real post: CURRENT PROVEN — @universo.anthares, segment `xcRGdBfHX0E:100:190`, published_run_id `local-1791834412`
+Last proven real post: CURRENT PROVEN — @lucasrosalem4, https://www.tiktok.com/@lucasrosalem4/video/7695869978876136705, segment `xcRGdBfHX0E:100:190`, published_run_id `local-1791834412`
 Safety after proof: PROVEN — one-shot ALLOW_PUBLISH file removed; automatic publication disarmed
-Current blocker: no TikTok E2E blocker remains; continuous scheduler/daemon activation is intentionally still OFF pending the next explicit reconstruction milestone
+Current blocker: identity guard must be updated to verify the actual logged-in TikTok account before any further publication; intended destination @universo.anthares differs from observed @lucasrosalem4. Continuous scheduler/daemon remains OFF.
 
 ## Kwai
 MEmu: FOUND — exact publisher/recovery code recovered
