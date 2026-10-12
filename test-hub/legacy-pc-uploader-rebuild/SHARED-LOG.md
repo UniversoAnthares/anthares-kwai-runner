@@ -1001,3 +1001,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - IMPORTANT ACCOUNT IDENTITY CORRECTION: Studio account is `lucasrosalem4`, not `universo.anthares`. Earlier profile probe navigated to the public @universo.anthares page manually, which did not prove logged-in posting identity. The successful post belongs to `@lucasrosalem4` per Studio. Do not claim it was posted to @universo.anthares.
 - No new post was made during URL lookup.
 - Next action: re-read this log, verify the exact URL in a read-only direct-page probe, then correct STATE.md account identity and return the link to the user.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — TikTok post URL independently opened
+- Re-read canonical log before read-only verification.
+- Anonymous Playwright navigation reached `https://www.tiktok.com/@lucasrosalem4/video/7695869978876136705` with same final URL, correct video ID and `O Homem do Elevador` present in HTML.
+- TikTok showed a login prompt in the anonymous page, but the URL/caption resolved. Authenticated Studio already showed it as public (`Todos`).
+- Confirmed exact post URL and identity correction. No new publication.
+- Next action: update STATE.md to correct the account for this verified post and prevent future identity misrouting.
