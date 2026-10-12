@@ -1117,3 +1117,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - `dumpsys package` reports `versionName=13.8.30.646601`, `versionCode=646601`, `primaryCpuAbi=arm64-v8a`.
 - Kwai package installation in historical VM3 = PROVEN. No app publishing action occurred.
 - Next: re-read canonical log, run the recovered publisher's safe `probe` mode against VM3 and inspect current Kwai onboarding/login/activity state. Do not run `publish-local` yet.
+
+## 2026-10-12 — Agent 3 — first recovered Kwai publisher probe reached app but found no creation control
+- Canonical log was re-read immediately before this probe.
+- Ran the isolated recovered publisher `kwai_memu_publish.py probe` with `ATD_KWAI_VM=3`.
+- Publisher version `0.2.2` successfully opened Kwai in VM3, proving executable/package launch compatibility.
+- Probe stopped safely with `Kwai abriu, porém nenhum controle de criação conhecido foi encontrado.` No publish path was entered.
+- This indicates the fresh VM is currently on an onboarding/login/permission UI rather than the authenticated home/create surface expected by the historical publisher.
+- No publication action occurred.
+- Next: re-read canonical log, dump the current Android UI hierarchy/activity from VM3 and classify the exact screen; then advance only through onboarding/login prerequisites.
