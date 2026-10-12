@@ -263,7 +263,8 @@ def prepare() -> dict[str, Any]:
     row = None
     source_url = ""
     source = WORK_DIR / "source.mp4"
-    while True:
+    failed_sources = 0
+    while failed_sources < 5:
         candidate = select_next(rows, probe_ledger, allow_legacy=True)
         if candidate is None:
             break
@@ -278,6 +279,7 @@ def prepare() -> dict[str, Any]:
             probe_ledger.setdefault("published", {})[key] = {"source_url": candidate_url}
             print(f"INSTAGRAM_SOURCE_SKIP id={candidate.get('id')} error={type(exc).__name__}: {exc}", flush=True)
             source.unlink(missing_ok=True)
+            failed_sources += 1
     if row is None:
         # Independent upstream extraction: a remote YouTube archive, not a pre-cut WordPress file.
         youtube_url = os.getenv("INSTAGRAM_YOUTUBE_SOURCE_URL", "").strip()
