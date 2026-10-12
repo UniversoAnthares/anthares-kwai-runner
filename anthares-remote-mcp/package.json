@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "start:http": "ARA_MCP_TRANSPORT=http node server.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",
