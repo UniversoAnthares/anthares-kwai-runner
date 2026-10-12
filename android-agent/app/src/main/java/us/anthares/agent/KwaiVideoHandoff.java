@@ -36,7 +36,7 @@ public final class KwaiVideoHandoff {
             show(activity, "O arquivo selecionado não é um vídeo.");
             return;
         }
-        shareUri(activity, uri);
+        shareUri(activity, uri, "");
     }
 
     public static void shareFromApprovedLink(Activity activity, Uri link) {
@@ -47,6 +47,8 @@ public final class KwaiVideoHandoff {
         }
         String rawUrl = link.getQueryParameter("url");
         String expectedHash = link.getQueryParameter("sha256");
+        String caption = safe(link.getQueryParameter("caption"), 500);
+        String jobId = safe(link.getQueryParameter("job_id"), 160);
         if (rawUrl == null || expectedHash == null
                 || !expectedHash.matches("(?i)[0-9a-f]{64}")) {
             show(activity, "O link exige URL HTTPS e SHA-256.");
@@ -118,9 +120,11 @@ public final class KwaiVideoHandoff {
                 activity.runOnUiThread(() -> {
                     Uri content = FileProvider.getUriForFile(activity,
                             activity.getPackageName() + ".files", ready);
-                    shareUri(activity, content);
+                    AutoPublishState.arm(activity, caption, jobId);
+                    shareUri(activity, content, caption);
                 });
             } catch (Exception e) {
+                AutoPublishState.clear(activity);
                 if (output != null && !matchesHash(output, expectedHash)) output.delete();
                 show(activity, "Não foi possível validar o vídeo: " + e.getClass().getSimpleName());
             }
@@ -146,18 +150,26 @@ public final class KwaiVideoHandoff {
         return s.toString();
     }
 
-    private static void shareUri(Activity activity, Uri uri) {
+    private static void shareUri(Activity activity, Uri uri, String caption) {
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("video/mp4");
         send.setPackage(KWAI_PACKAGE);
         send.putExtra(Intent.EXTRA_STREAM, uri);
+        if (caption != null && !caption.isEmpty()) send.putExtra(Intent.EXTRA_TEXT, caption);
         send.setClipData(ClipData.newUri(activity.getContentResolver(), "Anthares video", uri));
         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {
             activity.startActivity(send);
         } catch (Exception e) {
+            AutoPublishState.clear(activity);
             show(activity, "Instale ou atualize o aplicativo oficial do Kwai.");
         }
+    }
+
+    private static String safe(String value, int limit) {
+        if (value == null) return "";
+        value = value.trim();
+        return value.length() <= limit ? value : value.substring(0, limit);
     }
 
     private static void show(Activity activity, String message) {
