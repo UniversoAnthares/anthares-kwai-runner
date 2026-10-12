@@ -1,4 +1,4 @@
-name: Kwai - 40 Session Readiness Diagnostics
+name: Kwai - 40 Session Readiness Diagnostics v2
 on:
   workflow_dispatch:
   push:
@@ -61,10 +61,12 @@ jobs:
           print('CASE',case,'SCENARIO',scenario,'CHECK',check,'VALID',ok)
           print('SOURCE','AUTHORIZED_STATE' if state else 'SYNTHETIC_FIXTURE')
           print('AUTHENTICATED=NOT_PROVEN')
+          print('REAL_SESSION_AVAILABLE',bool(state))
           print('PUBLISHED=NOT_TESTED')
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
             f.write(f'Case {case}: schema check {check} = {ok}; source = {"authorized state" if state else "synthetic fixture"}; authentication NOT PROVEN.\\n')
           if not ok:raise SystemExit(3)
+          print('SCHEMA_VALIDATION=PASS_AUTHENTICATION_UNVERIFIED')
           PY
   actual-authentication:
     needs: session-readiness
