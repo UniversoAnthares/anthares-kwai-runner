@@ -1,15 +1,32 @@
-name: Kwai ARM64 Android Boot Attempt
+name: Kwai ARM64 QEMU Feasibility
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  native-android-boot:
-    name: "ARM64 Android boot without KVM"
+  qemu-native:
+    name: "QEMU ARM64 binary and accelerators"
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 18
+    timeout-minutes: 10
     steps:
-      - name: Install Android SDK tooling
+      - name: Install QEMU and probe native ARM64
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm qemu-utils >/dev/null
+          command -v qemu-system-aarch64
+          file "$(command -v qemu-system-aarch64)"
+          qemu-system-aarch64 -machine help | grep -E 'virt|raspi' | head -15
+          qemu-system-aarch64 -accel help
+          echo "HOST_ARCH=$(uname -m)"
+          echo "KVM_AVAILABLE=$(test -e /dev/kvm && echo yes || echo no)"
+          echo "QEMU_ARM64_BINARY=PASS"
+  android-image:
+    name: "ARM64 system image extraction"
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 14
+    steps:
+      - name: Install Android ARM64 system image without Google emulator
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -18,44 +35,10 @@ jobs:
           curl -fLsS --retry 2 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
           unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
           cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
-          echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
-          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$HOME/android-sdk/platform-tools" >> "$GITHUB_PATH"
-          echo "$HOME/android-sdk/emulator" >> "$GITHUB_PATH"
-      - name: Install ARM64 image and emulator
-        timeout-minutes: 9
-        run: |
-          set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager --install "platform-tools" "emulator" "system-images;android-30;default;arm64-v8a"
-          echo "EMULATOR_FILE=$(file "$ANDROID_HOME/emulator/emulator")"
-          file "$ANDROID_HOME/emulator/qemu/linux-aarch64/qemu-system-aarch64" || true
-          "$ANDROID_HOME/emulator/emulator" -version || true
-          echo "ANDROID_ARM64_IMAGE_INSTALLED=1"
-      - name: Attempt native ARM64 Android boot
-        timeout-minutes: 6
-        run: |
-          set -u
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n kwai_arm64 -k "system-images;android-30;default;arm64-v8a" --force
-          set +e
-          timeout 210 "$ANDROID_HOME/emulator/emulator" -avd kwai_arm64 -no-window -no-audio -no-snapshot -no-boot-anim -no-accel -gpu swiftshader_indirect -verbose > /tmp/emulator.log 2>&1 &
-          EMUPID=$!
-          for i in $(seq 1 35); do
-            BOOT=$("$ANDROID_HOME/platform-tools/adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-            if [ "$BOOT" = 1 ]; then echo "ANDROID_ARM64_BOOT=PASS"; break; fi
-            if ! kill -0 "$EMUPID" 2>/dev/null; then echo "EMULATOR_EXITED=1"; break; fi
-            sleep 5
-          done
-          "$ANDROID_HOME/platform-tools/adb" devices -l || true
-          "$ANDROID_HOME/platform-tools/adb" shell getprop ro.product.cpu.abilist || true
-          echo "EMULATOR_LOG_TAIL:"
-          tail -100 /tmp/emulator.log || true
-          if [ "${BOOT:-}" != 1 ]; then echo "ANDROID_ARM64_BOOT=FAIL"; exit 1; fi
-      - name: Upload emulator diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: arm64-emulator-boot-log
-          path: /tmp/emulator.log
-          if-no-files-found: warn
-          retention-days: 3
+          export ANDROID_HOME="$HOME/android-sdk"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-30;default;arm64-v8a"
+          find "$ANDROID_HOME/system-images" -maxdepth 5 -type f | head -35
+          test -s "$ANDROID_HOME/system-images/android-30/default/arm64-v8a/system.img"
+          echo "ARM64_ANDROID_SYSTEM_IMAGE=PASS"
+          echo "QEMU_BOOT=NOT_YET_PROVEN"
