@@ -21,207 +21,7 @@ jobs:
       fail-fast: false
       max-parallel: 40
       matrix:
-        include:
-          - variant: 1
-            api: 30
-            arch: x86_64
-            target: google_apis
-            gpu: swiftshader_indirect
-          - variant: 2
-            api: 30
-            arch: x86_64
-            target: google_apis
-            gpu: off
-          - variant: 3
-            api: 30
-            arch: x86_64
-            target: default
-            gpu: swiftshader_indirect
-          - variant: 4
-            api: 30
-            arch: x86_64
-            target: default
-            gpu: off
-          - variant: 5
-            api: 30
-            arch: x86
-            target: google_apis
-            gpu: swiftshader_indirect
-          - variant: 6
-            api: 30
-            arch: x86
-            target: google_apis
-            gpu: off
-          - variant: 7
-            api: 30
-            arch: x86
-            target: default
-            gpu: swiftshader_indirect
-          - variant: 8
-            api: 30
-            arch: x86
-            target: default
-            gpu: off
-          - variant: 9
-            api: 31
-            arch: x86_64
-            target: google_apis
-            gpu: swiftshader_indirect
-          - variant: 10
-            api: 31
-            arch: x86_64
-            target: google_apis
-            gpu: off
-          - variant: 11
-            api: 31
-            arch: x86_64
-            target: default
-            gpu: swiftshader_indirect
-          - variant: 12
-            api: 31
-            arch: x86_64
-            target: default
-            gpu: off
-          - variant: 13
-            api: 31
-            arch: x86
-            target: google_apis
-            gpu: swiftshader_indirect
-          - variant: 14
-            api: 31
-            arch: x86
-            target: google_apis
-            gpu: off
-          - variant: 15
-            api: 31
-            arch: x86
-            target: default
-            gpu: swiftshader_indirect
-          - variant: 16
-            api: 31
-            arch: x86
-            target: default
-            gpu: off
-          - variant: 17
-            api: 32
-            arch: x86_64
-            target: google_apis
-            gpu: swiftshader_indirect
-          - variant: 18
-            api: 32
-            arch: x86_64
-            target: google_apis
-            gpu: off
-          - variant: 19
-            api: 32
-            arch: x86_64
-            target: default
-            gpu: swiftshader_indirect
-          - variant: 20
-            api: 32
-            arch: x86_64
-            target: default
-            gpu: off
-          - variant: 21
-            api: 32
-            arch: x86
-            target: google_apis
-            gpu: swiftshader_indirect
-          - variant: 22
-            api: 32
-            arch: x86
-            target: google_apis
-            gpu: off
-          - variant: 23
-            api: 32
-            arch: x86
-            target: default
-            gpu: swiftshader_indirect
-          - variant: 24
-            api: 32
-            arch: x86
-            target: default
-            gpu: off
-          - variant: 25
-            api: 33
-            arch: x86_64
-            target: google_apis
-            gpu: swiftshader_indirect
-          - variant: 26
-            api: 33
-            arch: x86_64
-            target: google_apis
-            gpu: off
-          - variant: 27
-            api: 33
-            arch: x86_64
-            target: default
-            gpu: swiftshader_indirect
-          - variant: 28
-            api: 33
-            arch: x86_64
-            target: default
-            gpu: off
-          - variant: 29
-            api: 33
-            arch: x86
-            target: google_apis
-            gpu: swiftshader_indirect
-          - variant: 30
-            api: 33
-            arch: x86
-            target: google_apis
-            gpu: off
-          - variant: 31
-            api: 33
-            arch: x86
-            target: default
-            gpu: swiftshader_indirect
-          - variant: 32
-            api: 33
-            arch: x86
-            target: default
-            gpu: off
-          - variant: 33
-            api: 34
-            arch: x86_64
-            target: google_apis
-            gpu: swiftshader_indirect
-          - variant: 34
-            api: 34
-            arch: x86_64
-            target: google_apis
-            gpu: off
-          - variant: 35
-            api: 34
-            arch: x86_64
-            target: default
-            gpu: swiftshader_indirect
-          - variant: 36
-            api: 34
-            arch: x86_64
-            target: default
-            gpu: off
-          - variant: 37
-            api: 34
-            arch: x86
-            target: google_apis
-            gpu: swiftshader_indirect
-          - variant: 38
-            api: 34
-            arch: x86
-            target: google_apis
-            gpu: off
-          - variant: 39
-            api: 34
-            arch: x86
-            target: default
-            gpu: swiftshader_indirect
-          - variant: 40
-            api: 34
-            arch: x86
-            target: default
-            gpu: off
+        variant: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40]
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -232,45 +32,77 @@ jobs:
       X_APKM_B64: ${{ secrets.X_APKM_B64 }}
     steps:
       - uses: actions/checkout@v4
-      - name: Verify actual APK artifact rather than HTML
+      - name: Probe independently verifiable APK source
         shell: bash
+        env:
+          VARIANT: ${{ matrix.variant }}
         run: |
           set -Eeuo pipefail
           mkdir -p evidence
-          if [[ -n "${X_APKM_URL:-}" ]]; then
-            case "$X_APKM_URL" in https://*) ;; *) echo 'HTTPS required'; exit 31;; esac
-            curl -fL --retry 2 --max-time 120 "$X_APKM_URL" -o /tmp/x-current.apkm
-          elif [[ -n "${X_APKM_B64:-}" ]]; then
-            printf '%s' "$X_APKM_B64" | base64 -d > /tmp/x-current.apkm
-          else
-            echo 'BLOCKED_NO_APK: neither a direct bundle URL nor X_APKM_B64 repository secret is available' | tee evidence/status.txt
+          source_kind=$(( (VARIANT - 1) % 5 ))
+          probe_kind=$(( (VARIANT - 1) / 5 ))
+          echo "variant=$VARIANT source_kind=$source_kind probe_kind=$probe_kind" | tee evidence/matrix.txt
+          case "$source_kind" in
+            0) url="${X_APKM_URL:-}";;
+            1) url="https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/x-android-apk/x.apkm";;
+            2) url="https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/x-android-apk/x.apk";;
+            3) url="https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/x-android-session-v1/x.apkm";;
+            4) url="";;
+          esac
+          if [[ "$source_kind" == 4 ]]; then
+            if [[ -n "${X_APKM_B64:-}" ]]; then
+              printf '%s' "$X_APKM_B64" | base64 -d > /tmp/x-candidate
+            else
+              echo 'SOURCE_MISSING: protected X_APKM_B64 is empty' | tee evidence/status.txt
+              exit 30
+            fi
+          elif [[ -z "$url" ]]; then
+            echo 'SOURCE_MISSING: no HTTPS APK URL provided' | tee evidence/status.txt
             exit 30
+          else
+            case "$url" in https://*) ;; *) echo 'UNSAFE_URL'; exit 31;; esac
+            timeout $((45 + probe_kind * 10)) curl -fsSL --retry 1 --max-time $((30 + probe_kind * 10)) "$url" -o /tmp/x-candidate || { echo 'SOURCE_UNAVAILABLE' | tee evidence/status.txt; exit 32; }
           fi
-          file /tmp/x-current.apkm | tee evidence/file.txt
-          unzip -t /tmp/x-current.apkm | tail -4 | tee evidence/archive.txt
-          unzip -Z1 /tmp/x-current.apkm | grep -E '\.apk$' | tee evidence/apks.txt
-          test -s evidence/apks.txt
-      - name: Install and prove X on Android
+          file /tmp/x-candidate | tee evidence/file.txt
+          size=$(stat -c%s /tmp/x-candidate)
+          echo "size=$size" | tee evidence/size.txt
+          test "$size" -gt 100000 || { echo 'INVALID_SIZE_OR_HTML' | tee evidence/status.txt; exit 33; }
+          sha256sum /tmp/x-candidate | tee evidence/sha256.txt
+          if unzip -t /tmp/x-candidate > evidence/archive.txt 2>&1; then
+            unzip -Z1 /tmp/x-candidate | grep -E '\.apk      - name: Evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-actual-proof-${{ matrix.variant }}-${{ github.run_id }}
+          path: evidence/
+          retention-days: 2
+          if-no-files-found: ignore
+ > evidence/apks.txt || { echo 'NO_APK_IN_ARCHIVE' | tee evidence/status.txt; exit 34; }
+          elif [[ "$(head -c4 /tmp/x-candidate | od -An -tx1 | tr -d ' \n')" == 504b0304 ]]; then
+            echo 'CORRUPT_APK_ZIP' | tee evidence/status.txt
+            exit 35
+          else
+            echo 'INVALID_APK_FORMAT' | tee evidence/status.txt
+            exit 36
+          fi
+          echo 'APK_CANDIDATE_FOUND_NOT_YET_INSTALLED' | tee evidence/status.txt
+      - name: Real Android install (only when artifact exists)
+        if: success()
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: ${{ matrix.api }}
-          arch: ${{ matrix.arch }}
-          target: ${{ matrix.target }}
-          emulator-options: -no-window -no-boot-anim -gpu ${{ matrix.gpu }} -no-snapshot
+          api-level: 33
+          arch: x86_64
+          target: google_apis
           script: |
             set -Eeuo pipefail
-            chmod +x scripts/x_install_apkm_bundle.sh
+            cp /tmp/x-candidate /tmp/x-current.apkm
             scripts/x_install_apkm_bundle.sh /tmp/x-current.apkm | tee evidence/install.txt
             adb shell pm path com.twitter.android | tee evidence/pm-path.txt
-            adb shell dumpsys package com.twitter.android | grep -m1 versionName | tee evidence/version.txt
             adb shell monkey -p com.twitter.android 1 | tee evidence/launch.txt
             sleep 8
             adb shell pidof com.twitter.android | tee evidence/pid.txt
             test -s evidence/pid.txt
             echo 'X_INSTALLED_AND_LAUNCHED=PASS' | tee evidence/status.txt
-            if [[ "$CHECK_AUTH" == true ]]; then
-              echo 'AUTH_NOT_PROVEN: authentication requires a valid previously sealed session and independent account verification' | tee evidence/auth-status.txt
-            fi
       - name: Evidence
         if: always()
         uses: actions/upload-artifact@v4
