@@ -53,7 +53,6 @@ def tap_bounds(b):
     return True
 
 def clear_interest_onboarding(nodes):
-    """Clear the observed interest_tag onboarding without selecting preferences."""
     interest = any(
         (n.get("resource-id") or "").endswith(("interest_tag_fragment_container","interest_tag_container"))
         for n in nodes
@@ -75,14 +74,17 @@ def clear_interest_onboarding(nodes):
 def main():
     method=sys.argv[1] if len(sys.argv)==2 else "auto"
     if method=="auto":
-        login=os.getenv("KWAI_LOGIN","")
-        method="email" if "@" in login else "phone"
+        forced=os.getenv("KWAI_LOGIN_METHOD","").strip().lower()
+        if forced in METHODS:
+            method=forced
+        else:
+            login=os.getenv("KWAI_LOGIN","").strip()
+            digits=re.sub(r"[^0-9+]","",login)
+            method="phone" if login and digits==login and len(re.sub(r"\D","",login))>=8 else "email"
     if method not in METHODS:
         return 2
     try:
         nodes=snapshot()
-        # Fresh installs can land on interest_tag before the native login chooser.
-        # This is onboarding, not an authentication challenge; skip it and retry.
         for _ in range(3):
             if not clear_interest_onboarding(nodes):
                 break
