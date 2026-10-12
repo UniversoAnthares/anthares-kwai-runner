@@ -1093,3 +1093,9 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Historical `kwai_package_vault.py` records the expected Kwai signing-certificate SHA-256 as `bb8d2610b048bee8e9f96cd5456d8b8b5a0806d2a41dffdf744d2a8720e81047` and validates every split as the same package before installation.
 - No APK was installed and no publication action occurred in this step.
 - Next: re-read canonical log, verify the recovered local vault package/certificate with available Android tooling, then run the same `install-multiple -r` transaction into VM3 and verify `pm path` without opening the app beyond what is needed for package validation.
+
+## 2026-10-12 — Agent 3 — Android tool discovery probe timed out
+- Canonical log was re-read immediately before this probe.
+- A broad recursive search for `aapt/aapt2/apksigner` across several SDK/MEmu roots exceeded the 20-second command timeout before returning a reliable result.
+- No file, VM or package state changed.
+- Next: use narrow known Android SDK build-tools paths only; if the verifier tools are absent, proceed with the already historically validated local vault and verify package identity/version after `install-multiple` through Android package manager.
