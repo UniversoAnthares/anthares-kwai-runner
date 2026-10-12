@@ -1,4 +1,4 @@
-name: X APK 40 source preflight
+name: X APK 40 acquisition and install probes
 on:
   push:
     branches: [feature/x-native-live-android-bridge]
@@ -7,78 +7,203 @@ on:
 permissions:
   contents: read
 jobs:
-  source-preflight:
+  acquire-probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 18
     strategy:
       fail-fast: false
       max-parallel: 40
       matrix:
         variant: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
     steps:
-      - name: Check 40 source and protocol combinations
+      - name: Acquire and classify X delivery path
+        id: probe
         env:
           V: ${{ matrix.variant }}
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -uo pipefail
-          mkdir -p evidence
-          source_id=$(( (V - 1) % 5 ))
-          mode=$(( (V - 1) / 5 ))
-          case "$source_id" in
-            0) url="https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/releases/tags/x-android-apk";;
-            1) url="https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/x-android-apk/x.apkm";;
-            2) url="https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/x-android-apk/x.apk";;
-            3) url="https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/releases/tags/x-android-session-v1";;
-            4) url="https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/x-android-session-v1/x.apkm";;
+          mkdir -p evidence /tmp/xout /tmp/apkeep-out
+
+          idx=$(( (V - 1) % 10 ))
+          method=$(( (V - 1) / 10 ))
+          case "$idx" in
+            0) ARCH=arm64;  APKEEP_ARCH=arm64-v8a; COUNTRY=BR ;;
+            1) ARCH=arm64;  APKEEP_ARCH=arm64-v8a; COUNTRY=US ;;
+            2) ARCH=armv7;  APKEEP_ARCH=armeabi-v7a; COUNTRY=BR ;;
+            3) ARCH=armv7;  APKEEP_ARCH=armeabi-v7a; COUNTRY=US ;;
+            4) ARCH=x86;    APKEEP_ARCH=x86; COUNTRY=BR ;;
+            5) ARCH=x86;    APKEEP_ARCH=x86; COUNTRY=US ;;
+            6) ARCH=x86_64; APKEEP_ARCH=x86_64; COUNTRY=BR ;;
+            7) ARCH=x86_64; APKEEP_ARCH=x86_64; COUNTRY=US ;;
+            8) ARCH=arm64;  APKEEP_ARCH=arm64-v8a; COUNTRY=IN ;;
+            9) ARCH=x86_64; APKEEP_ARCH=x86_64; COUNTRY=IN ;;
           esac
-          echo "variant=$V source=$source_id mode=$mode url=$url" | tee evidence/variant.txt
-          case "$mode" in
-            0) opts=(--head --max-time 20);;
-            1) opts=(--location --max-time 20);;
-            2) opts=(--location --retry 2 --max-time 30);;
-            3) opts=(--location --range 0-4095 --max-time 20);;
-            4) opts=(--location --http1.1 --max-time 20);;
-            5) opts=(--location --http2 --max-time 20);;
-            6) opts=(--location --compressed --max-time 20);;
-            7) opts=(--location --retry 1 --connect-timeout 5 --max-time 20);;
-          esac
-          set +e
-          curl -sS "${opts[@]}" -D evidence/headers.txt -o evidence/body.bin -w 'status=%{http_code} bytes=%{size_download} type=%{content_type} redirect=%{url_effective}\n' "$url" > evidence/http.txt 2> evidence/error.txt
-          rc=$?
-          set -e
-          echo "curl_exit=$rc" | tee evidence/result.txt
-          cat evidence/http.txt
-          if test -f evidence/body.bin; then
-            file evidence/body.bin | tee evidence/type.txt
-            sha256sum evidence/body.bin | tee evidence/hash.txt
-            if head -c 128 evidence/body.bin | grep -Eqi '<html|<!doctype|not found'; then
-              echo HTML_NOT_APK | tee evidence/classification.txt
-            elif unzip -t evidence/body.bin >/dev/null 2>&1; then
-              echo ZIP_CANDIDATE | tee evidence/classification.txt
+          printf 'variant=%s method=%s arch=%s apkeep_arch=%s country=%s\n' "$V" "$method" "$ARCH" "$APKEEP_ARCH" "$COUNTRY" | tee evidence/variant.txt
+
+          python3 -m venv /tmp/goopdl-venv
+          if ! /tmp/goopdl-venv/bin/pip -q install --disable-pip-version-check 'goopdl==1.0.0' >evidence/goopdl-install.txt 2>&1; then
+            echo GOOPDL_BOOTSTRAP_PYPI_FAILED | tee evidence/goopdl-bootstrap.txt
+            /tmp/goopdl-venv/bin/pip -q install --disable-pip-version-check 'git+https://github.com/Villoh/goopdl.git' >>evidence/goopdl-install.txt 2>&1 || true
+          fi
+          G=/tmp/goopdl-venv/bin/goopdl
+          GOOPDL_OK=0
+          APKEEP_OK=0
+
+          if [[ -x "$G" ]]; then
+            set +e
+            case "$method" in
+              0) "$G" info com.twitter.android --arch "$ARCH" --country "$COUNTRY" >evidence/goopdl.txt 2>&1 ;;
+              1) "$G" latest com.twitter.android --arch "$ARCH" --country "$COUNTRY" --stable 1 >evidence/goopdl.txt 2>&1 ;;
+              2) "$G" list-splits com.twitter.android --arch "$ARCH" >evidence/goopdl.txt 2>&1 ;;
+              3) "$G" auth --arch "$ARCH" --country "$COUNTRY" >evidence/goopdl.txt 2>&1 ;;
+            esac
+            GRC=$?
+            set -e
+            echo "goopdl_exit=$GRC" | tee evidence/goopdl-result.txt
+            if [[ "$GRC" -eq 0 ]] && [[ -s evidence/goopdl.txt ]]; then
+              GOOPDL_OK=1
+              echo GOOPDL_PRIMARY_OK | tee evidence/goopdl-verdict.txt
+            elif grep -Eqi '429|rate.?limit|throttl' evidence/goopdl.txt; then
+              echo GOOPDL_THROTTLED_TRY_FALLBACK | tee evidence/goopdl-verdict.txt
+            elif grep -Eqi '404|unavailable|not found' evidence/goopdl.txt; then
+              echo GOOPDL_UNAVAILABLE_FOR_CONFIG_TRY_FALLBACK | tee evidence/goopdl-verdict.txt
             else
-              echo NON_ZIP_OR_PARTIAL | tee evidence/classification.txt
+              echo GOOPDL_FAILED_TRY_FALLBACK | tee evidence/goopdl-verdict.txt
+            fi
+          else
+            echo GOOPDL_BOOTSTRAP_FAILED_TRY_FALLBACK | tee evidence/goopdl-verdict.txt
+          fi
+
+          if [[ "$GOOPDL_OK" -ne 1 || "$method" -eq 3 ]]; then
+            set +e
+            timeout 120 docker run --rm ghcr.io/efforg/apkeep:stable -l -a com.twitter.android -d apk-pure -o "arch=$APKEEP_ARCH" >evidence/apkeep.txt 2>&1
+            ARC=$?
+            set -e
+            echo "apkeep_exit=$ARC" | tee evidence/apkeep-result.txt
+            if [[ "$ARC" -eq 0 ]] && [[ -s evidence/apkeep.txt ]] && ! grep -Eqi 'error|no versions|not found' evidence/apkeep.txt; then
+              APKEEP_OK=1
+              echo APKEEP_FALLBACK_OK | tee evidence/apkeep-verdict.txt
+            else
+              echo APKEEP_FALLBACK_FAILED | tee evidence/apkeep-verdict.txt
             fi
           fi
-          echo "Preflight completed; not an installation/auth/live proof" | tee evidence/scope.txt
-          if [[ "$rc" -ne 0 ]] || ! grep -Eq 'status=20[06] ' evidence/http.txt; then
-            echo 'FAIL_HTTP_OR_TRANSFER' | tee evidence/verdict.txt
-            exit 40
+
+          if [[ "$GOOPDL_OK" -ne 1 && "$APKEEP_OK" -ne 1 ]]; then
+            echo NO_DISCOVERY_PATH_FOR_CONFIGURATION | tee evidence/verdict.txt
+            exit 60
           fi
-          if [[ "$mode" -eq 0 || "$mode" -eq 3 ]]; then
-            echo 'METADATA_ONLY_NOT_INSTALL_PROOF' | tee evidence/verdict.txt
-            exit 41
+
+          # Four canaries perform a real APK acquisition, one per ABI family.
+          CANARY=0
+          case "$V" in 1|13|25|37) CANARY=1 ;; esac
+          if [[ "$CANARY" -eq 1 ]]; then
+            rm -rf /tmp/xout/* /tmp/apkeep-out/*
+            DOWNLOAD_OK=0
+            if [[ -x "$G" ]]; then
+              set +e
+              "$G" download com.twitter.android --arch "$ARCH" --country "$COUNTRY" --no-extras --integrity-manifest /tmp/goopdl-integrity.json -o /tmp/xout >evidence/goopdl-download.txt 2>&1
+              DRC=$?
+              set -e
+              echo "goopdl_download_exit=$DRC" | tee evidence/goopdl-download-result.txt
+              if [[ "$DRC" -eq 0 ]] && find /tmp/xout -type f -name '*.apk' -print -quit | grep -q .; then
+                DOWNLOAD_OK=1
+                echo GOOPDL_DOWNLOAD_OK | tee evidence/download-source.txt
+              fi
+            fi
+
+            if [[ "$DOWNLOAD_OK" -ne 1 ]]; then
+              set +e
+              timeout 300 docker run --rm -v /tmp/apkeep-out:/output ghcr.io/efforg/apkeep:stable -a com.twitter.android -d apk-pure -o "acknowledge_dangers=true,arch=$APKEEP_ARCH" /output >evidence/apkeep-download.txt 2>&1
+              ADRC=$?
+              set -e
+              echo "apkeep_download_exit=$ADRC" | tee evidence/apkeep-download-result.txt
+              if [[ "$ADRC" -eq 0 ]] && find /tmp/apkeep-out -type f \( -name '*.apk' -o -name '*.xapk' -o -name '*.apkm' \) -print -quit | grep -q .; then
+                DOWNLOAD_OK=1
+                echo APKEEP_DOWNLOAD_FALLBACK_OK | tee evidence/download-source.txt
+                find /tmp/apkeep-out -type f -name '*.apk' -exec cp '{}' /tmp/xout/ \;
+                for b in /tmp/apkeep-out/*.xapk /tmp/apkeep-out/*.apkm; do
+                  [[ -f "$b" ]] || continue
+                  unzip -qo "$b" -d /tmp/xout
+                done
+              fi
+            fi
+
+            if [[ "$DOWNLOAD_OK" -ne 1 ]]; then
+              echo NO_REAL_APK_FOR_CONFIGURATION | tee evidence/verdict.txt
+              exit 61
+            fi
+
+            mapfile -t APKS < <(find /tmp/xout -type f -name '*.apk' -print | sort)
+            if [[ "${#APKS[@]}" -eq 0 ]]; then
+              echo DOWNLOAD_CONTAINED_NO_APKS | tee evidence/verdict.txt
+              exit 62
+            fi
+
+            SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+            BT=""
+            if [[ -n "$SDK_ROOT" && -d "$SDK_ROOT/build-tools" ]]; then
+              BT="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+            fi
+            if [[ -z "$BT" || ! -x "$BT/aapt" || ! -x "$BT/apksigner" ]]; then
+              sudo apt-get update -qq
+              sudo apt-get install -y -qq aapt apksigner
+              AAPT="$(command -v aapt)"
+              APKSIGNER="$(command -v apksigner)"
+            else
+              AAPT="$BT/aapt"
+              APKSIGNER="$BT/apksigner"
+            fi
+
+            EXPECTED=0fd9a0cfb07b65950997b4eaebdc53931392391aa406538a3b04073bc2ce2fe9
+            : > evidence/apk-verification.txt
+            for apk in "${APKS[@]}"; do
+              pkg="$($AAPT dump badging "$apk" 2>/dev/null | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)"
+              cert="$($APKSIGNER verify --print-certs "$apk" 2>/dev/null | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')"
+              printf '%s package=%s cert=%s\n' "$(basename "$apk")" "$pkg" "$cert" >> evidence/apk-verification.txt
+              [[ "$pkg" == com.twitter.android ]] || { echo WRONG_PACKAGE | tee evidence/verdict.txt; exit 63; }
+              [[ "$cert" == "$EXPECTED" ]] || { echo WRONG_SIGNING_CERTIFICATE | tee evidence/verdict.txt; exit 64; }
+            done
+            echo "verified_apk_count=${#APKS[@]}" | tee evidence/apk-count.txt
+            echo REAL_APK_VERIFIED | tee evidence/verdict.txt
+
+            if [[ "$ARCH" == x86 || "$ARCH" == x86_64 ]]; then
+              echo 'installable=1' >> "$GITHUB_OUTPUT"
+              echo "emu_arch=$ARCH" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo DISCOVERY_PATH_CONFIRMED | tee evidence/verdict.txt
           fi
-          if ! grep -qx 'ZIP_CANDIDATE' evidence/classification.txt; then
-            echo 'FAIL_NOT_VALID_APK_ARCHIVE' | tee evidence/verdict.txt
-            exit 42
-          fi
-          echo 'VALID_ZIP_CANDIDATE_REQUIRES_APK_SIGNATURE_CHECK' | tee evidence/verdict.txt
-      - name: Upload per-variant evidence
+
+      - name: Install verified Intel build in Android emulator
+        if: steps.probe.outputs.installable == '1'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: ${{ steps.probe.outputs.emu_arch }}
+          target: google_apis
+          disable-animations: true
+          script: |
+            set -Eeuo pipefail
+            mapfile -t APKS < <(find /tmp/xout -type f -name '*.apk' -print | sort)
+            if [[ "${#APKS[@]}" -eq 1 ]]; then
+              adb install -r -d "${APKS[0]}"
+            else
+              adb install-multiple -r -d "${APKS[@]}"
+            fi
+            adb shell pm path com.twitter.android | tee evidence/pm-path.txt
+            adb shell dumpsys package com.twitter.android | grep -E 'versionName=|primaryCpuAbi=' | tee evidence/package.txt
+            adb shell monkey -p com.twitter.android 1 | tee evidence/launch.txt
+            sleep 8
+            adb shell pidof com.twitter.android | tee evidence/pid.txt
+            test -s evidence/pid.txt
+            echo X_INSTALLED_AND_LAUNCHED | tee evidence/install-verdict.txt
+
+      - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: x-source-preflight-${{ matrix.variant }}-${{ github.run_id }}
+          name: x-acquisition-${{ matrix.variant }}-${{ github.run_id }}
           path: evidence/
           retention-days: 3
+          if-no-files-found: warn
