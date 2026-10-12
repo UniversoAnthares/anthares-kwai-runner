@@ -948,3 +948,13 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - This proves the reconstructed local-PC TikTok path end-to-end: prepared owned clip -> authenticated upload -> caption -> public visibility -> real Post -> unequivocal TikTok confirmation -> persistent ledger completion -> artifact cleanup.
 - Milestone 1 is COMPLETE/PROVEN.
 - Next action: re-read this log and update canonical STATE.md to mark the current local TikTok runtime/publish/confirmation path PROVEN. Do not activate the continuous scheduler yet.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — canonical STATE updated after proven TikTok E2E
+- Canonical log was re-read before the state update.
+- `STATE.md` now marks current local TikTok executor, session, ledger, upload page, publish and confirmation as PROVEN.
+- Current proven post is recorded as segment `xcRGdBfHX0E:100:190`, `published_run_id=local-1791834412`.
+- Safety state is recorded: one-shot guard removed; automatic publication remains disarmed.
+- STATE update commit: `8735626c22d76ae7cf4c45515f69c5f0b32da7c6`.
+- TikTok milestone 1 is closed. Continuous scheduler remains intentionally OFF.
+- Next reconstruction milestone may proceed independently: restore/validate Kwai runtime, or later activate the TikTok scheduler after its cadence/guard behavior is revalidated.
