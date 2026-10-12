@@ -1,52 +1,39 @@
-name: Kwai APK ABI Preflight 4
+name: Kwai Native ARM64 Executor Feasibility
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  apk-abi:
-    name: "ABI preflight ${{ matrix.case }}"
-    runs-on: ubuntu-24.04
+  arm64-host:
+    name: "ARM64 host feasibility"
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 8
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        case: [manifest, native-libs, split-coverage, host-compat]
     steps:
-      - name: Download verified Kwai vault
+      - name: Verify actual native architecture and virtualization
         run: |
           set -euo pipefail
-          curl -fLsS --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
-          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
-          mkdir vault && unzip -q kwai-vault.zip -d vault
-      - name: Inspect APK architecture and report blockers
-        env:
-          CASE: ${{ matrix.case }}
+          echo "HOST_ARCH=$(uname -m)"
+          test "$(uname -m)" = "aarch64"
+          echo "NATIVE_ARM64_HOST=PASS"
+          ls -l /dev/kvm || true
+          if test -r /dev/kvm && test -w /dev/kvm; then echo "KVM_AVAILABLE=1"; else echo "KVM_AVAILABLE=0"; fi
+          grep -E '^(Features|CPU architecture)' /proc/cpuinfo | head -10 || true
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+          if command -v sdkmanager >/dev/null; then sdkmanager --list_installed | grep -E 'system-images|emulator' || true; fi
+  arm64-image:
+    name: "ARM64 Android image feasibility"
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - name: Inspect SDK availability without emulator boot
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import os,zipfile,collections,pathlib,json
-          root=pathlib.Path("vault")
-          apks=list(root.rglob("*.apk"))
-          print("APK_COUNT",len(apks),"CASE",os.environ["CASE"])
-          report=[]
-          for apk in apks:
-              with zipfile.ZipFile(apk) as z:
-                  libs=[x for x in z.namelist() if x.startswith("lib/") and x.endswith(".so")]
-                  abis=sorted({x.split("/")[1] for x in libs})
-                  critical=[x for x in libs if any(k in x.lower() for k in ("cpu-info","ndk","ffmpeg"))]
-                  report.append(dict(apk=str(apk),size=apk.stat().st_size,abis=abis,lib_count=len(libs),critical=critical[:20]))
-          print(json.dumps(report,indent=2))
-          allabis={a for r in report for a in r["abis"]}
-          print("AVAILABLE_NATIVE_ABIS",sorted(allabis))
-          print("X86_64_NATIVE_SUPPORTED",int("x86_64" in allabis))
-          print("ARM64_NATIVE_SUPPORTED",int("arm64-v8a" in allabis))
-          if not apks: raise SystemExit("NO_APK_IN_VAULT")
-          pathlib.Path("abi-report-"+os.environ["CASE"]+".json").write_text(json.dumps(report,indent=2))
-          PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: abi-report-${{ matrix.case }}
-          path: abi-report-*.json
-          retention-days: 3
+          echo "HOST_ARCH=$(uname -m)"
+          test "$(uname -m)" = aarch64
+          if command -v sdkmanager >/dev/null; then
+            sdkmanager --list | grep -E 'system-images;android-(29|30|31|33|34);(google_apis|default);arm64-v8a' | head -25 || true
+          else
+            echo SDKMANAGER_NOT_PREINSTALLED=1
+          fi
+          echo "KVM_DEVICE=$(test -e /dev/kvm && echo yes || echo no)"
+          echo "ARM64_IMAGE_DISCOVERY_COMPLETE=1"
