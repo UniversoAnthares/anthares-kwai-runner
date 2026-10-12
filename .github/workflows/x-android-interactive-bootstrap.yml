@@ -13,12 +13,12 @@ permissions:
   actions: write
 
 concurrency:
-  group: x-android-interactive-bootstrap
+  group: x-android-interactive-bootstrap-x86
   cancel-in-progress: false
 
 jobs:
   bootstrap:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       DISPLAY: :99
@@ -31,11 +31,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download current signed X Android bundle
+      - name: Download signer-compatible universal X Android bundle
         uses: Yakov5776/gh-apkmirror-dl@v1.3
         with:
           org: x-corp
           repo: twitter
+          version: 12.19.1-release.0
           bundle: true
           filename: x-current.apkm
 
@@ -55,13 +56,7 @@ jobs:
           nohup x11vnc -display :99 -rfbport 5900 -forever -shared -nopw -noxdamage > /tmp/x11vnc.log 2>&1 &
           nohup websockify --web=/usr/share/novnc 6080 localhost:5900 > /tmp/novnc.log 2>&1 &
 
-          arch=$(uname -m)
-          case "$arch" in
-            aarch64|arm64) cfarch=arm64 ;;
-            x86_64|amd64) cfarch=amd64 ;;
-            *) echo "Unsupported host arch: $arch"; exit 11 ;;
-          esac
-          curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cfarch}" -o /tmp/cloudflared
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
           chmod +x /tmp/cloudflared
           nohup /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 > /tmp/cloudflared.log 2>&1 &
 
@@ -73,7 +68,7 @@ jobs:
           done
           test -n "$url" || { cat /tmp/cloudflared.log; exit 12; }
           printf '%s/vnc.html?autoconnect=true&resize=scale\n' "$url" > x-bootstrap-access/open-this-url.txt
-          printf 'This one-time tunnel is deleted as soon as the Android session is sealed.\n' > x-bootstrap-access/README.txt
+          printf 'One-time remote Android login. The tunnel and artifact are deleted after session sealing.\n' > x-bootstrap-access/README.txt
           echo 'Bootstrap access file created without printing the tunnel URL to the job log.'
 
       - name: Publish one-time access file
@@ -88,7 +83,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          arch: arm64-v8a
+          arch: x86_64
           target: google_apis
           profile: pixel_5
           disable-animations: false
