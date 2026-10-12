@@ -923,3 +923,13 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - No publication occurred and the publish guard remains unarmed.
 - Safety decision: before the real click, re-run the already-proven no-post upload validator on the actual upload route. Only if it again reaches enabled Post + public visibility without challenge will the one-shot publish guard be armed.
 - Next action: re-read this log and run `legacy_tiktok_upload_prepare.py` against the existing attempted segment; do not alter ledger/plan.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — final no-post upload validation passed immediately before real post
+- Canonical log was re-read before this validation.
+- `legacy_tiktok_upload_prepare.py` again reached `LEGACY_TIKTOK_UPLOAD_PREPARE=READY_NOT_PUBLISHED` for `xcRGdBfHX0E:100:190`.
+- Caption: `O Homem do Elevador #literatura #escrita #escritores #livros #storytelling`.
+- Media bytes: 10,952,933; Post button enabled; public visibility confirmed.
+- No publication occurred; ledger/plan were not changed by this validator.
+- The actual upload route is currently usable despite the separate profile-route slider challenge.
+- Next action: re-read this log, arm both local publish guards only inside one PowerShell transaction, execute `legacy_pc_tiktok_controller.py publish` once, always remove the ALLOW file afterward, and inspect ledger/plan/media immediately after the result.
