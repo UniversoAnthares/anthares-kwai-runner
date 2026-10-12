@@ -1,0 +1,11 @@
+name = "anthares-remote-control"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[[durable_objects.bindings]]
+name = "DEVICE_STATE"
+class_name = "DeviceState"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["DeviceState"]
