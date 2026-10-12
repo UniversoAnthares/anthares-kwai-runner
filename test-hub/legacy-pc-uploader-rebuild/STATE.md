@@ -24,9 +24,9 @@ Corrected edit/source policy v3: RESTORED/STAGED on isolated branch `UniversoAnt
 - Hard QA gate checks chronological metadata, live/video boundary, mandatory microcuts, adaptive layout/full-frame preservation, 1080x1920 output and duration before any publication.
 - `publish()` re-runs QA immediately before the real Post click.
 
-Current TikTok blocker: execution transport only. WinRemote Shell/TaskCreate currently return upstream 502; Desktop Commander reached monthly tool-call limit; MeshCentral filesystem works but its command dispatch is not producing observable execution. Corrected v3 files are already written to `D:\AntharesWork\anthares-pc-legacy` and a no-publish prepare batch is staged. No v3 post has been made yet.
-Identity blocker also remains: before any next real publication, verify/choose the intended TikTok posting account because the recovered session is @lucasrosalem4 while prior target assumptions referenced @universo.anthares.
-Continuous scheduler/daemon remains OFF.
+Current TikTok execution transport: replacement local transport CONSTRUCTED/STAGED via Anthares Local Executor v2. First queue round-trip is still pending proof. Legacy WinRemote/Desktop Commander/AI Commander are no longer architectural requirements after first successful supervisor heartbeat.
+Identity blocker remains: before any next real publication, verify/choose the intended TikTok posting account because the recovered session is @lucasrosalem4 while prior target assumptions referenced @universo.anthares.
+Continuous social scheduler remains OFF.
 
 ## Kwai
 MEmu runtime: PROVEN/RESTORED — MEmu 9.5.7.1 installed at historical `D:\Program Files\Microvirt\MEmu` path
@@ -47,12 +47,23 @@ Last proven real post: HISTORICAL PROVEN — up to 31 confirmed publications / n
 Current blocker: finish Kwai post-onboarding/login restoration, verify target account in VM3, then run safe probe/pre-publish and one controlled E2E
 
 ## Shared
-Queue: FOUND — recovered daemon contains central enqueue/lease/complete/fail integration
+Queue: FOUND — recovered historical daemon contains central enqueue/lease/complete/fail integration
 Lease: FOUND — recovered daemon contains central lease handling
 Dedupe: FOUND — mature recovered daemon has persistent source+interval reservation and no wrap-around
 Timeline ledger: FOUND — source-segment-history.json implementation recovered
 Source selection: FOUND — live-media metadata + source-history selection recovered
 Logging: RESTORED
+
+Anthares Local Executor replacement transport: RESTORED/STAGED
+- Control plane: immutable GitHub JSON queue on isolated `anthares-clipper:legacy-pc-rebuild` branch.
+- Executor: `anthares_local_executor_v2.py`, allowlist-only; no arbitrary shell command surface.
+- Self-healing supervisor: `anthares_executor_supervisor.py`, heartbeat/PID monitoring every 20s.
+- Persistence: verified Startup launcher at `C:\Users\Lucas\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Anthares-Local-Executor.cmd`.
+- PC code paths staged: `D:\AntharesWork\anthares-pc-legacy\anthares_local_executor_v2.py` and `anthares_executor_supervisor.py`.
+- Publish safety: publish actions require both queue `publish=true` and matching local guard file.
+- Smoke request pending: `c9c9bf17-67e2-4c07-90f1-724933aa62c6` action=`status`; no result yet.
+- Immediate MeshCentral launch outcome: UNKNOWN because command channel returned OK without observable heartbeat. Next Windows user logon will launch supervisor through Startup even if all three former executors remain unavailable.
+- Status: architecture CONSTRUCTED; end-to-end GitHub queue round-trip not yet PROVEN.
 
 ## Archaeology
 Historical primary repository: FOUND — UniversoAnthares/anthares-clipper
@@ -72,6 +83,6 @@ TikTok self-hosted historical window: FOUND — bounded before commit 21ffa81 cl
 ## Coordination
 Canonical path: `UniversoAnthares/anthares-kwai-runner/test-hub/legacy-pc-uploader-rebuild/`
 SHARED-LOG.md: RESTORED/CANONICAL
-STATE.md: UPDATED with TikTok v3 corrections and current Kwai runtime progress
+STATE.md: UPDATED with TikTok v3 corrections, current Kwai runtime progress, and Anthares Local Executor replacement transport
 Functional reconstruction branch: `UniversoAnthares/anthares-clipper:legacy-pc-rebuild`
 Current rule: read canonical SHARED-LOG before any further investigation/change/test; append result after each step. Do not modify modern cloud systems for this reconstruction.
