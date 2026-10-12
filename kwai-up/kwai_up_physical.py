@@ -27,6 +27,8 @@ ku = safe.ku
 
 PACKAGE = os.getenv("KWAI_UP_PACKAGE", "kwai.lite.video").strip() or "kwai.lite.video"
 ku.PACKAGE = PACKAGE
+if "KWAI_UP_ARTIFACT_DIR" not in os.environ:
+    os.environ["KWAI_UP_ARTIFACT_DIR"] = str(pathlib.Path.home() / ".kwai-up" / "artifacts")
 
 BASIS = f"{PACKAGE}.basis:id"
 PRODUCT = f"{PACKAGE}.product:id"
@@ -37,6 +39,7 @@ EDITOR_NEXT_ID = f"{PRODUCT}/edit_post_next_step_button"
 FINAL_POST_ID = f"{BASIS}/post"
 EDITOR_ID = f"{BASIS}/editor"
 PRIVACY_ID = f"{PRODUCT}/tv_select_permission"
+PUBLIC_PRIVACY_VALUES = {"p\u00fablico", "publico", "public"}
 REMOTE_DIR = "/sdcard/Movies/KwaiUp"
 MEDIA_URI = "content://media/external/video/media"
 
@@ -82,7 +85,7 @@ def choose_serial(raw: str, requested: str = "") -> str:
     devices = online_devices(raw)
     if requested and requested in devices:
         return requested
-    network = [d for d in devices if ":" in d]
+    network = [d for d in devices if ":" in d and not d.startswith("127.")]
     if len(network) == 1:
         return network[0]
     if len(devices) == 1:
@@ -111,6 +114,64 @@ class PhysicalADB(ku.ADB):
         if self.serial:
             cmd += ["-s", self.serial]
         return cmd
+
+    @staticmethod
+    def _transport_error(text: str) -> bool:
+        low = (text or "").casefold()
+        return any(token in low for token in (
+            "connection reset", "protocol fault", "device not found",
+            "daemon not running", "cannot connect to daemon", "offline",
+        ))
+
+    def _recover_transport(self) -> None:
+        if ":" in self.serial and not self.serial.startswith("127."):
+            subprocess.run(
+                [self.executable, "connect", self.serial],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10,
+            )
+        probe = subprocess.run(
+            [self.executable, "devices", "-l"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=15,
+        )
+        if probe.returncode == 0:
+            try:
+                self.serial = choose_serial(probe.stdout, self.serial)
+            except ku.KwaiUpError:
+                # A stale DHCP address can be replaced by the unique non-loopback TCP device.
+                self.serial = choose_serial(probe.stdout, "")
+
+    def run(self, *args: str, timeout: int = 45, check: bool = True) -> str:
+        last = ""
+        for attempt in range(2):
+            p = subprocess.run(
+                self._base() + list(args), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, timeout=timeout,
+            )
+            last = p.stdout or ""
+            if p.returncode == 0 or not self._transport_error(last) or attempt == 1:
+                if check and p.returncode:
+                    raise ku.KwaiUpError(f"adb rc={p.returncode}: {' '.join(args)} :: {last[-800:]}")
+                return last
+            self._recover_transport()
+            time.sleep(0.6)
+        return last
+
+    def binary(self, *args: str, timeout: int = 45, check: bool = True) -> bytes:
+        last = b""
+        for attempt in range(2):
+            p = subprocess.run(
+                self._base() + list(args), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=False, timeout=timeout,
+            )
+            last = p.stdout or b""
+            text = last.decode("utf-8", errors="replace")
+            if p.returncode == 0 or not self._transport_error(text) or attempt == 1:
+                if check and p.returncode:
+                    raise ku.KwaiUpError(f"adb rc={p.returncode}: {' '.join(args)} :: {text[-800:]}")
+                return last
+            self._recover_transport()
+            time.sleep(0.6)
+        return last
 
 
 class HIDKeyboard:
@@ -236,8 +297,9 @@ class PhysicalPublisher(safe.SafePublisher):
             self.emit("FAILED_SAFE", reason="kwai-package-missing")
             return 21
         hid = self.adb.run("shell", "command", "-v", "hid", check=False).strip()
-        uhid = self.adb.run("shell", "sh", "-c", "test -w /dev/uhid && echo yes", check=False).strip()
-        if not hid or uhid != "yes":
+        uhid = self.adb.run("shell", "ls", "-l", "/dev/uhid", check=False).strip()
+        groups = self.adb.run("shell", "id", check=False).strip()
+        if not hid or "/dev/uhid" not in uhid or "uhid" not in groups:
             self.emit("FAILED_SAFE", reason="hid-control-unavailable")
             return 22
         sdk = self.adb.run("shell", "getprop", "ro.build.version.sdk", check=False).strip()
@@ -297,6 +359,60 @@ class PhysicalPublisher(safe.SafePublisher):
                 return nodes
         raise ku.KwaiUpError(f"hid-focus-target-timeout:{rid.split('/')[-1]}")
 
+    def focus_target_hint(
+        self,
+        keyboard: HIDKeyboard,
+        rid: str,
+        stage: str,
+        hint_steps: int,
+        fallback_steps: int = 50,
+    ) -> list[dict[str, str]]:
+        # Physical Kwai Lite focus order was measured on the dedicated device.
+        # Use the measured count once, then verify the exact resource-id before
+        # any Enter. If UI order changes, fall back to the slower fail-closed scan.
+        for _ in range(max(0, hint_steps)):
+            keyboard.tab()
+        nodes = self.dump(stage + "-hint", screenshot=False)
+        if self.focused_target(nodes, rid):
+            return nodes
+        for step in range(1, fallback_steps + 1):
+            keyboard.tab()
+            nodes = self.dump(f"{stage}-fallback-{step}", screenshot=False)
+            if self.focused_target(nodes, rid):
+                return nodes
+        raise ku.KwaiUpError(f"hid-focus-target-timeout:{rid.split('/')[-1]}")
+
+    def focus_profile_tab(self, keyboard: HIDKeyboard, stage: str) -> list[dict[str, str]]:
+        bottom = [
+            f"{BASIS}/id_home_bottom_tab_home",
+            f"{BASIS}/id_home_bottom_tab_player",
+            RECORD_ID,
+            f"{BASIS}/id_home_bottom_tab_message",
+            PROFILE_TAB_ID,
+        ]
+        nodes = self.dump(stage + "-0", screenshot=False)
+        if self.focused_target(nodes, PROFILE_TAB_ID):
+            return nodes
+        for batch in range(1, 16):
+            keyboard.tab(); keyboard.tab(); keyboard.tab()
+            nodes = self.dump(f"{stage}-batch-{batch}", screenshot=False)
+            focused = next((
+                n for n in nodes
+                if n.get("focused") == "true" and n.get("focusable") == "true"
+            ), {})
+            rid = focused.get("resource-id", "")
+            if rid == PROFILE_TAB_ID:
+                return nodes
+            if rid in bottom:
+                idx = bottom.index(rid)
+                for _ in range(len(bottom) - 1 - idx):
+                    keyboard.tab()
+                nodes = self.dump(stage + "-bottom", screenshot=False)
+                if self.focused_target(nodes, PROFILE_TAB_ID):
+                    return nodes
+                raise ku.KwaiUpError("profile-tab-focus-drift")
+        raise ku.KwaiUpError("profile-tab-focus-timeout")
+
     def verify_identity(self) -> int:
         expected = self.expected_account()
         pattern = safe.account_pattern(expected)
@@ -304,7 +420,7 @@ class PhysicalPublisher(safe.SafePublisher):
         if safe.AUTH_REQUIRED_RE.search(ku.text_blob(home)):
             raise ku.KwaiUpError("auth-required")
         with HIDKeyboard(self.adb, 311) as keyboard:
-            self.focus_target(keyboard, PROFILE_TAB_ID, "06-profile-tab", max_steps=30)
+            self.focus_profile_tab(keyboard, "06-profile-tab")
             keyboard.enter()
             time.sleep(2)
         deadline = time.time() + 25
@@ -365,14 +481,14 @@ class PhysicalPublisher(safe.SafePublisher):
     def navigate_to_final(self, remote: str) -> tuple[list[dict[str, str]], bool]:
         self.open_album(remote)
         with HIDKeyboard(self.adb, 312) as keyboard:
-            self.focus_target(keyboard, PREVIEW_ID, "12-first-video", max_steps=40)
+            self.focus_target_hint(keyboard, PREVIEW_ID, "12-first-video", hint_steps=7, fallback_steps=40)
             keyboard.enter()
             time.sleep(max(2, self.cfg.wait // 2))
             editor = self.dump("13-physical-editor")
             activity = self.current_activity()
             if "EditorActivity" not in activity or not ku.find_id(editor, EDITOR_NEXT_ID):
                 raise ku.KwaiUpError(f"physical-editor-mismatch:{activity or 'unknown'}")
-            self.focus_target(keyboard, EDITOR_NEXT_ID, "13-editor-next", max_steps=45)
+            self.focus_target_hint(keyboard, EDITOR_NEXT_ID, "13-editor-next", hint_steps=10, fallback_steps=45)
             keyboard.enter()
             time.sleep(max(2, self.cfg.wait // 2))
         final = self.dump("14-physical-final")
@@ -383,7 +499,7 @@ class PhysicalPublisher(safe.SafePublisher):
         if "ShareActivity" not in activity or not post or not field or not privacy:
             raise ku.KwaiUpError(f"physical-final-screen-mismatch:{activity or 'unknown'}")
         privacy_text = (privacy or {}).get("text", "").strip().casefold()
-        public_ok = privacy_text in {"público", "publico", "public", "pãºblico", "pç§blico"}
+        public_ok = privacy_text in PUBLIC_PRIVACY_VALUES
         return final, public_ok
 
     def fill_caption(self, nodes: list[dict[str, str]]) -> None:
@@ -411,7 +527,7 @@ class PhysicalPublisher(safe.SafePublisher):
         post = ku.find_id(final, FINAL_POST_ID)
         privacy = ku.find_id(final, PRIVACY_ID) or next((n for n in final if n.get("resource-id") == PRIVACY_ID), None)
         privacy_text = (privacy or {}).get("text", "").strip().casefold()
-        public_ok = public_ok and privacy_text in {"público", "publico", "public", "pãºblico", "pç§blico"}
+        public_ok = public_ok and privacy_text in PUBLIC_PRIVACY_VALUES
         if not post:
             raise ku.KwaiUpError("publish-control-not-ready")
         if not public_ok:
@@ -475,7 +591,7 @@ class PhysicalPublisher(safe.SafePublisher):
         privacy_text = (privacy or {}).get("text", "").strip().casefold()
         if "ShareActivity" not in activity or not post:
             raise ku.KwaiUpError("publish-boundary-lost")
-        if privacy_text not in {"público", "publico", "public", "pãºblico", "pç§blico"}:
+        if privacy_text not in PUBLIC_PRIVACY_VALUES:
             raise ku.KwaiUpError("privacy-not-confirmed-public")
         with HIDKeyboard(self.adb, 314) as keyboard:
             self.focus_target(keyboard, FINAL_POST_ID, "26-post-focus", max_steps=35)
