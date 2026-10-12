@@ -1171,3 +1171,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Progress remained `1/9` for every iteration; final UI text and resource IDs were unchanged. No onboarding choice was accepted and no publication action occurred.
 - Root-cause inspection of the loop found a coordinate-calculation bug: PowerShell regex captures were strings, so `$matches[1]+$matches[3]` concatenated the coordinates before division, producing invalid off-screen tap coordinates.
 - Next: re-read canonical log and rerun the same deterministic onboarding loop with explicit integer casts on each bounds coordinate before computing the center point.
+
+## 2026-10-12 — Agent 3 — Kwai interest onboarding advanced through 9/9
+- Canonical log was re-read immediately before this corrected test.
+- Re-ran the deterministic ADB onboarding loop with explicit integer casts for every UI bounds coordinate.
+- Progress advanced from `1/9` through `9/9`; one frame repeated `4/9` during transition, then continued to `6/9`, `7/9`, `8/9`, `9/9`.
+- After the ninth accepted choice, the interest-vote screen disappeared. Final visible text is `Está tudo pronto. Espero que você goste do Kwai!` with action `Começar agora`.
+- Current activity is still `TinyWebHomeActivity`, awaiting only the onboarding completion action.
+- No publication action occurred.
+- Next: re-read canonical log, identify/tap only `Começar agora`, then rerun the safe publisher `probe` to see whether native create controls appear or authentication is required.
