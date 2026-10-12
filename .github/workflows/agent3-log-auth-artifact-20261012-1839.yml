@@ -44,16 +44,20 @@ CHANGED:
 - Commit `af5a85aa20ae67bc2a2f015c046ebe5df01507c8` adds a 1-day `actions/upload-artifact` fallback containing only encrypted `kwai-session.enc`.
 - Identity gates remain unchanged: artifact can only exist after the workflow has run the native auth path and `kwai_session_state.sh save` has accepted the exact authenticated identity.
 - No plaintext credential, raw Android data directory, UI dump, or screenshot is added to the artifact.
+- Cloudflare deploy run `38317659360` subsequently completed successfully: snapshot validation, private vault validation, deployment and public health all passed.
+- Commit `35f8f6f2db687b55b908675137994978de08f81f` moved the focused auth acceptance back to the already-proven Ubuntu 24.04 + KVM executor path, fixed Linux checksum commands, enabled KVM explicitly, and set workflow concurrency to cancel superseded auth runs.
 
 NEXT:
-Let the workflow triggered by `af5a85aa...` run. If it proves `lucasrosalem`, capture the encrypted session artifact even if Cloudflare persistence fails, then restore that state into VM3 before `probe`/`prepare`.
+Focused Linux auth run `38318134025` is queued. Verify native credential login, exact identity `lucasrosalem`, encrypted session save, Cloudflare vault store and fresh-run restore; then move the native state into VM3 before `probe`/`prepare`.
 
 PUBLICATION:
 No social publication occurred.
 EOF
             git add "$path"
-            git commit -m 'legacy rebuild: record encrypted auth-session fallback'
+            git commit -m 'legacy rebuild: record focused auth recovery progress'
             if git push origin HEAD:main; then exit 0; fi
             sleep $((attempt*2))
           done
           exit 1
+
+# trigger 2026-10-12T18:43-04:00
