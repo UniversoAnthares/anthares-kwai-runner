@@ -1,0 +1,51 @@
+name: Restore legacy shared log once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-legacy-shared-log-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore canonical log and append Agent 3 findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          path='test-hub/legacy-pc-uploader-rebuild/SHARED-LOG.md'
+          git checkout c7a3e50e49dc37390018d445c45f4f8dc92c019b -- "$path"
+          cat >> "$path" <<'EOF'
+
+          ## 2026-10-12 — Agent 3 — historical native-create/auth archaeology consolidated
+          - Canonical SHARED-LOG was re-read before this consolidated write.
+          - Old-chat archaeology, starting from `Branch - Atualizar testes de publicação` and `Continuar pesquisa Kwai API`, confirms the previously successful local setup used an already-authenticated MEmu instance (historically MEmu2 during the first successful period). The chats do not preserve how that original native login was performed; no phone/password/QR/provider method can be asserted from the historical record.
+          - Historical native creation control was `com.kwai.video.basis:id/id_record_layout`, used via a 1200 ms long press on the bottom-center create control to open Album. Commit `de1eaf8d` later added `com.kwai.video.basis:id/fake_add_button` as a real bottom-bar variant. Commit `a64df3d` added semantic create/camera/+ matching plus a bottom-center 90%-height 1200 ms long-press fallback.
+          - Commit `a7de273b` proves the reliable Home recovery: resolve the Kwai launcher then use `am start -S --activity-clear-task`, because force-stop + monkey could restore ShareActivity without the bottom bar. It actively waited until the native create control appeared; this path was verified historically with `KWAI_MEMU_PREPARE=OK_NOT_PUBLISHED`.
+          - The isolated v0.2.2 publisher already contains these native create/cold-start mechanisms. Its current probe failure therefore reflects the fresh VM3 still being on Tiny/PWA/guest state rather than missing button-discovery logic.
+          - Searched current PC for recoverable old MEmu2/session artifacts; no historical MEmu2 disk/image, `kwai-session.enc`, or `kwai_storage_state.json` was found in the inspected runtime roots. Current MEmu configuration belongs to the fresh reinstall.
+          - Recovered the modern native session mechanism: encrypted full `/data/user/0/com.kwai.video` state (`kwai-session.enc`) saved/restored and identity-checked as `lucasrosalem`, backed by the private Cloudflare session vault. This is suitable to bootstrap the reconstructed VM3 if a valid vault session exists.
+          - Triggered the allowlisted `Anthares Kwai Queue Publisher` mobile-auth recovery through `.kwai-queue-trigger`, commit `12c477c34331d10054a62ec72dae83fb60b7806a`. Run `38306277632` was started; all 30 phone-auth contract cases passed.
+          - No Kwai publication occurred in this investigation.
+
+          ## 2026-10-12 — Agent 3 — mobile-auth recovery run proved vault empty; interactive tunnel failed
+          - Canonical SHARED-LOG was re-read immediately before polling and inspecting run `38306277632`.
+          - The run completed with failure in `mobile_auth_bootstrap` only after all 30 phone-auth contract cases passed.
+          - Private Cloudflare vault lookup succeeded technically but returned `KWAI_PRIVATE_VAULT_SESSION_ABSENT=1`; therefore there is no prior encrypted native Kwai session available to restore.
+          - Android boot, validated Kwai vault install and app launch all succeeded. The workflow then correctly reported `KWAI_MOBILE_AUTH_WINDOW_REQUIRED=1`.
+          - The next step attempted to expose the Android login UI through Xvfb + scrcpy + x11vnc + noVNC + nginx + Cloudflare Quick Tunnel. Local nginx authentication checks passed, but the protected temporary tunnel readiness step exited 1 before an access artifact could be created; subsequent phone-auth/session-seal steps were skipped.
+          - No authentication state was recovered and no publication occurred.
+          - DECISION: use the already-existing independent `Kwai Mobile Auth Acceptance` workflow next. It has repository-scoped `KWAI_LOGIN`/`KWAI_PASSWORD` secrets, performs native credential login inside Android when no valid session exists, verifies account `lucasrosalem`, seals the resulting app data as `kwai-session.enc`, stores it in the private Cloudflare vault, then proves restore on a fresh runner. This avoids exposing credentials in chat or on the PC.
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$path"
+          git commit -m 'legacy rebuild: restore shared log and record auth findings'
+          git push origin HEAD:main
