@@ -914,3 +914,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Six recognized auth cookies are present: sessionid, sessionid_ss, sid_guard, sid_tt, uid_tt, uid_tt_ss.
 - No publication occurred; publish guard remains unarmed.
 - Next action: re-read this log and run the read-only profile/account probe to confirm the authenticated account is the intended TikTok account before arming the one-shot Post guard.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — intended TikTok account confirmed; profile route exposed slider challenge text
+- Canonical log was re-read immediately before the read-only profile probe.
+- Probe landed on `https://www.tiktok.com/@universo.anthares`; body identifies `Universo Anthares / universo.anthares`. This confirms the authenticated session targets the intended account.
+- The profile body also contained `Drag the slider to fit the puzzle`, even though the older generic challenge detector returned false. The profile feed therefore cannot be trusted as a clean post-confirmation surface in this exact probe.
+- No publication occurred and the publish guard remains unarmed.
+- Safety decision: before the real click, re-run the already-proven no-post upload validator on the actual upload route. Only if it again reaches enabled Post + public visibility without challenge will the one-shot publish guard be armed.
+- Next action: re-read this log and run `legacy_tiktok_upload_prepare.py` against the existing attempted segment; do not alter ledger/plan.
