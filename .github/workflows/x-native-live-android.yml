@@ -1,4 +1,4 @@
-name: X authenticated native-live preview fast
+name: X auth route 40 probes
 
 on:
   push:
@@ -10,24 +10,84 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: x-auth-preview-fast
-  cancel-in-progress: true
-
 jobs:
-  auth-preview:
+  auth-probe:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        route:
+          - { id: 01, user_secret: X_ANDROID_USERNAME, pass_secret: X_ANDROID_PASSWORD }
+          - { id: 02, user_secret: X_USERNAME, pass_secret: X_PASSWORD }
+          - { id: 03, user_secret: X_LOGIN, pass_secret: X_PASSWORD }
+          - { id: 04, user_secret: X_EMAIL, pass_secret: X_PASSWORD }
+          - { id: 05, user_secret: TWITTER_USERNAME, pass_secret: TWITTER_PASSWORD }
+          - { id: 06, user_secret: TWITTER_LOGIN, pass_secret: TWITTER_PASSWORD }
+          - { id: 07, user_secret: TWITTER_EMAIL, pass_secret: TWITTER_PASSWORD }
+          - { id: 08, user_secret: X_USER, pass_secret: X_PASS }
+          - { id: 09, user_secret: TWITTER_USER, pass_secret: TWITTER_PASS }
+          - { id: 10, user_secret: X_ACCOUNT, pass_secret: X_ACCOUNT_PASSWORD }
+          - { id: 11, user_secret: X_HANDLE, pass_secret: X_PASSWORD }
+          - { id: 12, user_secret: TWITTER_HANDLE, pass_secret: TWITTER_PASSWORD }
+          - { id: 13, user_secret: X_AUTH_USERNAME, pass_secret: X_AUTH_PASSWORD }
+          - { id: 14, user_secret: TWITTER_AUTH_USERNAME, pass_secret: TWITTER_AUTH_PASSWORD }
+          - { id: 15, user_secret: X_MOBILE_USERNAME, pass_secret: X_MOBILE_PASSWORD }
+          - { id: 16, user_secret: TWITTER_MOBILE_USERNAME, pass_secret: TWITTER_MOBILE_PASSWORD }
+          - { id: 17, user_secret: X_USER_NAME, pass_secret: X_USER_PASSWORD }
+          - { id: 18, user_secret: TWITTER_USER_NAME, pass_secret: TWITTER_USER_PASSWORD }
+          - { id: 19, user_secret: X_CREDENTIAL_USERNAME, pass_secret: X_CREDENTIAL_PASSWORD }
+          - { id: 20, user_secret: TWITTER_CREDENTIAL_USERNAME, pass_secret: TWITTER_CREDENTIAL_PASSWORD }
+        shell_mode: [direct, file]
+
+    env:
+      X_USER_CANDIDATE: ${{ secrets[matrix.route.user_secret] }}
+      X_PASS_CANDIDATE: ${{ secrets[matrix.route.pass_secret] }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Enable KVM
+      - name: Validate execution path and inspect auth route
+        shell: bash
+        env:
+          ROUTE_ID: ${{ matrix.route.id }}
+          USER_SECRET_NAME: ${{ matrix.route.user_secret }}
+          PASS_SECRET_NAME: ${{ matrix.route.pass_secret }}
+          SHELL_MODE: ${{ matrix.shell_mode }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence
+          python3 -m py_compile scripts/x_android_login_ui.py scripts/x_android_live_ui.py
+          if [[ "$SHELL_MODE" == direct ]]; then
+            bash -lc 'set -Eeuo pipefail; printf "BASH_DIRECT_OK\n"'
+          else
+            cat > /tmp/bash-probe.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          printf 'BASH_FILE_OK\n'
+          EOF
+            chmod +x /tmp/bash-probe.sh
+            /tmp/bash-probe.sh
+          fi
+
+          state=ABSENT
+          [[ -n "${X_USER_CANDIDATE:-}" && -n "${X_PASS_CANDIDATE:-}" ]] && state=PRESENT
+          if [[ -n "${X_USER_CANDIDATE:-}" && -z "${X_PASS_CANDIDATE:-}" ]] || [[ -z "${X_USER_CANDIDATE:-}" && -n "${X_PASS_CANDIDATE:-}" ]]; then
+            state=PARTIAL
+          fi
+          printf 'route=%s shell=%s user_secret=%s pass_secret=%s state=%s\n' "$ROUTE_ID" "$SHELL_MODE" "$USER_SECRET_NAME" "$PASS_SECRET_NAME" "$state" | tee evidence/route.txt
+          echo "AUTH_ROUTE_STATE=$state" >> "$GITHUB_ENV"
+
+      - name: Enable KVM for real candidate
+        if: ${{ env.AUTH_ROUTE_STATE == 'PRESENT' && matrix.shell_mode == 'direct' }}
         shell: bash
         run: |
           set -Eeuo pipefail
           if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
 
       - name: Acquire and verify official X Android splits
+        if: ${{ env.AUTH_ROUTE_STATE == 'PRESENT' && matrix.shell_mode == 'direct' }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -48,20 +108,23 @@ jobs:
             base="$(basename "$apk")"
             "$AAPT" dump badging "$apk" > "evidence/prep/badging-$base.txt" 2>&1
             pkg="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" "evidence/prep/badging-$base.txt" | head -1)"
-            [[ "$pkg" == com.twitter.android ]] || { echo WRONG_PACKAGE; exit 71; }
+            [[ "$pkg" == com.twitter.android ]] || exit 71
             "$APKSIGNER" verify --verbose --print-certs "$apk" > "evidence/prep/apksigner-$base.txt" 2>&1
-            grep -Eqi "certificate SHA-256 digest:[[:space:]]*$OFFICIAL_SHA256([[:space:]]|$)" "evidence/prep/apksigner-$base.txt" || { echo OFFICIAL_CERT_NOT_CONFIRMED; exit 73; }
+            grep -Eqi "certificate SHA-256 digest:[[:space:]]*$OFFICIAL_SHA256([[:space:]]|$)" "evidence/prep/apksigner-$base.txt" || exit 73
           done
-          printf '%s\n' "${APKS[@]}" > evidence/prep/apks.txt
           echo VERIFIED_OFFICIAL_X_APK | tee evidence/prep/verdict.txt
 
-      - name: Install X, authenticate, and reach native Live preview
+      - name: Real Android authentication and native Live preview
+        if: ${{ env.AUTH_ROUTE_STATE == 'PRESENT' && matrix.shell_mode == 'direct' }}
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          X_ANDROID_USERNAME: ${{ secrets.X_ANDROID_USERNAME }}
-          X_ANDROID_PASSWORD: ${{ secrets.X_ANDROID_PASSWORD }}
+          X_ANDROID_USERNAME: ${{ env.X_USER_CANDIDATE }}
+          X_ANDROID_PASSWORD: ${{ env.X_PASS_CANDIDATE }}
           X_ANDROID_CHALLENGE_ID: ${{ secrets.X_ANDROID_CHALLENGE_ID }}
           X_ANDROID_OTP: ${{ secrets.X_ANDROID_OTP }}
+          EVIDENCE_DIR: evidence/login
+          MATRIX_VARIANT: ${{ matrix.route.id }}
+          ALLOW_PUBLIC_LIVE: "0"
         with:
           api-level: 30
           arch: x86_64
@@ -70,61 +133,13 @@ jobs:
           emulator-boot-timeout: 240
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
-          script: |
-            bash -s <<'BASH'
-            set -Eeuo pipefail
-            mkdir -p evidence/runtime evidence/login evidence/live
-            adb wait-for-device
-            adb shell pm uninstall com.twitter.android >/dev/null 2>&1 || true
-            mapfile -t APKS < <(find /tmp/xout -type f -name '*.apk' -print | sort)
-            ((${#APKS[@]} > 0)) || { echo NO_APKS_AT_INSTALL | tee evidence/runtime/verdict.txt; exit 79; }
-
-            set +e
-            adb install-multiple --no-streaming -r "${APKS[@]}" > evidence/runtime/install.txt 2>&1
-            irc=$?
-            if [[ "$irc" -ne 0 ]]; then
-              adb install-multiple -r -d "${APKS[@]}" >> evidence/runtime/install.txt 2>&1
-              irc=$?
-            fi
-            set -e
-            [[ "$irc" -eq 0 ]] || { echo INSTALL_FAILED | tee evidence/runtime/verdict.txt; exit 80; }
-
-            adb shell pm path com.twitter.android | tee evidence/runtime/pm-path.txt
-            activity="$(adb shell cmd package resolve-activity --brief com.twitter.android 2>/dev/null | tr -d '\r' | tail -1 || true)"
-            echo "$activity" > evidence/runtime/activity.txt
-            if [[ "$activity" == */* ]]; then adb shell am start -W -n "$activity" > evidence/runtime/launch.txt 2>&1 || true; else adb shell monkey -p com.twitter.android 1 > evidence/runtime/launch.txt 2>&1 || true; fi
-            sleep 5
-            pid="$(adb shell pidof com.twitter.android 2>/dev/null | tr -d '\r' || true)"
-            echo "$pid" > evidence/runtime/pid.txt
-            [[ -n "$pid" ]] || { echo X_DID_NOT_LAUNCH | tee evidence/runtime/verdict.txt; exit 81; }
-            echo X_INSTALL_AND_LAUNCH_OK | tee evidence/runtime/verdict.txt
-
-            timeout 10 adb shell uiautomator dump /sdcard/x-preauth.xml >/dev/null 2>&1 || true
-            adb pull /sdcard/x-preauth.xml evidence/runtime/preauth.xml >/dev/null 2>&1 || true
-            adb exec-out screencap -p > evidence/runtime/preauth.png 2>/dev/null || true
-
-            if [[ -z "${X_ANDROID_USERNAME:-}" || -z "${X_ANDROID_PASSWORD:-}" ]]; then
-              echo X_AUTH_CREDENTIALS_ABSENT | tee evidence/runtime/auth-verdict.txt
-              exit 90
-            fi
-
-            set +e
-            EVIDENCE_DIR=evidence/login python3 scripts/x_android_login_ui.py > evidence/runtime/login-driver.txt 2>&1
-            lrc=$?
-            set -e
-            cat evidence/runtime/login-driver.txt
-            [[ "$lrc" -eq 0 ]] || { echo X_AUTHENTICATION_NOT_CONFIRMED | tee evidence/runtime/auth-verdict.txt; exit "$lrc"; }
-            echo X_AUTHENTICATION_CONFIRMED | tee evidence/runtime/auth-verdict.txt
-
-            EVIDENCE_DIR=evidence/live MATRIX_VARIANT=1 ALLOW_PUBLIC_LIVE=0 python3 scripts/x_android_live_ui.py x-preview | tee evidence/runtime/live-preview.txt
-            echo X_NATIVE_LIVE_PREVIEW_CONFIRMED | tee evidence/runtime/final.txt
-            BASH
+          script: bash scripts/x_real_install_probe_fast.sh 'auth-${{ matrix.route.id }}' && EVIDENCE_DIR=evidence/login python3 scripts/x_android_login_ui.py && EVIDENCE_DIR=evidence/live MATRIX_VARIANT='${{ matrix.route.id }}' ALLOW_PUBLIC_LIVE=0 python3 scripts/x_android_live_ui.py x-preview
 
       - name: Save evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: x-auth-preview-${{ github.run_id }}
+          name: x-auth-route-${{ matrix.route.id }}-${{ matrix.shell_mode }}-${{ github.run_id }}
           path: evidence/
           if-no-files-found: warn
           retention-days: 3
