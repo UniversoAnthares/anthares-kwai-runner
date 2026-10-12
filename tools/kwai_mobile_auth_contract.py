@@ -17,6 +17,9 @@ session = (ROOT / "kwai_session_state.sh").read_text(encoding="utf-8")
 vault = (ROOT / "tools/kwai_session_vault_client.py").read_text(encoding="utf-8")
 publish_runtime = (ROOT / "kwai_queue_publish_runtime.sh").read_text(encoding="utf-8")
 
+bootstrap = re.search(r"mobile_auth_bootstrap:.*?mobile_auth_restore_verify:", workflow, re.S)
+bootstrap_text = bootstrap.group(0) if bootstrap else ""
+
 checks = {
     1: ("KWAI_AUTH_STRATEGY:-mobile_only" in headless, "mobile_only is the default auth strategy"),
     2: ("KWAI_CREDENTIAL_FALLBACK_DISABLED" in headless, "credential fallback is explicitly disabled"),
@@ -45,9 +48,9 @@ checks = {
     25: ("kwai_session_vault_client.py push" in workflow, "sealed session is pushed to private vault"),
     26: ("mobile_auth_restore_verify" in workflow, "fresh-runner restore is independently verified"),
     27: ("KWAI_AUTH_STRATEGY: mobile_only" in workflow, "publisher runtime is pinned to mobile-only auth"),
-    28: ("KWAI_LOGIN" not in re.search(r"mobile_auth_bootstrap:.*?mobile_auth_restore_verify:", workflow, re.S).group(0), "mobile bootstrap never consumes login credentials"),
-    29: ("bash kwai_queue_publish_runtime.sh" in publish_runtime, "canonical queue runtime remains the publication boundary"),
-    30: ("MEmu" not in re.search(r"mobile_auth_bootstrap:.*?mobile_auth_restore_verify:", workflow, re.S).group(0) and "self-hosted" not in re.search(r"mobile_auth_bootstrap:.*?mobile_auth_restore_verify:", workflow, re.S).group(0), "mobile auth bootstrap has no PC/MEmu executor dependency"),
+    28: (bool(bootstrap_text) and "KWAI_LOGIN" not in bootstrap_text, "mobile bootstrap never consumes login credentials"),
+    29: ("bash kwai_run_next_job.sh" in publish_runtime, "canonical queue runtime remains the publication boundary"),
+    30: (bool(bootstrap_text) and "MEmu" not in bootstrap_text and "self-hosted" not in bootstrap_text, "mobile auth bootstrap has no PC/MEmu executor dependency"),
 }
 
 ok, description = checks[case]
