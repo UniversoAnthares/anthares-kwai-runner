@@ -1,0 +1,167 @@
+name: Kwai Stage4 Auth Gate QA40
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/kwai-stage4-auth-gate-qa40.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  form-gate:
+    name: form-gate (${{ matrix.mode }}, ${{ matrix.settle }}, ${{ matrix.method }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        mode:
+          - plain
+          - relaunch-before-login
+          - pregrant-notification
+          - allow-permissions
+          - allow-then-retry
+          - deny-then-retry
+          - network-wait
+          - profile-fallback
+          - dismiss-guide
+          - relaunch-after-login
+        settle: [0, 5]
+        method: [email, phone]
+    env:
+      KWAI_LOGIN_MODE: ${{ matrix.mode }}
+      KWAI_LOGIN_SETTLE: ${{ matrix.settle }}
+      KWAI_LOGIN: ${{ matrix.method == 'email' && 'probe@example.invalid' || '+5511999999999' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch proven Kwai package vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+      - run: sudo chmod 666 /dev/kvm
+      - name: Reach native credential form without submitting credentials
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 4096M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 4096
+          script: |
+            set -euo pipefail
+            python3 tools/kwai_home_login_state_machine.py | tee form-gate-home.txt
+            grep -qx 'KWAI_HOME_LOGIN_SURFACE=PASS' form-gate-home.txt
+            python3 tools/kwai_android_login_entry.py '${{ matrix.method }}' | tee form-gate-method.txt
+            grep -Eq 'KWAI_NATIVE_LOGIN_FORM_(VISIBLE|ALREADY_VISIBLE)' form-gate-method.txt
+            echo KWAI_NATIVE_CREDENTIAL_FORM_GATE=PASS
+      - name: Upload gate diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-gate-${{ matrix.mode }}-${{ matrix.settle }}-${{ matrix.method }}-${{ github.run_id }}
+          path: |
+            form-gate-home.txt
+            form-gate-method.txt
+            kwai-home-login-state.txt
+            home-login-*.xml
+            kwai-vault-install-status.txt
+          if-no-files-found: warn
+          retention-days: 1
+
+  real-auth:
+    name: single-real-auth-identity-and-vault
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+      KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+      KWAI_SESSION_ENCRYPTION_KEY: ${{ secrets.KWAI_SESSION_ENCRYPTION_KEY }}
+      KWAI_LOGIN_MODE: plain
+      KWAI_LOGIN_SETTLE: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate required secrets exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KWAI_LOGIN" || { echo STAGE4_BLOCKED_MISSING_KWAI_LOGIN; exit 8; }
+          test -n "$KWAI_PASSWORD" || { echo STAGE4_BLOCKED_MISSING_KWAI_PASSWORD; exit 8; }
+          test -n "$KWAI_SESSION_ENCRYPTION_KEY" || { echo STAGE4_BLOCKED_MISSING_SESSION_KEY; exit 8; }
+      - name: Fetch proven Kwai package vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+      - run: sudo chmod 666 /dev/kvm
+      - name: Submit credentials once, verify identity, encrypt and store session
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 4096M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 4096
+          script: |
+            set -euo pipefail
+            set +e
+            timeout 180 python3 tools/kwai_credential_login.py >real-auth-login.txt 2>&1
+            LOGIN_RC=$?
+            set -e
+            cat real-auth-login.txt
+            if [ "$LOGIN_RC" -eq 6 ]; then
+              echo STAGE4_REAL_AUTH_CHALLENGE=1
+              exit 6
+            fi
+            test "$LOGIN_RC" -eq 0
+            sleep 8
+            MATCH=''
+            for candidate in lucasrosalem universo.anthares; do
+              set +e
+              KWAI_EXPECTED_ACCOUNT="$candidate" python3 kwai_auth_probe.py >"auth-$candidate.txt" 2>&1
+              RC=$?
+              set -e
+              cat "auth-$candidate.txt"
+              if [ "$RC" -eq 0 ] && grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' "auth-$candidate.txt" && grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' "auth-$candidate.txt"; then
+                MATCH="$candidate"
+                break
+              fi
+            done
+            test -n "$MATCH" || { echo STAGE4_AUTHENTICATED_IDENTITY_UNVERIFIED; exit 11; }
+            echo "KWAI_VERIFIED_IDENTITY=$MATCH"
+            bash kwai_session_state.sh save
+            test -s kwai-session.enc
+            python3 tools/kwai_session_vault_client.py push --path kwai-session.enc
+            echo OWN_KWAI_ENCRYPTED_SESSION=PASS
+            echo OWN_STAGE4_VAULT_STORED=PASS
+      - name: Upload non-secret auth diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage4-real-auth-${{ github.run_id }}
+          path: |
+            real-auth-login.txt
+            auth-lucasrosalem.txt
+            auth-universo.anthares.txt
+            kwai-home-login-state.txt
+          if-no-files-found: warn
+          retention-days: 1
