@@ -95,3 +95,38 @@ Continue GitLab/GitHub archaeology without waiting. When AI Commander access is 
 
 RISKS OF CONCURRENCY:
 None; no command reached the PC.
+
+## 2026-10-12 14:15 -04:00 — Agent 3
+
+ACTION:
+Inspected GitLab mirrors for preserved legacy uploader source.
+
+FILES / PROJECTS EXAMINED:
+- GitLab project 87307248: UniversoAnthares/anthares-kwai-runner, default branch main
+- GitLab project 87307279: Universo Anthares-group/anthares-kwai-runner, default branch duo-main
+- blob search for `kwai_daily_daemon.py` in both projects
+- commit search for `memu` in project 87307248
+
+RESULT:
+1. Both GitLab projects exist and were created on 2026-10-06, after the proven local-PC period documented for 2026-10-01..2026-10-05.
+2. Both default branches preserve the same dedupe incident finding that mentions the old `kwai_daily_daemon.py` formula.
+3. No actual `kwai_daily_daemon.py` source was found through current-branch blob search.
+4. Commit search for `memu` in the public GitLab mirror returned no commits.
+5. GitLab is therefore currently useful as a later mirror/evidence source, while recovery of the exact pre-2026-10-06 local files is more likely in GitHub non-default refs/history or on DESKTOP-FTDK0HP.
+
+EVIDENCE:
+- GitLab project metadata for IDs 87307248 and 87307279.
+- `kwai_daily_daemon.py` blob searches in both projects returned only `test-hub/findings/20261005-1805-video-dedupe-distribuicao-incidente.md`.
+- project 87307248 commit search for `memu`: zero results.
+
+CHANGED:
+None.
+
+STATE IMPACT:
+GitLab mirror evidence = FOUND; exact legacy daemon source = still UNKNOWN.
+
+NEXT:
+Prioritize GitHub non-default branches/trees and PC archaeology. Search current repository for surviving MEmu/ADB/Scheduled Task anchors that can identify historical filenames and paths.
+
+RISKS OF CONCURRENCY:
+Other agents may be searching the same mirrors. Record any recovered source path before restoring files to prevent duplicate/rebuilt variants.
