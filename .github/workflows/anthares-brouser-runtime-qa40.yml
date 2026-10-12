@@ -1,0 +1,132 @@
+name: Anthares-brouser - 40 Runtime QA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'anthares-brouser/**'
+      - '.github/workflows/anthares-brouser-runtime-qa40.yml'
+permissions:
+  contents: read
+jobs:
+  runtime:
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CASE: ${{ matrix.case }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify real Anthares-brouser container
+        shell: bash
+        run: |
+          set -euo pipefail
+          C="$CASE"
+          GROUP=$(( (C-1) / 10 ))
+          VARIANT=$(( (C-1) % 10 ))
+          IMAGE="anthares-brouser:qa-${C}"
+          NAME="anthares-brouser-qa-${C}"
+          VOL="anthares-brouser-data-${C}"
+          API_PORT=$((18080 + C))
+          VNC_PORT=$((16080 + C))
+          TOKEN="ci-control-${C}-g${GROUP}"
+          PASS="ci-vnc-${C}-v${VARIANT}"
+          MARKER="anthares-runtime-${C}-${GROUP}-${VARIANT}"
+
+          case "$GROUP" in
+            0) START_URL='about:blank' ;;
+            1) START_URL='data:text/html,anthares-brouser' ;;
+            2) START_URL='about:blank#restart' ;;
+            3) START_URL='data:text/html,persistence-check' ;;
+          esac
+
+          cleanup() {
+            docker rm -f "$NAME" >/dev/null 2>&1 || true
+            docker volume rm "$VOL" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker build -q -t "$IMAGE" anthares-brouser
+          docker volume create "$VOL" >/dev/null
+
+          start_container() {
+            docker rm -f "$NAME" >/dev/null 2>&1 || true
+            docker run -d --name "$NAME" \
+              -p "${API_PORT}:8080" -p "${VNC_PORT}:6080" \
+              -e "VNC_PASSWORD=${PASS}" \
+              -e "CONTROL_TOKEN=${TOKEN}" \
+              -e "START_URL=${START_URL}" \
+              -v "${VOL}:/data" \
+              "$IMAGE" >/dev/null
+          }
+
+          wait_http() {
+            local url="$1"
+            for _ in $(seq 1 60); do
+              if curl -fsS "$url" >/dev/null 2>&1; then return 0; fi
+              if ! docker ps --format '{{.Names}}' | grep -qx "$NAME"; then
+                docker logs "$NAME" || true
+                return 1
+              fi
+              sleep 0.5
+            done
+            docker logs "$NAME" || true
+            return 1
+          }
+
+          start_container
+          wait_http "http://127.0.0.1:${API_PORT}/health"
+
+          HEALTH=$(curl -fsS "http://127.0.0.1:${API_PORT}/health")
+          python3 - "$HEALTH" <<'PY'
+          import json,sys
+          d=json.loads(sys.argv[1])
+          assert d.get('ok') is True, d
+          assert d.get('profile_dir_exists') is True, d
+          assert d.get('chromium_running') is True, d
+          PY
+
+          CODE=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${API_PORT}/status")
+          test "$CODE" = 401
+          CODE=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer definitely-wrong' "http://127.0.0.1:${API_PORT}/status")
+          test "$CODE" = 401
+          STATUS=$(curl -fsS -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:${API_PORT}/status")
+          python3 - "$STATUS" <<'PY'
+          import json,sys
+          d=json.loads(sys.argv[1])
+          assert d.get('profile_dir_exists') is True, d
+          assert int(d.get('profile_bytes',0)) >= 0, d
+          assert d.get('chromium_pids'), d
+          assert d.get('session_claim') == 'not_verified', d
+          PY
+
+          wait_http "http://127.0.0.1:${VNC_PORT}/vnc.html"
+          curl -fsS "http://127.0.0.1:${VNC_PORT}/vnc.html" | grep -qi 'noVNC'
+
+          printf '%s' "$MARKER" | docker exec -i "$NAME" sh -c 'cat > /data/runtime-marker.txt'
+          docker exec "$NAME" test -s /data/runtime-marker.txt
+          docker rm -f "$NAME" >/dev/null
+
+          start_container
+          wait_http "http://127.0.0.1:${API_PORT}/health"
+          RESTORED=$(docker exec "$NAME" cat /data/runtime-marker.txt)
+          test "$RESTORED" = "$MARKER"
+
+          HEALTH2=$(curl -fsS "http://127.0.0.1:${API_PORT}/health")
+          python3 - "$HEALTH2" <<'PY'
+          import json,sys
+          d=json.loads(sys.argv[1])
+          assert d.get('ok') is True and d.get('chromium_running') is True, d
+          PY
+
+          echo "CASE=${C} GROUP=${GROUP} VARIANT=${VARIANT}"
+          echo 'CONTAINER_BUILD=PASS'
+          echo 'CONTROL_API_AUTH=PASS'
+          echo 'NOVNC_ENDPOINT=PASS'
+          echo 'CHROMIUM_RUNNING=PASS'
+          echo 'PERSISTENT_VOLUME_RESTART=PASS'
+          echo 'KWAI_AUTHENTICATED=NOT_TESTED PUBLISHED=NOT_TESTED'
