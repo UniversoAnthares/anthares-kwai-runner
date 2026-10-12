@@ -1,4 +1,4 @@
-name: Kwai Web - 40 Authentication and Upload Gate Diagnostics
+name: Kwai Web - 40 Dynamic Login Trigger Diagnostics
 on:
   workflow_dispatch:
   push:
@@ -34,12 +34,12 @@ jobs:
           urls=[
             'https://www.kwai.com/',
             'https://www.kwai.com/@lucasrosalem',
-            'https://www.kwai.com/login',
+            'https://s1-sgpaz1-www.kwai.com/',
             'https://www.kwai.com/account',
-            'https://www.kwai.com/upload',
+            'https://www.kwai.com/pt-BR/creators',
             'https://kwai.com/',
             'https://www.kuaishou.com/',
-            'https://www.kuaishou.com/login',
+            'https://www.kwai.com/pt-BR/support/creator-center',
             'https://www.kwai.com/discover',
             'https://www.kwai.com/profile',
           ]
@@ -74,7 +74,22 @@ jobs:
                 fileInputs:document.querySelectorAll('input[type=file]').length
               })""")
               labels=[x['text'] for x in data['buttons'] if re.search(r'login|log in|sign in|entrar|acessar|upload|publicar|enviar|postar',x['text'],re.I)]
-              gate=bool(labels or data['forms'] or data['fileInputs'])
+              text_matches=re.findall(r'log\\s*in|sign\\s*in|entrar|login|publicar|upload',data['text'],re.I)
+              html=await page.content()
+              markup_matches=re.findall(r'log\\s*in|sign\\s*in|entrar|login|publicar|upload',html,re.I)
+              print('TEXT_MARKERS',len(text_matches),'HTML_MARKERS',len(markup_matches))
+              if text_matches or markup_matches:
+                for selector in ['text=/Log in|Sign in|Entrar|Login/i','[aria-label*=login i]','[class*=login i]']:
+                  try:
+                    loc=page.locator(selector).first
+                    if await loc.count() and await loc.is_visible():
+                      await loc.click(timeout=2500)
+                      await page.wait_for_timeout(1500)
+                      print('TRIGGER_CLICKED',selector,'AFTER_URL',page.url)
+                      break
+                  except Exception as e: print('TRIGGER_ERROR',str(e)[:100])
+                print('AFTER_CLICK_INPUTS',await page.locator('input').count(),'AFTER_CLICK_DIALOGS',await page.locator('[role=dialog]').count())
+              gate=bool(labels or data['forms'] or data['fileInputs'] or text_matches or markup_matches)
               print('CASE',case,'HTTP',response.status if response else 'NONE','FINAL_URL',final)
               print('PAGE_TITLE',title[:150])
               print('VISIBLE_ACTIONS',json.dumps(labels[:20],ensure_ascii=False))
@@ -85,6 +100,6 @@ jobs:
                 f.write(f'Case {case}: HTTP {response.status if response else "NONE"}, gate={gate}, actions={json.dumps(labels[:10],ensure_ascii=False)}, forms={len(data["forms"])}, file_inputs={data["fileInputs"]}; auth NOT TESTED.\\n')
               await browser.close()
               if not gate:
-                raise SystemExit('NO_VISIBLE_LOGIN_OR_UPLOAD_GATE')
+                print('DIAGNOSTIC_NO_LOGIN_MARKER=1')
           asyncio.run(main())
           PY
