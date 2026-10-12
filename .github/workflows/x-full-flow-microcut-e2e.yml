@@ -19,7 +19,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_URL: https://www.youtube.com/watch?v=HtRVqkQ5Opo
   RELEASE_TAG: x-full-flow-test-cache
   ANTHARES_WHISPER_MODEL: small
   ANTHARES_PAUSE_SECONDS: "0.58"
@@ -53,48 +52,68 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
-          python -m pip install --disable-pip-version-check faster-whisper yt-dlp
-          python -m py_compile scripts/anthares_microcut_v2.py
+          python -m pip install --disable-pip-version-check faster-whisper
+          python -m py_compile scripts/anthares_microcut_v2.py scripts/instagram_autopublish.py
 
-      - name: Extract source and prove real microcuts
+      - name: Fetch owned Anthares clips and prove real microcuts
         id: cut
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p x-e2e
-          ok=0
-          for start in 60 300 600 900 1200; do
-            end=$((start+95))
-            rm -f x-e2e/source.* x-e2e/microcut.mp4 x-e2e/report.json x-e2e/final.mp4
-            echo "Trying owned source section ${start}-${end}"
-            yt-dlp --no-playlist --download-sections "*${start}-${end}" --force-keyframes-at-cuts \
-              --merge-output-format mp4 -f 'bv*+ba/b' -o 'x-e2e/source.%(ext)s' "$SOURCE_URL" || continue
-            src=$(find x-e2e -maxdepth 1 -type f -name 'source.*' | head -1)
-            test -n "$src" || continue
-            if python -u scripts/anthares_microcut_v2.py "$src" x-e2e/microcut.mp4 --report x-e2e/report.json; then
-              removed=$(python - <<'PY'
+          python - <<'PY'
           import json
-          r=json.load(open('x-e2e/report.json',encoding='utf-8'))
-          print(float(r.get('removed_seconds') or 0))
+          from scripts.instagram_autopublish import fetch_media
+          rows=[]
+          for r in fetch_media():
+              u=str(r.get('source_url') or '').strip()
+              if '/anthares-clips/' in u.lower() and u.lower().split('?',1)[0].endswith('.mp4'):
+                  rows.append({'id':str(r.get('id') or ''),'url':u})
+          open('x-e2e/candidates.json','w',encoding='utf-8').write(json.dumps(rows[:40],ensure_ascii=False))
+          print('OWNED_CANDIDATES='+str(len(rows[:40])))
           PY
-              )
+          ok=0
+          count=$(python - <<'PY'
+          import json
+          print(len(json.load(open('x-e2e/candidates.json',encoding='utf-8'))))
+          PY
+          )
+          for ((i=0;i<count;i++)); do
+            readarray -t vals < <(python - "$i" <<'PY'
+          import json,sys
+          row=json.load(open('x-e2e/candidates.json',encoding='utf-8'))[int(sys.argv[1])]
+          print(row['id'])
+          print(row['url'])
+          PY
+            )
+            media_id="${vals[0]}"
+            media_url="${vals[1]}"
+            rm -f x-e2e/source.mp4 x-e2e/microcut.mp4 x-e2e/report.json x-e2e/final.mp4
+            echo "Trying owned media id=$media_id"
+            if ! curl -fL --retry 3 --retry-delay 2 --max-time 180 -A 'Mozilla/5.0 Anthares-E2E/1.0' -e 'https://anthares.us/' -o x-e2e/source.mp4 "$media_url"; then
+              continue
+            fi
+            size=$(stat -c '%s' x-e2e/source.mp4 || echo 0)
+            test "$size" -gt 250000 || continue
+            if python -u scripts/anthares_microcut_v2.py x-e2e/source.mp4 x-e2e/microcut.mp4 --report x-e2e/report.json; then
               python - <<'PY'
           import json
           r=json.load(open('x-e2e/report.json',encoding='utf-8'))
           assert float(r['removed_seconds']) >= 0.18
           assert int(r['intervals']) >= 1
           assert r.get('reasons')
-          print('MICROCUT_EVIDENCE='+json.dumps(r,ensure_ascii=False,separators=(',',':')))
+          print('MICROCUT_EVIDENCE='+json.dumps({k:v for k,v in r.items() if k!='transcript'},ensure_ascii=False,separators=(',',':')))
           PY
               ffmpeg -y -hide_banner -loglevel error -i x-e2e/microcut.mp4 \
                 -vf 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,format=yuv420p' \
                 -c:v libx264 -preset veryfast -crf 19 -c:a aac -b:a 160k -movflags +faststart x-e2e/final.mp4
               ok=1
-              echo "source_start=$start" >> "$GITHUB_OUTPUT"
+              echo "source_attachment_id=$media_id" >> "$GITHUB_OUTPUT"
+              echo "source_url=$media_url" >> "$GITHUB_OUTPUT"
               break
             fi
           done
-          test "$ok" = 1 || { echo '::error::No tested source section produced verified microcuts'; exit 1; }
+          test "$ok" = 1 || { echo '::error::No reachable owned clip produced verified microcuts'; exit 1; }
           test -s x-e2e/final.mp4
           ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 x-e2e/final.mp4
 
@@ -124,24 +143,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           MEDIA_URL: ${{ steps.host.outputs.url }}
-          SOURCE_START: ${{ steps.cut.outputs.source_start }}
+          SOURCE_URL: ${{ steps.cut.outputs.source_url }}
+          SOURCE_ATTACHMENT_ID: ${{ steps.cut.outputs.source_attachment_id }}
         shell: bash
         run: |
           set -euo pipefail
-          CAPTION="Teste do fluxo completo Anthares — microcortes IA validados."
           python - <<'PY' > /tmp/x-issue-body.md
           import json, os
+          report=json.load(open('x-e2e/report.json',encoding='utf-8'))
           body={
             'platform':'x',
             'account':'lucasyahn',
             'caption':'Teste do fluxo completo Anthares — microcortes IA validados.',
             'media_url':os.environ['MEDIA_URL'],
+            'source_url':os.environ['SOURCE_URL'],
+            'source_attachment_id':os.environ['SOURCE_ATTACHMENT_ID'],
             'source_id':'x-e2e-'+os.environ['GITHUB_RUN_ID'],
-            'source_start_seconds':int(os.environ['SOURCE_START']),
-            'microcut_report':{
-              k:v for k,v in json.load(open('x-e2e/report.json',encoding='utf-8')).items()
-              if k != 'transcript'
-            },
+            'microcut_report':{k:v for k,v in report.items() if k!='transcript'},
           }
           print('```json')
           print(json.dumps(body,ensure_ascii=False,indent=2))
