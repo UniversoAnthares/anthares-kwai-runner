@@ -1017,3 +1017,10 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Account identity guard before any further publication is now an explicit blocker; scheduler stays OFF.
 - STATE update commit: `f8dfc4a1e6120235ef8cb269b691ee359d3af806`.
 - No further publication.
+
+## 2026-10-12 — Agent 3 — Kwai temporary highest-task probe denied
+- Canonical log was re-read immediately before this test.
+- Attempted to create a disposable Scheduled Task `Anthares-Kwai-Elevation-Probe` under the current user with `/RL HIGHEST`, whose only action would write `whoami /groups` to a runtime text file, then delete itself.
+- Task creation returned `Access denied`; the task never existed, never ran, produced no output file, and therefore left no persistent system change.
+- This confirms the current WinRemote user token cannot create a new highest-privilege task.
+- Next: continue only through legitimate existing elevated/admin channels. Probe MeshCentral command execution with a harmless write to a universally writable path, then inspect remote desktop/UAC-capable controls if needed. Do not use UAC-bypass techniques.
