@@ -1,4 +1,5 @@
 import hashlib
+import os
 import secrets
 import threading
 import time
@@ -27,19 +28,26 @@ def register(app, control_token):
     def device_id():
         return request.headers.get("X-Anthares-Device", "").strip()
 
+    def valid_hash(value):
+        return len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
     def expected_device_hash(device):
+        if not device or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_." for c in device):
+            return ""
+        env_name = "ARA_DEVICE_HASH_" + "".join(c if c.isalnum() else "_" for c in device.upper())
+        env_value = os.getenv(env_name, "").strip().lower()
+        if valid_hash(env_value):
+            return env_value
         now = time.time()
         cached = _DEVICE_HASH_CACHE.get(device)
         if cached and now - cached[1] < _DEVICE_HASH_TTL:
             return cached[0]
-        if not device or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_." for c in device):
-            return ""
         try:
             r = requests.get(f"{_DEVICE_HASH_BASE}/{device}.sha256", timeout=8)
             if not r.ok:
                 return ""
             value = r.text.strip().lower()
-            if len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
+            if not valid_hash(value):
                 return ""
             _DEVICE_HASH_CACHE[device] = (value, now)
             return value
