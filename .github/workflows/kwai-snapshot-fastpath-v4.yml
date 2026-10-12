@@ -178,6 +178,7 @@ jobs:
           adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
           sleep 8
           echo 'STAGE4_STRATEGY=PERMISSION_DIALOG_RECOVERY_THEN_PROFILE' | tee -a "$GITHUB_STEP_SUMMARY"
+          adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
           adb shell pm grant com.kwai.video android.permission.CAMERA >/dev/null 2>&1 || true
           adb shell pm grant com.kwai.video android.permission.RECORD_AUDIO >/dev/null 2>&1 || true
           adb shell pm grant com.kwai.video android.permission.READ_MEDIA_IMAGES >/dev/null 2>&1 || true
