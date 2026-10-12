@@ -1140,3 +1140,10 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Desktop/window snapshot showed no visible MEmu window even though VM3 is running; this matches the recovered publisher's background/hide-window behavior and explains why direct desktop inspection was unavailable.
 - No UI action or publication occurred.
 - Next: re-read canonical log and explicitly `memuc activate -i 3` to surface VM3 for one diagnostic screenshot, then identify the onboarding/login controls.
+
+## 2026-10-12 — Agent 3 — memuc activate did not surface VM3 window
+- Canonical log was re-read immediately before this step.
+- `memuc activate -i 3` returned `SUCCESS: activate finished`, but a following desktop/window snapshot still showed no MEmu window.
+- VM3 remains running in the background; direct Windows-window inspection is therefore unreliable for this runtime.
+- No Android UI control was activated and no publication occurred.
+- Next: re-read canonical log and inspect the Android UI directly through ADB by pulling `uiautomator` XML to the host and parsing its visible text/resource IDs.
