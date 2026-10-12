@@ -28,7 +28,8 @@ env:
   INSTAGRAM_PREPARED_PLAN: instagram-prepared.json
   INSTAGRAM_PREPARE_DIR: instagram-prepared
   INSTAGRAM_WHISPER_MODEL: small
-  INSTAGRAM_MIN_FINAL_SECONDS: "30"
+  INSTAGRAM_MIN_FINAL_SECONDS: "480"
+  INSTAGRAM_MAX_FINAL_SECONDS: "900"
   INSTAGRAM_TIKTOK_TARGET_SECONDS: ${{ vars.TIKTOK_CLIP_TARGET_SECONDS || '' }}
   INSTAGRAM_PAUSE_SECONDS: "0.65"
   INSTAGRAM_PAUSE_KEEP_SECONDS: "0.16"
@@ -65,6 +66,18 @@ jobs:
         run: |
           python -m py_compile scripts/instagram_publish.py scripts/instagram_autopublish.py scripts/instagram_prepare_media.py
           python -m unittest -v test-hub/test_instagram_publish.py test-hub/test_instagram_autopublish.py
+
+      - name: Diagnose upstream extraction and cutting availability
+        run: |
+          python - <<'PY'
+          import urllib.request
+          u="https://anthares.us/wp-json/anthares/v1/clipper-live/source-clips"
+          try:
+              with urllib.request.urlopen(u,timeout=15) as r:
+                  print("CLIPPER_SOURCE_CLIPS_HTTP="+str(r.status))
+          except Exception as e:
+              print("CLIPPER_SOURCE_CLIPS_UNAVAILABLE="+type(e).__name__)
+          PY
 
       - name: Prepare next owned clip
         id: prepare
