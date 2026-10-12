@@ -1,4 +1,4 @@
-name: Stage 4 - 40 Kwai Environment Differential Probes
+name: Stage 4 - 40 Kwai Entry Route Recovery Tests
 on:
   workflow_dispatch:
   push:
@@ -211,32 +211,34 @@ jobs:
           elif [ "$KWAI_CREDENTIALS_MISSING" = 0 ]; then
             echo 'STAGE4_AUTH=LOGIN_ROUTE_RECOVERY' | tee -a "$GITHUB_STEP_SUMMARY"
             set +e
-            # 40 network/bootstrap probes: 10 distinct network targets x 4 protocols.
-            TARGET=$(( (${{ matrix.case }} - 1) % 10 ))
-            PROTOCOL=$(( (${{ matrix.case }} - 1) / 10 ))
-            echo "STAGE4_NETWORK_TARGET=$TARGET PROTOCOL=$PROTOCOL" | tee -a "$GITHUB_STEP_SUMMARY"
-            case "$TARGET" in
-              0) HOST=www.google.com ;;
-              1) HOST=accounts.google.com ;;
-              2) HOST=play.googleapis.com ;;
-              3) HOST=android.clients.google.com ;;
-              4) HOST=www.kwai.com ;;
-              5) HOST=kwai.com ;;
-              6) HOST=www.kuaishou.com ;;
-              7) HOST=www.cloudflare.com ;;
-              8) HOST=www.github.com ;;
-              9) HOST=example.com ;;
-            esac
-            export HOST PROTOCOL
-            python3 -c $'import os,socket,ssl,time,urllib.request,urllib.error\nh=os.environ[\'HOST\'];p=int(os.environ[\'PROTOCOL\']);t=time.monotonic()\ntry:\n if p==0: print(\'STAGE4_NET_DNS=\'+socket.getaddrinfo(h,443,type=socket.SOCK_STREAM)[0][4][0])\n elif p==1:\n  with socket.create_connection((h,443),timeout=7): print(\'STAGE4_NET_TCP=CONNECTED\')\n elif p==2:\n  with socket.create_connection((h,443),timeout=7) as s:\n   with ssl.create_default_context().wrap_socket(s,server_hostname=h) as tls: print(\'STAGE4_NET_TLS=\'+tls.version())\n else:\n  try:\n   with urllib.request.urlopen(\'https://\'+h+\'/\',timeout=7) as res: print(\'STAGE4_NET_HTTP=\'+str(res.status))\n  except urllib.error.HTTPError as e: print(\'STAGE4_NET_HTTP=\'+str(e.code))\n print(\'STAGE4_NET_PROBE=OK\')\nexcept Exception as e: print(\'STAGE4_NET_PROBE=ERROR \'+type(e).__name__+\' \'+str(e)[:140])\nprint(\'STAGE4_NET_DURATION=\'+str(round(time.monotonic()-t,2)))'
-            echo 'STAGE4_ANDROID_NETWORK_BEGIN'
-            adb shell dumpsys connectivity | grep -m 2 'VALIDATED' || true
-            adb shell getprop net.dns1 || true
+            # 40 UI recovery experiments: 10 distinct entry routes x 4 timing profiles.
+            ROUTE=$(( (${{ matrix.case }} - 1) % 10 ))
+            DELAY=$(( (${{ matrix.case }} - 1) / 10 ))
+            echo "STAGE4_ROUTE=$ROUTE TIMING_PROFILE=$DELAY" | tee -a "$GITHUB_STEP_SUMMARY"
             adb shell am force-stop com.kwai.video || true
-            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
-            sleep 10
-            adb shell uiautomator dump /sdcard/kwai-net.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/kwai-net.xml | grep -o 'resource-id="[^"]*"' | sort -u | tail -15 || true
+            case "$ROUTE" in
+              0) adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 ;;
+              1) adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p com.kwai.video ;;
+              2) adb shell pm clear com.kwai.video; adb shell monkey -p com.kwai.video 1 ;;
+              3) adb shell settings put global private_dns_mode off; adb shell monkey -p com.kwai.video 1 ;;
+              4) adb shell settings put global http_proxy :0; adb shell monkey -p com.kwai.video 1 ;;
+              5) adb shell settings put system screen_off_timeout 600000; adb shell input keyevent 82; adb shell monkey -p com.kwai.video 1 ;;
+              6) adb shell am kill-all; adb shell monkey -p com.kwai.video 1 ;;
+              7) adb shell cmd package compile -m speed -f com.kwai.video || true; adb shell monkey -p com.kwai.video 1 ;;
+              8) adb shell settings put global animator_duration_scale 0; adb shell settings put global transition_animation_scale 0; adb shell monkey -p com.kwai.video 1 ;;
+              9) adb shell cmd connectivity airplane-mode disable || true; adb shell monkey -p com.kwai.video 1 ;;
+            esac
+            sleep $(( 8 + DELAY * 8 ))
+            adb shell uiautomator dump /sdcard/kwai-route.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/kwai-route.xml > /tmp/kwai-route.xml 2>/dev/null || true
+            echo "STAGE4_ROUTE_XML_BYTES=$(wc -c < /tmp/kwai-route.xml)" | tee -a "$GITHUB_STEP_SUMMARY"
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | tail -2 || true
+            adb logcat -d -t 1200 | grep -Ei 'com.kwai.video|SSLHandshake|UnknownHost|FATAL EXCEPTION|NetworkSecurity' | tail -15 || true
+            if grep -q 'fre_native_and_policy_load_progress_spinner' /tmp/kwai-route.xml; then
+              echo 'STAGE4_ROUTE_RESULT=FRE_SPINNER_PRESENT' | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo 'STAGE4_ROUTE_RESULT=NO_SPINNER_IN_XML' | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
             # Never unconditionally fail: inspect actual UI and allow credential proof.
             adb shell uiautomator dump /sdcard/kwai-final.xml >/dev/null 2>&1 || true
             adb shell cat /sdcard/kwai-final.xml > /tmp/kwai-final.xml || true
