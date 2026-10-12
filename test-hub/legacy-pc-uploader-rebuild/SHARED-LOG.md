@@ -1156,3 +1156,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - This explains the earlier publisher probe failure: onboarding must complete before native home/create controls appear.
 - No onboarding button was pressed yet and no publication action occurred.
 - Next: re-read canonical log, complete the 9-step like/dislike onboarding deterministically via ADB taps, then rerun the safe publisher `probe` mode.
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — user rejected test edit; three reconstruction rules corrected in scope
+- Canonical SHARED-LOG was re-read before investigation.
+- User rejected the first TikTok test because: (1) vertical layout was visually poor and failed to preserve/reflow important on-screen information; layouts must adapt per live, (2) the short edit contained no microcuts, and (3) source order must be chronological: oldest live -> all lives oldest-to-newest -> normal channel videos oldest-to-newest -> loop to oldest live after catalog exhaustion. YouTube-bound cuts must continue using lives only.
+- Current code inspection found the causes: `tiktok_creative_layout.py` classifies mainly by presenter count and uses destructive center/half-frame crops; `youtube_tiktok_pipeline.py` generates a single contiguous short segment and does not apply the existing silence microeditor; source discovery uses one configured tab and consumes discovery order, which is newest-first on YouTube.
+- Existing `clipper.py` already has reusable microediting primitives (`_detect_long_silences`, `_remove_long_silences`, part concatenation), so the fix can reuse mature code rather than create a second editor.
+- No publication occurred in this investigation.
+- Next: patch only the isolated legacy branch to add adaptive information-preserving layouts, guaranteed microcut pass, and deterministic two-tab chronological catalog selection; then run local rendering/ordering tests before any new TikTok post.
