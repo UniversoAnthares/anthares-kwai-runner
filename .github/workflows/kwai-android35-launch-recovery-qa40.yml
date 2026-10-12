@@ -1,0 +1,56 @@
+name: Kwai Android35 Launch Recovery QA40
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/kwai-android35-launch-recovery-qa40.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        mode: [cold, warm, clear-cache, fresh-data, no-gestures, single-launch, relaunch, permission, wait15, wait45]
+        ram: [2048, 3072, 4096, 5120]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      STABILIZE_MODE: ${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -fL --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          mkdir -p kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+      - run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: ${{ matrix.ram }}M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory ${{ matrix.ram }}
+          script: bash tools/kwai_android35_recovery_gate.sh "${{ matrix.mode }}"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolation-${{ matrix.mode }}-ram${{ matrix.ram }}-${{ github.run_id }}
+          path: |
+            advance-*.xml
+            advance-*.png
+            final-*.xml
+            final-*.png
+            kwai-vault-install-status.txt
+            kwai-crash-log.txt
+            kwai-meminfo.txt
+            kwai-launch-events.txt
+            device-abi.txt
+            package-paths.txt
+            final.xml
+          if-no-files-found: warn
+          retention-days: 1
