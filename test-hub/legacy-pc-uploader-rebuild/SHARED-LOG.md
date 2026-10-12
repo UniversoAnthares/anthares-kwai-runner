@@ -24,3 +24,13 @@
 - Heartbeat/lock state lives outside git under `D:\AntharesWork\legacy-pc-runtime\executor`.
 - This work is isolated from the other agent's active Kwai VM3/auth path; no Kwai/TikTok publication occurred.
 - Next: create queue schema/helper, watchdog and installation scripts; then stage files on PC and test only `status`/safe non-publish actions.
+
+## 2026-10-12 — Agent 3 — Anthares Local Executor queue/watchdog/install layer created
+- Canonical SHARED-LOG was re-read before this step.
+- Added queue protocol documentation `executor-control/README.md`, commit `63cd4553e35dbeb32ca21eb73ff2421459e407b9`.
+- Added `anthares_executor_watchdog.ps1`, commit `77fad07b1164a6bbdfd5dde9022d0e9614598a41`. It checks heartbeat age + PID and starts a hidden replacement executor only when stale/missing.
+- Added `install_anthares_local_executor.ps1`, commit `eb82444a530d15c70cd1dcf46e2080ff496139ee`.
+- Installer defines two isolated Scheduled Tasks: `Anthares-Local-Executor` at logon and `Anthares-Local-Executor-Watchdog` every minute. Both run as the signed-in user, limited privilege; no elevation is requested.
+- Watchdog writes its own local log and never publishes content. It only checks/restarts the executor.
+- No system task was registered yet; no publication occurred.
+- Next: stage the four executor files on `D:\AntharesWork\anthares-pc-legacy`, attempt installation through any available local executor path, then enqueue only a `status` request and verify result round-trip before enabling any operational action.
