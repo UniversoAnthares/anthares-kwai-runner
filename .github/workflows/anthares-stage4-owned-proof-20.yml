@@ -1,4 +1,4 @@
-name: Stage 4 Native Translation Isolation 40
+name: Stage 4 Visual Screen Probe 40
 on:
   workflow_dispatch:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 translation isolation ${{ matrix.case }}"
+    name: "Stage4 visual probe ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -113,4 +113,10 @@ jobs:
             if adb logcat -d -v brief | grep -q 'Fatal signal 11'; then exit 1; fi
             adb shell pidof com.kwai.video >/dev/null
             echo "DIALOG_PROBE_KWAI_ALIVE=1"
+            adb exec-out screencap -p > /tmp/kwai-screen-$CASE_ID.png
+            test -s /tmp/kwai-screen-$CASE_ID.png
+            python3 -c "import struct; p=open('/tmp/kwai-screen-$CASE_ID.png','rb').read(); print('SCREEN_CAPTURE_BYTES',len(p),'DIMENSIONS',struct.unpack('>II',p[16:24]))"
+            adb shell dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp' | head -5 || true
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
+            echo "VISUAL_CAPTURE=PASS"
             adb shell dumpsys activity processes | grep -A 5 'com.kwai.video' | head -25 || true
