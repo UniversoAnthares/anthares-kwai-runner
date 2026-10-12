@@ -10,17 +10,25 @@ permissions:
   contents: read
 
 jobs:
-  probe:
-    name: auth-handoff-${{ matrix.case }}
+  fanout:
+    name: auth-handoff-40-concurrent
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 40
-      matrix:
-        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
     steps:
       - uses: actions/checkout@v4
-      - name: Run auth-state handoff probe
-        env:
-          CASE: ${{ matrix.case }}
-        run: python tests/x_auth_handoff_matrix.py
+      - name: Run 40 probes concurrently
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .auth-handoff-results
+          mkdir .auth-handoff-results
+          seq 1 40 | xargs -n1 -P40 -I{} bash -c 'CASE={} python tests/x_auth_handoff_matrix.py > .auth-handoff-results/{}.json'
+          python - <<'PY'
+          import json, pathlib
+          files=sorted(pathlib.Path('.auth-handoff-results').glob('*.json'), key=lambda p:int(p.stem))
+          assert len(files)==40, len(files)
+          rows=[json.loads(p.read_text()) for p in files]
+          bad=[r for r in rows if not r.get('ok')]
+          print(json.dumps({'total':len(rows),'passed':len(rows)-len(bad),'failed':len(bad),'failed_cases':[r.get('case') for r in bad]}, separators=(',',':')))
+          if bad:
+              raise SystemExit(1)
+          PY
