@@ -3,15 +3,16 @@
 Status values: UNKNOWN / FOUND / RESTORED / PROVEN / FAILED / BLOCKED
 
 ## TikTok
-Executor: FOUND — historical local source family and self-hosted workflow history recovered; exact final local production snapshot still to extract
-Session: UNKNOWN — browser profile/storage-state source still to map from final local workflow
-Queue: FOUND — historical workflow history includes central queue integration; exact local production contract still to extract
-Ledger: FOUND — historical repository contains TikTok owned-source ledger/pipeline artifacts
-Upload page: FOUND — local TikTok web publisher family recovered on PC
-Publish: FOUND — local publisher family and self-hosted production history recovered; exact final entrypoint/version still to select
-Confirmation: UNKNOWN — exact final local confirmation gate still to extract
-Last proven real post: HISTORICAL PROVEN — @universo.anthares, historical ID 7692917905595370770
-Current blocker: extract the final validated local self-hosted workflow immediately before cloud migration, then verify current runner/profile availability
+Executor: PROVEN — reconstructed local-PC controller executed the real publisher successfully on 2026-10-12
+Session: PROVEN — authenticated session revalidated immediately before post; intended account confirmed as @universo.anthares
+Queue: FOUND — historical queue/workflow family recovered; current controlled reconstruction uses the owned-source local ledger/plan path
+Ledger: PROVEN — segment reservation, attempted safety state, published completion and cleanup all executed successfully
+Upload page: PROVEN — media attachment, caption and public visibility validated repeatedly
+Publish: PROVEN — real controlled Post succeeded for segment `xcRGdBfHX0E:100:190`
+Confirmation: PROVEN — `TIKTOK_OWNED_PUBLISH=OK` followed by `LEGACY_TIKTOK_PUBLISH=CONFIRMED_AND_COMPLETED`
+Last proven real post: CURRENT PROVEN — @universo.anthares, segment `xcRGdBfHX0E:100:190`, published_run_id `local-1791834412`
+Safety after proof: PROVEN — one-shot ALLOW_PUBLISH file removed; automatic publication disarmed
+Current blocker: no TikTok E2E blocker remains; continuous scheduler/daemon activation is intentionally still OFF pending the next explicit reconstruction milestone
 
 ## Kwai
 MEmu: FOUND — exact publisher/recovery code recovered
