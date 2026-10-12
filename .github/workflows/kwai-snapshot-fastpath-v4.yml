@@ -1,4 +1,4 @@
-name: Kwai Web - 40 Browser Entry Diagnostics
+name: Kwai Web - 40 Authentication and Upload Gate Diagnostics
 on:
   workflow_dispatch:
   push:
@@ -17,17 +17,20 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Probe real web login routes without Android emulator
+      - name: Inspect real login and upload gates (40 browser profiles)
         shell: bash
         env:
           CASE: ${{ matrix.case }}
         run: |
           set -euo pipefail
+          python3 -m pip install --quiet playwright==1.58.0
+          python3 -m playwright install --with-deps chromium >/tmp/browser-install.log 2>&1
           python3 - <<'PY'
-          import os,urllib.request,urllib.error,ssl,time,json,re
+          import os,asyncio,json,re
+          from playwright.async_api import async_playwright
           case=int(os.environ['CASE'])
           route=(case-1)%10
-          agent=(case-1)//10
+          profile=(case-1)//10
           urls=[
             'https://www.kwai.com/',
             'https://www.kwai.com/@lucasrosalem',
@@ -40,31 +43,48 @@ jobs:
             'https://www.kwai.com/discover',
             'https://www.kwai.com/profile',
           ]
-          agents=[
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Version/17 Safari/605.1.15',
-            'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36',
-          ]
-          url=urls[route];ua=agents[agent]
-          print('WEB_CASE',case,'ROUTE',route,'AGENT',agent,'URL',url,flush=True)
-          req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept-Language':'pt-BR,pt;q=0.9,en;q=0.8'})
-          try:
-            try: response=urllib.request.urlopen(req,timeout=15)
-            except urllib.error.HTTPError as e: response=e
-            with response:
-              body=response.read(200000).decode('utf-8','replace')
-              final=response.geturl()
-              status=response.status
-              print('WEB_HTTP_STATUS',status,'WEB_FINAL_URL',final)
-              print('WEB_CONTENT_BYTES',len(body),'LOGIN_MARKERS',len(re.findall('login|sign.in|entrar|captcha|qr.code',body,re.I)))
-              print('WEB_UPLOAD_MARKERS',len(re.findall('upload|publish|publicar',body,re.I)))
-              print('WEB_ACCESSIBLE',int(status<500))
-              print('WEB_AUTHENTICATED=NOT_TESTED')
-              print('WEB_PUBLISHED=NOT_TESTED')
+          async def main():
+            async with async_playwright() as p:
+              browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+              context=await browser.new_context(
+                viewport={'width': [1280,1440,390,412][profile],'height':[800,900,844,915][profile]},
+                is_mobile=profile>=2,has_touch=profile>=2,
+                locale=['pt-BR','en-US','pt-BR','en-US'][profile],
+                user_agent=([
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
+                  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
+                  'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36',
+                  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36'
+                ])[profile])
+              page=await context.new_page()
+              errors=[]
+              page.on('pageerror',lambda e:errors.append(str(e)[:200]))
+              response=None
+              try:
+                response=await page.goto(urls[route],wait_until='domcontentloaded',timeout=25000)
+                await page.wait_for_timeout(3500)
+              except Exception as e:
+                print('BROWSER_NAVIGATION_ERROR',str(e)[:250])
+              title=await page.title()
+              final=page.url
+              data=await page.evaluate("""() => ({
+                text:document.body?.innerText?.slice(0,12000)||'',
+                buttons:[...document.querySelectorAll('button,a,[role=button]')].slice(0,200).map(x=>({text:(x.innerText||x.getAttribute('aria-label')||'').trim().slice(0,100),href:x.getAttribute('href')})),
+                forms:[...document.forms].map(f=>({action:f.action,inputs:[...f.querySelectorAll('input')].map(i=>i.type)})),
+                fileInputs:document.querySelectorAll('input[type=file]').length
+              })""")
+              labels=[x['text'] for x in data['buttons'] if re.search(r'login|log in|sign in|entrar|acessar|upload|publicar|enviar|postar',x['text'],re.I)]
+              gate=bool(labels or data['forms'] or data['fileInputs'])
+              print('CASE',case,'HTTP',response.status if response else 'NONE','FINAL_URL',final)
+              print('PAGE_TITLE',title[:150])
+              print('VISIBLE_ACTIONS',json.dumps(labels[:20],ensure_ascii=False))
+              print('FORM_COUNT',len(data['forms']),'FILE_INPUTS',data['fileInputs'],'JS_ERRORS',json.dumps(errors[:5]))
+              print('BROWSER_GATE_FOUND',int(gate))
+              print('AUTHENTICATED=NOT_TESTED PUBLISHED=NOT_TESTED')
               with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
-                f.write(f'Case {case}: HTTP {status}, URL {final}, login markers {len(re.findall("login|sign.in|entrar|captcha|qr.code",body,re.I))}; authentication NOT TESTED.\n')
-          except Exception as e:
-            print('WEB_CONNECTIVITY_ERROR',type(e).__name__,str(e))
-            raise
+                f.write(f'Case {case}: HTTP {response.status if response else "NONE"}, gate={gate}, actions={json.dumps(labels[:10],ensure_ascii=False)}, forms={len(data["forms"])}, file_inputs={data["fileInputs"]}; auth NOT TESTED.\\n')
+              await browser.close()
+              if not gate:
+                raise SystemExit('NO_VISIBLE_LOGIN_OR_UPLOAD_GATE')
+          asyncio.run(main())
           PY
