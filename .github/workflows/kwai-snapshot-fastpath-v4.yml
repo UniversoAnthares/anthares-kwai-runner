@@ -211,35 +211,32 @@ jobs:
           elif [ "$KWAI_CREDENTIALS_MISSING" = 0 ]; then
             echo 'STAGE4_AUTH=LOGIN_ROUTE_RECOVERY' | tee -a "$GITHUB_STEP_SUMMARY"
             set +e
-            # Forty differential probes: 8 meaningful recovery strategies x 5 launch schedules.
-            MODE=$(( (${{ matrix.case }} - 1) % 8 ))
-            SCHEDULE=$(( (${{ matrix.case }} - 1) / 8 ))
-            echo "STAGE4_MODE=$MODE SCHEDULE=$SCHEDULE" | tee -a "$GITHUB_STEP_SUMMARY"
+            # Forty distinct diagnostic combinations: 10 hypotheses x 4 observation paths.
+            MODE=$(( (${{ matrix.case }} - 1) % 10 ))
+            OBS=$(( (${{ matrix.case }} - 1) / 10 ))
+            echo "STAGE4_HYPOTHESIS=$MODE OBSERVATION=$OBS" | tee -a "$GITHUB_STEP_SUMMARY"
             case "$MODE" in
-              0) echo 'STAGE4_STRATEGY=baseline' ;;
-              1) echo 'STAGE4_STRATEGY=clear_kwai'; adb shell pm clear com.kwai.video || true ;;
-              2) echo 'STAGE4_STRATEGY=reset_webview'; adb shell am force-stop com.google.android.webview || true ;;
-              3) echo 'STAGE4_STRATEGY=reset_play_services'; adb shell am force-stop com.google.android.gms || true ;;
-              4) echo 'STAGE4_STRATEGY=clear_network_policy'; adb shell settings put global private_dns_mode off; adb shell settings put global http_proxy :0 || true ;;
-              5) echo 'STAGE4_STRATEGY=disable_animations'; adb shell settings put global window_animation_scale 0; adb shell settings put global transition_animation_scale 0; adb shell settings put global animator_duration_scale 0 ;;
-              6) echo 'STAGE4_STRATEGY=force_stop_and_relaunch'; adb shell am force-stop com.kwai.video; adb shell am force-stop com.google.android.gms || true ;;
-              7) echo 'STAGE4_STRATEGY=locale_timezone'; adb shell setprop persist.sys.timezone America/Sao_Paulo || true; adb shell settings put system time_12_24 24 || true ;;
+              0) echo 'STAGE4_HYPOTHESIS=baseline_fre' ;;
+              1) echo 'STAGE4_HYPOTHESIS=app_data_corruption'; adb shell pm clear com.kwai.video || true ;;
+              2) echo 'STAGE4_HYPOTHESIS=missing_google_service'; adb shell pm list packages -d | grep -E 'gms|vending|webview' || true ;;
+              3) echo 'STAGE4_HYPOTHESIS=runtime_permissions'; adb shell dumpsys package com.kwai.video | grep -A 24 'runtime permissions:' | head -26 || true ;;
+              4) echo 'STAGE4_HYPOTHESIS=webview_provider'; adb shell cmd webviewupdate get-current-webview-package || true ;;
+              5) echo 'STAGE4_HYPOTHESIS=app_process_crash'; adb shell logcat -c || true ;;
+              6) echo 'STAGE4_HYPOTHESIS=network_bootstrap'; adb shell dumpsys connectivity | grep -m 1 VALIDATED || true ;;
+              7) echo 'STAGE4_HYPOTHESIS=app_components'; adb shell dumpsys package com.kwai.video | grep -E 'Activity Resolver Table|Service Resolver Table|com.kwai.video/' | head -12 || true ;;
+              8) echo 'STAGE4_HYPOTHESIS=clock_and_certificates'; adb shell date -u; adb shell getprop ro.build.version.security_patch ;;
+              9) echo 'STAGE4_HYPOTHESIS=cpu_native_compatibility'; adb shell getprop ro.product.cpu.abilist; adb shell dumpsys package com.kwai.video | grep -E 'primaryCpuAbi|nativeLibraryDir' | head -5 || true ;;
             esac
             adb shell am force-stop com.kwai.video || true
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
-            sleep $((5 + SCHEDULE * 5))
-            echo 'STAGE4_SYSTEM_FINGERPRINT_BEGIN'
-            adb shell getprop ro.build.version.sdk | sed 's/^/STAGE4_API=/'
-            adb shell getprop ro.product.cpu.abi | sed 's/^/STAGE4_ABI=/'
-            adb shell getprop ro.build.fingerprint | sed 's/^/STAGE4_FINGERPRINT=/'
-            adb shell pm list packages | grep -E 'com.google.android.gms|com.android.vending|com.google.android.webview' || true
-            echo 'STAGE4_WEBVIEW_BEGIN'
-            adb shell cmd webviewupdate get-current-webview-package || true
-            echo 'STAGE4_UI_BEGIN'
-            adb shell uiautomator dump /sdcard/kwai-diag.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/kwai-diag.xml | grep -o 'resource-id="[^"]*"' | sort -u | tail -20 || true
-            echo 'STAGE4_APP_ERRORS_BEGIN'
-            adb shell logcat -d -t 1800 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|com.kwai.video|com.yxcorp|gifshow|WebView|SSLHandshakeException|UnsatisfiedLinkError|ClassNotFoundException' | tail -60 || true
+            sleep $((8 + OBS * 4))
+            echo 'STAGE4_OBSERVATION_BEGIN'
+            case "$OBS" in
+              0) adb shell uiautomator dump /sdcard/kwai-diag.xml >/dev/null 2>&1 || true; adb shell cat /sdcard/kwai-diag.xml | grep -o 'resource-id="[^"]*"' | sort -u | tail -25 || true ;;
+              1) adb shell dumpsys activity activities | grep -E 'ResumedActivity|topResumedActivity|com.kwai.video|com.yxcorp' | tail -20 || true ;;
+              2) adb shell logcat -d -t 2500 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|com.kwai.video|com.yxcorp|gifshow|SSLHandshakeException|UnsatisfiedLinkError|ClassNotFoundException|denied' | tail -80 || true ;;
+              3) adb shell dumpsys package com.kwai.video | grep -E 'versionName=|targetSdk=|primaryCpuAbi=|enabled=|stopped=' | head -25 || true; adb shell dumpsys connectivity | grep -m 2 'VALIDATED' || true ;;
+            esac
             echo 'STAGE4_DIAGNOSTIC=ENVIRONMENT_COMPATIBILITY_UNVERIFIED' | tee -a "$GITHUB_STEP_SUMMARY"
             exit 25
             timeout 110 python3 tools/kwai_credential_login.py > /tmp/stage4-login.txt 2>&1
