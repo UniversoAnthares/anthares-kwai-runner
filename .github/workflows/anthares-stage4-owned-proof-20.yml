@@ -1,4 +1,4 @@
-name: Stage 4 Native Root Cause 40
+name: Stage 4 Native Translation Isolation 40
 on:
   workflow_dispatch:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 native root cause ${{ matrix.case }}"
+    name: "Stage4 translation isolation ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -59,6 +59,9 @@ jobs:
             adb shell getprop ro.product.cpu.abilist
             adb shell getprop ro.dalvik.vm.native.bridge
             adb shell getprop ro.hardware
+            echo "BRIDGE_PATH=$(adb shell getprop ro.dalvik.vm.native.bridge)"
+            adb shell ls -l /system/bin/ndk_translation_program_runner_binfmt_misc_arm64 || true
+            adb shell pm list packages | grep -E 'kwai|gifshow' || true
             adb shell am force-stop com.kwai.video
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
             sleep $((3 + CASE_ID % 6))
@@ -110,3 +113,4 @@ jobs:
             if adb logcat -d -v brief | grep -q 'Fatal signal 11'; then exit 1; fi
             adb shell pidof com.kwai.video >/dev/null
             echo "DIALOG_PROBE_KWAI_ALIVE=1"
+            adb shell dumpsys activity processes | grep -A 5 'com.kwai.video' | head -25 || true
