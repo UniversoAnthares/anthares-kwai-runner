@@ -977,3 +977,10 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Real publisher preserved only a screenshot `D:\AntharesWork\legacy-pc-runtime\tiktok\artifacts\tiktok-owned-after-post.png`; no exact TikTok video URL was persisted by the current controller/ledger.
 - No new publication occurred.
 - Next action: re-read this log, inspect the publisher's success gate and query the authenticated creator content management page for the actual post ID, without republishing.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — post URL retrieval, studio probe bootstrap error
+- Re-read canonical log before this investigation.
+- Confirmed historical `wait_confirmation` accepts success text OR URL leaving the upload page. The `TIKTOK_OWNED_PUBLISH=OK` result is therefore a UI-level success indication; it did not persist a post ID or canonical URL.
+- Initial read-only TikTok Studio probe did not run because temporary Python script outside repo lacked `tiktok_worker` in sys.path; no browser navigation/post occurred in that failed probe.
+- Next action: re-read log, rerun studio probe with repository path explicitly in sys.path; inspect actual account post links, no publishing.
