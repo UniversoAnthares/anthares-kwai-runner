@@ -43,10 +43,25 @@ if(Test-Path $tp){'TUNNEL_HELP_BEGIN'; & $tp --help 2>&1 | Select-Object -First 
 'TASKS_BEGIN'
 Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object {$_.TaskName -like '*Secure MCP Tunnel*' -or $_.TaskName -like '*Anthares*'} | ForEach-Object {[pscustomobject]@{TaskName=$_.TaskName;State=$_.State;Actions=@($_.Actions|ForEach-Object{[pscustomobject]@{Execute=$_.Execute;Arguments=$_.Arguments;WorkingDirectory=$_.WorkingDirectory}})}} | ConvertTo-Json -Depth 5 -Compress
 'TASKS_END'
-'PROFILE_FILES_BEGIN'
-$roots=@('C:\Users\Lucas\AntharesWork\openai-tunnel-client',"$env:USERPROFILE\.openai","$env:USERPROFILE\.config\openai","$env:APPDATA\OpenAI","$env:LOCALAPPDATA\OpenAI")
-foreach($r in $roots){if(Test-Path $r){Get-ChildItem $r -Recurse -File -ErrorAction SilentlyContinue | Where-Object {$_.Name -match 'tunnel|profile|config'} | Select-Object -First 60 | ForEach-Object {$_.FullName}}}
-'PROFILE_FILES_END'
+""".strip()
+        job=_enqueue("shell",{"command":command,"shell":"powershell"},90)
+        return jsonify(job_id=job["id"],status="queued"),202
+
+    @app.post("/v1/bootstrap/tunnel-details")
+    def tunnel_details():
+        if not _authorized(): return jsonify(error="unauthorized"),401
+        command=r"""
+$ErrorActionPreference='Continue'
+$tp='C:\Users\Lucas\AntharesWork\openai-tunnel-client\tunnel-client.exe'
+if(-not(Test-Path $tp)){throw 'tunnel_client_missing'}
+'QUICKSTART_BEGIN'; & $tp help quickstart 2>&1 | Select-Object -First 180; 'QUICKSTART_END'
+'INIT_HELP_BEGIN'; & $tp init --help 2>&1 | Select-Object -First 180; 'INIT_HELP_END'
+'PROFILES_BEGIN'; & $tp profiles list 2>&1 | Select-Object -First 120; 'PROFILES_END'
+'ADMIN_HELP_BEGIN'; & $tp admin --help 2>&1 | Select-Object -First 120; 'ADMIN_HELP_END'
+'SCRIPTS_BEGIN'
+$files=@('C:\Users\Lucas\AntharesWork\openai-tunnel-client\start-meshcentral-tunnel.ps1','C:\Users\Lucas\AntharesWork\openai-tunnel-client\start-winremote-tunnel.ps1')
+foreach($f in $files){if(Test-Path $f){'FILE='+$f; $raw=Get-Content $f -Raw; $raw=$raw -replace '(?i)(sk-[A-Za-z0-9_\-]{8,})','<REDACTED_KEY>'; $raw=$raw -replace '(?im)(CONTROL_PLANE_API_KEY\s*=\s*)[^\r\n]+','$1<REDACTED>'; $raw}}
+'SCRIPTS_END'
 """.strip()
         job=_enqueue("shell",{"command":command,"shell":"powershell"},90)
         return jsonify(job_id=job["id"],status="queued"),202
@@ -69,19 +84,10 @@ Push-Location $src
 try { npm install --omit=dev } finally { Pop-Location }
 $secret=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__TOKEN_B64__'))
 $launcher=Join-Path $root 'start-local.ps1'
-$lines=@(
-  '$env:ANTHARES_CONTROL_URL=''https://anthares-remote-control.onrender.com''',
-  '$env:ANTHARES_DEVICE_ID=''DESKTOP-FTDK0HP''',
-  ('$env:ARA_SHARED='''+$secret.Replace("'","''")+''''),
-  ('Set-Location '''+$src.Replace("'","''")+''''),
-  '& node server.mjs'
-)
+$lines=@('$env:ANTHARES_CONTROL_URL=''https://anthares-remote-control.onrender.com''','$env:ANTHARES_DEVICE_ID=''DESKTOP-FTDK0HP''',('$env:ARA_SHARED='''+$secret.Replace("'","''")+''''),('Set-Location '''+$src.Replace("'","''")+''''),'& node server.mjs')
 Set-Content -Path $launcher -Value $lines -Encoding UTF8
 icacls $launcher /inheritance:r /grant:r "$env:USERNAME`:F" | Out-Null
-'INSTALL_MCP=OK'
-'PATH='+$src
-'PACKAGE_JSON='+[bool](Test-Path (Join-Path $src 'package.json'))
-'NODE_MODULES='+[bool](Test-Path (Join-Path $src 'node_modules'))
+'INSTALL_MCP=OK'; 'PATH='+$src; 'PACKAGE_JSON='+[bool](Test-Path (Join-Path $src 'package.json')); 'NODE_MODULES='+[bool](Test-Path (Join-Path $src 'node_modules'))
 """.strip()).replace('__TOKEN_B64__',token_b64)
         job=_enqueue("shell",{"command":command,"shell":"powershell"},120)
         return jsonify(job_id=job["id"],status="queued"),202
@@ -89,9 +95,7 @@ icacls $launcher /inheritance:r /grant:r "$env:USERNAME`:F" | Out-Null
     @app.post("/v1/bootstrap/recover-runner")
     def recover_runner():
         if not _authorized(): return jsonify(error="unauthorized"),401
-        command=r"""
-$ErrorActionPreference='Stop'; $root='C:\actions-runner'; if(-not(Test-Path (Join-Path $root 'run.cmd'))){throw 'runner_not_installed'}; $p=Get-Process 'Runner.Listener' -ErrorAction SilentlyContinue; if(-not $p){Start-Process -FilePath 'cmd.exe' -ArgumentList '/c','run.cmd' -WorkingDirectory $root -WindowStyle Hidden; Start-Sleep -Seconds 6}; $p=Get-Process 'Runner.Listener' -ErrorAction SilentlyContinue; if($p){'RUNNER=ONLINE';'PID='+(($p|Select-Object -First 1).Id)}else{throw 'runner_not_started'}
-""".strip()
+        command=r"""$ErrorActionPreference='Stop'; $root='C:\actions-runner'; if(-not(Test-Path (Join-Path $root 'run.cmd'))){throw 'runner_not_installed'}; $p=Get-Process 'Runner.Listener' -ErrorAction SilentlyContinue; if(-not $p){Start-Process -FilePath 'cmd.exe' -ArgumentList '/c','run.cmd' -WorkingDirectory $root -WindowStyle Hidden; Start-Sleep -Seconds 6}; $p=Get-Process 'Runner.Listener' -ErrorAction SilentlyContinue; if($p){'RUNNER=ONLINE';'PID='+(($p|Select-Object -First 1).Id)}else{throw 'runner_not_started'}"""
         job=_enqueue("shell",{"command":command,"shell":"powershell"},30)
         return jsonify(job_id=job["id"],status="queued"),202
 
