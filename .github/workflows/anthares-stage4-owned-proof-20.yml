@@ -1,4 +1,4 @@
-name: Stage 4 ABI Verification 30
+name: Stage 4 ABI Architecture Matrix 30
 on:
   workflow_dispatch:
   push:
@@ -9,14 +9,44 @@ permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 ABI verification ${{ matrix.case }}"
+    name: "Stage4 architecture ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
       max-parallel: 30
       matrix:
-        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+        include:
+          - {case: 1, api: 28, arch: x86_64, target: google_apis}
+          - {case: 2, api: 29, arch: x86_64, target: google_apis}
+          - {case: 3, api: 30, arch: x86_64, target: google_apis}
+          - {case: 4, api: 31, arch: x86_64, target: google_apis}
+          - {case: 5, api: 32, arch: x86_64, target: google_apis}
+          - {case: 6, api: 33, arch: x86_64, target: google_apis}
+          - {case: 7, api: 28, arch: x86_64, target: google_apis}
+          - {case: 8, api: 29, arch: x86_64, target: google_apis}
+          - {case: 9, api: 30, arch: x86_64, target: google_apis}
+          - {case: 10, api: 31, arch: x86_64, target: google_apis}
+          - {case: 11, api: 32, arch: x86_64, target: google_apis}
+          - {case: 12, api: 33, arch: x86_64, target: google_apis}
+          - {case: 13, api: 28, arch: x86_64, target: google_apis}
+          - {case: 14, api: 29, arch: x86_64, target: google_apis}
+          - {case: 15, api: 30, arch: x86_64, target: google_apis}
+          - {case: 16, api: 31, arch: x86, target: google_apis}
+          - {case: 17, api: 32, arch: x86, target: google_apis}
+          - {case: 18, api: 33, arch: x86, target: google_apis}
+          - {case: 19, api: 28, arch: x86, target: google_apis}
+          - {case: 20, api: 29, arch: x86, target: google_apis}
+          - {case: 21, api: 30, arch: x86, target: google_apis}
+          - {case: 22, api: 31, arch: x86, target: google_apis}
+          - {case: 23, api: 32, arch: x86, target: google_apis}
+          - {case: 24, api: 33, arch: x86, target: google_apis}
+          - {case: 25, api: 28, arch: x86, target: google_apis}
+          - {case: 26, api: 29, arch: x86, target: google_apis}
+          - {case: 27, api: 30, arch: x86, target: google_apis}
+          - {case: 28, api: 31, arch: x86, target: google_apis}
+          - {case: 29, api: 32, arch: x86, target: google_apis}
+          - {case: 30, api: 33, arch: x86, target: google_apis}
     steps:
       - uses: actions/checkout@v4
       - name: Enable KVM
@@ -38,9 +68,9 @@ jobs:
           KWAI_EXPECTED_ACCOUNT: lucasrosalem
           CASE_ID: ${{ matrix.case }}
         with:
-          api-level: 30
-          arch: x86_64
-          target: google_apis
+          api-level: ${{ matrix.api }}
+          arch: ${{ matrix.arch }}
+          target: ${{ matrix.target }}
           profile: pixel_2
           emulator-boot-timeout: 600
           disable-animations: false
