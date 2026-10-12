@@ -211,32 +211,54 @@ jobs:
           elif [ "$KWAI_CREDENTIALS_MISSING" = 0 ]; then
             echo 'STAGE4_AUTH=LOGIN_ROUTE_RECOVERY' | tee -a "$GITHUB_STEP_SUMMARY"
             set +e
-            # Forty distinct diagnostic combinations: 10 hypotheses x 4 observation paths.
-            MODE=$(( (${{ matrix.case }} - 1) % 10 ))
-            OBS=$(( (${{ matrix.case }} - 1) / 10 ))
-            echo "STAGE4_HYPOTHESIS=$MODE OBSERVATION=$OBS" | tee -a "$GITHUB_STEP_SUMMARY"
-            case "$MODE" in
-              0) echo 'STAGE4_HYPOTHESIS=baseline_fre' ;;
-              1) echo 'STAGE4_HYPOTHESIS=app_data_corruption'; adb shell pm clear com.kwai.video || true ;;
-              2) echo 'STAGE4_HYPOTHESIS=missing_google_service'; adb shell pm list packages -d | grep -E 'gms|vending|webview' || true ;;
-              3) echo 'STAGE4_HYPOTHESIS=runtime_permissions'; adb shell dumpsys package com.kwai.video | grep -A 24 'runtime permissions:' | head -26 || true ;;
-              4) echo 'STAGE4_HYPOTHESIS=webview_provider'; adb shell cmd webviewupdate get-current-webview-package || true ;;
-              5) echo 'STAGE4_HYPOTHESIS=app_process_crash'; adb shell logcat -c || true ;;
-              6) echo 'STAGE4_HYPOTHESIS=network_bootstrap'; adb shell dumpsys connectivity | grep -m 1 VALIDATED || true ;;
-              7) echo 'STAGE4_HYPOTHESIS=app_components'; adb shell dumpsys package com.kwai.video | grep -E 'Activity Resolver Table|Service Resolver Table|com.kwai.video/' | head -12 || true ;;
-              8) echo 'STAGE4_HYPOTHESIS=clock_and_certificates'; adb shell date -u; adb shell getprop ro.build.version.security_patch ;;
-              9) echo 'STAGE4_HYPOTHESIS=cpu_native_compatibility'; adb shell getprop ro.product.cpu.abilist; adb shell dumpsys package com.kwai.video | grep -E 'primaryCpuAbi|nativeLibraryDir' | head -5 || true ;;
+            # 40 network/bootstrap probes: 10 distinct network targets x 4 protocols.
+            TARGET=$(( (${{ matrix.case }} - 1) % 10 ))
+            PROTOCOL=$(( (${{ matrix.case }} - 1) / 10 ))
+            echo "STAGE4_NETWORK_TARGET=$TARGET PROTOCOL=$PROTOCOL" | tee -a "$GITHUB_STEP_SUMMARY"
+            case "$TARGET" in
+              0) HOST=www.google.com ;;
+              1) HOST=accounts.google.com ;;
+              2) HOST=play.googleapis.com ;;
+              3) HOST=android.clients.google.com ;;
+              4) HOST=www.kwai.com ;;
+              5) HOST=kwai.com ;;
+              6) HOST=www.kuaishou.com ;;
+              7) HOST=www.cloudflare.com ;;
+              8) HOST=www.github.com ;;
+              9) HOST=example.com ;;
             esac
+            export HOST PROTOCOL
+            python3 - <<'PY'
+            import os,socket,ssl,urllib.request,time
+            host=os.environ['HOST']; protocol=int(os.environ['PROTOCOL'])
+            t=time.monotonic()
+            try:
+                if protocol==0:
+                    print('STAGE4_NET_DNS=',socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)[0][4][0])
+                elif protocol==1:
+                    with socket.create_connection((host,443),timeout=7) as s: print('STAGE4_NET_TCP=CONNECTED')
+                elif protocol==2:
+                    with socket.create_connection((host,443),timeout=7) as s:
+                        with ssl.create_default_context().wrap_socket(s,server_hostname=host) as tls:
+                            print('STAGE4_NET_TLS=',tls.version())
+                else:
+                    req=urllib.request.Request('https://'+host+'/',headers={'User-Agent':'Mozilla/5.0'})
+                    try:
+                        with urllib.request.urlopen(req,timeout=7) as res: print('STAGE4_NET_HTTP=',res.status)
+                    except urllib.error.HTTPError as e: print('STAGE4_NET_HTTP=',e.code)
+                print('STAGE4_NET_PROBE=OK')
+            except Exception as e:
+                print('STAGE4_NET_PROBE=ERROR',type(e).__name__,str(e)[:160])
+            print('STAGE4_NET_DURATION=',round(time.monotonic()-t,2))
+            PY
+            echo 'STAGE4_ANDROID_NETWORK_BEGIN'
+            adb shell dumpsys connectivity | grep -m 2 'VALIDATED' || true
+            adb shell getprop net.dns1 || true
             adb shell am force-stop com.kwai.video || true
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
-            sleep $((8 + OBS * 4))
-            echo 'STAGE4_OBSERVATION_BEGIN'
-            case "$OBS" in
-              0) adb shell uiautomator dump /sdcard/kwai-diag.xml >/dev/null 2>&1 || true; adb shell cat /sdcard/kwai-diag.xml | grep -o 'resource-id="[^"]*"' | sort -u | tail -25 || true ;;
-              1) adb shell dumpsys activity activities | grep -E 'ResumedActivity|topResumedActivity|com.kwai.video|com.yxcorp' | tail -20 || true ;;
-              2) adb shell logcat -d -t 2500 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|com.kwai.video|com.yxcorp|gifshow|SSLHandshakeException|UnsatisfiedLinkError|ClassNotFoundException|denied' | tail -80 || true ;;
-              3) adb shell dumpsys package com.kwai.video | grep -E 'versionName=|targetSdk=|primaryCpuAbi=|enabled=|stopped=' | head -25 || true; adb shell dumpsys connectivity | grep -m 2 'VALIDATED' || true ;;
-            esac
+            sleep 10
+            adb shell uiautomator dump /sdcard/kwai-net.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/kwai-net.xml | grep -o 'resource-id="[^"]*"' | sort -u | tail -15 || true
             # Never unconditionally fail: inspect actual UI and allow credential proof.
             adb shell uiautomator dump /sdcard/kwai-final.xml >/dev/null 2>&1 || true
             adb shell cat /sdcard/kwai-final.xml > /tmp/kwai-final.xml || true
