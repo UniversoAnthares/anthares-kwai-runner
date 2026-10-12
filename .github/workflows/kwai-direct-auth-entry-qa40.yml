@@ -1,0 +1,58 @@
+name: Kwai Direct Auth Entry QA40
+on:
+  workflow_dispatch:
+  push:
+    branches: [stage4-direct-auth-qa40]
+    paths:
+      - '.github/workflows/kwai-direct-auth-entry-qa40.yml'
+      - 'tools/kwai_direct_auth_probe.sh'
+permissions:
+  contents: read
+jobs:
+  direct-auth:
+    name: "direct-auth (${{ matrix.mode }}, settle-${{ matrix.settle }})"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        mode: [deeplink-login, deeplink-signin, deeplink-account, deeplink-profile, component-login, component-auth, component-account, profile-deny-permission]
+        settle: [0, 3, 7, 12, 20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch proven Kwai package vault
+        run: |
+          curl -fL --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          mkdir -p kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+      - run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 4096M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 4096
+          script: bash tools/kwai_direct_auth_probe.sh "${{ matrix.mode }}" "${{ matrix.settle }}"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-auth-${{ matrix.mode }}-${{ matrix.settle }}-${{ github.run_id }}
+          path: |
+            kwai-direct-auth-probe.txt
+            kwai-vault-install-status.txt
+            kwai-package-dump.txt
+            kwai-components.txt
+            kwai-auth-components.txt
+            direct-auth.xml
+            kwai-direct-activities.txt
+            kwai-direct-window.txt
+            kwai-direct-logcat.txt
+          if-no-files-found: warn
+          retention-days: 1
