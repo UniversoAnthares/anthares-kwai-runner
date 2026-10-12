@@ -1,0 +1,51 @@
+name: Kwai Priority Form Gate Ubuntu22
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/kwai-priority-form-gate-ubuntu22.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  priority-form-gate:
+    name: priority-form-gate-ubuntu22
+    runs-on: ubuntu-22.04
+    timeout-minutes: 14
+    env:
+      KWAI_LOGIN_MODE: plain
+      KWAI_LOGIN_SETTLE: 3
+      KWAI_LOGIN: probe@example.invalid
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch proven Kwai package vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+      - run: sudo chmod 666 /dev/kvm
+      - name: Reach native Kwai credential form
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 4096M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 4096
+          script: |
+            set -euo pipefail
+            python3 tools/kwai_home_login_state_machine.py | tee form-gate-home.txt
+            grep -qx 'KWAI_HOME_LOGIN_SURFACE=PASS' form-gate-home.txt
+            python3 tools/kwai_android_login_entry.py email | tee form-gate-method.txt
+            grep -Eq 'KWAI_NATIVE_LOGIN_FORM_(VISIBLE|ALREADY_VISIBLE)' form-gate-method.txt
+            echo KWAI_NATIVE_CREDENTIAL_FORM_GATE=PASS
