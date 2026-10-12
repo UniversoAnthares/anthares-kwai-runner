@@ -1333,3 +1333,16 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Run ID: `38309117775`; URL: `https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/38309117775`.
 - The run initially queued with `Waiting for a runner to pick up this job...`; GitHub showed no billing, spending-limit, or Actions-disabled warning.
 - No publication occurred.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — Anthares Local Executor v2 PROVEN end-to-end
+- Canonical SHARED-LOG was re-read before the installation and persistence proof.
+- The private-repo bootstrap was moved to the proven self-hosted runner `DESKTOP-FTDK0HP` running in the Lucas Windows session; runner probe recorded `username=Lucas`, `userprofile=C:\Users\Lucas`, Windows, Python 3.11 present.
+- Installed a dedicated clean executor clone at `D:\AntharesWork\anthares-local-executor`; the daemon no longer uses or resets the shared archaeology/reconstruction clone.
+- Dedicated repo uses the Lucas GitHub CLI credential helper for persistent private Git fetch/push without embedding a token in files.
+- Startup persistence points to `C:\Users\Lucas\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Anthares-Local-Executor.cmd`.
+- Bootstrap run `38317528263` completed successfully. Supervisor pid=5956 and executor pid=9440 were live; the executor consumed safe request `c9c9bf17-67e2-4c07-90f1-724933aa62c6` and pushed an `ok` result.
+- Independent persistence proof: after the bootstrap workflow completed, request `c6008e8c-0c81-4a43-8f3e-3489448064cd` was queued from ChatGPT. The already-running daemon fetched it and pushed `status=ok`, returncode 0 at `2026-10-12T22:36:30Z` without a bootstrap workflow or former remote executor.
+- Publish remains fail-closed: no publish guard files were created and no social publication occurred in this transport proof.
+- Canonical `STATE.md` was updated to mark Anthares Local Executor replacement transport PROVEN.
+- Result: ChatGPT/GitHub queue -> persistent local allowlisted executor -> result commit round-trip is PROVEN. WinRemote, Desktop Commander and AI Commander are not architectural dependencies anymore.
