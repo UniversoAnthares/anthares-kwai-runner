@@ -1147,3 +1147,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - VM3 remains running in the background; direct Windows-window inspection is therefore unreliable for this runtime.
 - No Android UI control was activated and no publication occurred.
 - Next: re-read canonical log and inspect the Android UI directly through ADB by pulling `uiautomator` XML to the host and parsing its visible text/resource IDs.
+
+## 2026-10-12 — Agent 3 — exact Kwai onboarding screen identified
+- Canonical log was re-read immediately before this inspection.
+- Used bundled `D:\Program Files\Microvirt\MEmu\adb.exe` to connect to VM3 at `127.0.0.1:21533`, dump `/sdcard/window.xml`, pull it to the host, and parse UI nodes.
+- Current Kwai screen is the Portuguese interest-discovery onboarding. Visible text: `Escolha gostar ou não gostar para que possamos melhor conhecer você.` and progress `1/9`.
+- Relevant resource IDs include `com.kwai.video:id/tiny_discovery_like_button` and `com.kwai.video:id/tiny_discovery_dislike_button`.
+- This explains the earlier publisher probe failure: onboarding must complete before native home/create controls appear.
+- No onboarding button was pressed yet and no publication action occurred.
+- Next: re-read canonical log, complete the 9-step like/dislike onboarding deterministically via ADB taps, then rerun the safe publisher `probe` mode.
