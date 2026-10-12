@@ -7,6 +7,7 @@ set -euo pipefail
 export DISPLAY=${DISPLAY:-:99}
 export CHROME_PROFILE_DIR=${CHROME_PROFILE_DIR:-/data/chrome-profile}
 START_URL=${START_URL:-https://www.kwai.com/}
+CDP_PORT=${CDP_PORT:-9222}
 mkdir -p "$CHROME_PROFILE_DIR" /run/anthares-brouser
 
 Xvfb "$DISPLAY" -screen 0 1440x900x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
@@ -30,6 +31,9 @@ chromium \
   --disable-component-update \
   --no-first-run \
   --start-maximized \
+  --remote-debugging-address=127.0.0.1 \
+  --remote-debugging-port="$CDP_PORT" \
+  --remote-allow-origins="http://127.0.0.1:$CDP_PORT" \
   --user-data-dir="$CHROME_PROFILE_DIR" \
   "$START_URL" >/tmp/chromium.log 2>&1 &
 CHROME_PID=$!
