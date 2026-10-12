@@ -1,4 +1,4 @@
-name: Stage 4 Profile Crash Root Cause 30
+name: Stage 4 ABI Crash Isolation 30
 on:
   workflow_dispatch:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 profile crash diagnostic ${{ matrix.case }}"
+    name: "Stage4 ABI isolation ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -55,6 +55,10 @@ jobs:
             adb shell pm path com.kwai.video | grep -q '^package:'
             echo KWAI_PACKAGE_INSTALLED=PASS
             adb logcat -c
+            echo "ABI_CASE=$CASE_ID"
+            adb shell getprop ro.product.cpu.abilist
+            adb shell getprop ro.dalvik.vm.native.bridge
+            adb shell getprop ro.hardware
             adb shell am force-stop com.kwai.video
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
             sleep $((3 + CASE_ID % 6))
@@ -65,4 +69,5 @@ jobs:
             adb logcat -d -v brief -t 2500 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|Process: com.kwai.video|com.kwai.video.*(crash|exception|error)|libndk_translation|UnsatisfiedLinkError|SIGSEGV|SIGABRT|ActivityTaskManager.*com.kwai.video' | tail -100 || true
             adb shell uiautomator dump /sdcard/stage4-diag.xml || true
             adb exec-out cat /sdcard/stage4-diag.xml | grep -Eo 'package="[^"]+"' | sort -u || true
-            echo "STAGE4_DIAGNOSTIC_CASE_${CASE_ID}=COLLECTED"
+            adb logcat -d -v brief | grep -E "libcpu-info.so|SIGSEGV|Fatal signal" | tail -30 || true
+            echo "STAGE4_ABI_CASE_${CASE_ID}=COLLECTED"
