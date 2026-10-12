@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import runpy
 
 p = Path(__file__).with_name('kwai_up_physical.py')
 s = p.read_text(encoding='utf-8')
@@ -55,3 +56,7 @@ s = s.replace(old_focus, new_focus, 1)
 
 p.write_text(s, encoding='utf-8', newline='\n')
 print('KWAI_UP_POST_VARIANTS_PATCH=APPLIED')
+
+# The same physical run must also dismiss Kwai Lite's transient downloaded-video
+# guide before identity checks. Apply that patch after this file's edits.
+runpy.run_path(str(Path(__file__).with_name('patch_physical_overlays.py')), run_name='__main__')
