@@ -7,6 +7,8 @@ import sys
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 ENTRY = ROOT / "kwai_up_physical_entry.py"
 SPEC = importlib.util.spec_from_file_location("kwai_up_physical_entry_test", ENTRY)
 assert SPEC and SPEC.loader
