@@ -94,6 +94,14 @@ jobs:
           test -s kwai-session.enc
           python3 tools/kwai_session_vault_client.py push --path kwai-session.enc
           echo ANTHARES_MOBILE_VAULT_STORE=PASS
+      - name: Upload encrypted session transfer artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-mobile-session-encrypted-${{ github.run_id }}
+          path: kwai-session.enc
+          if-no-files-found: warn
+          retention-days: 1
       - name: Upload privacy-safe acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
