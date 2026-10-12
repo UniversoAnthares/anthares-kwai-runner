@@ -56,9 +56,21 @@ $t=Get-Command tunnel-client -ErrorAction SilentlyContinue
 'TUNNEL_CLIENT=' + [bool]$t
 if($t){'TUNNEL_PATH=' + $t.Source; tunnel-client --version 2>$null; tunnel-client --help 2>$null | Select-Object -First 80}
 'RUNNER=' + [bool](Get-Process 'Runner.Listener' -ErrorAction SilentlyContinue)
-Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object {$_.TaskName -like '*Secure MCP Tunnel*' -or $_.TaskName -like '*Anthares*'} | Select-Object TaskName,State | ConvertTo-Json -Compress
+'TASKS_BEGIN'
+Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object {$_.TaskName -like '*Secure MCP Tunnel*' -or $_.TaskName -like '*Anthares*'} | ForEach-Object {
+  [pscustomobject]@{TaskName=$_.TaskName;State=$_.State;Actions=@($_.Actions | ForEach-Object {[pscustomobject]@{Execute=$_.Execute;Arguments=$_.Arguments;WorkingDirectory=$_.WorkingDirectory}})}
+} | ConvertTo-Json -Depth 5 -Compress
+'TASKS_END'
+'TUNNEL_FILES_BEGIN'
+$roots=@('C:\ProgramData','C:\Program Files',"$env:LOCALAPPDATA","$env:APPDATA","$env:USERPROFILE")
+foreach($r in $roots){if(Test-Path $r){Get-ChildItem $r -Filter 'tunnel-client*' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 30 -ExpandProperty FullName}}
+'TUNNEL_FILES_END'
+'RUNNER_DIAG_BEGIN'
+$diag=Get-ChildItem 'C:\actions-runner\_diag\Runner_*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if($diag){'RUNNER_DIAG_FILE='+$diag.FullName; Get-Content $diag.FullName -Tail 35}
+'RUNNER_DIAG_END'
 """.strip()
-        job = _enqueue("shell", {"command": command, "shell": "powershell"}, 45)
+        job = _enqueue("shell", {"command": command, "shell": "powershell"}, 90)
         return jsonify(job_id=job["id"], status="queued"), 202
 
     @app.post("/v1/bootstrap/recover-runner")
