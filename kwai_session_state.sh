@@ -18,13 +18,13 @@ root_ready(){
 # truncated archive can otherwise leave an unusable partially restored profile.
 restore_state(){
   [ -s "$STATE_FILE" ] || { log "KWAI_SESSION_CACHE_MISS"; return 1; }
-  [ -n "${KWAI_PASSWORD:-}" ] || { log "KWAI_SESSION_KEY_MISSING"; return 1; }
+  [ -n "${KWAI_SESSION_ENCRYPTION_KEY:-}" ] || { log "KWAI_SESSION_KEY_MISSING"; return 1; }
   root_ready || { log "KWAI_SESSION_ROOT_UNAVAILABLE"; return 1; }
   local archive staging
   archive="$(mktemp)"
   staging="/data/local/tmp/kwai-restore-$$"
   trap 'rm -f "$archive"; adb shell rm -rf "$staging" >/dev/null 2>&1 || true' RETURN
-  if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:KWAI_PASSWORD -in "$STATE_FILE" -out "$archive" 2>/dev/null; then
+  if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:KWAI_SESSION_ENCRYPTION_KEY -in "$STATE_FILE" -out "$archive" 2>/dev/null; then
     log "KWAI_SESSION_DECRYPT_FAILED"; return 1
   fi
   if ! python3 - "$archive" <<'PY'
@@ -81,7 +81,7 @@ save_state(){
     return 1
   fi
   rm -f "$proof"
-  [ -n "${KWAI_PASSWORD:-}" ] || { log "KWAI_SESSION_KEY_MISSING"; return 1; }
+  [ -n "${KWAI_SESSION_ENCRYPTION_KEY:-}" ] || { log "KWAI_SESSION_KEY_MISSING"; return 1; }
   root_ready || { log "KWAI_SESSION_ROOT_UNAVAILABLE"; return 1; }
   local tmp archive
   tmp="${STATE_FILE}.tmp"
@@ -94,7 +94,7 @@ save_state(){
   if ! tar -tf "$archive" >/dev/null 2>&1; then
     log "KWAI_SESSION_ARCHIVE_INVALID"; return 1
   fi
-  if ! openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -pass env:KWAI_PASSWORD -in "$archive" -out "$tmp"; then
+  if ! openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -pass env:KWAI_SESSION_ENCRYPTION_KEY -in "$archive" -out "$tmp"; then
     log "KWAI_SESSION_ENCRYPT_FAILED"; return 1
   fi
   test -s "$tmp" || return 1
