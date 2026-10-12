@@ -1,0 +1,78 @@
+name: Kwai Proven Runtime Form QA20
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/kwai-proven-runtime-form-qa20.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  form-test:
+    name: form-${{ matrix.attempt }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    env:
+      KWAI_LOGIN_MODE: plain
+      KWAI_LOGIN_SETTLE: 2
+      KWAI_LOGIN: probe@example.invalid
+      KWAI_TEST_ATTEMPT: ${{ matrix.attempt }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare validated API35 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+          rm -rf kwai-vault && mkdir kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n qa20 -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force
+          sudo chmod 666 /dev/kvm
+      - name: Boot and prove native credential form
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
+          export PATH="$SDK/platform-tools:$SDK/emulator:$PATH"
+          "$SDK/emulator/emulator" -avd qa20 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 4096 -cores 2 >/tmp/emulator.log 2>&1 &
+          EP=$!
+          trap 'kill "$EP" 2>/dev/null || true' EXIT
+          timeout 120 adb wait-for-device
+          timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 3; done'
+          echo QA20_ANDROID_BOOT=PASS
+          sleep $(( (KWAI_TEST_ATTEMPT - 1) % 4 ))
+          python3 tools/kwai_home_login_state_machine.py | tee form-gate-home.txt
+          grep -qx 'KWAI_HOME_LOGIN_SURFACE=PASS' form-gate-home.txt
+          python3 tools/kwai_android_login_entry.py email | tee form-gate-method.txt
+          grep -Eq 'KWAI_NATIVE_LOGIN_FORM_(VISIBLE|ALREADY_VISIBLE)' form-gate-method.txt
+          echo QA20_NATIVE_CREDENTIAL_FORM=PASS
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-form-qa20-${{ matrix.attempt }}-${{ github.run_id }}
+          path: |
+            form-gate-home.txt
+            form-gate-method.txt
+            kwai-home-login-state.txt
+            semantic-login-route.txt
+            semantic-*.xml
+            kwai-vault-install-status.txt
+            /tmp/emulator.log
+          if-no-files-found: warn
+          retention-days: 1
