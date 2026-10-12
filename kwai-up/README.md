@@ -81,6 +81,13 @@ python3 kwai-up/kwai_up_safe.py verify
 
 A primeira linhagem comprovada mantinha a conta dentro da VM Android persistente. O Kwai-up replica essa propriedade no executor dedicado: autentica uma vez, conserva a sessao do app no armazenamento persistente do Android e verifica a identidade antes de cada publicacao. O telefone fisico entra somente quando o Kwai exigir autenticacao ou aprovacao. Transferencia de `/data/user/0/com.kwai.video` exige root no Android de origem e destino; o telefone fisico comum fica fora desse mecanismo.
 
+## Validacao
+
+- 2026-10-12: `kwai-up/run_30_contracts.py` executado em Render sobre o commit `31b734837e5508a820952975eca2ef63a1d2da04`.
+- O build terminou `live`, o que implica compilacao bem-sucedida e conclusao dos 30 processos de contrato simultaneos com retorno zero.
+- GitLab expandiu os 30 jobs e encerrou todos antes da execucao com `ci_quota_exceeded`; esse resultado esta classificado como falha de infraestrutura.
+- GitHub Actions permanece como validador redundante da branch/PR.
+
 ## Estado desta branch
 
-A branch `kwai-up` e deliberadamente paralela e preserva os scripts atuais. A validacao de contrato executa 30 jobs simultaneos com variacoes de identidade, legenda, locale, serial ADB e casos de deduplicacao. Publicacao real permanece bloqueada ate existir um executor Android autenticado ligado ao transporte ADB desta nova camada.
+A branch `kwai-up` e deliberadamente paralela e preserva os scripts atuais. O nucleo, a camada segura, o ledger transacional, a suite de testes e o executor de 30 validacoes estao implementados. A proxima barreira operacional e ligar um Android persistente autenticado ao transporte ADB desta camada e executar uma publicacao real controlada com prova `VERIFIED`.
