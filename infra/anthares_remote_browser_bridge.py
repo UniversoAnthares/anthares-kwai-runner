@@ -1,8 +1,4 @@
-"""Browser-session control bridge for Anthares Remote Agent.
-
-A one-time bootstrap code mints a signed HttpOnly cookie. After that, Browserless can
-operate the user's authorized PC without placing the long-lived control secret in tool calls.
-"""
+"""Cookie-authenticated Browserless bridge for Anthares Remote Agent."""
 import base64
 import hashlib
 import hmac
@@ -17,10 +13,9 @@ from flask import Response, jsonify, make_response, request
 import anthares_remote_control_routes as _relay
 
 _COOKIE = "ara_control"
-_BOOTSTRAP_CODE = os.getenv("ARA_BROWSER_BOOTSTRAP_CODE", "")
 _CONTROL_SECRET = os.getenv("ARA_SHARED", "")
-_BOOTSTRAP_LOCK = threading.Lock()
-_BOOTSTRAP_USED = False
+_CHALLENGES = {}
+_CHALLENGE_LOCK = threading.Lock()
 
 
 def _b64(data):
@@ -61,14 +56,7 @@ def _state(device):
 
 def _enqueue(device, job_type, args, timeout):
     job_id = secrets.token_hex(16)
-    job = {
-        "id": job_id,
-        "type": job_type,
-        "args": args or {},
-        "timeout_seconds": max(1, min(int(timeout or 30), 120)),
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "status": "queued",
-    }
+    job = {"id": job_id, "type": job_type, "args": args or {}, "timeout_seconds": max(1, min(int(timeout or 30), 120)), "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "status": "queued"}
     with _relay._LOCK:
         s = _state(device)
         s["jobs"][job_id] = job
@@ -92,14 +80,28 @@ def _wait(device, job_id, seconds):
 
 
 def register(app):
-    @app.get("/v1/browser/bootstrap")
-    def ara_browser_bootstrap():
-        global _BOOTSTRAP_USED
-        supplied = request.args.get("code", "")
-        with _BOOTSTRAP_LOCK:
-            if _BOOTSTRAP_USED or not _BOOTSTRAP_CODE or not secrets.compare_digest(supplied, _BOOTSTRAP_CODE):
-                return jsonify(ok=False, error="not_available"), 404
-            _BOOTSTRAP_USED = True
+    @app.get("/v1/browser/challenge")
+    def ara_browser_challenge():
+        challenge_id = secrets.token_hex(16)
+        with _CHALLENGE_LOCK:
+            now = time.time()
+            for key, expiry in list(_CHALLENGES.items()):
+                if expiry <= now:
+                    _CHALLENGES.pop(key, None)
+            _CHALLENGES[challenge_id] = now + 600
+        return jsonify(ok=True, challenge_id=challenge_id, expires_in=600)
+
+    @app.get("/v1/browser/claim")
+    def ara_browser_claim():
+        challenge_id = request.args.get("challenge_id", "")
+        approved = os.getenv("ARA_BROWSER_APPROVED_CHALLENGE", "")
+        with _CHALLENGE_LOCK:
+            expiry = _CHALLENGES.get(challenge_id, 0)
+            valid = bool(challenge_id and approved and expiry > time.time() and secrets.compare_digest(challenge_id, approved))
+            if valid:
+                _CHALLENGES.pop(challenge_id, None)
+        if not valid:
+            return jsonify(ok=False, error="not_approved"), 403
         resp = make_response(jsonify(ok=True, session="created"))
         resp.set_cookie(_COOKIE, _mint_cookie(), max_age=30 * 24 * 3600, httponly=True, secure=True, samesite="Strict", path="/v1/browser")
         return resp
