@@ -906,3 +906,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - This is sufficient for a one-shot controlled real post with automatic duplicate protection.
 - No publication occurred in this inspection.
 - Next action: re-read this log, rerun the authenticated session check without publication; if authenticated, record it and then arm the guard only for the single controlled publish transaction.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — TikTok session revalidated immediately before controlled post
+- Canonical log was re-read before the check.
+- Local session check passed: `authenticated=true`, `login_visible=false`, `challenge=false`.
+- Six recognized auth cookies are present: sessionid, sessionid_ss, sid_guard, sid_tt, uid_tt, uid_tt_ss.
+- No publication occurred; publish guard remains unarmed.
+- Next action: re-read this log and run the read-only profile/account probe to confirm the authenticated account is the intended TikTok account before arming the one-shot Post guard.
