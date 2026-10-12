@@ -37,7 +37,9 @@ video_prepare() {
   need v4l2-ctl
   if [[ ! -e "$VIDEO_DEVICE" ]]; then
     sudo modprobe -r v4l2loopback >/dev/null 2>&1 || true
-    sudo modprobe v4l2loopback devices=1 video_nr="$VIDEO_NR" card_label="Anthares X Live" exclusive_caps=1
+    # Keep capture+output capabilities visible before FFmpeg attaches, so the
+    # Android Emulator can enumerate webcam0 during its own startup probe.
+    sudo modprobe v4l2loopback devices=1 video_nr="$VIDEO_NR" card_label="Anthares X Live" exclusive_caps=0
   fi
   sudo chmod 666 "$VIDEO_DEVICE"
   v4l2-ctl -d "$VIDEO_DEVICE" --all >/dev/null
@@ -48,7 +50,7 @@ resolve_youtube() {
   mapfile -t URLS < <(yt-dlp --no-warnings --no-playlist -f 'bestvideo[height<=1080]+bestaudio/best[height<=1080]' -g "$SOURCE_URL")
   VIDEO_URL="${URLS[0]:-}"
   AUDIO_URL="${URLS[1]:-${URLS[0]:-}}"
-  [[ -n "$VIDEO_URL" ]] || { echo "unable to resolve YouTube live video" >&2; exit 3; }
+  [[ -n "$VIDEO_URL" ]] || { echo "unable to resolve an active YouTube live video" >&2; exit 3; }
 }
 
 start_video() {
@@ -122,6 +124,7 @@ case "$MODE" in
   start)
     video_prepare
     pulse_prepare
+    stop_all
     start_video
     start_audio
     sleep 3
