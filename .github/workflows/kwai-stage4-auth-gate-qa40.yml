@@ -1,4 +1,4 @@
-name: Kwai Stage4 Auth Gate QA40
+name: Kwai Stage4 Real Auth and Vault
 
 on:
   workflow_dispatch:
@@ -8,33 +8,17 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   form-gate:
-    name: form-gate (${{ matrix.mode }}, ${{ matrix.settle }}, ${{ matrix.method }})
+    name: proven-form-gate-canary
     runs-on: ubuntu-24.04
     timeout-minutes: 14
-    strategy:
-      fail-fast: false
-      max-parallel: 40
-      matrix:
-        mode:
-          - plain
-          - relaunch-before-login
-          - pregrant-notification
-          - allow-permissions
-          - allow-then-retry
-          - deny-then-retry
-          - network-wait
-          - profile-fallback
-          - dismiss-guide
-          - relaunch-after-login
-        settle: [0, 5]
-        method: [email, phone]
     env:
-      KWAI_LOGIN_MODE: ${{ matrix.mode }}
-      KWAI_LOGIN_SETTLE: ${{ matrix.settle }}
-      KWAI_LOGIN: ${{ matrix.method == 'email' && 'probe@example.invalid' || '+5511999999999' }}
+      KWAI_LOGIN_MODE: plain
+      KWAI_LOGIN_SETTLE: 2
+      KWAI_LOGIN: probe@example.invalid
     steps:
       - uses: actions/checkout@v4
       - name: Fetch proven Kwai package vault
@@ -46,7 +30,7 @@ jobs:
           mkdir -p kwai-vault
           unzip -q kwai-vault.zip -d kwai-vault
       - run: sudo chmod 666 /dev/kvm
-      - name: Reach native credential form without submitting credentials
+      - name: Prove native credential form without submitting credentials
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -63,33 +47,35 @@ jobs:
             set -euo pipefail
             python3 tools/kwai_home_login_state_machine.py | tee form-gate-home.txt
             grep -qx 'KWAI_HOME_LOGIN_SURFACE=PASS' form-gate-home.txt
-            python3 tools/kwai_android_login_entry.py '${{ matrix.method }}' | tee form-gate-method.txt
+            python3 tools/kwai_android_login_entry.py email | tee form-gate-method.txt
             grep -Eq 'KWAI_NATIVE_LOGIN_FORM_(VISIBLE|ALREADY_VISIBLE)' form-gate-method.txt
             echo KWAI_NATIVE_CREDENTIAL_FORM_GATE=PASS
       - name: Upload gate diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: auth-gate-${{ matrix.mode }}-${{ matrix.settle }}-${{ matrix.method }}-${{ github.run_id }}
+          name: stage4-form-canary-${{ github.run_id }}
           path: |
             form-gate-home.txt
             form-gate-method.txt
             kwai-home-login-state.txt
-            home-login-*.xml
+            semantic-login-route.txt
+            semantic-*.xml
             kwai-vault-install-status.txt
           if-no-files-found: warn
           retention-days: 1
 
   real-auth:
+    needs: form-gate
     name: single-real-auth-identity-and-vault
     runs-on: ubuntu-24.04
-    timeout-minutes: 18
+    timeout-minutes: 20
     env:
       KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
       KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
       KWAI_SESSION_ENCRYPTION_KEY: ${{ secrets.KWAI_SESSION_ENCRYPTION_KEY }}
       KWAI_LOGIN_MODE: plain
-      KWAI_LOGIN_SETTLE: 3
+      KWAI_LOGIN_SETTLE: 2
     steps:
       - uses: actions/checkout@v4
       - name: Validate required secrets exist
@@ -163,5 +149,6 @@ jobs:
             auth-lucasrosalem.txt
             auth-universo.anthares.txt
             kwai-home-login-state.txt
+            semantic-login-route.txt
           if-no-files-found: warn
           retention-days: 1
