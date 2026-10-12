@@ -121,7 +121,6 @@ def repeated_phrase_removals(words: list[dict[str, Any]]) -> list[dict[str, Any]
     tokens = [w["norm"] for w in words]
     out: list[dict[str, Any]] = []
     occupied: set[int] = set()
-    # Longest exact immediate repetitions first: "eu acho que / eu acho que".
     for size in range(8, 0, -1):
         i = 0
         while i + 2 * size <= len(tokens):
@@ -142,7 +141,6 @@ def repeated_phrase_removals(words: list[dict[str, Any]]) -> list[dict[str, Any]
                 i += 2 * size
             else:
                 i += 1
-    # Repeated discourse restart with a short hesitation between the two phrases.
     for size in range(6, 1, -1):
         for i in range(len(tokens) - 2 * size + 1):
             left = tokens[i:i + size]
@@ -212,38 +210,26 @@ def render_without(path: Path, removals: list[dict[str, Any]], output: Path) -> 
 
 
 def microcut(path: Path, output: Path) -> dict[str, Any]:
-    original = duration(path)
-    words = transcribe_words(path)
-    candidates = filler_and_pause_removals(words) + repeated_phrase_removals(words)
-    removals = merge_removals(candidates, original)
-    if removals:
-        render_without(path, removals, output)
-    else:
-        shutil.copy2(path, output)
-    final = duration(output)
-    if final < MIN_FINAL_SECONDS:
-        raise RuntimeError("microcut duration below minimum; source must be reselected")
-    if original - final < MIN_MICROCUT_SECONDS:
-        raise RuntimeError("no meaningful microcuts detected; refusing unedited clip")
-    reasons: dict[str, int] = {}
-    for row in removals:
-        for reason in row.get("reasons", []):
-            reasons[reason] = reasons.get(reason, 0) + 1
-    return {
-        "original_duration": round(original, 3),
-        "final_duration": round(final, 3),
-        "removed_seconds": round(max(0.0, original - final), 3),
-        "removed_ratio": round(max(0.0, original - final) / original, 4) if original else 0.0,
-        "word_count": len(words),
-        "intervals": len(removals),
-        "reasons": reasons,
-    }
+    # The production media-preparation entry point now uses the shared semantic
+    # engine. Map the existing Instagram knobs so current deployments keep their
+    # tuning while gaining fuzzy restarts, stutters and safer prolonged fillers.
+    os.environ.setdefault("ANTHARES_WHISPER_MODEL", WHISPER_MODEL)
+    os.environ.setdefault("ANTHARES_PAUSE_SECONDS", str(PAUSE_THRESHOLD))
+    os.environ.setdefault("ANTHARES_PAUSE_KEEP_SECONDS", str(PAUSE_KEEP))
+    os.environ.setdefault("ANTHARES_FILLER_MIN_SECONDS", str(FILLER_MIN))
+    os.environ.setdefault("ANTHARES_MAX_REMOVAL_RATIO", str(MAX_REMOVAL_RATIO))
+    os.environ.setdefault("ANTHARES_MIN_FINAL_SECONDS", str(MIN_FINAL_SECONDS))
+    os.environ.setdefault("ANTHARES_MIN_REMOVED_SECONDS", str(MIN_MICROCUT_SECONDS))
+    from anthares_microcut_v2 import run as semantic_microcut
+
+    report = semantic_microcut(path, output)
+    report["production_entrypoint"] = "instagram_prepare_media.microcut"
+    return report
 
 
 def verticalize(path: Path, output: Path) -> dict[str, Any]:
     before = duration(path)
     w, h = dimensions(path)
-    # Preserve existing 9:16 media exactly; future TikTok microcuts arrive here already vertical.
     if h > 0 and abs((w / h) - (9 / 16)) < 0.001:
         shutil.copy2(path, output)
         return {"source_dimensions": [w, h], "output_dimensions": [w, h], "reencoded": False}
@@ -261,60 +247,58 @@ def verticalize(path: Path, output: Path) -> dict[str, Any]:
     return {"source_dimensions": [w, h], "output_dimensions": [ow, oh], "reencoded": True}
 
 
-def prepare() -> dict[str, Any]:
+def prepare_one(candidate: dict[str, Any], index: int) -> dict[str, Any]:
     WORK_DIR.mkdir(parents=True, exist_ok=True)
-    ledger = load_ledger()
-    rows = fetch_media()
-    probe_ledger = json.loads(json.dumps(ledger))
-    row = None
-    source_url = ""
-    source = WORK_DIR / "source.mp4"
-    while True:
-        candidate = select_next(rows, probe_ledger, allow_legacy=True)
-        if candidate is None:
-            break
-        candidate_url = str(candidate.get("source_url") or "")
-        try:
-            download(candidate_url, source)
-            row = candidate
-            source_url = candidate_url
-            break
-        except Exception as exc:
-            key = str(candidate.get("id") or candidate_url)
-            probe_ledger.setdefault("published", {})[key] = {"source_url": candidate_url}
-            print(f"INSTAGRAM_SOURCE_SKIP id={candidate.get('id')} error={type(exc).__name__}: {exc}", flush=True)
-            source.unlink(missing_ok=True)
-    if row is None:
-        plan = {"ready": False, "reason": "no_reachable_unpublished_owned_media"}
-        PLAN_PATH.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        return plan
-    source_is_microcut = "-microcut" in source_url.casefold()
-    micro = WORK_DIR / "microcut.mp4"
-    # A filename alone cannot prove that TikTok microcuts were applied.
-    micro_meta = microcut(source, micro)
-    micro_meta["reused_existing_tiktok_microcut"] = False
-    micro_meta["source_marked_microcut"] = source_is_microcut
-
-    final = WORK_DIR / f"instagram-{row.get('id') or 'clip'}-microcut.mp4"
-    layout_meta = verticalize(micro, final)
-    plan = {
-        "ready": True,
-        "source_attachment_id": str(row.get("id") or ""),
-        "source_url": source_url,
-        "caption": clean_caption(row),
-        "media_path": str(final),
-        "asset_name": final.name,
-        "microcut": micro_meta,
-        "layout": layout_meta,
-        "final_duration": round(duration(final), 3),
+    media_url = str(candidate.get("media_url") or candidate.get("url") or "").strip()
+    if not media_url:
+        raise RuntimeError("candidate has no media URL")
+    source_id = str(candidate.get("source_id") or candidate.get("id") or f"candidate-{index}")
+    caption = clean_caption(str(candidate.get("caption") or candidate.get("text") or ""))
+    source = WORK_DIR / f"{index:02d}-source.mp4"
+    cut = WORK_DIR / f"{index:02d}-microcut.mp4"
+    final = WORK_DIR / f"{index:02d}-final.mp4"
+    download(media_url, source)
+    microcut_report = microcut(source, cut)
+    vertical_report = verticalize(cut, final)
+    return {
+        "source_id": source_id,
+        "caption": caption,
+        "source_url": media_url,
+        "prepared_path": str(final),
+        "microcut": microcut_report,
+        "vertical": vertical_report,
+        "duration": round(duration(final), 3),
     }
-    PLAN_PATH.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return plan
 
 
 def main() -> int:
-    result = prepare()
-    print(json.dumps(result, ensure_ascii=False))
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--count", type=int, default=int(os.getenv("INSTAGRAM_PREPARE_COUNT", "10") or 10))
+    parser.add_argument("--candidate-url", action="append", default=[])
+    args = parser.parse_args()
+
+    ledger = load_ledger()
+    rows = []
+    if args.candidate_url:
+        rows = [{"media_url": url, "source_id": f"manual-{i}", "caption": ""} for i, url in enumerate(args.candidate_url, start=1)]
+    else:
+        pool = fetch_media()
+        reserved = set()
+        for _ in range(max(0, args.count)):
+            selected = select_next(pool, ledger, reserved)
+            if not selected:
+                break
+            reserved.add(str(selected.get("source_id") or selected.get("id") or selected.get("media_url") or ""))
+            rows.append(selected)
+
+    if not rows:
+        raise RuntimeError("no media candidates available")
+
+    prepared = [prepare_one(row, i) for i, row in enumerate(rows[: max(0, args.count)], start=1)]
+    PLAN_PATH.write_text(json.dumps({"items": prepared}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"ok": True, "count": len(prepared), "plan": str(PLAN_PATH)}, ensure_ascii=False))
     return 0
 
 
