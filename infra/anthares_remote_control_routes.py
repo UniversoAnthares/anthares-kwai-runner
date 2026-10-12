@@ -1,35 +1,67 @@
+import hashlib
 import secrets
 import threading
 import time
 
+import requests
 from flask import jsonify, request
 
 _LOCK = threading.Lock()
 _DEVICES = {}
+_DEVICE_HASH_CACHE = {}
+_DEVICE_HASH_TTL = 60
+_DEVICE_HASH_BASE = "https://raw.githubusercontent.com/UniversoAnthares/anthares-kwai-runner/main/anthares-remote-agent/devices"
 
 
-def register(app, shared_token):
-    token = str(shared_token or "")
+def register(app, control_token):
+    control_token = str(control_token or "")
 
-    def auth_ok():
+    def bearer():
         header = request.headers.get("Authorization", "")
-        if not token or not header.startswith("Bearer "):
-            return False
-        return secrets.compare_digest(header[7:], token)
+        return header[7:] if header.startswith("Bearer ") else ""
+
+    def control_auth_ok():
+        got = bearer()
+        return bool(control_token and got) and secrets.compare_digest(got, control_token)
 
     def device_id():
         return request.headers.get("X-Anthares-Device", "").strip()
+
+    def expected_device_hash(device):
+        now = time.time()
+        cached = _DEVICE_HASH_CACHE.get(device)
+        if cached and now - cached[1] < _DEVICE_HASH_TTL:
+            return cached[0]
+        if not device or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_." for c in device):
+            return ""
+        try:
+            r = requests.get(f"{_DEVICE_HASH_BASE}/{device}.sha256", timeout=8)
+            if not r.ok:
+                return ""
+            value = r.text.strip().lower()
+            if len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
+                return ""
+            _DEVICE_HASH_CACHE[device] = (value, now)
+            return value
+        except Exception:
+            return ""
+
+    def device_auth_ok(device):
+        got = bearer()
+        expected = expected_device_hash(device)
+        if not got or not expected:
+            return False
+        actual = hashlib.sha256(got.encode("utf-8")).hexdigest()
+        return secrets.compare_digest(actual, expected)
 
     def state(device):
         return _DEVICES.setdefault(device, {"heartbeat": None, "queue": [], "jobs": {}})
 
     @app.post("/v1/device/heartbeat")
     def ara_heartbeat():
-        if not auth_ok():
-            return jsonify(error="unauthorized"), 401
         device = device_id()
-        if not device:
-            return jsonify(error="missing_device_id"), 400
+        if not device_auth_ok(device):
+            return jsonify(error="unauthorized"), 401
         body = request.get_json(silent=True) or {}
         body["seen_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         with _LOCK:
@@ -38,11 +70,9 @@ def register(app, shared_token):
 
     @app.get("/v1/device/jobs/next")
     def ara_next_job():
-        if not auth_ok():
-            return jsonify(error="unauthorized"), 401
         device = device_id()
-        if not device:
-            return jsonify(error="missing_device_id"), 400
+        if not device_auth_ok(device):
+            return jsonify(error="unauthorized"), 401
         with _LOCK:
             s = state(device)
             while s["queue"]:
@@ -56,11 +86,9 @@ def register(app, shared_token):
 
     @app.post("/v1/device/jobs/<job_id>/result")
     def ara_result(job_id):
-        if not auth_ok():
-            return jsonify(error="unauthorized"), 401
         device = device_id()
-        if not device:
-            return jsonify(error="missing_device_id"), 400
+        if not device_auth_ok(device):
+            return jsonify(error="unauthorized"), 401
         body = request.get_json(silent=True) or {}
         with _LOCK:
             job = state(device)["jobs"].get(job_id)
@@ -72,7 +100,7 @@ def register(app, shared_token):
 
     @app.post("/v1/control/jobs")
     def ara_create_job():
-        if not auth_ok():
+        if not control_auth_ok():
             return jsonify(error="unauthorized"), 401
         body = request.get_json(silent=True) or {}
         device = str(body.get("device_id") or "").strip()
@@ -97,7 +125,7 @@ def register(app, shared_token):
 
     @app.get("/v1/control/jobs/<job_id>")
     def ara_get_job(job_id):
-        if not auth_ok():
+        if not control_auth_ok():
             return jsonify(error="unauthorized"), 401
         device = request.args.get("device_id", "").strip()
         if not device:
@@ -110,7 +138,7 @@ def register(app, shared_token):
 
     @app.get("/v1/control/status")
     def ara_status():
-        if not auth_ok():
+        if not control_auth_ok():
             return jsonify(error="unauthorized"), 401
         device = request.args.get("device_id", "").strip()
         if not device:
