@@ -958,3 +958,13 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - STATE update commit: `8735626c22d76ae7cf4c45515f69c5f0b32da7c6`.
 - TikTok milestone 1 is closed. Continuous scheduler remains intentionally OFF.
 - Next reconstruction milestone may proceed independently: restore/validate Kwai runtime, or later activate the TikTok scheduler after its cadence/guard behavior is revalidated.
+
+## 2026-10-12 — Agent 3 — Kwai elevation/runtime probe via WinRemote
+- Canonical SHARED-LOG was re-read immediately before this investigation.
+- `WinRemote_MCP.Shell` executes as `DESKTOP-FTDK0HP\Lucas`; the High/System integrity groups were not present in the returned group filter, so this connector is not treated as an elevated installer path.
+- Verified installer candidate remains `D:\AntharesWork\legacy-pc-runtime\downloads\MEmu-Setup-9.5.7.1.exe`, size 764,603,136 bytes. Historical secondary installer also remains at `D:\Downloads\MEmu-setup-abroad-3aa54ded.exe`.
+- Existing anthares-kwai-runner clones were located; production/current working copies were not modified.
+- MeshCentral command execution still times out for simple identity probes, so it is not yet accepted as a deterministic elevation path despite the agent being online.
+- A first attempt to commit this coordination entry failed only because the temporary coordination clone lacked local Git author identity; no runtime/system state changed. This retry configured author identity only inside `D:\AntharesWork\legacy-coord-log` and preserved production repos.
+- No installer was executed and no runtime state changed.
+- Next action: re-read this log and inspect existing SYSTEM/highest scheduled tasks and Anthares/remote-admin services for a deterministic elevated execution path before installing the verified MEmu package.
