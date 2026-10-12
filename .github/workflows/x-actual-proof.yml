@@ -17,6 +17,211 @@ permissions:
   contents: read
 jobs:
   proof:
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        include:
+          - variant: 1
+            api: 30
+            arch: x86_64
+            target: google_apis
+            gpu: swiftshader_indirect
+          - variant: 2
+            api: 30
+            arch: x86_64
+            target: google_apis
+            gpu: off
+          - variant: 3
+            api: 30
+            arch: x86_64
+            target: default
+            gpu: swiftshader_indirect
+          - variant: 4
+            api: 30
+            arch: x86_64
+            target: default
+            gpu: off
+          - variant: 5
+            api: 30
+            arch: x86
+            target: google_apis
+            gpu: swiftshader_indirect
+          - variant: 6
+            api: 30
+            arch: x86
+            target: google_apis
+            gpu: off
+          - variant: 7
+            api: 30
+            arch: x86
+            target: default
+            gpu: swiftshader_indirect
+          - variant: 8
+            api: 30
+            arch: x86
+            target: default
+            gpu: off
+          - variant: 9
+            api: 31
+            arch: x86_64
+            target: google_apis
+            gpu: swiftshader_indirect
+          - variant: 10
+            api: 31
+            arch: x86_64
+            target: google_apis
+            gpu: off
+          - variant: 11
+            api: 31
+            arch: x86_64
+            target: default
+            gpu: swiftshader_indirect
+          - variant: 12
+            api: 31
+            arch: x86_64
+            target: default
+            gpu: off
+          - variant: 13
+            api: 31
+            arch: x86
+            target: google_apis
+            gpu: swiftshader_indirect
+          - variant: 14
+            api: 31
+            arch: x86
+            target: google_apis
+            gpu: off
+          - variant: 15
+            api: 31
+            arch: x86
+            target: default
+            gpu: swiftshader_indirect
+          - variant: 16
+            api: 31
+            arch: x86
+            target: default
+            gpu: off
+          - variant: 17
+            api: 32
+            arch: x86_64
+            target: google_apis
+            gpu: swiftshader_indirect
+          - variant: 18
+            api: 32
+            arch: x86_64
+            target: google_apis
+            gpu: off
+          - variant: 19
+            api: 32
+            arch: x86_64
+            target: default
+            gpu: swiftshader_indirect
+          - variant: 20
+            api: 32
+            arch: x86_64
+            target: default
+            gpu: off
+          - variant: 21
+            api: 32
+            arch: x86
+            target: google_apis
+            gpu: swiftshader_indirect
+          - variant: 22
+            api: 32
+            arch: x86
+            target: google_apis
+            gpu: off
+          - variant: 23
+            api: 32
+            arch: x86
+            target: default
+            gpu: swiftshader_indirect
+          - variant: 24
+            api: 32
+            arch: x86
+            target: default
+            gpu: off
+          - variant: 25
+            api: 33
+            arch: x86_64
+            target: google_apis
+            gpu: swiftshader_indirect
+          - variant: 26
+            api: 33
+            arch: x86_64
+            target: google_apis
+            gpu: off
+          - variant: 27
+            api: 33
+            arch: x86_64
+            target: default
+            gpu: swiftshader_indirect
+          - variant: 28
+            api: 33
+            arch: x86_64
+            target: default
+            gpu: off
+          - variant: 29
+            api: 33
+            arch: x86
+            target: google_apis
+            gpu: swiftshader_indirect
+          - variant: 30
+            api: 33
+            arch: x86
+            target: google_apis
+            gpu: off
+          - variant: 31
+            api: 33
+            arch: x86
+            target: default
+            gpu: swiftshader_indirect
+          - variant: 32
+            api: 33
+            arch: x86
+            target: default
+            gpu: off
+          - variant: 33
+            api: 34
+            arch: x86_64
+            target: google_apis
+            gpu: swiftshader_indirect
+          - variant: 34
+            api: 34
+            arch: x86_64
+            target: google_apis
+            gpu: off
+          - variant: 35
+            api: 34
+            arch: x86_64
+            target: default
+            gpu: swiftshader_indirect
+          - variant: 36
+            api: 34
+            arch: x86_64
+            target: default
+            gpu: off
+          - variant: 37
+            api: 34
+            arch: x86
+            target: google_apis
+            gpu: swiftshader_indirect
+          - variant: 38
+            api: 34
+            arch: x86
+            target: google_apis
+            gpu: off
+          - variant: 39
+            api: 34
+            arch: x86
+            target: default
+            gpu: swiftshader_indirect
+          - variant: 40
+            api: 34
+            arch: x86
+            target: default
+            gpu: off
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -44,9 +249,10 @@ jobs:
       - name: Install and prove X on Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 33
-          arch: x86_64
-          target: google_apis
+          api-level: ${{ matrix.api }}
+          arch: ${{ matrix.arch }}
+          target: ${{ matrix.target }}
+          emulator-options: -no-window -no-boot-anim -gpu ${{ matrix.gpu }} -no-snapshot
           script: |
             set -Eeuo pipefail
             chmod +x scripts/x_install_apkm_bundle.sh
@@ -65,7 +271,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: x-actual-proof-${{ github.run_id }}
+          name: x-actual-proof-${{ matrix.variant }}-${{ github.run_id }}
           path: evidence/
           retention-days: 2
           if-no-files-found: ignore
