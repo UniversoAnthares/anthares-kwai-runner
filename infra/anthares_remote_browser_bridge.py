@@ -13,6 +13,7 @@ from flask import Response, jsonify, make_response, request
 import anthares_remote_control_routes as _relay
 
 _COOKIE = "ara_control"
+_PENDING_COOKIE = "ara_pending"
 _CONTROL_SECRET = os.getenv("ARA_SHARED", "")
 _CLAIM_LOCK = threading.Lock()
 _CLAIMED = set()
@@ -82,11 +83,14 @@ def _wait(device, job_id, seconds):
 def register(app):
     @app.get("/v1/browser/challenge")
     def ara_browser_challenge():
-        return jsonify(ok=True, challenge_id=secrets.token_hex(16), expires_in=600)
+        challenge_id = secrets.token_hex(16)
+        resp = make_response(jsonify(ok=True, challenge_id=challenge_id, expires_in=600))
+        resp.set_cookie(_PENDING_COOKIE, challenge_id, max_age=600, httponly=True, secure=True, samesite="Strict", path="/v1/browser")
+        return resp
 
     @app.get("/v1/browser/claim")
     def ara_browser_claim():
-        challenge_id = request.args.get("challenge_id", "")
+        challenge_id = request.cookies.get(_PENDING_COOKIE, "")
         approved = os.getenv("ARA_BROWSER_APPROVED_CHALLENGE", "")
         with _CLAIM_LOCK:
             valid = bool(challenge_id and approved and challenge_id not in _CLAIMED and secrets.compare_digest(challenge_id, approved))
@@ -96,6 +100,7 @@ def register(app):
             return jsonify(ok=False, error="not_approved"), 403
         resp = make_response(jsonify(ok=True, session="created"))
         resp.set_cookie(_COOKIE, _mint_cookie(), max_age=30 * 24 * 3600, httponly=True, secure=True, samesite="Strict", path="/v1/browser")
+        resp.delete_cookie(_PENDING_COOKIE, path="/v1/browser")
         return resp
 
     @app.get("/v1/browser/status")
