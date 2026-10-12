@@ -34,11 +34,18 @@ def bounds(n):
 def editable(ns):
     return [n for n in ns if (n.get('class') or '').endswith('EditText') or n.get('editable')=='true']
 
+def foreground():
+    return adb('shell','dumpsys','window','windows',timeout=12)
+
+def in_kwai():
+    return 'com.kwai.video' in foreground().split('mCurrentFocus')[-1].split('\\n')[0] or 'com.kwai.video' in adb('shell','dumpsys','activity','activities',timeout=12).split('mResumedActivity')[-1].split('\\n')[0]
+
 def login_ready(ns):
+    if not in_kwai(): return False
     s=' '.join(text(n) for n in ns)
     ed=editable(ns)
     markers=('password','senha','email','e-mail','phone','telefone','mobile','celular','log in','login','sign in','entrar')
-    return bool(ed) or any(k in s for k in markers)
+    return bool(ed) and any(k in s for k in markers)
 
 def clickables(ns):
     out=[]
@@ -78,14 +85,19 @@ def open_app():
 open_app()
 seen=set()
 for step in range(MAX_STEPS):
+    if not in_kwai():
+        print(f'KWAI_EXTERNAL_SURFACE_RECOVERY={step}')
+        adb('shell','input','keyevent','KEYCODE_BACK');time.sleep(1)
+        if not in_kwai(): open_app()
     ns=dump()
+    ns=[n for n in ns if (n.get('package') or '').startswith('com.kwai.video')]
     if not ns:
         print(f'KWAI_EXPLORE_STEP={step} EMPTY_UI=1')
         adb('shell','input','keyevent','KEYCODE_BACK');time.sleep(1);continue
     if login_ready(ns):
         print(f'KWAI_EXPLORE_LOGIN_SURFACE=1 STEP={step} EDITS={len(editable(ns))}')
         raise SystemExit(0)
-    cand=clickables(ns)
+    cand=[n for n in clickables(ns) if any(k in text(n) for k in PRIMARY+SECONDARY) or 'com.kwai.video' in (n.get('resource-id') or '')]
     ranked=sorted(cand,key=lambda n:score(n,step),reverse=True)
     chosen=None
     for n in ranked:
@@ -93,12 +105,12 @@ for step in range(MAX_STEPS):
         if key not in seen:
             chosen=n;seen.add(key);break
     if chosen is None:
-        # Geometric fallback: 5 bottom-nav probes rotated by case.
+        # No blind taps into launcher or external apps. Recover Kwai first.
         xs=[108,324,540,756,972]
         x=xs[(CASE+step)%len(xs)]
         y=1770 - (CASE%3)*35
         print(f'KWAI_EXPLORE_FALLBACK_TAP={x},{y} STEP={step}')
-        adb('shell','input','tap',str(x),str(y));time.sleep(1.5)
+        if in_kwai(): adb('shell','input','tap',str(x),str(y));time.sleep(1.5)
         continue
     print(f'KWAI_EXPLORE_STEP={step} SCORE={score(chosen,step)} TARGET={text(chosen)[:120]!r} BOUNDS={chosen.get("bounds")}')
     tap_node(chosen)
