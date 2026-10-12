@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
-const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-x-render-worker-v3.onrender.com').replace(/\/$/, '');
+const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-remote-control.onrender.com').replace(/\/$/, '');
 const CONTROL_TOKEN = process.env.ARA_SHARED || '';
 const DEFAULT_DEVICE = process.env.ANTHARES_DEVICE_ID || 'DESKTOP-FTDK0HP';
 
