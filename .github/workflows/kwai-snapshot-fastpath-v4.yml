@@ -10,9 +10,9 @@ jobs:
   slim-build-test:
     strategy:
       fail-fast: false
-      max-parallel: 20
+      max-parallel: 30
       matrix:
-        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -213,11 +213,13 @@ jobs:
             set +e
             # Different diagnostic strategy: isolate clean app state, system WebView,
             # package identity and launch activity rather than random DNS retries.
-            MODE=$(( ${{ matrix.case }} % 4 ))
+            MODE=$(( ${{ matrix.case }} % 6 ))
             echo "STAGE4_DIAGNOSTIC_MODE=$MODE" | tee -a "$GITHUB_STEP_SUMMARY"
             if [ "$MODE" -eq 1 ]; then adb shell pm clear com.kwai.video || true; fi
             if [ "$MODE" -eq 2 ]; then adb shell am force-stop com.google.android.webview || true; fi
             if [ "$MODE" -eq 3 ]; then adb shell settings put global animator_duration_scale 0; adb shell settings put global transition_animation_scale 0; fi
+            if [ "$MODE" -eq 4 ]; then adb shell pm clear com.google.android.gms || true; fi
+            if [ "$MODE" -eq 5 ]; then adb shell settings put global private_dns_mode off; adb shell settings put global captive_portal_mode 0; fi
             adb shell am force-stop com.kwai.video || true
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
             sleep 12
@@ -225,6 +227,10 @@ jobs:
             adb shell dumpsys package com.kwai.video | grep -E 'versionName=|versionCode=|primaryCpuAbi=|targetSdk=|firstInstallTime=' | head -10 || true
             echo 'STAGE4_ACTIVITY_INFO_BEGIN'
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|com.kwai.video|com.yxcorp' | head -18 || true
+            echo 'STAGE4_GOOGLE_SERVICES_BEGIN'
+            adb shell pm list packages | grep -E 'com.google.android.gms|com.android.vending|com.google.android.webview' || true
+            adb shell getprop ro.build.version.sdk | sed 's/^/STAGE4_ANDROID_API=/'
+            adb shell getprop ro.product.cpu.abi | sed 's/^/STAGE4_CPU_ABI=/'
             echo 'STAGE4_WEBVIEW_BEGIN'
             adb shell cmd webviewupdate get-current-webview-package || true
             echo 'STAGE4_UI_BEGIN'
@@ -232,7 +238,7 @@ jobs:
             adb shell cat /sdcard/kwai-diag.xml | grep -o 'resource-id="[^"]*"' | sort -u | tail -30 || true
             echo 'STAGE4_APP_ERRORS_BEGIN'
             adb shell logcat -d -t 1200 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|com.kwai.video|com.yxcorp|gifshow|WebView|SSLHandshakeException' | tail -55 || true
-            echo 'STAGE4_DIAGNOSTIC=FRE_BOOTSTRAP_NOT_READY' | tee -a "$GITHUB_STEP_SUMMARY"
+            echo 'STAGE4_DIAGNOSTIC=ENVIRONMENT_COMPATIBILITY_UNVERIFIED' | tee -a "$GITHUB_STEP_SUMMARY"
             exit 25
             timeout 110 python3 tools/kwai_credential_login.py > /tmp/stage4-login.txt 2>&1
             LOGIN_RC=$?
