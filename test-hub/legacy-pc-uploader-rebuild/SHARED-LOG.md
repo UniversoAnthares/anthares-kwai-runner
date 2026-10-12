@@ -1107,3 +1107,13 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - This provides an on-disk integrity baseline from the prior validated package-vault process.
 - No package was installed and no publication action occurred.
 - Next: re-read canonical log, recompute all 11 APK SHA-256 values against the manifest; if all match, install the entire split set into VM3 with the historical `adb install-multiple -r` transaction and verify package state.
+
+## 2026-10-12 — Agent 3 — KWAI APK INSTALLED IN VM3
+- Canonical log was re-read immediately before this transaction.
+- Recomputed SHA-256 for all 11 APKs in `D:\AntharesWork\temp\kwai-vault-final2`; every file matched `MANIFEST.tsv` (`HASHES_OK=11`).
+- Vault metadata: version `13.8.30.646601`; ABI set `arm64-v8a,armeabi-v7a`; provenance `source=APKCombo`, `package=com.kwai.video`.
+- Installed the full historically validated split set into VM3 with the recovered `adb install-multiple -r` transaction. Android returned `Success`.
+- `pm path com.kwai.video` now returns base + all expected split APK paths.
+- `dumpsys package` reports `versionName=13.8.30.646601`, `versionCode=646601`, `primaryCpuAbi=arm64-v8a`.
+- Kwai package installation in historical VM3 = PROVEN. No app publishing action occurred.
+- Next: re-read canonical log, run the recovered publisher's safe `probe` mode against VM3 and inspect current Kwai onboarding/login/activity state. Do not run `publish-local` yet.
