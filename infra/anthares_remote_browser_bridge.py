@@ -14,8 +14,8 @@ import anthares_remote_control_routes as _relay
 
 _COOKIE = "ara_control"
 _CONTROL_SECRET = os.getenv("ARA_SHARED", "")
-_CHALLENGES = {}
-_CHALLENGE_LOCK = threading.Lock()
+_CLAIM_LOCK = threading.Lock()
+_CLAIMED = set()
 
 
 def _b64(data):
@@ -82,24 +82,16 @@ def _wait(device, job_id, seconds):
 def register(app):
     @app.get("/v1/browser/challenge")
     def ara_browser_challenge():
-        challenge_id = secrets.token_hex(16)
-        with _CHALLENGE_LOCK:
-            now = time.time()
-            for key, expiry in list(_CHALLENGES.items()):
-                if expiry <= now:
-                    _CHALLENGES.pop(key, None)
-            _CHALLENGES[challenge_id] = now + 600
-        return jsonify(ok=True, challenge_id=challenge_id, expires_in=600)
+        return jsonify(ok=True, challenge_id=secrets.token_hex(16), expires_in=600)
 
     @app.get("/v1/browser/claim")
     def ara_browser_claim():
         challenge_id = request.args.get("challenge_id", "")
         approved = os.getenv("ARA_BROWSER_APPROVED_CHALLENGE", "")
-        with _CHALLENGE_LOCK:
-            expiry = _CHALLENGES.get(challenge_id, 0)
-            valid = bool(challenge_id and approved and expiry > time.time() and secrets.compare_digest(challenge_id, approved))
+        with _CLAIM_LOCK:
+            valid = bool(challenge_id and approved and challenge_id not in _CLAIMED and secrets.compare_digest(challenge_id, approved))
             if valid:
-                _CHALLENGES.pop(challenge_id, None)
+                _CLAIMED.add(challenge_id)
         if not valid:
             return jsonify(ok=False, error="not_approved"), 403
         resp = make_response(jsonify(ok=True, session="created"))
