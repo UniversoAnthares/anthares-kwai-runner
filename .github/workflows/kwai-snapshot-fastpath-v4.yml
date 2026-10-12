@@ -1,4 +1,4 @@
-name: Kwai Web - 40 Real Login Modal Investigations
+name: Kwai Web - 40 Login Method Transition Tests
 on:
   workflow_dispatch:
   push:
@@ -52,6 +52,20 @@ jobs:
                 else:
                   print('LOGIN_TRIGGER_NOT_VISIBLE',selector,flush=True)
                 await page.wait_for_timeout(1800)
+                transition=['Use o telefone','Use Phone','Continue com o Google','Continue with Google','Escaneie o código QR','Scan the QR Code','Use o telefone','Use Phone','Continue com o Google','Continue with Google'][method]
+                print('LOGIN_METHOD_TARGET',transition,flush=True)
+                if method in (0,1,6,7):
+                  loc=page.get_by_text(re.compile('Use o telefone|Use Phone',re.I)).first
+                  if await loc.count() and await loc.is_visible():
+                    await loc.click(timeout=3500)
+                    await page.wait_for_timeout(1200)
+                    print('PHONE_METHOD_OPENED',flush=True)
+                elif method in (2,3,8,9):
+                  loc=page.get_by_text(re.compile('Continue com o Google|Continue with Google',re.I)).first
+                  if await loc.count() and await loc.is_visible():
+                    print('GOOGLE_METHOD_PRESENT_NO_EXTERNAL_AUTH_TRIGGER',flush=True)
+                else:
+                  print('QR_METHOD_PRESENT_NO_SCAN',flush=True)
                 state=await page.evaluate("""() => ({
                   dialogs:[...document.querySelectorAll('[role=dialog]')].map(x=>x.innerText.slice(0,1000)),
                   inputs:[...document.querySelectorAll('input')].map(x=>({type:x.type,placeholder:x.placeholder,autocomplete:x.autocomplete})),
@@ -62,6 +76,8 @@ jobs:
                 print('CASE',case,'PROFILE',profile,'METHOD',method,'STATE',json.dumps(state,ensure_ascii=False)[:6000],flush=True)
                 print('JS_ERRORS',json.dumps(errors[:5]),flush=True)
                 print('LOGIN_MODAL_VISIBLE',int(bool(state['dialogs'])),flush=True)
+                print('PHONE_FIELDS',json.dumps(state['inputs'],ensure_ascii=False),flush=True)
+                print('AUTH_FLOW_DISCOVERED',int(bool(state['dialogs'] or state['inputs'])),flush=True)
                 print('AUTHENTICATED=NOT_TESTED PUBLISHED=NOT_TESTED',flush=True)
                 with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
                   f.write(f'Case {case}: modal={bool(state["dialogs"])}, inputs={len(state["inputs"])}, buttons={len(state["buttons"])}; authentication NOT TESTED.\\n')
