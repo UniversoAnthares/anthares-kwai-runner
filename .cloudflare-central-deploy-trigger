@@ -13,3 +13,5 @@ redeploy-queue-fencing-v16-after-kwai-runtime-mismatch-20261010
 retry-with-scoped-cloudflare-account-20261010-1507
 
 kwai-private-session-vault-v1-oidc-security-gated-20261010
+
+legacy-pc-auth-vault-allowlist-macos-20261012-1753
