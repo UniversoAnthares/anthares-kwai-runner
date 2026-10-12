@@ -34,10 +34,10 @@ jobs:
           NET="anthares-browser-net-${C}"
           API_PORT=$((18080 + C))
           VNC_PORT=$((16080 + C))
-          PAGE_PORT=$((19080 + C))
           TOKEN="ci-control-${C}-g${GROUP}"
           PASS="ci-vnc-${C}-v${VARIANT}"
           MARKER="anthares-runtime-${C}-${GROUP}-${VARIANT}"
+          PERSIST_SECRET="persist-${C}-${GROUP}-${VARIANT}"
           INPUT_TEXT="typed-${C}-${VARIANT}"
           CLICK_TEXT="clicked-${C}-${GROUP}"
           TMP_PAGE="$(mktemp -d)"
@@ -49,7 +49,6 @@ jobs:
             <input id="qa-input" value="">
             <button id="qa-button" onclick="document.getElementById('qa-result').textContent='${CLICK_TEXT}'">click</button>
             <div id="qa-result">idle</div>
-            <script>localStorage.setItem('anthares_case','${MARKER}')</script>
           </body></html>
           HTML
 
@@ -64,8 +63,8 @@ jobs:
           docker build -q -t "$IMAGE" anthares-brouser
           docker volume create "$VOL" >/dev/null
           docker network create "$NET" >/dev/null
-          docker run -d --name "qa-page-${C}" --network "$NET" \
-            -v "$TMP_PAGE:/usr/share/nginx/html:ro" nginx:alpine >/dev/null
+          docker run -d --name "qa-page-${C}" --network "$NET" nginx:alpine >/dev/null
+          docker cp "$TMP_PAGE/index.html" "qa-page-${C}:/usr/share/nginx/html/index.html"
 
           start_container() {
             docker rm -f "$NAME" >/dev/null 2>&1 || true
@@ -132,7 +131,6 @@ jobs:
           assert d.get('session_claim') == 'not_verified', d
           PY
 
-          # CDP must not be externally published by Docker.
           ! docker port "$NAME" | grep -q '9222'
 
           PAGE=$(auth_get /page)
@@ -184,19 +182,19 @@ jobs:
           assert len(raw) > 1000, len(raw)
           PY
 
-          # Browser profile state must survive a complete container restart on the same /data volume.
-          BEFORE=$(auth_post /evaluate '{"expression":"localStorage.getItem(\"anthares_case\")","return_by_value":true}')
-          python3 - "$BEFORE" "$MARKER" <<'PY'
+          SETPERSIST=$(auth_post /evaluate "{\"expression\":\"localStorage.setItem('anthares_persist_secret','${PERSIST_SECRET}'); localStorage.getItem('anthares_persist_secret')\",\"return_by_value\":true}")
+          python3 - "$SETPERSIST" "$PERSIST_SECRET" <<'PY'
           import json,sys
           d=json.loads(sys.argv[1])
           assert d['result'].get('value') == sys.argv[2], d
           PY
+
           docker rm -f "$NAME" >/dev/null
           start_container
           wait_http "http://127.0.0.1:${API_PORT}/health"
           auth_post /wait '{"selector":"body","timeout_ms":5000,"visible":true}' >/dev/null
-          AFTER=$(auth_post /evaluate '{"expression":"localStorage.getItem(\"anthares_case\")","return_by_value":true}')
-          python3 - "$AFTER" "$MARKER" <<'PY'
+          AFTER=$(auth_post /evaluate '{"expression":"localStorage.getItem(\"anthares_persist_secret\")","return_by_value":true}')
+          python3 - "$AFTER" "$PERSIST_SECRET" <<'PY'
           import json,sys
           d=json.loads(sys.argv[1])
           assert d['result'].get('value') == sys.argv[2], d
