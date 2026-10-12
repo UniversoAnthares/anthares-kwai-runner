@@ -1,4 +1,4 @@
-name: Stage 4 ABI Crash Isolation 30
+name: Stage 4 ABI Verification 30
 on:
   workflow_dispatch:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 ABI isolation ${{ matrix.case }}"
+    name: "Stage4 ABI verification ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -70,4 +70,6 @@ jobs:
             adb shell uiautomator dump /sdcard/stage4-diag.xml || true
             adb exec-out cat /sdcard/stage4-diag.xml | grep -Eo 'package="[^"]+"' | sort -u || true
             adb logcat -d -v brief | grep -E "libcpu-info.so|SIGSEGV|Fatal signal" | tail -30 || true
-            echo "STAGE4_ABI_CASE_${CASE_ID}=COLLECTED"
+            if adb logcat -d -v brief | grep -q "ndk_translation_program_runner_binfmt_misc_arm64"; then echo "ARM64_TRANSLATION_CRASH=1"; exit 1; fi
+            adb shell pidof com.kwai.video >/dev/null
+            echo "KWAI_NATIVE_STABILITY=PASS"
