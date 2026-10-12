@@ -1,145 +1,72 @@
-name: X auth route 40 probes
+name: X OAuth1 40 authenticated read probes
 
 on:
   push:
     branches: [feature/x-native-live-android-bridge]
     paths:
       - .github/workflows/x-native-live-android.yml
+      - scripts/x_oauth1_read_probe.py
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  auth-probe:
+  oauth-read-probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 3
     strategy:
       fail-fast: false
       max-parallel: 40
       matrix:
-        route:
-          - { id: 01, user_secret: X_ANDROID_USERNAME, pass_secret: X_ANDROID_PASSWORD }
-          - { id: 02, user_secret: X_USERNAME, pass_secret: X_PASSWORD }
-          - { id: 03, user_secret: X_LOGIN, pass_secret: X_PASSWORD }
-          - { id: 04, user_secret: X_EMAIL, pass_secret: X_PASSWORD }
-          - { id: 05, user_secret: TWITTER_USERNAME, pass_secret: TWITTER_PASSWORD }
-          - { id: 06, user_secret: TWITTER_LOGIN, pass_secret: TWITTER_PASSWORD }
-          - { id: 07, user_secret: TWITTER_EMAIL, pass_secret: TWITTER_PASSWORD }
-          - { id: 08, user_secret: X_USER, pass_secret: X_PASS }
-          - { id: 09, user_secret: TWITTER_USER, pass_secret: TWITTER_PASS }
-          - { id: 10, user_secret: X_ACCOUNT, pass_secret: X_ACCOUNT_PASSWORD }
-          - { id: 11, user_secret: X_HANDLE, pass_secret: X_PASSWORD }
-          - { id: 12, user_secret: TWITTER_HANDLE, pass_secret: TWITTER_PASSWORD }
-          - { id: 13, user_secret: X_AUTH_USERNAME, pass_secret: X_AUTH_PASSWORD }
-          - { id: 14, user_secret: TWITTER_AUTH_USERNAME, pass_secret: TWITTER_AUTH_PASSWORD }
-          - { id: 15, user_secret: X_MOBILE_USERNAME, pass_secret: X_MOBILE_PASSWORD }
-          - { id: 16, user_secret: TWITTER_MOBILE_USERNAME, pass_secret: TWITTER_MOBILE_PASSWORD }
-          - { id: 17, user_secret: X_USER_NAME, pass_secret: X_USER_PASSWORD }
-          - { id: 18, user_secret: TWITTER_USER_NAME, pass_secret: TWITTER_USER_PASSWORD }
-          - { id: 19, user_secret: X_CREDENTIAL_USERNAME, pass_secret: X_CREDENTIAL_PASSWORD }
-          - { id: 20, user_secret: TWITTER_CREDENTIAL_USERNAME, pass_secret: TWITTER_CREDENTIAL_PASSWORD }
-        shell_mode: [direct, file]
+        probe:
+          - { id: 01, path: "/1.1/account/verify_credentials.json?skip_status=true&include_entities=false" }
+          - { id: 02, path: "/1.1/account/verify_credentials.json?skip_status=false&include_entities=false" }
+          - { id: 03, path: "/1.1/account/settings.json" }
+          - { id: 04, path: "/1.1/application/rate_limit_status.json?resources=account" }
+          - { id: 05, path: "/1.1/application/rate_limit_status.json?resources=users" }
+          - { id: 06, path: "/1.1/users/show.json?screen_name=lucasrosalem&include_entities=false" }
+          - { id: 07, path: "/2/users/me" }
+          - { id: 08, path: "/2/users/me?user.fields=id,name,username" }
+          - { id: 09, path: "/2/users/by/username/lucasrosalem" }
+          - { id: 10, path: "/2/users/by/username/lucasrosalem?user.fields=id,name,username" }
+        host: [api.twitter.com, api.x.com]
+        oauth_version: ["1", "0"]
 
     env:
-      X_USER_CANDIDATE: ${{ secrets[matrix.route.user_secret] }}
-      X_PASS_CANDIDATE: ${{ secrets[matrix.route.pass_secret] }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+      PROBE_ID: ${{ matrix.probe.id }}
+      PROBE_PATH_QUERY: ${{ matrix.probe.path }}
+      PROBE_HOST: ${{ matrix.host }}
+      PROBE_OAUTH_VERSION: ${{ matrix.oauth_version }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate execution path and inspect auth route
+      - name: Validate OAuth probe implementation
         shell: bash
-        env:
-          ROUTE_ID: ${{ matrix.route.id }}
-          USER_SECRET_NAME: ${{ matrix.route.user_secret }}
-          PASS_SECRET_NAME: ${{ matrix.route.pass_secret }}
-          SHELL_MODE: ${{ matrix.shell_mode }}
         run: |
           set -Eeuo pipefail
+          python3 -m py_compile scripts/x_oauth1_read_probe.py
           mkdir -p evidence
-          python3 -m py_compile scripts/x_android_login_ui.py scripts/x_android_live_ui.py
-          if [[ "$SHELL_MODE" == direct ]]; then
-            bash -lc 'set -Eeuo pipefail; printf "BASH_DIRECT_OK\n"'
-          else
-            cat > /tmp/bash-probe.sh <<'EOF'
-          #!/usr/bin/env bash
-          set -Eeuo pipefail
-          printf 'BASH_FILE_OK\n'
-          EOF
-            chmod +x /tmp/bash-probe.sh
-            /tmp/bash-probe.sh
-          fi
+          printf 'probe=%s\nhost=%s\noauth_version=%s\npath=%s\n' \
+            "$PROBE_ID" "$PROBE_HOST" "$PROBE_OAUTH_VERSION" "$PROBE_PATH_QUERY" \
+            > evidence/context.txt
 
-          state=ABSENT
-          [[ -n "${X_USER_CANDIDATE:-}" && -n "${X_PASS_CANDIDATE:-}" ]] && state=PRESENT
-          if [[ -n "${X_USER_CANDIDATE:-}" && -z "${X_PASS_CANDIDATE:-}" ]] || [[ -z "${X_USER_CANDIDATE:-}" && -n "${X_PASS_CANDIDATE:-}" ]]; then
-            state=PARTIAL
-          fi
-          printf 'route=%s shell=%s user_secret=%s pass_secret=%s state=%s\n' "$ROUTE_ID" "$SHELL_MODE" "$USER_SECRET_NAME" "$PASS_SECRET_NAME" "$state" | tee evidence/route.txt
-          echo "AUTH_ROUTE_STATE=$state" >> "$GITHUB_ENV"
-
-      - name: Enable KVM for real candidate
-        if: ${{ env.AUTH_ROUTE_STATE == 'PRESENT' && matrix.shell_mode == 'direct' }}
+      - name: Make authenticated read-only X API request
         shell: bash
         run: |
-          set -Eeuo pipefail
-          if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
+          set -o pipefail
+          python3 scripts/x_oauth1_read_probe.py 2>&1 | tee evidence/result.txt
 
-      - name: Acquire and verify official X Android splits
-        if: ${{ env.AUTH_ROUTE_STATE == 'PRESENT' && matrix.shell_mode == 'direct' }}
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          mkdir -p evidence/prep /tmp/apkeep-out /tmp/xout
-          timeout 150 docker run --rm -v /tmp/apkeep-out:/output ghcr.io/efforg/apkeep:stable \
-            -a com.twitter.android -d apk-pure \
-            -o 'acknowledge_dangers=true,arch=x86_64' /output \
-            > evidence/prep/apkeep.txt 2>&1
-          find /tmp/apkeep-out -type f -name '*.apk' -exec cp '{}' /tmp/xout/ \;
-          while IFS= read -r -d '' b; do unzip -qo "$b" -d /tmp/xout; done < <(find /tmp/apkeep-out -type f \( -name '*.xapk' -o -name '*.apkm' \) -print0)
-          mapfile -t APKS < <(find /tmp/xout -type f -name '*.apk' -print | sort)
-          ((${#APKS[@]} > 0)) || { echo NO_APK_DOWNLOADED | tee evidence/prep/verdict.txt; exit 70; }
-          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
-          BT="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
-          AAPT="$BT/aapt"; APKSIGNER="$BT/apksigner"
-          OFFICIAL_SHA256=0fd9a0cfb07b65950997b4eaebdc53931392391aa406538a3b04073bc2ce2fe9
-          for apk in "${APKS[@]}"; do
-            base="$(basename "$apk")"
-            "$AAPT" dump badging "$apk" > "evidence/prep/badging-$base.txt" 2>&1
-            pkg="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" "evidence/prep/badging-$base.txt" | head -1)"
-            [[ "$pkg" == com.twitter.android ]] || exit 71
-            "$APKSIGNER" verify --verbose --print-certs "$apk" > "evidence/prep/apksigner-$base.txt" 2>&1
-            grep -Eqi "certificate SHA-256 digest:[[:space:]]*$OFFICIAL_SHA256([[:space:]]|$)" "evidence/prep/apksigner-$base.txt" || exit 73
-          done
-          echo VERIFIED_OFFICIAL_X_APK | tee evidence/prep/verdict.txt
-
-      - name: Real Android authentication and native Live preview
-        if: ${{ env.AUTH_ROUTE_STATE == 'PRESENT' && matrix.shell_mode == 'direct' }}
-        uses: reactivecircus/android-emulator-runner@v2
-        env:
-          X_ANDROID_USERNAME: ${{ env.X_USER_CANDIDATE }}
-          X_ANDROID_PASSWORD: ${{ env.X_PASS_CANDIDATE }}
-          X_ANDROID_CHALLENGE_ID: ${{ secrets.X_ANDROID_CHALLENGE_ID }}
-          X_ANDROID_OTP: ${{ secrets.X_ANDROID_OTP }}
-          EVIDENCE_DIR: evidence/login
-          MATRIX_VARIANT: ${{ matrix.route.id }}
-          ALLOW_PUBLIC_LIVE: "0"
-        with:
-          api-level: 30
-          arch: x86_64
-          target: google_apis
-          cores: 2
-          emulator-boot-timeout: 240
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
-          script: bash scripts/x_real_install_probe_fast.sh 'auth-${{ matrix.route.id }}' && EVIDENCE_DIR=evidence/login python3 scripts/x_android_login_ui.py && EVIDENCE_DIR=evidence/live MATRIX_VARIANT='${{ matrix.route.id }}' ALLOW_PUBLIC_LIVE=0 python3 scripts/x_android_live_ui.py x-preview
-
-      - name: Save evidence
+      - name: Save sanitized evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: x-auth-route-${{ matrix.route.id }}-${{ matrix.shell_mode }}-${{ github.run_id }}
+          name: x-oauth-read-${{ matrix.probe.id }}-${{ matrix.host }}-v${{ matrix.oauth_version }}-${{ github.run_id }}
           path: evidence/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 3
