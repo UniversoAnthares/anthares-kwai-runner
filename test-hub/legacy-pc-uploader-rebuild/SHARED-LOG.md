@@ -1042,3 +1042,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - No MEmu VM/process was running at the verification instant; this step installed only the runtime and did not publish anything.
 - This closes the prior primary Kwai blocker: MEmu runtime installation = PROVEN/RESTORED.
 - Next: re-read canonical log, inventory MEmu VMs with memuc, identify/create the isolated target VM (historically VM index 3), then validate ADB/package state before any Kwai publication action.
+
+## 2026-10-12 — Agent 3 — Kwai MEmu VM inventory after install
+- Canonical log was re-read immediately before this investigation.
+- `memuc.exe listvms` now works and reports one default VM: `0,MEmu,657162,1,11812` (VM index 0, running at the time of inspection).
+- `memuc.exe` help confirms the required historical control surface is present: create/clone/start/stop/listvms, guest app install/start, file upload/download, and `adb` passthrough.
+- This proves the installed runtime exposes the exact command families expected by the recovered Kwai publisher.
+- The historical reconstructed daemon still targets VM index 3, so runtime alignment is not complete yet.
+- No app was installed and no publication action occurred.
+- Next: re-read canonical log, inspect VM0 Android version/package state and exact memuc clone/create syntax, then create an isolated VM3 compatible with the historical daemon.
