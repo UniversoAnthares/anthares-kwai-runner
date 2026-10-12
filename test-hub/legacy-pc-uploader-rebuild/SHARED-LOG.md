@@ -55,3 +55,13 @@
 - Therefore the immediate MeshCentral launch is still not proven to have started the supervisor; do not treat the new transport as live yet.
 - Construction/persistence remain intact. The queued status request will be consumed automatically when the Startup launcher starts the supervisor at the next Windows user logon.
 - No publication occurred.
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — executor bootstrap reached live process; clean-clone pivot
+- Canonical log was re-read before each executor bootstrap step.
+- MeshAgent console `eval` was proven as an immediate fourth execution route; it successfully created a test file and then launched `anthares_executor_supervisor.py` without reboot/user action.
+- Supervisor became live: pid 23980; it launched executor pid 26220 and reported `executor health after restart=True`.
+- Executor safety check then correctly blocked syncing because the shared reconstruction clone `D:\AntharesWork\anthares-pc-legacy` has tracked local changes. Heartbeat error: `RuntimeError: tracked files modified locally; executor refuses destructive sync`.
+- Decision: DO NOT weaken the dirty-tree guard and DO NOT reset the reconstruction clone. The permanent executor must use a dedicated clean clone.
+- First local clone attempt from `anthares-pc-legacy` was rejected by Git dubious-ownership protection because MeshAgent runs as SYSTEM; no safe.directory exception was added.
+- Direct GitHub clone was then attempted synchronously inside MeshAgent console and appears to have blocked the MeshAgent core/file tunnel. Windows itself remains up; no reboot will be performed.
+- Next: recover only the MeshAgent core, then create/start the dedicated executor under the interactive Lucas user context (so normal Git credentials/ownership apply), update Startup to the dedicated path, and prove the queued `status` round-trip. No social publication occurred.
