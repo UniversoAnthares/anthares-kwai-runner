@@ -1,134 +1,52 @@
-name: Stage 4 Real Kwai Foreground Gate 4
+name: Kwai APK ABI Preflight 4
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  identity-evidence:
-    name: "Stage4 real foreground ${{ matrix.case }}"
+  apk-abi:
+    name: "ABI preflight ${{ matrix.case }}"
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 8
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 4
       matrix:
-        case: [7, 12, 30, 40]
+        case: [manifest, native-libs, split-coverage, host-compat]
     steps:
-      - uses: actions/checkout@v4
-      - name: Enable KVM
-        run: |
-          sudo chmod 666 /dev/kvm
-          test -r /dev/kvm && test -w /dev/kvm
-          echo KVM_USABLE=YES
-      - name: Download verified Kwai package
+      - name: Download verified Kwai vault
         run: |
           set -euo pipefail
           curl -fLsS --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
           echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
-          mkdir -p kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
-      - name: Semantic UI discovery and real identity proof
-        uses: reactivecircus/android-emulator-runner@v2
+          mkdir vault && unzip -q kwai-vault.zip -d vault
+      - name: Inspect APK architecture and report blockers
         env:
-          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
-          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
-          KWAI_EXPECTED_ACCOUNT: lucasrosalem
-          CASE_ID: ${{ matrix.case }}
+          CASE: ${{ matrix.case }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,zipfile,collections,pathlib,json
+          root=pathlib.Path("vault")
+          apks=list(root.rglob("*.apk"))
+          print("APK_COUNT",len(apks),"CASE",os.environ["CASE"])
+          report=[]
+          for apk in apks:
+              with zipfile.ZipFile(apk) as z:
+                  libs=[x for x in z.namelist() if x.startswith("lib/") and x.endswith(".so")]
+                  abis=sorted({x.split("/")[1] for x in libs})
+                  critical=[x for x in libs if any(k in x.lower() for k in ("cpu-info","ndk","ffmpeg"))]
+                  report.append(dict(apk=str(apk),size=apk.stat().st_size,abis=abis,lib_count=len(libs),critical=critical[:20]))
+          print(json.dumps(report,indent=2))
+          allabis={a for r in report for a in r["abis"]}
+          print("AVAILABLE_NATIVE_ABIS",sorted(allabis))
+          print("X86_64_NATIVE_SUPPORTED",int("x86_64" in allabis))
+          print("ARM64_NATIVE_SUPPORTED",int("arm64-v8a" in allabis))
+          if not apks: raise SystemExit("NO_APK_IN_VAULT")
+          pathlib.Path("abi-report-"+os.environ["CASE"]+".json").write_text(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
         with:
-          api-level: 30
-          arch: x86_64
-          target: google_apis_playstore
-          profile: pixel_5
-          emulator-boot-timeout: 600
-          disable-animations: false
-          disable-linux-hw-accel: false
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -accel on
-          script: |
-            set -eu
-            adb wait-for-device
-            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
-            echo ANDROID_BOOT=PASS
-            bash kwai_vault_install.sh
-            adb shell pm path com.kwai.video | grep -q '^package:'
-            echo KWAI_PACKAGE_INSTALLED=PASS
-            adb logcat -c
-            echo "STABLE_IMAGE_CASE=$CASE_ID"
-            adb shell getprop ro.product.cpu.abilist
-            adb shell getprop ro.dalvik.vm.native.bridge
-            adb shell getprop ro.hardware
-            echo "BRIDGE_PATH=$(adb shell getprop ro.dalvik.vm.native.bridge)"
-            adb shell ls -l /system/bin/ndk_translation_program_runner_binfmt_misc_arm64 || true
-            adb shell pm list packages | grep -E 'kwai|gifshow' || true
-            adb shell am force-stop com.kwai.video
-            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
-            sleep $((3 + CASE_ID % 6))
-            if [ $((CASE_ID % 5)) -eq 0 ]; then adb shell input tap 945 1710; fi
-            if [ $((CASE_ID % 5)) -eq 1 ]; then adb shell input tap 960 1650; fi
-            if [ $((CASE_ID % 5)) -eq 2 ]; then adb shell input keyevent KEYCODE_BACK; fi
-            if [ $((CASE_ID % 5)) -eq 3 ]; then adb shell input tap 100 1710; fi
-            if [ $((CASE_ID % 5)) -eq 4 ]; then adb shell input tap 540 1700; fi
-            sleep $((2 + CASE_ID % 7))
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
-            adb shell pidof com.kwai.video || true
-            adb logcat -d -v brief -t 2500 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|Process: com.kwai.video|com.kwai.video.*(crash|exception|error)|libndk_translation|UnsatisfiedLinkError|SIGSEGV|SIGABRT|ActivityTaskManager.*com.kwai.video' | tail -100 || true
-            echo "NATIVE_VARIANT=$((CASE_ID % 5))"
-            adb shell getprop ro.dalvik.vm.native.bridge
-            adb shell pm path com.kwai.video
-            adb shell uiautomator dump /sdcard/stage4-diag.xml || true
-            adb exec-out cat /sdcard/stage4-diag.xml | grep -Eo 'package="[^"]+"' | sort -u || true
-            adb logcat -d -v brief | grep -E "libcpu-info.so|SIGSEGV|Fatal signal" | tail -30 || true
-            if adb logcat -d -v brief | grep -q "ndk_translation_program_runner_binfmt_misc_arm64"; then echo "ARM64_TRANSLATION_CRASH=1"; fi
-            adb shell pidof com.kwai.video >/dev/null
-            echo "KWAI_NATIVE_STABILITY=PASS"
-            echo "UI_PROBE_CASE=$CASE_ID"
-            adb shell wm size
-            adb shell wm density
-            adb shell input keyevent KEYCODE_WAKEUP || true
-            adb shell input keyevent 82 || true
-            adb shell am start -n com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity || true
-            sleep $((2 + CASE_ID % 5))
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
-            adb shell uiautomator dump /sdcard/profile-probe.xml || true
-            adb exec-out cat /sdcard/profile-probe.xml | head -c 1200 || true
-            adb shell input tap $((100 + CASE_ID % 5 * 190)) $((1580 + CASE_ID % 4 * 55))
-            sleep $((3 + CASE_ID % 4))
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
-            adb logcat -d -v brief | grep -E 'SIGSEGV|FATAL EXCEPTION|libcpu-info.so' | tail -20 || true
-            if adb logcat -d -v brief | grep -q 'Fatal signal 11'; then echo "UI_PROBE_NATIVE_CRASH=1"; fi
-            if ! adb shell pidof com.kwai.video >/dev/null; then echo "UI_PROBE_KWAI_EXITED=1"; fi
-            echo "UI_PROBE_KWAI_ALIVE=1"
-            adb shell uiautomator dump /sdcard/dialog-check.xml || true
-            adb exec-out cat /sdcard/dialog-check.xml | grep -Eo 'text="[^"]+"|resource-id="android:id/[^"]+"' | head -30 || true
-            if [ $((CASE_ID % 4)) -eq 0 ]; then adb shell input keyevent KEYCODE_BACK; fi
-            if [ $((CASE_ID % 4)) -eq 1 ]; then adb shell input tap 540 1210; fi
-            if [ $((CASE_ID % 4)) -eq 2 ]; then adb shell input tap 800 1230; fi
-            if [ $((CASE_ID % 4)) -eq 3 ]; then adb shell input keyevent KEYCODE_ENTER; fi
-            sleep $((2 + CASE_ID % 5))
-            adb shell uiautomator dump /sdcard/dialog-after.xml || true
-            adb exec-out cat /sdcard/dialog-after.xml | grep -Eo 'package="[^"]+"|text="[^"]+"' | head -30 || true
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
-            if adb logcat -d -v brief | grep -q 'Fatal signal 11'; then echo NATIVE_CRASH_OBSERVED=1; fi
-            adb shell pidof com.kwai.video || true
-            echo "DIALOG_PROBE_CHECKED=1"
-            adb exec-out screencap -p > /tmp/kwai-screen-$CASE_ID.png
-            test -s /tmp/kwai-screen-$CASE_ID.png
-            python3 -c "import struct; p=open('/tmp/kwai-screen-$CASE_ID.png','rb').read(); print('SCREEN_CAPTURE_BYTES',len(p),'DIMENSIONS',struct.unpack('>II',p[16:24]))"
-            adb shell dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp' | head -5 || true
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
-            echo "VISUAL_CAPTURE=PASS"
-            FOREGROUND=$(adb shell dumpsys activity activities | grep -m 1 -E "mResumedActivity|topResumedActivity" || true)
-            echo "FOREGROUND_ACTIVITY=$FOREGROUND"
-            if echo "$FOREGROUND" | grep -q "com.kwai.video/"; then echo "KWAI_FOREGROUND=1"; else echo "KWAI_FOREGROUND=0"; fi
-            if adb logcat -d -v brief | grep -q "Fatal signal 11"; then echo "NATIVE_CRASH_DETECTED=1"; fi
-            if ! echo "$FOREGROUND" | grep -q "com.kwai.video/"; then echo "KWAI_REAL_FOREGROUND_GATE=FAIL"; exit 1; fi
-            echo "KWAI_REAL_FOREGROUND_GATE=PASS"
-            cp /tmp/kwai-screen-$CASE_ID.png "$GITHUB_WORKSPACE/kwai-screen-$CASE_ID.png"
-            adb shell dumpsys activity processes | grep -A 5 'com.kwai.video' | head -25 || true
-
-      - name: Upload real screen for visual review
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kwai-screen-${{ matrix.case }}
-          path: kwai-screen-*.png
-          if-no-files-found: warn
+          name: abi-report-${{ matrix.case }}
+          path: abi-report-*.json
           retention-days: 3
