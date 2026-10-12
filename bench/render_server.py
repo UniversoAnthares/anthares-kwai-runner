@@ -8,12 +8,16 @@ STORE=pathlib.Path('/tmp/anthares-xbench-media'); STORE.mkdir(parents=True,exist
 MAX_UPLOAD=50_000_000
 
 
+def probe(path: pathlib.Path):
+    p=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-show_entries','stream=width,height:format=duration','-of','json',str(path)],capture_output=True,text=True,check=True,timeout=30)
+    return json.loads(p.stdout or '{}')
+
+
 def transcode_webm(tmp: pathlib.Path, out: pathlib.Path):
     if tmp.stat().st_size < 100_000 or tmp.stat().st_size > MAX_UPLOAD:
         raise RuntimeError('invalid source size')
     subprocess.run(['ffmpeg','-y','-hide_banner','-loglevel','error','-i',str(tmp),'-vf','scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p','-c:v','libx264','-preset','veryfast','-crf','20','-c:a','aac','-b:a','160k','-movflags','+faststart',str(out)],check=True,timeout=600)
-    probe=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-show_entries','stream=width,height:format=duration','-of','json',str(out)],capture_output=True,text=True,check=True,timeout=30)
-    return json.loads(probe.stdout or '{}')
+    return probe(out)
 
 class UploadPage(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -33,6 +37,25 @@ class App(BaseHTTPRequestHandler):
             ident=uuid.uuid4().hex
             tmp=STORE/(ident+'.webm'); out=STORE/(ident+'.mp4')
             length=int(self.headers.get('content-length') or 0)
+            if self.path == '/concat':
+                body=json.loads(self.rfile.read(length) or b'{}')
+                urls=list(body.get('media_urls') or [])
+                if len(urls) < 2 or len(urls) > 4:
+                    raise RuntimeError('2-4 media_urls required')
+                parts=[]
+                for u in urls:
+                    name=pathlib.Path(urllib.parse.urlparse(str(u)).path).name
+                    p=STORE/name
+                    if not p.exists() or p.suffix.lower()!='.mp4':
+                        raise RuntimeError('concat part unavailable')
+                    parts.append(p)
+                manifest=STORE/(ident+'.txt')
+                manifest.write_text(''.join("file '"+str(p).replace("'","'\\''")+"'\n" for p in parts),encoding='utf-8')
+                subprocess.run(['ffmpeg','-y','-hide_banner','-loglevel','error','-f','concat','-safe','0','-i',str(manifest),'-c','copy','-movflags','+faststart',str(out)],check=True,timeout=300)
+                meta=probe(out)
+                host=self.headers.get('host') or ''
+                self.reply({'ok':True,'media_url':f'https://{host}/media/{ident}.mp4','bytes':out.stat().st_size,'probe':meta,'parts':len(parts)})
+                return
             if self.path == '/transcode-upload':
                 if length < 100_000 or length > MAX_UPLOAD:
                     raise RuntimeError('invalid upload size')
@@ -49,7 +72,7 @@ class App(BaseHTTPRequestHandler):
                 src=str(body.get('source_url') or '')
                 if not src.startswith('https://'):
                     raise RuntimeError('https source_url required')
-                req=urllib.request.Request(src,headers={'User-Agent':'Mozilla/5.0'})
+                req=urllib.request.Request(src,headers={'User-Agent':'Mozilla/5.0','Referer':'https://anthares.us/'})
                 with urllib.request.urlopen(req,timeout=120) as r, tmp.open('wb') as f:
                     while True:
                         chunk=r.read(1024*1024)
@@ -64,7 +87,7 @@ class App(BaseHTTPRequestHandler):
             self.reply({'ok':False,'error':f'{type(exc).__name__}: {exc}'},status=500)
     def do_GET(self):
         if self.path.startswith('/health'):
-            self.reply({'ok':True,'ffmpeg':True,'transcode_upload':True}); return
+            self.reply({'ok':True,'ffmpeg':True,'transcode_upload':True,'concat':True}); return
         if self.path.startswith('/media/') and self.path.endswith('.mp4'):
             name=pathlib.Path(urllib.parse.urlparse(self.path).path).name
             path=STORE/name
