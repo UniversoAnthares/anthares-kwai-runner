@@ -1,19 +1,17 @@
-name: Kwai ARM64 Android Runtime Probe
+name: Kwai ARM64 Android Boot Attempt
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  sdk-arm64-probe:
-    name: "Android ARM64 SDK probe"
+  native-android-boot:
+    name: "ARM64 Android boot without KVM"
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 12
+    timeout-minutes: 18
     steps:
-      - name: Install Android commandline tools
+      - name: Install Android SDK tooling
         run: |
           set -euo pipefail
-          echo "ARCH=$(uname -m)"
-          test "$(uname -m)" = aarch64
           sudo apt-get update -qq
           sudo apt-get install -y -qq unzip curl default-jre-headless >/dev/null
           mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
@@ -22,27 +20,42 @@ jobs:
           cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
           echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
           echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-      - name: Check ARM64 Android image and emulator binaries
+          echo "$HOME/android-sdk/platform-tools" >> "$GITHUB_PATH"
+          echo "$HOME/android-sdk/emulator" >> "$GITHUB_PATH"
+      - name: Install ARM64 image and emulator
+        timeout-minutes: 9
         run: |
           set -euo pipefail
-          echo "ANDROID_HOME=$ANDROID_HOME"
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager --list | grep -E 'system-images;android-(30|33|34|35);(default|google_apis);arm64-v8a' | head -20 || true
-          echo "SDK_ARM64_DISCOVERY=PASS"
-          echo "KVM=$(test -e /dev/kvm && echo present || echo absent)"
-          echo "ANDROID_RUNTIME_READY=UNPROVEN"
-  qemu-host-probe:
-    name: "ARM64 QEMU host probe"
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 8
-    steps:
-      - name: Detect virtualization capabilities
+          sdkmanager --install "platform-tools" "emulator" "system-images;android-30;default;arm64-v8a"
+          echo "EMULATOR_FILE=$(file "$ANDROID_HOME/emulator/emulator")"
+          file "$ANDROID_HOME/emulator/qemu/linux-aarch64/qemu-system-aarch64" || true
+          "$ANDROID_HOME/emulator/emulator" -version || true
+          echo "ANDROID_ARM64_IMAGE_INSTALLED=1"
+      - name: Attempt native ARM64 Android boot
+        timeout-minutes: 6
         run: |
-          set -euo pipefail
-          echo "ARCH=$(uname -m)"
-          test "$(uname -m)" = aarch64
-          command -v qemu-system-aarch64 || true
-          ls -l /dev/kvm /dev/vhost-vsock /dev/net/tun 2>&1 || true
-          grep -E '^(Features|CPU architecture)' /proc/cpuinfo | head -10 || true
-          echo "KVM_PRESENT=$(test -e /dev/kvm && echo yes || echo no)"
-          echo "QEMU_PROBE_COMPLETE=1"
+          set -u
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n kwai_arm64 -k "system-images;android-30;default;arm64-v8a" --force
+          set +e
+          timeout 210 "$ANDROID_HOME/emulator/emulator" -avd kwai_arm64 -no-window -no-audio -no-snapshot -no-boot-anim -no-accel -gpu swiftshader_indirect -verbose > /tmp/emulator.log 2>&1 &
+          EMUPID=$!
+          for i in $(seq 1 35); do
+            BOOT=$("$ANDROID_HOME/platform-tools/adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$BOOT" = 1 ]; then echo "ANDROID_ARM64_BOOT=PASS"; break; fi
+            if ! kill -0 "$EMUPID" 2>/dev/null; then echo "EMULATOR_EXITED=1"; break; fi
+            sleep 5
+          done
+          "$ANDROID_HOME/platform-tools/adb" devices -l || true
+          "$ANDROID_HOME/platform-tools/adb" shell getprop ro.product.cpu.abilist || true
+          echo "EMULATOR_LOG_TAIL:"
+          tail -100 /tmp/emulator.log || true
+          if [ "${BOOT:-}" != 1 ]; then echo "ANDROID_ARM64_BOOT=FAIL"; exit 1; fi
+      - name: Upload emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-emulator-boot-log
+          path: /tmp/emulator.log
+          if-no-files-found: warn
+          retention-days: 3
