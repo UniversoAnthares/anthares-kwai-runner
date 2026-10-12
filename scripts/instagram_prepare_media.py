@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import hashlib
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -277,6 +278,29 @@ def prepare() -> dict[str, Any]:
             probe_ledger.setdefault("published", {})[key] = {"source_url": candidate_url}
             print(f"INSTAGRAM_SOURCE_SKIP id={candidate.get('id')} error={type(exc).__name__}: {exc}", flush=True)
             source.unlink(missing_ok=True)
+    if row is None:
+        # Independent upstream extraction: a remote YouTube archive, not a pre-cut WordPress file.
+        youtube_url = os.getenv("INSTAGRAM_YOUTUBE_SOURCE_URL", "").strip()
+        if youtube_url:
+            import urllib.parse
+            parsed = urllib.parse.urlparse(youtube_url)
+            if parsed.hostname not in {"youtube.com", "www.youtube.com", "youtu.be", "m.youtube.com"}:
+                raise RuntimeError("YouTube source host not allowed")
+            start = max(0, int(os.getenv("INSTAGRAM_YOUTUBE_START_SECONDS", "0") or 0))
+            length = max(35, min(180, int(os.getenv("INSTAGRAM_YOUTUBE_CLIP_SECONDS", "90") or 90)))
+            key = "youtube:" + hashlib.sha256((youtube_url + ":" + str(start) + ":" + str(length)).encode()).hexdigest()[:20]
+            if key not in ledger.get("published", {}):
+                if not shutil.which("yt-dlp"):
+                    raise RuntimeError("yt-dlp required for direct YouTube extraction")
+                template = str(WORK_DIR / "youtube-source.%(ext)s")
+                cmd = ["yt-dlp", "--no-playlist", "--download-sections", f"*{start}-{start+length}", "--force-keyframes-at-cuts", "--merge-output-format", "mp4", "-f", "bv*+ba/b", "-o", template, youtube_url]
+                subprocess.run(cmd, check=True, timeout=1100)
+                outputs = sorted(WORK_DIR.glob("youtube-source.*"), key=lambda p: p.stat().st_size, reverse=True)
+                if not outputs:
+                    raise RuntimeError("YouTube extraction produced no video")
+                shutil.move(str(outputs[0]), str(source))
+                row = {"id": key, "title": {"rendered": os.getenv("INSTAGRAM_YOUTUBE_TITLE", "Universo Anthares — trecho da live")}, "source_url": youtube_url}
+                source_url = youtube_url
     if row is None:
         plan = {"ready": False, "reason": "no_reachable_unpublished_owned_media"}
         PLAN_PATH.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
