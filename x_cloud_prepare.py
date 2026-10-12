@@ -13,6 +13,7 @@ from pathlib import Path
 CHANNEL_URL = os.getenv("X_SOURCE_CHANNEL", "https://www.youtube.com/@UniversoAnthares/streams")
 SCAN_START = int(os.getenv("X_SCAN_START", "600"))
 SCAN_SECONDS = int(os.getenv("X_SCAN_SECONDS", "300"))
+MIN_SOURCE_SECONDS = int(os.getenv("X_MIN_SOURCE_SECONDS", "1200"))
 WORK = Path(os.getenv("X_CLOUD_WORK", "x-cloud-work"))
 MODEL = os.getenv("X_WHISPER_MODEL", "base")
 INVIDIOUS_BASES = tuple(
@@ -35,6 +36,7 @@ def discover_source() -> dict:
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(CHANNEL_URL, download=False)
     entries = list((info or {}).get("entries") or [])
+    required_duration = max(MIN_SOURCE_SECONDS, SCAN_START + 120)
     for e in entries:
         if not isinstance(e, dict):
             continue
@@ -45,15 +47,16 @@ def discover_source() -> dict:
         duration = int(e.get("duration") or 0)
         if live in {"is_live", "is_upcoming"}:
             continue
-        if duration and duration < SCAN_START + 120:
+        if not duration or duration < required_duration:
             continue
         return {
             "video_id": vid,
             "source_url": f"https://www.youtube.com/watch?v={vid}",
             "title": str(e.get("title") or vid),
             "duration": duration,
+            "source_class": "long_form",
         }
-    raise RuntimeError("Nenhuma live concluída adequada encontrada no canal.")
+    raise RuntimeError(f"Nenhum vídeo longo concluído adequado encontrado no canal (mínimo {required_duration}s).")
 
 
 def _video_id(source_url: str) -> str:
@@ -89,7 +92,6 @@ def _fetch_invidious_streams(video_id: str) -> tuple[str, str, str]:
                 adaptive = [x for x in (data.get("adaptiveFormats") or []) if isinstance(x, dict) and x.get("url")]
                 videos = [x for x in adaptive if str(x.get("type") or x.get("mimeType") or "").startswith("video/")]
                 audios = [x for x in adaptive if str(x.get("type") or x.get("mimeType") or "").startswith("audio/")]
-                # Some instances expose codec/type strings differently. Fall back to dimensions/bitrate.
                 if not videos:
                     videos = [x for x in adaptive if _format_height(x) > 0 and str(x.get("audioQuality") or "") == ""]
                 if not audios:
@@ -154,6 +156,25 @@ def download_scan(source_url: str, out: Path) -> None:
         raise RuntimeError("Trecho de varredura não foi baixado corretamente.")
 
 
+def probe_video(path: Path) -> dict:
+    p = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", str(path)],
+        capture_output=True, text=True, check=True, timeout=30,
+    )
+    streams = (json.loads(p.stdout or "{}").get("streams") or [])
+    if not streams:
+        raise RuntimeError("Origem sem stream de vídeo.")
+    width = int(streams[0].get("width") or 0)
+    height = int(streams[0].get("height") or 0)
+    if width <= 0 or height <= 0:
+        raise RuntimeError("Dimensões de vídeo inválidas.")
+    ratio = width / height
+    target = 16 / 9
+    if width <= height or abs(ratio - target) > 0.04:
+        raise RuntimeError(f"Origem rejeitada para X: exige horizontal 16:9; recebido {width}x{height} ({ratio:.4f}).")
+    return {"width": width, "height": height, "aspect_ratio": round(ratio, 4), "format": "16:9_horizontal"}
+
+
 def transcribe_words(video: Path) -> list[dict]:
     from faster_whisper import WhisperModel
     model = WhisperModel(MODEL, device="cpu", compute_type="int8")
@@ -183,6 +204,7 @@ def main() -> int:
     source = discover_source()
     scan = WORK / "scan.mp4"
     download_scan(source["source_url"], scan)
+    source["video"] = probe_video(scan)
     words = transcribe_words(scan)
     payload = {
         "kind": "X_MICROCUT_REQUEST_V1",
@@ -191,8 +213,9 @@ def main() -> int:
         "scan_start": SCAN_START,
         "scan_seconds": SCAN_SECONDS,
         "target_seconds": {"min": 45, "max": 90},
+        "output_policy": {"orientation": "horizontal", "aspect_ratio": "16:9", "source_class": "long_form"},
         "instructions": {
-            "select": "Escolha um trecho autossuficiente, forte e interessante, sem intro/CTA/bastidor.",
+            "select": "Escolha um trecho autossuficiente, forte e interessante, sem intro/CTA/bastidor, somente de vídeo longo horizontal 16:9.",
             "microcut": "Dentro dele remova repetição imediata, falso começo, correção substituída, fillers/hesitações prolongadas, espaços vazios e microapartes que não integram o fluxo. Preserve argumento, nuance e gramática.",
             "format": "Comente JSON X_MICROCUT_PLAN_V1 com start_word_id, end_word_id, remove [{from,to,reason}] e caption <=240 chars.",
         },
@@ -203,6 +226,8 @@ def main() -> int:
     )
     print("X_MICROCUT_REQUEST_READY")
     print("X_SOURCE=" + source["source_url"])
+    print("X_SOURCE_DURATION=" + str(source["duration"]))
+    print("X_SOURCE_FORMAT=" + json.dumps(source["video"], ensure_ascii=False, separators=(",", ":")))
     print("X_WORDS=" + str(len(words)))
     return 0
 
