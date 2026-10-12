@@ -237,8 +237,14 @@ jobs:
               2) adb shell logcat -d -t 2500 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|com.kwai.video|com.yxcorp|gifshow|SSLHandshakeException|UnsatisfiedLinkError|ClassNotFoundException|denied' | tail -80 || true ;;
               3) adb shell dumpsys package com.kwai.video | grep -E 'versionName=|targetSdk=|primaryCpuAbi=|enabled=|stopped=' | head -25 || true; adb shell dumpsys connectivity | grep -m 2 'VALIDATED' || true ;;
             esac
-            echo 'STAGE4_DIAGNOSTIC=ENVIRONMENT_COMPATIBILITY_UNVERIFIED' | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 25
+            # Never unconditionally fail: inspect actual UI and allow credential proof.
+            adb shell uiautomator dump /sdcard/kwai-final.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/kwai-final.xml > /tmp/kwai-final.xml || true
+            if grep -q 'fre_native_and_policy_load_progress_spinner' /tmp/kwai-final.xml; then
+              echo 'STAGE4_DIAGNOSTIC=FRE_STILL_BLOCKED' | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 25
+            fi
+            echo 'STAGE4_DIAGNOSTIC=FRE_NOT_PRESENT_ATTEMPTING_LOGIN' | tee -a "$GITHUB_STEP_SUMMARY"
             timeout 110 python3 tools/kwai_credential_login.py > /tmp/stage4-login.txt 2>&1
             LOGIN_RC=$?
             set -e
