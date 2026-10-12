@@ -18,7 +18,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq qemu-system-arm linux-image-generic busybox-static cpio >/dev/null
-          KERNEL=$(find /boot -name 'vmlinuz-*' | sort -V | tail -1)
+          KERNEL=$(ls -1 /boot/vmlinuz-* 2>/dev/null | sort -V | tail -1)
           test -s "$KERNEL"
           mkdir -p /tmp/guest/bin
           cp /bin/busybox /tmp/guest/bin/busybox
@@ -44,16 +44,16 @@ jobs:
           name: qemu-guest-boot-log
           path: /tmp/qemu-boot.log
           retention-days: 3
-  android-kernel-inventory:
-    name: "Android ARM64 boot components"
+  android-direct-boot:
+    name: "Android ARM64 direct QEMU boot"
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 12
+    timeout-minutes: 16
     steps:
-      - name: Inspect official Android ARM64 image prerequisites
+      - name: Install QEMU and official Android ARM64 image
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq unzip curl default-jre-headless file >/dev/null
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless file >/dev/null
           mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
           curl -fLsS --retry 2 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
           unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
@@ -62,9 +62,41 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-30;default;arm64-v8a" >/dev/null
           DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
-          ls -lh "$DIR"
-          for f in "$DIR"/kernel* "$DIR"/ramdisk* "$DIR"/vendor* "$DIR"/system.img; do
-            if test -f "$f"; then file "$f"; fi
-          done
-          test -s "$DIR/system.img"
-          echo ANDROID_BOOT_COMPONENT_INVENTORY=PASS
+          gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
+          test -s /tmp/android-Image
+          echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
+          echo ANDROID_COMPONENTS_READY=PASS
+      - name: Attempt Android kernel and init boot under QEMU TCG
+        run: |
+          set +e
+          timeout 180 qemu-system-aarch64 \
+            -machine virt \
+            -cpu cortex-a72 \
+            -m 2048 \
+            -smp 2 \
+            -accel tcg \
+            -nographic \
+            -no-reboot \
+            -kernel /tmp/android-Image \
+            -initrd "$ANDROID_DIR/ramdisk.img" \
+            -drive if=none,file="$ANDROID_DIR/system.img",format=raw,readonly=on,id=system \
+            -device virtio-blk-device,drive=system \
+            -drive if=none,file="$ANDROID_DIR/vendor.img",format=raw,readonly=on,id=vendor \
+            -device virtio-blk-device,drive=vendor \
+            -drive if=none,file="$ANDROID_DIR/userdata.img",format=raw,id=userdata \
+            -device virtio-blk-device,drive=userdata \
+            -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive root=/dev/ram0 rw" \
+            > /tmp/android-qemu.log 2>&1
+          grep -E 'Linux version|init:|Android|SELinux|Kernel panic|panic|Unable to mount|VFS|ranchu' /tmp/android-qemu.log | tail -80 || true
+          if grep -Eq 'init:|Android|SELinux' /tmp/android-qemu.log; then
+            echo ANDROID_KERNEL_INIT_REACHED=PASS
+          else
+            echo ANDROID_KERNEL_INIT_REACHED=FAIL
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-qemu-boot-log
+          path: /tmp/android-qemu.log
+          retention-days: 3
