@@ -1,4 +1,4 @@
-name: Kwai Web - 40 Dynamic Login Trigger Diagnostics
+name: Kwai Web - 40 Real Login Modal Investigations
 on:
   workflow_dispatch:
   push:
@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 jobs:
-  web-entry:
+  login-modal:
     strategy:
       fail-fast: false
       max-parallel: 40
@@ -17,89 +17,60 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect real login and upload gates (40 browser profiles)
-        shell: bash
+      - name: Inspect login modal and authentication methods
         env:
           CASE: ${{ matrix.case }}
+        shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet playwright==1.58.0
-          python3 -m playwright install --with-deps chromium >/tmp/browser-install.log 2>&1
+          python3 -m pip install -q playwright==1.58.0
+          python3 -m playwright install --with-deps chromium >/tmp/playwright-install.log 2>&1
           python3 - <<'PY'
           import os,asyncio,json,re
           from playwright.async_api import async_playwright
-          case=int(os.environ['CASE'])
-          route=(case-1)%10
-          profile=(case-1)//10
-          urls=[
-            'https://www.kwai.com/',
-            'https://www.kwai.com/@lucasrosalem',
-            'https://s1-sgpaz1-www.kwai.com/',
-            'https://www.kwai.com/account',
-            'https://www.kwai.com/pt-BR/creators',
-            'https://kwai.com/',
-            'https://www.kuaishou.com/',
-            'https://www.kwai.com/pt-BR/support/creator-center',
-            'https://www.kwai.com/discover',
-            'https://www.kwai.com/profile',
-          ]
+          case=int(os.environ['CASE']); method=(case-1)%10; profile=(case-1)//10
           async def main():
             async with async_playwright() as p:
               browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
               context=await browser.new_context(
-                viewport={'width': [1280,1440,390,412][profile],'height':[800,900,844,915][profile]},
+                viewport={'width':[1280,1440,390,412][profile],'height':[800,900,844,915][profile]},
                 is_mobile=profile>=2,has_touch=profile>=2,
-                locale=['pt-BR','en-US','pt-BR','en-US'][profile],
-                user_agent=([
-                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
-                  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
-                  'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36',
-                  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36'
-                ])[profile])
+                locale=['pt-BR','en-US','pt-BR','en-US'][profile])
               page=await context.new_page()
-              errors=[]
-              page.on('pageerror',lambda e:errors.append(str(e)[:200]))
-              response=None
+              errors=[]; page.on('pageerror',lambda e:errors.append(str(e)[:160]))
               try:
-                response=await page.goto(urls[route],wait_until='domcontentloaded',timeout=25000)
-                await page.wait_for_timeout(3500)
+                await page.goto('https://www.kwai.com/',wait_until='domcontentloaded',timeout=25000)
+                await page.wait_for_timeout(1500+method*250)
+                selectors=['text=/Log in|Sign in|Entrar|Login/i','button:has-text("Log in")','text=/Entrar/i','[class*=login i]','[aria-label*=login i]','a:has-text("Log in")','button:has-text("Entrar")','[role=button]:has-text("Log in")','text=/Sign in/i','text=/Login/i']
+                selector=selectors[method]
+                found=page.locator(selector).first
+                if not await found.count() or not await found.is_visible():
+                  found=page.get_by_text(re.compile('Log in|Sign in|Entrar|Login',re.I)).first
+                if await found.count() and await found.is_visible():
+                  await found.click(timeout=5000)
+                  print('LOGIN_TRIGGER_CLICKED',selector,flush=True)
+                else:
+                  print('LOGIN_TRIGGER_NOT_VISIBLE',selector,flush=True)
+                await page.wait_for_timeout(1800)
+                state=await page.evaluate("""() => ({
+                  dialogs:[...document.querySelectorAll('[role=dialog]')].map(x=>x.innerText.slice(0,1000)),
+                  inputs:[...document.querySelectorAll('input')].map(x=>({type:x.type,placeholder:x.placeholder,autocomplete:x.autocomplete})),
+                  buttons:[...document.querySelectorAll('button,[role=button]')].filter(x=>x.getClientRects().length).slice(0,70).map(x=>(x.innerText||x.getAttribute('aria-label')||'').trim().slice(0,80)),
+                  qr:document.querySelectorAll('canvas,svg,img').length,
+                  url:location.href
+                })""")
+                print('CASE',case,'PROFILE',profile,'METHOD',method,'STATE',json.dumps(state,ensure_ascii=False)[:6000],flush=True)
+                print('JS_ERRORS',json.dumps(errors[:5]),flush=True)
+                print('LOGIN_MODAL_VISIBLE',int(bool(state['dialogs'])),flush=True)
+                print('AUTHENTICATED=NOT_TESTED PUBLISHED=NOT_TESTED',flush=True)
+                with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+                  f.write(f'Case {case}: modal={bool(state["dialogs"])}, inputs={len(state["inputs"])}, buttons={len(state["buttons"])}; authentication NOT TESTED.\\n')
+                if not state['dialogs'] and not state['inputs']:
+                  raise SystemExit('LOGIN_MODAL_NOT_OPEN')
               except Exception as e:
-                print('BROWSER_NAVIGATION_ERROR',str(e)[:250])
-              title=await page.title()
-              final=page.url
-              data=await page.evaluate("""() => ({
-                text:document.body?.innerText?.slice(0,12000)||'',
-                buttons:[...document.querySelectorAll('button,a,[role=button]')].slice(0,200).map(x=>({text:(x.innerText||x.getAttribute('aria-label')||'').trim().slice(0,100),href:x.getAttribute('href')})),
-                forms:[...document.forms].map(f=>({action:f.action,inputs:[...f.querySelectorAll('input')].map(i=>i.type)})),
-                fileInputs:document.querySelectorAll('input[type=file]').length
-              })""")
-              labels=[x['text'] for x in data['buttons'] if re.search(r'login|log in|sign in|entrar|acessar|upload|publicar|enviar|postar',x['text'],re.I)]
-              text_matches=re.findall(r'log\\s*in|sign\\s*in|entrar|login|publicar|upload',data['text'],re.I)
-              html=await page.content()
-              markup_matches=re.findall(r'log\\s*in|sign\\s*in|entrar|login|publicar|upload',html,re.I)
-              print('TEXT_MARKERS',len(text_matches),'HTML_MARKERS',len(markup_matches))
-              if text_matches or markup_matches:
-                for selector in ['text=/Log in|Sign in|Entrar|Login/i','[aria-label*=login i]','[class*=login i]']:
-                  try:
-                    loc=page.locator(selector).first
-                    if await loc.count() and await loc.is_visible():
-                      await loc.click(timeout=2500)
-                      await page.wait_for_timeout(1500)
-                      print('TRIGGER_CLICKED',selector,'AFTER_URL',page.url)
-                      break
-                  except Exception as e: print('TRIGGER_ERROR',str(e)[:100])
-                print('AFTER_CLICK_INPUTS',await page.locator('input').count(),'AFTER_CLICK_DIALOGS',await page.locator('[role=dialog]').count())
-              gate=bool(labels or data['forms'] or data['fileInputs'] or text_matches or markup_matches)
-              print('CASE',case,'HTTP',response.status if response else 'NONE','FINAL_URL',final)
-              print('PAGE_TITLE',title[:150])
-              print('VISIBLE_ACTIONS',json.dumps(labels[:20],ensure_ascii=False))
-              print('FORM_COUNT',len(data['forms']),'FILE_INPUTS',data['fileInputs'],'JS_ERRORS',json.dumps(errors[:5]))
-              print('BROWSER_GATE_FOUND',int(gate))
-              print('AUTHENTICATED=NOT_TESTED PUBLISHED=NOT_TESTED')
-              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
-                f.write(f'Case {case}: HTTP {response.status if response else "NONE"}, gate={gate}, actions={json.dumps(labels[:10],ensure_ascii=False)}, forms={len(data["forms"])}, file_inputs={data["fileInputs"]}; auth NOT TESTED.\\n')
-              await browser.close()
-              if not gate:
-                print('DIAGNOSTIC_NO_LOGIN_MARKER=1')
+                print('LOGIN_INSPECTION_ERROR',type(e).__name__,str(e)[:350],flush=True)
+                raise
+              finally:
+                await browser.close()
           asyncio.run(main())
           PY
