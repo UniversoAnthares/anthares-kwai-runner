@@ -1,0 +1,91 @@
+name: Kwai Semantic Login Route QA40
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/kwai-semantic-login-route-qa40.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  semantic-login-route:
+    name: semantic (${{ matrix.route }}, ${{ matrix.network }}, settle-${{ matrix.settle }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        route: [me_direct, me_retry, me_login_label, profile_content, me_relaunch]
+        network: [baseline, airplane_off, wifi_cycle, network_wait]
+        settle: [2, 7]
+    env:
+      KWAI_ROUTE: ${{ matrix.route }}
+      KWAI_NETWORK: ${{ matrix.network }}
+      KWAI_SETTLE: ${{ matrix.settle }}
+    steps:
+      - name: Restore proven slim AVD
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+      - name: Restore Android 35 system image
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+      - name: Restore emulator binary
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
+      - uses: actions/checkout@v4
+      - name: Boot proven snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export PATH="$SDK/platform-tools:$PATH"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          test -d "$ANDROID_AVD_HOME/kwai-speed.avd/snapshots/kwai-ready"
+          sudo chmod 666 /dev/kvm
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/semantic-emulator.log 2>&1 &
+          timeout 60 adb wait-for-device
+          timeout 60 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done'
+          grep -q "Successfully loaded snapshot 'kwai-ready'" /tmp/semantic-emulator.log
+          echo SEMANTIC_ANDROID_BOOT=PASS
+      - name: Install verified Kwai package
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! adb shell pm path com.kwai.video 2>/dev/null | grep -q package:; then
+            bash independent_android/install_kwai.sh
+          else
+            echo KWAI_ALREADY_PRESENT=1
+          fi
+          adb shell pm path com.kwai.video | grep -q package:
+          echo SEMANTIC_KWAI_INSTALL=PASS
+      - name: Probe semantic Me to native login route
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/kwai_semantic_login_route_probe.py
+      - name: Upload semantic diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semantic-${{ matrix.route }}-${{ matrix.network }}-${{ matrix.settle }}-${{ github.run_id }}
+          path: |
+            semantic-login-route.txt
+            semantic-*.xml
+            semantic-activities.txt
+            semantic-connectivity.txt
+            semantic-logcat.txt
+            /tmp/semantic-emulator.log
+          if-no-files-found: warn
+          retention-days: 1
