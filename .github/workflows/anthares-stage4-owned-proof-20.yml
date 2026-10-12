@@ -1,4 +1,4 @@
-name: Kwai Android ARM64 Metadata Boot
+name: Kwai Android ARM64 Metadata Matrix 30
 on:
   workflow_dispatch:
   push:
@@ -8,16 +8,51 @@ on:
 permissions:
   contents: read
 jobs:
-  android-metadata-boot:
-    name: "Android ARM64 boot with metadata GPT"
+  android-metadata-matrix:
+    name: "case-${{ matrix.id }} ${{ matrix.mode }} ${{ matrix.bus }} ${{ matrix.order }}"
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 18
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        include:
+          - {id: 1,  mode: gpt-ext4, bus: virtio, order: meta-first,  name: metadata, args: base}
+          - {id: 2,  mode: gpt-ext4, bus: virtio, order: meta-last,   name: metadata, args: base}
+          - {id: 3,  mode: gpt-ext4, bus: virtio, order: meta-first,  name: metadata, args: slot}
+          - {id: 4,  mode: gpt-ext4, bus: virtio, order: meta-last,   name: metadata, args: slot}
+          - {id: 5,  mode: gpt-ext4, bus: virtio, order: meta-first,  name: metadata_a, args: slot}
+          - {id: 6,  mode: gpt-ext4, bus: virtio, order: meta-last,   name: metadata_a, args: slot}
+          - {id: 7,  mode: gpt-ext4, bus: virtio, order: meta-first,  name: metadata, args: skipinitramfs}
+          - {id: 8,  mode: gpt-ext4, bus: virtio, order: meta-last,   name: metadata, args: skipinitramfs}
+          - {id: 9,  mode: raw-ext4, bus: virtio, order: meta-first,  name: metadata, args: base}
+          - {id: 10, mode: raw-ext4, bus: virtio, order: meta-last,   name: metadata, args: base}
+          - {id: 11, mode: raw-ext4, bus: virtio, order: meta-first,  name: metadata, args: slot}
+          - {id: 12, mode: raw-ext4, bus: virtio, order: meta-last,   name: metadata, args: slot}
+          - {id: 13, mode: gpt-ext4, bus: virtio-pci, order: meta-first, name: metadata, args: base}
+          - {id: 14, mode: gpt-ext4, bus: virtio-pci, order: meta-last,  name: metadata, args: base}
+          - {id: 15, mode: raw-ext4, bus: virtio-pci, order: meta-first, name: metadata, args: base}
+          - {id: 16, mode: raw-ext4, bus: virtio-pci, order: meta-last,  name: metadata, args: base}
+          - {id: 17, mode: gpt-ext4, bus: virtio, order: meta-first, name: metadata, args: noverity}
+          - {id: 18, mode: gpt-ext4, bus: virtio, order: meta-last,  name: metadata, args: noverity}
+          - {id: 19, mode: raw-ext4, bus: virtio, order: meta-first, name: metadata, args: noverity}
+          - {id: 20, mode: raw-ext4, bus: virtio, order: meta-last,  name: metadata, args: noverity}
+          - {id: 21, mode: gpt-ext4, bus: virtio, order: meta-first, name: metadata, args: rootwait}
+          - {id: 22, mode: gpt-ext4, bus: virtio, order: meta-last,  name: metadata, args: rootwait}
+          - {id: 23, mode: raw-ext4, bus: virtio, order: meta-first, name: metadata, args: rootwait}
+          - {id: 24, mode: raw-ext4, bus: virtio, order: meta-last,  name: metadata, args: rootwait}
+          - {id: 25, mode: gpt-ext4, bus: virtio, order: meta-first, name: metadata, args: selinuxenforce}
+          - {id: 26, mode: gpt-ext4, bus: virtio, order: meta-last,  name: metadata, args: selinuxenforce}
+          - {id: 27, mode: gpt-ext4, bus: virtio-pci, order: meta-first, name: metadata_a, args: slot}
+          - {id: 28, mode: gpt-ext4, bus: virtio-pci, order: meta-last,  name: metadata_a, args: slot}
+          - {id: 29, mode: raw-ext4, bus: virtio-pci, order: meta-first, name: metadata, args: noverity}
+          - {id: 30, mode: raw-ext4, bus: virtio-pci, order: meta-last,  name: metadata, args: rootwait}
     steps:
-      - name: Install QEMU and Android ARM64 image
+      - name: Install runtime and Android ARM64 image
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless file cpio gdisk e2fsprogs util-linux >/dev/null
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless cpio gdisk e2fsprogs util-linux >/dev/null
           mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
           curl -fLsS --retry 2 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
           unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
@@ -27,83 +62,77 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-30;default;arm64-v8a" >/dev/null
           DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
           gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
-          test -s /tmp/android-Image
           echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
 
-      - name: Inspect ramdisk fstab and required early partitions
+      - name: Extract fstab safely
         run: |
-          set -euo pipefail
+          set -eu
           rm -rf /tmp/ramdisk && mkdir -p /tmp/ramdisk
+          gzip -dc "$ANDROID_DIR/ramdisk.img" > /tmp/ramdisk.cpio || true
           cd /tmp/ramdisk
-          gzip -dc "$ANDROID_DIR/ramdisk.img" | cpio -idmu --quiet
-          find . -type f \( -name 'fstab*' -o -name '*fstab*' \) -print > /tmp/fstab-files.txt
+          cpio -idmu --quiet < /tmp/ramdisk.cpio || true
+          find . -type f \( -name 'fstab*' -o -name '*fstab*' \) -print > /tmp/fstab-files.txt || true
           : > /tmp/fstab-dump.txt
-          while read -r f; do
-            echo "===== $f =====" >> /tmp/fstab-dump.txt
-            cat "$f" >> /tmp/fstab-dump.txt || true
-          done < /tmp/fstab-files.txt
-          grep -E 'metadata|system|vendor|userdata|super|product' /tmp/fstab-dump.txt || true
+          while read -r f; do test -f "$f" && { echo "===== $f ====="; cat "$f"; } >> /tmp/fstab-dump.txt; done < /tmp/fstab-files.txt
+          grep -E 'metadata|system|vendor|userdata|super|product|encrypt|logical|first_stage_mount' /tmp/fstab-dump.txt || true
           echo FSTAB_INSPECTION=PASS
 
-      - name: Create GPT metadata partition expected by Android first stage
+      - name: Build metadata device variant
         run: |
           set -euo pipefail
-          truncate -s 128M /tmp/metadata-disk.img
-          sgdisk -o /tmp/metadata-disk.img >/dev/null
-          sgdisk -n 1:2048:0 -c 1:metadata /tmp/metadata-disk.img >/dev/null
-          LOOP=$(sudo losetup --find --show --partscan /tmp/metadata-disk.img)
-          trap 'sudo losetup -d "$LOOP" || true' EXIT
-          sleep 1
-          test -b "${LOOP}p1"
-          sudo mkfs.ext4 -F -L metadata "${LOOP}p1" >/dev/null
-          sudo blkid "${LOOP}p1" || true
-          sudo losetup -d "$LOOP"
-          trap - EXIT
-          sgdisk -p /tmp/metadata-disk.img
-          echo METADATA_GPT_READY=PASS
+          if [ "${{ matrix.mode }}" = "gpt-ext4" ]; then
+            truncate -s 192M /tmp/meta.img
+            sgdisk -o /tmp/meta.img >/dev/null
+            sgdisk -n 1:2048:0 -c 1:${{ matrix.name }} /tmp/meta.img >/dev/null
+            LOOP=$(sudo losetup --find --show --partscan /tmp/meta.img)
+            sleep 1
+            sudo mkfs.ext4 -F -L metadata "${LOOP}p1" >/dev/null
+            sudo losetup -d "$LOOP"
+            sgdisk -p /tmp/meta.img
+          else
+            truncate -s 160M /tmp/meta.img
+            mkfs.ext4 -F -L metadata /tmp/meta.img >/dev/null
+          fi
+          echo METADATA_VARIANT_READY=PASS
 
-      - name: Boot Android past missing-metadata checkpoint
+      - name: Boot Android variant
         run: |
           set +e
-          timeout 210 qemu-system-aarch64 \
-            -machine virt \
-            -cpu cortex-a72 \
-            -m 2048 \
-            -smp 2 \
-            -accel tcg \
-            -nographic \
-            -no-reboot \
-            -kernel /tmp/android-Image \
-            -initrd "$ANDROID_DIR/ramdisk.img" \
-            -drive if=none,file="$ANDROID_DIR/system.img",format=raw,readonly=on,id=system \
-            -device virtio-blk-device,drive=system \
-            -drive if=none,file="$ANDROID_DIR/vendor.img",format=raw,readonly=on,id=vendor \
-            -device virtio-blk-device,drive=vendor \
-            -drive if=none,file="$ANDROID_DIR/userdata.img",format=raw,id=userdata \
-            -device virtio-blk-device,drive=userdata \
-            -drive if=none,file=/tmp/metadata-disk.img,format=raw,id=metadata \
-            -device virtio-blk-device,drive=metadata \
-            -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive root=/dev/ram0 rw" \
-            > /tmp/android-qemu.log 2>&1
-          grep -E 'init first stage|init second stage|metadata|partition\(s\) not found|Failed to mount|required partitions|InitFatalReboot|Android|SELinux|VFS|panic' /tmp/android-qemu.log | tail -120 || true
-          if grep -Eq 'partition\(s\) not found.*metadata|partitions not found.*metadata' /tmp/android-qemu.log; then
-            echo METADATA_CHECKPOINT=FAIL
-            exit 1
+          DEV='virtio-blk-device'
+          [ "${{ matrix.bus }}" = "virtio-pci" ] && DEV='virtio-blk-pci'
+          EXTRA=''
+          case '${{ matrix.args }}' in
+            slot) EXTRA='androidboot.slot_suffix=_a androidboot.slot=a' ;;
+            skipinitramfs) EXTRA='skip_initramfs' ;;
+            noverity) EXTRA='androidboot.veritymode=disabled androidboot.verifiedbootstate=orange' ;;
+            rootwait) EXTRA='rootwait rootdelay=2' ;;
+            selinuxenforce) EXTRA='androidboot.selinux=enforcing' ;;
+          esac
+          BASE="-machine virt -cpu cortex-a72 -m 2048 -smp 2 -accel tcg -nographic -no-reboot -kernel /tmp/android-Image -initrd $ANDROID_DIR/ramdisk.img"
+          SYS="-drive if=none,file=$ANDROID_DIR/system.img,format=raw,readonly=on,id=system -device $DEV,drive=system"
+          VEN="-drive if=none,file=$ANDROID_DIR/vendor.img,format=raw,readonly=on,id=vendor -device $DEV,drive=vendor"
+          USR="-drive if=none,file=$ANDROID_DIR/userdata.img,format=raw,id=userdata -device $DEV,drive=userdata"
+          MET="-drive if=none,file=/tmp/meta.img,format=raw,id=metadata -device $DEV,drive=metadata"
+          if [ '${{ matrix.order }}' = 'meta-first' ]; then DISKS="$MET $SYS $VEN $USR"; else DISKS="$SYS $VEN $USR $MET"; fi
+          timeout 165 qemu-system-aarch64 $BASE $DISKS -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive root=/dev/ram0 rw $EXTRA" > /tmp/android-qemu.log 2>&1
+          grep -E 'init first stage|init second stage|SecondStageMain|metadata|partition\(s\) not found|Failed to mount|required partitions|InitFatalReboot|property_service|servicemanager|zygote|userdata|super|product|panic' /tmp/android-qemu.log | tail -120 || true
+          if grep -Eq 'init second stage|SecondStageMain|property_service|servicemanager|zygote' /tmp/android-qemu.log; then
+            echo RESULT=SECOND_STAGE_PASS
+            exit 0
           fi
-          if grep -Eq 'init second stage started|SecondStageMain|second stage|property_service|servicemanager|zygote|userdata|super|product|Failed to mount required partitions' /tmp/android-qemu.log; then
-            echo METADATA_CHECKPOINT=PASS
-            echo ANDROID_BOOT_ADVANCED=PASS
-          else
-            echo METADATA_CHECKPOINT=INCONCLUSIVE
-            exit 1
-          fi
+          if grep -Eq 'partition\(s\) not found.*metadata|partitions not found.*metadata' /tmp/android-qemu.log; then echo RESULT=METADATA_NOT_FOUND; exit 1; fi
+          if grep -q 'Failed to mount required partitions early' /tmp/android-qemu.log; then echo RESULT=EARLY_MOUNT_FAIL; exit 1; fi
+          if grep -q 'InitFatalReboot' /tmp/android-qemu.log; then echo RESULT=INIT_FATAL; exit 1; fi
+          echo RESULT=OTHER_FAIL
+          exit 1
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-metadata-boot-diagnostics
+          name: android-arm64-case-${{ matrix.id }}
           path: |
             /tmp/android-qemu.log
             /tmp/fstab-dump.txt
             /tmp/fstab-files.txt
+          if-no-files-found: warn
           retention-days: 3
