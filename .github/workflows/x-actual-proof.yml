@@ -1,0 +1,71 @@
+name: X actual installation and authentication proof
+on:
+  workflow_dispatch:
+    inputs:
+      x_apkm_url:
+        description: 'Direct HTTPS URL to X APKM bundle (not an HTML page)'
+        required: false
+        type: string
+      check_auth:
+        description: 'Check existing encrypted authenticated session (never publish)'
+        type: boolean
+        default: false
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths: [.github/workflows/x-actual-proof.yml]
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      X_APKM_URL: ${{ inputs.x_apkm_url }}
+      CHECK_AUTH: ${{ inputs.check_auth }}
+      X_ANDROID_SESSION_KEY: ${{ secrets.X_ANDROID_SESSION_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify actual APK artifact rather than HTML
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence
+          if [[ -z "${X_APKM_URL:-}" ]]; then
+            echo 'BLOCKED_NO_APK: No direct verified APKM download supplied. HTML page discovery is not installation.' | tee evidence/status.txt
+            exit 30
+          fi
+          case "$X_APKM_URL" in https://*) ;; *) echo 'HTTPS required'; exit 31;; esac
+          curl -fL --retry 2 --max-time 120 "$X_APKM_URL" -o /tmp/x-current.apkm
+          file /tmp/x-current.apkm | tee evidence/file.txt
+          unzip -t /tmp/x-current.apkm | tail -4 | tee evidence/archive.txt
+          unzip -Z1 /tmp/x-current.apkm | grep -E '\.apk$' | tee evidence/apks.txt
+          test -s evidence/apks.txt
+      - name: Install and prove X on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          target: google_apis
+          script: |
+            set -Eeuo pipefail
+            chmod +x scripts/x_install_apkm_bundle.sh
+            scripts/x_install_apkm_bundle.sh /tmp/x-current.apkm | tee evidence/install.txt
+            adb shell pm path com.twitter.android | tee evidence/pm-path.txt
+            adb shell dumpsys package com.twitter.android | grep -m1 versionName | tee evidence/version.txt
+            adb shell monkey -p com.twitter.android 1 | tee evidence/launch.txt
+            sleep 8
+            adb shell pidof com.twitter.android | tee evidence/pid.txt
+            test -s evidence/pid.txt
+            echo 'X_INSTALLED_AND_LAUNCHED=PASS' | tee evidence/status.txt
+            if [[ "$CHECK_AUTH" == true ]]; then
+              echo 'AUTH_NOT_PROVEN: authentication requires a valid previously sealed session and independent account verification' | tee evidence/auth-status.txt
+            fi
+      - name: Evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-actual-proof-${{ github.run_id }}
+          path: evidence/
+          retention-days: 2
+          if-no-files-found: ignore
