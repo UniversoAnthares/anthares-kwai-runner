@@ -1,0 +1,113 @@
+name: X real install proof 40 fast
+on:
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths:
+      - .github/workflows/x-real-install-40-fast.yml
+      - scripts/x_real_install_probe_fast.sh
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        include:
+          - { api: 28, arch: x86,    target: google_apis, id: 01 }
+          - { api: 28, arch: x86_64, target: google_apis, id: 02 }
+          - { api: 29, arch: x86,    target: google_apis, id: 03 }
+          - { api: 29, arch: x86_64, target: google_apis, id: 04 }
+          - { api: 30, arch: x86,    target: google_apis, id: 05 }
+          - { api: 30, arch: x86_64, target: google_apis, id: 06 }
+          - { api: 31, arch: x86_64, target: google_apis, id: 07 }
+          - { api: 33, arch: x86_64, target: google_apis, id: 08 }
+          - { api: 28, arch: x86_64, target: default,     id: 09 }
+          - { api: 30, arch: x86_64, target: default,     id: 10 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM acceleration
+        shell: bash
+        run: |
+          set -u
+          if [[ -e /dev/kvm ]]; then
+            sudo chmod 666 /dev/kvm || true
+            ls -l /dev/kvm
+          else
+            echo NO_KVM_DEVICE
+          fi
+
+      - name: Acquire and verify official X APK once
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+          ENV_ID: ${{ matrix.id }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence /tmp/apkeep-out /tmp/xout
+          printf 'env=%s api=%s arch=%s target=%s\n' "$ENV_ID" '${{ matrix.api }}' "$ARCH" '${{ matrix.target }}' | tee evidence/environment.txt
+
+          set +e
+          timeout 150 docker run --rm -v /tmp/apkeep-out:/output ghcr.io/efforg/apkeep:stable \
+            -a com.twitter.android -d apk-pure \
+            -o "acknowledge_dangers=true,arch=$ARCH" /output \
+            > evidence/apkeep.txt 2>&1
+          rc=$?
+          set -e
+          echo "apkeep_rc=$rc" | tee evidence/download-result.txt
+
+          if ! find /tmp/apkeep-out -type f \( -name '*.apk' -o -name '*.xapk' -o -name '*.apkm' \) -print -quit | grep -q .; then
+            rm -rf /tmp/apkeep-out/*
+            timeout 150 docker run --rm -v /tmp/apkeep-out:/output ghcr.io/efforg/apkeep:stable \
+              -a com.twitter.android -d apk-pure \
+              -o "acknowledge_dangers=true" /output \
+              >> evidence/apkeep.txt 2>&1
+          fi
+
+          find /tmp/apkeep-out -type f -name '*.apk' -exec cp '{}' /tmp/xout/ \;
+          while IFS= read -r -d '' b; do unzip -qo "$b" -d /tmp/xout; done < <(find /tmp/apkeep-out -type f \( -name '*.xapk' -o -name '*.apkm' \) -print0)
+          mapfile -t APKS < <(find /tmp/xout -type f -name '*.apk' -print | sort)
+          ((${#APKS[@]} > 0)) || { echo NO_APK_DOWNLOADED | tee evidence/prep-verdict.txt; exit 70; }
+
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          BT="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          AAPT="$BT/aapt"
+          APKSIGNER="$BT/apksigner"
+          [[ -x "$AAPT" && -x "$APKSIGNER" ]] || { yes | sdkmanager 'build-tools;35.0.0' >/dev/null; BT="$SDK_ROOT/build-tools/35.0.0"; AAPT="$BT/aapt"; APKSIGNER="$BT/apksigner"; }
+
+          OFFICIAL_SHA256=0fd9a0cfb07b65950997b4eaebdc53931392391aa406538a3b04073bc2ce2fe9
+          : > evidence/apk-verification.txt
+          for apk in "${APKS[@]}"; do
+            base="$(basename "$apk")"
+            "$AAPT" dump badging "$apk" > "evidence/badging-$base.txt" 2>&1
+            pkg="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" "evidence/badging-$base.txt" | head -1)"
+            [[ "$pkg" == com.twitter.android ]] || { echo WRONG_PACKAGE | tee evidence/prep-verdict.txt; exit 71; }
+            "$APKSIGNER" verify --verbose --print-certs "$apk" > "evidence/apksigner-$base.txt" 2>&1
+            grep -Eqi "certificate SHA-256 digest:[[:space:]]*$OFFICIAL_SHA256([[:space:]]|$)" "evidence/apksigner-$base.txt" || { echo OFFICIAL_CERT_NOT_CONFIRMED | tee evidence/prep-verdict.txt; exit 73; }
+          done
+          echo VERIFIED_OFFICIAL_X_APK | tee evidence/prep-verdict.txt
+
+      - name: Run four independent install-launch tests on one fast emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: ${{ matrix.arch }}
+          target: ${{ matrix.target }}
+          cores: 2
+          emulator-boot-timeout: 300
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          script: bash scripts/x_real_install_probe_fast.sh '${{ matrix.id }}-${{ matrix.api }}-${{ matrix.arch }}-${{ matrix.target }}'
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-real-fast-${{ matrix.id }}-${{ matrix.api }}-${{ matrix.arch }}-${{ matrix.target }}-${{ github.run_id }}
+          path: evidence/
+          retention-days: 3
+          if-no-files-found: warn
