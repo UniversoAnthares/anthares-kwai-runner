@@ -229,6 +229,7 @@ jobs:
       CHECK_AUTH: ${{ inputs.check_auth }}
       X_ANDROID_SESSION_KEY: ${{ secrets.X_ANDROID_SESSION_KEY }}
       GH_TOKEN: ${{ github.token }}
+      X_APKM_B64: ${{ secrets.X_APKM_B64 }}
     steps:
       - uses: actions/checkout@v4
       - name: Verify actual APK artifact rather than HTML
@@ -236,12 +237,15 @@ jobs:
         run: |
           set -Eeuo pipefail
           mkdir -p evidence
-          if [[ -z "${X_APKM_URL:-}" ]]; then
-            echo 'BLOCKED_NO_APK: No direct verified APKM download supplied. HTML page discovery is not installation.' | tee evidence/status.txt
+          if [[ -n "${X_APKM_URL:-}" ]]; then
+            case "$X_APKM_URL" in https://*) ;; *) echo 'HTTPS required'; exit 31;; esac
+            curl -fL --retry 2 --max-time 120 "$X_APKM_URL" -o /tmp/x-current.apkm
+          elif [[ -n "${X_APKM_B64:-}" ]]; then
+            printf '%s' "$X_APKM_B64" | base64 -d > /tmp/x-current.apkm
+          else
+            echo 'BLOCKED_NO_APK: neither a direct bundle URL nor X_APKM_B64 repository secret is available' | tee evidence/status.txt
             exit 30
           fi
-          case "$X_APKM_URL" in https://*) ;; *) echo 'HTTPS required'; exit 31;; esac
-          curl -fL --retry 2 --max-time 120 "$X_APKM_URL" -o /tmp/x-current.apkm
           file /tmp/x-current.apkm | tee evidence/file.txt
           unzip -t /tmp/x-current.apkm | tail -4 | tee evidence/archive.txt
           unzip -Z1 /tmp/x-current.apkm | grep -E '\.apk$' | tee evidence/apks.txt
