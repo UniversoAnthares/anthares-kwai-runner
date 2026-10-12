@@ -6,6 +6,17 @@ Navegador remoto persistente do ecossistema Anthares para autenticação manual,
 
 O Chromium usa `/data/chrome-profile` como `user-data-dir`, portanto cookies, Local Storage, IndexedDB e demais dados do perfil sobrevivem a reinicializações quando `/data` está em volume persistente.
 
+## Regra obrigatória: sessão isolada e invisível
+
+Toda automação Anthares-browser DEVE criar ou reutilizar exclusivamente seu próprio ambiente remoto isolado (container + Xvfb + Chromium + perfil dedicado). Nunca conectar-se a uma janela, aba, perfil, sessão CDP ou navegador já aberto pelo usuário. Nunca controlar o desktop hospedeiro, mover o mouse real, enviar teclas globais, roubar foco, exibir janelas locais ou interromper atividades correntes do computador.
+
+- A execução normal é invisível no computador do usuário; noVNC é somente uma visualização remota opcional e explicitamente aberta para login/recuperação.
+- Toda interação deve ocorrer dentro do Chromium isolado via CDP interno. Não usar automação de mouse/teclado do sistema operacional hospedeiro.
+- Um perfil Chromium pertence a uma única instância por vez; sessões paralelas precisam de perfis/volumes separados e isolamento de concorrência.
+- É proibido anexar o CDP a um navegador externo ou usar o perfil padrão do Chrome/Edge do usuário.
+- Se o ambiente isolado não estiver disponível, a operação deve falhar de forma segura; não fazer fallback para o navegador/desktop do usuário.
+- Testes de aceitação devem confirmar: nenhum processo/janela criado no desktop do usuário, nenhum foco roubado, nenhum evento de mouse/teclado enviado ao hospedeiro e nenhum perfil pessoal acessado.
+
 ## Portas
 
 - `6080`: interface noVNC para login/recuperação manual.
