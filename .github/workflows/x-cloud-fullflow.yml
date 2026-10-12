@@ -19,6 +19,7 @@ env:
   X_SOURCE_CHANNEL: 'https://www.youtube.com/@UniversoAnthares/streams'
   X_SCAN_START: '600'
   X_SCAN_SECONDS: '300'
+  X_MIN_SOURCE_SECONDS: '1200'
   X_WHISPER_MODEL: 'base'
   PYTHONUTF8: '1'
 
@@ -62,6 +63,9 @@ jobs:
         if: steps.gate.outputs.due == 'true'
         with:
           deno-version: lts
+      - name: Install ffmpeg
+        if: steps.gate.outputs.due == 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Install transcript dependencies
         if: steps.gate.outputs.due == 'true'
         run: python -m pip install --disable-pip-version-check 'yt-dlp[default]' yt-dlp-ejs faster-whisper
@@ -128,6 +132,8 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: lts
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Install render dependencies
         run: python -m pip install --disable-pip-version-check 'yt-dlp[default]' yt-dlp-ejs
       - name: Render AI-directed semantic microcut
