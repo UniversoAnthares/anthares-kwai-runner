@@ -1,0 +1,9 @@
+name = "anthares-x-vault"
+main = "src/index.js"
+account_id = "5c24be052e5144391f73a8e03491e88e"
+compatibility_date = "2026-10-12"
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "ANTHARES_STATE"
+id = "d5ca2033673040babc9fd701cc0c8738"
