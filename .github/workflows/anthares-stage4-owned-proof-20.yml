@@ -1,4 +1,4 @@
-name: Stage 4 Dialog Unblock 40
+name: Stage 4 Native Root Cause 40
 on:
   workflow_dispatch:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 dialog unblock ${{ matrix.case }}"
+    name: "Stage4 native root cause ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -62,11 +62,18 @@ jobs:
             adb shell am force-stop com.kwai.video
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
             sleep $((3 + CASE_ID % 6))
-            adb shell input tap $((930 + CASE_ID % 3 * 15)) $((1680 + CASE_ID % 5 * 16))
+            if [ $((CASE_ID % 5)) -eq 0 ]; then adb shell input tap 945 1710; fi
+            if [ $((CASE_ID % 5)) -eq 1 ]; then adb shell input tap 960 1650; fi
+            if [ $((CASE_ID % 5)) -eq 2 ]; then adb shell input keyevent KEYCODE_BACK; fi
+            if [ $((CASE_ID % 5)) -eq 3 ]; then adb shell input tap 100 1710; fi
+            if [ $((CASE_ID % 5)) -eq 4 ]; then adb shell input tap 540 1700; fi
             sleep $((2 + CASE_ID % 7))
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
             adb shell pidof com.kwai.video || true
             adb logcat -d -v brief -t 2500 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|Process: com.kwai.video|com.kwai.video.*(crash|exception|error)|libndk_translation|UnsatisfiedLinkError|SIGSEGV|SIGABRT|ActivityTaskManager.*com.kwai.video' | tail -100 || true
+            echo "NATIVE_VARIANT=$((CASE_ID % 5))"
+            adb shell getprop ro.dalvik.vm.native.bridge
+            adb shell pm path com.kwai.video
             adb shell uiautomator dump /sdcard/stage4-diag.xml || true
             adb exec-out cat /sdcard/stage4-diag.xml | grep -Eo 'package="[^"]+"' | sort -u || true
             adb logcat -d -v brief | grep -E "libcpu-info.so|SIGSEGV|Fatal signal" | tail -30 || true
