@@ -2,57 +2,97 @@ name: Kwai Proven Runtime Autologin V2
 on:
   workflow_dispatch:
   push:
-    paths: ['.kwai-autologin-v2-trigger']
-permissions: {contents: read}
+    paths: ['.kwai-autologin-v2-trigger', '.github/workflows/kwai-autologin-proven-runtime-v2.yml']
+permissions:
+  contents: read
+  id-token: write
 jobs:
   autologin:
-    if: vars.KWAI_CREDENTIALS_ROTATED == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 18
+    timeout-minutes: 22
     env:
       KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
       KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+      KWAI_SESSION_ENCRYPTION_KEY: ${{ secrets.KWAI_SESSION_ENCRYPTION_KEY }}
+      KWAI_LOGIN_MODE: plain
+      KWAI_LOGIN_SETTLE: 2
     steps:
       - uses: actions/checkout@v4
-      - name: Validate credentials presence
+      - name: Validate secrets presence
+        shell: bash
         run: |
-          test -n "$KWAI_LOGIN"
-          test -n "$KWAI_PASSWORD"
-          echo CREDENTIAL_SECRETS_PRESENT=1
-      - name: Prepare validated runtime
+          set -euo pipefail
+          test -n "$KWAI_LOGIN" || { echo STAGE4_BLOCKED_MISSING_KWAI_LOGIN; exit 8; }
+          test -n "$KWAI_PASSWORD" || { echo STAGE4_BLOCKED_MISSING_KWAI_PASSWORD; exit 8; }
+          test -n "$KWAI_SESSION_ENCRYPTION_KEY" || { echo STAGE4_BLOCKED_MISSING_SESSION_KEY; exit 8; }
+          echo STAGE4_REQUIRED_SECRETS_PRESENT=1
+      - name: Prepare validated API35 runtime
+        shell: bash
         run: |
           set -euo pipefail
           SDK=/usr/local/lib/android/sdk
           export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
           export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
           mkdir -p "$ANDROID_AVD_HOME"
-          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o /tmp/kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
-          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai-vault.zip" | sha256sum -c -
-          python3 - <<'PY'
-          import zipfile
-          zipfile.ZipFile("/tmp/kwai-vault.zip").extractall("/tmp/kwai-vault")
-          PY
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
+          rm -rf kwai-vault && mkdir kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
           "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-35" "system-images;android-35;google_apis;x86_64"
           echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n autologin -k "system-images;android-35;google_apis;x86_64" --device pixel_5 --force
           sudo chmod 666 /dev/kvm
-      - name: Boot install and authenticate
+      - name: Boot, authenticate once, prove identity and persist session
+        shell: bash
         run: |
           set -Eeuo pipefail
           SDK=/usr/local/lib/android/sdk
           export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
           export ANDROID_SDK_HOME="$HOME/.android" ANDROID_AVD_HOME="$HOME/.android/avd"
           export PATH="$SDK/platform-tools:$SDK/emulator:$PATH"
-          "$SDK/emulator/emulator" -avd autologin -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
+          "$SDK/emulator/emulator" -avd autologin -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 4096 -cores 2 >/tmp/emulator.log 2>&1 &
           EP=$!
-          trap 'kill $EP 2>/dev/null || true' EXIT
+          trap 'kill "$EP" 2>/dev/null || true' EXIT
           timeout 120 adb wait-for-device
-          timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
-          adb install-multiple -r /tmp/kwai-vault/*.apk
-          adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS || true
-          adb shell monkey -p com.kwai.video 1 >/dev/null
+          timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 3; done'
+          echo STAGE4_ANDROID_BOOT=PASS
+          LOGIN_RC=0
+          timeout 240 python3 tools/kwai_credential_login.py >real-auth-login.txt 2>&1 || LOGIN_RC=$?
+          cat real-auth-login.txt
+          if [ "$LOGIN_RC" -eq 6 ]; then
+            echo STAGE4_REAL_AUTH_CHALLENGE=1
+            exit 6
+          fi
+          test "$LOGIN_RC" -eq 0
           sleep 8
-          python3 kwai_state_driver.py | tee /tmp/fsm.log
-          grep -q FSM_MAIN_REACHED /tmp/fsm.log
-          python3 kwai_android_autologin.py
-          python3 kwai_auth_probe.py
-          echo SUCCESS_SIGNAL=KWAI_AUTOLOGIN_AUTHENTICATED
+          MATCH=''
+          for candidate in lucasrosalem universo.anthares; do
+            RC=0
+            KWAI_EXPECTED_ACCOUNT="$candidate" python3 kwai_auth_probe.py >"auth-$candidate.txt" 2>&1 || RC=$?
+            cat "auth-$candidate.txt"
+            if [ "$RC" -eq 0 ] && grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' "auth-$candidate.txt" && grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' "auth-$candidate.txt"; then
+              MATCH="$candidate"
+              break
+            fi
+          done
+          test -n "$MATCH" || { echo STAGE4_AUTHENTICATED_IDENTITY_UNVERIFIED; exit 11; }
+          echo "KWAI_VERIFIED_IDENTITY=$MATCH"
+          export KWAI_EXPECTED_ACCOUNT="$MATCH"
+          bash kwai_session_state.sh save
+          test -s kwai-session.enc
+          python3 tools/kwai_session_vault_client.py push --path kwai-session.enc
+          echo OWN_KWAI_ENCRYPTED_SESSION=PASS
+          echo OWN_STAGE4_VAULT_STORED=PASS
+      - name: Upload non-secret diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage4-proven-runtime-${{ github.run_id }}
+          path: |
+            real-auth-login.txt
+            auth-lucasrosalem.txt
+            auth-universo.anthares.txt
+            kwai-home-login-state.txt
+            semantic-login-route.txt
+            /tmp/emulator.log
+          if-no-files-found: warn
+          retention-days: 1
