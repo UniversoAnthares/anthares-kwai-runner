@@ -31,7 +31,7 @@ def discover_source() -> dict:
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(CHANNEL_URL, download=False)
     entries = list((info or {}).get("entries") or [])
-    required_duration = max(MIN_SOURCE_SECONDS, SCAN_START + 120)
+    required_duration = max(MIN_SOURCE_SECONDS, SCAN_START + 150)
     for e in entries:
         if not isinstance(e, dict):
             continue
@@ -190,11 +190,11 @@ def main() -> int:
     payload = {
         "kind": "X_MICROCUT_REQUEST_V1", "account": "lucasyahn", "source": source,
         "scan_start": SCAN_START, "scan_seconds": SCAN_SECONDS,
-        "target_seconds": {"min": 45, "max": 90},
+        "target_seconds": {"min": 105, "max": 135},
         "output_policy": {"orientation": "horizontal", "aspect_ratio": "16:9", "source_class": "long_form"},
         "instructions": {
-            "select": "Escolha um trecho autossuficiente, forte e interessante, sem intro/CTA/bastidor, somente de vídeo longo horizontal 16:9.",
-            "microcut": "Dentro dele remova repetição imediata, falso começo, correção substituída, fillers/hesitações prolongadas, espaços vazios e microapartes que não integram o fluxo. Preserve argumento, nuance e gramática.",
+            "select": "Escolha um trecho autossuficiente, forte e interessante, de 105 a 135 segundos, sem intro/CTA/bastidor, somente de vídeo longo horizontal 16:9.",
+            "microcut": "Dentro dele remova repetição imediata, falso começo, correção substituída, fillers/hesitações prolongadas, espaços vazios e microapartes que não integram o fluxo. Preserve argumento, nuance e gramática e mantenha o resultado final longo.",
             "format": "Comente JSON X_MICROCUT_PLAN_V1 com start_word_id, end_word_id, remove [{from,to,reason}] e caption <=240 chars.",
         },
         "words": words,
