@@ -1,0 +1,85 @@
+name: Kwai Launch Isolation and ABI QA40
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/kwai-launch-isolation-abi-qa40.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        mode: [cold, warm, clear-cache, fresh-data, no-gestures, single-launch, relaunch, permission, wait15, wait45]
+        api: [29, 30, 33, 35]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      STABILIZE_MODE: ${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -fL --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          mkdir -p kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+      - run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 3072M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 3072
+          script: |
+            bash kwai_vault_install.sh
+            adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+            sleep 8
+            echo "CASE=${{ matrix.mode }} API=${{ matrix.api }}"
+            adb logcat -c || true
+            adb shell am force-stop com.kwai.video || true
+            case "${{ matrix.mode }}" in
+              fresh-data) adb shell pm clear com.kwai.video ;;
+              clear-cache) adb shell pm trim-caches 999G || true ;;
+              permission) adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS || true ;;
+            esac
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 || true
+            case "${{ matrix.mode }}" in
+              wait45) sleep 45 ;;
+              wait15) sleep 15 ;;
+              warm|relaunch) sleep 8; adb shell am force-stop com.kwai.video; adb shell monkey -p com.kwai.video 1; sleep 10 ;;
+              *) sleep 12 ;;
+            esac
+            adb shell uiautomator dump /sdcard/final.xml || true
+            adb exec-out cat /sdcard/final.xml > final.xml || true
+            adb shell getprop ro.product.cpu.abi > device-abi.txt
+            adb shell pm path com.kwai.video > package-paths.txt
+            adb shell dumpsys activity activities > /tmp/final-activities.txt
+            adb shell pidof com.kwai.video > /tmp/kwai-pid.txt || true
+            echo "KWAI_PID=$(cat /tmp/kwai-pid.txt)"
+            adb logcat -d -v brief | grep -Ei 'com.kwai.video|AndroidRuntime|FATAL EXCEPTION|UnsatisfiedLinkError|SIGSEGV|dlopen|ABI|native crash|ANR' | tail -120 > kwai-launch-events.txt || true
+            adb logcat -b crash -d -v brief > kwai-crash-log.txt || true
+            if test -s /tmp/kwai-pid.txt && grep -Eq 'com.kwai.video/' /tmp/final-activities.txt; then echo KWAI_FOREGROUND_AUTH_GATE=PASS; else echo KWAI_FOREGROUND_AUTH_GATE=FAIL; exit 31; fi
+            adb shell dumpsys meminfo com.kwai.video > kwai-meminfo.txt || true
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolation-${{ matrix.mode }}-api${{ matrix.api }}-${{ github.run_id }}
+          path: |
+            advance-*.xml
+            advance-*.png
+            final-*.xml
+            final-*.png
+            kwai-vault-install-status.txt
+            kwai-crash-log.txt
+            kwai-meminfo.txt
+            kwai-launch-events.txt
+            device-abi.txt
+            package-paths.txt
+            final.xml
+          if-no-files-found: warn
+          retention-days: 1
