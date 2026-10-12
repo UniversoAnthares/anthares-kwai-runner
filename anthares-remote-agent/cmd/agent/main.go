@@ -72,7 +72,7 @@ func loadConfig() (Config, error) {
             if root != "" { if abs, err := filepath.Abs(root); err == nil { c.AllowedRoots = append(c.AllowedRoots, filepath.Clean(abs)) } }
         }
     }
-    if c.ControlURL == "" || c.DeviceToken == "" || c.DeviceID == "" { return c, errors.New("ANTHARES_CONTROL_URL, ANTHARES_DEVICE_TOKEN and ANTHARES_DEVICE_ID are required") }
+    if !strings.HasPrefix(c.ControlURL, "https://") { return c, errors.New("ANTHARES_CONTROL_URL must use HTTPS") }; if c.ControlURL == "" || c.DeviceToken == "" || c.DeviceID == "" { return c, errors.New("ANTHARES_CONTROL_URL, ANTHARES_DEVICE_TOKEN and ANTHARES_DEVICE_ID are required") }
     return c, nil
 }
 
@@ -117,9 +117,9 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string,error) {
     case "file_write_chunk":
         off,_:=strconv.ParseInt(job.Args["offset"],10,64); trunc:=strings.EqualFold(job.Args["truncate"],"true")||job.Args["truncate"]=="1"; return fileWriteChunk(cfg,job.Args["path"],off,job.Args["base64"],trunc)
     case "file_read":
-        p,err:=safePath(cfg,job.Args["path"]); if err!=nil{return "",err}; b,err:=os.ReadFile(p); if err!=nil{return "",err}; if len(b)>1<<20{return "",errors.New("file exceeds 1 MiB limit")}; return base64.StdEncoding.EncodeToString(b),nil
+        p,err:=safeExistingPath(cfg,job.Args["path"]); if err!=nil{return "",err}; b,err:=os.ReadFile(p); if err!=nil{return "",err}; if len(b)>1<<20{return "",errors.New("file exceeds 1 MiB limit")}; return base64.StdEncoding.EncodeToString(b),nil
     case "file_write":
-        p,err:=safePath(cfg,job.Args["path"]); if err!=nil{return "",err}; b,err:=base64.StdEncoding.DecodeString(job.Args["base64"]); if err!=nil{return "",err}; if len(b)>1<<20{return "",errors.New("file exceeds 1 MiB limit")}; if err:=os.MkdirAll(filepath.Dir(p),0700);err!=nil{return "",err}; if err:=os.WriteFile(p,b,0600);err!=nil{return "",err}; return fmt.Sprintf("wrote %d bytes",len(b)),nil
+        p,err:=safeExistingPath(cfg,job.Args["path"]); if err!=nil{return "",err}; b,err:=base64.StdEncoding.DecodeString(job.Args["base64"]); if err!=nil{return "",err}; if len(b)>1<<20{return "",errors.New("file exceeds 1 MiB limit")}; if err:=os.MkdirAll(filepath.Dir(p),0700);err!=nil{return "",err}; if err:=os.WriteFile(p,b,0600);err!=nil{return "",err}; return fmt.Sprintf("wrote %d bytes",len(b)),nil
     case "job_start":
         if !cfg.AllowShell{return "",errors.New("shell disabled")}; return startDetachedJob(job.Args["command"],job.Args["name"])
     case "job_list":
