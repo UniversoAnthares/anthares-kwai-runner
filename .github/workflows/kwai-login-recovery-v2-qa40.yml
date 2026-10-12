@@ -1,0 +1,66 @@
+name: Kwai Login Recovery V2 QA40
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/kwai-login-recovery-v2-qa40.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        entry: [warm, fresh-data]
+        capture: [normal, compressed, retry, relaunch]
+        route: [auto, interest-first, profile-first, login-first, direct-bottom]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      STABILIZE_MODE: ${{ matrix.entry }}
+      KWAI_CAPTURE_MODE: ${{ matrix.capture }}
+      KWAI_ROUTE_MODE: ${{ matrix.route }}
+      KWAI_SETTLE_SECONDS: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch proven Kwai package vault
+        run: |
+          curl -fL --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          mkdir -p kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+      - run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 4096M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 4096
+          script: |
+            bash tools/kwai_android35_recovery_gate.sh "${{ matrix.entry }}"
+            set +e
+            python3 tools/kwai_login_surface_recovery_v2.py 2>&1 | tee kwai-login-route-v2.txt
+            rc=${PIPESTATUS[0]}
+            set -e
+            echo "KWAI_LOGIN_RECOVERY_V2_RC=$rc"
+            if [ "$rc" -ne 0 ]; then exit "$rc"; fi
+            echo KWAI_NATIVE_LOGIN_ROUTE_V2=PASS
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: login-v2-${{ matrix.entry }}-${{ matrix.capture }}-${{ matrix.route }}-${{ github.run_id }}
+          path: |
+            final.xml
+            kwai-login-route-v2.txt
+            kwai-vault-install-status.txt
+            kwai-crash-log.txt
+            kwai-meminfo.txt
+            kwai-launch-events.txt
+            device-abi.txt
+            package-paths.txt
+          if-no-files-found: warn
+          retention-days: 1
