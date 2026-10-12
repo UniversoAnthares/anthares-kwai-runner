@@ -1009,3 +1009,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - TikTok showed a login prompt in the anonymous page, but the URL/caption resolved. Authenticated Studio already showed it as public (`Todos`).
 - Confirmed exact post URL and identity correction. No new publication.
 - Next action: update STATE.md to correct the account for this verified post and prevent future identity misrouting.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — STATE.md corrected with actual TikTok account
+- Canonical log was re-read before state update.
+- `STATE.md` now records the exact verified direct post URL `https://www.tiktok.com/@lucasrosalem4/video/7695869978876136705`, account `@lucasrosalem4`, and notes that `@universo.anthares` was merely a public profile visited by the earlier probe.
+- Account identity guard before any further publication is now an explicit blocker; scheduler stays OFF.
+- STATE update commit: `f8dfc4a1e6120235ef8cb269b691ee359d3af806`.
+- No further publication.
