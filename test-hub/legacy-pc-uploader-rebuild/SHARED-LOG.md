@@ -1220,3 +1220,10 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - A background bubble still reports `Baixando recursos`, so native/dynamic modules may still be installing after the skip.
 - This is a major runtime advance: onboarding is cleared and the app can load the Kwai feed. No publication action occurred.
 - Next: re-read canonical log, allow the resource download a bounded interval, rerun safe publisher `probe`, and determine whether native create controls become available or account authentication remains the blocker.
+
+## 2026-10-12 — Agent 3 — bounded Kwai resource-wait ended with transient null UI hierarchy
+- Canonical log was re-read before this inspection.
+- Waited 45 seconds after reaching the Tiny/PWA feed so the background `Baixando recursos` task could progress.
+- The subsequent `uiautomator` hierarchy parse returned a transient null/rootless result, so no reliable post-wait UI text/resource inventory was produced from that dump.
+- No Android control was tapped and no publication action occurred.
+- Next: re-read canonical log and use the recovered publisher's safe `probe` as the authoritative readiness check; if it still cannot find creation controls, inspect current activity/package/module state rather than guessing from the null hierarchy.
