@@ -888,3 +888,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - The publisher itself does not close the ledger; completion is orchestrated outside this file and must be identified before the controlled post.
 - No publication occurred in this inspection.
 - Next action: re-read this log and locate the exact historical caller/gate that converts publisher success into ledger `published/complete`; then run one controlled post through that complete path.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — exact historical TikTok ledger completion path found
+- Canonical log was re-read immediately before inspection.
+- Historical `.github/workflows/anthares-tiktok-owned-youtube.yml` proves the transaction order: gate -> prepare -> reserve ledger -> install browser -> `python -u tiktok_web_publish_local.py` -> only on publisher success run `python -u youtube_tiktok_pipeline.py complete` -> commit confirmed ledger.
+- Local reconstructed `legacy_pc_tiktok_controller.py` already references the same real publisher.
+- Therefore the controlled milestone can preserve the historical safety invariant: Post click and confirmation happen in the publisher; ledger is marked complete only after an unequivocal publisher success.
+- No publication occurred in this inspection.
+- Next action: re-read this log, inspect `youtube_tiktok_pipeline.py complete` and the controller publish branch for exact local environment paths, then execute one controlled transaction if all guards match.
