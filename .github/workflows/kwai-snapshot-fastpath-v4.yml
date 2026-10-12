@@ -211,14 +211,23 @@ jobs:
           elif [ "$KWAI_CREDENTIALS_MISSING" = 0 ]; then
             echo 'STAGE4_AUTH=LOGIN_ROUTE_RECOVERY' | tee -a "$GITHUB_STEP_SUMMARY"
             set +e
-            # Radical pivot: allow asynchronous FRE policy/network bootstrap to settle before login.
-            # Matrix variants explore 20 distinct waiting periods rather than retrying the same instant.
-            WAIT_SECONDS=$((20 + ${{ matrix.case }} * 5))
-            echo "STAGE4_ONBOARDING_WAIT=${WAIT_SECONDS}" | tee -a "$GITHUB_STEP_SUMMARY"
-            sleep "$WAIT_SECONDS"
-            adb shell input keyevent 4 || true
+            # Diagnostic pivot: collect connectivity, UI state and logcat before login.
+            # Twenty variants of DNS/private-DNS, network toggle and app cache recovery.
+            MODE=$(( ${{ matrix.case }} % 5 ))
+            echo "STAGE4_DIAGNOSTIC_MODE=$MODE" | tee -a "$GITHUB_STEP_SUMMARY"
+            adb shell settings put global private_dns_mode off || true
+            if [ "$MODE" -eq 1 ]; then adb shell svc wifi disable; sleep 2; adb shell svc wifi enable; fi
+            if [ "$MODE" -eq 2 ]; then adb shell settings put global private_dns_mode opportunistic; fi
+            if [ "$MODE" -eq 3 ]; then adb shell am force-stop com.kwai.video; adb shell pm trim-caches 128M || true; fi
+            if [ "$MODE" -eq 4 ]; then adb shell svc data disable || true; adb shell svc data enable || true; fi
+            adb shell getprop net.dns1 | sed 's/^/STAGE4_DNS=/' || true
+            adb shell dumpsys connectivity | grep -E 'VALIDATED|INTERNET' | head -5 || true
+            adb shell am force-stop com.kwai.video || true
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
-            sleep 5
+            sleep $((8 + ${{ matrix.case }} % 4 * 5))
+            adb shell uiautomator dump /sdcard/kwai-diag.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/kwai-diag.xml | grep -o 'resource-id="[^"]*"' | sort -u | tail -25 || true
+            adb logcat -d -t 350 | grep -Ei 'kwai|gifshow|ssl|dns|network|timeout|policy' | tail -35 || true
             timeout 110 python3 tools/kwai_credential_login.py > /tmp/stage4-login.txt 2>&1
             LOGIN_RC=$?
             set -e
