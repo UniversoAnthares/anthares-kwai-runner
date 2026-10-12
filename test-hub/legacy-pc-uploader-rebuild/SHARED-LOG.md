@@ -992,3 +992,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - A MeshCentral `runcommands` test with `reply=false` returned `OK`, but the expected identity output file was not created; therefore command execution through that path is not yet proven even though the service itself is LocalSystem.
 - No task/service configuration was changed; no installer was executed.
 - Next: test whether the already-registered `Anthares Admin PowerShell` task can be safely repointed and started by the current user, using a harmless one-shot identity file and restoring the original task action immediately. If access is denied, do not alter it further.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — EXACT TIKTOK POST URL FOUND in authenticated Studio
+- Canonical log was re-read before successful read-only Studio probe.
+- Authenticated `https://www.tiktok.com/tiktokstudio/content` lists the newest video at 12 Oct 15:47, duration 01:30, caption `O Homem do Elevador #literatura #escrita #escritores #livros #storytelling`, visibility `Todos`, 2 views.
+- Exact anchor: `/@lucasrosalem4/video/7695869978876136705`. Therefore direct post URL: `https://www.tiktok.com/@lucasrosalem4/video/7695869978876136705`.
+- IMPORTANT ACCOUNT IDENTITY CORRECTION: Studio account is `lucasrosalem4`, not `universo.anthares`. Earlier profile probe navigated to the public @universo.anthares page manually, which did not prove logged-in posting identity. The successful post belongs to `@lucasrosalem4` per Studio. Do not claim it was posted to @universo.anthares.
+- No new post was made during URL lookup.
+- Next action: re-read this log, verify the exact URL in a read-only direct-page probe, then correct STATE.md account identity and return the link to the user.
