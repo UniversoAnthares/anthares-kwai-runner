@@ -211,6 +211,14 @@ jobs:
           elif [ "$KWAI_CREDENTIALS_MISSING" = 0 ]; then
             echo 'STAGE4_AUTH=LOGIN_ROUTE_RECOVERY' | tee -a "$GITHUB_STEP_SUMMARY"
             set +e
+            # Radical pivot: allow asynchronous FRE policy/network bootstrap to settle before login.
+            # Matrix variants explore 20 distinct waiting periods rather than retrying the same instant.
+            WAIT_SECONDS=$((20 + ${{ matrix.case }} * 5))
+            echo "STAGE4_ONBOARDING_WAIT=${WAIT_SECONDS}" | tee -a "$GITHUB_STEP_SUMMARY"
+            sleep "$WAIT_SECONDS"
+            adb shell input keyevent 4 || true
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+            sleep 5
             timeout 110 python3 tools/kwai_credential_login.py > /tmp/stage4-login.txt 2>&1
             LOGIN_RC=$?
             set -e
