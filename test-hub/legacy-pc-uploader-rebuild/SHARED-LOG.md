@@ -130,3 +130,56 @@ Prioritize GitHub non-default branches/trees and PC archaeology. Search current 
 
 RISKS OF CONCURRENCY:
 Other agents may be searching the same mirrors. Record any recovered source path before restoring files to prevent duplicate/rebuilt variants.
+
+## 2026-10-12 14:20 -04:00 — Agent 3
+
+ACTION:
+Used MeshCentral for read-only archaeology on DESKTOP-FTDK0HP after AI Commander was gated.
+
+FILES / SYSTEM EXAMINED:
+- C:\Users\Lucas\anthares-clipper\kwai_daily_daemon.py
+- C:\Users\Lucas\AntharesWork\anthares-clipper-cloud\kwai_daily_daemon.py
+- C:\Users\Lucas\anthares-clipper\kwai_memu_publish.py
+- C:\Users\Lucas\AntharesWork\anthares-clipper-cloud\kwai_memu_publish.py
+- related Python/PowerShell/BAT/VBS file inventory under C:\Users\Lucas
+- scheduled tasks matching Anthares/Kwai/TikTok/MEmu/runner/GitHub
+- local git history and remotes for C:\Users\Lucas\anthares-clipper
+
+FOUND:
+1. Exact legacy files are still present on the PC. This resolves the main archaeology blocker.
+2. Two copies of each key Kwai file are byte-identical:
+   - kwai_daily_daemon.py SHA-256 14B31D4BFE50B6B0B3103B08DAAB693132A9E7926C4EB12DD1BA6F403C088527, size 20484.
+   - kwai_memu_publish.py SHA-256 5257623F994BE9B2B12B4FED9DC1996616784004AF4A490E41B88FD2F36650B0, size 46849.
+   - anthares-clipper copy timestamps are 2026-10-05 18:57 and 2026-10-05 09:17 local respectively; AntharesWork cloud copies are 2026-10-06 copies with identical hashes.
+3. The real historical source repository is `UniversoAnthares/anthares-clipper`, not only `anthares-kwai-runner`. Local origin points to https://github.com/UniversoAnthares/anthares-clipper.git.
+4. Local `anthares-clipper` git history contains the previously documented commits, including the exact full commit `33c1596` (Move Kwai started marker to publisher boundary), `106dff4` (Preservar publicador Kwai invisivel e sem console), caption fixes, MEmu recovery commits, and dedupe hardening commits.
+5. The recovered daemon is mature, not the defective early version. It already contains persistent source/segment history, legacy source quarantine, no wrap-around, local daemon lock, MEmu recovery, central queue/lease handling, publication ambiguity handling, and calls `kwai_memu_publish.py` in `publish-local` mode.
+6. The recovered MEmu publisher is version 0.2.2. It implements modes probe/prepare/publish-local/publish; MEmu+ADB setup; MediaStore staging; long-press creation path; stable Album/Videos selection; ShareActivity validation; privacy Public check; caption validation; publish button `com.kwai.video.basis:id/post`; 120-second post confirmation gate; structural/textual checks; overlay handling; and a publisher lock.
+7. Current Windows Scheduled Tasks list contains Anthares administration tasks but no obvious historical Kwai daemon task. The legacy Scheduled Task appears to have been removed and will need reconstruction from history/logs after exact command/path is recovered.
+8. The PC also contains many historical TikTok files in `C:\Users\Lucas\anthares-clipper`, including `tiktok_web_publish.py`, `_batch.py`, `_local.py`, `_ultralean.py`, v2/v3, `tiktok_worker.py`, account identity/privacy probes and `youtube_tiktok_pipeline.py`.
+
+EVIDENCE:
+- MeshCentral exact-file search and read.
+- Get-FileHash/Get-Item comparison on all four recovered Kwai files.
+- local git log: `git -C C:\Users\Lucas\anthares-clipper log --oneline --all -- kwai_daily_daemon.py kwai_memu_publish.py`.
+- local remote: origin=https://github.com/UniversoAnthares/anthares-clipper.git.
+
+CHANGED:
+None on the PC. Read-only archaeology only.
+
+STATE IMPACT:
+- Exact legacy Kwai daemon source = FOUND.
+- Exact legacy Kwai MEmu publisher source = FOUND.
+- Historical source repository `anthares-clipper` = FOUND.
+- MEmu publication algorithm = FOUND.
+- Scheduled Task exact launcher = still UNKNOWN/removed from current task list.
+- TikTok local source family = FOUND, exact production workflow still to identify.
+
+NEXT:
+1. Treat `UniversoAnthares/anthares-clipper` and the recovered PC copy as the primary historical source for archaeology.
+2. Inspect full commits `33c1596`, `106dff4`, MEmu recovery/caption commits and the earlier `kwai_memu_publish.py` history to identify the last PROVEN local version and the exact Scheduled Task launcher.
+3. Inspect TikTok local git history/workflows in the same repository for the self-hosted runner and browser profile/session path.
+4. Preserve the recovered files before any edits; reconstruct the isolated legacy path from these originals instead of reimplementing them.
+
+RISKS OF CONCURRENCY:
+Do not overwrite either recovered `anthares-clipper` copy. Other agents should consume the hashes and commit history above and coordinate through this file before restoring anything.
