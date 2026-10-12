@@ -1,0 +1,59 @@
+name: Anthares OWN Stage4 Native Login Navigation 20
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-owned-stage4-login-navigation-20.yml'
+permissions:
+  contents: read
+jobs:
+  evidence:
+    name: "Native login navigation ${{ matrix.check }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        check: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot proven Android and capture actual Kwai login screen
+        shell: bash
+        env:
+          CHECK: ${{ matrix.check }}
+        run: |
+          set -Eeuo pipefail
+          SDK=/usr/local/lib/android/sdk
+          export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+          export PATH="$SDK/platform-tools:$SDK/emulator:$SDK/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator "platforms;android-30" "system-images;android-30;google_apis;x86_64"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n "auth-evidence-$CHECK" -k "system-images;android-30;google_apis;x86_64" --device pixel_2 --force
+          sudo chmod 666 /dev/kvm
+          "$SDK/emulator/emulator" -avd "auth-evidence-$CHECK" -no-window -no-audio -no-boot-anim -accel on -no-snapshot -gpu swiftshader_indirect -memory 2048 -cores 2 >/tmp/emulator.log 2>&1 &
+          timeout 120 adb wait-for-device
+          timeout 420 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 3; done'
+          curl -fL --retry 3 --max-time 180 -o /tmp/kwai.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  /tmp/kwai.zip' | sha256sum -c -
+          mkdir -p /tmp/kwai
+          unzip -q /tmp/kwai.zip -d /tmp/kwai
+          mapfile -t apks < <(find /tmp/kwai -name '*.apk' -type f | sort)
+          timeout 180 adb install-multiple -r "${apks[@]}"
+          adb shell monkey -p com.kwai.video 1 >/dev/null
+          sleep 12
+          adb shell uiautomator dump /sdcard/auth.xml >/dev/null
+          adb exec-out cat /sdcard/auth.xml > /tmp/auth.xml
+          adb shell dumpsys activity activities > /tmp/activities.txt
+          adb shell dumpsys package com.kwai.video > /tmp/package.txt
+          echo KWAI_NATIVE_NAVIGATION_ATTEMPT="$CHECK"
+          python3 tools/kwai_login_surface_recovery.py | tee /tmp/kwai-recovery.log
+          python3 tools/kwai_android_login_entry.py email | tee /tmp/kwai-login-entry.log
+          echo KWAI_NATIVE_LOGIN_FORM_REACHED=PASS
+
+      - name: Report failure without leaking account credentials
+        if: failure()
+        run: |
+          tail -40 /tmp/emulator.log 2>/dev/null || true
+          grep -E 'mResumedActivity|topResumedActivity' /tmp/activities.txt 2>/dev/null || true
