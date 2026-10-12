@@ -177,7 +177,26 @@ jobs:
           adb shell am force-stop com.kwai.video || true
           adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
           sleep 8
-          echo 'STAGE4_STRATEGY=PROFILE_FIRST_NO_BLIND_AUTOLOGIN' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo 'STAGE4_STRATEGY=PERMISSION_DIALOG_RECOVERY_THEN_PROFILE' | tee -a "$GITHUB_STEP_SUMMARY"
+          adb shell pm grant com.kwai.video android.permission.CAMERA >/dev/null 2>&1 || true
+          adb shell pm grant com.kwai.video android.permission.RECORD_AUDIO >/dev/null 2>&1 || true
+          adb shell pm grant com.kwai.video android.permission.READ_MEDIA_IMAGES >/dev/null 2>&1 || true
+          adb shell pm grant com.kwai.video android.permission.READ_MEDIA_VIDEO >/dev/null 2>&1 || true
+          for attempt in 1 2 3 4 5; do
+            WINDOW="$(adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | head -2 || true)"
+            if echo "$WINDOW" | grep -Eiq 'permissioncontroller|grantpermissions'; then
+              echo "STAGE4_PERMISSION_DIALOG_DETECTED=$attempt" | tee -a "$GITHUB_STEP_SUMMARY"
+              adb shell input keyevent 66 || true
+              sleep 2
+              adb shell input tap 540 1200 || true
+              sleep 2
+            else
+              echo "STAGE4_PERMISSION_DIALOG_CLEARED=$attempt" | tee -a "$GITHUB_STEP_SUMMARY"
+              break
+            fi
+          done
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+          sleep 3
           set +e
           KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" timeout 110 python3 kwai_auth_probe.py > /tmp/stage4-pre-probe.txt 2>&1
           PROBE_RC=$?
