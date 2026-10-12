@@ -48,3 +48,10 @@
 - No publish guard files were created; no social publication can be triggered by this smoke test.
 - Replacement architecture is now constructed: ChatGPT/GitHub queue -> local allowlisted executor -> result commit, with Startup supervisor self-healing. WinRemote/Desktop Commander/AI Commander are no longer required after first successful supervisor start.
 - Next: on first observable executor start (immediate if process actually launched, otherwise next Windows logon), verify the pending status result appears; then mark the new executor PROVEN and use it for subsequent safe actions.
+
+## 2026-10-12 — Agent 3 — executor smoke result rechecked
+- Canonical SHARED-LOG was re-read immediately before the check.
+- `executor-control/results/c9c9bf17-67e2-4c07-90f1-724933aa62c6.json` is still absent on `legacy-pc-rebuild`.
+- Therefore the immediate MeshCentral launch is still not proven to have started the supervisor; do not treat the new transport as live yet.
+- Construction/persistence remain intact. The queued status request will be consumed automatically when the Startup launcher starts the supervisor at the next Windows user logon.
+- No publication occurred.
