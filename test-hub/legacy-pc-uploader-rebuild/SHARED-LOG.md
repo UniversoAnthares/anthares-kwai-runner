@@ -1346,3 +1346,16 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Publish remains fail-closed: no publish guard files were created and no social publication occurred in this transport proof.
 - Canonical `STATE.md` was updated to mark Anthares Local Executor replacement transport PROVEN.
 - Result: ChatGPT/GitHub queue -> persistent local allowlisted executor -> result commit round-trip is PROVEN. WinRemote, Desktop Commander and AI Commander are not architectural dependencies anymore.
+
+## 2026-10-12 — TinyFish replacement: Anthares-browser protected automation surface
+- User explicitly retired TinyFish and designated Anthares-browser as replacement.
+- Re-read canonical SHARED-LOG before work and reviewed current `anthares-brouser/` implementation against the attached technical note.
+- Kept physical `anthares-brouser/` path unchanged; canonical product name is Anthares-browser.
+- Added loopback-only Chromium CDP on `127.0.0.1:9222`; port is not exposed externally.
+- Expanded CONTROL_TOKEN-protected API: `/page`, `/targets`, `/navigate`, `/click`, `/type`, `/wait`, `/evaluate`, `/screenshot`.
+- `/health` and `/status` now report CDP readiness; `session_claim` intentionally remains `not_verified`.
+- Added `websocket-client==1.8.0`; no Playwright dependency.
+- Serialized browser commands with an in-process lock; external lease/mutex is still required across containers/profiles.
+- Updated README with security and persistence invariants. No cookies, tokens, profile data, or screenshot artifacts were committed.
+- No social publication occurred.
+- Status: implementation committed to `main`; Chromium/CDP E2E and real-session restart proof are still pending.
