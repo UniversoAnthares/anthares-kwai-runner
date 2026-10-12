@@ -9,9 +9,16 @@ def adb(*args):
     return subprocess.run(['adb',*args],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=20).stdout
 
 def snap():
-    adb('shell','uiautomator','dump','/sdcard/kwai-cred.xml')
-    xml=adb('exec-out','cat','/sdcard/kwai-cred.xml')
-    return list(ET.fromstring(xml).iter('node'))
+    for _ in range(3):
+        try:
+            adb('shell','uiautomator','dump','/sdcard/kwai-cred.xml')
+            xml=adb('exec-out','cat','/sdcard/kwai-cred.xml')
+            if '<hierarchy' in xml:
+                return list(ET.fromstring(xml).iter('node'))
+        except Exception:
+            pass
+        time.sleep(1)
+    raise SystemExit(3)
 
 def txt(n): return ((n.get('text') or '')+' '+(n.get('content-desc') or '')+' '+(n.get('resource-id') or '')).strip().lower()
 def bounds(n):
@@ -54,23 +61,21 @@ def wait_password_or_challenge(seconds=12):
         time.sleep(.5)
     return 'stuck',snap()
 
-# Enter native email/phone surface using the proven selector helper.
-r=subprocess.run(['python3','tools/kwai_android_login_entry.py','auto']).returncode
-if r == 3:
-    # Native chooser is absent on fresh installs; recover by semantic navigation.
-    recovered=subprocess.run(['python3','tools/kwai_login_surface_recovery.py']).returncode
-    if recovered == 0:
-        r=subprocess.run(['python3','tools/kwai_android_login_entry.py','auto']).returncode
+# The previous deep-link/component recovery path was structurally unreliable.
+# First reach the native Home -> Log In surface through the proven state machine,
+# then select the actual email/phone method without touching third-party OAuth UI.
+env=os.environ.copy()
+env.setdefault('KWAI_LOGIN_MODE','plain')
+env.setdefault('KWAI_LOGIN_SETTLE','3')
+r=subprocess.run(['python3','tools/kwai_home_login_state_machine.py'],env=env).returncode
 if r != 0:
-    # Independent route: Android resolver-confirmed native Kwai login intent.
-    native=subprocess.run(['python3','tools/kwai_native_intent_recovery.py']).returncode
-    if native == 0:
-        r=subprocess.run(['python3','tools/kwai_android_login_entry.py','auto']).returncode
+    print('KWAI_HOME_LOGIN_STATE_MACHINE_FAILED'); raise SystemExit(3)
+r=subprocess.run(['python3','tools/kwai_android_login_entry.py','auto'],env=env).returncode
 if r != 0:
     print('KWAI_CREDENTIAL_METHOD_NOT_READY'); raise SystemExit(3)
+
 ns=snap(); es=edits(ns)
 if not es: print('KWAI_EMAIL_FIELD_MISSING'); raise SystemExit(3)
-# Email screen should contain a non-password field.
 email_field=next((n for n in es if not is_password(n)),None)
 if email_field is None:
     print('KWAI_ACCOUNT_FIELD_NOT_VERIFIED')
@@ -92,7 +97,6 @@ ns=snap(); b=exact_button(ns,('Log in','Login','Sign in','Entrar','Continue','Co
 if b: tap(b)
 else: adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(1)
 
-# Return success only after credential fields disappear. Challenges are explicit.
 for _ in range(20):
     ns=snap()
     if challenge(ns): print('KWAI_POST_PASSWORD_CHALLENGE'); raise SystemExit(6)
