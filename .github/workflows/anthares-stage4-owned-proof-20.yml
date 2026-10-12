@@ -1,4 +1,4 @@
-name: Stage 4 Own Real Identity Proof 30
+name: Stage 4 Direct Activity Discovery 30
 on:
   workflow_dispatch:
   push:
@@ -8,44 +8,14 @@ permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 case ${{ matrix.case }} - ${{ matrix.launch }} - wait${{ matrix.wait }}"
+    name: "Stage4 direct activity case ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
       max-parallel: 30
       matrix:
-        include:
-          - { case: 1,  launch: monkey,          wait: 4 }
-          - { case: 2,  launch: monkey,          wait: 6 }
-          - { case: 3,  launch: monkey,          wait: 8 }
-          - { case: 4,  launch: monkey,          wait: 10 }
-          - { case: 5,  launch: monkey,          wait: 12 }
-          - { case: 6,  launch: monkey,          wait: 14 }
-          - { case: 7,  launch: component,       wait: 4 }
-          - { case: 8,  launch: component,       wait: 6 }
-          - { case: 9,  launch: component,       wait: 8 }
-          - { case: 10, launch: component,       wait: 10 }
-          - { case: 11, launch: component,       wait: 12 }
-          - { case: 12, launch: component,       wait: 14 }
-          - { case: 13, launch: force_monkey,    wait: 4 }
-          - { case: 14, launch: force_monkey,    wait: 6 }
-          - { case: 15, launch: force_monkey,    wait: 8 }
-          - { case: 16, launch: force_monkey,    wait: 10 }
-          - { case: 17, launch: force_monkey,    wait: 12 }
-          - { case: 18, launch: force_monkey,    wait: 14 }
-          - { case: 19, launch: force_component, wait: 4 }
-          - { case: 20, launch: force_component, wait: 6 }
-          - { case: 21, launch: force_component, wait: 8 }
-          - { case: 22, launch: force_component, wait: 10 }
-          - { case: 23, launch: force_component, wait: 12 }
-          - { case: 24, launch: force_component, wait: 14 }
-          - { case: 25, launch: monkey_twice,    wait: 4 }
-          - { case: 26, launch: monkey_twice,    wait: 6 }
-          - { case: 27, launch: monkey_twice,    wait: 8 }
-          - { case: 28, launch: monkey_twice,    wait: 10 }
-          - { case: 29, launch: monkey_twice,    wait: 12 }
-          - { case: 30, launch: monkey_twice,    wait: 14 }
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
     steps:
       - uses: actions/checkout@v4
       - name: Enable KVM
@@ -59,15 +29,13 @@ jobs:
           curl -fLsS --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
           echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
           mkdir -p kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
-      - name: Real Android account identity verification
+      - name: Discover and exercise direct Kwai auth surfaces
         uses: reactivecircus/android-emulator-runner@v2
         env:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
           KWAI_EXPECTED_ACCOUNT: lucasrosalem
           CASE_ID: ${{ matrix.case }}
-          LAUNCH_MODE: ${{ matrix.launch }}
-          WAIT_SECS: ${{ matrix.wait }}
         with:
           api-level: 30
           arch: x86_64
@@ -85,12 +53,19 @@ jobs:
             bash kwai_vault_install.sh
             adb shell pm path com.kwai.video | grep -q '^package:'
             echo KWAI_PACKAGE_INSTALLED=PASS
-            if [ "$LAUNCH_MODE" = "monkey" ]; then adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null || true; elif [ "$LAUNCH_MODE" = "component" ]; then adb shell am start -n com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity >/dev/null || true; elif [ "$LAUNCH_MODE" = "force_monkey" ]; then adb shell am force-stop com.kwai.video; adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null || true; elif [ "$LAUNCH_MODE" = "force_component" ]; then adb shell am force-stop com.kwai.video; adb shell am start -n com.kwai.video/com.yxcorp.gifshow.tiny.TinyLaunchActivity >/dev/null || true; else adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null || true; sleep 1; adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null || true; fi
-            sleep "$WAIT_SECS"
-            if adb shell pidof com.kwai.video 2>/dev/null | grep -q '[0-9]' || adb shell dumpsys window windows 2>/dev/null | grep -q 'com.kwai.video'; then echo KWAI_APP_LAUNCHED=PASS; else echo KWAI_APP_LAUNCH_SIGNAL=NOT_DETECTED_CONTINUING_TO_UI_PROBE; fi
-            python3 kwai_android_autologin.py
+            adb shell dumpsys package com.kwai.video > /tmp/kwai-package.txt
+            grep -Eo 'com\.kwai\.video/[A-Za-z0-9_.$]+' /tmp/kwai-package.txt | sort -u > /tmp/kwai-components-all.txt || true
+            grep -Ei 'login|signin|auth|account|profile|user|phone|email|verify|passport|entry|tiny' /tmp/kwai-components-all.txt > /tmp/kwai-components-priority.txt || true
+            test -s /tmp/kwai-components-priority.txt || cp /tmp/kwai-components-all.txt /tmp/kwai-components-priority.txt
+            python3 -c 'import os; xs=[x.strip() for x in open("/tmp/kwai-components-priority.txt") if x.strip()]; assert xs; i=(int(os.environ["CASE_ID"])-1)%len(xs); open("/tmp/kwai-candidate.txt","w").write(xs[i]+"\n"); print("KWAI_DIRECT_COMPONENT_COUNT="+str(len(xs))); print("KWAI_DIRECT_COMPONENT="+xs[i])'
+            adb shell am force-stop com.kwai.video
+            adb shell am start -n "$(cat /tmp/kwai-candidate.txt)" > /tmp/kwai-direct-start.txt 2>&1 || true
+            sleep $((4 + (CASE_ID % 6) * 2))
+            adb shell uiautomator dump /sdcard/kwai-direct.xml >/dev/null 2>&1 || true
+            adb exec-out cat /sdcard/kwai-direct.xml > /tmp/kwai-direct.xml 2>/dev/null || true
+            python3 -c 'import xml.etree.ElementTree as E,sys; p="/tmp/kwai-direct.xml"; root=E.parse(p).getroot(); ns=list(root.iter("node")); s=" ".join(((n.get("text") or "")+" "+(n.get("content-desc") or "")+" "+(n.get("resource-id") or "")).lower() for n in ns); edits=sum(1 for n in ns if (n.get("class") or "").endswith("EditText") or n.get("editable")=="true"); print("KWAI_DIRECT_EDITTEXT_COUNT="+str(edits)); print("KWAI_DIRECT_AUTH_MARKERS="+str(int(any(k in s for k in ("login","log in","sign in","entrar","phone","telefone","email","password","senha","account","conta")))))' || true
             python3 tools/kwai_credential_login.py || true
             KWAI_EXPECTED_ACCOUNT=lucasrosalem python3 kwai_auth_probe.py | tee /tmp/stage4-proof.txt
             grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/stage4-proof.txt
             grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/stage4-proof.txt
-            echo "STAGE4_REAL_IDENTITY_CASE_${CASE_ID}=PASS"
+            echo "STAGE4_DIRECT_ACTIVITY_CASE_${CASE_ID}=PASS"
