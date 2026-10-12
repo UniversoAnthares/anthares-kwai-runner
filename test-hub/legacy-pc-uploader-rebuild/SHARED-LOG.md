@@ -1134,3 +1134,9 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - `uiautomator dump` was requested, but reading the generated XML through the memuc wrapper did not return usable content in this attempt; no UI action was performed.
 - No publication action occurred.
 - Next: re-read canonical log, capture the live MEmu3 window and/or pull the UI XML to the host, identify actionable onboarding/login controls, and advance through those controls only.
+
+## 2026-10-12 — Agent 3 — MEmu3 window hidden after publisher probe
+- Canonical log was re-read immediately before this visual inspection.
+- Desktop/window snapshot showed no visible MEmu window even though VM3 is running; this matches the recovered publisher's background/hide-window behavior and explains why direct desktop inspection was unavailable.
+- No UI action or publication occurred.
+- Next: re-read canonical log and explicitly `memuc activate -i 3` to surface VM3 for one diagnostic screenshot, then identify the onboarding/login controls.
