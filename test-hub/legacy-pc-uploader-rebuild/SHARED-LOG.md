@@ -1202,3 +1202,13 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Kwai opened a confirmation dialog: `Pular a preparação?`, warning that some resources may not be immediately available, with actions `Sim, pular` and `Cancelar`.
 - No skip has been confirmed yet and no publication action occurred.
 - Next: re-read canonical log, confirm only `Sim, pular`, then inspect whether Kwai reaches its normal home/login surface.
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — chronological TikTok source catalog validated
+- Canonical log was re-read before the test.
+- Isolated `legacy-pc-rebuild` code was patched to build one deterministic catalog: all `/streams` oldest->newest first, then `/videos` oldest->newest, with dedupe and catalog indices. Only this TikTok-owned source flow changed; the YouTube clipper continues to use lives only.
+- Live discovery test against the real Universo Anthares channel returned 624 unique sources: 154 lives followed by 470 normal videos.
+- Boundary is exact: index 153 = live `xcRGdBfHX0E` (`O Homem do Elevador`); index 154 = first normal video `siBWOPrgar8`.
+- Oldest live is index 0: `b6gL9plY_6w` (`A Poética de Aristóteles - Parte 1 (LIVE)`). The first ten results are all old lives in historical order.
+- The catalog loop code resets published segment states only after every catalog source is exhausted, then begins again at catalog index 0.
+- No publication occurred.
+- Next: exercise the new microcut + adaptive-layout pipeline against the oldest live and inspect render metrics before any Post click.
