@@ -50,6 +50,7 @@ function text(value) {
   return { content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }] };
 }
 
+function createMcpServer() {
 const server = new McpServer({ name: 'Anthares Remote', version: '0.1.0' });
 
 server.registerTool('session_status', {
@@ -169,9 +170,12 @@ server.registerTool('capabilities', {
   inputSchema: {},
 }, async () => text(await api('/v1/control/capabilities')));
 
+return server;
+}
+
 const mode = process.env.ARA_MCP_TRANSPORT || 'stdio';
 if (mode === 'stdio') {
-  await server.connect(new StdioServerTransport());
+  await createMcpServer().connect(new StdioServerTransport());
 } else if (mode === 'http') {
   const clientToken = process.env.ARA_MCP_CLIENT_TOKEN;
   if (!clientToken || clientToken.length < 32 || clientToken === CONTROL_TOKEN) {
@@ -199,7 +203,8 @@ if (mode === 'stdio') {
     }
     try {
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      await server.connect(transport);
+      const instance = createMcpServer();
+      await instance.connect(transport);
       await transport.handleRequest(req, res);
       res.on('close', () => transport.close().catch(() => {}));
     } catch {
