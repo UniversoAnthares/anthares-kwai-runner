@@ -1,0 +1,71 @@
+name: X APK 40 source preflight
+on:
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths: [.github/workflows/x-source-preflight-40.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        variant: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
+    steps:
+      - name: Check 40 source and protocol combinations
+        env:
+          V: ${{ matrix.variant }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p evidence
+          source_id=$(( (V - 1) % 5 ))
+          mode=$(( (V - 1) / 5 ))
+          case "$source_id" in
+            0) url="https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/releases/tags/x-android-apk";;
+            1) url="https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/x-android-apk/x.apkm";;
+            2) url="https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/x-android-apk/x.apk";;
+            3) url="https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/releases/tags/x-android-session-v1";;
+            4) url="https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/x-android-session-v1/x.apkm";;
+          esac
+          echo "variant=$V source=$source_id mode=$mode url=$url" | tee evidence/variant.txt
+          case "$mode" in
+            0) opts=(--head --max-time 20);;
+            1) opts=(--location --max-time 20);;
+            2) opts=(--location --retry 2 --max-time 30);;
+            3) opts=(--location --range 0-4095 --max-time 20);;
+            4) opts=(--location --http1.1 --max-time 20);;
+            5) opts=(--location --http2 --max-time 20);;
+            6) opts=(--location --compressed --max-time 20);;
+            7) opts=(--location --retry 1 --connect-timeout 5 --max-time 20);;
+          esac
+          set +e
+          curl -sS "${opts[@]}" -D evidence/headers.txt -o evidence/body.bin -w 'status=%{http_code} bytes=%{size_download} type=%{content_type} redirect=%{url_effective}\n' "$url" > evidence/http.txt 2> evidence/error.txt
+          rc=$?
+          set -e
+          echo "curl_exit=$rc" | tee evidence/result.txt
+          cat evidence/http.txt
+          if test -f evidence/body.bin; then
+            file evidence/body.bin | tee evidence/type.txt
+            sha256sum evidence/body.bin | tee evidence/hash.txt
+            if head -c 128 evidence/body.bin | grep -Eqi '<html|<!doctype|not found'; then
+              echo HTML_NOT_APK | tee evidence/classification.txt
+            elif unzip -t evidence/body.bin >/dev/null 2>&1; then
+              echo ZIP_CANDIDATE | tee evidence/classification.txt
+            else
+              echo NON_ZIP_OR_PARTIAL | tee evidence/classification.txt
+            fi
+          fi
+          echo "Preflight completed; not an installation/auth/live proof" | tee evidence/scope.txt
+      - name: Upload per-variant evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-source-preflight-${{ matrix.variant }}-${{ github.run_id }}
+          path: evidence/
+          retention-days: 3
