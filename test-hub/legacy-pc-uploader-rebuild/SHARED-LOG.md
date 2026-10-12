@@ -1195,3 +1195,10 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - This is a dynamic-feature/module loading gate after onboarding, currently stalled at 5%, not yet the native authenticated home/create surface.
 - No publication action occurred.
 - Next: re-read canonical log, identify the exact bounds/resource for `Pular`, tap only that skip action, then inspect the resulting screen.
+
+## 2026-10-12 — Agent 3 — Kwai dynamic-module skip confirmation opened
+- Canonical log was re-read before this action.
+- Identified `Pular` as clickable/enabled `com.kwai.video:id/tiny_discovery_right_operation_btn`, bounds `[366,1151][691,1235]`, and tapped only that control.
+- Kwai opened a confirmation dialog: `Pular a preparação?`, warning that some resources may not be immediately available, with actions `Sim, pular` and `Cancelar`.
+- No skip has been confirmed yet and no publication action occurred.
+- Next: re-read canonical log, confirm only `Sim, pular`, then inspect whether Kwai reaches its normal home/login surface.
