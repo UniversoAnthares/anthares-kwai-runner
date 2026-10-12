@@ -6,11 +6,10 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import time
 from pathlib import Path
 
-PACKAGE = "com.kwai.video"
+SUPPORTED_PACKAGES = ("com.kwai.video", "kwai.lite.video")
 
 
 def adb_candidates() -> list[Path]:
@@ -90,17 +89,29 @@ def wifi_ip(adb: Path, serial: str) -> str:
     raise SystemExit("KWAI_UP_PHYSICAL=NO_WIFI_IP")
 
 
-def validate(adb: Path, serial: str) -> None:
+def detect_package(adb: Path, serial: str) -> str:
+    requested = os.getenv("KWAI_UP_PACKAGE", "").strip()
+    candidates = (requested,) if requested else SUPPORTED_PACKAGES
+    for package in candidates:
+        if not package:
+            continue
+        pkg = run(adb, "shell", "pm", "path", package, serial=serial, check=False)
+        if pkg.startswith("package:"):
+            return package
+    print("KWAI_UP_PHYSICAL=KWAI_NOT_INSTALLED")
+    raise SystemExit(13)
+
+
+def validate(adb: Path, serial: str) -> str:
     model = run(adb, "shell", "getprop", "ro.product.model", serial=serial)
     sdk = run(adb, "shell", "getprop", "ro.build.version.sdk", serial=serial)
-    pkg = run(adb, "shell", "pm", "path", PACKAGE, serial=serial, check=False)
-    if not pkg.startswith("package:"):
-        print("KWAI_UP_PHYSICAL=KWAI_NOT_INSTALLED")
-        raise SystemExit(13)
+    package = detect_package(adb, serial)
     print("KWAI_UP_PHYSICAL=READY")
     print("KWAI_UP_MODEL=" + model)
     print("KWAI_UP_SDK=" + sdk)
     print("KWAI_UP_ADB_SERIAL=" + serial)
+    print("KWAI_UP_PACKAGE=" + package)
+    return package
 
 
 def attach_tcp(adb: Path, usb_serial: str, port: int) -> str:
