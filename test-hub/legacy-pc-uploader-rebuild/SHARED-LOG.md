@@ -34,3 +34,17 @@
 - Watchdog writes its own local log and never publishes content. It only checks/restarts the executor.
 - No system task was registered yet; no publication occurred.
 - Next: stage the four executor files on `D:\AntharesWork\anthares-pc-legacy`, attempt installation through any available local executor path, then enqueue only a `status` request and verify result round-trip before enabling any operational action.
+
+## 2026-10-12 — Agent 3 — Anthares Local Executor v2 + self-healing Startup persistence staged
+- Canonical SHARED-LOG was re-read before each bootstrap/persistence step.
+- WinRemote Scheduled Task API remains unavailable with HTTP 502. MeshCentral process execution acknowledges commands but does not produce observable process state/heartbeat, so it is not trusted as the permanent executor.
+- Added hardened `anthares_local_executor_v2.py` on isolated branch, commit `8b255ee75cf613f53dec5ff187311fabbb1b7b1a`. v2 checks only tracked-file dirtiness before hard sync, so harmless untracked archaeology/test files cannot wedge the daemon.
+- Added self-healing `anthares_executor_supervisor.py`, commit `d5600d091c753242993aa4530f1429b0ead05fbd`. Supervisor checks heartbeat+PID every 20s and restarts the executor when absent/stale.
+- Added `anthares_executor_startup.cmd`, commit `7182ea6df25b8f26489945eadccfe67eadbfc2f2`.
+- Staged v2 and supervisor directly on PC under `D:\AntharesWork\anthares-pc-legacy` through the working MeshCentral filesystem channel.
+- Installed Windows user Startup launcher at `C:\Users\Lucas\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Anthares-Local-Executor.cmd`; read-back verified its exact contents. This removes dependency on WinRemote Scheduled Tasks for persistence: next user logon starts supervisor via `pythonw.exe`.
+- Tried immediate supervisor launch through MeshCentral command channel. Connector returned OK but no supervisor heartbeat became readable, so immediate-start outcome is UNKNOWN rather than claimed successful.
+- Queued safe smoke request `c9c9bf17-67e2-4c07-90f1-724933aa62c6` action=`status`, publish=false, commit `4bb000f80cc6db24009af7c9c76b13fd97ff9f3d`. Result is not present yet, so end-to-end queue round-trip remains PENDING.
+- No publish guard files were created; no social publication can be triggered by this smoke test.
+- Replacement architecture is now constructed: ChatGPT/GitHub queue -> local allowlisted executor -> result commit, with Startup supervisor self-healing. WinRemote/Desktop Commander/AI Commander are no longer required after first successful supervisor start.
+- Next: on first observable executor start (immediate if process actually launched, otherwise next Windows logon), verify the pending status result appears; then mark the new executor PROVEN and use it for subsequent safe actions.
