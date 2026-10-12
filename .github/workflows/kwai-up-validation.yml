@@ -60,7 +60,7 @@ jobs:
       - name: Install verification dependency
         run: python -m pip install -r kwai-up/requirements.txt
       - name: Compile
-        run: python -m py_compile kwai-up/kwai_up.py kwai-up/kwai_up_safe.py kwai-up/tests/test_contract.py kwai-up/tests/test_safe_entrypoint.py
+        run: python -m py_compile kwai-up/kwai_up.py kwai-up/kwai_up_safe.py kwai-up/kwai_up_job.py kwai-up/tests/test_contract.py kwai-up/tests/test_safe_entrypoint.py kwai-up/tests/test_job_ledger.py
       - name: Contract tests
         env:
           KWAI_UP_CASE: ${{ matrix.case }}
@@ -73,16 +73,22 @@ jobs:
           from pathlib import Path
           core=Path('kwai-up/kwai_up.py').read_text(encoding='utf-8')
           safe=Path('kwai-up/kwai_up_safe.py').read_text(encoding='utf-8')
+          job=Path('kwai-up/kwai_up_job.py').read_text(encoding='utf-8')
           readme=Path('kwai-up/README.md').read_text(encoding='utf-8')
+          allcode=core+safe+job
           assert 'com.kwai.video' in core
           assert 'PUBLISH_REQUESTED' in core
           assert 'READY_TO_PUBLISH' in core
           assert 'profile_grid_changed' in core
-          assert 'memuc' not in (core+safe).casefold()
+          assert 'memuc' not in allcode.casefold()
           assert '/sdcard/Movies/KwaiUp' in core
           assert 'self.verify_identity()' in safe
           assert 'KWAI_UP_EXPECTED_ACCOUNT' in safe
           assert 'por\\s+favor\\s+aguarde' in safe
+          assert 'BEGIN IMMEDIATE' in job
+          assert 'source-interval-overlap' in job
+          assert 'media-sha256-already-seen' in job
+          assert 'UNCERTAIN' in job
           assert 'kwai_up_safe.py prepare' in readme
           print('KWAI_UP_CONTRACT_OK')
           PY
