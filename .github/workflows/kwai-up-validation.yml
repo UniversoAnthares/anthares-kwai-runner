@@ -1,16 +1,16 @@
 name: Kwai-up validation
 
 on:
-  push:
-    branches: [kwai-up]
-    paths:
-      - 'kwai-up/**'
-      - '.github/workflows/kwai-up-validation.yml'
   pull_request:
+    branches: [main]
     paths:
       - 'kwai-up/**'
       - '.github/workflows/kwai-up-validation.yml'
   workflow_dispatch:
+
+concurrency:
+  group: kwai-up-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   contract:
