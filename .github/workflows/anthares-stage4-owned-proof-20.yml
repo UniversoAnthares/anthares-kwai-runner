@@ -23,12 +23,7 @@ jobs:
           mkdir -p /tmp/guest/bin
           cp /bin/busybox /tmp/guest/bin/busybox
           ln -s busybox /tmp/guest/bin/sh
-          cat >/tmp/guest/init <<'EOF'
-#!/bin/sh
-echo ARM64_GUEST_BOOT_CONFIRMED
-uname -m
-poweroff -f
-EOF
+          printf '%s\n' '#!/bin/sh' 'echo ARM64_GUEST_BOOT_CONFIRMED' 'uname -m' 'poweroff -f' > /tmp/guest/init
           chmod +x /tmp/guest/init
           (cd /tmp/guest && find . | cpio -o -H newc 2>/dev/null | gzip -1) > /tmp/guest-initramfs.cpio.gz
           echo "KERNEL_PATH=$KERNEL" >> "$GITHUB_ENV"
