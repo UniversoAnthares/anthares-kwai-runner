@@ -1,0 +1,55 @@
+name: Kwai Home Login State Machine QA40
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/kwai-home-login-state-machine-qa40.yml'
+permissions:
+  contents: read
+jobs:
+  login-state:
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        mode: [plain, dismiss-guide, pregrant-notification, network-wait, relaunch-before-login, deny-then-retry, allow-permissions, allow-then-retry, relaunch-after-login, profile-fallback]
+        settle: [0, 3, 8, 15]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      KWAI_LOGIN_MODE: ${{ matrix.mode }}
+      KWAI_LOGIN_SETTLE: ${{ matrix.settle }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch proven Kwai package vault
+        run: |
+          curl -fL --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          mkdir -p kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+      - run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 4096M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 4096
+          script: python3 tools/kwai_home_login_state_machine.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: home-login-${{ matrix.mode }}-${{ matrix.settle }}-${{ github.run_id }}
+          path: |
+            kwai-home-login-state.txt
+            home-login-*.xml
+            kwai-home-login-activities.txt
+            kwai-home-login-window.txt
+            kwai-home-login-logcat.txt
+            kwai-vault-install-status.txt
+          if-no-files-found: warn
+          retention-days: 1
