@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: kwai-mobile-auth-acceptance
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   KWAI_EXPECTED_ACCOUNT: lucasrosalem
@@ -21,7 +21,7 @@ env:
 
 jobs:
   acquire_and_store:
-    runs-on: macos-14
+    runs-on: ubuntu-24.04
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
-          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | shasum -a 256 -c -
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
           unzip -q kwai-vault.zip -d kwai-vault
       - name: Pull existing private session when present
         shell: bash
@@ -54,6 +54,11 @@ jobs:
           elif [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then
             exit "$rc"
           fi
+      - name: Enable KVM
+        shell: bash
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
       - name: Acquire authenticated identity and seal session
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -69,7 +74,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 300
           force-avd-creation: true
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -memory 2048
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
             set -eu
             bash kwai_vault_install.sh
@@ -117,7 +122,7 @@ jobs:
 
   restore_verify:
     needs: acquire_and_store
-    runs-on: macos-14
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -126,7 +131,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
-          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | shasum -a 256 -c -
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
           unzip -q kwai-vault.zip -d kwai-vault
       - name: Pull session created by independent prior runner
         shell: bash
@@ -134,6 +139,11 @@ jobs:
           set -euo pipefail
           python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
           test -s kwai-session.enc
+      - name: Enable KVM
+        shell: bash
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
       - name: Prove identity survives fresh cloud runner
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -148,7 +158,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 300
           force-avd-creation: true
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -memory 2048
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
             set -eu
             bash kwai_vault_install.sh
