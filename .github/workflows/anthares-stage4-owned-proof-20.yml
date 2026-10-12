@@ -1,11 +1,11 @@
-name: Stage 4 Crash Tolerant Visual 40
+name: Stage 4 Visual Artifact Proof 4
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 crash tolerant ${{ matrix.case }}"
+    name: "Stage4 artifact proof ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -115,4 +115,14 @@ jobs:
             adb shell dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp' | head -5 || true
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
             echo "VISUAL_CAPTURE=PASS"
+            cp /tmp/kwai-screen-$CASE_ID.png "$GITHUB_WORKSPACE/kwai-screen-$CASE_ID.png"
             adb shell dumpsys activity processes | grep -A 5 'com.kwai.video' | head -25 || true
+
+      - name: Upload real screen for visual review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-screen-${{ matrix.case }}
+          path: kwai-screen-*.png
+          if-no-files-found: warn
+          retention-days: 3
