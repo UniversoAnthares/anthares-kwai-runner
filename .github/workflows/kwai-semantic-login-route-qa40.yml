@@ -25,7 +25,7 @@ jobs:
           printf '%s  %s\n' "$SHA" kwai-vault.zip | sha256sum --check
           unzip -tq kwai-vault.zip >/dev/null
           echo PREPARED_KWAI_VAULT=PASS
-      - name: Upload verified vault for the 40 tests
+      - name: Upload verified vault for tests
         uses: actions/upload-artifact@v4
         with:
           name: kwai-vault-verified-${{ github.run_id }}
@@ -34,8 +34,85 @@ jobs:
           retention-days: 1
           compression-level: 0
 
-  semantic-login-route:
+  install-canary:
+    name: Prove Android boot and Kwai install before QA40
     needs: prepare-vault
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Restore proven slim AVD
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+      - name: Restore Android 35 system image
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+      - name: Restore emulator binary
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
+      - uses: actions/checkout@v4
+      - name: Download verified vault
+        uses: actions/download-artifact@v4
+        with:
+          name: kwai-vault-verified-${{ github.run_id }}
+          path: /tmp/kwai-vault-artifact
+      - name: Boot and persist Android tools PATH
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+          export PATH="$SDK/platform-tools:$PATH"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          test -x "$SDK/platform-tools/adb"
+          test -d "$ANDROID_AVD_HOME/kwai-speed.avd/snapshots/kwai-ready"
+          sudo chmod 666 /dev/kvm
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/canary-emulator.log 2>&1 &
+          timeout 60 "$SDK/platform-tools/adb" wait-for-device
+          timeout 60 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done'
+          grep -F "Successfully loaded snapshot 'kwai-ready'" /tmp/canary-emulator.log >/dev/null
+          echo CANARY_ANDROID_BOOT=PASS
+      - name: Install Kwai canary
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v adb
+          adb version
+          cp /tmp/kwai-vault-artifact/kwai-vault.zip ./kwai-vault.zip
+          printf '%s  %s\n' '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543' kwai-vault.zip | sha256sum --check
+          rm -rf kwai-vault && mkdir kwai-vault
+          unzip -oq kwai-vault.zip -d kwai-vault
+          bash kwai_vault_install.sh | tee /tmp/canary-install.log
+          PM_PATH="$(adb shell pm path com.kwai.video 2>/dev/null || true)"
+          [[ "$PM_PATH" == *'package:'* ]]
+          adb shell am force-stop com.kwai.video || true
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+          sleep 5
+          PID="$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
+          test -n "$PID"
+          echo CANARY_KWAI_INSTALL_AND_PROCESS=PASS
+      - name: Upload canary diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-install-canary-${{ github.run_id }}
+          path: |
+            kwai-vault-install-status.txt
+            /tmp/canary-install.log
+            /tmp/canary-emulator.log
+          if-no-files-found: warn
+          retention-days: 1
+
+  semantic-login-route:
+    needs: [prepare-vault, install-canary]
     name: semantic (${{ matrix.route }}, ${{ matrix.network }}, settle-${{ matrix.settle }})
     runs-on: ubuntu-24.04
     timeout-minutes: 14
@@ -74,33 +151,35 @@ jobs:
         with:
           name: kwai-vault-verified-${{ github.run_id }}
           path: /tmp/kwai-vault-artifact
-      - name: Boot proven snapshot
+      - name: Boot proven snapshot and persist Android PATH
         shell: bash
         run: |
           set -euo pipefail
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           export PATH="$SDK/platform-tools:$PATH"
           export ANDROID_SDK_HOME="$HOME"
           export ANDROID_AVD_HOME="$HOME/.android/avd"
+          test -x "$SDK/platform-tools/adb"
           test -d "$ANDROID_AVD_HOME/kwai-speed.avd/snapshots/kwai-ready"
           sudo chmod 666 /dev/kvm
           nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/semantic-emulator.log 2>&1 &
-          timeout 60 adb wait-for-device
+          timeout 60 "$SDK/platform-tools/adb" wait-for-device
           timeout 60 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done'
           grep -F "Successfully loaded snapshot 'kwai-ready'" /tmp/semantic-emulator.log >/dev/null
           echo SEMANTIC_ANDROID_BOOT=PASS
-      - name: Install verified Kwai package without pipefail false negatives
+      - name: Install verified Kwai package
         shell: bash
         run: |
           set -euo pipefail
+          command -v adb
           PM_PATH="$(adb shell pm path com.kwai.video 2>/dev/null || true)"
           if [[ "$PM_PATH" == *'package:'* ]]; then
             echo KWAI_ALREADY_PRESENT=1
           else
             cp /tmp/kwai-vault-artifact/kwai-vault.zip ./kwai-vault.zip
             printf '%s  %s\n' '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543' kwai-vault.zip | sha256sum --check
-            rm -rf kwai-vault
-            mkdir -p kwai-vault
+            rm -rf kwai-vault && mkdir kwai-vault
             unzip -oq kwai-vault.zip -d kwai-vault
             bash kwai_vault_install.sh | tee /tmp/kwai-install-local.log
           fi
@@ -117,6 +196,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          command -v adb
           python3 tools/kwai_semantic_login_route_probe.py
       - name: Upload semantic diagnostics
         if: always()
