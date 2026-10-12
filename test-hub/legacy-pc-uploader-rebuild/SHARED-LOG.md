@@ -1032,3 +1032,13 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - The `Mesh Agent` Windows service remains LocalSystem, but that fact alone is insufficient without a working command path.
 - No installer was executed and no persistent system state changed.
 - Next: use the existing interactive Windows session and signed installer through the normal UAC path, controlling only the authorized installer UI; preserve the historical D:\Program Files\Microvirt\MEmu target if offered.
+
+## 2026-10-12 — Agent 3 — KWAI MEmu runtime installed at historical path
+- Canonical log was re-read immediately before the installation step and before verification.
+- Launched the already verified/signed `D:\AntharesWork\legacy-pc-runtime\downloads\MEmu-Setup-9.5.7.1.exe` through the normal interactive Windows installer path. No UAC-bypass method was used.
+- Installer progressed normally (observed at 49% while registering main components) and then closed.
+- Post-install verification proves `D:\Program Files\Microvirt\MEmu\memuc.exe` now exists, size 247,040 bytes, timestamp 2026-09-15 21:23:31.
+- `D:\Program Files\Microvirt\MEmu` and `D:\Program Files\Microvirt\MEmuHyperv` both exist. This exactly matches the historical Kwai daemon/publisher `MEMUC` path.
+- No MEmu VM/process was running at the verification instant; this step installed only the runtime and did not publish anything.
+- This closes the prior primary Kwai blocker: MEmu runtime installation = PROVEN/RESTORED.
+- Next: re-read canonical log, inventory MEmu VMs with memuc, identify/create the isolated target VM (historically VM index 3), then validate ADB/package state before any Kwai publication action.
