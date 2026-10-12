@@ -12,6 +12,7 @@ _DEVICES = {}
 _DEVICE_HASH_CACHE = {}
 _DEVICE_HASH_TTL = 60
 _DEVICE_HASH_BASE = "https://raw.githubusercontent.com/UniversoAnthares/anthares-kwai-runner/main/anthares-remote-agent/devices"
+_PROBE_DEVICE = "DESKTOP-FTDK0HP"
 
 
 def register(app, control_token):
@@ -65,6 +66,21 @@ def register(app, control_token):
     def state(device):
         return _DEVICES.setdefault(device, {"heartbeat": None, "queue": [], "jobs": {}})
 
+    def enqueue(device, job_type, args=None, timeout=30):
+        job_id = secrets.token_hex(16)
+        job = {
+            "id": job_id,
+            "type": job_type,
+            "args": args or {},
+            "timeout_seconds": max(1, min(int(timeout or 30), 120)),
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "status": "queued",
+        }
+        s = state(device)
+        s["jobs"][job_id] = job
+        s["queue"].append(job_id)
+        return job
+
     @app.post("/v1/device/heartbeat")
     def ara_heartbeat():
         device = device_id()
@@ -115,20 +131,8 @@ def register(app, control_token):
         job_type = str(body.get("type") or "").strip()
         if not device or not job_type:
             return jsonify(error="missing_device_id_or_type"), 400
-        timeout = max(1, min(int(body.get("timeout_seconds") or 30), 120))
-        job_id = secrets.token_hex(16)
-        job = {
-            "id": job_id,
-            "type": job_type,
-            "args": body.get("args") or {},
-            "timeout_seconds": timeout,
-            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "status": "queued",
-        }
         with _LOCK:
-            s = state(device)
-            s["jobs"][job_id] = job
-            s["queue"].append(job_id)
+            job = enqueue(device, job_type, body.get("args") or {}, body.get("timeout_seconds") or 30)
         return jsonify(ok=True, job=job), 201
 
     @app.get("/v1/control/jobs/<job_id>")
@@ -154,3 +158,31 @@ def register(app, control_token):
         with _LOCK:
             s = state(device)
             return jsonify(heartbeat=s["heartbeat"], queued=len(s["queue"]))
+
+    @app.get("/v1/public/status")
+    def ara_public_status():
+        device = request.args.get("device_id", "").strip()
+        if device != _PROBE_DEVICE:
+            return jsonify(error="not_found"), 404
+        with _LOCK:
+            hb = state(device)["heartbeat"]
+        return jsonify(device_id=device, connected=bool(hb), heartbeat=hb)
+
+    @app.post("/v1/public/ping")
+    def ara_public_ping_create():
+        body = request.get_json(silent=True) or {}
+        device = str(body.get("device_id") or "").strip()
+        if device != _PROBE_DEVICE:
+            return jsonify(error="not_found"), 404
+        with _LOCK:
+            job = enqueue(device, "ping", {}, 15)
+        return jsonify(job_id=job["id"], status=job["status"]), 202
+
+    @app.get("/v1/public/ping/<job_id>")
+    def ara_public_ping_get(job_id):
+        with _LOCK:
+            job = state(_PROBE_DEVICE)["jobs"].get(job_id)
+            if not job or job.get("type") != "ping":
+                return jsonify(error="not_found"), 404
+            result = job.get("result") or {}
+            return jsonify(status=job.get("status"), ok=result.get("ok"), output=result.get("output") if result.get("ok") else None)
