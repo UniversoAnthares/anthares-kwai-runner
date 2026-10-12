@@ -1,0 +1,163 @@
+name: X full flow microcut E2E
+
+on:
+  push:
+    branches:
+      - fix/microcut-semantic-x-e2e-20261011
+    paths:
+      - scripts/anthares_microcut_v2.py
+      - .github/workflows/x-full-flow-microcut-e2e.yml
+      - .x-full-flow-trigger
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: x-full-flow-microcut-e2e
+  cancel-in-progress: false
+
+env:
+  SOURCE_URL: https://www.youtube.com/watch?v=HtRVqkQ5Opo
+  RELEASE_TAG: x-full-flow-test-cache
+  ANTHARES_WHISPER_MODEL: small
+  ANTHARES_PAUSE_SECONDS: "0.58"
+  ANTHARES_PAUSE_KEEP_SECONDS: "0.14"
+  ANTHARES_FILLER_MIN_SECONDS: "0.30"
+  ANTHARES_MAX_REMOVAL_RATIO: "0.32"
+  ANTHARES_MIN_FINAL_SECONDS: "25"
+  ANTHARES_MIN_REMOVED_SECONDS: "0.18"
+
+jobs:
+  prepare-and-queue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/microcut-semantic-x-e2e-20261011
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache Whisper model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: anthares-microcut-v2-whisper-small
+
+      - name: Install media tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          python -m pip install --disable-pip-version-check faster-whisper yt-dlp
+          python -m py_compile scripts/anthares_microcut_v2.py
+
+      - name: Extract source and prove real microcuts
+        id: cut
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p x-e2e
+          ok=0
+          for start in 60 300 600 900 1200; do
+            end=$((start+95))
+            rm -f x-e2e/source.* x-e2e/microcut.mp4 x-e2e/report.json x-e2e/final.mp4
+            echo "Trying owned source section ${start}-${end}"
+            yt-dlp --no-playlist --download-sections "*${start}-${end}" --force-keyframes-at-cuts \
+              --merge-output-format mp4 -f 'bv*+ba/b' -o 'x-e2e/source.%(ext)s' "$SOURCE_URL" || continue
+            src=$(find x-e2e -maxdepth 1 -type f -name 'source.*' | head -1)
+            test -n "$src" || continue
+            if python -u scripts/anthares_microcut_v2.py "$src" x-e2e/microcut.mp4 --report x-e2e/report.json; then
+              removed=$(python - <<'PY'
+          import json
+          r=json.load(open('x-e2e/report.json',encoding='utf-8'))
+          print(float(r.get('removed_seconds') or 0))
+          PY
+              )
+              python - <<'PY'
+          import json
+          r=json.load(open('x-e2e/report.json',encoding='utf-8'))
+          assert float(r['removed_seconds']) >= 0.18
+          assert int(r['intervals']) >= 1
+          assert r.get('reasons')
+          print('MICROCUT_EVIDENCE='+json.dumps(r,ensure_ascii=False,separators=(',',':')))
+          PY
+              ffmpeg -y -hide_banner -loglevel error -i x-e2e/microcut.mp4 \
+                -vf 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,format=yuv420p' \
+                -c:v libx264 -preset veryfast -crf 19 -c:a aac -b:a 160k -movflags +faststart x-e2e/final.mp4
+              ok=1
+              echo "source_start=$start" >> "$GITHUB_OUTPUT"
+              break
+            fi
+          done
+          test "$ok" = 1 || { echo '::error::No tested source section produced verified microcuts'; exit 1; }
+          test -s x-e2e/final.mp4
+          ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 x-e2e/final.mp4
+
+      - name: Publish prepared asset to temporary release
+        id: host
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSET="anthares-x-e2e-${GITHUB_RUN_ID}.mp4"
+          cp x-e2e/final.mp4 "x-e2e/$ASSET"
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --title "Anthares X E2E transient media" \
+              --notes "Temporary media for Anthares end-to-end X publisher validation." --target "$GITHUB_SHA"
+          fi
+          gh release upload "$RELEASE_TAG" "x-e2e/$ASSET" --clobber
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${ASSET}"
+          curl -fL --retry 4 --retry-delay 2 --range 0-65535 -o /tmp/x-e2e-probe.bin "$URL"
+          test -s /tmp/x-e2e-probe.bin
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+          echo "PUBLIC_MEDIA_URL=$URL"
+
+      - name: Queue X publication through the production queue contract
+        id: queue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MEDIA_URL: ${{ steps.host.outputs.url }}
+          SOURCE_START: ${{ steps.cut.outputs.source_start }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CAPTION="Teste do fluxo completo Anthares — microcortes IA validados."
+          python - <<'PY' > /tmp/x-issue-body.md
+          import json, os
+          body={
+            'platform':'x',
+            'account':'lucasyahn',
+            'caption':'Teste do fluxo completo Anthares — microcortes IA validados.',
+            'media_url':os.environ['MEDIA_URL'],
+            'source_id':'x-e2e-'+os.environ['GITHUB_RUN_ID'],
+            'source_start_seconds':int(os.environ['SOURCE_START']),
+            'microcut_report':{
+              k:v for k,v in json.load(open('x-e2e/report.json',encoding='utf-8')).items()
+              if k != 'transcript'
+            },
+          }
+          print('```json')
+          print(json.dumps(body,ensure_ascii=False,indent=2))
+          print('```')
+          PY
+          url=$(gh issue create --title "[X-PUBLISH] full-flow-microcut-${GITHUB_RUN_ID}" --body-file /tmp/x-issue-body.md)
+          echo "issue_url=$url" >> "$GITHUB_OUTPUT"
+          echo "X_QUEUE_ISSUE=$url"
+
+      - name: Upload cut evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-full-flow-${{ github.run_id }}
+          path: |
+            x-e2e/report.json
+            x-e2e/final.mp4
+          if-no-files-found: ignore
+          retention-days: 3
