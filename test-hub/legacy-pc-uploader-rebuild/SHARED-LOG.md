@@ -1126,3 +1126,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - This indicates the fresh VM is currently on an onboarding/login/permission UI rather than the authenticated home/create surface expected by the historical publisher.
 - No publication action occurred.
 - Next: re-read canonical log, dump the current Android UI hierarchy/activity from VM3 and classify the exact screen; then advance only through onboarding/login prerequisites.
+
+## 2026-10-12 — Agent 3 — Kwai current activity classified as TinyWebHomeActivity
+- Canonical log was re-read immediately before this inspection.
+- VM3 current focus is `com.kwai.video/com.yxcorp.gifshow.tiny.TinyWebHomeActivity`.
+- This confirms the app is sitting on Kwai's tiny/web onboarding/home surface rather than the historical authenticated native home/create surface.
+- `uiautomator dump` was requested, but reading the generated XML through the memuc wrapper did not return usable content in this attempt; no UI action was performed.
+- No publication action occurred.
+- Next: re-read canonical log, capture the live MEmu3 window and/or pull the UI XML to the host, identify actionable onboarding/login controls, and advance through those controls only.
