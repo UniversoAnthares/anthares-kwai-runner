@@ -16,6 +16,15 @@ ku = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = ku
 SPEC.loader.exec_module(ku)
 
+# A dedicated physical executor may carry either the full Kwai app or Kwai
+# Lite. The rest of the publisher remains fail-closed until the UI contract
+# for that exact package has been validated.
+CONFIGURED_PACKAGE = os.getenv("KWAI_UP_PACKAGE", "").strip()
+if CONFIGURED_PACKAGE:
+    if not re.fullmatch(r"[A-Za-z0-9_.]+", CONFIGURED_PACKAGE):
+        raise SystemExit("KWAI_UP_STATE=FAILED_SAFE REASON=invalid-package")
+    ku.PACKAGE = CONFIGURED_PACKAGE
+
 # Preserve the semantics that were learned by the successful 2026-10-02
 # publisher: a review/pending message is not publication proof.
 ku.SUCCESS_RE = re.compile(
