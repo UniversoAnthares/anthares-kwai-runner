@@ -29,6 +29,9 @@ env:
   INSTAGRAM_PREPARE_DIR: instagram-prepared
   INSTAGRAM_WHISPER_MODEL: small
   INSTAGRAM_MIN_FINAL_SECONDS: "30"
+  INSTAGRAM_YOUTUBE_SOURCE_URL: ${{ vars.INSTAGRAM_YOUTUBE_SOURCE_URL || 'https://www.youtube.com/watch?v=HtRVqkQ5Opo' }}
+  INSTAGRAM_YOUTUBE_START_SECONDS: ${{ vars.INSTAGRAM_YOUTUBE_START_SECONDS || '0' }}
+  INSTAGRAM_YOUTUBE_CLIP_SECONDS: ${{ vars.TIKTOK_CLIP_TARGET_SECONDS || '90' }}
   INSTAGRAM_TIKTOK_TARGET_SECONDS: ${{ vars.TIKTOK_CLIP_TARGET_SECONDS || '' }}
   INSTAGRAM_PAUSE_SECONDS: "0.65"
   INSTAGRAM_PAUSE_KEEP_SECONDS: "0.16"
@@ -59,7 +62,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
-          python -m pip install --disable-pip-version-check faster-whisper
+          python -m pip install --disable-pip-version-check faster-whisper yt-dlp
 
       - name: Unit and syntax tests
         run: |
