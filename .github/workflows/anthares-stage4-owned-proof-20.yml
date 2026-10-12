@@ -1,4 +1,4 @@
-name: Stage 4 UI Surface Recovery 40
+name: Stage 4 Dialog Unblock 40
 on:
   workflow_dispatch:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 UI recovery ${{ matrix.case }}"
+    name: "Stage4 dialog unblock ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -90,3 +90,16 @@ jobs:
             if adb logcat -d -v brief | grep -q 'Fatal signal 11'; then echo "UI_PROBE_NATIVE_CRASH=1"; exit 1; fi
             if ! adb shell pidof com.kwai.video >/dev/null; then echo "UI_PROBE_KWAI_EXITED=1"; exit 2; fi
             echo "UI_PROBE_KWAI_ALIVE=1"
+            adb shell uiautomator dump /sdcard/dialog-check.xml || true
+            adb exec-out cat /sdcard/dialog-check.xml | grep -Eo 'text="[^"]+"|resource-id="android:id/[^"]+"' | head -30 || true
+            if [ $((CASE_ID % 4)) -eq 0 ]; then adb shell input keyevent KEYCODE_BACK; fi
+            if [ $((CASE_ID % 4)) -eq 1 ]; then adb shell input tap 540 1210; fi
+            if [ $((CASE_ID % 4)) -eq 2 ]; then adb shell input tap 800 1230; fi
+            if [ $((CASE_ID % 4)) -eq 3 ]; then adb shell input keyevent KEYCODE_ENTER; fi
+            sleep $((2 + CASE_ID % 5))
+            adb shell uiautomator dump /sdcard/dialog-after.xml || true
+            adb exec-out cat /sdcard/dialog-after.xml | grep -Eo 'package="[^"]+"|text="[^"]+"' | head -30 || true
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
+            if adb logcat -d -v brief | grep -q 'Fatal signal 11'; then exit 1; fi
+            adb shell pidof com.kwai.video >/dev/null
+            echo "DIALOG_PROBE_KWAI_ALIVE=1"
