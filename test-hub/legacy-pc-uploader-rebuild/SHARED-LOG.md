@@ -1164,3 +1164,10 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Existing `clipper.py` already has reusable microediting primitives (`_detect_long_silences`, `_remove_long_silences`, part concatenation), so the fix can reuse mature code rather than create a second editor.
 - No publication occurred in this investigation.
 - Next: patch only the isolated legacy branch to add adaptive information-preserving layouts, guaranteed microcut pass, and deterministic two-tab chronological catalog selection; then run local rendering/ordering tests before any new TikTok post.
+
+## 2026-10-12 — Agent 3 — first Kwai onboarding tap loop did not advance
+- Canonical log was re-read before recording this result.
+- A 10-iteration ADB onboarding loop attempted to tap the discovered dislike/like control while re-dumping the UI after each step.
+- Progress remained `1/9` for every iteration; final UI text and resource IDs were unchanged. No onboarding choice was accepted and no publication action occurred.
+- Root-cause inspection of the loop found a coordinate-calculation bug: PowerShell regex captures were strings, so `$matches[1]+$matches[3]` concatenated the coordinates before division, producing invalid off-screen tap coordinates.
+- Next: re-read canonical log and rerun the same deterministic onboarding loop with explicit integer casts on each bounds coordinate before computing the center point.
