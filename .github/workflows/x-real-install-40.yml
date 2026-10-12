@@ -1,0 +1,150 @@
+name: X real install proof 40
+on:
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths: [.github/workflows/x-real-install-40.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        variant: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure variant and acquire signed X APK
+        id: prep
+        shell: bash
+        env:
+          V: ${{ matrix.variant }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence /tmp/apkeep-out /tmp/xout
+
+          apis=(28 30 31 33 34)
+          idx=$((V-1))
+          api="${apis[$((idx % 5))]}"
+          arch_idx=$(((idx / 5) % 2))
+          mode=$(((idx / 10) % 4))
+          if [[ "$arch_idx" -eq 0 ]]; then
+            arch=x86
+            apkeep_arch=x86
+          else
+            arch=x86_64
+            apkeep_arch=x86_64
+          fi
+          printf 'variant=%s api=%s arch=%s mode=%s\n' "$V" "$api" "$arch" "$mode" | tee evidence/variant.txt
+
+          timeout 300 docker run --rm -v /tmp/apkeep-out:/output ghcr.io/efforg/apkeep:stable \
+            -a com.twitter.android -d apk-pure \
+            -o "acknowledge_dangers=true,arch=$apkeep_arch" /output \
+            > evidence/apkeep-download.txt 2>&1
+
+          find /tmp/apkeep-out -type f -name '*.apk' -exec cp '{}' /tmp/xout/ \;
+          for b in /tmp/apkeep-out/*.xapk /tmp/apkeep-out/*.apkm; do
+            [[ -f "$b" ]] || continue
+            unzip -qo "$b" -d /tmp/xout
+          done
+
+          mapfile -t APKS < <(find /tmp/xout -type f -name '*.apk' -print | sort)
+          ((${#APKS[@]} > 0)) || { echo NO_APK_DOWNLOADED | tee evidence/verdict.txt; exit 70; }
+
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          BT=""
+          if [[ -n "$SDK_ROOT" && -d "$SDK_ROOT/build-tools" ]]; then
+            BT="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          fi
+          if [[ -z "$BT" || ! -x "$BT/aapt" || ! -x "$BT/apksigner" ]]; then
+            yes | sdkmanager 'build-tools;35.0.0' >/dev/null
+            BT="$SDK_ROOT/build-tools/35.0.0"
+          fi
+          AAPT="$BT/aapt"
+          APKSIGNER="$BT/apksigner"
+          echo "build_tools=$BT" | tee evidence/build-tools.txt
+
+          OFFICIAL_SHA256=0fd9a0cfb07b65950997b4eaebdc53931392391aa406538a3b04073bc2ce2fe9
+          OFFICIAL_SHA1=40f3166bb567d3144bca7da466bb948b782270ea
+          : > evidence/apk-verification.txt
+          : > evidence/native-code.txt
+
+          for apk in "${APKS[@]}"; do
+            base="$(basename "$apk")"
+            pkg="$($AAPT dump badging "$apk" 2>/dev/null | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)"
+            $AAPT dump badging "$apk" 2>/dev/null | grep -E '^native-code:' >> evidence/native-code.txt || true
+            set +e
+            "$APKSIGNER" verify --verbose --print-certs "$apk" > "evidence/apksigner-$base.txt" 2>&1
+            src=$?
+            set -e
+            sha256="$(sed -nE 's/^Signer #[0-9]+ certificate SHA-256 digest:[[:space:]]*//p' "evidence/apksigner-$base.txt" | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')"
+            sha1="$(sed -nE 's/^Signer #[0-9]+ certificate SHA-1 digest:[[:space:]]*//p' "evidence/apksigner-$base.txt" | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')"
+            printf '%s package=%s apksigner_rc=%s sha256=%s sha1=%s\n' "$base" "$pkg" "$src" "$sha256" "$sha1" >> evidence/apk-verification.txt
+            [[ "$pkg" == com.twitter.android ]] || { echo WRONG_PACKAGE | tee evidence/verdict.txt; exit 71; }
+            [[ "$src" -eq 0 ]] || { echo APK_SIGNATURE_VERIFY_FAILED | tee evidence/verdict.txt; exit 72; }
+            if [[ "$sha256" != "$OFFICIAL_SHA256" && "$sha1" != "$OFFICIAL_SHA1" ]]; then
+              echo OFFICIAL_CERT_NOT_CONFIRMED | tee evidence/verdict.txt
+              exit 73
+            fi
+          done
+
+          echo "apk_count=${#APKS[@]}" | tee evidence/apk-count.txt
+          echo VERIFIED_OFFICIAL_X_APK | tee evidence/verdict.txt
+          echo "api=$api" >> "$GITHUB_OUTPUT"
+          echo "arch=$arch" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      - name: Install and launch verified X
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ steps.prep.outputs.api }}
+          arch: ${{ steps.prep.outputs.arch }}
+          target: google_apis
+          disable-animations: true
+          script: |
+            set -Eeuo pipefail
+            mode='${{ steps.prep.outputs.mode }}'
+            mapfile -t APKS < <(find /tmp/xout -type f -name '*.apk' -print | sort)
+            adb shell pm uninstall com.twitter.android >/dev/null 2>&1 || true
+            if [[ "${#APKS[@]}" -eq 1 ]]; then
+              case "$mode" in
+                0) adb install -r -d "${APKS[0]}" ;;
+                1) adb install --no-streaming -r -d "${APKS[0]}" ;;
+                2) adb install -g -r -d "${APKS[0]}" ;;
+                3) adb install --no-streaming -g -r -d "${APKS[0]}" ;;
+              esac
+            else
+              case "$mode" in
+                0) adb install-multiple -r -d "${APKS[@]}" ;;
+                1) adb install-multiple --no-streaming -r -d "${APKS[@]}" ;;
+                2) adb install-multiple -g -r -d "${APKS[@]}" ;;
+                3) adb install-multiple --no-streaming -g -r -d "${APKS[@]}" ;;
+              esac
+            fi
+            adb shell pm path com.twitter.android | tee evidence/pm-path.txt
+            adb shell dumpsys package com.twitter.android | grep -E 'versionName=|versionCode=|primaryCpuAbi=' | tee evidence/package.txt
+            adb shell monkey -p com.twitter.android 1 | tee evidence/launch.txt
+            sleep 10
+            adb shell pidof com.twitter.android | tee evidence/pid.txt
+            test -s evidence/pid.txt
+            adb logcat -d | grep -E 'FATAL EXCEPTION|AndroidRuntime' | tail -100 > evidence/crash-scan.txt || true
+            if grep -A8 -B2 -E 'FATAL EXCEPTION' evidence/crash-scan.txt | grep -q 'com.twitter.android'; then
+              echo X_CRASHED_AFTER_LAUNCH | tee evidence/install-verdict.txt
+              exit 74
+            fi
+            adb shell uiautomator dump /sdcard/x-window.xml >/dev/null 2>&1 || true
+            adb pull /sdcard/x-window.xml evidence/x-window.xml >/dev/null 2>&1 || true
+            echo X_INSTALLED_AND_LAUNCHED | tee evidence/install-verdict.txt
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-real-install-${{ matrix.variant }}-${{ github.run_id }}
+          path: evidence/
+          retention-days: 3
+          if-no-files-found: warn
