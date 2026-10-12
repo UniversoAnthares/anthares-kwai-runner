@@ -211,29 +211,27 @@ jobs:
           elif [ "$KWAI_CREDENTIALS_MISSING" = 0 ]; then
             echo 'STAGE4_AUTH=LOGIN_ROUTE_RECOVERY' | tee -a "$GITHUB_STEP_SUMMARY"
             set +e
-            # Diagnostic pivot: collect connectivity, UI state and logcat before login.
-            # Twenty variants of DNS/private-DNS, network toggle and app cache recovery.
-            MODE=$(( ${{ matrix.case }} % 5 ))
+            # Different diagnostic strategy: isolate clean app state, system WebView,
+            # package identity and launch activity rather than random DNS retries.
+            MODE=$(( ${{ matrix.case }} % 4 ))
             echo "STAGE4_DIAGNOSTIC_MODE=$MODE" | tee -a "$GITHUB_STEP_SUMMARY"
-            adb shell settings put global private_dns_mode off || true
-            if [ "$MODE" -eq 1 ]; then adb shell svc wifi disable; sleep 2; adb shell svc wifi enable; fi
-            if [ "$MODE" -eq 2 ]; then adb shell settings put global private_dns_mode opportunistic; fi
-            if [ "$MODE" -eq 3 ]; then adb shell am force-stop com.kwai.video; adb shell pm trim-caches 128M || true; fi
-            if [ "$MODE" -eq 4 ]; then adb shell svc data disable || true; adb shell svc data enable || true; fi
-            adb shell getprop net.dns1 | sed 's/^/STAGE4_DNS=/' || true
-            adb shell dumpsys connectivity | grep -E 'VALIDATED|INTERNET' | head -5 || true
+            if [ "$MODE" -eq 1 ]; then adb shell pm clear com.kwai.video || true; fi
+            if [ "$MODE" -eq 2 ]; then adb shell am force-stop com.google.android.webview || true; fi
+            if [ "$MODE" -eq 3 ]; then adb shell settings put global animator_duration_scale 0; adb shell settings put global transition_animation_scale 0; fi
             adb shell am force-stop com.kwai.video || true
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
-            sleep $((8 + ${{ matrix.case }} % 4 * 5))
+            sleep 12
+            echo 'STAGE4_PACKAGE_INFO_BEGIN'
+            adb shell dumpsys package com.kwai.video | grep -E 'versionName=|versionCode=|primaryCpuAbi=|targetSdk=|firstInstallTime=' | head -10 || true
+            echo 'STAGE4_ACTIVITY_INFO_BEGIN'
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|com.kwai.video|com.yxcorp' | head -18 || true
+            echo 'STAGE4_WEBVIEW_BEGIN'
+            adb shell cmd webviewupdate get-current-webview-package || true
+            echo 'STAGE4_UI_BEGIN'
             adb shell uiautomator dump /sdcard/kwai-diag.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/kwai-diag.xml | grep -o 'resource-id="[^"]*"' | sort -u | tail -25 || true
-            adb logcat -d -t 350 | grep -Ei 'kwai|gifshow|ssl|dns|network|timeout|policy' | tail -35 || true
-            # Stop repeating login when FRE bootstrap is blocked. Collect explicit
-            # connectivity and launcher diagnostics; classify this as a diagnostic job.
-            adb shell dumpsys connectivity | grep -E 'NetworkAgentInfo|VALIDATED|INTERNET' | head -12 || true
-            adb shell settings get global http_proxy | sed 's/^/STAGE4_PROXY=/' || true
-            adb shell getprop | grep -E 'dns|proxy' | head -15 || true
-            adb shell logcat -d -t 1200 | grep -Ei 'UnknownHostException|SSLHandshakeException|ConnectException|SocketTimeoutException|fre_native_and_policy|NetworkSecurityConfig' | tail -25 || true
+            adb shell cat /sdcard/kwai-diag.xml | grep -o 'resource-id="[^"]*"' | sort -u | tail -30 || true
+            echo 'STAGE4_APP_ERRORS_BEGIN'
+            adb shell logcat -d -t 1200 | grep -Ei 'FATAL EXCEPTION|AndroidRuntime|com.kwai.video|com.yxcorp|gifshow|WebView|SSLHandshakeException' | tail -55 || true
             echo 'STAGE4_DIAGNOSTIC=FRE_BOOTSTRAP_NOT_READY' | tee -a "$GITHUB_STEP_SUMMARY"
             exit 25
             timeout 110 python3 tools/kwai_credential_login.py > /tmp/stage4-login.txt 2>&1
