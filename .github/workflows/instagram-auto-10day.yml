@@ -83,9 +83,11 @@ jobs:
               print('INSTAGRAM_LAYOUT='+json.dumps(p.get('layout') or {},ensure_ascii=False,separators=(',',':')))
           PY
 
-      - name: Stop cleanly when queue is empty
+      - name: Fail when upstream extraction has not delivered a video
         if: steps.prepare.outputs.ready != 'true'
-        run: echo "No unpublished Anthares source clip is available."
+        run: |
+          echo "::error::Upstream YouTube extraction/cutting has not delivered a reachable video. Full pipeline incomplete; publication did not occur."
+          exit 1
 
       - name: Validate runtime credentials
         if: steps.prepare.outputs.ready == 'true' && (github.event_name == 'schedule' || inputs.dry_run != true)
