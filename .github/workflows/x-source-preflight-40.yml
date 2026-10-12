@@ -62,6 +62,19 @@ jobs:
             fi
           fi
           echo "Preflight completed; not an installation/auth/live proof" | tee evidence/scope.txt
+          if [[ "$rc" -ne 0 ]] || ! grep -Eq 'status=20[06] ' evidence/http.txt; then
+            echo 'FAIL_HTTP_OR_TRANSFER' | tee evidence/verdict.txt
+            exit 40
+          fi
+          if [[ "$mode" -eq 0 || "$mode" -eq 3 ]]; then
+            echo 'METADATA_ONLY_NOT_INSTALL_PROOF' | tee evidence/verdict.txt
+            exit 41
+          fi
+          if ! grep -qx 'ZIP_CANDIDATE' evidence/classification.txt; then
+            echo 'FAIL_NOT_VALID_APK_ARCHIVE' | tee evidence/verdict.txt
+            exit 42
+          fi
+          echo 'VALID_ZIP_CANDIDATE_REQUIRES_APK_SIGNATURE_CHECK' | tee evidence/verdict.txt
       - name: Upload per-variant evidence
         if: always()
         uses: actions/upload-artifact@v4
