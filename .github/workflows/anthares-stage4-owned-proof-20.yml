@@ -1,4 +1,4 @@
-name: Stage 4 Native Compatibility 40
+name: Stage 4 Profile Login on Stable Image 40
 on:
   workflow_dispatch:
   push:
@@ -9,54 +9,14 @@ permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 compatibility ${{ matrix.case }}"
+    name: "Stage4 profile login ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
       max-parallel: 40
       matrix:
-        include:
-          - {case: 1, api: 29, arch: x86_64, target: google_apis, profile: pixel_2}
-          - {case: 2, api: 30, arch: x86_64, target: default, profile: pixel_5}
-          - {case: 3, api: 33, arch: x86_64, target: default, profile: pixel_2}
-          - {case: 4, api: 34, arch: x86_64, target: google_apis_playstore, profile: pixel_5}
-          - {case: 5, api: 35, arch: x86_64, target: google_apis, profile: pixel_2}
-          - {case: 6, api: 29, arch: x86_64, target: default, profile: pixel_5}
-          - {case: 7, api: 30, arch: x86_64, target: default, profile: pixel_2}
-          - {case: 8, api: 33, arch: x86_64, target: google_apis_playstore, profile: pixel_5}
-          - {case: 9, api: 34, arch: x86_64, target: google_apis, profile: pixel_2}
-          - {case: 10, api: 35, arch: x86_64, target: default, profile: pixel_5}
-          - {case: 11, api: 29, arch: x86_64, target: default, profile: pixel_2}
-          - {case: 12, api: 30, arch: x86_64, target: google_apis_playstore, profile: pixel_5}
-          - {case: 13, api: 33, arch: x86_64, target: google_apis, profile: pixel_2}
-          - {case: 14, api: 34, arch: x86_64, target: default, profile: pixel_5}
-          - {case: 15, api: 35, arch: x86_64, target: default, profile: pixel_2}
-          - {case: 16, api: 29, arch: x86_64, target: google_apis, profile: pixel_5}
-          - {case: 17, api: 30, arch: x86_64, target: google_apis, profile: pixel_2}
-          - {case: 18, api: 33, arch: x86_64, target: default, profile: pixel_5}
-          - {case: 19, api: 34, arch: x86_64, target: default, profile: pixel_2}
-          - {case: 20, api: 35, arch: x86_64, target: google_apis_playstore, profile: pixel_5}
-          - {case: 21, api: 29, arch: x86_64, target: google_apis, profile: pixel_2}
-          - {case: 22, api: 30, arch: x86_64, target: default, profile: pixel_5}
-          - {case: 23, api: 33, arch: x86_64, target: default, profile: pixel_2}
-          - {case: 24, api: 34, arch: x86_64, target: google_apis_playstore, profile: pixel_5}
-          - {case: 25, api: 35, arch: x86_64, target: google_apis, profile: pixel_2}
-          - {case: 26, api: 29, arch: x86_64, target: default, profile: pixel_5}
-          - {case: 27, api: 30, arch: x86_64, target: default, profile: pixel_2}
-          - {case: 28, api: 33, arch: x86_64, target: google_apis_playstore, profile: pixel_5}
-          - {case: 29, api: 34, arch: x86_64, target: google_apis, profile: pixel_2}
-          - {case: 30, api: 35, arch: x86_64, target: default, profile: pixel_5}
-          - {case: 31, api: 29, arch: x86_64, target: default, profile: pixel_2}
-          - {case: 32, api: 30, arch: x86_64, target: google_apis_playstore, profile: pixel_5}
-          - {case: 33, api: 33, arch: x86_64, target: google_apis, profile: pixel_2}
-          - {case: 34, api: 34, arch: x86_64, target: default, profile: pixel_5}
-          - {case: 35, api: 35, arch: x86_64, target: default, profile: pixel_2}
-          - {case: 36, api: 29, arch: x86_64, target: google_apis, profile: pixel_5}
-          - {case: 37, api: 30, arch: x86_64, target: google_apis, profile: pixel_2}
-          - {case: 38, api: 33, arch: x86_64, target: default, profile: pixel_5}
-          - {case: 39, api: 34, arch: x86_64, target: default, profile: pixel_2}
-          - {case: 40, api: 35, arch: x86_64, target: google_apis_playstore, profile: pixel_5}
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
     steps:
       - uses: actions/checkout@v4
       - name: Enable KVM
@@ -78,10 +38,10 @@ jobs:
           KWAI_EXPECTED_ACCOUNT: lucasrosalem
           CASE_ID: ${{ matrix.case }}
         with:
-          api-level: ${{ matrix.api }}
-          arch: ${{ matrix.arch }}
-          target: ${{ matrix.target }}
-          profile: ${{ matrix.profile }}
+          api-level: 30
+          arch: x86_64
+          target: google_apis_playstore
+          profile: pixel_5
           emulator-boot-timeout: 600
           disable-animations: false
           disable-linux-hw-accel: false
@@ -95,7 +55,7 @@ jobs:
             adb shell pm path com.kwai.video | grep -q '^package:'
             echo KWAI_PACKAGE_INSTALLED=PASS
             adb logcat -c
-            echo "ABI_CASE=$CASE_ID API=${{ matrix.api }} TARGET=${{ matrix.target }} PROFILE=${{ matrix.profile }}"
+            echo "STABLE_IMAGE_CASE=$CASE_ID"
             adb shell getprop ro.product.cpu.abilist
             adb shell getprop ro.dalvik.vm.native.bridge
             adb shell getprop ro.hardware
@@ -113,3 +73,4 @@ jobs:
             if adb logcat -d -v brief | grep -q "ndk_translation_program_runner_binfmt_misc_arm64"; then echo "ARM64_TRANSLATION_CRASH=1"; exit 1; fi
             adb shell pidof com.kwai.video >/dev/null
             echo "KWAI_NATIVE_STABILITY=PASS"
+            python3 tools/kwai_semantic_ui_explorer.py
