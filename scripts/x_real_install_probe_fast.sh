@@ -38,15 +38,20 @@ for apk in "${ALL_APKS[@]}"; do
 done
 [[ -n "$BASE" ]] || BASE="$(find /tmp/xout -maxdepth 1 -type f \( -name 'base.apk' -o -name 'com.twitter.android.apk' \) -print -quit)"
 [[ -n "$BASE" ]] || { echo BASE_APK_NOT_FOUND | tee "$ROOT/final.txt"; exit 83; }
+
 TMP=("$BASE")
-for apk in "${FILTERED[@]}"; do [[ "$apk" == "$BASE" ]] || TMP+=("$apk"); done
+for apk in "${FILTERED[@]}"; do
+  [[ "$apk" == "$BASE" ]] && continue
+  TMP+=("$apk")
+done
 FILTERED=("${TMP[@]}")
 printf '%s\n' "${FILTERED[@]}" > "$ROOT/filtered-apks.txt"
 
 run_session_install() {
   local out session_id idx apk size remote
   set +e
-  out="$(adb shell pm install-create -r 2>&1)"; local rc=$?
+  out="$(adb shell pm install-create -r 2>&1)"
+  local rc=$?
   set -e
   printf '%s\n' "$out"
   [[ "$rc" -eq 0 ]] || return "$rc"
@@ -54,7 +59,8 @@ run_session_install() {
   [[ -n "$session_id" ]] || return 88
   idx=0
   for apk in "${FILTERED[@]}"; do
-    size="$(stat -c%s "$apk")"; remote="/data/local/tmp/xfast-$LABEL-$idx.apk"
+    size="$(stat -c%s "$apk")"
+    remote="/data/local/tmp/xfast-$LABEL-$idx.apk"
     adb push "$apk" "$remote" >/dev/null
     adb shell pm install-write -S "$size" "$session_id" "split$idx" "$remote"
     idx=$((idx+1))
@@ -64,9 +70,11 @@ run_session_install() {
 
 passed=0
 for mode in 0 1 2 3; do
-  T="$ROOT/test-$mode"; mkdir -p "$T"
+  T="$ROOT/test-$mode"
+  mkdir -p "$T"
   adb shell pm uninstall com.twitter.android >/dev/null 2>&1 || true
   adb logcat -c || true
+
   set +e
   case "$mode" in
     0) adb install-multiple -r -d "${ALL_APKS[@]}" >"$T/install.txt" 2>&1 ;;
@@ -74,24 +82,42 @@ for mode in 0 1 2 3; do
     2) adb install-multiple -r -g "${FILTERED[@]}" >"$T/install.txt" 2>&1 ;;
     3) run_session_install >"$T/install.txt" 2>&1 ;;
   esac
-  irc=$?; set -e
+  irc=$?
+  set -e
   echo "install_rc=$irc" >> "$T/install.txt"
+
   if [[ "$irc" -ne 0 ]]; then
     grep -Ei 'INSTALL_FAILED|Failure|Error|Exception|NO_MATCHING_ABIS|MISSING_SPLIT|INVALID_APK|OLDER_SDK|NEWER_SDK|VERSION_DOWNGRADE' "$T/install.txt" | tail -80 > "$T/classification.txt" || true
-    echo FAIL_INSTALL | tee "$T/verdict.txt"; continue
+    echo FAIL_INSTALL | tee "$T/verdict.txt"
+    continue
   fi
+
   adb shell pm path com.twitter.android > "$T/pm-path.txt" 2>&1 || true
   activity="$(adb shell cmd package resolve-activity --brief com.twitter.android 2>/dev/null | tr -d '\r' | tail -1 || true)"
   echo "$activity" > "$T/activity.txt"
-  if [[ "$activity" == */* ]]; then adb shell am start -W -n "$activity" > "$T/launch.txt" 2>&1 || true; else adb shell monkey -p com.twitter.android -c android.intent.category.LAUNCHER 1 > "$T/launch.txt" 2>&1 || true; fi
+  if [[ "$activity" == */* ]]; then
+    adb shell am start -W -n "$activity" > "$T/launch.txt" 2>&1 || true
+  else
+    adb shell monkey -p com.twitter.android -c android.intent.category.LAUNCHER 1 > "$T/launch.txt" 2>&1 || true
+  fi
   sleep 3
-  pid1="$(adb shell pidof com.twitter.android 2>/dev/null | tr -d '\r' || true)"; echo "$pid1" > "$T/pid-3s.txt"
+  pid1="$(adb shell pidof com.twitter.android 2>/dev/null | tr -d '\r' || true)"
+  echo "$pid1" > "$T/pid-3s.txt"
   sleep 2
-  pid2="$(adb shell pidof com.twitter.android 2>/dev/null | tr -d '\r' || true)"; echo "$pid2" > "$T/pid-5s.txt"
+  pid2="$(adb shell pidof com.twitter.android 2>/dev/null | tr -d '\r' || true)"
+  echo "$pid2" > "$T/pid-5s.txt"
   adb logcat -d | tail -2500 > "$T/logcat.txt" || true
   timeout 8 adb shell uiautomator dump /sdcard/x-fast.xml >/dev/null 2>&1 || true
   adb pull /sdcard/x-fast.xml "$T/window.xml" >/dev/null 2>&1 || true
-  if [[ -n "$pid1" && -n "$pid2" ]]; then echo PASS_X_INSTALLED_AND_LAUNCHED | tee "$T/verdict.txt"; passed=$((passed+1)); else grep -Ei 'FATAL EXCEPTION|AndroidRuntime|Process: com.twitter.android|UnsatisfiedLinkError|NoClassDefFoundError|VerifyError|SIGSEGV|SIGABRT' "$T/logcat.txt" | tail -120 > "$T/crash.txt" || true; echo FAIL_LAUNCH | tee "$T/verdict.txt"; fi
+
+  if [[ -n "$pid1" && -n "$pid2" ]]; then
+    echo PASS_X_INSTALLED_AND_LAUNCHED | tee "$T/verdict.txt"
+    passed=$((passed+1))
+  else
+    grep -Ei 'FATAL EXCEPTION|AndroidRuntime|Process: com.twitter.android|UnsatisfiedLinkError|NoClassDefFoundError|VerifyError|SIGSEGV|SIGABRT' "$T/logcat.txt" | tail -120 > "$T/crash.txt" || true
+    echo FAIL_LAUNCH | tee "$T/verdict.txt"
+  fi
 done
+
 printf 'passed=%s total=4\n' "$passed" | tee "$ROOT/summary.txt"
 [[ "$passed" -gt 0 ]]
