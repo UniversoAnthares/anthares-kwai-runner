@@ -1,9 +1,10 @@
-import json, os, pathlib, subprocess, threading, traceback
+import json, os, pathlib, subprocess, threading, traceback, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+ROOT=pathlib.Path('/app')
+sys.path.insert(0,str(ROOT))
 import x_real_fullflow_once as x
 
-ROOT=pathlib.Path('/app')
 STATUS={'state':'booting','error':None,'result':None}
 
 _original_discover=x.prep.discover_source
@@ -13,7 +14,6 @@ def discover_with_channel_fallback():
         return _original_discover()
     except Exception as exc:
         print('X_REAL_DISCOVERY_PRIMARY_FAIL='+type(exc).__name__+': '+str(exc),flush=True)
-        # This ID was independently discovered from the public Universo Anthares channel page.
         return {
             'video_id':'xcRGdBfHX0E',
             'source_url':'https://www.youtube.com/watch?v=xcRGdBfHX0E',
