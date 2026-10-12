@@ -1,0 +1,61 @@
+name: Kwai-up physical control proof
+
+on:
+  push:
+    branches: [kwai-up]
+    paths:
+      - '.github/workflows/kwai-up-physical-control-proof.yml'
+  workflow_dispatch:
+
+jobs:
+  physical-control-proof:
+    runs-on: self-hosted
+    timeout-minutes: 12
+    env:
+      KWAI_UP_ADB_BIN: 'C:\Users\Lucas\.kwai-up\platform-tools\adb.exe'
+      KWAI_UP_ADB_SERIAL: '192.168.1.35:5555'
+      KWAI_UP_PACKAGE: 'kwai.lite.video'
+      KWAI_UP_EXPECTED_ACCOUNT: 'lucasrosalem'
+      KWAI_UP_ARTIFACT_DIR: 'C:\Users\Lucas\.kwai-up\artifacts-control-proof'
+      KWAI_UP_MEDIA: 'C:\Users\Lucas\.kwai-up\runtime\kwaiup_probe_2s.mp4'
+      KWAI_UP_JOB_ID: 'physical-control-proof-20261012'
+      KWAI_UP_CAPTION: ''
+      KWAI_UP_WAIT: '8'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect exact Redmi transport
+        shell: powershell
+        run: |
+          & $env:KWAI_UP_ADB_BIN connect $env:KWAI_UP_ADB_SERIAL | Out-Host
+          & $env:KWAI_UP_ADB_BIN devices -l | Out-Host
+          $model=& $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL shell getprop ro.product.model
+          $sdk=& $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL shell getprop ro.build.version.sdk
+          Write-Host "KWAI_UP_MODEL=$($model.Trim()) SDK=$($sdk.Trim())"
+          if ($model -notmatch 'M2004J19C') { throw 'unexpected-device' }
+      - name: Physical probe
+        shell: powershell
+        run: python .\kwai-up\kwai_up_physical_entry.py probe
+      - name: Authenticated account proof
+        shell: powershell
+        run: python .\kwai-up\kwai_up_physical_entry.py auth
+      - name: Prove HID/UHID control through prepare boundary
+        shell: powershell
+        run: python .\kwai-up\kwai_up_physical.py prepare
+      - name: Capture READY_TO_PUBLISH proof
+        if: always()
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:KWAI_UP_ARTIFACT_DIR | Out-Null
+          & $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL shell uiautomator dump /sdcard/kwai_control_proof.xml | Out-Host
+          & $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL pull /sdcard/kwai_control_proof.xml "$env:KWAI_UP_ARTIFACT_DIR\control-proof.xml" | Out-Host
+          & $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL exec-out screencap -p > "$env:KWAI_UP_ARTIFACT_DIR\control-proof.png"
+          $xml = Get-Content "$env:KWAI_UP_ARTIFACT_DIR\control-proof.xml" -Raw
+          if ($xml -notmatch 'kwai\.lite\.video\.basis:id/post') { throw 'post-control-not-visible' }
+          Write-Host 'KWAI_UP_PHYSICAL_CONTROL_CONFIRMED=1'
+      - name: Upload physical control proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-up-physical-control-proof
+          path: C:\Users\Lucas\.kwai-up\artifacts-control-proof
+          if-no-files-found: warn
