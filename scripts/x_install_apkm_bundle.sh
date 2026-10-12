@@ -63,21 +63,37 @@ if ((rc != 0)); then
   [[ -n "$BASE" ]] || BASE="$(find "$OUT_DIR" -type f -name 'base.apk' -print -quit)"
   [[ -n "$BASE" ]] || { echo 'unable to locate base APK for filtered retry' >&2; exit 6; }
 
+  ABI="$(adb shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r[:space:]')"
+  case "$ABI" in
+    x86_64) ABI_PAT='x86_64|x86' ;;
+    x86) ABI_PAT='(^|[._-])x86([._-]|$)' ;;
+    arm64-v8a) ABI_PAT='arm64|aarch64' ;;
+    armeabi-v7a) ABI_PAT='armeabi|armv7' ;;
+    *) echo "unsupported emulator ABI for filtered split install: $ABI" >&2; exit 7 ;;
+  esac
+
   DENSITY="$(adb shell wm density 2>/dev/null | sed -n 's/.*: //p' | head -1 | tr -d '\r')"
   case "${DENSITY:-420}" in
     ''|*[!0-9]*) DENSITY=420 ;;
   esac
+
   SELECTED=("$BASE")
   for apk in "${APKS[@]}"; do
     [[ "$apk" == "$BASE" ]] && continue
     name="$(basename "$apk" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$name" =~ $ABI_PAT ]]; then
+      SELECTED+=("$apk")
+      continue
+    fi
     case "$name" in
-      *arm64*|*aarch64*|*config.en*|*config.pt*|*config.xxhdpi*|*config.420*|*master*|*base*) SELECTED+=("$apk") ;;
+      *config.en*|*config.pt*|*config.xxhdpi*|*config.420*|*config.440*|*config.480*|*master*|*base*) SELECTED+=("$apk") ;;
     esac
   done
+  echo "FILTERED_SPLIT_RETRY abi=$ABI density=$DENSITY count=${#SELECTED[@]}"
   adb install-multiple -r -d "${SELECTED[@]}"
 fi
 
 adb shell pm path com.twitter.android >/dev/null
 version="$(adb shell dumpsys package com.twitter.android | sed -n 's/.*versionName=//p' | head -1 | tr -d '\r')"
-echo "X_APK_INSTALL_OK package=com.twitter.android version=${version:-unknown} cert=$EXPECTED_CERT_SHA256"
+abi="$(adb shell getprop ro.product.cpu.abi | tr -d '\r')"
+echo "X_APK_INSTALL_OK package=com.twitter.android version=${version:-unknown} abi=${abi:-unknown} cert=$EXPECTED_CERT_SHA256"
