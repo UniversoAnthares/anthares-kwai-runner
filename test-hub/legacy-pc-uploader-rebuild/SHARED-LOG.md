@@ -1227,3 +1227,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - The subsequent `uiautomator` hierarchy parse returned a transient null/rootless result, so no reliable post-wait UI text/resource inventory was produced from that dump.
 - No Android control was tapped and no publication action occurred.
 - Next: re-read canonical log and use the recovered publisher's safe `probe` as the authoritative readiness check; if it still cannot find creation controls, inspect current activity/package/module state rather than guessing from the null hierarchy.
+
+## 2026-10-12 — Agent 3 — Kwai safe probe still lacks native creation control after onboarding
+- Canonical log was re-read immediately before recording this result.
+- Re-ran isolated `kwai_memu_publish.py probe` with `ATD_KWAI_VM=3` after onboarding completion and a bounded resource-download wait.
+- Publisher v0.2.2 again opened Kwai successfully but stopped safely with `Kwai abriu, porém nenhum controle de criação conhecido foi encontrado.`
+- Therefore runtime/package/ADB are healthy, but the app has not yet reached the native home/create surface required by the historical publisher.
+- No publication path was entered.
+- Several stale/pending WinRemote shell tasks temporarily held the connector shell lock; they were cancelled only at the remote-tool layer and did not alter the Kwai/PC runtime. The lock is now cleared.
+- Next: re-read canonical log, inspect the current Tiny/PWA profile/account surface to determine whether missing authentication is the remaining gate; do not attempt publication.
