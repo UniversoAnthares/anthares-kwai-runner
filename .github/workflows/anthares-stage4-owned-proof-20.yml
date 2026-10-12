@@ -17,36 +17,36 @@ jobs:
       max-parallel: 30
       matrix:
         include:
-          - {id: 1, ram: 3072, smp: 2, data: gpt2, gfx: none, net: off, qemu: on}
-          - {id: 2, ram: 3072, smp: 2, data: gpt4, gfx: none, net: off, qemu: on}
-          - {id: 3, ram: 3072, smp: 2, data: gpt8, gfx: none, net: off, qemu: on}
-          - {id: 4, ram: 4096, smp: 4, data: gpt2, gfx: none, net: on, qemu: off}
-          - {id: 5, ram: 4096, smp: 4, data: gpt4, gfx: none, net: on, qemu: off}
-          - {id: 6, ram: 4096, smp: 4, data: gpt8, gfx: none, net: on, qemu: off}
-          - {id: 7, ram: 3072, smp: 2, data: gpt4, gfx: virtio-mmio, net: off, qemu: on}
-          - {id: 8, ram: 3072, smp: 2, data: gpt4, gfx: virtio-pci, net: off, qemu: on}
-          - {id: 9, ram: 3072, smp: 2, data: gpt4, gfx: ramfb, net: off, qemu: on}
-          - {id: 10, ram: 4096, smp: 4, data: gpt4, gfx: virtio-mmio, net: on, qemu: off}
-          - {id: 11, ram: 4096, smp: 4, data: gpt4, gfx: virtio-pci, net: on, qemu: off}
-          - {id: 12, ram: 4096, smp: 4, data: gpt4, gfx: ramfb, net: on, qemu: off}
-          - {id: 13, ram: 3072, smp: 2, data: original, gfx: virtio-mmio, net: off, qemu: on}
-          - {id: 14, ram: 3072, smp: 2, data: original, gfx: virtio-pci, net: off, qemu: on}
-          - {id: 15, ram: 4096, smp: 4, data: original, gfx: virtio-mmio, net: on, qemu: off}
-          - {id: 16, ram: 4096, smp: 4, data: original, gfx: virtio-pci, net: on, qemu: off}
-          - {id: 17, ram: 3072, smp: 2, data: gpt4, gfx: none, net: on, qemu: on}
-          - {id: 18, ram: 4096, smp: 4, data: gpt4, gfx: none, net: on, qemu: on}
-          - {id: 19, ram: 3072, smp: 2, data: gpt4, gfx: virtio-mmio, net: on, qemu: on}
-          - {id: 20, ram: 4096, smp: 4, data: gpt4, gfx: virtio-mmio, net: on, qemu: on}
-          - {id: 21, ram: 3072, smp: 2, data: gpt4, gfx: virtio-pci, net: on, qemu: on}
-          - {id: 22, ram: 4096, smp: 4, data: gpt4, gfx: virtio-pci, net: on, qemu: on}
-          - {id: 23, ram: 3072, smp: 2, data: gpt2, gfx: virtio-mmio, net: on, qemu: on}
-          - {id: 24, ram: 4096, smp: 4, data: gpt2, gfx: virtio-mmio, net: on, qemu: on}
-          - {id: 25, ram: 3072, smp: 2, data: gpt8, gfx: virtio-mmio, net: on, qemu: on}
-          - {id: 26, ram: 4096, smp: 4, data: gpt8, gfx: virtio-mmio, net: on, qemu: on}
-          - {id: 27, ram: 3072, smp: 2, data: gpt4, gfx: none, net: adb, qemu: on}
-          - {id: 28, ram: 4096, smp: 4, data: gpt4, gfx: none, net: adb, qemu: on}
-          - {id: 29, ram: 3072, smp: 2, data: gpt4, gfx: virtio-mmio, net: adb, qemu: on}
-          - {id: 30, ram: 4096, smp: 4, data: gpt4, gfx: virtio-mmio, net: adb, qemu: on}
+          - {id: 1, ram: 3072, smp: 2, data: 'gpt2', gfx: 'none', net: 'off', qemu: 'on'}
+          - {id: 2, ram: 3072, smp: 2, data: 'gpt4', gfx: 'none', net: 'off', qemu: 'on'}
+          - {id: 3, ram: 3072, smp: 2, data: 'gpt8', gfx: 'none', net: 'off', qemu: 'on'}
+          - {id: 4, ram: 4096, smp: 4, data: 'gpt2', gfx: 'none', net: 'on', qemu: 'off'}
+          - {id: 5, ram: 4096, smp: 4, data: 'gpt4', gfx: 'none', net: 'on', qemu: 'off'}
+          - {id: 6, ram: 4096, smp: 4, data: 'gpt8', gfx: 'none', net: 'on', qemu: 'off'}
+          - {id: 7, ram: 3072, smp: 2, data: 'gpt4', gfx: 'virtio-mmio', net: 'off', qemu: 'on'}
+          - {id: 8, ram: 3072, smp: 2, data: 'gpt4', gfx: 'virtio-pci', net: 'off', qemu: 'on'}
+          - {id: 9, ram: 3072, smp: 2, data: 'gpt4', gfx: 'ramfb', net: 'off', qemu: 'on'}
+          - {id: 10, ram: 4096, smp: 4, data: 'gpt4', gfx: 'virtio-mmio', net: 'on', qemu: 'off'}
+          - {id: 11, ram: 4096, smp: 4, data: 'gpt4', gfx: 'virtio-pci', net: 'on', qemu: 'off'}
+          - {id: 12, ram: 4096, smp: 4, data: 'gpt4', gfx: 'ramfb', net: 'on', qemu: 'off'}
+          - {id: 13, ram: 3072, smp: 2, data: 'original', gfx: 'virtio-mmio', net: 'off', qemu: 'on'}
+          - {id: 14, ram: 3072, smp: 2, data: 'original', gfx: 'virtio-pci', net: 'off', qemu: 'on'}
+          - {id: 15, ram: 4096, smp: 4, data: 'original', gfx: 'virtio-mmio', net: 'on', qemu: 'off'}
+          - {id: 16, ram: 4096, smp: 4, data: 'original', gfx: 'virtio-pci', net: 'on', qemu: 'off'}
+          - {id: 17, ram: 3072, smp: 2, data: 'gpt4', gfx: 'none', net: 'on', qemu: 'on'}
+          - {id: 18, ram: 4096, smp: 4, data: 'gpt4', gfx: 'none', net: 'on', qemu: 'on'}
+          - {id: 19, ram: 3072, smp: 2, data: 'gpt4', gfx: 'virtio-mmio', net: 'on', qemu: 'on'}
+          - {id: 20, ram: 4096, smp: 4, data: 'gpt4', gfx: 'virtio-mmio', net: 'on', qemu: 'on'}
+          - {id: 21, ram: 3072, smp: 2, data: 'gpt4', gfx: 'virtio-pci', net: 'on', qemu: 'on'}
+          - {id: 22, ram: 4096, smp: 4, data: 'gpt4', gfx: 'virtio-pci', net: 'on', qemu: 'on'}
+          - {id: 23, ram: 3072, smp: 2, data: 'gpt2', gfx: 'virtio-mmio', net: 'on', qemu: 'on'}
+          - {id: 24, ram: 4096, smp: 4, data: 'gpt2', gfx: 'virtio-mmio', net: 'on', qemu: 'on'}
+          - {id: 25, ram: 3072, smp: 2, data: 'gpt8', gfx: 'virtio-mmio', net: 'on', qemu: 'on'}
+          - {id: 26, ram: 4096, smp: 4, data: 'gpt8', gfx: 'virtio-mmio', net: 'on', qemu: 'on'}
+          - {id: 27, ram: 3072, smp: 2, data: 'gpt4', gfx: 'none', net: 'adb', qemu: 'on'}
+          - {id: 28, ram: 4096, smp: 4, data: 'gpt4', gfx: 'none', net: 'adb', qemu: 'on'}
+          - {id: 29, ram: 3072, smp: 2, data: 'gpt4', gfx: 'virtio-mmio', net: 'adb', qemu: 'on'}
+          - {id: 30, ram: 4096, smp: 4, data: 'gpt4', gfx: 'virtio-mmio', net: 'adb', qemu: 'on'}
     steps:
       - name: Install runtime Android image and adb
         run: |
@@ -89,13 +89,12 @@ jobs:
           sleep 1
           sudo mkfs.ext4 -F -L data "${LOOP}p1" >/dev/null
           sudo losetup -d "$LOOP"
-          sgdisk -p /tmp/userdata-gpt.img
           echo "USERIMG=/tmp/userdata-gpt.img" >> "$GITHUB_ENV"
       - name: Boot and probe framework stability
         run: |
           set +e
           EXTRA='androidboot.selinux=permissive root=/dev/ram0 rw'
-          [ '${{ matrix.qemu }}' = on ] && EXTRA="$EXTRA qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30 androidboot.adb.secure=0"
+          [ '${{ matrix.qemu }}' = 'on' ] && EXTRA="$EXTRA qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30 androidboot.adb.secure=0"
           DEVICES=''
           case '${{ matrix.gfx }}' in
             virtio-mmio) DEVICES="$DEVICES -device virtio-gpu-device" ;;
@@ -106,20 +105,10 @@ jobs:
             on) DEVICES="$DEVICES -netdev user,id=n0 -device virtio-net-device,netdev=n0" ;;
             adb) DEVICES="$DEVICES -netdev user,id=n0,hostfwd=tcp::5555-:5555 -device virtio-net-device,netdev=n0"; EXTRA="$EXTRA androidboot.adb.secure=0 service.adb.tcp.port=5555" ;;
           esac
-          timeout 185 qemu-system-aarch64 \
-            -machine virt -cpu cortex-a72 -m ${{ matrix.ram }} -smp ${{ matrix.smp }} -accel tcg \
-            -nographic -no-reboot \
-            -kernel /tmp/android-Image -initrd "$ANDROID_DIR/ramdisk.img" \
-            -drive if=none,file=/tmp/meta.img,format=raw,id=metadata -device virtio-blk-device,drive=metadata \
-            -drive if=none,file="$ANDROID_DIR/system.img",format=raw,readonly=on,id=system -device virtio-blk-device,drive=system \
-            -drive if=none,file="$ANDROID_DIR/vendor.img",format=raw,readonly=on,id=vendor -device virtio-blk-device,drive=vendor \
-            -drive if=none,file="$USERIMG",format=raw,id=userdata -device virtio-blk-device,drive=userdata \
-            $DEVICES \
-            -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu $EXTRA" \
-            > /tmp/android-qemu.log 2>&1 &
+          timeout 185 qemu-system-aarch64 -machine virt -cpu cortex-a72 -m ${{ matrix.ram }} -smp ${{ matrix.smp }} -accel tcg -nographic -no-reboot -kernel /tmp/android-Image -initrd "$ANDROID_DIR/ramdisk.img" -drive if=none,file=/tmp/meta.img,format=raw,id=metadata -device virtio-blk-device,drive=metadata -drive if=none,file="$ANDROID_DIR/system.img",format=raw,readonly=on,id=system -device virtio-blk-device,drive=system -drive if=none,file="$ANDROID_DIR/vendor.img",format=raw,readonly=on,id=vendor -device virtio-blk-device,drive=vendor -drive if=none,file="$USERIMG",format=raw,id=userdata -device virtio-blk-device,drive=userdata $DEVICES -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu $EXTRA" > /tmp/android-qemu.log 2>&1 &
           QPID=$!
           for i in $(seq 1 30); do
-            if [ '${{ matrix.net }}' = adb ]; then adb connect 127.0.0.1:5555 >/tmp/adb-connect.txt 2>&1 || true; adb -s 127.0.0.1:5555 shell getprop sys.boot_completed >/tmp/adb-boot.txt 2>&1 || true; fi
+            if [ '${{ matrix.net }}' = 'adb' ]; then adb connect 127.0.0.1:5555 >/tmp/adb-connect.txt 2>&1 || true; adb -s 127.0.0.1:5555 shell getprop sys.boot_completed >/tmp/adb-boot.txt 2>&1 || true; fi
             sleep 5
           done
           kill "$QPID" 2>/dev/null || true
@@ -130,7 +119,7 @@ jobs:
           echo "ZYGOTE_CRASH_COUNT=$ZC"
           echo "SURFACE_CRASH_COUNT=$SC"
           if grep -Eq 'BOOT_COMPLETED|boot_completed=1|sys.boot_completed.*1|ActivityManager.*Start proc.*system_server|SystemServer.*Start' /tmp/android-qemu.log /tmp/adb-boot.txt 2>/dev/null; then echo RESULT=BOOT_OR_SYSTEMSERVER; exit 0; fi
-          if [ '${{ matrix.net }}' = adb ] && grep -q '^1' /tmp/adb-boot.txt 2>/dev/null; then echo RESULT=ADB_BOOT_COMPLETE; exit 0; fi
+          if [ '${{ matrix.net }}' = 'adb' ] && grep -q '^1' /tmp/adb-boot.txt 2>/dev/null; then echo RESULT=ADB_BOOT_COMPLETE; exit 0; fi
           if grep -q 'init second stage started' /tmp/android-qemu.log && [ "$ZC" -le 1 ] && [ "$SC" -le 1 ]; then echo RESULT=STABLE_FRAMEWORK_CANDIDATE; exit 0; fi
           echo RESULT=UNSTABLE_FRAMEWORK
           exit 1
