@@ -1,5 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { createServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
 const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-remote-control.onrender.com').replace(/\/$/, '');
@@ -166,5 +169,45 @@ server.registerTool('capabilities', {
   inputSchema: {},
 }, async () => text(await api('/v1/control/capabilities')));
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+const mode = process.env.ARA_MCP_TRANSPORT || 'stdio';
+if (mode === 'stdio') {
+  await server.connect(new StdioServerTransport());
+} else if (mode === 'http') {
+  const clientToken = process.env.ARA_MCP_CLIENT_TOKEN;
+  if (!clientToken || clientToken.length < 32 || clientToken === CONTROL_TOKEN) {
+    throw new Error('ARA_MCP_CLIENT_TOKEN must be independent and at least 32 characters');
+  }
+  const validToken = (header) => {
+    const expected = Buffer.from('Bearer ' + clientToken);
+    const actual = Buffer.from(header || '');
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  };
+  const http = createServer(async (req, res) => {
+    if (req.url === '/health' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, service: 'anthares-remote-mcp' }));
+      return;
+    }
+    if (req.url !== '/mcp') { res.writeHead(404); res.end(); return; }
+    if (!validToken(req.headers.authorization)) {
+      res.writeHead(401, { 'WWW-Authenticate': 'Bearer', 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.writeHead(405, { Allow: 'POST' }); res.end(); return;
+    }
+    try {
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      await server.connect(transport);
+      await transport.handleRequest(req, res);
+      res.on('close', () => transport.close().catch(() => {}));
+    } catch {
+      if (!res.headersSent) { res.writeHead(500); res.end('MCP request failed'); }
+    }
+  });
+  http.requestTimeout = 150000;
+  http.listen(Number(process.env.PORT || 3000), '0.0.0.0');
+} else {
+  throw new Error('Unknown ARA_MCP_TRANSPORT');
+}
