@@ -1,0 +1,158 @@
+name: X native live from YouTube via Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      youtube_url:
+        description: "Public YouTube Live URL; leave empty only for synthetic camera probe"
+        required: false
+        type: string
+      mode:
+        description: "Validation or native X live"
+        required: true
+        default: "camera-probe"
+        type: choice
+        options:
+          - camera-probe
+          - x-preview
+          - x-go-live
+      max_minutes:
+        description: "Maximum public live duration"
+        required: true
+        default: "330"
+        type: string
+      allow_public_live:
+        description: "Explicitly authorize pressing the final Go Live control"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: x-native-live-android
+  cancel-in-progress: false
+
+jobs:
+  relay:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    env:
+      VIDEO_DEVICE: /dev/video10
+      VIDEO_NR: "10"
+      PULSE_SINK: anthares_x_live
+      WIDTH: "1280"
+      HEIGHT: "720"
+      FPS: "30"
+      EVIDENCE_DIR: x-live-evidence
+      SOURCE_URL: ${{ inputs.youtube_url }}
+      X_ANDROID_SESSION_KEY: ${{ secrets.X_ANDROID_SESSION_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      ALLOW_PUBLIC_LIVE: ${{ inputs.allow_public_live && '1' || '0' }}
+      LIVE_MODE: ${{ inputs.mode }}
+      MAX_MINUTES: ${{ inputs.max_minutes }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download current signed X Android bundle
+        if: ${{ inputs.mode != 'camera-probe' }}
+        id: xapk
+        uses: Yakov5776/gh-apkmirror-dl@v1.3
+        with:
+          org: x-corp
+          repo: twitter
+          bundle: true
+          filename: x-current.apkm
+
+      - name: Install host media bridge dependencies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            v4l2loopback-dkms v4l-utils pulseaudio pulseaudio-utils ffmpeg gnupg unzip \
+            "linux-headers-$(uname -r)"
+          python3 -m pip install --disable-pip-version-check --quiet --upgrade yt-dlp
+          if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
+          chmod +x scripts/x_android_media_bridge.sh scripts/x_install_apkm_bundle.sh scripts/x_android_session_vault.sh
+          mkdir -p "$EVIDENCE_DIR"
+          scripts/x_android_media_bridge.sh prepare
+          "$ANDROID_SDK_ROOT/emulator/emulator" -webcam-list 2>&1 | tee "$EVIDENCE_DIR/emulator-webcams.txt"
+          grep -qi 'webcam0' "$EVIDENCE_DIR/emulator-webcams.txt"
+
+      - name: Boot ARM Android and run native X live bridge
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: arm64-v8a
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          emulator-options: >-
+            -no-window -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+            -camera-back webcam0 -camera-front none -allow-host-audio
+          script: |
+            set -Eeuo pipefail
+            trap 'python3 scripts/x_android_live_ui.py x-stop-live >/dev/null 2>&1 || true; scripts/x_android_media_bridge.sh stop || true; adb exec-out screencap -p > "$EVIDENCE_DIR/final.png" 2>/dev/null || true' EXIT
+
+            case "$MAX_MINUTES" in ''|*[!0-9]*) echo 'max_minutes must be an integer'; exit 2;; esac
+            if (( MAX_MINUTES < 1 || MAX_MINUTES > 350 )); then echo 'max_minutes must be 1..350'; exit 2; fi
+
+            if [[ "$LIVE_MODE" != 'camera-probe' ]]; then
+              test -s x-current.apkm
+              scripts/x_install_apkm_bundle.sh x-current.apkm | tee "$EVIDENCE_DIR/x-install.txt"
+
+              if [[ -z "${X_ANDROID_SESSION_KEY:-}" ]]; then
+                echo 'X_ANDROID_SESSION_KEY is missing; authenticated Android session bootstrap is required.' >&2
+                exit 20
+              fi
+              rm -f /tmp/x-session.gpg
+              if ! gh release download x-android-session-v1 -p x-session.gpg -D /tmp >/dev/null 2>&1; then
+                echo 'Encrypted X Android session vault release x-android-session-v1 is missing.' >&2
+                exit 21
+              fi
+              scripts/x_android_session_vault.sh import /tmp/x-session.gpg | tee "$EVIDENCE_DIR/x-session-import.txt"
+            fi
+
+            scripts/x_android_media_bridge.sh start | tee "$EVIDENCE_DIR/bridge-start.txt"
+            adb emu avd hostmicon || true
+
+            if [[ "$LIVE_MODE" == 'camera-probe' ]]; then
+              python3 scripts/x_android_live_ui.py camera-probe
+              exit 0
+            fi
+
+            if [[ "$LIVE_MODE" == 'x-preview' ]]; then
+              python3 scripts/x_android_live_ui.py x-preview
+              exit 0
+            fi
+
+            if [[ "$ALLOW_PUBLIC_LIVE" != '1' ]]; then
+              echo 'x-go-live requires allow_public_live=true' >&2
+              exit 22
+            fi
+            test -n "$SOURCE_URL" || { echo 'youtube_url is required for x-go-live' >&2; exit 23; }
+
+            python3 scripts/x_android_live_ui.py x-go-live
+            started=$(date +%s)
+            deadline=$((started + MAX_MINUTES * 60))
+            while (( $(date +%s) < deadline )); do
+              vp=$(cat /tmp/anthares-x-live/video.pid 2>/dev/null || true)
+              ap=$(cat /tmp/anthares-x-live/audio.pid 2>/dev/null || true)
+              [[ -n "$vp" && -n "$ap" ]] || break
+              kill -0 "$vp" 2>/dev/null || break
+              kill -0 "$ap" 2>/dev/null || break
+              sleep 15
+            done
+            python3 scripts/x_android_live_ui.py x-stop-live
+
+      - name: Save evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-native-live-android-evidence
+          path: x-live-evidence/
+          if-no-files-found: ignore
+          retention-days: 3
