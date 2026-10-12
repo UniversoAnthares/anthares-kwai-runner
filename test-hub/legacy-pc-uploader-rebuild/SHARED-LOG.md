@@ -1212,3 +1212,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - The catalog loop code resets published segment states only after every catalog source is exhausted, then begins again at catalog index 0.
 - No publication occurred.
 - Next: exercise the new microcut + adaptive-layout pipeline against the oldest live and inspect render metrics before any Post click.
+
+## 2026-10-12 — Agent 3 — Kwai reached functional Tiny/PWA home after skipping preparation
+- Canonical log was re-read before recording this action.
+- Confirmed `Sim, pular` via clickable/enabled resource `com.kwai.video:id/tiny_alert_dialog_positive_button`.
+- Kwai then reached a functional feed inside `TinyWebHomeActivity`. Visible navigation now includes `Home`, `Discover`, `Caixa de entrada`, and `Perfil`; feed cards/authors are populated.
+- A background bubble still reports `Baixando recursos`, so native/dynamic modules may still be installing after the skip.
+- This is a major runtime advance: onboarding is cleared and the app can load the Kwai feed. No publication action occurred.
+- Next: re-read canonical log, allow the resource download a bounded interval, rerun safe publisher `probe`, and determine whether native create controls become available or account authentication remains the blocker.
