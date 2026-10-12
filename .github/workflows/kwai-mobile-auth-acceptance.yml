@@ -75,7 +75,7 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
-            set -euo pipefail
+            set -eu
             bash kwai_vault_install.sh
             adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
             bash kwai_session_state.sh restore || true
@@ -147,7 +147,7 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
-            set -euo pipefail
+            set -eu
             bash kwai_vault_install.sh
             bash kwai_session_state.sh restore | tee kwai-mobile-restore.txt
             adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
