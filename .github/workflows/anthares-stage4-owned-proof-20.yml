@@ -1,11 +1,11 @@
-name: Stage 4 Foreground Evidence 4
+name: Stage 4 Real Kwai Foreground Gate 4
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 foreground proof ${{ matrix.case }}"
+    name: "Stage4 real foreground ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -115,10 +115,12 @@ jobs:
             adb shell dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp' | head -5 || true
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
             echo "VISUAL_CAPTURE=PASS"
-            FOREGROUND=$(adb shell dumpsys activity activities | grep -m 1 mResumedActivity || true)
+            FOREGROUND=$(adb shell dumpsys activity activities | grep -m 1 -E "mResumedActivity|topResumedActivity" || true)
             echo "FOREGROUND_ACTIVITY=$FOREGROUND"
             if echo "$FOREGROUND" | grep -q "com.kwai.video/"; then echo "KWAI_FOREGROUND=1"; else echo "KWAI_FOREGROUND=0"; fi
             if adb logcat -d -v brief | grep -q "Fatal signal 11"; then echo "NATIVE_CRASH_DETECTED=1"; fi
+            if ! echo "$FOREGROUND" | grep -q "com.kwai.video/"; then echo "KWAI_REAL_FOREGROUND_GATE=FAIL"; exit 1; fi
+            echo "KWAI_REAL_FOREGROUND_GATE=PASS"
             cp /tmp/kwai-screen-$CASE_ID.png "$GITHUB_WORKSPACE/kwai-screen-$CASE_ID.png"
             adb shell dumpsys activity processes | grep -A 5 'com.kwai.video' | head -25 || true
 
