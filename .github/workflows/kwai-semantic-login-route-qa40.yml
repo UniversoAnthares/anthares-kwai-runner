@@ -1,4 +1,4 @@
-name: Kwai Semantic Login Route QA40
+name: Kwai Semantic Login Route Robust QA40
 
 on:
   workflow_dispatch:
@@ -10,10 +10,35 @@ permissions:
   contents: read
 
 jobs:
+  prepare-vault:
+    name: Prepare verified Kwai vault once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Acquire and verify package once
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip'
+          SHA='96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543'
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 15 --max-time 300 --output kwai-vault.zip "$URL"
+          printf '%s  %s\n' "$SHA" kwai-vault.zip | sha256sum --check
+          unzip -tq kwai-vault.zip >/dev/null
+          echo PREPARED_KWAI_VAULT=PASS
+      - name: Upload verified vault for the 40 tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-vault-verified-${{ github.run_id }}
+          path: kwai-vault.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
   semantic-login-route:
+    needs: prepare-vault
     name: semantic (${{ matrix.route }}, ${{ matrix.network }}, settle-${{ matrix.settle }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 14
     strategy:
       fail-fast: false
       max-parallel: 40
@@ -44,6 +69,11 @@ jobs:
           path: /usr/local/lib/android/sdk/emulator
           key: kwai-speed-emulator-ubuntu24-v1
       - uses: actions/checkout@v4
+      - name: Download already verified Kwai vault
+        uses: actions/download-artifact@v4
+        with:
+          name: kwai-vault-verified-${{ github.run_id }}
+          path: /tmp/kwai-vault-artifact
       - name: Boot proven snapshot
         shell: bash
         run: |
@@ -57,19 +87,32 @@ jobs:
           nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/semantic-emulator.log 2>&1 &
           timeout 60 adb wait-for-device
           timeout 60 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done'
-          grep -q "Successfully loaded snapshot 'kwai-ready'" /tmp/semantic-emulator.log
+          grep -F "Successfully loaded snapshot 'kwai-ready'" /tmp/semantic-emulator.log >/dev/null
           echo SEMANTIC_ANDROID_BOOT=PASS
-      - name: Install verified Kwai package
+      - name: Install verified Kwai package without pipefail false negatives
         shell: bash
         run: |
           set -euo pipefail
-          if ! adb shell pm path com.kwai.video 2>/dev/null | grep -q package:; then
-            bash independent_android/install_kwai.sh
-          else
+          PM_PATH="$(adb shell pm path com.kwai.video 2>/dev/null || true)"
+          if [[ "$PM_PATH" == *'package:'* ]]; then
             echo KWAI_ALREADY_PRESENT=1
+          else
+            cp /tmp/kwai-vault-artifact/kwai-vault.zip ./kwai-vault.zip
+            printf '%s  %s\n' '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543' kwai-vault.zip | sha256sum --check
+            rm -rf kwai-vault
+            mkdir -p kwai-vault
+            unzip -oq kwai-vault.zip -d kwai-vault
+            bash kwai_vault_install.sh | tee /tmp/kwai-install-local.log
           fi
-          adb shell pm path com.kwai.video | grep -q package:
+          PM_PATH_AFTER="$(adb shell pm path com.kwai.video 2>/dev/null || true)"
+          [[ "$PM_PATH_AFTER" == *'package:'* ]]
           echo SEMANTIC_KWAI_INSTALL=PASS
+          adb shell am force-stop com.kwai.video || true
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+          sleep 4
+          PID="$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
+          test -n "$PID"
+          echo SEMANTIC_KWAI_PROCESS=PASS
       - name: Probe semantic Me to native login route
         shell: bash
         run: |
@@ -86,6 +129,8 @@ jobs:
             semantic-activities.txt
             semantic-connectivity.txt
             semantic-logcat.txt
+            kwai-vault-install-status.txt
+            /tmp/kwai-install-local.log
             /tmp/semantic-emulator.log
           if-no-files-found: warn
           retention-days: 1
