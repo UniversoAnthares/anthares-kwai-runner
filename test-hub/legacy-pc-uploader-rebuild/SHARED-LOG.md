@@ -1051,3 +1051,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - The historical reconstructed daemon still targets VM index 3, so runtime alignment is not complete yet.
 - No app was installed and no publication action occurred.
 - Next: re-read canonical log, inspect VM0 Android version/package state and exact memuc clone/create syntax, then create an isolated VM3 compatible with the historical daemon.
+
+## 2026-10-12 — Agent 3 — Kwai VM0 compatibility probe and VM1 creation
+- Canonical log was re-read immediately before this step.
+- VM0 reports Android 9 and ABI `x86_64`; no Kwai/Kuaishou package is installed on VM0.
+- `memuc clone` without an index only returned its required-argument error.
+- `memuc create` without extra arguments is an actual create operation, not a help screen; it completed successfully and created VM index 1. This was harmless but was an unintended consequence of probing syntax.
+- No app was installed and no publication action occurred.
+- Next: deliberately create VM2 and VM3 with the same MEmu default Android profile so the reconstructed daemon can keep its historical VM index 3, then start VM3 and validate ADB/package state.
