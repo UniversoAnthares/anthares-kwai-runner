@@ -41,7 +41,6 @@ def merge_intervals(rows: list[dict], lo: float, hi: float, max_ratio: float = 0
     budget = (hi - lo) * max_ratio
     used = 0.0
     accepted = []
-    # small surgical cuts have priority over long uncertain deletions
     for row in sorted(merged, key=lambda x: (x["end"] - x["start"], x["start"])):
         span = row["end"] - row["start"]
         if used + span <= budget + 1e-6:
@@ -130,26 +129,34 @@ def render_microcut(scan: Path, lo: float, hi: float, removals: list[dict], edit
     subprocess.run(cmd,check=True,timeout=600)
 
 
-def verticalize(edited: Path, out: Path) -> None:
-    vf=("[0:v]split=2[bg0][fg0];"
-        "[bg0]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=28[bg];"
-        "[fg0]scale=1080:1800:force_original_aspect_ratio=decrease[fg];"
-        "[bg][fg]overlay=(W-w)/2:(H-h)/2:format=auto[v]")
-    cmd=["ffmpeg","-y","-hide_banner","-loglevel","error","-i",str(edited),"-filter_complex",vf,"-map","[v]","-map","0:a:0","-c:v","libx264","-preset","veryfast","-crf","21","-maxrate","3500k","-bufsize","7000k","-c:a","aac","-b:a","160k","-movflags","+faststart",str(out)]
+def horizontalize(edited: Path, out: Path) -> None:
+    vf="scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1"
+    cmd=["ffmpeg","-y","-hide_banner","-loglevel","error","-i",str(edited),"-vf",vf,"-map","0:v:0","-map","0:a:0","-c:v","libx264","-preset","veryfast","-crf","20","-maxrate","3500k","-bufsize","7000k","-c:a","aac","-b:a","160k","-movflags","+faststart",str(out)]
     subprocess.run(cmd,check=True,timeout=900)
     if not out.exists() or out.stat().st_size < 200_000:
         raise RuntimeError("Arquivo final inválido.")
 
 
-def duration(path: Path) -> float:
-    p=subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1",str(path)],capture_output=True,text=True,check=True)
-    return float(p.stdout.strip())
+def media_meta(path: Path) -> dict:
+    p=subprocess.run(["ffprobe","-v","error","-select_streams","v:0","-show_entries","stream=width,height:format=duration","-of","json",str(path)],capture_output=True,text=True,check=True)
+    data=json.loads(p.stdout or "{}")
+    streams=data.get("streams") or []
+    if not streams: raise RuntimeError("Saída sem vídeo.")
+    width=int(streams[0].get("width") or 0); height=int(streams[0].get("height") or 0)
+    dur=float((data.get("format") or {}).get("duration") or 0)
+    ratio=(width/height) if height else 0
+    if width != 1280 or height != 720 or abs(ratio-(16/9)) > 0.001:
+        raise RuntimeError(f"Saída X fora de 16:9 horizontal: {width}x{height}")
+    return {"width":width,"height":height,"aspect_ratio":"16:9","orientation":"horizontal","duration":round(dur,3)}
 
 
 def main() -> int:
     req=json.loads(REQ.read_text(encoding="utf-8")); plan=json.loads(PLAN.read_text(encoding="utf-8"))
     if plan.get("kind") != "X_MICROCUT_PLAN_V1": raise RuntimeError("Plano incompatível.")
     if str(req.get("account")) != "lucasyahn": raise RuntimeError("Conta inesperada.")
+    policy=req.get("output_policy") or {}
+    if policy.get("orientation") != "horizontal" or policy.get("aspect_ratio") != "16:9" or policy.get("source_class") != "long_form":
+        raise RuntimeError("Política X exige origem longa e saída horizontal 16:9.")
     caption=" ".join(str(plan.get("caption") or "").split()).strip()
     if not caption or len(caption)>240: raise RuntimeError("Caption ausente ou longa demais.")
     lo,hi,removals,meta=plan_intervals(req,plan)
@@ -158,9 +165,13 @@ def main() -> int:
     source_url=str((req.get("source") or {}).get("source_url") or "")
     prep.SCAN_START=int(req.get("scan_start") or 0); prep.SCAN_SECONDS=int(req.get("scan_seconds") or 300)
     prep.download_scan(source_url,scan)
+    prep.probe_video(scan)
     render_microcut(scan,lo,hi,removals,edited)
-    verticalize(edited,OUT)
-    meta["final_duration"]=round(duration(OUT),3); meta["file_bytes"]=OUT.stat().st_size
+    horizontalize(edited,OUT)
+    out_meta=media_meta(OUT)
+    meta["final_duration"]=out_meta["duration"]
+    meta["file_bytes"]=OUT.stat().st_size
+    meta["output_video"]=out_meta
     result={"kind":"X_RENDER_RESULT_V1","account":"lucasyahn","caption":caption,"source":req.get("source"),"scan_start":req.get("scan_start"),"segment_start":round(lo,3),"segment_end":round(hi,3),"microedit":meta,"output":str(OUT)}
     Path("x-render-result.json").write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
     print("X_RENDER_OK="+json.dumps(meta,ensure_ascii=False,separators=(",",":")))
