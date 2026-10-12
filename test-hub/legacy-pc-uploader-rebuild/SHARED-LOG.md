@@ -1187,3 +1187,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Tapped only the center of that control through ADB. The action was accepted without error; activity remained `TinyWebHomeActivity` immediately afterward, so the resulting surface must be inspected before assuming native home readiness.
 - No publication action occurred.
 - Next: re-read canonical log, dump the post-onboarding UI hierarchy and classify whether it is feed/home, login, permission prompt or another tiny/web gate; then rerun safe publisher `probe` only if the create surface is present.
+
+## 2026-10-12 — Agent 3 — Kwai post-onboarding dynamic-module gate identified
+- Canonical log was re-read immediately before this inspection.
+- Post-onboarding UI is still `TinyWebHomeActivity` and now shows `Desculpe, a internet está um pouco lenta. Espera aí!`, progress `5%`, and action `Pular`.
+- Resource IDs include `tiny_layout_discovery_install_dfm`, `tiny_loading_flash`, `tiny_discovery_left_operation_btn`, and `tiny_discovery_right_operation_btn`.
+- This is a dynamic-feature/module loading gate after onboarding, currently stalled at 5%, not yet the native authenticated home/create surface.
+- No publication action occurred.
+- Next: re-read canonical log, identify the exact bounds/resource for `Pular`, tap only that skip action, then inspect the resulting screen.
