@@ -70,6 +70,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          mkdir -p "$EVIDENCE_DIR"
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             build-essential v4l-utils pulseaudio pulseaudio-utils ffmpeg gnupg unzip \
@@ -83,7 +84,6 @@ jobs:
           python3 -m pip install --disable-pip-version-check --quiet --upgrade yt-dlp
           if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
           chmod +x scripts/x_android_media_bridge.sh scripts/x_install_apkm_bundle.sh scripts/x_android_session_vault.sh
-          mkdir -p "$EVIDENCE_DIR"
           scripts/x_android_media_bridge.sh prepare
           "$ANDROID_SDK_ROOT/emulator/emulator" -webcam-list 2>&1 | tee "$EVIDENCE_DIR/emulator-webcams.txt"
           grep -qi 'webcam0' "$EVIDENCE_DIR/emulator-webcams.txt"
