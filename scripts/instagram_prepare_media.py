@@ -20,6 +20,7 @@ PAUSE_KEEP = float(os.getenv("INSTAGRAM_PAUSE_KEEP_SECONDS", "0.16") or 0.16)
 FILLER_MIN = float(os.getenv("INSTAGRAM_FILLER_MIN_SECONDS", "0.45") or 0.45)
 MAX_REMOVAL_RATIO = float(os.getenv("INSTAGRAM_MAX_REMOVAL_RATIO", "0.30") or 0.30)
 MIN_FINAL_SECONDS = float(os.getenv("INSTAGRAM_MIN_FINAL_SECONDS", "30") or 30)
+TIKTOK_TARGET_SECONDS = float(os.getenv("INSTAGRAM_TIKTOK_TARGET_SECONDS", "0") or 0)
 FILLERS = {"ah", "ahn", "ha", "ham", "hum", "hmm", "eh", "e", "er", "uh", "uhm"}
 
 
@@ -299,6 +300,14 @@ def prepare() -> dict[str, Any]:
 
     final = WORK_DIR / f"instagram-{row.get('id') or 'clip'}-microcut.mp4"
     layout_meta = verticalize(micro, final)
+    final_seconds = duration(final)
+    final_width, final_height = dimensions(final)
+    if final_width * 16 != final_height * 9:
+        raise RuntimeError(f"Instagram Reel must be exactly 9:16: {final_width}x{final_height}")
+    if TIKTOK_TARGET_SECONDS > 0 and abs(final_seconds - TIKTOK_TARGET_SECONDS) > 1.0:
+        raise RuntimeError(f"TikTok duration mismatch: Instagram={final_seconds:.2f}s TikTok={TIKTOK_TARGET_SECONDS:.2f}s")
+    if micro_meta.get("intervals", 0) == 0 and not micro_meta.get("reused_existing_tiktok_microcut"):
+        print("INSTAGRAM_QA_WARNING: No microcuts detected; verify source transcription and editorial quality.", flush=True)
     plan = {
         "ready": True,
         "source_attachment_id": str(row.get("id") or ""),
@@ -308,7 +317,7 @@ def prepare() -> dict[str, Any]:
         "asset_name": final.name,
         "microcut": micro_meta,
         "layout": layout_meta,
-        "final_duration": round(duration(final), 3),
+        "final_duration": round(final_seconds, 3),
     }
     PLAN_PATH.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return plan
