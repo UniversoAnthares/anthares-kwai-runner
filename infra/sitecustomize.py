@@ -8,6 +8,8 @@ try:
     _register_bootstrap(_worker.app)
     from anthares_remote_browser_bridge import register as _register_browser
     _register_browser(_worker.app)
+    from anthares_remote_switch import register as _register_switch
+    _register_switch(_worker.app)
 except Exception:
     # Keep the existing X worker boot path fail-open; deployment logs will expose errors.
     pass
