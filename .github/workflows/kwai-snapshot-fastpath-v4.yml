@@ -1,4 +1,4 @@
-name: Stage 4 - 40 Kwai Permission Gate Recovery Tests
+name: Stage 4 - 40 Kwai Onboarding State Experiments
 on:
   workflow_dispatch:
   push:
@@ -211,47 +211,30 @@ jobs:
           elif [ "$KWAI_CREDENTIALS_MISSING" = 0 ]; then
             echo 'STAGE4_AUTH=LOGIN_ROUTE_RECOVERY' | tee -a "$GITHUB_STEP_SUMMARY"
             set +e
-            # 40 permission-controller and login-state experiments: 10 approaches x 4 timings.
-            ROUTE=$(( (${{ matrix.case }} - 1) % 10 ))
-            DELAY=$(( (${{ matrix.case }} - 1) / 10 ))
-            echo "STAGE4_PERMISSION_ROUTE=$ROUTE TIMING=$DELAY" | tee -a "$GITHUB_STEP_SUMMARY"
+            # 40 independent onboarding-state experiments: 10 actions x 4 checkpoints.
+            MODE=$(( (${{ matrix.case }} - 1) % 10 ))
+            CHECKPOINT=$(( (${{ matrix.case }} - 1) / 10 ))
+            echo "STAGE4_MODE=$MODE CHECKPOINT=$CHECKPOINT" | tee -a "$GITHUB_STEP_SUMMARY"
             adb shell am force-stop com.kwai.video || true
-            case "$ROUTE" in
-              0) adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS || true ;;
-              1) adb shell appops set com.kwai.video POST_NOTIFICATION allow || true ;;
-              2) adb shell pm clear com.kwai.video || true ;;
-              3) adb shell settings put secure enabled_accessibility_services '' || true ;;
-              4) adb shell settings put global window_animation_scale 0 || true ;;
-              5) adb shell settings put global transition_animation_scale 0 || true ;;
-              6) adb shell settings put global animator_duration_scale 0 || true ;;
-              7) adb shell pm grant com.kwai.video android.permission.CAMERA || true ;;
-              8) adb shell pm grant com.kwai.video android.permission.RECORD_AUDIO || true ;;
-              9) adb shell settings put global private_dns_mode off || true ;;
+            case "$MODE" in
+              0) adb shell monkey -p com.kwai.video 1 >/dev/null ;;
+              1) adb shell pm clear com.kwai.video; adb shell monkey -p com.kwai.video 1 >/dev/null ;;
+              2) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 4 ;;
+              3) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 66 ;;
+              4) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input swipe 900 950 160 950 300 ;;
+              5) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input swipe 160 950 900 950 300 ;;
+              6) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 61 ;;
+              7) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 82 ;;
+              8) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 3; adb shell monkey -p com.kwai.video 1 >/dev/null ;;
+              9) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 4; adb shell monkey -p com.kwai.video 1 >/dev/null ;;
             esac
-            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
-            sleep $(( 3 + DELAY * 3 ))
-            for N in 1 2 3 4 5 6; do
-              adb shell uiautomator dump /sdcard/kwai-permcheck.xml >/dev/null 2>&1 || true
-              adb shell cat /sdcard/kwai-permcheck.xml > /tmp/kwai-permcheck.xml 2>/dev/null || true
-              if grep -Eq 'permission_allow_button|permission_allow_foreground_only_button|permission_allow_one_time_button' /tmp/kwai-permcheck.xml; then
-                echo "STAGE4_PERMISSION_DIALOG_FOUND=$N" | tee -a "$GITHUB_STEP_SUMMARY"
-                case "$DELAY" in
-                  0) adb shell input keyevent 22; adb shell input keyevent 66 ;;
-                  1) adb shell input tap 540 1150 ;;
-                  2) adb shell input keyevent 61; adb shell input keyevent 66 ;;
-                  3) adb shell input keyevent 66 ;;
-                esac
-                sleep 2
-              else
-                echo "STAGE4_PERMISSION_DIALOG_ABSENT=$N" | tee -a "$GITHUB_STEP_SUMMARY"
-                break
-              fi
-            done
-            adb shell uiautomator dump /sdcard/kwai-route.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/kwai-route.xml > /tmp/kwai-route.xml 2>/dev/null || true
-            echo "STAGE4_ROUTE_XML_BYTES=$(wc -c < /tmp/kwai-route.xml)" | tee -a "$GITHUB_STEP_SUMMARY"
-            grep -o 'resource-id="[^"]*"' /tmp/kwai-route.xml | sort -u | tail -15 || true
-            adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | head -2 || true
+            sleep $(( 5 + CHECKPOINT * 5 ))
+            adb shell uiautomator dump /sdcard/kwai-onboarding.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/kwai-onboarding.xml > /tmp/kwai-onboarding.xml 2>/dev/null || true
+            echo "STAGE4_XML_BYTES=$(wc -c < /tmp/kwai-onboarding.xml)" | tee -a "$GITHUB_STEP_SUMMARY"
+            grep -o 'resource-id="[^"]*"' /tmp/kwai-onboarding.xml | sort -u | tail -20 || true
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | tail -2 || true
+            adb logcat -d -t 800 | grep -Ei 'com.kwai.video|FATAL EXCEPTION|SSLHandshakeException|UnknownHostException' | tail -12 || true
             # Never unconditionally fail: inspect actual UI and allow credential proof.
             adb shell uiautomator dump /sdcard/kwai-final.xml >/dev/null 2>&1 || true
             adb shell cat /sdcard/kwai-final.xml > /tmp/kwai-final.xml || true
