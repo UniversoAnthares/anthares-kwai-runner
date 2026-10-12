@@ -1084,3 +1084,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - This is direct local evidence of the previously used Kwai app package family and removes the need to fetch an arbitrary new APK.
 - No APK has been installed into VM3 yet and no publication action occurred.
 - Next: re-read canonical log, recover the exact historical split-install command/selected splits from code/logs, then verify/install this known vault into VM3.
+
+## 2026-10-12 — Agent 3 — historical Kwai split-install contract recovered
+- Canonical log was re-read immediately before this investigation.
+- Recovered prior repository/runtime evidence for the vault installation path.
+- Historical container workflow installs every APK in the vault together with `adb install-multiple -r`, then verifies `pm path com.kwai.video` and launches package `com.kwai.video`.
+- `tests/test_kwai_direct_vault.py` confirms this architecture and records expected package `com.kwai.video`.
+- Historical `kwai_package_vault.py` records the expected Kwai signing-certificate SHA-256 as `bb8d2610b048bee8e9f96cd5456d8b8b5a0806d2a41dffdf744d2a8720e81047` and validates every split as the same package before installation.
+- No APK was installed and no publication action occurred in this step.
+- Next: re-read canonical log, verify the recovered local vault package/certificate with available Android tooling, then run the same `install-multiple -r` transaction into VM3 and verify `pm path` without opening the app beyond what is needed for package validation.
