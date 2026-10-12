@@ -1,14 +1,15 @@
-name: Stage 4 Direct Activity Discovery 30
+name: Stage 4 Semantic UI Exploration 30
 on:
   workflow_dispatch:
   push:
     paths:
       - '.github/workflows/anthares-stage4-owned-proof-20.yml'
+      - 'tools/kwai_semantic_ui_explorer.py'
 permissions:
   contents: read
 jobs:
   identity-evidence:
-    name: "Stage4 direct activity case ${{ matrix.case }}"
+    name: "Stage4 semantic UI case ${{ matrix.case }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -29,7 +30,7 @@ jobs:
           curl -fLsS --retry 3 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
           echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
           mkdir -p kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
-      - name: Discover and exercise direct Kwai auth surfaces
+      - name: Semantic UI discovery and real identity proof
         uses: reactivecircus/android-emulator-runner@v2
         env:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
@@ -53,19 +54,9 @@ jobs:
             bash kwai_vault_install.sh
             adb shell pm path com.kwai.video | grep -q '^package:'
             echo KWAI_PACKAGE_INSTALLED=PASS
-            adb shell dumpsys package com.kwai.video > /tmp/kwai-package.txt
-            grep -Eo 'com\.kwai\.video/[A-Za-z0-9_.$]+' /tmp/kwai-package.txt | sort -u > /tmp/kwai-components-all.txt || true
-            grep -Ei 'login|signin|auth|account|profile|user|phone|email|verify|passport|entry|tiny' /tmp/kwai-components-all.txt > /tmp/kwai-components-priority.txt || true
-            test -s /tmp/kwai-components-priority.txt || cp /tmp/kwai-components-all.txt /tmp/kwai-components-priority.txt
-            python3 -c 'import os; xs=[x.strip() for x in open("/tmp/kwai-components-priority.txt") if x.strip()]; assert xs; i=(int(os.environ["CASE_ID"])-1)%len(xs); open("/tmp/kwai-candidate.txt","w").write(xs[i]+"\n"); print("KWAI_DIRECT_COMPONENT_COUNT="+str(len(xs))); print("KWAI_DIRECT_COMPONENT="+xs[i])'
-            adb shell am force-stop com.kwai.video
-            adb shell am start -n "$(cat /tmp/kwai-candidate.txt)" > /tmp/kwai-direct-start.txt 2>&1 || true
-            sleep $((4 + (CASE_ID % 6) * 2))
-            adb shell uiautomator dump /sdcard/kwai-direct.xml >/dev/null 2>&1 || true
-            adb exec-out cat /sdcard/kwai-direct.xml > /tmp/kwai-direct.xml 2>/dev/null || true
-            python3 -c 'import xml.etree.ElementTree as E,sys; p="/tmp/kwai-direct.xml"; root=E.parse(p).getroot(); ns=list(root.iter("node")); s=" ".join(((n.get("text") or "")+" "+(n.get("content-desc") or "")+" "+(n.get("resource-id") or "")).lower() for n in ns); edits=sum(1 for n in ns if (n.get("class") or "").endswith("EditText") or n.get("editable")=="true"); print("KWAI_DIRECT_EDITTEXT_COUNT="+str(edits)); print("KWAI_DIRECT_AUTH_MARKERS="+str(int(any(k in s for k in ("login","log in","sign in","entrar","phone","telefone","email","password","senha","account","conta")))))' || true
+            python3 tools/kwai_semantic_ui_explorer.py || true
             python3 tools/kwai_credential_login.py || true
             KWAI_EXPECTED_ACCOUNT=lucasrosalem python3 kwai_auth_probe.py | tee /tmp/stage4-proof.txt
             grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/stage4-proof.txt
             grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/stage4-proof.txt
-            echo "STAGE4_DIRECT_ACTIVITY_CASE_${CASE_ID}=PASS"
+            echo "STAGE4_SEMANTIC_UI_CASE_${CASE_ID}=PASS"
