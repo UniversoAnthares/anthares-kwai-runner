@@ -868,3 +868,13 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - No TikTok/Playwright Python publisher process was observed; normal Chrome processes are active and were not touched.
 - No publication occurred in this step.
 - Next action: re-read this log, inspect the exact plan/ledger/media fields and the controlled-post script/confirmation path before allowing a Post click.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — controlled TikTok post exact state verified
+- Canonical log was re-read immediately before inspection.
+- Prepared plan is still `xcRGdBfHX0E:100:190` from source `O Homem do Elevador`.
+- Ledger status for that segment is still `attempted` with run id `local-1791830667`; prior segment `5:95` remains `quarantined_uncertain`.
+- Prepared media exists at `D:\AntharesWork\legacy-pc-runtime\tiktok\output\yt_xcRGdBfHX0E_100_190.mp4`, size 10,952,933 bytes, SHA-256 `3A6C09DB401551FAED122264676783DA9970EA05758F8E697D794E57D27AFD1D`.
+- `legacy_tiktok_upload_prepare.py` is confirmed no-post: it stops after enabled Post + public visibility and closes the browser.
+- No publication occurred in this inspection.
+- Next action: re-read this log and inspect the historical real publisher's click/confirmation/ledger-complete path; only then create/run the smallest controlled one-post wrapper.
