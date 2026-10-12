@@ -1,0 +1,83 @@
+name: Kwai Stage4 Vault Restore Proof
+
+on:
+  workflow_run:
+    workflows: ["Kwai Stage4 Real Auth and Vault"]
+    types: [completed]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  restore-proof:
+    if: github.event.workflow_run.conclusion == 'success'
+    name: fresh-emulator-encrypted-session-restore
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      KWAI_SESSION_ENCRYPTION_KEY: ${{ secrets.KWAI_SESSION_ENCRYPTION_KEY }}
+      KWAI_ACCOUNT_ID: primary
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate session key exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KWAI_SESSION_ENCRYPTION_KEY" || { echo STAGE4_RESTORE_BLOCKED_MISSING_SESSION_KEY; exit 8; }
+      - name: Fetch proven Kwai package vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-all-errors --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+      - run: sudo chmod 666 /dev/kvm
+      - name: Pull encrypted session, restore on clean Android, prove identity
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 4096M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 4096
+          script: |
+            set -euo pipefail
+            bash kwai_vault_install.sh
+            python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
+            test -s kwai-session.enc
+            bash kwai_session_state.sh restore
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+            sleep 10
+            MATCH=''
+            for candidate in lucasrosalem universo.anthares; do
+              set +e
+              KWAI_EXPECTED_ACCOUNT="$candidate" python3 kwai_auth_probe.py >"restore-auth-$candidate.txt" 2>&1
+              RC=$?
+              set -e
+              cat "restore-auth-$candidate.txt"
+              if [ "$RC" -eq 0 ] && grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' "restore-auth-$candidate.txt" && grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' "restore-auth-$candidate.txt"; then
+                MATCH="$candidate"
+                break
+              fi
+            done
+            test -n "$MATCH" || { echo STAGE4_RESTORE_IDENTITY_UNVERIFIED; exit 11; }
+            echo "KWAI_RESTORED_IDENTITY=$MATCH"
+            echo OWN_STAGE4_ENCRYPTED_SESSION_RESTORE=PASS
+      - name: Upload non-secret restore diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage4-restore-proof-${{ github.run_id }}
+          path: |
+            restore-auth-lucasrosalem.txt
+            restore-auth-universo.anthares.txt
+            kwai-vault-install-status.txt
+          if-no-files-found: warn
+          retention-days: 1
