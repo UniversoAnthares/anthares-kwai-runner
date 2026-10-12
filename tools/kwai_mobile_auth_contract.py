@@ -42,7 +42,7 @@ checks = {
     19: ("retention-days: 1" in workflow, "auth access artifact has short retention"),
     20: ("::add-mask::" in workflow, "temporary GUI password is masked from logs"),
     21: ("htpasswd" in workflow and "auth_basic" in workflow, "remote GUI is protected by HTTP basic auth"),
-    22: ("trycloudflare.com" in workflow, "auth window uses a temporary Cloudflare tunnel"),
+    22: ("trycloudflare" in workflow and "cloudflared tunnel" in workflow, "auth window uses a temporary Cloudflare tunnel"),
     23: ("kwai_auth_probe.py" in workflow, "remote login completion uses real account UI proof"),
     24: ("kwai_session_state.sh save" in workflow, "successful mobile login is sealed for reuse"),
     25: ("kwai_session_vault_client.py push" in workflow, "sealed session is pushed to private vault"),
