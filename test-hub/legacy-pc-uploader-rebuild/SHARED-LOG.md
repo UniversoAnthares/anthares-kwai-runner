@@ -1067,3 +1067,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - The reconstructed daemon/publisher can now retain its historical target index `VM=3` without code changes.
 - No Kwai app was installed and no publication action occurred.
 - Next: re-read canonical log, start VM3, wait for Android boot/ADB readiness, verify Android version/ABI and confirm Kwai package is absent before restoring the app/session.
+
+## 2026-10-12 — Agent 3 — Kwai VM3 boot/ADB proven
+- Canonical log was re-read immediately before this step.
+- Started historical target VM3 with `memuc start -i 3`; command returned success.
+- Polled `sys.boot_completed` through `memuc adb -i 3` until Android reported boot complete.
+- VM3 now reports running in `listvms` and exposes ADB at the expected MEmu transport; Android version = 9, ABI = `x86_64`.
+- `pm list packages` confirms Kwai/Kuaishou is not yet installed in VM3.
+- VM3 runtime + ADB = PROVEN. No publication action occurred.
+- Next: re-read canonical log and locate the exact previously used Kwai APK / package artifact on the PC or repository, verify its package/signature metadata, then install it into VM3 without opening/publishing.
