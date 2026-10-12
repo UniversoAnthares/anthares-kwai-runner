@@ -26,18 +26,31 @@ def register(app):
 $ErrorActionPreference='Stop'
 $dir='C:\ProgramData\AntharesRemoteAgent'
 $launcher=Join-Path $dir 'run-agent.ps1'
-$text=Get-Content $launcher -Raw
-$text=[regex]::Replace($text,"(?m)^\$env:ANTHARES_CONTROL_URL='[^']*'","`$env:ANTHARES_CONTROL_URL='https://anthares-remote-control.onrender.com'")
-Set-Content -Path $launcher -Value $text -Encoding UTF8
+if(-not(Test-Path $launcher)){throw 'launcher_missing'}
+$lines=Get-Content $launcher
+$found=$false
+$new=@()
+foreach($line in $lines){
+  if($line -match '^\$env:ANTHARES_CONTROL_URL='){
+    $new += '$env:ANTHARES_CONTROL_URL=''https://anthares-remote-control.onrender.com'''
+    $found=$true
+  } else { $new += $line }
+}
+if(-not $found){throw 'control_url_line_missing'}
+Set-Content -Path $launcher -Value $new -Encoding UTF8
+$verify=(Get-Content $launcher | Where-Object {$_ -match '^\$env:ANTHARES_CONTROL_URL='} | Select-Object -First 1)
+if($verify -ne '$env:ANTHARES_CONTROL_URL=''https://anthares-remote-control.onrender.com'''){throw 'launcher_verify_failed'}
 $restart=Join-Path $dir 'switch-control-restart.ps1'
-@"
-Start-Sleep -Seconds 3
-Get-Process 'anthares-remote-agent' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 2
-Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','C:\ProgramData\AntharesRemoteAgent\run-agent.ps1'
-"@ | Set-Content -Path $restart -Encoding UTF8
+$restartLines=@(
+  'Start-Sleep -Seconds 4',
+  'Get-Process ''anthares-remote-agent'' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue',
+  'Start-Sleep -Seconds 2',
+  'Start-Process powershell.exe -WindowStyle Hidden -ArgumentList ''-NoProfile'',''-ExecutionPolicy'',''Bypass'',''-File'',''C:\ProgramData\AntharesRemoteAgent\run-agent.ps1'''
+)
+Set-Content -Path $restart -Value $restartLines -Encoding UTF8
 Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',$restart
-'MIGRATION_SCHEDULED TARGET=https://anthares-remote-control.onrender.com'
+'MIGRATION_SCHEDULED'
+'CONTROL_URL='+$verify
 """.strip()
         job_id=_enqueue(command)
         return jsonify(job_id=job_id,status="queued"),202
