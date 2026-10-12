@@ -1,0 +1,152 @@
+name: X Android interactive session bootstrap
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/x-native-live-android-bridge
+    paths:
+      - .x-android-bootstrap-trigger
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: x-android-interactive-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    env:
+      DISPLAY: :99
+      QT_X11_NO_MITSHM: "1"
+      EVIDENCE_DIR: x-bootstrap-evidence
+      X_ANDROID_SESSION_KEY: ${{ secrets.X_ANDROID_SESSION_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      ACCESS_ARTIFACT: x-bootstrap-access-${{ github.run_id }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download current signed X Android bundle
+        uses: Yakov5776/gh-apkmirror-dl@v1.3
+        with:
+          org: x-corp
+          repo: twitter
+          bundle: true
+          filename: x-current.apkm
+
+      - name: Prepare private-lived browser desktop tunnel
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "$X_ANDROID_SESSION_KEY" || { echo 'Missing X_ANDROID_SESSION_KEY'; exit 10; }
+          mkdir -p "$EVIDENCE_DIR" x-bootstrap-access
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb x11vnc novnc websockify curl gnupg unzip
+          if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
+          chmod +x scripts/x_install_apkm_bundle.sh scripts/x_android_session_vault.sh
+
+          nohup Xvfb :99 -screen 0 1280x900x24 -ac +extension GLX +render > /tmp/xvfb.log 2>&1 &
+          sleep 2
+          nohup x11vnc -display :99 -rfbport 5900 -forever -shared -nopw -noxdamage > /tmp/x11vnc.log 2>&1 &
+          nohup websockify --web=/usr/share/novnc 6080 localhost:5900 > /tmp/novnc.log 2>&1 &
+
+          arch=$(uname -m)
+          case "$arch" in
+            aarch64|arm64) cfarch=arm64 ;;
+            x86_64|amd64) cfarch=amd64 ;;
+            *) echo "Unsupported host arch: $arch"; exit 11 ;;
+          esac
+          curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cfarch}" -o /tmp/cloudflared
+          chmod +x /tmp/cloudflared
+          nohup /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 > /tmp/cloudflared.log 2>&1 &
+
+          url=''
+          for _ in $(seq 1 60); do
+            url=$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/cloudflared.log | tail -1 || true)
+            [[ -n "$url" ]] && break
+            sleep 1
+          done
+          test -n "$url" || { cat /tmp/cloudflared.log; exit 12; }
+          printf '%s/vnc.html?autoconnect=true&resize=scale\n' "$url" > x-bootstrap-access/open-this-url.txt
+          printf 'This one-time tunnel is deleted as soon as the Android session is sealed.\n' > x-bootstrap-access/README.txt
+          echo 'Bootstrap access file created without printing the tunnel URL to the job log.'
+
+      - name: Publish one-time access file
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ACCESS_ARTIFACT }}
+          path: x-bootstrap-access/
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Boot visible Android, wait for manual X sign-in, and seal session
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: arm64-v8a
+          target: google_apis
+          profile: pixel_5
+          disable-animations: false
+          enable-hw-keyboard: true
+          emulator-options: >-
+            -gpu swiftshader_indirect -no-snapshot -no-boot-anim
+            -camera-back none -camera-front none
+          script: |
+            set -Eeuo pipefail
+            mkdir -p "$EVIDENCE_DIR"
+            scripts/x_install_apkm_bundle.sh x-current.apkm | tee "$EVIDENCE_DIR/x-install.txt"
+            adb shell monkey -p com.twitter.android 1 >/dev/null
+
+            echo 'Waiting up to 15 minutes for the X app to reach an authenticated home timeline.'
+            authenticated=0
+            for i in $(seq 1 180); do
+              adb shell uiautomator dump /sdcard/x-login.xml >/dev/null 2>&1 || true
+              adb pull /sdcard/x-login.xml /tmp/x-login.xml >/dev/null 2>&1 || true
+              if [[ -s /tmp/x-login.xml ]]; then
+                if grep -Eqi 'For you|Following|Para você|Seguindo|Home|Página inicial' /tmp/x-login.xml && ! grep -Eqi 'Sign in|Log in|Entrar na sua conta' /tmp/x-login.xml; then
+                  authenticated=1
+                  break
+                fi
+              fi
+              sleep 5
+            done
+            (( authenticated == 1 )) || { echo 'Authenticated X home was not detected before timeout.'; exit 20; }
+
+            adb exec-out screencap -p > "$EVIDENCE_DIR/x-authenticated.png" || true
+            scripts/x_android_session_vault.sh export /tmp/x-session.gpg | tee "$EVIDENCE_DIR/session-export.txt"
+            sha256sum /tmp/x-session.gpg | tee "$EVIDENCE_DIR/session-sha256.txt"
+
+            if gh release view x-android-session-v1 >/dev/null 2>&1; then
+              gh release upload x-android-session-v1 /tmp/x-session.gpg --clobber
+            else
+              gh release create x-android-session-v1 /tmp/x-session.gpg --target "$GITHUB_SHA" --title 'Encrypted X Android session v1' --notes 'Encrypted authenticated Android application state. Decryption key is stored only as a repository Actions secret.'
+            fi
+            echo 'X_ANDROID_SESSION_SEALED=PASS' | tee "$EVIDENCE_DIR/result.txt"
+
+      - name: Remove one-time tunnel access artifact
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          artifact_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${ACCESS_ARTIFACT}" --jq '.artifacts[0].id // empty' 2>/dev/null)
+          if [[ -n "$artifact_id" ]]; then
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}" >/dev/null 2>&1 || true
+          fi
+          pkill -f cloudflared || true
+          pkill -f websockify || true
+          pkill -f x11vnc || true
+          pkill -f Xvfb || true
+
+      - name: Save bootstrap evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-android-session-bootstrap-evidence-${{ github.run_id }}
+          path: x-bootstrap-evidence/
+          retention-days: 1
+          if-no-files-found: ignore
