@@ -108,7 +108,6 @@ def x_preview():
     shot("x-home")
     nodes = dump("x-home")
 
-    # Try semantic controls first; coordinate fallbacks vary across the matrix.
     if not click_pattern(r"compose|create|criar|postar|post|new post|novo post", nodes):
         size = adb("shell", "wm", "size").stdout
         m = re.search(r"(\d+)x(\d+)", size)
@@ -147,9 +146,25 @@ def x_preview():
         print("X_LIVE_PREVIEW_OK")
 
 
+def x_stop_live():
+    ensure_boot()
+    nodes = dump("x-live-before-stop")
+    shot("x-live-before-stop")
+    if not click_pattern(r"^stop$|parar|end live|encerrar", nodes):
+        raise RuntimeError("Live stop control not found")
+    time.sleep(1.5)
+    nodes = dump("x-live-stop-confirm")
+    click_pattern(r"stop|parar|end|encerrar|confirmar|confirm", nodes)
+    time.sleep(3)
+    shot("x-live-stopped")
+    print("X_LIVE_STOPPED")
+
+
 if MODE == "camera-probe":
     camera_probe()
 elif MODE in ("x-preview", "x-go-live"):
     x_preview()
+elif MODE == "x-stop-live":
+    x_stop_live()
 else:
-    raise SystemExit("usage: x_android_live_ui.py {camera-probe|x-preview|x-go-live}")
+    raise SystemExit("usage: x_android_live_ui.py {camera-probe|x-preview|x-go-live|x-stop-live}")
