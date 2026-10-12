@@ -214,3 +214,40 @@ Inspect local `.github/workflows` plus git log for TikTok workflow/self-hosted r
 
 RISKS OF CONCURRENCY:
 Do not hard-code VM2 or VM3 into a rebuilt launcher until current MEmu inventory and the last proven runtime are reconciled.
+
+## 2026-10-12 14:31 -04:00 — Agent 3
+
+ACTION:
+Inspected local workflow history in `C:\Users\Lucas\anthares-clipper` for TikTok self-hosted execution and recovered the exact Kwai daemon Scheduled Task launcher plus the original MEmu publisher commit.
+
+COMMITS / HISTORY EXAMINED:
+- workflow inventory and pickaxe searches for `self-hosted`, `tiktok_web_publish`, `youtube_tiktok_pipeline`
+- 7592779bee9fc095196ea16fce9b56c7189e321b — Run Kwai daily publishing from local daemon
+- 796a3a160691bf689e4ee806c3f7b11c61970513 — Desacoplar daemon Kwai do ciclo do runner
+- 253be4b3d13bffc1f9fed599beae40161b606579 — Add guarded Kwai MEmu publisher
+- pickaxe searches for `Register-ScheduledTask`, `schtasks`, and `kwai_daily_daemon.py`
+
+FOUND:
+1. Commit `253be4b3` is valid in the historical `UniversoAnthares/anthares-clipper` repository. It created `kwai_memu_publish.py` version 0.1.0 on 2026-10-01 23:08 -04:00. The original guarded flow already contained MediaStore staging, long-press Album path, ShareActivity validation, public-privacy gate, final post resource id, and a 120-second confirmation wait.
+2. Commit `7592779` removed the 10-minute workflow schedule from `.github/workflows/anthares-kwai-100-daily.yml`, establishing that continuous publication moved to the local daemon instead of recurring Actions scheduling.
+3. Commit `796a3a1` contains the exact historical persistence launcher. Task name: `Anthares-Kwai-Daily-Publisher`. It used `pythonw.exe` with argument `D:\AntharesWork\anthares-clipper\kwai_daily_daemon.py`, working directory set to the repository, trigger `AtLogOn`, settings `StartWhenAvailable`, `MultipleInstances IgnoreNew`, and `Hidden`. The workflow registered the task when absent, started it, waited five seconds, and verified a Python process whose command line contained `kwai_daily_daemon.py`.
+4. Current Windows task inventory no longer contains `Anthares-Kwai-Daily-Publisher`, so the task can be reconstructed exactly from commit `796a3a1` after runtime validation.
+5. TikTok workflow history has many local-PC/self-hosted commits before the later cloud migration. Particularly relevant anchors include `5ea62a5` (automatic owned YouTube cuts), `583174c` (immediate owned TikTok test), `3c8e9bf` (restore 100/day), `276c007` (restore validated TikTok workflow), `4fda365` (persistence resilient to concurrent pushes), `96eb05b` (cache Deno runtime on self-hosted runner), and the later `21ffa81` migration to cloud failover. This gives a bounded historical window for recovering the final local production workflow.
+
+EVIDENCE:
+- Local git `show` output for 7592779, 796a3a1 and 253be4b.
+- Local git workflow history/pickaxe output.
+
+CHANGED:
+No runtime or PC files changed.
+
+STATE IMPACT:
+- Historical commit 253be4b3 = FOUND/PROVEN in correct repository.
+- Kwai Scheduled Task launcher = FOUND exactly.
+- TikTok self-hosted historical window = FOUND; exact final local workflow snapshot still to extract.
+
+NEXT:
+Extract the final validated TikTok local workflow immediately before cloud migration, including `runs-on`, browser profile/session source, publisher entrypoint, confirmation gate and Git retry logic. Then reconcile current PC runner/profile availability before restoring anything.
+
+RISKS OF CONCURRENCY:
+Do not register/start `Anthares-Kwai-Daily-Publisher` until current VM/account and active daemon/process state are checked. Other agents can now reuse the exact launcher from commit 796a3a1 instead of recreating it.
