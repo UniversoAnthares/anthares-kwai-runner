@@ -1076,3 +1076,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - `pm list packages` confirms Kwai/Kuaishou is not yet installed in VM3.
 - VM3 runtime + ADB = PROVEN. No publication action occurred.
 - Next: re-read canonical log and locate the exact previously used Kwai APK / package artifact on the PC or repository, verify its package/signature metadata, then install it into VM3 without opening/publishing.
+
+## 2026-10-12 — Agent 3 — historical Kwai APK vault recovered
+- Canonical log was re-read immediately before this search.
+- File-system search under `D:\AntharesWork` recovered the prior Kwai split-APK vault at `D:\AntharesWork\temp\kwai-vault-final2\`.
+- Base package artifact: `com.kwai.video.apk` (7,316,172 bytes), plus split APKs for arm64-v8a, armeabi-v7a, density variants and `dfm_ug.apk`.
+- This is direct local evidence of the previously used Kwai app package family and removes the need to fetch an arbitrary new APK.
+- No APK has been installed into VM3 yet and no publication action occurred.
+- Next: re-read canonical log, recover the exact historical split-install command/selected splits from code/logs, then verify/install this known vault into VM3.
