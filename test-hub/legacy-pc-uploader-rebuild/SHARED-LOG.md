@@ -897,3 +897,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Therefore the controlled milestone can preserve the historical safety invariant: Post click and confirmation happen in the publisher; ledger is marked complete only after an unequivocal publisher success.
 - No publication occurred in this inspection.
 - Next action: re-read this log, inspect `youtube_tiktok_pipeline.py complete` and the controller publish branch for exact local environment paths, then execute one controlled transaction if all guards match.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — local controlled-post transaction verified
+- Canonical log was re-read immediately before inspection.
+- `legacy_pc_tiktok_controller.py publish` exactly preserves the historical transaction: requires BOTH runtime `ALLOW_PUBLISH` file and `LEGACY_TIKTOK_ALLOW_PUBLISH=YES`; runs `tiktok_web_publish_local.py`; only if rc=0 runs `youtube_tiktok_pipeline.py complete`.
+- `complete()` requires the target segment still be `attempted`, marks it `published`, records `published_at/published_run_id`, schedules the next publication, persists the ledger, then deletes only the completed media and plan.
+- This is sufficient for a one-shot controlled real post with automatic duplicate protection.
+- No publication occurred in this inspection.
+- Next action: re-read this log, rerun the authenticated session check without publication; if authenticated, record it and then arm the guard only for the single controlled publish transaction.
