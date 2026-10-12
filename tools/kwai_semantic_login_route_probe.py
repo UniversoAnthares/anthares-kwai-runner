@@ -57,7 +57,7 @@ def clickable_center(root,node):
     if root is None:return p
     parents={c:par for par in root.iter() for c in par}
     cur=node
-    for _ in range(4):
+    for _ in range(5):
         if cur is None:break
         if cur.get('clickable')=='true' and center(cur):return center(cur)
         cur=parents.get(cur)
@@ -87,14 +87,16 @@ def success(xml,ns):
     return False
 
 def clear_known_gate(root,ns):
-    n=find_id(ns,'bt_interest_skip_top_right')
-    if n is not None:return tap_xy(clickable_center(root,n),'skip_interests')
-    n=find_label(ns,'skip','pular')
-    if n is not None and any('interest' in rid(x) for x in ns):return tap_xy(clickable_center(root,n),'skip_interests_label')
-    n=find_id(ns,'signin_fre_continue_button')
-    if n is not None:return tap_xy(clickable_center(root,n),'signin_fre_continue')
+    for key in ('bt_interest_skip_top_right','signin_fre_continue_button'):
+        n=find_id(ns,key)
+        if n is not None:return tap_xy(clickable_center(root,n),key)
+    if any('interest' in rid(x) for x in ns):
+        n=find_label(ns,'skip','pular','not now','agora não')
+        if n is not None:return tap_xy(clickable_center(root,n),'skip_interest_label')
     n=find_id(ns,'permission_deny_button','permission_allow_button')
     if n is not None:return tap_xy(clickable_center(root,n),'permission_gate')
+    n=find_label(ns,'not now','maybe later','agora não','mais tarde')
+    if n is not None:return tap_xy(clickable_center(root,n),'dismiss_optional_gate')
     return False
 
 def profile_target(root,ns):
@@ -109,94 +111,113 @@ def profile_content(root,ns):
     return clickable_center(root,n) if n is not None else None
 
 def login_target(root,ns):
-    # Prefer explicit login containers/buttons after the Me tab opens.
     for key in ('login_container','login_button','btn_login','tv_login','login_platform_expand_text'):
         n=find_id(ns,key)
         if n is not None:return clickable_center(root,n)
-    return clickable_center(root,find_label(ns,'log in','login','sign in','entrar','fazer login','log in / sign up','log in or sign up')) if find_label(ns,'log in','login','sign in','entrar','fazer login','log in / sign up','log in or sign up') is not None else None
+    n=find_label(ns,'log in','login','sign in','entrar','fazer login','log in / sign up','log in or sign up')
+    return clickable_center(root,n) if n is not None else None
 
 def relaunch():
     adb('shell','am','force-stop',PKG);time.sleep(1)
     adb('shell','monkey','-p',PKG,'-c','android.intent.category.LAUNCHER','1');time.sleep(max(3,SETTLE))
 
-def network_prepare():
-    log('NETWORK_MODE='+NETWORK)
-    if NETWORK in {'airplane_off','wifi_cycle','network_wait'}:
-        adb('shell','cmd','connectivity','airplane-mode','disable')
-        adb('shell','settings','put','global','airplane_mode_on','0')
-        adb('shell','svc','data','enable')
-        adb('shell','svc','wifi','enable')
+def ensure_network(reason='initial'):
+    log('NETWORK_REPAIR='+reason+' MODE='+NETWORK)
+    adb('shell','cmd','connectivity','airplane-mode','disable')
+    adb('shell','settings','put','global','airplane_mode_on','0')
+    adb('shell','svc','data','enable')
+    adb('shell','svc','wifi','enable')
     if NETWORK=='wifi_cycle':
         adb('shell','svc','wifi','disable');time.sleep(2);adb('shell','svc','wifi','enable');time.sleep(3)
-    if NETWORK=='network_wait':
-        for i in range(8):
-            ip=adb('shell','ping','-c','1','-W','1','8.8.8.8',timeout=5)
-            dns=adb('shell','ping','-c','1','-W','1','www.google.com',timeout=5)
-            if ip.returncode==0 and dns.returncode==0:
-                log('ANDROID_NETWORK_READY=1');break
-            time.sleep(2)
-        else:log('ANDROID_NETWORK_READY=0')
+    loops=8 if NETWORK in {'network_wait','wifi_cycle'} else 3
+    ready=False
+    for _ in range(loops):
+        ip=adb('shell','ping','-c','1','-W','1','8.8.8.8',timeout=5)
+        dns=adb('shell','ping','-c','1','-W','1','www.google.com',timeout=5)
+        if ip.returncode==0 and dns.returncode==0:
+            ready=True;break
+        time.sleep(1)
+    log('ANDROID_NETWORK_READY='+str(int(ready)))
     log('AIRPLANE_MODE='+adb('shell','settings','get','global','airplane_mode_on').stdout.strip())
-    ip=adb('shell','ping','-c','1','-W','1','8.8.8.8',timeout=5)
-    dns=adb('shell','ping','-c','1','-W','1','www.google.com',timeout=5)
-    log('PING_IP='+str(int(ip.returncode==0))+' PING_DNS='+str(int(dns.returncode==0)))
 
 def state(tag):
     xml=dump(tag);root,ns=root_nodes(xml)
     if not xml:return xml,root,ns
     ids={rid(n) for n in ns}
+    unconnected=any('un_connected_network' in x for x in ids)
     log(f'STATE={tag} NODES={len(ns)} PID='+(adb('shell','pidof',PKG).stdout.strip() or 'none'))
-    log('HAS_ME='+str(int('id_home_bottom_tab_me' in ids))+' HAS_LOGIN_CONTAINER='+str(int('login_container' in ids))+' HAS_UNCONNECTED='+str(int(any('un_connected_network' in x for x in ids))))
+    log('HAS_ME='+str(int('id_home_bottom_tab_me' in ids))+' HAS_LOGIN_CONTAINER='+str(int('login_container' in ids))+' HAS_UNCONNECTED='+str(int(unconnected)))
+    if unconnected:ensure_network('ui-unconnected')
     return xml,root,ns
 
-network_prepare()
+def open_profile_then_login(tag):
+    xml,root,ns=state(tag+'-before-me')
+    if success(xml,ns):return True
+    if clear_known_gate(root,ns):
+        xml,root,ns=state(tag+'-after-gate')
+    p=profile_target(root,ns)
+    if p:tap_xy(p,tag+'-me')
+    for i in range(5):
+        xml,root,ns=state(f'{tag}-profile-{i}')
+        if success(xml,ns):return True
+        if clear_known_gate(root,ns):continue
+        q=login_target(root,ns)
+        if q:
+            tap_xy(q,tag+'-login')
+            xml,root,ns=state(f'{tag}-login-result-{i}')
+            if success(xml,ns):return True
+        time.sleep(max(1,SETTLE/2))
+    return False
+
+ensure_network('initial')
 relaunch()
 
-# Bounded gate-clearing before semantic navigation.
-for i in range(5):
+for i in range(8):
     xml,root,ns=state(f'pre-{i}')
     if not xml:continue
     if success(xml,ns):log('SEMANTIC_LOGIN_ROUTE=PASS_PREEXISTING');sys.exit(0)
     if not clear_known_gate(root,ns):break
 
-xml,root,ns=state('home')
-if not xml:log('SEMANTIC_LOGIN_ROUTE=FAIL_UI_DUMP');sys.exit(21)
-if success(xml,ns):log('SEMANTIC_LOGIN_ROUTE=PASS_PREEXISTING');sys.exit(0)
-
-# Five structurally different route families. Every one is semantic/resource based.
+passed=False
 if ROUTE=='me_direct':
-    tap_xy(profile_target(root,ns),'me_direct')
+    passed=open_profile_then_login('direct')
 elif ROUTE=='me_retry':
-    tap_xy(profile_target(root,ns),'me_first')
-    xml,root,ns=state('me-first')
-    if not success(xml,ns):tap_xy(profile_target(root,ns) or login_target(root,ns),'me_or_login_retry')
+    passed=open_profile_then_login('retry-a')
+    if not passed:
+        ensure_network('retry-route');passed=open_profile_then_login('retry-b')
 elif ROUTE=='me_login_label':
-    tap_xy(profile_target(root,ns),'me_then_login')
-    xml,root,ns=state('me-opened')
-    if not success(xml,ns):tap_xy(login_target(root,ns),'explicit_login')
+    passed=open_profile_then_login('explicit')
 elif ROUTE=='profile_content':
-    tap_xy(profile_target(root,ns),'me_before_profile_content')
-    xml,root,ns=state('profile-opened')
-    if not success(xml,ns):tap_xy(profile_content(root,ns) or login_target(root,ns),'profile_content_or_login')
+    xml,root,ns=state('content-home')
+    p=profile_target(root,ns)
+    if p:tap_xy(p,'content-me')
+    xml,root,ns=state('content-profile')
+    if success(xml,ns):passed=True
+    else:
+        q=profile_content(root,ns)
+        if q:tap_xy(q,'profile-content')
+        passed=open_profile_then_login('content-after')
 elif ROUTE=='me_relaunch':
-    tap_xy(profile_target(root,ns),'me_before_relaunch')
-    xml,root,ns=state('me-before-relaunch')
-    if not success(xml,ns):
-        relaunch();xml,root,ns=state('after-relaunch');tap_xy(profile_target(root,ns),'me_after_relaunch')
+    xml,root,ns=state('relaunch-home')
+    p=profile_target(root,ns)
+    if p:tap_xy(p,'relaunch-me-before')
+    relaunch();ensure_network('after-relaunch')
+    passed=open_profile_then_login('relaunch-after')
 else:
     log('UNKNOWN_ROUTE='+ROUTE);sys.exit(2)
 
-# Poll actual state; clear interest/FRE gates that may appear after navigation.
-for i in range(10):
-    xml,root,ns=state(f'post-{i}')
+if passed:
+    log('SEMANTIC_LOGIN_ROUTE=PASS')
+    sys.exit(0)
+
+for i in range(12):
+    xml,root,ns=state(f'late-{i}')
     if not xml:time.sleep(1);continue
-    if success(xml,ns):
-        log('SEMANTIC_LOGIN_ROUTE=PASS')
-        sys.exit(0)
+    if success(xml,ns):log('SEMANTIC_LOGIN_ROUTE=PASS_LATE');sys.exit(0)
     if clear_known_gate(root,ns):continue
-    if i in {2,5}:
-        p=login_target(root,ns)
-        if p:tap_xy(p,'late_login_target')
+    if i in {2,5,8}:
+        q=login_target(root,ns) or profile_target(root,ns)
+        if q:tap_xy(q,'late-semantic-target')
     time.sleep(max(1,SETTLE/2))
 
 Path('semantic-activities.txt').write_text(adb('shell','dumpsys','activity','activities').stdout,encoding='utf-8')
