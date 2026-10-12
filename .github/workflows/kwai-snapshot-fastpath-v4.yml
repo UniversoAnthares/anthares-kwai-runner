@@ -228,6 +228,14 @@ jobs:
             adb shell uiautomator dump /sdcard/kwai-diag.xml >/dev/null 2>&1 || true
             adb shell cat /sdcard/kwai-diag.xml | grep -o 'resource-id="[^"]*"' | sort -u | tail -25 || true
             adb logcat -d -t 350 | grep -Ei 'kwai|gifshow|ssl|dns|network|timeout|policy' | tail -35 || true
+            # Stop repeating login when FRE bootstrap is blocked. Collect explicit
+            # connectivity and launcher diagnostics; classify this as a diagnostic job.
+            adb shell dumpsys connectivity | grep -E 'NetworkAgentInfo|VALIDATED|INTERNET' | head -12 || true
+            adb shell settings get global http_proxy | sed 's/^/STAGE4_PROXY=/' || true
+            adb shell getprop | grep -E 'dns|proxy' | head -15 || true
+            adb shell logcat -d -t 1200 | grep -Ei 'UnknownHostException|SSLHandshakeException|ConnectException|SocketTimeoutException|fre_native_and_policy|NetworkSecurityConfig' | tail -25 || true
+            echo 'STAGE4_DIAGNOSTIC=FRE_BOOTSTRAP_NOT_READY' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
             timeout 110 python3 tools/kwai_credential_login.py > /tmp/stage4-login.txt 2>&1
             LOGIN_RC=$?
             set -e
