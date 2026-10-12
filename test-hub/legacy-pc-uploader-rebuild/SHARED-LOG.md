@@ -933,3 +933,18 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - No publication occurred; ledger/plan were not changed by this validator.
 - The actual upload route is currently usable despite the separate profile-route slider challenge.
 - Next action: re-read this log, arm both local publish guards only inside one PowerShell transaction, execute `legacy_pc_tiktok_controller.py publish` once, always remove the ALLOW file afterward, and inspect ledger/plan/media immediately after the result.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — CONTROLLED TIKTOK REAL POST PROVEN
+- Canonical log was re-read immediately before the one-shot transaction.
+- User explicitly authorized advancing milestone 1 (first real controlled TikTok Post + confirmation + ledger completion).
+- Both local guards were armed only for this transaction: runtime `ALLOW_PUBLISH` file + `LEGACY_TIKTOK_ALLOW_PUBLISH=YES`.
+- Real publisher result: `TIKTOK_OWNED_PUBLISH=OK segment=xcRGdBfHX0E:100:190 source=xcRGdBfHX0E`.
+- Historical completion path then succeeded: `YT_TIKTOK_COMPLETE segment=xcRGdBfHX0E:100:190 next_in_seconds=63 artifacts=cleaned`.
+- Controller result: `LEGACY_TIKTOK_PUBLISH=CONFIRMED_AND_COMPLETED`; process rc=0.
+- Ledger row is now `status=published`, `published_at=1791834412`, `published_run_id=local-1791834412`.
+- Completed plan and media were removed exactly as historical `complete()` specifies.
+- The ALLOW_PUBLISH file was removed in finally; `CONTROLLED_POST_GUARD_EXISTS_AFTER=False`. Automatic publication is therefore disarmed again.
+- This proves the reconstructed local-PC TikTok path end-to-end: prepared owned clip -> authenticated upload -> caption -> public visibility -> real Post -> unequivocal TikTok confirmation -> persistent ledger completion -> artifact cleanup.
+- Milestone 1 is COMPLETE/PROVEN.
+- Next action: re-read this log and update canonical STATE.md to mark the current local TikTok runtime/publish/confirmation path PROVEN. Do not activate the continuous scheduler yet.
