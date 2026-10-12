@@ -147,7 +147,7 @@ jobs:
         env:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
-          KWAI_EXPECTED_ACCOUNT: ${{ vars.KWAI_EXPECTED_ACCOUNT || 'universo.anthares' }}
+          KWAI_EXPECTED_ACCOUNT: ${{ 'lucasrosalem' }}
         run: |
           set -euo pipefail
           if [ -z "$KWAI_LOGIN" ] || [ -z "$KWAI_PASSWORD" ]; then
@@ -182,19 +182,22 @@ jobs:
           adb shell pm grant com.kwai.video android.permission.RECORD_AUDIO >/dev/null 2>&1 || true
           adb shell pm grant com.kwai.video android.permission.READ_MEDIA_IMAGES >/dev/null 2>&1 || true
           adb shell pm grant com.kwai.video android.permission.READ_MEDIA_VIDEO >/dev/null 2>&1 || true
-          for attempt in 1 2 3 4 5; do
+          # Recover the actual Android permission controller, not guessed screen coordinates.
+          for attempt in 1 2 3 4 5 6 7 8; do
+            adb shell uiautomator dump /sdcard/kwai-permission.xml >/dev/null 2>&1 || true
+            adb shell cat /sdcard/kwai-permission.xml > /tmp/kwai-permission.xml 2>/dev/null || true
             WINDOW="$(adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | head -2 || true)"
-            if echo "$WINDOW" | grep -Eiq 'permissioncontroller|grantpermissions'; then
+            if grep -Eiq 'permission_allow_button|permissioncontroller|grant_dialog' /tmp/kwai-permission.xml || echo "$WINDOW" | grep -Eiq 'permissioncontroller|grantpermissions'; then
               echo "STAGE4_PERMISSION_DIALOG_DETECTED=$attempt" | tee -a "$GITHUB_STEP_SUMMARY"
+              adb shell input keyevent 22 || true
               adb shell input keyevent 66 || true
-              sleep 2
-              adb shell input tap 540 1200 || true
               sleep 2
             else
               echo "STAGE4_PERMISSION_DIALOG_CLEARED=$attempt" | tee -a "$GITHUB_STEP_SUMMARY"
               break
             fi
           done
+          adb shell am force-stop com.kwai.video || true
           adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
           sleep 3
           set +e
