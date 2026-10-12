@@ -968,3 +968,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - A first attempt to commit this coordination entry failed only because the temporary coordination clone lacked local Git author identity; no runtime/system state changed. This retry configured author identity only inside `D:\AntharesWork\legacy-coord-log` and preserved production repos.
 - No installer was executed and no runtime state changed.
 - Next action: re-read this log and inspect existing SYSTEM/highest scheduled tasks and Anthares/remote-admin services for a deterministic elevated execution path before installing the verified MEmu package.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — exact TikTok post URL retrieval investigation
+- Canonical log was re-read before inspection.
+- Read-only authenticated profile probe at `https://www.tiktok.com/@universo.anthares` now exposes 13 `/video/` anchors, but none contains the controlled post caption; anchors use numeric profile ID `7195726752122913798` and video IDs from an older range, so they cannot be attributed to the controlled post.
+- Profile body still contains a slider-puzzle challenge text, making this surface unreliable for confirming the new post.
+- Real publisher preserved only a screenshot `D:\AntharesWork\legacy-pc-runtime\tiktok\artifacts\tiktok-owned-after-post.png`; no exact TikTok video URL was persisted by the current controller/ledger.
+- No new publication occurred.
+- Next action: re-read this log, inspect the publisher's success gate and query the authenticated creator content management page for the actual post ID, without republishing.
