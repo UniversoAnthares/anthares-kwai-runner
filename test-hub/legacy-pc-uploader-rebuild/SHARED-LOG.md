@@ -1099,3 +1099,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - A broad recursive search for `aapt/aapt2/apksigner` across several SDK/MEmu roots exceeded the 20-second command timeout before returning a reliable result.
 - No file, VM or package state changed.
 - Next: use narrow known Android SDK build-tools paths only; if the verifier tools are absent, proceed with the already historically validated local vault and verify package identity/version after `install-multiple` through Android package manager.
+
+## 2026-10-12 — Agent 3 — Kwai vault manifest/provenance present
+- Canonical log was re-read immediately before this inspection.
+- `D:\AntharesWork\temp\kwai-vault-final2` contains the full split set plus `MANIFEST.tsv`, `PROVENANCE.txt`, `VERSION` and `ABI.txt` from the prior validated vault build.
+- `MANIFEST.tsv` records exact SHA-256 values for all 11 APK files, including base `com.kwai.video.apk` SHA-256 `bf30b26a22726ac92a13c0ed85a972bbb51f5d1be2d990967b9f0640c7892c35`.
+- This provides an on-disk integrity baseline from the prior validated package-vault process.
+- No package was installed and no publication action occurred.
+- Next: re-read canonical log, recompute all 11 APK SHA-256 values against the manifest; if all match, install the entire split set into VM3 with the historical `adb install-multiple -r` transaction and verify package state.
