@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   preempt:
+    if: ${{ false }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 1
     steps:
       - run: echo KWAI_PUBLISHER_QUEUE_PREEMPTED=1
