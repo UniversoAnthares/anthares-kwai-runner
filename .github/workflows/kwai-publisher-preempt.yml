@@ -1,0 +1,21 @@
+name: Kwai publisher queue preempt
+
+on:
+  push:
+    paths:
+      - ".github/workflows/kwai-publisher-preempt.yml"
+      - ".kwai-preempt"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-kwai-queue-publisher
+  cancel-in-progress: true
+
+jobs:
+  preempt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - run: echo KWAI_PUBLISHER_QUEUE_PREEMPTED=1
