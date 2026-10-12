@@ -1,0 +1,91 @@
+name: X Real Longform Full Flow Once
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.x-real-fullflow-trigger'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: x-real-fullflow-once
+  cancel-in-progress: false
+
+jobs:
+  fullflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      X_SOURCE_CHANNEL: 'https://www.youtube.com/@UniversoAnthares/streams'
+      X_SCAN_START: '600'
+      X_SCAN_SECONDS: '300'
+      X_MIN_SOURCE_SECONDS: '1200'
+      X_WHISPER_MODEL: 'base'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install media dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install --disable-pip-version-check 'yt-dlp[default]' yt-dlp-ejs faster-whisper
+      - name: Extract real source, select strategic long cut, render 16:9
+        run: python -u x_real_fullflow_once.py
+      - name: Publish temporary public media branch
+        id: media
+        run: |
+          set -e
+          cp x-cloud-output.mp4 /tmp/x-cloud-output.mp4
+          cp x-render-result.json /tmp/x-render-result.json
+          git config user.name 'Anthares X Real Full Flow'
+          git config user.email '81930373+UniversoAnthares@users.noreply.github.com'
+          if git ls-remote --exit-code --heads origin x-media >/dev/null 2>&1; then
+            git fetch origin x-media
+            git checkout -B x-media origin/x-media
+          else
+            git checkout --orphan x-media
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+          mkdir -p public/x
+          name="real-longform-${GITHUB_RUN_ID}.mp4"
+          cp /tmp/x-cloud-output.mp4 "public/x/$name"
+          cp /tmp/x-render-result.json "public/x/${name%.mp4}.json"
+          git add public/x
+          git commit -m "X real longform media ${GITHUB_RUN_ID} [skip ci]"
+          git push origin HEAD:x-media
+          url="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/x-media/public/x/$name"
+          echo "media_url=$url" >> "$GITHUB_OUTPUT"
+          echo "X_REAL_MEDIA_URL=$url"
+      - name: Create real X publish issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MEDIA_URL: ${{ steps.media.outputs.media_url }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          result=json.load(open('/tmp/x-render-result.json',encoding='utf-8'))
+          body={
+            'platform':'x','account':'lucasyahn','caption':result['caption'],'media_url':os.environ['MEDIA_URL'],
+            'source_id':result['source']['video_id'],'source_url':result['source']['source_url'],
+            'source_route':result['source_route'],'segment_start':result['segment_start'],'segment_end':result['segment_end'],
+            'microedit':result['microedit'],'output_video':result['output_video'],'real_fullflow_test':True
+          }
+          payload=json.dumps({'title':f'[X-PUBLISH] real-longform-{result["source"]["video_id"]}-{os.environ["GITHUB_RUN_ID"]}','body':'```json\n'+json.dumps(body,ensure_ascii=False,indent=2)+'\n```'},ensure_ascii=False).encode()
+          req=urllib.request.Request(f'https://api.github.com/repos/{os.environ["GITHUB_REPOSITORY"]}/issues',data=payload,method='POST',headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json','User-Agent':'anthares-x-real'})
+          with urllib.request.urlopen(req,timeout=30) as r: out=json.load(r)
+          print('X_REAL_PUBLISH_ISSUE='+out['html_url'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: x-real-fullflow-${{ github.run_id }}
+          retention-days: 3
+          if-no-files-found: ignore
+          path: |
+            x-render-result.json
+            x-cloud-output.mp4
