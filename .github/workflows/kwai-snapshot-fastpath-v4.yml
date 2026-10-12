@@ -1,4 +1,4 @@
-name: Stage 4 - 40 Kwai Onboarding State Experiments
+name: Kwai Web - 40 Browser Entry Diagnostics
 on:
   workflow_dispatch:
   push:
@@ -7,253 +7,64 @@ on:
 permissions:
   contents: read
 jobs:
-  slim-build-test:
+  web-entry:
     strategy:
       fail-fast: false
       max-parallel: 40
       matrix:
         case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 5
     steps:
-      - name: Start timing
-        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
-
-      - name: Restore slim AVD v4
-        id: slim
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ~/.android/avd/kwai-speed.avd
-            ~/.android/avd/kwai-speed.ini
-          key: kwai-speed-avd-direct-slim-android35-v4
-
-      - name: Restore proven direct AVD v3 fallback
-        id: base
-        if: steps.slim.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ~/.android/avd/kwai-speed.avd
-            ~/.android/avd/kwai-speed.ini
-          key: kwai-speed-avd-direct-android35-v3
-
-      - name: Slim redundant default snapshot
-        if: steps.slim.outputs.cache-hit != 'true' && steps.base.outputs.cache-hit == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          ROOT="$HOME/.android/avd/kwai-speed.avd"
-          test -d "$ROOT/snapshots/kwai-ready"
-          BEFORE=$(du -sb "$ROOT" | awk '{print $1}')
-          DEFAULT=0
-          if [ -d "$ROOT/snapshots/default_boot" ]; then
-            DEFAULT=$(du -sb "$ROOT/snapshots/default_boot" | awk '{print $1}')
-            rm -rf "$ROOT/snapshots/default_boot"
-          fi
-          AFTER=$(du -sb "$ROOT" | awk '{print $1}')
-          echo "V4_RAW_BEFORE_BYTES=$BEFORE" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "V4_REMOVED_DEFAULT_BOOT_BYTES=$DEFAULT" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "V4_RAW_AFTER_BYTES=$AFTER" | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: Save slim AVD v4
-        if: steps.slim.outputs.cache-hit != 'true' && steps.base.outputs.cache-hit == 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/.android/avd/kwai-speed.avd
-            ~/.android/avd/kwai-speed.ini
-          key: kwai-speed-avd-direct-slim-android35-v4
-
-      - name: Restore Android system image
-        uses: actions/cache/restore@v4
-        with:
-          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
-          key: kwai-speed-android35-google-apis-x86_64-v1
-
-      - name: Restore emulator
-        uses: actions/cache/restore@v4
-        with:
-          path: /usr/local/lib/android/sdk/emulator
-          key: kwai-speed-emulator-ubuntu24-v1
-
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-      - name: Build agent APK for real restored Android
-        working-directory: android-agent
-        shell: bash
-        run: |
-          set -euo pipefail
-          gradle --no-daemon :app:assembleDebug
-          test -s app/build/outputs/apk/debug/app-debug.apk
-      - name: Boot kwai-ready and validate
-        shell: bash
-        run: |
-          set -euo pipefail
-          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          ADB="$SDK/platform-tools/adb"
-          export ANDROID_SDK_HOME="$HOME"
-          export ANDROID_AVD_HOME="$HOME/.android/avd"
-          test -d "$ANDROID_AVD_HOME/kwai-speed.avd/snapshots/kwai-ready"
-          if [ -d "$ANDROID_AVD_HOME/kwai-speed.avd/snapshots/default_boot" ]; then
-            echo "V4_DEFAULT_BOOT_PRESENT=true" | tee -a "$GITHUB_STEP_SUMMARY"
-          else
-            echo "V4_DEFAULT_BOOT_PRESENT=false" | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
-          sudo chmod 666 /dev/kvm
-          t=$(date +%s)
-          nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/v4-emulator.log 2>&1 &
-          timeout 60 "$ADB" wait-for-device
-          timeout 60 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done' _ "$ADB"
-          BOOT=$(($(date +%s)-t))
-          echo "V4_SNAPSHOT_BOOT_SECONDS=$BOOT" | tee -a "$GITHUB_STEP_SUMMARY"
-          if grep -q "Successfully loaded snapshot 'kwai-ready'" /tmp/v4-emulator.log && ! grep -Eq "Failed to load snapshot 'kwai-ready'|performing a cold boot" /tmp/v4-emulator.log; then
-            echo "V4_ACTUAL_LOAD=true" | tee -a "$GITHUB_STEP_SUMMARY"
-          else
-            echo "V4_ACTUAL_LOAD=false" | tee -a "$GITHUB_STEP_SUMMARY"
-            grep -Ei 'snapshot|cold boot|error' /tmp/v4-emulator.log | tail -40 || true
-            exit 4
-          fi
-          grep -E "Loading snapshot 'kwai-ready'|Successfully loaded snapshot 'kwai-ready'" /tmp/v4-emulator.log | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "V4_TOTAL_SECONDS=$(($(date +%s)-T0))" | tee -a "$GITHUB_STEP_SUMMARY"
-          test "$BOOT" -lt 10
-          echo "V4_RESULT=PROVEN_SUB10" | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: Install built agent and prove it exists inside restored Android
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK=android-agent/app/build/outputs/apk/debug/app-debug.apk
-          test -s "$APK"
-          ADB="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb"
-          test -x "$ADB"
-          timeout 90 "$ADB" install -r "$APK"
-          PKG="$(unzip -p "$APK" AndroidManifest.xml 2>/dev/null | strings | grep -o 'com\.anthares[^[:space:]]*' | head -1 || true)"
-          echo "AGENT_PACKAGE_HINT=$PKG"
-          timeout 30 "$ADB" shell pm list packages | tee /tmp/agent-packages.txt
-          grep -Ei 'anthares' /tmp/agent-packages.txt
-          echo SNAPSHOT_AGENT_INSTALLED=PASS
-          echo AUTHENTICATED_KWAI_IDENTITY=NOT_TESTED
-          echo ENCRYPTED_SESSION_RESTORE=NOT_TESTED
-
-      - name: Stage 4 real Kwai login and strict identity proof
+      - name: Probe real web login routes without Android emulator
         shell: bash
         env:
-          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
-          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
-          KWAI_EXPECTED_ACCOUNT: ${{ 'lucasrosalem' }}
+          CASE: ${{ matrix.case }}
         run: |
           set -euo pipefail
-          if [ -z "$KWAI_LOGIN" ] || [ -z "$KWAI_PASSWORD" ]; then
-            echo "STAGE4_BLOCKER=MISSING_KWAI_CREDENTIAL_SECRETS" | tee -a "$GITHUB_STEP_SUMMARY"
-            echo "STAGE4_CREDENTIAL_LOGIN=NOT_ATTEMPTED"
-            echo "STAGE4_PROBE=CHECKING_RESTORED_SNAPSHOT"
-            export KWAI_CREDENTIALS_MISSING=1
-          else
-            export KWAI_CREDENTIALS_MISSING=0
-          fi
-          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          export PATH="$SDK/platform-tools:$PATH"
-          if ! adb shell pm path com.kwai.video | grep -q 'package:'; then
-            echo 'STAGE4_KWAI_MISSING_IN_SNAPSHOT=1' | tee -a "$GITHUB_STEP_SUMMARY"
-            echo 'STAGE4_INSTALL_ATTEMPT=VAULT' | tee -a "$GITHUB_STEP_SUMMARY"
-            if bash independent_android/install_kwai.sh > /tmp/kwai-install.log 2>&1; then
-              echo 'STAGE4_KWAI_INSTALL=PASS' | tee -a "$GITHUB_STEP_SUMMARY"
-            else
-              echo 'STAGE4_KWAI_INSTALL=FAIL' | tee -a "$GITHUB_STEP_SUMMARY"
-              grep -Ei 'INSTALL_FAILED|ABI|architecture|incompatible|error|failed|not supported|sha256' /tmp/kwai-install.log | tail -20 | tee -a "$GITHUB_STEP_SUMMARY" || true
-              exit 22
-            fi
-          fi
-          adb shell pm path com.kwai.video | grep -q 'package:'
-          adb shell settings put secure enabled_accessibility_services us.anthares.agent/.AntharesAccessibilityService
-          adb shell settings put secure accessibility_enabled 1
-          adb shell am force-stop com.kwai.video || true
-          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1
-          sleep 8
-          echo 'STAGE4_STRATEGY=PERMISSION_DIALOG_RECOVERY_THEN_PROFILE' | tee -a "$GITHUB_STEP_SUMMARY"
-          adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
-          adb shell pm grant com.kwai.video android.permission.CAMERA >/dev/null 2>&1 || true
-          adb shell pm grant com.kwai.video android.permission.RECORD_AUDIO >/dev/null 2>&1 || true
-          adb shell pm grant com.kwai.video android.permission.READ_MEDIA_IMAGES >/dev/null 2>&1 || true
-          adb shell pm grant com.kwai.video android.permission.READ_MEDIA_VIDEO >/dev/null 2>&1 || true
-          # Recover the actual Android permission controller, not guessed screen coordinates.
-          for attempt in 1 2 3 4 5 6 7 8; do
-            adb shell uiautomator dump /sdcard/kwai-permission.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/kwai-permission.xml > /tmp/kwai-permission.xml 2>/dev/null || true
-            WINDOW="$(adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | head -2 || true)"
-            if grep -Eiq 'permission_allow_button|permissioncontroller|grant_dialog' /tmp/kwai-permission.xml || echo "$WINDOW" | grep -Eiq 'permissioncontroller|grantpermissions'; then
-              echo "STAGE4_PERMISSION_DIALOG_DETECTED=$attempt" | tee -a "$GITHUB_STEP_SUMMARY"
-              adb shell input keyevent 22 || true
-              adb shell input keyevent 66 || true
-              sleep 2
-            else
-              echo "STAGE4_PERMISSION_DIALOG_CLEARED=$attempt" | tee -a "$GITHUB_STEP_SUMMARY"
-              break
-            fi
-          done
-          adb shell am force-stop com.kwai.video || true
-          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
-          sleep 3
-          set +e
-          KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" timeout 110 python3 kwai_auth_probe.py > /tmp/stage4-pre-probe.txt 2>&1
-          PROBE_RC=$?
-          set -e
-          grep '^KWAI_AUTH_STATE=' /tmp/stage4-pre-probe.txt | tail -3 || true
-          if [ "$PROBE_RC" -eq 0 ] && grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/stage4-pre-probe.txt; then
-            echo 'STAGE4_AUTH=PASS_FROM_RESTORED_SESSION' | tee -a "$GITHUB_STEP_SUMMARY"
-          elif [ "$KWAI_CREDENTIALS_MISSING" = 0 ]; then
-            echo 'STAGE4_AUTH=LOGIN_ROUTE_RECOVERY' | tee -a "$GITHUB_STEP_SUMMARY"
-            set +e
-            # 40 independent onboarding-state experiments: 10 actions x 4 checkpoints.
-            MODE=$(( (${{ matrix.case }} - 1) % 10 ))
-            CHECKPOINT=$(( (${{ matrix.case }} - 1) / 10 ))
-            echo "STAGE4_MODE=$MODE CHECKPOINT=$CHECKPOINT" | tee -a "$GITHUB_STEP_SUMMARY"
-            adb shell am force-stop com.kwai.video || true
-            case "$MODE" in
-              0) adb shell monkey -p com.kwai.video 1 >/dev/null ;;
-              1) adb shell pm clear com.kwai.video; adb shell monkey -p com.kwai.video 1 >/dev/null ;;
-              2) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 4 ;;
-              3) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 66 ;;
-              4) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input swipe 900 950 160 950 300 ;;
-              5) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input swipe 160 950 900 950 300 ;;
-              6) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 61 ;;
-              7) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 82 ;;
-              8) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 3; adb shell monkey -p com.kwai.video 1 >/dev/null ;;
-              9) adb shell monkey -p com.kwai.video 1 >/dev/null; adb shell input keyevent 4; adb shell monkey -p com.kwai.video 1 >/dev/null ;;
-            esac
-            sleep $(( 5 + CHECKPOINT * 5 ))
-            adb shell uiautomator dump /sdcard/kwai-onboarding.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/kwai-onboarding.xml > /tmp/kwai-onboarding.xml 2>/dev/null || true
-            echo "STAGE4_XML_BYTES=$(wc -c < /tmp/kwai-onboarding.xml)" | tee -a "$GITHUB_STEP_SUMMARY"
-            grep -o 'resource-id="[^"]*"' /tmp/kwai-onboarding.xml | sort -u | tail -20 || true
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | tail -2 || true
-            adb logcat -d -t 800 | grep -Ei 'com.kwai.video|FATAL EXCEPTION|SSLHandshakeException|UnknownHostException' | tail -12 || true
-            # Never unconditionally fail: inspect actual UI and allow credential proof.
-            adb shell uiautomator dump /sdcard/kwai-final.xml >/dev/null 2>&1 || true
-            adb shell cat /sdcard/kwai-final.xml > /tmp/kwai-final.xml || true
-            if grep -q 'fre_native_and_policy_load_progress_spinner' /tmp/kwai-final.xml; then
-              echo 'STAGE4_DIAGNOSTIC=FRE_STILL_BLOCKED' | tee -a "$GITHUB_STEP_SUMMARY"
-              exit 25
-            fi
-            echo 'STAGE4_DIAGNOSTIC=FRE_NOT_PRESENT_ATTEMPTING_LOGIN' | tee -a "$GITHUB_STEP_SUMMARY"
-            timeout 110 python3 tools/kwai_credential_login.py > /tmp/stage4-login.txt 2>&1
-            LOGIN_RC=$?
-            set -e
-            echo "STAGE4_LOGIN_EXIT=$LOGIN_RC" | tee -a "$GITHUB_STEP_SUMMARY"
-            grep '^KWAI_' /tmp/stage4-login.txt | tail -12 || true
-            test "$LOGIN_RC" -eq 0
-            timeout 110 python3 kwai_auth_probe.py | tee /tmp/stage4-auth-proof.txt
-            grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/stage4-auth-proof.txt
-            grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/stage4-auth-proof.txt
-          else
-            echo 'STAGE4_AUTH=BLOCKED_NO_RESTORED_IDENTITY_OR_CREDENTIALS' | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 24
-          fi
-          echo STAGE4_IDENTITY_AUTHENTICATION=PASS
+          python3 - <<'PY'
+          import os,urllib.request,urllib.error,ssl,time,json,re
+          case=int(os.environ['CASE'])
+          route=(case-1)%10
+          agent=(case-1)//10
+          urls=[
+            'https://www.kwai.com/',
+            'https://www.kwai.com/@lucasrosalem',
+            'https://www.kwai.com/login',
+            'https://www.kwai.com/account',
+            'https://www.kwai.com/upload',
+            'https://kwai.com/',
+            'https://www.kuaishou.com/',
+            'https://www.kuaishou.com/login',
+            'https://www.kwai.com/discover',
+            'https://www.kwai.com/profile',
+          ]
+          agents=[
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Version/17 Safari/605.1.15',
+            'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36',
+          ]
+          url=urls[route];ua=agents[agent]
+          print('WEB_CASE',case,'ROUTE',route,'AGENT',agent,'URL',url,flush=True)
+          req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept-Language':'pt-BR,pt;q=0.9,en;q=0.8'})
+          try:
+            try: response=urllib.request.urlopen(req,timeout=15)
+            except urllib.error.HTTPError as e: response=e
+            with response:
+              body=response.read(200000).decode('utf-8','replace')
+              final=response.geturl()
+              status=response.status
+              print('WEB_HTTP_STATUS',status,'WEB_FINAL_URL',final)
+              print('WEB_CONTENT_BYTES',len(body),'LOGIN_MARKERS',len(re.findall('login|sign.in|entrar|captcha|qr.code',body,re.I)))
+              print('WEB_UPLOAD_MARKERS',len(re.findall('upload|publish|publicar',body,re.I)))
+              print('WEB_ACCESSIBLE',int(status<500))
+              print('WEB_AUTHENTICATED=NOT_TESTED')
+              print('WEB_PUBLISHED=NOT_TESTED')
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+                f.write(f'Case {case}: HTTP {status}, URL {final}, login markers {len(re.findall("login|sign.in|entrar|captcha|qr.code",body,re.I))}; authentication NOT TESTED.\n')
+          except Exception as e:
+            print('WEB_CONNECTIVITY_ERROR',type(e).__name__,str(e))
+            raise
+          PY
