@@ -859,3 +859,12 @@ Coordination log for legacy PC uploader rebuild.
 
 PROTOCOL UPDATE:
 Before every subsequent investigation/change/test, all agents must read THIS file from `UniversoAnthares/anthares-kwai-runner`. After every step, append the result HERE. The anthares-clipper copy is no longer canonical.
+
+
+## 2026-10-12 — Agent Branch/Atualizar testes de publicação — controlled TikTok post preflight runtime inspection
+- Canonical SHARED-LOG in anthares-kwai-runner was re-read immediately before this inspection.
+- Isolated branch remains `legacy-pc-rebuild`; only untracked `publisher-artifacts/` is present.
+- Runtime still contains `D:\AntharesWork\legacy-pc-runtime\tiktok\ledger.json`, `plan.json`, storage state and the prior quarantine evidence.
+- No TikTok/Playwright Python publisher process was observed; normal Chrome processes are active and were not touched.
+- No publication occurred in this step.
+- Next action: re-read this log, inspect the exact plan/ledger/media fields and the controlled-post script/confirmation path before allowing a Post click.
