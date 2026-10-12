@@ -1024,3 +1024,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Task creation returned `Access denied`; the task never existed, never ran, produced no output file, and therefore left no persistent system change.
 - This confirms the current WinRemote user token cannot create a new highest-privilege task.
 - Next: continue only through legitimate existing elevated/admin channels. Probe MeshCentral command execution with a harmless write to a universally writable path, then inspect remote desktop/UAC-capable controls if needed. Do not use UAC-bypass techniques.
+
+## 2026-10-12 — Agent 3 — MeshCentral runcommands execution not proven
+- Canonical log was re-read immediately before this probe.
+- A second harmless MeshCentral `runcommands` test returned `OK` for `echo mesh-ok > C:\Users\Public\mesh_probe.txt`, but the file was absent when checked immediately afterward from WinRemote.
+- Therefore MeshCentral command dispatch is acknowledged by the server but is not producing observable shell side effects on this device in the current state; it will not be used to launch the installer.
+- The `Mesh Agent` Windows service remains LocalSystem, but that fact alone is insufficient without a working command path.
+- No installer was executed and no persistent system state changed.
+- Next: use the existing interactive Windows session and signed installer through the normal UAC path, controlling only the authorized installer UI; preserve the historical D:\Program Files\Microvirt\MEmu target if offered.
