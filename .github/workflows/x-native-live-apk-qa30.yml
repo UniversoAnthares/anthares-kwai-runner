@@ -47,7 +47,7 @@ jobs:
           - {variant: 28, api: 35}
           - {variant: 29, api: 34}
           - {variant: 30, api: 35}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       EVIDENCE_DIR: x-apk-evidence
@@ -56,11 +56,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download latest stable X Android bundle
+      - name: Download signer-compatible universal X Android bundle
         uses: Yakov5776/gh-apkmirror-dl@v1.3
         with:
           org: x-corp
           repo: twitter
+          version: 12.19.1-release.0
           bundle: true
           filename: x-current.apkm
 
@@ -68,7 +69,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}
-          arch: arm64-v8a
+          arch: x86_64
           target: google_apis
           profile: pixel_5
           disable-animations: true
@@ -86,7 +87,7 @@ jobs:
             adb shell dumpsys package com.twitter.android > "$EVIDENCE_DIR/package.txt"
             adb shell dumpsys activity activities > "$EVIDENCE_DIR/activity.txt"
             grep -q 'com.twitter.android' "$EVIDENCE_DIR/activity.txt"
-            echo "X_APP_QA=PASS variant=$MATRIX_VARIANT api=${{ matrix.api }}" | tee "$EVIDENCE_DIR/result.txt"
+            echo "X_APP_QA=PASS variant=$MATRIX_VARIANT api=${{ matrix.api }} abi=$(adb shell getprop ro.product.cpu.abi | tr -d '\r')" | tee "$EVIDENCE_DIR/result.txt"
 
       - name: Save evidence
         if: always()
