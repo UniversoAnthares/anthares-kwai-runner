@@ -1,0 +1,57 @@
+name: Kwai - Authenticated Session Gate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-session:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      KWAI_STORAGE_STATE_B64: ${{ secrets.KWAI_STORAGE_STATE_B64 }}
+    steps:
+      - name: Check authorized session prerequisite
+        run: |
+          if [ -z "$KWAI_STORAGE_STATE_B64" ]; then
+            echo 'AUTH_BLOCKED=KWAI_STORAGE_STATE_B64_SECRET_MISSING' >> "$GITHUB_STEP_SUMMARY"
+            echo 'An authorized browser session must be provided; UI discovery is not authentication.'
+            exit 2
+          fi
+      - name: Install browser
+        run: |
+          python3 -m pip install -q playwright==1.58.0
+          python3 -m playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify session without uploading
+        env:
+          EXPECTED_ACCOUNT: lucasrosalem
+        run: |
+          python3 - <<'PY'
+          import os,base64,json,asyncio,re
+          from playwright.async_api import async_playwright
+          state=json.loads(base64.b64decode(os.environ['KWAI_STORAGE_STATE_B64'],validate=True))
+          assert isinstance(state.get('cookies'),list) and state['cookies'],'SESSION_STATE_HAS_NO_COOKIES'
+          async def main():
+            async with async_playwright() as p:
+              browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+              context=await browser.new_context(storage_state=state)
+              page=await context.new_page()
+              response=await page.goto('https://www.kwai.com/',wait_until='domcontentloaded',timeout=25000)
+              await page.wait_for_timeout(2500)
+              login=page.get_by_text(re.compile('Log in|Sign in|Fazer login|Entrar',re.I)).first
+              login_visible=await login.count() and await login.is_visible()
+              print('SESSION_HTTP',response.status if response else 'NONE')
+              print('LOGIN_TRIGGER_VISIBLE',bool(login_visible))
+              if login_visible:
+                print('AUTH_STATE=UNAUTHENTICATED_OR_EXPIRED')
+                raise SystemExit(3)
+              profile=await page.goto('https://www.kwai.com/@'+os.environ['EXPECTED_ACCOUNT'],wait_until='domcontentloaded',timeout=25000)
+              await page.wait_for_timeout(1500)
+              body=await page.locator('body').inner_text()
+              identity=os.environ['EXPECTED_ACCOUNT'].lower() in (page.url+' '+body).lower()
+              print('PUBLIC_PROFILE_MATCH',identity)
+              print('AUTH_STATE=INDETERMINATE_REQUIRES_ACCOUNT_ONLY_SIGNAL')
+              print('PUBLISHED=NOT_TESTED')
+              # A public profile match and hidden login button do not prove account ownership.
+              raise SystemExit(4)
+          asyncio.run(main())
+          PY
