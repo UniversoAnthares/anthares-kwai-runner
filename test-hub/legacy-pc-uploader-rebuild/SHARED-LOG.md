@@ -12,3 +12,15 @@
 - TinyFish profile inventory also found an existing profile with a recorded GitHub sign-in (`GitLab Runner Admin`), giving a browser fallback for explicitly dispatching the independent `Kwai Mobile Auth Acceptance` workflow if the queue bootstrap cannot recover the prior session.
 - No Kwai publication occurred in this investigation.
 - Next: poll run 38306277632. If its prior encrypted session authenticates as `lucasrosalem`, reuse that native state for VM3; otherwise run the independent credential-based mobile-auth acceptance workflow and seal a fresh session, then restore it into VM3 before the native create/probe/prepare milestones.
+
+## 2026-10-12 — Agent 3 — Anthares Local Executor v1 daemon created
+- Canonical SHARED-LOG was re-read immediately before this step.
+- Added `anthares_local_executor.py` on isolated branch `UniversoAnthares/anthares-clipper:legacy-pc-rebuild`, commit `4c0db8ec0af779725e39c6a348be79a005d8a520`.
+- Executor is allowlist-only; there is no arbitrary shell action.
+- Current fixed actions: `status`, `tiktok_session`, `tiktok_prepare`, `tiktok_qa`, `tiktok_publish`, `kwai_probe`, `kwai_prepare`, `kwai_publish_local`.
+- Publish actions require two independent gates: queue request must set `publish=true` and a local runtime guard file must exist (`ALLOW_TIKTOK_PUBLISH` / `ALLOW_KWAI_PUBLISH`).
+- Queue protocol is immutable JSON request files under `executor-control/inbox/`; result files are written under `executor-control/results/` and committed back to the isolated Git branch.
+- Executor refuses unknown actions, arbitrary args, malformed/non-UUID request IDs, and local code dirtiness before syncing.
+- Heartbeat/lock state lives outside git under `D:\AntharesWork\legacy-pc-runtime\executor`.
+- This work is isolated from the other agent's active Kwai VM3/auth path; no Kwai/TikTok publication occurred.
+- Next: create queue schema/helper, watchdog and installation scripts; then stage files on PC and test only `status`/safe non-publish actions.
