@@ -39,7 +39,13 @@ video_prepare() {
     sudo modprobe -r v4l2loopback >/dev/null 2>&1 || true
     # Keep capture+output capabilities visible before FFmpeg attaches, so the
     # Android Emulator can enumerate webcam0 during its own startup probe.
-    sudo modprobe v4l2loopback devices=1 video_nr="$VIDEO_NR" card_label="Anthares X Live" exclusive_caps=0
+    if ! sudo modprobe v4l2loopback devices=1 video_nr="$VIDEO_NR" card_label="Anthares X Live" exclusive_caps=0; then
+      echo "V4L2_KERNEL_INCOMPATIBLE: module could not load on $(uname -r)" >&2
+      modinfo v4l2loopback 2>&1 | grep -E 'filename:|vermagic:|depends:' >&2 || true
+      sudo dmesg 2>&1 | tail -50 >&2 || true
+      echo "Do not retry this media bridge on the same kernel without changing the module/kernel strategy." >&2
+      exit 42
+    fi
   fi
   sudo chmod 666 "$VIDEO_DEVICE"
   v4l2-ctl -d "$VIDEO_DEVICE" --all >/dev/null
