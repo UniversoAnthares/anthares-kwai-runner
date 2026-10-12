@@ -1,0 +1,82 @@
+name: Kwai-up validation
+
+on:
+  push:
+    branches: [kwai-up]
+    paths:
+      - 'kwai-up/**'
+      - '.github/workflows/kwai-up-validation.yml'
+  pull_request:
+    paths:
+      - 'kwai-up/**'
+      - '.github/workflows/kwai-up-validation.yml'
+  workflow_dispatch:
+
+jobs:
+  contract:
+    name: kwai-up-${{ matrix.case }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        case:
+          - '01'
+          - '02'
+          - '03'
+          - '04'
+          - '05'
+          - '06'
+          - '07'
+          - '08'
+          - '09'
+          - '10'
+          - '11'
+          - '12'
+          - '13'
+          - '14'
+          - '15'
+          - '16'
+          - '17'
+          - '18'
+          - '19'
+          - '20'
+          - '21'
+          - '22'
+          - '23'
+          - '24'
+          - '25'
+          - '26'
+          - '27'
+          - '28'
+          - '29'
+          - '30'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install verification dependency
+        run: python -m pip install -r kwai-up/requirements.txt
+      - name: Compile
+        run: python -m py_compile kwai-up/kwai_up.py kwai-up/tests/test_contract.py
+      - name: Contract tests
+        env:
+          KWAI_UP_CASE: ${{ matrix.case }}
+        run: python -m unittest discover -s kwai-up/tests -p 'test_*.py' -v
+      - name: Static live-boundary assertions
+        env:
+          KWAI_UP_CASE: ${{ matrix.case }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('kwai-up/kwai_up.py').read_text(encoding='utf-8')
+          assert 'com.kwai.video' in s
+          assert 'PUBLISH_REQUESTED' in s
+          assert 'READY_TO_PUBLISH' in s
+          assert 'profile_grid_changed' in s
+          assert 'memuc' not in s.casefold()
+          assert '/sdcard/Movies/KwaiUp' in s
+          print('KWAI_UP_CONTRACT_OK')
+          PY
