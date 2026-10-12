@@ -32,13 +32,24 @@ for _ in $(seq 1 15); do
   sleep 2
 done
 test -s /tmp/kwai-ui.xml || { log "FAIL: no-ui-dump"; exit 32; }
-# A restored encrypted session wins over credential entry.
+
+# Canonical production mode: authentication is established once on the remote
+# Android through the user's phone, then restored from the encrypted private
+# vault on every disposable runner. Password-based fallback is opt-in only.
 if python3 kwai_auth_probe.py >>"$REPORT" 2>&1; then
   log "KWAI_SESSION_AUTHENTICATED_RESTORED"
   adb shell pidof com.kwai.video >/dev/null || { log "FAIL: kwai-process-missing"; exit 62; }
   log "KWAI_HEALTH_OK"
   exit 0
 fi
+
+AUTH_STRATEGY="${KWAI_AUTH_STRATEGY:-mobile_only}"
+if [ "$AUTH_STRATEGY" != "credential_fallback" ]; then
+  log "KWAI_MOBILE_REAUTH_REQUIRED"
+  log "KWAI_CREDENTIAL_FALLBACK_DISABLED"
+  exit 66
+fi
+
 log "KWAI_AUTO_LOGIN_ATTEMPT"
 set +e
 python3 tools/kwai_credential_login.py >>"$REPORT" 2>&1

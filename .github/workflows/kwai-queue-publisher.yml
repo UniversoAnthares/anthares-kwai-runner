@@ -2,15 +2,25 @@ name: Anthares Kwai Queue Publisher
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "publish or mobile_auth"
+        required: true
+        default: publish
+        type: choice
+        options:
+          - publish
+          - mobile_auth
   push:
     paths:
       - ".github/workflows/kwai-queue-publisher.yml"
       - ".kwai-queue-trigger"
-  # Scheduled publication paused until exposed login credential is rotated.
+  # Scheduled publication remains paused; explicit queue triggers are used.
 
 permissions:
   contents: read
   id-token: write
+  actions: write
 
 concurrency:
   group: anthares-kwai-queue-publisher
@@ -23,9 +33,11 @@ env:
   KWAI_LEASE_RENEW_INTERVAL_SECONDS: "120"
   KWAI_LEASE_RENEW_TTL_SECONDS: "600"
   KWAI_SESSION_FILE: kwai-session.enc
+  KWAI_AUTH_STRATEGY: mobile_only
 
 jobs:
   diagnostic_matrix:
+    if: ${{ !((github.event_name == 'workflow_dispatch' && inputs.mode == 'mobile_auth') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]'))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     strategy:
@@ -37,7 +49,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Execute independent hypothesis
         run: python3 tools/kwai_30_diagnostics.py ${{ matrix.probe }}
+
   login_recovery_syntax:
+    if: ${{ !((github.event_name == 'workflow_dispatch' && inputs.mode == 'mobile_auth') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]'))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -47,7 +61,9 @@ jobs:
           set -euo pipefail
           python3 -m py_compile tools/kwai_native_intent_recovery.py tools/kwai_login_surface_recovery.py tools/kwai_login_ui_locator.py tools/kwai_credential_login.py kwai_auth_probe.py
           echo KWAI_RECOVERY_CODE_VALID=1
+
   control_preflight:
+    if: ${{ !((github.event_name == 'workflow_dispatch' && inputs.mode == 'mobile_auth') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]'))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     outputs:
@@ -78,11 +94,10 @@ jobs:
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "::warning::Kwai publisher disabled until Cloudflare queue-fencing-v16 is deployed."
           fi
+
   publish:
     needs: control_preflight
-    # Credential presence and observed UI identity are enforced by the runtime.
-    # The owner confirmed rotation in conversation; do not silently skip jobs.
-    if: needs.control_preflight.outputs.ready == 'true'
+    if: ${{ needs.control_preflight.outputs.ready == 'true' && !((github.event_name == 'workflow_dispatch' && inputs.mode == 'mobile_auth') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]'))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -91,21 +106,20 @@ jobs:
       - name: Validate publisher scripts
         run: |
           set -euo pipefail
-          bash -n kwai_publish.sh kwai_claim_job.sh kwai_queue_heartbeat.sh kwai_queue_state.sh kwai_queue_publish_runtime.sh android_executor_api30_runtime.sh kwai_run_next_job.sh
-          python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py kwai_auth_probe.py kwai_auth_ready_gate.py kwai_real_publish_promotion_gate.py kwai_auth_probe.py tools/kwai_login_surface_recovery.py tools/kwai_credential_login.py tools/kwai_android_login_entry.py tools/kwai_session_vault_client.py
+          bash -n kwai_publish.sh kwai_claim_job.sh kwai_queue_heartbeat.sh kwai_queue_state.sh kwai_queue_publish_runtime.sh android_executor_api30_runtime.sh kwai_run_next_job.sh kwai_headless_login.sh kwai_session_state.sh
+          python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py kwai_auth_probe.py kwai_auth_ready_gate.py kwai_real_publish_promotion_gate.py tools/kwai_login_surface_recovery.py tools/kwai_android_login_entry.py tools/kwai_session_vault_client.py
 
-      - name: Check Kwai session key
+      - name: Check encrypted-session key
         env:
-          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
         run: |
-          test -n "$KWAI_LOGIN" || { echo "KWAI_LOGIN missing"; exit 42; }
           test -n "$KWAI_PASSWORD" || { echo "KWAI_PASSWORD missing"; exit 42; }
+          echo KWAI_PHONE_ONLY_AUTH_MODE=1
 
       - name: Download validated Kwai vault
         run: |
           set -euo pipefail
-          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip             https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
           echo "96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip" | sha256sum -c -
           rm -rf kwai-vault
           unzip -q kwai-vault.zip -d kwai-vault
@@ -120,6 +134,7 @@ jobs:
           set -e
           if [ "$rc" -eq 3 ]; then
             echo 'KWAI_PRIVATE_VAULT_EMPTY_BOOTSTRAP=1'
+            exit 66
           elif [ "$rc" -ne 0 ]; then
             echo 'KWAI_PRIVATE_VAULT_RESTORE_BLOCKED=1'
             exit "$rc"
@@ -134,7 +149,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         env:
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
-          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_AUTH_STRATEGY: mobile_only
         with:
           api-level: 35
           arch: x86_64
@@ -181,4 +196,311 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
-# Kwai first-run recovery logs only foreground Android package to diagnose setup stall.
+  mobile_auth_contract_matrix:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'mobile_auth') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        case: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate phone-only authentication contract
+        run: python3 tools/kwai_mobile_auth_contract.py ${{ matrix.case }}
+
+  mobile_auth_bootstrap:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'mobile_auth') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    outputs:
+      session_ready: ${{ steps.seal.outputs.ready }}
+    env:
+      REMOTE_USER: anthares
+      KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+      KWAI_AUTH_STRATEGY: mobile_only
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate mobile-auth prerequisites
+        run: |
+          set -euo pipefail
+          test -n "$KWAI_PASSWORD" || { echo 'KWAI_SESSION_ENCRYPTION_KEY_MISSING'; exit 42; }
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+          bash -n kwai_session_state.sh kwai_headless_login.sh
+          python3 -m py_compile kwai_auth_probe.py tools/kwai_login_surface_recovery.py tools/kwai_android_login_entry.py tools/kwai_session_vault_client.py
+          echo KWAI_MOBILE_AUTH_PREREQUISITES=PASS
+
+      - name: Pull existing encrypted session if present
+        run: |
+          set +e
+          python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
+          rc=$?
+          set -e
+          if [ "$rc" -eq 3 ]; then
+            echo KWAI_MOBILE_AUTH_NO_PRIOR_SESSION=1
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
+
+      - name: Restore cached Android runtime when available
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+            /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+            /usr/local/lib/android/sdk/emulator
+          key: kwai-mobile-auth-runtime-v1
+          restore-keys: |
+            kwai-speed-avd-direct-slim-android35-v4
+            kwai-speed-android35-google-apis-x86_64-v1
+            kwai-speed-emulator-headless-x86_64-v2
+
+      - name: Prepare Android and protected remote-display stack
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb x11vnc novnc websockify nginx apache2-utils scrcpy
+          curl -fsSL --retry 3 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x /tmp/cloudflared
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          IMAGE='system-images;android-35;google_apis;x86_64'
+          if [ ! -d "$SDK/system-images/android-35/google_apis/x86_64" ]; then
+            yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" "$IMAGE" emulator platform-tools
+          fi
+          if [ ! -f "$HOME/.android/avd/kwai-speed.ini" ]; then
+            mkdir -p "$HOME/.android/avd"
+            echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd --force --name kwai-speed --package "$IMAGE" --device pixel_5
+          fi
+
+      - name: Boot remote Android, install Kwai and test prior session
+        id: initial
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/kwai-mobile-emulator.log 2>&1 &
+          timeout 120 "$ADB" wait-for-device
+          timeout 120 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done' _ "$ADB"
+          "$ADB" root >/dev/null 2>&1 || true
+          "$ADB" wait-for-device
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          rm -rf kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+          bash kwai_vault_install.sh
+          "$ADB" shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+          if [ -s kwai-session.enc ]; then
+            bash kwai_session_state.sh restore >/tmp/kwai-mobile-restore.log 2>&1 || true
+          fi
+          "$ADB" shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+          sleep 6
+          if KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py >/tmp/kwai-mobile-initial-proof.txt 2>&1; then
+            if grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/kwai-mobile-initial-proof.txt; then
+              echo 'authenticated=true' >> "$GITHUB_OUTPUT"
+              echo KWAI_MOBILE_PRIOR_SESSION_VALID=1
+              exit 0
+            fi
+          fi
+          echo 'authenticated=false' >> "$GITHUB_OUTPUT"
+          python3 tools/kwai_login_surface_recovery.py >/tmp/kwai-mobile-login-surface.log 2>&1 || true
+          python3 tools/kwai_android_login_entry.py auto >>/tmp/kwai-mobile-login-surface.log 2>&1 || true
+          echo KWAI_MOBILE_AUTH_WINDOW_REQUIRED=1
+
+      - name: Start protected temporary Android login window
+        if: steps.initial.outputs.authenticated != 'true'
+        run: |
+          set -euo pipefail
+          REMOTE_PASSWORD="$(openssl rand -hex 18)"
+          echo "::add-mask::$REMOTE_PASSWORD"
+          echo "REMOTE_PASSWORD=$REMOTE_PASSWORD" >> "$GITHUB_ENV"
+          export DISPLAY=:99
+          nohup Xvfb :99 -screen 0 1280x800x24 -ac >/tmp/xvfb.log 2>&1 &
+          sleep 2
+          nohup scrcpy --no-audio --stay-awake --max-size=1080 --window-title='Kwai Authentication' >/tmp/scrcpy.log 2>&1 &
+          sleep 4
+          nohup x11vnc -display :99 -forever -shared -nopw -localhost -rfbport 5900 >/tmp/x11vnc.log 2>&1 &
+          nohup websockify --web=/usr/share/novnc 6081 127.0.0.1:5900 >/tmp/websockify.log 2>&1 &
+          sudo htpasswd -bc /etc/nginx/.kwai-htpasswd "$REMOTE_USER" "$REMOTE_PASSWORD" >/dev/null
+          sudo tee /etc/nginx/sites-available/default >/dev/null <<'NGINX'
+          server {
+            listen 6080;
+            server_name _;
+            auth_basic "Anthares Kwai authentication";
+            auth_basic_user_file /etc/nginx/.kwai-htpasswd;
+            location / {
+              proxy_pass http://127.0.0.1:6081;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+              proxy_set_header Host $host;
+              proxy_read_timeout 3600;
+            }
+          }
+          NGINX
+          sudo nginx -t
+          sudo systemctl restart nginx
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:6080/vnc.html)" = 401
+          test "$(curl -s -u "$REMOTE_USER:$REMOTE_PASSWORD" -o /dev/null -w '%{http_code}' http://127.0.0.1:6080/vnc.html)" = 200
+          nohup /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 >/tmp/cloudflared.log 2>&1 &
+          URL=''
+          for _ in $(seq 1 50); do
+            URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | tail -1 || true)"
+            [ -n "$URL" ] && break
+            sleep 2
+          done
+          test -n "$URL"
+          READY=0
+          for _ in $(seq 1 30); do
+            unauth="$(curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "$URL/vnc.html" || true)"
+            auth="$(curl -s --connect-timeout 4 -u "$REMOTE_USER:$REMOTE_PASSWORD" -o /dev/null -w '%{http_code}' "$URL/vnc.html" || true)"
+            if [ "$unauth" = 401 ] && [ "$auth" = 200 ]; then READY=1; break; fi
+            sleep 2
+          done
+          test "$READY" = 1
+          python3 - "$URL" "$REMOTE_USER" "$REMOTE_PASSWORD" > kwai-mobile-auth-access.json <<'PY'
+          import datetime,json,sys
+          expires=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(minutes=22)).isoformat()
+          print(json.dumps({"url":sys.argv[1]+"/vnc.html?autoconnect=1&resize=scale","username":sys.argv[2],"password":sys.argv[3],"expires_at":expires}))
+          PY
+          chmod 600 kwai-mobile-auth-access.json
+          echo KWAI_MOBILE_AUTH_TUNNEL_PROTECTED=1
+
+      - name: Publish temporary private access bundle
+        if: steps.initial.outputs.authenticated != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-mobile-auth-access-${{ github.run_id }}
+          path: kwai-mobile-auth-access.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Wait for phone-authenticated Kwai identity
+        if: steps.initial.outputs.authenticated != 'true'
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS+1200))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            if ! pgrep -f 'cloudflared tunnel' >/dev/null; then
+              echo KWAI_MOBILE_AUTH_TUNNEL_DIED
+              exit 71
+            fi
+            set +e
+            KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py >/tmp/kwai-mobile-live-proof.txt 2>&1
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ] && grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/kwai-mobile-live-proof.txt && grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/kwai-mobile-live-proof.txt; then
+              echo KWAI_MOBILE_AUTH_IDENTITY_CONFIRMED=1
+              exit 0
+            fi
+            sleep 8
+          done
+          echo KWAI_MOBILE_AUTH_TIMEOUT=1
+          exit 72
+
+      - name: Seal verified Android session in private vault
+        id: seal
+        run: |
+          set -euo pipefail
+          KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee kwai-mobile-auth-proof.txt
+          grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' kwai-mobile-auth-proof.txt
+          grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-mobile-auth-proof.txt
+          bash kwai_session_state.sh save | tee kwai-mobile-session-save.txt
+          test -s kwai-session.enc
+          python3 tools/kwai_session_vault_client.py push --path kwai-session.enc
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+          echo KWAI_MOBILE_SESSION_STORED=1
+
+      - name: Remove temporary login access artifact
+        if: always() && steps.initial.outputs.authenticated != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          ids="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[] | select(.name | startswith("kwai-mobile-auth-access-")) | .id' 2>/dev/null)"
+          for id in $ids; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" >/dev/null 2>&1 || true; done
+          rm -f kwai-mobile-auth-access.json
+          set -e
+
+      - name: Upload privacy-safe mobile-auth evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-mobile-auth-proof-${{ github.run_id }}
+          path: |
+            kwai-mobile-auth-proof.txt
+            kwai-mobile-session-save.txt
+          if-no-files-found: warn
+          retention-days: 3
+
+  mobile_auth_restore_verify:
+    needs: mobile_auth_bootstrap
+    if: ${{ needs.mobile_auth_bootstrap.outputs.session_ready == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+      KWAI_AUTH_STRATEGY: mobile_only
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pull independently stored session
+        run: |
+          set -euo pipefail
+          python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
+          test -s kwai-session.enc
+      - name: Download validated Kwai vault
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          rm -rf kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+      - name: Enable KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Verify mobile-authenticated identity on a fresh cloud Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            set -euo pipefail
+            bash kwai_vault_install.sh
+            adb root >/dev/null 2>&1 || true
+            adb wait-for-device
+            bash kwai_session_state.sh restore | tee kwai-mobile-fresh-restore.txt
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+            sleep 6
+            KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee kwai-mobile-fresh-proof.txt
+            grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' kwai-mobile-fresh-proof.txt
+            grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-mobile-fresh-proof.txt
+            echo KWAI_MOBILE_CROSS_RUN_RESTORE=PASS
+      - name: Upload fresh-runner proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-mobile-auth-restore-${{ github.run_id }}
+          path: |
+            kwai-mobile-fresh-restore.txt
+            kwai-mobile-fresh-proof.txt
+          if-no-files-found: warn
+          retention-days: 3
+
+# Kwai production publication now consumes only a verified mobile-established session.
