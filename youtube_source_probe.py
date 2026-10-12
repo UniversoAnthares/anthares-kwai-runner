@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import base64
 import json
 import os
 import pathlib
@@ -23,10 +24,19 @@ AUTH_STATE = {"configured": False, "metadata": "pending", "full_acquisition": "p
 
 
 def _materialize_cookie_secret() -> str | None:
+    encoded = os.environ.get("YOUTUBE_COOKIES_B64", "").strip()
     raw = os.environ.get("YOUTUBE_COOKIES", "")
-    if not raw.strip():
+    if encoded:
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except Exception:
+            AUTH_STATE["metadata"] = "cookie_secret_invalid_base64"
+            return None
+        COOKIE_FILE.write_bytes(data)
+    elif raw.strip():
+        COOKIE_FILE.write_text(raw, encoding="utf-8")
+    else:
         return None
-    COOKIE_FILE.write_text(raw, encoding="utf-8")
     os.chmod(COOKIE_FILE, 0o600)
     AUTH_STATE["configured"] = True
     return str(COOKIE_FILE)
@@ -111,7 +121,6 @@ def _authenticated_full_acquisition_probe():
             raise RuntimeError("authenticated metadata probe failed")
         AUTH_STATE["metadata"] = "proven"
         print(f"YOUTUBE_REMOTE_AUTH=METADATA_PROVEN id={video_id} duration={float(meta['duration']):.3f}", flush=True)
-
         root = pathlib.Path("/tmp/anthares-auth-full")
         shutil.rmtree(root, ignore_errors=True)
         root.mkdir(parents=True, exist_ok=True)
@@ -143,7 +152,6 @@ def _authenticated_full_acquisition_probe():
 
 
 threading.Thread(target=_authenticated_full_acquisition_probe, daemon=True).start()
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "10000"))
