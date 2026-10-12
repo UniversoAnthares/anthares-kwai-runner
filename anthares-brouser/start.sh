@@ -6,6 +6,7 @@ set -euo pipefail
 
 export DISPLAY=${DISPLAY:-:99}
 export CHROME_PROFILE_DIR=${CHROME_PROFILE_DIR:-/data/chrome-profile}
+START_URL=${START_URL:-https://www.kwai.com/}
 mkdir -p "$CHROME_PROFILE_DIR" /run/anthares-brouser
 
 Xvfb "$DISPLAY" -screen 0 1440x900x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
@@ -30,7 +31,7 @@ chromium \
   --no-first-run \
   --start-maximized \
   --user-data-dir="$CHROME_PROFILE_DIR" \
-  https://www.kwai.com/ >/tmp/chromium.log 2>&1 &
+  "$START_URL" >/tmp/chromium.log 2>&1 &
 CHROME_PID=$!
 
 uvicorn app:app --host 0.0.0.0 --port 8080 --app-dir /opt/anthares-brouser >/tmp/api.log 2>&1 &
