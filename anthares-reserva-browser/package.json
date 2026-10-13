@@ -7,7 +7,7 @@
     "check": "node --check src/index.js"
   },
   "dependencies": {
-    "@cloudflare/puppeteer": "^1.0.0"
+    "@cloudflare/puppeteer": "^1.1.0"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
