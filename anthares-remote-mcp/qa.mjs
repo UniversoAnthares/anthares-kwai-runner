@@ -60,18 +60,25 @@ try {
   const client = new Client({ name: 'ara-qa', version: '1.0.0' });
   await client.connect(transport);
   const listed = await client.listTools();
-  const names = new Set(listed.tools.map(t => t.name));
+  const byName = new Map(listed.tools.map(t => [t.name, t]));
   const required = [
     'session_status','system_info','capabilities','remote_exec','process_list',
+    'process_start','process_kill','service_status','service_start','service_stop',
     'clipboard_get','clipboard_set','screenshot','file_stat','file_list','file_read',
-    'file_write','file_read_chunk','file_write_chunk','remote_job_start','remote_job_list',
-    'remote_job_status','remote_job_logs','remote_job_cancel'
+    'file_write','file_read_chunk','file_write_chunk','file_mkdir','file_remove',
+    'file_rename','file_copy','file_sha256','file_write_atomic','remote_job_start',
+    'remote_job_list','remote_job_status','remote_job_logs','remote_job_cancel'
   ];
-  for (const name of required) assert(names.has(name), `missing MCP tool ${name}`);
-  assert(names.size >= required.length, `expected at least ${required.length} tools, got ${names.size}`);
+  for (const name of required) assert(byName.has(name), `missing MCP tool ${name}`);
+  assert(byName.size >= 30, `expected at least 30 tools, got ${byName.size}`);
+
+  const processStart = byName.get('process_start');
+  assert(processStart?.inputSchema?.properties?.args?.type === 'array', 'process_start.args must be an array');
+  const remove = byName.get('file_remove');
+  assert(remove?.inputSchema?.properties?.recursive?.type === 'boolean', 'file_remove.recursive must be boolean');
   await client.close();
 
-  console.log(JSON.stringify({ ok: true, tests: 5, tools: [...names].sort() }, null, 2));
+  console.log(JSON.stringify({ ok: true, tests: 7, tool_count: byName.size, tools: [...byName.keys()].sort() }, null, 2));
 } finally {
   child.kill('SIGTERM');
 }
