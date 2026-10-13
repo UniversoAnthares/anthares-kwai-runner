@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 )
 
 type detachedJobMeta struct {
@@ -316,6 +318,21 @@ func jobLogsJSON(id string, offset int64, maxBytes int, tailLines int) (string, 
 		} else {
 			return "", err
 		}
+	}
+	// PowerShell redirection can produce UTF-16LE logs. Normalize BOM-marked
+	// text to UTF-8 before applying offsets so clients receive readable output.
+	if len(b) >= 2 && b[0] == 0xff && b[1] == 0xfe {
+		words := make([]uint16, (len(b)-2)/2)
+		for i := range words {
+			words[i] = binary.LittleEndian.Uint16(b[2+i*2 : 4+i*2])
+		}
+		b = []byte(string(utf16.Decode(words)))
+	} else if len(b) >= 2 && b[0] == 0xfe && b[1] == 0xff {
+		words := make([]uint16, (len(b)-2)/2)
+		for i := range words {
+			words[i] = binary.BigEndian.Uint16(b[2+i*2 : 4+i*2])
+		}
+		b = []byte(string(utf16.Decode(words)))
 	}
 	if maxBytes <= 0 || maxBytes > 256*1024 {
 		maxBytes = 256 * 1024
