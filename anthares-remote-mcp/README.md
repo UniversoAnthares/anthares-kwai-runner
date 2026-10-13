@@ -36,3 +36,7 @@ Canonical Render service: `anthares-remote-mcp-v2` (`srv-db6o0d5g1s2s738s7bp0`).
 Control service: `anthares-remote-control` (`srv-db6mj8navr4c73cqvgo0`).
 
 The public `/health` endpoint is healthy only when OAuth, the internal MCP and the signed control bridge are all ready.
+
+## Completion criterion
+
+The backend is ready. The project remains incomplete until ChatGPT itself registers the custom MCP endpoint, completes OAuth, discovers the tools and executes a real ARA tool call. That product-level registration is intentionally tracked separately from the backend deployment proof.
