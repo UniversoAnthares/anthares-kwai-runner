@@ -56,9 +56,9 @@ s = s.replace(marker, helper, 1)
 # substring would also rewrite trusted_focused_final_post() into recursion.
 old_prepare = '        post = ku.find_id(final, FINAL_POST_ID)'
 old_commit = '        post = ku.find_id(nodes, FINAL_POST_ID)'
-if old_prepare not in s or old_commit not in s:
-    raise SystemExit('POST_LOOKUP_TARGET_NOT_FOUND')
-s = s.replace(old_prepare, '        post = find_final_post(final)', 1)
+if s.count(old_prepare) != 2 or s.count(old_commit) != 1:
+    raise SystemExit('POST_LOOKUP_TARGET_COUNT_MISMATCH')
+s = s.replace(old_prepare, '        post = find_final_post(final)')
 s = s.replace(old_commit, '        post = find_final_post(nodes)', 1)
 
 old_focus = '''        with HIDKeyboard(self.adb, 314) as keyboard:
