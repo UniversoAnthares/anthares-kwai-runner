@@ -1,6 +1,9 @@
 # Anthares Remote Agent — infrastructure validation (2026-10-12)
 
 Branch: `feature/ara-infra`
+PR: https://github.com/UniversoAnthares/anthares-kwai-runner/pull/105
+Canary: https://anthares-ara-infra-canary-v2.onrender.com
+SQL-extended CI run: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/38326131390
 
 ## Proven on isolated Render canary
 
