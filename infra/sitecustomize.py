@@ -15,5 +15,8 @@ try:
     from anthares_runtime_mesh import register as _register_runtime_mesh
     _register_runtime_mesh(_worker.app)
 except Exception:
-    # Preserve the existing X worker boot path; deployment logs expose integration errors.
-    pass
+    # Keep the X worker boot path available, but never hide a broken runtime integration.
+    import logging as _logging
+    _logging.getLogger("anthares.runtime.startup").exception("Anthares runtime integration registration failed")
+    if _os.getenv("ANTHARES_REQUIRE_RUNTIME_MESH", "0") == "1":
+        raise
