@@ -5,6 +5,8 @@ PR: https://github.com/UniversoAnthares/anthares-kwai-runner/pull/105
 Canary: https://anthares-ara-infra-canary-v2.onrender.com
 SQL-extended CI run: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/38326131390
 
+Production ARA routes were not switched to this branch during validation.
+
 ## Proven on isolated Render canary
 
 Service: `anthares-ara-infra-canary-v2`
