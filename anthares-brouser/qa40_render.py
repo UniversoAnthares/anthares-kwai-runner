@@ -10,6 +10,7 @@ PAGE_PORT=18081
 TOKEN=secrets.token_urlsafe(32)
 VNC_PASSWORD=secrets.token_urlsafe(24)
 ROOT=Path('/opt/anthares-brouser')
+QA_STATE_SLOT='qa-proof-v2'
 RESULT={'ok':False,'cases':[],'restart_profile':False,'gitlab_snapshot':{'state':'not_checked'}}
 
 def request(path,method='GET',body=None,auth=True,timeout=15):
@@ -39,7 +40,22 @@ def wait_ready(proc,timeout=70):
     raise RuntimeError(f'ready timeout last={last}')
 
 def start_stack():
-    env=os.environ.copy(); env.update({'PORT':str(API_PORT),'API_BIND':'127.0.0.1','CONTROL_TOKEN':TOKEN,'VNC_PASSWORD':VNC_PASSWORD,'START_URL':f'http://127.0.0.1:{PAGE_PORT}/','CHROME_PROFILE_DIR':'/data/chrome-profile','MAX_READY_FAILURES':'6','SUPERVISOR_INTERVAL':'1'})
+    env=os.environ.copy()
+    env.update({
+        'PORT':str(API_PORT),
+        'API_BIND':'127.0.0.1',
+        'CONTROL_TOKEN':TOKEN,
+        'VNC_PASSWORD':VNC_PASSWORD,
+        'START_URL':f'http://127.0.0.1:{PAGE_PORT}/',
+        'CHROME_PROFILE_DIR':'/data/chrome-profile',
+        'MAX_READY_FAILURES':'6',
+        'SUPERVISOR_INTERVAL':'1',
+        # The harness token is intentionally ephemeral. Never let start.sh use it
+        # for encrypted GitLab state; QA performs restore/backup explicitly with
+        # the stable Render CONTROL_TOKEN in the parent process.
+        'GITLAB_STATE_ENABLED':'0',
+        'GITLAB_SNAPSHOT_INTERVAL':'3600',
+    })
     proc=subprocess.Popen([str(ROOT/'start.sh')],cwd=ROOT,env=env); wait_ready(proc); return proc
 
 def stop_stack(proc):
@@ -58,9 +74,9 @@ def run_cases():
     gitlab_enabled=profile_store.configured()
     try:
         if gitlab_enabled:
-            os.environ['GITLAB_STATE_SLOT']='qa'
+            os.environ['GITLAB_STATE_SLOT']=QA_STATE_SLOT
             prior=profile_store.restore('/data/chrome-profile')
-            RESULT['gitlab_snapshot']={'state':'restored' if prior.get('ok') else 'initial','prior':prior.get('reason','ok')}
+            RESULT['gitlab_snapshot']={'state':'restored' if prior.get('ok') else 'initial','prior':prior.get('reason','ok'),'slot':QA_STATE_SLOT}
         stack=start_stack()
         for path in ('/status','/page','/targets','/screenshot'):
             code,_=request(path,auth=False)
@@ -79,7 +95,7 @@ def run_cases():
             checks['screenshot']=code==200 and png.startswith(b'\x89PNG\r\n\x1a\n') and len(png)>1000
             ok=all(checks.values()); RESULT['cases'].append({'case':case,'ok':ok,'checks':checks})
             if not ok: raise AssertionError(f'case {case} failed: {checks}')
-        marker='render40-persist-marker-v1'
+        marker='render40-persist-marker-v2'
         code,set_marker=request('/evaluate','POST',{'expression':f"localStorage.setItem('anthares_render40','{marker}'); localStorage.getItem('anthares_render40')",'return_by_value':True}); assert code==200 and (set_marker.get('result') or {}).get('value')==marker,set_marker
         stop_stack(stack); stack=None; time.sleep(1); stack=start_stack()
         code,restored=request('/evaluate','POST',{'expression':"localStorage.getItem('anthares_render40')",'return_by_value':True}); RESULT['restart_profile']=code==200 and (restored.get('result') or {}).get('value')==marker
@@ -91,6 +107,7 @@ def run_cases():
             saved=profile_store.backup('/data/chrome-profile')
             RESULT['gitlab_snapshot']['saved']=saved.get('ok',False)
             RESULT['gitlab_snapshot']['chunks']=saved.get('chunks',0)
+            RESULT['gitlab_snapshot']['bytes']=saved.get('bytes',0)
             if not saved.get('ok'): raise AssertionError('GitLab encrypted snapshot write failed')
         RESULT['ok']=len(RESULT['cases'])==40 and all(x['ok'] for x in RESULT['cases']) and RESULT['restart_profile'] and RESULT['novnc_internal']
     except Exception as exc:
