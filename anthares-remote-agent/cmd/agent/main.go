@@ -125,6 +125,10 @@ func pollJob(cfg Config) (*Job, error) {
     if resp.StatusCode/100!=2{return nil,fmt.Errorf("poll status %d",resp.StatusCode)}
     var env JobEnvelope
     if err:=json.NewDecoder(io.LimitReader(resp.Body,1<<20)).Decode(&env);err!=nil{return nil,err}
+    if env.Job != nil {
+        if err := validateJobID(env.Job.ID); err != nil { return nil, fmt.Errorf("control plane returned unsafe job ID: %w", err) }
+        if strings.TrimSpace(env.Job.Type) == "" { return nil, errors.New("control plane returned job without type") }
+    }
     return env.Job,nil
 }
 
