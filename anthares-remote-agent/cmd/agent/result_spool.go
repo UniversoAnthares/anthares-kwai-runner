@@ -15,13 +15,17 @@ import (
 )
 
 // saveEncryptedResult writes a result atomically with AES-GCM authenticated
-// encryption. The caller must choose a private, device-scoped spool directory.
+// encryption. The controller and fence epoch are part of the encrypted result,
+// so a completed job is never replayed through a different fencing generation.
 func saveEncryptedResult(dir, token string, result Result) error {
 	if err := validateJobID(result.ID); err != nil {
 		return err
 	}
 	if token == "" {
 		return errors.New("missing encryption secret")
+	}
+	if result.Controller == "" || result.FenceEpoch == "" {
+		return errors.New("result is missing fencing metadata")
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
@@ -101,24 +105,28 @@ func loadEncryptedResult(path, token, id string) (Result, error) {
 	if result.ID != id {
 		return result, errors.New("result identity mismatch")
 	}
+	if result.Controller == "" || result.FenceEpoch == "" {
+		return result, errors.New("pending result has no fencing metadata")
+	}
 	return result, nil
 }
 
 func resultSpoolDir(cfg Config) string {
-	key := sha256.Sum256([]byte(cfg.ControlURL + "|" + cfg.DeviceID))
+	// Device-scoped rather than controller-scoped: changing the active controller
+	// must not orphan a locally persisted result.
+	key := sha256.Sum256([]byte("anthares-ara-device-spool-v2|" + cfg.DeviceID))
 	return filepath.Join(os.TempDir(), "anthares-ara-results", fmt.Sprintf("%x", key[:12]))
 }
 
-// The durable controller uses 404 when a job no longer exists for this device
-// and 409 when a result can no longer be applied (not leased or conflicting
-// final result). Replaying either forever cannot make progress and creates an
-// avoidable request storm. Keep the encrypted artifact for audit instead.
 func permanentResultRejection(err error) bool {
 	if err == nil {
 		return false
 	}
 	text := err.Error()
-	return strings.Contains(text, "result status 404") || strings.Contains(text, "result status 409")
+	return strings.Contains(text, "result status 404") ||
+		strings.Contains(text, "result status 409") ||
+		strings.Contains(text, "result status 423") ||
+		strings.Contains(text, "stale fence epoch")
 }
 
 func quarantineRejectedResult(path string) error {
