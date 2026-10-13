@@ -1,7 +1,6 @@
 """Authenticated Ed25519 bridge used only by the Anthares remote MCP service."""
 import base64
 import json
-import secrets
 import threading
 import time
 
@@ -13,11 +12,14 @@ from cryptography.exceptions import InvalidSignature
 import anthares_remote_control_routes as _relay
 
 _SIGNER = "anthares-remote-mcp"
-_KEY_URL = "https://anthares-remote-mcp.onrender.com/.well-known/ara-control-key"
+_KEY_URLS = (
+    "https://anthares-remote-mcp-v2.onrender.com/.well-known/ara-control-key",
+    "https://anthares-remote-mcp.onrender.com/.well-known/ara-control-key",
+)
 _KEY_TTL = 60
 _MAX_SKEW_MS = 30000
 _LOCK = threading.Lock()
-_KEY_CACHE = {"key": None, "at": 0.0}
+_KEY_CACHE = {"key": None, "at": 0.0, "source": ""}
 _REPLAY = {}
 
 
@@ -26,16 +28,25 @@ def _public_key():
     with _LOCK:
         if _KEY_CACHE["key"] is not None and now - _KEY_CACHE["at"] < _KEY_TTL:
             return _KEY_CACHE["key"]
-    r = requests.get(_KEY_URL, timeout=6, headers={"User-Agent": "AntharesRemoteControl/0.4"})
-    r.raise_for_status()
-    raw = r.content
-    if len(raw) > 4096:
-        raise ValueError("service key too large")
-    key = serialization.load_pem_public_key(raw)
-    with _LOCK:
-        _KEY_CACHE["key"] = key
-        _KEY_CACHE["at"] = now
-    return key
+    last = None
+    for url in _KEY_URLS:
+        try:
+            r = requests.get(url, timeout=6, headers={"User-Agent": "AntharesRemoteControl/0.5"})
+            r.raise_for_status()
+            raw = r.content
+            if len(raw) > 4096:
+                raise ValueError("service key too large")
+            key = serialization.load_pem_public_key(raw)
+            with _LOCK:
+                _KEY_CACHE["key"] = key
+                _KEY_CACHE["at"] = now
+                _KEY_CACHE["source"] = url
+            return key
+        except Exception as exc:
+            last = exc
+    if last:
+        raise last
+    raise ValueError("no MCP service key endpoint configured")
 
 
 def _b64decode(value):
@@ -68,13 +79,12 @@ def _verify():
         signature = _b64decode(sig)
     except Exception:
         return False, b""
-    replay_key = secrets.token_hex(0) + sig
     with _LOCK:
         cutoff = time.time() - 60
         for key, seen in list(_REPLAY.items()):
             if seen < cutoff:
                 _REPLAY.pop(key, None)
-        if replay_key in _REPLAY:
+        if sig in _REPLAY:
             return False, b""
     payload = (ts + "\n" + request.method.upper() + "\n" + _canonical_path() + "\n").encode("utf-8") + raw
     try:
@@ -82,7 +92,7 @@ def _verify():
     except (InvalidSignature, ValueError, TypeError, requests.RequestException):
         return False, b""
     with _LOCK:
-        _REPLAY[replay_key] = time.time()
+        _REPLAY[sig] = time.time()
     return True, raw
 
 
@@ -104,7 +114,7 @@ def register(app):
             return jsonify(error="unauthorized"), 401
         return jsonify(
             ok=True,
-            protocol="anthares-remote-agent/0.4",
+            protocol="anthares-remote-agent/0.5",
             auth="ed25519-service-signature",
             replay_protection=True,
             capabilities=[
