@@ -46,6 +46,10 @@ jobs:
               git add "$f"
             done <<< "$conflicts"
           fi
+          # Production X worker stays byte-for-byte aligned with current main.
+          git checkout origin/main -- infra/x_render_worker_v3.py
+          git add infra/x_render_worker_v3.py
+          git diff --cached --check
       - name: Validate durable queue, route security and runtime mesh
         shell: bash
         run: |
@@ -59,12 +63,14 @@ jobs:
             infra/ara_runtime_truth.py \
             infra/anthares_runtime_mesh.py \
             infra/anthares_runtime_mesh_vaulted.py \
-            infra/sitecustomize.py
+            infra/sitecustomize.py \
+            infra/x_render_worker_v3.py
           python -m unittest -v \
             tests.test_ara_state_store \
             tests.test_ara_route_security \
             tests.test_ara_legacy_state_compat \
             tools.test_anthares_runtime_mesh
+          git diff --quiet origin/main -- infra/x_render_worker_v3.py
       - name: Commit resolved integration to PR105 branch
         shell: bash
         run: |
@@ -73,6 +79,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No integration changes required.'
           else
-            git commit -m 'merge(ara): reconcile durable infra with current main'
+            git commit -m 'merge(ara): preserve production worker while reconciling durable infra'
           fi
           git push origin HEAD:feature/ara-infra
