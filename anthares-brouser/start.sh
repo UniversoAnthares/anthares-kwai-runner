@@ -180,6 +180,11 @@ start_chromium
 
 LAST_SNAPSHOT=$(date +%s)
 SNAPSHOT_INTERVAL=${GITLAB_SNAPSHOT_INTERVAL:-1800}
+# On a new production slot, write a first checkpoint promptly rather than
+# waiting the full periodic interval. Preserve the existing restore semantics.
+if [[ "${GITLAB_STATE_ENABLED:-0}" == "1" && ! -f /run/anthares-brouser/first-checkpoint-done ]]; then
+  SNAPSHOT_INTERVAL=${GITLAB_FIRST_SNAPSHOT_INTERVAL:-120}
+fi
 READY_FAILURES=0
 MAX_READY_FAILURES=${MAX_READY_FAILURES:-6}
 SUPERVISOR_INTERVAL=${SUPERVISOR_INTERVAL:-5}
@@ -217,6 +222,8 @@ while kill -0 "$API_PID" 2>/dev/null; do
     stop_pid "$CHROME_PID"
     if python /opt/anthares-brouser/profile_store.py backup; then
       log "encrypted profile checkpoint committed"
+      touch /run/anthares-brouser/first-checkpoint-done
+      SNAPSHOT_INTERVAL=${GITLAB_SNAPSHOT_INTERVAL:-1800}
     else
       log "encrypted profile checkpoint failed"
     fi
