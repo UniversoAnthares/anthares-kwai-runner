@@ -102,6 +102,39 @@ class PhysicalContractTests(unittest.TestCase):
         self.assertIn("keyboard.enter()", commit_body)
         self.assertLess(commit_body.index("trusted_focused_final_post(nodes)"), commit_body.index("keyboard.enter()"))
 
+    def test_native_post_requires_focused_enabled_clickable(self):
+        rid = mod.FINAL_POST_ID
+        valid = {"resource-id": rid, "focused": "true", "focusable": "true",
+                 "clickable": "true", "enabled": "true"}
+        self.assertEqual(mod.trusted_focused_final_post([valid]), valid)
+        for field in ("focused", "focusable", "clickable", "enabled"):
+            invalid = {**valid, field: "false"}
+            self.assertIsNone(mod.trusted_focused_final_post([invalid]), field)
+
+    def test_native_right_button_requires_exact_publish_label(self):
+        rid = f"{mod.BASIS}/right_btn"
+        valid = {"resource-id": rid, "text": "Publicar", "class": "android.widget.Button",
+                 "focused": "true", "focusable": "true", "clickable": "true",
+                 "enabled": "true"}
+        self.assertEqual(mod.trusted_focused_final_post([valid]), valid)
+        for label in ("Excluir", "Cancelar", "Privado", ""):
+            self.assertIsNone(mod.trusted_focused_final_post([{**valid, "text": label}]))
+        self.assertIsNone(mod.trusted_focused_final_post([{**valid, "class": "android.view.View"}]))
+
+    def test_native_focus_rejects_untrusted_resource_id(self):
+        fake = {"resource-id": f"{mod.BASIS}/other", "text": "Publicar",
+                "class": "android.widget.Button", "focused": "true",
+                "focusable": "true", "clickable": "true", "enabled": "true"}
+        self.assertIsNone(mod.trusted_focused_final_post([fake]))
+
+    def test_native_focus_prefers_exact_post_over_right_button(self):
+        right = {"resource-id": f"{mod.BASIS}/right_btn", "text": "Publicar",
+                 "class": "android.widget.Button", "focused": "true",
+                 "focusable": "true", "clickable": "true", "enabled": "true"}
+        post = {"resource-id": mod.FINAL_POST_ID, "focused": "true",
+                "focusable": "true", "clickable": "true", "enabled": "true"}
+        self.assertEqual(mod.trusted_focused_final_post([right, post]), post)
+
     def test_physical_job_routes_to_verified_adapter(self):
         source = (ROOT / "kwai_up_physical_job.py").read_text(encoding="utf-8")
         self.assertIn("kwai_up_physical.py", source)
