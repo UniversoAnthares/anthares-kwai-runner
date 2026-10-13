@@ -5,7 +5,13 @@ import { createHash, createHmac, generateKeyPairSync, randomBytes, sign, timingS
 const PUBLIC_ORIGIN=(process.env.ARA_PUBLIC_URL||'https://anthares-remote-mcp.onrender.com').replace(/\/$/,'');
 const PUBLIC_PORT=Number(process.env.PORT||3000);
 const INTERNAL_PORT=Number(process.env.ARA_INTERNAL_MCP_PORT||3118);
-const CONTROL_URL=(process.env.ANTHARES_CONTROL_URL||'https://anthares-ara-control.onrender.com').replace(/\/$/,'');
+const PRIMARY_CONTROL='https://anthares-ara-control.onrender.com';
+const SECONDARY_CONTROL='https://anthares-ara-infra-canary-v2.onrender.com';
+const ALLOWED_CONTROLS=new Set([PRIMARY_CONTROL,SECONDARY_CONTROL]);
+const rawPreferred=(process.env.ANTHARES_CONTROL_URL||PRIMARY_CONTROL).replace(/\/$/,'');
+const CONTROL_URL=ALLOWED_CONTROLS.has(rawPreferred)?rawPreferred:PRIMARY_CONTROL;
+const CONTROL_ORIGINS=[CONTROL_URL,...[PRIMARY_CONTROL,SECONDARY_CONTROL].filter(v=>v!==CONTROL_URL)];
+const FAILOVER_STATUSES=new Set([404,500,502,503,504]);
 const DEVICE_ID=process.env.ANTHARES_DEVICE_ID||'DESKTOP-FTDK0HP';
 const TOKEN_SECRET=process.env.ARA_OAUTH_TOKEN_SECRET||'';
 const SCOPES=new Set(['ara.read','ara.write']);
@@ -23,7 +29,7 @@ function b64url(v){return Buffer.from(v).toString('base64url');}
 function sha256(v){return createHash('sha256').update(v).digest();}
 function json(res,status,body,headers={}){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store',...headers});res.end(JSON.stringify(body));}
 function form(buf){return new URLSearchParams(buf.toString('utf8'));}
-function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));}
 async function readBody(req,max=3*1024*1024){const chunks=[];let n=0;for await(const c of req){n+=c.length;if(n>max)throw new Error('request_too_large');chunks.push(c);}return Buffer.concat(chunks);}
 function validateClientId(v){return v==='https://chatgpt.com/oauth/client.json'||/^https:\/\/chatgpt\.com\/oauth\/[A-Za-z0-9_-]{8,}\/client\.json$/.test(v||'');}
 function validateRedirect(v){return v==='https://chatgpt.com/connector_platform_oauth_redirect'||/^https:\/\/chatgpt\.com\/connector\/oauth\/[A-Za-z0-9_-]+$/.test(v||'');}
@@ -34,8 +40,19 @@ function issueTokens(clientId,scopes){const now=Math.floor(Date.now()/1000);cons
 function bearer(req){const m=/^Bearer\s+(.+)$/i.exec(req.headers.authorization||'');return m?m[1]:'';}
 function challenge(){return `Bearer resource_metadata="${PUBLIC_ORIGIN}/.well-known/oauth-protected-resource", scope="ara.read ara.write"`;}
 function signControl(method,path,raw=''){const ts=String(Date.now());const payload=`${ts}\n${method.toUpperCase()}\n${path}\n${raw}`;return{ts,sig:sign(null,Buffer.from(payload),pair.privateKey).toString('base64url')}};
-async function control(path,{method='GET',body,timeoutMs=30000}={}){const raw=body===undefined?'':JSON.stringify(body);const s=signControl(method,path,raw);return fetch(`${CONTROL_URL}${path}`,{method,headers:{'Content-Type':'application/json','X-ARA-Timestamp':s.ts,'X-ARA-Signature':s.sig,'X-ARA-Signer':'anthares-remote-mcp'},body:body===undefined?undefined:raw,signal:AbortSignal.timeout(timeoutMs)});}
-async function sendApprovalCode(code){const r=await control('/v1/mcp/execute',{method:'POST',timeoutMs:30000,body:{device_id:DEVICE_ID,type:'clipboard_set',args:{text:code},timeout_seconds:20}});return r.ok;}
+async function control(path,{method='GET',body,timeoutMs=30000}={}){
+  const raw=body===undefined?'':JSON.stringify(body);let lastResponse=null,lastError=null;
+  for(const origin of CONTROL_ORIGINS){
+    const s=signControl(method,path,raw);
+    try{
+      const r=await fetch(`${origin}${path}`,{method,headers:{'Content-Type':'application/json','X-ARA-Timestamp':s.ts,'X-ARA-Signature':s.sig,'X-ARA-Signer':'anthares-remote-mcp'},body:body===undefined?undefined:raw,signal:AbortSignal.timeout(timeoutMs)});
+      lastResponse=r;if(!FAILOVER_STATUSES.has(r.status))return r;
+    }catch(e){lastError=e;}
+  }
+  if(lastResponse)return lastResponse;
+  throw lastError||new Error('all ARA control origins unavailable');
+}
+async function sendApprovalCode(code){const idempotency_key=`oauth-approval-${sha256(code).toString('hex')}`;const r=await control('/v1/mcp/execute',{method:'POST',timeoutMs:30000,body:{device_id:DEVICE_ID,type:'clipboard_set',args:{text:code},timeout_seconds:20,idempotency_key}});return r.ok;}
 async function consumeOauth(kind,p){try{const r=await control('/v1/mcp/oauth/consume',{method:'POST',timeoutMs:10000,body:{kind,issuer:PUBLIC_ORIGIN,jti:p.jti,exp:p.exp}});return r.ok;}catch{return false;}}
 function checkRate(p,write){const key=`${p.jti}:${write?'w':'r'}`;const now=Date.now();const max=write?30:120;let x=rate.get(key);if(!x||x.reset<now)x={count:0,reset:now+60000};x.count++;rate.set(key,x);return x.count<=max;}
 setInterval(()=>{const now=Date.now();for(const[k,v]of transactions)if(v.expires<now)transactions.delete(k);for(const [key, expiry] of codes) if(expiry < now) codes.delete(key);for(const[k,v]of rate)if(v.reset<now)rate.delete(k);},60000).unref();
@@ -50,7 +67,7 @@ function metadata(res){json(res,200,{issuer:PUBLIC_ORIGIN,authorization_endpoint
 
 const server=createServer(async(req,res)=>{try{
   const u=new URL(req.url,PUBLIC_ORIGIN);
-  if(req.method==='GET'&&u.pathname==='/health'){const[ih,ch]=await Promise.all([internalHealth(),controlHealth()]);const oauth=TOKEN_SECRET.length>=32;json(res,ih&&ch&&oauth?200:503,{ok:ih&&ch&&oauth,service:'anthares-remote-mcp-gateway-v2',oauth:oauth?'configured':'pending',control:ch?'signed-ready':'pending',mcp:ih?'ready':'pending'});return;}
+  if(req.method==='GET'&&u.pathname==='/health'){const[ih,ch]=await Promise.all([internalHealth(),controlHealth()]);const oauth=TOKEN_SECRET.length>=32;json(res,ih&&ch&&oauth?200:503,{ok:ih&&ch&&oauth,service:'anthares-remote-mcp-gateway-v2',oauth:oauth?'configured':'pending',control:ch?'signed-ready':'pending',mcp:ih?'ready':'pending',preferred_control:CONTROL_URL,controls:CONTROL_ORIGINS});return;}
   if(req.method==='GET'&&u.pathname==='/.well-known/ara-control-key'){res.writeHead(200,{'Content-Type':'application/x-pem-file','Cache-Control':'no-store'});res.end(publicPem);return;}
   if(req.method==='GET'&&u.pathname==='/.well-known/oauth-protected-resource'){json(res,200,{resource:PUBLIC_ORIGIN,authorization_servers:[PUBLIC_ORIGIN],scopes_supported:[...SCOPES],resource_documentation:'https://github.com/UniversoAnthares/anthares-kwai-runner'});return;}
   if(req.method==='GET'&&(u.pathname==='/.well-known/oauth-authorization-server'||u.pathname==='/.well-known/openid-configuration')){metadata(res);return;}
@@ -60,7 +77,6 @@ const server=createServer(async(req,res)=>{try{
     if(!validateClientId(clientId)||!validateRedirect(redirectUri)||responseType!=='code'||method!=='S256'||challengeCode.length<43||resource!==PUBLIC_ORIGIN||!scopes){json(res,400,{error:'invalid_request'});return;}
     const approval=randomBytes(9).toString('base64url');const tx=signToken({typ:'oauth_pending',iss:PUBLIC_ORIGIN,aud:PUBLIC_ORIGIN,exp:Math.floor(Date.now()/1000)+600,jti:randomBytes(16).toString('hex'),clientId,redirectUri,challenge:challengeCode,resource,scopes,scp:scopes,state:u.searchParams.get('state')||'',approvalHash:createHash('sha256').update(approval).digest('hex')});
     if(!(await sendApprovalCode(approval))){json(res,503,{error:'device_authorization_unavailable'});return;}
-    // Pending OAuth transactions are signed and survive a gateway process restart.
     const html=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Remote Agent</title></head><body><main><h1>Anthares Remote Agent</h1><p>Um código de autorização foi colocado no clipboard do computador cadastrado. Cole-o abaixo para autorizar o ChatGPT.</p><p>Escopos: ${esc(scopes.join(', '))}</p><form method="post" action="/oauth/authorize"><input type="hidden" name="tx" value="${esc(tx)}"><label>Código <input type="password" name="approval" autocomplete="one-time-code" required autofocus></label><button type="submit">Autorizar</button></form></main></body></html>`;
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",'Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});res.end(html);return;
   }
@@ -87,4 +103,4 @@ const server=createServer(async(req,res)=>{try{
   res.writeHead(404);res.end();
 }catch(e){console.error('gateway-v2 error',e?.message||e);if(!res.headersSent)json(res,e?.message==='request_too_large'?413:500,{error:'gateway_error'});else res.end();}});
 server.requestTimeout=160000;
-server.listen(PUBLIC_PORT,'0.0.0.0',()=>console.log(`Anthares signed OAuth gateway listening on ${PUBLIC_PORT}`));
+server.listen(PUBLIC_PORT,'0.0.0.0',()=>console.log(`Anthares signed OAuth gateway listening on ${PUBLIC_PORT} controls=${CONTROL_ORIGINS.join(',')}`));
