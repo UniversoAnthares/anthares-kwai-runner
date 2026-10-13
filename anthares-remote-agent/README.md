@@ -1,103 +1,61 @@
 # Anthares Remote Agent
 
-MVP de agente remoto próprio para máquinas Windows do projeto Anthares.
+Anthares Remote é o canal canônico de administração remota do Windows do projeto Anthares. O runtime não depende de AI Commander, Desktop Commander ou outro agente remoto como fallback.
 
-## Objetivo
+## Runtime canônico no Windows
 
-Substituir gradualmente a dependência de serviços de acesso remoto de terceiros por um agente controlado pelo próprio projeto, com conexão de saída HTTPS, autenticação explícita e superfície de comandos limitada.
+O dispositivo autorizado é `DESKTOP-FTDK0HP`.
 
-## Componentes
+A execução persistente usa a tarefa agendada `Anthares Remote Agent SYSTEM`, em `SYSTEM`, `Highest`, sessão 0 e PowerShell não interativo/oculto. A tarefa possui gatilho de boot e verificação periódica de 1 minuto; `MultipleInstances=IgnoreNew` impede supervisores duplicados.
 
-- `cmd/agent`: agente Windows em Go.
-- `worker`: control plane Cloudflare Worker + Durable Object.
-- `.github/workflows/anthares-remote-agent-build.yml`: compila o `.exe` Windows.
-
-## Operações atuais
-
-O agente aceita somente tipos de job conhecidos:
-
-- `ping`
-- `system_info`
-- `process_list`
-- `clipboard_get`
-- `clipboard_set`
-- `file_read`
-- `file_write`
-- `shell` (desligado por padrão; exige `ANTHARES_ALLOW_SHELL=1`)
-
-Acesso a arquivos também fica desligado até que `ANTHARES_ALLOWED_ROOTS` seja configurado. O limite por arquivo/resultado é 1 MiB no MVP.
-
-## Variáveis do agente
+O supervisor canônico é:
 
 ```text
-ANTHARES_CONTROL_URL=https://SEU-WORKER.workers.dev
-ANTHARES_DEVICE_TOKEN=<segredo-do-dispositivo>
-ANTHARES_DEVICE_ID=DESKTOP-FTDK0HP
-ANTHARES_ALLOWED_ROOTS=C:\Users\Lucas;C:\ProgramData\AntharesRemoteAgent
-ANTHARES_ALLOW_SHELL=0
+C:\ProgramData\AntharesRemoteAgent\run-agent-system-supervisor.ps1
 ```
 
-Nunca faça commit dos tokens.
+A fonte versionada correspondente é `windows/run-agent-system-supervisor.ps1`.
 
-## Worker
+O supervisor mantém uma única instância do agente para evitar leases e resultados duplicados.
 
-No diretório `worker`:
+## Plano de controle redundante
 
-```bash
-npx wrangler secret put DEVICE_TOKEN
-npx wrangler secret put CONTROL_TOKEN
-npx wrangler deploy
-```
+Ordem normal:
 
-`DEVICE_TOKEN` autentica exclusivamente o agente. `CONTROL_TOKEN` autentica quem cria e consulta jobs.
+1. `https://anthares-ara-control.onrender.com` — primário, estado durável PostgreSQL.
+2. `https://anthares-ara-infra-canary-v2.onrender.com` — redundância Render/PostgreSQL.
+3. `https://anthares-ara-backup.anthares1.workers.dev` — redundância independente em Cloudflare Durable Object/SQLite.
 
-## API de controle
+O supervisor troca de controlador após falhas consecutivas e retorna ao primário somente depois de uma sequência estável de health checks. Os arquivos `force-secondary.flag` e `force-tertiary.flag` existem apenas para testes controlados de failover.
 
-Criar job:
+O watchdog/keep-warm mantém o segundo serviço Render aquecido para evitar que cold start elimine a utilidade do failover rápido.
 
-```http
-POST /v1/control/jobs
-Authorization: Bearer <CONTROL_TOKEN>
-Content-Type: application/json
-
-{
-  "device_id": "DESKTOP-FTDK0HP",
-  "type": "ping",
-  "args": {},
-  "timeout_seconds": 30
-}
-```
-
-Consultar job:
-
-```http
-GET /v1/control/jobs/<JOB_ID>?device_id=DESKTOP-FTDK0HP
-Authorization: Bearer <CONTROL_TOKEN>
-```
-
-Status do dispositivo:
-
-```http
-GET /v1/control/status?device_id=DESKTOP-FTDK0HP
-Authorization: Bearer <CONTROL_TOKEN>
-```
-
-## Segurança do MVP
+## Segurança
 
 - Nenhuma porta de entrada precisa ser aberta no PC.
-- O agente inicia conexões HTTPS para o Worker.
-- Token do dispositivo e token de controle são separados.
-- Shell é opt-in.
-- Arquivos só podem ser acessados dentro de raízes explicitamente permitidas.
-- Jobs têm timeout máximo de 120 segundos.
-- O Worker mantém fila e resultados por dispositivo em Durable Object.
+- O agente inicia somente conexões HTTPS de saída.
+- O runtime canônico roda em sessão 0 e não deve abrir ou manipular a área de trabalho interativa.
+- O token do dispositivo permanece somente no host; o repositório publica apenas seu SHA-256 por identidade autorizada.
+- Tokens e outros segredos nunca devem ser commitados.
+- O MCP usa autenticação de serviço assinada; o dispositivo usa seu token próprio.
+- Acesso a arquivos e processos continua sujeito às allowlists do agente.
+- Shell remoto exige `ANTHARES_ALLOW_SHELL=1`.
+- Jobs têm timeout e ciclo de lease/resultado persistente.
 
-## Próxima etapa
+## Arquivos principais
 
-1. Comprovar build Windows no GitHub Actions.
-2. Implantar o Worker em `anthares1.workers.dev` ou domínio dedicado.
-3. Gerar tokens aleatórios fora do repositório.
-4. Instalar o `.exe` em uma máquina de teste e comprovar `ping`, heartbeat e clipboard.
-5. Criar um MCP `AntharesRemote_MCP` sobre a API de controle.
-6. Trocar tokens estáticos por identidade Ed25519 por dispositivo e adicionar rotação/revogação.
-7. Adicionar serviço Windows, atualização assinada, screenshot e jobs assíncronos longos.
+- `cmd/agent`: agente Windows em Go.
+- `windows/run-agent-system-supervisor.ps1`: supervisor SYSTEM canônico.
+- `windows/run-agent-supervisor.ps1`: supervisor de compatibilidade/fallback de instalação.
+- `windows/run-agent-standard.ps1`: supervisor de compatibilidade da identidade padrão.
+- `windows/watchdog-dual-supervisor.ps1`: keep-warm e recuperação de instalações legadas.
+- `devices/*.sha256`: hashes públicos dos tokens dos dispositivos autorizados.
+- `cloudflare-ara-backup/`: controlador independente Cloudflare.
+
+## Contrato do agente
+
+O agente expõe somente operações conhecidas pelo protocolo Anthares Remote, incluindo status, informações do sistema, processos, serviços, arquivos, shell controlado e jobs destacados. O conjunto efetivo é informado pelo endpoint de capabilities do plano de controle.
+
+## Regra operacional
+
+Novas funções de administração remota do PC devem ser implementadas no Anthares Remote. Não reintroduzir agentes remotos de terceiros como dependência ou redundância do canal canônico.
