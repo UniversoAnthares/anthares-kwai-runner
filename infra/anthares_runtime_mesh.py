@@ -267,6 +267,27 @@ def register(app):
         _, body, code = _browser_request("GET", "/status")
         return jsonify(body), code
 
+    @app.get("/v1/runtime/browser/screenshot")
+    def browser_screenshot():
+        if not _auth_ok():
+            return jsonify(ok=False, error="unauthorized"), 401
+        _, body, code = _browser_request("GET", "/screenshot")
+        return jsonify(body), code
+
+    @app.get("/v1/runtime/browser/targets")
+    def browser_targets():
+        if not _auth_ok():
+            return jsonify(ok=False, error="unauthorized"), 401
+        _, body, code = _browser_request("GET", "/targets")
+        return jsonify(body), code
+
+    @app.get("/v1/runtime/browser/session/evidence")
+    def browser_session_evidence():
+        if not _auth_ok():
+            return jsonify(ok=False, error="unauthorized"), 401
+        _, body, code = _browser_request("GET", "/session/evidence")
+        return jsonify(body), code
+
     @app.get("/v1/runtime/browser/page")
     def browser_page():
         if not _auth_ok():
