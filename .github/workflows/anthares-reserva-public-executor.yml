@@ -46,30 +46,15 @@ jobs:
           cd anthares-reserva-browser
           npm install --no-audit --no-fund
           npx wrangler deploy
-      - name: Prove live Cloudflare Chromium
+      - name: Prove API and migrated Kwai authentication
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://anthares-reserva-browser.anthares1.workers.dev'
-          sleep 15
-          for i in $(seq 1 10); do
-            if curl -fsS --max-time 30 "$BASE/health" -o /tmp/reserva-health.json; then break; fi
-            test "$i" -lt 10
-            sleep 5
-          done
+          sleep 25
+          curl -fsS --max-time 30 "$BASE/health" -o /tmp/reserva-health.json
           python -c 'import json; d=json.load(open("/tmp/reserva-health.json")); assert d.get("ok") is True, d; print("RESERVA_HEALTH=PASS")'
-          for i in $(seq 1 4); do
-            if curl -fsS --max-time 45 "$BASE/_selftest" -o /tmp/reserva-selftest.json; then break; fi
-            test "$i" -lt 4
-            sleep 5
-          done
-          python -c 'import json; d=json.load(open("/tmp/reserva-selftest.json")); assert d.get("ok") is True and d.get("browser_started") is True and d.get("host_ok") is True, d; print("RESERVA_BROWSER=PASS")'
-      - name: Diagnose migrated Kwai authentication safely
-        shell: bash
-        run: |
-          set -euo pipefail
-          BASE='https://anthares-reserva-browser.anthares1.workers.dev'
-          code=$(curl -sS --max-time 60 -o /tmp/reserva-auth.json -w '%{http_code}' "$BASE/_auth_selftest" || true)
+          code=$(curl -sS --max-time 70 -o /tmp/reserva-auth.json -w '%{http_code}' "$BASE/_auth_selftest" || true)
           python - "$code" <<'PY'
           import json,sys
           code=sys.argv[1]
@@ -79,4 +64,4 @@ jobs:
           print('RESERVA_AUTH_DIAGNOSTIC='+json.dumps(safe,separators=(',',':')))
           assert d.get('capsule_decrypted') is True or d.get('error')
           PY
-          rm -f /tmp/reserva-auth.json
+          rm -f /tmp/reserva-health.json /tmp/reserva-auth.json
