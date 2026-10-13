@@ -54,7 +54,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx wrangler deploy
-      - name: Verify deployed public health contract
+      - name: Verify deployed public contract
         run: |
           set -euo pipefail
           for attempt in $(seq 1 12); do
@@ -64,17 +64,26 @@ jobs:
           d=json.load(open('/tmp/reserva-health.json', encoding='utf-8'))
           assert d.get('ok') is True, d
           assert d.get('service') == 'anthares-reserva-browser', d
-          assert d.get('version') == '2026-10-13-reserva-browser-v3', d
+          assert d.get('version') == '2026-10-13-reserva-browser-v4', d
           assert d.get('provider') == 'cloudflare', d
           assert d.get('browser_binding') is True, d
+          assert d.get('durable_state_binding') is True, d
+          assert d.get('live_view') is True, d
+          assert d.get('persistent_profile_support') is True, d
           assert d.get('render_required') is False, d
-          print('RESERVA_PUBLIC_HEALTH_OK=1')
+          print('RESERVA_V4_PUBLIC_HEALTH_OK=1')
           PY
               then break; fi
             fi
             test "$attempt" -lt 12 || exit 21
             sleep 5
           done
+          code="$(curl -sS -o /tmp/owner.html -w '%{http_code}' --max-time 10 https://anthares-reserva-browser.anthares1.workers.dev/owner)"
+          test "$code" = "200"
+          grep -q 'Anthares Reserva Browser' /tmp/owner.html
+          unauth="$(curl -sS -o /tmp/status-unauth.json -w '%{http_code}' --max-time 10 https://anthares-reserva-browser.anthares1.workers.dev/status)"
+          test "$unauth" = "401"
+          echo 'RESERVA_OWNER_HANDOFF_SURFACE_OK=1'
       - name: Verify authenticated status when Actions owns the secret
         env:
           ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
@@ -93,7 +102,8 @@ jobs:
           d=json.load(open('/tmp/reserva-status.json', encoding='utf-8'))
           assert d.get('ok') is True, d
           assert d.get('browser_binding') is True, d
-          assert d.get('version') == '2026-10-13-reserva-browser-v3', d
+          assert d.get('durable_state_binding') is True, d
+          assert d.get('version') == '2026-10-13-reserva-browser-v4', d
           assert d.get('render_required') is False, d
-          print('RESERVA_AUTHENTICATED_STATUS_OK=1')
+          print('RESERVA_V4_AUTHENTICATED_STATUS_OK=1')
           PY
