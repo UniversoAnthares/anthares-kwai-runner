@@ -138,9 +138,9 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string,error) {
 
 func safePath(cfg Config,p string)(string,error){if len(cfg.AllowedRoots)==0{return "",errors.New("file access disabled; ANTHARES_ALLOWED_ROOTS is empty")}; abs,err:=filepath.Abs(p);if err!=nil{return "",err};abs=filepath.Clean(abs);lower:=strings.ToLower(abs);for _,root:=range cfg.AllowedRoots{r:=strings.ToLower(filepath.Clean(root));if lower==r||strings.HasPrefix(lower,r+string(os.PathSeparator)){return abs,nil}};return "",errors.New("path outside allowed roots")}
 
-func run(ctx context.Context,name string,args ...string)(string,error){cmd:=exec.CommandContext(ctx,name,args...);var out bytes.Buffer;cmd.Stdout=&out;cmd.Stderr=&out;err:=cmd.Run();s:=out.String();if len(s)>1<<20{s=s[:1<<20]+"\n[truncated]"};if ctx.Err()==context.DeadlineExceeded{return s,errors.New("command timed out")};return s,err}
+func run(ctx context.Context,name string,args ...string)(string,error){cmd:=hiddenCommandContext(ctx,name,args...);var out bytes.Buffer;cmd.Stdout=&out;cmd.Stderr=&out;err:=cmd.Run();s:=out.String();if len(s)>1<<20{s=s[:1<<20]+"\n[truncated]"};if ctx.Err()==context.DeadlineExceeded{return s,errors.New("command timed out")};return s,err}
 
-func runWithStdin(ctx context.Context,stdin,name string,args ...string)(string,error){cmd:=exec.CommandContext(ctx,name,args...);cmd.Stdin=strings.NewReader(stdin);var out bytes.Buffer;cmd.Stdout=&out;cmd.Stderr=&out;err:=cmd.Run();return out.String(),err}
+func runWithStdin(ctx context.Context,stdin,name string,args ...string)(string,error){cmd:=hiddenCommandContext(ctx,name,args...);cmd.Stdin=strings.NewReader(stdin);var out bytes.Buffer;cmd.Stdout=&out;cmd.Stderr=&out;err:=cmd.Run();return out.String(),err}
 
 func postResult(cfg Config,result Result)error{body,_:=json.Marshal(result);req,_:=http.NewRequest(http.MethodPost,cfg.ControlURL+"/v1/device/jobs/"+result.ID+"/result",bytes.NewReader(body));req.Header.Set("Content-Type","application/json");authReq(req,cfg);resp,err:=httpClient.Do(req);if err!=nil{return err};defer resp.Body.Close();if resp.StatusCode/100!=2{return fmt.Errorf("result status %d",resp.StatusCode)};return nil}
 
