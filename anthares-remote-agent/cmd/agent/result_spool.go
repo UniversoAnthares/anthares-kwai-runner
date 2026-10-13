@@ -7,6 +7,7 @@ import (
  "crypto/sha256"
  "encoding/json"
  "errors"
+ "fmt"
  "io"
  "os"
  "path/filepath"
@@ -45,4 +46,9 @@ func loadEncryptedResult(path,token,id string)(Result,error){
  if err=json.Unmarshal(plain,&result);err!=nil{return result,err}
  if result.ID!=id{return result,errors.New("result identity mismatch")}
  return result,nil
+}
+
+func resultSpoolDir(cfg Config) string {
+ key:=sha256.Sum256([]byte(cfg.ControlURL+"|"+cfg.DeviceID))
+ return filepath.Join(os.TempDir(),"anthares-ara-results",fmt.Sprintf("%x",key[:12]))
 }
