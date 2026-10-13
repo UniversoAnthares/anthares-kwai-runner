@@ -65,7 +65,7 @@ const server=createServer(async(req,res)=>{try{
   }
   if(req.method==='POST'&&u.pathname==='/oauth/authorize'){
     const body=form(await readBody(req,65536));const tx=body.get('tx')||'',approval=body.get('approval')||'';const p=verifyToken(tx,'oauth_pending');
-    if(!p||p.expires<Date.now()){transactions.delete(tx);json(res,400,{error:'authorization_expired'});return;}
+    if(!p){json(res,400,{error:'authorization_expired'});return;}
     if(!safeEq(createHash('sha256').update(approval).digest('hex'),p.approvalHash)){json(res,403,{error:'authorization_denied'});return;}
     transactions.delete(tx);const code=randomBytes(32).toString('base64url');codes.set(code,{...p,approval:undefined,expires:Date.now()+5*60000});const target=new URL(p.redirectUri);target.searchParams.set('code',code);if(p.state)target.searchParams.set('state',p.state);target.searchParams.set('iss',PUBLIC_ORIGIN);res.writeHead(302,{Location:target.toString(),'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();return;
   }
