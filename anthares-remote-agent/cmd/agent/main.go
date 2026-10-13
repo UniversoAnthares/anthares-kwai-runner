@@ -95,9 +95,10 @@ func main() {
 			defer func() { <-sem }()
 			result := executeJob(cfg, j)
 			if err := postResultRetry(cfg, result); err != nil {
-				// Never silently discard the result after the retry budget.
-				// A durable, encrypted spool is still needed for crash recovery.
-				fmt.Fprintf(os.Stderr, "result upload error job=%s: %v\n", result.ID, err)
+				// Stop accepting new work if a completed result cannot be delivered.
+				// Restart recovery still requires a durable encrypted result spool.
+				fmt.Fprintf(os.Stderr, "fatal result upload error job=%s: %v\n", result.ID, err)
+				os.Exit(1)
 			}
 		}()
 	}
