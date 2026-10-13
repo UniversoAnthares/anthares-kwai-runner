@@ -5,7 +5,12 @@ on:
     branches: [feature/ara-infra]
     paths:
       - 'infra/ara_state_store.py'
+      - 'infra/ara_legacy_state_compat.py'
+      - 'infra/anthares_remote_control_routes.py'
+      - 'infra/anthares_remote_browser_bridge.py'
+      - 'infra/sitecustomize.py'
       - 'tests/test_ara_state_store.py'
+      - 'tests/test_ara_legacy_state_compat.py'
       - '.github/workflows/ara-infra-tests.yml'
   workflow_dispatch:
 
@@ -18,6 +23,15 @@ jobs:
         with:
           python-version: '3.12'
       - name: Run deterministic queue tests
-        run: python -m unittest -v tests.test_ara_state_store
+        run: python -m unittest -v tests.test_ara_state_store tests.test_ara_legacy_state_compat
       - name: Syntax compile
-        run: python -m py_compile infra/ara_state_store.py
+        run: >-
+          python -m py_compile
+          infra/ara_state_store.py
+          infra/ara_legacy_state_compat.py
+          infra/anthares_remote_control_routes.py
+          infra/anthares_remote_browser_bridge.py
+          infra/anthares_remote_bootstrap.py
+          infra/anthares_remote_secure_bootstrap.py
+          infra/anthares_remote_switch.py
+          infra/sitecustomize.py
