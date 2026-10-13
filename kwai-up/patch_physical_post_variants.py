@@ -52,9 +52,14 @@ if marker not in s:
     raise SystemExit('POST_HELPER_MARKER_NOT_FOUND')
 s = s.replace(marker, helper, 1)
 
-s = s.replace('post = ku.find_id(final, FINAL_POST_ID)', 'post = find_final_post(final)')
-# The original exact-ID lookup is replaced in commit only after the helper is inserted.
-s = s.replace('post = ku.find_id(nodes, FINAL_POST_ID)', 'post = find_final_post(nodes)')
+# Restrict replacements to the publisher methods. Replacing an unindented
+# substring would also rewrite trusted_focused_final_post() into recursion.
+old_prepare = '        post = ku.find_id(final, FINAL_POST_ID)'
+old_commit = '        post = ku.find_id(nodes, FINAL_POST_ID)'
+if old_prepare not in s or old_commit not in s:
+    raise SystemExit('POST_LOOKUP_TARGET_NOT_FOUND')
+s = s.replace(old_prepare, '        post = find_final_post(final)', 1)
+s = s.replace(old_commit, '        post = find_final_post(nodes)', 1)
 
 old_focus = '''        with HIDKeyboard(self.adb, 314) as keyboard:
             self.focus_target(keyboard, FINAL_POST_ID, "26-post-focus", max_steps=35)
@@ -86,8 +91,6 @@ new_focus = '''        post_rid = post.get("resource-id", "")
             )
             keyboard.enter()
 '''
-if old_focus not in s:
-    raise SystemExit('POST_FOCUS_TARGET_NOT_FOUND')
 if old_focus not in s:
     raise SystemExit('POST_FOCUS_TARGET_NOT_FOUND')
 s = s.replace(old_focus, new_focus, 1)
