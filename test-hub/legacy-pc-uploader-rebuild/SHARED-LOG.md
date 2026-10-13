@@ -1408,3 +1408,9 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Anthares-browser workflow run `38330972424` job `115080372808` finally COMPLETED SUCCESS (vault crypto/adapter routing/import checks). This does not establish real web posting.
 - Primary MCP new commit `89cad72943da25df899ed072a34a7262303674e8` (`fix(agent): implement restricted service query and nonrecursive file removal`) build_in_progress at 02:57:13Z. Control service `3e4ae610` remains live.
 - Existing Kwai probe result still failed due unknown creation control, see previous entry. No new local probe or publication initiated.
+
+## 2026-10-13 03:27 UTC — Native ARA healthy; new MCP deploys live; browser smoke passed
+- Anthares Remote `session_status` connected, device DESKTOP-FTDK0HP agent 0.2.0 heartbeat 03:26:51Z, queued=0. `remote_job_list` has only two exited validation jobs; no detached jobs active. No local `remote_exec` or CMD/PowerShell spawned in this check, respecting user's no-focus restriction.
+- Both Render MCP gateways now LIVE at commit `b80f551095074187855f7a2865e31b42e99e95cb` (`fix(ara): remove unused os/exec import blocking all Go CI jobs`). Latest startup logs 03:22Z: remote QA invoked, signed OAuth gateway listening, internal MCP ready. No error/fail/panic entries in sampled latest logs.
+- Anthares-browser Actions run 38330972424 job 115080372808 completed SUCCESS, including compile/import/vault crypto and adapter routing tests; not evidence of a live post.
+- Historical Kwai probe last known FAILED due missing creation control, no new local diagnostic performed pending guaranteed invisible/no-focus command execution.
