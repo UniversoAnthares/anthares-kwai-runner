@@ -8,8 +8,9 @@ import { z } from 'zod';
 const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-remote-control.onrender.com').replace(/\/$/, '');
 const CONTROL_TOKEN = process.env.ARA_SHARED || '';
 const DEFAULT_DEVICE = process.env.ANTHARES_DEVICE_ID || 'DESKTOP-FTDK0HP';
+let browserLease = null;
 
-async function api(path, { method = 'GET', body, timeoutMs = 140000 } = {}) {
+async function api(path, { method = 'GET', body, timeoutMs = 140000, headers = {} } = {}) {
   if (!CONTROL_TOKEN) throw new Error('ARA_SHARED is not configured');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -19,7 +20,8 @@ async function api(path, { method = 'GET', body, timeoutMs = 140000 } = {}) {
       headers: {
         Authorization: `Bearer ${CONTROL_TOKEN}`,
         'Content-Type': 'application/json',
-        'User-Agent': 'AntharesRemoteMCP/0.2',
+        'User-Agent': 'AntharesRemoteMCP/0.6',
+        ...headers,
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
@@ -35,7 +37,7 @@ async function api(path, { method = 'GET', body, timeoutMs = 140000 } = {}) {
 }
 
 async function execute(type, args = {}, timeoutSeconds = 30, deviceId = DEFAULT_DEVICE) {
-  return api('/v1/control/execute', {
+  return api('/v1/runtime/remote/execute', {
     method: 'POST',
     timeoutMs: Math.min(150000, (timeoutSeconds + 12) * 1000),
     body: { device_id: deviceId, type, args, timeout_seconds: timeoutSeconds },
@@ -46,8 +48,25 @@ function text(value) {
   return { content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }] };
 }
 
+function leaseHeaders() {
+  if (!browserLease?.token || !browserLease?.generation) throw new Error('Anthares-browser session lease is not acquired');
+  return {
+    'X-Anthares-Lease-Token': browserLease.token,
+    'X-Anthares-Lease-Generation': String(browserLease.generation),
+  };
+}
+
+async function browserMutate(op, body = {}) {
+  return api(`/v1/runtime/browser/${op}`, { method: 'POST', body, headers: leaseHeaders(), timeoutMs: 90000 });
+}
+
 function createMcpServer() {
-  const server = new McpServer({ name: 'Anthares Remote', version: '0.2.0' });
+  const server = new McpServer({ name: 'Anthares Remote', version: '0.6.0' });
+
+  server.registerTool('runtime_status', {
+    description: 'Check the unified Anthares runtime mesh, including Remote and isolated Anthares-browser availability.',
+    inputSchema: { device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ device_id }) => text(await api(`/v1/runtime/health?device_id=${encodeURIComponent(device_id)}`)));
 
   server.registerTool('session_status', {
     description: 'Check the Anthares Remote Agent heartbeat for a Windows device.',
@@ -92,6 +111,58 @@ function createMcpServer() {
     const b64 = out.output || '';
     return { content: [{ type: 'image', data: b64, mimeType: 'image/jpeg' }] };
   });
+
+  server.registerTool('browser_session_acquire', {
+    description: 'Acquire the local single-writer fence for the isolated Anthares-browser profile. Global operation authority remains anthares-control.',
+    inputSchema: { owner: z.string().min(1).default('anthares-remote-mcp'), ttl_seconds: z.number().int().min(15).max(1800).default(300) },
+  }, async ({ owner, ttl_seconds }) => {
+    browserLease = await api('/v1/runtime/browser/lease/acquire', { method: 'POST', body: { owner, ttl_seconds } });
+    return text({ ok: true, generation: browserLease.generation, expires_at: browserLease.expires_at, scope: browserLease.scope });
+  });
+
+  server.registerTool('browser_session_renew', {
+    description: 'Renew the current isolated Anthares-browser local profile fence.',
+    inputSchema: { ttl_seconds: z.number().int().min(15).max(1800).default(300) },
+  }, async ({ ttl_seconds }) => text(await api('/v1/runtime/browser/lease/renew', { method: 'POST', body: { ttl_seconds }, headers: leaseHeaders() })));
+
+  server.registerTool('browser_session_release', {
+    description: 'Release the isolated Anthares-browser local profile fence.',
+    inputSchema: {},
+  }, async () => {
+    const out = await api('/v1/runtime/browser/lease/release', { method: 'POST', body: {}, headers: leaseHeaders() });
+    browserLease = null;
+    return text(out);
+  });
+
+  server.registerTool('browser_status', {
+    description: 'Read the isolated Anthares-browser status. This never attaches to the user desktop browser.',
+    inputSchema: {},
+  }, async () => text(await api('/v1/runtime/browser/status')));
+
+  server.registerTool('browser_page', {
+    description: 'Read URL, title and page text from the isolated Anthares-browser.',
+    inputSchema: {},
+  }, async () => text(await api('/v1/runtime/browser/page')));
+
+  server.registerTool('browser_navigate', {
+    description: 'Navigate the isolated Anthares-browser. Requires a browser session fence.',
+    inputSchema: { url: z.string().url(), wait_ms: z.number().int().min(0).max(30000).default(1200) },
+  }, async ({ url, wait_ms }) => text(await browserMutate('navigate', { url, wait_ms })));
+
+  server.registerTool('browser_click', {
+    description: 'Click a CSS selector inside the isolated Anthares-browser. Requires a browser session fence.',
+    inputSchema: { selector: z.string().min(1), wait_ms: z.number().int().min(0).max(30000).default(1000) },
+  }, async ({ selector, wait_ms }) => text(await browserMutate('click', { selector, wait_ms })));
+
+  server.registerTool('browser_type', {
+    description: 'Type into a CSS selector inside the isolated Anthares-browser. Requires a browser session fence.',
+    inputSchema: { selector: z.string().min(1), value: z.string(), clear: z.boolean().default(true), wait_ms: z.number().int().min(0).max(30000).default(250) },
+  }, async ({ selector, value, clear, wait_ms }) => text(await browserMutate('type', { selector, text: value, clear, wait_ms })));
+
+  server.registerTool('browser_wait', {
+    description: 'Wait for a selector inside the isolated Anthares-browser. Requires a browser session fence.',
+    inputSchema: { selector: z.string().min(1), timeout_ms: z.number().int().min(100).max(120000).default(10000), visible: z.boolean().default(true) },
+  }, async ({ selector, timeout_ms, visible }) => text(await browserMutate('wait', { selector, timeout_ms, visible })));
 
   server.registerTool('file_stat', {
     description: 'Stat a file or directory within the agent allowlisted roots.',
@@ -185,7 +256,7 @@ if (mode === 'stdio') {
   const http = createServer(async (req, res) => {
     if (req.url === '/health' && req.method === 'GET') {
       res.writeHead(configured ? 200 : 503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: configured, service: 'anthares-remote-mcp', auth: configured ? 'configured' : 'pending' }));
+      res.end(JSON.stringify({ ok: configured, service: 'anthares-remote-mcp', auth: configured ? 'configured' : 'pending', runtime_mesh: true }));
       return;
     }
     if (req.url !== '/mcp') { res.writeHead(404); res.end(); return; }
