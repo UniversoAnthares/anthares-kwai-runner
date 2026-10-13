@@ -9,6 +9,7 @@ $exe = Join-Path $root 'anthares-remote-agent-standard.exe'
 $stdout = Join-Path $root 'agent-standard.stdout.log'
 $stderr = Join-Path $root 'agent-standard.stderr.log'
 $stateFile = Join-Path $root 'standard-supervisor-state.json'
+$forceSecondary = Join-Path $root 'force-secondary.flag'
 
 $created = $false
 $mutex = New-Object System.Threading.Mutex($true, 'Global\AntharesRemoteAgentStandardSupervisor', [ref]$created)
@@ -36,6 +37,17 @@ function Save-State([string]$active, [string]$reason, [int]$agentPid = 0) {
     } catch {}
 }
 
+function Choose-Control {
+    if (Test-Path $forceSecondary) {
+        if (Test-Control $secondary) { return $secondary }
+        if (Test-Control $primary) { return $primary }
+        return $null
+    }
+    if (Test-Control $primary) { return $primary }
+    if (Test-Control $secondary) { return $secondary }
+    return $null
+}
+
 try {
     while ($true) {
         $existing = @(Get-Process -Name 'anthares-remote-agent-standard' -ErrorAction SilentlyContinue)
@@ -46,11 +58,8 @@ try {
             Start-Sleep -Seconds 2
         }
 
-        if (Test-Control $primary) {
-            $active = $primary
-        } elseif (Test-Control $secondary) {
-            $active = $secondary
-        } else {
+        $active = Choose-Control
+        if (-not $active) {
             Save-State '' 'both-controls-unavailable'
             Start-Sleep -Seconds 5
             continue
@@ -72,7 +81,14 @@ try {
         while (-not $proc.HasExited) {
             Start-Sleep -Seconds 10
 
-            if ($active -eq $secondary) {
+            if (Test-Path $forceSecondary) {
+                if ($active -ne $secondary -and (Test-Control $secondary)) {
+                    Save-State $active 'forced-switch-to-secondary' $proc.Id
+                    try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
+                    try { $proc.WaitForExit(5000) | Out-Null } catch {}
+                    break
+                }
+            } elseif ($active -eq $secondary) {
                 if (Test-Control $primary) { $primaryHealthyStreak++ } else { $primaryHealthyStreak = 0 }
                 if ($primaryHealthyStreak -ge 6) {
                     Save-State $active 'primary-stable-failback' $proc.Id
