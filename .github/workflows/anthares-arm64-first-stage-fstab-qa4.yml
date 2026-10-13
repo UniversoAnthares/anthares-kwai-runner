@@ -48,19 +48,21 @@ jobs:
           dd if="$DIR/vendor.img" of=/tmp/vendor-p1.img bs=512 skip="$START" count="$((END-START+1))" status=none
           debugfs -R 'dump /etc/fstab.ranchu /tmp/fstab.ranchu' /tmp/vendor-p1.img >/dev/null 2>&1
           test -s /tmp/fstab.ranchu
-          rm -rf /tmp/ramdisk-root && mkdir /tmp/ramdisk-root
-          (cd /tmp/ramdisk-root && gzip -dc "$DIR/ramdisk.img" | cpio -idm --quiet)
+          sudo rm -rf /tmp/ramdisk-root
+          sudo mkdir /tmp/ramdisk-root
+          sudo bash -c "cd /tmp/ramdisk-root && gzip -dc '$DIR/ramdisk.img' | cpio -idm --quiet"
           V='${{ matrix.variant }}'
           case "$V" in
             control) ;;
-            root) cp /tmp/fstab.ranchu /tmp/ramdisk-root/fstab.ranchu ;;
-            system_etc) mkdir -p /tmp/ramdisk-root/system/etc; cp /tmp/fstab.ranchu /tmp/ramdisk-root/system/etc/fstab.ranchu ;;
-            both) cp /tmp/fstab.ranchu /tmp/ramdisk-root/fstab.ranchu; mkdir -p /tmp/ramdisk-root/system/etc; cp /tmp/fstab.ranchu /tmp/ramdisk-root/system/etc/fstab.ranchu ;;
+            root) sudo cp /tmp/fstab.ranchu /tmp/ramdisk-root/fstab.ranchu ;;
+            system_etc) sudo mkdir -p /tmp/ramdisk-root/system/etc; sudo cp /tmp/fstab.ranchu /tmp/ramdisk-root/system/etc/fstab.ranchu ;;
+            both) sudo cp /tmp/fstab.ranchu /tmp/ramdisk-root/fstab.ranchu; sudo mkdir -p /tmp/ramdisk-root/system/etc; sudo cp /tmp/fstab.ranchu /tmp/ramdisk-root/system/etc/fstab.ranchu ;;
           esac
           if [ "$V" = control ]; then
             cp "$DIR/ramdisk.img" /tmp/ramdisk-test.img
           else
-            (cd /tmp/ramdisk-root && find . -print0 | cpio --null -o --format=newc --quiet | gzip -9 > /tmp/ramdisk-test.img)
+            sudo bash -c 'cd /tmp/ramdisk-root && find . -print0 | cpio --null -o --format=newc --quiet | gzip -9 > /tmp/ramdisk-test.img'
+            sudo chown "$USER":"$(id -gn)" /tmp/ramdisk-test.img
           fi
           echo "VARIANT=$V" | tee /tmp/fstab-variant.txt
           grep -nE 'system|vendor|product|system_ext|/data|/metadata' /tmp/fstab.ranchu | tee -a /tmp/fstab-variant.txt
