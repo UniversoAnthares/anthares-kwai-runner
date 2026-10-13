@@ -1,0 +1,8 @@
+when:
+  - event: manual
+steps:
+  smoke:
+    image: python:3.12-alpine
+    commands:
+      - python tools/render_redundancy_acceptance.py
+      - python -m py_compile tools/provider_router.py
