@@ -118,6 +118,8 @@ class PhysicalContractTests(unittest.TestCase):
         self.assertIn("os.fsync(fd)", commit)
         self.assertIn("publish-attempt-already-recorded:verify-only", commit)
         self.assertIn("publish_attempt_", commit)
+        self.assertIn('"publish_attempt_" + str(proof["media_sha256"]) + ".json"', commit)
+        self.assertNotIn('"publish_attempt_" + ku.safe_token(self.cfg.job_id)', commit)
         self.assertLess(commit.index("os.fsync(fd)"), commit.index('self.emit(\n                "PUBLISH_REQUESTED"'))
         self.assertLess(commit.index("os.fsync(fd)"), commit.index("keyboard.enter()"))
         self.assertNotIn("attempt.unlink(", commit)
