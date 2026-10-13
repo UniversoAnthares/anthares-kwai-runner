@@ -106,8 +106,11 @@ def restore(profile):
     manifest_raw = _get(f"browser-state/{SLOT}/latest.json")
     if not manifest_raw:
         return {"ok": False, "reason": "no_snapshot"}
-    manifest = json.loads(manifest_raw)
-    if manifest.get("version") != 1:
+    try:
+        manifest = json.loads(manifest_raw)
+    except (ValueError, TypeError):
+        return {"ok": False, "reason": "no_snapshot"}
+    if not isinstance(manifest, dict) or manifest.get("version") != 1:
         return {"ok": False, "reason": "no_snapshot"}
     generation = manifest["generation"]
     count = int(manifest["chunks"])
@@ -123,6 +126,8 @@ def restore(profile):
     if len(encrypted) != manifest["bytes"] or hashlib.sha256(encrypted).hexdigest() != manifest["sha256"]:
         raise RuntimeError("snapshot integrity verification failed")
     raw = AESGCM(_key()).decrypt(encrypted[:12], encrypted[12:], SLOT.encode())
+    if len(raw) > MAX_ARCHIVE:
+        raise RuntimeError("snapshot exceeds maximum size")
     destination = Path(profile)
     destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
