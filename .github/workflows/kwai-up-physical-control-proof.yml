@@ -42,7 +42,9 @@ jobs:
         run: python .\kwai-up\kwai_up_physical_entry.py auth
       - name: Prove HID/UHID control through prepare boundary
         shell: powershell
-        run: python .\kwai-up\kwai_up_physical.py prepare
+        run: |
+          if (-not (Test-Path $env:KWAI_UP_MEDIA)) { throw 'probe-media-missing-on-Windows' }
+          python .\kwai-up\kwai_up_physical.py prepare
       - name: Capture READY_TO_PUBLISH proof
         if: always()
         shell: powershell
@@ -50,7 +52,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path $env:KWAI_UP_ARTIFACT_DIR | Out-Null
           & $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL shell uiautomator dump /sdcard/kwai_control_proof.xml | Out-Host
           & $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL pull /sdcard/kwai_control_proof.xml "$env:KWAI_UP_ARTIFACT_DIR\control-proof.xml" | Out-Host
-          & $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL exec-out screencap -p > "$env:KWAI_UP_ARTIFACT_DIR\control-proof.png"
+          & $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL shell screencap -p /sdcard/kwai_control_proof.png | Out-Host
+          & $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL pull /sdcard/kwai_control_proof.png "$env:KWAI_UP_ARTIFACT_DIR\control-proof.png" | Out-Host
           $xml = Get-Content "$env:KWAI_UP_ARTIFACT_DIR\control-proof.xml" -Raw
           if ($xml -notmatch 'kwai\.lite\.video\.basis:id/post') { throw 'post-control-not-visible' }
           Write-Host 'KWAI_UP_PHYSICAL_CONTROL_CONFIRMED=1'
