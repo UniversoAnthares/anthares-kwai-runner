@@ -12,10 +12,10 @@ func TestExecuteJobPreservesStructuredFailure(t *testing.T) {
 	}
 	cfg := Config{AllowShell: true}
 	job := Job{
-		ID: "structured-failure",
+		ID:   "structured-failure",
 		Type: "shell",
 		Args: map[string]string{
-			"shell": "cmd",
+			"shell":   "cmd",
 			"command": "echo diagnostic-out & echo diagnostic-err 1>&2 & exit /b 7",
 		},
 	}
@@ -37,3 +37,4 @@ func TestExecuteJobPreservesStructuredFailure(t *testing.T) {
 		t.Fatalf("stdout and stderr must both be present: %#v", got)
 	}
 }
+
