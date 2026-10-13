@@ -139,58 +139,27 @@ new_state = '''\tif runtime.GOOS == "windows" {
 \t\treturn `C:\\ProgramData\\AntharesRemoteAgent\\issue-queue`, nil
 \t}
 '''
-if old_state not in s:
+if old_state in s:
+    s = s.replace(old_state, new_state, 1)
+elif 'filepath.Join(work, "ara-jobs", "issue-queue")' not in s:
     raise SystemExit('issue queue state-dir target missing')
-s = s.replace(old_state, new_state, 1)
 issue.write_text(s, encoding='utf-8')
 
 sup = Path('anthares-remote-agent/windows/run-agent-system-supervisor.ps1')
 s = sup.read_text(encoding='utf-8')
-s = s.replace("# Prefer the already-proven production binary; v4 remains a fallback until it\n# has passed an end-to-end Windows heartbeat/job validation.", "# The queue-aware v4 binary is canonical after a proven private GitHub queue\n# round trip. Legacy remains rollback-only.")
-s = s.replace("$exe = if (Test-Path $legacyExe) { $legacyExe } elseif (Test-Path $v4Exe) { $v4Exe } else { $legacyExe }", "$exe = if (Test-Path $v4Exe) { $v4Exe } elseif (Test-Path $legacyExe) { $legacyExe } else { $v4Exe }")
-
-# No default HTTP provider. Render and Cloudflare are explicitly excluded from
-# automatic runtime selection; a future independent HTTPS origin must be set
-# explicitly through ANTHARES_CONTROL_*.
-start = s.index('function Control-OrDefault')
-end = s.index('\n$created = $false', start)
-control_block = r'''function Control-OrDefault([string]$value) {
-    $candidate = ([string]$value).Trim().TrimEnd('/')
-    if ([string]::IsNullOrWhiteSpace($candidate)) { return '' }
-    if ($candidate -match 'onrender\.com' -or $candidate -match 'workers\.dev') { return '' }
-    return $candidate
-}
-$primaryControl = Control-OrDefault $env:ANTHARES_CONTROL_PRIMARY_URL
-$secondaryControl = Control-OrDefault $env:ANTHARES_CONTROL_SECONDARY_URL
-$tertiaryControl = Control-OrDefault $env:ANTHARES_CONTROL_TERTIARY_URL
-$httpCandidates = @($primaryControl, $secondaryControl, $tertiaryControl) |
-    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-    Select-Object -Unique
-'''
-s = s[:start] + control_block + s[end:]
-s = s.replace("'Global\\AntharesRemoteSystemSupervisorV6'", "'Global\\AntharesRemoteSystemSupervisorV7'")
-s = s.replace('cloudflare_controls=$true; render_required=$false', 'cloudflare_controls=$false; cloudflare_required=$false; render_required=$false')
-s = s.replace("if ($queueReady) { $mode = if ($active) { 'issue-queues+cloudflare-http' } else { 'issue-queues-only' } }", "if ($queueReady) { $mode = if ($active) { 'issue-queues+http' } else { 'issue-queues-only' } }")
-s = s.replace("elseif ($active) { $mode = 'cloudflare-http-only' }", "elseif ($active) { $mode = 'http-only' }")
-s = s.replace("$reason = if ($currentControlHealthy) { 'running-queue-with-cloudflare-http' } else { 'running-queue-failover' }", "$reason = if ($currentControlHealthy) { 'running-queue-with-http' } else { 'running-queue-only' }")
-
-old_existing = """        $existing = @(Get-Process -Name 'anthares-remote-agent','anthares-remote-agent-standard','anthares-remote-agent-v4' -ErrorAction SilentlyContinue)
-        if ($existing.Count -gt 0) { Save-State '' 'preserve-existing' 'waiting-for-existing-agent'; Start-Sleep -Seconds 5; continue }
-"""
-new_existing = """        $existing = @(Get-Process -Name 'anthares-remote-agent','anthares-remote-agent-standard','anthares-remote-agent-v4' -ErrorAction SilentlyContinue)
-        if ($existing.Count -gt 0) {
-            $desiredName = Split-Path $exe -Leaf
-            $desiredRunning = @($existing | Where-Object { $_.ProcessName -eq [IO.Path]::GetFileNameWithoutExtension($desiredName) })
-            if ($desiredRunning.Count -gt 0) { Save-State '' 'preserve-existing' 'desired-agent-already-running' $desiredRunning[0].Id; Start-Sleep -Seconds 5; continue }
-            Save-State '' 'migrating' 'replacing-legacy-agent'
-            foreach ($p in $existing) { try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {} }
-            Start-Sleep -Seconds 2
-            continue
-        }
-"""
-if old_existing not in s:
-    raise SystemExit('supervisor existing-process target missing')
-s = s.replace(old_existing, new_existing, 1)
+legacy_preferred = "$exe = if (Test-Path $legacyExe) { $legacyExe } elseif (Test-Path $v4Exe) { $v4Exe } else { $legacyExe }"
+v4_preferred = "$exe = if (Test-Path $v4Exe) { $v4Exe } elseif (Test-Path $legacyExe) { $legacyExe } else { $v4Exe }"
+if legacy_preferred in s:
+    s = s.replace(legacy_preferred, v4_preferred, 1)
+elif v4_preferred not in s:
+    raise SystemExit('supervisor binary preference target missing')
+s = s.replace('# The installed production binary already proved an end-to-end private queue ping.', '# The queue-aware v4 binary is canonical after a proven private GitHub queue round trip.')
+if 'onrender.com' in s or 'workers.dev' in s:
+    raise SystemExit('forbidden Render/Cloudflare runtime origin remains in supervisor')
+if "Remove-Item Env:ANTHARES_CONTROL_URL" not in s or "mode='issue-queues-only'" not in s:
+    raise SystemExit('supervisor is not queue-only')
+if 'cloudflare_required=$false' not in s or 'render_required=$false' not in s:
+    raise SystemExit('supervisor dependency flags are not fail-closed')
 sup.write_text(s, encoding='utf-8')
 
 print('ARA_QUEUE_ONLY_FINALIZED=1')
