@@ -42,3 +42,12 @@ Nome oficial do antigo "Render Redundancy". O sistema coordena provedores de Git
 - `.forgejo/workflows/anthares-reserva-smoke.yml`: smoke leve manual, sem sobreposição com QA Docker.
 - `.woodpecker.yml`: smoke leve manual; exige Woodpecker habilitado no Codeberg.
 - QA Docker de 40 casos já preparado na branch `qa/anthares-browser-github-fallback`, sem sucesso de runner comprovado.
+
+## Browser alternativo sem Render (protótipo, 2026-10-13)
+- Código criado em `anthares-reserva-browser/` na branch `feature/anthares-reserva-ci`.
+- Executa Chromium sob demanda via Cloudflare Browser Run e fecha o processo após cada verificação.
+- A rota `/probe` exige token, limita hosts a Kwai e não afirma sessão autenticada.
+- A rota `/health` confirma apenas a API, não login, upload ou disponibilidade do navegador.
+- O Workers Free tem cota de 10 minutos de navegador por dia: **não atende execução contínua 24h nem 100 uploads/dia**.
+- Pendente: implantar na conta Cloudflare, validar uma execução real, desenvolver persistência autenticada segura e integração com fila/lease.
+- **Não desligar Render nem migrar sessão Kwai antes de prova de autenticação e publicação real.**
