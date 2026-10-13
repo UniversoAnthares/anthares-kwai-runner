@@ -1,0 +1,1 @@
+Anthares Remote redundancy topology: dual MCP services, dual control services, shared PostgreSQL state, hidden Windows supervisor with automatic failover/failback, signed Ed25519 control requests, idempotent execution keys, persistent device authentication hash.
