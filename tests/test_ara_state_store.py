@@ -18,6 +18,11 @@ class StoreTests(unittest.TestCase):
         self.assertIsNone(rejected["result"])
         self.assertEqual(self.s.lease_next("pc")["id"], job["id"])
 
+    def test_future_heartbeat_is_not_connected(self):
+        self.s.heartbeat("pc", {"pid": 7})
+        self.clock.t -= 60
+        self.assertFalse(self.s.status("pc", 45)["connected"])
+
     def test_heartbeat_freshness(self):
         self.s.heartbeat("pc", {"pid": 7})
         self.assertTrue(self.s.status("pc", 45)["connected"])
