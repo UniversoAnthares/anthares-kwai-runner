@@ -35,7 +35,10 @@ def _keys(refresh=False):
             if len(r.content) > 4096:
                 continue
             key = serialization.load_pem_public_key(r.content)
-            fp = key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+            fp = key.public_bytes(
+                serialization.Encoding.DER,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
             if fp not in seen:
                 seen.add(fp)
                 keys.append(key)
@@ -237,10 +240,24 @@ def register(app):
             return jsonify(error="job_lost"), 503
         status = job.get("status")
         if status == "uncertain":
-            return jsonify(ok=False, status=status, job_id=job.get("id"), error="execution_outcome_unknown"), 409
+            return jsonify(
+                ok=False,
+                status=status,
+                job_id=job.get("id"),
+                error="execution_outcome_unknown",
+            ), 409
         if status not in ("done", "failed"):
-            return jsonify(ok=False, status=status, job_id=job.get("id"), error="timeout_waiting_for_device"), 504
+            return jsonify(
+                ok=False,
+                status=status,
+                job_id=job.get("id"),
+                error="timeout_waiting_for_device",
+            ), 504
         result = job.get("result") or {}
+        # A completed remote operation may legitimately report ok=false (for example,
+        # a rejected path or non-zero command). That is an operation result, not a
+        # control-plane failure. Keep transport HTTP 200 so clients receive the
+        # structured outcome; reserve 5xx for infrastructure failures above.
         return jsonify(
             ok=bool(result.get("ok")),
             status=status,
@@ -249,4 +266,4 @@ def register(app):
             error=result.get("error"),
             started_at=result.get("started_at"),
             ended_at=result.get("ended_at"),
-        ), (200 if result.get("ok") else 500)
+        ), 200
