@@ -34,11 +34,14 @@ wait_http() {
   for _ in $(seq 1 90); do
     if curl -fsS "$url" >/dev/null 2>&1; then return 0; fi
     if ! docker ps --format '{{.Names}}' | grep -qx "$name"; then
+      echo "WAIT_HTTP_CONTAINER_EXITED url=${url}" >&2
       docker logs "$name" || true
       return 1
     fi
     sleep 0.5
   done
+  echo "WAIT_HTTP_TIMEOUT url=${url}" >&2
+  curl -sS -i "$url" || true
   docker logs "$name" || true
   return 1
 }
@@ -91,13 +94,35 @@ HTML
       "$IMAGE" >/dev/null
   }
 
+  auth_request() {
+    local method="$1" path="$2" body="${3:-}"
+    local tmp code
+    tmp="$(mktemp)"
+    if [ "$method" = GET ]; then
+      code=$(curl -sS -o "$tmp" -w '%{http_code}' -H "Authorization: Bearer ${TOKEN}" \
+        "http://127.0.0.1:${API_PORT}${path}") || code="curl_error"
+    else
+      code=$(curl -sS -o "$tmp" -w '%{http_code}' -X "$method" \
+        -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
+        -d "$body" "http://127.0.0.1:${API_PORT}${path}") || code="curl_error"
+    fi
+    if [ "$code" != 200 ]; then
+      echo "ANTHARES_BROWSER_QA_HTTP_FAILURE case=${C} method=${method} path=${path} status=${code}" >&2
+      cat "$tmp" >&2 || true
+      echo >&2
+      docker logs "$NAME" >&2 || true
+      rm -f "$tmp"
+      return 1
+    fi
+    cat "$tmp"
+    rm -f "$tmp"
+  }
+
   auth_get() {
-    curl -fsS -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:${API_PORT}$1"
+    auth_request GET "$1"
   }
   auth_post() {
-    local path="$1" body="$2"
-    curl -fsS -X POST -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
-      -d "$body" "http://127.0.0.1:${API_PORT}${path}"
+    auth_request POST "$1" "$2"
   }
 
   start_container
@@ -105,6 +130,16 @@ HTML
 
   HEALTH=$(curl -fsS "http://127.0.0.1:${API_PORT}/health")
   python3 - "$HEALTH" <<'PY'
+import json,sys
+d=json.loads(sys.argv[1])
+assert d.get('ok') is True, d
+assert d.get('service') == 'anthares-browser', d
+assert d.get('readiness_path') == '/ready', d
+PY
+
+  wait_http "$NAME" "http://127.0.0.1:${API_PORT}/ready"
+  READY=$(curl -fsS "http://127.0.0.1:${API_PORT}/ready")
+  python3 - "$READY" <<'PY'
 import json,sys
 d=json.loads(sys.argv[1])
 assert d.get('ok') is True, d
@@ -192,6 +227,7 @@ PY
   docker rm -f "$NAME" >/dev/null
   start_container
   wait_http "$NAME" "http://127.0.0.1:${API_PORT}/health"
+  wait_http "$NAME" "http://127.0.0.1:${API_PORT}/ready"
   auth_post /wait '{"selector":"body","timeout_ms":5000,"visible":true}' >/dev/null
   AFTER=$(auth_post /evaluate '{"expression":"localStorage.getItem(\"anthares_persist_secret\")","return_by_value":true}')
   python3 - "$AFTER" "$PERSIST_SECRET" <<'PY'
@@ -213,6 +249,7 @@ PY
 done
 
 echo "PROVIDER=${PROVIDER} ALL_${CASES}_CASES=PASS"
+echo 'HEALTH_LIVENESS=PASS READY_FAIL_CLOSED=PASS'
 echo 'CONTROL_API_AUTH=PASS CDP_LOOPBACK_ONLY=PASS'
 echo 'NAVIGATE=PASS CLICK=PASS TYPE=PASS WAIT=PASS EVALUATE=PASS SCREENSHOT=PASS'
 echo 'NOVNC_ENDPOINT=PASS CHROMIUM_RUNNING=PASS PERSISTENT_BROWSER_PROFILE_RESTART=PASS'
