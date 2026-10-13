@@ -28,6 +28,7 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -s cloudflare-ara-mcp/src/index.js
           test -s cloudflare-ara-mcp/wrangler.toml
+          test -s cloudflare-ara-mcp/patch_oauth_owner_code.py
           test -s cloudflare-ara-backup/src/index.js
           test -s cloudflare-ara-backup/trusted-keys/render-mcp-v2.pem
           test -s cloudflare-ara-backup/trusted-keys/render-mcp.pem
@@ -51,6 +52,14 @@ jobs:
           p.write_text(out)
           PY
           grep -q 'env.ARA_CONTROL.fetch' cloudflare-ara-mcp/src/index.js
+      - name: Build owner-code OAuth flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cloudflare-ara-mcp/patch_oauth_owner_code.py
+          node --check cloudflare-ara-mcp/src/index.js
+          grep -q "oauth_owner_code_mode:'chat_setup_code'" cloudflare-ara-mcp/src/index.js
+          grep -q 'authorization_replayed' cloudflare-ara-mcp/src/index.js
       - name: Wrangler dry-run MCP
         shell: bash
         run: |
@@ -123,6 +132,7 @@ jobs:
           test "$code" = 200
           grep -q '"render_independent":true' /tmp/mcp-health.json
           grep -q '"control_ready":true' /tmp/mcp-health.json
+          grep -q '"oauth_owner_code_mode":"chat_setup_code"' /tmp/mcp-health.json
           meta="$(curl -fsS https://anthares-ara-mcp.anthares1.workers.dev/.well-known/oauth-authorization-server)"
           echo "$meta" | grep -q 'oauth/authorize'
           unauth="$(curl -sS -o /tmp/mcp-unauth.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1"}}}' https://anthares-ara-mcp.anthares1.workers.dev/mcp)"
