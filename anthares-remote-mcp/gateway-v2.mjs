@@ -71,7 +71,7 @@ const server=createServer(async(req,res)=>{try{
   }
   if(req.method==='POST'&&u.pathname==='/oauth/token'){
     const body=form(await readBody(req,131072)),grant=body.get('grant_type')||'',clientId=body.get('client_id')||'';if(!validateClientId(clientId)){json(res,400,{error:'invalid_client'});return;}
-    if(grant==='authorization_code'){const code=body.get('code')||'',p=verifyToken(code,'oauth_code');if(!p||p.clientId!==clientId||p.redirectUri!==(body.get('redirect_uri')||'')){json(res,400,{error:'invalid_grant'});return;}const verifier=body.get('code_verifier')||'';if(verifier.length<43||!safeEq(sha256(verifier).toString('base64url'),p.challenge)){json(res,400,{error:'invalid_grant'});return;}json(res,200,issueTokens(clientId,p.scopes));return;}
+    if(grant==='authorization_code'){const code=body.get('code')||'',p=verifyToken(code,'oauth_code');if(!p||p.clientId!==clientId||p.redirectUri!==(body.get('redirect_uri')||'')){json(res,400,{error:'invalid_grant'});return;}const verifier=body.get('code_verifier')||'';if(verifier.length<43||!safeEq(sha256(verifier).toString('base64url'),p.challenge)){json(res,400,{error:'invalid_grant'});return;}if(codes.has(p.jti)){json(res,400,{error:'invalid_grant'});return;}codes.set(p.jti,p.exp*1000);json(res,200,issueTokens(clientId,p.scopes));return;}
     if(grant==='refresh_token'){const p=verifyToken(body.get('refresh_token')||'','refresh');if(!p||p.cid!==clientId){json(res,400,{error:'invalid_grant'});return;}json(res,200,issueTokens(clientId,p.scp));return;}
     json(res,400,{error:'unsupported_grant_type'});return;
   }
