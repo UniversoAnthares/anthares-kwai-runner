@@ -52,9 +52,37 @@ function coalescedEmptyPoll() {
   });
 }
 
+async function healthResponse(request, env, ctx) {
+  const response = await core.fetch(request, env, ctx);
+  if (!response.ok) return response;
+  try {
+    const body = await response.clone().json();
+    return Response.json({
+      ...body,
+      quota_guard: true,
+      heartbeat_coalesce_seconds: HEARTBEAT_COALESCE_SECONDS,
+      empty_poll_coalesce_seconds: EMPTY_POLL_COALESCE_SECONDS,
+      legacy_mcp_discovery: false,
+    }, {
+      status: response.status,
+      headers: {
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'x-ara-quota-guard': 'active',
+      },
+    });
+  } catch {
+    return response;
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    if ((url.pathname === '/healthz' || url.pathname === '/') && request.method === 'GET') {
+      return healthResponse(request, env, ctx);
+    }
 
     if (url.pathname === '/v1/device/heartbeat' && request.method === 'POST') {
       const key = await tokenKey(request, 'heartbeat');
