@@ -1,0 +1,8 @@
+name = "anthares-ara-reserva"
+account_id = "5c24be052e5144391f73a8e03491e88e"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[[services]]
+binding = "ARA_CONTROL"
+service = "anthares-ara-backup"

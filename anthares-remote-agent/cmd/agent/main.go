@@ -158,8 +158,18 @@ func authReq(req *http.Request, cfg Config) {
 func heartbeatLoop(cfg Config) {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
+	failures := 0
 	for {
-		_ = heartbeat(cfg)
+		if err := heartbeat(cfg); err != nil {
+			failures++
+			fmt.Fprintf(os.Stderr, "heartbeat error (%d/4): %v\n", failures, err)
+			if failures >= 4 {
+				fmt.Fprintln(os.Stderr, "control heartbeat unavailable; exiting for supervisor recovery")
+				os.Exit(23)
+			}
+		} else {
+			failures = 0
+		}
 		<-ticker.C
 	}
 }

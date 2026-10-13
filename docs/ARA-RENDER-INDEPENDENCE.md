@@ -51,3 +51,11 @@ O gateway implementa OAuth com PKCE, access token, refresh token e aprovação v
 - Não usar o PC como runner de CI, publicação ou fallback de serviços.
 - Não abrir janelas no desktop interativo; administração Windows roda em SYSTEM/sessão 0.
 - Não declarar o conector ChatGPT migrado antes de a conexão OAuth ser concluída na conta.
+
+
+## Fechamento operacional — 13/10/2026
+- O app `Anthares Remote Cloudflare` foi conectado por OAuth no ChatGPT e uma chamada real `remote_exec` retornou exit code 0.
+- O controlador canônico não consulta Render nem Floot em runtime; estado, leases, replay protection e OAuth ficam em Cloudflare Durable Objects/SQLite.
+- `anthares-ara-reserva` é um proxy de transporte para o mesmo serviço `anthares-ara-backup`; ele não cria um segundo escritor de estado.
+- GitHub/GitLab podem permanecer como canais de recuperação independentes, sem substituir o controlador Cloudflare canônico.
+- O agente encerra após quatro falhas consecutivas de heartbeat para permitir recuperação pelo supervisor SYSTEM ativo.
