@@ -281,3 +281,19 @@ def post():
         return jsonify(ok=True, **_publish(text, media_url))
     except Exception as exc:
         return jsonify(ok=False, error=str(exc)), 500
+
+
+# Gunicorn adds the infra directory to sys.path only after interpreter startup,
+# so Python's automatic sitecustomize hook is not reliable here. Import it
+# explicitly after this module defines app to register the ARA routes on this
+# dedicated control service without changing the X worker routes above.
+try:
+    import sitecustomize as _ara_sitecustomize  # noqa: F401,E402
+except Exception as _ara_bootstrap_exc:
+    print(
+        "ARA_EXPLICIT_BOOTSTRAP_ERROR="
+        + type(_ara_bootstrap_exc).__name__
+        + ":"
+        + str(_ara_bootstrap_exc)[:240],
+        flush=True,
+    )
