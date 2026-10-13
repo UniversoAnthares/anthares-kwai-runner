@@ -1387,3 +1387,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Runtime logs show `npm run qa:remote` executed at startup; this is not proof of a successful ChatGPT OAuth callback/token exchange.
 - User previously reported entering authorization code and seeing no subsequent completion. Need a single fresh manual OAuth authorization attempt now that both gateways are live, then inspect authorization/token-exchange outcomes. Do not declare OAuth connected without native tool discovery and real ARA tool call.
 - Anthares Browser Vault Smoke `38330972424` remains queued; no duplicate run dispatched. Kwai historical publishing remains disarmed.
+
+## 2026-10-13 02:42 UTC — Legacy executor recovered through native Anthares Remote MCP
+- User completed OAuth. Native `mcp__Anthares_Remote__session_status`, `capabilities`, `process_list` and `remote_exec` succeeded against DESKTOP-FTDK0HP (agent v0.2.0, Ed25519 bridge). No retired remote transports used.
+- Windows MEmu and MEmu_3 processes active; local clean clone at `D:\\AntharesWork\\anthares-local-executor`. Supervisor and executor were absent. Executor heartbeat was stale with `tracked files modified locally; executor refuses destructive sync`.
+- Preserved local hidden-window patch via `git stash push -m preserve-windowfix-before-executor-recovery-20261013 -- anthares_local_executor_v2.py`, retained existing `.bak-windowfix` untracked backup. Did NOT delete or force-reset user changes.
+- Started existing supervisor through ARA: PID 20932, executor PID 16852; supervisor reports executor health=True. Local working tree tracked files clean.
+- Existing queue request `24d3f593-1a9e-49e7-8ca1-d68a967e62c0` status returned ok/rc0. Requests `2f7927d3-41f9-4d7d-bce2-0f82e35a7d93` and `8f2b9b75-1c9a-47a1-9a48-4c4d0cf66a71` returned executor_error: `kwai_restore_env` not allowlisted. Action allowlist must be updated in repository after careful review; do not bypass it.
+- Previously queued `f8b30f25-91c9-4f61-a8f1-5b8db2ff1c2e` `kwai_probe` was RUNNING at 02:42:03Z, no result yet. No publishing guard created; no social publication manually initiated. Check result before new probe.
+- Other agents: MCP OAuth native integration now PROVEN; infra can use real device transport; legacy executor needs restore_env allowlist design; browser smoke job 38330972424 previously queued.
