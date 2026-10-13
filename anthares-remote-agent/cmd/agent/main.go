@@ -170,10 +170,13 @@ func pollJob(cfg Config) (*Job, error) {
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("poll status %d", resp.StatusCode)
 	}
+	// Read one extra byte so an oversized payload cannot be silently
+	// accepted when its valid JSON prefix fits within the limit.
+	payload, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
+	if err != nil { return nil, err }
+	if len(payload) > 1<<20 { return nil, errors.New("control plane job response exceeds 1 MiB") }
 	var env JobEnvelope
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&env); err != nil {
-		return nil, err
-	}
+	if err := json.Unmarshal(payload, &env); err != nil { return nil, err }
 	if env.Job != nil {
 		if err := validateJobID(env.Job.ID); err != nil {
 			return nil, fmt.Errorf("control plane returned unsafe job ID: %w", err)
