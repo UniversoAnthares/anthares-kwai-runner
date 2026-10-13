@@ -77,6 +77,15 @@ def test_browser_single_writer_conflict():
     assert first["scope"] == "local_browser_profile_fence"
 
 
+def test_same_owner_cannot_steal_live_lease():
+    reset(); c = app_client(); first = acquire(c, "runner-a")
+    second = c.post("/v1/runtime/browser/lease/acquire", headers=auth(), json={"owner": "runner-a"})
+    assert second.status_code == 409
+    assert "token" not in second.get_json()
+    h = auth({"X-Anthares-Lease-Token": first["token"], "X-Anthares-Lease-Generation": str(first["generation"])})
+    assert c.post("/v1/runtime/browser/lease/renew", headers=h, json={"ttl_seconds": 300}).status_code == 200
+
+
 def test_stale_generation_fenced_after_release_and_reacquire():
     reset(); c = app_client(); first = acquire(c, "runner-a")
     h1 = auth({"X-Anthares-Lease-Token": first["token"], "X-Anthares-Lease-Generation": str(first["generation"])})
