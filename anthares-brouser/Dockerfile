@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /opt/anthares-brouser
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py novnc_gateway.py start.sh qa40_render.py ./
+COPY app.py novnc_gateway.py profile_store.py start.sh qa40_render.py ./
 RUN chmod +x /opt/anthares-brouser/start.sh /opt/anthares-brouser/qa40_render.py && mkdir -p /data/chrome-profile
 
 EXPOSE 8080
