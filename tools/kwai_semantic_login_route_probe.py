@@ -140,12 +140,35 @@ def ensure_network(reason='initial'):
     log('ANDROID_NETWORK_READY='+str(int(ready)))
     log('AIRPLANE_MODE='+adb('shell','settings','get','global','airplane_mode_on').stdout.strip())
 
+def safe_window_diagnostic(tag,xml,ns):
+    """Report structural routing evidence only; never emit labels, UI XML or secrets."""
+    packages=sorted({(n.get('package') or '') for n in ns if n.get('package')})
+    packages=[p for p in packages if re.fullmatch(r'[A-Za-z0-9_.]{1,100}',p)]
+    classes=sorted({(n.get('class') or '').split('.')[-1] for n in ns})
+    has_webview=any('WebView' in cls for cls in classes)
+    kwai_nodes=sum((n.get('package') or '')==PKG for n in ns)
+    focus=adb('shell','dumpsys','window','windows',timeout=12).stdout
+    focus_match=re.search(r'mCurrentFocus=Window\\{[^ ]+ [^ ]+ ([A-Za-z0-9_.]+/[A-Za-z0-9_.$]+)',focus)
+    focused=focus_match.group(1) if focus_match else 'UNKNOWN'
+    log('WINDOW_DIAG='+tag+' PKGS='+','.join(packages)+' WEBVIEW='+str(int(has_webview))+' KWAI_NODES='+str(kwai_nodes)+' FOCUS='+focused)
+    if has_webview and not kwai_nodes:
+        log('AUTH_SURFACE=EXTERNAL_WEBVIEW_OR_SYSTEM')
+    elif not kwai_nodes:
+        log('AUTH_SURFACE=EXTERNAL_NATIVE_OR_LAUNCHER')
+    elif has_webview:
+        log('AUTH_SURFACE=KWAI_WEBVIEW')
+    else:
+        log('AUTH_SURFACE=KWAI_NATIVE')
+
+
 def state(tag):
     xml=dump(tag);root,ns=root_nodes(xml)
     if not xml:return xml,root,ns
     ids={rid(n) for n in ns}
     unconnected=any('un_connected_network' in x for x in ids)
     log(f'STATE={tag} NODES={len(ns)} PID='+(adb('shell','pidof',PKG).stdout.strip() or 'none'))
+    if tag.startswith(('late-','direct-login-result','retry-b-login-result')):
+        safe_window_diagnostic(tag,xml,ns)
     log('HAS_ME='+str(int('id_home_bottom_tab_me' in ids))+' HAS_LOGIN_CONTAINER='+str(int('login_container' in ids))+' HAS_UNCONNECTED='+str(int(unconnected)))
     if unconnected:ensure_network('ui-unconnected')
     return xml,root,ns
@@ -220,6 +243,7 @@ for i in range(12):
         if q:tap_xy(q,'late-semantic-target')
     time.sleep(max(1,SETTLE/2))
 
+safe_window_diagnostic('failure-final',xml,ns)
 Path('semantic-activities.txt').write_text(adb('shell','dumpsys','activity','activities').stdout,encoding='utf-8')
 Path('semantic-connectivity.txt').write_text(adb('shell','dumpsys','connectivity').stdout[-40000:],encoding='utf-8')
 Path('semantic-logcat.txt').write_text(adb('logcat','-d','-v','brief').stdout[-80000:],encoding='utf-8')
