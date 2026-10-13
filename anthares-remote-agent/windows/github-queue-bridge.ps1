@@ -7,14 +7,23 @@ param([string]$Repository = $env:ANTHARES_GITHUB_QUEUE_REPOSITORY,
       [int]$IntervalSeconds = 30)
 $ErrorActionPreference = 'Stop'
 if ($Repository -notmatch '^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$') { throw 'Private repository owner/name required' }
-$credentialFile = Join-Path $WorkRoot 'secrets\github-queue-token.dpapi'
-if ([string]::IsNullOrWhiteSpace($Token) -and (Test-Path $credentialFile)) {
-  $secure = Get-Content $credentialFile -Raw | ConvertTo-SecureString
-  $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-  try { $Token = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }
-  finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
+$machineCredentialFile = Join-Path $WorkRoot 'secrets\github-queue-token.machine.b64'
+$legacyCredentialFile = Join-Path $WorkRoot 'secrets\github-queue-token.dpapi'
+if ([string]::IsNullOrWhiteSpace($Token) -and (Test-Path $machineCredentialFile)) {
+  $cipher = [Convert]::FromBase64String((Get-Content $machineCredentialFile -Raw).Trim())
+  $plainBytes = [Security.Cryptography.ProtectedData]::Unprotect($cipher,$null,[Security.Cryptography.DataProtectionScope]::LocalMachine)
+  try { $Token = [Text.Encoding]::UTF8.GetString($plainBytes) }
+  finally { [Array]::Clear($plainBytes,0,$plainBytes.Length) }
 }
-if ([string]::IsNullOrWhiteSpace($Token)) { throw 'GitHub queue token required (environment or D:\AntharesWork DPAPI credential)' }
+if ([string]::IsNullOrWhiteSpace($Token) -and (Test-Path $legacyCredentialFile)) {
+  try {
+    $secure = Get-Content $legacyCredentialFile -Raw | ConvertTo-SecureString
+    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try { $Token = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }
+    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
+  } catch {}
+}
+if ([string]::IsNullOrWhiteSpace($Token)) { throw 'GitHub queue token required (environment or D:\AntharesWork protected credential)' }
 $sha256 = [Security.Cryptography.SHA256]::Create()
 try { $repoHash = ([BitConverter]::ToString($sha256.ComputeHash([Text.Encoding]::UTF8.GetBytes($Repository.ToLowerInvariant()))) -replace '-', '').Substring(0,16) } finally { $sha256.Dispose() }
 $root = Join-Path $WorkRoot ('github-queue\' + $repoHash)
@@ -32,6 +41,7 @@ try {
       $issues = @(Invoke-RestMethod -Headers $headers -Uri "$api/issues?state=open&labels=ara-queued&per_page=30" -TimeoutSec 15)
       foreach ($issue in $issues) {
         if ($issue.pull_request) { continue }
+        if ($issue.user.login -ne 'UniversoAnthares') { continue }
         $number = [int]$issue.number
         $id = [string]$number
         $receipt = Join-Path $root ($id + '.started.json')
