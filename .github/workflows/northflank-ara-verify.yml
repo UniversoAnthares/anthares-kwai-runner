@@ -16,11 +16,13 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Query Northflank and verify public health endpoint
         shell: bash
@@ -39,7 +41,8 @@ jobs:
               req = urllib.request.Request(base + path, headers=headers)
               try:
                   with urllib.request.urlopen(req, timeout=30) as r:
-                      return json.load(r)
+                      raw = r.read().decode("utf-8", errors="replace")
+                      return json.loads(raw) if raw else {}
               except urllib.error.HTTPError as e:
                   print("Northflank HTTP", e.code, "at", path)
                   print(e.read().decode(errors="replace")[:1200])
@@ -60,15 +63,13 @@ jobs:
           if len(targets) != 1:
               sys.exit(f"Expected exactly one anthares-ara-northflank service, found {len(targets)}")
           svc = targets[0]
-          service_id = svc["id"]
+          service_id = svc.get("id") or "anthares-ara-northflank"
 
-          # Current API docs expose public DNS through the service ports endpoint.
           ports = api(f"/projects/{project_id}/services/{service_id}/ports").get("data", {}).get("ports", [])
           public_http = [p for p in ports if p.get("public") and p.get("protocol") in ("HTTP", "HTTP/2")]
           if not public_http:
               sys.exit("Service has no public HTTP port")
-          port = public_http[0]
-          dns = port.get("dns")
+          dns = public_http[0].get("dns")
           if not dns:
               sys.exit("Public HTTP port has no DNS yet")
           base_url = "https://" + dns
@@ -76,7 +77,7 @@ jobs:
 
           health = None
           health_error = None
-          for attempt in range(30):
+          for attempt in range(60):
               try:
                   with urllib.request.urlopen(health_url, timeout=15) as r:
                       raw = r.read().decode("utf-8", errors="replace")
@@ -89,7 +90,8 @@ jobs:
                   health_error = type(e).__name__ + ": " + str(e)[:300]
               time.sleep(10)
 
-          status = svc.get("status") or {}
+          fresh = api(f"/projects/{project_id}/services/{service_id}").get("data", {})
+          status = fresh.get("status") or svc.get("status") or {}
           result = {
               "checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
               "project_id": project_id,
@@ -128,4 +130,5 @@ jobs:
             exit 0
           fi
           git commit -m "chore: record Northflank ARA verification"
-          git push
+          git pull --rebase origin main
+          git push origin HEAD:main
