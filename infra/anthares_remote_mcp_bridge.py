@@ -1,4 +1,4 @@
-"""Authenticated Ed25519 bridge used only by the Anthares remote MCP service."""
+"""Authenticated Ed25519 bridge used only by the Anthares remote MCP services."""
 import base64
 import json
 import secrets
@@ -20,43 +20,57 @@ _KEY_URLS = (
 _KEY_TTL = 60
 _MAX_SKEW_MS = 30000
 _LOCK = threading.Lock()
-_KEY_CACHE = {"key": None, "at": 0.0, "source": ""}
+_KEY_CACHE = {"keys": [], "at": 0.0, "sources": []}
 _REPLAY = {}
 
 
 def _clear_key_cache():
     with _LOCK:
-        _KEY_CACHE["key"] = None
+        _KEY_CACHE["keys"] = []
         _KEY_CACHE["at"] = 0.0
-        _KEY_CACHE["source"] = ""
+        _KEY_CACHE["sources"] = []
 
 
-def _public_key(force_refresh=False):
+def _public_keys(force_refresh=False):
     now = time.time()
     if force_refresh:
         _clear_key_cache()
     with _LOCK:
-        if _KEY_CACHE["key"] is not None and now - _KEY_CACHE["at"] < _KEY_TTL:
-            return _KEY_CACHE["key"]
-    last = None
+        if _KEY_CACHE["keys"] and now - _KEY_CACHE["at"] < _KEY_TTL:
+            return list(_KEY_CACHE["keys"])
+    keys = []
+    sources = []
     for url in _KEY_URLS:
         try:
-            r = requests.get(url, timeout=6, headers={"User-Agent": "AntharesRemoteControl/0.7"})
+            r = requests.get(url, timeout=6, headers={"User-Agent": "AntharesRemoteControl/0.8"})
             r.raise_for_status()
             raw = r.content
             if len(raw) > 4096:
                 raise ValueError("service key too large")
             key = serialization.load_pem_public_key(raw)
-            with _LOCK:
-                _KEY_CACHE["key"] = key
-                _KEY_CACHE["at"] = now
-                _KEY_CACHE["source"] = url
-            return key
-        except Exception as exc:
-            last = exc
-    if last:
-        raise last
-    raise ValueError("no MCP service key endpoint configured")
+            # Avoid duplicate keys while allowing both redundant MCP services.
+            fingerprint = key.public_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            if not any(
+                existing.public_bytes(
+                    encoding=serialization.Encoding.DER,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                ) == fingerprint
+                for existing in keys
+            ):
+                keys.append(key)
+                sources.append(url)
+        except Exception:
+            continue
+    if not keys:
+        raise ValueError("no MCP service key endpoint available")
+    with _LOCK:
+        _KEY_CACHE["keys"] = list(keys)
+        _KEY_CACHE["at"] = now
+        _KEY_CACHE["sources"] = list(sources)
+    return keys
 
 
 def _b64decode(value):
@@ -68,6 +82,16 @@ def _b64decode(value):
 def _canonical_path():
     qs = request.query_string.decode("ascii", errors="strict")
     return request.path + (("?" + qs) if qs else "")
+
+
+def _verify_with_any(keys, signature, payload):
+    for key in keys:
+        try:
+            key.verify(signature, payload)
+            return True
+        except InvalidSignature:
+            continue
+    return False
 
 
 def _verify():
@@ -90,21 +114,18 @@ def _verify():
         return False, b""
     with _LOCK:
         cutoff = time.time() - 60
-        for key, seen in list(_REPLAY.items()):
+        for replay_key, seen in list(_REPLAY.items()):
             if seen < cutoff:
-                _REPLAY.pop(key, None)
+                _REPLAY.pop(replay_key, None)
         if sig in _REPLAY:
             return False, b""
     payload = (ts + "\n" + request.method.upper() + "\n" + _canonical_path() + "\n").encode("utf-8") + raw
     try:
-        key = _public_key()
-        try:
-            key.verify(signature, payload)
-        except InvalidSignature:
-            # MCP uses an ephemeral Ed25519 service key. A deploy/restart rotates it;
-            # refresh immediately instead of leaving the gateway degraded for TTL seconds.
-            _public_key(force_refresh=True).verify(signature, payload)
-    except (InvalidSignature, ValueError, TypeError, requests.RequestException):
+        if not _verify_with_any(_public_keys(), signature, payload):
+            # Either redundant MCP can restart independently and rotate its key.
+            if not _verify_with_any(_public_keys(force_refresh=True), signature, payload):
+                return False, b""
+    except (ValueError, TypeError, requests.RequestException):
         return False, b""
     with _LOCK:
         _REPLAY[sig] = time.time()
@@ -171,12 +192,16 @@ def register(app):
         ok, _ = _verify()
         if not ok:
             return jsonify(error="unauthorized"), 401
+        with _LOCK:
+            trusted_sources = len(_KEY_CACHE.get("sources") or [])
         return jsonify(
             ok=True,
-            protocol="anthares-remote-agent/0.7",
+            protocol="anthares-remote-agent/0.8",
             auth="ed25519-service-signature",
             replay_protection=True,
             rotating_service_key_refresh=True,
+            redundant_mcp_keys=True,
+            trusted_mcp_services=trusted_sources,
             capabilities=[
                 "status", "system_info", "shell", "process_list", "process_start", "process_kill",
                 "service_status", "service_start", "service_stop", "clipboard_get", "clipboard_set",
