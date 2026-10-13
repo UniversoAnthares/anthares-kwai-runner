@@ -260,7 +260,9 @@ def register(app):
         if not ok:
             return jsonify(ok=False, error=error), 409
         body = request.get_json(silent=True) or {}
-        ttl = max(15, min(int(body.get("ttl_seconds") or 300), 1800))
+        ttl = _bounded_int(body.get("ttl_seconds"), 300, 15, 1800)
+        if ttl is None:
+            return jsonify(ok=False, error="invalid_ttl_seconds"), 400
         with _LOCK:
             _BROWSER_LEASE["expires_at"] = _now() + ttl
         return jsonify(ok=True, lease=_lease_snapshot())
