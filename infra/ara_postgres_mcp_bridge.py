@@ -3,6 +3,7 @@ import base64
 import json
 import threading
 import time
+from datetime import datetime, timezone
 
 import requests
 from flask import jsonify, request
@@ -90,6 +91,19 @@ def _verify():
     return False, b""
 
 
+def _heartbeat_fresh(status, max_age_seconds=90):
+    if not status.get("heartbeat") or not status.get("seen_at"):
+        return False
+    try:
+        seen = datetime.fromisoformat(str(status["seen_at"]).replace("Z", "+00:00"))
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - seen.astimezone(timezone.utc)).total_seconds()
+        return 0 <= age <= max_age_seconds
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
 def _execute(device, job_type, args, timeout):
     job, _ = store.create_job(device, job_type, args or {}, timeout)
     deadline = time.time() + min(timeout + 8, 130)
@@ -113,8 +127,7 @@ def register(app):
         if not device:
             return jsonify(error="missing_device_id"), 400
         status = store.device_status(device)
-        heartbeat = status.get("heartbeat")
-        return jsonify(**status, connected=bool(heartbeat))
+        return jsonify(**status, connected=_heartbeat_fresh(status))
 
     @app.get("/v1/mcp/capabilities")
     def mcp_capabilities():
