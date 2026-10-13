@@ -1,7 +1,4 @@
 const X_KEY = "x:web:session:lucasyahn:opaque:v1";
-// Keep the legacy slot readable for older callers, but never make the two
-// browser runtimes share encrypted payloads: their encryption keys are derived
-// from service-local ARA_SHARED values and are intentionally not interchangeable.
 const BROWSER_KEY = "anthares:browser:legacy:opaque:v1";
 const BROWSER_RUNTIME_KEY = "anthares:browser:runtime:opaque:v2";
 const BROWSER_CONTROL_KEY = "anthares:browser:control:opaque:v1";
@@ -9,8 +6,6 @@ const BROWSER_CONTROL_JWK_KEY = "anthares:browser:signing:control-jwk:v1";
 const BROWSER_RUNTIME_JWK_KEY = "anthares:browser:signing:runtime-jwk:v1";
 const MAX_BODY = 500000;
 const PUBLIC_JWK = {"kty":"EC","crv":"P-256","x":"oljQWjUajvbTS5Lyc0ElhK2nN_h6kJo-bhJ6F5mnf_4","y":"lBVZd8W28jEMd2A0oDs_PrGAkaDUbuzqb9WoerAVrmQ","ext":true};
-const BROWSER_CONTROL_PUBLIC_KEY_URL = "https://anthares-remote-control.onrender.com/v1/runtime/browser/signing-public-key";
-const BROWSER_RUNTIME_PUBLIC_KEY_URL = "https://anthares-x-render-worker-v3.onrender.com/v1/runtime/browser/signing-public-key";
 let browserControlJwk=null,browserRuntimeJwk=null;
 
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json;charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}})}
@@ -24,24 +19,9 @@ async function authorized(request,body){
   if(!ts||Math.abs(Date.now()-ts)>300000||!sig)return false;
   try{const hex=await sha256hex(body);return await crypto.subtle.verify({name:"ECDSA",hash:"SHA-256"},await importVerifyKey(PUBLIC_JWK),b64bytes(sig),new TextEncoder().encode(String(ts)+"."+hex));}catch{return false;}
 }
-async function fetchPublicJwk(url){
-  const r=await fetch(url,{headers:{"accept":"application/json","cache-control":"no-cache"}});
-  if(!r.ok)throw new Error("browser_public_key_unavailable");
-  const data=await r.json(),jwk=data&&data.jwk;
-  if(!data?.ok||!validBrowserJwk(jwk))throw new Error("browser_public_key_invalid");
-  return jwk;
-}
-async function refreshBrowserPublicKeys(env){
-  const [control,runtime]=await Promise.all([
-    fetchPublicJwk(BROWSER_CONTROL_PUBLIC_KEY_URL),
-    fetchPublicJwk(BROWSER_RUNTIME_PUBLIC_KEY_URL),
-  ]);
-  await Promise.all([
-    env.ANTHARES_STATE.put(BROWSER_CONTROL_JWK_KEY,JSON.stringify(control)),
-    env.ANTHARES_STATE.put(BROWSER_RUNTIME_JWK_KEY,JSON.stringify(runtime)),
-  ]);
-  browserControlJwk=control;browserRuntimeJwk=runtime;
-  return {control,runtime};
+function adminAuthorized(request,env){
+  const token=String(env.BROWSER_KEY_ADMIN_TOKEN||"");
+  return !!token&&request.headers.get("Authorization")==="Bearer "+token;
 }
 async function storedBrowserKeys(env){
   if(!validBrowserJwk(browserControlJwk)){
@@ -54,6 +34,21 @@ async function storedBrowserKeys(env){
   }
   return [browserRuntimeJwk,browserControlJwk].filter(validBrowserJwk);
 }
+async function browserKeyStatus(env){
+  await storedBrowserKeys(env);
+  return {runtime:validBrowserJwk(browserRuntimeJwk),control:validBrowserJwk(browserControlJwk)};
+}
+async function registerBrowserKey(request,env){
+  if(!adminAuthorized(request,env))return json({ok:false,error:"unauthorized"},401);
+  let data;try{data=await request.json()}catch{return json({ok:false,error:"invalid_json"},400)}
+  const authority=String(data?.authority||"");
+  const jwk=data?.jwk;
+  if(!["runtime","control"].includes(authority)||!validBrowserJwk(jwk))return json({ok:false,error:"invalid_browser_key_registration"},422);
+  const key=authority==="runtime"?BROWSER_RUNTIME_JWK_KEY:BROWSER_CONTROL_JWK_KEY;
+  await env.ANTHARES_STATE.put(key,JSON.stringify(jwk));
+  if(authority==="runtime")browserRuntimeJwk=jwk;else browserControlJwk=jwk;
+  return json({ok:true,registered:true,authority,render_dependency:false});
+}
 async function verifyBrowserSignature(jwk,message,sig){
   return crypto.subtle.verify({name:"ECDSA",hash:"SHA-256"},await importVerifyKey(jwk),b64bytes(sig),new TextEncoder().encode(message));
 }
@@ -64,12 +59,7 @@ async function browserAuthorized(request,body,env){
   try{
     const hex=await sha256hex(body),message=String(ts)+"."+hex;
     for(const jwk of await storedBrowserKeys(env))if(await verifyBrowserSignature(jwk,message,sig))return true;
-    // Safe self-heal for the controller key only. Never call back into the X worker
-    // from an in-flight browser-state request; that can deadlock its single worker.
-    const control=await fetchPublicJwk(BROWSER_CONTROL_PUBLIC_KEY_URL);
-    await env.ANTHARES_STATE.put(BROWSER_CONTROL_JWK_KEY,JSON.stringify(control));
-    browserControlJwk=control;
-    return await verifyBrowserSignature(control,message,sig);
+    return false;
   }catch{return false;}
 }
 function validEnvelope(x){return !!x&&x.schema==="anthares.encrypted-browser-state.v1"&&typeof x.ciphertext==="string"&&x.ciphertext.length>=64&&x.ciphertext.length<=MAX_BODY-1000&&/^[A-Za-z0-9+/_=-]+$/.test(x.ciphertext)&&typeof x.sha256==="string"&&/^[0-9a-f]{64}$/.test(x.sha256);}
@@ -83,13 +73,20 @@ function browserStateKey(pathname){
 export default {
   async fetch(request,env){
     const url=new URL(request.url);
-    if(url.pathname==="/health")return json({ok:true,service:"anthares-x-vault",version:"x-vault-v8-isolated-browser-slots",persistent_state:!!env.ANTHARES_STATE,browser_state_slot:true,browser_state_slots:["legacy","runtime","control"],browser_identity:"dual-public-key"});
-    if(url.pathname==="/browser-key/refresh"){
+    if(url.pathname==="/health"){
+      const keys=env.ANTHARES_STATE?await browserKeyStatus(env):{runtime:false,control:false};
+      return json({ok:true,service:"anthares-x-vault",version:"x-vault-v9-render-independent-keys",persistent_state:!!env.ANTHARES_STATE,browser_state_slot:true,browser_state_slots:["legacy","runtime","control"],browser_identity:"registered-public-keys",render_independent:true,browser_keys:keys});
+    }
+    if(url.pathname==="/browser-key/status"){
+      if(!env.ANTHARES_STATE)return json({ok:false,error:"persistent_state_unavailable"},503);
+      return json({ok:true,...await browserKeyStatus(env),render_dependency:false});
+    }
+    if(url.pathname==="/browser-key/register"){
       if(request.method!=="POST")return json({ok:false,error:"method_not_allowed"},405);
       if(!env.ANTHARES_STATE)return json({ok:false,error:"persistent_state_unavailable"},503);
-      try{await refreshBrowserPublicKeys(env);return json({ok:true,refreshed:true,authorities:2});}
-      catch{return json({ok:false,error:"browser_public_key_refresh_failed"},503);}
+      return registerBrowserKey(request,env);
     }
+    if(url.pathname==="/browser-key/refresh")return json({ok:false,error:"endpoint_retired",render_dependency:false},410);
     const browserKey=browserStateKey(url.pathname);
     const isBrowser=!!browserKey;
     const key=url.pathname==="/state"?X_KEY:browserKey;
