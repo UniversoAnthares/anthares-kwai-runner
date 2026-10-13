@@ -1,0 +1,44 @@
+name: Anthares Reserva Public Executor
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/anthares-reserva-ci]
+    paths:
+      - '.github/workflows/anthares-reserva-public-executor.yml'
+      - 'anthares-reserva-browser/**'
+
+permissions:
+  contents: read
+
+jobs:
+  capability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CF: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CONTROL: ${{ secrets.ANTHARES_CONTROL_TOKEN }}
+      GLKEY: ${{ secrets.GITLAB_STATE_KEY }}
+      GLTOKEN: ${{ secrets.GITLAB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove hosted capacity without exposing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo GITHUB_PUBLIC_HOSTED_RUNNER=READY
+          awk '/MemTotal/{print "MEM_KB=" $2}' /proc/meminfo
+          echo HAS_CLOUDFLARE_API_TOKEN=$([ -n "$CF" ] && echo 1 || echo 0)
+          echo HAS_ANTHARES_CONTROL_TOKEN=$([ -n "$CONTROL" ] && echo 1 || echo 0)
+          echo HAS_GITLAB_STATE_KEY=$([ -n "$GLKEY" ] && echo 1 || echo 0)
+          echo HAS_GITLAB_TOKEN=$([ -n "$GLTOKEN" ] && echo 1 || echo 0)
+          curl -fsSI --max-time 20 https://www.kwai.com/ >/dev/null
+          echo KWAI_NETWORK=READY
+      - name: Deploy Cloudflare fallback when credential exists
+        if: ${{ env.CF != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd anthares-reserva-browser
+          npm install --no-audit --no-fund
+          npx wrangler deploy
