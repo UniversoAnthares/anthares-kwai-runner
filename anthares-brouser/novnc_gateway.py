@@ -7,10 +7,10 @@ import os
 import secrets
 import time
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, WebSocket
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, WebSocket
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import connect
 
@@ -73,14 +73,47 @@ def _secure_cookie() -> bool:
     return os.environ.get("NOVNC_COOKIE_SECURE", "1") != "0"
 
 
-@router.post("/novnc/session")
-def create_session(response: Response, _: None = Depends(_authenticate)) -> dict:
-    token = _issue()
+def _set_session_cookie(response: Response) -> None:
     response.set_cookie(
-        COOKIE_NAME, token, max_age=SESSION_SECONDS, httponly=True,
+        COOKIE_NAME, _issue(), max_age=SESSION_SECONDS, httponly=True,
         secure=_secure_cookie(), samesite="strict", path="/novnc",
     )
     response.headers["Cache-Control"] = "no-store"
+
+
+@router.get("/novnc/login", response_class=HTMLResponse)
+def login_form() -> HTMLResponse:
+    html = ("<!doctype html><html lang='pt-BR'><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>Anthares Browser</title>"
+            "<form action='/novnc/login' method='post'>"
+            "<label>Chave de acesso <input name='access_token' type='password' "
+            "required autocomplete='off' maxlength='512'></label>"
+            "<button type='submit'>Abrir navegador remoto</button></form></html>")
+    return HTMLResponse(html, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff"})
+
+
+@router.post("/novnc/login")
+async def browser_login(request: Request):
+    if _secure_cookie() and request.url.scheme != "https":
+        raise HTTPException(status_code=403, detail="HTTPS required")
+    if request.headers.get("content-type", "").split(";")[0].strip() != "application/x-www-form-urlencoded":
+        raise HTTPException(status_code=415, detail="unsupported form")
+    raw = await request.body()
+    if len(raw) > 1024:
+        raise HTTPException(status_code=413, detail="form too large")
+    params = parse_qs(raw.decode("utf-8", "replace"), keep_blank_values=True)
+    supplied = params.get("access_token", [""])[0].encode("utf-8")
+    if not hmac.compare_digest(supplied, _secret()):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    response = RedirectResponse(url="/novnc/vnc.html", status_code=303)
+    _set_session_cookie(response)
+    return response
+
+
+@router.post("/novnc/session")
+def create_session(response: Response, _: None = Depends(_authenticate)) -> dict:
+    _set_session_cookie(response)
     return {"ok": True, "path": "/novnc/vnc.html", "expires_in_seconds": SESSION_SECONDS}
 
 
