@@ -1,4 +1,5 @@
-const KEY = "x:web:session:lucasyahn:opaque:v1";
+const X_KEY = "x:web:session:lucasyahn:opaque:v1";
+const BROWSER_KEY = "anthares:browser:runtime:opaque:v1";
 const MAX_BODY = 500000;
 const PUBLIC_JWK = {"kty":"EC","crv":"P-256","x":"oljQWjUajvbTS5Lyc0ElhK2nN_h6kJo-bhJ6F5mnf_4","y":"lBVZd8W28jEMd2A0oDs_PrGAkaDUbuzqb9WoerAVrmQ","ext":true};
 
@@ -17,14 +18,15 @@ function validEnvelope(x){return !!x&&x.schema==="anthares.encrypted-browser-sta
 export default {
   async fetch(request,env){
     const url=new URL(request.url);
-    if(url.pathname==="/health")return json({ok:true,service:"anthares-x-vault",version:"x-vault-v2",persistent_state:!!env.ANTHARES_STATE});
-    if(url.pathname!=="/state")return json({ok:false,error:"not_found"},404);
+    if(url.pathname==="/health")return json({ok:true,service:"anthares-x-vault",version:"x-vault-v3-browser-slot",persistent_state:!!env.ANTHARES_STATE,browser_state_slot:true});
+    const key=url.pathname==="/state"?X_KEY:url.pathname==="/browser-state"?BROWSER_KEY:null;
+    if(!key)return json({ok:false,error:"not_found"},404);
     if(!env.ANTHARES_STATE)return json({ok:false,error:"persistent_state_unavailable"},503);
     const body=request.method==="POST"?await request.text():"";
     if(body.length>MAX_BODY)return json({ok:false,error:"payload_too_large"},413);
     if(!(await authorized(request,body)))return json({ok:false,error:"unauthorized"},401);
     if(request.method==="GET"){
-      const row=await env.ANTHARES_STATE.get(KEY,"json");
+      const row=await env.ANTHARES_STATE.get(key,"json");
       if(!row)return json({ok:false,available:false},404);
       if(!validEnvelope(row)||row.sha256!==await sha256hex(row.ciphertext))return json({ok:false,error:"vault_integrity_failed"},409);
       return json({ok:true,available:true,schema:row.schema,ciphertext:row.ciphertext,sha256:row.sha256,updated_at:row.updated_at});
@@ -35,7 +37,7 @@ export default {
       const sha=await sha256hex(data.ciphertext);
       if(sha!==data.sha256)return json({ok:false,error:"digest_mismatch"},422);
       const row={schema:data.schema,ciphertext:data.ciphertext,sha256:sha,updated_at:new Date().toISOString()};
-      await env.ANTHARES_STATE.put(KEY,JSON.stringify(row));
+      await env.ANTHARES_STATE.put(key,JSON.stringify(row));
       return json({ok:true,stored:true,sha256:sha,updated_at:row.updated_at});
     }
     return json({ok:false,error:"method_not_allowed"},405);
