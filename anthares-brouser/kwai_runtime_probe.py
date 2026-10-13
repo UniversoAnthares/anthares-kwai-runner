@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Bounded, fail-closed verification of the restored Kwai browser profile.
+"""Fast, fail-closed verification of the restored Kwai browser profile.
 
-The probe never exports cookies/tokens/storage. It blocks media and font payloads,
-stops navigation after a small bounded window, and reuses a single renderer so a
-512 MiB Render instance cannot be taken down by an unbounded creator-page load.
+No cookies, tokens or storage are exported. Heavy assets are blocked, each
+navigation is bounded independently, and the tab always returns to about:blank
+so a verification attempt cannot leave the 512 MiB Render service on a heavy
+Kwai page.
 """
 import json
 import os
@@ -17,7 +18,7 @@ CDP_HTTP = f"http://127.0.0.1:{CDP_PORT}"
 EXPECTED = os.environ.get("KWAI_EXPECTED_ACCOUNT", "lucasrosalem").lstrip("@").lower()
 PROFILE_URL = f"https://www.kwai.com/@{EXPECTED}"
 STUDIO_URL = "https://studio.kwai.com/"
-NAV_TIMEOUT = float(os.environ.get("KWAI_PROBE_NAV_TIMEOUT", "8"))
+NAV_SECONDS = float(os.environ.get("KWAI_PROBE_NAV_SECONDS", "5"))
 
 BLOCKED = [
     "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.avif", "*.ico",
@@ -28,7 +29,7 @@ BLOCKED = [
 
 
 def targets():
-    with urllib.request.urlopen(f"{CDP_HTTP}/json/list", timeout=3) as response:
+    with urllib.request.urlopen(f"{CDP_HTTP}/json/list", timeout=2) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -39,61 +40,104 @@ def page_target():
     raise RuntimeError("no_page_target")
 
 
-def cdp(ws, method, params=None, timeout=8):
+def cdp(ws, method, params=None, timeout=4):
     rid = int(time.time_ns() % 2_000_000_000)
     ws.send(json.dumps({"id": rid, "method": method, "params": params or {}}))
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         ws.settimeout(max(0.2, deadline - time.monotonic()))
-        msg = json.loads(ws.recv())
-        if msg.get("id") != rid:
+        message = json.loads(ws.recv())
+        if message.get("id") != rid:
             continue
-        if "error" in msg:
+        if "error" in message:
             raise RuntimeError(f"cdp_error:{method}")
-        return msg.get("result", {})
+        return message.get("result", {})
     raise RuntimeError(f"cdp_timeout:{method}")
 
 
-def evaluate(ws, expression, timeout=6):
+def evaluate(ws, expression, timeout=3):
     out = cdp(ws, "Runtime.evaluate", {
         "expression": expression,
-        "awaitPromise": True,
         "returnByValue": True,
-        "userGesture": True,
+        "userGesture": False,
     }, timeout=timeout)
     if out.get("exceptionDetails"):
         raise RuntimeError("javascript_exception")
     return out.get("result", {}).get("value")
 
 
-def compact(ws):
-    for method in ("HeapProfiler.collectGarbage", "Memory.forciblyPurgeJavaScriptMemory"):
-        try:
-            cdp(ws, method, timeout=2)
-        except Exception:
-            pass
-
-
-def navigate_bounded(ws, url):
-    cdp(ws, "Page.navigate", {"url": url}, timeout=5)
-    deadline = time.monotonic() + NAV_TIMEOUT
-    last_host = ""
+def navigate(ws, url, seconds=NAV_SECONDS):
+    cdp(ws, "Page.navigate", {"url": url}, timeout=3)
+    deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
+        time.sleep(0.35)
         try:
-            state = evaluate(ws, "({host:location.hostname,ready:document.readyState})", timeout=2)
-            if isinstance(state, dict):
-                last_host = state.get("host") or last_host
-                if state.get("ready") in ("interactive", "complete"):
-                    break
+            ready = evaluate(ws, "document.readyState", timeout=1.2)
+            if ready in ("interactive", "complete"):
+                break
         except Exception:
             pass
-        time.sleep(0.2)
     try:
-        cdp(ws, "Page.stopLoading", timeout=2)
+        cdp(ws, "Page.stopLoading", timeout=1.5)
     except Exception:
         pass
-    time.sleep(0.45)
-    return last_host
+    time.sleep(0.25)
+
+
+def blank(ws):
+    try:
+        cdp(ws, "Page.navigate", {"url": "about:blank"}, timeout=2)
+        time.sleep(0.25)
+        cdp(ws, "Page.stopLoading", timeout=1)
+    except Exception:
+        pass
+    for method in ("HeapProfiler.collectGarbage", "Memory.forciblyPurgeJavaScriptMemory"):
+        try:
+            cdp(ws, method, timeout=1)
+        except Exception:
+            pass
+
+
+def profile_probe(ws):
+    navigate(ws, PROFILE_URL)
+    return evaluate(ws, r'''(() => {
+      const expected = ''' + json.dumps(EXPECTED) + r''';
+      const body = (document.body?.innerText || '').slice(0, 24000);
+      const low = body.toLowerCase();
+      const inputs = [...document.querySelectorAll('input')];
+      const loginInput = inputs.some(el => ['email','tel','password'].includes((el.type||'').toLowerCase()));
+      const loginText = /(^|\n)\s*(log\s*in|login|sign\s*in|entrar|fazer login)\s*($|\n)/i.test(body);
+      const ownerEdit = /(^|\n)\s*(edit profile|editar perfil)\s*($|\n)/i.test(body) ||
+        !!document.querySelector('[data-testid*="edit-profile" i],[href*="/profile/edit" i],[href*="/account/edit" i]');
+      const exactHandle = low.includes('@' + expected) || low.split(/\s+/).includes(expected);
+      return {
+        host: location.hostname.toLowerCase(),
+        path: location.pathname.replace(/\/$/,'').toLowerCase(),
+        owner_edit: ownerEdit,
+        exact_handle: exactHandle,
+        login_gate: loginInput || loginText
+      };
+    })()''', timeout=3)
+
+
+def studio_probe(ws):
+    navigate(ws, STUDIO_URL)
+    return evaluate(ws, r'''(() => {
+      const body = (document.body?.innerText || '').slice(0, 24000);
+      const inputs = [...document.querySelectorAll('input')];
+      const loginInput = inputs.some(el => ['email','tel','password'].includes((el.type||'').toLowerCase()));
+      const loginText = /(^|\n)\s*(log\s*in|login|sign\s*in|entrar|fazer login)\s*($|\n)/i.test(body);
+      const fileInput = [...document.querySelectorAll('input[type="file"]')].some(el => !el.disabled);
+      const createOrUpload = /upload|enviar|carregar|create video|criar v[ií]deo|new post|novo post/i.test(body);
+      const publish = /(^|\n)\s*(publish|post|publicar|share|compartilhar)\s*($|\n)/i.test(body);
+      return {
+        host: location.hostname.toLowerCase(),
+        login_gate: loginInput || loginText,
+        file_input: fileInput,
+        create_or_upload: createOrUpload,
+        publish_control: publish
+      };
+    })()''', timeout=3)
 
 
 def main():
@@ -107,87 +151,50 @@ def main():
         "bounded_navigation": True,
         "media_blocked": True,
     }
-    target = page_target()
-    ws = websocket.create_connection(
-        target["webSocketDebuggerUrl"], timeout=5, suppress_origin=True,
-        http_no_proxy=["127.0.0.1", "localhost", "::1"],
-    )
+    ws = None
     try:
-        try:
-            cdp(ws, "Network.enable", timeout=3)
-            cdp(ws, "Network.setBlockedURLs", {"urls": BLOCKED}, timeout=3)
-            cdp(ws, "Page.enable", timeout=3)
-        except Exception:
-            result["network_block_setup_failed"] = True
+        target = page_target()
+        ws = websocket.create_connection(
+            target["webSocketDebuggerUrl"], timeout=3, suppress_origin=True,
+            http_no_proxy=["127.0.0.1", "localhost", "::1"],
+        )
+        cdp(ws, "Network.enable", timeout=2)
+        cdp(ws, "Network.setBlockedURLs", {"urls": BLOCKED}, timeout=2)
+        cdp(ws, "Page.enable", timeout=2)
 
-        navigate_bounded(ws, PROFILE_URL)
-        profile = evaluate(ws, r'''(() => {
-          const expected = ''' + json.dumps(EXPECTED) + r''';
-          const visible = el => {
-            if (!el) return false;
-            const s=getComputedStyle(el), r=el.getBoundingClientRect();
-            return s.display!=='none' && s.visibility!=='hidden' && r.width>0 && r.height>0;
-          };
-          const label = el => ((el.innerText||el.textContent||'')+' '+(el.getAttribute?.('aria-label')||'')+' '+(el.getAttribute?.('title')||'')).replace(/\s+/g,' ').trim();
-          const nodes=[...document.querySelectorAll('a,button,[role="button"],[role="link"],[role="menuitem"],input,span,div')];
-          const loginGate=nodes.some(el=>visible(el)&&(
-            /^(log\s*in|login|sign\s*in|entrar|fazer login)$/i.test(label(el)) ||
-            ['email','tel','password'].includes((el.getAttribute?.('type')||'').toLowerCase())
-          ));
-          const path=location.pathname.replace(/\/$/,'').toLowerCase();
-          const exactRoute=path==='/@'+expected;
-          const ownerEdit=nodes.some(el=>visible(el)&&(
-            /^(edit profile|editar perfil)$/i.test(label(el)) ||
-            /edit[-_ ]?profile|profile[-_ ]?edit/i.test((el.getAttribute?.('data-testid')||'')) ||
-            /\/(profile|account)\/(edit|settings)(\/|$)/i.test((el.getAttribute?.('href')||''))
-          ));
-          const exactHandle=nodes.some(el=>{
-            if(!visible(el)) return false;
-            const t=(el.innerText||el.textContent||'').trim().replace(/^@/,'').toLowerCase();
-            return t===expected;
-          });
-          return {host:location.hostname.toLowerCase(), exact_route:exactRoute, owner_edit:ownerEdit, exact_handle:exactHandle, login_gate:loginGate};
-        })()''')
+        try:
+            profile = profile_probe(ws)
+        except Exception as exc:
+            profile = {}
+            result["profile_error"] = str(exc)[:80]
         if not isinstance(profile, dict):
             profile = {}
         identity = bool(
             profile.get("host") == "www.kwai.com"
-            and profile.get("exact_route")
+            and profile.get("path") == "/@" + EXPECTED
             and profile.get("owner_edit")
             and not profile.get("login_gate")
         )
         result["profile"] = {
-            "exact_route": bool(profile.get("exact_route")),
+            "exact_route": profile.get("path") == "/@" + EXPECTED,
             "owner_edit": bool(profile.get("owner_edit")),
             "exact_handle": bool(profile.get("exact_handle")),
             "login_gate": bool(profile.get("login_gate")),
         }
         result["identity_verified"] = identity
-        result["session_state"] = "authenticated" if identity else ("unauthenticated" if profile.get("login_gate") else "unknown")
+        result["session_state"] = (
+            "authenticated" if identity
+            else "unauthenticated" if profile.get("login_gate")
+            else "unknown"
+        )
 
-        # Drop the heavy profile document before entering Studio.
-        navigate_bounded(ws, "about:blank")
-        compact(ws)
-        time.sleep(0.4)
+        blank(ws)
 
-        navigate_bounded(ws, STUDIO_URL)
-        studio = evaluate(ws, r'''(() => {
-          const visible = el => {
-            if (!el) return false;
-            const s=getComputedStyle(el), r=el.getBoundingClientRect();
-            return s.display!=='none' && s.visibility!=='hidden' && r.width>0 && r.height>0;
-          };
-          const nodes=[...document.querySelectorAll('a,button,label,[role="button"],[role="menuitem"],input')];
-          const label=el=>((el.innerText||el.textContent||'')+' '+(el.getAttribute?.('aria-label')||'')+' '+(el.getAttribute?.('title')||'')).replace(/\s+/g,' ').trim();
-          const loginGate=nodes.some(el=>visible(el)&&(
-            /^(log\s*in|login|sign\s*in|entrar|fazer login)$/i.test(label(el)) ||
-            ['email','tel','password'].includes((el.getAttribute?.('type')||'').toLowerCase())
-          ));
-          const fileInput=[...document.querySelectorAll('input[type="file"]')].some(el=>!el.disabled);
-          const createOrUpload=nodes.some(el=>visible(el)&&/upload|enviar|carregar|create video|criar v[ií]deo|new post|novo post|create|criar/i.test(label(el)));
-          const publish=nodes.some(el=>visible(el)&&/^(publish|post|publicar|share|compartilhar)$/i.test(label(el)));
-          return {host:location.hostname.toLowerCase(), login_gate:loginGate, file_input:fileInput, create_or_upload:createOrUpload, publish_control:publish};
-        })()''')
+        try:
+            studio = studio_probe(ws)
+        except Exception as exc:
+            studio = {}
+            result["studio_error"] = str(exc)[:80]
         if not isinstance(studio, dict):
             studio = {}
         ready = bool(
@@ -204,19 +211,20 @@ def main():
             "publish_control": bool(studio.get("publish_control")),
         }
         result["studio_upload_ready"] = ready
-        result["ok"] = identity and ready
+        result["ok"] = bool(identity and ready)
     except Exception as exc:
-        result["error"] = type(exc).__name__
-        result["error_detail"] = str(exc)[:180]
+        result["error"] = str(exc)[:100]
     finally:
-        try:
-            cdp(ws, "Network.setBlockedURLs", {"urls": []}, timeout=2)
-        except Exception:
-            pass
-        try:
-            ws.close()
-        except Exception:
-            pass
+        if ws is not None:
+            blank(ws)
+            try:
+                cdp(ws, "Network.setBlockedURLs", {"urls": []}, timeout=1)
+            except Exception:
+                pass
+            try:
+                ws.close()
+            except Exception:
+                pass
     print("ANTHARES_KWAI_RUNTIME_PROBE=" + json.dumps(result, separators=(",", ":")), flush=True)
     raise SystemExit(0 if result.get("ok") else 3)
 
