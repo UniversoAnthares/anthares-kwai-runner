@@ -6,7 +6,9 @@ import (
     "encoding/json"
     "errors"
     "fmt"
+    "os"
     "os/exec"
+    "path/filepath"
     "strconv"
     "strings"
 )
@@ -59,18 +61,46 @@ func limitText(s string) string {
     return s
 }
 
+func envAllowlist(name string) []string {
+    var out []string
+    for _, item := range strings.Split(os.Getenv(name), ";") {
+        item = strings.TrimSpace(item)
+        if item != "" { out = append(out, item) }
+    }
+    return out
+}
+
+func executableAllowed(path string) bool {
+    abs, err := filepath.Abs(path)
+    if err != nil { return false }
+    abs = strings.ToLower(filepath.Clean(abs))
+    for _, allowed := range envAllowlist("ANTHARES_ALLOWED_EXECUTABLES") {
+        a, err := filepath.Abs(allowed)
+        if err == nil && strings.EqualFold(filepath.Clean(a), abs) { return true }
+    }
+    return false
+}
+
+func serviceAllowed(name string) bool {
+    for _, allowed := range envAllowlist("ANTHARES_ALLOWED_SERVICES") {
+        if strings.EqualFold(allowed, strings.TrimSpace(name)) { return true }
+    }
+    return false
+}
+
 func processStartJSON(path, argLine string) (string, error) {
     path = strings.TrimSpace(path)
     if path == "" { return "", errors.New("missing process path") }
+    if !executableAllowed(path) { return "", errors.New("executable is not authorized") }
     args := []string{}
+    target := path
     if strings.TrimSpace(argLine) != "" {
-        // Deliberately simple contract: arguments are passed through cmd's parser.
-        // MCP callers should prefer job_start for complex command lines.
         args = []string{"/d", "/s", "/c", fmt.Sprintf("\"%s\" %s", strings.ReplaceAll(path, "\"", ""), argLine)}
-        path = "cmd.exe"
+        target = "cmd.exe"
     }
-    cmd := exec.Command(path, args...)
+    cmd := exec.Command(target, args...)
     if err := cmd.Start(); err != nil { return "", err }
+    _ = cmd.Process.Release()
     out, _ := json.Marshal(map[string]any{"pid": cmd.Process.Pid, "status": "started"})
     return string(out), nil
 }
@@ -79,6 +109,13 @@ func processKillJSON(pidText string) (string, error) {
     pid, err := strconv.Atoi(strings.TrimSpace(pidText))
     if err != nil || pid <= 0 { return "", errors.New("invalid pid") }
     if pid <= 4 { return "", errors.New("refusing to terminate critical system pid") }
+
+    ps := fmt.Sprintf("(Get-CimInstance Win32_Process -Filter \"ProcessId=%d\" -ErrorAction Stop).ExecutablePath", pid)
+    raw, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps).CombinedOutput()
+    if err != nil { return "", fmt.Errorf("cannot identify process: %v", err) }
+    path := strings.TrimSpace(string(raw))
+    if path == "" || !executableAllowed(path) { return "", errors.New("process executable is not authorized") }
+
     out, err := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F").CombinedOutput()
     if err != nil { return "", fmt.Errorf("taskkill failed: %v: %s", err, strings.TrimSpace(string(out))) }
     b, _ := json.Marshal(map[string]any{"pid":pid,"status":"terminated"})
@@ -95,6 +132,7 @@ func serviceStatusJSON(ctx context.Context, name string) (string, error) {
 func serviceControlJSON(ctx context.Context, name string, start bool) (string, error) {
     name = strings.TrimSpace(name)
     if name == "" { return "", errors.New("missing service name") }
+    if !serviceAllowed(name) { return "", errors.New("service is not authorized") }
     escaped := strings.ReplaceAll(name,"'","''")
     verb := "Start-Service"
     if !start { verb = "Stop-Service" }
