@@ -13,7 +13,13 @@ try:
     # This eliminates the legacy per-process MCP queue without changing the
     # Ed25519 request-verification contract.
     import anthares_remote_mcp_bridge as _mcp_bridge
-    _mcp_bridge._status = lambda device: _relay.device_status(device)
+
+    def _durable_status(device):
+        status = dict(_relay.device_status(device))
+        status["state_backend"] = type(_relay._store()).__name__
+        return status
+
+    _mcp_bridge._status = _durable_status
     _mcp_bridge._enqueue = lambda device, job_type, args=None, timeout=30: _relay.enqueue_job(
         device, job_type, args or {}, timeout
     )
