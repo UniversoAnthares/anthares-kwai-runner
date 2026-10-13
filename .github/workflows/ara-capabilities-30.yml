@@ -1,4 +1,5 @@
 name: ARA capabilities 30-way QA
+# retrigger 2026-10-12 after cancelled queued run
 
 on:
   push:
