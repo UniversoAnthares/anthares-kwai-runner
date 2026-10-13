@@ -1359,3 +1359,10 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Updated README with security and persistence invariants. No cookies, tokens, profile data, or screenshot artifacts were committed.
 - No social publication occurred.
 - Status: implementation committed to `main`; Chromium/CDP E2E and real-session restart proof are still pending.
+
+## 2026-10-12 — Agent continuidade — transport outage verified (read-only)
+- Re-read canonical STATE and SHARED-LOG; checked three pending executor results on `anthares-clipper:legacy-pc-rebuild`: `2f7927d3-41f9-4d7d-bce2-0f82e35a7d93`, `24d3f593-1a9e-49e7-8ca1-d68a967e62c0`, `f8b30f25-91c9-4f61-a8f1-5b8db2ff1c2e`. All three result paths returned GitHub 404; none is proven consumed.
+- Remote Desktop Commander lists `DESKTOP-FTDK0HP` offline (last seen ~2h). WinRemote Shell fails: `Tunnel-client has not been seen for 300 seconds`. MeshCentral device listing fails `Session terminated`. Thus no authorized live PC execution path was available in this round.
+- Anthares Browser Vault Smoke run `38330972424` still reports job `smoke` queued, with no conclusion. Do not count it as passing or failing; do not enqueue redundant runs.
+- No fourth executor request, publish guard, destructive reset, daemon activation, or publication performed. Kwai authentication remains UNKNOWN pending restored execution and actual UI identity proof.
+- Next operator/agent with a live Windows transport should inspect executor/supervisor PID, heartbeat, dedicated clone sync, git auth and locks, then consume the three existing requests in order and record each result. Parallel browser agent should inspect runner capacity/queue before re-running QA.
