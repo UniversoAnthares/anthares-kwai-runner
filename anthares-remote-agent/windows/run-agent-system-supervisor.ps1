@@ -8,8 +8,9 @@ if (Test-Path $queueAuthLoader) {
 }
 
 # Canonical runtime: one SYSTEM agent, one device identity, no interactive desktop.
-# GitHub and GitLab issue queues are independent transports and automatically
-# back each other up. Render and Cloudflare are intentionally not referenced.
+# Cloudflare controls are safe zero-cost HTTP defaults. GitHub/GitLab issue queues
+# are independent recovery transports when their encrypted credentials exist.
+# Render is intentionally absent.
 $env:ANTHARES_DEVICE_ID = 'DESKTOP-FTDK0HP'
 $v4Exe = Join-Path $root 'anthares-remote-agent-v4.exe'
 $legacyExe = Join-Path $root 'anthares-remote-agent.exe'
@@ -18,11 +19,17 @@ $stdout = Join-Path $root 'agent-system.stdout.log'
 $stderr = Join-Path $root 'agent-system.stderr.log'
 $stateFile = Join-Path $root 'system-supervisor-state.json'
 
-$httpCandidates = @(
-    ([string]$env:ANTHARES_CONTROL_PRIMARY_URL).TrimEnd('/'),
-    ([string]$env:ANTHARES_CONTROL_SECONDARY_URL).TrimEnd('/'),
-    ([string]$env:ANTHARES_CONTROL_TERTIARY_URL).TrimEnd('/')
-) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+function Control-OrDefault([string]$value, [string]$fallback) {
+    $candidate = ([string]$value).Trim().TrimEnd('/')
+    if ([string]::IsNullOrWhiteSpace($candidate)) { return $fallback }
+    return $candidate
+}
+$primaryControl = Control-OrDefault $env:ANTHARES_CONTROL_PRIMARY_URL 'https://anthares-ara-backup.anthares1.workers.dev'
+$secondaryControl = Control-OrDefault $env:ANTHARES_CONTROL_SECONDARY_URL 'https://anthares-control.anthares1.workers.dev'
+$tertiaryControl = ([string]$env:ANTHARES_CONTROL_TERTIARY_URL).Trim().TrimEnd('/')
+$httpCandidates = @($primaryControl, $secondaryControl, $tertiaryControl) |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+    Select-Object -Unique
 
 $created = $false
 $mutex = New-Object System.Threading.Mutex($true, 'Global\AntharesRemoteSystemSupervisorV4', [ref]$created)
@@ -50,7 +57,8 @@ function Save-State([string]$active, [string]$mode, [string]$reason, [int]$agent
             supervisor_pid=$PID; agent_pid=$agentPid; device_id=$env:ANTHARES_DEVICE_ID; identity='SYSTEM'; session=0
             binary=(Split-Path $exe -Leaf); github_queue=[bool](Github-QueueConfigured); gitlab_queue=[bool](Gitlab-QueueConfigured)
             queue_failover=[bool](Queue-TransportConfigured); cloudflare_required=$false; render_required=$false
-        } | ConvertTo-Json | Set-Content -Path $stateFile -Encoding UTF8
+            http_candidates=@($httpCandidates)
+        } | ConvertTo-Json -Depth 4 | Set-Content -Path $stateFile -Encoding UTF8
     } catch {}
 }
 function Start-Agent([string]$control, [string]$mode) {
