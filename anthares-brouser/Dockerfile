@@ -25,4 +25,7 @@ RUN chmod +x /opt/anthares-brouser/start.sh /opt/anthares-brouser/qa40_render.py
 EXPOSE 8080
 VOLUME ["/data"]
 
-CMD ["python", "/opt/anthares-brouser/qa40_render.py"]
+# This Render service is the live redundant Anthares-browser runtime. The
+# 40-case harness remains available as qa40_render.py for explicit CI/QA runs,
+# but must not own the service's public port in normal operation.
+CMD ["/opt/anthares-brouser/start.sh"]
