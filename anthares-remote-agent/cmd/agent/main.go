@@ -121,7 +121,7 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string,error) {
     case "file_write":
         p,err:=safePath(cfg,job.Args["path"]); if err!=nil{return "",err}; b,err:=base64.StdEncoding.DecodeString(job.Args["base64"]); if err!=nil{return "",err}; if len(b)>1<<20{return "",errors.New("file exceeds 1 MiB limit")}; if err:=os.MkdirAll(filepath.Dir(p),0700);err!=nil{return "",err}; if err:=os.WriteFile(p,b,0600);err!=nil{return "",err}; return fmt.Sprintf("wrote %d bytes",len(b)),nil
     case "job_start":
-        if !cfg.AllowShell{return "",errors.New("shell disabled")}; return startDetachedJob(job.Args["command"],job.Args["name"])
+        if !cfg.AllowShell{return "",errors.New("shell disabled")}; if err:=rejectInteractiveCommand(job.Args["command"]);err!=nil{return "",err}; return startDetachedJob(job.Args["command"],job.Args["name"])
     case "job_list":
         limit,_:=strconv.Atoi(job.Args["limit"]); include:=job.Args["include_command"]=="1"||strings.EqualFold(job.Args["include_command"],"true"); return jobListJSON(include,limit)
     case "job_status":
@@ -130,7 +130,7 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string,error) {
         off:=int64(-1); if v:=job.Args["offset_bytes"];v!=""{off,_=strconv.ParseInt(v,10,64)}; max,_:=strconv.Atoi(job.Args["max_bytes"]); tail,_:=strconv.Atoi(job.Args["tail_lines"]); return jobLogsJSON(job.Args["job_id"],off,max,tail)
     case "job_cancel": return jobCancelJSON(job.Args["job_id"])
     case "shell":
-        if !cfg.AllowShell{return "",errors.New("shell disabled; set ANTHARES_ALLOW_SHELL=1 to enable")}; cmd:=strings.TrimSpace(job.Args["command"]); if cmd==""{return "",errors.New("missing command")}
+        if !cfg.AllowShell{return "",errors.New("shell disabled; set ANTHARES_ALLOW_SHELL=1 to enable")}; cmd:=strings.TrimSpace(job.Args["command"]); if cmd==""{return "",errors.New("missing command")}; if err:=rejectInteractiveCommand(cmd);err!=nil{return "",err}
         shell:=strings.ToLower(strings.TrimSpace(job.Args["shell"])); switch shell {case "cmd": return run(ctx,"cmd.exe","/d","/s","/c",cmd); case "powershell", "": return run(ctx,"powershell.exe","-NoProfile","-NonInteractive","-Command",cmd); default:return "",fmt.Errorf("unsupported shell %q",shell)}
     default: return "",fmt.Errorf("unsupported job type %q",job.Type)
     }
