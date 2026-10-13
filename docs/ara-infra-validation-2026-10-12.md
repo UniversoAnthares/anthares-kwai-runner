@@ -27,7 +27,7 @@ Service: `anthares-ara-infra-canary-v2`
 - `FOR UPDATE SKIP LOCKED` queue leasing;
 - terminal-result idempotence.
 
-A GitHub Actions workflow includes a real `postgres:16` service and tests store recreation for heartbeat, queued job, expired lease recovery, and result persistence.
+The deterministic durability workflow already passed before the SQL integration extension. The current workflow adds a real `postgres:16` service and tests store recreation for heartbeat, queued job, expired lease recovery, and result persistence. At the time of this validation record, that SQL-extended run is queued by GitHub Actions rather than failed; unrelated repository workflows also fire on this feature branch and their failures are not ARA durability results.
 
 ## Render database
 
