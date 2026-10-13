@@ -83,6 +83,13 @@ class RouteSecurityTests(unittest.TestCase):
             self.assertEqual(response.status_code, 409)
             self.assertEqual(store.get_job(device, job["id"])["status"], "queued")
 
+    def test_canary_healthz_checks_postgres_without_exposing_secrets(self):
+        source = (ROOT / "infra" / "ara_canary_app.py").read_text(encoding="utf-8")
+        self.assertIn('@app.get("/healthz")', source)
+        self.assertIn('cursor.execute("SELECT 1")', source)
+        self.assertIn('"backend": "postgres"', source)
+        self.assertNotIn('"dsn":', source)
+
     def test_canary_requires_durable_database_and_controller_secret(self):
         source = (ROOT / 'infra' / 'ara_canary_app.py').read_text(encoding='utf-8')
         self.assertIn('if not os.getenv("ARA_SHARED"):', source)
