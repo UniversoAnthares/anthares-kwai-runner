@@ -29,7 +29,9 @@ try {
 }
 $token | ConvertFrom-SecureString | Set-Content -Path (Join-Path $secretDir 'github-queue-token.dpapi') -Encoding ASCII
 $target = Join-Path $WorkRoot 'github-queue-bridge.ps1'
-Copy-Item -Path $BridgePath -Destination $target -Force
+$src = (Resolve-Path $BridgePath).Path
+$dst = [IO.Path]::GetFullPath($target)
+if (-not [string]::Equals($src,$dst,[StringComparison]::OrdinalIgnoreCase)) { Copy-Item -Path $src -Destination $dst -Force }
 $arg = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File "' + $target + '" -Repository "' + $Repository + '" -DeviceId "' + $DeviceId + '" -WorkRoot "' + $WorkRoot + '"'
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User ([Security.Principal.WindowsIdentity]::GetCurrent().Name)
