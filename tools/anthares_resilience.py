@@ -70,7 +70,9 @@ def main() -> int:
 
     by_name = {item.name: item for item in checks}
     browser_primary_ok = by_name["browser_liveness"].ok and by_name["browser_readiness"].ok
-    browser_reserve_ok = bool(BROWSER_RESERVE) and by_name.get("browser_reserve", Probe("", "", False, None, 0, "")).ok
+    browser_reserve_ok = bool(BROWSER_RESERVE) and by_name.get(
+        "browser_reserve", Probe("", "", False, None, 0, "")
+    ).ok
     reserva_ok = by_name["reserva_control"].ok
     control_ok = by_name["control_plane"].ok and by_name["control_failover_self_test"].ok
 
@@ -81,18 +83,23 @@ def main() -> int:
         browser_route = "anthares-reserva-browser"
         browser_continuity = "on_demand_browser"
     else:
-        browser_route = "github-actions"
-        browser_continuity = "finite_jobs_only"
+        browser_route = "none_equivalent"
+        browser_continuity = "github_actions_finite_jobs_only"
 
     if reserva_ok:
         reserva_route = "cloudflare-ara"
     elif control_ok:
         reserva_route = "anthares-control"
     else:
-        reserva_route = "github-actions_then_gitlab"
+        reserva_route = "none_equivalent"
+
+    browser_has_equivalent_continuity = browser_primary_ok or browser_reserve_ok
+    reserva_has_equivalent_continuity = reserva_ok or control_ok
+    fully_healthy = browser_primary_ok and reserva_ok and control_ok
 
     result = {
-        "ok": browser_primary_ok and reserva_ok and control_ok,
+        "ok": fully_healthy,
+        "continuity_ok": browser_has_equivalent_continuity and reserva_has_equivalent_continuity,
         "architecture": {
             "layer_1": "AUTOCURA",
             "layer_2": "CONTINUIDADE",
@@ -104,16 +111,12 @@ def main() -> int:
             "browser_route": browser_route,
             "browser_continuity": browser_continuity,
             "reserva_route": reserva_route,
-            "degraded": not (browser_primary_ok and reserva_ok and control_ok),
+            "degraded": not fully_healthy,
         },
         "checks": [asdict(item) for item in checks],
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
-
-    # A degraded primary is acceptable when an independent continuity route exists.
-    browser_has_continuity = browser_primary_ok or browser_reserve_ok or True  # GitHub Actions finite-job fallback
-    reserva_has_continuity = reserva_ok or control_ok or True  # GitHub/GitLab provider fallback
-    return 0 if browser_has_continuity and reserva_has_continuity else 2
+    return 0 if result["continuity_ok"] else 2
 
 
 if __name__ == "__main__":
