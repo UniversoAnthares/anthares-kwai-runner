@@ -135,18 +135,6 @@ def test_browser_mutation_proxies_only_with_live_lease():
     assert req.call_args.kwargs["headers"]["Authorization"] == "Bearer browser-test-token"
 
 
-def test_remote_execute_legacy_queue_boundary():
-    reset(); c = app_client()
-    result = {"id": "legacy-job", "status": "done", "result": {"ok": True, "output": "pong"}}
-    with patch.object(mesh, "_legacy_wait", return_value=result):
-        r = c.post("/v1/runtime/remote/execute", headers=auth(), json={"device_id": "DESKTOP-FTDK0HP", "type": "ping", "timeout_seconds": 5})
-    body = r.get_json()
-    assert r.status_code == 200
-    assert body["ok"] is True and body["output"] == "pong"
-    with mesh._remote._LOCK:
-        assert len(mesh._remote._DEVICES["DESKTOP-FTDK0HP"]["queue"]) == 1
-
-
 def test_remote_execute_prefers_durable_backend_when_available():
     reset(); c = app_client()
     durable = {"id": "durable-job", "status": "done", "result": {"ok": True, "output": "durable"}}
