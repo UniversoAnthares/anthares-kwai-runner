@@ -42,8 +42,9 @@ try {
         # No remote shell execution is enabled via GitHub Issues.
         $body = @{body = "ARA result: ping=pong; device=$DeviceId; issue=$number"} | ConvertTo-Json
         Invoke-RestMethod -Method Post -Headers $headers -ContentType 'application/json' -Body $body -Uri "$api/issues/$number/comments" -TimeoutSec 15 | Out-Null
-        $labels = @{labels = @('ara-done')} | ConvertTo-Json
-        Invoke-RestMethod -Method Put -Headers $headers -ContentType 'application/json' -Body $labels -Uri "$api/issues/$number/labels" -TimeoutSec 15 | Out-Null
+        # Remove the queued label only after the result comment was accepted.
+        # Do not remove any unrelated labels or overwrite issue metadata.
+        Invoke-RestMethod -Method Delete -Headers $headers -Uri "$api/issues/$number/labels/ara-queued" -TimeoutSec 15 | Out-Null
       }
     } catch {
       # Network outages do not reset local execution fences.
