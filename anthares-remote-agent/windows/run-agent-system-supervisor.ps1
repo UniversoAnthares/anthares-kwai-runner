@@ -24,12 +24,15 @@ if (-not $created) { exit 0 }
 
 function Test-Control([string]$origin) {
     if ([string]::IsNullOrWhiteSpace($origin)) { return $false }
-    try {
-        $r = Invoke-WebRequest -UseBasicParsing -Uri ($origin + '/healthz') -TimeoutSec 12
-        return ([int]$r.StatusCode -ge 200 -and [int]$r.StatusCode -lt 300)
-    } catch {
-        return $false
+    # The ARA backup exposes /healthz while anthares-control exposes /health.
+    # Probe both so failover does not silently discard a healthy candidate.
+    foreach ($healthPath in @('/healthz', '/health')) {
+        try {
+            $r = Invoke-WebRequest -UseBasicParsing -Uri ($origin + $healthPath) -TimeoutSec 12
+            if ([int]$r.StatusCode -ge 200 -and [int]$r.StatusCode -lt 300) { return $true }
+        } catch {}
     }
+    return $false
 }
 
 function Save-State([string]$active, [string]$reason, [int]$agentPid = 0) {
