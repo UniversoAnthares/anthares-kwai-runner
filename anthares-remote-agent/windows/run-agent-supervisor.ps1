@@ -72,14 +72,8 @@ function Preferred-Alternate([string]$active) {
 
 try {
     while ($true) {
-        $existing = @(Get-Process -Name 'anthares-remote-agent' -ErrorAction SilentlyContinue)
-        if ($existing.Count -gt 0) {
-            foreach ($p in $existing) {
-                try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
-            }
-            Start-Sleep -Seconds 2
-        }
-
+        # Do not kill agents owned by another supervisor or Windows session.
+        # Each supervisor manages only the child process it starts below.
         $active = Choose-Control
         if (-not $active) {
             Save-State '' 'all-controls-unavailable'
