@@ -25,14 +25,13 @@ try {
     Write-Error -Message ('AntharsWork initialization deferred: ' + $_.Exception.Message) -ErrorAction Continue
 }
 
-# Canonical runtime: one SYSTEM agent, one device identity, no interactive desktop.
-# Cloudflare provides the normal zero-cost HTTP controls. GitHub/GitLab private
-# issue queues are independent transports when encrypted credentials are present.
-# Render is intentionally absent from all defaults and normal operation.
+# Canonical runtime: one agent, one device identity, no interactive desktop.
+# Prefer the already-proven production binary; v4 remains a fallback until it
+# has passed an end-to-end Windows heartbeat/job validation.
 $env:ANTHARES_DEVICE_ID = 'DESKTOP-FTDK0HP'
 $v4Exe = Join-Path $root 'anthares-remote-agent-v4.exe'
 $legacyExe = Join-Path $root 'anthares-remote-agent.exe'
-$exe = if (Test-Path $v4Exe) { $v4Exe } else { $legacyExe }
+$exe = if (Test-Path $legacyExe) { $legacyExe } elseif (Test-Path $v4Exe) { $v4Exe } else { $legacyExe }
 $stdout = Join-Path $root 'agent-system.stdout.log'
 $stderr = Join-Path $root 'agent-system.stderr.log'
 $stateFile = Join-Path $root 'system-supervisor-state.json'
@@ -90,8 +89,6 @@ function Start-Agent([string]$control, [string]$mode) {
 
 try {
     while ($true) {
-        # Never kill another agent instance merely because this supervisor was
-        # restarted. Preserve the live control path and wait for a clean handoff.
         $existing = @(Get-Process -Name 'anthares-remote-agent','anthares-remote-agent-standard','anthares-remote-agent-v4' -ErrorAction SilentlyContinue)
         if ($existing.Count -gt 0) { Save-State '' 'preserve-existing' 'waiting-for-existing-agent'; Start-Sleep -Seconds 5; continue }
         if (Test-Path $queueAuthLoader) { try { . $queueAuthLoader } catch { Write-Error -Message ('issue queue auth reload deferred: ' + $_.Exception.Message) -ErrorAction Continue } }
