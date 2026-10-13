@@ -14,8 +14,10 @@ New-Item -ItemType Directory -Force -Path 'D:\AntharsWork\logs','D:\AntharsWork\
 
 $primary=([string]$env:ANTHARES_CONTROL_PRIMARY_URL).Trim().TrimEnd('/')
 $secondary=([string]$env:ANTHARES_CONTROL_SECONDARY_URL).Trim().TrimEnd('/')
+$tertiary=([string]$env:ANTHARES_CONTROL_TERTIARY_URL).Trim().TrimEnd('/')
 if([string]::IsNullOrWhiteSpace($primary)-or $primary -match 'onrender\.com'){$primary='https://anthares-ara-backup.anthares1.workers.dev'}
 if([string]::IsNullOrWhiteSpace($secondary)-or $secondary -match 'onrender\.com'){$secondary='https://anthares-ara-reserva.anthares1.workers.dev'}
+if([string]::IsNullOrWhiteSpace($tertiary)-or $tertiary -match 'onrender\.com'){$tertiary='https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run'}
 function Test-Control([string]$origin){
   if([string]::IsNullOrWhiteSpace($origin)){return $false}
   foreach($path in @('/healthz','/health')){
@@ -23,7 +25,7 @@ function Test-Control([string]$origin){
   }
   return $false
 }
-$control=if(Test-Control $primary){$primary}elseif(Test-Control $secondary){$secondary}else{$primary}
+$control=if(Test-Control $primary){$primary}elseif(Test-Control $secondary){$secondary}elseif(Test-Control $tertiary){$tertiary}else{$primary}
 $env:ANTHARES_CONTROL_URL=$control
 
 $legacy=Join-Path $root 'anthares-remote-agent.exe'
@@ -58,7 +60,7 @@ function Save-State([string]$reason,[int]$agentPid=0){
   try{
     [pscustomobject]@{
       updated_at=(Get-Date).ToUniversalTime().ToString('o');device_id=$env:ANTHARES_DEVICE_ID
-      binary=(Split-Path $exe -Leaf);control=$control;primary=$primary;secondary=$secondary
+      binary=(Split-Path $exe -Leaf);control=$control;primary=$primary;secondary=$secondary;tertiary=$tertiary
       github_queue=[bool]$env:ANTHARES_GITHUB_QUEUE_TOKEN
       identity=$env:USERNAME;session=(Get-Process -Id $PID).SessionId;watchdog_pid=$PID;agent_pid=$agentPid
       reason=$reason;render_required=$false;work_root=$env:ANTHARES_WORK_ROOT
@@ -74,7 +76,6 @@ while($true){
     continue
   }
 
-  # When v4 is the validated target, retire legacy writers before launch.
   if($processName -eq 'anthares-remote-agent-v4'){
     $obsolete=@(Get-Process -Name 'anthares-remote-agent','anthares-remote-agent-standard' -ErrorAction SilentlyContinue)
     foreach($proc in $obsolete){try{Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue}catch{}}
