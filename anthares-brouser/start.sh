@@ -19,9 +19,7 @@ VNC_PID=""
 NOVNC_PID=""
 CHROME_PID=""
 
-log() {
-  printf '[anthares-browser] %s\n' "$*"
-}
+log() { printf '[anthares-browser] %s\n' "$*"; }
 
 stop_pid() {
   local pid="${1:-}"
@@ -62,8 +60,7 @@ wait_api_health() {
       return 1
     fi
     if python - "$API_PORT" <<'PY'
-import sys
-import urllib.request
+import sys, urllib.request
 port = sys.argv[1]
 try:
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=1) as response:
@@ -86,9 +83,7 @@ start_xvfb() {
   Xvfb "$DISPLAY" -screen 0 1440x900x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
   XVFB_PID=$!
   for _ in $(seq 1 80); do
-    if xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then
-      return 0
-    fi
+    if xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then return 0; fi
     sleep 0.1
   done
   log "Xvfb failed to become ready"
@@ -96,52 +91,58 @@ start_xvfb() {
   return 1
 }
 
+vnc_banner_ready() {
+  python <<'PY'
+import socket
+try:
+    with socket.create_connection(("127.0.0.1", 5900), timeout=1.5) as sock:
+        sock.settimeout(1.5)
+        data = sock.recv(12)
+        raise SystemExit(0 if data.startswith(b"RFB ") else 1)
+except Exception:
+    raise SystemExit(1)
+PY
+}
+
 start_vnc() {
   log "starting loopback-only VNC"
   x11vnc -display "$DISPLAY" -forever -shared -nopw -rfbport 5900 -localhost >/tmp/x11vnc.log 2>&1 &
   VNC_PID=$!
+  for _ in $(seq 1 50); do
+    if ! kill -0 "$VNC_PID" 2>/dev/null; then break; fi
+    if vnc_banner_ready; then
+      log "VNC RFB ready"
+      return 0
+    fi
+    sleep 0.2
+  done
+  log "VNC failed RFB readiness; forcing container-level recovery"
+  tail -n 50 /tmp/x11vnc.log 2>/dev/null || true
+  return 1
 }
 
 start_novnc() {
   log "starting loopback-only noVNC websocket proxy"
-  websockify --web=/usr/share/novnc 127.0.0.1:6080 localhost:5900 >/tmp/novnc.log 2>&1 &
+  websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900 >/tmp/novnc.log 2>&1 &
   NOVNC_PID=$!
 }
 
 start_chromium() {
-  rm -f "$CHROME_PROFILE_DIR/SingletonLock" \
-        "$CHROME_PROFILE_DIR/SingletonSocket" \
-        "$CHROME_PROFILE_DIR/SingletonCookie" 2>/dev/null || true
-
+  rm -f "$CHROME_PROFILE_DIR/SingletonLock" "$CHROME_PROFILE_DIR/SingletonSocket" "$CHROME_PROFILE_DIR/SingletonCookie" 2>/dev/null || true
   log "starting isolated Chromium at ${START_URL}"
-  chromium \
-    --no-sandbox \
-    --disable-dev-shm-usage \
-    --disable-background-networking \
-    --disable-component-update \
-    --disable-client-side-phishing-detection \
-    --disable-default-apps \
-    --disable-extensions \
-    --disable-gpu \
-    --disable-sync \
-    --disable-translate \
-    --no-first-run \
-    --no-service-autorun \
-    --password-store=basic \
-    --renderer-process-limit=3 \
-    --remote-debugging-address=127.0.0.1 \
-    --remote-debugging-port="$CDP_PORT" \
-    --remote-allow-origins='*' \
-    --start-maximized \
-    --user-data-dir="$CHROME_PROFILE_DIR" \
+  chromium --no-sandbox --disable-dev-shm-usage --disable-background-networking \
+    --disable-component-update --disable-client-side-phishing-detection --disable-default-apps \
+    --disable-extensions --disable-gpu --disable-sync --disable-translate --no-first-run \
+    --no-service-autorun --password-store=basic --renderer-process-limit=3 \
+    --remote-debugging-address=127.0.0.1 --remote-debugging-port="$CDP_PORT" \
+    --remote-allow-origins='*' --start-maximized --user-data-dir="$CHROME_PROFILE_DIR" \
     "$START_URL" >/tmp/chromium.log 2>&1 &
   CHROME_PID=$!
 }
 
 local_ready() {
   python - "$API_PORT" <<'PY'
-import sys
-import urllib.request
+import sys, urllib.request
 port = sys.argv[1]
 try:
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/ready", timeout=4) as response:
@@ -153,10 +154,7 @@ PY
 
 restart_display_stack() {
   log "display stack failed; rebuilding isolated browser stack"
-  stop_pid "$CHROME_PID"
-  stop_pid "$NOVNC_PID"
-  stop_pid "$VNC_PID"
-  stop_pid "$XVFB_PID"
+  stop_pid "$CHROME_PID"; stop_pid "$NOVNC_PID"; stop_pid "$VNC_PID"; stop_pid "$XVFB_PID"
   start_xvfb
   start_vnc
   start_novnc
@@ -170,20 +168,17 @@ start_vnc
 start_novnc
 start_chromium
 
-# End-to-end check: signed cookie -> FastAPI WebSocket -> loopback x11vnc RFB.
 (
   for attempt in $(seq 1 20); do
     if python - "$API_PORT" <<'PY'
-import sys
-import websocket
+import os, sys, websocket
 sys.path.insert(0, "/opt/anthares-brouser")
 from novnc_gateway import COOKIE_NAME, _issue
 port = sys.argv[1]
+origin = os.environ.get("NOVNC_PUBLIC_ORIGIN", "https://anthares-browser-qa-render.onrender.com")
 ws = websocket.create_connection(
-    f"ws://127.0.0.1:{port}/novnc/websockify",
-    origin="https://anthares-browser-qa-render.onrender.com",
-    cookie=f"{COOKIE_NAME}={_issue()}",
-    timeout=5,
+    f"ws://127.0.0.1:{port}/novnc/websockify", origin=origin,
+    cookie=f"{COOKIE_NAME}={_issue()}", timeout=5,
 )
 try:
     banner = ws.recv()
@@ -203,27 +198,15 @@ PY
 READY_FAILURES=0
 MAX_READY_FAILURES=${MAX_READY_FAILURES:-6}
 SUPERVISOR_INTERVAL=${SUPERVISOR_INTERVAL:-5}
+RECOVERY_CYCLES=0
+MAX_RECOVERY_CYCLES=${MAX_RECOVERY_CYCLES:-3}
 
 log "supervisor active"
 while kill -0 "$API_PID" 2>/dev/null; do
   sleep "$SUPERVISOR_INTERVAL"
-
-  if ! kill -0 "$XVFB_PID" 2>/dev/null; then
-    restart_display_stack
-    READY_FAILURES=0
-    continue
-  fi
-
-  if ! kill -0 "$VNC_PID" 2>/dev/null; then
-    log "VNC exited; restarting"
-    start_vnc
-  fi
-
-  if ! kill -0 "$NOVNC_PID" 2>/dev/null; then
-    log "noVNC proxy exited; restarting"
-    start_novnc
-  fi
-
+  if ! kill -0 "$XVFB_PID" 2>/dev/null; then restart_display_stack; READY_FAILURES=0; continue; fi
+  if ! kill -0 "$VNC_PID" 2>/dev/null; then start_vnc; fi
+  if ! kill -0 "$NOVNC_PID" 2>/dev/null; then start_novnc; fi
   if ! kill -0 "$CHROME_PID" 2>/dev/null; then
     log "Chromium exited; restarting with the same persistent profile"
     tail -n 20 /tmp/chromium.log 2>/dev/null || true
@@ -233,22 +216,24 @@ while kill -0 "$API_PID" 2>/dev/null; do
   fi
 
   if local_ready; then
-    if (( READY_FAILURES > 0 )); then
-      log "browser readiness recovered"
-    fi
+    if (( READY_FAILURES > 0 || RECOVERY_CYCLES > 0 )); then log "browser readiness recovered"; fi
     READY_FAILURES=0
+    RECOVERY_CYCLES=0
   else
     READY_FAILURES=$((READY_FAILURES + 1))
     log "readiness probe failed (${READY_FAILURES}/${MAX_READY_FAILURES})"
     if (( READY_FAILURES >= MAX_READY_FAILURES )); then
-      log "CDP remained unhealthy; restarting Chromium"
-      tail -n 20 /tmp/chromium.log 2>/dev/null || true
-      stop_pid "$CHROME_PID"
-      start_chromium
+      RECOVERY_CYCLES=$((RECOVERY_CYCLES + 1))
+      log "readiness recovery cycle ${RECOVERY_CYCLES}/${MAX_RECOVERY_CYCLES}"
+      if (( RECOVERY_CYCLES >= MAX_RECOVERY_CYCLES )); then
+        log "local self-healing exhausted; exiting so the hosting provider restarts the container"
+        exit 70
+      fi
+      restart_display_stack
       READY_FAILURES=0
     fi
   fi
 done
 
-log "control API exited; terminating container so Render can restart it"
+log "control API exited; terminating container so hosting can restart it"
 wait "$API_PID" || exit $?
