@@ -3,7 +3,6 @@ import base64
 import json
 import threading
 import time
-from datetime import datetime, timezone
 
 import requests
 from flask import jsonify, request
@@ -116,14 +115,16 @@ def _execute(device, job_type, args, timeout, idempotency_key=None):
 
 
 def _consume_oauth(kind, issuer, jti, exp):
-    if not all((kind, issuer, jti)):
+    if kind not in {"authorization_code", "refresh_token"}:
+        return False
+    if not issuer or len(issuer) > 300 or not jti or len(jti) > 128:
         return False
     try:
         exp_num = int(exp)
-    except Exception:
+    except (TypeError, ValueError):
         return False
     now = int(time.time())
-    if exp_num <= now or exp_num > now + 31 * 24 * 3600:
+    if exp_num <= now or exp_num > now + 32 * 24 * 3600:
         return False
     with _STORE._conn() as conn, conn.cursor() as cur:
         cur.execute(
@@ -174,6 +175,7 @@ def register(app):
             durability="postgres",
             failover="canary",
             replay_protection=True,
+            oauth_one_time_tokens="postgres",
             redundant_mcp_keys=True,
             trusted_mcp_services=trusted,
             capabilities=[
@@ -220,7 +222,7 @@ def register(app):
             error=result.get("error"),
             started_at=result.get("started_at"),
             ended_at=result.get("ended_at"),
-        ), (200 if result.get("ok") else 500)
+        ), 200
 
     @app.post("/v1/mcp/oauth/consume")
     def mcp_oauth_consume():
@@ -240,4 +242,4 @@ def register(app):
             return jsonify(error="consume_failed"), 503
         if not consumed:
             return jsonify(error="already_consumed_or_invalid"), 409
-        return jsonify(ok=True)
+        return jsonify(ok=True, consumed=True)
