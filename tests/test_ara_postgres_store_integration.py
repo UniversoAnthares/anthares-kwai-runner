@@ -35,6 +35,15 @@ class PostgresStoreIntegrationTests(unittest.TestCase):
             cur.execute("UPDATE ara_jobs SET lease_until=now()-interval '1 second' WHERE id=%s", (job_id,))
             conn.commit()
 
+    def test_unleased_job_cannot_be_completed(self):
+        device = self.device("unleased")
+        store = PostgresStore(self.dsn)
+        job = store.enqueue(device, "shell", {"command": "example"}, 30)
+        rejected = store.complete(device, job["id"], {"ok": True})
+        self.assertEqual(rejected["status"], "queued")
+        self.assertIsNone(rejected["result"])
+        self.assertEqual(store.lease_next(device)["id"], job["id"])
+
     def test_heartbeat_survives_store_recreation(self):
         device = self.device("heartbeat")
         first = PostgresStore(self.dsn)
