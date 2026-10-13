@@ -7,7 +7,7 @@ import { signedControlFetch } from './control-client.mjs';
 import { servicePublicKey } from './service-signing.mjs';
 import { registerExtendedTools } from './extended-tools.mjs';
 
-const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-remote-control.onrender.com').replace(/\/$/, '');
+const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-ara-control.onrender.com').replace(/\/$/, '');
 const DEFAULT_DEVICE = process.env.ANTHARES_DEVICE_ID || 'DESKTOP-FTDK0HP';
 const CLIENT_TOKEN = process.env.ARA_MCP_CLIENT_TOKEN || '';
 
@@ -33,7 +33,7 @@ function text(value) {
 }
 
 function createMcpServer() {
-  const server = new McpServer({name:'Anthares Remote',version:'0.7.0'});
+  const server = new McpServer({name:'Anthares Remote',version:'0.7.1'});
 
   server.registerTool('session_status',{description:'Check the Anthares Remote Agent heartbeat for the authorized Windows device.',inputSchema:{device_id:z.string().default(DEFAULT_DEVICE)}},async({device_id})=>text(await api(`/v1/mcp/status?device_id=${encodeURIComponent(device_id)}`)));
   server.registerTool('system_info',{description:'Return OS, CPU, RAM, GPU and disk information.',inputSchema:{device_id:z.string().default(DEFAULT_DEVICE)}},async({device_id})=>text(await execute('system_info',{},30,device_id)));
@@ -68,7 +68,7 @@ function validToken(header) {
 const http=createServer(async(req,res)=>{
   if(req.method==='GET' && req.url==='/health'){
     res.writeHead(CLIENT_TOKEN.length>=32?200:503,{'Content-Type':'application/json','Cache-Control':'no-store'});
-    res.end(JSON.stringify({ok:CLIENT_TOKEN.length>=32,service:'anthares-remote-signed-mcp',auth:'ed25519-control'}));return;
+    res.end(JSON.stringify({ok:CLIENT_TOKEN.length>=32,service:'anthares-remote-signed-mcp',auth:'ed25519-control',control:CONTROL_URL}));return;
   }
   if(req.method==='GET' && req.url==='/control-key'){
     res.writeHead(200,{'Content-Type':'application/x-pem-file','Cache-Control':'no-store'});res.end(servicePublicKey());return;
@@ -85,4 +85,5 @@ const http=createServer(async(req,res)=>{
   }catch(e){if(!res.headersSent){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'mcp_request_failed'}));}}
 });
 http.requestTimeout=150000;
+console.log(`Signed ARA MCP control=${CONTROL_URL}`);
 http.listen(Number(process.env.ARA_INTERNAL_MCP_PORT||3118),'127.0.0.1',()=>console.log('Signed ARA MCP internal server ready'));
