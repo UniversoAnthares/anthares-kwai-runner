@@ -61,6 +61,7 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           cd anthares-reserva-browser
           npm install --no-audit --no-fund >/dev/null
+          printf 'y\n' | npx wrangler secret delete RESERVA_KWAI_CAPSULE >/dev/null 2>&1 || true
           count=$(cat /tmp/reserva-capsule-count)
           for i in $(seq 0 $((count-1))); do
             cat "/tmp/reserva-capsule-$i" | npx wrangler secret put "RESERVA_KWAI_CAPSULE_$i" >/dev/null
