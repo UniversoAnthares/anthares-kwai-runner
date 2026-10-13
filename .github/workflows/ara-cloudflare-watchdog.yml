@@ -20,7 +20,7 @@ jobs:
           import json, time, urllib.request, urllib.error
           endpoints = [
               ("cloudflare", "https://anthares-ara-backup.anthares1.workers.dev/healthz"),
-              ("cloudflare-secondary", "https://anthares-control.anthares1.workers.dev/healthz"),
+              ("cloudflare-secondary", "https://anthares-control.anthares1.workers.dev/health"),
               
           ]
           results = {}
