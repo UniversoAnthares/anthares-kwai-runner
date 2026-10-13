@@ -402,6 +402,25 @@ export class AraState extends DurableObject {
     return previous === "uncertain" ? "resolved_uncertain" : "stored";
   }
 
+  async reconciliationSnapshot(device) {
+    this._reap(device);
+    const rows = this.sql.exec(
+      "SELECT * FROM ara_jobs WHERE device_id=? AND status IN ('queued','leased','uncertain') ORDER BY created_at", device
+    ).toArray();
+    return {
+      device_id: device,
+      queued: rows.filter(x => x.status === "queued").length,
+      leased: rows.filter(x => x.status === "leased").length,
+      uncertain: rows.filter(x => x.status === "uncertain").length,
+      jobs: rows.map(x => ({
+        id: x.id, type: x.type, status: x.status,
+        created_at: iso(Number(x.created_at)), expires_at: iso(Number(x.expires_at)),
+        lease_until: x.lease_until ? iso(Number(x.lease_until)) : null,
+        idempotency_key: x.idempotency_key || null
+      }))
+    };
+  }
+
   async getJob(device, jobId) {
     this._reap(device);
     return this._row(this._one("SELECT * FROM ara_jobs WHERE id=? AND device_id=?", jobId, device));
@@ -568,6 +587,14 @@ export default {
       if (outcome === "not_leased") return json({ error: "job_not_leased" }, 409);
       if (outcome === "conflict") return json({ error: "result_conflict" }, 409);
       return json({ ok: true, duplicate: outcome === "duplicate" });
+    }
+
+    if (url.pathname === "/v1/mcp/reconciliation" && request.method === "GET") {
+      if (!(await verifyMcp(request, env))) return json({ error: "unauthorized" }, 401);
+      const device = (url.searchParams.get("device_id") || "").trim();
+      if (!validDeviceId(device)) return json({ error: "invalid_device_id" }, 400);
+      const snapshot = await st.reconciliationSnapshot(device);
+      return json({ ok: true, ...snapshot, safe_to_promote: snapshot.queued === 0 && snapshot.leased === 0 && snapshot.uncertain === 0 });
     }
 
     if (url.pathname === "/v1/mcp/status" && request.method === "GET") {
