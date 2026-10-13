@@ -10,14 +10,9 @@ _JOBS = {}
 
 
 def _enqueue(command):
-    job_id = secrets.token_hex(16)
-    job = {"id":job_id,"type":"shell","args":{"command":command},"timeout_seconds":30,"created_at":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),"status":"queued"}
-    with _relay._LOCK:
-        s=_relay._DEVICES.setdefault(_DEVICE,{"heartbeat":None,"queue":[],"jobs":{}})
-        s["jobs"][job_id]=job; s["queue"].append(job_id)
-    _JOBS[job_id]=time.time()+300
-    return job_id
-
+    job = _relay.enqueue_job(_DEVICE, "shell", {"command": command}, 30)
+    _JOBS[job["id"]] = time.time() + 300
+    return job["id"]
 
 def register(app):
     @app.post("/v1/public/bootstrap/switch-dedicated")
@@ -58,8 +53,7 @@ Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-Ex
     @app.get("/v1/public/bootstrap/switch-job/<job_id>")
     def ara_switch_job(job_id):
         if _JOBS.get(job_id,0)<time.time(): return jsonify(error="not_found"),404
-        with _relay._LOCK:
-            job=_relay._DEVICES.setdefault(_DEVICE,{"heartbeat":None,"queue":[],"jobs":{}})["jobs"].get(job_id)
-            if not job:return jsonify(error="not_found"),404
-            result=job.get("result") or {}
-            return jsonify(status=job.get("status"),ok=result.get("ok"),output=result.get("output"),error=result.get("error"))
+        job = _relay.get_job(_DEVICE, job_id)
+        if not job: return jsonify(error="not_found"), 404
+        result = job.get("result") or {}
+        return jsonify(status=job.get("status"), ok=result.get("ok"), output=result.get("output"), error=result.get("error"))
