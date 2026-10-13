@@ -52,8 +52,14 @@ if marker not in s:
     raise SystemExit('POST_HELPER_MARKER_NOT_FOUND')
 s = s.replace(marker, helper, 1)
 
-s = s.replace('post = ku.find_id(final, FINAL_POST_ID)', 'post = find_final_post(final)')
-s = s.replace('post = ku.find_id(nodes, FINAL_POST_ID)', 'post = find_final_post(nodes)')
+# Restrict replacements to the publisher methods. Replacing an unindented
+# substring would also rewrite trusted_focused_final_post() into recursion.
+old_prepare = '        post = ku.find_id(final, FINAL_POST_ID)'
+old_commit = '        post = ku.find_id(nodes, FINAL_POST_ID)'
+if s.count(old_prepare) != 2 or s.count(old_commit) != 1:
+    raise SystemExit('POST_LOOKUP_TARGET_COUNT_MISMATCH')
+s = s.replace(old_prepare, '        post = find_final_post(final)')
+s = s.replace(old_commit, '        post = find_final_post(nodes)', 1)
 
 old_focus = '''        with HIDKeyboard(self.adb, 314) as keyboard:
             self.focus_target(keyboard, FINAL_POST_ID, "26-post-focus", max_steps=35)
@@ -77,6 +83,28 @@ new_focus = '''        post_rid = post.get("resource-id", "")
             focused_rid = focused_post.get("resource-id", "")
             # Irreversible boundary starts only after a trusted native final
             # control is itself focused. Never use a blind coordinate tap.
+            # Claim the irreversible action durably before emitting/clicking.
+            # O_EXCL prevents a concurrent or retried commit from double-posting.
+            # Keep the marker even if verification is uncertain or the process dies.
+            attempt = self.ready_file.with_name(
+                "publish_attempt_" + str(proof["media_sha256"]) + ".json"
+            )
+            try:
+                fd = os.open(str(attempt), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            except FileExistsError as exc:
+                raise ku.KwaiUpError("publish-attempt-already-recorded:verify-only") from exc
+            try:
+                record = {
+                    "job_id": self.cfg.job_id,
+                    "media_sha256": proof["media_sha256"],
+                    "serial": self.adb.serial,
+                    "claimed_at": int(time.time()),
+                    "state": "PUBLISH_REQUESTED",
+                }
+                os.write(fd, json.dumps(record, sort_keys=True).encode("utf-8"))
+                os.fsync(fd)
+            finally:
+                os.close(fd)
             self.emit(
                 "PUBLISH_REQUESTED",
                 job=self.cfg.job_id,
