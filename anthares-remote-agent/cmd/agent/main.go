@@ -400,6 +400,7 @@ func postResult(cfg Config, result Result) error {
 }
 
 func postResultRetry(cfg Config, result Result) error {
+	if err := validateJobID(result.ID); err != nil { return err }
 	var last error
 	for attempt := 0; attempt < 5; attempt++ {
 		if err := postResult(cfg, result); err == nil {
