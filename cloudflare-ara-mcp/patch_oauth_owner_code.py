@@ -5,11 +5,17 @@ import re
 p = Path(__file__).with_name("src") / "index.js"
 s = p.read_text(encoding="utf-8")
 
-OWNER_HASH = "tJskpBl5Q2cyatlRUFw7FYnXFtsJvpfHXv3ersczcJE"
+OWNER_HASH = "6Z-3WlmAvh6o7m_W0eYEpEo23YKZtjn-DLJpyjtEfQ0"
 
-if "OWNER_APPROVAL_HASH=" not in s:
-    needle = "const te=new TextEncoder();"
-    s = s.replace(needle, f"const OWNER_APPROVAL_HASH='{OWNER_HASH}';\n{needle}", 1)
+# Always rotate the configured hash; existing source may contain a stale hash.
+needle = "const te=new TextEncoder();"
+assignment = f"const OWNER_APPROVAL_HASH='{OWNER_HASH}';"
+if re.search(r"const OWNER_APPROVAL_HASH='[^']*';", s):
+    s = re.sub(r"const OWNER_APPROVAL_HASH='[^']*';", lambda _: assignment, s, count=1)
+elif needle in s:
+    s = s.replace(needle, assignment + "\\n" + needle, 1)
+else:
+    raise SystemExit("owner hash insertion target missing")
 
 consume = "  async consume(kind,jti,exp){const key=`used:${kind}:${jti}`;if(await this.ctx.storage.get(key))return false;await this.ctx.storage.put(key,Number(exp)*1000);return true;}\n"
 if "async pinnedClient()" not in s:
