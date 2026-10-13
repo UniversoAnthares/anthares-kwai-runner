@@ -281,10 +281,3 @@ def post():
         return jsonify(ok=True, **_publish(text, media_url))
     except Exception as exc:
         return jsonify(ok=False, error=str(exc)), 500
-
-
-# The production worker owns this integration.  It is intentionally not placed in
-# sitecustomize, which Python may import for unrelated processes such as the ARA
-# canary.
-from anthares_runtime_mesh import register as _register_runtime_mesh
-_register_runtime_mesh(app)
