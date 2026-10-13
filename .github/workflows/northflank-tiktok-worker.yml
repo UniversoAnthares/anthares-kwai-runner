@@ -1,0 +1,128 @@
+name: Provision Render-independent TikTok worker on Northflank
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - cloudflare-tiktok-router/**
+      - .github/workflows/northflank-tiktok-worker.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: northflank-tiktok-worker
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require existing platform credentials
+        run: |
+          set -euo pipefail
+          test -n "$NORTHFLANK_API_TOKEN"
+          test -n "$CLOUDFLARE_API_TOKEN"
+
+      - name: Provision/update Northflank TikTok worker
+        id: nf
+        shell: bash
+        run: |
+          python3 - <<'PY' | tee /tmp/northflank-tiktok.out
+          import json, os, sys, time, urllib.request, urllib.error
+          token=os.environ['NORTHFLANK_API_TOKEN']
+          base='https://api.northflank.com/v1'
+          headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
+          def api(method,path,data=None,allow=()):
+              body=None if data is None else json.dumps(data).encode()
+              req=urllib.request.Request(base+path,data=body,method=method,headers=headers)
+              try:
+                  with urllib.request.urlopen(req,timeout=40) as r:
+                      raw=r.read().decode('utf-8','replace')
+                      return json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode('utf-8','replace')
+                  if e.code in allow:return {'_status':e.code,'_body':raw}
+                  raise RuntimeError(f'Northflank HTTP {e.code} {path}: {raw[:800]}')
+          projects=api('GET','/projects').get('data',{}).get('projects',[])
+          if isinstance(projects,dict):projects=list(projects.values())
+          project=next((p.get('id') for p in projects if p.get('name')=='Default'),None)
+          if not project:sys.exit('Northflank Default project not found')
+          services=api('GET',f'/projects/{project}/services').get('data',{}).get('services',[])
+          if isinstance(services,dict):services=list(services.values())
+          name='anthares-tiktok-northflank'
+          target=next((s for s in services if s.get('name')==name),None)
+          runtime={
+            'PORT':'10000',
+            'WORKER_RUNTIME_PROVIDER':'northflank',
+            'EXPECTED_TIKTOK_USERNAME':'universo.anthares',
+            'EXPECTED_TIKTOK_USER_ID':'7577123938226406401',
+            'GITHUB_OIDC_AUDIENCE':'anthares-render-worker',
+            'ANTHARES_CONTROL_URL':'https://anthares-control.anthares1.workers.dev'
+          }
+          if not target:
+              payload={
+                'name':name,'description':'Canonical Render-independent TikTok browser worker',
+                'billing':{'deploymentPlan':'nf-compute-10'},
+                'deployment':{'instances':1,'docker':{'configType':'default'}},
+                'ports':[{'name':'http','internalPort':10000,'public':True,'protocol':'HTTP'}],
+                'buildSource':'git',
+                'vcsData':{'projectUrl':'https://github.com/UniversoAnthares/anthares-clipper','projectType':'github','projectBranch':'main'},
+                'buildSettings':{'dockerfile':{'buildEngine':'buildkit','dockerFilePath':'/render-tiktok-worker/Dockerfile.northflank','dockerWorkDir':'/'}},
+                'runtimeEnvironment':runtime,'disabledCI':True
+              }
+              created=api('POST',f'/projects/{project}/services/combined',payload)
+              service_id=(created.get('data') or {}).get('id') or name
+          else:
+              service_id=target.get('id') or name
+              api('PATCH',f'/projects/{project}/services/{service_id}',{'runtimeEnvironment':runtime},allow=(400,404,405))
+          api('POST',f'/projects/{project}/services/{service_id}/build',{},allow=(409,))
+          ports=api('GET',f'/projects/{project}/services/{service_id}/ports').get('data',{}).get('ports',[])
+          public=next((p for p in ports if p.get('public') and p.get('dns')),None)
+          if not public:sys.exit('Northflank TikTok worker has no public DNS')
+          public_base='https://'+public['dns']
+          last='not_ready'
+          for _ in range(60):
+              try:
+                  with urllib.request.urlopen(public_base+'/health',timeout=20) as r:
+                      data=json.loads(r.read().decode())
+                  if data.get('ok') is True:break
+                  last=json.dumps(data)[:500]
+              except Exception as exc:last=type(exc).__name__+':'+str(exc)[:300]
+              time.sleep(10)
+          else:sys.exit('Northflank TikTok worker health failed: '+last)
+          print('NORTHFLANK_TIKTOK_URL='+public_base)
+          print(json.dumps({'ok':True,'service':service_id,'public_url':public_base,'render_dependency':False},sort_keys=True))
+          PY
+          url="$(grep '^NORTHFLANK_TIKTOK_URL=' /tmp/northflank-tiktok.out | tail -1 | cut -d= -f2-)"
+          test -n "$url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy stable Cloudflare TikTok router
+        env:
+          NORTHFLANK_TIKTOK_URL: ${{ steps.nf.outputs.url }}
+        run: |
+          set -euo pipefail
+          test -n "$NORTHFLANK_TIKTOK_URL"
+          cd cloudflare-tiktok-router
+          npx --yes wrangler@4.43.0 deploy --var "NORTHFLANK_TIKTOK_URL:$NORTHFLANK_TIKTOK_URL" --var "ALLOW_RENDER_FALLBACK:0" --var "RENDER_TIKTOK_FALLBACK:https://anthares-tiktok-render-rootless.onrender.com"
+
+      - name: Verify stable route uses Northflank without Render
+        run: |
+          set -euo pipefail
+          router='https://anthares-tiktok-worker.anthares1.workers.dev'
+          out="$(curl --fail-with-body -sS "$router/router-health")"
+          echo "$out"
+          echo "$out" | grep -q '"primary_provider":"northflank"'
+          echo "$out" | grep -q '"render_fallback_enabled":false'
+          echo "$out" | grep -q '"render_required":false'
+          health="$(curl --fail-with-body -sS "$router/health")"
+          echo "$health"
+          echo "$health" | grep -q '"ok":true'
