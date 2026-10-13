@@ -1,5 +1,10 @@
 const X_KEY = "x:web:session:lucasyahn:opaque:v1";
-const BROWSER_KEY = "anthares:browser:runtime:opaque:v1";
+// Keep the legacy slot readable for older callers, but never make the two
+// browser runtimes share encrypted payloads: their encryption keys are derived
+// from service-local ARA_SHARED values and are intentionally not interchangeable.
+const BROWSER_KEY = "anthares:browser:legacy:opaque:v1";
+const BROWSER_RUNTIME_KEY = "anthares:browser:runtime:opaque:v2";
+const BROWSER_CONTROL_KEY = "anthares:browser:control:opaque:v1";
 const BROWSER_CONTROL_JWK_KEY = "anthares:browser:signing:control-jwk:v1";
 const BROWSER_RUNTIME_JWK_KEY = "anthares:browser:signing:runtime-jwk:v1";
 const MAX_BODY = 500000;
@@ -68,19 +73,26 @@ async function browserAuthorized(request,body,env){
   }catch{return false;}
 }
 function validEnvelope(x){return !!x&&x.schema==="anthares.encrypted-browser-state.v1"&&typeof x.ciphertext==="string"&&x.ciphertext.length>=64&&x.ciphertext.length<=MAX_BODY-1000&&/^[A-Za-z0-9+/_=-]+$/.test(x.ciphertext)&&typeof x.sha256==="string"&&/^[0-9a-f]{64}$/.test(x.sha256);}
+function browserStateKey(pathname){
+  if(pathname==="/browser-state/runtime")return BROWSER_RUNTIME_KEY;
+  if(pathname==="/browser-state/control")return BROWSER_CONTROL_KEY;
+  if(pathname==="/browser-state")return BROWSER_KEY;
+  return null;
+}
 
 export default {
   async fetch(request,env){
     const url=new URL(request.url);
-    if(url.pathname==="/health")return json({ok:true,service:"anthares-x-vault",version:"x-vault-v7-dual-browser-authority",persistent_state:!!env.ANTHARES_STATE,browser_state_slot:true,browser_identity:"dual-public-key"});
+    if(url.pathname==="/health")return json({ok:true,service:"anthares-x-vault",version:"x-vault-v8-isolated-browser-slots",persistent_state:!!env.ANTHARES_STATE,browser_state_slot:true,browser_state_slots:["legacy","runtime","control"],browser_identity:"dual-public-key"});
     if(url.pathname==="/browser-key/refresh"){
       if(request.method!=="POST")return json({ok:false,error:"method_not_allowed"},405);
       if(!env.ANTHARES_STATE)return json({ok:false,error:"persistent_state_unavailable"},503);
       try{await refreshBrowserPublicKeys(env);return json({ok:true,refreshed:true,authorities:2});}
       catch{return json({ok:false,error:"browser_public_key_refresh_failed"},503);}
     }
-    const isBrowser=url.pathname==="/browser-state";
-    const key=url.pathname==="/state"?X_KEY:isBrowser?BROWSER_KEY:null;
+    const browserKey=browserStateKey(url.pathname);
+    const isBrowser=!!browserKey;
+    const key=url.pathname==="/state"?X_KEY:browserKey;
     if(!key)return json({ok:false,error:"not_found"},404);
     if(!env.ANTHARES_STATE)return json({ok:false,error:"persistent_state_unavailable"},503);
     const body=request.method==="POST"?await request.text():"";
