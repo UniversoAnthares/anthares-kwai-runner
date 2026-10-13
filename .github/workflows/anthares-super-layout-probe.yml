@@ -1,0 +1,64 @@
+name: Anthares ARM64 Super Layout Inspection
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-super-layout-probe.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 12
+    steps:
+      - name: Inspect real image partition tables and fstab
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq unzip curl default-jre-headless gdisk e2fsprogs file cpio >/dev/null
+          mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
+          curl -fLsS --retry 3 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
+          cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
+          export ANDROID_HOME="$HOME/android-sdk"
+          (yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null) || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'system-images;android-30;default;arm64-v8a' >/dev/null
+          D="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
+          {
+            echo "=== IMAGE INVENTORY ==="
+            find "$D" -maxdepth 2 -type f -printf '%P %s bytes\n' | sort
+            for img in "$D"/*.img; do
+              echo "=== $(basename "$img") ==="
+              file "$img"
+              sgdisk -p "$img" || true
+              for n in 1 2 3; do
+                sgdisk -i "$n" "$img" 2>/dev/null || true
+              done
+            done
+          } | tee /tmp/layout.txt
+          for kind in vendor system; do
+            IMG="$D/$kind.img"
+            START=$(sgdisk -i 1 "$IMG" | awk '/First sector:/ {print $3}')
+            END=$(sgdisk -i 1 "$IMG" | awk '/Last sector:/ {print $3}')
+            if [ -n "$START" ] && [ -n "$END" ]; then
+              dd if="$IMG" of="/tmp/$kind-p1.img" bs=512 skip="$START" count="$((END-START+1))" status=none
+              debugfs -R 'ls -l /etc' "/tmp/$kind-p1.img" > "/tmp/$kind-etc.txt" 2>&1 || true
+              debugfs -R 'dump /etc/fstab.ranchu /tmp/fstab.ranchu' "/tmp/$kind-p1.img" 2>&1 | tee -a /tmp/layout.txt || true
+              debugfs -R 'dump /system/etc/fstab.ranchu /tmp/fstab-system.ranchu' "/tmp/$kind-p1.img" 2>&1 | tee -a /tmp/layout.txt || true
+            fi
+          done
+          for f in /tmp/fstab.ranchu /tmp/fstab-system.ranchu; do
+            if [ -s "$f" ]; then echo "=== $f ===" | tee -a /tmp/layout.txt; cat "$f" | tee -a /tmp/layout.txt; fi
+          done
+          if grep -qE 'logical|super' /tmp/layout.txt; then echo SUPER_LOGICAL_FSTAB_DETECTED=YES; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: super-layout-inspection
+          path: |
+            /tmp/layout.txt
+            /tmp/fstab.ranchu
+            /tmp/fstab-system.ranchu
+            /tmp/*-etc.txt
+          retention-days: 3
