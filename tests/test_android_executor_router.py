@@ -30,6 +30,9 @@ class AndroidExecutorRoutingTests(unittest.TestCase):
     def test_firebase_only_is_not_valid_for_manual_login(self):
         self.assertIsNone(router.choose(MANIFEST, {"firebase_test_lab": ready()}, workload="manual_auth"))
 
+    def test_unspecified_workload_never_routes_manual_login_to_firebase(self):
+        self.assertIsNone(router.choose(MANIFEST, {"firebase_test_lab": ready()}))
+
     def test_firebase_can_handle_generic_noninteractive_android(self):
         self.assertEqual(router.choose(MANIFEST, {"firebase_test_lab": ready()}, workload="generic_android"), "firebase_test_lab")
 
