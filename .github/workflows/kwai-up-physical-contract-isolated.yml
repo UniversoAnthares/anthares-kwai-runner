@@ -1,5 +1,11 @@
 name: Kwai-up physical contract isolated QA
 on:
+  pull_request:
+    branches:
+      - kwai-up
+    paths:
+      - 'kwai-up/**'
+      - '.github/workflows/kwai-up-physical-contract-isolated.yml'
   push:
     branches:
       - fix/kwai-up-physical-contract-focus-20261013
@@ -33,5 +39,7 @@ jobs:
           assert 'hid-focus-target-timeout:trusted-final-post' in commit
           assert commit.index('trusted_focused_final_post(nodes)') < commit.index('keyboard.enter()')
           assert 'PUBLISH_REQUESTED' in commit and 'UNCERTAIN' in commit
+          assert 'os.O_EXCL' in commit and 'os.fsync(fd)' in commit
+          assert commit.index('os.fsync(fd)') < commit.index('keyboard.enter()')
           print('KWAI_UP_NATIVE_FOCUS_CONTRACT=PASS')
           PY
