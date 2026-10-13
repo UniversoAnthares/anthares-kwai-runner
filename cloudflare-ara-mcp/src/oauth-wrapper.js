@@ -54,12 +54,6 @@ async function sendApproval(env,code){
   }catch{return false;}
 }
 
-// ChatGPT may retry the authorization GET while the user is already looking at
-// the first page. A fresh random code on every GET can therefore overwrite the
-// clipboard with a code that belongs to a different pending transaction. Use a
-// secret-derived short-lived code for the whole 10-minute window so concurrent
-// retries cannot race each other. The code is still delivered only through the
-// authenticated device channel and is consumed once on successful approval.
 async function currentApproval(env){
   const bucket=Math.floor(Date.now()/600000);
   const mac=await st(env).hmac(`oauth-approval-v2:${bucket}`);
@@ -92,7 +86,7 @@ async function authorizePost(req,env){
   const p=await st(env).verifyToken(tx,'oauth_pending');
   if(!p)return json({error:'authorization_expired'},400);
   const approvalHash=await sha256b64(approval);
-  if(!approval.startsWith('ARA-')||!eq(approvalHash,p.approvalHash))return approvalPage(tx,'O conteúdo colado não é o código Anthares desta autorização. O clipboard pode ter sido substituído por outro conteúdo. Inicie novamente a conexão e cole apenas um código que comece com ARA-.'),403);
+  if(!approval.startsWith('ARA-')||!eq(approvalHash,p.approvalHash))return approvalPage(tx,'O conteúdo colado não é o código Anthares desta autorização. O clipboard pode ter sido substituído por outro conteúdo. Inicie novamente a conexão e cole apenas um código que comece com ARA-.',403);
   if(!(await st(env).consume('oauth_approval',p.approvalHash,p.exp)))return json({error:'authorization_already_used'},409);
   const now=Math.floor(Date.now()/1000);
   const code=await st(env).signToken({typ:'oauth_code',iss:ORIGIN,aud:ORIGIN,iat:now,exp:now+300,jti:rand(16),clientId:p.clientId,redirectUri:p.redirectUri,challenge:p.challenge,scopes:p.scopes,scp:p.scopes});
