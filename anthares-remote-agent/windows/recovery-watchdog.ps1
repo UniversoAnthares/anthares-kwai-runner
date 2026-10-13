@@ -42,9 +42,16 @@ function Ensure-BinaryIntegrity{
   try{Stop-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue}catch{}
   Get-SystemAgents|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
   Start-Sleep -Milliseconds 500
-  Copy-Item $lastGood $exe -Force
-  Log("automatic rollback restored sha256=$expected")
-  return $true
+  try {
+    Copy-Item $lastGood $exe -Force -ErrorAction Stop
+    $restored=(Get-FileHash $exe -Algorithm SHA256 -ErrorAction Stop).Hash
+    if($restored -ne $expected){throw "restored binary hash mismatch"}
+    Log("automatic rollback restored sha256=$expected")
+    return $true
+  } catch {
+    Log("automatic rollback failed: $($_.Exception.Message)")
+    return $false
+  }
 }
 New-Item -ItemType Directory -Force -Path $root|Out-Null
 Retire-InteractiveAgents
