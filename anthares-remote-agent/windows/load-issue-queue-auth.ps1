@@ -2,6 +2,7 @@
 # Secrets are protected with Windows DPAPI LocalMachine so the SYSTEM service
 # can decrypt credentials provisioned by an administrator on the same machine.
 $ErrorActionPreference = 'Stop'
+try { Add-Type -AssemblyName System.Security -ErrorAction Stop } catch { throw 'System.Security is required for DPAPI queue credentials' }
 $root = 'C:\ProgramData\AntharesRemoteAgent\secrets'
 $configPath = Join-Path $root 'issue-queue.json'
 if (-not (Test-Path $configPath)) { return }
