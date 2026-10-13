@@ -89,12 +89,12 @@ func main() {
 		if err != nil {
 			<-sem
 			fmt.Fprintln(os.Stderr, "poll error:", err)
-			time.Sleep(3 * time.Second)
+			time.Sleep(10 * time.Second)
 			continue
 		}
 		if job == nil {
 			<-sem
-			time.Sleep(2 * time.Second)
+			time.Sleep(15 * time.Second)
 			continue
 		}
 		if err := validateJobID(job.ID); err != nil || strings.TrimSpace(job.Type) == "" {
@@ -168,7 +168,7 @@ func authReq(req *http.Request, cfg Config) {
 }
 
 func heartbeatLoop(cfg Config) {
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 	failures := 0
 	for {
