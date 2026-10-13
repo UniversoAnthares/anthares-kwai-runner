@@ -11,7 +11,7 @@ if not os.getenv("ARA_SHARED"):
     raise RuntimeError("ARA_SHARED must be configured before serving control routes")
 if not (os.getenv("ARA_DATABASE_URL") or os.getenv("DATABASE_URL")):
     raise RuntimeError("ARA canary requires a durable PostgreSQL connection")
-build_store()
+_durable_store = build_store()
 
 from flask import Flask
 import anthares_remote_control_routes as _relay
@@ -30,3 +30,15 @@ from anthares_remote_secure_bootstrap import register as _register_secure_bootst
 # both legacy modules expose shell-producing actions without controller authentication.
 _register_browser(app)
 _register_secure_bootstrap(app)
+
+@app.get("/healthz")
+def ara_canary_health():
+    # Do not expose DSNs, credentials, device identifiers or stored job data.
+    try:
+        with _durable_store._conn() as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            ready = cursor.fetchone()[0] == 1
+        return {"ok": ready, "backend": "postgres"}, (200 if ready else 503)
+    except Exception:
+        app.logger.exception("ARA PostgreSQL readiness check failed")
+        return {"ok": False, "backend": "postgres"}, 503
