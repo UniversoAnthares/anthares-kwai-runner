@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        transport: [mmio, pci, scsi]
+        transport: [nvme, ahci, usb-storage]
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 12
     steps:
@@ -56,13 +56,13 @@ jobs:
           echo '--- PLATFORM VIRTIO NODES ---'
           /bin/busybox find /sys/devices/platform -maxdepth 5 -type d 2>/dev/null | /bin/busybox grep -E 'virtio_mmio|virtio[0-9]+' || true
           echo '--- KERNEL STORAGE DRIVER SUPPORT ---'
-          if [ -e /proc/config.gz ]; then /bin/busybox zcat /proc/config.gz | /bin/busybox grep -E 'CONFIG_(VIRTIO_BLK|VIRTIO_MMIO|VIRTIO_PCI|SCSI|BLK_DEV_SD)=' || true; fi
+          if [ -e /proc/config.gz ]; then /bin/busybox zcat /proc/config.gz | /bin/busybox grep -E 'CONFIG_(VIRTIO_BLK|VIRTIO_MMIO|VIRTIO_PCI|SCSI|BLK_DEV_SD|BLK_DEV_NVME|NVME_CORE|SATA_AHCI|ATA|USB_STORAGE|USB_XHCI_HCD)=' || true; fi
           echo '--- KERNEL MODULES ---'
           /bin/busybox cat /proc/modules || true
           /bin/busybox find /sys/bus/virtio/drivers -maxdepth 2 2>/dev/null || true
           /bin/busybox find /sys/class/block -maxdepth 1 2>/dev/null || true
           echo '--- BLOCK MAP ---'
-          for b in /sys/class/block/vd*; do
+          for b in /sys/class/block/vd* /sys/class/block/sd* /sys/class/block/nvme*; do
             [ -e "$b" ] || continue
             n="${b##*/}"
             echo "BLOCK=$n"
@@ -78,7 +78,7 @@ jobs:
             done
           done
           echo '--- PARTITIONS ---'
-          for p in /sys/class/block/vd*[0-9]; do
+          for p in /sys/class/block/vd*[0-9] /sys/class/block/sd*[0-9] /sys/class/block/nvme*n[0-9]p[0-9]; do
             [ -e "$p" ] || continue
             echo "PART=${p##*/} PATH=$(/bin/busybox readlink -f "$p")"
             /bin/busybox cat "$p/uevent" 2>/dev/null || true
@@ -117,8 +117,14 @@ jobs:
             pci)
               Q+=( -drive "if=none,file=$ANDROID_DIR/system.img,format=raw,id=system,readonly=on" -device "virtio-blk-pci,drive=system" )
               ;;
-            scsi)
-              Q+=( -device virtio-scsi-pci,id=scsi0 -drive "if=none,file=$ANDROID_DIR/system.img,format=raw,id=system,readonly=on" -device "scsi-hd,drive=system,bus=scsi0.0" )
+            nvme)
+              Q+=( -drive "if=none,file=$ANDROID_DIR/system.img,format=raw,id=system,readonly=on" -device "nvme,serial=ANTHARES,drive=system" )
+              ;;
+            ahci)
+              Q+=( -device "ich9-ahci,id=ahci0" -drive "if=none,file=$ANDROID_DIR/system.img,format=raw,id=system,readonly=on" -device "ide-hd,drive=system,bus=ahci0.0" )
+              ;;
+            usb-storage)
+              Q+=( -device "qemu-xhci,id=xhci" -drive "if=none,file=$ANDROID_DIR/system.img,format=raw,id=system,readonly=on" -device "usb-storage,drive=system,bus=xhci.0" )
               ;;
           esac
           Q+=( -append 'console=ttyAMA0 earlycon=pl011,0x09000000 loglevel=7 root=/dev/ram0 rw rdinit=/init' )
