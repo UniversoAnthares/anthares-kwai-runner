@@ -1,31 +1,33 @@
-# ARA GitHub Actions control-plane migration lease
+# ARA GitHub/GitLab control-plane migration
 
-STATUS: RUNNING
+STATUS: PARTIAL — ONE LOCAL START ACTION REQUIRED
 AREA: ara-admin-control-transport
 OWNER: chatgpt-ara-github-actions-migration
 LEASE_START_UTC: 2026-10-13T15:53:00Z
-LEASE_EXPIRES_UTC: 2026-10-13T16:25:00Z
+UPDATED_UTC: 2026-10-13T16:24:00Z
 
-BASELINE_PROVEN:
-- The current ChatGPT Anthares Remote connector still reports `control_origin=https://anthares-ara-control.onrender.com` and `connected=false`.
-- The user explicitly requires Anthares Remote to stop depending on Render, and reports the Cloudflare quota exhausted.
-- `UniversoAnthares/anthares-ara-queue` exists and is private.
-- Main already contains GitHub/GitLab issue-queue transport code, but activation still depends on a persistent private-repository credential on Windows.
-- A repository self-hosted GitHub Actions runner has existed for Anthares administration; this lease tests that independent transport without using Render or Cloudflare.
+PROVEN:
+- The obsolete ChatGPT plugin `Anthares Remote` that pointed at Render was uninstalled.
+- `UniversoAnthares/anthares-ara-queue` exists, is private, and accepts the `ara-queued` label.
+- Go tests and Windows amd64 build for the queue-aware agent passed in GitHub Actions run `38425643217`.
+- The Windows installation already contains `anthares-remote-agent-v4.exe`, `load-issue-queue-auth.ps1`, and the DPAPI credential file `secrets/issue-queue.json`.
+- The canonical supervisor was changed so GitHub/GitLab issue queues are primary transports; `onrender.com` and `workers.dev` are explicitly excluded from automatic HTTP candidates.
+- Automatic Cloudflare-only finalizers/deploy triggers were removed or made manual-only after the user reported Cloudflare quota exhaustion.
+- A safe queue smoke issue exists as `UniversoAnthares/anthares-ara-queue#2` and remains `ara-queued` awaiting the local queue-aware agent.
 
-FAILED_AVOIDED:
-- Do not make Cloudflare a required runtime or failover while its quota is exhausted.
-- Do not return to Render as the canonical Anthares Remote control plane.
-- Do not expose tokens, private queue payloads, or arbitrary shell commands in public workflow inputs.
-- Do not touch the concurrent `issue_queue.go` implementation while another agent is changing/testing it.
+SUPERSEDED:
+- The self-hosted GitHub Actions runner diagnostic remained queued/offline and was removed. The user's Windows PC is not used as a GitHub Actions runner.
+- Cloudflare-only finalization is not an accepted recovery architecture while quota is exhausted.
+- Render is not an accepted control transport.
 
-SUCCESS_SIGNAL:
-- A `runs-on: self-hosted` diagnostic executes on the Anthares Windows runner without Render/Cloudflare and returns a non-secret capability report.
-- If that succeeds, use this channel to install the validated agent/bridge and verify a safe `ping` round trip before disabling the obsolete Render-connected path.
+CURRENT_BLOCKER:
+- During the one-time migration, the command stopped the running `Anthares Remote Agent SYSTEM` scheduled task and its legacy agent before the final `Start-ScheduledTask` line could execute; the control connection therefore terminated as designed before it could restart itself.
+- WinRemote and MeshCentral recovery channels were also unavailable at that moment.
+- Because all remote administration transports are now offline, the remaining action cannot be performed remotely in this session.
 
-FAILURE_SIGNAL:
-- The self-hosted workflow remains queued/offline, or no secure persistent credential exists for the private issue queue.
+NEXT_SINGLE_ACTION:
+- On Windows Task Scheduler, run the existing task `Anthares Remote Agent SYSTEM` once. The task points to `C:\ProgramData\AntharesRemoteAgent\run-agent-system-supervisor.ps1`, which has already been replaced with the queue-first V5 supervisor. No reinstall, command prompt, or credential entry is required.
 
-TEST_VALIDITY:
-- Diagnostic must not print credentials and must not open interactive Windows UI.
-- No social publication, browser interaction, or destructive system action is permitted in this lease.
+SUCCESS_SIGNAL_AFTER_START:
+- `system-supervisor-state.json` reports `mode=issue-queues-only` (or `issue-queues+optional-http` only if a non-Render/non-Cloudflare optional control is explicitly configured), `github_queue=true`, `cloudflare_required=false`, `render_required=false`.
+- Private queue issue #2 is consumed and acknowledged/closed by the agent.
