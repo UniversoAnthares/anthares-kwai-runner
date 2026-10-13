@@ -1,0 +1,108 @@
+name: Anthares Android - GitHub hosted (CircleCI replacement)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/anthares-android-replacement.yml'
+      - 'ci-hub/executor-routing.json'
+      - 'tools/android_executor_router.py'
+      - 'tests/test_android_executor_router.py'
+      - 'tools/kwai_android_login_entry.py'
+      - 'tools/kwai_login_ui_locator.py'
+      - 'tools/kwai_semantic_login_route_probe.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-android-replacement-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  routing-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify retired CircleCI is never selected
+        run: |
+          set -Eeuo pipefail
+          python3 -m unittest discover -s tests -p 'test_android_executor_router.py' -v
+          python3 - <<'PY'
+          import json
+          m=json.load(open('ci-hub/executor-routing.json'))
+          assert 'circleci' not in m['android_execution']['priority']
+          assert 'circleci' not in m['browser_execution']['priority']
+          assert m['providers']['circleci']['active'] is False
+          assert m['providers']['gitlab']['active'] is True
+          print('CIRCLECI_RETIRED_ROUTING=PASS')
+          PY
+
+  android-kwai-real:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: routing-contract
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start accelerated headless Android 35 and verify real Kwai APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PHASE=KVM
+          trap 'code=$?; echo "ANDROID_KWAI_FAILURE_PHASE=$PHASE EXIT_CODE=$code" >&2' ERR
+          test -c /dev/kvm
+          sudo chmod 666 /dev/kvm
+          test -n "${ANDROID_HOME:-}"
+          export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          emulator -accel-check
+          PHASE=SDK
+          IMG='system-images;android-35;google_apis;x86_64'
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "$IMG"
+          echo no | avdmanager create avd --force --name anthares-github-api35 --package "$IMG" --device pixel_2
+          PHASE=BOOT
+          nohup emulator -avd anthares-github-api35 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on > /tmp/anthares-github-emulator.log 2>&1 &
+          adb start-server
+          timeout 80 adb wait-for-device
+          for i in $(seq 1 120); do
+            [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          echo GITHUB_ANDROID_BOOT=PASS
+          PHASE=VAULT
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          mkdir -p kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+          PHASE=INSTALL
+          bash kwai_vault_install.sh
+          adb shell pm path com.kwai.video | grep -q '^package:'
+          echo GITHUB_KWAI_INSTALL=PASS
+          PHASE=CHOOSER
+          timeout 300 env KWAI_ROUTE=me_direct KWAI_NETWORK=baseline KWAI_SETTLE=2 python3 tools/kwai_semantic_login_route_probe.py | tee kwai-route.txt
+          grep -Eq 'SEMANTIC_LOGIN_ROUTE=PASS' kwai-route.txt
+          echo GITHUB_KWAI_CHOOSER=PASS
+          PHASE=FORM
+          timeout 120 python3 tools/kwai_android_login_entry.py email | tee kwai-method.txt
+          grep -Eq 'KWAI_NATIVE_LOGIN_FORM_(VISIBLE|ALREADY_VISIBLE)' kwai-method.txt
+          echo GITHUB_KWAI_FORM=PASS
+          echo 'KWAI_AUTHENTICATED=NOT_TESTED KWAI_PUBLISHED=NOT_TESTED'
+      - name: Safe diagnostics - no screenshots or credential XML
+        if: always()
+        shell: bash
+        run: |
+          adb devices -l || true
+          if [ -f /tmp/anthares-github-emulator.log ]; then
+            grep -E 'FATAL|ERROR|emulator:|qemu' /tmp/anthares-github-emulator.log | tail -35 || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kwai-android-phase-logs
+          path: |
+            kwai-route.txt
+            kwai-method.txt
+          if-no-files-found: ignore
+          retention-days: 3
