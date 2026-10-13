@@ -174,6 +174,40 @@ async function deviceOk(request) {
   return { ok: !!expected && constantEqual(expected, actual), device };
 }
 
+// shared-fencing-v1: a separate Floot/Neon PostgreSQL authority is the
+// single writer for controller ownership. The existing device bearer is
+// forwarded only to that user-owned authority, where only its SHA-256 is
+// enrolled. Failure is fail-closed: no new job lease is issued.
+const FENCE_URL = "https://anthares-ara-reserva.floot.app/_api/ara/fence";
+const FENCE_OWNER = "https://anthares-ara-backup.anthares1.workers.dev";
+async function sharedFence(request, device, op = "acquire") {
+  const auth = request.headers.get("Authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return { ok: false, status: 401, error: "missing_device_token" };
+  const body = { device_id: device, op };
+  if (op !== "status") {
+    body.owner = FENCE_OWNER;
+    body.nonce = (await sha256Hex(`${token}\n${FENCE_OWNER}`)).slice(0, 48);
+    body.ttl_seconds = 180;
+  }
+  try {
+    const r = await fetch(FENCE_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": auth,
+        "Content-Type": "application/json",
+        "User-Agent": "AntharesARACloudflare/shared-fencing-v1",
+      },
+      body: JSON.stringify(body),
+    });
+    let data = {};
+    try { data = await r.json(); } catch {}
+    return { ok: r.ok && data?.ok === true, status: r.status, ...data };
+  } catch (e) {
+    return { ok: false, status: 503, error: "fence_authority_unreachable" };
+  }
+}
+
 export class AraState extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -480,6 +514,7 @@ export default {
           role: "ara-backup-control",
           persistence_cycle: true,
           independent_of_render_postgres: true,
+          shared_fencing: "floot-postgres-v1",
         }, h.ok ? 200 : 503);
       } catch (e) {
         return json({ ok: false, backend: "cloudflare-durable-object-sqlite", error: e?.name || "error" }, 503);
@@ -496,23 +531,30 @@ export default {
 
     if (url.pathname === "/v1/device/auth-check" && request.method === "GET") {
       const auth = await deviceOk(request);
-      return auth.ok ? json({ ok: true }) : json({ ok: false, error: "unauthorized" }, 401);
+      if (!auth.ok) return json({ ok: false, error: "unauthorized" }, 401);
+      const fence = await sharedFence(request, auth.device, "status");
+      if (!fence.ok) return json({ ok: false, error: "shared_fence_auth_failed", fence_status: fence.status }, 503);
+      return json({ ok: true, shared_fence_auth: true, fence_authority: "floot-postgres" });
     }
 
     if (url.pathname === "/v1/device/heartbeat" && request.method === "POST") {
       const auth = await deviceOk(request);
       if (!auth.ok) return json({ error: "unauthorized" }, 401);
+      const fence = await sharedFence(request, auth.device, "acquire");
+      if (!fence.ok) return json({ error: "fence_not_owned", fence_status: fence.status, fence_error: fence.error || null }, fence.status === 409 ? 409 : 503);
       let body = {};
       try { body = await request.json(); } catch {}
       await st.heartbeat(auth.device, body);
-      return json({ ok: true });
+      return json({ ok: true, fence_epoch: fence.epoch ?? null });
     }
 
     if (url.pathname === "/v1/device/jobs/next" && request.method === "GET") {
       const auth = await deviceOk(request);
       if (!auth.ok) return json({ error: "unauthorized" }, 401);
+      const fence = await sharedFence(request, auth.device, "acquire");
+      if (!fence.ok) return json({ error: "fence_not_owned", fence_status: fence.status, fence_error: fence.error || null }, fence.status === 409 ? 409 : 503);
       const job = await st.leaseNext(auth.device, 35);
-      return job ? json({ job }) : new Response(null, { status: 204 });
+      return job ? json({ job, fence_epoch: fence.epoch ?? null }) : new Response(null, { status: 204 });
     }
 
     const resultMatch = url.pathname.match(/^\/v1\/device\/jobs\/([A-Za-z0-9_-]{1,100})\/result$/);
