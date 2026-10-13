@@ -12,13 +12,13 @@ from urllib.parse import urlsplit, parse_qs
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from starlette.websockets import WebSocketDisconnect
-from websockets.asyncio.client import connect
 
 router = APIRouter()
 COOKIE_NAME = "anthares_novnc_session"
 SESSION_SECONDS = 600
 NOVNC_ROOT = Path(os.environ.get("NOVNC_STATIC_ROOT", "/usr/share/novnc"))
-WS_BACKEND = "ws://127.0.0.1:6080/websockify"
+VNC_HOST = os.environ.get("NOVNC_VNC_HOST", "127.0.0.1")
+VNC_PORT = int(os.environ.get("NOVNC_VNC_PORT", "5900"))
 REVOKED = set()
 MANUAL_TOKEN = os.environ.get("NOVNC_MANUAL_TOKEN", "")
 try:
@@ -75,14 +75,10 @@ def _require_cookie(anthares_novnc_session: str | None = Cookie(default=None)) -
 
 
 def _secure_cookie() -> bool:
-    # Only isolated local tests may disable Secure.
     return os.environ.get("NOVNC_COOKIE_SECURE", "1") != "0"
 
 
 def _set_session_cookie(response: Response) -> None:
-    # Use the site root so the cookie survives the one-time redirect and is
-    # also available to the websocket upgrade. Lax is sufficient because all
-    # authenticated noVNC traffic remains same-origin and the cookie is HttpOnly.
     response.set_cookie(
         COOKIE_NAME, _issue(), max_age=SESSION_SECONDS, httponly=True,
         secure=_secure_cookie(), samesite="lax", path="/",
@@ -105,7 +101,6 @@ def login_form() -> HTMLResponse:
 
 @router.get("/novnc/once/{token}")
 def manual_once(token: str, request: Request):
-    """Issue one short noVNC cookie without disclosing the permanent control token."""
     global MANUAL_USED
     if _secure_cookie() and request.url.scheme != "https":
         raise HTTPException(status_code=403, detail="HTTPS required")
@@ -182,46 +177,60 @@ def _same_origin(websocket: WebSocket) -> bool:
 
 @router.websocket("/novnc/websockify")
 async def novnc_websocket(websocket: WebSocket):
+    """Bridge the authenticated browser websocket directly to loopback VNC TCP.
+
+    noVNC already speaks raw RFB over websocket. A second websocket proxy layer
+    is unnecessary and can stall RFB negotiation, so this endpoint terminates
+    the public websocket itself and forwards bytes to x11vnc on 127.0.0.1:5900.
+    """
     expiry = _expiry(websocket.cookies.get(COOKIE_NAME))
     if not expiry or not _same_origin(websocket):
         await websocket.close(code=1008)
         return
-    offered = [s.strip() for s in websocket.headers.get("sec-websocket-protocol", "").split(",")]
-    protocols = [s for s in offered if s in {"binary", "base64"}]
+
+    offered = [s.strip() for s in websocket.headers.get("sec-websocket-protocol", "").split(",") if s.strip()]
+    selected = "binary" if "binary" in offered else ("base64" if "base64" in offered else None)
+    writer = None
     try:
-        async with connect(WS_BACKEND, subprotocols=protocols or None, open_timeout=5, max_size=None) as backend:
-            selected = backend.subprotocol if backend.subprotocol in protocols else None
-            await websocket.accept(subprotocol=selected)
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(VNC_HOST, VNC_PORT), timeout=5)
+        await websocket.accept(subprotocol=selected)
 
-            async def to_backend():
-                while True:
-                    message = await websocket.receive()
-                    if message["type"] == "websocket.disconnect":
-                        return
-                    if message.get("bytes") is not None:
-                        await backend.send(message["bytes"])
-                    elif message.get("text") is not None:
-                        await backend.send(message["text"])
+        async def to_vnc():
+            while True:
+                message = await websocket.receive()
+                if message["type"] == "websocket.disconnect":
+                    return
+                payload = message.get("bytes")
+                if payload is None and message.get("text") is not None:
+                    text = message["text"]
+                    payload = base64.b64decode(text) if selected == "base64" else text.encode("latin1")
+                if payload:
+                    writer.write(payload)
+                    await writer.drain()
 
-            async def to_browser():
-                async for message in backend:
-                    if isinstance(message, bytes):
-                        await websocket.send_bytes(message)
-                    else:
-                        await websocket.send_text(message)
+        async def to_browser():
+            while True:
+                data = await reader.read(65536)
+                if not data:
+                    return
+                if selected == "base64":
+                    await websocket.send_text(base64.b64encode(data).decode("ascii"))
+                else:
+                    await websocket.send_bytes(data)
 
-            async def expire():
-                await asyncio.sleep(max(0, expiry - time.time()))
-                await websocket.close(code=1008)
+        async def expire():
+            await asyncio.sleep(max(0, expiry - time.time()))
+            await websocket.close(code=1008)
 
-            tasks = [asyncio.create_task(fn()) for fn in (to_backend, to_browser, expire)]
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-            for task in done:
-                if task.exception() and not isinstance(task.exception(), WebSocketDisconnect):
-                    raise task.exception()
+        tasks = [asyncio.create_task(fn()) for fn in (to_vnc, to_browser, expire)]
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        for task in done:
+            exc = task.exception()
+            if exc and not isinstance(exc, WebSocketDisconnect):
+                raise exc
     except WebSocketDisconnect:
         return
     except Exception:
@@ -229,3 +238,10 @@ async def novnc_websocket(websocket: WebSocket):
             await websocket.close(code=1011)
         except RuntimeError:
             pass
+    finally:
+        if writer is not None:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
