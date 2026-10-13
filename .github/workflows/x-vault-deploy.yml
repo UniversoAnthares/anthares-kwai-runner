@@ -23,6 +23,7 @@ jobs:
           node --experimental-default-type=module --check cloudflare-x-vault/src/index.js
           grep -q 'anthares.encrypted-browser-state.v1' cloudflare-x-vault/src/index.js
           grep -q 'BROWSER_KEY' cloudflare-x-vault/src/index.js
+          grep -q 'BROWSER_JWK_KEY' cloudflare-x-vault/src/index.js
           grep -q 'ANTHARES_STATE' cloudflare-x-vault/wrangler.toml
       - name: Deploy durable session vault
         env:
@@ -33,6 +34,12 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           cd cloudflare-x-vault
           npx --yes wrangler@4.43.0 deploy
+      - name: Seed browser verifier key
+        run: |
+          set -euo pipefail
+          out="$(curl --fail-with-body -sS -X POST https://anthares-x-vault.anthares1.workers.dev/browser-key/refresh)"
+          echo "$out"
+          echo "$out" | grep -q '"refreshed":true'
       - name: Verify durable vault health
         run: |
           set -euo pipefail
