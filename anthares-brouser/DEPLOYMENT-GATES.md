@@ -21,3 +21,11 @@ GitHub Actions fornece testes efêmeros e não substitui um serviço persistente
 
 ## Intervenção exclusiva do usuário
 Apenas quando existir URL HTTPS privada da instância persistente com noVNC protegido: abrir a interface, autenticar Kwai pelo método exigido (QR/OTP/confirmação no celular) e avisar que concluiu. Nunca enviar senhas ou códigos no chat.
+
+
+## Administração remota — atualização 2026-10-12
+- Anthares-remote é o único plano de administração remota adotado. Não utilizar MeshCentral, Remote Desktop Commander ou AI Commander.
+- Serviços Render verificados: anthares-remote-control, anthares-remote-mcp e anthares-remote-mcp-v2; deploys recentes em estado `live`. Isso **não** prova capacidade de executar Chromium persistente nem constitui autorização para expor o noVNC.
+- Integração do navegador com Anthares-remote deve preservar `CONTROL_TOKEN`, acesso noVNC somente por túnel/proxy HTTPS autenticado, perfis isolados e registro de evidência sem segredos.
+- Nenhum serviço Anthares-browser dedicado foi encontrado no workspace Render na última auditoria. Não criar um serviço público enquanto persistência e interface de login segura não estiverem comprovadas.
+- GitLab CI: 20 verificações paralelas e teste funcional da API concluídos com sucesso na execução 2940648485. Não confundir testes de contrato com login ou publicação real.
