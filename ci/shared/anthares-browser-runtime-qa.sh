@@ -54,7 +54,6 @@ for C in $(seq 1 "$CASES"); do
   VOL="anthares-browser-data-${LANE}-${C}"
   NET="anthares-browser-net-${LANE}-${C}"
   API_PORT=$((18080 + C))
-  VNC_PORT=$((16080 + C))
   TOKEN="ci-control-${LANE}-${C}-g${GROUP}"
   PASS="ci-vnc-${LANE}-${C}-v${VARIANT}"
   PERSIST_SECRET="persist-${LANE}-${C}-${GROUP}-${VARIANT}"
@@ -86,7 +85,7 @@ HTML
   start_container() {
     docker rm -f "$NAME" >/dev/null 2>&1 || true
     docker run -d --name "$NAME" --network "$NET" \
-      -p "${API_PORT}:8080" -p "${VNC_PORT}:6080" \
+      -p "${API_PORT}:8080" \
       -e "VNC_PASSWORD=${PASS}" \
       -e "CONTROL_TOKEN=${TOKEN}" \
       -e "START_URL=http://${PAGE_NAME}/" \
@@ -236,8 +235,18 @@ d=json.loads(sys.argv[1])
 assert d['result'].get('value') == sys.argv[2], d
 PY
 
-  wait_http "$NAME" "http://127.0.0.1:${VNC_PORT}/vnc.html"
-  curl -fsS "http://127.0.0.1:${VNC_PORT}/vnc.html" | grep -qi 'noVNC'
+  # websockify intentionally binds loopback inside the container. Publishing
+  # 6080 on the Docker host cannot reach that listener and would be unsafe.
+  ! docker port "$NAME" | grep -q ':6080'
+  NOVNC_OK=0
+  for _ in $(seq 1 30); do
+    if docker exec "$NAME" python3 -c 'import urllib.request; data=urllib.request.urlopen("http://127.0.0.1:6080/vnc.html", timeout=10).read(); assert b"noVNC" in data' >/dev/null 2>&1; then
+      NOVNC_OK=1
+      break
+    fi
+    sleep 0.5
+  done
+  test "$NOVNC_OK" = 1
 
   echo "PROVIDER=${PROVIDER} CASE=${C} GROUP=${GROUP} VARIANT=${VARIANT} PASS"
   cleanup_current
