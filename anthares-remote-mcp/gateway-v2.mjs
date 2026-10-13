@@ -61,7 +61,7 @@ const server=createServer(async(req,res)=>{try{
     if(!(await sendApprovalCode(approval))){json(res,503,{error:'device_authorization_unavailable'});return;}
     // Pending OAuth transactions are signed and survive a gateway process restart.
     const html=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Remote Agent</title></head><body><main><h1>Anthares Remote Agent</h1><p>Um código de autorização foi colocado no clipboard do computador cadastrado. Cole-o abaixo para autorizar o ChatGPT.</p><p>Escopos: ${esc(scopes.join(', '))}</p><form method="post" action="/oauth/authorize"><input type="hidden" name="tx" value="${esc(tx)}"><label>Código <input type="password" name="approval" autocomplete="one-time-code" required autofocus></label><button type="submit">Autorizar</button></form></main></body></html>`;
-    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",'Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});res.end(html);return;
+    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",'Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});res.end(html);return;
   }
   if(req.method==='POST'&&u.pathname==='/oauth/authorize'){
     const body=form(await readBody(req,65536));const tx=body.get('tx')||'',approval=body.get('approval')||'';const p=verifyToken(tx,'oauth_pending');
