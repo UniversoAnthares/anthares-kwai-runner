@@ -11,6 +11,15 @@ workflows:
   primary:
     steps:
     - git-clone@8: {}
+    - script@1:
+        title: Anthares-browser 40-case runtime QA
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -Eeuo pipefail
+            export CI_PROVIDER=bitrise
+            docker info
+            ANTHARES_BROWSER_QA_CASES=40 bash ci/shared/anthares-browser-runtime-qa.sh
     - avd-manager@1:
         inputs:
         - profile: pixel_2
