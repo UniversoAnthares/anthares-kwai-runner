@@ -1,0 +1,110 @@
+name: Recover ARA and LDPlayer
+
+on:
+  push:
+    branches:
+      - recovery/ldplayer-ara-20261013
+    paths:
+      - .github/workflows/recover-ara-and-ldplayer.yml
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: self-hosted
+    timeout-minutes: 15
+    steps:
+      - name: Recover Anthares Remote agents and LDPlayer
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Output "HOST=$env:COMPUTERNAME USER=$env:USERNAME"
+
+          $control = 'https://anthares-ara-control.onrender.com'
+          $araRoot = 'C:\ProgramData\AntharesRemoteAgent'
+          $launchers = @()
+          if (Test-Path $araRoot) {
+            $launchers = @(Get-ChildItem -Path $araRoot -Recurse -File -Filter 'run-agent*.ps1' -ErrorAction SilentlyContinue)
+          }
+          Write-Output "ARA_LAUNCHERS=$($launchers.Count)"
+
+          Get-Process 'anthares-remote-agent' -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+
+          foreach ($launcher in $launchers) {
+            $text = Get-Content -LiteralPath $launcher.FullName -Raw
+            if ($text -match "ANTHARES_CONTROL_URL='[^']*'") {
+              $text = [regex]::Replace(
+                $text,
+                "ANTHARES_CONTROL_URL='[^']*'",
+                "ANTHARES_CONTROL_URL='$control'"
+              )
+              Set-Content -LiteralPath $launcher.FullName -Value $text -Encoding UTF8
+            }
+
+            $device = 'DESKTOP-FTDK0HP'
+            $m = [regex]::Match($text, "ANTHARES_DEVICE_ID='([^']+)'" )
+            if ($m.Success) { $device = $m.Groups[1].Value }
+            $safe = ($device -replace '[^A-Za-z0-9_.-]', '_')
+            $taskName = "AntharesRemoteAgent-$safe"
+            $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (
+              '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $launcher.FullName + '"'
+            )
+            $trigger = New-ScheduledTaskTrigger -AtStartup
+            $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+            $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Days 3650)
+            $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings
+            Register-ScheduledTask -TaskName $taskName -InputObject $task -Force | Out-Null
+            Start-ScheduledTask -TaskName $taskName
+            Write-Output "ARA_TASK_STARTED=$taskName LAUNCHER=$($launcher.FullName)"
+          }
+
+          Start-Sleep -Seconds 12
+          Get-CimInstance Win32_Process |
+            Where-Object { $_.Name -eq 'anthares-remote-agent.exe' } |
+            Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine |
+            Format-Table -AutoSize | Out-String -Width 4096 | Write-Output
+
+          $ld = 'D:\LDPlayer\LDPlayer9\ldconsole.exe'
+          if (-not (Test-Path $ld)) { throw "LDPlayer console missing: $ld" }
+          Write-Output ('LD_VERSION=' + (& $ld help | Select-Object -First 1))
+
+          & $ld quitall | Out-Null
+          Start-Sleep -Seconds 3
+          sc.exe start Ld9BoxSup | Out-Null
+          & $ld modify --index 0 --root 1 | Out-Null
+
+          $ldTask = 'Anthares-LDPlayer-Launch'
+          $ldAction = New-ScheduledTaskAction -Execute $ld -Argument 'launch --index 0'
+          $ldTrigger = New-ScheduledTaskTrigger -AtStartup
+          $ldPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+          $ldSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+          $ldDef = New-ScheduledTask -Action $ldAction -Trigger $ldTrigger -Principal $ldPrincipal -Settings $ldSettings
+          Register-ScheduledTask -TaskName $ldTask -InputObject $ldDef -Force | Out-Null
+          Start-ScheduledTask -TaskName $ldTask
+          Write-Output "LD_TASK_STARTED=$ldTask"
+
+          $deadline = (Get-Date).AddSeconds(90)
+          $ready = $false
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 5
+            $state = (& $ld isrunning --index 0 | Out-String).Trim()
+            Write-Output "LD_STATE=$state"
+            if ($state -eq 'running') {
+              try {
+                $boot = (& $ld adb --index 0 --command 'shell getprop sys.boot_completed' | Out-String).Trim()
+                Write-Output "LD_BOOT=$boot"
+                if ($boot -match '1') { $ready = $true; break }
+              } catch {}
+            }
+          }
+          Write-Output ('LD_LIST2=' + ((& $ld list2 | Out-String).Trim()))
+          Write-Output ('LD_RUNNINGLIST=' + ((& $ld runninglist | Out-String).Trim()))
+          if (-not $ready) { throw 'LDPlayer instance 0 did not reach Android boot_completed=1' }
+
+          Write-Output ('LD_ABI=' + ((& $ld adb --index 0 --command 'shell getprop ro.product.cpu.abi' | Out-String).Trim()))
+          Write-Output ('LD_ABILIST=' + ((& $ld adb --index 0 --command 'shell getprop ro.product.cpu.abilist' | Out-String).Trim()))
+          Write-Output ('LD_ANDROID=' + ((& $ld adb --index 0 --command 'shell getprop ro.build.version.release' | Out-String).Trim()))
+          Write-Output ('LD_ROOT=' + ((& $ld adb --index 0 --command 'shell id' | Out-String).Trim()))
