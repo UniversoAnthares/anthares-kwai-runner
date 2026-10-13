@@ -1,4 +1,5 @@
 name: ARA ChatGPT MCP QA
+# validates durable authorization-code and refresh-token rotation
 
 on:
   push:
