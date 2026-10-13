@@ -182,6 +182,8 @@ def register(app, control_token):
         job = execute_job(device, job_type, body.get("args") or {}, timeout, body.get("idempotency_key"))
         if not job:
             return jsonify(error="job_lost"), 503
+        if job.get("status") == "uncertain":
+            return jsonify(ok=False, status="uncertain", job_id=job.get("id"), error="execution_outcome_unknown"), 409
         if job.get("status") not in ("done", "failed"):
             return jsonify(ok=False, status=job.get("status"), job_id=job.get("id"), error="timeout_waiting_for_device"), 504
         result = job.get("result") or {}
