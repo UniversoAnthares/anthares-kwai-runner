@@ -51,6 +51,17 @@ def test_health_fail_closed_and_no_host_fallback():
     assert body["global_lease_authority"] == "anthares-control/cloudflare"
 
 
+def test_no_implicit_desktop_target():
+    reset(); c = app_client()
+    r = c.post("/v1/runtime/remote/execute", headers=auth(), json={"type": "ping"})
+    assert r.status_code == 400
+    assert r.get_json()["error"] == "device_id_required_no_local_fallback"
+    with patch.object(mesh.requests, "get", side_effect=RuntimeError("offline")):
+        health = c.get("/v1/runtime/health").get_json()
+    assert health["remote"]["device_id"] is None
+    assert health["remote"]["connected"] is False
+
+
 def test_browser_requires_control_auth():
     reset(); c = app_client()
     assert c.post("/v1/runtime/browser/lease/acquire", json={"owner": "x"}).status_code == 401
