@@ -1,0 +1,79 @@
+name: Anthares Reserva Session Migration
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/anthares-reserva-ci]
+    paths:
+      - '.github/workflows/anthares-reserva-session-migration.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-reserva-session-migration
+  cancel-in-progress: true
+
+jobs:
+  migrate-and-prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch encrypted capsule from temporary Render bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://anthares-browser-qa-render-v2.onrender.com/migration/kwai-capsule'
+          for i in $(seq 1 30); do
+            code=$(curl -sS --max-time 20 -o /tmp/reserva-capsule.json -w '%{http_code}' "$URL" || true)
+            if [ "$code" = 200 ]; then break; fi
+            echo "MIGRATION_BRIDGE_WAIT=$code"
+            test "$i" -lt 30
+            sleep 10
+          done
+          python - <<'PY'
+          import json
+          p='/tmp/reserva-capsule.json'; d=json.load(open(p))
+          assert d.get('version')==1 and d.get('alg')=='RSA-OAEP-256+A256GCM'
+          assert all(isinstance(d.get(k),str) and d[k] for k in ('wrapped_key','nonce','ciphertext','aad'))
+          assert 0 < int(d.get('cookie_count',0)) <= 128
+          print('ENCRYPTED_CAPSULE_VALID=1')
+          print('COOKIE_COUNT='+str(d['cookie_count']))
+          PY
+      - name: Store encrypted capsule only inside Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          cd anthares-reserva-browser
+          npm install --no-audit --no-fund >/dev/null
+          cat /tmp/reserva-capsule.json | npx wrangler secret put RESERVA_KWAI_CAPSULE >/dev/null
+          rm -f /tmp/reserva-capsule.json
+          npx wrangler deploy >/dev/null
+          echo CAPSULE_STORED=1
+      - name: Prove restored Kwai session without exposing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://anthares-reserva-browser.anthares1.workers.dev'
+          sleep 15
+          for i in $(seq 1 6); do
+            if curl -fsS --max-time 60 "$BASE/_auth_selftest" -o /tmp/auth-proof.json; then break; fi
+            test "$i" -lt 6
+            sleep 8
+          done
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/auth-proof.json'))
+          safe={k:d.get(k) for k in ('ok','capsule_decrypted','cookie_count','identity_verified','upload_surface_verified','session_state','error') if k in d}
+          print('AUTH_PROOF='+json.dumps(safe,separators=(',',':')))
+          assert d.get('ok') is True
+          assert d.get('capsule_decrypted') is True
+          assert d.get('identity_verified') is True
+          assert d.get('upload_surface_verified') is True
+          print('RESERVA_AUTH_CONTINUITY=PASS')
+          PY
+          rm -f /tmp/auth-proof.json
