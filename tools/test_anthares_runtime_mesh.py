@@ -62,6 +62,15 @@ def test_no_implicit_desktop_target():
     assert health["remote"]["connected"] is False
 
 
+def test_invalid_numeric_inputs_return_400():
+    reset(); c = app_client()
+    assert c.post("/v1/runtime/remote/execute", headers=auth(), json={"device_id": "remote", "type": "ping", "timeout_seconds": "not-a-number"}).status_code == 400
+    assert c.post("/v1/runtime/browser/lease/acquire", headers=auth(), json={"owner": "runner", "ttl_seconds": []}).status_code == 400
+    lease = acquire(c)
+    h = auth({"X-Anthares-Lease-Token": lease["token"], "X-Anthares-Lease-Generation": str(lease["generation"])})
+    assert c.post("/v1/runtime/browser/lease/renew", headers=h, json={"ttl_seconds": "bad"}).status_code == 400
+
+
 def test_browser_requires_control_auth():
     reset(); c = app_client()
     assert c.post("/v1/runtime/browser/lease/acquire", json={"owner": "x"}).status_code == 401
