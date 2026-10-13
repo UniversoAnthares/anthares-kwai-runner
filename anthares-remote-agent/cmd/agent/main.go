@@ -9,6 +9,7 @@ import (
     "fmt"
     "io"
     "net/http"
+    "net/url"
     "os"
     "os/exec"
     "path/filepath"
@@ -218,8 +219,10 @@ func runWithStdin(ctx context.Context,stdin,name string,args ...string)(string,e
 }
 
 func postResult(cfg Config,result Result)error{
+    if err:=validateJobID(result.ID);err!=nil{return err}
     body,_:=json.Marshal(result)
-    req,_:=http.NewRequest(http.MethodPost,cfg.ControlURL+"/v1/device/jobs/"+result.ID+"/result",bytes.NewReader(body))
+    req,err:=http.NewRequest(http.MethodPost,cfg.ControlURL+"/v1/device/jobs/"+url.PathEscape(result.ID)+"/result",bytes.NewReader(body))
+    if err!=nil{return err}
     req.Header.Set("Content-Type","application/json"); authReq(req,cfg)
     resp,err:=httpClient.Do(req);if err!=nil{return err};defer resp.Body.Close()
     if resp.StatusCode/100!=2{return fmt.Errorf("result status %d",resp.StatusCode)}
@@ -236,3 +239,14 @@ func postResultRetry(cfg Config, result Result) error {
 }
 
 func hostname()string{h,_:=os.Hostname();return h}
+
+// validateJobID prevents job IDs from escaping the control-plane result route.
+func validateJobID(id string) error {
+    if len(id)==0 || len(id)>128 {return errors.New("invalid job ID length")}
+    for _,ch:=range id {
+        if !(ch>='a'&&ch<='z' || ch>='A'&&ch<='Z' || ch>='0'&&ch<='9' || ch=='-' || ch=='_') {
+            return errors.New("invalid job ID character")
+        }
+    }
+    return nil
+}
