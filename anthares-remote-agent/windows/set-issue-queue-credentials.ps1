@@ -12,6 +12,7 @@ param(
     [switch]$KeepExistingMissingTokens
 )
 $ErrorActionPreference = 'Stop'
+try { Add-Type -AssemblyName System.Security -ErrorAction Stop } catch { throw 'System.Security is required for DPAPI queue credentials' }
 $root = 'C:\ProgramData\AntharesRemoteAgent\secrets'
 $configPath = Join-Path $root 'issue-queue.json'
 New-Item -ItemType Directory -Path $root -Force | Out-Null
