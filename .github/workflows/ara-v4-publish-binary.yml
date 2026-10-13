@@ -1,0 +1,47 @@
+name: Publish ARA V4 recovery binary
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'anthares-remote-agent/**'
+      - '.github/workflows/ara-v4-publish-binary.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: anthares-remote-agent/go.mod
+      - name: Test
+        working-directory: anthares-remote-agent
+        run: go test ./... -count=1
+      - name: Build Windows V4
+        working-directory: anthares-remote-agent
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4.exe ./cmd/agent
+          sha256sum dist/anthares-remote-agent-v4.exe | tee dist/anthares-remote-agent-v4.exe.sha256
+      - name: Publish stable recovery release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view ara-v4-latest >/dev/null 2>&1; then
+            gh release create ara-v4-latest --target "$GITHUB_SHA" --title 'ARA V4 latest recovery binary' --notes 'Stable recovery asset for Anthares Remote. Updated automatically after validated agent changes.'
+          fi
+          gh release upload ara-v4-latest \
+            anthares-remote-agent/dist/anthares-remote-agent-v4.exe \
+            anthares-remote-agent/dist/anthares-remote-agent-v4.exe.sha256 \
+            --clobber
