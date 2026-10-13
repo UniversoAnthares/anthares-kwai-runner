@@ -152,6 +152,7 @@ func loadConfig() (Config, error) {
 				if abs, err := filepath.Abs(root); err == nil {
 					c.AllowedRoots = append(c.AllowedRoots, filepath.Clean(abs))
 				}
+			}
 		}
 	}
 	if c.DeviceToken == "" || c.DeviceID == "" {
