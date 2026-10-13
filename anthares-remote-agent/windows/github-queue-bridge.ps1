@@ -87,7 +87,7 @@ function Invoke-Gh {
     param([string[]]$Args,[switch]$IgnoreExit)
     $out=& $Gh @Args 2>&1
     $code=$LASTEXITCODE
-    if($code -ne 0 -and -not $IgnoreExit){throw "gh exit=$code: $([string]::Join(' ',@($out)))"}
+    if($code -ne 0 -and -not $IgnoreExit){throw "gh exit=${code}: $([string]::Join(' ',@($out)))"}
     return @($out)
 }
 function Ensure-GhAuth {
@@ -109,11 +109,11 @@ function Set-IssueLabels {
 }
 function Add-ResultComment {
     param([int]$Number,[string]$JobId,[string]$Status,[string]$ResultJson,[string]$ResultHash)
-    $marker="<!-- ara-result:$JobId:$ResultHash -->"
+    $marker="<!-- ara-result:${JobId}:${ResultHash} -->"
     $comments=Invoke-Gh @('api',"repos/$Repository/issues/$Number/comments",'--paginate') -IgnoreExit
     $joined=[string]::Join("`n",@($comments))
     if($joined -match [regex]::Escape($marker)){return}
-    $body="$marker`nARA result`n`n```json`n$ResultJson`n```"
+    $body="$marker`nARA result`n`n" + '```json' + "`n$ResultJson`n" + '```'
     if($body.Length -gt 32000){$body=$body.Substring(0,32000)}
     Invoke-Gh @('issue','comment',"$Number",'-R',$Repository,'--body',$body) | Out-Null
 }
@@ -176,7 +176,7 @@ function Acquire-Job {
         $rec=[ordered]@{
             job_id=$Job.job_id; idempotency_key=$Job.idempotency_key; transport=$Job.source; issue_number=$Job.issue_number
             type=$Job.type; args=$Job.args; status='leased'; created_at=$Job.created_at; leased_at=$now.ToString('o')
-            started_at=$null; completed_at=$null; result=$null; result_hash=$null; attempt=$attempt; owner="$DeviceId:github"
+            started_at=$null; completed_at=$null; result=$null; result_hash=$null; attempt=$attempt; owner="${DeviceId}:github"
             lease_token=$token; fencing_token=[int64]$l.fence_counter; lease_until=$now.AddSeconds($LeaseSeconds).ToString('o')
         }
         Set-JobProp $l.jobs $Job.job_id ([pscustomobject]$rec)
