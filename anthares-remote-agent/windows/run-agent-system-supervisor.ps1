@@ -7,6 +7,24 @@ if (Test-Path $queueAuthLoader) {
     try { . $queueAuthLoader } catch { Write-Error -Message ('issue queue auth load deferred: ' + $_.Exception.Message) -ErrorAction Continue }
 }
 
+# Keep mutable Anthares runtime data off the nearly-full system drive. The
+# executable and protected credentials stay under ProgramData, while temporary
+# files, browser profiles, downloads, installers and other work products live on D:.
+$workRoot = ([string]$env:ANTHARES_WORK_ROOT).Trim()
+if ([string]::IsNullOrWhiteSpace($workRoot)) { $workRoot = 'D:\AntharsWork' }
+try {
+    @($workRoot, (Join-Path $workRoot 'temp'), (Join-Path $workRoot 'logs'), (Join-Path $workRoot 'downloads'), (Join-Path $workRoot 'installers'), (Join-Path $workRoot 'ara-jobs'), (Join-Path $workRoot 'browser-profiles')) |
+        ForEach-Object { New-Item -ItemType Directory -Path $_ -Force | Out-Null }
+    $env:ANTHARES_WORK_ROOT = $workRoot
+    $env:TEMP = Join-Path $workRoot 'temp'
+    $env:TMP = $env:TEMP
+    $roots = @(([string]$env:ANTHARES_ALLOWED_ROOTS -split ';') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($roots -notcontains $workRoot) { $roots += $workRoot }
+    $env:ANTHARES_ALLOWED_ROOTS = ($roots | Select-Object -Unique) -join ';'
+} catch {
+    Write-Error -Message ('AntharsWork initialization deferred: ' + $_.Exception.Message) -ErrorAction Continue
+}
+
 # Canonical runtime: one SYSTEM agent, one device identity, no interactive desktop.
 # Cloudflare provides the normal zero-cost HTTP controls. GitHub/GitLab private
 # issue queues are independent transports when encrypted credentials are present.
@@ -59,7 +77,7 @@ function Save-State([string]$active, [string]$mode, [string]$reason, [int]$agent
             supervisor_pid=$PID; agent_pid=$agentPid; device_id=$env:ANTHARES_DEVICE_ID; identity='SYSTEM'; session=0
             binary=(Split-Path $exe -Leaf); github_queue=[bool](Github-QueueConfigured); gitlab_queue=[bool](Gitlab-QueueConfigured)
             queue_failover=[bool](Queue-TransportConfigured); cloudflare_controls=$true; render_required=$false
-            http_candidates=@($httpCandidates)
+            work_root=$env:ANTHARES_WORK_ROOT; http_candidates=@($httpCandidates)
         } | ConvertTo-Json -Depth 4 | Set-Content -Path $stateFile -Encoding UTF8
     } catch {}
 }
