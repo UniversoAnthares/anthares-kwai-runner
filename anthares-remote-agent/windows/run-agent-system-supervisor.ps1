@@ -71,13 +71,14 @@ function Preferred-Alternate([string]$active) {
 
 try {
     while ($true) {
-        # A single canonical runtime prevents duplicate leases/results.
+        # Never terminate agents that this supervisor did not start.
+        # An existing agent may belong to a healthy recovery or admin channel.
+        # Wait for it to exit rather than stealing its identity or leases.
         $existing = @(Get-Process -Name 'anthares-remote-agent','anthares-remote-agent-standard' -ErrorAction SilentlyContinue)
         if ($existing.Count -gt 0) {
-            foreach ($p in $existing) {
-                try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
-            }
-            Start-Sleep -Seconds 2
+            Save-State '' 'waiting-for-existing-agent'
+            Start-Sleep -Seconds 5
+            continue
         }
 
         $active = Choose-Control
