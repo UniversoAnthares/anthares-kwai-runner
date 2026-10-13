@@ -83,6 +83,13 @@ func main() {
 			time.Sleep(2 * time.Second)
 			continue
 		}
+		// Defensive validation even if a future poll implementation changes.
+		// Never execute a malformed job supplied by the control plane.
+		if err := validateJobID(job.ID); err != nil || strings.TrimSpace(job.Type) == "" {
+			<-sem
+			fmt.Fprintln(os.Stderr, "rejecting malformed remote job")
+			continue
+		}
 		j := *job
 		go func() {
 			defer func() { <-sem }()
