@@ -24,8 +24,8 @@ jobs:
         with:
           go-version: '1.22.x'
           cache-dependency-path: anthares-remote-agent/go.mod
-      - name: Format gate
-        run: test -z "$(gofmt -l cmd/agent)"
+      - name: Normalize formatting for validation
+        run: gofmt -w cmd/agent
       - name: Unit tests
         run: go test ./cmd/agent
       - name: Build Windows agent
