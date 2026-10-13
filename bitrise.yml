@@ -1,10 +1,46 @@
 format_version: '13'
 default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 project_type: other
+
+app:
+  envs:
+  - KWAI_VAULT_URL: https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+  - KWAI_VAULT_SHA256: 96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543
+
 workflows:
   primary:
     steps:
     - git-clone@8: {}
+    - avd-manager@1:
+        inputs:
+        - profile: pixel_2
+        - api_level: '35'
+        - tag: google_apis
+        - abi: x86_64
+        - emulator_id: anthares-bitrise-api35
+        - disable_animations: 'yes'
+    - script@1:
+        title: Prove Android and Kwai runtime
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -Eeuo pipefail
+            adb devices -l
+            timeout 60 adb wait-for-device
+            timeout 150 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done'
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+            echo BITRISE_ANDROID_BOOT=PASS
+            curl -fL --retry 5 --retry-all-errors --connect-timeout 15 --max-time 180 -o kwai-vault.zip "$KWAI_VAULT_URL"
+            echo "$KWAI_VAULT_SHA256  kwai-vault.zip" | sha256sum -c -
+            rm -rf kwai-vault && mkdir kwai-vault
+            unzip -q kwai-vault.zip -d kwai-vault
+            bash kwai_vault_install.sh
+            adb shell pm path com.kwai.video | grep -q '^package:'
+            adb shell am force-stop com.kwai.video || true
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+            sleep 5
+            test -n "$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
+            echo BITRISE_KWAI_RUNTIME=PASS
     - script@1:
         title: Provider hub smoke
         inputs:
