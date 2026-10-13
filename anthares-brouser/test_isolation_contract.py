@@ -37,6 +37,14 @@ class IsolationContract(unittest.TestCase):
         self.assertIn("profile_dir_writable", self.api)
         self.assertIn('"/ready"', self.api)
 
+    def test_hosted_qa_uses_separate_loopback_api_and_public_result_port(self):
+        qa = (ROOT / "qa40_render.py").read_text()
+        self.assertIn("API_PORT=18080", qa)
+        self.assertIn("'API_BIND':'127.0.0.1'", qa)
+        self.assertIn("result_server.start()", qa)
+        self.assertIn("result_server.join()", qa)
+        self.assertIn('"${API_BIND:-0.0.0.0}"', self.start)
+
     def test_api_requires_token(self):
         self.assertIn('def require_token(', self.api)
         self.assertIn('Depends(require_token)', self.api)
