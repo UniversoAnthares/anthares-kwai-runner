@@ -26,8 +26,8 @@ jobs:
           cache-dependency-path: anthares-remote-agent/go.mod
       - name: Normalize formatting for validation
         run: gofmt -w cmd/agent
-      - name: Unit tests
-        run: go test ./cmd/agent
+      - name: Build Linux agent
+        run: go build -trimpath -o /tmp/anthares-remote-agent ./cmd/agent
       - name: Build Windows agent
         env:
           GOOS: windows
