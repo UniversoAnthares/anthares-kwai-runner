@@ -205,7 +205,8 @@ class PostgresStore:
         hb, seen = row
         hb = dict(hb)
         hb["seen_at"] = seen.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-        connected = (datetime.now(timezone.utc) - seen).total_seconds() <= freshness_seconds
+        age_seconds = (datetime.now(timezone.utc) - seen).total_seconds()
+        connected = 0 <= age_seconds <= freshness_seconds
         return {"heartbeat": hb, "connected": connected, "queued": queued, "uncertain": uncertain}
 
     def enqueue(self, device_id, job_type, args=None, timeout_seconds=30,
