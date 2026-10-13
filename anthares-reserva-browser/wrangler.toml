@@ -1,5 +1,5 @@
 name = "anthares-reserva-browser"
-main = "src/index_v2.js"
+main = "src/index_v3.js"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 
