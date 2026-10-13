@@ -1,11 +1,6 @@
 name: Cloudflare ARA Canonical Control Deploy
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'cloudflare-ara-backup/**'
-      - '.github/workflows/cloudflare-ara-backup-deploy.yml'
 concurrency:
   group: anthares-ara-backup-deploy
   cancel-in-progress: true
