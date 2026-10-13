@@ -1,0 +1,36 @@
+name: ARA HA agent compile and test
+
+on:
+  push:
+    branches: [feature/ara-no-cloudflare-no-render]
+    paths:
+      - 'anthares-remote-agent/**'
+      - '.github/workflows/ara-ha-agent-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: anthares-remote-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: anthares-remote-agent/go.mod
+      - name: Format gate
+        run: test -z "$(gofmt -l cmd/agent)"
+      - name: Unit tests
+        run: go test ./cmd/agent
+      - name: Build Windows agent
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: go build -trimpath -o /tmp/anthares-remote-agent.exe ./cmd/agent
