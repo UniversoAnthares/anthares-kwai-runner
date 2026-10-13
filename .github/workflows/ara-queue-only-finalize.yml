@@ -52,19 +52,36 @@ jobs:
           ! grep -q 'workers.dev' anthares-remote-agent/windows/run-agent-user-fallback.ps1
           echo 'ARA_QUEUE_ONLY_VALIDATION_OK=1'
 
-      - name: Commit finalized runtime
+      - name: Commit finalized runtime with lease-safe retry
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'UniversoAnthares'
           git config user.email '81930373+UniversoAnthares@users.noreply.github.com'
-          git add anthares-remote-agent/cmd/agent/main.go anthares-remote-agent/cmd/agent/issue_queue.go
-          if git diff --cached --quiet; then
-            echo 'Queue-only agent runtime already finalized.'
-            exit 0
-          fi
-          git commit -m 'fix(ara): make private issue queues canonical runtime'
-          git push origin HEAD:main
+          pushed=0
+          for attempt in $(seq 1 8); do
+            echo "queue-only commit attempt $attempt"
+            git fetch origin main
+            git reset --hard origin/main
+            python3 tools/finalize_ara_queue_only.py
+            cd anthares-remote-agent
+            go test ./... -count=1
+            GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4.exe ./cmd/agent
+            cd ..
+            git add anthares-remote-agent/cmd/agent/main.go anthares-remote-agent/cmd/agent/issue_queue.go
+            if git diff --cached --quiet; then
+              echo 'Queue-only agent runtime already finalized on current main.'
+              pushed=1
+              break
+            fi
+            git commit -m 'fix(ara): make private issue queues canonical runtime'
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            sleep 2
+          done
+          test "$pushed" = 1
 
       - uses: actions/upload-artifact@v4
         with:
