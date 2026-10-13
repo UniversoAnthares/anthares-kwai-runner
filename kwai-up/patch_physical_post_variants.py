@@ -83,6 +83,29 @@ new_focus = '''        post_rid = post.get("resource-id", "")
             focused_rid = focused_post.get("resource-id", "")
             # Irreversible boundary starts only after a trusted native final
             # control is itself focused. Never use a blind coordinate tap.
+            # Claim the irreversible action durably before emitting/clicking.
+            # O_EXCL prevents a concurrent or retried commit from double-posting.
+            # Keep the marker even if verification is uncertain or the process dies.
+            attempt = self.ready_file.with_name(
+                "publish_attempt_" + ku.safe_token(self.cfg.job_id)
+                + "_" + str(proof["media_sha256"])[:16] + ".json"
+            )
+            try:
+                fd = os.open(str(attempt), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            except FileExistsError as exc:
+                raise ku.KwaiUpError("publish-attempt-already-recorded:verify-only") from exc
+            try:
+                record = {
+                    "job_id": self.cfg.job_id,
+                    "media_sha256": proof["media_sha256"],
+                    "serial": self.adb.serial,
+                    "claimed_at": int(time.time()),
+                    "state": "PUBLISH_REQUESTED",
+                }
+                os.write(fd, json.dumps(record, sort_keys=True).encode("utf-8"))
+                os.fsync(fd)
+            finally:
+                os.close(fd)
             self.emit(
                 "PUBLISH_REQUESTED",
                 job=self.cfg.job_id,
