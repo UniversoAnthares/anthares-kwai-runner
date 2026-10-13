@@ -14,7 +14,11 @@ def load_manifest():
 
 def load_state():
     raw = os.environ.get("ANTHARES_EXECUTOR_STATUS_JSON", "{}").strip() or "{}"
-    return json.loads(raw)
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def choose(manifest, state, workload="manual_auth"):
