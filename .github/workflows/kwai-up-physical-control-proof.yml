@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 12
     env:
       KWAI_UP_ADB_BIN: 'C:\Users\Lucas\.kwai-up\platform-tools\adb.exe'
-      KWAI_UP_ADB_SERIAL: '192.168.1.35:5555'
+      KWAI_UP_ADB_SERIAL: '993fce720408'
       KWAI_UP_PACKAGE: 'kwai.lite.video'
       KWAI_UP_EXPECTED_ACCOUNT: 'lucasrosalem'
       KWAI_UP_ARTIFACT_DIR: 'C:\Users\Lucas\.kwai-up\artifacts-control-proof'
@@ -26,7 +26,9 @@ jobs:
       - name: Connect exact Redmi transport
         shell: powershell
         run: |
-          & $env:KWAI_UP_ADB_BIN connect $env:KWAI_UP_ADB_SERIAL | Out-Host
+          $state = (& $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL get-state 2>&1 | Out-String).Trim()
+          Write-Host "KWAI_UP_USB_ADB_STATE=$state"
+          if ($LASTEXITCODE -ne 0 -or $state -ne 'device') { throw "usb-adb-not-authorized: $state" }
           & $env:KWAI_UP_ADB_BIN devices -l | Out-Host
           $model=& $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL shell getprop ro.product.model
           $sdk=& $env:KWAI_UP_ADB_BIN -s $env:KWAI_UP_ADB_SERIAL shell getprop ro.build.version.sdk
