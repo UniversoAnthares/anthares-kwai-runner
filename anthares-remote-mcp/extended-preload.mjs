@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerExtendedTools } from './extended-tools.mjs';
 
-const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-remote-control.onrender.com').replace(/\/$/, '');
+const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-ara-backup.anthares1.workers.dev').replace(/\/$/, '');
 const CONTROL_TOKEN = process.env.ARA_SHARED || '';
 const DEFAULT_DEVICE = process.env.ANTHARES_DEVICE_ID || 'DESKTOP-FTDK0HP';
 const registered = new WeakSet();
