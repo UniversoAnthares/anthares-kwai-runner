@@ -1,0 +1,24 @@
+services:
+  anthares-executor:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      ANTHARES_EXECUTOR_TOKEN: ${ANTHARES_EXECUTOR_TOKEN:?set in environment}
+      ANTHARES_EXECUTOR_ID: ${ANTHARES_EXECUTOR_ID:-reserva-01}
+      CHROME_PROFILE_DIR: /data/profile
+      STATE_DB: /data/state/jobs.sqlite3
+      MEMORY_LIMIT_BYTES: "1073741824"
+    volumes:
+      - profile:/data/profile
+      - state:/data/state
+    mem_limit: 1536m
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  profile:
+  state:
