@@ -106,6 +106,20 @@ def heartbeat(device_id, body):
 
 def _reap(conn, device_id):
     safe = list(SAFE_RETRY_TYPES)
+    unknown = json.dumps({
+        "ok": False,
+        "error": "execution_outcome_unknown",
+        "reconciled": "expired_after_deadline",
+    })
+    conn.execute(
+        """
+        UPDATE ara_jobs
+        SET status='expired', lease_until=NULL,
+            result=COALESCE(result,%s::jsonb)
+        WHERE device_id=%s AND status='uncertain' AND expires_at<=now()
+        """,
+        (unknown, device_id),
+    )
     conn.execute(
         """
         UPDATE ara_jobs SET status=CASE
