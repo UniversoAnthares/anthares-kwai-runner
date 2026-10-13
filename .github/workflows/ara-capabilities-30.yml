@@ -47,13 +47,13 @@ jobs:
           - {name: '21 linux amd64 build', os: ubuntu-latest, cmd: 'GOOS=linux GOARCH=amd64 go build ./cmd/agent'}
           - {name: '22 linux arm64 build', os: ubuntu-latest, cmd: 'GOOS=linux GOARCH=arm64 go build ./cmd/agent'}
           - {name: '23 gofmt linux', os: ubuntu-latest, cmd: 'test -z "$(gofmt -l cmd/agent/*.go)"'}
-          - {name: '24 windows compile tests', os: windows-latest, cmd: 'go test ./cmd/agent -run TestFilesystemLifecycle -count=1 -v'}
+          - {name: '24 windows admin runtime', os: windows-latest, cmd: 'go test ./cmd/agent -run "TestWindows(ProcessInfoSelf|ServiceList|NetworkInfo|TCPConnections|ScheduledTasks|SystemEventLog|EventLogRejectsSecurityByDefault|FileACL)" -v'}
           - {name: '25 repeat full suite', os: ubuntu-latest, cmd: 'go test ./... -count=10'}
           - {name: '26 shuffled suite', os: ubuntu-latest, cmd: 'go test ./... -shuffle=on -count=5'}
           - {name: '27 coverage suite', os: ubuntu-latest, cmd: 'go test ./... -cover'}
           - {name: '28 strict timeout', os: ubuntu-latest, cmd: 'go test ./... -timeout=30s'}
           - {name: '29 json runner', os: ubuntu-latest, cmd: 'go test -json ./...'}
-          - {name: '30 windows repeated lifecycle', os: windows-latest, cmd: 'go test ./cmd/agent -run TestFilesystemLifecycle -count=20'}
+          - {name: '30 windows shell jobs interactive', os: windows-latest, cmd: 'go test ./cmd/agent -run "TestWindows(ShellCmdStructured|ShellExitCode|DetachedJobLifecycle|ClipboardRoundTrip|ScreenshotProbe)" -v'}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
