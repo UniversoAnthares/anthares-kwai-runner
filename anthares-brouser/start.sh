@@ -188,6 +188,9 @@ fi
 READY_FAILURES=0
 MAX_READY_FAILURES=${MAX_READY_FAILURES:-6}
 SUPERVISOR_INTERVAL=${SUPERVISOR_INTERVAL:-5}
+KWAI_PROBE_DONE=0
+KWAI_PROBE_ATTEMPTS=0
+KWAI_PROBE_MAX_ATTEMPTS=${KWAI_PROBE_MAX_ATTEMPTS:-3}
 
 log "supervisor active"
 while kill -0 "$API_PID" 2>/dev/null; do
@@ -214,6 +217,8 @@ while kill -0 "$API_PID" 2>/dev/null; do
     tail -n 20 /tmp/chromium.log 2>/dev/null || true
     start_chromium
     READY_FAILURES=0
+    KWAI_PROBE_DONE=0
+    KWAI_PROBE_ATTEMPTS=0
     continue
   fi
 
@@ -230,6 +235,8 @@ while kill -0 "$API_PID" 2>/dev/null; do
     start_chromium
     LAST_SNAPSHOT=$(date +%s)
     READY_FAILURES=0
+    KWAI_PROBE_DONE=0
+    KWAI_PROBE_ATTEMPTS=0
     continue
   fi
 
@@ -238,6 +245,16 @@ while kill -0 "$API_PID" 2>/dev/null; do
       log "browser readiness recovered"
     fi
     READY_FAILURES=0
+    if (( KWAI_PROBE_DONE == 0 && KWAI_PROBE_ATTEMPTS < KWAI_PROBE_MAX_ATTEMPTS )); then
+      KWAI_PROBE_ATTEMPTS=$((KWAI_PROBE_ATTEMPTS + 1))
+      log "running fail-closed Kwai runtime probe (${KWAI_PROBE_ATTEMPTS}/${KWAI_PROBE_MAX_ATTEMPTS})"
+      if python /opt/anthares-brouser/kwai_runtime_probe.py; then
+        KWAI_PROBE_DONE=1
+        log "Kwai identity and upload surface verified"
+      else
+        log "Kwai runtime probe did not prove authenticated upload readiness"
+      fi
+    fi
   else
     READY_FAILURES=$((READY_FAILURES + 1))
     log "readiness probe failed (${READY_FAILURES}/${MAX_READY_FAILURES})"
@@ -247,6 +264,8 @@ while kill -0 "$API_PID" 2>/dev/null; do
       stop_pid "$CHROME_PID"
       start_chromium
       READY_FAILURES=0
+      KWAI_PROBE_DONE=0
+      KWAI_PROBE_ATTEMPTS=0
     fi
   fi
 done
