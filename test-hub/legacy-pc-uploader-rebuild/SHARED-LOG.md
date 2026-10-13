@@ -1443,3 +1443,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Render workspace `anthares-site` currently lists both MCP gateways, both ARA canaries, and two Anthares-browser QA services. Latest MCP service logs sampled for `anthares-remote-mcp` and `anthares-remote-mcp-v2` show startup and signed gateway readiness around 03:22 UTC; no fresh application error was seen in the sampled records. The device round-trip is separately proven by the current ARA heartbeat/status call.
 - No CMD/PowerShell command was deliberately launched by this check, no process was killed, no publish guard was created, and no social publication was initiated.
 - Current blockers: verify the installed executor/supervisor revision and heartbeat without creating a visible shell; obtain Android hierarchy/screenshot/activity evidence for Kwai; prove the intended Kwai account is authenticated; then run only a safe probe. The next Kwai probe is intentionally deferred until the installed revision and no-focus execution path can be checked without risking the user's desktop.
+
+
+## 2026-10-13 03:49 UTC — Defense-in-depth patch proposed for Kwai probe subprocesses
+
+- Created PR #47: https://github.com/UniversoAnthares/anthares-clipper/pull/47
+- Branch: `fix/kwai-no-window-stdin-20261013`; commit `f1e6a96b3a7e528f78b131483c8fa174d7f911f9`.
+- Change: added `stdin=subprocess.DEVNULL` to both subprocess creation paths in `kwai_memu_probe.py` (shared `subprocess.run` wrapper and bounded `Popen` for hierarchy/screenshot commands). Existing `CREATE_NO_WINDOW` remains enabled.
+- Validation: diff is exactly 2 additions / 0 deletions; branch is one commit ahead of `legacy-pc-rebuild`, zero commits behind. No CI status or workflow run has appeared yet. PR reports `mergeable=false`, so it remains open pending GitHub's mergeability/check state and review; it was not merged.
+- Scope: this reduces inherited stdin coupling; it does not prove Windows session isolation and does not suppress MEmu's own GUI interactions. Runtime rollout and a new Kwai probe remain blocked until safe execution and account identity are established.
