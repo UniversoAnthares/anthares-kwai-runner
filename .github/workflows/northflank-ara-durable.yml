@@ -1,0 +1,145 @@
+name: Provision durable Northflank ARA controller
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - infra/northflank/Dockerfile
+      - .github/workflows/northflank-ara-durable.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: northflank-ara-durable
+  cancel-in-progress: false
+
+jobs:
+  provision-durable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Create PostgreSQL, inject durable config, and rebuild
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, time, urllib.error, urllib.request
+
+          token = os.getenv("NORTHFLANK_API_TOKEN", "")
+          shared = os.getenv("ARA_SHARED", "")
+          if not token:
+              sys.exit("NORTHFLANK_API_TOKEN secret is absent")
+          if not shared:
+              sys.exit("ARA_SHARED secret is absent; refusing to deploy an incompatible failover controller")
+
+          print("::add-mask::" + token)
+          print("::add-mask::" + shared)
+
+          base = "https://api.northflank.com/v1"
+          headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+
+          def api(method, path, data=None, allow=()):
+              body = json.dumps(data).encode() if data is not None else None
+              req = urllib.request.Request(base + path, data=body, method=method, headers=headers)
+              try:
+                  with urllib.request.urlopen(req, timeout=45) as r:
+                      raw = r.read().decode("utf-8", errors="replace")
+                      return json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw = e.read().decode("utf-8", errors="replace")
+                  if e.code in allow:
+                      return {"_http_status": e.code, "_body": raw}
+                  print("Northflank HTTP", e.code, "at", path)
+                  # Never print credential-bearing bodies from credential/environment endpoints.
+                  if "credentials" not in path and "runtime-environment" not in path:
+                      print(raw[:1200])
+                  raise
+
+          projects = api("GET", "/projects").get("data", {}).get("projects", [])
+          if isinstance(projects, dict):
+              projects = list(projects.values())
+          matches = [p for p in projects if p.get("name") == "Default"]
+          if len(matches) != 1:
+              sys.exit(f"Expected one Default project, found {len(matches)}")
+          project = matches[0].get("id")
+
+          services = api("GET", f"/projects/{project}/services").get("data", {}).get("services", [])
+          if isinstance(services, dict):
+              services = list(services.values())
+          service = next((s for s in services if s.get("name") == "anthares-ara-northflank"), None)
+          if not service:
+              sys.exit("anthares-ara-northflank service does not exist")
+          service_id = service.get("id") or "anthares-ara-northflank"
+
+          addons_response = api("GET", f"/projects/{project}/addons")
+          addons = addons_response.get("data", {}).get("addons", [])
+          if isinstance(addons, dict):
+              addons = list(addons.values())
+          addon = next((a for a in addons if a.get("name") == "anthares-ara-postgres"), None)
+
+          if not addon:
+              payload = {
+                  "name": "anthares-ara-postgres",
+                  "description": "Durable state for the Anthares Remote failover controller",
+                  "type": "postgresql",
+                  "version": "latest",
+                  "billing": {
+                      "deploymentPlan": "nf-compute-10",
+                      "storageClass": "nvme",
+                      "storage": 4096,
+                      "replicas": 1
+                  },
+                  "tlsEnabled": False,
+                  "externalAccessEnabled": False,
+                  "ipPolicies": [],
+                  "pitrEnabled": False,
+                  "typeSpecificSettings": {}
+              }
+              created = api("POST", f"/projects/{project}/addons", payload)
+              addon_data = created.get("data") or {}
+              addon_id = addon_data.get("id") or "anthares-ara-postgres"
+              print("Created PostgreSQL addon:", addon_id)
+          else:
+              addon_id = addon.get("id") or "anthares-ara-postgres"
+              print("PostgreSQL addon already exists:", addon_id)
+
+          postgres_uri = ""
+          for _ in range(90):
+              try:
+                  creds = api("GET", f"/projects/{project}/addons/{addon_id}/credentials")
+                  data = creds.get("data") or {}
+                  envs = data.get("envs") or {}
+                  postgres_uri = envs.get("POSTGRES_URI") or envs.get("DATABASE_URL") or ""
+                  if postgres_uri:
+                      break
+              except urllib.error.HTTPError as e:
+                  if e.code not in (404, 409, 503):
+                      raise
+              time.sleep(10)
+          if not postgres_uri:
+              sys.exit("PostgreSQL credentials were not ready before timeout")
+          print("::add-mask::" + postgres_uri)
+
+          runtime = {
+              "PORT": "10000",
+              "ARA_SHARED": shared,
+              "ARA_DATABASE_URL": postgres_uri,
+              "DATABASE_URL": postgres_uri
+          }
+          updated = api("POST", f"/projects/{project}/services/{service_id}/runtime-environment",
+                        {"runtimeEnvironment": runtime, "runtimeFiles": {}})
+          data = updated.get("data") or {}
+          if data.get("success") is False:
+              sys.exit("Northflank rejected durable runtime environment")
+          print("Durable runtime environment applied without printing secrets.")
+
+          started = api("POST", f"/projects/{project}/services/{service_id}/build", {}, allow=(409,))
+          if started.get("_http_status") == 409:
+              print("A service build is already running.")
+          else:
+              print("Durable service build started.")
+          print("Production failover remains unchanged until persistence validation passes.")
+          PY
