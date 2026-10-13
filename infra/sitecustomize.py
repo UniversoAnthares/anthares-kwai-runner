@@ -21,6 +21,6 @@ try:
 
     # Deliberately omitted: anthares_remote_bootstrap. Its public routes enqueue shell
     # jobs without controller authentication and are not safe for a public service.
-except Exception:
-    # Keep the existing X worker boot path fail-open; deployment logs will expose errors.
-    pass
+except Exception as _exc:
+    # Never print configuration values or request data; only the exception class and bounded message.
+    print("ARA_BOOTSTRAP_ERROR=" + type(_exc).__name__ + ":" + str(_exc)[:240], flush=True)
