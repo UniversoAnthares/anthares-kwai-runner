@@ -1,0 +1,171 @@
+name: Integrate shared ARA fencing
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ara-shared-fencing-integrate.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: ara-shared-fencing-source-patch
+  cancel-in-progress: false
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch Cloudflare ARA with shared external fencing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('cloudflare-ara-backup/src/index.js')
+          s=p.read_text(encoding='utf-8')
+          if 'shared-fencing-v1' in s:
+              print('already patched')
+              raise SystemExit(0)
+          anchor='''async function deviceOk(request) {
+            const device = (request.headers.get("X-Anthares-Device") || "").trim();
+            if (!validDeviceId(device)) return { ok: false, device: "" };
+            const auth = request.headers.get("Authorization") || "";
+            const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+            if (!token) return { ok: false, device };
+            const expected = await expectedDeviceHash(device);
+            const actual = await sha256Hex(token);
+            return { ok: !!expected && constantEqual(expected, actual), device };
+          }
+          '''
+          insert='''async function deviceOk(request) {
+            const device = (request.headers.get("X-Anthares-Device") || "").trim();
+            if (!validDeviceId(device)) return { ok: false, device: "" };
+            const auth = request.headers.get("Authorization") || "";
+            const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+            if (!token) return { ok: false, device };
+            const expected = await expectedDeviceHash(device);
+            const actual = await sha256Hex(token);
+            return { ok: !!expected && constantEqual(expected, actual), device };
+          }
+
+          // shared-fencing-v1: a separate Floot/Neon PostgreSQL authority is the
+          // single writer for controller ownership. The existing device bearer is
+          // forwarded only to that user-owned authority, where only its SHA-256 is
+          // enrolled. Failure is fail-closed: no new job lease is issued.
+          const FENCE_URL = "https://anthares-ara-reserva.floot.app/_api/ara/fence";
+          const FENCE_OWNER = "https://anthares-ara-backup.anthares1.workers.dev";
+          async function sharedFence(request, device, op = "acquire") {
+            const auth = request.headers.get("Authorization") || "";
+            const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+            if (!token) return { ok: false, status: 401, error: "missing_device_token" };
+            const body = { device_id: device, op };
+            if (op !== "status") {
+              body.owner = FENCE_OWNER;
+              body.nonce = (await sha256Hex(`${token}\\n${FENCE_OWNER}`)).slice(0, 48);
+              body.ttl_seconds = 180;
+            }
+            try {
+              const r = await fetch(FENCE_URL, {
+                method: "POST",
+                headers: {
+                  "Authorization": auth,
+                  "Content-Type": "application/json",
+                  "User-Agent": "AntharesARACloudflare/shared-fencing-v1",
+                },
+                body: JSON.stringify(body),
+              });
+              let data = {};
+              try { data = await r.json(); } catch {}
+              return { ok: r.ok && data?.ok === true, status: r.status, ...data };
+            } catch (e) {
+              return { ok: false, status: 503, error: "fence_authority_unreachable" };
+            }
+          }
+          '''
+          if anchor not in s:
+              raise SystemExit('deviceOk anchor missing')
+          s=s.replace(anchor,insert,1)
+
+          old='''    if (url.pathname === "/v1/device/auth-check" && request.method === "GET") {
+                const auth = await deviceOk(request);
+                return auth.ok ? json({ ok: true }) : json({ ok: false, error: "unauthorized" }, 401);
+              }
+          '''
+          new='''    if (url.pathname === "/v1/device/auth-check" && request.method === "GET") {
+                const auth = await deviceOk(request);
+                if (!auth.ok) return json({ ok: false, error: "unauthorized" }, 401);
+                const fence = await sharedFence(request, auth.device, "status");
+                if (!fence.ok) return json({ ok: false, error: "shared_fence_auth_failed", fence_status: fence.status }, 503);
+                return json({ ok: true, shared_fence_auth: true, fence_authority: "floot-postgres" });
+              }
+          '''
+          if old not in s:
+              raise SystemExit('auth-check anchor missing')
+          s=s.replace(old,new,1)
+
+          old='''    if (url.pathname === "/v1/device/heartbeat" && request.method === "POST") {
+                const auth = await deviceOk(request);
+                if (!auth.ok) return json({ error: "unauthorized" }, 401);
+                let body = {};
+                try { body = await request.json(); } catch {}
+                await st.heartbeat(auth.device, body);
+                return json({ ok: true });
+              }
+          '''
+          new='''    if (url.pathname === "/v1/device/heartbeat" && request.method === "POST") {
+                const auth = await deviceOk(request);
+                if (!auth.ok) return json({ error: "unauthorized" }, 401);
+                const fence = await sharedFence(request, auth.device, "acquire");
+                if (!fence.ok) return json({ error: "fence_not_owned", fence_status: fence.status, fence_error: fence.error || null }, fence.status === 409 ? 409 : 503);
+                let body = {};
+                try { body = await request.json(); } catch {}
+                await st.heartbeat(auth.device, body);
+                return json({ ok: true, fence_epoch: fence.epoch ?? null });
+              }
+          '''
+          if old not in s:
+              raise SystemExit('heartbeat anchor missing')
+          s=s.replace(old,new,1)
+
+          old='''    if (url.pathname === "/v1/device/jobs/next" && request.method === "GET") {
+                const auth = await deviceOk(request);
+                if (!auth.ok) return json({ error: "unauthorized" }, 401);
+                const job = await st.leaseNext(auth.device, 35);
+                return job ? json({ job }) : new Response(null, { status: 204 });
+              }
+          '''
+          new='''    if (url.pathname === "/v1/device/jobs/next" && request.method === "GET") {
+                const auth = await deviceOk(request);
+                if (!auth.ok) return json({ error: "unauthorized" }, 401);
+                const fence = await sharedFence(request, auth.device, "acquire");
+                if (!fence.ok) return json({ error: "fence_not_owned", fence_status: fence.status, fence_error: fence.error || null }, fence.status === 409 ? 409 : 503);
+                const job = await st.leaseNext(auth.device, 35);
+                return job ? json({ job, fence_epoch: fence.epoch ?? null }) : new Response(null, { status: 204 });
+              }
+          '''
+          if old not in s:
+              raise SystemExit('jobs-next anchor missing')
+          s=s.replace(old,new,1)
+
+          s=s.replace('independent_of_render_postgres: true,','independent_of_render_postgres: true,\n          shared_fencing: "floot-postgres-v1",',1)
+          p.write_text(s,encoding='utf-8')
+          PY
+          node --check cloudflare-ara-backup/src/index.js
+          grep -q 'shared-fencing-v1' cloudflare-ara-backup/src/index.js
+          grep -q 'floot-postgres-v1' cloudflare-ara-backup/src/index.js
+      - name: Commit fencing integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- cloudflare-ara-backup/src/index.js; then
+            echo 'NO_CHANGE=true'
+            exit 0
+          fi
+          git config user.name 'anthares-fencing-bot'
+          git config user.email 'anthares-fencing-bot@users.noreply.github.com'
+          git add cloudflare-ara-backup/src/index.js
+          git commit -m 'integrate shared PostgreSQL fencing into Cloudflare ARA'
+          git push origin HEAD:main
