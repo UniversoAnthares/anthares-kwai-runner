@@ -8,6 +8,7 @@ export DISPLAY=${DISPLAY:-:99}
 export CHROME_PROFILE_DIR=${CHROME_PROFILE_DIR:-/data/chrome-profile}
 START_URL=${START_URL:-https://www.kwai.com/}
 CDP_PORT=${CDP_PORT:-9222}
+API_PORT=${PORT:-8080}
 # The CDP websocket is strictly loopback-only. Explicitly bypass any proxy
 # configuration inherited/injected into the container; websocket-client can
 # otherwise tunnel ws://localhost through an HTTP proxy and the control API
@@ -46,7 +47,7 @@ chromium \
   "$START_URL" >/tmp/chromium.log 2>&1 &
 CHROME_PID=$!
 
-uvicorn app:app --host 0.0.0.0 --port 8080 --app-dir /opt/anthares-brouser >/tmp/api.log 2>&1 &
+uvicorn app:app --host 0.0.0.0 --port "$API_PORT" --app-dir /opt/anthares-brouser >/tmp/api.log 2>&1 &
 API_PID=$!
 
 cleanup() {
@@ -54,4 +55,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-wait -n "$API_PID" "$CHROME_PID" "$NOVNC_PID" "$VNC_PID" "$XVFB_PID"
+# Keep diagnostics reachable if Chromium/noVNC crashes. /ready must fail closed;
+# the service supervisor can then restart the unhealthy browser instance.
+wait "$API_PID"
