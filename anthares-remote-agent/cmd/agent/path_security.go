@@ -74,7 +74,9 @@ func securePath(cfg Config, path string) (string, error) {
 		if info.Mode()&os.ModeSymlink != 0 || info.Mode()&os.ModeIrregular != 0 {
 			return "", errors.New("path contains symbolic link or irregular component")
 		}
-		if info.Mode()&os.ModeType != 0 && !info.IsDir() && current != abs {
+		// Every existing ancestor must be a directory. The final component may
+		// be a regular file because callers often validate a file path.
+		if current != abs && !info.IsDir() {
 			return "", fmt.Errorf("non-directory component in path: %s", current)
 		}
 	}
