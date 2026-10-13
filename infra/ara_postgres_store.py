@@ -60,8 +60,6 @@ def connection():
 
 
 def initialize():
-    # Use the canonical schema already shared by the production ARA canary.
-    # CREATE IF NOT EXISTS keeps this service compatible with that existing store.
     ddl = """
     CREATE TABLE IF NOT EXISTS ara_devices(
       device_id TEXT PRIMARY KEY,
@@ -211,18 +209,22 @@ def submit_result(device_id, job_id, result):
             return "missing"
         if row["status"] in FINAL:
             return "duplicate" if row["result"] == (result or {}) else "conflict"
-        if row["status"] != "leased":
+        if row["status"] not in ("leased", "uncertain"):
             return "not_leased"
+        previous = row["status"]
         status = "done" if bool((result or {}).get("ok")) else "failed"
-        conn.execute(
+        updated = conn.execute(
             """
             UPDATE ara_jobs
             SET status=%s,result=%s::jsonb,lease_until=NULL
-            WHERE id=%s AND device_id=%s AND status='leased'
+            WHERE id=%s AND device_id=%s AND status IN ('leased','uncertain')
+            RETURNING id
             """,
             (status, json.dumps(result or {}), job_id, device_id),
-        )
-        return "stored"
+        ).fetchone()
+        if not updated:
+            return "conflict"
+        return "resolved_uncertain" if previous == "uncertain" else "stored"
 
 
 def get_job(device_id, job_id):
