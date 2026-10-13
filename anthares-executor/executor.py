@@ -176,6 +176,24 @@ def snapshot_profile():
         return jsonify(result), 200 if result.get("ok") else 503
 
 
+@app.post("/v1/kwai/session/import")
+def import_kwai_session():
+    if not browser_ready():
+        return jsonify(ok=False, error="browser_not_ready"), 409
+    if request.content_length is not None and request.content_length > 600 * 1024:
+        return jsonify(ok=False, error="session_payload_too_large"), 413
+    state = request.get_json(silent=True)
+    if not isinstance(state, dict):
+        return jsonify(ok=False, error="invalid_session_payload"), 400
+    try:
+        result = kwai_probe.import_state(state)
+        return jsonify(result), 200
+    except (ValueError, TypeError) as exc:
+        return jsonify(ok=False, error="invalid_session_state", detail=str(exc)[:80]), 400
+    except Exception as exc:
+        return jsonify(ok=False, error="session_import_failed", detail=str(exc)[:80]), 502
+
+
 @app.post("/v1/kwai/probe")
 def probe_kwai():
     if not browser_ready():
