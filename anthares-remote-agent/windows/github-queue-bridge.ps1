@@ -7,7 +7,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
-$BridgeVersion = '2.0.0'
+$BridgeVersion = '2.1.0'
 $StateDir = Join-Path $WorkRoot 'state'
 $LogDir = Join-Path $WorkRoot 'logs'
 $SecretDir = Join-Path $WorkRoot 'secrets'
@@ -42,7 +42,7 @@ function Write-Log {
     } catch {}
 }
 function New-EmptyLedger {
-    [ordered]@{version=1;fence_counter=0;jobs=@{}}
+    [ordered]@{version=1;fence_counter=0;jobs=[pscustomobject]@{}}
 }
 function Read-Ledger {
     if(-not(Test-Path $LedgerPath)){return (New-EmptyLedger)}
@@ -84,14 +84,14 @@ function Get-GhPath {
 }
 $Gh=Get-GhPath
 function Invoke-Gh {
-    param([string[]]$Args,[switch]$IgnoreExit)
-    $out=& $Gh @Args 2>&1
+    param([string[]]$GhArgs,[switch]$IgnoreExit)
+    $out=& $Gh @GhArgs 2>&1
     $code=$LASTEXITCODE
     if($code -ne 0 -and -not $IgnoreExit){throw "gh exit=${code}: $([string]::Join(' ',@($out)))"}
     return @($out)
 }
 function Ensure-GhAuth {
-    $private=Invoke-Gh @('repo','view',$Repository,'--json','isPrivate','--jq','.isPrivate')
+    $private=Invoke-Gh -GhArgs @('repo','view',$Repository,'--json','isPrivate','--jq','.isPrivate')
     if(([string]($private|Select-Object -First 1)).Trim() -ne 'true'){throw 'private repository required'}
 }
 function Ensure-Labels {
@@ -99,23 +99,28 @@ function Ensure-Labels {
         @('ara-queued','ededed'),@('ara-leased','fbca04'),@('ara-running','1d76db'),
         @('ara-completed','0e8a16'),@('ara-failed','d73a4a'),@('ara-uncertain','b60205')
     )
-    foreach($d in $defs){Invoke-Gh @('label','create',$d[0],'-R',$Repository,'--color',$d[1],'--force') -IgnoreExit | Out-Null}
+    foreach($d in $defs){Invoke-Gh -GhArgs @('label','create',$d[0],'-R',$Repository,'--color',$d[1],'--force') -IgnoreExit | Out-Null}
 }
 function Set-IssueLabels {
     param([int]$Number,[string]$State)
-    $all=@('ara-queued','ara-leased','ara-running','ara-completed','ara-failed','ara-uncertain')
-    foreach($lab in $all){ if($lab -ne $State){Invoke-Gh @('issue','edit',"$Number",'-R',$Repository,'--remove-label',$lab) -IgnoreExit | Out-Null} }
-    if($State){Invoke-Gh @('issue','edit',"$Number",'-R',$Repository,'--add-label',$State) -IgnoreExit | Out-Null}
+    if([string]::IsNullOrWhiteSpace($State)){throw 'state label required'}
+    Invoke-Gh -GhArgs @('api','--method','PUT',"repos/$Repository/issues/$Number/labels",'-f',"labels[]=$State",'--silent') | Out-Null
 }
 function Add-ResultComment {
     param([int]$Number,[string]$JobId,[string]$Status,[string]$ResultJson,[string]$ResultHash)
     $marker="<!-- ara-result:${JobId}:${ResultHash} -->"
-    $comments=Invoke-Gh @('api',"repos/$Repository/issues/$Number/comments",'--paginate') -IgnoreExit
+    $comments=Invoke-Gh -GhArgs @('api',"repos/$Repository/issues/$Number/comments",'--paginate') -IgnoreExit
     $joined=[string]::Join("`n",@($comments))
     if($joined -match [regex]::Escape($marker)){return}
     $body="$marker`nARA result`n`n" + '```json' + "`n$ResultJson`n" + '```'
     if($body.Length -gt 32000){$body=$body.Substring(0,32000)}
-    Invoke-Gh @('issue','comment',"$Number",'-R',$Repository,'--body',$body) | Out-Null
+    $tmp=Join-Path $StateDir ('comment-'+[guid]::NewGuid().ToString('N')+'.md')
+    try{
+        [IO.File]::WriteAllText($tmp,$body,(New-Object Text.UTF8Encoding($false)))
+        Invoke-Gh -GhArgs @('issue','comment',"$Number",'-R',$Repository,'--body-file',$tmp) | Out-Null
+    } finally {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+    }
 }
 function Parse-IssueJob {
     param([object]$Issue)
@@ -213,8 +218,7 @@ function Invoke-Handler {
     switch($Job.type){
         'ping' { return [ordered]@{ok=$true;output='pong';device_id=$DeviceId;version=$BridgeVersion} }
         'system_info' {
-            $os=Get-CimInstance Win32_OperatingSystem
-            return [ordered]@{ok=$true;computer=$env:COMPUTERNAME;user=$env:USERNAME;os=$os.Caption;version=$os.Version;last_boot=$os.LastBootUpTime;ps=$PSVersionTable.PSVersion.ToString()}
+            return [ordered]@{ok=$true;computer=[Environment]::MachineName;user=[Environment]::UserName;os=[Environment]::OSVersion.VersionString;version=[Environment]::OSVersion.Version.ToString();ps=$PSVersionTable.PSVersion.ToString();utc_now=[DateTime]::UtcNow.ToString('o')}
         }
         'process_list' {
             $items=Get-CimInstance Win32_Process | Select-Object -First 200 ProcessId,ParentProcessId,Name,CreationDate,CommandLine
@@ -263,37 +267,61 @@ function Process-Issue([object]$Issue){
         $acq=Acquire-Job $job
         if($acq.action -eq 'busy'){return}
         if($acq.action -eq 'cached'){
-            $r=$acq.record;$res=[string]$r.result;if([string]::IsNullOrWhiteSpace($res)){$res='{"ok":false,"error":"cached result unavailable"}'}
-            Add-ResultComment -Number $Issue.number -JobId $job.job_id -Status ([string]$r.status) -ResultJson $res -ResultHash ([string]$r.result_hash
-            )
-            Set-IssueLabels $Issue.number $(if($r.status -eq 'completed'){'ara-completed'}else{'ara-failed'})
-            Write-Log 'job_deduplicated' 'info' $job.job_id "issue=$($Issue.number)"
+            $r=$acq.record
+            $res=[string]$r.result
+            if([string]::IsNullOrWhiteSpace($res)){$res='{"ok":false,"error":"cached result unavailable"}'}
+            try{
+                Add-ResultComment -Number $Issue.number -JobId $job.job_id -Status ([string]$r.status) -ResultJson $res -ResultHash ([string]$r.result_hash)
+                Set-IssueLabels $Issue.number $(if($r.status -eq 'completed'){'ara-completed'}else{'ara-failed'})
+                Write-Log 'job_deduplicated' 'info' $job.job_id "issue=$($Issue.number)"
+            }catch{
+                Write-Log 'reconcile_error' 'error' $job.job_id ($_.Exception.Message+' | '+$_.ScriptStackTrace)
+                try{Set-IssueLabels $Issue.number 'ara-queued'}catch{}
+            }
             return
         }
-        Set-IssueLabels $Issue.number 'ara-leased'
+        try{Set-IssueLabels $Issue.number 'ara-leased'}catch{Write-Log 'label_error' 'error' $job.job_id $_.Exception.Message}
         Mark-Running $job.job_id $acq.lease_token
-        Set-IssueLabels $Issue.number 'ara-running'
+        try{Set-IssueLabels $Issue.number 'ara-running'}catch{Write-Log 'label_error' 'error' $job.job_id $_.Exception.Message}
+        $json=$null
+$rec=$null
         try{
             $value=Invoke-Handler $job
             $json=Normalize-Result $value
             $rec=Complete-Job $job.job_id $acq.lease_token 'completed' $json
+        }catch{
+            $execMessage=$_.Exception.Message
+            $execTrace=$_.ScriptStackTrace
+            $json=Normalize-Result ([ordered]@{ok=$false;error=$execMessage;type=$job.type})
+            try{$rec=Complete-Job $job.job_id $acq.lease_token 'failed' $json;$hash=[string]$rec.result_hash}catch{$hash=Hash-Text $json}
+            try{
+                Add-ResultComment $Issue.number $job.job_id 'failed' $json $hash
+                Set-IssueLabels $Issue.number 'ara-failed'
+            }catch{
+                Write-Log 'result_publish_error' 'error' $job.job_id ($_.Exception.Message+' | '+$_.ScriptStackTrace)
+                try{Set-IssueLabels $Issue.number 'ara-queued'}catch{}
+            }
+            Write-Log 'job_failed' 'error' $job.job_id ($execMessage+' | '+$execTrace)
+            return
+        }
+        try{
             Add-ResultComment $Issue.number $job.job_id 'completed' $json ([string]$rec.result_hash)
             Set-IssueLabels $Issue.number 'ara-completed'
             Write-Log 'job_completed' 'ok' $job.job_id "issue=$($Issue.number)"
         }catch{
-            $err=[ordered]@{ok=$false;error=$_.Exception.Message;type=$job.type}
-            $json=Normalize-Result $err
-            try{$rec=Complete-Job $job.job_id $acq.lease_token 'failed' $json;$hash=[string]$rec.result_hash}catch{$hash=Hash-Text $json}
-            Add-ResultComment $Issue.number $job.job_id 'failed' $json $hash
-            Set-IssueLabels $Issue.number 'ara-failed'
-            Write-Log 'job_failed' 'error' $job.job_id $_.Exception.Message
+            Write-Log 'result_publish_error' 'error' $job.job_id ($_.Exception.Message+' | '+$_.ScriptStackTrace)
+            try{Set-IssueLabels $Issue.number 'ara-queued'}catch{}
         }
-    } catch {
-        $jid=if($null -ne $job){$job.job_id}else{"github-issue-$($Issue.number)"}
-        Write-Log 'job_rejected' 'error' $jid $_.Exception.Message
-        Set-IssueLabels $Issue.number 'ara-failed'
-        $json=Normalize-Result ([ordered]@{ok=$false;error=$_.Exception.Message})
-        Add-ResultComment $Issue.number $jid 'failed' $json (Hash-Text $json)
+    }catch{
+        $outerMessage=$_.Exception.Message
+        $outerTrace=$_.ScriptStackTrace
+        $jid=if($null-ne$job){$job.job_id}else{"github-issue-$($Issue.number)"}
+        Write-Log 'job_rejected' 'error' $jid ($outerMessage+' | '+$outerTrace)
+        $json=Normalize-Result ([ordered]@{ok=$false;error=$outerMessage})
+        try{
+            Set-IssueLabels $Issue.number 'ara-failed'
+            Add-ResultComment $Issue.number $jid 'failed' $json (Hash-Text $json)
+        }catch{Write-Log 'rejection_publish_error' 'error' $jid $_.Exception.Message}
     }
 }
 $created=$false
@@ -305,17 +333,23 @@ try{
     Write-Log 'startup' 'ok' '' "bridge=$BridgeVersion"
     while($true){
         try{
-            $raw=Invoke-Gh @('api',"repos/$Repository/issues?state=open&labels=ara-queued&per_page=50")
-            $issues=@(([string]::Join("`n",@($raw)))|ConvertFrom-Json)
-            foreach($i in $issues){
-                if($null -ne $i.pull_request){continue}
-                if([string]$i.user.login -ne 'UniversoAnthares'){Write-Log 'job_rejected' 'error' "github-issue-$($i.number)" 'unauthorized issue author';continue}
+            $raw=Invoke-Gh -GhArgs @('api',"repos/$Repository/issues?state=open&labels=ara-queued&per_page=50")
+            $parsedIssues=([string]::Join("`n",@($raw)))|ConvertFrom-Json
+            $issues=@(); foreach($entry in $parsedIssues){$issues += $entry}
+            foreach($i in @($issues)){
+                if($null -eq $i){continue}
+                if($i.PSObject.Properties['pull_request']){continue}
+                $userProp=$i.PSObject.Properties['user']
+                $numberProp=$i.PSObject.Properties['number']
+                if($null -eq $userProp -or $null -eq $numberProp){Write-Log 'poll_item_skipped' 'error' '' 'GitHub issue object missing required properties';continue}
+                $loginProp=$userProp.Value.PSObject.Properties['login']
+                if($null -eq $loginProp -or [string]$loginProp.Value -ne 'UniversoAnthares'){Write-Log 'job_rejected' 'error' ('github-issue-'+[string]$numberProp.Value) 'unauthorized issue author';continue}
                 Process-Issue $i
             }
             Update-Health $true '' ''
         } catch {
             Update-Health $false $_.Exception.Message ''
-            Write-Log 'poll_error' 'error' '' $_.Exception.Message
+            Write-Log 'poll_error' 'error' '' ($_.Exception.Message+' | '+$_.ScriptStackTrace)
         }
         Start-Sleep -Seconds ([Math]::Max(10,$IntervalSeconds))
     }
