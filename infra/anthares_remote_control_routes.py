@@ -48,7 +48,7 @@ def wait_for_job(device, job_id, wait_seconds):
         job = get_job(device, job_id)
         if not job:
             return None
-        if job.get("status") in ("done", "failed", "expired"):
+        if job.get("status") in ("done", "failed", "expired", "uncertain"):
             return job
         time.sleep(0.20)
     return get_job(device, job_id)
