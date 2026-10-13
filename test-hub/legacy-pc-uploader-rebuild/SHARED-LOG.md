@@ -1374,3 +1374,10 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Render Postgres direct SQL inspection blocked by empty external IP allowlist. Preserve private DB posture; test via authorized internal application path, not by opening public access.
 - Anthares Browser Vault Smoke `38330972424` still queued at last check. No additional workflow was dispatched.
 - Remaining: validate Anthares Remote authenticated device/queue roundtrip and recover existing three Kwai executor requests; verify Kwai account UI before probe/prepare. No publication performed.
+
+## 2026-10-12 — Agent continuidade — latest Render recheck and cross-agent handoff
+- Rechecked Render services and deployments; `anthares-remote-control` latest `3e4ae610` LIVE; `anthares-remote-mcp-v2` latest `7c5a91c8` LIVE; both unsuspended.
+- Infra canary `anthares-ara-infra-canary` advanced to commit `6f4fb9037e9b79b606899fd5b91e275b61274eb1` (`test(ara): uncertain command outcome must not block synchronous controller`), deploy `dep-db6omavclcms73eeup8g` LIVE at 2026-10-13T01:38:47Z. Canary-only proof: do not assume main controller deployed this change.
+- Browser smoke run `38330972424` job `115080372808` remains queued; no new run dispatched.
+- Anthares Remote MCP v2 README confirms signed clipboard_set reached Windows in an earlier live OAuth authorization test, while native ChatGPT MCP registration and tool execution remain separate pending acceptance criteria.
+- Follow-up for infra agent: compare canary commit with main control branch and test authenticated command outcome semantics before promoting; for MCP agent: finish ChatGPT OAuth registration; for browser agent: investigate runner availability; for legacy agent: consume three existing queue requests after authenticated ARA transport is available.
