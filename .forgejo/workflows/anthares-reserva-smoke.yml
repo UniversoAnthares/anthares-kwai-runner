@@ -1,0 +1,9 @@
+name: Anthares Reserva smoke
+on:
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: codeberg-small
+    steps:
+      - name: Verify router
+        run: python3 tools/render_redundancy_acceptance.py
