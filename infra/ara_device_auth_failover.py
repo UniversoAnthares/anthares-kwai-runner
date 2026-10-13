@@ -1,8 +1,8 @@
-"""Device authentication bootstrap for the secondary ARA control plane.
+"""Device authentication bootstrap for a secondary ARA control plane.
 
-A valid token is learned once from the primary control's auth-check endpoint and
-stored only as a SHA-256 hash in the shared PostgreSQL state. Afterwards the
-secondary control validates the device independently of the primary service.
+A valid token is learned once from the canonical Cloudflare control's auth-check
+endpoint and stored only as a SHA-256 hash in shared PostgreSQL state. Afterwards
+the secondary control validates the device independently of the canonical service.
 """
 import hashlib
 import os
@@ -13,7 +13,10 @@ from flask import request
 
 from ara_state_store import build_store
 
-_PRIMARY_AUTH_CHECK = "https://anthares-ara-control.onrender.com/v1/device/auth-check"
+_PRIMARY_AUTH_CHECK = os.getenv(
+    "ARA_PRIMARY_AUTH_CHECK",
+    "https://anthares-ara-backup.anthares1.workers.dev/v1/device/auth-check",
+)
 _STORE = build_store()
 
 
