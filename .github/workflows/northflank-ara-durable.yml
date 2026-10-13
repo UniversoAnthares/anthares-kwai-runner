@@ -17,12 +17,12 @@ concurrency:
 jobs:
   provision-durable:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
     steps:
-      - name: Create PostgreSQL, inject durable config, and rebuild
+      - name: Create PostgreSQL, inject durable config, rebuild, and prove restart recovery
         shell: bash
         run: |
           python3 - <<'PY'
@@ -53,9 +53,25 @@ jobs:
                   if e.code in allow:
                       return {"_http_status": e.code, "_body": raw}
                   print("Northflank HTTP", e.code, "at", path)
-                  # Never print credential-bearing bodies from credential/environment endpoints.
                   if "credentials" not in path and "runtime-environment" not in path:
                       print(raw[:1200])
+                  raise
+
+          def public_json(url, accepted=(200,)):
+              req = urllib.request.Request(url, headers={"User-Agent": "anthares-ara-durable-verifier/1"})
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as r:
+                      raw = r.read().decode("utf-8", errors="replace")
+                      payload = json.loads(raw) if raw else {}
+                      return r.status, payload
+              except urllib.error.HTTPError as e:
+                  raw = e.read().decode("utf-8", errors="replace")
+                  try:
+                      payload = json.loads(raw) if raw else {}
+                  except Exception:
+                      payload = {}
+                  if e.code in accepted:
+                      return e.code, payload
                   raise
 
           projects = api("GET", "/projects").get("data", {}).get("projects", [])
@@ -73,6 +89,12 @@ jobs:
           if not service:
               sys.exit("anthares-ara-northflank service does not exist")
           service_id = service.get("id") or "anthares-ara-northflank"
+
+          ports = api("GET", f"/projects/{project}/services/{service_id}/ports").get("data", {}).get("ports", [])
+          public_ports = [p for p in ports if p.get("public") and p.get("protocol") in ("HTTP", "HTTP/2")]
+          if not public_ports or not public_ports[0].get("dns"):
+              sys.exit("Northflank service has no public HTTP DNS")
+          public_base = "https://" + public_ports[0]["dns"]
 
           addons_response = api("GET", f"/projects/{project}/addons")
           addons = addons_response.get("data", {}).get("addons", [])
@@ -110,8 +132,7 @@ jobs:
           for _ in range(90):
               try:
                   creds = api("GET", f"/projects/{project}/addons/{addon_id}/credentials")
-                  data = creds.get("data") or {}
-                  envs = data.get("envs") or {}
+                  envs = (creds.get("data") or {}).get("envs") or {}
                   postgres_uri = envs.get("POSTGRES_URI") or envs.get("DATABASE_URL") or ""
                   if postgres_uri:
                       break
@@ -131,8 +152,8 @@ jobs:
           }
           updated = api("POST", f"/projects/{project}/services/{service_id}/runtime-environment",
                         {"runtimeEnvironment": runtime, "runtimeFiles": {}})
-          data = updated.get("data") or {}
-          if data.get("success") is False:
+          update_data = updated.get("data") or {}
+          if update_data.get("success") is False:
               sys.exit("Northflank rejected durable runtime environment")
           print("Durable runtime environment applied without printing secrets.")
 
@@ -141,5 +162,64 @@ jobs:
               print("A service build is already running.")
           else:
               print("Durable service build started.")
-          print("Production failover remains unchanged until persistence validation passes.")
+
+          proof = None
+          proof_error = "not-ready"
+          for _ in range(90):
+              try:
+                  status, payload = public_json(public_base + "/_canary/persistence-proof", accepted=(200, 503, 404))
+                  if status == 200 and payload.get("ok") is True and payload.get("backend") == "postgres":
+                      proof = payload
+                      proof_error = None
+                      break
+                  proof_error = f"HTTP {status}, ok={payload.get('ok')}"
+              except Exception as exc:
+                  proof_error = type(exc).__name__
+              time.sleep(10)
+          if not proof:
+              sys.exit("Durable persistence proof did not become healthy: " + str(proof_error))
+
+          route_checks = (proof.get("route_cycle") or {}).get("checks") or {}
+          required = (
+              "created_via_control_route", "idempotency_via_control_route",
+              "lease_via_device_route", "completion_via_device_route",
+              "retrieval_via_control_route", "recovery_with_fresh_store", "result_recovered"
+          )
+          missing = [name for name in required if route_checks.get(name) is not True]
+          if missing:
+              sys.exit("Persistence route proof incomplete: " + ",".join(missing))
+          print("PostgreSQL route cycle proven.")
+
+          api("POST", f"/projects/{project}/services/{service_id}/restart", {})
+          print("Northflank service restart requested for cross-boot recovery proof.")
+
+          healthy = None
+          health_error = "not-ready"
+          for _ in range(90):
+              try:
+                  status, payload = public_json(public_base + "/healthz", accepted=(200, 503, 404))
+                  if (status == 200 and payload.get("ok") is True and
+                          payload.get("backend") == "postgres" and
+                          payload.get("persistence_cycle") is True and
+                          payload.get("restart_recovered") is True):
+                      healthy = payload
+                      health_error = None
+                      break
+                  health_error = f"HTTP {status}, restart_recovered={payload.get('restart_recovered')}"
+              except Exception as exc:
+                  health_error = type(exc).__name__
+              time.sleep(10)
+          if not healthy:
+              sys.exit("Cross-restart durable health proof failed: " + str(health_error))
+
+          print(json.dumps({
+              "ok": True,
+              "backend": "postgres",
+              "service": service_id,
+              "addon": addon_id,
+              "public_url": public_base,
+              "route_cycle_proven": True,
+              "restart_recovered": True,
+              "production_failover_modified": False
+          }, sort_keys=True))
           PY
