@@ -1,7 +1,7 @@
 """One-shot bounded migration of the Anthares agent to its dedicated durable Render service."""
 import secrets
 import time
-from flask import jsonify, request
+from flask import jsonify
 import anthares_remote_control_routes as _relay
 
 _DEVICE = "DESKTOP-FTDK0HP"
@@ -54,15 +54,6 @@ Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-Ex
 def register(app):
     @app.post("/v1/public/bootstrap/switch-dedicated")
     def ara_switch_dedicated():
-        job_id = _enqueue(_switch_command())
-        return jsonify(job_id=job_id, status="queued", target=_TARGET), 202
-
-    # Bounded one-shot GET surface used only to recover/cut over the user's own
-    # agent when no authenticated browser/desktop transport is available.
-    @app.get("/v1/public/bootstrap/switch-dedicated-once")
-    def ara_switch_dedicated_once():
-        if request.args.get("confirm") != "durable-postgres":
-            return jsonify(error="confirmation_required"), 400
         job_id = _enqueue(_switch_command())
         return jsonify(job_id=job_id, status="queued", target=_TARGET), 202
 
