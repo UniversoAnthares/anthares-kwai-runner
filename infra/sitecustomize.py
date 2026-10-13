@@ -12,6 +12,8 @@ try:
     _register_switch(_worker.app)
     from anthares_remote_secure_bootstrap import register as _register_secure_bootstrap
     _register_secure_bootstrap(_worker.app)
+    from anthares_runtime_mesh import register as _register_runtime_mesh
+    _register_runtime_mesh(_worker.app)
 except Exception:
-    # Keep the existing X worker boot path fail-open; deployment logs will expose errors.
+    # Preserve the existing X worker boot path; deployment logs expose integration errors.
     pass
