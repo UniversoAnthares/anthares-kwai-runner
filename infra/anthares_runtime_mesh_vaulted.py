@@ -27,6 +27,25 @@ def _diagnostic_local_health():
         }
 
 
+def _diagnostic_code(result):
+    detail = str(result.get("error_detail") or "").lower()
+    if "host system is missing dependencies" in detail or "missing dependencies" in detail:
+        return "playwright_system_dependencies_missing"
+    if "executable doesn't exist" in detail or "executable does not exist" in detail:
+        return "chromium_executable_missing"
+    if "browser has been closed" in detail or "target page, context or browser has been closed" in detail:
+        return "chromium_closed_during_startup"
+    if "permission denied" in detail:
+        return "browser_permission_denied"
+    if result.get("restore_status") == "vault_unavailable":
+        return "vault_unavailable"
+    if result.get("last_persist_ok") is False:
+        return "vault_persist_failed"
+    if result.get("error"):
+        return "browser_start_failed"
+    return "unclassified"
+
+
 def _hybrid_ready():
     url, _ = _mesh._browser_cfg()
     if url:
@@ -72,6 +91,16 @@ def register(app):
             and fields["last_persist_ok"] is True
             and not fields["host_desktop_fallback"]
         )
+        if not fields["persistence_proven"]:
+            code = _diagnostic_code(result)
+            fields["diagnostic"] = code
+            app.logger.warning(
+                "browser_persistence_unproven diagnostic=%s healthy=%s restore=%s persist=%s",
+                code,
+                fields["healthy"],
+                fields["restore_status"],
+                fields["last_persist_ok"],
+            )
         body = "\n".join(f"{key}={value}" for key, value in fields.items()) + "\n"
         return Response(body, status=200 if fields["healthy"] else 503, mimetype="text/plain")
 
