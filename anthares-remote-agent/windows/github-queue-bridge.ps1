@@ -7,7 +7,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
-$BridgeVersion = '2.1.0'
+$BridgeVersion = '2.2.0'
 $StateDir = Join-Path $WorkRoot 'state'
 $LogDir = Join-Path $WorkRoot 'logs'
 $SecretDir = Join-Path $WorkRoot 'secrets'
@@ -205,6 +205,35 @@ function Complete-Job {
         $r.status=$Status;$r.completed_at=[DateTime]::UtcNow.ToString('o');$r.result=$ResultJson;$r.result_hash=Hash-Text $ResultJson;$r.lease_until=$null;Save-Ledger $l;return $r
     } finally {if($got){try{$mutex.ReleaseMutex()}catch{}};$mutex.Dispose()}
 }
+function Recover-ExpiredJobs {
+    $expired=@()
+    $mutex=[Threading.Mutex]::new($false,'Global\AntharesRemoteLedgerV1')
+    $got=$false
+    try{
+        $got=$mutex.WaitOne(15000);if(-not $got){throw 'ledger lock timeout'}
+        $l=Read-Ledger
+        $changed=$false
+        foreach($p in $l.jobs.PSObject.Properties){
+            $r=$p.Value
+            if(($r.status -eq 'leased' -or $r.status -eq 'running') -and $r.lease_until){
+                $until=[DateTime]::Parse([string]$r.lease_until).ToUniversalTime()
+                if($until -le [DateTime]::UtcNow){
+                    $r.status='uncertain'
+                    $r.lease_until=$null
+                    $expired += [pscustomobject]@{job_id=$p.Name;issue_number=[int]$r.issue_number;old_fencing_token=$r.fencing_token}
+                    $changed=$true
+                }
+            }
+        }
+        if($changed){Save-Ledger $l}
+    } finally {if($got){try{$mutex.ReleaseMutex()}catch{}};$mutex.Dispose()}
+    foreach($x in $expired){
+        if($x.issue_number -gt 0){try{Set-IssueLabels $x.issue_number 'ara-queued'}catch{Write-Log 'recovery_label_error' 'error' $x.job_id $_.Exception.Message}}
+        Write-Log 'lease_expired_requeued' 'info' $x.job_id ('old_fence='+[string]$x.old_fencing_token)
+    }
+    return @($expired)
+}
+
 function Assert-Path([string]$Path){
     if([string]::IsNullOrWhiteSpace($Path)){throw 'path required'}
     $full=[IO.Path]::GetFullPath($Path)
@@ -330,9 +359,11 @@ if(-not $created){Write-Log 'startup' 'info' '' 'duplicate bridge suppressed';ex
 try{
     Ensure-GhAuth
     Ensure-Labels
+    $null=Recover-ExpiredJobs
     Write-Log 'startup' 'ok' '' "bridge=$BridgeVersion"
     while($true){
         try{
+            $null=Recover-ExpiredJobs
             $raw=Invoke-Gh -GhArgs @('api',"repos/$Repository/issues?state=open&labels=ara-queued&per_page=50")
             $parsedIssues=([string]::Join("`n",@($raw)))|ConvertFrom-Json
             $issues=@(); foreach($entry in $parsedIssues){$issues += $entry}
