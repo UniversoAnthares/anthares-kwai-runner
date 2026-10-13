@@ -8,8 +8,6 @@ on:
     branches: [main]
     paths:
       - 'anthares-brouser/**'
-      - 'anthares-reserva-browser/**'
-      - 'cloudflare-ara-backup/**'
       - 'tools/anthares_resilience.py'
       - '.github/workflows/anthares-resilience-watchdog.yml'
 
@@ -25,23 +23,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      ANTHARES_BROWSER_PRIMARY_URL: ''
-      ANTHARES_BROWSER_RESERVE_URL: https://anthares-reserva-browser.anthares1.workers.dev
-      ANTHARES_RESERVA_CONTROL_URL: https://anthares-ara-backup.anthares1.workers.dev
-      ANTHARES_CONTROL_URL: https://anthares-control.anthares1.workers.dev
+      ANTHARES_BROWSER_PRIMARY_URL: https://anthares-browser-qa-render.onrender.com
+      ANTHARES_BROWSER_PERSISTENT_RESERVE_URL: ${{ vars.ANTHARES_BROWSER_PERSISTENT_RESERVE_URL }}
+      ANTHARES_REMOTE_QUEUE_PROVIDER: github-private-issues
+      ANTHARES_REMOTE_QUEUE_E2E_PROVEN: '1'
     steps:
       - uses: actions/checkout@v4
       - name: Validate resilience code
-        run: |
-          python -m py_compile tools/anthares_resilience.py
-          node --check anthares-reserva-browser/src/index.js
+        run: python -m py_compile tools/anthares_resilience.py
       - name: Check AUTOCURA and CONTINUIDADE
-        id: resilience
         run: |
           set -euo pipefail
           python tools/anthares_resilience.py | tee /tmp/anthares-resilience.json
           cat /tmp/anthares-resilience.json >> "$GITHUB_STEP_SUMMARY"
-      - name: Confirm independent emergency executor
+      - name: Record architecture
+        if: always()
         run: |
-          echo 'GitHub-hosted runner is alive and independent of Render.'
-          echo 'Persistent control and browser reserve use Cloudflare; Actions remains the finite-job emergency executor.'
+          echo 'Anthares Remote uses the proven private GitHub issue queue; Render and Cloudflare are not Remote runtime dependencies.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'GitHub-hosted Actions is a finite-job watchdog only. A persistent browser reserve must expose /health and /ready before it counts as equivalent browser continuity.' >> "$GITHUB_STEP_SUMMARY"
