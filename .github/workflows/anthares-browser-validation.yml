@@ -1,4 +1,4 @@
-name: Anthares-browser isolation and build
+name: Anthares-browser 20 parallel validations
 on:
   push:
     paths:
@@ -6,14 +6,58 @@ on:
       - '.github/workflows/anthares-browser-validation.yml'
   workflow_dispatch:
 jobs:
-  isolation:
+  validate:
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Static isolation tests
+      - name: Static isolation contract
         run: python -m unittest discover -s anthares-brouser -p 'test_isolation_contract.py' -v
       - name: Python syntax
         run: python -m compileall -q anthares-brouser
-      - name: Build browser image
+      - name: Varied runtime security checks
+        env:
+          CASE: ${{ matrix.case }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          n = int(os.environ['CASE'])
+          root = Path('anthares-brouser')
+          start = (root/'start.sh').read_text()
+          app = (root/'app.py').read_text()
+          docker = (root/'Dockerfile').read_text()
+          checks = [
+              ('virtual display', 'Xvfb "$DISPLAY"' in start),
+              ('isolated profile', '--user-data-dir="$CHROME_PROFILE_DIR"' in start),
+              ('CDP loopback', '--remote-debugging-address=127.0.0.1' in start),
+              ('no public CDP', 'EXPOSE 9222' not in docker),
+              ('auth guard', 'def require_token(' in app),
+              ('session evidence', '@app.get("/session/evidence")' in app),
+              ('fail closed', 'authentication_not_proven' in app),
+              ('no xdotool', 'xdotool' not in start),
+              ('no pyautogui', 'pyautogui' not in start),
+              ('no default chrome profile', 'Default/User Data' not in start),
+              ('no host keyboard injection', 'keyboard.write(' not in app),
+              ('no host mouse injection', 'mouse.move(' not in app),
+              ('no remote public debug', '--remote-debugging-address=0.0.0.0' not in start),
+              ('virtual profile persistence', '/data/chrome-profile' in start),
+              ('no public vnc direct', '-localhost' in start),
+              ('strict env token', 'CONTROL_TOKEN is required' in start),
+              ('strict vnc password', 'VNC_PASSWORD is required' in start),
+              ('screenshot', '@app.get("/screenshot")' in app),
+              ('navigation', '@app.post("/navigate")' in app),
+              ('isolated targets', '@app.get("/targets")' in app),
+          ]
+          label, ok = checks[n - 1]
+          print(f'CASE {n:02d}: {label} => {"PASS" if ok else "FAIL"}')
+          assert ok, label
+          PY
+      - name: Container build
+        if: matrix.case == 1
         run: docker build -t anthares-browser:test ./anthares-brouser
