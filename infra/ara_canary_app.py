@@ -2,6 +2,7 @@
 
 The dedicated canary uses its own Flask app, independent of the existing X worker.
 """
+import hashlib
 import hmac
 import os
 import uuid
@@ -35,32 +36,84 @@ _register_secure_bootstrap(app)
 
 @app.post("/_canary/persistence-cycle")
 def ara_persistence_cycle_probe():
-    """Token-gated synthetic persistence proof; this route exists on the canary only."""
+    """Token-gated synthetic end-to-end persistence proof; canary only."""
     expected = os.getenv("ARA_PERSISTENCE_PROBE_TOKEN", "")
     supplied = request.headers.get("Authorization", "")
     supplied = supplied[7:] if supplied.startswith("Bearer ") else ""
     if not expected or not supplied or not hmac.compare_digest(supplied, expected):
         return jsonify(ok=False, error="unauthorized"), 401
 
+    controller_token = os.getenv("ARA_SHARED", "")
+    if not controller_token:
+        return jsonify(ok=False, error="controller_not_configured"), 503
+
     device = "persistence-probe-" + uuid.uuid4().hex
     idem = "persistence-probe-" + uuid.uuid4().hex
-    created = _durable_store.enqueue(device, "ping", {"probe": True}, 30, idempotency_key=idem)
-    duplicate = _durable_store.enqueue(device, "ping", {"probe": True}, 30, idempotency_key=idem)
-    leased = _durable_store.lease_next(device, lease_seconds=15)
-    if not leased or leased.get("id") != created.get("id"):
-        return jsonify(ok=False, stage="lease", created_status=created.get("status")), 500
-    completed = _durable_store.complete(device, created["id"], {"ok": True, "output": "persistence-probe"})
-    recovered = build_store().get_job(device, created["id"])
-    checks = {
-        "created": created.get("status") == "queued",
-        "idempotency": duplicate.get("id") == created.get("id"),
-        "leased": leased.get("status") == "leased",
-        "completed": (completed or {}).get("status") == "done",
-        "recovered_after_new_store": (recovered or {}).get("status") == "done",
-        "result_recovered": ((recovered or {}).get("result") or {}).get("output") == "persistence-probe",
+    device_token = "device-probe-" + uuid.uuid4().hex
+    env_key = "ARA_DEVICE_HASH_" + "".join(c if c.isalnum() else "_" for c in device.upper())
+    old_hash = os.environ.get(env_key)
+    os.environ[env_key] = hashlib.sha256(device_token.encode("utf-8")).hexdigest()
+    headers = {"Authorization": "Bearer " + controller_token}
+    device_headers = {
+        "Authorization": "Bearer " + device_token,
+        "X-Anthares-Device": device,
     }
-    return jsonify(ok=all(checks.values()), backend="postgres", checks=checks,
-                   test_job_id=created["id"]), (200 if all(checks.values()) else 500)
+
+    try:
+        # Exercise the actual HTTP control route for creation.
+        with app.test_client() as client:
+            created_response = client.post(
+                "/v1/control/jobs",
+                headers=headers,
+                json={"device_id": device, "type": "ping", "args": {"probe": True},
+                      "timeout_seconds": 30, "idempotency_key": idem},
+            )
+            created_body = created_response.get_json() or {}
+            created = created_body.get("job") or {}
+            duplicate_response = client.post(
+                "/v1/control/jobs",
+                headers=headers,
+                json={"device_id": device, "type": "ping", "args": {"probe": True},
+                      "timeout_seconds": 30, "idempotency_key": idem},
+            )
+            duplicate = (duplicate_response.get_json() or {}).get("job") or {}
+
+            # Exercise the actual authenticated device lease route.
+            lease_response = client.get("/v1/device/jobs/next", headers=device_headers)
+            leased = (lease_response.get_json() or {}).get("job") or {}
+
+            # Exercise the actual authenticated device completion route.
+            result_response = client.post(
+                "/v1/device/jobs/" + str(created.get("id", "")) + "/result",
+                headers=device_headers,
+                json={"ok": True, "output": "persistence-probe"},
+            )
+
+            # Exercise the actual HTTP control retrieval route.
+            get_response = client.get(
+                "/v1/control/jobs/" + str(created.get("id", "")) + "?device_id=" + device,
+                headers=headers,
+            )
+            recovered_via_route = (get_response.get_json() or {}).get("job") or {}
+
+        # A newly constructed store opens a fresh PostgreSQL connection and reads the durable row.
+        recovered_after_new_store = build_store().get_job(device, str(created.get("id", "")))
+        checks = {
+            "created_via_control_route": created_response.status_code == 201 and created.get("status") == "queued",
+            "idempotency_via_control_route": duplicate_response.status_code == 201 and duplicate.get("id") == created.get("id"),
+            "lease_via_device_route": lease_response.status_code == 200 and leased.get("status") == "leased" and leased.get("id") == created.get("id"),
+            "completion_via_device_route": result_response.status_code == 200,
+            "retrieval_via_control_route": get_response.status_code == 200 and recovered_via_route.get("status") == "done",
+            "recovery_with_fresh_store": (recovered_after_new_store or {}).get("status") == "done",
+            "result_recovered": ((recovered_after_new_store or {}).get("result") or {}).get("output") == "persistence-probe",
+        }
+        return jsonify(ok=all(checks.values()), backend="postgres", checks=checks,
+                       test_job_id=created.get("id")), (200 if all(checks.values()) else 500)
+    finally:
+        if old_hash is None:
+            os.environ.pop(env_key, None)
+        else:
+            os.environ[env_key] = old_hash
 
 
 @app.get("/healthz")
