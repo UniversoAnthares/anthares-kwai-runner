@@ -19,7 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq unzip curl default-jre-headless cpio gzip e2fsprogs >/dev/null
+          sudo apt-get install -y -qq unzip curl default-jre-headless cpio gzip e2fsprogs gdisk >/dev/null
           mkdir -p "$HOME/android-sdk/cmdline-tools/latest" /tmp/android-tools /tmp/sdk-ramdisk
           curl -fLsS --retry 4 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
           unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
@@ -37,8 +37,23 @@ jobs:
           find /tmp/sdk-ramdisk -type f | grep -E '(modules|\.ko($|\.))' | head -120 || true
           echo '=== VENDOR PARTITION FILE TYPE ==='
           file "$DIR/vendor.img" "$DIR/system.img"
-          echo '=== VENDOR MODULES IF EXT4 ==='
-          sudo debugfs -R 'ls -l /lib/modules' "$DIR/vendor.img" 2>&1 | head -50 || true
+          echo '=== VENDOR GPT PARTITIONS ==='
+          sgdisk -p "$DIR/vendor.img" || true
+          sgdisk -i 1 "$DIR/vendor.img" || true
+          echo '=== VENDOR PARTITION FILESYSTEM ==='
+          FIRST="$(sgdisk -i 1 "$DIR/vendor.img" | sed -n 's/^First sector: \([0-9]*\).*/\1/p' | head -1)"
+          LAST="$(sgdisk -i 1 "$DIR/vendor.img" | sed -n 's/^Last sector: \([0-9]*\).*/\1/p' | head -1)"
+          if [ -n "$FIRST" ] && [ -n "$LAST" ]; then
+            dd if="$DIR/vendor.img" of=/tmp/vendor-partition.img bs=512 skip="$FIRST" count="$((LAST-FIRST+1))" status=none
+            file /tmp/vendor-partition.img
+            for p in /lib/modules /vendor/lib/modules /etc/init; do
+              echo "VENDOR_PATH=$p"
+              debugfs -R "ls -l $p" /tmp/vendor-partition.img 2>&1 | head -60 || true
+            done
+          fi
+          echo '=== GUEST KERNEL CONFIG STORAGE OPTIONS ==='
+          gzip -dc "$DIR/kernel-ranchu" > /tmp/kernel-Image
+          strings /tmp/kernel-Image | grep -E '^Linux version |^CONFIG_(VIRTIO|PCI|NVME|ATA|SCSI|USB_STORAGE|BLK_DEV)' | head -90 || true
           echo '=== HOST KERNEL INVENTORY ==='
           uname -a
           ls -lh /boot/vmlinuz* /lib/modules/*/kernel/drivers/block/virtio_blk.ko* 2>/dev/null || true
