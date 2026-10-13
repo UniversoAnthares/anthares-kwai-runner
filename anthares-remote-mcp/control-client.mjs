@@ -3,8 +3,9 @@ import { signControlRequest } from './service-signing.mjs';
 
 const PRIMARY_CONTROL = 'https://anthares-ara-control.onrender.com';
 const SECONDARY_CONTROL = 'https://anthares-ara-infra-canary-v2.onrender.com';
-const TERTIARY_CONTROL = 'https://anthares-ara-backup.anthares1.workers.dev';
-const ALL_CONTROLS = Object.freeze([PRIMARY_CONTROL, SECONDARY_CONTROL, TERTIARY_CONTROL]);
+const TERTIARY_CONTROL = 'https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run';
+const QUATERNARY_CONTROL = 'https://anthares-ara-backup.anthares1.workers.dev';
+const ALL_CONTROLS = Object.freeze([PRIMARY_CONTROL, SECONDARY_CONTROL, TERTIARY_CONTROL, QUATERNARY_CONTROL]);
 const ALLOWED_CONTROLS = new Set(ALL_CONTROLS);
 const FAILOVER_STATUSES = new Set([404, 500, 502, 503, 504]);
 const RETRYABLE_STATUS = new Set([502, 503, 504]);
@@ -150,7 +151,15 @@ async function aggregateStatus(preferred, path, deadline) {
 }
 
 async function consumeOauthCentrally(path, requestBody, deadline) {
-  return signedFetchWithRetry(TERTIARY_CONTROL, path, 'POST', requestBody, deadline);
+  let lastError = null;
+  for (const origin of [PRIMARY_CONTROL, SECONDARY_CONTROL]) {
+    try {
+      const response = await signedFetchWithRetry(origin, path, 'POST', requestBody, deadline);
+      if (!FAILOVER_STATUSES.has(response.status) || origin === SECONDARY_CONTROL) return response;
+      await response.arrayBuffer().catch(() => {});
+    } catch (error) { lastError = error; }
+  }
+  throw lastError || new Error('durable OAuth control unavailable');
 }
 
 export async function signedControlFetch(controlOrigin, path, { method = 'GET', body, timeoutMs = 140000 } = {}) {
