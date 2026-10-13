@@ -2,15 +2,14 @@ $ErrorActionPreference = 'Continue'
 $root = 'C:\ProgramData\AntharesRemoteAgent'
 . (Join-Path $root 'agent-env.ps1')
 
-# The fallback supervisor must never share the standard agent's queue or result
-# spool. A distinct device identity prevents duplicate leases and conflicting
-# result replays while preserving the same device credential and capabilities.
+# Legacy HTTP supervisor only. The canonical path is the private issue-queue V4.
+# Render is deliberately kept only as the final emergency fallback.
 $env:ANTHARES_DEVICE_ID = 'DESKTOP-FTDK0HP-SYSTEM'
 
-$primary = 'https://anthares-ara-control.onrender.com'
-$secondary = 'https://anthares-ara-infra-canary-v2.onrender.com'
-$tertiary = 'https://anthares-ara-backup.anthares1.workers.dev'
-$quaternary = 'https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run'
+$primary = 'https://anthares-ara-backup.anthares1.workers.dev'
+$secondary = 'https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run'
+$tertiary = 'https://anthares-ara-control.onrender.com'
+$quaternary = 'https://anthares-ara-infra-canary-v2.onrender.com'
 $exe = Join-Path $root 'anthares-remote-agent.exe'
 $stdout = Join-Path $root 'agent.stdout.log'
 $stderr = Join-Path $root 'agent.stderr.log'
@@ -76,8 +75,6 @@ function Preferred-Alternate([string]$active) {
 
 try {
     while ($true) {
-        # Do not kill agents owned by another supervisor or Windows session.
-        # Each supervisor manages only the child process it starts below.
         $active = Choose-Control
         if (-not $active) {
             Save-State '' 'all-controls-unavailable'
@@ -117,11 +114,7 @@ try {
                     break
                 }
             } elseif ($active -ne $primary) {
-                if (Test-Control $primary) {
-                    $primaryHealthyStreak++
-                } else {
-                    $primaryHealthyStreak = 0
-                }
+                if (Test-Control $primary) { $primaryHealthyStreak++ } else { $primaryHealthyStreak = 0 }
                 if ($primaryHealthyStreak -ge 6) {
                     Save-State $active 'primary-stable-failback' $proc.Id
                     try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
@@ -150,9 +143,7 @@ try {
             $activeFailures = 0
         }
 
-        if ($proc.HasExited) {
-            Save-State $active ('agent-exited:' + $proc.ExitCode)
-        }
+        if ($proc.HasExited) { Save-State $active ('agent-exited:' + $proc.ExitCode) }
         Start-Sleep -Seconds 2
     }
 }
