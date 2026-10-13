@@ -6,7 +6,6 @@ from flask import Response, jsonify
 import anthares_runtime_mesh as _mesh
 import anthares_runtime_browser_local as _local
 
-_ORIGINAL_READY = _mesh._browser_ready
 _ORIGINAL_REQUEST = _mesh._browser_request
 
 
@@ -46,10 +45,46 @@ def _diagnostic_code(result):
     return "unclassified"
 
 
+def _external_ready():
+    """Read the external browser readiness contract rather than liveness-only /health."""
+    url, token = _mesh._browser_cfg()
+    if not url or not token:
+        return {"configured": False, "healthy": False, "error": "browser_not_configured"}
+    try:
+        response = _mesh.requests.get(url + "/ready", timeout=8)
+        body = (
+            response.json()
+            if response.headers.get("content-type", "").startswith("application/json")
+            else {}
+        )
+        evidence = body.get("detail") if isinstance(body.get("detail"), dict) else body
+        cdp_ready = bool(evidence.get("cdp_ready"))
+        chromium_running = bool(evidence.get("chromium_running"))
+        ready = bool(response.ok and evidence.get("ok") and cdp_ready and chromium_running)
+        return {
+            "configured": True,
+            "healthy": ready,
+            "status": response.status_code,
+            "cdp_ready": cdp_ready,
+            "chromium_running": chromium_running,
+            "profile_dir_exists": bool(evidence.get("profile_dir_exists")),
+            "profile_dir_writable": bool(evidence.get("profile_dir_writable")),
+            "durable_volume_verified": bool(evidence.get("durable_volume_verified")),
+            "readiness_path": "/ready",
+        }
+    except Exception as exc:
+        return {
+            "configured": True,
+            "healthy": False,
+            "error": type(exc).__name__,
+            "readiness_path": "/ready",
+        }
+
+
 def _hybrid_ready():
     url, _ = _mesh._browser_cfg()
     if url:
-        return _ORIGINAL_READY()
+        return _external_ready()
     result = _diagnostic_local_health()
     if not result.get("healthy") and "error_detail" not in result:
         try:

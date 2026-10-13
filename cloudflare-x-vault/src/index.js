@@ -3,7 +3,7 @@ const BROWSER_KEY = "anthares:browser:runtime:opaque:v1";
 const BROWSER_JWK_KEY = "anthares:browser:signing:jwk:v1";
 const MAX_BODY = 500000;
 const PUBLIC_JWK = {"kty":"EC","crv":"P-256","x":"oljQWjUajvbTS5Lyc0ElhK2nN_h6kJo-bhJ6F5mnf_4","y":"lBVZd8W28jEMd2A0oDs_PrGAkaDUbuzqb9WoerAVrmQ","ext":true};
-const BROWSER_PUBLIC_KEY_URL = "https://anthares-x-render-worker-v3.onrender.com/v1/runtime/browser/signing-public-key";
+const BROWSER_PUBLIC_KEY_URL = "https://anthares-remote-control.onrender.com/v1/runtime/browser/signing-public-key";
 let browserJwk=null;
 
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json;charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}})}
