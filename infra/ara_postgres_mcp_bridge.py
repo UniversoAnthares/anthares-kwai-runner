@@ -37,7 +37,9 @@ def _keys(refresh=False):
             key = serialization.load_pem_public_key(r.content)
             fp = key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
             if fp not in seen:
-                seen.add(fp); keys.append(key); sources.append(url)
+                seen.add(fp)
+                keys.append(key)
+                sources.append(url)
         except Exception:
             continue
     if not keys:
@@ -56,7 +58,8 @@ def _decode_sig(value):
 def _verify():
     if request.headers.get("X-ARA-Signer", "") != _SIGNER:
         return False, b""
-    ts, sig = request.headers.get("X-ARA-Timestamp", ""), request.headers.get("X-ARA-Signature", "")
+    ts = request.headers.get("X-ARA-Timestamp", "")
+    sig = request.headers.get("X-ARA-Signature", "")
     try:
         ts_num, signature = int(ts), _decode_sig(sig)
     except Exception:
@@ -68,9 +71,9 @@ def _verify():
         return False, b""
     with _LOCK:
         cutoff = time.time() - 60
-        for k, seen_at in list(_REPLAY.items()):
+        for key, seen_at in list(_REPLAY.items()):
             if seen_at < cutoff:
-                _REPLAY.pop(k, None)
+                _REPLAY.pop(key, None)
         if sig in _REPLAY:
             return False, b""
     qs = request.query_string.decode("ascii", errors="strict")
@@ -102,6 +105,44 @@ def _heartbeat_fresh(status, max_age_seconds=90):
         return 0 <= age <= max_age_seconds
     except (TypeError, ValueError, OverflowError):
         return False
+
+
+def _consume_oauth_token(kind, issuer, jti, exp):
+    if kind not in {"authorization_code", "refresh_token"}:
+        return False
+    if not issuer or len(issuer) > 300 or not jti or len(jti) > 128:
+        return False
+    try:
+        exp = int(exp)
+    except (TypeError, ValueError):
+        return False
+    now = int(time.time())
+    if exp <= now or exp > now + 32 * 24 * 3600:
+        return False
+    with store.connection() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ara_oauth_consumed(
+              kind TEXT NOT NULL,
+              issuer TEXT NOT NULL,
+              jti TEXT NOT NULL,
+              expires_at TIMESTAMPTZ NOT NULL,
+              consumed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              PRIMARY KEY(kind,issuer,jti)
+            )
+            """
+        )
+        conn.execute("DELETE FROM ara_oauth_consumed WHERE expires_at <= now()")
+        row = conn.execute(
+            """
+            INSERT INTO ara_oauth_consumed(kind,issuer,jti,expires_at)
+            VALUES(%s,%s,%s,to_timestamp(%s))
+            ON CONFLICT DO NOTHING
+            RETURNING jti
+            """,
+            (kind, issuer, jti, exp),
+        ).fetchone()
+        return row is not None
 
 
 def _execute(device, job_type, args, timeout):
@@ -136,14 +177,46 @@ def register(app):
             return jsonify(error="unauthorized"), 401
         with _LOCK:
             trusted = len(_KEY_CACHE.get("sources") or [])
-        return jsonify(ok=True, protocol="anthares-remote-agent/1.0", auth="ed25519-service-signature",
-                       durability="postgres", replay_protection=True, redundant_mcp_keys=True,
-                       rotating_service_key_refresh=True, trusted_mcp_services=trusted,
-                       capabilities=["status","system_info","shell","process_list","process_start","process_kill",
-                       "service_status","service_start","service_stop","clipboard_get","clipboard_set","screenshot",
-                       "file_stat","file_list","file_read","file_write","file_read_chunk","file_write_chunk",
-                       "file_mkdir","file_remove","file_rename","file_copy","file_sha256","file_write_atomic",
-                       "job_start","job_list","job_status","job_logs","job_cancel"])
+        return jsonify(
+            ok=True,
+            protocol="anthares-remote-agent/1.0",
+            auth="ed25519-service-signature",
+            durability="postgres",
+            replay_protection=True,
+            oauth_one_time_tokens="postgres",
+            redundant_mcp_keys=True,
+            rotating_service_key_refresh=True,
+            trusted_mcp_services=trusted,
+            capabilities=[
+                "status", "system_info", "shell", "process_list", "process_start", "process_kill",
+                "service_status", "service_start", "service_stop", "clipboard_get", "clipboard_set", "screenshot",
+                "file_stat", "file_list", "file_read", "file_write", "file_read_chunk", "file_write_chunk",
+                "file_mkdir", "file_remove", "file_rename", "file_copy", "file_sha256", "file_write_atomic",
+                "job_start", "job_list", "job_status", "job_logs", "job_cancel",
+            ],
+        )
+
+    @app.post("/v1/mcp/oauth/consume")
+    def mcp_oauth_consume():
+        ok, raw = _verify()
+        if not ok:
+            return jsonify(error="unauthorized"), 401
+        try:
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+            kind = str(body.get("kind") or "")
+            issuer = str(body.get("issuer") or "")
+            jti = str(body.get("jti") or "")
+            exp = body.get("exp")
+        except Exception:
+            return jsonify(error="invalid_request"), 400
+        try:
+            consumed = _consume_oauth_token(kind, issuer, jti, exp)
+        except Exception:
+            app.logger.exception("durable OAuth token consumption failed")
+            return jsonify(error="oauth_store_unavailable"), 503
+        if not consumed:
+            return jsonify(ok=False, error="already_used_or_invalid"), 409
+        return jsonify(ok=True, consumed=True)
 
     @app.post("/v1/mcp/execute")
     def mcp_execute():
@@ -168,6 +241,12 @@ def register(app):
         if status not in ("done", "failed"):
             return jsonify(ok=False, status=status, job_id=job.get("id"), error="timeout_waiting_for_device"), 504
         result = job.get("result") or {}
-        return jsonify(ok=bool(result.get("ok")), status=status, job_id=job.get("id"),
-                       output=result.get("output"), error=result.get("error"),
-                       started_at=result.get("started_at"), ended_at=result.get("ended_at")), (200 if result.get("ok") else 500)
+        return jsonify(
+            ok=bool(result.get("ok")),
+            status=status,
+            job_id=job.get("id"),
+            output=result.get("output"),
+            error=result.get("error"),
+            started_at=result.get("started_at"),
+            ended_at=result.get("ended_at"),
+        ), (200 if result.get("ok") else 500)
