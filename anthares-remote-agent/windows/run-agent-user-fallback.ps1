@@ -12,22 +12,6 @@ if($roots -notcontains 'D:\AntharsWork'){$roots+='D:\AntharsWork'}
 $env:ANTHARES_ALLOWED_ROOTS=($roots | Select-Object -Unique) -join ';'
 New-Item -ItemType Directory -Force -Path 'D:\AntharsWork\logs','D:\AntharsWork\temp','D:\AntharsWork\legacy-pc-runtime\ara' | Out-Null
 
-$gh='C:\Program Files\GitHub CLI\gh.exe'
-function Load-QueueAuth {
-  if(Test-Path $gh){
-    try{
-      $token=(& $gh auth token 2>$null).Trim()
-      if($token){
-        $env:ANTHARES_GITHUB_QUEUE_REPOSITORY='UniversoAnthares/anthares-ara-queue'
-        $env:ANTHARES_GITHUB_QUEUE_AUTHOR='UniversoAnthares'
-        $env:ANTHARES_GITHUB_QUEUE_TOKEN=$token
-        $env:ANTHARES_ISSUE_QUEUE_INTERVAL_SECONDS='5'
-      }
-    }catch{}
-  }
-}
-Load-QueueAuth
-
 $primary=([string]$env:ANTHARES_CONTROL_PRIMARY_URL).Trim().TrimEnd('/')
 if([string]::IsNullOrWhiteSpace($primary)-or $primary -match 'onrender\.com'){
   $primary='https://anthares-ara-backup.anthares1.workers.dev'
@@ -47,17 +31,17 @@ function Save-State([string]$reason,[int]$agentPid=0){
   try{
     [pscustomobject]@{
       updated_at=(Get-Date).ToUniversalTime().ToString('o');device_id=$env:ANTHARES_DEVICE_ID
-      binary=(Split-Path $exe -Leaf);control=$primary;github_queue=[bool]$env:ANTHARES_GITHUB_QUEUE_TOKEN
+      binary=(Split-Path $exe -Leaf);control=$primary;github_queue_bridge='separate-scheduled-task'
       identity=$env:USERNAME;session=(Get-Process -Id $PID).SessionId;watchdog_pid=$PID;agent_pid=$agentPid
       reason=$reason;render_required=$false;work_root=$env:ANTHARES_WORK_ROOT
     } | ConvertTo-Json | Set-Content -Path $state -Encoding UTF8
   }catch{}
 }
 
-# Persistent hidden watchdog for the non-elevated fallback. It supervises the
-# already-proven agent and only launches a replacement after the agent exits.
+# Persistent hidden watchdog for the non-elevated fallback. GitHub queue
+# redundancy is handled by its own hidden scheduled bridge; this watchdog never
+# invokes gh.exe, cmd.exe or another console helper.
 while($true){
-  Load-QueueAuth
   $running=@(Get-Process -Name $processName -ErrorAction SilentlyContinue)
   if($running.Count -gt 0){
     Save-State 'supervising-existing-agent' $running[0].Id
@@ -71,7 +55,7 @@ while($true){
   }
 
   try{
-    "$(Get-Date -Format o) starting $(Split-Path $exe -Leaf) queue=$([bool]$env:ANTHARES_GITHUB_QUEUE_TOKEN) control=$primary" | Add-Content $launchLog
+    "$(Get-Date -Format o) starting $(Split-Path $exe -Leaf) control=$primary" | Add-Content $launchLog
     $proc=Start-Process -FilePath $exe -WindowStyle Hidden -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
     Save-State 'started-agent' $proc.Id
     while(-not $proc.HasExited){
