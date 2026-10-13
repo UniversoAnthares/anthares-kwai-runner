@@ -1,6 +1,6 @@
 name = "anthares-ara-mcp"
 account_id = "5c24be052e5144391f73a8e03491e88e"
-main = "src/oauth-wrapper.js"
+main = "src/index.js"
 compatibility_date = "2026-10-01"
 
 [[durable_objects.bindings]]
