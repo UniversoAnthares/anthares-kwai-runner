@@ -21,11 +21,13 @@ from flask import Flask, jsonify
 import anthares_remote_control_routes as _relay
 from ara_public_probe_guard import register as _register_probe_guard
 from ara_runtime_truth import register as _register_runtime_truth
+from anthares_remote_mcp_bridge import register as _register_mcp
 
 app = Flask("anthares_remote_agent_canary")
 _register_probe_guard(app)
 _register_runtime_truth(app)
 _relay.register(app, os.getenv("ARA_SHARED", ""))
+_register_mcp(app)
 
 from anthares_remote_browser_bridge import register as _register_browser
 from anthares_remote_secure_bootstrap import register as _register_secure_bootstrap
