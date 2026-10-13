@@ -20,6 +20,12 @@ SESSION_SECONDS = 600
 NOVNC_ROOT = Path(os.environ.get("NOVNC_STATIC_ROOT", "/usr/share/novnc"))
 WS_BACKEND = "ws://127.0.0.1:6080/websockify"
 REVOKED = set()
+MANUAL_TOKEN = os.environ.get("NOVNC_MANUAL_TOKEN", "")
+try:
+    MANUAL_EXPIRES = int(os.environ.get("NOVNC_MANUAL_EXPIRES", "0") or "0")
+except ValueError:
+    MANUAL_EXPIRES = 0
+MANUAL_USED = False
 
 
 def _secret() -> bytes:
@@ -79,6 +85,7 @@ def _set_session_cookie(response: Response) -> None:
         secure=_secure_cookie(), samesite="strict", path="/novnc",
     )
     response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
 
 
 @router.get("/novnc/login", response_class=HTMLResponse)
@@ -91,6 +98,23 @@ def login_form() -> HTMLResponse:
             "required autocomplete='off' maxlength='512'></label>"
             "<button type='submit'>Abrir navegador remoto</button></form></html>")
     return HTMLResponse(html, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/novnc/once/{token}")
+def manual_once(token: str, request: Request):
+    """Issue one short noVNC cookie without disclosing the permanent control token."""
+    global MANUAL_USED
+    if _secure_cookie() and request.url.scheme != "https":
+        raise HTTPException(status_code=403, detail="HTTPS required")
+    now = int(time.time())
+    supplied = token.encode("utf-8", "strict")
+    expected = MANUAL_TOKEN.encode("utf-8", "strict")
+    if MANUAL_USED or not expected or MANUAL_EXPIRES <= now or not hmac.compare_digest(supplied, expected):
+        raise HTTPException(status_code=410, detail="manual access link expired or consumed")
+    MANUAL_USED = True
+    response = RedirectResponse(url="/novnc/vnc.html?path=novnc%2Fwebsockify", status_code=303)
+    _set_session_cookie(response)
+    return response
 
 
 @router.post("/novnc/login")
