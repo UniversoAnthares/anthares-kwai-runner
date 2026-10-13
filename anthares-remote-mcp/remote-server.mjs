@@ -9,6 +9,7 @@ import { registerExtendedTools } from './extended-tools.mjs';
 
 const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-ara-control.onrender.com').replace(/\/$/, '');
 const DEFAULT_DEVICE = process.env.ANTHARES_DEVICE_ID || 'DESKTOP-FTDK0HP';
+const FALLBACK_DEVICE = DEFAULT_DEVICE.endsWith('-SYSTEM') ? DEFAULT_DEVICE : `${DEFAULT_DEVICE}-SYSTEM`;
 const CLIENT_TOKEN = process.env.ARA_MCP_CLIENT_TOKEN || '';
 
 async function api(path, { method='GET', body, timeoutMs=140000 }={}) {
@@ -20,12 +21,45 @@ async function api(path, { method='GET', body, timeoutMs=140000 }={}) {
   return data;
 }
 
+async function deviceStatus(deviceId) {
+  return api(`/v1/mcp/status?device_id=${encodeURIComponent(deviceId)}`);
+}
+
+async function resolveDevice(deviceId=DEFAULT_DEVICE) {
+  if (deviceId !== DEFAULT_DEVICE || FALLBACK_DEVICE === DEFAULT_DEVICE) return deviceId;
+  try {
+    const preferred = await deviceStatus(DEFAULT_DEVICE);
+    if (preferred?.connected) return DEFAULT_DEVICE;
+  } catch {}
+  try {
+    const fallback = await deviceStatus(FALLBACK_DEVICE);
+    if (fallback?.connected) return FALLBACK_DEVICE;
+  } catch {}
+  return DEFAULT_DEVICE;
+}
+
+async function logicalStatus(deviceId=DEFAULT_DEVICE) {
+  if (deviceId !== DEFAULT_DEVICE || FALLBACK_DEVICE === DEFAULT_DEVICE) return deviceStatus(deviceId);
+  const preferred = await deviceStatus(DEFAULT_DEVICE);
+  if (preferred?.connected) {
+    return { ...preferred, requested_device_id: DEFAULT_DEVICE, active_device_id: DEFAULT_DEVICE, device_failover: false };
+  }
+  try {
+    const fallback = await deviceStatus(FALLBACK_DEVICE);
+    if (fallback?.connected) {
+      return { ...fallback, requested_device_id: DEFAULT_DEVICE, active_device_id: FALLBACK_DEVICE, device_failover: true };
+    }
+  } catch {}
+  return { ...preferred, requested_device_id: DEFAULT_DEVICE, active_device_id: DEFAULT_DEVICE, device_failover: false };
+}
+
 async function execute(type, args={}, timeoutSeconds=30, deviceId=DEFAULT_DEVICE) {
+  const activeDevice = await resolveDevice(deviceId);
   const idempotencyKey = `mcp-${randomUUID()}`;
   return api('/v1/mcp/execute', {
     method:'POST',
     timeoutMs:Math.min(150000,(timeoutSeconds+12)*1000),
-    body:{device_id:deviceId,type,args,timeout_seconds:timeoutSeconds,idempotency_key:idempotencyKey}
+    body:{device_id:activeDevice,type,args,timeout_seconds:timeoutSeconds,idempotency_key:idempotencyKey}
   });
 }
 
@@ -34,9 +68,9 @@ function text(value) {
 }
 
 function createMcpServer() {
-  const server = new McpServer({name:'Anthares Remote',version:'0.8.0'});
+  const server = new McpServer({name:'Anthares Remote',version:'0.9.0'});
 
-  server.registerTool('session_status',{description:'Check the Anthares Remote Agent heartbeat for the authorized Windows device.',inputSchema:{device_id:z.string().default(DEFAULT_DEVICE)}},async({device_id})=>text(await api(`/v1/mcp/status?device_id=${encodeURIComponent(device_id)}`)));
+  server.registerTool('session_status',{description:'Check the Anthares Remote Agent heartbeat for the authorized Windows device, including automatic fallback to its SYSTEM agent.',inputSchema:{device_id:z.string().default(DEFAULT_DEVICE)}},async({device_id})=>text(await logicalStatus(device_id)));
   server.registerTool('system_info',{description:'Return OS, CPU, RAM, GPU and disk information.',inputSchema:{device_id:z.string().default(DEFAULT_DEVICE)}},async({device_id})=>text(await execute('system_info',{},30,device_id)));
   server.registerTool('remote_exec',{description:'Execute a PowerShell or CMD command on the authorized Windows device.',inputSchema:{command:z.string().min(1),shell:z.enum(['powershell','cmd']).default('powershell'),timeout_seconds:z.number().int().min(1).max(120).default(30),device_id:z.string().default(DEFAULT_DEVICE)}},async({command,shell,timeout_seconds,device_id})=>text(await execute('shell',{command,shell},timeout_seconds,device_id)));
   server.registerTool('process_list',{description:'List running processes.',inputSchema:{device_id:z.string().default(DEFAULT_DEVICE)}},async({device_id})=>text(await execute('process_list',{},30,device_id)));
@@ -69,7 +103,7 @@ function validToken(header) {
 const http=createServer(async(req,res)=>{
   if(req.method==='GET' && req.url==='/health'){
     res.writeHead(CLIENT_TOKEN.length>=32?200:503,{'Content-Type':'application/json','Cache-Control':'no-store'});
-    res.end(JSON.stringify({ok:CLIENT_TOKEN.length>=32,service:'anthares-remote-signed-mcp',auth:'ed25519-control',preferred_control:CONTROL_URL,controls:controlFailoverOrigins}));return;
+    res.end(JSON.stringify({ok:CLIENT_TOKEN.length>=32,service:'anthares-remote-signed-mcp',auth:'ed25519-control',preferred_control:CONTROL_URL,controls:controlFailoverOrigins,devices:[DEFAULT_DEVICE,FALLBACK_DEVICE]}));return;
   }
   if(req.method==='GET' && req.url==='/control-key'){
     res.writeHead(200,{'Content-Type':'application/x-pem-file','Cache-Control':'no-store'});res.end(servicePublicKey());return;
@@ -86,5 +120,5 @@ const http=createServer(async(req,res)=>{
   }catch(e){if(!res.headersSent){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'mcp_request_failed'}));}}
 });
 http.requestTimeout=150000;
-console.log(`Signed ARA MCP preferred_control=${CONTROL_URL} failover=${controlFailoverOrigins.join(',')}`);
+console.log(`Signed ARA MCP preferred_control=${CONTROL_URL} failover=${controlFailoverOrigins.join(',')} devices=${DEFAULT_DEVICE},${FALLBACK_DEVICE}`);
 http.listen(Number(process.env.ARA_INTERNAL_MCP_PORT||3118),'127.0.0.1',()=>console.log('Signed ARA MCP internal server ready'));
