@@ -7,9 +7,9 @@ import (
     "strings"
 )
 
-// securePath first enforces the configured lexical roots, then rejects traversal
-// through existing symlinks/reparse-like path components. Missing leaf components
-// are allowed so authorized files/directories can still be created.
+// securePath enforces configured lexical roots and rejects traversal through
+// existing symbolic-link/reparse-like components. Missing leaf components are
+// allowed so authorized files and directories can be created.
 func securePath(cfg Config, path string) (string, error) {
     if len(cfg.AllowedRoots) == 0 {
         return "", errors.New("file access disabled; ANTHARES_ALLOWED_ROOTS is empty")
@@ -33,9 +33,6 @@ func securePath(cfg Config, path string) (string, error) {
         return "", errors.New("path outside allowed roots")
     }
 
-    // Walk every existing component. On Go/Windows, symlinks and junction-like
-    // reparse points surfaced as ModeSymlink are rejected. EvalSymlinks provides
-    // a second containment check for existing paths.
     volume := filepath.VolumeName(abs)
     rest := strings.TrimPrefix(abs, volume)
     current := volume + string(os.PathSeparator)
@@ -81,7 +78,12 @@ func securePath(cfg Config, path string) (string, error) {
     return abs, nil
 }
 
-// Compatibility alias used by direct read/write call sites.
+// Preserve the existing internal contract while applying the hardened checks to
+// file_stat, file_list, chunked transfers and direct reads/writes.
+func safePath(cfg Config, path string) (string, error) {
+    return securePath(cfg, path)
+}
+
 func safeExistingPath(cfg Config, path string) (string, error) {
     return securePath(cfg, path)
 }
