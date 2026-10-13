@@ -1,0 +1,131 @@
+name: Verify isolated ARA Northflank controller
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/northflank-ara-verify.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: northflank-ara-verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Query Northflank and verify public health endpoint
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime, json, os, sys, time, urllib.error, urllib.request
+
+          token = os.getenv("NORTHFLANK_API_TOKEN", "")
+          if not token:
+              sys.exit("NORTHFLANK_API_TOKEN secret is absent")
+
+          base = "https://api.northflank.com/v1"
+          headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+
+          def api(path):
+              req = urllib.request.Request(base + path, headers=headers)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as r:
+                      return json.load(r)
+              except urllib.error.HTTPError as e:
+                  print("Northflank HTTP", e.code, "at", path)
+                  print(e.read().decode(errors="replace")[:1200])
+                  raise
+
+          projects = api("/projects").get("data", {}).get("projects", [])
+          if isinstance(projects, dict):
+              projects = list(projects.values())
+          matches = [p for p in projects if p.get("name") == "Default"]
+          if len(matches) != 1:
+              sys.exit(f"Expected exactly one Default project, found {len(matches)}")
+          project_id = matches[0]["id"]
+
+          services = api(f"/projects/{project_id}/services").get("data", {}).get("services", [])
+          if isinstance(services, dict):
+              services = list(services.values())
+          targets = [s for s in services if s.get("name") == "anthares-ara-northflank"]
+          if len(targets) != 1:
+              sys.exit(f"Expected exactly one anthares-ara-northflank service, found {len(targets)}")
+          svc = targets[0]
+          service_id = svc["id"]
+
+          # Current API docs expose public DNS through the service ports endpoint.
+          ports = api(f"/projects/{project_id}/services/{service_id}/ports").get("data", {}).get("ports", [])
+          public_http = [p for p in ports if p.get("public") and p.get("protocol") in ("HTTP", "HTTP/2")]
+          if not public_http:
+              sys.exit("Service has no public HTTP port")
+          port = public_http[0]
+          dns = port.get("dns")
+          if not dns:
+              sys.exit("Public HTTP port has no DNS yet")
+          base_url = "https://" + dns
+          health_url = base_url + "/health"
+
+          health = None
+          health_error = None
+          for attempt in range(30):
+              try:
+                  with urllib.request.urlopen(health_url, timeout=15) as r:
+                      raw = r.read().decode("utf-8", errors="replace")
+                      health = json.loads(raw)
+                      if r.status == 200 and health.get("ok") is True:
+                          health_error = None
+                          break
+                      health_error = f"HTTP {r.status}: {raw[:300]}"
+              except Exception as e:
+                  health_error = type(e).__name__ + ": " + str(e)[:300]
+              time.sleep(10)
+
+          status = svc.get("status") or {}
+          result = {
+              "checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "project_id": project_id,
+              "service_id": service_id,
+              "service_name": svc.get("name"),
+              "service_type": svc.get("serviceType"),
+              "build_status": (status.get("build") or {}).get("status"),
+              "deployment_status": (status.get("deployment") or {}).get("status"),
+              "public_url": base_url,
+              "health_url": health_url,
+              "health_ok": bool(health and health.get("ok") is True),
+              "health": health,
+              "health_error": health_error,
+              "production_failover_modified": False,
+          }
+          os.makedirs("infra/northflank", exist_ok=True)
+          with open("infra/northflank/status.json", "w", encoding="utf-8") as f:
+              json.dump(result, f, indent=2, sort_keys=True)
+              f.write("\n")
+          print(json.dumps(result, indent=2, sort_keys=True))
+          if not result["health_ok"]:
+              sys.exit("Northflank service did not pass /health verification")
+          PY
+
+      - name: Persist sanitized verification result
+        if: always()
+        shell: bash
+        run: |
+          if [ ! -f infra/northflank/status.json ]; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add infra/northflank/status.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore: record Northflank ARA verification"
+          git push
