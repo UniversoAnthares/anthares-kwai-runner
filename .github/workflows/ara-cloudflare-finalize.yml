@@ -1,0 +1,250 @@
+name: Finalize ARA Cloudflare-only runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ara-cloudflare-finalize.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ara-cloudflare-finalize
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch canonical ARA runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          # 1) Cloudflare Durable Object is the single controller authority.
+          p = Path('cloudflare-ara-backup/src/index.js')
+          s = p.read_text(encoding='utf-8')
+          s, n = re.subn(
+              r'const KEY_URLS = \[.*?\];',
+              'const KEY_URLS = [];',
+              s,
+              count=1,
+              flags=re.S,
+          )
+          if n != 1:
+              raise SystemExit('KEY_URLS patch failed')
+          fence = '''// cloudflare-single-authority-v1: ARA has exactly one durable controller state.\n// Reserve endpoints are transport proxies to this same Worker service, so there is\n// no second writer and therefore no external fencing database is required.\nconst FENCE_MODE = "cloudflare-single-authority-v1";\nasync function sharedFence(_request, _device, _op = "acquire") {\n  return { ok: true, status: 200, owner: "anthares-ara-backup", epoch: FENCE_MODE };\n}\n\n'''
+          s, n = re.subn(
+              r'// shared-fencing-v1:.*?\nexport class AraState',
+              fence + 'export class AraState',
+              s,
+              count=1,
+              flags=re.S,
+          )
+          if n != 1 and 'cloudflare-single-authority-v1' not in s:
+              raise SystemExit('shared fencing patch failed')
+          s = s.replace('role: "ara-backup-control"', 'role: "ara-canonical-control"')
+          s = s.replace('shared_fencing: "floot-postgres-v1"', 'shared_fencing: FENCE_MODE')
+          s = s.replace('fence_authority: "floot-postgres"', 'fence_authority: "cloudflare-durable-object"')
+          s = s.replace('redundant_mcp_keys: true,', 'redundant_mcp_keys: true,\n        legacy_mcp_discovery: false,')
+          s = s.replace('trusted_mcp_services: KEY_URLS.length,', 'trusted_mcp_services: "pinned-secret",')
+          auth_block = '''    if (url.pathname === "/v1/device/auth-check" && request.method === "GET") {\n      const auth = await deviceOk(request);\n      if (!auth.ok) return json({ ok: false, error: "unauthorized" }, 401);\n      const fence = await sharedFence(request, auth.device, "status");\n      if (!fence.ok) return json({ ok: false, error: "shared_fence_auth_failed", fence_status: fence.status }, 503);\n      return json({ ok: true, shared_fence_auth: true, fence_authority: "cloudflare-durable-object" });\n    }\n'''
+          if auth_block not in s:
+              raise SystemExit('auth-check route target missing')
+          status_block = auth_block + '''\n    if (url.pathname === "/v1/device/status" && request.method === "GET") {\n      const auth = await deviceOk(request);\n      if (!auth.ok) return json({ ok: false, error: "unauthorized" }, 401);\n      return json(await st.status(auth.device));\n    }\n'''
+          s = s.replace(auth_block, status_block, 1)
+          if 'floot.app' in s or 'onrender.com' in s:
+              raise SystemExit('external runtime dependency still present in canonical controller')
+          p.write_text(s, encoding='utf-8')
+
+          # 2) SYSTEM supervisor: only ARA-compatible Cloudflare origins, same authority.
+          p = Path('anthares-remote-agent/windows/run-agent-system-supervisor.ps1')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("$secondary = 'https://anthares-control.anthares1.workers.dev'", "$secondary = 'https://anthares-ara-reserva.anthares1.workers.dev'")
+          test_control = r'''function Test-Control\(\[string\]\$origin\) \{.*?\n\}'''
+          replacement = r'''function Invoke-DeviceGet([string]$origin, [string]$path) {
+    if ([string]::IsNullOrWhiteSpace($origin)) { return $null }
+    try {
+        $headers = @{
+            Authorization = ('Bearer ' + $env:ANTHARES_DEVICE_TOKEN)
+            'X-Anthares-Device' = $env:ANTHARES_DEVICE_ID
+        }
+        return Invoke-RestMethod -Method Get -Uri ($origin + $path) -Headers $headers -TimeoutSec 12
+    } catch { return $null }
+}
+
+function Test-Control([string]$origin) {
+    $r = Invoke-DeviceGet $origin '/v1/device/auth-check'
+    return ($null -ne $r -and $r.ok -eq $true)
+}
+
+function Test-AgentConnected {
+    foreach ($candidate in (Candidate-Controls)) {
+        $r = Invoke-DeviceGet $candidate '/v1/device/status'
+        if ($null -ne $r -and $r.connected -eq $true) { return $true }
+    }
+    return $false
+}'''
+          s, n = re.subn(test_control, replacement, s, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit('supervisor Test-Control patch failed')
+          old_existing = '''        $existing = @(Get-Process -Name 'anthares-remote-agent','anthares-remote-agent-standard' -ErrorAction SilentlyContinue)\n        if ($existing.Count -gt 0) {\n            Save-State '' 'waiting-for-existing-agent'\n            Start-Sleep -Seconds 5\n            continue\n        }\n'''
+          new_existing = '''        $existing = @(Get-Process -Name 'anthares-remote-agent','anthares-remote-agent-standard' -ErrorAction SilentlyContinue)\n        if ($existing.Count -gt 0) {\n            if (Test-AgentConnected) {\n                Save-State '' 'existing-agent-healthy' $existing[0].Id\n                $existingStaleSince = $null\n                Start-Sleep -Seconds 10\n                continue\n            }\n            if ($null -eq $existingStaleSince) { $existingStaleSince = Get-Date }\n            if (((Get-Date) - $existingStaleSince).TotalSeconds -lt 45) {\n                Save-State '' 'existing-agent-heartbeat-stale-grace' $existing[0].Id\n                Start-Sleep -Seconds 5\n                continue\n            }\n            Save-State '' 'replacing-stale-existing-agent' $existing[0].Id\n            foreach ($ep in $existing) { try { Stop-Process -Id $ep.Id -Force -ErrorAction SilentlyContinue } catch {} }\n            $existingStaleSince = $null\n            Start-Sleep -Seconds 2\n            continue\n        }\n        $existingStaleSince = $null\n'''
+          if old_existing not in s:
+              raise SystemExit('existing agent block target missing')
+          s = s.replace(old_existing, new_existing, 1)
+          s = s.replace("$mutex = New-Object System.Threading.Mutex($true, 'Global\\AntharesRemoteSystemSupervisorV3', [ref]$created)", "$mutex = New-Object System.Threading.Mutex($true, 'Global\\AntharesRemoteSystemSupervisorV4', [ref]$created)\n$existingStaleSince = $null")
+          # Monitor actual device heartbeat, not just process/control health.
+          needle = '''            if (Test-Control $active) {\n                $activeFailures = 0\n                continue\n            }\n'''
+          repl = '''            if (Test-Control $active) {\n                $activeFailures = 0\n                if (Test-AgentConnected) {\n                    $agentHeartbeatFailures = 0\n                    continue\n                }\n                $agentHeartbeatFailures++\n                if ($agentHeartbeatFailures -lt 4) { continue }\n                Save-State $active 'agent-heartbeat-stale-restart' $proc.Id\n                try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}\n                try { $proc.WaitForExit(5000) | Out-Null } catch {}\n                break\n            }\n'''
+          if needle not in s:
+              raise SystemExit('active health block target missing')
+          s = s.replace(needle, repl, 1)
+          s = s.replace('$activeFailures = 0\n        $primaryHealthyStreak = 0', '$activeFailures = 0\n        $agentHeartbeatFailures = 0\n        $primaryHealthyStreak = 0', 1)
+          p.write_text(s, encoding='utf-8')
+
+          # 3) Agent exits after persistent control failure so the supervisor can recover it.
+          p = Path('anthares-remote-agent/cmd/agent/main.go')
+          s = p.read_text(encoding='utf-8')
+          old = '''func heartbeatLoop(cfg Config) {\n\tticker := time.NewTicker(15 * time.Second)\n\tdefer ticker.Stop()\n\tfor {\n\t\t_ = heartbeat(cfg)\n\t\t<-ticker.C\n\t}\n}\n'''
+          new = '''func heartbeatLoop(cfg Config) {\n\tticker := time.NewTicker(15 * time.Second)\n\tdefer ticker.Stop()\n\tfailures := 0\n\tfor {\n\t\tif err := heartbeat(cfg); err != nil {\n\t\t\tfailures++\n\t\t\tfmt.Fprintf(os.Stderr, "heartbeat error (%d/4): %v\\n", failures, err)\n\t\t\tif failures >= 4 {\n\t\t\t\tfmt.Fprintln(os.Stderr, "control heartbeat unavailable; exiting for supervisor recovery")\n\t\t\t\tos.Exit(23)\n\t\t\t}\n\t\t} else {\n\t\t\tfailures = 0\n\t\t}\n\t\t<-ticker.C\n\t}\n}\n'''
+          if old not in s:
+              raise SystemExit('heartbeatLoop target missing')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          # 4) Build on main; this is now production code, not a feature branch artifact.
+          p = Path('.github/workflows/anthares-remote-agent-build.yml')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("      - feature/anthares-remote-agent\n      - feature/ara-chatgpt-mcp", "      - main\n      - feature/anthares-remote-agent\n      - feature/ara-chatgpt-mcp")
+          p.write_text(s, encoding='utf-8')
+
+          # 5) Update deploy assertions away from external fencing.
+          p = Path('.github/workflows/cloudflare-ara-backup-deploy.yml')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('shared-fencing-v1', 'cloudflare-single-authority-v1')
+          s = s.replace('floot-postgres-v1', 'cloudflare-single-authority-v1')
+          s = s.replace('ARA_SHARED_FENCING_DEPLOYED=1', 'ARA_CLOUDFLARE_SINGLE_AUTHORITY_DEPLOYED=1')
+          p.write_text(s, encoding='utf-8')
+
+          # 6) Documentation reflects the now-proven ChatGPT OAuth connection.
+          p = Path('docs/ARA-RENDER-INDEPENDENCE.md')
+          s = p.read_text(encoding='utf-8')
+          s += '''\n\n## Fechamento operacional — 13/10/2026\n- O app `Anthares Remote Cloudflare` foi conectado por OAuth no ChatGPT e uma chamada real `remote_exec` retornou exit code 0.\n- O controlador canônico não consulta Render nem Floot em runtime; estado, leases, replay protection e OAuth ficam em Cloudflare Durable Objects/SQLite.\n- `anthares-ara-reserva` é somente um proxy de transporte para o mesmo serviço `anthares-ara-backup`; ele não cria um segundo escritor de estado.\n- O agente e o supervisor encerram/reiniciam automaticamente após perda persistente de heartbeat, sempre em SYSTEM/sessão 0 e sem janelas interativas.\n'''
+          p.write_text(s, encoding='utf-8')
+
+          # Obsolete workflows could reintroduce the external Floot fence if manually run.
+          for obsolete in [
+              Path('.github/workflows/ara-shared-fencing-deploy.yml'),
+              Path('.github/workflows/ara-shared-fencing-integrate.yml'),
+          ]:
+              if obsolete.exists():
+                  obsolete.unlink()
+          PY
+
+          mkdir -p cloudflare-ara-reserva/src
+          cat > cloudflare-ara-reserva/wrangler.toml <<'EOF'
+          name = "anthares-ara-reserva"
+          account_id = "5c24be052e5144391f73a8e03491e88e"
+          main = "src/index.js"
+          compatibility_date = "2026-10-01"
+
+          [[services]]
+          binding = "ARA_CONTROL"
+          service = "anthares-ara-backup"
+          EOF
+          cat > cloudflare-ara-reserva/src/index.js <<'EOF'
+          const INTERNAL_ORIGIN = 'https://anthares-ara-backup.internal';
+
+          export default {
+            async fetch(request, env) {
+              const incoming = new URL(request.url);
+              const target = new URL(incoming.pathname + incoming.search, INTERNAL_ORIGIN);
+              const upstream = await env.ARA_CONTROL.fetch(new Request(target.toString(), request));
+              const headers = new Headers(upstream.headers);
+              headers.set('x-anthares-ara-route', 'reserve-proxy');
+              return new Response(upstream.body, {
+                status: upstream.status,
+                statusText: upstream.statusText,
+                headers,
+              });
+            },
+          };
+          EOF
+
+      - name: Validate source and agent tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check cloudflare-ara-backup/src/index.js
+          node --check cloudflare-ara-reserva/src/index.js
+          ! grep -q 'onrender.com' cloudflare-ara-backup/src/index.js
+          ! grep -q 'floot.app' cloudflare-ara-backup/src/index.js
+          grep -q 'cloudflare-single-authority-v1' cloudflare-ara-backup/src/index.js
+          grep -q '/v1/device/status' cloudflare-ara-backup/src/index.js
+          grep -q 'anthares-ara-reserva.anthares1.workers.dev' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q 'Global\\AntharesRemoteSystemSupervisorV4' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q 'os.Exit(23)' anthares-remote-agent/cmd/agent/main.go
+          cd anthares-remote-agent
+          go test ./...
+
+      - name: Dry-run Cloudflare Workers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          (cd cloudflare-ara-backup && npx --yes wrangler@4.43.0 deploy --dry-run --outdir /tmp/ara-primary)
+          (cd cloudflare-ara-reserva && npx --yes wrangler@4.43.0 deploy --dry-run --outdir /tmp/ara-reserve)
+
+      - name: Deploy canonical controller and reserve proxy
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd cloudflare-ara-backup && npx --yes wrangler@4.43.0 deploy)
+          (cd cloudflare-ara-reserva && npx --yes wrangler@4.43.0 deploy)
+
+      - name: Verify Cloudflare-only persistence and reserve path
+        shell: bash
+        run: |
+          set -euo pipefail
+          for origin in \
+            https://anthares-ara-backup.anthares1.workers.dev \
+            https://anthares-ara-reserva.anthares1.workers.dev; do
+            h="$(curl -fsS "$origin/healthz")"
+            echo "$h"
+            echo "$h" | grep -q '"ok":true'
+            echo "$h" | grep -q 'cloudflare-durable-object-sqlite'
+            echo "$h" | grep -q '"shared_fencing":"cloudflare-single-authority-v1"'
+            s="$(curl -fsS "$origin/_selftest")"
+            echo "$s" | grep -q '"ok":true'
+            code="$(curl -sS -o /tmp/ara-auth.json -w '%{http_code}' -H 'X-Anthares-Device: DESKTOP-FTDK0HP' "$origin/v1/device/auth-check")"
+            test "$code" = 401
+          done
+          echo 'ARA_CLOUDFLARE_ONLY_FINALIZED=1'
+
+      - name: Commit finalized runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'UniversoAnthares'
+          git config user.email '81930373+UniversoAnthares@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit.'
+            exit 0
+          fi
+          git commit -m 'fix(ara): finalize Cloudflare-only control and self-healing Windows agent'
+          git push origin HEAD:main
