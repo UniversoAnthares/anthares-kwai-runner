@@ -15,7 +15,7 @@ from starlette.websockets import WebSocketDisconnect
 
 router = APIRouter()
 COOKIE_NAME = "anthares_novnc_session"
-SESSION_SECONDS = 600
+SESSION_SECONDS = 3600
 NOVNC_ROOT = Path(os.environ.get("NOVNC_STATIC_ROOT", "/usr/share/novnc"))
 VNC_HOST = os.environ.get("NOVNC_VNC_HOST", "127.0.0.1")
 VNC_PORT = int(os.environ.get("NOVNC_VNC_PORT", "5900"))
