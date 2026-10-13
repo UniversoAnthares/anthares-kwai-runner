@@ -1452,3 +1452,13 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Change: added `stdin=subprocess.DEVNULL` to both subprocess creation paths in `kwai_memu_probe.py` (shared `subprocess.run` wrapper and bounded `Popen` for hierarchy/screenshot commands). Existing `CREATE_NO_WINDOW` remains enabled.
 - Validation: diff is exactly 2 additions / 0 deletions; branch is one commit ahead of `legacy-pc-rebuild`, zero commits behind. No CI status or workflow run has appeared yet. PR reports `mergeable=false`, so it remains open pending GitHub's mergeability/check state and review; it was not merged.
 - Scope: this reduces inherited stdin coupling; it does not prove Windows session isolation and does not suppress MEmu's own GUI interactions. Runtime rollout and a new Kwai probe remain blocked until safe execution and account identity are established.
+
+
+## 2026-10-13 04:02 UTC — User-provided desktop evidence and fresh heartbeat
+
+- Fresh ARA status: connected, device `DESKTOP-FTDK0HP`, agent `0.2.0`, heartbeat `2026-10-13T04:02:21Z`, queue depth 0.
+- Detached-job inventory still contains only two exited historical validation jobs; no active detached job was reported.
+- User screenshot at approximately 00:02 local shows MEmu Play in the foreground with a modal reading “Reparação do ambiente de tempo de execução...” at 59%. The Kwai app/profile is not yet visible. This is a repair/loading state, so do not launch another probe or interact with the emulator until this operation completes.
+- Fresh process inventory includes `MEmu.exe` PID 22792 and `adb.exe` PID 3868, plus `cmd.exe` PIDs 20720, 14008, and 30692 in Console session 3. This is evidence of processes in the interactive session, but the current process listing does not show parent/command-line provenance; ownership and whether these are harmful cannot be concluded from this output alone. No process was stopped.
+- PR #47 remains open and unmerged; no CI status or workflow run was present at the last check.
+- Manual gate remains: wait for MEmu's runtime repair to finish, then capture the resulting emulator screen. If it remains at 59% for several minutes or displays an error, capture that state rather than force-closing it. Do not enter credentials or start a publication during this diagnostic step.
