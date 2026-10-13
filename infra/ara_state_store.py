@@ -47,7 +47,8 @@ class MemoryStore:
                          if self._jobs.get(jid, {}).get("status") == "queued")
             uncertain = sum(1 for row in self._jobs.values()
                             if row["device_id"] == device_id and row.get("status") == "uncertain")
-        connected = bool(hb and self._now() - hb.get("_seen_epoch", 0) <= freshness_seconds)
+        age_seconds = self._now() - hb.get("_seen_epoch", 0) if hb else None
+        connected = bool(age_seconds is not None and 0 <= age_seconds <= freshness_seconds)
         if hb:
             hb.pop("_seen_epoch", None)
         return {"heartbeat": hb, "connected": connected, "queued": queued, "uncertain": uncertain}
