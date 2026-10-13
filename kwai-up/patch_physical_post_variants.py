@@ -87,8 +87,7 @@ new_focus = '''        post_rid = post.get("resource-id", "")
             # O_EXCL prevents a concurrent or retried commit from double-posting.
             # Keep the marker even if verification is uncertain or the process dies.
             attempt = self.ready_file.with_name(
-                "publish_attempt_" + ku.safe_token(self.cfg.job_id)
-                + "_" + str(proof["media_sha256"])[:16] + ".json"
+                "publish_attempt_" + str(proof["media_sha256"]) + ".json"
             )
             try:
                 fd = os.open(str(attempt), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
