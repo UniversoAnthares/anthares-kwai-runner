@@ -13,11 +13,11 @@ jobs:
     env:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
     steps:
-      - name: Print sanitized service and addon state
+      - name: Print sanitized service, addon, and runtime state
         shell: bash
         run: |
           python3 - <<'PY'
-          import json, os, urllib.request, urllib.error
+          import json, os, re, urllib.request, urllib.error
           token=os.environ.get('NORTHFLANK_API_TOKEN','')
           if not token: raise SystemExit('missing NORTHFLANK_API_TOKEN')
           base='https://api.northflank.com/v1'
@@ -65,4 +65,14 @@ jobs:
             'credentials_ready':creds_ready,
           }
           print(json.dumps(out,sort_keys=True))
+          logs=get(f'/projects/{pid}/services/{sid}/logs?queryType=range&duration=900&lineLimit=120&direction=backward&type=runtime').get('data') or []
+          def redact(text):
+              text=str(text or '')
+              text=re.sub(r'(?i)(postgres(?:ql)?://)[^\s"\']+',r'\1<redacted>',text)
+              text=re.sub(r'(?i)(bearer\s+)[A-Za-z0-9._~+/-]+',r'\1<redacted>',text)
+              text=re.sub(r'(?i)(ARA_SHARED|DEVICE_TOKEN|CONTROL_TOKEN)(\s*[=:]\s*)[^\s,;]+',r'\1\2<redacted>',text)
+              return text[:3000]
+          print('--- sanitized runtime logs ---')
+          for item in reversed(logs[-120:]):
+              print(redact(item.get('log')))
           PY
