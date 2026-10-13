@@ -60,8 +60,8 @@ async function currentApproval(env){
   return `ARA-${mac.slice(0,10)}`;
 }
 
-function approvalPage(tx,message='Cole o código que foi enviado à área de transferência deste computador.'){
-  return html(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Remote</title></head><body><main><h1>Anthares Remote</h1><p>${esc(message)}</p><p>O código Anthares sempre começa com <strong>ARA-</strong>. Se o conteúdo colado não começar assim, não autorize.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="tx" value="${esc(tx)}"><label>Código <input type="password" name="approval" pattern="ARA-[A-Za-z0-9_-]{10}" autocomplete="one-time-code" required autofocus></label><button type="submit">Autorizar</button></form></main></body></html>`);
+function approvalPage(tx,message='Cole o código que foi enviado à área de transferência deste computador.',status=200){
+  return html(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Remote</title></head><body><main><h1>Anthares Remote</h1><p>${esc(message)}</p><p>O código Anthares sempre começa com <strong>ARA-</strong>. Se o conteúdo colado não começar assim, não autorize.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="tx" value="${esc(tx)}"><label>Código <input type="password" name="approval" pattern="ARA-[A-Za-z0-9_-]{10}" autocomplete="one-time-code" required autofocus></label><button type="submit">Autorizar</button></form></main></body></html>`,status);
 }
 
 async function authorizeGet(req,env,u){
