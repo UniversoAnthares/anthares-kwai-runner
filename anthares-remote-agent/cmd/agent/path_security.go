@@ -3,6 +3,7 @@ package main
 import (
     "errors"
     "os"
+    "fmt"
     "path/filepath"
     "runtime"
     "strings"
@@ -70,8 +71,11 @@ func securePath(cfg Config, path string) (string, error) {
         if err != nil {
             return "", err
         }
-        if info.Mode()&os.ModeSymlink != 0 {
-            return "", errors.New("path contains symbolic link or reparse point")
+        if info.Mode()&os.ModeSymlink != 0 || info.Mode()&os.ModeIrregular != 0 {
+            return "", errors.New("path contains symbolic link or irregular component")
+        }
+        if info.Mode()&os.ModeType != 0 && !info.IsDir() && current != abs {
+            return "", fmt.Errorf("non-directory component in path: %s", current)
         }
     }
 
