@@ -7,6 +7,25 @@ import (
     "strings"
 )
 
+func pathWithin(path, root string) bool {
+    p := strings.ToLower(filepath.Clean(path))
+    r := strings.ToLower(filepath.Clean(root))
+    return p == r || strings.HasPrefix(p, r+string(os.PathSeparator))
+}
+
+func canonicalRoot(root string) string {
+    cleaned := filepath.Clean(root)
+    resolved, err := filepath.EvalSymlinks(cleaned)
+    if err != nil {
+        return cleaned
+    }
+    abs, err := filepath.Abs(resolved)
+    if err != nil {
+        return cleaned
+    }
+    return filepath.Clean(abs)
+}
+
 // securePath enforces configured lexical roots and rejects traversal through
 // existing symbolic-link/reparse-like components. Missing leaf components are
 // allowed so authorized files and directories can be created.
@@ -21,10 +40,8 @@ func securePath(cfg Config, path string) (string, error) {
     abs = filepath.Clean(abs)
 
     allowed := false
-    lower := strings.ToLower(abs)
     for _, root := range cfg.AllowedRoots {
-        r := strings.ToLower(filepath.Clean(root))
-        if lower == r || strings.HasPrefix(lower, r+string(os.PathSeparator)) {
+        if pathWithin(abs, root) {
             allowed = true
             break
         }
@@ -62,11 +79,9 @@ func securePath(cfg Config, path string) (string, error) {
         if err != nil {
             return "", err
         }
-        rl := strings.ToLower(filepath.Clean(resolved))
         contained := false
         for _, root := range cfg.AllowedRoots {
-            rr := strings.ToLower(filepath.Clean(root))
-            if rl == rr || strings.HasPrefix(rl, rr+string(os.PathSeparator)) {
+            if pathWithin(resolved, canonicalRoot(root)) {
                 contained = true
                 break
             }
