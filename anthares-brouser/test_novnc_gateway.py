@@ -184,8 +184,8 @@ class NoVNCGatewayTests(unittest.TestCase):
         self.login()
         with patch.object(gateway, "connect", fake_connect):
             with self.client.websocket_connect("/novnc/websockify", headers={"origin": "http://testserver"}, subprotocols=["binary"]) as ws:
-                ws.send_bytes(b"\\x00\\x01\\x02")
-                self.assertEqual(ws.receive_bytes(), b"\\x00\\x01\\x02")
+                ws.send_bytes(b"\x00\x01\x02")
+                self.assertEqual(ws.receive_bytes(), b"\x00\x01\x02")
 
     def test_real_websockify_tcp_vnc_handshake(self):
         """Real WebSocket upgrade -> websockify -> TCP RFB bytes, no Android needed."""
@@ -195,7 +195,7 @@ class NoVNCGatewayTests(unittest.TestCase):
 
         class VNCHandler(socketserver.BaseRequestHandler):
             def handle(self):
-                self.request.sendall(b"RFB 003.008\\n")
+                self.request.sendall(b"RFB 003.008\n")
                 self.request.settimeout(3)
                 received.append(self.request.recv(12))
 
@@ -223,13 +223,13 @@ class NoVNCGatewayTests(unittest.TestCase):
                 self.login()
                 with patch.object(gateway, "WS_BACKEND", f"ws://127.0.0.1:{port}/websockify"):
                     with self.client.websocket_connect("/novnc/websockify", headers={"origin": "http://testserver"}, subprotocols=["binary"]) as ws:
-                        self.assertEqual(ws.receive_bytes(), b"RFB 003.008\\n")
-                        ws.send_bytes(b"RFB 003.008\\n")
+                        self.assertEqual(ws.receive_bytes(), b"RFB 003.008\n")
+                        ws.send_bytes(b"RFB 003.008\n")
                 for _ in range(20):
                     if received:
                         break
                     time.sleep(.05)
-                self.assertEqual(received, [b"RFB 003.008\\n"])
+                self.assertEqual(received, [b"RFB 003.008\n"])
             finally:
                 proc.terminate()
                 proc.wait(timeout=5)
