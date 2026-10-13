@@ -193,6 +193,9 @@ async def novnc_websocket(websocket: WebSocket):
     the public websocket itself and forwards bytes to x11vnc on 127.0.0.1:5900.
     """
     expiry = _expiry(websocket.cookies.get(COOKIE_NAME))
+    print("[anthares-browser] ws auth cookie_present=%s valid=%s origin_valid=%s" % (
+        bool(websocket.cookies.get(COOKIE_NAME)), bool(expiry), _same_origin(websocket)
+    ), flush=True)
     if not expiry or not _same_origin(websocket):
         import logging
         logging.getLogger("anthares.novnc").warning(
