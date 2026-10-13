@@ -1,0 +1,74 @@
+name: Build clean ARA final integration
+
+on:
+  push:
+    branches: [ops/ara-104-resolve]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: integrate/ara-final-main
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: anthares-remote-agent/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Import only ARA-owned paths from validated source branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name anthares-integration-bot
+          git config user.email 81930373+UniversoAnthares@users.noreply.github.com
+          git fetch origin feature/anthares-remote-agent
+          git checkout origin/feature/anthares-remote-agent -- \
+            anthares-remote-agent \
+            anthares-remote-mcp \
+            .github/workflows/anthares-remote-agent-build.yml \
+            .github/workflows/ara-chatgpt-mcp-qa.yml
+          git diff --cached --check
+          changed="$(git diff --cached --name-only)"
+          unexpected="$(printf '%s\n' "$changed" | grep -Ev '^(anthares-remote-agent/|anthares-remote-mcp/|\.github/workflows/(anthares-remote-agent-build|ara-chatgpt-mcp-qa)\.yml$)' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected paths in clean integration:" >&2
+            echo "$unexpected" >&2
+            exit 1
+          fi
+      - name: Validate Windows agent
+        shell: bash
+        working-directory: anthares-remote-agent
+        run: |
+          set -euo pipefail
+          test -z "$(gofmt -l cmd/agent/*.go)"
+          go test ./... -count=1
+          go vet ./...
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o /tmp/anthares-remote-agent.exe ./cmd/agent
+          test -s /tmp/anthares-remote-agent.exe
+      - name: Validate MCP gateway
+        shell: bash
+        working-directory: anthares-remote-mcp
+        run: |
+          set -euo pipefail
+          npm install
+          npm run qa
+          npm run qa:oauth
+          npm run qa:remote
+      - name: Commit clean integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat(ara): integrate validated Windows agent and MCP gateway cleanly'
+            git push origin HEAD:integrate/ara-final-main
+          fi
