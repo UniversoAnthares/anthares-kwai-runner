@@ -190,13 +190,16 @@ def health() -> dict[str, Any]:
 def ready() -> dict[str, Any]:
     """Fail closed if the browser or persistent-profile mount is unavailable."""
     profile_exists = PROFILE_DIR.is_dir()
+    profile_writable = os.access(PROFILE_DIR, os.W_OK | os.X_OK) if profile_exists else False
     browser_running = bool(chromium_processes())
     cdp_ready = _cdp_ready() if browser_running else False
     evidence = {
-        "ok": profile_exists and browser_running and cdp_ready,
+        "ok": profile_exists and profile_writable and browser_running and cdp_ready,
         "profile_dir_exists": profile_exists,
+        "profile_dir_writable": profile_writable,
         "chromium_running": browser_running,
         "cdp_ready": cdp_ready,
+        "durable_volume_verified": False,
     }
     if not evidence["ok"]:
         raise HTTPException(status_code=503, detail=evidence)
