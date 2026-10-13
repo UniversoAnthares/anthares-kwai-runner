@@ -54,7 +54,9 @@ trap shutdown INT TERM
 
 start_api() {
   log "starting control API on 0.0.0.0:${API_PORT}"
-  uvicorn app:app --host "${API_BIND:-0.0.0.0}" --port "$API_PORT" --app-dir /opt/anthares-brouser --no-access-log &
+  # Render must reach the public service port. Keep CDP/VNC/noVNC loopback-only;
+  # only this token-protected HTTP API is exposed on the Render interface.
+  uvicorn app:app --host 0.0.0.0 --port "$API_PORT" --app-dir /opt/anthares-brouser --no-access-log &
   API_PID=$!
 }
 
