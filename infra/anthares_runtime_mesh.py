@@ -165,8 +165,9 @@ def _remote_execute(device: str, job_type: str, args: dict[str, Any], timeout: i
     durable_execute = getattr(_remote, "execute_job", None)
     if callable(durable_execute):
         return durable_execute(device, job_type, args, timeout)
-    job = _legacy_enqueue(device, job_type, args, timeout)
-    return _legacy_wait(device, job["id"], timeout + 8)
+    # Never silently queue remote commands in volatile per-process memory.
+    # Without a durable executor, the caller must receive an explicit failure.
+    return None
 
 
 def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int | None:
