@@ -5,7 +5,7 @@ import { createHash, createHmac, generateKeyPairSync, randomBytes, sign, timingS
 const PUBLIC_ORIGIN=(process.env.ARA_PUBLIC_URL||'https://anthares-remote-mcp.onrender.com').replace(/\/$/,'');
 const PUBLIC_PORT=Number(process.env.PORT||3000);
 const INTERNAL_PORT=Number(process.env.ARA_INTERNAL_MCP_PORT||3118);
-const CONTROL_URL=(process.env.ANTHARES_CONTROL_URL||'https://anthares-remote-control.onrender.com').replace(/\/$/,'');
+const CONTROL_URL=(process.env.ANTHARES_CONTROL_URL||'https://anthares-ara-control.onrender.com').replace(/\/$/,'');
 const DEVICE_ID=process.env.ANTHARES_DEVICE_ID||'DESKTOP-FTDK0HP';
 const TOKEN_SECRET=process.env.ARA_OAUTH_TOKEN_SECRET||'';
 const SCOPES=new Set(['ara.read','ara.write']);
@@ -36,6 +36,7 @@ function challenge(){return `Bearer resource_metadata="${PUBLIC_ORIGIN}/.well-kn
 function signControl(method,path,raw=''){const ts=String(Date.now());const payload=`${ts}\n${method.toUpperCase()}\n${path}\n${raw}`;return{ts,sig:sign(null,Buffer.from(payload),pair.privateKey).toString('base64url')}};
 async function control(path,{method='GET',body,timeoutMs=30000}={}){const raw=body===undefined?'':JSON.stringify(body);const s=signControl(method,path,raw);return fetch(`${CONTROL_URL}${path}`,{method,headers:{'Content-Type':'application/json','X-ARA-Timestamp':s.ts,'X-ARA-Signature':s.sig,'X-ARA-Signer':'anthares-remote-mcp'},body:body===undefined?undefined:raw,signal:AbortSignal.timeout(timeoutMs)});}
 async function sendApprovalCode(code){const r=await control('/v1/mcp/execute',{method:'POST',timeoutMs:30000,body:{device_id:DEVICE_ID,type:'clipboard_set',args:{text:code},timeout_seconds:20}});return r.ok;}
+async function consumeOauth(kind,p){try{const r=await control('/v1/mcp/oauth/consume',{method:'POST',timeoutMs:10000,body:{kind,issuer:PUBLIC_ORIGIN,jti:p.jti,exp:p.exp}});return r.ok;}catch{return false;}}
 function checkRate(p,write){const key=`${p.jti}:${write?'w':'r'}`;const now=Date.now();const max=write?30:120;let x=rate.get(key);if(!x||x.reset<now)x={count:0,reset:now+60000};x.count++;rate.set(key,x);return x.count<=max;}
 setInterval(()=>{const now=Date.now();for(const[k,v]of transactions)if(v.expires<now)transactions.delete(k);for(const [key, expiry] of codes) if(expiry < now) codes.delete(key);for(const[k,v]of rate)if(v.reset<now)rate.delete(k);},60000).unref();
 
@@ -71,8 +72,8 @@ const server=createServer(async(req,res)=>{try{
   }
   if(req.method==='POST'&&u.pathname==='/oauth/token'){
     const body=form(await readBody(req,131072)),grant=body.get('grant_type')||'',clientId=body.get('client_id')||'';if(!validateClientId(clientId)){json(res,400,{error:'invalid_client'});return;}
-    if(grant==='authorization_code'){const code=body.get('code')||'',p=verifyToken(code,'oauth_code');if(!p||p.clientId!==clientId||p.redirectUri!==(body.get('redirect_uri')||'')){json(res,400,{error:'invalid_grant'});return;}const verifier=body.get('code_verifier')||'';if(verifier.length<43||!safeEq(sha256(verifier).toString('base64url'),p.challenge)){json(res,400,{error:'invalid_grant'});return;}if(codes.has(p.jti)){json(res,400,{error:'invalid_grant'});return;}codes.set(p.jti,p.exp*1000);json(res,200,issueTokens(clientId,p.scopes));return;}
-    if(grant==='refresh_token'){const p=verifyToken(body.get('refresh_token')||'','refresh');if(!p||p.cid!==clientId){json(res,400,{error:'invalid_grant'});return;}json(res,200,issueTokens(clientId,p.scp));return;}
+    if(grant==='authorization_code'){const code=body.get('code')||'',p=verifyToken(code,'oauth_code');if(!p||p.clientId!==clientId||p.redirectUri!==(body.get('redirect_uri')||'')){json(res,400,{error:'invalid_grant'});return;}const verifier=body.get('code_verifier')||'';if(verifier.length<43||!safeEq(sha256(verifier).toString('base64url'),p.challenge)){json(res,400,{error:'invalid_grant'});return;}if(codes.has(p.jti)||!(await consumeOauth('authorization_code',p))){json(res,400,{error:'invalid_grant'});return;}codes.set(p.jti,p.exp*1000);json(res,200,issueTokens(clientId,p.scopes));return;}
+    if(grant==='refresh_token'){const p=verifyToken(body.get('refresh_token')||'','refresh');if(!p||p.cid!==clientId||!(await consumeOauth('refresh_token',p))){json(res,400,{error:'invalid_grant'});return;}json(res,200,issueTokens(clientId,p.scp));return;}
     json(res,400,{error:'unsupported_grant_type'});return;
   }
   if(u.pathname==='/mcp'){
