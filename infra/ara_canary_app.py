@@ -22,10 +22,12 @@ import anthares_remote_control_routes as _relay
 from ara_public_probe_guard import register as _register_probe_guard
 from ara_runtime_truth import register as _register_runtime_truth
 from ara_canary_mcp_bridge import register as _register_mcp_failover
+from ara_device_auth_failover import register as _register_device_auth_failover
 
 app = Flask("anthares_remote_agent_canary")
 _register_probe_guard(app)
 _register_runtime_truth(app)
+_register_device_auth_failover(app)
 _relay.register(app, os.getenv("ARA_SHARED", ""))
 _register_mcp_failover(app)
 
