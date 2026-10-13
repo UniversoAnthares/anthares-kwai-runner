@@ -95,7 +95,15 @@ def login_form() -> HTMLResponse:
 
 @router.post("/novnc/login")
 async def browser_login(request: Request):
-    if _secure_cookie() and request.url.scheme != "https":
+    # TLS may terminate at Render's ingress. Trust its HTTPS indication only
+    # when this deployment explicitly opts into a managed TLS reverse proxy.
+    # Do not enable this flag when the application port is publicly reachable
+    # without a proxy that overwrites client-supplied forwarded headers.
+    forwarded_https = (
+        os.environ.get("NOVNC_TRUST_PROXY_HTTPS", "0") == "1"
+        and request.headers.get("x-forwarded-proto", "").strip().lower() == "https"
+    )
+    if _secure_cookie() and request.url.scheme != "https" and not forwarded_https:
         raise HTTPException(status_code=403, detail="HTTPS required")
     if request.headers.get("content-type", "").split(";")[0].strip() != "application/x-www-form-urlencoded":
         raise HTTPException(status_code=415, detail="unsupported form")
