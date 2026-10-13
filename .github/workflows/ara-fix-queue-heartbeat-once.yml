@@ -1,5 +1,6 @@
 name: ARA one-shot queue heartbeat fix
 
+# One-shot source repair. Delete this workflow after the verified patch lands.
 on:
   push:
     branches: [main]
