@@ -25,10 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      ANTHARES_BROWSER_PRIMARY_URL: https://anthares-browser-qa-render.onrender.com
+      ANTHARES_BROWSER_PRIMARY_URL: ''
+      ANTHARES_BROWSER_RESERVE_URL: https://anthares-reserva-browser.anthares1.workers.dev
       ANTHARES_RESERVA_CONTROL_URL: https://anthares-ara-backup.anthares1.workers.dev
       ANTHARES_CONTROL_URL: https://anthares-control.anthares1.workers.dev
-      ANTHARES_BROWSER_RESERVE_URL: ${{ vars.ANTHARES_BROWSER_RESERVE_URL }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate resilience code
@@ -43,5 +43,5 @@ jobs:
           cat /tmp/anthares-resilience.json >> "$GITHUB_STEP_SUMMARY"
       - name: Confirm independent emergency executor
         run: |
-          echo 'GitHub-hosted runner is alive and independent of Render/Cloudflare runtime.'
-          echo 'It may execute finite jobs only; persistent interactive Chromium requires a persistent browser provider.'
+          echo 'GitHub-hosted runner is alive and independent of Render.'
+          echo 'Persistent control and browser reserve use Cloudflare; Actions remains the finite-job emergency executor.'
