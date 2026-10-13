@@ -11,12 +11,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: anthares-reserva-public-executor
+  cancel-in-progress: true
+
 jobs:
   capability:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      CF: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CONTROL: ${{ secrets.ANTHARES_CONTROL_TOKEN }}
       GLKEY: ${{ secrets.GITLAB_STATE_KEY }}
       GLTOKEN: ${{ secrets.GITLAB_TOKEN }}
@@ -28,17 +32,24 @@ jobs:
           set -euo pipefail
           echo GITHUB_PUBLIC_HOSTED_RUNNER=READY
           awk '/MemTotal/{print "MEM_KB=" $2}' /proc/meminfo
-          echo HAS_CLOUDFLARE_API_TOKEN=$([ -n "$CF" ] && echo 1 || echo 0)
+          echo HAS_CLOUDFLARE_API_TOKEN=$([ -n "$CLOUDFLARE_API_TOKEN" ] && echo 1 || echo 0)
           echo HAS_ANTHARES_CONTROL_TOKEN=$([ -n "$CONTROL" ] && echo 1 || echo 0)
           echo HAS_GITLAB_STATE_KEY=$([ -n "$GLKEY" ] && echo 1 || echo 0)
           echo HAS_GITLAB_TOKEN=$([ -n "$GLTOKEN" ] && echo 1 || echo 0)
           curl -fsSI --max-time 20 https://www.kwai.com/ >/dev/null
           echo KWAI_NETWORK=READY
-      - name: Deploy Cloudflare fallback when credential exists
-        if: ${{ env.CF != '' }}
+      - name: Deploy Cloudflare fallback
         shell: bash
         run: |
           set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
           cd anthares-reserva-browser
           npm install --no-audit --no-fund
           npx wrangler deploy
+      - name: Prove live Cloudflare Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://anthares-reserva-browser.anthares1.workers.dev'
+          curl -fsS --retry 5 --retry-delay 3 --max-time 30 "$BASE/health" | python -c 'import json,sys; d=json.load(sys.stdin); assert d.get("ok") is True; print("RESERVA_HEALTH=PASS")'
+          curl -fsS --retry 2 --retry-delay 3 --max-time 45 "$BASE/_selftest" | python -c 'import json,sys; d=json.load(sys.stdin); assert d.get("ok") is True and d.get("browser_started") is True and d.get("host_ok") is True, d; print("RESERVA_BROWSER=PASS")'
