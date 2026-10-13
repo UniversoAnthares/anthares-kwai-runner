@@ -106,9 +106,12 @@ func main() {
 				os.Exit(1)
 			}
 			if err := postResultRetry(cfg, result); err != nil {
-				// Stop accepting new work if a completed result cannot be delivered.
-				// Restart recovery still requires a durable encrypted result spool.
+				// Keep the encrypted pending file for replay on next start.
 				fmt.Fprintf(os.Stderr, "fatal result upload error job=%s: %v\n", result.ID, err)
+				os.Exit(1)
+			}
+			if err := os.Remove(filepath.Join(resultSpoolDir(cfg), result.ID+".pending")); err != nil {
+				fmt.Fprintf(os.Stderr, "fatal result cleanup error job=%s: %v\n", result.ID, err)
 				os.Exit(1)
 			}
 		}()
