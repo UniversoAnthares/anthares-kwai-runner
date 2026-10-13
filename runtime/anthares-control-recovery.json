@@ -1,7 +1,7 @@
 {
-  "checked_at": 1791879744,
+  "checked_at": 1791908426,
   "healthy": true,
-  "last_healthy_at": 1791879744,
+  "last_healthy_at": 1791908426,
   "schema": "anthares.core.control-watchdog.v1",
   "status": "HEALTHY"
 }
