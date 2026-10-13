@@ -3,12 +3,14 @@ $root = 'C:\ProgramData\AntharesRemoteAgent'
 . (Join-Path $root 'agent-env.ps1')
 
 # Canonical Anthares Remote runtime: one SYSTEM agent, one device identity,
-# three independent control-plane candidates, no interactive desktop.
+# independent zero-cost control-plane candidates, no interactive desktop.
 $env:ANTHARES_DEVICE_ID = 'DESKTOP-FTDK0HP'
 
-$primary = 'https://anthares-ara-control.onrender.com'
-$secondary = 'https://anthares-ara-infra-canary-v2.onrender.com'
-$tertiary = 'https://anthares-ara-backup.anthares1.workers.dev'
+# Render is intentionally absent from the canonical path. Cloudflare Workers are
+# persistent controls; GitHub Actions is the finite-job watchdog/emergency executor.
+$primary = 'https://anthares-ara-backup.anthares1.workers.dev'
+$secondary = 'https://anthares-control.anthares1.workers.dev'
+$tertiary = ($env:ANTHARES_CONTROL_TERTIARY_URL | ForEach-Object { [string]$_ }).TrimEnd('/')
 $exe = Join-Path $root 'anthares-remote-agent.exe'
 $stdout = Join-Path $root 'agent-system.stdout.log'
 $stderr = Join-Path $root 'agent-system.stderr.log'
@@ -17,10 +19,11 @@ $forceSecondary = Join-Path $root 'force-secondary.flag'
 $forceTertiary = Join-Path $root 'force-tertiary.flag'
 
 $created = $false
-$mutex = New-Object System.Threading.Mutex($true, 'Global\AntharesRemoteSystemSupervisorV2', [ref]$created)
+$mutex = New-Object System.Threading.Mutex($true, 'Global\AntharesRemoteSystemSupervisorV3', [ref]$created)
 if (-not $created) { exit 0 }
 
 function Test-Control([string]$origin) {
+    if ([string]::IsNullOrWhiteSpace($origin)) { return $false }
     try {
         $r = Invoke-WebRequest -UseBasicParsing -Uri ($origin + '/healthz') -TimeoutSec 12
         return ([int]$r.StatusCode -ge 200 -and [int]$r.StatusCode -lt 300)
@@ -40,31 +43,26 @@ function Save-State([string]$active, [string]$reason, [int]$agentPid = 0) {
             device_id = $env:ANTHARES_DEVICE_ID
             identity = 'SYSTEM'
             session = 0
+            render_required = $false
         } | ConvertTo-Json | Set-Content -Path $stateFile -Encoding UTF8
     } catch {}
 }
 
+function Candidate-Controls {
+    @($primary, $secondary, $tertiary) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+}
+
 function Choose-Control {
-    if (Test-Path $forceTertiary) {
-        if (Test-Control $tertiary) { return $tertiary }
-        if (Test-Control $primary) { return $primary }
-        if (Test-Control $secondary) { return $secondary }
-        return $null
+    if ((Test-Path $forceTertiary) -and (Test-Control $tertiary)) { return $tertiary }
+    if ((Test-Path $forceSecondary) -and (Test-Control $secondary)) { return $secondary }
+    foreach ($candidate in (Candidate-Controls)) {
+        if (Test-Control $candidate) { return $candidate }
     }
-    if (Test-Path $forceSecondary) {
-        if (Test-Control $secondary) { return $secondary }
-        if (Test-Control $primary) { return $primary }
-        if (Test-Control $tertiary) { return $tertiary }
-        return $null
-    }
-    if (Test-Control $primary) { return $primary }
-    if (Test-Control $secondary) { return $secondary }
-    if (Test-Control $tertiary) { return $tertiary }
     return $null
 }
 
 function Preferred-Alternate([string]$active) {
-    foreach ($candidate in @($primary, $secondary, $tertiary)) {
+    foreach ($candidate in (Candidate-Controls)) {
         if ($candidate -eq $active) { continue }
         if (Test-Control $candidate) { return $candidate }
     }
@@ -106,15 +104,15 @@ try {
         while (-not $proc.HasExited) {
             Start-Sleep -Seconds 10
 
-            if (Test-Path $forceTertiary) {
-                if ($active -ne $tertiary -and (Test-Control $tertiary)) {
+            if ((Test-Path $forceTertiary) -and (Test-Control $tertiary)) {
+                if ($active -ne $tertiary) {
                     Save-State $active 'forced-switch-to-tertiary' $proc.Id
                     try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
                     try { $proc.WaitForExit(5000) | Out-Null } catch {}
                     break
                 }
-            } elseif (Test-Path $forceSecondary) {
-                if ($active -ne $secondary -and (Test-Control $secondary)) {
+            } elseif ((Test-Path $forceSecondary) -and (Test-Control $secondary)) {
+                if ($active -ne $secondary) {
                     Save-State $active 'forced-switch-to-secondary' $proc.Id
                     try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
                     try { $proc.WaitForExit(5000) | Out-Null } catch {}
