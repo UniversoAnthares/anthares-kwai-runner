@@ -1,5 +1,5 @@
 name: Verify isolated ARA Northflank controller
-# manual retrigger 2026-10-13: validate Northflank as non-Render ARA exit
+# retrigger after corrected explicit Northflank build start
 
 on:
   workflow_dispatch:
