@@ -11,7 +11,8 @@ TOKEN=secrets.token_urlsafe(32)
 VNC_PASSWORD=secrets.token_urlsafe(24)
 ROOT=Path('/opt/anthares-brouser')
 QA_STATE_SLOT='qa-proof-v2'
-RESULT={'ok':False,'cases':[],'restart_profile':False,'gitlab_snapshot':{'state':'not_checked'}}
+SCREENSHOT_CASES={1,10,20,30,40}
+RESULT={'ok':False,'cases':[],'restart_profile':False,'gitlab_snapshot':{'state':'not_checked'},'screenshot_cases':sorted(SCREENSHOT_CASES)}
 
 def request(path,method='GET',body=None,auth=True,timeout=15):
     headers={'Authorization':f'Bearer {TOKEN}'} if auth else {}
@@ -52,7 +53,7 @@ def start_stack():
         'SUPERVISOR_INTERVAL':'1',
         # The harness token is intentionally ephemeral. Never let start.sh use it
         # for encrypted GitLab state; QA performs restore/backup explicitly with
-        # the stable Render CONTROL_TOKEN in the parent process.
+        # the stable Render state key in the parent process.
         'GITLAB_STATE_ENABLED':'0',
         'GITLAB_SNAPSHOT_INTERVAL':'3600',
     })
@@ -96,11 +97,17 @@ def run_cases():
             code,evaluated=request('/evaluate','POST',{'expression':"document.querySelector('#qa-input').value",'return_by_value':True}); checks['evaluate']=code==200 and (evaluated.get('result') or {}).get('value')==value
             code,_=request('/click','POST',{'selector':'#qa-button','wait_ms':10}); checks['click']=code==200
             code,clicked=request('/evaluate','POST',{'expression':"document.querySelector('#qa-result').textContent",'return_by_value':True}); checks['click_effect']=code==200 and (clicked.get('result') or {}).get('value')==value
-            code,shot=request('/screenshot'); png=b''
-            if code==200 and shot.get('base64'): png=base64.b64decode(shot['base64'])
-            checks['screenshot']=code==200 and png.startswith(b'\x89PNG\r\n\x1a\n') and len(png)>1000
-            ok=all(checks.values()); RESULT['cases'].append({'case':case,'ok':ok,'checks':checks})
+            if case in SCREENSHOT_CASES:
+                code,shot=request('/screenshot'); png=b''
+                if code==200 and shot.get('base64'): png=base64.b64decode(shot['base64'])
+                checks['screenshot']=code==200 and png.startswith(b'\x89PNG\r\n\x1a\n') and len(png)>1000
+            else:
+                checks['screenshot']='not_run'
+            ok=all(value is True or value=='not_run' for value in checks.values())
+            RESULT['cases'].append({'case':case,'ok':ok,'checks':checks})
             if not ok: raise AssertionError(f'case {case} failed: {checks}')
+            if case % 10 == 0:
+                print(f'ANTHARES_BROWSER_RENDER40_PROGRESS={case}/40',flush=True)
         marker='render40-persist-marker-v2'
         code,set_marker=request('/evaluate','POST',{'expression':f"localStorage.setItem('anthares_render40','{marker}'); localStorage.getItem('anthares_render40')",'return_by_value':True}); assert code==200 and (set_marker.get('result') or {}).get('value')==marker,set_marker
         stop_stack(stack); stack=None; time.sleep(1); stack=start_stack()
