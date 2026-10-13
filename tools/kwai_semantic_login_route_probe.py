@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os,re,subprocess,sys,time,xml.etree.ElementTree as ET
 from pathlib import Path
+from kwai_login_ui_locator import login_surface_kind
 
 PKG='com.kwai.video'
 ROUTE=os.getenv('KWAI_ROUTE','me_direct')
@@ -76,14 +77,13 @@ def find_label(ns,*words):
     return None
 
 def success(xml,ns):
-    ids={rid(n) for n in ns}
-    edits=[n for n in ns if (n.get('class') or '').endswith('EditText') or n.get('editable')=='true']
-    if 'login_platform_expand_text' in ids or 'login_platform_item_layout' in ids:
+    # Must match the selector that immediately follows this probe. The old
+    # resource-ID-only check accepted a Google button as an email chooser.
+    surface=login_surface_kind(ns,xml)
+    if surface=='chooser':
         log('KWAI_NATIVE_LOGIN_CHOOSER_VISIBLE=1');return True
-    if edits:
-        ctx=' '.join(label(n)+' '+rid(n).casefold() for n in ns)
-        if re.search(r'login|sign in|password|email|e-mail|phone|telefone|senha|verification|c[oó]digo',ctx,re.I):
-            log('KWAI_NATIVE_LOGIN_FORM_VISIBLE=1');return True
+    if surface=='form':
+        log('KWAI_NATIVE_LOGIN_FORM_VISIBLE=1');return True
     return False
 
 def clear_known_gate(root,ns):

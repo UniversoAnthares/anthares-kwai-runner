@@ -1,0 +1,189 @@
+name: Kwai ARM64 VDC Data Matrix 40
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/anthares-stage4-vdc-data-40.yml'
+permissions:
+  contents: read
+jobs:
+  matrix40:
+    name: "${{ matrix.family }}-${{ matrix.variant }}"
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        family: [order, filesystem, seed, graphics, props]
+        variant: [0,1,2,3,4,5,6,7]
+    steps:
+      - name: Install runtime and ARM64 Android image
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless gdisk e2fsprogs util-linux file >/dev/null
+          rm -rf /tmp/android-tools "$HOME/android-sdk"
+          mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
+          curl -fLsS --retry 3 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
+          cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
+          export ANDROID_HOME="$HOME/android-sdk"
+          (yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null) || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-30;default;arm64-v8a" >/dev/null
+          DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
+          gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
+          echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
+
+      - name: Build metadata and real userdata filesystem
+        run: |
+          set -euo pipefail
+          V=${{ matrix.variant }}
+          FAMILY='${{ matrix.family }}'
+
+          truncate -s 192M /tmp/meta.img
+          sgdisk -o /tmp/meta.img >/dev/null
+          sgdisk -n 1:2048:0 -c 1:metadata /tmp/meta.img >/dev/null
+          L=$(sudo losetup --find --show --partscan /tmp/meta.img)
+          sleep 1
+          sudo mkfs.ext4 -F -L metadata "${L}p1" >/dev/null
+          sudo losetup -d "$L"
+
+          case "$FAMILY:$V" in
+            filesystem:0) SIZE=2G; LABEL=data; OPTS='' ;;
+            filesystem:1) SIZE=4G; LABEL=data; OPTS='' ;;
+            filesystem:2) SIZE=8G; LABEL=data; OPTS='' ;;
+            filesystem:3) SIZE=4G; LABEL=userdata; OPTS='' ;;
+            filesystem:4) SIZE=4G; LABEL=data; OPTS='-O ^64bit,^metadata_csum' ;;
+            filesystem:5) SIZE=4G; LABEL=data; OPTS='-O ^has_journal' ;;
+            filesystem:6) SIZE=4G; LABEL=data; OPTS='-b 4096 -I 256' ;;
+            filesystem:7) SIZE=8G; LABEL=userdata; OPTS='-O ^64bit,^metadata_csum -b 4096 -I 256' ;;
+            *) SIZE=4G; LABEL=data; OPTS='-O ^64bit,^metadata_csum -b 4096 -I 256' ;;
+          esac
+          truncate -s "$SIZE" /tmp/data.img
+          # shellcheck disable=SC2086
+          mkfs.ext4 -F -L "$LABEL" $OPTS -E lazy_itable_init=0,lazy_journal_init=0 /tmp/data.img >/dev/null
+
+          mkdir -p /tmp/data-mnt
+          sudo mount -o loop /tmp/data.img /tmp/data-mnt
+          if [ "$FAMILY" = seed ]; then
+            case "$V" in
+              0) : ;;
+              1) sudo mkdir -p /tmp/data-mnt/dalvik-cache/arm64 ;;
+              2) sudo mkdir -p /tmp/data-mnt/misc_de /tmp/data-mnt/misc_ce ;;
+              3) sudo mkdir -p /tmp/data-mnt/dalvik-cache/arm64 /tmp/data-mnt/misc_de /tmp/data-mnt/misc_ce ;;
+              4) sudo mkdir -p /tmp/data-mnt/dalvik-cache/arm64 /tmp/data-mnt/misc_de /tmp/data-mnt/misc_ce /tmp/data-mnt/system /tmp/data-mnt/system_de /tmp/data-mnt/system_ce ;;
+              5) sudo mkdir -p /tmp/data-mnt/dalvik-cache/arm64 /tmp/data-mnt/misc_de /tmp/data-mnt/misc_ce /tmp/data-mnt/system /tmp/data-mnt/system_de /tmp/data-mnt/system_ce /tmp/data-mnt/user_de /tmp/data-mnt/user_ce ;;
+              6) sudo mkdir -p /tmp/data-mnt/dalvik-cache/arm64 /tmp/data-mnt/misc_de /tmp/data-mnt/misc_ce; sudo chmod 771 /tmp/data-mnt/dalvik-cache /tmp/data-mnt/dalvik-cache/arm64 ;;
+              7) sudo mkdir -p /tmp/data-mnt/dalvik-cache/arm64 /tmp/data-mnt/misc_de /tmp/data-mnt/misc_ce /tmp/data-mnt/system /tmp/data-mnt/system_de /tmp/data-mnt/system_ce /tmp/data-mnt/user_de /tmp/data-mnt/user_ce /tmp/data-mnt/misc/keystore /tmp/data-mnt/misc/credstore; sudo chmod 771 /tmp/data-mnt/dalvik-cache /tmp/data-mnt/dalvik-cache/arm64 ;;
+            esac
+          fi
+          sync
+          sudo umount /tmp/data-mnt
+          {
+            echo "FAMILY=$FAMILY V=$V SIZE=$SIZE LABEL=$LABEL OPTS=$OPTS"
+            file /tmp/data.img
+            blkid -p /tmp/data.img || true
+            dumpe2fs -h /tmp/data.img 2>/dev/null | grep -E 'Filesystem volume name|Filesystem features|Filesystem magic|Block size|Inode size'
+          } | tee /tmp/data-image.txt
+
+      - name: Boot with userdata forced to vdc and classify
+        run: |
+          set +e
+          V=${{ matrix.variant }}
+          FAMILY='${{ matrix.family }}'
+          MEM=4096; SMP=4
+          [ $((V % 2)) -eq 0 ] && MEM=3072 && SMP=2
+          Q=(qemu-system-aarch64 -machine virt -cpu cortex-a72 -m "$MEM" -smp "$SMP" -accel tcg -nographic -no-reboot -kernel /tmp/android-Image -initrd "$ANDROID_DIR/ramdisk.img")
+          add() {
+            local file="$1" id="$2" ro="$3"
+            local opt="if=none,file=$file,format=raw,id=$id"
+            [ "$ro" = 1 ] && opt="$opt,readonly=on"
+            Q+=( -drive "$opt" -device "virtio-blk-device,drive=$id" )
+          }
+
+          # Device addition is observed to enumerate in reverse on this QEMU/virt path.
+          # Keep data in ADD POSITION 2 => kernel vdc, which vendor fstab.ranchu hardcodes for /data.
+          if [ "$FAMILY" = order ]; then
+            case "$V" in
+              0) add /tmp/meta.img meta 0; add /tmp/data.img data 0; add "$ANDROID_DIR/system.img" system 1; add "$ANDROID_DIR/vendor.img" vendor 1 ;;
+              1) add /tmp/meta.img meta 0; add /tmp/data.img data 0; add "$ANDROID_DIR/vendor.img" vendor 1; add "$ANDROID_DIR/system.img" system 1 ;;
+              2) add "$ANDROID_DIR/system.img" system 1; add /tmp/data.img data 0; add /tmp/meta.img meta 0; add "$ANDROID_DIR/vendor.img" vendor 1 ;;
+              3) add "$ANDROID_DIR/vendor.img" vendor 1; add /tmp/data.img data 0; add /tmp/meta.img meta 0; add "$ANDROID_DIR/system.img" system 1 ;;
+              4) add "$ANDROID_DIR/system.img" system 1; add /tmp/data.img data 0; add "$ANDROID_DIR/vendor.img" vendor 1; add /tmp/meta.img meta 0 ;;
+              5) add "$ANDROID_DIR/vendor.img" vendor 1; add /tmp/data.img data 0; add "$ANDROID_DIR/system.img" system 1; add /tmp/meta.img meta 0 ;;
+              6) add /tmp/meta.img meta 0; add /tmp/data.img data 0; add "$ANDROID_DIR/system.img" system 1; add "$ANDROID_DIR/vendor.img" vendor 1 ;;
+              7) add /tmp/meta.img meta 0; add /tmp/data.img data 0; add "$ANDROID_DIR/vendor.img" vendor 1; add "$ANDROID_DIR/system.img" system 1 ;;
+            esac
+          else
+            add /tmp/meta.img meta 0
+            add /tmp/data.img data 0
+            add "$ANDROID_DIR/system.img" system 1
+            add "$ANDROID_DIR/vendor.img" vendor 1
+          fi
+
+          CMD='console=ttyAMA0 earlycon=pl011,0x09000000 loglevel=8 ignore_loglevel initcall_debug androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive androidboot.init_log_level=7 androidboot.boot_devices=a003c00.virtio_mmio root=/dev/ram0 rw qemu=1 androidboot.qemu=1 androidboot.serialno=ANTHARESVDC'
+          EXTRA=()
+          if [ "$FAMILY" = order ]; then
+            [ "$V" = 6 ] && CMD="$CMD androidboot.boot_devices=a003c00.virtio_mmio"
+            [ "$V" = 7 ] && CMD="$CMD androidboot.veritymode=disabled androidboot.verifiedbootstate=orange"
+          elif [ "$FAMILY" = graphics ]; then
+            case "$V" in
+              0) : ;;
+              1) EXTRA+=( -device virtio-gpu-device ) ;;
+              2) EXTRA+=( -device ramfb ) ;;
+              3) EXTRA+=( -netdev user,id=n0 -device virtio-net-device,netdev=n0 ) ;;
+              4) EXTRA+=( -object rng-random,filename=/dev/urandom,id=r0 -device virtio-rng-device,rng=r0 ) ;;
+              5) EXTRA+=( -device virtio-gpu-device -netdev user,id=n0 -device virtio-net-device,netdev=n0 ) ;;
+              6) EXTRA+=( -device ramfb -netdev user,id=n0 -device virtio-net-device,netdev=n0 ) ;;
+              7) EXTRA+=( -device virtio-gpu-device -netdev user,id=n0 -device virtio-net-device,netdev=n0 -object rng-random,filename=/dev/urandom,id=r0 -device virtio-rng-device,rng=r0 ) ;;
+            esac
+          elif [ "$FAMILY" = props ]; then
+            case "$V" in
+              0) : ;;
+              1) CMD="$CMD androidboot.veritymode=disabled androidboot.verifiedbootstate=orange" ;;
+              2) CMD="$CMD androidboot.force_normal_boot=1" ;;
+              3) CMD="$CMD androidboot.slot_suffix=_a androidboot.slot=a" ;;
+              4) CMD="$CMD androidboot.debuggable=1" ;;
+              5) CMD="$CMD androidboot.adb=1" ;;
+              6) CMD="$CMD androidboot.boot_devices=a003c00.virtio_mmio" ;;
+              7) CMD="$CMD androidboot.veritymode=disabled androidboot.force_normal_boot=1 androidboot.debuggable=1" ;;
+            esac
+          fi
+          Q+=( "${EXTRA[@]}" -append "$CMD" )
+          printf 'ARG=%q\n' "${Q[@]}" > /tmp/qemu-argv.txt
+          timeout 175 "${Q[@]}" > /tmp/android-qemu.log 2>&1
+          RC=$?
+
+          echo '--- SERIAL LAST 120 ---'; tail -120 /tmp/android-qemu.log
+          grep -E 'virtio_blk|\[vd[a-d]\]|/data|metadata|EXT4-fs \(vdc\)|mount.*vdc|Invalid ext4|init second stage|dalvik-cache|misc_de|zygote|system_server|SystemServer|ActivityManager|PackageManager|SurfaceFlinger|surfaceflinger|BOOT_COMPLETED|boot_completed|received signal' /tmp/android-qemu.log | tail -500 > /tmp/checkpoints.txt || true
+          cat /tmp/checkpoints.txt
+          MAP=$(grep -E 'virtio_blk.*\[vdc\]' /tmp/android-qemu.log | tail -1 || true)
+          DATA_MOUNT=$(grep -cE 'EXT4-fs \(vdc\): mounted|__mount\(source=/dev/block/vdc,target=/data,type=ext4\)=0' /tmp/android-qemu.log || true)
+          META_MOUNT=$(grep -cE 'target=/metadata.*Success|__mount\(.*target=/metadata.*\)=0' /tmp/android-qemu.log || true)
+          SECOND=$(grep -c 'init second stage started' /tmp/android-qemu.log || true)
+          ZSIG=$(grep -c "Service 'zygote'.*received signal" /tmp/android-qemu.log || true)
+          SF=$(grep -cE 'SurfaceFlinger::init|Service .surfaceflinger.*received signal' /tmp/android-qemu.log || true)
+          echo "QEMU_RC=$RC FAMILY=$FAMILY V=$V MAP_VDC=$MAP DATA_MOUNT=$DATA_MOUNT META_MOUNT=$META_MOUNT SECOND=$SECOND ZSIG=$ZSIG SF=$SF"
+
+          if grep -Eq 'sys.boot_completed.*1|BOOT_COMPLETED|PackageManagerService|ActivityManager.*system_server' /tmp/android-qemu.log; then echo RESULT=FRAMEWORK_READY; exit 0; fi
+          if [ "$DATA_MOUNT" -gt 0 ] && [ "$SECOND" -gt 0 ] && [ "$ZSIG" -eq 0 ]; then echo RESULT=DATA_AND_ZYGOTE_STABLE; exit 0; fi
+          if [ "$DATA_MOUNT" -gt 0 ] && [ "$SECOND" -gt 0 ]; then echo RESULT=DATA_MOUNTED_NEXT_GATE; exit 0; fi
+          if grep -q 'Invalid ext4 superblock on .*/dev/block/vdc' /tmp/android-qemu.log; then echo RESULT=VDC_NOT_DATA; exit 1; fi
+          if [ "$SECOND" -gt 0 ]; then echo RESULT=SECOND_STAGE_DATA_NOT_MOUNTED; exit 1; fi
+          echo RESULT=EARLY_FAIL
+          echo '--- INIT CRASH CONTEXT ---'; grep -B 35 -A 15 -E 'FirstStageMain|InitFatalReboot|Failed to|FATAL|init:.*error' /tmp/android-qemu.log | tail -160 || true
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vdc40-${{ matrix.family }}-${{ matrix.variant }}
+          path: |
+            /tmp/android-qemu.log
+            /tmp/checkpoints.txt
+            /tmp/qemu-argv.txt
+            /tmp/data-image.txt
+          if-no-files-found: warn
+          retention-days: 3

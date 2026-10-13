@@ -1,0 +1,151 @@
+name: Anthares ARM64 Storage Driver Isolation
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-arm64-storage-driver-isolation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    strategy:
+      fail-fast: false
+      matrix:
+        transport: [nvme, ahci, usb-storage]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 12
+    steps:
+      - name: Prepare Android kernel, package disks and static BusyBox initramfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless gdisk e2fsprogs cpio gzip busybox-static >/dev/null
+          rm -rf "$HOME/android-sdk" /tmp/android-tools /tmp/map-root
+          mkdir -p "$HOME/android-sdk/cmdline-tools/latest" /tmp/map-root/bin /tmp/map-root/proc /tmp/map-root/sys /tmp/map-root/dev /tmp/map-root/tmp
+          curl -fLsS --retry 4 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
+          cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
+          export ANDROID_HOME="$HOME/android-sdk"
+          (yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null) || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'system-images;android-30;default;arm64-v8a' >/dev/null
+          DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
+          gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
+          echo '=== SDK MODULE INVENTORY ==='
+          find "$DIR" -type f \( -name '*.ko' -o -name '*.ko.gz' -o -name '*.ko.xz' \) | head -80
+          echo '=== KERNEL CONFIG INVENTORY ==='
+          ls -l "$DIR"/kernel* "$DIR"/ramdisk* || true
+          file /tmp/android-Image
+          BB="$(command -v busybox)"
+          file "$BB"
+          cp "$BB" /tmp/map-root/bin/busybox
+          chmod 0755 /tmp/map-root/bin/busybox
+          cat > /tmp/map-root/init <<'SH'
+          #!/bin/busybox sh
+          /bin/busybox mount -t proc proc /proc
+          /bin/busybox mount -t sysfs sysfs /sys
+          /bin/busybox mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+          /bin/busybox mdev -s 2>/dev/null || true
+          /bin/busybox sleep 1
+          echo '=== ANTHARES_VIRTIO_MAP_BEGIN ==='
+          echo '--- CMDLINE ---'
+          /bin/busybox cat /proc/cmdline
+          echo '--- PLATFORM VIRTIO NODES ---'
+          /bin/busybox find /sys/devices/platform -maxdepth 5 -type d 2>/dev/null | /bin/busybox grep -E 'virtio_mmio|virtio[0-9]+' || true
+          echo '--- KERNEL STORAGE DRIVER SUPPORT ---'
+          if [ -e /proc/config.gz ]; then /bin/busybox zcat /proc/config.gz | /bin/busybox grep -E 'CONFIG_(VIRTIO_BLK|VIRTIO_MMIO|VIRTIO_PCI|SCSI|BLK_DEV_SD|BLK_DEV_NVME|NVME_CORE|SATA_AHCI|ATA|USB_STORAGE|USB_XHCI_HCD)=' || true; fi
+          echo '--- KERNEL MODULES ---'
+          /bin/busybox cat /proc/modules || true
+          /bin/busybox find /sys/bus/virtio/drivers -maxdepth 2 2>/dev/null || true
+          /bin/busybox find /sys/class/block -maxdepth 1 2>/dev/null || true
+          echo '--- BLOCK MAP ---'
+          for b in /sys/class/block/vd* /sys/class/block/sd* /sys/class/block/nvme*; do
+            [ -e "$b" ] || continue
+            n="${b##*/}"
+            echo "BLOCK=$n"
+            echo "PATH=$(/bin/busybox readlink -f "$b")"
+            /bin/busybox cat "$b/uevent" 2>/dev/null || true
+            echo 'PARENT_CHAIN:'
+            p="$b"
+            i=0
+            while [ "$i" -lt 8 ]; do
+              p="$(/bin/busybox dirname "$(/bin/busybox readlink -f "$p")")"
+              echo "$p"
+              i=$((i+1))
+            done
+          done
+          echo '--- PARTITIONS ---'
+          for p in /sys/class/block/vd*[0-9] /sys/class/block/sd*[0-9] /sys/class/block/nvme*n[0-9]p[0-9]; do
+            [ -e "$p" ] || continue
+            echo "PART=${p##*/} PATH=$(/bin/busybox readlink -f "$p")"
+            /bin/busybox cat "$p/uevent" 2>/dev/null || true
+          done
+          echo '--- BY-NAME IF ANY ---'
+          /bin/busybox find /dev/block -maxdepth 6 -type l 2>/dev/null | /bin/busybox grep by-name || true
+          echo '=== ANTHARES_VIRTIO_MAP_END ==='
+          /bin/busybox sync
+          /bin/busybox sleep 1
+          /bin/busybox reboot -f || /bin/busybox poweroff -f || true
+          while true; do /bin/busybox sleep 60; done
+          SH
+          chmod 0755 /tmp/map-root/init
+          (cd /tmp/map-root && find . -print0 | cpio --null -o --format=newc --quiet | gzip -9 > /tmp/map-initramfs.img)
+          echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
+
+      - name: Build writable userdata and cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          truncate -s 4G /tmp/userdata-qemu.img
+          mkfs.ext4 -F -L data -O ^64bit,^metadata_csum -b 4096 -I 256 -E lazy_itable_init=0,lazy_journal_init=0 /tmp/userdata-qemu.img >/dev/null
+          truncate -s 66M /tmp/cache.img
+          mkfs.ext4 -F -L cache -O ^64bit,^metadata_csum -b 4096 -I 256 -E lazy_itable_init=0,lazy_journal_init=0 /tmp/cache.img >/dev/null
+
+      - name: Boot diagnostic init and print actual virtio map
+        shell: bash
+        run: |
+          set +e
+          Q=(qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 2048 -smp 2 -accel tcg -nographic -no-reboot -kernel /tmp/android-Image -initrd /tmp/map-initramfs.img)
+          add(){ local f="$1" id="$2" ro="$3"; local o="if=none,file=$f,format=raw,id=$id"; [ "$ro" = 1 ] && o="$o,readonly=on"; Q+=( -drive "$o" -device "virtio-blk-device,drive=$id" ); }
+          case '${{ matrix.transport }}' in
+            mmio)
+              Q+=( -drive "if=none,file=$ANDROID_DIR/system.img,format=raw,id=system,readonly=on" -device "virtio-blk-device,drive=system" )
+              ;;
+            pci)
+              Q+=( -drive "if=none,file=$ANDROID_DIR/system.img,format=raw,id=system,readonly=on" -device "virtio-blk-pci,drive=system" )
+              ;;
+            nvme)
+              Q+=( -drive "if=none,file=$ANDROID_DIR/system.img,format=raw,id=system,readonly=on" -device "nvme,serial=ANTHARES,drive=system" )
+              ;;
+            ahci)
+              Q+=( -device "ich9-ahci,id=ahci0" -drive "if=none,file=$ANDROID_DIR/system.img,format=raw,id=system,readonly=on" -device "ide-hd,drive=system,bus=ahci0.0" )
+              ;;
+            usb-storage)
+              Q+=( -device "qemu-xhci,id=xhci" -drive "if=none,file=$ANDROID_DIR/system.img,format=raw,id=system,readonly=on" -device "usb-storage,drive=system,bus=xhci.0" )
+              ;;
+          esac
+          Q+=( -append 'console=ttyAMA0 earlycon=pl011,0x09000000 loglevel=7 root=/dev/ram0 rw rdinit=/init' )
+          printf 'ARG=%q\n' "${Q[@]}" > /tmp/qemu-argv.txt
+          timeout 70 "${Q[@]}" > /tmp/virtio-map.log 2>&1
+          RC=$?
+          set -e
+          sed -n '/=== ANTHARES_VIRTIO_MAP_BEGIN ===/,/=== ANTHARES_VIRTIO_MAP_END ===/p' /tmp/virtio-map.log | tee /tmp/virtio-map.txt
+          grep -q '=== ANTHARES_VIRTIO_MAP_END ===' /tmp/virtio-map.txt
+          if ! grep -Eq 'PARTNAME=super|PART=vd[a-z]2|PART=sd[a-z]2' /tmp/virtio-map.txt; then echo 'STORAGE_DRIVER_NOT_ATTACHED'; fi
+          echo "QEMU_RC=$RC"
+          echo STORAGE_TRANSPORT=${{ matrix.transport }} ARM64_VIRTIO_MAP=DIAGNOSED
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-storage-${{ matrix.transport }}-${{ github.run_id }}
+          path: |
+            /tmp/virtio-map.log
+            /tmp/virtio-map.txt
+            /tmp/qemu-argv.txt
+          if-no-files-found: warn
+          retention-days: 3

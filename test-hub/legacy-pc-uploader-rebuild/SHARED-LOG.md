@@ -1359,3 +1359,132 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Updated README with security and persistence invariants. No cookies, tokens, profile data, or screenshot artifacts were committed.
 - No social publication occurred.
 - Status: implementation committed to `main`; Chromium/CDP E2E and real-session restart proof are still pending.
+
+## 2026-10-12 — Agent continuidade — transport outage verified (read-only)
+- Re-read canonical STATE and SHARED-LOG; checked three pending executor results on `anthares-clipper:legacy-pc-rebuild`: `2f7927d3-41f9-4d7d-bce2-0f82e35a7d93`, `24d3f593-1a9e-49e7-8ca1-d68a967e62c0`, `f8b30f25-91c9-4f61-a8f1-5b8db2ff1c2e`. All three result paths returned GitHub 404; none is proven consumed.
+- Remote Desktop Commander lists `DESKTOP-FTDK0HP` offline (last seen ~2h). WinRemote Shell fails: `Tunnel-client has not been seen for 300 seconds`. MeshCentral device listing fails `Session terminated`. Thus no authorized live PC execution path was available in this round.
+- Anthares Browser Vault Smoke run `38330972424` still reports job `smoke` queued, with no conclusion. Do not count it as passing or failing; do not enqueue redundant runs.
+- No fourth executor request, publish guard, destructive reset, daemon activation, or publication performed. Kwai authentication remains UNKNOWN pending restored execution and actual UI identity proof.
+- Next operator/agent with a live Windows transport should inspect executor/supervisor PID, heartbeat, dedicated clone sync, git auth and locks, then consume the three existing requests in order and record each result. Parallel browser agent should inspect runner capacity/queue before re-running QA.
+
+## 2026-10-12 — Agent continuidade — Anthares Remote supersedes retired transports
+- User confirmed MeshCentral is retired and Remote Desktop Commander / AI Commander must no longer be used; Anthares Remote is the authorized replacement. Future diagnostics must use Anthares Remote / its control plane, not the retired connectors.
+- Render workspace `anthares-site` verified: `anthares-remote-control`, `anthares-remote-mcp`, `anthares-remote-mcp-v2`, both ARA infra canaries exist and are unsuspended; `anthares-ara-state` Postgres 18 free instance reports available.
+- Render deployments: remote-control `3e4ae610` LIVE; both MCP gateways `7c5a91c8` LIVE. Application logs report signed MCP servers started. This proves service deployment, not end-to-end device execution.
+- Render Postgres direct SQL inspection blocked by empty external IP allowlist. Preserve private DB posture; test via authorized internal application path, not by opening public access.
+- Anthares Browser Vault Smoke `38330972424` still queued at last check. No additional workflow was dispatched.
+- Remaining: validate Anthares Remote authenticated device/queue roundtrip and recover existing three Kwai executor requests; verify Kwai account UI before probe/prepare. No publication performed.
+
+## 2026-10-12 — Agent continuidade — latest Render recheck and cross-agent handoff
+- Rechecked Render services and deployments; `anthares-remote-control` latest `3e4ae610` LIVE; `anthares-remote-mcp-v2` latest `7c5a91c8` LIVE; both unsuspended.
+- Infra canary `anthares-ara-infra-canary` advanced to commit `6f4fb9037e9b79b606899fd5b91e275b61274eb1` (`test(ara): uncertain command outcome must not block synchronous controller`), deploy `dep-db6omavclcms73eeup8g` LIVE at 2026-10-13T01:38:47Z. Canary-only proof: do not assume main controller deployed this change.
+- Browser smoke run `38330972424` job `115080372808` remains queued; no new run dispatched.
+- Anthares Remote MCP v2 README confirms signed clipboard_set reached Windows in an earlier live OAuth authorization test, while native ChatGPT MCP registration and tool execution remain separate pending acceptance criteria.
+- Follow-up for infra agent: compare canary commit with main control branch and test authenticated command outcome semantics before promoting; for MCP agent: finish ChatGPT OAuth registration; for browser agent: investigate runner availability; for legacy agent: consume three existing queue requests after authenticated ARA transport is available.
+
+## 2026-10-13 — OAuth deployment verified, manual acceptance gate
+- Both Render gateways (`anthares-remote-mcp-v2`, `anthares-remote-mcp`) latest commit `a71d16399409dee5677f5505a68a5df5503742ac` LIVE (02:19:42 and 02:19:53 UTC), after signed-code persistence fix `f2408c13` and expiry/replay fixes.
+- Runtime logs show `npm run qa:remote` executed at startup; this is not proof of a successful ChatGPT OAuth callback/token exchange.
+- User previously reported entering authorization code and seeing no subsequent completion. Need a single fresh manual OAuth authorization attempt now that both gateways are live, then inspect authorization/token-exchange outcomes. Do not declare OAuth connected without native tool discovery and real ARA tool call.
+- Anthares Browser Vault Smoke `38330972424` remains queued; no duplicate run dispatched. Kwai historical publishing remains disarmed.
+
+## 2026-10-13 02:42 UTC — Legacy executor recovered through native Anthares Remote MCP
+- User completed OAuth. Native `mcp__Anthares_Remote__session_status`, `capabilities`, `process_list` and `remote_exec` succeeded against DESKTOP-FTDK0HP (agent v0.2.0, Ed25519 bridge). No retired remote transports used.
+- Windows MEmu and MEmu_3 processes active; local clean clone at `D:\\AntharesWork\\anthares-local-executor`. Supervisor and executor were absent. Executor heartbeat was stale with `tracked files modified locally; executor refuses destructive sync`.
+- Preserved local hidden-window patch via `git stash push -m preserve-windowfix-before-executor-recovery-20261013 -- anthares_local_executor_v2.py`, retained existing `.bak-windowfix` untracked backup. Did NOT delete or force-reset user changes.
+- Started existing supervisor through ARA: PID 20932, executor PID 16852; supervisor reports executor health=True. Local working tree tracked files clean.
+- Existing queue request `24d3f593-1a9e-49e7-8ca1-d68a967e62c0` status returned ok/rc0. Requests `2f7927d3-41f9-4d7d-bce2-0f82e35a7d93` and `8f2b9b75-1c9a-47a1-9a48-4c4d0cf66a71` returned executor_error: `kwai_restore_env` not allowlisted. Action allowlist must be updated in repository after careful review; do not bypass it.
+- Previously queued `f8b30f25-91c9-4f61-a8f1-5b8db2ff1c2e` `kwai_probe` was RUNNING at 02:42:03Z, no result yet. No publishing guard created; no social publication manually initiated. Check result before new probe.
+- Other agents: MCP OAuth native integration now PROVEN; infra can use real device transport; legacy executor needs restore_env allowlist design; browser smoke job 38330972424 previously queued.
+
+## 2026-10-13 02:51 UTC — Kwai probe completed, UI mismatch confirmed
+- Native Anthares Remote device heartbeat current 02:50:51Z, Windows executor heartbeat `idle` PID 16852 updated 02:50:52Z.
+- Read result `executor-control/results/f8b30f25-91c9-4f61-a8f1-5b8db2ff1c2e.json`: `kwai_probe` FAILED returncode=1, started 02:42:03Z, finished 02:43:26Z; exact error `Kwai abriu, porém nenhum controle de criação conhecido foi encontrado.`
+- Source `kwai_memu_publish.py` probe accepts only known `RECORD_ID`, `FAKE_ADD_ID` nodes. This is a UI selector mismatch or wrong app screen, NOT evidence of a publication or valid authenticated account. Need examine saved Android UI dump/screenshot and current activity; adapt selectors only after evidence. Avoid publish/prepare until identity and route validated.
+- Native ARA `remote_exec` can read files; direct `file_list` on `D:\\AntharesWork` denied by allowed roots, so use authorized shell read-only diagnostics when permitted.
+
+## 2026-10-13 02:57 UTC — Windows no-focus safety and browser smoke
+- User reported intrusive PowerShell/CMD windows and ordered immediate stop if ours. Native ARA `process_list` found 3 cmd.exe and 1 powershell.exe, but provenance unverified. No ARA detached jobs active (`remote_job_list` showed two historical validation jobs both exited). Do NOT indiscriminately kill shells used by other agents; avoid additional `remote_exec` until hidden/no-focus enforcement is verified.
+- Anthares-browser workflow run `38330972424` job `115080372808` finally COMPLETED SUCCESS (vault crypto/adapter routing/import checks). This does not establish real web posting.
+- Primary MCP new commit `89cad72943da25df899ed072a34a7262303674e8` (`fix(agent): implement restricted service query and nonrecursive file removal`) build_in_progress at 02:57:13Z. Control service `3e4ae610` remains live.
+- Existing Kwai probe result still failed due unknown creation control, see previous entry. No new local probe or publication initiated.
+
+## 2026-10-13 03:27 UTC — Native ARA healthy; new MCP deploys live; browser smoke passed
+- Anthares Remote `session_status` connected, device DESKTOP-FTDK0HP agent 0.2.0 heartbeat 03:26:51Z, queued=0. `remote_job_list` has only two exited validation jobs; no detached jobs active. No local `remote_exec` or CMD/PowerShell spawned in this check, respecting user's no-focus restriction.
+- Both Render MCP gateways now LIVE at commit `b80f551095074187855f7a2865e31b42e99e95cb` (`fix(ara): remove unused os/exec import blocking all Go CI jobs`). Latest startup logs 03:22Z: remote QA invoked, signed OAuth gateway listening, internal MCP ready. No error/fail/panic entries in sampled latest logs.
+- Anthares-browser Actions run 38330972424 job 115080372808 completed SUCCESS, including compile/import/vault crypto and adapter routing tests; not evidence of a live post.
+- Historical Kwai probe last known FAILED due missing creation control, no new local diagnostic performed pending guaranteed invisible/no-focus command execution.
+
+## 2026-10-13 03:31 UTC — Kwai probe false-negative fix proposed
+- Found concrete mismatch: `kwai_memu_publish.py` `open_kwai_home()` uses `find_create_control(nodes)` (supports labels/ID fallbacks), but `MODE == probe` checked only hardcoded `RECORD_ID` and `FAKE_ADD_ID`. A valid create control could therefore be reported missing.
+- Opened isolated PR https://github.com/UniversoAnthares/anthares-clipper/pull/43 (commit b8fe63d7) against `legacy-pc-rebuild` to reuse `find_create_control(nodes)` in probe. No publish path or guard changed. Do not claim it fixes other UI screens without Android dump/QA.
+- Window safety remains outstanding: existing `anthares_executor_startup.cmd` invokes `start /min pythonw.exe`, which is minimized, not an independently proven noninteractive/no-focus isolation guarantee. Do not run additional interactive local diagnostics until safe isolation validated.
+
+## 2026-10-13 03:36 UTC — Two targeted legacy fixes merged
+- Merged Kwai probe selector consistency PR #43 into `anthares-clipper:legacy-pc-rebuild` at `f1d63bd98909cc941b0c990ec5e9c1fd7e028194`: probe now uses existing `find_create_control` and FAKE_ADD fallback. Needs live UI validation; no post attempted.
+- Identified recurring Windows console flash source: supervisor `heartbeat_alive()` called `tasklist` without CREATE_NO_WINDOW every 20s. Merged PR #44 at `5a52c1257ae322e3d08cdc10ad79f03d6a1e3eff`: tasklist subprocess now uses CREATE_NO_WINDOW and DEVNULL stdin. No remote CMD/PowerShell used. Existing running supervisor may need safe reload before this takes effect; this is not yet proof of complete desktop isolation.
+- ARA session still connected at 03:35:36Z, queued=0. Remaining: verify local code reload without UI interference, inspect Kwai UI hierarchy and authenticated account, prove browser live publication only with explicit account/content approval.
+
+## 2026-10-13 03:38 UTC — Legacy child process console suppression merged
+- Merged `anthares-clipper` PR #45 into `legacy-pc-rebuild`, commit `75979b4250df3e757e83a1d5ce782cbd6c27371c`. Added CREATE_NO_WINDOW + stdin DEVNULL to local executor git sync, subprocess task runner, PID health check and Kwai direct MEMUC input command. Complements supervisor PR #44. No interactive Windows command launched.
+- Current executor source already allowlists `kwai_restore_env`; earlier rejection arose from an older local revision, so sync/reload is required, not bypassing action safety. No local reload executed because no-focus/isolated-session behavior not yet proven.
+- ARA native heartbeat 03:37:06Z connected; queue empty; no detached remote jobs active.
+- Pending: safe rollout/reload to Windows without focus disruption, fresh Kwai probe with UI dump and account identity, browser real posting only with explicitly approved account/media. Repository merges alone are not proof of these runtime outcomes.
+
+
+## 2026-10-13 03:48 UTC — Recheck after native Anthares Remote recovery
+
+- ARA session is connected: device `DESKTOP-FTDK0HP`, agent `0.2.0`, heartbeat `2026-10-13T03:46:08Z`, queue depth 0.
+- ARA detached-job list contains only two historical validation jobs, both exited; no active detached job was reported.
+- Read-only process inventory shows multiple `cmd.exe`, three MEmu GUI/headless groups, ADB processes, `Runner.Listener.exe`, and `anthares-remote-agent.exe`. The inventory does not provide reliable parent-command provenance in this result. No process was terminated. A screen capture showed the user's normal Chrome/ChatGPT desktop, with no CMD/PowerShell window visibly covering it at capture time; this does not prove that future commands are isolated or that hidden-window behavior is fully enforced.
+- Existing queue results re-read from `UniversoAnthares/anthares-clipper:legacy-pc-rebuild`: `24d3f593-1a9e-49e7-8ca1-d68a967e62c0` status action passed (rc 0); `2f7927d3-41f9-4d7d-bce2-0f82e35a7d93` and `8f2b9b75-1c9a-47a1-9a48-4c4d0cf66a71` failed because the older runtime did not allowlist `kwai_restore_env`; `f8b30f25-91c9-4f61-a8f1-5b8db2ff1c2e` failed `kwai_probe` with `Kwai abriu, porém nenhum controle de criação conhecido foi encontrado.`
+- Current repository source on `legacy-pc-rebuild` contains the shared `find_create_control(nodes)` selector in probe mode and `CREATE_NO_WINDOW`/DEVNULL in the supervisor and executor subprocess paths (source SHA values were inspected this session). This confirms repository content only. The actual runtime clone at `D:\\AntharesWork\\anthares-local-executor` could not be inspected through the dedicated file API because that path is outside its allowlisted roots; no shell command was issued to bypass that restriction.
+- Anthares-browser run `38330972424` is completed/success for compile/import, vault crypto, and adapter-routing smoke checks. This is not evidence of a real social post.
+- Render workspace `anthares-site` currently lists both MCP gateways, both ARA canaries, and two Anthares-browser QA services. Latest MCP service logs sampled for `anthares-remote-mcp` and `anthares-remote-mcp-v2` show startup and signed gateway readiness around 03:22 UTC; no fresh application error was seen in the sampled records. The device round-trip is separately proven by the current ARA heartbeat/status call.
+- No CMD/PowerShell command was deliberately launched by this check, no process was killed, no publish guard was created, and no social publication was initiated.
+- Current blockers: verify the installed executor/supervisor revision and heartbeat without creating a visible shell; obtain Android hierarchy/screenshot/activity evidence for Kwai; prove the intended Kwai account is authenticated; then run only a safe probe. The next Kwai probe is intentionally deferred until the installed revision and no-focus execution path can be checked without risking the user's desktop.
+
+
+## 2026-10-13 03:49 UTC — Defense-in-depth patch proposed for Kwai probe subprocesses
+
+- Created PR #47: https://github.com/UniversoAnthares/anthares-clipper/pull/47
+- Branch: `fix/kwai-no-window-stdin-20261013`; commit `f1e6a96b3a7e528f78b131483c8fa174d7f911f9`.
+- Change: added `stdin=subprocess.DEVNULL` to both subprocess creation paths in `kwai_memu_probe.py` (shared `subprocess.run` wrapper and bounded `Popen` for hierarchy/screenshot commands). Existing `CREATE_NO_WINDOW` remains enabled.
+- Validation: diff is exactly 2 additions / 0 deletions; branch is one commit ahead of `legacy-pc-rebuild`, zero commits behind. No CI status or workflow run has appeared yet. PR reports `mergeable=false`, so it remains open pending GitHub's mergeability/check state and review; it was not merged.
+- Scope: this reduces inherited stdin coupling; it does not prove Windows session isolation and does not suppress MEmu's own GUI interactions. Runtime rollout and a new Kwai probe remain blocked until safe execution and account identity are established.
+
+
+## 2026-10-13 04:02 UTC — User-provided desktop evidence and fresh heartbeat
+
+- Fresh ARA status: connected, device `DESKTOP-FTDK0HP`, agent `0.2.0`, heartbeat `2026-10-13T04:02:21Z`, queue depth 0.
+- Detached-job inventory still contains only two exited historical validation jobs; no active detached job was reported.
+- User screenshot at approximately 00:02 local shows MEmu Play in the foreground with a modal reading “Reparação do ambiente de tempo de execução...” at 59%. The Kwai app/profile is not yet visible. This is a repair/loading state, so do not launch another probe or interact with the emulator until this operation completes.
+- Fresh process inventory includes `MEmu.exe` PID 22792 and `adb.exe` PID 3868, plus `cmd.exe` PIDs 20720, 14008, and 30692 in Console session 3. This is evidence of processes in the interactive session, but the current process listing does not show parent/command-line provenance; ownership and whether these are harmful cannot be concluded from this output alone. No process was stopped.
+- PR #47 remains open and unmerged; no CI status or workflow run was present at the last check.
+- Manual gate remains: wait for MEmu's runtime repair to finish, then capture the resulting emulator screen. If it remains at 59% for several minutes or displays an error, capture that state rather than force-closing it. Do not enter credentials or start a publication during this diagnostic step.
+
+
+## 2026-10-13 04:11 UTC — MEmu repair completed; Kwai crash dialog observed
+
+- User-provided screenshot shows Google Play Store open to “Kwai - Vídeo & Bônus Diário”; Android displays the system dialog “Kwai apresenta falhas continuamente” with options “Informações do app” and “Fechar app”.
+- This establishes that the Kwai app is currently crashing repeatedly after the MEmu runtime repair. The screen does not establish whether the account is authenticated.
+- No automated tap, restart, reinstall, or publication was initiated. Do not run the Kwai probe while Android is showing the crash dialog; it would likely fail and could obscure useful diagnostics.
+- Recommended immediate manual action: tap “Fechar app” once to dismiss the Android crash dialog, then stop and send a screenshot of the resulting screen. Do not uninstall/reinstall Kwai, clear app data, or press “Abrir” repeatedly yet; preserve the current app state for diagnosis.
+- ARA status from 04:02 UTC remains connected with queue depth 0; no active detached jobs were reported. Process inventory previously showed MEmu.exe PID 22792 and adb.exe PID 3868, with three cmd.exe processes in interactive session 3; command-line/parent provenance remains unknown. No process was terminated.
+
+
+## 2026-10-13 04:38 UTC — Follow-up screenshot after crash dialog dismissal
+
+- User correctly noted that manually pressing “Abrir” repeats the crash cycle. No instruction to open the app was given.
+- A fresh remote desktop screenshot now shows MEmu foreground with Kwai's splash/loading screen (“Para você” and Kwai logo); the prior crash dialog is absent in this capture. This may be an automatic relaunch/retry. The capture does not establish that Kwai has completed startup or that an account is authenticated.
+- ARA is still connected: device `DESKTOP-FTDK0HP`, agent `0.2.0`, heartbeat `2026-10-13T04:37:21Z`, queue depth 0. Detached-job inventory remains limited to two historical exited validation jobs.
+- No clicks, app restarts, cache/data clearing, reinstall, process termination, or publication were performed. Next step is passive observation/diagnosis of the crash, ideally using existing Android/MEmu crash logs, before attempting app interaction.
+
+
+## 2026-10-13 04:39 UTC — Kwai reached authenticated profile screen
+
+- User-provided MEmu screenshot now shows Kwai's profile page for `Lucas Rosalem`, handle `lucasrosalem`, with follower/following/likes counts and the profile navigation active. This is strong visual evidence that the intended account is currently logged in and the app reached its main UI after the previous crash dialog. It does not yet prove the app will remain stable or that upload/publishing works.
+- No manual or automated interaction was initiated after receiving the screenshot. No post was created or published.
+- Fresh ARA status at 04:38:38Z showed connected device DESKTOP-FTDK0HP, agent 0.2.0, but queue depth changed to 1. The subsequent detached-job-list call timed out at the device control layer (`control 504: timeout_waiting_for_device`). Stop further remote commands until the queue/control path recovers, to avoid overlapping requests or interacting with the live MEmu session.
+- PR #47 commit `f1e6a96b3a7e528f78b131483c8fa174d7f911f9` still has no reported CI statuses from the status API. No runtime rollout was attempted.
+- Next safe action: allow the current remote request/queue to settle, then check status and inspect existing logs without tapping Kwai. Since the app is now on the account profile, preserve this session and do not clear data or reinstall.

@@ -46,8 +46,8 @@ def _browser_cfg() -> tuple[str, str]:
 
 
 def _browser_ready() -> dict[str, Any]:
-    url, _ = _browser_cfg()
-    if not url:
+    url, token = _browser_cfg()
+    if not url or not token:
         return {"configured": False, "healthy": False, "error": "browser_not_configured"}
     try:
         r = requests.get(url + "/health", timeout=8)
@@ -165,20 +165,31 @@ def _remote_execute(device: str, job_type: str, args: dict[str, Any], timeout: i
     durable_execute = getattr(_remote, "execute_job", None)
     if callable(durable_execute):
         return durable_execute(device, job_type, args, timeout)
-    job = _legacy_enqueue(device, job_type, args, timeout)
-    return _legacy_wait(device, job["id"], timeout + 8)
+    # Never silently queue remote commands in volatile per-process memory.
+    # Without a durable executor, the caller must receive an explicit failure.
+    return None
+
+
+def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int | None:
+    if value is None:
+        return default
+    try:
+        number = int(value)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return max(minimum, min(number, maximum))
 
 
 def register(app):
     @app.get("/v1/runtime/health")
     def runtime_health():
-        device = request.args.get("device_id", "DESKTOP-FTDK0HP").strip()
+        device = request.args.get("device_id", "").strip()
         return jsonify(
             ok=True,
             service="anthares-runtime-mesh",
             control_authority="anthares-control/cloudflare",
             global_lease_authority="anthares-control/cloudflare",
-            remote={"device_id": device, "connected": _remote_connected(device)},
+            remote={"device_id": device or None, "connected": _remote_connected(device) if device else False},
             browser=_browser_ready(),
             browser_lease=_lease_snapshot(),
             host_desktop_fallback=False,
@@ -189,9 +200,13 @@ def register(app):
         if not _auth_ok():
             return jsonify(ok=False, error="unauthorized"), 401
         body = request.get_json(silent=True) or {}
-        device = str(body.get("device_id") or "DESKTOP-FTDK0HP").strip()
+        device = str(body.get("device_id") or "").strip()
+        if not device:
+            return jsonify(ok=False, error="device_id_required_no_local_fallback"), 400
         job_type = str(body.get("type") or "").strip()
-        timeout = max(1, min(int(body.get("timeout_seconds") or 30), 120))
+        timeout = _bounded_int(body.get("timeout_seconds"), 30, 1, 120)
+        if timeout is None:
+            return jsonify(ok=False, error="invalid_timeout_seconds"), 400
         if not job_type:
             return jsonify(ok=False, error="missing_type"), 400
         finished = _remote_execute(device, job_type, body.get("args") or {}, timeout)
@@ -214,12 +229,16 @@ def register(app):
             return jsonify(ok=False, error="unauthorized"), 401
         body = request.get_json(silent=True) or {}
         owner = str(body.get("owner") or "").strip()
-        ttl = max(15, min(int(body.get("ttl_seconds") or 300), 1800))
+        ttl = _bounded_int(body.get("ttl_seconds"), 300, 15, 1800)
+        if ttl is None:
+            return jsonify(ok=False, error="invalid_ttl_seconds"), 400
         if not owner:
             return jsonify(ok=False, error="missing_owner"), 400
         with _LOCK:
             active = bool(_BROWSER_LEASE["token"] and _BROWSER_LEASE["expires_at"] > _now())
-            if active and _BROWSER_LEASE["owner"] != owner:
+            if active:
+                # Owner names are not credentials: never reveal a live token on reacquire.
+                # Existing holders must use the authenticated renew endpoint.
                 return jsonify(ok=False, error="lease_conflict", lease=_lease_snapshot()), 409
             if not active:
                 _BROWSER_LEASE["generation"] += 1
@@ -242,7 +261,9 @@ def register(app):
         if not ok:
             return jsonify(ok=False, error=error), 409
         body = request.get_json(silent=True) or {}
-        ttl = max(15, min(int(body.get("ttl_seconds") or 300), 1800))
+        ttl = _bounded_int(body.get("ttl_seconds"), 300, 15, 1800)
+        if ttl is None:
+            return jsonify(ok=False, error="invalid_ttl_seconds"), 400
         with _LOCK:
             _BROWSER_LEASE["expires_at"] = _now() + ttl
         return jsonify(ok=True, lease=_lease_snapshot())

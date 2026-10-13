@@ -77,6 +77,19 @@ def native_chooser_visible(nodes,xml_text=""):
     return any(not (n.get("class") or "").endswith("EditText") and EMAIL.fullmatch(label(n)) and bounds(n) for n in nodes) or (semantic_action(xml_text,"email") is not None and not any((n.get("class") or "").endswith("EditText") for n in nodes))
 
 
+def login_surface_kind(nodes, xml_text=""):
+    """Shared proof contract for route discovery and method selection.
+
+    A Google button or an unrelated text input is not evidence that the
+    email/phone chooser or credential form can be used. Never log UI text.
+    """
+    if email_form_visible(nodes):
+        return "form"
+    if native_chooser_visible(nodes, xml_text):
+        return "chooser"
+    return "absent"
+
+
 def email_entry(nodes,xml_text=""):
     if email_form_visible(nodes):
         return None

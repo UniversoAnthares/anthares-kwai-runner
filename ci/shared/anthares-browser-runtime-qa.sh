@@ -34,11 +34,14 @@ wait_http() {
   for _ in $(seq 1 90); do
     if curl -fsS "$url" >/dev/null 2>&1; then return 0; fi
     if ! docker ps --format '{{.Names}}' | grep -qx "$name"; then
+      echo "WAIT_HTTP_CONTAINER_EXITED url=${url}" >&2
       docker logs "$name" || true
       return 1
     fi
     sleep 0.5
   done
+  echo "WAIT_HTTP_TIMEOUT url=${url}" >&2
+  curl -sS -i "$url" || true
   docker logs "$name" || true
   return 1
 }
@@ -51,7 +54,6 @@ for C in $(seq 1 "$CASES"); do
   VOL="anthares-browser-data-${LANE}-${C}"
   NET="anthares-browser-net-${LANE}-${C}"
   API_PORT=$((18080 + C))
-  VNC_PORT=$((16080 + C))
   TOKEN="ci-control-${LANE}-${C}-g${GROUP}"
   PASS="ci-vnc-${LANE}-${C}-v${VARIANT}"
   PERSIST_SECRET="persist-${LANE}-${C}-${GROUP}-${VARIANT}"
@@ -83,7 +85,7 @@ HTML
   start_container() {
     docker rm -f "$NAME" >/dev/null 2>&1 || true
     docker run -d --name "$NAME" --network "$NET" \
-      -p "${API_PORT}:8080" -p "${VNC_PORT}:6080" \
+      -p "${API_PORT}:8080" \
       -e "VNC_PASSWORD=${PASS}" \
       -e "CONTROL_TOKEN=${TOKEN}" \
       -e "START_URL=http://${PAGE_NAME}/" \
@@ -91,13 +93,35 @@ HTML
       "$IMAGE" >/dev/null
   }
 
+  auth_request() {
+    local method="$1" path="$2" body="${3:-}"
+    local tmp code
+    tmp="$(mktemp)"
+    if [ "$method" = GET ]; then
+      code=$(curl -sS -o "$tmp" -w '%{http_code}' -H "Authorization: Bearer ${TOKEN}" \
+        "http://127.0.0.1:${API_PORT}${path}") || code="curl_error"
+    else
+      code=$(curl -sS -o "$tmp" -w '%{http_code}' -X "$method" \
+        -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
+        -d "$body" "http://127.0.0.1:${API_PORT}${path}") || code="curl_error"
+    fi
+    if [ "$code" != 200 ]; then
+      echo "ANTHARES_BROWSER_QA_HTTP_FAILURE case=${C} method=${method} path=${path} status=${code}" >&2
+      cat "$tmp" >&2 || true
+      echo >&2
+      docker logs "$NAME" >&2 || true
+      rm -f "$tmp"
+      return 1
+    fi
+    cat "$tmp"
+    rm -f "$tmp"
+  }
+
   auth_get() {
-    curl -fsS -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:${API_PORT}$1"
+    auth_request GET "$1"
   }
   auth_post() {
-    local path="$1" body="$2"
-    curl -fsS -X POST -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
-      -d "$body" "http://127.0.0.1:${API_PORT}${path}"
+    auth_request POST "$1" "$2"
   }
 
   start_container
@@ -105,6 +129,16 @@ HTML
 
   HEALTH=$(curl -fsS "http://127.0.0.1:${API_PORT}/health")
   python3 - "$HEALTH" <<'PY'
+import json,sys
+d=json.loads(sys.argv[1])
+assert d.get('ok') is True, d
+assert d.get('service') == 'anthares-browser', d
+assert d.get('readiness_path') == '/ready', d
+PY
+
+  wait_http "$NAME" "http://127.0.0.1:${API_PORT}/ready"
+  READY=$(curl -fsS "http://127.0.0.1:${API_PORT}/ready")
+  python3 - "$READY" <<'PY'
 import json,sys
 d=json.loads(sys.argv[1])
 assert d.get('ok') is True, d
@@ -192,6 +226,7 @@ PY
   docker rm -f "$NAME" >/dev/null
   start_container
   wait_http "$NAME" "http://127.0.0.1:${API_PORT}/health"
+  wait_http "$NAME" "http://127.0.0.1:${API_PORT}/ready"
   auth_post /wait '{"selector":"body","timeout_ms":5000,"visible":true}' >/dev/null
   AFTER=$(auth_post /evaluate '{"expression":"localStorage.getItem(\"anthares_persist_secret\")","return_by_value":true}')
   python3 - "$AFTER" "$PERSIST_SECRET" <<'PY'
@@ -200,8 +235,18 @@ d=json.loads(sys.argv[1])
 assert d['result'].get('value') == sys.argv[2], d
 PY
 
-  wait_http "$NAME" "http://127.0.0.1:${VNC_PORT}/vnc.html"
-  curl -fsS "http://127.0.0.1:${VNC_PORT}/vnc.html" | grep -qi 'noVNC'
+  # websockify intentionally binds loopback inside the container. Publishing
+  # 6080 on the Docker host cannot reach that listener and would be unsafe.
+  ! docker port "$NAME" | grep -q ':6080'
+  NOVNC_OK=0
+  for _ in $(seq 1 30); do
+    if docker exec "$NAME" python3 -c 'import urllib.request; data=urllib.request.urlopen("http://127.0.0.1:6080/vnc.html", timeout=10).read(); assert b"noVNC" in data' >/dev/null 2>&1; then
+      NOVNC_OK=1
+      break
+    fi
+    sleep 0.5
+  done
+  test "$NOVNC_OK" = 1
 
   echo "PROVIDER=${PROVIDER} CASE=${C} GROUP=${GROUP} VARIANT=${VARIANT} PASS"
   cleanup_current
@@ -213,6 +258,7 @@ PY
 done
 
 echo "PROVIDER=${PROVIDER} ALL_${CASES}_CASES=PASS"
+echo 'HEALTH_LIVENESS=PASS READY_FAIL_CLOSED=PASS'
 echo 'CONTROL_API_AUTH=PASS CDP_LOOPBACK_ONLY=PASS'
 echo 'NAVIGATE=PASS CLICK=PASS TYPE=PASS WAIT=PASS EVALUATE=PASS SCREENSHOT=PASS'
 echo 'NOVNC_ENDPOINT=PASS CHROMIUM_RUNNING=PASS PERSISTENT_BROWSER_PROFILE_RESTART=PASS'

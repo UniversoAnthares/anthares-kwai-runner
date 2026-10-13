@@ -13,9 +13,11 @@ from typing import Any
 import psutil
 import websocket
 from fastapi import Depends, FastAPI, Header, HTTPException
+from novnc_gateway import router as novnc_router
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="Anthares-browser control API", version="0.2.1")
+app = FastAPI(title="Anthares-browser control API", version="0.2.3")
+app.include_router(novnc_router)
 PROFILE_DIR = Path(os.environ.get("CHROME_PROFILE_DIR", "/data/chrome-profile"))
 CONTROL_TOKEN = os.environ.get("CONTROL_TOKEN", "")
 CDP_PORT = int(os.environ.get("CDP_PORT", "9222"))
@@ -89,8 +91,12 @@ def _page_target() -> dict[str, Any]:
 
 def _cdp_ready() -> bool:
     try:
-        _page_target()
-        return True
+        result = _cdp_call(
+            "Runtime.evaluate",
+            {"expression": "1", "returnByValue": True},
+            timeout=2.5,
+        )
+        return result.get("result", {}).get("value") == 1
     except HTTPException:
         return False
 
@@ -105,6 +111,7 @@ def _cdp_call(method: str, params: dict[str, Any] | None = None, timeout: float 
                 target["webSocketDebuggerUrl"],
                 timeout=min(2.0, max(0.2, deadline - time.monotonic())),
                 suppress_origin=True,
+                http_no_proxy=["127.0.0.1", "localhost", "::1"],
             )
             break
         except Exception as exc:
@@ -182,12 +189,28 @@ def _profile_size() -> int:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {
-        "ok": True,
-        "profile_dir_exists": PROFILE_DIR.exists(),
-        "chromium_running": bool(chromium_processes()),
-        "cdp_ready": _cdp_ready(),
+    """Liveness only; use /ready for real browser readiness."""
+    return {"ok": True, "service": "anthares-browser", "readiness_path": "/ready"}
+
+
+@app.get("/ready")
+def ready() -> dict[str, Any]:
+    """Fail closed if the browser or persistent-profile mount is unavailable."""
+    profile_exists = PROFILE_DIR.is_dir()
+    profile_writable = os.access(PROFILE_DIR, os.W_OK | os.X_OK) if profile_exists else False
+    browser_running = bool(chromium_processes())
+    cdp_ready = _cdp_ready() if browser_running else False
+    evidence = {
+        "ok": profile_exists and profile_writable and browser_running and cdp_ready,
+        "profile_dir_exists": profile_exists,
+        "profile_dir_writable": profile_writable,
+        "chromium_running": browser_running,
+        "cdp_ready": cdp_ready,
+        "durable_volume_verified": False,
     }
+    if not evidence["ok"]:
+        raise HTTPException(status_code=503, detail=evidence)
+    return evidence
 
 
 @app.get("/status")

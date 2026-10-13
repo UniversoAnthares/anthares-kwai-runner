@@ -19,14 +19,15 @@ Toda automação Anthares-browser DEVE criar ou reutilizar exclusivamente seu pr
 
 ## Portas
 
-- `6080`: interface noVNC para login/recuperação manual.
-- `8080`: API de controle protegida por Bearer token.
-- `9222`: CDP interno, vinculado exclusivamente a `127.0.0.1`; não deve ser publicado pelo container/plataforma.
+- `8080`: única porta da API e do gateway noVNC autenticado; expor apenas por HTTPS.
+- `5900`: VNC interno, vinculado a `127.0.0.1`; não publicar.
+- `6080`: websockify/noVNC interno, vinculado a `127.0.0.1`; não publicar.
+- `9222`: CDP interno, vinculado a `127.0.0.1`; não publicar.
 
 ## Variáveis obrigatórias
 
 - `VNC_PASSWORD`: senha da sessão visual remota.
-- `CONTROL_TOKEN`: token Bearer para a API de controle.
+- `CONTROL_TOKEN`: token Bearer para a API de controle e acesso visual; usar valor aleatório com pelo menos 24 caracteres.
 
 Opcionais:
 
@@ -39,16 +40,18 @@ Opcionais:
 
 ```bash
 docker build -t anthares-browser ./anthares-brouser
-docker run --rm -p 6080:6080 -p 8080:8080 \
-  -e VNC_PASSWORD='...' -e CONTROL_TOKEN='...' \
+docker run --rm -p 127.0.0.1:8080:8080 \
+  -e VNC_PASSWORD='...' -e CONTROL_TOKEN='TOKEN_ALEATORIO_COM_PELO_MENOS_24_CARACTERES' \
   -v anthares_browser_data:/data anthares-browser
 ```
 
-Não publique a porta 9222. A API FastAPI acessa o CDP somente via loopback dentro do mesmo container.
+Não publique as portas 5900, 6080 ou 9222. O exemplo publica a API somente no loopback do host; um proxy HTTPS autenticado deve expor a porta 8080 remotamente. A API acessa CDP/VNC/websockify apenas pelo loopback do container.
+
+Para acesso visual, abra `https://DOMINIO_DO_SERVICO/novnc/login` e informe o `CONTROL_TOKEN` no formulário HTTPS. A sessão é temporária (10 minutos), em cookie HttpOnly/Secure/SameSite; o WebSocket `/novnc/websockify` só aceita a mesma origem e uma sessão válida. O endpoint `POST /novnc/session` também emite sessão mediante Bearer token. `POST /novnc/logout` (com Bearer) revoga a sessão. **Não coloque o token em URL, logs ou repositórios.**
 
 ## API
 
-`GET /health` não exige token e informa saúde, existência do perfil, Chromium e disponibilidade do CDP.
+`GET /health` não exige token e informa apenas liveness. `GET /ready` valida perfil, Chromium e CDP; pode retornar HTTP 503.
 
 Todos os endpoints abaixo exigem `Authorization: Bearer <CONTROL_TOKEN>`:
 

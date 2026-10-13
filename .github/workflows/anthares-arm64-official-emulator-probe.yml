@@ -1,0 +1,62 @@
+name: Anthares ARM64 Official Emulator Probe
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-arm64-official-emulator-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 8
+    steps:
+      - name: Install Android command tools and emulator package
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq unzip curl default-jre-headless file >/dev/null
+          rm -rf "$HOME/android-sdk" /tmp/android-tools
+          mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
+          curl -fLsS --retry 4 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
+          cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
+          export ANDROID_HOME="$HOME/android-sdk"
+          (yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null) || true
+          set +e
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator platform-tools 'system-images;android-30;default;arm64-v8a' 2>&1 | tee /tmp/sdk-install.txt
+          SDK_RC=${PIPESTATUS[0]}
+          set -e
+          echo "SDK_INSTALL_RC=$SDK_RC"
+          echo '=== HOST ==='
+          uname -a
+          uname -m
+          echo '=== EMULATOR FILES ==='
+          find "$ANDROID_HOME/emulator" -maxdepth 3 -type f -perm -111 -print -exec file {} \; 2>/dev/null | tee /tmp/emulator-files.txt || true
+          echo '=== EMULATOR VERSION ==='
+          set +e
+          "$ANDROID_HOME/emulator/emulator" -version 2>&1 | tee /tmp/emulator-version.txt
+          EMU_RC=${PIPESTATUS[0]}
+          set -e
+          echo "EMULATOR_VERSION_RC=$EMU_RC"
+          if [ "$EMU_RC" -eq 0 ]; then
+            echo ARM64_OFFICIAL_EMULATOR_NATIVE=PASS
+            exit 0
+          fi
+          echo ARM64_OFFICIAL_EMULATOR_NATIVE=UNAVAILABLE
+          exit 3
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-official-emulator-probe-${{ github.run_id }}
+          path: |
+            /tmp/sdk-install.txt
+            /tmp/emulator-files.txt
+            /tmp/emulator-version.txt
+          if-no-files-found: warn
+          retention-days: 3

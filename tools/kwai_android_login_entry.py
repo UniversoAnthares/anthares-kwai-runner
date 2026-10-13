@@ -43,7 +43,7 @@ def adb(*args):
 def snapshot():
     adb("shell","uiautomator","dump","/sdcard/kwai-login-method.xml")
     xml=adb("exec-out","cat","/sdcard/kwai-login-method.xml")
-    return list(ET.fromstring(xml).iter("node"))
+    return list(ET.fromstring(xml).iter("node")), xml.decode("utf-8", "replace")
 
 def tap_bounds(b):
     if not b:
@@ -84,18 +84,26 @@ def main():
     if method not in METHODS:
         return 2
     try:
-        nodes=snapshot()
+        nodes, xml_text=snapshot()
         for _ in range(3):
             if not clear_interest_onboarding(nodes):
                 break
-            nodes=snapshot()
+            nodes, xml_text=snapshot()
         if email_form_visible(nodes):
             print("KWAI_NATIVE_LOGIN_FORM_ALREADY_VISIBLE")
             return 0
-        if not native_chooser_visible(nodes):
+        for _ in range(6):
+            if email_form_visible(nodes) or native_chooser_visible(nodes,xml_text):
+                break
+            time.sleep(1)
+            nodes, xml_text=snapshot()
+        if email_form_visible(nodes):
+            print("KWAI_NATIVE_LOGIN_FORM_ALREADY_VISIBLE")
+            return 0
+        if not native_chooser_visible(nodes,xml_text):
             print("KWAI_NATIVE_LOGIN_CHOOSER_ABSENT")
             return 3
-        coords=method_coords(nodes,method)
+        coords=method_coords(nodes,method) or (email_entry(nodes,xml_text) if method=="email" else None)
         if not coords:
             print("KWAI_NATIVE_LOGIN_METHOD_NOT_FOUND")
             return 3
@@ -103,13 +111,13 @@ def main():
         print("KWAI_NATIVE_LOGIN_METHOD_TAPPED="+method.upper())
         for _ in range(5):
             time.sleep(1)
-            nodes=snapshot()
+            nodes, xml_text=snapshot()
             if email_form_visible(nodes):
                 print("KWAI_NATIVE_LOGIN_FORM_VISIBLE")
                 return 0
             if clear_interest_onboarding(nodes):
-                nodes=snapshot()
-                coords=method_coords(nodes,method)
+                nodes, xml_text=snapshot()
+                coords=method_coords(nodes,method) or (email_entry(nodes,xml_text) if method=="email" else None)
                 if coords:
                     adb("shell","input","tap",str(coords[0]),str(coords[1]))
     except (subprocess.CalledProcessError,subprocess.TimeoutExpired,OSError,ET.ParseError):

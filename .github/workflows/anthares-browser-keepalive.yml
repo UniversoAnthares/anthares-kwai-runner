@@ -1,0 +1,33 @@
+name: Anthares-browser keepalive
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-browser-keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      matrix:
+        url:
+          - https://anthares-browser-qa-render.onrender.com/health
+          - https://anthares-browser-qa-render-v2.onrender.com/health
+    steps:
+      - name: Wake and verify liveness
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --retry 5 --retry-all-errors --retry-delay 8 \
+            --connect-timeout 15 --max-time 90 \
+            "${{ matrix.url }}"
