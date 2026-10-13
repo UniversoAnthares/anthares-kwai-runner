@@ -212,7 +212,17 @@ async def novnc_websocket(websocket: WebSocket):
     writer = None
     try:
         reader, writer = await asyncio.wait_for(asyncio.open_connection(VNC_HOST, VNC_PORT), timeout=5)
+        # x11vnc must send its 12-byte RFB greeting first. Verify the actual
+        # TCP banner before upgrading the browser socket; preserve all bytes.
+        banner = await asyncio.wait_for(reader.readexactly(12), timeout=12)
+        if not banner.startswith(b"RFB "):
+            raise RuntimeError("VNC endpoint returned an invalid RFB greeting")
         await websocket.accept(subprotocol=selected)
+        if selected == "base64":
+            await websocket.send_text(base64.b64encode(banner).decode("ascii"))
+        else:
+            await websocket.send_bytes(banner)
+        print("[anthares-browser] VNC RFB greeting forwarded", flush=True)
 
         async def to_vnc():
             while True:
