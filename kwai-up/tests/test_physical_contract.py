@@ -111,6 +111,17 @@ class PhysicalContractTests(unittest.TestCase):
         self.assertNotIn("post = ku.find_id(final, FINAL_POST_ID)", navigate)
         self.assertNotIn("post = ku.find_id(final, FINAL_POST_ID)", prepare)
 
+    def test_commit_is_at_most_once_before_hid_enter(self):
+        source = MODULE.read_text(encoding="utf-8")
+        commit = source.split("    def commit(self) -> int:", 1)[1].split("    def verify(self) -> int:", 1)[0]
+        self.assertIn("os.O_EXCL", commit)
+        self.assertIn("os.fsync(fd)", commit)
+        self.assertIn("publish-attempt-already-recorded:verify-only", commit)
+        self.assertIn("publish_attempt_", commit)
+        self.assertLess(commit.index("os.fsync(fd)"), commit.index('self.emit(\n                "PUBLISH_REQUESTED"'))
+        self.assertLess(commit.index("os.fsync(fd)"), commit.index("keyboard.enter()"))
+        self.assertNotIn("attempt.unlink(", commit)
+
     def test_native_post_requires_focused_enabled_clickable(self):
         rid = mod.FINAL_POST_ID
         valid = {"resource-id": rid, "focused": "true", "focusable": "true",
