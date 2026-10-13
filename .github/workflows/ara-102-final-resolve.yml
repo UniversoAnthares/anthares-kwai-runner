@@ -1,0 +1,75 @@
+name: Finalize ARA PR102 against main
+
+on:
+  push:
+    branches: [ops/ara-104-resolve]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/anthares-remote-agent
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: anthares-remote-agent/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Merge current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name anthares-integration-bot
+          git config user.email 81930373+UniversoAnthares@users.noreply.github.com
+          git fetch origin main
+          set +e
+          git merge --no-commit --no-ff origin/main
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            printf 'Conflicts:\n%s\n' "$conflicts"
+            if [ "$conflicts" != ".circleci/config.yml" ]; then
+              echo 'Unexpected conflicts; aborting.' >&2
+              exit 1
+            fi
+            git rm -f .circleci/config.yml
+          fi
+          git diff --cached --check
+      - name: Validate Windows agent
+        shell: bash
+        working-directory: anthares-remote-agent
+        run: |
+          set -euo pipefail
+          test -z "$(gofmt -l cmd/agent/*.go)"
+          go test ./... -count=1
+          go vet ./...
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o /tmp/anthares-remote-agent.exe ./cmd/agent
+          test -s /tmp/anthares-remote-agent.exe
+      - name: Validate MCP gateway
+        shell: bash
+        working-directory: anthares-remote-mcp
+        run: |
+          set -euo pipefail
+          npm install
+          npm run qa
+          npm run qa:oauth
+          npm run qa:remote
+      - name: Push resolved PR102 branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'merge(ara): reconcile final MVP with current main'
+          fi
+          git push origin HEAD:feature/anthares-remote-agent
