@@ -103,7 +103,8 @@ def main():
             /edit[-_ ]?profile|profile[-_ ]?edit/i.test((el.getAttribute?.('data-testid')||'')) ||
             /\/(profile|account)\/(edit|settings)(\/|$)/i.test((el.getAttribute?.('href')||''))
           ));
-          const exactHandle=nodes.some(el=>visible(el)&&{
+          const exactHandle=nodes.some(el=>{
+            if(!visible(el)) return false;
             const t=(el.innerText||el.textContent||'').trim().replace(/^@/,'').toLowerCase();
             return t===expected;
           });
