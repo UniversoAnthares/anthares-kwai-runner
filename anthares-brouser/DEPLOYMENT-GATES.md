@@ -27,5 +27,11 @@ Apenas quando existir URL HTTPS privada da instância persistente com noVNC prot
 - Anthares-remote é o único plano de administração remota adotado. Não utilizar MeshCentral, Remote Desktop Commander ou AI Commander.
 - Serviços Render verificados: anthares-remote-control, anthares-remote-mcp e anthares-remote-mcp-v2; deploys recentes em estado `live`. Isso **não** prova capacidade de executar Chromium persistente nem constitui autorização para expor o noVNC.
 - Integração do navegador com Anthares-remote deve preservar `CONTROL_TOKEN`, acesso noVNC somente por túnel/proxy HTTPS autenticado, perfis isolados e registro de evidência sem segredos.
-- Nenhum serviço Anthares-browser dedicado foi encontrado no workspace Render na última auditoria. Não criar um serviço público enquanto persistência e interface de login segura não estiverem comprovadas.
+- Serviço de QA `anthares-browser-qa-render` criado no Render (plano free). Deploy confirmado `live`, `/ready` retornou Chromium/CDP operacionais, `/novnc/login` respondeu e `/novnc/vnc.html` negou acesso anônimo com HTTP 401. **Não utilizar para login real enquanto não houver persistência comprovada**.
 - GitLab CI: 20 verificações paralelas e teste funcional da API concluídos com sucesso na execução 2940648485. Não confundir testes de contrato com login ou publicação real.
+
+## Evidência operacional mais recente
+- URL de QA: https://anthares-browser-qa-render.onrender.com/novnc/login
+- A implementação de gateway noVNC está presente no repositório, com testes próprios. Verificações externas comprovaram formulário e negação de conteúdo sem sessão, mas **não** comprovaram handshake WebSocket autenticado de ponta a ponta.
+- O campo `durable_volume_verified` permanece `false`; a sessão Kwai não deve ser estabelecida neste ambiente efêmero.
+- Há deploys concorrentes de outros agentes: consultar o commit implantado antes de atribuir qualquer resultado à versão mais recente do código.
