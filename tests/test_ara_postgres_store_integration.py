@@ -96,6 +96,18 @@ class PostgresStoreIntegrationTests(unittest.TestCase):
         self.assertEqual(recovered["id"], job["id"])
         self.assertEqual(recovered["attempts"], 2)
 
+    def test_side_effect_deadline_after_lease_is_uncertain(self):
+        import psycopg
+        device = self.device("deadline")
+        store = PostgresStore(self.dsn)
+        job = store.enqueue(device, "shell", {"command": "example"}, 30)
+        store.lease_next(device)
+        with psycopg.connect(self.dsn) as conn, conn.cursor() as cur:
+            cur.execute("UPDATE ara_jobs SET expires_at=now()-interval '1 second' WHERE id=%s", (job["id"],))
+            conn.commit()
+        self.assertEqual(store.get_job(device, job["id"])["status"], "uncertain")
+        self.assertIsNone(store.lease_next(device))
+
     def test_side_effect_expired_lease_is_uncertain_not_replayed(self):
         device = self.device("side-effect")
         first = PostgresStore(self.dsn)
