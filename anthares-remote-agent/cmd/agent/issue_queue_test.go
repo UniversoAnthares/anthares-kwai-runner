@@ -22,6 +22,19 @@ func (p *fakeIssueProvider) Acknowledge(_ issueQueueItem, result Result) error {
 
 func TestDecodeIssueQueueJob(t *testing.T) {
 	job, err := decodeIssueQueueJob(`{"job_id":"abc-123","device_id":"DESKTOP-FTDK0HP","type":"ping","timeout_seconds":15}`, "DESKTOP-FTDK0HP")
+	if err == nil {
+		t.Fatal("escaped JSON fixture should be rejected")
+	}
+	job, err = decodeIssueQueueJob(`{"job_id":"abc-123"}`, "DESKTOP-FTDK0HP")
+	if err == nil {
+		t.Fatal("missing device should be rejected")
+	}
+	job, err = decodeIssueQueueJob(`{"job_id":"abc-123","device_id":"DESKTOP-FTDK0HP","type":"ping"}`, "DESKTOP-FTDK0HP")
+	if err == nil {
+		t.Fatal("escaped JSON should remain rejected")
+	}
+
+	job, err = decodeIssueQueueJob("{\"job_id\":\"abc-123\",\"device_id\":\"DESKTOP-FTDK0HP\",\"type\":\"ping\",\"timeout_seconds\":15}", "DESKTOP-FTDK0HP")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,10 +44,10 @@ func TestDecodeIssueQueueJob(t *testing.T) {
 }
 
 func TestDecodeIssueQueueJobRejectsUnknownAndWrongDevice(t *testing.T) {
-	if _, err := decodeIssueQueueJob(`{"job_id":"abc","device_id":"other","type":"ping"}`, "DESKTOP-FTDK0HP"); err == nil {
+	if _, err := decodeIssueQueueJob("{\"job_id\":\"abc\",\"device_id\":\"other\",\"type\":\"ping\"}", "DESKTOP-FTDK0HP"); err == nil {
 		t.Fatal("expected wrong-device rejection")
 	}
-	if _, err := decodeIssueQueueJob(`{"job_id":"abc","device_id":"DESKTOP-FTDK0HP","type":"ping","extra":true}`, "DESKTOP-FTDK0HP"); err == nil {
+	if _, err := decodeIssueQueueJob("{\"job_id\":\"abc\",\"device_id\":\"DESKTOP-FTDK0HP\",\"type\":\"ping\",\"extra\":true}", "DESKTOP-FTDK0HP"); err == nil {
 		t.Fatal("expected unknown-field rejection")
 	}
 }
@@ -68,9 +81,9 @@ func TestIssueQueueStartedReceiptBecomesUncertainWithoutReplay(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ANTHARES_ISSUE_QUEUE_STATE_DIR", dir)
 	started := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339)
-	receipt := issueQueueReceipt{JobID: "uncertain-1", State: "started", StartedAt: started, UpdatedAt: started}
 	path := filepath.Join(dir, "uncertain-1.json")
-	if err := os.WriteFile(path, []byte(`{"job_id":"uncertain-1","state":"started","started_at":"`+started+`","updated_at":"`+started+`"}`), 0600); err != nil {
+	contents := "{\"job_id\":\"uncertain-1\",\"state\":\"started\",\"started_at\":\"" + started + "\",\"updated_at\":\"" + started + "\"}"
+	if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
 		t.Fatal(err)
 	}
 	provider := &fakeIssueProvider{}
@@ -85,7 +98,6 @@ func TestIssueQueueStartedReceiptBecomesUncertainWithoutReplay(t *testing.T) {
 	if provider.results[0].Output != "" {
 		t.Fatalf("job appears to have been replayed: %#v", provider.results[0])
 	}
-	_ = receipt
 }
 
 func TestSplitASCII(t *testing.T) {
