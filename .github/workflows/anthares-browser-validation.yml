@@ -1,0 +1,19 @@
+name: Anthares-browser isolation and build
+on:
+  push:
+    paths:
+      - 'anthares-brouser/**'
+      - '.github/workflows/anthares-browser-validation.yml'
+  workflow_dispatch:
+jobs:
+  isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static isolation tests
+        run: python -m unittest discover -s anthares-brouser -p 'test_isolation_contract.py' -v
+      - name: Python syntax
+        run: python -m compileall -q anthares-brouser
+      - name: Build browser image
+        run: docker build -t anthares-browser:test ./anthares-brouser
