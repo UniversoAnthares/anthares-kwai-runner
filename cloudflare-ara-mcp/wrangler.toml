@@ -10,3 +10,7 @@ class_name = "GatewayState"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GatewayState"]
+
+[[services]]
+binding = "ARA_CONTROL"
+service = "anthares-ara-backup"
