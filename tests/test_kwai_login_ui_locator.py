@@ -42,6 +42,30 @@ class KwaiNativeLoginSelectorTests(unittest.TestCase):
         self.assertLessEqual(x, 815)
         self.assertEqual(y, 1330)
 
+    def test_surface_contract_real_chooser(self):
+        self.assertEqual(selector.login_surface_kind(selector.parse(CHOOSER), CHOOSER), "chooser")
+
+    def test_surface_contract_real_credential_form(self):
+        self.assertEqual(selector.login_surface_kind(selector.parse(FORM), FORM), "form")
+
+    def test_google_only_button_is_not_email_chooser(self):
+        xml = ('<hierarchy><node class="android.view.ViewGroup" '
+               'resource-id="com.kwai.video.basis:id/login_platform_item_layout" '
+               'text="Continue with Google" bounds="[70,1108][1010,1233]"/></hierarchy>')
+        self.assertEqual(selector.login_surface_kind(selector.parse(xml), xml), "absent")
+
+    def test_unrelated_search_input_is_not_login_form(self):
+        xml = ('<hierarchy><node class="android.widget.EditText" '
+               'resource-id="com.kwai.video:id/search_box" text="Search" '
+               'bounds="[0,0][500,80]"/></hierarchy>')
+        self.assertEqual(selector.login_surface_kind(selector.parse(xml), xml), "absent")
+
+    def test_semantic_probe_uses_same_surface_contract(self):
+        probe = (ROOT / "tools" / "kwai_semantic_login_route_probe.py").read_text()
+        self.assertIn("from kwai_login_ui_locator import login_surface_kind", probe)
+        self.assertIn("surface=login_surface_kind(ns,xml)", probe)
+        self.assertNotIn("'login_platform_item_layout' in ids", probe)
+
     def test_google_chooser_coordinates(self):
         self.assertEqual(selector.google_entry(selector.parse(CHOOSER)), (540, 1170))
 

@@ -12,6 +12,9 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Native Kwai login surface contract regressions
+          command: python3 -m unittest discover -s tests -p 'test_kwai_login_ui_locator.py' -v
+      - run:
           name: Provider hub smoke
           command: CI_PROVIDER=circleci bash ci/shared/provider-smoke.sh
 
