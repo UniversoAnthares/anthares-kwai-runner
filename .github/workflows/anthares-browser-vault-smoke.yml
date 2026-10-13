@@ -32,7 +32,7 @@ jobs:
           ARA_SHARED: smoke-only-secret
         run: |
           python - <<'PY'
-          import os, sys
+          import sys
           sys.path.insert(0, 'infra')
           from flask import Flask
           import anthares_runtime_browser_local as local
