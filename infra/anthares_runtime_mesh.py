@@ -172,13 +172,13 @@ def _remote_execute(device: str, job_type: str, args: dict[str, Any], timeout: i
 def register(app):
     @app.get("/v1/runtime/health")
     def runtime_health():
-        device = request.args.get("device_id", "DESKTOP-FTDK0HP").strip()
+        device = request.args.get("device_id", "").strip()
         return jsonify(
             ok=True,
             service="anthares-runtime-mesh",
             control_authority="anthares-control/cloudflare",
             global_lease_authority="anthares-control/cloudflare",
-            remote={"device_id": device, "connected": _remote_connected(device)},
+            remote={"device_id": device or None, "connected": _remote_connected(device) if device else False},
             browser=_browser_ready(),
             browser_lease=_lease_snapshot(),
             host_desktop_fallback=False,
@@ -189,7 +189,9 @@ def register(app):
         if not _auth_ok():
             return jsonify(ok=False, error="unauthorized"), 401
         body = request.get_json(silent=True) or {}
-        device = str(body.get("device_id") or "DESKTOP-FTDK0HP").strip()
+        device = str(body.get("device_id") or "").strip()
+        if not device:
+            return jsonify(ok=False, error="device_id_required_no_local_fallback"), 400
         job_type = str(body.get("type") or "").strip()
         timeout = max(1, min(int(body.get("timeout_seconds") or 30), 120))
         if not job_type:
