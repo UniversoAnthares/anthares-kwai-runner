@@ -47,6 +47,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Android SDK command-line tools (no emulator action)
         uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+          log-accepted-android-sdk-licenses: 'false'
       - name: Start accelerated headless Android 35 and verify real Kwai APK
         shell: bash
         run: |
