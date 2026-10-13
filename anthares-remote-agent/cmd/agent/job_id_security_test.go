@@ -34,4 +34,3 @@ func TestPostResultRejectsUnsafeJobIDBeforeNetwork(t *testing.T) {
 		t.Fatalf("unexpected outbound requests: %d", calls)
 	}
 }
-

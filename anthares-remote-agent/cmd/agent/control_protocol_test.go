@@ -88,4 +88,3 @@ func TestControlRejectsUnauthorizedDevice(t *testing.T) {
 		t.Fatal("unauthorized poll accepted")
 	}
 }
-

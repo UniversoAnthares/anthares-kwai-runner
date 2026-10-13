@@ -157,4 +157,3 @@ func fileWriteAtomic(cfg Config, path string, data []byte) (string, error) {
 	}
 	return fmt.Sprintf("wrote %d bytes atomically", len(data)), nil
 }
-

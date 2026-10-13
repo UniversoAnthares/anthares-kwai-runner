@@ -37,4 +37,3 @@ func TestExecuteJobPreservesStructuredFailure(t *testing.T) {
 		t.Fatalf("stdout and stderr must both be present: %#v", got)
 	}
 }
-

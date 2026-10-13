@@ -107,4 +107,3 @@ func securePath(cfg Config, path string) (string, error) {
 func safeExistingPath(cfg Config, path string) (string, error) {
 	return securePath(cfg, path)
 }
-

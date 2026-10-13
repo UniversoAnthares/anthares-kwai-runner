@@ -41,4 +41,3 @@ func TestExecuteJobTimeoutIsBounded(t *testing.T) {
 		t.Fatalf("bounded job execution failed: %#v", r)
 	}
 }
-

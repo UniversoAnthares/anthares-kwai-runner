@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -214,7 +213,7 @@ func startDetachedJob(command, name string) (string, error) {
 		return "", err
 	}
 	ps := `$p=Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','` + strings.ReplaceAll(wrapperPath, "'", "''") + `' -PassThru; $p.Id`
-	out, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps).CombinedOutput()
+	out, err := hiddenCommandContext(context.Background(), "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("start failed: %v: %s", err, strings.TrimSpace(string(out)))
 	}
@@ -246,7 +245,7 @@ func loadJobMeta(id string) (detachedJobMeta, error) {
 }
 
 func processRunning(pid int) bool {
-	out, _ := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/FO", "CSV", "/NH").CombinedOutput()
+	out, _ := hiddenCommandContext(context.Background(), "tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/FO", "CSV", "/NH").CombinedOutput()
 	s := strings.TrimSpace(string(out))
 	return s != "" && !strings.Contains(strings.ToLower(s), "no tasks") && !strings.Contains(strings.ToLower(s), "nenhuma tarefa")
 }
@@ -379,7 +378,7 @@ func jobCancelJSON(id string) (string, error) {
 		return "", err
 	}
 	if processRunning(m.PID) {
-		out, er := exec.Command("taskkill", "/PID", strconv.Itoa(m.PID), "/T", "/F").CombinedOutput()
+		out, er := hiddenCommandContext(context.Background(), "taskkill", "/PID", strconv.Itoa(m.PID), "/T", "/F").CombinedOutput()
 		if er != nil {
 			return "", fmt.Errorf("taskkill failed: %v: %s", er, strings.TrimSpace(string(out)))
 		}
@@ -387,4 +386,3 @@ func jobCancelJSON(id string) (string, error) {
 	s, _ := jobStatusJSON(id, false)
 	return s, nil
 }
-

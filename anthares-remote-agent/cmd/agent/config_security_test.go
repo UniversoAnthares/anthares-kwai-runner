@@ -31,4 +31,3 @@ func TestLoadConfigRejectsUnsafeControlURL(t *testing.T) {
 		t.Fatalf("valid HTTPS origin rejected: %v", err)
 	}
 }
-

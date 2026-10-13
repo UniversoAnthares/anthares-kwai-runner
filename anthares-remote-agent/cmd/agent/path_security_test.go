@@ -162,4 +162,3 @@ func TestFileCopyRejectsDirectorySource(t *testing.T) {
 		t.Fatal("directory source accepted by fileCopy")
 	}
 }
-

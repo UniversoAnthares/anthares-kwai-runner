@@ -1,10 +1,14 @@
 {
   "name": "anthares-remote-mcp",
-  "version": "0.1.0",
+  "version": "0.7.2",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node remote-server.mjs",
+    "qa": "NODE_OPTIONS=--import=./extended-preload.mjs node qa.mjs",
+    "qa:oauth": "NODE_OPTIONS=--import=./extended-preload.mjs node oauth-qa.mjs",
+    "qa:remote": "node remote-qa.mjs",
+    "start:http": "npm run qa:remote && node start-v2.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",

@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -197,10 +196,16 @@ func pollJob(cfg Config) (*Job, error) {
 	// Read one extra byte so an oversized payload cannot be silently
 	// accepted when its valid JSON prefix fits within the limit.
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
-	if err != nil { return nil, err }
-	if len(payload) > 1<<20 { return nil, errors.New("control plane job response exceeds 1 MiB") }
+	if err != nil {
+		return nil, err
+	}
+	if len(payload) > 1<<20 {
+		return nil, errors.New("control plane job response exceeds 1 MiB")
+	}
 	var env JobEnvelope
-	if err := json.Unmarshal(payload, &env); err != nil { return nil, err }
+	if err := json.Unmarshal(payload, &env); err != nil {
+		return nil, err
+	}
 	if env.Job != nil {
 		if err := validateJobID(env.Job.ID); err != nil {
 			return nil, fmt.Errorf("control plane returned unsafe job ID: %w", err)
@@ -339,6 +344,9 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string, error) {
 		if !cfg.AllowShell {
 			return "", errors.New("shell disabled")
 		}
+		if err := rejectInteractiveCommand(job.Args["command"]); err != nil {
+			return "", err
+		}
 		return startDetachedJob(job.Args["command"], job.Args["name"])
 	case "job_list":
 		limit, _ := strconv.Atoi(job.Args["limit"])
@@ -363,6 +371,9 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string, error) {
 		if cmd == "" {
 			return "", errors.New("missing command")
 		}
+		if err := rejectInteractiveCommand(cmd); err != nil {
+			return "", err
+		}
 		shell := strings.ToLower(strings.TrimSpace(job.Args["shell"]))
 		return shellExecJSON(ctx, shell, cmd)
 	default:
@@ -373,7 +384,7 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string, error) {
 func safePath(cfg Config, p string) (string, error) { return securePath(cfg, p) }
 
 func run(ctx context.Context, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := hiddenCommandContext(ctx, name, args...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
@@ -389,7 +400,7 @@ func run(ctx context.Context, name string, args ...string) (string, error) {
 }
 
 func runWithStdin(ctx context.Context, stdin, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := hiddenCommandContext(ctx, name, args...)
 	cmd.Stdin = strings.NewReader(stdin)
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -424,7 +435,9 @@ func postResult(cfg Config, result Result) error {
 }
 
 func postResultRetry(cfg Config, result Result) error {
-	if err := validateJobID(result.ID); err != nil { return err }
+	if err := validateJobID(result.ID); err != nil {
+		return err
+	}
 	var last error
 	for attempt := 0; attempt < 5; attempt++ {
 		if err := postResult(cfg, result); err == nil {
@@ -453,4 +466,3 @@ func validateJobID(id string) error {
 	}
 	return nil
 }
-

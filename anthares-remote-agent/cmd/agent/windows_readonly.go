@@ -94,4 +94,3 @@ func fileACLJSON(ctx context.Context, cfg Config, path string) (string, error) {
 	ps := `$a=Get-Acl -LiteralPath '` + escaped + `' -ErrorAction Stop; [pscustomobject]@{path='` + escaped + `';owner=$a.Owner;access=@($a.Access|Select-Object IdentityReference,FileSystemRights,AccessControlType,IsInherited,InheritanceFlags,PropagationFlags)}|ConvertTo-Json -Depth 5 -Compress`
 	return run(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps)
 }
-

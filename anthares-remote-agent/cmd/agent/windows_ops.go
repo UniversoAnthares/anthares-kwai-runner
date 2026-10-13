@@ -33,7 +33,7 @@ func shellExecJSON(ctx context.Context, shell, command string) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported shell %q", shell)
 	}
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := hiddenCommandContext(ctx, name, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -135,7 +135,7 @@ func processStartJSON(path, argsJSON string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command(path, args...)
+	cmd := hiddenCommandContext(context.Background(), path, args...)
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
@@ -155,7 +155,7 @@ func processKillJSON(pidText string) (string, error) {
 	}
 
 	ps := fmt.Sprintf("(Get-CimInstance Win32_Process -Filter \"ProcessId=%d\" -ErrorAction Stop).ExecutablePath", pid)
-	raw, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps).CombinedOutput()
+	raw, err := hiddenCommandContext(context.Background(), "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("cannot identify process: %v", err)
 	}
@@ -164,7 +164,7 @@ func processKillJSON(pidText string) (string, error) {
 		return "", errors.New("process executable is not authorized")
 	}
 
-	out, err := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F").CombinedOutput()
+	out, err := hiddenCommandContext(context.Background(), "taskkill", "/PID", strconv.Itoa(pid), "/T", "/F").CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("taskkill failed: %v: %s", err, strings.TrimSpace(string(out)))
 	}
@@ -202,4 +202,3 @@ func systemInfoJSON(ctx context.Context) (string, error) {
 	ps := `$ErrorActionPreference='Stop'; $os=Get-CimInstance Win32_OperatingSystem; $cpu=Get-CimInstance Win32_Processor | Select-Object -First 1; $gpu=Get-CimInstance Win32_VideoController | Select-Object Name,AdapterRAM,DriverVersion; $disks=Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID,Size,FreeSpace; [pscustomobject]@{hostname=$env:COMPUTERNAME;os=$os.Caption;version=$os.Version;arch=$env:PROCESSOR_ARCHITECTURE;cpu=$cpu.Name;ram_bytes=[int64]$os.TotalVisibleMemorySize*1024;free_ram_bytes=[int64]$os.FreePhysicalMemory*1024;last_boot=$os.LastBootUpTime;gpu=$gpu;disks=$disks;agent_version='0.3.0'}|ConvertTo-Json -Depth 5 -Compress`
 	return run(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps)
 }
-

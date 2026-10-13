@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/anthares-remote-agent
+      - feature/ara-chatgpt-mcp
     paths:
       - 'anthares-remote-agent/**'
       - '.github/workflows/anthares-remote-agent-build.yml'
