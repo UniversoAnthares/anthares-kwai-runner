@@ -72,10 +72,27 @@ function state(env) {
   return env.ARA_STATE.get(id);
 }
 
+// ARA_TRUSTED_MCP_PUBLIC_KEYS_JSON is a JSON array of PEM-encoded Ed25519
+// SPKI public keys, supplied as a Cloudflare Worker secret. It permits
+// verification even when both Render-hosted MCP gateways are unavailable.
+// Maintain at least two keys during rotation. Never put private keys here.
 let keyCache = { at: 0, keys: [] };
-async function signingKeys(force = false) {
+async function signingKeys(env, force = false) {
   if (!force && keyCache.keys.length && Date.now() - keyCache.at < 60000) return keyCache.keys;
   const keys = [];
+  let pinned = [];
+  try {
+    const value = JSON.parse(env.ARA_TRUSTED_MCP_PUBLIC_KEYS_JSON || "[]");
+    if (Array.isArray(value)) pinned = value.filter(v => typeof v === "string" && v.length <= 4096);
+  } catch {}
+  for (const pem of pinned) {
+    try {
+      keys.push(await crypto.subtle.importKey(
+        "spki", pemDer(pem), { name: "Ed25519" }, false, ["verify"]
+      ));
+    } catch {}
+  }
+  // Legacy discovery remains optional during migration and key rotation.
   for (const url of KEY_URLS) {
     try {
       const r = await fetch(url, {
@@ -111,7 +128,7 @@ async function verifyMcp(request, env) {
 
   for (const force of [false, true]) {
     let keys = [];
-    try { keys = await signingKeys(force); } catch {}
+    try { keys = await signingKeys(env, force); } catch {}
     for (const key of keys) {
       try {
         if (await crypto.subtle.verify({ name: "Ed25519" }, key, signature, payload)) {
