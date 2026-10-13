@@ -1402,3 +1402,9 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Read result `executor-control/results/f8b30f25-91c9-4f61-a8f1-5b8db2ff1c2e.json`: `kwai_probe` FAILED returncode=1, started 02:42:03Z, finished 02:43:26Z; exact error `Kwai abriu, porém nenhum controle de criação conhecido foi encontrado.`
 - Source `kwai_memu_publish.py` probe accepts only known `RECORD_ID`, `FAKE_ADD_ID` nodes. This is a UI selector mismatch or wrong app screen, NOT evidence of a publication or valid authenticated account. Need examine saved Android UI dump/screenshot and current activity; adapt selectors only after evidence. Avoid publish/prepare until identity and route validated.
 - Native ARA `remote_exec` can read files; direct `file_list` on `D:\\AntharesWork` denied by allowed roots, so use authorized shell read-only diagnostics when permitted.
+
+## 2026-10-13 02:57 UTC — Windows no-focus safety and browser smoke
+- User reported intrusive PowerShell/CMD windows and ordered immediate stop if ours. Native ARA `process_list` found 3 cmd.exe and 1 powershell.exe, but provenance unverified. No ARA detached jobs active (`remote_job_list` showed two historical validation jobs both exited). Do NOT indiscriminately kill shells used by other agents; avoid additional `remote_exec` until hidden/no-focus enforcement is verified.
+- Anthares-browser workflow run `38330972424` job `115080372808` finally COMPLETED SUCCESS (vault crypto/adapter routing/import checks). This does not establish real web posting.
+- Primary MCP new commit `89cad72943da25df899ed072a34a7262303674e8` (`fix(agent): implement restricted service query and nonrecursive file removal`) build_in_progress at 02:57:13Z. Control service `3e4ae610` remains live.
+- Existing Kwai probe result still failed due unknown creation control, see previous entry. No new local probe or publication initiated.
