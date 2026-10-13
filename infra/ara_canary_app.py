@@ -36,6 +36,7 @@ _register_secure_bootstrap(app)
 
 _RESTART_DEVICE = "persistence-restart-sentinel-v1"
 _RESTART_IDEMPOTENCY_KEY = "persistence-restart-sentinel-v1"
+_PERSISTENCE_PROOF = {"ok": False, "backend": "postgres", "state": "not-run"}
 
 
 def _route_cycle_proof():
@@ -103,11 +104,7 @@ def _route_cycle_proof():
             "recovery_with_fresh_store": (recovered_after_new_store or {}).get("status") == "done",
             "result_recovered": ((recovered_after_new_store or {}).get("result") or {}).get("output") == "persistence-route-probe",
         }
-        return {
-            "ok": all(checks.values()),
-            "checks": checks,
-            "test_job_id": created.get("id"),
-        }
+        return {"ok": all(checks.values()), "checks": checks, "test_job_id": created.get("id")}
     finally:
         if old_hash is None:
             os.environ.pop(env_key, None)
@@ -160,12 +157,8 @@ def _run_persistence_proof():
         return {"ok": False, "backend": "postgres", "error": type(exc).__name__}
 
 
-_PERSISTENCE_PROOF = _run_persistence_proof()
-
-
 @app.get("/_canary/persistence-proof")
 def ara_persistence_proof():
-    # Read-only proof. It exposes booleans and synthetic job identifiers only.
     return jsonify(_PERSISTENCE_PROOF), (200 if _PERSISTENCE_PROOF.get("ok") else 503)
 
 
@@ -184,3 +177,7 @@ def ara_canary_health():
     except Exception:
         app.logger.exception("ARA PostgreSQL readiness check failed")
         return {"ok": False, "backend": "postgres"}, 503
+
+
+# Execute only after every Flask route/decorator has been registered.
+_PERSISTENCE_PROOF = _run_persistence_proof()
