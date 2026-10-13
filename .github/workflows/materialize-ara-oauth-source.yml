@@ -1,0 +1,35 @@
+name: Materialize ARA OAuth Source
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare-ara-mcp/patch_oauth_owner_code.py'
+      - '.github/workflows/materialize-ara-oauth-source.yml'
+permissions:
+  contents: write
+concurrency:
+  group: materialize-ara-oauth-source
+  cancel-in-progress: true
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Materialize owner-code OAuth into canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python cloudflare-ara-mcp/patch_oauth_owner_code.py
+          node --check cloudflare-ara-mcp/src/index.js
+          grep -q "oauth_owner_code_mode:'chat_setup_code'" cloudflare-ara-mcp/src/index.js
+          if git diff --quiet -- cloudflare-ara-mcp/src/index.js; then
+            echo 'ARA_OAUTH_SOURCE_ALREADY_MATERIALIZED=1'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add cloudflare-ara-mcp/src/index.js
+          git commit -m 'fix(ara): materialize owner-code OAuth source'
+          git push origin HEAD:main
