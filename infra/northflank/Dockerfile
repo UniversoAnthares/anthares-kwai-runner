@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app \
     PORT=10000
 
-RUN pip install --no-cache-dir flask requests "psycopg[binary]" gunicorn \
+RUN pip install --no-cache-dir flask requests "psycopg[binary]" cryptography gunicorn \
     && useradd --create-home --uid 10001 ara
 
 COPY infra/ /app/
