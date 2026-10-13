@@ -1,0 +1,30 @@
+name: ARA recover SYSTEM agent one-shot
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/ara-recover-system-once.yml']
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: self-hosted
+    timeout-minutes: 5
+    steps:
+      - name: Restore known-good SYSTEM launcher and restart task
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $task='Anthares Remote Agent SYSTEM'
+          $known='C:\ProgramData\AntharesRemoteAgent\run-agent-system.ps1'
+          if(-not(Test-Path $known)){throw 'known_good_system_launcher_missing'}
+          $action=New-ScheduledTaskAction -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$known+'"')
+          Set-ScheduledTask -TaskName $task -Action $action | Out-Null
+          Get-Process 'anthares-remote-agent' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+          Start-ScheduledTask -TaskName $task
+          Start-Sleep -Seconds 15
+          $p=Get-Process 'anthares-remote-agent' -ErrorAction Stop | Select-Object -First 1
+          'RECOVERY=PROVEN'
+          'PID='+$p.Id
+          'SESSION='+$p.SessionId
