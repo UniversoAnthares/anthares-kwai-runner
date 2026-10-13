@@ -10,7 +10,6 @@ import (
     "io"
     "net/http"
     "os"
-    "os/exec"
     "path/filepath"
     "runtime"
     "strconv"
@@ -110,6 +109,15 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string,error) {
     case "clipboard_get": return run(ctx,"powershell.exe","-NoProfile","-NonInteractive","-Command","Get-Clipboard -Raw")
     case "clipboard_set": return runWithStdin(ctx,job.Args["text"],"powershell.exe","-NoProfile","-NonInteractive","-Command","$input | Set-Clipboard")
     case "screenshot": return screenshotBase64(ctx,job.Args["display"])
+    case "service_status":
+        name:=strings.TrimSpace(job.Args["name"])
+        if name=="" || len(name)>128 || strings.ContainsAny(name," \\t\\r\\n/\\\\\"'&|;<>") {return "",errors.New("invalid service name")}
+        return run(ctx,"sc.exe","query",name)
+    case "file_remove":
+        p,err:=safePath(cfg,job.Args["path"]); if err!=nil{return "",err}
+        if strings.EqualFold(job.Args["recursive"],"true") || job.Args["recursive"]=="1" {return "",errors.New("recursive removal disabled")}
+        if err:=os.Remove(p);err!=nil{return "",err}
+        return "removed",nil
     case "file_stat": return fileStatJSON(cfg,job.Args["path"])
     case "file_list": return fileListJSON(cfg,job.Args["path"])
     case "file_read_chunk":
@@ -121,7 +129,7 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string,error) {
     case "file_write":
         p,err:=safePath(cfg,job.Args["path"]); if err!=nil{return "",err}; b,err:=base64.StdEncoding.DecodeString(job.Args["base64"]); if err!=nil{return "",err}; if len(b)>1<<20{return "",errors.New("file exceeds 1 MiB limit")}; if err:=os.MkdirAll(filepath.Dir(p),0700);err!=nil{return "",err}; if err:=os.WriteFile(p,b,0600);err!=nil{return "",err}; return fmt.Sprintf("wrote %d bytes",len(b)),nil
     case "job_start":
-        if !cfg.AllowShell{return "",errors.New("shell disabled")}; return startDetachedJob(job.Args["command"],job.Args["name"])
+        if !cfg.AllowShell{return "",errors.New("shell disabled")}; if err:=rejectInteractiveCommand(job.Args["command"]);err!=nil{return "",err}; return startDetachedJob(job.Args["command"],job.Args["name"])
     case "job_list":
         limit,_:=strconv.Atoi(job.Args["limit"]); include:=job.Args["include_command"]=="1"||strings.EqualFold(job.Args["include_command"],"true"); return jobListJSON(include,limit)
     case "job_status":
@@ -130,7 +138,7 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string,error) {
         off:=int64(-1); if v:=job.Args["offset_bytes"];v!=""{off,_=strconv.ParseInt(v,10,64)}; max,_:=strconv.Atoi(job.Args["max_bytes"]); tail,_:=strconv.Atoi(job.Args["tail_lines"]); return jobLogsJSON(job.Args["job_id"],off,max,tail)
     case "job_cancel": return jobCancelJSON(job.Args["job_id"])
     case "shell":
-        if !cfg.AllowShell{return "",errors.New("shell disabled; set ANTHARES_ALLOW_SHELL=1 to enable")}; cmd:=strings.TrimSpace(job.Args["command"]); if cmd==""{return "",errors.New("missing command")}
+        if !cfg.AllowShell{return "",errors.New("shell disabled; set ANTHARES_ALLOW_SHELL=1 to enable")}; cmd:=strings.TrimSpace(job.Args["command"]); if cmd==""{return "",errors.New("missing command")}; if err:=rejectInteractiveCommand(cmd);err!=nil{return "",err}
         shell:=strings.ToLower(strings.TrimSpace(job.Args["shell"])); switch shell {case "cmd": return run(ctx,"cmd.exe","/d","/s","/c",cmd); case "powershell", "": return run(ctx,"powershell.exe","-NoProfile","-NonInteractive","-Command",cmd); default:return "",fmt.Errorf("unsupported shell %q",shell)}
     default: return "",fmt.Errorf("unsupported job type %q",job.Type)
     }
@@ -138,9 +146,9 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string,error) {
 
 func safePath(cfg Config,p string)(string,error){if len(cfg.AllowedRoots)==0{return "",errors.New("file access disabled; ANTHARES_ALLOWED_ROOTS is empty")}; abs,err:=filepath.Abs(p);if err!=nil{return "",err};abs=filepath.Clean(abs);lower:=strings.ToLower(abs);for _,root:=range cfg.AllowedRoots{r:=strings.ToLower(filepath.Clean(root));if lower==r||strings.HasPrefix(lower,r+string(os.PathSeparator)){return abs,nil}};return "",errors.New("path outside allowed roots")}
 
-func run(ctx context.Context,name string,args ...string)(string,error){cmd:=exec.CommandContext(ctx,name,args...);var out bytes.Buffer;cmd.Stdout=&out;cmd.Stderr=&out;err:=cmd.Run();s:=out.String();if len(s)>1<<20{s=s[:1<<20]+"\n[truncated]"};if ctx.Err()==context.DeadlineExceeded{return s,errors.New("command timed out")};return s,err}
+func run(ctx context.Context,name string,args ...string)(string,error){cmd:=hiddenCommandContext(ctx,name,args...);var out bytes.Buffer;cmd.Stdout=&out;cmd.Stderr=&out;err:=cmd.Run();s:=out.String();if len(s)>1<<20{s=s[:1<<20]+"\n[truncated]"};if ctx.Err()==context.DeadlineExceeded{return s,errors.New("command timed out")};return s,err}
 
-func runWithStdin(ctx context.Context,stdin,name string,args ...string)(string,error){cmd:=exec.CommandContext(ctx,name,args...);cmd.Stdin=strings.NewReader(stdin);var out bytes.Buffer;cmd.Stdout=&out;cmd.Stderr=&out;err:=cmd.Run();return out.String(),err}
+func runWithStdin(ctx context.Context,stdin,name string,args ...string)(string,error){cmd:=hiddenCommandContext(ctx,name,args...);cmd.Stdin=strings.NewReader(stdin);var out bytes.Buffer;cmd.Stdout=&out;cmd.Stderr=&out;err:=cmd.Run();return out.String(),err}
 
 func postResult(cfg Config,result Result)error{body,_:=json.Marshal(result);req,_:=http.NewRequest(http.MethodPost,cfg.ControlURL+"/v1/device/jobs/"+result.ID+"/result",bytes.NewReader(body));req.Header.Set("Content-Type","application/json");authReq(req,cfg);resp,err:=httpClient.Do(req);if err!=nil{return err};defer resp.Body.Close();if resp.StatusCode/100!=2{return fmt.Errorf("result status %d",resp.StatusCode)};return nil}
 
