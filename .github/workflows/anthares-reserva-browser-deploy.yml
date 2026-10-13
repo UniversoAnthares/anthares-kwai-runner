@@ -1,0 +1,51 @@
+name: Anthares Reserva Browser Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'anthares-reserva-browser/**'
+      - '.github/workflows/anthares-reserva-browser-deploy.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-reserva-browser-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate required secrets without exposing them
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CF_TOKEN" || { echo 'CLOUDFLARE_API_TOKEN missing'; exit 10; }
+          test -n "$RESERVA_TOKEN" || { echo 'ANTHARES_RESERVA_TOKEN missing'; exit 11; }
+      - name: Install dependencies
+        working-directory: anthares-reserva-browser
+        run: npm install --ignore-scripts
+      - name: Static validation
+        working-directory: anthares-reserva-browser
+        run: npm run check
+      - name: Configure Worker access secret
+        working-directory: anthares-reserva-browser
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
+        run: printf '%s' "$ANTHARES_RESERVA_TOKEN" | npx wrangler secret put ANTHARES_RESERVA_TOKEN
+      - name: Deploy reserve browser
+        working-directory: anthares-reserva-browser
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
