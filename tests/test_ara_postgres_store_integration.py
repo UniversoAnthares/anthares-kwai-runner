@@ -44,6 +44,16 @@ class PostgresStoreIntegrationTests(unittest.TestCase):
         self.assertIsNone(rejected["result"])
         self.assertEqual(store.lease_next(device)["id"], job["id"])
 
+    def test_future_dated_heartbeat_is_not_connected(self):
+        import psycopg
+        device = self.device("future-heartbeat")
+        store = PostgresStore(self.dsn)
+        store.heartbeat(device, {"version": "0.3"})
+        with psycopg.connect(self.dsn) as conn, conn.cursor() as cur:
+            cur.execute("UPDATE ara_devices SET seen_at=now()+interval '1 hour' WHERE device_id=%s", (device,))
+            conn.commit()
+        self.assertFalse(store.status(device)["connected"])
+
     def test_heartbeat_survives_store_recreation(self):
         device = self.device("heartbeat")
         first = PostgresStore(self.dsn)
