@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - 'tools/finalize_ara_queue_only.py'
+      - 'anthares-remote-agent/windows/run-agent-system-supervisor.ps1'
+      - 'anthares-remote-agent/windows/run-agent-user-fallback.ps1'
       - '.github/workflows/ara-queue-only-finalize.yml'
 
 permissions:
@@ -37,7 +39,7 @@ jobs:
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4.exe ./cmd/agent
           cd ..
           grep -q 'issue-queue-only mode' anthares-remote-agent/cmd/agent/main.go
-          grep -q 'AntharesRemoteSystemSupervisorV7' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q 'AntharesRemoteSystemSupervisorV9' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
           grep -q 'cloudflare_required=$false' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
           grep -q 'render_required=$false' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
           grep -q "mode='issue-queues-only'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
@@ -45,6 +47,7 @@ jobs:
           ! grep -q 'workers.dev' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
           grep -q 'cloudflare_required=$false' anthares-remote-agent/windows/run-agent-user-fallback.ps1
           grep -q 'render_required=$false' anthares-remote-agent/windows/run-agent-user-fallback.ps1
+          grep -q "mode='issue-queues-only'" anthares-remote-agent/windows/run-agent-user-fallback.ps1
           ! grep -q 'onrender.com' anthares-remote-agent/windows/run-agent-user-fallback.ps1
           ! grep -q 'workers.dev' anthares-remote-agent/windows/run-agent-user-fallback.ps1
           echo 'ARA_QUEUE_ONLY_VALIDATION_OK=1'
@@ -55,9 +58,9 @@ jobs:
           set -euo pipefail
           git config user.name 'UniversoAnthares'
           git config user.email '81930373+UniversoAnthares@users.noreply.github.com'
-          git add anthares-remote-agent/cmd/agent/main.go anthares-remote-agent/cmd/agent/issue_queue.go anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          git add anthares-remote-agent/cmd/agent/main.go anthares-remote-agent/cmd/agent/issue_queue.go
           if git diff --cached --quiet; then
-            echo 'Queue-only runtime already finalized.'
+            echo 'Queue-only agent runtime already finalized.'
             exit 0
           fi
           git commit -m 'fix(ara): make private issue queues canonical runtime'
