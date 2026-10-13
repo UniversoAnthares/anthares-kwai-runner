@@ -24,7 +24,7 @@ export function registerExtendedTools(server, { execute, text, defaultDevice }) 
       name: z.string().min(1),
       device_id: z.string().default(defaultDevice),
     },
-  }, async ({ name, device_id }) => text(await execute('service_status', { name }, 30, device_id)));
+  }, async ({ name, device_id }) => { if (!/^[A-Za-z0-9_.-]{1,128}$/.test(name)) throw new Error('invalid_service_name'); return text(await execute('shell', { command: `Get-Service -Name '${name}' | Select-Object Name,Status,DisplayName | ConvertTo-Json -Compress`, shell: 'powershell' }, 30, device_id)); });
 
   server.registerTool('service_start', {
     description: 'Start an allowlisted Windows service.',
