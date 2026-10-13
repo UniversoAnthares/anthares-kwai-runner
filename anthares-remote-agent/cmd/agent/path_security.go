@@ -4,12 +4,17 @@ import (
     "errors"
     "os"
     "path/filepath"
+    "runtime"
     "strings"
 )
 
 func pathWithin(path, root string) bool {
-    p := strings.ToLower(filepath.Clean(path))
-    r := strings.ToLower(filepath.Clean(root))
+    p := filepath.Clean(path)
+    r := filepath.Clean(root)
+    if runtime.GOOS == "windows" {
+        p = strings.ToLower(p)
+        r = strings.ToLower(r)
+    }
     return p == r || strings.HasPrefix(p, r+string(os.PathSeparator))
 }
 
