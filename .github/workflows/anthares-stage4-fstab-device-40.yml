@@ -1,4 +1,4 @@
-name: Kwai Android ARM64 Fstab Device Matrix 40
+name: Kwai Android ARM64 Fstab Device Matrix 40 v2
 on:
   workflow_dispatch:
   push:
@@ -24,16 +24,19 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless gdisk e2fsprogs util-linux cpio gzip >/dev/null
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless gdisk e2fsprogs util-linux cpio gzip file >/dev/null
+          rm -rf /tmp/android-tools "$HOME/android-sdk"
           mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
-          curl -fLsS --retry 2 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          curl -fLsS --retry 3 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
           unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
           cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
           export ANDROID_HOME="$HOME/android-sdk"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          (yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null) || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-30;default;arm64-v8a" >/dev/null
           DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
           gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
+          test -s /tmp/android-Image
+          test -s "$DIR/ramdisk.img"
           echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
 
       - name: Build deterministic metadata and userdata
@@ -51,13 +54,13 @@ jobs:
           mkfs.ext4 -F -L data -O ^64bit,^metadata_csum -E lazy_itable_init=0,lazy_journal_init=0 /tmp/userdata.raw >/dev/null
           mkdir -p /tmp/data-mnt
           sudo mount -o loop /tmp/userdata.raw /tmp/data-mnt
-          sudo mkdir -p /tmp/data-mnt/dalvik-cache/arm64 /tmp/data-mnt/misc_de /tmp/data-mnt/misc_ce /tmp/data-mnt/system /tmp/data-mnt/system_ce /tmp/data-mnt/system_de
+          sudo mkdir -p /tmp/data-mnt/dalvik-cache/arm64 /tmp/data-mnt/misc_de /tmp/data-mnt/misc_ce /tmp/data-mnt/system /tmp/data-mnt/system_ce /tmp/data-mnt/system_de /tmp/data-mnt/user_de /tmp/data-mnt/user_ce
           sudo chmod 771 /tmp/data-mnt/dalvik-cache /tmp/data-mnt/dalvik-cache/arm64 || true
           sync
           sudo umount /tmp/data-mnt
           dumpe2fs -h /tmp/userdata.raw 2>/dev/null | grep -E 'Filesystem magic|Filesystem features|Filesystem volume name'
 
-      - name: Patch ramdisk fstab to explicit devices
+      - name: Extract patch validate and repack ramdisk
         run: |
           set -euo pipefail
           DATA_SRC="/dev/block/${{ matrix.data_dev }}"
@@ -70,71 +73,126 @@ jobs:
           else
             META_SRC="/dev/block/${{ matrix.meta_dev }}"
           fi
-          rm -rf /tmp/rd && mkdir -p /tmp/rd
-          cd /tmp/rd
+
+          rm -rf /tmp/rd /tmp/rd-check
+          mkdir -p /tmp/rd /tmp/rd-check
+
           if gzip -t "$ANDROID_DIR/ramdisk.img" 2>/dev/null; then
-            gzip -dc "$ANDROID_DIR/ramdisk.img" | cpio -idmu --no-absolute-filenames 2>/dev/null
+            gzip -dc "$ANDROID_DIR/ramdisk.img" > /tmp/ramdisk.cpio
             PACK=gzip
           else
-            cpio -idmu --no-absolute-filenames < "$ANDROID_DIR/ramdisk.img" 2>/dev/null
+            cp "$ANDROID_DIR/ramdisk.img" /tmp/ramdisk.cpio
             PACK=raw
           fi
-          find . -type f -name 'fstab*' -print -exec grep -HnE '[[:space:]]/(data|metadata)[[:space:]]' {} \; | tee /tmp/fstab-before.txt || true
+          test -s /tmp/ramdisk.cpio
+
+          cd /tmp/rd
+          set +e
+          cpio -idmu --no-absolute-filenames < /tmp/ramdisk.cpio 2>/tmp/cpio-extract.err
+          CPIO_RC=$?
+          set -e
+          echo "CPIO_EXTRACT_RC=$CPIO_RC"
+          cat /tmp/cpio-extract.err || true
+          test -e ./init
+
+          find . -type f -name 'fstab*' -print > /tmp/fstab-files.txt
+          cat /tmp/fstab-files.txt
+          test -s /tmp/fstab-files.txt
+          while IFS= read -r f; do
+            echo "--- BEFORE $f"
+            grep -HnE '(^|[[:space:]])/(data|metadata)([[:space:]]|$)' "$f" || true
+          done < /tmp/fstab-files.txt | tee /tmp/fstab-before.txt
+
           DATA_PATCH=0
           META_PATCH=0
-          while IFS= read -r -d '' f; do
-            if awk -v d="$DATA_SRC" -v m="$META_SRC" '
+          while IFS= read -r f; do
+            awk -v d="$DATA_SRC" -v m="$META_SRC" '
               BEGIN { OFS="\t" }
               /^[[:space:]]*#/ || NF < 2 { print; next }
               $2=="/data" { $1=d; dc++ }
               $2=="/metadata" { $1=m; mc++ }
               { print }
-              END { if (dc>0) print dc > "/tmp/data-patch-count.part"; if (mc>0) print mc > "/tmp/meta-patch-count.part" }
-            ' "$f" > "$f.new"; then mv "$f.new" "$f"; fi
-            if [ -f /tmp/data-patch-count.part ]; then DATA_PATCH=$((DATA_PATCH+$(cat /tmp/data-patch-count.part))); rm -f /tmp/data-patch-count.part; fi
-            if [ -f /tmp/meta-patch-count.part ]; then META_PATCH=$((META_PATCH+$(cat /tmp/meta-patch-count.part))); rm -f /tmp/meta-patch-count.part; fi
-          done < <(find . -type f -name 'fstab*' -print0)
-          echo "DATA_PATCH_COUNT=$DATA_PATCH"
-          echo "META_PATCH_COUNT=$META_PATCH"
-          find . -type f -name 'fstab*' -exec grep -HnE '[[:space:]]/(data|metadata)[[:space:]]' {} \; | tee /tmp/fstab-after.txt || true
+              END {
+                if (dc>0) print dc > "/tmp/dcount";
+                if (mc>0) print mc > "/tmp/mcount";
+              }
+            ' "$f" > "$f.new"
+            mv "$f.new" "$f"
+            if [ -f /tmp/dcount ]; then DATA_PATCH=$((DATA_PATCH+$(cat /tmp/dcount))); rm -f /tmp/dcount; fi
+            if [ -f /tmp/mcount ]; then META_PATCH=$((META_PATCH+$(cat /tmp/mcount))); rm -f /tmp/mcount; fi
+          done < /tmp/fstab-files.txt
+
+          echo "DATA_PATCH_COUNT=$DATA_PATCH META_PATCH_COUNT=$META_PATCH DATA_SRC=$DATA_SRC META_SRC=$META_SRC"
           test "$DATA_PATCH" -gt 0
           test "$META_PATCH" -gt 0
+
+          while IFS= read -r f; do
+            echo "--- AFTER $f"
+            grep -HnE '(^|[[:space:]])/(data|metadata)([[:space:]]|$)' "$f" || true
+          done < /tmp/fstab-files.txt | tee /tmp/fstab-after.txt
+          grep -q "$DATA_SRC" /tmp/fstab-after.txt
+          grep -Fq "$META_SRC" /tmp/fstab-after.txt
+
+          find . -print0 | cpio --null -o -H newc > /tmp/ramdisk-new.cpio 2>/tmp/cpio-pack.err
+          test -s /tmp/ramdisk-new.cpio
           if [ "$PACK" = gzip ]; then
-            find . -print0 | cpio --null -o -H newc 2>/dev/null | gzip -1 > /tmp/ramdisk-patched.img
+            gzip -1 -c /tmp/ramdisk-new.cpio > /tmp/ramdisk-patched.img
           else
-            find . -print0 | cpio --null -o -H newc 2>/dev/null > /tmp/ramdisk-patched.img
+            cp /tmp/ramdisk-new.cpio /tmp/ramdisk-patched.img
           fi
           test -s /tmp/ramdisk-patched.img
+
+          if [ "$PACK" = gzip ]; then
+            gzip -dc /tmp/ramdisk-patched.img > /tmp/ramdisk-check.cpio
+          else
+            cp /tmp/ramdisk-patched.img /tmp/ramdisk-check.cpio
+          fi
+          cd /tmp/rd-check
+          set +e
+          cpio -idmu --no-absolute-filenames < /tmp/ramdisk-check.cpio 2>/tmp/cpio-check.err
+          CHECK_RC=$?
+          set -e
+          echo "CPIO_CHECK_RC=$CHECK_RC"
+          test -e ./init
+          find . -type f -name 'fstab*' -exec grep -HnF "$DATA_SRC" {} \; | tee /tmp/fstab-validate-data.txt
+          find . -type f -name 'fstab*' -exec grep -HnF "$META_SRC" {} \; | tee /tmp/fstab-validate-meta.txt
+          test -s /tmp/fstab-validate-data.txt
+          test -s /tmp/fstab-validate-meta.txt
+          echo RAMDISK_PATCH_VALIDATED=1
 
       - name: Boot patched Android and classify next gate
         run: |
           set +e
           if [ '${{ matrix.bus }}' = mmio ]; then
-            BLK='virtio-blk-device'
-            D1="-device $BLK,drive=metadata"
-            D2="-device $BLK,drive=system"
-            D3="-device $BLK,drive=userdata"
-            D4="-device $BLK,drive=vendor"
+            D1='-device virtio-blk-device,drive=metadata'
+            D2='-device virtio-blk-device,drive=system'
+            D3='-device virtio-blk-device,drive=userdata'
+            D4='-device virtio-blk-device,drive=vendor'
             GPU='-device virtio-gpu-device'
+            NET='-device virtio-net-device,netdev=n0'
           else
             D1='-device virtio-blk-pci,drive=metadata,addr=0x5'
             D2='-device virtio-blk-pci,drive=system,addr=0x6'
             D3='-device virtio-blk-pci,drive=userdata,addr=0x7'
             D4='-device virtio-blk-pci,drive=vendor,addr=0x8'
-            GPU='-device virtio-gpu-pci'
+            GPU='-device virtio-gpu-pci,addr=0x9'
+            NET='-device virtio-net-pci,netdev=n0,addr=0xa'
           fi
-          timeout 170 qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 4096 -smp 4 -accel tcg -nographic -no-reboot \
+
+          timeout 180 qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 4096 -smp 4 -accel tcg -nographic -no-reboot \
             -kernel /tmp/android-Image -initrd /tmp/ramdisk-patched.img \
             -drive if=none,file=/tmp/meta.img,format=raw,id=metadata $D1 \
             -drive if=none,file="$ANDROID_DIR/system.img",format=raw,readonly=on,id=system $D2 \
             -drive if=none,file=/tmp/userdata.raw,format=raw,id=userdata $D3 \
             -drive if=none,file="$ANDROID_DIR/vendor.img",format=raw,readonly=on,id=vendor $D4 \
-            $GPU -netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-            -append 'console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive root=/dev/ram0 rw qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR40' \
+            $GPU -netdev user,id=n0 $NET \
+            -append 'console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive root=/dev/ram0 rw qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR40V2' \
             > /tmp/android-qemu.log 2>&1
           RC=$?
-          grep -E 'fstab|metadata|/data|Invalid ext4|EXT4-fs|dalvik-cache|misc_de|init second stage|zygote|system_server|SystemServer|ActivityManager|PackageManager|surfaceflinger|SurfaceFlinger|BOOT_COMPLETED|boot_completed|Fatal signal|received signal' /tmp/android-qemu.log | tail -360 || true
+
+          grep -E 'metadata|/data|Invalid ext4|EXT4-fs|dalvik-cache|misc_de|init second stage|zygote|system_server|SystemServer|ActivityManager|PackageManager|surfaceflinger|SurfaceFlinger|BOOT_COMPLETED|boot_completed|Fatal signal|received signal' /tmp/android-qemu.log | tail -420 || true
           echo "QEMU_RC=$RC DATA=${{ matrix.data_dev }} META=${{ matrix.meta_dev }} BUS=${{ matrix.bus }}"
+
           if grep -Eq 'BOOT_COMPLETED|sys.boot_completed.*1|SystemServer.*Start|ActivityManager.*system_server|PackageManagerService' /tmp/android-qemu.log; then echo RESULT=FRAMEWORK_READY; exit 0; fi
           if ! grep -q 'Error creating cache dir /data/dalvik-cache' /tmp/android-qemu.log && ! grep -q "Can't open /data/misc_de" /tmp/android-qemu.log && grep -q "starting service 'zygote'" /tmp/android-qemu.log; then echo RESULT=DATA_FIXED_NEXT_GATE; exit 0; fi
           if grep -q 'Error creating cache dir /data/dalvik-cache' /tmp/android-qemu.log; then echo RESULT=DATA_NOT_MOUNTED; exit 1; fi
@@ -148,11 +206,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fstab-device-${{ matrix.data_dev }}-${{ matrix.meta_dev }}-${{ matrix.bus }}
+          name: fstab-device-v2-${{ matrix.data_dev }}-${{ matrix.meta_dev }}-${{ matrix.bus }}
           path: |
             /tmp/android-qemu.log
             /tmp/fstab-before.txt
             /tmp/fstab-after.txt
-            /tmp/ramdisk-patched.img
+            /tmp/fstab-validate-data.txt
+            /tmp/fstab-validate-meta.txt
+            /tmp/cpio-extract.err
+            /tmp/cpio-check.err
           if-no-files-found: warn
           retention-days: 3
