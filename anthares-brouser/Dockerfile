@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py start.sh ./
 RUN chmod +x /opt/anthares-brouser/start.sh && mkdir -p /data/chrome-profile
 
-EXPOSE 6080 8080
+EXPOSE 8080
 VOLUME ["/data"]
 
 CMD ["/opt/anthares-brouser/start.sh"]
