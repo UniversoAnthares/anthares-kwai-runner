@@ -51,6 +51,44 @@ def test_health_fail_closed_and_no_host_fallback():
     assert body["global_lease_authority"] == "anthares-control/cloudflare"
 
 
+def test_remote_execute_does_not_enqueue_volatile_jobs():
+    reset(); c = app_client()
+    with patch.object(mesh._remote, "execute_job", None, create=True), patch.object(mesh, "_legacy_enqueue", side_effect=AssertionError("volatile queue must not be used")):
+        response = c.post("/v1/runtime/remote/execute", headers=auth(), json={"device_id": "remote", "type": "ping"})
+    assert response.status_code == 503
+    assert response.get_json()["error"] == "job_lost"
+
+
+def test_browser_health_requires_url_and_token():
+    reset(); c = app_client()
+    with patch.dict(os.environ, {"ANTHARES_BROWSER_URL": "https://browser.invalid", "ANTHARES_BROWSER_TOKEN": ""}):
+        with patch.object(mesh.requests, "get", side_effect=AssertionError("health must not call upstream without token")):
+            body = c.get("/v1/runtime/health").get_json()
+    assert body["browser"]["configured"] is False
+    assert body["browser"]["healthy"] is False
+    assert body["browser"]["error"] == "browser_not_configured"
+
+
+def test_no_implicit_desktop_target():
+    reset(); c = app_client()
+    r = c.post("/v1/runtime/remote/execute", headers=auth(), json={"type": "ping"})
+    assert r.status_code == 400
+    assert r.get_json()["error"] == "device_id_required_no_local_fallback"
+    with patch.object(mesh.requests, "get", side_effect=RuntimeError("offline")):
+        health = c.get("/v1/runtime/health").get_json()
+    assert health["remote"]["device_id"] is None
+    assert health["remote"]["connected"] is False
+
+
+def test_invalid_numeric_inputs_return_400():
+    reset(); c = app_client()
+    assert c.post("/v1/runtime/remote/execute", headers=auth(), json={"device_id": "remote", "type": "ping", "timeout_seconds": "not-a-number"}).status_code == 400
+    assert c.post("/v1/runtime/browser/lease/acquire", headers=auth(), json={"owner": "runner", "ttl_seconds": []}).status_code == 400
+    lease = acquire(c)
+    h = auth({"X-Anthares-Lease-Token": lease["token"], "X-Anthares-Lease-Generation": str(lease["generation"])})
+    assert c.post("/v1/runtime/browser/lease/renew", headers=h, json={"ttl_seconds": "bad"}).status_code == 400
+
+
 def test_browser_requires_control_auth():
     reset(); c = app_client()
     assert c.post("/v1/runtime/browser/lease/acquire", json={"owner": "x"}).status_code == 401
@@ -64,6 +102,15 @@ def test_browser_single_writer_conflict():
     assert second.get_json()["error"] == "lease_conflict"
     assert first["generation"] == 1
     assert first["scope"] == "local_browser_profile_fence"
+
+
+def test_same_owner_cannot_steal_live_lease():
+    reset(); c = app_client(); first = acquire(c, "runner-a")
+    second = c.post("/v1/runtime/browser/lease/acquire", headers=auth(), json={"owner": "runner-a"})
+    assert second.status_code == 409
+    assert "token" not in second.get_json()
+    h = auth({"X-Anthares-Lease-Token": first["token"], "X-Anthares-Lease-Generation": str(first["generation"])})
+    assert c.post("/v1/runtime/browser/lease/renew", headers=h, json={"ttl_seconds": 300}).status_code == 200
 
 
 def test_stale_generation_fenced_after_release_and_reacquire():
@@ -102,7 +149,8 @@ def test_health_prefers_durable_device_status_when_available():
     reset(); c = app_client()
     browser = SimpleNamespace(ok=True, status_code=200, headers={"content-type": "application/json"}, json=lambda: {"ok": True, "cdp_ready": True})
     with patch.object(mesh._remote, "device_status", create=True, return_value={"connected": True}), patch.object(mesh.requests, "get", return_value=browser):
-        body = c.get("/v1/runtime/health").get_json()
+        body = c.get("/v1/runtime/health?device_id=test-remote-device").get_json()
+    assert body["remote"]["device_id"] == "test-remote-device"
     assert body["remote"]["connected"] is True
 
 
