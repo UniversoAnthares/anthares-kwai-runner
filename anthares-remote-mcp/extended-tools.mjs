@@ -2,16 +2,16 @@ import { z } from 'zod';
 
 export function registerExtendedTools(server, { execute, text, defaultDevice }) {
   server.registerTool('process_start', {
-    description: 'Start an executable on the authorized Windows device.',
+    description: 'Start an allowlisted executable on the authorized Windows device.',
     inputSchema: {
       path: z.string().min(1),
-      args: z.string().default(''),
+      args: z.array(z.string().max(8192)).max(64).default([]),
       device_id: z.string().default(defaultDevice),
     },
-  }, async ({ path, args, device_id }) => text(await execute('process_start', { path, args }, 30, device_id)));
+  }, async ({ path, args, device_id }) => text(await execute('process_start', { path, args_json: JSON.stringify(args) }, 30, device_id)));
 
   server.registerTool('process_kill', {
-    description: 'Terminate a process by PID on the authorized Windows device.',
+    description: 'Terminate an allowlisted process by PID on the authorized Windows device.',
     inputSchema: {
       pid: z.number().int().positive(),
       device_id: z.string().default(defaultDevice),
@@ -27,7 +27,7 @@ export function registerExtendedTools(server, { execute, text, defaultDevice }) 
   }, async ({ name, device_id }) => text(await execute('service_status', { name }, 30, device_id)));
 
   server.registerTool('service_start', {
-    description: 'Start an authorized Windows service.',
+    description: 'Start an allowlisted Windows service.',
     inputSchema: {
       name: z.string().min(1),
       device_id: z.string().default(defaultDevice),
@@ -35,7 +35,7 @@ export function registerExtendedTools(server, { execute, text, defaultDevice }) 
   }, async ({ name, device_id }) => text(await execute('service_start', { name }, 45, device_id)));
 
   server.registerTool('service_stop', {
-    description: 'Stop an authorized Windows service.',
+    description: 'Stop an allowlisted Windows service.',
     inputSchema: {
       name: z.string().min(1),
       device_id: z.string().default(defaultDevice),
