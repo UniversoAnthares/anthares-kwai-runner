@@ -8,22 +8,46 @@ on:
       - 'infra/ara_legacy_state_compat.py'
       - 'infra/anthares_remote_control_routes.py'
       - 'infra/anthares_remote_browser_bridge.py'
+      - 'infra/ara_canary_app.py'
       - 'infra/sitecustomize.py'
       - 'tests/test_ara_state_store.py'
       - 'tests/test_ara_legacy_state_compat.py'
+      - 'tests/test_ara_postgres_store_integration.py'
       - '.github/workflows/ara-infra-tests.yml'
   workflow_dispatch:
 
 jobs:
   durability:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ara_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ara_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ara_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Run deterministic queue tests
-        run: python -m unittest -v tests.test_ara_state_store tests.test_ara_legacy_state_compat
+      - name: Install test dependency
+        run: pip install 'psycopg[binary]'
+      - name: Run deterministic and postgres queue tests
+        run: >-
+          python -m unittest -v
+          tests.test_ara_state_store
+          tests.test_ara_legacy_state_compat
+          tests.test_ara_postgres_store_integration
       - name: Syntax compile
         run: >-
           python -m py_compile
@@ -34,4 +58,5 @@ jobs:
           infra/anthares_remote_bootstrap.py
           infra/anthares_remote_secure_bootstrap.py
           infra/anthares_remote_switch.py
+          infra/ara_canary_app.py
           infra/sitecustomize.py
