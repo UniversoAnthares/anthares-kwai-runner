@@ -8,6 +8,7 @@ import (
  "encoding/json"
  "errors"
  "fmt"
+ "strings"
  "io"
  "os"
  "path/filepath"
@@ -51,4 +52,21 @@ func loadEncryptedResult(path,token,id string)(Result,error){
 func resultSpoolDir(cfg Config) string {
  key:=sha256.Sum256([]byte(cfg.ControlURL+"|"+cfg.DeviceID))
  return filepath.Join(os.TempDir(),"anthares-ara-results",fmt.Sprintf("%x",key[:12]))
+}
+
+func replayEncryptedResults(cfg Config) error {
+ dir:=resultSpoolDir(cfg)
+ entries,err:=os.ReadDir(dir)
+ if os.IsNotExist(err){return nil}
+ if err!=nil{return err}
+ for _,entry:=range entries{
+  if entry.IsDir() || !strings.HasSuffix(entry.Name(),".pending"){continue}
+  id:=strings.TrimSuffix(entry.Name(),".pending")
+  path:=filepath.Join(dir,entry.Name())
+  result,err:=loadEncryptedResult(path,cfg.DeviceToken,id)
+  if err!=nil{return fmt.Errorf("pending result %s: %w",id,err)}
+  if err=postResultRetry(cfg,result);err!=nil{return fmt.Errorf("replay result %s: %w",id,err)}
+  if err=os.Remove(path);err!=nil{return err}
+ }
+ return nil
 }
