@@ -1,34 +1,33 @@
 # Anthares Remote Agent
 
-Anthares Remote é o canal canônico de administração remota do Windows do projeto Anthares. O runtime não depende de AI Commander, Desktop Commander ou outro agente remoto como fallback.
+Anthares Remote é o canal canônico de administração remota do Windows do projeto Anthares. O runtime não depende de AI Commander, Desktop Commander ou Render como requisito operacional.
 
 ## Runtime canônico no Windows
 
 O dispositivo autorizado é `DESKTOP-FTDK0HP`.
 
-A execução persistente usa a tarefa agendada `Anthares Remote Agent SYSTEM`, em `SYSTEM`, `Highest`, sessão 0 e PowerShell não interativo/oculto. A tarefa possui gatilho de boot e verificação periódica de 1 minuto; `MultipleInstances=IgnoreNew` impede supervisores duplicados.
+A execução persistente usa a tarefa agendada `Anthares Remote Agent SYSTEM`, em `SYSTEM`, `Highest`, sessão 0 e PowerShell não interativo/oculto.
 
-O supervisor canônico é:
-
-```text
-C:\ProgramData\AntharesRemoteAgent\run-agent-system-supervisor.ps1
-```
-
-A fonte versionada correspondente é `windows/run-agent-system-supervisor.ps1`.
-
-O supervisor mantém uma única instância do agente para evitar leases e resultados duplicados.
+O supervisor canônico é `windows/run-agent-system-supervisor.ps1`. Ele usa as filas privadas GitHub/GitLab e mantém uma única instância do agente para evitar leases e resultados duplicados. Não há controlador HTTP obrigatório nesse caminho.
 
 ## Plano de controle redundante
 
-Ordem normal:
+Caminho canônico:
 
-1. `https://anthares-ara-control.onrender.com` — primário, estado durável PostgreSQL.
-2. `https://anthares-ara-infra-canary-v2.onrender.com` — redundância Render/PostgreSQL.
-3. `https://anthares-ara-backup.anthares1.workers.dev` — redundância independente em Cloudflare Durable Object/SQLite.
+1. fila privada GitHub/GitLab — transporte V4 do agente;
+2. Cloudflare `https://anthares-ara-backup.anthares1.workers.dev` — controlador HTTP durável independente;
+3. Northflank `https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run` — redundância de compute/control;
+4. Render — somente fallback final de emergência enquanto a cota gratuita ainda existir.
 
-O supervisor troca de controlador após falhas consecutivas e retorna ao primário somente depois de uma sequência estável de health checks. Os arquivos `force-secondary.flag` e `force-tertiary.flag` existem apenas para testes controlados de failover.
+Os supervisores HTTP legados devem seguir essa mesma ordem: Cloudflare -> Northflank -> Render. Nenhuma URL `onrender.com` pode ser primária ou única.
 
-O watchdog/keep-warm mantém o segundo serviço Render aquecido para evitar que cold start elimine a utilidade do failover rápido.
+## Estado e MCP
+
+- controle durável principal: Cloudflare Durable Objects/SQLite;
+- banco externo redundante: Neon (`anthares-ara-ha`);
+- MCP/OAuth canônico: `https://anthares-ara-mcp.anthares1.workers.dev/mcp`;
+- compute/container que exige Chromium: Northflank;
+- Render não é autoridade de estado nem requisito de autenticação.
 
 ## Segurança
 
@@ -37,7 +36,6 @@ O watchdog/keep-warm mantém o segundo serviço Render aquecido para evitar que 
 - O runtime canônico roda em sessão 0 e não deve abrir ou manipular a área de trabalho interativa.
 - O token do dispositivo permanece somente no host; o repositório publica apenas seu SHA-256 por identidade autorizada.
 - Tokens e outros segredos nunca devem ser commitados.
-- O MCP usa autenticação de serviço assinada; o dispositivo usa seu token próprio.
 - Acesso a arquivos e processos continua sujeito às allowlists do agente.
 - Shell remoto exige `ANTHARES_ALLOW_SHELL=1`.
 - Jobs têm timeout e ciclo de lease/resultado persistente.
@@ -45,17 +43,13 @@ O watchdog/keep-warm mantém o segundo serviço Render aquecido para evitar que 
 ## Arquivos principais
 
 - `cmd/agent`: agente Windows em Go.
-- `windows/run-agent-system-supervisor.ps1`: supervisor SYSTEM canônico.
-- `windows/run-agent-supervisor.ps1`: supervisor de compatibilidade/fallback de instalação.
-- `windows/run-agent-standard.ps1`: supervisor de compatibilidade da identidade padrão.
-- `windows/watchdog-dual-supervisor.ps1`: keep-warm e recuperação de instalações legadas.
-- `devices/*.sha256`: hashes públicos dos tokens dos dispositivos autorizados.
-- `cloudflare-ara-backup/`: controlador independente Cloudflare.
-
-## Contrato do agente
-
-O agente expõe somente operações conhecidas pelo protocolo Anthares Remote, incluindo status, informações do sistema, processos, serviços, arquivos, shell controlado e jobs destacados. O conjunto efetivo é informado pelo endpoint de capabilities do plano de controle.
+- `windows/run-agent-system-supervisor.ps1`: supervisor SYSTEM canônico por filas privadas.
+- `windows/run-agent-supervisor.ps1`: compatibilidade HTTP; Cloudflare/Northflank antes de Render.
+- `windows/run-agent-standard.ps1`: compatibilidade da identidade padrão; mesma ordem de fallback.
+- `windows/watchdog-dual-supervisor.ps1`: recuperação legada com standby Northflank.
+- `cloudflare-ara-backup/`: controlador durável Cloudflare.
+- `cloudflare-ara-mcp/`: MCP/OAuth canônico.
 
 ## Regra operacional
 
-Novas funções de administração remota do PC devem ser implementadas no Anthares Remote. Não reintroduzir agentes remotos de terceiros como dependência ou redundância do canal canônico.
+Novas funções de administração remota devem ser implementadas no Anthares Remote sem introduzir dependência obrigatória de Render. Render permanece somente como último fallback até sua retirada definitiva.
