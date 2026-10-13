@@ -18,4 +18,4 @@ jobs:
       - name: Dispatch canonical Cloudflare deployment
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run cloudflare-ara-backup-deploy.yml --ref main
+        run: gh workflow run cloudflare-ara-backup-deploy.yml --repo UniversoAnthares/anthares-kwai-runner --ref main
