@@ -6,7 +6,7 @@ set -euo pipefail
 
 export DISPLAY=${DISPLAY:-:99}
 export CHROME_PROFILE_DIR=${CHROME_PROFILE_DIR:-/data/chrome-profile}
-START_URL=${START_URL:-https://www.kwai.com/}
+START_URL=${START_URL:-about:blank}
 CDP_PORT=${CDP_PORT:-9222}
 API_PORT=${PORT:-8080}
 export NO_PROXY="127.0.0.1,localhost,::1${NO_PROXY:+,$NO_PROXY}"
@@ -173,8 +173,13 @@ except Exception:
 PY
 }
 
+# memory.current includes reclaimable page cache. That made the safety gate
+# report ~520 MiB while Render's actual process memory was ~240 MiB. Gate on
+# anonymous cgroup memory instead, which is the pressure the probe can amplify.
 memory_current_bytes() {
-  if [[ -r /sys/fs/cgroup/memory.current ]]; then
+  if [[ -r /sys/fs/cgroup/memory.stat ]]; then
+    awk '$1 == "anon" { print $2; found=1; exit } END { if (!found) print 0 }' /sys/fs/cgroup/memory.stat
+  elif [[ -r /sys/fs/cgroup/memory.current ]]; then
     cat /sys/fs/cgroup/memory.current
   else
     printf '0\n'
@@ -214,8 +219,8 @@ SUPERVISOR_INTERVAL=${SUPERVISOR_INTERVAL:-5}
 KWAI_PROBE_DONE=0
 KWAI_PROBE_ATTEMPTS=0
 KWAI_PROBE_MAX_ATTEMPTS=${KWAI_PROBE_MAX_ATTEMPTS:-1}
-KWAI_PROBE_TIMEOUT=${KWAI_PROBE_TIMEOUT:-28}
-KWAI_PROBE_MEMORY_MAX_BYTES=${KWAI_PROBE_MEMORY_MAX_BYTES:-340000000}
+KWAI_PROBE_TIMEOUT=${KWAI_PROBE_TIMEOUT:-45}
+KWAI_PROBE_MEMORY_MAX_BYTES=${KWAI_PROBE_MEMORY_MAX_BYTES:-300000000}
 
 log "supervisor active"
 while kill -0 "$API_PID" 2>/dev/null; do
@@ -269,7 +274,7 @@ while kill -0 "$API_PID" 2>/dev/null; do
     if (( KWAI_PROBE_DONE == 0 && KWAI_PROBE_ATTEMPTS < KWAI_PROBE_MAX_ATTEMPTS )); then
       CURRENT_MEMORY=$(memory_current_bytes)
       if (( CURRENT_MEMORY > 0 && CURRENT_MEMORY >= KWAI_PROBE_MEMORY_MAX_BYTES )); then
-        log "deferring Kwai runtime probe; memory=${CURRENT_MEMORY} limit=${KWAI_PROBE_MEMORY_MAX_BYTES}"
+        log "deferring Kwai runtime probe; anon_memory=${CURRENT_MEMORY} limit=${KWAI_PROBE_MEMORY_MAX_BYTES}"
       else
         KWAI_PROBE_ATTEMPTS=$((KWAI_PROBE_ATTEMPTS + 1))
         log "running bounded fail-closed Kwai runtime probe (${KWAI_PROBE_ATTEMPTS}/${KWAI_PROBE_MAX_ATTEMPTS})"
