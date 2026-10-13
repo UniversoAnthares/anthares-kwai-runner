@@ -1,5 +1,8 @@
 # Shared operational state
 
+**Mandatory video policy (2026-10-13):** Before any clip generation, upload, publication, or E2E test, read the canonical platform duration, shared-master and per-account daily quotas in [`UniversoAnthares/anthares-clipper/README.md`](https://github.com/UniversoAnthares/anthares-clipper/blob/main/README.md), section **Política obrigatória de distribuição**. Old durations and quotas are superseded. Keep independent queue, ledger, retry and confirmation for every `platform + account_id`. The policy is normative; do not claim runtime migrated without code verification.
+
+
 **Before running or changing any Anthares automation test, read [test-hub/README.md](test-hub/README.md) and [AGENTS.md](AGENTS.md). The append-only evidence ledger is [test-hub/findings/](test-hub/findings/).**
 
 # Anthares Kwai Runner
