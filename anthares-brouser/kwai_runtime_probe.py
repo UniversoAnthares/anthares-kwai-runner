@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""Bounded, fail-closed verification of the restored Kwai browser profile.
+
+The probe never exports cookies/tokens/storage. It blocks media and font payloads,
+stops navigation after a small bounded window, and reuses a single renderer so a
+512 MiB Render instance cannot be taken down by an unbounded creator-page load.
+"""
 import json
 import os
 import time
@@ -11,6 +17,14 @@ CDP_HTTP = f"http://127.0.0.1:{CDP_PORT}"
 EXPECTED = os.environ.get("KWAI_EXPECTED_ACCOUNT", "lucasrosalem").lstrip("@").lower()
 PROFILE_URL = f"https://www.kwai.com/@{EXPECTED}"
 STUDIO_URL = "https://studio.kwai.com/"
+NAV_TIMEOUT = float(os.environ.get("KWAI_PROBE_NAV_TIMEOUT", "8"))
+
+BLOCKED = [
+    "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.avif", "*.ico",
+    "*.mp4", "*.webm", "*.mov", "*.m3u8", "*.ts", "*.mp3", "*.aac",
+    "*.woff", "*.woff2", "*.ttf", "*.otf",
+    "*doubleclick*", "*google-analytics*", "*googletagmanager*",
+]
 
 
 def targets():
@@ -25,7 +39,7 @@ def page_target():
     raise RuntimeError("no_page_target")
 
 
-def cdp(ws, method, params=None, timeout=10):
+def cdp(ws, method, params=None, timeout=8):
     rid = int(time.time_ns() % 2_000_000_000)
     ws.send(json.dumps({"id": rid, "method": method, "params": params or {}}))
     deadline = time.monotonic() + timeout
@@ -40,29 +54,46 @@ def cdp(ws, method, params=None, timeout=10):
     raise RuntimeError(f"cdp_timeout:{method}")
 
 
-def evaluate(ws, expression):
+def evaluate(ws, expression, timeout=6):
     out = cdp(ws, "Runtime.evaluate", {
         "expression": expression,
         "awaitPromise": True,
         "returnByValue": True,
         "userGesture": True,
-    }, timeout=12)
+    }, timeout=timeout)
     if out.get("exceptionDetails"):
         raise RuntimeError("javascript_exception")
     return out.get("result", {}).get("value")
 
 
-def navigate(ws, url, settle=2.0):
-    cdp(ws, "Page.navigate", {"url": url}, timeout=10)
-    deadline = time.monotonic() + 15
-    while time.monotonic() < deadline:
+def compact(ws):
+    for method in ("HeapProfiler.collectGarbage", "Memory.forciblyPurgeJavaScriptMemory"):
         try:
-            if evaluate(ws, "document.readyState") in ("interactive", "complete"):
-                break
+            cdp(ws, method, timeout=2)
         except Exception:
             pass
-        time.sleep(0.25)
-    time.sleep(settle)
+
+
+def navigate_bounded(ws, url):
+    cdp(ws, "Page.navigate", {"url": url}, timeout=5)
+    deadline = time.monotonic() + NAV_TIMEOUT
+    last_host = ""
+    while time.monotonic() < deadline:
+        try:
+            state = evaluate(ws, "({host:location.hostname,ready:document.readyState})", timeout=2)
+            if isinstance(state, dict):
+                last_host = state.get("host") or last_host
+                if state.get("ready") in ("interactive", "complete"):
+                    break
+        except Exception:
+            pass
+        time.sleep(0.2)
+    try:
+        cdp(ws, "Page.stopLoading", timeout=2)
+    except Exception:
+        pass
+    time.sleep(0.45)
+    return last_host
 
 
 def main():
@@ -73,16 +104,23 @@ def main():
         "studio_upload_ready": False,
         "session_state": "unknown",
         "session_exported": False,
+        "bounded_navigation": True,
+        "media_blocked": True,
     }
     target = page_target()
     ws = websocket.create_connection(
         target["webSocketDebuggerUrl"], timeout=5, suppress_origin=True,
         http_no_proxy=["127.0.0.1", "localhost", "::1"],
     )
-    original = None
     try:
-        original = evaluate(ws, "location.href")
-        navigate(ws, PROFILE_URL, settle=2.5)
+        try:
+            cdp(ws, "Network.enable", timeout=3)
+            cdp(ws, "Network.setBlockedURLs", {"urls": BLOCKED}, timeout=3)
+            cdp(ws, "Page.enable", timeout=3)
+        except Exception:
+            result["network_block_setup_failed"] = True
+
+        navigate_bounded(ws, PROFILE_URL)
         profile = evaluate(ws, r'''(() => {
           const expected = ''' + json.dumps(EXPECTED) + r''';
           const visible = el => {
@@ -127,7 +165,12 @@ def main():
         result["identity_verified"] = identity
         result["session_state"] = "authenticated" if identity else ("unauthenticated" if profile.get("login_gate") else "unknown")
 
-        navigate(ws, STUDIO_URL, settle=3.0)
+        # Drop the heavy profile document before entering Studio.
+        navigate_bounded(ws, "about:blank")
+        compact(ws)
+        time.sleep(0.4)
+
+        navigate_bounded(ws, STUDIO_URL)
         studio = evaluate(ws, r'''(() => {
           const visible = el => {
             if (!el) return false;
@@ -167,10 +210,9 @@ def main():
         result["error_detail"] = str(exc)[:180]
     finally:
         try:
-            if isinstance(original, str) and original.startswith(("http://", "https://")):
-                navigate(ws, original, settle=0.5)
+            cdp(ws, "Network.setBlockedURLs", {"urls": []}, timeout=2)
         except Exception:
-            result["restore_original_failed"] = True
+            pass
         try:
             ws.close()
         except Exception:
