@@ -35,10 +35,7 @@ def _keys(refresh=False):
             if len(r.content) > 4096:
                 continue
             key = serialization.load_pem_public_key(r.content)
-            fp = key.public_bytes(
-                serialization.Encoding.DER,
-                serialization.PublicFormat.SubjectPublicKeyInfo,
-            )
+            fp = key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
             if fp not in seen:
                 seen.add(fp)
                 keys.append(key)
@@ -124,32 +121,34 @@ def _consume_oauth_token(kind, issuer, jti, exp):
         return False
     with store.connection() as conn:
         conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS ara_oauth_consumed(
+            """CREATE TABLE IF NOT EXISTS ara_oauth_consumed(
               kind TEXT NOT NULL,
               issuer TEXT NOT NULL,
               jti TEXT NOT NULL,
               expires_at TIMESTAMPTZ NOT NULL,
               consumed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
               PRIMARY KEY(kind,issuer,jti)
-            )
-            """
+            )"""
         )
         conn.execute("DELETE FROM ara_oauth_consumed WHERE expires_at <= now()")
         row = conn.execute(
-            """
-            INSERT INTO ara_oauth_consumed(kind,issuer,jti,expires_at)
+            """INSERT INTO ara_oauth_consumed(kind,issuer,jti,expires_at)
             VALUES(%s,%s,%s,to_timestamp(%s))
             ON CONFLICT DO NOTHING
-            RETURNING jti
-            """,
+            RETURNING jti""",
             (kind, issuer, jti, exp),
         ).fetchone()
         return row is not None
 
 
-def _execute(device, job_type, args, timeout):
-    job, _ = store.create_job(device, job_type, args or {}, timeout)
+def _execute(device, job_type, args, timeout, idempotency_key=None):
+    job, _ = store.create_job(
+        device,
+        job_type,
+        args or {},
+        timeout,
+        idempotency_key=(str(idempotency_key or "").strip() or None),
+    )
     deadline = time.time() + min(timeout + 8, 130)
     while time.time() < deadline:
         current = store.get_job(device, job["id"])
@@ -231,33 +230,22 @@ def register(app):
             device = str(body.get("device_id") or "").strip()
             job_type = str(body.get("type") or "").strip()
             timeout = max(1, min(int(body.get("timeout_seconds") or 30), 120))
+            idem = str(body.get("idempotency_key") or "").strip()
         except Exception:
             return jsonify(error="invalid_request"), 400
         if not device or not job_type:
             return jsonify(error="missing_device_id_or_type"), 400
-        job = _execute(device, job_type, body.get("args") or {}, timeout)
+        if len(idem) > 200:
+            return jsonify(error="idempotency_key_too_long"), 400
+        job = _execute(device, job_type, body.get("args") or {}, timeout, idem or None)
         if not job:
             return jsonify(error="job_lost"), 503
         status = job.get("status")
         if status == "uncertain":
-            return jsonify(
-                ok=False,
-                status=status,
-                job_id=job.get("id"),
-                error="execution_outcome_unknown",
-            ), 409
+            return jsonify(ok=False, status=status, job_id=job.get("id"), error="execution_outcome_unknown"), 409
         if status not in ("done", "failed"):
-            return jsonify(
-                ok=False,
-                status=status,
-                job_id=job.get("id"),
-                error="timeout_waiting_for_device",
-            ), 504
+            return jsonify(ok=False, status=status, job_id=job.get("id"), error="timeout_waiting_for_device"), 504
         result = job.get("result") or {}
-        # A completed remote operation may legitimately report ok=false (for example,
-        # a rejected path or non-zero command). That is an operation result, not a
-        # control-plane failure. Keep transport HTTP 200 so clients receive the
-        # structured outcome; reserve 5xx for infrastructure failures above.
         return jsonify(
             ok=bool(result.get("ok")),
             status=status,
