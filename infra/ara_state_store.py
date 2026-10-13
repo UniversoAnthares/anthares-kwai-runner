@@ -63,6 +63,8 @@ class MemoryStore:
                     if row["device_id"] == device_id and row.get("idempotency_key") == idempotency_key:
                         return copy.deepcopy(row)
             jid = job_id or uuid.uuid4().hex
+            if jid in self._jobs:
+                raise RuntimeError("ARA job id collision")
             row = {
                 "id": jid,
                 "device_id": device_id,
