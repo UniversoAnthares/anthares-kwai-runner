@@ -1,14 +1,18 @@
-# Isolated Northflank build for the legacy Go ARA control API.
-# This controller currently keeps jobs in memory: do not promote as durable failover.
-FROM golang:1.24-alpine AS build
-WORKDIR /src
-COPY anthares-remote-agent/cmd/control/main.go ./main.go
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/ara-control ./main.go
+FROM python:3.12-slim
 
-FROM alpine:3.21
-RUN apk add --no-cache ca-certificates && addgroup -S ara && adduser -S -G ara ara
-COPY --from=build /out/ara-control /usr/local/bin/ara-control
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PORT=10000
+
+RUN pip install --no-cache-dir flask requests "psycopg[binary]" gunicorn \
+    && useradd --create-home --uid 10001 ara
+
+COPY infra/ /app/
+RUN chown -R ara:ara /app
+
 USER ara
-ENV PORT=10000
 EXPOSE 10000
-CMD ["/usr/local/bin/ara-control"]
+
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 4 --timeout 180 ara_canary_app:app"]
