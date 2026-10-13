@@ -64,11 +64,12 @@ func main() {
 	}
 	fmt.Printf("Anthares Remote Agent starting device=%s os=%s/%s concurrency=%d\n", cfg.DeviceID, runtime.GOOS, runtime.GOARCH, cfg.MaxConcurrent)
 	go heartbeatLoop(cfg)
-	// Replay previously persisted results before leasing new work.
+	// A transient control-plane outage must not terminate the agent. Keep any
+	// encrypted pending results on disk and retry them while the process stays up.
 	if err := replayEncryptedResults(cfg); err != nil {
-		fmt.Fprintln(os.Stderr, "pending result replay error:", err)
-		os.Exit(1)
+		fmt.Fprintln(os.Stderr, "pending result replay deferred:", err)
 	}
+	go resultReplayLoop(cfg)
 
 	sem := make(chan struct{}, cfg.MaxConcurrent)
 	for {
@@ -105,13 +106,13 @@ func main() {
 				os.Exit(1)
 			}
 			if err := postResultRetry(cfg, result); err != nil {
-				// Keep the encrypted pending file for replay on next start.
-				fmt.Fprintf(os.Stderr, "fatal result upload error job=%s: %v\n", result.ID, err)
-				os.Exit(1)
+				// Keep the encrypted pending file and retry it in the background.
+				fmt.Fprintf(os.Stderr, "result upload deferred job=%s: %v\n", result.ID, err)
+				return
 			}
 			if err := os.Remove(filepath.Join(resultSpoolDir(cfg), result.ID+".pending")); err != nil {
-				fmt.Fprintf(os.Stderr, "fatal result cleanup error job=%s: %v\n", result.ID, err)
-				os.Exit(1)
+				// Replaying an acknowledged result is idempotent at the control plane.
+				fmt.Fprintf(os.Stderr, "result cleanup deferred job=%s: %v\n", result.ID, err)
 			}
 		}()
 	}
@@ -151,7 +152,7 @@ func loadConfig() (Config, error) {
 func authReq(req *http.Request, cfg Config) {
 	req.Header.Set("Authorization", "Bearer "+cfg.DeviceToken)
 	req.Header.Set("X-Anthares-Device", cfg.DeviceID)
-	req.Header.Set("User-Agent", "AntharesRemoteAgent/0.3")
+	req.Header.Set("User-Agent", "AntharesRemoteAgent/0.3.1")
 }
 
 func heartbeatLoop(cfg Config) {
@@ -163,8 +164,18 @@ func heartbeatLoop(cfg Config) {
 	}
 }
 
+func resultReplayLoop(cfg Config) {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		if err := replayEncryptedResults(cfg); err != nil {
+			fmt.Fprintln(os.Stderr, "pending result replay deferred:", err)
+		}
+	}
+}
+
 func heartbeat(cfg Config) error {
-	body, _ := json.Marshal(map[string]any{"device_id": cfg.DeviceID, "hostname": hostname(), "os": runtime.GOOS, "arch": runtime.GOARCH, "version": "0.3.0", "time": time.Now().UTC().Format(time.RFC3339)})
+	body, _ := json.Marshal(map[string]any{"device_id": cfg.DeviceID, "hostname": hostname(), "os": runtime.GOOS, "arch": runtime.GOARCH, "version": "0.3.1", "time": time.Now().UTC().Format(time.RFC3339)})
 	req, _ := http.NewRequest(http.MethodPost, cfg.ControlURL+"/v1/device/heartbeat", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	authReq(req, cfg)
