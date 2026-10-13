@@ -120,7 +120,7 @@ class MemoryStore:
             row = self._jobs.get(job_id)
             if not row or row["device_id"] != device_id:
                 return None
-            if row["status"] in FINAL:
+            if row["status"] in FINAL or row["status"] == "queued":
                 return copy.deepcopy(row)
             row["result"] = copy.deepcopy(result or {})
             row["status"] = "done" if bool((result or {}).get("ok")) else "failed"
@@ -288,7 +288,7 @@ class PostgresStore:
             if not found:
                 c.commit()
                 return None
-            if found[0] in FINAL:
+            if found[0] in FINAL or found[0] == "queued":
                 cur.execute("SELECT * FROM ara_jobs WHERE id=%s", (job_id,))
             else:
                 status = "done" if bool((result or {}).get("ok")) else "failed"
