@@ -30,9 +30,9 @@ if n != 1 and "async function ownerCodeOk" not in s:
     raise SystemExit(f"approval helper patch count={n}")
 
 health_pattern = r" if\(req\.method==='GET'&&\(u\.pathname==='/'\|\|u\.pathname==='/health'\)\)\{.*?\n if\(req\.method==='GET'&&u\.pathname==='\/\.well-known\/ara-control-key'\)"
-health_repl = """ if(req.method==='GET'&&(u.pathname==='/'||u.pathname==='/health')){await st(env).ensure();let controlReady=false,connected=false;try{const s=await status(env,DEFAULT_DEVICE);controlReady=true;connected=!!s.connected;}catch{}const pinned=!!(await st(env).pinnedClient());return json({ok:controlReady,service:'anthares-ara-mcp',provider:'cloudflare',render_independent:true,control:CONTROL,control_ready:controlReady,device_connected:connected,oauth:true,mcp:true,oauth_owner_code_mode:'email_setup_code',oauth_client_pinned:pinned},controlReady?200:503);}\n if(req.method==='GET'&&u.pathname==='/.well-known/ara-control-key')"""
+health_repl = """ if(req.method==='GET'&&(u.pathname==='/'||u.pathname==='/health')){await st(env).ensure();let controlReady=false,connected=false;try{const s=await status(env,DEFAULT_DEVICE);controlReady=true;connected=!!s.connected;}catch{}const pinned=!!(await st(env).pinnedClient());return json({ok:controlReady,service:'anthares-ara-mcp',provider:'cloudflare',render_independent:true,control:CONTROL,control_ready:controlReady,device_connected:connected,oauth:true,mcp:true,oauth_owner_code_mode:'chat_setup_code',oauth_client_pinned:pinned},controlReady?200:503);}\n if(req.method==='GET'&&u.pathname==='/.well-known/ara-control-key')"""
 s, n = re.subn(health_pattern, health_repl, s, count=1, flags=re.S)
-if n != 1 and "oauth_owner_code_mode:'email_setup_code'" not in s:
+if n != 1 and "oauth_owner_code_mode:'chat_setup_code'" not in s:
     raise SystemExit(f"health patch count={n}")
 
 get_pattern = r" if\(req\.method==='GET'&&u\.pathname==='/oauth/authorize'\)\{.*?\n if\(req\.method==='POST'&&u\.pathname==='/oauth/authorize'\)"
@@ -54,7 +54,7 @@ required = [
     "OWNER_APPROVAL_HASH=",
     "async pinnedClient()",
     "async function ownerCodeOk",
-    "oauth_owner_code_mode:'email_setup_code'",
+    "oauth_owner_code_mode:'chat_setup_code'",
     "authorization_replayed",
     "await clientAllowed(env,cid)",
 ]
