@@ -87,7 +87,9 @@ class MemoryStore:
             if row["device_id"] != device_id or row["status"] in FINAL or row["status"] == "uncertain":
                 continue
             if now >= row["expires_epoch"]:
-                row["status"] = "expired"
+                # Side-effecting work already leased may have executed; never
+                # report it as safely expired or replay it after a restart.
+                row["status"] = "uncertain" if row["status"] == "leased" and not is_safe_retry(row["type"]) else "expired"
                 row["lease_until"] = None
                 continue
             if row["status"] == "leased" and row.get("lease_until") and now >= row["lease_until"]:
@@ -239,9 +241,11 @@ class PostgresStore:
     def _reap(self, cur, device_id):
         safe = list(SAFE_RETRY_TYPES)
         cur.execute(
-            """UPDATE ara_jobs SET status='expired', lease_until=NULL
+            """UPDATE ara_jobs SET status=CASE
+                 WHEN status='leased' AND NOT (type=ANY(%s)) THEN 'uncertain'
+                 ELSE 'expired' END, lease_until=NULL
                WHERE device_id=%s AND status IN ('queued','leased') AND expires_at<=now()""",
-            (device_id,),
+            (safe, device_id),
         )
         cur.execute(
             """UPDATE ara_jobs SET status='queued', lease_until=NULL
