@@ -61,3 +61,10 @@ The active `feature/ara-infra` implementation of `wait_for_job()` already treats
 ## Proof boundary
 
 Anthares-browser runtime/control path is now independently proven on Render. The complete 40-case Docker/profile-restart proof remains pending on the isolated CircleCI job. Do not conflate either result with Kwai authentication or publication. No social publication occurred in this work.
+
+## Recheck — 2026-10-12 22:16 -04:00
+
+- CircleCI isolated proof `a69a038a37d56c2d231e37eb52ea1d1f502d5edd`: GitHub combined status now reports `failure` for `ci/circleci: anthares_browser_qa` (workflow `515cbf1c-5291-4ced-805a-be88021bf3cc`, job `ee3f41d2-8242-4f47-bfd3-64f506209d45`). The previous `pending` statement above is superseded. CircleCI job logs are not accessible through the current GitHub connector or public page, so root cause is **not established**; do not claim 40-case pass or apply speculative fixes. Obtain failing step/log before modifying QA or spawning another run.
+- Render `anthares-browser-qa-render-v2` service and deployment independently rechecked: service active/not suspended, latest deploy `dep-db6oou59fdbs73do9u70` status `live`, commit `783538b3afff863062c3edc75888bad47d8bd308`, auto-deploy disabled. This is the earlier runtime proof, not proof of newer main changes.
+- Main has since received authenticated noVNC gateway commit `7a38477e24d0b83453431f6f5e1245182842d475` (23 tests reported by commit message) and router fail-closed commit `3d3b9886f481fc1c20090266d7b5dbcc8934b94a` (15 tests reported by commit message). Neither commit is contained in the isolated Circle proof SHA or the Render deploy SHA; these claims need independent CI/runtime verification.
+- A separate coordination-evidence lease is active until `2026-10-13T02:30:00Z`; do not overwrite that agent's coordination target. No publication/scheduler change.
