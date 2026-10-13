@@ -24,15 +24,24 @@ _KEY_CACHE = {"key": None, "at": 0.0, "source": ""}
 _REPLAY = {}
 
 
-def _public_key():
+def _clear_key_cache():
+    with _LOCK:
+        _KEY_CACHE["key"] = None
+        _KEY_CACHE["at"] = 0.0
+        _KEY_CACHE["source"] = ""
+
+
+def _public_key(force_refresh=False):
     now = time.time()
+    if force_refresh:
+        _clear_key_cache()
     with _LOCK:
         if _KEY_CACHE["key"] is not None and now - _KEY_CACHE["at"] < _KEY_TTL:
             return _KEY_CACHE["key"]
     last = None
     for url in _KEY_URLS:
         try:
-            r = requests.get(url, timeout=6, headers={"User-Agent": "AntharesRemoteControl/0.6"})
+            r = requests.get(url, timeout=6, headers={"User-Agent": "AntharesRemoteControl/0.7"})
             r.raise_for_status()
             raw = r.content
             if len(raw) > 4096:
@@ -88,7 +97,13 @@ def _verify():
             return False, b""
     payload = (ts + "\n" + request.method.upper() + "\n" + _canonical_path() + "\n").encode("utf-8") + raw
     try:
-        _public_key().verify(signature, payload)
+        key = _public_key()
+        try:
+            key.verify(signature, payload)
+        except InvalidSignature:
+            # MCP uses an ephemeral Ed25519 service key. A deploy/restart rotates it;
+            # refresh immediately instead of leaving the gateway degraded for TTL seconds.
+            _public_key(force_refresh=True).verify(signature, payload)
     except (InvalidSignature, ValueError, TypeError, requests.RequestException):
         return False, b""
     with _LOCK:
@@ -158,9 +173,10 @@ def register(app):
             return jsonify(error="unauthorized"), 401
         return jsonify(
             ok=True,
-            protocol="anthares-remote-agent/0.6",
+            protocol="anthares-remote-agent/0.7",
             auth="ed25519-service-signature",
             replay_protection=True,
+            rotating_service_key_refresh=True,
             capabilities=[
                 "status", "system_info", "shell", "process_list", "process_start", "process_kill",
                 "service_status", "service_start", "service_stop", "clipboard_get", "clipboard_set",
