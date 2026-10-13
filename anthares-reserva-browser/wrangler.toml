@@ -1,4 +1,5 @@
 name = "anthares-reserva-browser"
+account_id = "5c24be052e5144391f73a8e03491e88e"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
@@ -6,5 +7,15 @@ compatibility_flags = ["nodejs_compat"]
 [browser]
 binding = "BROWSER"
 
+[[durable_objects.bindings]]
+name = "BROWSER_STATE"
+class_name = "BrowserState"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BrowserState"]
+
 # Required secret: ANTHARES_RESERVA_TOKEN.
-# Free Browser Run allowance is an on-demand emergency path, not 24h Chromium.
+# It authenticates the machine API and derives encryption/session keys. The
+# owner web UI additionally requires the pre-existing Anthares owner code.
+# Workers Free Browser Run is used on demand and closed immediately after save.
