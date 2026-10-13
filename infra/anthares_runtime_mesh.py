@@ -1,9 +1,10 @@
 """Unified Anthares runtime surface.
 
-Anthares-control remains the authority for global routing. This module joins the
-persistent Anthares Remote relay and the isolated Anthares-browser behind one
-fail-closed API. Browser mutations are fenced by a local lease generation so a
-stale executor cannot touch a profile after failover.
+Anthares-control remains the authority for global routing and operation leases.
+This module joins the persistent Anthares Remote relay and the isolated
+Anthares-browser behind one fail-closed API. The browser session lease below is
+only a local execution fence protecting one Chromium profile; it is subordinate
+to the global anthares-control lease and never becomes a second control plane.
 """
 from __future__ import annotations
 
@@ -55,7 +56,8 @@ def _browser_ready() -> dict[str, Any]:
             "configured": True,
             "healthy": bool(r.ok and body.get("ok") and body.get("cdp_ready")),
             "status": r.status_code,
-            "detail": body,
+            "cdp_ready": bool(body.get("cdp_ready")),
+            "chromium_running": bool(body.get("chromium_running")),
         }
     except Exception as exc:
         return {"configured": True, "healthy": False, "error": type(exc).__name__}
@@ -73,6 +75,7 @@ def _lease_snapshot() -> dict[str, Any]:
             "owner": _BROWSER_LEASE["owner"] if active else None,
             "generation": int(_BROWSER_LEASE["generation"]),
             "expires_at": _BROWSER_LEASE["expires_at"] if active else None,
+            "scope": "local_browser_profile_fence",
         }
 
 
@@ -157,7 +160,8 @@ def register(app):
             ok=True,
             service="anthares-runtime-mesh",
             control_authority="anthares-control/cloudflare",
-            remote={"device_id": device, "connected": bool(heartbeat), "heartbeat": heartbeat},
+            global_lease_authority="anthares-control/cloudflare",
+            remote={"device_id": device, "connected": bool(heartbeat)},
             browser=_browser_ready(),
             browser_lease=_lease_snapshot(),
             host_desktop_fallback=False,
@@ -206,7 +210,7 @@ def register(app):
                 _BROWSER_LEASE["token"] = secrets.token_urlsafe(32)
                 _BROWSER_LEASE["owner"] = owner
             _BROWSER_LEASE["expires_at"] = _now() + ttl
-            return jsonify(ok=True, token=_BROWSER_LEASE["token"], generation=_BROWSER_LEASE["generation"], expires_at=_BROWSER_LEASE["expires_at"])
+            return jsonify(ok=True, token=_BROWSER_LEASE["token"], generation=_BROWSER_LEASE["generation"], expires_at=_BROWSER_LEASE["expires_at"], scope="local_browser_profile_fence")
 
     @app.post("/v1/runtime/browser/lease/renew")
     def browser_lease_renew():
