@@ -24,26 +24,31 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Validate required secrets without exposing them
+      - name: Validate Cloudflare deployment credential
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
         run: |
           set -euo pipefail
           test -n "$CF_TOKEN" || { echo 'CLOUDFLARE_API_TOKEN missing'; exit 10; }
-          test -n "$RESERVA_TOKEN" || { echo 'ANTHARES_RESERVA_TOKEN missing'; exit 11; }
       - name: Install dependencies
         working-directory: anthares-reserva-browser
         run: npm install --ignore-scripts
       - name: Static validation
         working-directory: anthares-reserva-browser
         run: npm run check
-      - name: Configure Worker access secret
+      - name: Refresh Worker access secret when provisioned in Actions
         working-directory: anthares-reserva-browser
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
-        run: printf '%s' "$ANTHARES_RESERVA_TOKEN" | npx wrangler secret put ANTHARES_RESERVA_TOKEN
+        run: |
+          set -euo pipefail
+          if [ -n "${ANTHARES_RESERVA_TOKEN:-}" ]; then
+            printf '%s' "$ANTHARES_RESERVA_TOKEN" | npx wrangler secret put ANTHARES_RESERVA_TOKEN
+            echo 'Reserve access secret refreshed from GitHub Actions.'
+          else
+            echo 'ANTHARES_RESERVA_TOKEN is not stored in GitHub Actions; preserving the existing Cloudflare Worker secret.'
+          fi
       - name: Deploy reserve browser
         working-directory: anthares-reserva-browser
         env:
@@ -70,11 +75,15 @@ jobs:
             test "$attempt" -lt 12 || exit 21
             sleep 5
           done
-      - name: Verify authenticated status without exposing token
+      - name: Verify authenticated status when Actions owns the secret
         env:
           ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -z "${ANTHARES_RESERVA_TOKEN:-}" ]; then
+            echo 'Authenticated status check skipped: token remains Cloudflare-only.'
+            exit 0
+          fi
           curl -fsS --max-time 10 \
             -H "Authorization: Bearer $ANTHARES_RESERVA_TOKEN" \
             https://anthares-reserva-browser.anthares1.workers.dev/status \
