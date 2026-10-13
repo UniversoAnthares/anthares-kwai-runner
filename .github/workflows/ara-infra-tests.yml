@@ -58,7 +58,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install test dependencies
-        run: pip install flask 'psycopg[binary]'
+        run: pip install flask requests 'psycopg[binary]'
       - name: Run durability and security tests
         run: >-
           python -m unittest -v
