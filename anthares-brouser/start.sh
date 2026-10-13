@@ -172,7 +172,7 @@ start_xvfb
 start_vnc
 start_novnc
 if [[ "${GITLAB_STATE_ENABLED:-0}" == "1" ]]; then
-  python /opt/anthares-brouser/profile_store.py restore || log "encrypted snapshot restore failed; refusing to start with empty profile"
+  python /opt/anthares-brouser/profile_store.py restore || { log "encrypted snapshot restore failed; refusing to start"; exit 1; }
 fi
 start_chromium
 
