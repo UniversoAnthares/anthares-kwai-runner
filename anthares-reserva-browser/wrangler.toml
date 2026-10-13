@@ -1,0 +1,10 @@
+name = "anthares-reserva-browser"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[browser]
+binding = "BROWSER"
+
+# Required secret: ANTHARES_RESERVA_TOKEN.
+# Free Browser Run allowance is an on-demand emergency path, not 24h Chromium.
