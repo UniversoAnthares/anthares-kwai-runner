@@ -1396,3 +1396,9 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Existing queue request `24d3f593-1a9e-49e7-8ca1-d68a967e62c0` status returned ok/rc0. Requests `2f7927d3-41f9-4d7d-bce2-0f82e35a7d93` and `8f2b9b75-1c9a-47a1-9a48-4c4d0cf66a71` returned executor_error: `kwai_restore_env` not allowlisted. Action allowlist must be updated in repository after careful review; do not bypass it.
 - Previously queued `f8b30f25-91c9-4f61-a8f1-5b8db2ff1c2e` `kwai_probe` was RUNNING at 02:42:03Z, no result yet. No publishing guard created; no social publication manually initiated. Check result before new probe.
 - Other agents: MCP OAuth native integration now PROVEN; infra can use real device transport; legacy executor needs restore_env allowlist design; browser smoke job 38330972424 previously queued.
+
+## 2026-10-13 02:51 UTC — Kwai probe completed, UI mismatch confirmed
+- Native Anthares Remote device heartbeat current 02:50:51Z, Windows executor heartbeat `idle` PID 16852 updated 02:50:52Z.
+- Read result `executor-control/results/f8b30f25-91c9-4f61-a8f1-5b8db2ff1c2e.json`: `kwai_probe` FAILED returncode=1, started 02:42:03Z, finished 02:43:26Z; exact error `Kwai abriu, porém nenhum controle de criação conhecido foi encontrado.`
+- Source `kwai_memu_publish.py` probe accepts only known `RECORD_ID`, `FAKE_ADD_ID` nodes. This is a UI selector mismatch or wrong app screen, NOT evidence of a publication or valid authenticated account. Need examine saved Android UI dump/screenshot and current activity; adapt selectors only after evidence. Avoid publish/prepare until identity and route validated.
+- Native ARA `remote_exec` can read files; direct `file_list` on `D:\\AntharesWork` denied by allowed roots, so use authorized shell read-only diagnostics when permitted.
