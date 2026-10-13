@@ -1,0 +1,40 @@
+name: ARA Cloudflare independent watchdog
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ara-cloudflare-watchdog
+  cancel-in-progress: true
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check independent ARA control without issuing jobs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, time, urllib.request, urllib.error
+          endpoints = [
+              ("cloudflare", "https://anthares-ara-backup.anthares1.workers.dev/healthz"),
+              ("render-primary", "https://anthares-ara-control.onrender.com/healthz"),
+              ("render-canary", "https://anthares-ara-infra-canary-v2.onrender.com/healthz"),
+          ]
+          results = {}
+          for name, url in endpoints:
+              try:
+                  req = urllib.request.Request(url, headers={"User-Agent":"Anthares-ARA-Watchdog/1"})
+                  with urllib.request.urlopen(req, timeout=9) as response:
+                      results[name] = {"ok":200 <= response.status < 300, "status":response.status}
+              except Exception as exc:
+                  results[name] = {"ok":False, "error":type(exc).__name__}
+          print(json.dumps(results, sort_keys=True))
+          # Render quota exhaustion is expected; only independent Cloudflare
+          # is required. Never auto-promote another controller or replay jobs.
+          if not results["cloudflare"]["ok"]:
+              raise SystemExit("ARA_CLOUDFLARE_UNAVAILABLE: investigate before failover")
+          print("ARA_CLOUDFLARE_HEALTH=PASS")
+          PY
