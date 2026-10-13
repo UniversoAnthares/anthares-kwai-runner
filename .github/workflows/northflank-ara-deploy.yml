@@ -1,0 +1,69 @@
+name: Provision isolated ARA Northflank controller
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/northflank-ara-deploy.yml
+permissions:
+  contents: read
+concurrency:
+  group: northflank-ara-provision
+  cancel-in-progress: false
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - name: Check credentials and provision isolated service
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, secrets, sys, urllib.request, urllib.error
+          token=os.getenv("NORTHFLANK_API_TOKEN","")
+          if not token:
+              sys.exit("NORTHFLANK_API_TOKEN secret is absent")
+          base="https://api.northflank.com/v1"
+          def api(method,path,data=None):
+              body=json.dumps(data).encode() if data is not None else None
+              req=urllib.request.Request(base+path, data=body, method=method,
+                  headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"})
+              try:
+                  with urllib.request.urlopen(req,timeout=35) as r:
+                      return json.load(r)
+              except urllib.error.HTTPError as e:
+                  print("Northflank HTTP",e.code,"at",path)
+                  print(e.read().decode()[:1500])
+                  sys.exit(1)
+          projects=api("GET","/projects")
+          entries=projects.get("data",{}).get("projects",[])
+          if isinstance(entries,dict): entries=list(entries.values())
+          matches=[p for p in entries if p.get("name")=="Default"]
+          if len(matches)!=1:
+              sys.exit("Expected exactly one project named Default; found "+str(len(matches)))
+          project=matches[0].get("id")
+          print("Selected Northflank project:",project)
+          existing=api("GET",f"/projects/{project}/services")
+          services=existing.get("data",{}).get("services",[])
+          if isinstance(services,dict): services=list(services.values())
+          if any(s.get("name")=="anthares-ara-northflank" for s in services):
+              print("Service already exists; no duplicate created.")
+              sys.exit(0)
+          # Isolated service only; generated tokens deliberately differ from existing controllers.
+          payload={
+              "name":"anthares-ara-northflank",
+              "description":"Isolated ARA controller canary; in-memory state, not production failover",
+              "billing":{"deploymentPlan":"nf-compute-10"},
+              "deployment":{"instances":1,"docker":{"configType":"default"}},
+              "ports":[{"name":"http","internalPort":10000,"public":True,"protocol":"HTTP"}],
+              "buildSource":"git",
+              "vcsData":{"projectUrl":"https://github.com/UniversoAnthares/anthares-kwai-runner","projectType":"github","projectBranch":"main"},
+              "buildSettings":{"dockerfile":{"buildEngine":"buildkit","dockerFilePath":"/infra/northflank/Dockerfile","dockerWorkDir":"/"}},
+              "runtimeEnvironment":{"PORT":"10000","DEVICE_TOKEN":secrets.token_urlsafe(48),"CONTROL_TOKEN":secrets.token_urlsafe(48)},
+              "disabledCI":True
+          }
+          created=api("POST",f"/projects/{project}/services/combined",payload)
+          print("Created isolated Northflank service:",created.get("data",{}).get("id","unknown"))
+          print("Controller remains isolated; no production failover changes.")
+          PY
