@@ -1,0 +1,156 @@
+name: Anthares-browser Cloud Fallback
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: qa or login
+        required: true
+        default: qa
+        type: choice
+        options: [qa, login]
+      keep_minutes:
+        description: Interactive login window, max 45
+        required: false
+        default: '20'
+  schedule:
+    - cron: '37 */6 * * *'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: anthares-browser-cloud-fallback
+  cancel-in-progress: false
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      PROFILE_DIR: /tmp/anthares-browser-data
+      PROFILE_ARTIFACT: anthares-browser-profile-encrypted
+      STATE_KEY: ${{ secrets.ANTHARES_BROWSER_STATE_KEY }}
+      VNC_SECRET: ${{ secrets.ANTHARES_BROWSER_VNC_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare isolated profile directory
+        shell: bash
+        run: mkdir -p "$PROFILE_DIR/chrome-profile"
+
+      - name: Restore latest encrypted profile when configured
+        if: ${{ env.STATE_KEY != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${PROFILE_ARTIFACT}&per_page=20" --jq '.artifacts | map(select(.expired==false)) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          if [ -n "$id" ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > /tmp/profile.zip
+            unzip -q /tmp/profile.zip -d /tmp/profile-artifact
+            if [ -s /tmp/profile-artifact/profile.tgz.enc ]; then
+              openssl enc -d -aes-256-cbc -pbkdf2 -salt -pass env:STATE_KEY -in /tmp/profile-artifact/profile.tgz.enc -out /tmp/profile.tgz
+              tar -xzf /tmp/profile.tgz -C "$PROFILE_DIR"
+              echo PROFILE_RESTORED=1
+            fi
+          fi
+
+      - name: Generate per-run control credentials
+        id: creds
+        shell: bash
+        run: |
+          set -euo pipefail
+          control="$(openssl rand -hex 32)"
+          if [ -n "$VNC_SECRET" ]; then vnc="$VNC_SECRET"; else vnc="$(openssl rand -hex 12)"; fi
+          echo "control=$control" >> "$GITHUB_OUTPUT"
+          echo "vnc=$vnc" >> "$GITHUB_OUTPUT"
+
+      - name: Build Anthares-browser
+        run: docker build -t anthares-browser ./anthares-brouser
+
+      - name: Start isolated Anthares-browser
+        env:
+          CONTROL: ${{ steps.creds.outputs.control }}
+          VNC: ${{ steps.creds.outputs.vnc }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name anthares-browser \
+            -e CONTROL_TOKEN="$CONTROL" \
+            -e VNC_PASSWORD="$VNC" \
+            -v "$PROFILE_DIR:/data" \
+            -p 127.0.0.1:18080:8080 \
+            -p 127.0.0.1:16080:6080 \
+            anthares-browser
+          for i in $(seq 1 75); do
+            curl -fsS http://127.0.0.1:18080/health | grep -q '"cdp_ready":true' && exit 0
+            sleep 1
+          done
+          docker logs anthares-browser
+          exit 1
+
+      - name: Prove browser API and isolation
+        env:
+          CONTROL: ${{ steps.creds.outputs.control }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS http://127.0.0.1:18080/health | tee /tmp/health.json
+          grep -q '"cdp_ready":true' /tmp/health.json
+          curl -fsS -H "Authorization: Bearer $CONTROL" http://127.0.0.1:18080/status | tee /tmp/status.json
+          grep -q '"cdp_bind":"127.0.0.1"' /tmp/status.json
+          ! docker port anthares-browser | grep -q 9222
+          echo HOST_DESKTOP_FALLBACK=FALSE
+
+      - name: Open temporary noVNC tunnel for legitimate manual login
+        if: ${{ inputs.mode == 'login' }}
+        env:
+          KEEP: ${{ inputs.keep_minutes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$VNC_SECRET" ]; then
+            echo 'ANTHARES_BROWSER_VNC_PASSWORD secret is required for login mode' >&2
+            exit 2
+          fi
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+          chmod +x /tmp/cloudflared
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:16080 > /tmp/tunnel.log 2>&1 &
+          for i in $(seq 1 60); do
+            url="$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log | tail -1 || true)"
+            if [ -n "$url" ]; then
+              echo "NOVNC_URL=${url}/vnc.html?autoconnect=true&resize=scale"
+              break
+            fi
+            sleep 1
+          done
+          minutes="$KEEP"; [ "$minutes" -gt 45 ] && minutes=45; [ "$minutes" -lt 1 ] && minutes=1
+          sleep "$((minutes*60))"
+
+      - name: Seal profile snapshot
+        if: ${{ always() && env.STATE_KEY != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker stop anthares-browser >/dev/null 2>&1 || true
+          tar -czf /tmp/profile.tgz -C "$PROFILE_DIR" chrome-profile
+          openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:STATE_KEY -in /tmp/profile.tgz -out /tmp/profile.tgz.enc
+          rm -f /tmp/profile.tgz
+
+      - name: Persist encrypted browser profile
+        if: ${{ always() && env.STATE_KEY != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: anthares-browser-profile-encrypted
+          path: /tmp/profile.tgz.enc
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f anthares-browser >/dev/null 2>&1 || true
+          rm -rf /tmp/profile.tgz /tmp/profile.zip /tmp/profile-artifact "$PROFILE_DIR"
