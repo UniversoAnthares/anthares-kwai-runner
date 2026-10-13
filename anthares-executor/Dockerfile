@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends chromium ca-cer
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY executor.py controller_client.py profile_store.py kwai_probe.py ./
+COPY executor.py controller_client.py profile_store.py kwai_probe.py handoff_import.py ./
 RUN useradd -m -u 10001 anthares && mkdir -p /data/profile /data/state && chown -R anthares:anthares /data /app
 USER anthares
 EXPOSE 8080
