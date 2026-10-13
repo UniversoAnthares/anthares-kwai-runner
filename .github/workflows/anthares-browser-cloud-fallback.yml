@@ -31,6 +31,8 @@ jobs:
     env:
       PROFILE_DIR: /tmp/anthares-browser-data
       PROFILE_ARTIFACT: anthares-browser-profile-encrypted
+      STATE_KEY: ${{ secrets.ANTHARES_BROWSER_STATE_KEY }}
+      VNC_SECRET: ${{ secrets.ANTHARES_BROWSER_VNC_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,10 +41,9 @@ jobs:
         run: mkdir -p "$PROFILE_DIR/chrome-profile"
 
       - name: Restore latest encrypted profile when configured
-        if: ${{ secrets.ANTHARES_BROWSER_STATE_KEY != '' }}
+        if: ${{ env.STATE_KEY != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          STATE_KEY: ${{ secrets.ANTHARES_BROWSER_STATE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -64,11 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           control="$(openssl rand -hex 32)"
-          if [ -n "${{ secrets.ANTHARES_BROWSER_VNC_PASSWORD }}" ]; then
-            vnc='${{ secrets.ANTHARES_BROWSER_VNC_PASSWORD }}'
-          else
-            vnc="$(openssl rand -hex 12)"
-          fi
+          if [ -n "$VNC_SECRET" ]; then vnc="$VNC_SECRET"; else vnc="$(openssl rand -hex 12)"; fi
           echo "control=$control" >> "$GITHUB_OUTPUT"
           echo "vnc=$vnc" >> "$GITHUB_OUTPUT"
 
@@ -116,7 +113,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${{ secrets.ANTHARES_BROWSER_VNC_PASSWORD }}" ]; then
+          if [ -z "$VNC_SECRET" ]; then
             echo 'ANTHARES_BROWSER_VNC_PASSWORD secret is required for login mode' >&2
             exit 2
           fi
@@ -135,9 +132,7 @@ jobs:
           sleep "$((minutes*60))"
 
       - name: Seal profile snapshot
-        if: ${{ always() && secrets.ANTHARES_BROWSER_STATE_KEY != '' }}
-        env:
-          STATE_KEY: ${{ secrets.ANTHARES_BROWSER_STATE_KEY }}
+        if: ${{ always() && env.STATE_KEY != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -147,7 +142,7 @@ jobs:
           rm -f /tmp/profile.tgz
 
       - name: Persist encrypted browser profile
-        if: ${{ always() && secrets.ANTHARES_BROWSER_STATE_KEY != '' }}
+        if: ${{ always() && env.STATE_KEY != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: anthares-browser-profile-encrypted
