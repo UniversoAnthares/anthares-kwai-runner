@@ -1,6 +1,15 @@
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createPrivateKey, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
 
-const pair = generateKeyPairSync('ed25519');
+function loadPair() {
+  const encoded = process.env.ARA_CONTROL_PRIVATE_KEY_B64 || '';
+  if (encoded) {
+    const privateKey = createPrivateKey({ key: Buffer.from(encoded, 'base64'), format: 'der', type: 'pkcs8' });
+    return { privateKey, publicKey: createPublicKey(privateKey) };
+  }
+  return generateKeyPairSync('ed25519');
+}
+
+const pair = loadPair();
 const publicPem = pair.publicKey.export({ type: 'spki', format: 'pem' });
 
 export function servicePublicKey() {
