@@ -1,0 +1,95 @@
+name: Anthares Remote Agent install self-hosted
+
+on:
+  push:
+    branches:
+      - feature/anthares-remote-agent
+    paths:
+      - .github/workflows/anthares-remote-agent-install-selfhosted.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  install:
+    runs-on: self-hosted
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download proven Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: anthares-remote-agent-windows-amd64
+          path: ara-staging
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38314484330
+
+      - name: Install and enroll agent
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $expected = '9d4c661ca59937d4c7f9f68c6b928c7815a66b2ba3b632f525da41cfe7c6dd08'
+          $source = Join-Path $PWD 'ara-staging\anthares-remote-agent.exe'
+          if (-not (Test-Path $source)) { throw 'agent artifact missing' }
+          $actual = (Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "agent hash mismatch: $actual" }
+
+          $install = 'C:\ProgramData\AntharesRemoteAgent'
+          New-Item -ItemType Directory -Force -Path $install | Out-Null
+          Copy-Item -Force $source (Join-Path $install 'anthares-remote-agent.exe')
+
+          $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+          $bytes = New-Object byte[] 48
+          $rng.GetBytes($bytes)
+          $rng.Dispose()
+          $deviceToken = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+          $sha = [Security.Cryptography.SHA256]::Create()
+          try { $hashBytes = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($deviceToken)) } finally { $sha.Dispose() }
+          $deviceHash = -join ($hashBytes | ForEach-Object { $_.ToString('x2') })
+
+          $api = 'https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/contents/anthares-remote-agent/devices/DESKTOP-FTDK0HP.sha256'
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+          $existingSha = $null
+          try { $existingSha = (Invoke-RestMethod -Headers $headers -Uri ($api + '?ref=main') -Method Get).sha } catch { if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw } }
+          $body = @{ message='chore(remote-agent): register DESKTOP-FTDK0HP device hash'; content=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($deviceHash + "`n")); branch='main' }
+          if ($existingSha) { $body.sha = $existingSha }
+          Invoke-RestMethod -Headers $headers -Uri $api -Method Put -ContentType 'application/json' -Body ($body | ConvertTo-Json -Compress) | Out-Null
+
+          $launcher = @"
+          `$env:ANTHARES_CONTROL_URL='https://anthares-x-render-worker-v3.onrender.com'
+          `$env:ANTHARES_DEVICE_TOKEN='$deviceToken'
+          `$env:ANTHARES_DEVICE_ID='DESKTOP-FTDK0HP'
+          `$env:ANTHARES_ALLOWED_ROOTS='C:\Users\Lucas;C:\ProgramData\AntharesRemoteAgent'
+          `$env:ANTHARES_ALLOW_SHELL='1'
+          & 'C:\ProgramData\AntharesRemoteAgent\anthares-remote-agent.exe' *>> 'C:\ProgramData\AntharesRemoteAgent\agent.log'
+          "@
+          $launcherPath = Join-Path $install 'run-agent.ps1'
+          Set-Content -Path $launcherPath -Value $launcher -Encoding UTF8
+          icacls $launcherPath /inheritance:r /grant:r 'SYSTEM:F' "$env:USERNAME`:F" | Out-Null
+
+          $startup = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\AntharesRemoteAgent.cmd'
+          $startupText = '@echo off' + [Environment]::NewLine + 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\ProgramData\AntharesRemoteAgent\run-agent.ps1"'
+          Set-Content -Path $startup -Value $startupText -Encoding ASCII
+
+          Get-Process 'anthares-remote-agent' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Remove-Item Env:RUNNER_TRACKING_ID -ErrorAction SilentlyContinue
+          $env:RUNNER_TRACKING_ID = ''
+          Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',$launcherPath
+          Start-Sleep -Seconds 12
+          $proc = Get-Process 'anthares-remote-agent' -ErrorAction SilentlyContinue
+          if (-not $proc) { throw 'agent process did not stay running' }
+
+          @(
+            'INSTALL=PROVEN',
+            "EXE_SHA256=$actual",
+            "PID=$($proc.Id)",
+            "STARTUP=$([bool](Test-Path $startup))",
+            "DEVICE_HASH_PUBLISHED=$([bool]$deviceHash)"
+          ) | Set-Content -Encoding UTF8 (Join-Path $install 'install-report.txt')
+
+      - name: Show non-secret install proof
+        shell: powershell
+        run: Get-Content 'C:\ProgramData\AntharesRemoteAgent\install-report.txt'

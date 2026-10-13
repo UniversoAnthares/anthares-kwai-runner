@@ -1,0 +1,290 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { createServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
+import { z } from 'zod';
+
+const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-remote-control.onrender.com').replace(/\/$/, '');
+const CONTROL_TOKEN = process.env.ARA_SHARED || '';
+const DEFAULT_DEVICE = process.env.ANTHARES_DEVICE_ID || 'DESKTOP-FTDK0HP';
+let browserLease = null;
+
+async function api(path, { method = 'GET', body, timeoutMs = 140000, headers = {} } = {}) {
+  if (!CONTROL_TOKEN) throw new Error('ARA_SHARED is not configured');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${CONTROL_URL}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${CONTROL_TOKEN}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'AntharesRemoteMCP/0.6',
+        ...headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const responseText = await res.text();
+    let data;
+    try { data = responseText ? JSON.parse(responseText) : {}; } catch { data = { raw: responseText }; }
+    if (!res.ok) throw new Error(`control ${res.status}: ${data.error || data.raw || 'request failed'}`);
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function execute(type, args = {}, timeoutSeconds = 30, deviceId = DEFAULT_DEVICE) {
+  return api('/v1/runtime/remote/execute', {
+    method: 'POST',
+    timeoutMs: Math.min(150000, (timeoutSeconds + 12) * 1000),
+    body: { device_id: deviceId, type, args, timeout_seconds: timeoutSeconds },
+  });
+}
+
+function text(value) {
+  return { content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }] };
+}
+
+function leaseHeaders() {
+  if (!browserLease?.token || !browserLease?.generation) throw new Error('Anthares-browser session lease is not acquired');
+  return {
+    'X-Anthares-Lease-Token': browserLease.token,
+    'X-Anthares-Lease-Generation': String(browserLease.generation),
+  };
+}
+
+async function browserMutate(op, body = {}) {
+  return api(`/v1/runtime/browser/${op}`, { method: 'POST', body, headers: leaseHeaders(), timeoutMs: 90000 });
+}
+
+function createMcpServer() {
+  const server = new McpServer({ name: 'Anthares Remote', version: '0.6.0' });
+
+  server.registerTool('runtime_status', {
+    description: 'Check the unified Anthares runtime mesh, including Remote and isolated Anthares-browser availability.',
+    inputSchema: { device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ device_id }) => text(await api(`/v1/runtime/health?device_id=${encodeURIComponent(device_id)}`)));
+
+  server.registerTool('session_status', {
+    description: 'Check the Anthares Remote Agent heartbeat for a Windows device.',
+    inputSchema: { device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ device_id }) => text(await api(`/v1/control/status?device_id=${encodeURIComponent(device_id)}`)));
+
+  server.registerTool('system_info', {
+    description: 'Return OS, CPU, RAM and GPU information from the remote device.',
+    inputSchema: { device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ device_id }) => text(await execute('system_info', {}, 30, device_id)));
+
+  server.registerTool('remote_exec', {
+    description: 'Execute a PowerShell or CMD command on the authorized remote Windows device.',
+    inputSchema: {
+      command: z.string().min(1),
+      shell: z.enum(['powershell', 'cmd']).default('powershell'),
+      timeout_seconds: z.number().int().min(1).max(120).default(30),
+      device_id: z.string().default(DEFAULT_DEVICE),
+    },
+  }, async ({ command, shell, timeout_seconds, device_id }) => text(await execute('shell', { command, shell }, timeout_seconds, device_id)));
+
+  server.registerTool('process_list', {
+    description: 'List running processes on the remote Windows device.',
+    inputSchema: { device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ device_id }) => text(await execute('process_list', {}, 30, device_id)));
+
+  server.registerTool('clipboard_get', {
+    description: 'Read text from the interactive desktop clipboard.',
+    inputSchema: { device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ device_id }) => text(await execute('clipboard_get', {}, 20, device_id)));
+
+  server.registerTool('clipboard_set', {
+    description: 'Set text on the interactive desktop clipboard.',
+    inputSchema: { text: z.string(), device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ text: value, device_id }) => text(await execute('clipboard_set', { text: value }, 20, device_id)));
+
+  server.registerTool('screenshot', {
+    description: 'Capture a JPEG screenshot of display 0, another display index, or all displays.',
+    inputSchema: { display: z.string().default('0'), device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ display, device_id }) => {
+    const out = await execute('screenshot', { display }, 45, device_id);
+    const b64 = out.output || '';
+    return { content: [{ type: 'image', data: b64, mimeType: 'image/jpeg' }] };
+  });
+
+  server.registerTool('browser_session_acquire', {
+    description: 'Acquire the local single-writer fence for the isolated Anthares-browser profile. Global operation authority remains anthares-control.',
+    inputSchema: { owner: z.string().min(1).default('anthares-remote-mcp'), ttl_seconds: z.number().int().min(15).max(1800).default(300) },
+  }, async ({ owner, ttl_seconds }) => {
+    browserLease = await api('/v1/runtime/browser/lease/acquire', { method: 'POST', body: { owner, ttl_seconds } });
+    return text({ ok: true, generation: browserLease.generation, expires_at: browserLease.expires_at, scope: browserLease.scope });
+  });
+
+  server.registerTool('browser_session_renew', {
+    description: 'Renew the current isolated Anthares-browser local profile fence.',
+    inputSchema: { ttl_seconds: z.number().int().min(15).max(1800).default(300) },
+  }, async ({ ttl_seconds }) => text(await api('/v1/runtime/browser/lease/renew', { method: 'POST', body: { ttl_seconds }, headers: leaseHeaders() })));
+
+  server.registerTool('browser_session_release', {
+    description: 'Release the isolated Anthares-browser local profile fence.',
+    inputSchema: {},
+  }, async () => {
+    const out = await api('/v1/runtime/browser/lease/release', { method: 'POST', body: {}, headers: leaseHeaders() });
+    browserLease = null;
+    return text(out);
+  });
+
+  server.registerTool('browser_status', {
+    description: 'Read the isolated Anthares-browser status. This never attaches to the user desktop browser.',
+    inputSchema: {},
+  }, async () => text(await api('/v1/runtime/browser/status')));
+
+  server.registerTool('browser_page', {
+    description: 'Read URL, title and page text from the isolated Anthares-browser.',
+    inputSchema: {},
+  }, async () => text(await api('/v1/runtime/browser/page')));
+
+  server.registerTool('browser_navigate', {
+    description: 'Navigate the isolated Anthares-browser. Requires a browser session fence.',
+    inputSchema: { url: z.string().url(), wait_ms: z.number().int().min(0).max(30000).default(1200) },
+  }, async ({ url, wait_ms }) => text(await browserMutate('navigate', { url, wait_ms })));
+
+  server.registerTool('browser_click', {
+    description: 'Click a CSS selector inside the isolated Anthares-browser. Requires a browser session fence.',
+    inputSchema: { selector: z.string().min(1), wait_ms: z.number().int().min(0).max(30000).default(1000) },
+  }, async ({ selector, wait_ms }) => text(await browserMutate('click', { selector, wait_ms })));
+
+  server.registerTool('browser_type', {
+    description: 'Type into a CSS selector inside the isolated Anthares-browser. Requires a browser session fence.',
+    inputSchema: { selector: z.string().min(1), value: z.string(), clear: z.boolean().default(true), wait_ms: z.number().int().min(0).max(30000).default(250) },
+  }, async ({ selector, value, clear, wait_ms }) => text(await browserMutate('type', { selector, text: value, clear, wait_ms })));
+
+  server.registerTool('browser_wait', {
+    description: 'Wait for a selector inside the isolated Anthares-browser. Requires a browser session fence.',
+    inputSchema: { selector: z.string().min(1), timeout_ms: z.number().int().min(100).max(120000).default(10000), visible: z.boolean().default(true) },
+  }, async ({ selector, timeout_ms, visible }) => text(await browserMutate('wait', { selector, timeout_ms, visible })));
+
+  server.registerTool('file_stat', {
+    description: 'Stat a file or directory within the agent allowlisted roots.',
+    inputSchema: { path: z.string(), device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ path, device_id }) => text(await execute('file_stat', { path }, 30, device_id)));
+
+  server.registerTool('file_list', {
+    description: 'List a directory within the agent allowlisted roots.',
+    inputSchema: { path: z.string(), device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ path, device_id }) => text(await execute('file_list', { path }, 30, device_id)));
+
+  server.registerTool('file_read', {
+    description: 'Read a file up to 1 MiB and return its base64 payload.',
+    inputSchema: { path: z.string(), device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ path, device_id }) => text(await execute('file_read', { path }, 30, device_id)));
+
+  server.registerTool('file_write', {
+    description: 'Write a file up to 1 MiB from base64 data within allowlisted roots.',
+    inputSchema: { path: z.string(), base64: z.string(), device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ path, base64, device_id }) => text(await execute('file_write', { path, base64 }, 30, device_id)));
+
+  server.registerTool('file_read_chunk', {
+    description: 'Read a chunk of a larger file (maximum 512 KiB per chunk).',
+    inputSchema: {
+      path: z.string(), offset: z.number().int().min(0).default(0), length: z.number().int().min(1).max(524288).default(524288),
+      device_id: z.string().default(DEFAULT_DEVICE),
+    },
+  }, async ({ path, offset, length, device_id }) => text(await execute('file_read_chunk', { path, offset: String(offset), length: String(length) }, 40, device_id)));
+
+  server.registerTool('file_write_chunk', {
+    description: 'Write a base64 chunk to a larger file (maximum 512 KiB per chunk).',
+    inputSchema: {
+      path: z.string(), offset: z.number().int().min(0), base64: z.string(), truncate: z.boolean().default(false),
+      device_id: z.string().default(DEFAULT_DEVICE),
+    },
+  }, async ({ path, offset, base64, truncate, device_id }) => text(await execute('file_write_chunk', { path, offset: String(offset), base64, truncate: truncate ? '1' : '0' }, 40, device_id)));
+
+  server.registerTool('remote_job_start', {
+    description: 'Start a detached background command that continues after the MCP call ends.',
+    inputSchema: { command: z.string().min(1), name: z.string().default(''), device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ command, name, device_id }) => text(await execute('job_start', { command, name }, 30, device_id)));
+
+  server.registerTool('remote_job_list', {
+    description: 'List detached jobs retained by Anthares Remote Agent.',
+    inputSchema: { limit: z.number().int().min(1).max(100).default(20), include_command: z.boolean().default(false), device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ limit, include_command, device_id }) => text(await execute('job_list', { limit: String(limit), include_command: include_command ? '1' : '0' }, 30, device_id)));
+
+  server.registerTool('remote_job_status', {
+    description: 'Get the status of a detached job.',
+    inputSchema: { job_id: z.string(), include_command: z.boolean().default(false), device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ job_id, include_command, device_id }) => text(await execute('job_status', { job_id, include_command: include_command ? '1' : '0' }, 30, device_id)));
+
+  server.registerTool('remote_job_logs', {
+    description: 'Read detached job logs by tail or byte offset.',
+    inputSchema: {
+      job_id: z.string(), offset_bytes: z.number().int().min(0).optional(), max_bytes: z.number().int().min(1).max(262144).default(262144),
+      tail_lines: z.number().int().min(1).max(5000).default(200), device_id: z.string().default(DEFAULT_DEVICE),
+    },
+  }, async ({ job_id, offset_bytes, max_bytes, tail_lines, device_id }) => text(await execute('job_logs', {
+    job_id,
+    offset_bytes: offset_bytes === undefined ? '' : String(offset_bytes),
+    max_bytes: String(max_bytes), tail_lines: String(tail_lines),
+  }, 30, device_id)));
+
+  server.registerTool('remote_job_cancel', {
+    description: 'Terminate a detached job process tree.',
+    inputSchema: { job_id: z.string(), device_id: z.string().default(DEFAULT_DEVICE) },
+  }, async ({ job_id, device_id }) => text(await execute('job_cancel', { job_id }, 30, device_id)));
+
+  server.registerTool('capabilities', {
+    description: 'List capabilities exposed by the Anthares Remote control plane.',
+    inputSchema: {},
+  }, async () => text(await api('/v1/control/capabilities')));
+
+  return server;
+}
+
+const mode = process.env.ARA_MCP_TRANSPORT || (process.env.PORT ? 'http' : 'stdio');
+if (mode === 'stdio') {
+  if (!CONTROL_TOKEN) throw new Error('ARA_SHARED is required for stdio mode');
+  await createMcpServer().connect(new StdioServerTransport());
+} else if (mode === 'http') {
+  const clientToken = process.env.ARA_MCP_CLIENT_TOKEN || '';
+  const configured = clientToken.length >= 32 && clientToken !== CONTROL_TOKEN && CONTROL_TOKEN.length > 0;
+  const validToken = (header) => {
+    if (!configured) return false;
+    const expected = Buffer.from('Bearer ' + clientToken);
+    const actual = Buffer.from(header || '');
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  };
+  const http = createServer(async (req, res) => {
+    if (req.url === '/health' && req.method === 'GET') {
+      res.writeHead(configured ? 200 : 503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: configured, service: 'anthares-remote-mcp', auth: configured ? 'configured' : 'pending', runtime_mesh: true }));
+      return;
+    }
+    if (req.url !== '/mcp') { res.writeHead(404); res.end(); return; }
+    if (!configured) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'server credentials are not configured' }));
+      return;
+    }
+    if (!validToken(req.headers.authorization)) {
+      res.writeHead(401, { 'WWW-Authenticate': 'Bearer', 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.writeHead(405, { Allow: 'POST' }); res.end(); return;
+    }
+    try {
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      const instance = createMcpServer();
+      await instance.connect(transport);
+      await transport.handleRequest(req, res);
+      res.on('close', () => transport.close().catch(() => {}));
+    } catch {
+      if (!res.headersSent) { res.writeHead(500); res.end('MCP request failed'); }
+    }
+  });
+  http.requestTimeout = 150000;
+  http.listen(Number(process.env.PORT || 3000), '0.0.0.0');
+} else {
+  throw new Error('Unknown ARA_MCP_TRANSPORT');
+}

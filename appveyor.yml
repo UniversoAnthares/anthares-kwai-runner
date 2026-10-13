@@ -1,0 +1,35 @@
+version: 1.0.{build}
+image: Visual Studio 2022
+platform: x64
+branches:
+  only:
+    - feature/ara-capabilities
+clone_depth: 1
+environment:
+  GOPATH: C:\gopath
+install:
+  - ps: |
+      $ErrorActionPreference = 'Stop'
+      $go = Get-Command go -ErrorAction SilentlyContinue
+      if (-not $go) { throw 'Go is unavailable on the AppVeyor Windows image' }
+      go version
+build_script:
+  - ps: |
+      $ErrorActionPreference = 'Stop'
+      Set-Location (Join-Path $env:APPVEYOR_BUILD_FOLDER 'anthares-remote-agent')
+      go build -o agent.exe ./cmd/agent
+      if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
+      if (-not (Test-Path agent.exe)) { throw 'Windows executable missing' }
+test_script:
+  - ps: |
+      $ErrorActionPreference = 'Stop'
+      Set-Location (Join-Path $env:APPVEYOR_BUILD_FOLDER 'anthares-remote-agent')
+      go test ./... -count=1
+      if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
+      go vet ./...
+      if ($LASTEXITCODE -ne 0) { throw 'Windows vet failed' }
+      go test ./cmd/agent -run 'TestWindows|TestExecuteJobPreservesStructuredFailure|TestFilesystemLifecycle|TestFileRemoveRefusesAllowedRoot|TestControlProtocolEndToEnd|TestValidateJobID' -v
+      if ($LASTEXITCODE -ne 0) { throw 'Windows runtime probes failed' }
+artifacts:
+  - path: anthares-remote-agent\agent.exe
+    name: anthares-remote-agent-windows
