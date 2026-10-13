@@ -13,9 +13,11 @@ from typing import Any
 import psutil
 import websocket
 from fastapi import Depends, FastAPI, Header, HTTPException
+from novnc_gateway import router as novnc_router
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="Anthares-browser control API", version="0.2.2")
+app = FastAPI(title="Anthares-browser control API", version="0.2.3")
+app.include_router(novnc_router)
 PROFILE_DIR = Path(os.environ.get("CHROME_PROFILE_DIR", "/data/chrome-profile"))
 CONTROL_TOKEN = os.environ.get("CONTROL_TOKEN", "")
 CDP_PORT = int(os.environ.get("CDP_PORT", "9222"))
