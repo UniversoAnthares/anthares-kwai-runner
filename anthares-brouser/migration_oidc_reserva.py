@@ -107,9 +107,18 @@ def _collect():
             base_app._cdp_call("Page.navigate", {"url": "https://www.kwai.com/@lucasrosalem"}, timeout=8.0)
             time.sleep(2.5)
             evidence = migration_capsule._evaluate_value("""(() => { const nodes=[...document.querySelectorAll('a,button,input,[role=button],[role=menuitem],span,div')]; const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'}; const txt=e=>((e.innerText||e.textContent||'')+' '+(e.getAttribute?.('aria-label')||'')).replace(/\\s+/g,' ').trim(); const login=nodes.some(e=>vis(e)&&(/^(log\\s*in|login|sign\\s*in|entrar|fazer login)$/i.test(txt(e))||['password','tel'].includes((e.getAttribute?.('type')||'').toLowerCase()))); const owner=nodes.some(e=>vis(e)&&(/^(edit profile|editar perfil|account settings|configura[cç][oõ]es da conta)$/i.test(txt(e))||/edit[-_ ]?profile|profile[-_ ]?edit/i.test(e.getAttribute?.('data-testid')||'')||/\\/(profile|account)\\/(edit|settings)(\\/|$)/i.test(e.getAttribute?.('href')||''))); const logout=nodes.some(e=>vis(e)&&/^(log\\s*out|logout|sign\\s*out|sair)$/i.test(txt(e))); return {host_ok:location.hostname==='www.kwai.com',path_ok:location.pathname.replace(/\\/$/,'').toLowerCase()==='/@lucasrosalem',login_gate:login,owner_edit:owner,logout_visible:logout}; })()""")
-            authenticated = isinstance(evidence, dict) and evidence.get("host_ok") and evidence.get("path_ok") and not evidence.get("login_gate") and (evidence.get("owner_edit") or evidence.get("logout_visible"))
+            profile_ok = isinstance(evidence, dict) and evidence.get("host_ok") and evidence.get("path_ok") and not evidence.get("login_gate")
+            strong_profile_marker = bool(profile_ok and (evidence.get("owner_edit") or evidence.get("logout_visible")))
+            studio_evidence = {}
+            if profile_ok and not strong_profile_marker:
+                base_app._cdp_call("Page.navigate", {"url": "https://studio.kwai.com/"}, timeout=8.0)
+                time.sleep(2.5)
+                studio_evidence = migration_capsule._evaluate_value("""(() => { const body=(document.body?.innerText||'').slice(0,24000); const login=!!document.querySelector('input[type=password],input[type=tel],input[type=email]')||/(^|\\n)\\s*(log\\s*in|login|sign\\s*in|entrar|fazer login)\\s*($|\\n)/i.test(body); const file=!!document.querySelector('input[type=file]:not([disabled])'); const upload=/upload|enviar|carregar|create video|criar v[ií]deo|new post|novo post/i.test(body); return {host_ok:location.hostname==='studio.kwai.com',login_gate:login,file_input:file,upload_control:upload}; })()""") or {}
+            authenticated = bool(strong_profile_marker or (profile_ok and isinstance(studio_evidence, dict) and studio_evidence.get("host_ok") and not studio_evidence.get("login_gate") and (studio_evidence.get("file_input") or studio_evidence.get("upload_control"))))
             if not authenticated:
-                raise HTTPException(409, {"error": "source_session_not_authenticated", "evidence": evidence if isinstance(evidence, dict) else {}})
+                raise HTTPException(409, {"error": "source_session_not_authenticated", "evidence": evidence if isinstance(evidence, dict) else {}, "studio": studio_evidence if isinstance(studio_evidence, dict) else {}})
+            base_app._cdp_call("Page.navigate", {"url": "https://www.kwai.com/@lucasrosalem"}, timeout=8.0)
+            time.sleep(1.5)
             cookies_result = base_app._cdp_call("Network.getAllCookies", timeout=8.0)
             storage_raw = migration_capsule._evaluate_value("JSON.stringify(Object.fromEntries(Array.from({length:localStorage.length},(_,i)=>{const k=localStorage.key(i);return [k,localStorage.getItem(k)]})))")
         finally:
