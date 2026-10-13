@@ -56,10 +56,12 @@ func main() {
 
     sem := make(chan struct{}, cfg.MaxConcurrent)
     for {
-        job, err := pollJob(cfg)
-        if err != nil { fmt.Fprintln(os.Stderr, "poll error:", err); time.Sleep(3 * time.Second); continue }
-        if job == nil { time.Sleep(2 * time.Second); continue }
+        // Reserve capacity before claiming a remote job. Polling first could
+        // leave a leased task waiting locally while every worker is busy.
         sem <- struct{}{}
+        job, err := pollJob(cfg)
+        if err != nil { <-sem; fmt.Fprintln(os.Stderr, "poll error:", err); time.Sleep(3 * time.Second); continue }
+        if job == nil { <-sem; time.Sleep(2 * time.Second); continue }
         j := *job
         go func() {
             defer func(){ <-sem }()
