@@ -18,7 +18,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 PROJECT = os.environ.get("GITLAB_STATE_PROJECT", "87307279")
 BRANCH = os.environ.get("GITLAB_STATE_BRANCH", "browser-state")
-SLOT = os.environ.get("GITLAB_STATE_SLOT", "runtime")
+def _slot():
+    return os.environ.get("GITLAB_STATE_SLOT", "runtime")
 CHUNK_SIZE = 3 * 1024 * 1024
 MAX_ARCHIVE = 96 * 1024 * 1024
 EXCLUDES = {"Cache", "Code Cache", "GPUCache", "GrShaderCache", "ShaderCache",
@@ -87,15 +88,15 @@ def backup(profile):
     raw = _archive(Path(profile))
     generation = secrets.token_hex(12)
     nonce = secrets.token_bytes(12)
-    encrypted = nonce + AESGCM(_key()).encrypt(nonce, raw, SLOT.encode())
+    encrypted = nonce + AESGCM(_key()).encrypt(nonce, raw, _slot().encode())
     chunks = [encrypted[i:i + CHUNK_SIZE] for i in range(0, len(encrypted), CHUNK_SIZE)]
-    base = f"browser-state/{SLOT}/generations/{generation}"
+    base = f"browser-state/{_slot()}/generations/{generation}"
     for index, chunk in enumerate(chunks):
         _put(f"{base}/{index:03d}.bin", chunk, "state: encrypted Chromium profile chunk")
     manifest = {"version": 1, "generation": generation, "chunks": len(chunks),
                 "sha256": hashlib.sha256(encrypted).hexdigest(), "bytes": len(encrypted)}
     # Manifest written LAST: readers never observe an incomplete generation.
-    _put(f"browser-state/{SLOT}/latest.json",
+    _put(f"browser-state/{_slot()}/latest.json",
          json.dumps(manifest, separators=(",", ":")).encode(),
          "state: commit encrypted Chromium profile generation")
     return {"ok": True, "chunks": len(chunks), "bytes": len(encrypted)}
@@ -103,7 +104,7 @@ def backup(profile):
 def restore(profile):
     if not configured():
         return {"ok": False, "reason": "not_configured"}
-    manifest_raw = _get(f"browser-state/{SLOT}/latest.json")
+    manifest_raw = _get(f"browser-state/{_slot()}/latest.json")
     if not manifest_raw:
         return {"ok": False, "reason": "no_snapshot"}
     try:
@@ -118,14 +119,14 @@ def restore(profile):
         raise RuntimeError("invalid chunk count")
     chunks = []
     for i in range(count):
-        chunk = _get(f"browser-state/{SLOT}/generations/{generation}/{i:03d}.bin")
+        chunk = _get(f"browser-state/{_slot()}/generations/{generation}/{i:03d}.bin")
         if chunk is None:
             raise RuntimeError("incomplete snapshot generation")
         chunks.append(chunk)
     encrypted = b"".join(chunks)
     if len(encrypted) != manifest["bytes"] or hashlib.sha256(encrypted).hexdigest() != manifest["sha256"]:
         raise RuntimeError("snapshot integrity verification failed")
-    raw = AESGCM(_key()).decrypt(encrypted[:12], encrypted[12:], SLOT.encode())
+    raw = AESGCM(_key()).decrypt(encrypted[:12], encrypted[12:], _slot().encode())
     if len(raw) > MAX_ARCHIVE:
         raise RuntimeError("snapshot exceeds maximum size")
     destination = Path(profile)
