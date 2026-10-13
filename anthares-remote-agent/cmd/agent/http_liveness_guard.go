@@ -3,17 +3,22 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
-// Keep issue-queue redundancy during transient failures, while ensuring a
-// permanently wedged Cloudflare HTTP transport cannot leave an immortal agent
-// process that the SYSTEM supervisor refuses to replace.
+// Guard the HTTP transport only when HTTP control is actually configured.
+// In private issue-queue-only mode there is no HTTP endpoint by design, so
+// probing an empty URL would create a false failure loop and restart a healthy
+// queue worker every minute.
 func init() {
 	go func() {
 		time.Sleep(5 * time.Second)
 		cfg, err := loadConfig()
 		if err != nil {
+			return
+		}
+		if strings.TrimSpace(cfg.ControlURL) == "" {
 			return
 		}
 		failures := 0
