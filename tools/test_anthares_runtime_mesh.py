@@ -51,6 +51,16 @@ def test_health_fail_closed_and_no_host_fallback():
     assert body["global_lease_authority"] == "anthares-control/cloudflare"
 
 
+def test_browser_health_requires_url_and_token():
+    reset(); c = app_client()
+    with patch.dict(os.environ, {"ANTHARES_BROWSER_URL": "https://browser.invalid", "ANTHARES_BROWSER_TOKEN": ""}):
+        with patch.object(mesh.requests, "get", side_effect=AssertionError("health must not call upstream without token")):
+            body = c.get("/v1/runtime/health").get_json()
+    assert body["browser"]["configured"] is False
+    assert body["browser"]["healthy"] is False
+    assert body["browser"]["error"] == "browser_not_configured"
+
+
 def test_no_implicit_desktop_target():
     reset(); c = app_client()
     r = c.post("/v1/runtime/remote/execute", headers=auth(), json={"type": "ping"})
