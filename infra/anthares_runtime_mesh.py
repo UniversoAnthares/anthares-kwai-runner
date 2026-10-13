@@ -5,6 +5,10 @@ This module joins Anthares Remote and the isolated Anthares-browser behind one
 fail-closed API. The browser lease here is only a local execution fence for one
 Chromium profile; it is subordinate to the global anthares-control lease and
 never becomes a second control plane.
+
+If ANTHARES_BROWSER_URL is unset, the Render service runs a dedicated headless
+Playwright/Chromium profile inside its own Linux instance. It never attaches to
+or controls the user's desktop browser, mouse, keyboard, tabs, or windows.
 """
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ import os
 import secrets
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -26,6 +31,9 @@ _BROWSER_LEASE: dict[str, Any] = {
     "generation": 0,
     "expires_at": 0.0,
 }
+_LOCAL_PLAYWRIGHT = None
+_LOCAL_CONTEXT = None
+_LOCAL_PAGE = None
 
 
 def _now() -> float:
@@ -45,22 +53,98 @@ def _browser_cfg() -> tuple[str, str]:
     )
 
 
+def _local_profile_dir() -> str:
+    path = Path(os.getenv("ANTHARES_BROWSER_PROFILE_DIR", "/tmp/anthares-browser-profile"))
+    path.mkdir(parents=True, exist_ok=True)
+    return str(path)
+
+
+def _local_browser():
+    global _LOCAL_PLAYWRIGHT, _LOCAL_CONTEXT, _LOCAL_PAGE
+    with _LOCK:
+        if _LOCAL_CONTEXT is not None:
+            try:
+                pages = _LOCAL_CONTEXT.pages
+                if pages:
+                    _LOCAL_PAGE = pages[0]
+                elif _LOCAL_PAGE is None:
+                    _LOCAL_PAGE = _LOCAL_CONTEXT.new_page()
+                return _LOCAL_CONTEXT, _LOCAL_PAGE
+            except Exception:
+                _LOCAL_CONTEXT = None
+                _LOCAL_PAGE = None
+        from playwright.sync_api import sync_playwright
+        if _LOCAL_PLAYWRIGHT is None:
+            _LOCAL_PLAYWRIGHT = sync_playwright().start()
+        _LOCAL_CONTEXT = _LOCAL_PLAYWRIGHT.chromium.launch_persistent_context(
+            _local_profile_dir(),
+            headless=True,
+            viewport={"width": 1365, "height": 768},
+            locale="pt-BR",
+            timezone_id="America/Campo_Grande",
+            args=[
+                "--disable-dev-shm-usage",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-background-networking",
+            ],
+        )
+        _LOCAL_PAGE = _LOCAL_CONTEXT.pages[0] if _LOCAL_CONTEXT.pages else _LOCAL_CONTEXT.new_page()
+        return _LOCAL_CONTEXT, _LOCAL_PAGE
+
+
+def _local_browser_status() -> dict[str, Any]:
+    try:
+        _, page = _local_browser()
+        return {
+            "configured": True,
+            "healthy": True,
+            "backend": "local_playwright",
+            "isolated": True,
+            "headless": True,
+            "chromium_running": True,
+            "host_desktop_fallback": False,
+            "url": page.url,
+        }
+    except Exception as exc:
+        return {
+            "configured": True,
+            "healthy": False,
+            "backend": "local_playwright",
+            "isolated": True,
+            "headless": True,
+            "chromium_running": False,
+            "host_desktop_fallback": False,
+            "error": type(exc).__name__,
+        }
+
+
 def _browser_ready() -> dict[str, Any]:
     url, _ = _browser_cfg()
     if not url:
-        return {"configured": False, "healthy": False, "error": "browser_not_configured"}
+        return _local_browser_status()
     try:
         r = requests.get(url + "/health", timeout=8)
         body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
         return {
             "configured": True,
             "healthy": bool(r.ok and body.get("ok") and body.get("cdp_ready")),
+            "backend": "external_anthares_browser",
             "status": r.status_code,
             "cdp_ready": bool(body.get("cdp_ready")),
             "chromium_running": bool(body.get("chromium_running")),
+            "isolated": True,
+            "host_desktop_fallback": False,
         }
     except Exception as exc:
-        return {"configured": True, "healthy": False, "error": type(exc).__name__}
+        return {
+            "configured": True,
+            "healthy": False,
+            "backend": "external_anthares_browser",
+            "error": type(exc).__name__,
+            "isolated": True,
+            "host_desktop_fallback": False,
+        }
 
 
 def _lease_snapshot() -> dict[str, Any]:
@@ -95,10 +179,83 @@ def _lease_required() -> tuple[bool, str]:
     return True, ""
 
 
+def _local_browser_request(method: str, path: str, payload: dict[str, Any] | None = None):
+    data = payload or {}
+    try:
+        _, page = _local_browser()
+        if method == "GET" and path == "/status":
+            return None, {
+                "ok": True,
+                "version": "runtime-local-playwright-v1",
+                "backend": "local_playwright",
+                "isolated": True,
+                "headless": True,
+                "host_desktop_fallback": False,
+                "url": page.url,
+                "title": page.title(),
+                "profile_dir": "isolated-runtime-profile",
+            }, 200
+        if method == "GET" and path == "/page":
+            text = page.locator("body").inner_text(timeout=10000) if page.locator("body").count() else ""
+            return None, {"ok": True, "url": page.url, "title": page.title(), "text": text[:50000]}, 200
+        if method != "POST":
+            return None, {"ok": False, "error": "method_not_allowed"}, 405
+        if path == "/navigate":
+            url = str(data.get("url") or "").strip()
+            if not url.startswith(("http://", "https://")):
+                return None, {"ok": False, "error": "invalid_url"}, 400
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            wait_ms = max(0, min(int(data.get("wait_ms") or 0), 30000))
+            if wait_ms:
+                page.wait_for_timeout(wait_ms)
+            return None, {"ok": True, "url": page.url, "title": page.title()}, 200
+        if path == "/click":
+            selector = str(data.get("selector") or "").strip()
+            if not selector:
+                return None, {"ok": False, "error": "missing_selector"}, 400
+            page.locator(selector).first.click(timeout=30000)
+            wait_ms = max(0, min(int(data.get("wait_ms") or 0), 30000))
+            if wait_ms:
+                page.wait_for_timeout(wait_ms)
+            return None, {"ok": True, "url": page.url, "title": page.title()}, 200
+        if path == "/type":
+            selector = str(data.get("selector") or "").strip()
+            value = str(data.get("text") if data.get("text") is not None else data.get("value") or "")
+            if not selector:
+                return None, {"ok": False, "error": "missing_selector"}, 400
+            locator = page.locator(selector).first
+            if bool(data.get("clear", True)):
+                locator.fill(value, timeout=30000)
+            else:
+                locator.press_sequentially(value, timeout=30000)
+            wait_ms = max(0, min(int(data.get("wait_ms") or 0), 30000))
+            if wait_ms:
+                page.wait_for_timeout(wait_ms)
+            return None, {"ok": True}, 200
+        if path == "/wait":
+            selector = str(data.get("selector") or "").strip()
+            if not selector:
+                return None, {"ok": False, "error": "missing_selector"}, 400
+            timeout_ms = max(100, min(int(data.get("timeout_ms") or 10000), 120000))
+            state = "visible" if bool(data.get("visible", True)) else "attached"
+            page.locator(selector).first.wait_for(state=state, timeout=timeout_ms)
+            return None, {"ok": True}, 200
+        if path == "/evaluate":
+            expression = str(data.get("expression") or data.get("script") or "").strip()
+            if not expression:
+                return None, {"ok": False, "error": "missing_expression"}, 400
+            return None, {"ok": True, "result": page.evaluate(expression)}, 200
+        return None, {"ok": False, "error": "not_found"}, 404
+    except Exception as exc:
+        return None, {"ok": False, "error": "browser_operation_failed", "detail": type(exc).__name__}, 500
+
+
 def _browser_request(method: str, path: str, payload: dict[str, Any] | None = None):
     url, token = _browser_cfg()
-    if not url or not token:
-        return None, {"ok": False, "error": "browser_not_configured"}, 503
+    if not url:
+        return _local_browser_request(method, path, payload)
+    if not token:
+        return None, {"ok": False, "error": "browser_token_not_configured"}, 503
     try:
         r = requests.request(
             method,
