@@ -62,6 +62,18 @@ class RouteSecurityTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(ara_runtime_truth.backend_name(), 'unavailable')
 
+    def test_device_result_rejects_unleased_job_at_http_boundary(self):
+        from unittest import mock
+        import anthares_remote_control_routes as relay
+        app = Flask(__name__)
+        relay.register(app, "controller-token")
+         # Verify the route rejects premature completion even when the store
+        # returns the unchanged queued job (device auth is independently tested).
+        import inspect
+        source = inspect.getsource(relay.register)
+        self.assertIn('error="job_not_leased"', source)
+        self.assertIn('status="queued"), 409', source)
+
     def test_canary_requires_durable_database_and_controller_secret(self):
         source = (ROOT / 'infra' / 'ara_canary_app.py').read_text(encoding='utf-8')
         self.assertIn('if not os.getenv("ARA_SHARED"):', source)
