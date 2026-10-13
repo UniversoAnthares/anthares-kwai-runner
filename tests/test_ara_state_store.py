@@ -23,7 +23,7 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(a["id"], b["id"])
         self.assertEqual(self.s.status("pc")["queued"], 1)
 
-    def test_lease_recovery(self):
+    def test_safe_lease_recovery(self):
         job=self.s.enqueue("pc","ping",timeout_seconds=120)
         first=self.s.lease_next("pc", lease_seconds=10)
         self.assertEqual(first["id"], job["id"])
@@ -31,6 +31,26 @@ class StoreTests(unittest.TestCase):
         second=self.s.lease_next("pc", lease_seconds=10)
         self.assertEqual(second["id"], job["id"])
         self.assertEqual(second["attempts"], 2)
+
+    def test_side_effect_lease_becomes_uncertain_not_replayed(self):
+        job=self.s.enqueue("pc","shell",{"command":"example"},timeout_seconds=120)
+        leased=self.s.lease_next("pc", lease_seconds=10)
+        self.assertEqual(leased["id"], job["id"])
+        self.clock.add(11)
+        self.assertIsNone(self.s.lease_next("pc", lease_seconds=10))
+        state=self.s.get_job("pc",job["id"])
+        self.assertEqual(state["status"], "uncertain")
+        self.assertEqual(state["attempts"], 1)
+        self.assertEqual(self.s.status("pc")["uncertain"], 1)
+
+    def test_late_result_reconciles_uncertain_side_effect(self):
+        job=self.s.enqueue("pc","shell",{"command":"example"},timeout_seconds=120)
+        self.s.lease_next("pc", lease_seconds=10)
+        self.clock.add(11)
+        self.assertEqual(self.s.get_job("pc",job["id"])["status"], "uncertain")
+        done=self.s.complete("pc",job["id"],{"ok":True,"output":"finished"})
+        self.assertEqual(done["status"], "done")
+        self.assertEqual(done["result"]["output"], "finished")
 
     def test_expired_job_is_not_released(self):
         job=self.s.enqueue("pc","ping",timeout_seconds=1)
