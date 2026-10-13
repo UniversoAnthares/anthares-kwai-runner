@@ -62,6 +62,14 @@ class RouteSecurityTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(ara_runtime_truth.backend_name(), 'unavailable')
 
+    def test_wait_for_job_returns_uncertain_without_waiting_for_timeout(self):
+        import anthares_remote_control_routes as relay
+        with mock.patch.object(relay, "get_job", return_value={"id": "job", "status": "uncertain"}):
+            with mock.patch.object(relay.time, "sleep") as sleep:
+                result = relay.wait_for_job("pc", "job", 120)
+        self.assertEqual(result["status"], "uncertain")
+        sleep.assert_not_called()
+
     def test_device_result_rejects_unleased_job_at_http_boundary(self):
         import hashlib
         import anthares_remote_control_routes as relay
