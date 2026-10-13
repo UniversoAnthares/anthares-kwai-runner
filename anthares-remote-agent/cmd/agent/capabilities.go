@@ -318,20 +318,44 @@ func jobLogsJSON(id string, offset int64, maxBytes int, tailLines int) (string, 
 			return "", err
 		}
 	}
-	// PowerShell redirection can produce UTF-16LE logs. Normalize BOM-marked
-	// text to UTF-8 before applying offsets so clients receive readable output.
-	if len(b) >= 2 && b[0] == 0xff && b[1] == 0xfe {
-		words := make([]uint16, (len(b)-2)/2)
-		for i := range words {
-			words[i] = binary.LittleEndian.Uint16(b[2+i*2 : 4+i*2])
+	// PowerShell redirection may produce UTF-16LE without a BOM when the
+	// output stream is appended. Detect alternating NUL bytes as a fallback.
+	if len(b) >= 4 {
+		start, little := 0, false
+		if b[0] == 0xff && b[1] == 0xfe {
+			start, little = 2, true
+		} else if b[0] == 0xfe && b[1] == 0xff {
+			start = 2
+		} else {
+			oddZeros, evenZeros := 0, 0
+			for i := 0; i+1 < len(b); i += 2 {
+				if b[i] == 0 {
+					evenZeros++
+				}
+				if b[i+1] == 0 {
+					oddZeros++
+				}
+			}
+			pairs := len(b) / 2
+			if oddZeros > pairs/3 {
+				little = true
+			} else if evenZeros > pairs/3 {
+				start = 0
+			} else {
+				start = -1
+			}
 		}
-		b = []byte(string(utf16.Decode(words)))
-	} else if len(b) >= 2 && b[0] == 0xfe && b[1] == 0xff {
-		words := make([]uint16, (len(b)-2)/2)
-		for i := range words {
-			words[i] = binary.BigEndian.Uint16(b[2+i*2 : 4+i*2])
+		if start >= 0 {
+			words := make([]uint16, (len(b)-start)/2)
+			for i := range words {
+				if little {
+					words[i] = binary.LittleEndian.Uint16(b[start+i*2 : start+i*2+2])
+				} else {
+					words[i] = binary.BigEndian.Uint16(b[start+i*2 : start+i*2+2])
+				}
+			}
+			b = []byte(string(utf16.Decode(words)))
 		}
-		b = []byte(string(utf16.Decode(words)))
 	}
 	if maxBytes <= 0 || maxBytes > 256*1024 {
 		maxBytes = 256 * 1024
