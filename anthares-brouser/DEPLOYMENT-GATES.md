@@ -35,3 +35,9 @@ Apenas quando existir URL HTTPS privada da instância persistente com noVNC prot
 - A implementação de gateway noVNC está presente no repositório, com testes próprios. Verificações externas comprovaram formulário e negação de conteúdo sem sessão, mas **não** comprovaram handshake WebSocket autenticado de ponta a ponta.
 - O campo `durable_volume_verified` permanece `false`; a sessão Kwai não deve ser estabelecida neste ambiente efêmero.
 - Há deploys concorrentes de outros agentes: consultar o commit implantado antes de atribuir qualquer resultado à versão mais recente do código.
+
+## Plano de recuperação do perfil — decisão técnica pendente
+- Render free não fornece volume persistente ao serviço de QA. Não confundir `VOLUME ["/data"]` do Dockerfile com armazenamento durável gerenciado.
+- Não usar banco de dados compartilhado de Anthares-remote como armazenamento de cookies/sessões. Banco gratuito com expiração informada também não atende persistência de longo prazo.
+- Solução candidata: arquivo de perfil Chromium criptografado com chave exclusiva e versionamento em repositório **privado** ou armazenamento remoto gratuito. Exige implementar restauração antes do Chromium, backup consistente após parada do Chromium, verificação de integridade, recuperação e rotação de chaves. Nunca enviar cookies em claro a GitHub público ou logs.
+- Critério de aceite: perfil sintético sobrevive a reinicialização e substituição da instância; restauração verificável por hash, sem expor credenciais. Só então habilitar login Kwai manual.
