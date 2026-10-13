@@ -23,9 +23,25 @@ jobs:
           set -euo pipefail
           test -s cloudflare-ara-backup/src/index.js
           test -s cloudflare-ara-backup/wrangler.toml
+          test -s cloudflare-ara-backup/trusted-keys/render-mcp-v2.pem
+          test -s cloudflare-ara-backup/trusted-keys/render-mcp.pem
           grep -q 'ARA_TRUSTED_MCP_PUBLIC_KEYS_JSON' cloudflare-ara-backup/src/index.js
           grep -q 'independent_of_render_postgres' cloudflare-ara-backup/src/index.js
-      - name: Fetch and pin current MCP public keys
+      - name: Build Render-independent verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('cloudflare-ara-backup/src/index.js')
+          s=p.read_text()
+          needle='  // Legacy discovery remains optional during migration and key rotation.\n  for (const url of KEY_URLS) {'
+          repl='  if (keys.length) { keyCache = { at: Date.now(), keys }; return keys; }\n  // Emergency legacy discovery is unreachable in the normal pinned-key deployment.\n  for (const url of KEY_URLS) {'
+          if needle not in s:
+              raise SystemExit('pinned-key patch target missing')
+          p.write_text(s.replace(needle,repl,1))
+          PY
+      - name: Pin static and Cloudflare MCP public keys
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -33,12 +49,11 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
-          k1="$(curl -fsS https://anthares-remote-mcp-v2.onrender.com/.well-known/ara-control-key)"
-          k2="$(curl -fsS https://anthares-remote-mcp.onrender.com/.well-known/ara-control-key)"
-          test -n "$k1" && test -n "$k2"
-          printf '%s' "$k1" | grep -q 'BEGIN PUBLIC KEY'
-          printf '%s' "$k2" | grep -q 'BEGIN PUBLIC KEY'
-          keys="$(jq -cn --arg a "$k1" --arg b "$k2" '[$a,$b]')"
+          k1="$(cat cloudflare-ara-backup/trusted-keys/render-mcp-v2.pem)"
+          k2="$(cat cloudflare-ara-backup/trusted-keys/render-mcp.pem)"
+          k3="$(curl -fsS https://anthares-ara-mcp.anthares1.workers.dev/.well-known/ara-control-key)"
+          printf '%s' "$k3" | grep -q 'BEGIN PUBLIC KEY'
+          keys="$(jq -cn --arg a "$k1" --arg b "$k2" --arg c "$k3" '[$a,$b,$c]')"
           cd cloudflare-ara-backup
           printf '%s' "$keys" | npx --yes wrangler@4.43.0 secret put ARA_TRUSTED_MCP_PUBLIC_KEYS_JSON
       - name: Deploy Worker
