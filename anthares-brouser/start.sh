@@ -179,7 +179,7 @@ import os, sys, websocket
 sys.path.insert(0, "/opt/anthares-brouser")
 from novnc_gateway import COOKIE_NAME, _issue
 port = sys.argv[1]
-origin = os.environ.get("NOVNC_PUBLIC_ORIGIN", "https://anthares-browser-qa-render.onrender.com")
+origin = os.environ.get("NOVNC_PUBLIC_ORIGIN", f"http://127.0.0.1:{port}")
 ws = websocket.create_connection(
     f"ws://127.0.0.1:{port}/novnc/websockify", origin=origin,
     cookie=f"{COOKIE_NAME}={_issue()}", timeout=15,
