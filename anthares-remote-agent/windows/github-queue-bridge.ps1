@@ -7,7 +7,16 @@ param([string]$Repository = $env:ANTHARES_GITHUB_QUEUE_REPOSITORY,
       [int]$IntervalSeconds = 30)
 $ErrorActionPreference = 'Stop'
 if ($Repository -notmatch '^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$') { throw 'Private repository owner/name required' }
-if ([string]::IsNullOrWhiteSpace($Token)) { throw 'GitHub queue token required' }
+if ([string]::IsNullOrWhiteSpace($Token)) {
+  $credentialFile = Join-Path $env:APPDATA 'AntharesRemoteAgent\github-queue-token.dpapi'
+  if (Test-Path $credentialFile) {
+    $secure = Get-Content $credentialFile -Raw | ConvertTo-SecureString
+    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try { $Token = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }
+    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
+  }
+}
+if ([string]::IsNullOrWhiteSpace($Token)) { throw 'GitHub queue token required (environment or per-user DPAPI credential)' }
 $sha256 = [Security.Cryptography.SHA256]::Create()
 try { $repoHash = ([BitConverter]::ToString($sha256.ComputeHash([Text.Encoding]::UTF8.GetBytes($Repository.ToLowerInvariant()))) -replace '-', '').Substring(0,16) } finally { $sha256.Dispose() }
 $root = Join-Path 'C:\ProgramData\AntharesRemoteAgent\github-queue' $repoHash
@@ -28,7 +37,14 @@ try {
         $number = [int]$issue.number
         $id = [string]$number
         $receipt = Join-Path $root ($id + '.started.json')
-        if (Test-Path $receipt) { continue }
+        if (Test-Path $receipt) {
+          # Recover acknowledgement only; never execute the same issue twice.
+          $prior = Get-Content $receipt -Raw | ConvertFrom-Json
+          if ($prior.state -eq 'acknowledged') {
+            try { Invoke-RestMethod -Method Delete -Headers $headers -Uri "$api/issues/$number/labels/ara-queued" -TimeoutSec 15 | Out-Null } catch {}
+          }
+          continue
+        }
         $job = $null
         try { $job = $issue.body | ConvertFrom-Json -ErrorAction Stop } catch { continue }
         if ($job.device_id -ne $DeviceId -or $job.type -ne 'ping') { continue }
@@ -44,6 +60,9 @@ try {
         # No remote shell execution is enabled via GitHub Issues.
         $body = @{body = "ARA result: ping=pong; device=$DeviceId; issue=$number"} | ConvertTo-Json
         Invoke-RestMethod -Method Post -Headers $headers -ContentType 'application/json' -Body $body -Uri "$api/issues/$number/comments" -TimeoutSec 15 | Out-Null
+        # Persist acknowledgement before removing the queued label; restart
+        # can safely retry the label removal without duplicating the result.
+        @{id=$id;state='acknowledged'} | ConvertTo-Json -Compress | Set-Content -Path $receipt -Encoding UTF8
         # Remove the queued label only after the result comment was accepted.
         # Do not remove any unrelated labels or overwrite issue metadata.
         Invoke-RestMethod -Method Delete -Headers $headers -Uri "$api/issues/$number/labels/ara-queued" -TimeoutSec 15 | Out-Null
