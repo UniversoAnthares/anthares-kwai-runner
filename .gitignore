@@ -7,3 +7,5 @@
 .env.*
 __pycache__/
 *.log
+
+anthares-remote-mcp/node_modules/
