@@ -2,18 +2,19 @@
 
 The dedicated canary uses its own Flask app, independent of the existing X worker.
 """
+import hmac
 import os
+import uuid
 
 from ara_state_store import build_store
 
-# Fail at startup if durable storage or controller credentials are unavailable.
 if not os.getenv("ARA_SHARED"):
     raise RuntimeError("ARA_SHARED must be configured before serving control routes")
 if not (os.getenv("ARA_DATABASE_URL") or os.getenv("DATABASE_URL")):
     raise RuntimeError("ARA canary requires a durable PostgreSQL connection")
 _durable_store = build_store()
 
-from flask import Flask
+from flask import Flask, jsonify, request
 import anthares_remote_control_routes as _relay
 from ara_public_probe_guard import register as _register_probe_guard
 from ara_runtime_truth import register as _register_runtime_truth
@@ -31,9 +32,39 @@ from anthares_remote_secure_bootstrap import register as _register_secure_bootst
 _register_browser(app)
 _register_secure_bootstrap(app)
 
+
+@app.post("/_canary/persistence-cycle")
+def ara_persistence_cycle_probe():
+    """Token-gated synthetic persistence proof; this route exists on the canary only."""
+    expected = os.getenv("ARA_PERSISTENCE_PROBE_TOKEN", "")
+    supplied = request.headers.get("Authorization", "")
+    supplied = supplied[7:] if supplied.startswith("Bearer ") else ""
+    if not expected or not supplied or not hmac.compare_digest(supplied, expected):
+        return jsonify(ok=False, error="unauthorized"), 401
+
+    device = "persistence-probe-" + uuid.uuid4().hex
+    idem = "persistence-probe-" + uuid.uuid4().hex
+    created = _durable_store.enqueue(device, "ping", {"probe": True}, 30, idempotency_key=idem)
+    duplicate = _durable_store.enqueue(device, "ping", {"probe": True}, 30, idempotency_key=idem)
+    leased = _durable_store.lease_next(device, lease_seconds=15)
+    if not leased or leased.get("id") != created.get("id"):
+        return jsonify(ok=False, stage="lease", created_status=created.get("status")), 500
+    completed = _durable_store.complete(device, created["id"], {"ok": True, "output": "persistence-probe"})
+    recovered = build_store().get_job(device, created["id"])
+    checks = {
+        "created": created.get("status") == "queued",
+        "idempotency": duplicate.get("id") == created.get("id"),
+        "leased": leased.get("status") == "leased",
+        "completed": (completed or {}).get("status") == "done",
+        "recovered_after_new_store": (recovered or {}).get("status") == "done",
+        "result_recovered": ((recovered or {}).get("result") or {}).get("output") == "persistence-probe",
+    }
+    return jsonify(ok=all(checks.values()), backend="postgres", checks=checks,
+                   test_job_id=created["id"]), (200 if all(checks.values()) else 500)
+
+
 @app.get("/healthz")
 def ara_canary_health():
-    # Do not expose DSNs, credentials, device identifiers or stored job data.
     try:
         with _durable_store._conn() as connection, connection.cursor() as cursor:
             cursor.execute("SELECT 1")
