@@ -18,5 +18,8 @@ try:
     # Intentionally omitted: anthares_remote_bootstrap and anthares_remote_switch.
     # Their legacy public endpoints enqueue shell-producing actions without controller auth.
 except Exception:
-    # Keep the existing X worker boot path fail-open; deployment logs will expose errors.
-    pass
+    # Never advertise a running ARA service with silently missing security routes.
+    # The dedicated canary uses ara_canary_app:app for explicit initialization.
+    import logging
+    logging.getLogger("anthares.ara").exception("ARA route registration failed")
+    raise
