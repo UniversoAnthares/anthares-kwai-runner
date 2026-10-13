@@ -91,8 +91,9 @@ func loadConfig() (Config, error) {
     if c.ControlURL == "" || c.DeviceToken == "" || c.DeviceID == "" {
         return c, errors.New("ANTHARES_CONTROL_URL, ANTHARES_DEVICE_TOKEN and ANTHARES_DEVICE_ID are required")
     }
-    if !strings.HasPrefix(strings.ToLower(c.ControlURL), "https://") {
-        return c, errors.New("ANTHARES_CONTROL_URL must use HTTPS")
+    u, err := url.Parse(c.ControlURL)
+    if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+        return c, errors.New("ANTHARES_CONTROL_URL must be an HTTPS origin without credentials, path, query or fragment")
     }
     return c, nil
 }
