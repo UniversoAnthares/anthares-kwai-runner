@@ -14,13 +14,21 @@ The Windows device initiates outbound polling to the control plane. No inbound p
 
 - ChatGPT-facing authorization uses OAuth 2.1 authorization-code + PKCE S256 and refresh tokens.
 - OAuth authorization is approved with a one-time code delivered directly to the registered Windows clipboard through ARA.
-- MCP-to-control authentication uses short-lived Ed25519 request signatures with a 30-second freshness window and replay rejection.
+- MCP-to-control authentication uses Ed25519 request signatures with a 30-second freshness window and replay rejection.
 - The new path does not use `ARA_SHARED` and does not require `ARA_OAUTH_ADMIN_PASSWORD`.
 - Read and write MCP operations are separated by `ara.read` and `ara.write` scopes.
 
 ## Tools
 
 The signed remote MCP exposes exactly 30 tools covering status, system information, shell execution, processes, services, clipboard, screenshots, allowlisted file operations, hashes, atomic writes and detached jobs.
+
+## Verified execution
+
+A live OAuth authorization request completed the signed `clipboard_set` operation on `DESKTOP-FTDK0HP` before the authorization form was rendered. This proves the production path MCP v2 -> Ed25519 control bridge -> ARA -> Windows without AI Commander and without the legacy shared controller secret.
+
+The control service uses a threaded Gunicorn worker so long-polling MCP execution can coexist with device heartbeat, job polling and result upload.
+
+The temporary recovery bootstrap has been disabled again and returns HTTP 401 without authorization.
 
 ## Deployment
 
