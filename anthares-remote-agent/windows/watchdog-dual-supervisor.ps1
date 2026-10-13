@@ -1,6 +1,6 @@
 $ErrorActionPreference='SilentlyContinue'
 $root='C:\ProgramData\AntharesRemoteAgent'
-$standby='https://anthares-ara-infra-canary-v2.onrender.com'
+$standby='https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run'
 
 function Warm-Standby {
     try {
