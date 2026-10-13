@@ -1,0 +1,11 @@
+name = "anthares-ara-backup"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[[durable_objects.bindings]]
+name = "ARA_STATE"
+class_name = "AraState"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AraState"]
