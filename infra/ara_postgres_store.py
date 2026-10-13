@@ -2,11 +2,41 @@ import json
 import os
 import secrets
 from contextlib import contextmanager
+from urllib.parse import quote
 
 import psycopg
 from psycopg.rows import dict_row
 
-DATABASE_URL = os.getenv("ARA_DATABASE_URL", "")
+
+def _database_url_from_env():
+    value = os.getenv("ARA_DATABASE_URL", "").strip()
+    if not value:
+        return ""
+    # Render's dashboard exposes both the complete Internal Database URL and its
+    # component password. Accept either form so an operator copying the masked
+    # password field does not leave the service unusable. No credential is
+    # persisted in source; the password remains only in the environment.
+    if value.startswith(("postgres://", "postgresql://")) or "=" in value:
+        return value
+    host = os.getenv("ARA_DATABASE_HOST", "dpg-db6n9nqvcj2c73afk82g-a").strip()
+    port = os.getenv("ARA_DATABASE_PORT", "5432").strip()
+    name = os.getenv("ARA_DATABASE_NAME", "anthares_ara_state").strip()
+    user = os.getenv("ARA_DATABASE_USER", "anthares_ara_state_user").strip()
+    return (
+        "postgresql://"
+        + quote(user, safe="")
+        + ":"
+        + quote(value, safe="")
+        + "@"
+        + host
+        + ":"
+        + port
+        + "/"
+        + quote(name, safe="")
+    )
+
+
+DATABASE_URL = _database_url_from_env()
 LEASE_SECONDS = max(30, min(int(os.getenv("ARA_LEASE_SECONDS", "90")), 600))
 
 
