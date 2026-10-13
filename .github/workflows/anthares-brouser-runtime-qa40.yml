@@ -193,7 +193,7 @@ jobs:
           start_container
           wait_http "http://127.0.0.1:${API_PORT}/health"
           auth_post /wait '{"selector":"body","timeout_ms":5000,"visible":true}' >/dev/null
-          AFTER=$(auth_post /evaluate '{"expression":"localStorage.getItem(\"anthares_persist_secret\")","return_by_value":true}')
+          AFTER=$(auth_post /evaluate '{"expression":"localStorage.getItem(\"anthares_persist_secret\")","return_by_value\":true}')
           python3 - "$AFTER" "$PERSIST_SECRET" <<'PY'
           import json,sys
           d=json.loads(sys.argv[1])
@@ -211,3 +211,5 @@ jobs:
           echo 'NOVNC_ENDPOINT=PASS CHROMIUM_RUNNING=PASS'
           echo 'PERSISTENT_BROWSER_PROFILE_RESTART=PASS'
           echo 'KWAI_AUTHENTICATED=NOT_TESTED PUBLISHED=NOT_TESTED'
+
+# manual rerun trigger after user-cancelled queued run
