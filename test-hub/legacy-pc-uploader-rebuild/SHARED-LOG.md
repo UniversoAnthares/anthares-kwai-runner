@@ -1414,3 +1414,8 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Both Render MCP gateways now LIVE at commit `b80f551095074187855f7a2865e31b42e99e95cb` (`fix(ara): remove unused os/exec import blocking all Go CI jobs`). Latest startup logs 03:22Z: remote QA invoked, signed OAuth gateway listening, internal MCP ready. No error/fail/panic entries in sampled latest logs.
 - Anthares-browser Actions run 38330972424 job 115080372808 completed SUCCESS, including compile/import/vault crypto and adapter routing tests; not evidence of a live post.
 - Historical Kwai probe last known FAILED due missing creation control, no new local diagnostic performed pending guaranteed invisible/no-focus command execution.
+
+## 2026-10-13 03:31 UTC — Kwai probe false-negative fix proposed
+- Found concrete mismatch: `kwai_memu_publish.py` `open_kwai_home()` uses `find_create_control(nodes)` (supports labels/ID fallbacks), but `MODE == probe` checked only hardcoded `RECORD_ID` and `FAKE_ADD_ID`. A valid create control could therefore be reported missing.
+- Opened isolated PR https://github.com/UniversoAnthares/anthares-clipper/pull/43 (commit b8fe63d7) against `legacy-pc-rebuild` to reuse `find_create_control(nodes)` in probe. No publish path or guard changed. Do not claim it fixes other UI screens without Android dump/QA.
+- Window safety remains outstanding: existing `anthares_executor_startup.cmd` invokes `start /min pythonw.exe`, which is minimized, not an independently proven noninteractive/no-focus isolation guarantee. Do not run additional interactive local diagnostics until safe isolation validated.
