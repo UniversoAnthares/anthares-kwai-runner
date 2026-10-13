@@ -1,0 +1,50 @@
+name: Deploy ARA shared fencing
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ara-shared-fencing-deploy.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: anthares-ara-shared-fencing-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate fencing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'shared-fencing-v1' cloudflare-ara-backup/src/index.js
+          grep -q 'floot-postgres-v1' cloudflare-ara-backup/src/index.js
+          node --check cloudflare-ara-backup/src/index.js
+      - name: Deploy fenced ARA controller
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          cd cloudflare-ara-backup
+          npx --yes wrangler@4.43.0 deploy
+      - name: Verify deployed fencing marker and fail-closed auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            health="$(curl -fsS https://anthares-ara-backup.anthares1.workers.dev/healthz || true)"
+            echo "$health"
+            if echo "$health" | grep -q '"shared_fencing":"floot-postgres-v1"'; then break; fi
+            sleep 5
+          done
+          echo "$health" | grep -q '"shared_fencing":"floot-postgres-v1"'
+          code="$(curl -sS -o /tmp/auth.json -w '%{http_code}' -H 'X-Anthares-Device: DESKTOP-FTDK0HP' https://anthares-ara-backup.anthares1.workers.dev/v1/device/auth-check)"
+          cat /tmp/auth.json
+          test "$code" = 401
+          echo 'ARA_SHARED_FENCING_DEPLOYED=1'
