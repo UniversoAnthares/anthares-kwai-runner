@@ -80,9 +80,12 @@ def _secure_cookie() -> bool:
 
 
 def _set_session_cookie(response: Response) -> None:
+    # Use the site root so the cookie survives the one-time redirect and is
+    # also available to the websocket upgrade. Lax is sufficient because all
+    # authenticated noVNC traffic remains same-origin and the cookie is HttpOnly.
     response.set_cookie(
         COOKIE_NAME, _issue(), max_age=SESSION_SECONDS, httponly=True,
-        secure=_secure_cookie(), samesite="strict", path="/novnc",
+        secure=_secure_cookie(), samesite="lax", path="/",
     )
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -149,7 +152,7 @@ def revoke_session(
 ) -> dict:
     if token and _expiry(token):
         REVOKED.add(token)
-    response.delete_cookie(COOKIE_NAME, path="/novnc", secure=_secure_cookie(), httponly=True, samesite="strict")
+    response.delete_cookie(COOKIE_NAME, path="/", secure=_secure_cookie(), httponly=True, samesite="lax")
     response.headers["Cache-Control"] = "no-store"
     return {"ok": True}
 
