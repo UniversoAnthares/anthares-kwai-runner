@@ -49,7 +49,9 @@ jobs:
           debugfs -R 'dump /etc/fstab.ranchu /tmp/fstab.ranchu' /tmp/vendor-p1.img >/dev/null 2>&1
           test -s /tmp/fstab.ranchu
           rm -rf /tmp/ramdisk-root && mkdir /tmp/ramdisk-root
-          (cd /tmp/ramdisk-root && gzip -dc "$DIR/ramdisk.img" | cpio -idm --quiet)
+          gzip -dc "$DIR/ramdisk.img" > /tmp/ramdisk-original.cpio
+          (cd /tmp/ramdisk-root && cpio -idm --quiet --no-absolute-filenames < /tmp/ramdisk-original.cpio) || true
+          test -L /tmp/ramdisk-root/init || test -f /tmp/ramdisk-root/init
           V='${{ matrix.variant }}'
           # First-stage init cannot find /dev/block/by-name/super; test physical GPT mounts.
           # Preserve all original mount options, only replace logical partition references.
