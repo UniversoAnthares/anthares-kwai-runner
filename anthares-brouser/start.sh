@@ -33,6 +33,9 @@ stop_pid() {
 
 cleanup() {
   stop_pid "$CHROME_PID"
+  if [[ "${GITLAB_STATE_ENABLED:-0}" == "1" ]]; then
+    python /opt/anthares-brouser/profile_store.py backup || log "encrypted snapshot backup failed"
+  fi
   stop_pid "$NOVNC_PID"
   stop_pid "$VNC_PID"
   stop_pid "$XVFB_PID"
@@ -168,8 +171,13 @@ wait_api_health
 start_xvfb
 start_vnc
 start_novnc
+if [[ "${GITLAB_STATE_ENABLED:-0}" == "1" ]]; then
+  python /opt/anthares-brouser/profile_store.py restore || log "encrypted snapshot restore failed; refusing to start with empty profile"
+fi
 start_chromium
 
+LAST_SNAPSHOT=$(date +%s)
+SNAPSHOT_INTERVAL=${GITLAB_SNAPSHOT_INTERVAL:-1800}
 READY_FAILURES=0
 MAX_READY_FAILURES=${MAX_READY_FAILURES:-6}
 SUPERVISOR_INTERVAL=${SUPERVISOR_INTERVAL:-5}
@@ -198,6 +206,20 @@ while kill -0 "$API_PID" 2>/dev/null; do
     log "Chromium exited; restarting with the same persistent profile"
     tail -n 20 /tmp/chromium.log 2>/dev/null || true
     start_chromium
+    READY_FAILURES=0
+    continue
+  fi
+
+  if [[ "${GITLAB_STATE_ENABLED:-0}" == "1" ]] && (( $(date +%s) - LAST_SNAPSHOT >= SNAPSHOT_INTERVAL )); then
+    log "checkpointing encrypted browser profile"
+    stop_pid "$CHROME_PID"
+    if python /opt/anthares-brouser/profile_store.py backup; then
+      log "encrypted profile checkpoint committed"
+    else
+      log "encrypted profile checkpoint failed"
+    fi
+    start_chromium
+    LAST_SNAPSHOT=$(date +%s)
     READY_FAILURES=0
     continue
   fi
