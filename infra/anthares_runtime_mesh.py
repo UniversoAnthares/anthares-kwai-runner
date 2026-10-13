@@ -46,8 +46,8 @@ def _browser_cfg() -> tuple[str, str]:
 
 
 def _browser_ready() -> dict[str, Any]:
-    url, _ = _browser_cfg()
-    if not url:
+    url, token = _browser_cfg()
+    if not url or not token:
         return {"configured": False, "healthy": False, "error": "browser_not_configured"}
     try:
         r = requests.get(url + "/health", timeout=8)
