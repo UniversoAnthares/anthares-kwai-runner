@@ -116,7 +116,10 @@ class RouteSecurityTests(unittest.TestCase):
 
     def test_production_sitecustomize_preserves_runtime_mesh(self):
         sitecustomize = (ROOT / 'infra' / 'sitecustomize.py').read_text(encoding='utf-8')
-        self.assertIn('from anthares_runtime_mesh import register', sitecustomize)
+        # The production entrypoint now registers the vault-backed runtime mesh.
+        # Requiring the legacy import rejects the current, tested adapter.
+        self.assertIn('from anthares_runtime_mesh_vaulted import register', sitecustomize)
+        self.assertIn('_register_runtime_mesh(_worker.app)', sitecustomize)
 
 
 if __name__ == '__main__':
