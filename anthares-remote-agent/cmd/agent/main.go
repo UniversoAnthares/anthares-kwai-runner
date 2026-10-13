@@ -48,7 +48,14 @@ type Result struct {
 	EndedAt   string `json:"ended_at"`
 }
 
-var httpClient = &http.Client{Timeout: 35 * time.Second}
+var httpClient = &http.Client{
+	Timeout: 35 * time.Second,
+	// Control-plane requests carry a device bearer token. Never follow
+	// redirects: they can move jobs or credentials to an untrusted endpoint.
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
 
 func main() {
 	cfg, err := loadConfig()
