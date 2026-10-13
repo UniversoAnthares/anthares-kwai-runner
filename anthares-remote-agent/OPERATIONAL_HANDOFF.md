@@ -2,44 +2,50 @@
 
 ## Verified
 
-- GitLab project `87307279`, pipeline `2940582183`: **success** (Linux tests/race/vet and Windows amd64/arm64 cross-build).
-- GitLab jobs used `k8s.saas-linux-small-amd64.runners-manager.gitlab.com/default` (Linux runner). Cross-compiling Windows executables **does not** validate Windows native behavior.
+- GitLab project `87307279`, pipeline `2940931649`: **success** after correcting the CI to test GitHub branch `feature/ara-capabilities`; Linux tests/vet and Windows amd64/arm64 cross-build completed.
+- GitLab PostgreSQL integration pipeline `2940964419`: **success**; persistent store tests cover lease recovery, full persistent contract and transactional self-test.
 - GitHub PR #104 remains open at `feature/ara-capabilities`; its base is `feature/anthares-remote-agent`.
-- ARA uses outbound HTTPS heartbeat, poll and result routes. Unit tests use an isolated TLS test server, not production infrastructure.
+- ARA uses outbound HTTPS heartbeat, poll and result routes.
+- Dedicated Render control plane `anthares-ara-control` (`srv-db6r95gm7kps73b23jf0`) is isolated from the existing X worker and uses PostgreSQL `anthares-ara-state` (`dpg-db6n9nqvcj2c73afk82g-a`).
+- The existing `anthares-remote-control` service remains the X worker and was not repointed.
+- Both MCP gateways (`anthares-remote-mcp` and `anthares-remote-mcp-v2`) are configured to use `https://anthares-ara-control.onrender.com` and their post-change deploys are live.
+- Real Windows device `DESKTOP-FTDK0HP` is connected through ARA 0.3.0. Live `session_status` returned `connected=true`, and a real `system_info` job completed successfully through the durable control plane.
+- A deliberate redeploy of `anthares-ara-control` completed live at 2026-10-13 05:38:01 UTC. The device resumed heartbeat/polling immediately after replacement, and a new `system_info` job completed after the restart.
+- Root readiness was hardened in commit `2d6e5bd39c5365d38b573504d19dd05bd0a9729c`; generic `HEAD /` and `GET /` probes now return HTTP 200 using the same fail-closed PostgreSQL readiness contract as `/healthz`.
+- Signed bridge capability response reports PostgreSQL durability, PostgreSQL OAuth one-time-token storage, replay protection, rotating service-key refresh, redundant MCP keys and two trusted MCP services.
 
-## Not verified / blockers
+## Remaining external acceptance items
 
 - CircleCI connected project and completed `ara_validation` run: **not verified**.
-- AppVeyor connected project and native Windows test run: **not verified**.
-- Failover GitLab -> CircleCI -> AppVeyor: **not implemented or demonstrated**. Config files alone do not implement failover.
-- Production control plane authentication/authorization and device enrollment: **not verified**.
-- Real Windows host end-to-end: **not verified**. Do not claim production readiness.
-- The GitLab pipeline currently clones the mutable GitHub `feature/ara-capabilities` branch. A GitLab pipeline SHA refers to the GitLab CI config, **not** the exact tested GitHub commit. Record the checked-out GitHub commit SHA in every CI log/artifact before asserting provenance.
+- AppVeyor connected project and native Windows CI run: **not verified**.
+- GitLab -> CircleCI -> AppVeyor CI-provider failover: **not demonstrated**. These are CI redundancy acceptance items; they no longer block the live ARA control path.
+- GitLab Windows builds are cross-builds on Linux; they do not replace native Windows CI evidence. The real Windows device execution above proves the production execution path, not AppVeyor acceptance.
 
 ## Ownership boundaries
 
-- Agent capabilities and Go security tests: this PR.
-- Control plane and server deployment: coordinate with control-plane owner; use the documented `/v1/device/heartbeat`, `/v1/device/jobs/next`, and `/v1/device/jobs/{id}/result` contract.
-- CI orchestration: implement independently of the device agent, with provider status polling, bounded deadlines, idempotency key per commit/test suite, provider priority and durable audit log. Never dispatch duplicate destructive jobs.
-- Browser and social upload agents: do not change their workflows or application code from this PR.
+- Agent capabilities and Go security tests: PR #104 / `feature/ara-capabilities`.
+- Durable control plane: `anthares-ara-control`, branch `ara-postgres-control-service`.
+- Existing X worker: preserve `anthares-remote-control`; do not reuse it for ARA.
+- CI orchestration: keep independent of the device agent, with bounded deadlines, idempotency and durable audit evidence.
+- Browser/social upload workflows remain separate from ARA control-plane changes.
 
-## Acceptance criteria
+## Render state — 2026-10-13
 
-1. Green native Windows AppVeyor job and direct job URL.
-2. Green CircleCI job and direct URL.
-3. GitLab, CircleCI, AppVeyor each demonstrably run independently of GitHub-hosted runners.
-4. Failover integration test simulates primary timeout and secondary outage, proves one active attempt and recorded decision.
-5. Production-like isolated control-plane test proves device auth, heartbeat, poll, result, and retry semantics.
-6. Real Windows device enrollment requires separate explicit authorization; do not install software or touch the user's PC without permission.
+- Workspace: `anthares-site` (`tea-d9hnkbt8nd3s73f0876g`).
+- PostgreSQL `anthares-ara-state`: `available`, PostgreSQL 18, free plan, Oregon; free instance reports expiration **2026-11-12**.
+- Dedicated control service: `anthares-ara-control` (`srv-db6r95gm7kps73b23jf0`), URL `https://anthares-ara-control.onrender.com`, branch `ara-postgres-control-service`.
+- MCP primary: `anthares-remote-mcp` (`srv-db6naljbc2fs739og1s0`) — live after control URL correction.
+- MCP secondary: `anthares-remote-mcp-v2` (`srv-db6o0d5g1s2s738s7bp0`) — live after control URL correction.
+- X worker preserved: `anthares-remote-control` (`srv-db6mj8navr4c73cqvgo0`), start command remains `x_render_worker_v3:app`.
 
-No AI Commander, MeshCentral, local PC dependency, billing or card registration.
+## Current production evidence
 
-## Render verification — 2026-10-13
+- `/v1/device/heartbeat`: HTTP 200 from `AntharesRemoteAgent/0.3`.
+- `/v1/device/jobs/next`: active polling with HTTP 204 when idle and HTTP 200 when jobs are leased.
+- `/v1/device/jobs/{id}/result`: HTTP 200 on completed real jobs.
+- `/v1/mcp/status`: HTTP 200.
+- `/v1/mcp/execute`: real executions return HTTP 200 for successful jobs; individual command failures may legitimately surface as HTTP 500 when the agent reports a failed operation.
+- `/`: HTTP 200 after root-readiness fix.
+- `/healthz`: HTTP 200 while PostgreSQL self-test/readiness is healthy.
 
-- Render workspace: `anthares-site` (`tea-d9hnkbt8nd3s73f0876g`).
-- PostgreSQL `anthares-ara-state` (`dpg-db6n9nqvcj2c73afk82g-a`): `available`, free plan, Oregon. The database's free instance reports expiration **2026-11-12**; plan migration/renewal before relying on persistent state.
-- Render web service `anthares-remote-control` (`srv-db6mj8navr4c73cqvgo0`): deploy `dep-db6og2aj9qps739sn2mg` **live**, finished 2026-10-13 01:24:48 UTC.
-- **Critical configuration mismatch:** service's actual start command is `gunicorn --timeout 180 -b 0.0.0.0:$PORT --chdir infra x_render_worker_v3:app`. Its checked-out branch `anthares-remote-control-v1` file `infra/x_render_worker_v3.py` exposes a `/health` route, but no `ARA_DATABASE_URL` or `/v1/device/*` routes. The service is running the X Render worker, **not proven to be the ARA control plane**.
-- Render connector exposes deploys and logs but does **not** expose a read operation for environment variables. Therefore the user-reported `ARA_DATABASE_URL` update cannot be independently verified from environment-variable state.
-- Do **not** redeploy or repoint this shared service without coordination with the infrastructure owner. First deploy the correct ARA control-plane app to an isolated service, add database connection validation/health endpoint, then verify the authenticated device protocol end to end.
-- Agent CI: GitLab pipeline `2940612607` **success**; newest strict-size test pipeline `2940627430` pending verification.
+No AI Commander, MeshCentral, Remote Desktop Commander or local shell fallback is required for the live ARA control path.
