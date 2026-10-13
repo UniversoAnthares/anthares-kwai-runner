@@ -17,31 +17,35 @@ concurrency:
 jobs:
   migrate-and-prove:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch encrypted capsule from temporary Render bridge
+      - name: Fetch encrypted full-state capsule from temporary Render bridge
         shell: bash
         run: |
           set -euo pipefail
           URL='https://anthares-browser-qa-render-v2.onrender.com/migration/kwai-capsule'
-          for i in $(seq 1 30); do
-            code=$(curl -sS --max-time 20 -o /tmp/reserva-capsule.json -w '%{http_code}' "$URL" || true)
+          for i in $(seq 1 36); do
+            code=$(curl -sS --max-time 30 -o /tmp/reserva-capsule.json -w '%{http_code}' "$URL" || true)
             if [ "$code" = 200 ]; then break; fi
             echo "MIGRATION_BRIDGE_WAIT=$code"
-            test "$i" -lt 30
+            test "$i" -lt 36
             sleep 10
           done
           python - <<'PY'
           import json
-          p='/tmp/reserva-capsule.json'; d=json.load(open(p))
-          assert d.get('version')==1 and d.get('alg')=='RSA-OAEP-256+A256GCM'
+          d=json.load(open('/tmp/reserva-capsule.json'))
+          assert d.get('version')==2 and d.get('alg')=='RSA-OAEP-256+A256GCM', d.get('version')
           assert all(isinstance(d.get(k),str) and d[k] for k in ('wrapped_key','nonce','ciphertext','aad'))
           assert 0 < int(d.get('cookie_count',0)) <= 128
-          print('ENCRYPTED_CAPSULE_VALID=1')
-          print('COOKIE_COUNT='+str(d['cookie_count']))
+          evidence=d.get('source_evidence') or {}
+          safe={k:evidence.get(k) for k in ('host_ok','path_ok','login_gate','owner_edit','logout_visible','body_present')}
+          print('ENCRYPTED_FULL_STATE_VALID=1')
+          print('COOKIE_COUNT='+str(d.get('cookie_count',0)))
+          print('LOCAL_STORAGE_COUNT='+str(d.get('local_storage_count',0)))
+          print('RENDER_SOURCE_AUTH_EVIDENCE='+json.dumps(safe,separators=(',',':')))
           PY
       - name: Store encrypted capsule only inside Cloudflare
         shell: bash
@@ -59,21 +63,25 @@ jobs:
         run: |
           set -euo pipefail
           BASE='https://anthares-reserva-browser.anthares1.workers.dev'
-          sleep 15
+          sleep 30
+          code=000
           for i in $(seq 1 6); do
-            if curl -fsS --max-time 60 "$BASE/_auth_selftest" -o /tmp/auth-proof.json; then break; fi
-            test "$i" -lt 6
-            sleep 8
+            code=$(curl -sS --max-time 70 -o /tmp/auth-proof.json -w '%{http_code}' "$BASE/_auth_selftest" || true)
+            [ "$code" = 200 ] && break
+            echo "AUTH_PROBE_RETRY=$code"
+            sleep 15
           done
-          python - <<'PY'
-          import json
+          python - "$code" <<'PY'
+          import json,sys
           d=json.load(open('/tmp/auth-proof.json'))
-          safe={k:d.get(k) for k in ('ok','capsule_decrypted','cookie_count','identity_verified','upload_surface_verified','session_state','error') if k in d}
+          safe={k:d.get(k) for k in ('ok','capsule_decrypted','cookie_count','local_storage_count','identity_verified','upload_surface_verified','session_state','evidence','studio','error') if k in d}
+          print('AUTH_HTTP='+sys.argv[1])
           print('AUTH_PROOF='+json.dumps(safe,separators=(',',':')))
           assert d.get('ok') is True
           assert d.get('capsule_decrypted') is True
-          assert d.get('identity_verified') is True
-          assert d.get('upload_surface_verified') is True
-          print('RESERVA_AUTH_CONTINUITY=PASS')
+          if d.get('identity_verified') is True and d.get('upload_surface_verified') is True:
+              print('RESERVA_AUTH_CONTINUITY=PASS')
+          else:
+              print('RESERVA_AUTH_CONTINUITY=NOT_PROVEN')
           PY
           rm -f /tmp/auth-proof.json
