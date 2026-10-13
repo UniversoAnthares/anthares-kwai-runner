@@ -66,6 +66,7 @@ func saveEncryptedResult(dir, token string, result Result) error {
 	}
 	return os.Rename(tmp.Name(), filepath.Join(dir, result.ID+".pending"))
 }
+
 func loadEncryptedResult(path, token, id string) (Result, error) {
 	var result Result
 	if err := validateJobID(id); err != nil {
@@ -108,6 +109,29 @@ func resultSpoolDir(cfg Config) string {
 	return filepath.Join(os.TempDir(), "anthares-ara-results", fmt.Sprintf("%x", key[:12]))
 }
 
+// The durable controller uses 404 when a job no longer exists for this device
+// and 409 when a result can no longer be applied (not leased or conflicting
+// final result). Replaying either forever cannot make progress and creates an
+// avoidable request storm. Keep the encrypted artifact for audit instead.
+func permanentResultRejection(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := err.Error()
+	return strings.Contains(text, "result status 404") || strings.Contains(text, "result status 409")
+}
+
+func quarantineRejectedResult(path string) error {
+	if !strings.HasSuffix(path, ".pending") {
+		return errors.New("result spool path is not pending")
+	}
+	target := strings.TrimSuffix(path, ".pending") + ".rejected"
+	if err := os.Rename(path, target); err != nil {
+		return err
+	}
+	return nil
+}
+
 func replayEncryptedResults(cfg Config) error {
 	dir := resultSpoolDir(cfg)
 	entries, err := os.ReadDir(dir)
@@ -128,6 +152,13 @@ func replayEncryptedResults(cfg Config) error {
 			return fmt.Errorf("pending result %s: %w", id, err)
 		}
 		if err = postResultRetry(cfg, result); err != nil {
+			if permanentResultRejection(err) {
+				if qerr := quarantineRejectedResult(path); qerr != nil {
+					return fmt.Errorf("quarantine rejected result %s: %w", id, qerr)
+				}
+				fmt.Fprintf(os.Stderr, "result permanently rejected; quarantined job=%s: %v\n", id, err)
+				continue
+			}
 			return fmt.Errorf("replay result %s: %w", id, err)
 		}
 		if err = os.Remove(path); err != nil {
