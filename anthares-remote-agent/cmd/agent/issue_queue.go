@@ -67,17 +67,8 @@ type gitlabIssueProvider struct {
 }
 
 func init() {
-	// Issue queues are a control-plane-independent transport. If no HTTP control
-	// origin is configured, keep the existing agent main loop alive on a reserved
-	// non-routable origin while the issue queue goroutine performs real work.
 	if !issueQueueConfigured() {
 		return
-	}
-	if strings.TrimSpace(os.Getenv("ANTHARES_CONTROL_URL")) == "" {
-		_ = os.Setenv("ANTHARES_CONTROL_URL", "https://ara-control-unavailable.invalid")
-	}
-	if strings.TrimSpace(os.Getenv("ANTHARES_DEVICE_TOKEN")) == "" {
-		_ = os.Setenv("ANTHARES_DEVICE_TOKEN", "issue-queue-only")
 	}
 	go func() {
 		cfg, err := loadConfig()
@@ -191,6 +182,9 @@ func issueQueueStateDir() (string, error) {
 		return filepath.Abs(v)
 	}
 	if runtime.GOOS == "windows" {
+		if work := strings.TrimSpace(os.Getenv("ANTHARES_WORK_ROOT")); work != "" {
+			return filepath.Join(work, "ara-jobs", "issue-queue"), nil
+		}
 		return `C:\ProgramData\AntharesRemoteAgent\issue-queue`, nil
 	}
 	base, err := os.UserCacheDir()

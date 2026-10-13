@@ -63,9 +63,20 @@ func main() {
 		os.Exit(2)
 	}
 	fmt.Printf("Anthares Remote Agent starting device=%s os=%s/%s concurrency=%d\n", cfg.DeviceID, runtime.GOOS, runtime.GOARCH, cfg.MaxConcurrent)
+
+	// GitHub/GitLab issue queues are a complete, independent control transport.
+	// When no HTTP origin is configured, run cleanly in queue-only mode instead
+	// of manufacturing a fake endpoint and producing permanent network failures.
+	if strings.TrimSpace(cfg.ControlURL) == "" {
+		if !issueQueueConfigured() {
+			fmt.Fprintln(os.Stderr, "config error: no control transport configured")
+			os.Exit(2)
+		}
+		fmt.Println("Anthares Remote Agent running in issue-queue-only mode")
+		select {}
+	}
+
 	go heartbeatLoop(cfg)
-	// A transient control-plane outage must not terminate the agent. Keep any
-	// encrypted pending results on disk and retry them while the process stays up.
 	if err := replayEncryptedResults(cfg); err != nil {
 		fmt.Fprintln(os.Stderr, "pending result replay deferred:", err)
 	}
@@ -73,8 +84,6 @@ func main() {
 
 	sem := make(chan struct{}, cfg.MaxConcurrent)
 	for {
-		// Reserve capacity before claiming a remote job. Polling first could
-		// leave a leased task waiting locally while every worker is busy.
 		sem <- struct{}{}
 		job, err := pollJob(cfg)
 		if err != nil {
@@ -88,8 +97,6 @@ func main() {
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		// Defensive validation even if a future poll implementation changes.
-		// Never execute a malformed job supplied by the control plane.
 		if err := validateJobID(job.ID); err != nil || strings.TrimSpace(job.Type) == "" {
 			<-sem
 			fmt.Fprintln(os.Stderr, "rejecting malformed remote job")
@@ -99,19 +106,15 @@ func main() {
 		go func() {
 			defer func() { <-sem }()
 			result := executeJob(cfg, j)
-			// Persist the result before attempting network delivery. Until
-			// replay is wired in, do not silently execute without a spool.
 			if err := saveEncryptedResult(resultSpoolDir(cfg), cfg.DeviceToken, result); err != nil {
 				fmt.Fprintf(os.Stderr, "fatal result spool error job=%s: %v\n", result.ID, err)
 				os.Exit(1)
 			}
 			if err := postResultRetry(cfg, result); err != nil {
-				// Keep the encrypted pending file and retry it in the background.
 				fmt.Fprintf(os.Stderr, "result upload deferred job=%s: %v\n", result.ID, err)
 				return
 			}
 			if err := os.Remove(filepath.Join(resultSpoolDir(cfg), result.ID+".pending")); err != nil {
-				// Replaying an acknowledged result is idempotent at the control plane.
 				fmt.Fprintf(os.Stderr, "result cleanup deferred job=%s: %v\n", result.ID, err)
 			}
 		}()
@@ -139,8 +142,17 @@ func loadConfig() (Config, error) {
 			}
 		}
 	}
-	if c.ControlURL == "" || c.DeviceToken == "" || c.DeviceID == "" {
-		return c, errors.New("ANTHARES_CONTROL_URL, ANTHARES_DEVICE_TOKEN and ANTHARES_DEVICE_ID are required")
+	if c.DeviceID == "" {
+		return c, errors.New("ANTHARES_DEVICE_ID is required")
+	}
+	if c.ControlURL == "" {
+		if !issueQueueConfigured() {
+			return c, errors.New("no control transport configured")
+		}
+		return c, nil
+	}
+	if c.DeviceToken == "" {
+		return c, errors.New("ANTHARES_DEVICE_TOKEN is required when HTTP control is configured")
 	}
 	u, err := url.Parse(c.ControlURL)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
