@@ -52,7 +52,7 @@ func fileCopy(cfg Config, src, dst string) (string, error) {
     defer in.Close()
     st, err := in.Stat()
     if err != nil { return "", err }
-    if st.IsDir() { return "", errors.New("source is a directory") }
+    if !st.Mode().IsRegular() { return "", errors.New("source must be a regular file") }
     if err := os.MkdirAll(filepath.Dir(d), 0700); err != nil { return "", err }
     tmp, err := os.CreateTemp(filepath.Dir(d), ".ara-copy-*")
     if err != nil { return "", err }
