@@ -51,6 +51,14 @@ def test_health_fail_closed_and_no_host_fallback():
     assert body["global_lease_authority"] == "anthares-control/cloudflare"
 
 
+def test_remote_execute_does_not_enqueue_volatile_jobs():
+    reset(); c = app_client()
+    with patch.object(mesh._remote, "execute_job", None, create=True), patch.object(mesh, "_legacy_enqueue", side_effect=AssertionError("volatile queue must not be used")):
+        response = c.post("/v1/runtime/remote/execute", headers=auth(), json={"device_id": "remote", "type": "ping"})
+    assert response.status_code == 503
+    assert response.get_json()["error"] == "job_lost"
+
+
 def test_browser_health_requires_url_and_token():
     reset(); c = app_client()
     with patch.dict(os.environ, {"ANTHARES_BROWSER_URL": "https://browser.invalid", "ANTHARES_BROWSER_TOKEN": ""}):
