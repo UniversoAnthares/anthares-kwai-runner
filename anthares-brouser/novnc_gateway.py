@@ -167,12 +167,21 @@ def novnc_static(asset_path: str, _: int = Depends(_require_cookie)):
 
 
 def _same_origin(websocket: WebSocket) -> bool:
-    origin = websocket.headers.get("origin", "")
-    host = websocket.headers.get("host", "")
-    parsed = urlsplit(origin)
-    return bool(parsed.netloc and host and parsed.netloc.casefold() == host.casefold()
-                and parsed.scheme in {"https", "http"}
-                and (parsed.scheme == "https" or not _secure_cookie()))
+    """Validate browser origin against the configured public HTTPS hostname.
+
+    Render can rewrite the internal Host header while preserving the public
+    browser Origin. Never trust arbitrary forwarded-host headers here.
+    """
+    origin = urlsplit(websocket.headers.get("origin", ""))
+    public_url = urlsplit(os.environ.get(
+        "NOVNC_PUBLIC_ORIGIN", "https://anthares-browser-qa-render.onrender.com"
+    ))
+    return bool(
+        origin.scheme == "https"
+        and origin.hostname == public_url.hostname
+        and origin.port == public_url.port
+        and public_url.scheme == "https"
+    )
 
 
 @router.websocket("/novnc/websockify")
