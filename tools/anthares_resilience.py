@@ -19,10 +19,10 @@ import urllib.request
 from dataclasses import asdict, dataclass
 
 TIMEOUT = float(os.environ.get("ANTHARES_HEALTH_TIMEOUT", "8"))
-BROWSER_PRIMARY = os.environ.get(
-    "ANTHARES_BROWSER_PRIMARY_URL", "https://anthares-browser-qa-render.onrender.com"
+BROWSER_PRIMARY = os.environ.get("ANTHARES_BROWSER_PRIMARY_URL", "").rstrip("/")
+BROWSER_RESERVE = os.environ.get(
+    "ANTHARES_BROWSER_RESERVE_URL", "https://anthares-reserva-browser.anthares1.workers.dev"
 ).rstrip("/")
-BROWSER_RESERVE = os.environ.get("ANTHARES_BROWSER_RESERVE_URL", "").rstrip("/")
 RESERVA_CONTROL = os.environ.get(
     "ANTHARES_RESERVA_CONTROL_URL", "https://anthares-ara-backup.anthares1.workers.dev"
 ).rstrip("/")
@@ -42,9 +42,11 @@ class Probe:
 
 
 def probe(name: str, url: str) -> Probe:
+    if not url:
+        return Probe(name, "", False, None, 0, "disabled")
     started = time.monotonic()
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "AntharesResilience/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "AntharesResilience/1.1"})
         with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
             raw = response.read(65536)
             body = raw.decode("utf-8", "replace")
@@ -59,17 +61,24 @@ def probe(name: str, url: str) -> Probe:
 
 def main() -> int:
     checks = [
-        probe("browser_liveness", f"{BROWSER_PRIMARY}/health"),
-        probe("browser_readiness", f"{BROWSER_PRIMARY}/ready"),
         probe("reserva_control", f"{RESERVA_CONTROL}/health"),
         probe("control_plane", f"{CONTROL}/health"),
         probe("control_failover_self_test", f"{CONTROL}/failover-self-test"),
     ]
+    if BROWSER_PRIMARY:
+        checks.extend([
+            probe("browser_liveness", f"{BROWSER_PRIMARY}/health"),
+            probe("browser_readiness", f"{BROWSER_PRIMARY}/ready"),
+        ])
     if BROWSER_RESERVE:
         checks.append(probe("browser_reserve", f"{BROWSER_RESERVE}/health"))
 
     by_name = {item.name: item for item in checks}
-    browser_primary_ok = by_name["browser_liveness"].ok and by_name["browser_readiness"].ok
+    browser_primary_ok = bool(BROWSER_PRIMARY) and by_name.get(
+        "browser_liveness", Probe("", "", False, None, 0, "")
+    ).ok and by_name.get(
+        "browser_readiness", Probe("", "", False, None, 0, "")
+    ).ok
     browser_reserve_ok = bool(BROWSER_RESERVE) and by_name.get(
         "browser_reserve", Probe("", "", False, None, 0, "")
     ).ok
@@ -83,8 +92,8 @@ def main() -> int:
         browser_route = "anthares-reserva-browser"
         browser_continuity = "on_demand_browser"
     else:
-        browser_route = "none_equivalent"
-        browser_continuity = "github_actions_finite_jobs_only"
+        browser_route = "github-actions"
+        browser_continuity = "finite_jobs_only"
 
     if reserva_ok:
         reserva_route = "cloudflare-ara"
@@ -95,7 +104,7 @@ def main() -> int:
 
     browser_has_equivalent_continuity = browser_primary_ok or browser_reserve_ok
     reserva_has_equivalent_continuity = reserva_ok or control_ok
-    fully_healthy = browser_primary_ok and reserva_ok and control_ok
+    fully_healthy = browser_has_equivalent_continuity and reserva_ok and control_ok
 
     result = {
         "ok": fully_healthy,
@@ -106,6 +115,7 @@ def main() -> int:
             "single_writer_required": True,
             "pc_as_runner": False,
             "paid_services_allowed": False,
+            "render_required": False,
         },
         "decision": {
             "browser_route": browser_route,
