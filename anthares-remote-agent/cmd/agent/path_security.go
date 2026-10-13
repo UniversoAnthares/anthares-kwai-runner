@@ -78,12 +78,6 @@ func securePath(cfg Config, path string) (string, error) {
     return abs, nil
 }
 
-// Preserve the existing internal contract while applying the hardened checks to
-// file_stat, file_list, chunked transfers and direct reads/writes.
-func safePath(cfg Config, path string) (string, error) {
-    return securePath(cfg, path)
-}
-
 func safeExistingPath(cfg Config, path string) (string, error) {
     return securePath(cfg, path)
 }
