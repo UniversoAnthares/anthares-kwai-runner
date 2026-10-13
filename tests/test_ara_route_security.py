@@ -62,6 +62,27 @@ class RouteSecurityTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(ara_runtime_truth.backend_name(), 'unavailable')
 
+    def test_device_result_rejects_unleased_job_at_http_boundary(self):
+        import hashlib
+        import anthares_remote_control_routes as relay
+        from ara_state_store import MemoryStore
+        app = Flask(__name__)
+        token = "device-test-token"
+        device = "TEST-DEVICE"
+        store = MemoryStore()
+        with mock.patch.object(relay, "_STORE", store), mock.patch.dict(
+            os.environ, {"ARA_DEVICE_HASH_TEST_DEVICE": hashlib.sha256(token.encode()).hexdigest()}
+        ):
+            relay.register(app, "controller-token")
+            job = store.enqueue(device, "ping", {})
+            response = app.test_client().post(
+                "/v1/device/jobs/" + job["id"] + "/result",
+                json={"ok": True},
+                headers={"Authorization": "Bearer " + token, "X-Anthares-Device": device},
+            )
+            self.assertEqual(response.status_code, 409)
+            self.assertEqual(store.get_job(device, job["id"])["status"], "queued")
+
     def test_canary_requires_durable_database_and_controller_secret(self):
         source = (ROOT / 'infra' / 'ara_canary_app.py').read_text(encoding='utf-8')
         self.assertIn('if not os.getenv("ARA_SHARED"):', source)

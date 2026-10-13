@@ -142,6 +142,8 @@ def register(app, control_token):
         job = _store().complete(device, job_id, request.get_json(silent=True) or {})
         if not job:
             return jsonify(error="unknown_job"), 404
+        if job.get("status") == "queued":
+            return jsonify(ok=False, error="job_not_leased", status="queued"), 409
         return jsonify(ok=True, status=job.get("status"))
 
     @app.post("/v1/control/jobs")
