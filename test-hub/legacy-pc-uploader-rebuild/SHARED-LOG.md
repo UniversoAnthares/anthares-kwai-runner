@@ -1462,3 +1462,12 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Fresh process inventory includes `MEmu.exe` PID 22792 and `adb.exe` PID 3868, plus `cmd.exe` PIDs 20720, 14008, and 30692 in Console session 3. This is evidence of processes in the interactive session, but the current process listing does not show parent/command-line provenance; ownership and whether these are harmful cannot be concluded from this output alone. No process was stopped.
 - PR #47 remains open and unmerged; no CI status or workflow run was present at the last check.
 - Manual gate remains: wait for MEmu's runtime repair to finish, then capture the resulting emulator screen. If it remains at 59% for several minutes or displays an error, capture that state rather than force-closing it. Do not enter credentials or start a publication during this diagnostic step.
+
+
+## 2026-10-13 04:11 UTC — MEmu repair completed; Kwai crash dialog observed
+
+- User-provided screenshot shows Google Play Store open to “Kwai - Vídeo & Bônus Diário”; Android displays the system dialog “Kwai apresenta falhas continuamente” with options “Informações do app” and “Fechar app”.
+- This establishes that the Kwai app is currently crashing repeatedly after the MEmu runtime repair. The screen does not establish whether the account is authenticated.
+- No automated tap, restart, reinstall, or publication was initiated. Do not run the Kwai probe while Android is showing the crash dialog; it would likely fail and could obscure useful diagnostics.
+- Recommended immediate manual action: tap “Fechar app” once to dismiss the Android crash dialog, then stop and send a screenshot of the resulting screen. Do not uninstall/reinstall Kwai, clear app data, or press “Abrir” repeatedly yet; preserve the current app state for diagnosis.
+- ARA status from 04:02 UTC remains connected with queue depth 0; no active detached jobs were reported. Process inventory previously showed MEmu.exe PID 22792 and adb.exe PID 3868, with three cmd.exe processes in interactive session 3; command-line/parent provenance remains unknown. No process was terminated.
