@@ -2,12 +2,15 @@ name: Anthares Render Redundancy Acceptance
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
   push:
-    branches: [anthares-render-redundancy]
+    branches: [main, anthares-render-redundancy]
     paths:
       - 'tools/render_redundancy_acceptance.py'
       - 'tools/provider_router.py'
       - '.github/workflows/render-redundancy-acceptance.yml'
+      - 'tools/RENDER_REDUNDANCY.md'
   pull_request:
     branches: [main]
     paths:
@@ -15,6 +18,10 @@ on:
       - 'tools/provider_router.py'
       - '.github/workflows/render-redundancy-acceptance.yml'
       - 'tools/RENDER_REDUNDANCY.md'
+
+concurrency:
+  group: anthares-render-redundancy-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -61,14 +68,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe Render without making it a dependency
+      - name: Probe Render as an execution provider
         run: |
           set +e
           code=$(curl -sS -o /tmp/render-health.json -w '%{http_code}' --max-time 15 https://anthares-remote-control.onrender.com/health)
           echo "RENDER_HTTP=$code"
           cat /tmp/render-health.json 2>/dev/null || true
           exit 0
-      - name: Prove backup authority remains outside Render
+      - name: Prove control authority remains outside Render
         run: |
           set -euo pipefail
           out="$(curl -fsS --retry 3 --max-time 15 https://anthares-control.anthares1.workers.dev/health)"
