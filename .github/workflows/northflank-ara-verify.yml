@@ -1,5 +1,4 @@
-name: Verify isolated ARA Northflank controller
-# retrigger after corrected explicit Northflank build start
+name: Verify durable ARA Northflank controller
 
 on:
   workflow_dispatch:
@@ -8,7 +7,7 @@ on:
       - .github/workflows/northflank-ara-verify.yml
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: northflank-ara-verify
@@ -17,119 +16,88 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Query Northflank and verify public health endpoint
+      - name: Verify Northflank service, durable health, and restart proof
         shell: bash
         run: |
           python3 - <<'PY'
-          import datetime, json, os, sys, time, urllib.error, urllib.request
+          import json, os, sys, time, urllib.error, urllib.request
 
           token = os.getenv("NORTHFLANK_API_TOKEN", "")
           if not token:
               sys.exit("NORTHFLANK_API_TOKEN secret is absent")
-
           base = "https://api.northflank.com/v1"
           headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
 
           def api(path):
               req = urllib.request.Request(base + path, headers=headers)
-              try:
-                  with urllib.request.urlopen(req, timeout=30) as r:
-                      raw = r.read().decode("utf-8", errors="replace")
-                      return json.loads(raw) if raw else {}
-              except urllib.error.HTTPError as e:
-                  print("Northflank HTTP", e.code, "at", path)
-                  print(e.read().decode(errors="replace")[:1200])
-                  raise
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  raw = r.read().decode("utf-8", errors="replace")
+                  return json.loads(raw) if raw else {}
 
           projects = api("/projects").get("data", {}).get("projects", [])
-          if isinstance(projects, dict):
-              projects = list(projects.values())
+          if isinstance(projects, dict): projects = list(projects.values())
           matches = [p for p in projects if p.get("name") == "Default"]
           if len(matches) != 1:
-              sys.exit(f"Expected exactly one Default project, found {len(matches)}")
-          project_id = matches[0]["id"]
+              sys.exit(f"Expected one Default project, found {len(matches)}")
+          project = matches[0]["id"]
 
-          services = api(f"/projects/{project_id}/services").get("data", {}).get("services", [])
-          if isinstance(services, dict):
-              services = list(services.values())
-          targets = [s for s in services if s.get("name") == "anthares-ara-northflank"]
-          if len(targets) != 1:
-              sys.exit(f"Expected exactly one anthares-ara-northflank service, found {len(targets)}")
-          svc = targets[0]
-          service_id = svc.get("id") or "anthares-ara-northflank"
+          services = api(f"/projects/{project}/services").get("data", {}).get("services", [])
+          if isinstance(services, dict): services = list(services.values())
+          matches = [s for s in services if s.get("name") == "anthares-ara-northflank"]
+          if len(matches) != 1:
+              sys.exit(f"Expected one anthares-ara-northflank service, found {len(matches)}")
+          service = matches[0]
+          service_id = service.get("id") or "anthares-ara-northflank"
 
-          ports = api(f"/projects/{project_id}/services/{service_id}/ports").get("data", {}).get("ports", [])
-          public_http = [p for p in ports if p.get("public") and p.get("protocol") in ("HTTP", "HTTP/2")]
-          if not public_http:
-              sys.exit("Service has no public HTTP port")
-          dns = public_http[0].get("dns")
-          if not dns:
-              sys.exit("Public HTTP port has no DNS yet")
-          base_url = "https://" + dns
-          health_url = base_url + "/health"
+          ports = api(f"/projects/{project}/services/{service_id}/ports").get("data", {}).get("ports", [])
+          http_ports = [p for p in ports if p.get("public") and p.get("protocol") in ("HTTP", "HTTP/2") and p.get("dns")]
+          if not http_ports:
+              sys.exit("Northflank service has no public HTTP DNS")
+          public_base = "https://" + http_ports[0]["dns"]
 
-          health = None
-          health_error = None
-          for attempt in range(60):
+          last = None
+          for _ in range(30):
               try:
-                  with urllib.request.urlopen(health_url, timeout=15) as r:
-                      raw = r.read().decode("utf-8", errors="replace")
-                      health = json.loads(raw)
-                      if r.status == 200 and health.get("ok") is True:
-                          health_error = None
+                  with urllib.request.urlopen(public_base + "/healthz", timeout=20) as r:
+                      payload = json.loads(r.read().decode("utf-8", errors="replace"))
+                      last = {"status": r.status, "payload": payload}
+                      if (r.status == 200 and payload.get("ok") is True and
+                          payload.get("backend") == "postgres" and
+                          payload.get("persistence_cycle") is True and
+                          payload.get("restart_recovered") is True):
                           break
-                      health_error = f"HTTP {r.status}: {raw[:300]}"
-              except Exception as e:
-                  health_error = type(e).__name__ + ": " + str(e)[:300]
+              except urllib.error.HTTPError as e:
+                  try: body = json.loads(e.read().decode("utf-8", errors="replace"))
+                  except Exception: body = {}
+                  last = {"status": e.code, "payload": body}
+              except Exception as exc:
+                  last = {"error": type(exc).__name__}
               time.sleep(10)
+          else:
+              sys.exit("Durable /healthz verification failed: " + json.dumps(last, sort_keys=True))
 
-          fresh = api(f"/projects/{project_id}/services/{service_id}").get("data", {})
-          status = fresh.get("status") or svc.get("status") or {}
-          result = {
-              "checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-              "project_id": project_id,
-              "service_id": service_id,
-              "service_name": svc.get("name"),
-              "service_type": svc.get("serviceType"),
-              "build_status": (status.get("build") or {}).get("status"),
-              "deployment_status": (status.get("deployment") or {}).get("status"),
-              "public_url": base_url,
-              "health_url": health_url,
-              "health_ok": bool(health and health.get("ok") is True),
-              "health": health,
-              "health_error": health_error,
-              "production_failover_modified": False,
-          }
-          os.makedirs("infra/northflank", exist_ok=True)
-          with open("infra/northflank/status.json", "w", encoding="utf-8") as f:
-              json.dump(result, f, indent=2, sort_keys=True)
-              f.write("\n")
-          print(json.dumps(result, indent=2, sort_keys=True))
-          if not result["health_ok"]:
-              sys.exit("Northflank service did not pass /health verification")
+          with urllib.request.urlopen(public_base + "/_canary/persistence-proof", timeout=20) as r:
+              proof = json.loads(r.read().decode("utf-8", errors="replace"))
+          checks = ((proof.get("route_cycle") or {}).get("checks") or {})
+          required = [
+              "created_via_control_route", "idempotency_via_control_route",
+              "lease_via_device_route", "completion_via_device_route",
+              "retrieval_via_control_route", "recovery_with_fresh_store", "result_recovered"
+          ]
+          missing = [k for k in required if checks.get(k) is not True]
+          if r.status != 200 or proof.get("ok") is not True or missing:
+              sys.exit("Persistence proof failed; missing=" + ",".join(missing))
+
+          print(json.dumps({
+              "ok": True,
+              "backend": "postgres",
+              "public_url": public_base,
+              "persistence_cycle": True,
+              "restart_recovered": True,
+              "production_failover_modified": False
+          }, sort_keys=True))
           PY
-
-      - name: Persist sanitized verification result
-        if: always()
-        shell: bash
-        run: |
-          if [ ! -f infra/northflank/status.json ]; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add infra/northflank/status.json
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "chore: record Northflank ARA verification"
-          git pull --rebase origin main
-          git push origin HEAD:main
