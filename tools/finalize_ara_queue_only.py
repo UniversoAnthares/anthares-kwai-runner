@@ -72,7 +72,7 @@ new_main = r'''func main() {
 }
 
 func loadConfig() (Config, error) {'''
-s, n = old_main.subn(new_main, s, count=1)
+s, n = old_main.subn(lambda _m: new_main, s, count=1)
 if n != 1:
     raise SystemExit('main/loadConfig patch target missing')
 
@@ -124,7 +124,7 @@ new_init = r'''func init() {
 }
 
 func issueQueueConfigured'''
-s, n = old_init.subn(new_init, s, count=1)
+s, n = old_init.subn(lambda _m: new_init, s, count=1)
 if n != 1:
     raise SystemExit('issue queue init target missing')
 
