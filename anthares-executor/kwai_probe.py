@@ -1,8 +1,9 @@
-"""Read-only Kwai verification over loopback CDP.
+"""Read-only Kwai verification and bounded session-state import over loopback CDP.
 
 Navigation is allowlisted to the expected profile and studio. The probe never
-reads/returns cookies, localStorage, tokens, page text or account secrets, and
-never clicks upload/publish controls.
+returns cookies, localStorage, tokens, page text or account secrets, and never
+clicks upload/publish controls. Session import accepts only bounded Kwai-domain
+cookies and localStorage, and returns counts only.
 """
 import json
 import os
@@ -13,6 +14,7 @@ import websocket
 
 CDP = os.environ.get("CDP_HTTP", "http://127.0.0.1:9222").rstrip("/")
 EXPECTED = os.environ.get("KWAI_EXPECTED_ACCOUNT", "lucasrosalem").lstrip("@").lower()
+_ALLOWED_SAMESITE = {"Strict", "Lax", "None"}
 
 
 def targets():
@@ -64,6 +66,81 @@ def navigate(ws, url, expected_host, expected_path=None, timeout=18):
     raise RuntimeError("expected_surface_not_loaded")
 
 
+def _valid_expected():
+    return bool(EXPECTED) and len(EXPECTED) <= 64 and all(c.isalnum() or c in "._-" for c in EXPECTED)
+
+
+def _is_kwai_domain(domain):
+    host = str(domain or "").lstrip(".").lower()
+    return host == "kwai.com" or host.endswith(".kwai.com")
+
+
+def _clean_cookie(raw):
+    if not isinstance(raw, dict):
+        raise ValueError("invalid_cookie")
+    name = str(raw.get("name", ""))
+    value = str(raw.get("value", ""))
+    domain = str(raw.get("domain", ""))
+    path = str(raw.get("path") or "/")
+    if not name or len(name) > 512 or len(value) > 16384 or len(domain) > 255 or len(path) > 2048:
+        raise ValueError("invalid_cookie_bounds")
+    if not _is_kwai_domain(domain):
+        raise ValueError("cookie_domain_not_allowed")
+    clean = {"name": name, "value": value, "domain": domain, "path": path}
+    for key in ("httpOnly", "secure"):
+        if key in raw:
+            clean[key] = bool(raw[key])
+    same_site = raw.get("sameSite")
+    if same_site in _ALLOWED_SAMESITE:
+        clean["sameSite"] = same_site
+    try:
+        expires = float(raw.get("expires", 0) or 0)
+        if expires > 0:
+            clean["expires"] = expires
+    except (TypeError, ValueError):
+        pass
+    return clean
+
+
+def import_state(state):
+    if not _valid_expected():
+        raise ValueError("invalid_expected_account")
+    if not isinstance(state, dict) or state.get("version") not in {2, 3}:
+        raise ValueError("invalid_session_state")
+    encoded = json.dumps(state, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    if len(encoded) > 512 * 1024:
+        raise ValueError("session_state_too_large")
+    cookies = state.get("cookies")
+    storage = state.get("local_storage", {})
+    if not isinstance(cookies, list) or not 1 <= len(cookies) <= 128:
+        raise ValueError("invalid_cookie_count")
+    if not isinstance(storage, dict) or len(storage) > 256:
+        raise ValueError("invalid_local_storage")
+    clean_cookies = [_clean_cookie(c) for c in cookies]
+    clean_storage = {}
+    for key, value in storage.items():
+        key, value = str(key), str(value)
+        if len(key) > 512 or len(value) > 32768:
+            raise ValueError("local_storage_bounds")
+        clean_storage[key] = value
+
+    target = page_target()
+    ws = websocket.create_connection(target["webSocketDebuggerUrl"], timeout=4, suppress_origin=True, http_no_proxy=["127.0.0.1", "localhost", "::1"])
+    try:
+        call(ws, "Network.enable")
+        call(ws, "Network.setCookies", {"cookies": clean_cookies}, timeout=8)
+        path = "/@" + EXPECTED
+        navigate(ws, "https://www.kwai.com/" + quote("@" + EXPECTED, safe="@._-"), "www.kwai.com", path)
+        entries = json.dumps(list(clean_storage.items()), separators=(",", ":"), ensure_ascii=False)
+        result = evaluate(ws, "((entries)=>{localStorage.clear();for(const [k,v] of entries)localStorage.setItem(k,v);return localStorage.length;})(" + entries + ")")
+        if int(result or 0) != len(clean_storage):
+            raise RuntimeError("local_storage_import_mismatch")
+        call(ws, "Page.navigate", {"url": "about:blank"})
+        return {"ok": True, "cookies_imported": len(clean_cookies), "local_storage_imported": len(clean_storage)}
+    finally:
+        ws.close()
+
+
 PROFILE_JS = r'''(() => {
  const visible=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
  const label=e=>((e.innerText||e.textContent||'')+' '+(e.getAttribute?.('aria-label')||'')+' '+(e.getAttribute?.('title')||'')).replace(/\s+/g,' ').trim();
@@ -86,7 +163,7 @@ STUDIO_JS = r'''(() => {
 
 
 def probe():
-    if not EXPECTED or len(EXPECTED) > 64 or not all(c.isalnum() or c in "._-" for c in EXPECTED):
+    if not _valid_expected():
         raise RuntimeError("invalid_expected_account")
     target = page_target()
     ws = websocket.create_connection(target["webSocketDebuggerUrl"], timeout=4, suppress_origin=True, http_no_proxy=["127.0.0.1", "localhost", "::1"])
