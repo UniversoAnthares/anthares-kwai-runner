@@ -1,3 +1,4 @@
+# Provisioning workflow: explicit build start is required because CI is disabled.
 name: Provision isolated ARA Northflank controller
 on:
   workflow_dispatch:
