@@ -18,7 +18,7 @@ from flask import jsonify, request
 
 import anthares_remote_control_routes as _remote
 
-_LOCK = threading.Lock()
+_LOCK = threading.RLock()
 _BROWSER_LEASE: dict[str, Any] = {
     "owner": None,
     "token": None,
