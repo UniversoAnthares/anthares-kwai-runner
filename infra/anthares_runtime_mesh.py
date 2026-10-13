@@ -169,6 +169,16 @@ def _remote_execute(device: str, job_type: str, args: dict[str, Any], timeout: i
     return _legacy_wait(device, job["id"], timeout + 8)
 
 
+def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int | None:
+    if value is None:
+        return default
+    try:
+        number = int(value)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return max(minimum, min(number, maximum))
+
+
 def register(app):
     @app.get("/v1/runtime/health")
     def runtime_health():
@@ -193,7 +203,9 @@ def register(app):
         if not device:
             return jsonify(ok=False, error="device_id_required_no_local_fallback"), 400
         job_type = str(body.get("type") or "").strip()
-        timeout = max(1, min(int(body.get("timeout_seconds") or 30), 120))
+        timeout = _bounded_int(body.get("timeout_seconds"), 30, 1, 120)
+        if timeout is None:
+            return jsonify(ok=False, error="invalid_timeout_seconds"), 400
         if not job_type:
             return jsonify(ok=False, error="missing_type"), 400
         finished = _remote_execute(device, job_type, body.get("args") or {}, timeout)
@@ -216,7 +228,9 @@ def register(app):
             return jsonify(ok=False, error="unauthorized"), 401
         body = request.get_json(silent=True) or {}
         owner = str(body.get("owner") or "").strip()
-        ttl = max(15, min(int(body.get("ttl_seconds") or 300), 1800))
+        ttl = _bounded_int(body.get("ttl_seconds"), 300, 15, 1800)
+        if ttl is None:
+            return jsonify(ok=False, error="invalid_ttl_seconds"), 400
         if not owner:
             return jsonify(ok=False, error="missing_owner"), 400
         with _LOCK:
