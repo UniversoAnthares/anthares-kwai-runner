@@ -12,7 +12,7 @@ permissions:
 jobs:
   contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: anthares-executor
@@ -22,5 +22,49 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
-      - run: python -m unittest -v test_executor
-      - run: python -m compileall -q executor.py controller_client.py
+      - run: python -m unittest -v test_executor test_failover_controller
+      - run: python -m compileall -q executor.py controller_client.py profile_store.py kwai_probe.py failover_controller.py
+      - name: Build executor container
+        run: docker build -t anthares-executor:ci .
+      - name: Validate live Chromium lifecycle inside container
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN='ci-executor-token-0123456789abcdef'
+          docker run -d --name anthares-executor-ci \
+            -p 127.0.0.1:18080:8080 \
+            -e ANTHARES_EXECUTOR_TOKEN="$TOKEN" \
+            -e MEMORY_LIMIT_BYTES=2147483648 \
+            anthares-executor:ci
+          cleanup() { docker logs anthares-executor-ci || true; docker rm -f anthares-executor-ci >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:18080/health > /tmp/health.json; then break; fi
+            sleep 0.5
+          done
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/health.json'))
+          assert data['ok'] is True
+          assert data['chromium_ready'] is False
+          PY
+          code=$(curl -sS -o /tmp/unauth.json -w '%{http_code}' -X POST http://127.0.0.1:18080/v1/browser/start)
+          test "$code" = 401
+          curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/browser/start > /tmp/start.json
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/start.json'))
+          assert data['ok'] is True
+          PY
+          curl -fsS http://127.0.0.1:18080/health > /tmp/running.json
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/running.json'))
+          assert data['chromium_ready'] is True
+          PY
+          curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/browser/stop > /tmp/stop.json
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/stop.json'))
+          assert data['ok'] is True
+          PY
