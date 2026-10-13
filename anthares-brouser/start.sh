@@ -33,7 +33,7 @@ chromium \
   --start-maximized \
   --remote-debugging-address=127.0.0.1 \
   --remote-debugging-port="$CDP_PORT" \
-  --remote-allow-origins="http://127.0.0.1:$CDP_PORT" \
+  --remote-allow-origins='*' \
   --user-data-dir="$CHROME_PROFILE_DIR" \
   "$START_URL" >/tmp/chromium.log 2>&1 &
 CHROME_PID=$!
