@@ -67,6 +67,28 @@ class NoVNCGatewayTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         return r
 
+    def test_browser_login_form_no_secret(self):
+        r = self.client.get("/novnc/login")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("method='post'", r.text)
+        self.assertNotIn(SECRET, r.text)
+        self.assertEqual(r.headers["Cache-Control"], "no-store")
+
+    def test_browser_login_post_redirects_with_cookie(self):
+        r = self.client.post("/novnc/login", data={"access_token": SECRET}, follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertIn("httponly", r.headers["set-cookie"].lower())
+        self.assertIn("noVNC", self.client.get("/novnc/vnc.html").text)
+
+    def test_browser_login_wrong_token_denied(self):
+        r = self.client.post("/novnc/login", data={"access_token": "wrong"}, follow_redirects=False)
+        self.assertEqual(r.status_code, 401)
+
+    def test_browser_login_https_required_in_production(self):
+        with patch.dict(os.environ, {"NOVNC_COOKIE_SECURE": "1"}):
+            r = self.client.post("/novnc/login", data={"access_token": SECRET})
+            self.assertEqual(r.status_code, 403)
+
     def test_session_requires_bearer(self):
         self.assertEqual(self.client.post("/novnc/session").status_code, 401)
 
