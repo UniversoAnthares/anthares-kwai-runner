@@ -67,7 +67,7 @@ def lease_next(device_id):
         row = conn.execute("""
           SELECT * FROM ara_jobs
           WHERE device_id=%s AND status='queued'
-          ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
+          ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
         """, (device_id,)).fetchone()
         if row is None:
             return None
