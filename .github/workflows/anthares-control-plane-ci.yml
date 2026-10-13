@@ -1,0 +1,30 @@
+name: Anthares Control Plane CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [anthares-control-plane-redundancy]
+    paths:
+      - 'anthares-control-plane/**'
+      - '.github/workflows/anthares-control-plane-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: pip install -r anthares-control-plane/requirements.txt
+      - name: Compile
+        run: python -m py_compile anthares-control-plane/app.py anthares-control-plane/client.py
+      - name: Tests
+        run: pytest -q anthares-control-plane/tests
+      - name: Container build
+        run: docker build -f anthares-control-plane/Dockerfile -t anthares-control-plane:test .
