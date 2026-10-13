@@ -12,13 +12,13 @@ from urllib.parse import urlsplit, parse_qs
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from starlette.websockets import WebSocketDisconnect
+from websockets.asyncio.client import connect as ws_connect
 
 router = APIRouter()
 COOKIE_NAME = "anthares_novnc_session"
 SESSION_SECONDS = 43200
 NOVNC_ROOT = Path(os.environ.get("NOVNC_STATIC_ROOT", "/usr/share/novnc"))
-VNC_HOST = os.environ.get("NOVNC_VNC_HOST", "127.0.0.1")
-VNC_PORT = int(os.environ.get("NOVNC_VNC_PORT", "5900"))
+LOCAL_WEBSOCKIFY = os.environ.get("NOVNC_LOCAL_WEBSOCKIFY", "ws://127.0.0.1:6080")
 REVOKED = set()
 MANUAL_TOKEN = os.environ.get("NOVNC_MANUAL_TOKEN", "")
 try:
@@ -167,11 +167,6 @@ def novnc_static(asset_path: str, _: int = Depends(_require_cookie)):
 
 
 def _same_origin(websocket: WebSocket) -> bool:
-    """Validate browser origin against the configured public HTTPS hostname.
-
-    Render can rewrite the internal Host header while preserving the public
-    browser Origin. Never trust arbitrary forwarded-host headers here.
-    """
     origin = urlsplit(websocket.headers.get("origin", ""))
     public_url = urlsplit(os.environ.get(
         "NOVNC_PUBLIC_ORIGIN", "https://anthares-browser-qa-render.onrender.com"
@@ -186,72 +181,58 @@ def _same_origin(websocket: WebSocket) -> bool:
 
 @router.websocket("/novnc/websockify")
 async def novnc_websocket(websocket: WebSocket):
-    """Bridge the authenticated browser websocket directly to loopback VNC TCP.
+    """Authenticated public websocket bridged to loopback-only websockify.
 
-    noVNC already speaks raw RFB over websocket. A second websocket proxy layer
-    is unnecessary and can stall RFB negotiation, so this endpoint terminates
-    the public websocket itself and forwards bytes to x11vnc on 127.0.0.1:5900.
+    x11vnc stays bound to loopback. websockify remains the component responsible
+    for the VNC/RFB websocket framing; this gateway only enforces Anthares auth,
+    same-origin and session expiry.
     """
     expiry = _expiry(websocket.cookies.get(COOKIE_NAME))
+    origin_valid = _same_origin(websocket)
     print("[anthares-browser] ws auth cookie_present=%s valid=%s origin_valid=%s" % (
-        bool(websocket.cookies.get(COOKIE_NAME)), bool(expiry), _same_origin(websocket)
+        bool(websocket.cookies.get(COOKIE_NAME)), bool(expiry), origin_valid
     ), flush=True)
-    if not expiry or not _same_origin(websocket):
-        import logging
-        logging.getLogger("anthares.novnc").warning(
-            "websocket denied: cookie_present=%s cookie_valid=%s origin_valid=%s host=%s origin=%s",
-            bool(websocket.cookies.get(COOKIE_NAME)), bool(expiry),
-            _same_origin(websocket), websocket.headers.get("host", ""),
-            websocket.headers.get("origin", ""),
-        )
+    if not expiry or not origin_valid:
         await websocket.close(code=1008)
         return
 
     offered = [s.strip() for s in websocket.headers.get("sec-websocket-protocol", "").split(",") if s.strip()]
     selected = "binary" if "binary" in offered else ("base64" if "base64" in offered else None)
-    writer = None
+    local = None
     try:
-        reader, writer = await asyncio.wait_for(asyncio.open_connection(VNC_HOST, VNC_PORT), timeout=5)
-        # x11vnc must send its 12-byte RFB greeting first. Verify the actual
-        # TCP banner before upgrading the browser socket; preserve all bytes.
+        kwargs = {"open_timeout": 5, "close_timeout": 2}
+        if selected:
+            kwargs["subprotocols"] = [selected]
+        local = await ws_connect(LOCAL_WEBSOCKIFY, **kwargs)
         await websocket.accept(subprotocol=selected)
-        banner = await asyncio.wait_for(reader.readexactly(12), timeout=12)
-        if not banner.startswith(b"RFB "):
-            raise RuntimeError("VNC endpoint returned an invalid RFB greeting")
-        if selected == "base64":
-            await websocket.send_text(base64.b64encode(banner).decode("ascii"))
-        else:
-            await websocket.send_bytes(banner)
-        print("[anthares-browser] VNC RFB greeting forwarded", flush=True)
+        print("[anthares-browser] local websockify connected", flush=True)
 
-        async def to_vnc():
+        async def browser_to_local():
             while True:
                 message = await websocket.receive()
                 if message["type"] == "websocket.disconnect":
                     return
-                payload = message.get("bytes")
-                if payload is None and message.get("text") is not None:
-                    text = message["text"]
-                    payload = base64.b64decode(text) if selected == "base64" else text.encode("latin1")
-                if payload:
-                    writer.write(payload)
-                    await writer.drain()
+                if message.get("bytes") is not None:
+                    await local.send(message["bytes"])
+                elif message.get("text") is not None:
+                    await local.send(message["text"])
 
-        async def to_browser():
-            while True:
-                data = await reader.read(65536)
-                if not data:
-                    return
-                if selected == "base64":
-                    await websocket.send_text(base64.b64encode(data).decode("ascii"))
+        async def local_to_browser():
+            async for payload in local:
+                if isinstance(payload, bytes):
+                    await websocket.send_bytes(payload)
                 else:
-                    await websocket.send_bytes(data)
+                    await websocket.send_text(payload)
 
         async def expire():
             await asyncio.sleep(max(0, expiry - time.time()))
             await websocket.close(code=1008)
 
-        tasks = [asyncio.create_task(fn()) for fn in (to_vnc, to_browser, expire)]
+        tasks = [
+            asyncio.create_task(browser_to_local()),
+            asyncio.create_task(local_to_browser()),
+            asyncio.create_task(expire()),
+        ]
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for task in pending:
             task.cancel()
@@ -262,15 +243,12 @@ async def novnc_websocket(websocket: WebSocket):
                 raise exc
     except WebSocketDisconnect:
         return
-    except Exception:
+    except Exception as exc:
+        print("[anthares-browser] websocket bridge error=%s" % type(exc).__name__, flush=True)
         try:
             await websocket.close(code=1011)
         except RuntimeError:
             pass
     finally:
-        if writer is not None:
-            writer.close()
-            try:
-                await writer.wait_closed()
-            except Exception:
-                pass
+        if local is not None:
+            await local.close()
