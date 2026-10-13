@@ -56,3 +56,5 @@ jobs:
           path: anthares-remote-agent/anthares-remote-agent-0.3.1-windows-amd64.exe
           if-no-files-found: error
           retention-days: 1
+
+# Triggered after the 0.3.1 transient-outage resilience patch passed Go tests and vet.
