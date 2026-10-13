@@ -10,6 +10,7 @@ $env:ANTHARES_DEVICE_ID = 'DESKTOP-FTDK0HP-SYSTEM'
 $primary = 'https://anthares-ara-control.onrender.com'
 $secondary = 'https://anthares-ara-infra-canary-v2.onrender.com'
 $tertiary = 'https://anthares-ara-backup.anthares1.workers.dev'
+$quaternary = 'https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run'
 $exe = Join-Path $root 'anthares-remote-agent.exe'
 $stdout = Join-Path $root 'agent.stdout.log'
 $stderr = Join-Path $root 'agent.stderr.log'
@@ -48,22 +49,25 @@ function Choose-Control {
         if (Test-Control $tertiary) { return $tertiary }
         if (Test-Control $primary) { return $primary }
         if (Test-Control $secondary) { return $secondary }
+        if (Test-Control $quaternary) { return $quaternary }
         return $null
     }
     if (Test-Path $forceSecondary) {
         if (Test-Control $secondary) { return $secondary }
         if (Test-Control $primary) { return $primary }
+        if (Test-Control $quaternary) { return $quaternary }
         if (Test-Control $tertiary) { return $tertiary }
         return $null
     }
     if (Test-Control $primary) { return $primary }
     if (Test-Control $secondary) { return $secondary }
+    if (Test-Control $quaternary) { return $quaternary }
     if (Test-Control $tertiary) { return $tertiary }
     return $null
 }
 
 function Preferred-Alternate([string]$active) {
-    foreach ($candidate in @($primary, $secondary, $tertiary)) {
+    foreach ($candidate in @($primary, $secondary, $quaternary, $tertiary)) {
         if ($candidate -eq $active) { continue }
         if (Test-Control $candidate) { return $candidate }
     }
