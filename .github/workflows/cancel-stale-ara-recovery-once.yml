@@ -1,0 +1,17 @@
+name: Cancel stale ARA recovery run once
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cancel-stale-ara-recovery-once.yml']
+permissions:
+  actions: write
+  contents: read
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Cancel stale queued self-hosted recovery
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST /repos/${{ github.repository }}/actions/runs/38355072134/cancel || true
