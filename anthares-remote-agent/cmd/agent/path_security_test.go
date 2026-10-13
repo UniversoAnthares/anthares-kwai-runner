@@ -6,6 +6,7 @@ import (
     "os"
     "path/filepath"
     "runtime"
+    "strings"
     "testing"
 )
 
@@ -71,4 +72,15 @@ func TestAtomicWriteLimit(t *testing.T) {
     cfg, root := testConfig(t)
     tooLarge := make([]byte, 8*1024*1024+1)
     if _, err := fileWriteAtomic(cfg, filepath.Join(root, "large.bin"), tooLarge); err == nil { t.Fatal("expected size limit") }
+}
+
+func TestPathWithinCaseSensitivity(t *testing.T) {
+ cfg, root := testConfig(t)
+ altered := filepath.Join(filepath.Dir(root), "DIFFERENT-"+filepath.Base(root))
+ if pathWithin(altered,root) {t.Fatal("different sibling must not be contained")}
+ if runtime.GOOS!="windows" {
+  upper := filepath.Join(filepath.Dir(root), strings.ToUpper(filepath.Base(root)))
+  if upper!=root && pathWithin(upper,root) {t.Fatal("Linux paths must remain case sensitive")}
+ }
+ _ = cfg
 }
