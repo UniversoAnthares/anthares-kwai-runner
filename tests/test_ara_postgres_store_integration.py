@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 import pathlib
 import sys
 import unittest
@@ -42,6 +43,16 @@ class PostgresStoreIntegrationTests(unittest.TestCase):
         status = second.status(device)
         self.assertTrue(status["connected"])
         self.assertEqual(status["heartbeat"]["version"], "0.3")
+
+    def test_concurrent_idempotency_has_one_durable_job(self):
+        device = self.device("parallel-dedupe")
+        store = PostgresStore(self.dsn)
+        def enqueue(_):
+            return store.enqueue(device, "ping", {}, 30, idempotency_key="parallel")["id"]
+        with ThreadPoolExecutor(max_workers=12) as executor:
+            ids = list(executor.map(enqueue, range(24)))
+        self.assertEqual(len(set(ids)), 1)
+        self.assertEqual(store.status(device)["queued"], 1)
 
     def test_queued_job_survives_store_recreation(self):
         device = self.device("queued")
