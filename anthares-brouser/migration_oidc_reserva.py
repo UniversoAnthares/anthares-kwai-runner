@@ -45,7 +45,7 @@ def _keys():
     now = time.time()
     if _JWKS["expires"] > now and _JWKS["keys"]:
         return _JWKS["keys"]
-    req = urllib.request.Request(JWKS_URL, headers={"Accept": "application/json", "User-Agent": "anthares-session-handoff/3"})
+    req = urllib.request.Request(JWKS_URL, headers={"Accept": "application/json", "User-Agent": "anthares-session-handoff/4"})
     try:
         with urllib.request.urlopen(req, timeout=8) as response:
             data = json.loads(response.read().decode())
@@ -79,17 +79,13 @@ def _claims(token):
         key.verify(signature, (head_raw + "." + body_raw).encode(), padding.PKCS1v15(), hashes.SHA256())
     except Exception as exc:
         raise HTTPException(401, "github_oidc_signature_invalid") from exc
-
     aud = claims.get("aud")
     audiences = aud if isinstance(aud, list) else [aud]
-    ref = claims.get("ref")
-    workflow_ref = claims.get("workflow_ref")
+    ref, workflow_ref = claims.get("ref"), claims.get("workflow_ref")
     if claims.get("iss") != ISSUER or claims.get("repository") != REPOSITORY or AUDIENCE not in audiences:
         raise HTTPException(403, "github_oidc_claims_rejected")
     if ref not in ALLOWED or workflow_ref not in ALLOWED[ref]:
         raise HTTPException(403, "github_oidc_workflow_rejected")
-    # Do not depend on GitHub's optional/customizable `sub` format. The signed
-    # issuer, audience, repository, ref and exact workflow_ref form the allowlist.
     if claims.get("event_name") not in {"push", "workflow_dispatch"}:
         raise HTTPException(403, "github_oidc_event_rejected")
     try:
@@ -110,8 +106,9 @@ def _collect():
         try:
             base_app._cdp_call("Page.navigate", {"url": "https://www.kwai.com/@lucasrosalem"}, timeout=8.0)
             time.sleep(2.5)
-            evidence = migration_capsule._evaluate_value("""(() => { const nodes=[...document.querySelectorAll('a,button,input,[role=button],[role=menuitem],span,div')]; const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'}; const txt=e=>((e.innerText||e.textContent||'')+' '+(e.getAttribute?.('aria-label')||'')).replace(/\\s+/g,' ').trim(); const login=nodes.some(e=>vis(e)&&(/^(log\\s*in|login|sign\\s*in|entrar|fazer login)$/i.test(txt(e))||['password','tel'].includes((e.getAttribute?.('type')||'').toLowerCase()))); const owner=nodes.some(e=>vis(e)&&(/^(edit profile|editar perfil|account settings|configura[cç][oõ]es da conta)$/i.test(txt(e))||/edit[-_ ]?profile|profile[-_ ]?edit/i.test(e.getAttribute?.('data-testid')||'')||/\\/(profile|account)\\/(edit|settings)(\\/|$)/i.test(e.getAttribute?.('href')||''))); return {host_ok:location.hostname==='www.kwai.com',path_ok:location.pathname.replace(/\\/$/,'').toLowerCase()==='/@lucasrosalem',login_gate:login,owner_edit:owner}; })()""")
-            if not isinstance(evidence, dict) or not evidence.get("host_ok") or not evidence.get("path_ok") or evidence.get("login_gate") or not evidence.get("owner_edit"):
+            evidence = migration_capsule._evaluate_value("""(() => { const nodes=[...document.querySelectorAll('a,button,input,[role=button],[role=menuitem],span,div')]; const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'}; const txt=e=>((e.innerText||e.textContent||'')+' '+(e.getAttribute?.('aria-label')||'')).replace(/\\s+/g,' ').trim(); const login=nodes.some(e=>vis(e)&&(/^(log\\s*in|login|sign\\s*in|entrar|fazer login)$/i.test(txt(e))||['password','tel'].includes((e.getAttribute?.('type')||'').toLowerCase()))); const owner=nodes.some(e=>vis(e)&&(/^(edit profile|editar perfil|account settings|configura[cç][oõ]es da conta)$/i.test(txt(e))||/edit[-_ ]?profile|profile[-_ ]?edit/i.test(e.getAttribute?.('data-testid')||'')||/\\/(profile|account)\\/(edit|settings)(\\/|$)/i.test(e.getAttribute?.('href')||''))); const logout=nodes.some(e=>vis(e)&&/^(log\\s*out|logout|sign\\s*out|sair)$/i.test(txt(e))); return {host_ok:location.hostname==='www.kwai.com',path_ok:location.pathname.replace(/\\/$/,'').toLowerCase()==='/@lucasrosalem',login_gate:login,owner_edit:owner,logout_visible:logout}; })()""")
+            authenticated = isinstance(evidence, dict) and evidence.get("host_ok") and evidence.get("path_ok") and not evidence.get("login_gate") and (evidence.get("owner_edit") or evidence.get("logout_visible"))
+            if not authenticated:
                 raise HTTPException(409, {"error": "source_session_not_authenticated", "evidence": evidence if isinstance(evidence, dict) else {}})
             cookies_result = base_app._cdp_call("Network.getAllCookies", timeout=8.0)
             storage_raw = migration_capsule._evaluate_value("JSON.stringify(Object.fromEntries(Array.from({length:localStorage.length},(_,i)=>{const k=localStorage.key(i);return [k,localStorage.getItem(k)]})))")
@@ -129,7 +126,7 @@ def _collect():
     except Exception:
         storage = {}
     if not isinstance(storage, dict) or len(storage) > 256:
-        raise HTTPException(413, "source_kwai_local_storage_too_large")
+        raise HTTPException(413, "kwai_local_storage_too_large")
     storage = {str(k): str(v) for k, v in storage.items() if len(str(k)) <= 512 and len(str(v)) <= 32768}
     return cookies, storage
 
