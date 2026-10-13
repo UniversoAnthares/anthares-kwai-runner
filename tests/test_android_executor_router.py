@@ -56,7 +56,9 @@ class AndroidExecutorRoutingTests(unittest.TestCase):
         self.assertIsNone(router.choose(MANIFEST, {"circleci": s}))
 
     def test_invalid_queue_does_not_crash_router(self):
-        self.assertEqual(router.choose(MANIFEST, {"github_actions": ready("unknown"), "bitrise": ready()}), "github_actions")
+        m = router.load_manifest()
+        m["providers"]["bitrise"]["active"] = True
+        self.assertEqual(router.choose(m, {"github_actions": ready("unknown"), "bitrise": ready()}), "bitrise")
 
     def test_negative_queue_fails_closed(self):
         self.assertIsNone(router.choose(MANIFEST, {"github_actions": ready(-1)}))
