@@ -145,21 +145,6 @@ elif 'filepath.Join(work, "ara-jobs", "issue-queue")' not in s:
     raise SystemExit('issue queue state-dir target missing')
 issue.write_text(s, encoding='utf-8')
 
-sup = Path('anthares-remote-agent/windows/run-agent-system-supervisor.ps1')
-s = sup.read_text(encoding='utf-8')
-legacy_preferred = "$exe = if (Test-Path $legacyExe) { $legacyExe } elseif (Test-Path $v4Exe) { $v4Exe } else { $legacyExe }"
-v4_preferred = "$exe = if (Test-Path $v4Exe) { $v4Exe } elseif (Test-Path $legacyExe) { $legacyExe } else { $v4Exe }"
-if legacy_preferred in s:
-    s = s.replace(legacy_preferred, v4_preferred, 1)
-elif v4_preferred not in s:
-    raise SystemExit('supervisor binary preference target missing')
-s = s.replace('# The installed production binary already proved an end-to-end private queue ping.', '# The queue-aware v4 binary is canonical after a proven private GitHub queue round trip.')
-if 'onrender.com' in s or 'workers.dev' in s:
-    raise SystemExit('forbidden Render/Cloudflare runtime origin remains in supervisor')
-if "Remove-Item Env:ANTHARES_CONTROL_URL" not in s or "mode='issue-queues-only'" not in s:
-    raise SystemExit('supervisor is not queue-only')
-if 'cloudflare_required=$false' not in s or 'render_required=$false' not in s:
-    raise SystemExit('supervisor dependency flags are not fail-closed')
-sup.write_text(s, encoding='utf-8')
-
+# Supervisor files are maintained directly and validated by CI. Keeping this
+# finalizer scoped to Go avoids clobbering concurrent supervisor hardening.
 print('ARA_QUEUE_ONLY_FINALIZED=1')
