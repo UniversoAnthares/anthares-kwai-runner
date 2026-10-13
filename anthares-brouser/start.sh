@@ -4,6 +4,12 @@ set -euo pipefail
 : "${VNC_PASSWORD:?VNC_PASSWORD is required}"
 : "${CONTROL_TOKEN:?CONTROL_TOKEN is required}"
 
+# x11vnc/LibVNCServer can spend an extreme amount of time sweeping a huge
+# inherited fd table before completing a client handshake. Hosted containers
+# may expose RLIMIT_NOFILE in the billions. Keep it high enough for Chromium,
+# but bounded so RFB negotiation completes promptly.
+ulimit -n 65536 || true
+
 export DISPLAY=${DISPLAY:-:99}
 export CHROME_PROFILE_DIR=${CHROME_PROFILE_DIR:-/data/chrome-profile}
 START_URL=${START_URL:-https://www.kwai.com/}
@@ -92,10 +98,6 @@ start_xvfb() {
 }
 
 vnc_socket_ready() {
-  # LibVNCServer may wait briefly for client bytes to distinguish native RFB
-  # from WebSocket. Waiting for the RFB greeting here can therefore deadlock
-  # its WebSocket autodetection. Startup readiness only proves the loopback
-  # listener; the authenticated end-to-end test below proves actual RFB.
   python <<'PY'
 import socket
 try:
