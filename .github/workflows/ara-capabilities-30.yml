@@ -6,6 +6,11 @@ on:
     paths:
       - 'anthares-remote-agent/**'
       - '.github/workflows/ara-capabilities-30.yml'
+  pull_request:
+    branches: [feature/anthares-remote-agent]
+    paths:
+      - 'anthares-remote-agent/**'
+      - '.github/workflows/ara-capabilities-30.yml'
   workflow_dispatch:
 
 permissions:
