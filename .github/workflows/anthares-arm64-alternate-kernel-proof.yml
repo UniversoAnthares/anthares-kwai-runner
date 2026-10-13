@@ -24,7 +24,8 @@ jobs:
           test -s "$KERNEL"
           echo "HOST_KERNEL=$KERNEL"
           file "$KERNEL"
-          if gzip -t "$KERNEL" 2>/dev/null; then gzip -dc "$KERNEL" > /tmp/arm64-Image; else cp "$KERNEL" /tmp/arm64-Image; fi
+          if sudo gzip -t "$KERNEL" 2>/dev/null; then sudo gzip -dc "$KERNEL" > /tmp/arm64-Image; else sudo cp "$KERNEL" /tmp/arm64-Image; fi
+          sudo chown "$(id -u):$(id -g)" /tmp/arm64-Image
           file /tmp/arm64-Image
           truncate -s 64M /tmp/storage-gpt.img
           sgdisk -og -n 1:2048:+8M -t 1:8300 -c 1:super /tmp/storage-gpt.img >/dev/null
