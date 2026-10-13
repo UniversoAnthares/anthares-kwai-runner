@@ -132,7 +132,8 @@ func executeJob(cfg Config, job Job) Result {
     ctx,cancel:=context.WithTimeout(context.Background(),time.Duration(timeout)*time.Second); defer cancel()
     out,err:=dispatch(ctx,cfg,job)
     r:=Result{ID:job.ID,OK:err==nil,StartedAt:start.Format(time.RFC3339),EndedAt:time.Now().UTC().Format(time.RFC3339)}
-    if err!=nil{r.Error=err.Error()}else{r.Output=out}
+    r.Output=out
+    if err!=nil{r.Error=err.Error()}
     return r
 }
 
