@@ -61,6 +61,20 @@ jobs:
           keys="$(jq -cn --arg a "$k1" --arg b "$k2" --arg c "$gateway_key" '[$a,$b,$c]')"
           cd cloudflare-ara-backup
           printf '%s' "$keys" | npx --yes wrangler@4.43.0 secret put ARA_TRUSTED_MCP_PUBLIC_KEYS_JSON
+      - name: Build pinned-key-only durable control
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('cloudflare-ara-backup/src/index.js')
+          s=p.read_text()
+          needle='  // Legacy discovery remains optional during migration and key rotation.\n  for (const url of KEY_URLS) {'
+          repl='  if (keys.length) { keyCache = { at: Date.now(), keys }; return keys; }\n  // Emergency legacy discovery is unreachable in the normal pinned-key deployment.\n  for (const url of KEY_URLS) {'
+          if needle not in s:
+              raise SystemExit('pinned-key patch target missing')
+          p.write_text(s.replace(needle,repl,1))
+          PY
       - name: Deploy Cloudflare durable control
         shell: bash
         run: |
@@ -82,7 +96,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for i in $(seq 1 20); do
+          for i in $(seq 1 30); do
             code="$(curl -sS -o /tmp/mcp-health.json -w '%{http_code}' https://anthares-ara-mcp.anthares1.workers.dev/health || true)"
             cat /tmp/mcp-health.json || true
             if [ "$code" = 200 ] && grep -q '"ok":true' /tmp/mcp-health.json; then break; fi
