@@ -4,7 +4,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer, SimpleHTTPR
 from pathlib import Path
 
 RESULT_PORT=int(os.environ.get('PORT','10000'))
-API_PORT=RESULT_PORT
+API_PORT=18080  # loopback-only browser API; never compete with Render's public port
 PAGE_PORT=18081
 TOKEN=secrets.token_urlsafe(32)
 VNC_PASSWORD=secrets.token_urlsafe(24)
