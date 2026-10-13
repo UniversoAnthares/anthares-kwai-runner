@@ -27,7 +27,9 @@ done
 x11vnc -display "$DISPLAY" -forever -shared -passwd "$VNC_PASSWORD" -rfbport 5900 -localhost >/tmp/x11vnc.log 2>&1 &
 VNC_PID=$!
 
-websockify --web=/usr/share/novnc 6080 localhost:5900 >/tmp/novnc.log 2>&1 &
+# noVNC must never listen on a public interface without an authenticated
+# reverse proxy. Bind loopback; expose only through an authenticated tunnel.
+websockify --web=/usr/share/novnc 127.0.0.1:6080 localhost:5900 >/tmp/novnc.log 2>&1 &
 NOVNC_PID=$!
 
 chromium \
