@@ -28,7 +28,7 @@ class IsolationContract(unittest.TestCase):
             self.assertNotIn(forbidden, self.start)
 
     def test_novnc_is_not_public(self):
-        self.assertIn("127.0.0.1:6080 localhost:5900", self.start)
+        self.assertIn("127.0.0.1:6080 127.0.0.1:5900", self.start)
         self.assertNotIn("EXPOSE 6080", self.docker)
         self.assertIn("-localhost", self.start)
 
