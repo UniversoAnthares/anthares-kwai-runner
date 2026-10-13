@@ -3,9 +3,9 @@ import base64, json, os, secrets, signal, subprocess, tempfile, threading, time,
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
-API_PORT=18080
-PAGE_PORT=18081
 RESULT_PORT=int(os.environ.get('PORT','10000'))
+API_PORT=RESULT_PORT
+PAGE_PORT=18081
 TOKEN=secrets.token_urlsafe(32)
 VNC_PASSWORD=secrets.token_urlsafe(24)
 ROOT=Path('/opt/anthares-brouser')
