@@ -45,7 +45,7 @@ def _keys():
     now = time.time()
     if _JWKS["expires"] > now and _JWKS["keys"]:
         return _JWKS["keys"]
-    req = urllib.request.Request(JWKS_URL, headers={"Accept": "application/json", "User-Agent": "anthares-session-handoff/2"})
+    req = urllib.request.Request(JWKS_URL, headers={"Accept": "application/json", "User-Agent": "anthares-session-handoff/3"})
     try:
         with urllib.request.urlopen(req, timeout=8) as response:
             data = json.loads(response.read().decode())
@@ -84,16 +84,12 @@ def _claims(token):
     audiences = aud if isinstance(aud, list) else [aud]
     ref = claims.get("ref")
     workflow_ref = claims.get("workflow_ref")
-    subject = str(claims.get("sub") or "")
     if claims.get("iss") != ISSUER or claims.get("repository") != REPOSITORY or AUDIENCE not in audiences:
         raise HTTPException(403, "github_oidc_claims_rejected")
     if ref not in ALLOWED or workflow_ref not in ALLOWED[ref]:
         raise HTTPException(403, "github_oidc_workflow_rejected")
-    # repository/ref/workflow_ref are authoritative; subject formats can vary when
-    # GitHub organization OIDC customization is enabled, so require repository binding
-    # but do not duplicate the exact default-subject format.
-    if not subject.startswith("repo:" + REPOSITORY + ":"):
-        raise HTTPException(403, "github_oidc_subject_rejected")
+    # Do not depend on GitHub's optional/customizable `sub` format. The signed
+    # issuer, audience, repository, ref and exact workflow_ref form the allowlist.
     if claims.get("event_name") not in {"push", "workflow_dispatch"}:
         raise HTTPException(403, "github_oidc_event_rejected")
     try:
