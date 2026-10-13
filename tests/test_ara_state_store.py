@@ -18,6 +18,11 @@ class StoreTests(unittest.TestCase):
         self.assertIsNone(rejected["result"])
         self.assertEqual(self.s.lease_next("pc")["id"], job["id"])
 
+    def test_future_heartbeat_is_not_connected(self):
+        self.s.heartbeat("pc", {"pid": 7})
+        self.clock.t -= 60
+        self.assertFalse(self.s.status("pc", 45)["connected"])
+
     def test_heartbeat_freshness(self):
         self.s.heartbeat("pc", {"pid": 7})
         self.assertTrue(self.s.status("pc", 45)["connected"])
@@ -38,6 +43,13 @@ class StoreTests(unittest.TestCase):
         second=self.s.lease_next("pc", lease_seconds=10)
         self.assertEqual(second["id"], job["id"])
         self.assertEqual(second["attempts"], 2)
+
+    def test_side_effect_deadline_after_lease_is_uncertain(self):
+        job = self.s.enqueue("pc", "shell", {"command": "example"}, timeout_seconds=5)
+        self.s.lease_next("pc")
+        self.clock.add(36)
+        self.assertEqual(self.s.get_job("pc", job["id"])["status"], "uncertain")
+        self.assertIsNone(self.s.lease_next("pc"))
 
     def test_side_effect_lease_becomes_uncertain_not_replayed(self):
         job=self.s.enqueue("pc","shell",{"command":"example"},timeout_seconds=120)

@@ -47,7 +47,8 @@ class MemoryStore:
                          if self._jobs.get(jid, {}).get("status") == "queued")
             uncertain = sum(1 for row in self._jobs.values()
                             if row["device_id"] == device_id and row.get("status") == "uncertain")
-        connected = bool(hb and self._now() - hb.get("_seen_epoch", 0) <= freshness_seconds)
+        age_seconds = self._now() - hb.get("_seen_epoch", 0) if hb else None
+        connected = bool(age_seconds is not None and 0 <= age_seconds <= freshness_seconds)
         if hb:
             hb.pop("_seen_epoch", None)
         return {"heartbeat": hb, "connected": connected, "queued": queued, "uncertain": uncertain}
@@ -87,7 +88,9 @@ class MemoryStore:
             if row["device_id"] != device_id or row["status"] in FINAL or row["status"] == "uncertain":
                 continue
             if now >= row["expires_epoch"]:
-                row["status"] = "expired"
+                # Side-effecting work already leased may have executed; never
+                # report it as safely expired or replay it after a restart.
+                row["status"] = "uncertain" if row["status"] == "leased" and not is_safe_retry(row["type"]) else "expired"
                 row["lease_until"] = None
                 continue
             if row["status"] == "leased" and row.get("lease_until") and now >= row["lease_until"]:
@@ -239,9 +242,11 @@ class PostgresStore:
     def _reap(self, cur, device_id):
         safe = list(SAFE_RETRY_TYPES)
         cur.execute(
-            """UPDATE ara_jobs SET status='expired', lease_until=NULL
+            """UPDATE ara_jobs SET status=CASE
+                 WHEN status='leased' AND NOT (type=ANY(%s)) THEN 'uncertain'
+                 ELSE 'expired' END, lease_until=NULL
                WHERE device_id=%s AND status IN ('queued','leased') AND expires_at<=now()""",
-            (device_id,),
+            (safe, device_id),
         )
         cur.execute(
             """UPDATE ara_jobs SET status='queued', lease_until=NULL
