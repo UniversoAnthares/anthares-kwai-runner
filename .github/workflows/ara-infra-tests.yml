@@ -8,6 +8,9 @@ on:
       - 'infra/ara_legacy_state_compat.py'
       - 'infra/anthares_remote_control_routes.py'
       - 'infra/anthares_remote_browser_bridge.py'
+      - 'infra/anthares_remote_bootstrap.py'
+      - 'infra/anthares_remote_secure_bootstrap.py'
+      - 'infra/anthares_remote_switch.py'
       - 'infra/ara_public_probe_guard.py'
       - 'infra/ara_runtime_truth.py'
       - 'infra/ara_canary_app.py'
@@ -21,7 +24,18 @@ on:
 
 jobs:
   durability:
-    runs-on: ubuntu-latest
+    name: ARA validation (${{ matrix.priority }} / ${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - priority: primary
+            runner: ubuntu-24.04
+          - priority: backup-1
+            runner: ubuntu-22.04
+          - priority: backup-2
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     services:
       postgres:
         image: postgres:16
