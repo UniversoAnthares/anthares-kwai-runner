@@ -11,6 +11,13 @@ class StoreTests(unittest.TestCase):
         self.clock=Clock()
         self.s=MemoryStore(self.clock.now)
 
+    def test_unleased_job_cannot_be_completed(self):
+        job = self.s.enqueue("pc", "shell", {"command": "example"})
+        rejected = self.s.complete("pc", job["id"], {"ok": True})
+        self.assertEqual(rejected["status"], "queued")
+        self.assertIsNone(rejected["result"])
+        self.assertEqual(self.s.lease_next("pc")["id"], job["id"])
+
     def test_heartbeat_freshness(self):
         self.s.heartbeat("pc", {"pid": 7})
         self.assertTrue(self.s.status("pc", 45)["connected"])
