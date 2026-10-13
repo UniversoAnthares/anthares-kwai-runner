@@ -49,3 +49,42 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx wrangler deploy
+      - name: Verify deployed public health contract
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            if curl -fsS --max-time 10 https://anthares-reserva-browser.anthares1.workers.dev/health -o /tmp/reserva-health.json; then
+              if python - <<'PY'
+          import json
+          d=json.load(open('/tmp/reserva-health.json', encoding='utf-8'))
+          assert d.get('ok') is True, d
+          assert d.get('service') == 'anthares-reserva-browser', d
+          assert d.get('version') == '2026-10-13-reserva-browser-v3', d
+          assert d.get('provider') == 'cloudflare', d
+          assert d.get('browser_binding') is True, d
+          assert d.get('render_required') is False, d
+          print('RESERVA_PUBLIC_HEALTH_OK=1')
+          PY
+              then break; fi
+            fi
+            test "$attempt" -lt 12 || exit 21
+            sleep 5
+          done
+      - name: Verify authenticated status without exposing token
+        env:
+          ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 10 \
+            -H "Authorization: Bearer $ANTHARES_RESERVA_TOKEN" \
+            https://anthares-reserva-browser.anthares1.workers.dev/status \
+            -o /tmp/reserva-status.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/reserva-status.json', encoding='utf-8'))
+          assert d.get('ok') is True, d
+          assert d.get('browser_binding') is True, d
+          assert d.get('version') == '2026-10-13-reserva-browser-v3', d
+          assert d.get('render_required') is False, d
+          print('RESERVA_AUTHENTICATED_STATUS_OK=1')
+          PY
