@@ -81,6 +81,12 @@ def health():
         return jsonify(ok=False, database="unavailable", selftest=_STARTUP_SELFTEST), 503
 
 
+@app.get("/")
+def root():
+    """Expose the same readiness contract at the service root for generic probes."""
+    return health()
+
+
 @app.post("/v1/device/heartbeat")
 def heartbeat():
     device = device_id()
