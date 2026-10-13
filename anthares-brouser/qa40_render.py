@@ -38,7 +38,7 @@ def wait_ready(proc,timeout=70):
     raise RuntimeError(f'ready timeout last={last}')
 
 def start_stack():
-    env=os.environ.copy(); env.update({'PORT':str(API_PORT),'CONTROL_TOKEN':TOKEN,'VNC_PASSWORD':VNC_PASSWORD,'START_URL':f'http://127.0.0.1:{PAGE_PORT}/','CHROME_PROFILE_DIR':'/data/chrome-profile','MAX_READY_FAILURES':'6','SUPERVISOR_INTERVAL':'1'})
+    env=os.environ.copy(); env.update({'PORT':str(API_PORT),'API_BIND':'127.0.0.1','CONTROL_TOKEN':TOKEN,'VNC_PASSWORD':VNC_PASSWORD,'START_URL':f'http://127.0.0.1:{PAGE_PORT}/','CHROME_PROFILE_DIR':'/data/chrome-profile','MAX_READY_FAILURES':'6','SUPERVISOR_INTERVAL':'1'})
     proc=subprocess.Popen([str(ROOT/'start.sh')],cwd=ROOT,env=env); wait_ready(proc); return proc
 
 def stop_stack(proc):
@@ -96,4 +96,10 @@ def serve_result():
     ThreadingHTTPServer(('0.0.0.0',RESULT_PORT),Handler).serve_forever()
 
 if __name__=='__main__':
-    run_cases(); print('ANTHARES_BROWSER_RENDER40_RESULT='+json.dumps(RESULT,separators=(',',':')),flush=True); serve_result()
+    # Bind the Render-facing PORT before starting the internal browser API.
+    # Render otherwise discovers the temporary API port and restarts the deploy.
+    result_server = threading.Thread(target=serve_result, daemon=True)
+    result_server.start()
+    run_cases()
+    print('ANTHARES_BROWSER_RENDER40_RESULT='+json.dumps(RESULT,separators=(',',':')),flush=True)
+    result_server.join()
