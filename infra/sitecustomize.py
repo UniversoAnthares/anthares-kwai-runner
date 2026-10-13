@@ -1,6 +1,8 @@
-"""ARA does not register routes implicitly during interpreter startup.
+"""Do not register ARA routes implicitly during interpreter startup.
 
-The dedicated service must start with `gunicorn --chdir infra ara_canary_app:app`.
-Implicit registration via sitecustomize could double-register routes when that explicit
-entrypoint imports the existing worker, and could affect unrelated production workers.
+The dedicated ARA service uses ``gunicorn --chdir infra ara_canary_app:app``.
+Keeping this module inert prevents double route registration and ensures that the
+canary neither changes nor depends on any pre-existing Render worker integration.
+The runtime-mesh module remains available to its owning worker; this ARA branch
+does not activate it as a side effect of importing Python's sitecustomize.
 """

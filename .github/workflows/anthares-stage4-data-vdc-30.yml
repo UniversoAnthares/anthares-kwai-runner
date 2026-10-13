@@ -1,0 +1,139 @@
+name: Kwai Android ARM64 Data on VDC Matrix 30
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/anthares-stage4-data-vdc-30.yml'
+permissions:
+  contents: read
+jobs:
+  matrix30:
+    name: "case-${{ matrix.id }} fs=${{ matrix.fs }} profile=${{ matrix.profile }}"
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 22
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        include:
+          - {id: 1, fs: fresh2, profile: base}
+          - {id: 2, fs: fresh2, profile: qemu}
+          - {id: 3, fs: fresh2, profile: mmio}
+          - {id: 4, fs: fresh2, profile: pci-net}
+          - {id: 5, fs: fresh2, profile: qemu-pci-net}
+          - {id: 6, fs: fresh4, profile: base}
+          - {id: 7, fs: fresh4, profile: qemu}
+          - {id: 8, fs: fresh4, profile: mmio}
+          - {id: 9, fs: fresh4, profile: pci-net}
+          - {id: 10, fs: fresh4, profile: qemu-pci-net}
+          - {id: 11, fs: fresh8, profile: base}
+          - {id: 12, fs: fresh8, profile: qemu}
+          - {id: 13, fs: fresh8, profile: mmio}
+          - {id: 14, fs: fresh8, profile: pci-net}
+          - {id: 15, fs: fresh8, profile: qemu-pci-net}
+          - {id: 16, fs: compat4, profile: base}
+          - {id: 17, fs: compat4, profile: qemu}
+          - {id: 18, fs: compat4, profile: mmio}
+          - {id: 19, fs: compat4, profile: pci-net}
+          - {id: 20, fs: compat4, profile: qemu-pci-net}
+          - {id: 21, fs: userdata-label, profile: base}
+          - {id: 22, fs: userdata-label, profile: qemu}
+          - {id: 23, fs: userdata-label, profile: mmio}
+          - {id: 24, fs: userdata-label, profile: pci-net}
+          - {id: 25, fs: userdata-label, profile: qemu-pci-net}
+          - {id: 26, fs: seeded4, profile: base}
+          - {id: 27, fs: seeded4, profile: qemu}
+          - {id: 28, fs: seeded4, profile: mmio}
+          - {id: 29, fs: seeded4, profile: pci-net}
+          - {id: 30, fs: seeded4, profile: qemu-pci-net}
+    steps:
+      - name: Install runtime and Android ARM64 image
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless gdisk e2fsprogs util-linux >/dev/null
+          mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
+          curl -fLsS --retry 2 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
+          cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
+          export ANDROID_HOME="$HOME/android-sdk"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-30;default;arm64-v8a" >/dev/null
+          DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
+          gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
+          echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
+      - name: Build metadata and valid ext4 userdata
+        run: |
+          set -euo pipefail
+          truncate -s 192M /tmp/meta.img
+          sgdisk -o /tmp/meta.img >/dev/null
+          sgdisk -n 1:2048:0 -c 1:metadata /tmp/meta.img >/dev/null
+          LOOP=$(sudo losetup --find --show --partscan /tmp/meta.img)
+          sleep 1
+          sudo mkfs.ext4 -F -L metadata "${LOOP}p1" >/dev/null
+          sudo losetup -d "$LOOP"
+
+          FS='${{ matrix.fs }}'
+          SIZE=4G
+          LABEL=data
+          OPTS=''
+          case "$FS" in
+            fresh2) SIZE=2G ;;
+            fresh4) SIZE=4G ;;
+            fresh8) SIZE=8G ;;
+            compat4) SIZE=4G; OPTS='-O ^64bit,^metadata_csum' ;;
+            userdata-label) SIZE=4G; LABEL=userdata ;;
+            seeded4) SIZE=4G ;;
+          esac
+          truncate -s "$SIZE" /tmp/userdata.raw
+          mkfs.ext4 -F -L "$LABEL" $OPTS -E lazy_itable_init=0,lazy_journal_init=0 /tmp/userdata.raw >/dev/null
+          if [ "$FS" = seeded4 ]; then
+            mkdir -p /tmp/data-mnt
+            sudo mount -o loop /tmp/userdata.raw /tmp/data-mnt
+            sudo mkdir -p /tmp/data-mnt/dalvik-cache/arm64 /tmp/data-mnt/misc_de /tmp/data-mnt/misc_ce /tmp/data-mnt/system /tmp/data-mnt/system_ce /tmp/data-mnt/system_de
+            sudo chmod 771 /tmp/data-mnt/dalvik-cache /tmp/data-mnt/dalvik-cache/arm64 || true
+            sync
+            sudo umount /tmp/data-mnt
+          fi
+          dumpe2fs -h /tmp/userdata.raw 2>/dev/null | grep -E 'Filesystem magic|Filesystem features|Filesystem volume name' || true
+      - name: Boot with userdata fixed at vdc
+        run: |
+          set +e
+          PROFILE='${{ matrix.profile }}'
+          RAM=4096
+          SMP=4
+          EXTRA='androidboot.selinux=permissive root=/dev/ram0 rw'
+          DEVICES=''
+          case "$PROFILE" in
+            qemu) EXTRA="$EXTRA qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30" ;;
+            mmio) RAM=3072; SMP=2; EXTRA="$EXTRA qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30"; DEVICES='-device virtio-gpu-device' ;;
+            pci-net) DEVICES='-device virtio-gpu-pci -netdev user,id=n0 -device virtio-net-device,netdev=n0' ;;
+            qemu-pci-net) EXTRA="$EXTRA qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30"; DEVICES='-device virtio-gpu-pci -netdev user,id=n0 -device virtio-net-device,netdev=n0' ;;
+          esac
+
+          timeout 190 qemu-system-aarch64 -machine virt -cpu cortex-a72 -m "$RAM" -smp "$SMP" -accel tcg -nographic -no-reboot \
+            -kernel /tmp/android-Image -initrd "$ANDROID_DIR/ramdisk.img" \
+            -drive if=none,file=/tmp/meta.img,format=raw,id=metadata -device virtio-blk-device,drive=metadata \
+            -drive if=none,file="$ANDROID_DIR/system.img",format=raw,readonly=on,id=system -device virtio-blk-device,drive=system \
+            -drive if=none,file=/tmp/userdata.raw,format=raw,id=userdata -device virtio-blk-device,drive=userdata \
+            -drive if=none,file="$ANDROID_DIR/vendor.img",format=raw,readonly=on,id=vendor -device virtio-blk-device,drive=vendor \
+            $DEVICES \
+            -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu $EXTRA" \
+            > /tmp/android-qemu.log 2>&1
+
+          grep -E 'init second stage|Invalid ext4|/data/misc_de|dalvik-cache|app_process64|system_server|SystemServer|ActivityManager|PackageManager|surfaceflinger|zygote|BOOT_COMPLETED|boot_completed|metadata|Fatal signal|received signal' /tmp/android-qemu.log | tail -280 || true
+          if grep -Eq 'BOOT_COMPLETED|sys.boot_completed.*1|SystemServer.*Start|ActivityManager.*system_server|PackageManagerService' /tmp/android-qemu.log; then echo RESULT=FRAMEWORK_READY; exit 0; fi
+          if ! grep -q 'Invalid ext4 superblock on .*/vdc' /tmp/android-qemu.log && ! grep -q 'Error creating cache dir /data/dalvik-cache' /tmp/android-qemu.log && grep -q "starting service 'zygote'" /tmp/android-qemu.log; then echo RESULT=DATA_MOUNTED_ADVANCED; exit 0; fi
+          if grep -q 'Invalid ext4 superblock on .*/vdc' /tmp/android-qemu.log; then echo RESULT=VDC_EXT4_REJECTED; exit 1; fi
+          if grep -q 'Error creating cache dir /data/dalvik-cache' /tmp/android-qemu.log; then echo RESULT=DATA_STILL_UNMOUNTED; exit 1; fi
+          if grep -q "Can't open /data/misc_de" /tmp/android-qemu.log; then echo RESULT=DATA_PARTIAL; exit 1; fi
+          echo RESULT=OTHER_FAIL
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: data-vdc-case-${{ matrix.id }}
+          path: /tmp/android-qemu.log
+          if-no-files-found: warn
+          retention-days: 3

@@ -15,7 +15,7 @@ import websocket
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="Anthares-browser control API", version="0.2.0")
+app = FastAPI(title="Anthares-browser control API", version="0.2.1")
 PROFILE_DIR = Path(os.environ.get("CHROME_PROFILE_DIR", "/data/chrome-profile"))
 CONTROL_TOKEN = os.environ.get("CONTROL_TOKEN", "")
 CDP_PORT = int(os.environ.get("CDP_PORT", "9222"))
@@ -96,21 +96,28 @@ def _cdp_ready() -> bool:
 
 
 def _cdp_call(method: str, params: dict[str, Any] | None = None, timeout: float = 10.0) -> dict[str, Any]:
-    target = _page_target()
-    ws_url = target["webSocketDebuggerUrl"]
+    deadline = time.monotonic() + timeout
+    last_exc: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            target = _page_target()
+            ws = websocket.create_connection(
+                target["webSocketDebuggerUrl"],
+                timeout=min(2.0, max(0.2, deadline - time.monotonic())),
+                suppress_origin=True,
+            )
+            break
+        except Exception as exc:
+            last_exc = exc
+            time.sleep(0.1)
+    else:
+        raise HTTPException(status_code=503, detail=f"CDP websocket unavailable after retry: {last_exc}") from last_exc
+
     request_id = int(time.time_ns() % 2_000_000_000)
     try:
-        ws = websocket.create_connection(
-            ws_url,
-            timeout=timeout,
-            origin=f"http://127.0.0.1:{CDP_PORT}",
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"CDP websocket unavailable: {exc}") from exc
-    try:
         ws.send(json.dumps({"id": request_id, "method": method, "params": params or {}}))
-        deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            ws.settimeout(max(0.2, deadline - time.monotonic()))
             message = json.loads(ws.recv())
             if message.get("id") != request_id:
                 continue
@@ -294,7 +301,6 @@ def screenshot(_: None = Depends(require_token)) -> dict[str, Any]:
         data = result.get("data", "")
         if not data:
             raise HTTPException(status_code=502, detail="Chromium returned an empty screenshot")
-        # Validate the payload before returning it; do not persist screenshots to the profile volume.
         try:
             base64.b64decode(data, validate=True)
         except ValueError as exc:
@@ -314,3 +320,24 @@ def targets(_: None = Depends(require_token)) -> list[dict[str, Any]]:
             }
             for target in _json_get("/json/list")
         ]
+
+
+@app.get("/session/evidence")
+def session_evidence(_: None = Depends(require_token)) -> dict[str, Any]:
+    """Conservative service-specific evidence; never infer login from cookies."""
+    with _BROWSER_LOCK:
+        data = _evaluate("""(() => {
+            const host = location.hostname.toLowerCase();
+            if (host !== 'kwai.com' && !host.endsWith('.kwai.com'))
+                return {state:'unknown', reason:'not_kwai'};
+            const body = (document.body?.innerText || '').slice(0, 12000).toLowerCase();
+            const dialog = Array.from(document.querySelectorAll('[role="dialog"],[aria-modal="true"]'))
+                .some(el => /log in|sign in|login|entrar|fazer login|登录/i.test(el.innerText || ''));
+            const explicit = dialog || /please log in|please sign in|faça login para|entre na sua conta/.test(body);
+            return explicit
+                ? {state:'unauthenticated', reason:'visible_login_prompt'}
+                : {state:'unknown', reason:'authentication_not_proven'};
+        })()""").get("value", {})
+        if not isinstance(data, dict) or data.get("state") not in {"unknown", "unauthenticated"}:
+            return {"state": "unknown", "reason": "invalid_evidence"}
+        return data

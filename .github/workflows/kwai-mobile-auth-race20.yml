@@ -1,0 +1,32 @@
+name: Kwai Manual Auth Race 20
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/kwai-mobile-auth-race20.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        slot: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - name: Dispatch manual-auth ${{ matrix.slot }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          jitter=$(( ( ${{ matrix.slot }} - 1 ) % 4 ))
+          sleep "$jitter"
+          gh workflow run kwai-mobile-auth-cached.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main
+          echo "KWAI_MANUAL_AUTH_DISPATCHED=${{ matrix.slot }}"

@@ -54,6 +54,7 @@ Todos os endpoints abaixo exigem `Authorization: Bearer <CONTROL_TOKEN>`:
 
 - `GET /status`: perfil, tamanho, PIDs, CDP e `session_claim`.
 - `GET /page`: URL, título e texto visível atual.
+- `GET /session/evidence`: evidência conservadora de login Kwai; retorna `unauthenticated` apenas quando encontra solicitação explícita de login, ou `unknown`. Nunca retorna `authenticated` sem prova.
 - `GET /targets`: alvos Chromium sem expor WebSocket debugger URL.
 - `POST /navigate`: navega para URL absoluta `http/https`.
 - `POST /click`: clica um seletor CSS.

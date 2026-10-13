@@ -1,0 +1,48 @@
+{
+  "revision": "2026-10-12-executors-r3",
+  "android_execution": {
+    "priority": ["circleci", "cirrus", "bitrise"],
+    "github_actions": "retired_from_android_execution",
+    "failover": {
+      "failure_threshold": 1,
+      "queue_threshold_seconds": 90,
+      "order": ["circleci", "cirrus", "bitrise"]
+    }
+  },
+  "browser_execution": {
+    "priority": ["circleci", "cirrus", "bitrise"],
+    "github_actions": "retired_from_browser_runtime_qa",
+    "redundancy": "three_independent_providers",
+    "failover": {
+      "failure_threshold": 1,
+      "queue_threshold_seconds": 90,
+      "order": ["circleci", "cirrus", "bitrise"]
+    },
+    "shared_test": "ci/shared/anthares-browser-runtime-qa.sh",
+    "cases_per_provider": 40
+  },
+  "providers": {
+    "circleci": {
+      "rank": 1,
+      "status": "proven",
+      "runtime": "Linux machine executor with Docker; Android machine executor for Android workloads",
+      "config": ".circleci/config.yml"
+    },
+    "cirrus": {
+      "rank": 2,
+      "status": "configured",
+      "runtime": "Docker/KVM Compute Engine VM for browser QA; Android SDK container with kvm=true for Android",
+      "config": ".cirrus.yml"
+    },
+    "bitrise": {
+      "rank": 3,
+      "status": "configured",
+      "runtime": "Linux Android & Docker stack",
+      "config": "bitrise.yml"
+    }
+  },
+  "non_android": {
+    "gitlab": "coordination_and_generic_ci_only",
+    "github": "canonical_repository_and_history_only"
+  }
+}

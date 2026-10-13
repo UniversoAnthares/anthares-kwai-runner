@@ -8,6 +8,12 @@ export DISPLAY=${DISPLAY:-:99}
 export CHROME_PROFILE_DIR=${CHROME_PROFILE_DIR:-/data/chrome-profile}
 START_URL=${START_URL:-https://www.kwai.com/}
 CDP_PORT=${CDP_PORT:-9222}
+# The CDP websocket is strictly loopback-only. Explicitly bypass any proxy
+# configuration inherited/injected into the container; websocket-client can
+# otherwise tunnel ws://localhost through an HTTP proxy and the control API
+# reports that as a generic 503 even while /json/list is healthy.
+export NO_PROXY="127.0.0.1,localhost,::1${NO_PROXY:+,$NO_PROXY}"
+export no_proxy="127.0.0.1,localhost,::1${no_proxy:+,$no_proxy}"
 mkdir -p "$CHROME_PROFILE_DIR" /run/anthares-brouser
 
 Xvfb "$DISPLAY" -screen 0 1440x900x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
@@ -33,7 +39,7 @@ chromium \
   --start-maximized \
   --remote-debugging-address=127.0.0.1 \
   --remote-debugging-port="$CDP_PORT" \
-  --remote-allow-origins="http://127.0.0.1:$CDP_PORT" \
+  --remote-allow-origins='*' \
   --user-data-dir="$CHROME_PROFILE_DIR" \
   "$START_URL" >/tmp/chromium.log 2>&1 &
 CHROME_PID=$!

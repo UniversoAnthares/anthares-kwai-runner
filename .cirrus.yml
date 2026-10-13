@@ -1,0 +1,57 @@
+env:
+  KWAI_VAULT_URL: https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+  KWAI_VAULT_SHA256: 96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543
+
+browser_runtime_task:
+  name: Anthares-browser runtime QA (Cirrus secondary)
+  compute_engine_instance:
+    image_project: cirrus-images
+    image: family/docker-kvm
+    platform: linux
+    nested_virtualization: true
+    cpu: 4
+    memory: 16G
+  timeout_in: 40m
+  browser_qa_script: |
+    set -Eeuo pipefail
+    export CI_PROVIDER=cirrus
+    docker info
+    ANTHARES_BROWSER_QA_CASES=40 bash ci/shared/anthares-browser-runtime-qa.sh
+
+kwai_android_task:
+  name: Kwai Android executor (Cirrus secondary)
+  container:
+    image: ghcr.io/cirruslabs/android-sdk:35
+    cpu: 4
+    memory: 12G
+    kvm: true
+  timeout_in: 20m
+  setup_script: |
+    set -Eeuo pipefail
+    sdkmanager --install 'system-images;android-35;google_apis;x86_64' platform-tools emulator
+    echo no | avdmanager create avd --force --name anthares-cirrus-api35 --package 'system-images;android-35;google_apis;x86_64' --device pixel_2
+  boot_script: |
+    set -Eeuo pipefail
+    nohup emulator -avd anthares-cirrus-api35 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >/tmp/cirrus-emulator.log 2>&1 &
+    adb start-server
+    timeout 60 adb wait-for-device
+    timeout 150 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done'
+    test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+    echo CIRRUS_ANDROID_BOOT=PASS
+  kwai_script: |
+    set -Eeuo pipefail
+    curl -fL --retry 5 --retry-all-errors --connect-timeout 15 --max-time 180 -o kwai-vault.zip "$KWAI_VAULT_URL"
+    echo "$KWAI_VAULT_SHA256  kwai-vault.zip" | sha256sum -c -
+    rm -rf kwai-vault && mkdir kwai-vault
+    unzip -q kwai-vault.zip -d kwai-vault
+    bash kwai_vault_install.sh
+    adb shell pm path com.kwai.video | grep -q '^package:'
+    adb shell am force-stop com.kwai.video || true
+    adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+    sleep 5
+    test -n "$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
+    echo CIRRUS_KWAI_RUNTIME=PASS
+  always:
+    diagnostics_script: |
+      adb devices -l || true
+      tail -200 /tmp/cirrus-emulator.log || true
