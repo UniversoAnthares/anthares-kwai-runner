@@ -71,7 +71,10 @@ jobs:
           assert d.get('live_view') is True, d
           assert d.get('persistent_profile_support') is True, d
           assert d.get('render_required') is False, d
+          assert d.get('authenticated_probe') is True, d
+          assert d.get('authenticated_probe_path') == '/session/verify', d
           print('RESERVA_V4_PUBLIC_HEALTH_OK=1')
+          print('RESERVA_SESSION_VERIFY_GATEWAY_OK=1')
           PY
               then break; fi
             fi
@@ -83,7 +86,10 @@ jobs:
           grep -q 'Anthares Reserva Browser' /tmp/owner.html
           unauth="$(curl -sS -o /tmp/status-unauth.json -w '%{http_code}' --max-time 10 https://anthares-reserva-browser.anthares1.workers.dev/status)"
           test "$unauth" = "401"
+          verify_unauth="$(curl -sS -o /tmp/verify-unauth.json -w '%{http_code}' --max-time 10 -X POST https://anthares-reserva-browser.anthares1.workers.dev/session/verify)"
+          test "$verify_unauth" = "401"
           echo 'RESERVA_OWNER_HANDOFF_SURFACE_OK=1'
+          echo 'RESERVA_VERIFY_AUTH_PROTECTION_OK=1'
       - name: Verify authenticated status when Actions owns the secret
         env:
           ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
