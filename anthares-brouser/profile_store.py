@@ -1,7 +1,8 @@
 """Encrypted, chunked GitLab snapshot store for a stopped Chromium profile.
 
-Only enabled when GITLAB_TOKEN and CONTROL_TOKEN are set. No plaintext
-profile material is sent to GitLab; uploads are AES-GCM authenticated.
+No plaintext profile material is sent to GitLab; uploads are AES-GCM
+authenticated. A dedicated GITLAB_STATE_KEY is preferred so API-token
+rotation cannot make browser snapshots unreadable.
 """
 import base64
 import hashlib
@@ -26,13 +27,16 @@ EXCLUDES = {"Cache", "Code Cache", "GPUCache", "GrShaderCache", "ShaderCache",
             "Crashpad", "BrowserMetrics", "Safe Browsing", "SingletonLock",
             "SingletonSocket", "SingletonCookie"}
 
+def _state_secret():
+    return os.environ.get("GITLAB_STATE_KEY") or os.environ.get("CONTROL_TOKEN") or ""
+
 def configured():
-    return bool(os.environ.get("GITLAB_TOKEN") and os.environ.get("CONTROL_TOKEN"))
+    return bool(os.environ.get("GITLAB_TOKEN") and _state_secret())
 
 def _key():
-    secret = os.environ["CONTROL_TOKEN"].encode()
+    secret = _state_secret().encode()
     if len(secret) < 32:
-        raise RuntimeError("CONTROL_TOKEN must have at least 32 characters")
+        raise RuntimeError("GITLAB_STATE_KEY must have at least 32 characters")
     return hashlib.pbkdf2_hmac("sha256", secret,
                               b"anthares-browser-gitlab-state-v1", 250000, 32)
 
