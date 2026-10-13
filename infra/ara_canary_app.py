@@ -8,8 +8,10 @@ import os
 import x_render_worker_v3 as _worker
 import anthares_remote_control_routes as _relay
 from ara_legacy_state_compat import DevicesProxy
+from ara_public_probe_guard import register as _register_probe_guard
 
 app = _worker.app
+_register_probe_guard(app)
 _relay._DEVICES = DevicesProxy(_relay)
 _relay.register(app, os.getenv("ARA_SHARED", ""))
 
