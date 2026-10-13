@@ -1,0 +1,68 @@
+name: Diagnose Northflank ARA controller
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/northflank-ara-diagnose.yml
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - name: Print sanitized service and addon state
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          token=os.environ.get('NORTHFLANK_API_TOKEN','')
+          if not token: raise SystemExit('missing NORTHFLANK_API_TOKEN')
+          base='https://api.northflank.com/v1'
+          h={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
+          def get(path):
+              req=urllib.request.Request(base+path,headers=h)
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      raw=r.read().decode(); return json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  print(json.dumps({'path':path,'http':e.code})); return {}
+          projects=(get('/projects').get('data') or {}).get('projects') or []
+          if isinstance(projects,dict): projects=list(projects.values())
+          p=next((x for x in projects if x.get('name')=='Default'),None)
+          if not p: raise SystemExit('Default project missing')
+          pid=p.get('id')
+          services=(get(f'/projects/{pid}/services').get('data') or {}).get('services') or []
+          if isinstance(services,dict): services=list(services.values())
+          s=next((x for x in services if x.get('name')=='anthares-ara-northflank'),None)
+          sid=(s or {}).get('id') or 'anthares-ara-northflank'
+          detail=(get(f'/projects/{pid}/services/{sid}').get('data') or {})
+          status=detail.get('status') or (s or {}).get('status') or {}
+          ports=(get(f'/projects/{pid}/services/{sid}/ports').get('data') or {}).get('ports') or []
+          addons=(get(f'/projects/{pid}/addons').get('data') or {}).get('addons') or []
+          if isinstance(addons,dict): addons=list(addons.values())
+          a=next((x for x in addons if x.get('name')=='anthares-ara-postgres'),None)
+          aid=(a or {}).get('id')
+          adetail=(get(f'/projects/{pid}/addons/{aid}').get('data') or {}) if aid else {}
+          creds_ready=False
+          if aid:
+              c=get(f'/projects/{pid}/addons/{aid}/credentials').get('data') or {}
+              envs=c.get('envs') or {}
+              creds_ready=bool(envs.get('POSTGRES_URI') or envs.get('DATABASE_URL'))
+          out={
+            'project_id':pid,
+            'service_id':sid,
+            'service_type':detail.get('serviceType') or (s or {}).get('serviceType'),
+            'build_status':(status.get('build') or {}).get('status'),
+            'deployment_status':(status.get('deployment') or {}).get('status'),
+            'ports':[{'internalPort':x.get('internalPort'),'public':x.get('public'),'protocol':x.get('protocol'),'dns':x.get('dns')} for x in ports],
+            'addon_exists':bool(aid),
+            'addon_id':aid,
+            'addon_status':adetail.get('status') or (a or {}).get('status'),
+            'addon_type':adetail.get('type') or (a or {}).get('type'),
+            'credentials_ready':creds_ready,
+          }
+          print(json.dumps(out,sort_keys=True))
+          PY
