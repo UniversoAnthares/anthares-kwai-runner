@@ -320,3 +320,24 @@ def targets(_: None = Depends(require_token)) -> list[dict[str, Any]]:
             }
             for target in _json_get("/json/list")
         ]
+
+
+@app.get("/session/evidence")
+def session_evidence(_: None = Depends(require_token)) -> dict[str, Any]:
+    """Conservative service-specific evidence; never infer login from cookies."""
+    with _BROWSER_LOCK:
+        data = _evaluate("""(() => {
+            const host = location.hostname.toLowerCase();
+            if (host !== 'kwai.com' && !host.endsWith('.kwai.com'))
+                return {state:'unknown', reason:'not_kwai'};
+            const body = (document.body?.innerText || '').slice(0, 12000).toLowerCase();
+            const dialog = Array.from(document.querySelectorAll('[role="dialog"],[aria-modal="true"]'))
+                .some(el => /log in|sign in|login|entrar|fazer login|登录/i.test(el.innerText || ''));
+            const explicit = dialog || /please log in|please sign in|faça login para|entre na sua conta/.test(body);
+            return explicit
+                ? {state:'unauthenticated', reason:'visible_login_prompt'}
+                : {state:'unknown', reason:'authentication_not_proven'};
+        })()""").get("value", {})
+        if not isinstance(data, dict) or data.get("state") not in {"unknown", "unauthenticated"}:
+            return {"state": "unknown", "reason": "invalid_evidence"}
+        return data
