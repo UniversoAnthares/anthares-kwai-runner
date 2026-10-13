@@ -102,6 +102,15 @@ class PhysicalContractTests(unittest.TestCase):
         self.assertIn("keyboard.enter()", commit_body)
         self.assertLess(commit_body.index("trusted_focused_final_post(nodes)"), commit_body.index("keyboard.enter()"))
 
+    def test_final_and_ready_both_use_dynamic_native_post_lookup(self):
+        source = MODULE.read_text(encoding="utf-8")
+        navigate = source.split("    def navigate_to_final(", 1)[1].split("    def fill_caption(", 1)[0]
+        prepare = source.split("    def prepare(self) -> int:", 1)[1].split("    def verify_after_post_physical", 1)[0]
+        self.assertIn("post = find_final_post(final)", navigate)
+        self.assertIn("post = find_final_post(final)", prepare)
+        self.assertNotIn("post = ku.find_id(final, FINAL_POST_ID)", navigate)
+        self.assertNotIn("post = ku.find_id(final, FINAL_POST_ID)", prepare)
+
     def test_native_post_requires_focused_enabled_clickable(self):
         rid = mod.FINAL_POST_ID
         valid = {"resource-id": rid, "focused": "true", "focusable": "true",
