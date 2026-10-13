@@ -1,0 +1,38 @@
+name: ARA cross-branch contract guard
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/ara_contract_guard.py'
+      - '.github/workflows/ara-contract-guard.yml'
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: guard
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/ara-chatgpt-mcp
+          path: mcp
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/ara-capabilities
+          path: windows
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/ara-infra
+          path: infra
+      - name: Collect Windows operation implementations
+        run: |
+          find windows/anthares-remote-agent -type f -name '*.go' -print0 | xargs -0 cat > /tmp/ara-windows-all.go
+      - name: Check contracts
+        run: |
+          python3 guard/tools/ara_contract_guard.py \
+            --mcp mcp/anthares-remote-mcp/server.mjs \
+            --agent /tmp/ara-windows-all.go \
+            --control infra/infra/anthares_remote_control_routes.py
