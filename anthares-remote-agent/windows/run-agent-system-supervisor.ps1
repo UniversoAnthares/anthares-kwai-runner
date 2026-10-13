@@ -8,9 +8,10 @@ if (Test-Path $queueAuthLoader) {
 }
 
 # Canonical runtime: one SYSTEM agent, one device identity, no interactive desktop.
-# Cloudflare controls are safe zero-cost HTTP defaults. GitHub/GitLab issue queues
-# are independent recovery transports when their encrypted credentials exist.
-# Render is intentionally absent.
+# GitHub/GitLab private issue queues are the canonical independent transports.
+# Render and Cloudflare are not defaults and are never required. An HTTPS control
+# may be supplied explicitly later through ANTHARES_CONTROL_* only as an optional
+# accelerator; quota exhaustion or provider outage must not stop queue execution.
 $env:ANTHARES_DEVICE_ID = 'DESKTOP-FTDK0HP'
 $v4Exe = Join-Path $root 'anthares-remote-agent-v4.exe'
 $legacyExe = Join-Path $root 'anthares-remote-agent.exe'
@@ -19,20 +20,21 @@ $stdout = Join-Path $root 'agent-system.stdout.log'
 $stderr = Join-Path $root 'agent-system.stderr.log'
 $stateFile = Join-Path $root 'system-supervisor-state.json'
 
-function Control-OrDefault([string]$value, [string]$fallback) {
+function Optional-Control([string]$value) {
     $candidate = ([string]$value).Trim().TrimEnd('/')
-    if ([string]::IsNullOrWhiteSpace($candidate)) { return $fallback }
+    if ([string]::IsNullOrWhiteSpace($candidate)) { return '' }
     return $candidate
 }
-$primaryControl = Control-OrDefault $env:ANTHARES_CONTROL_PRIMARY_URL 'https://anthares-ara-backup.anthares1.workers.dev'
-$secondaryControl = Control-OrDefault $env:ANTHARES_CONTROL_SECONDARY_URL 'https://anthares-control.anthares1.workers.dev'
-$tertiaryControl = ([string]$env:ANTHARES_CONTROL_TERTIARY_URL).Trim().TrimEnd('/')
+$primaryControl = Optional-Control $env:ANTHARES_CONTROL_PRIMARY_URL
+$secondaryControl = Optional-Control $env:ANTHARES_CONTROL_SECONDARY_URL
+$tertiaryControl = Optional-Control $env:ANTHARES_CONTROL_TERTIARY_URL
 $httpCandidates = @($primaryControl, $secondaryControl, $tertiaryControl) |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+    Where-Object { $_ -notmatch 'onrender\.com' -and $_ -notmatch 'workers\.dev' } |
     Select-Object -Unique
 
 $created = $false
-$mutex = New-Object System.Threading.Mutex($true, 'Global\AntharesRemoteSystemSupervisorV4', [ref]$created)
+$mutex = New-Object System.Threading.Mutex($true, 'Global\AntharesRemoteSystemSupervisorV5', [ref]$created)
 if (-not $created) { exit 0 }
 
 function Test-Control([string]$origin) {
@@ -75,8 +77,8 @@ try {
         if (Test-Path $queueAuthLoader) { try { . $queueAuthLoader } catch { Write-Error -Message ('issue queue auth reload deferred: ' + $_.Exception.Message) -ErrorAction Continue } }
         $queueReady = Queue-TransportConfigured
         $active = Choose-Control
-        if ($queueReady) { $mode = if ($active) { 'issue-queues+http' } else { 'issue-queues-only' } }
-        elseif ($active) { $mode = 'http-only' }
+        if ($queueReady) { $mode = if ($active) { 'issue-queues+optional-http' } else { 'issue-queues-only' } }
+        elseif ($active) { $mode = 'optional-http-only' }
         else { Save-State '' 'waiting' 'no-control-transport-configured'; Start-Sleep -Seconds 10; continue }
         try { $proc = Start-Agent $active $mode } catch { Save-State $active $mode ('start-failed:' + $_.Exception.GetType().Name); Start-Sleep -Seconds 5; continue }
         Save-State $active $mode 'running' $proc.Id
@@ -85,7 +87,7 @@ try {
             Start-Sleep -Seconds 10
             if (Queue-TransportConfigured) {
                 $currentControlHealthy = $false; if ($active) { $currentControlHealthy = Test-Control $active }
-                $reason = if ($currentControlHealthy) { 'running-queue-with-http' } else { 'running-queue-failover' }
+                $reason = if ($currentControlHealthy) { 'running-queue-with-optional-http' } else { 'running-queue-primary' }
                 Save-State $active $mode $reason $proc.Id; continue
             }
             if ($active -and (Test-Control $active)) { $activeFailures = 0; continue }
@@ -98,7 +100,7 @@ try {
                 try { $proc.WaitForExit(5000) | Out-Null } catch {}
                 break
             }
-            Save-State $active $mode 'http-unhealthy-no-alternate' $proc.Id; $activeFailures = 0
+            Save-State $active $mode 'optional-http-unhealthy-no-alternate' $proc.Id; $activeFailures = 0
         }
         if ($proc.HasExited) { Save-State $active $mode ('agent-exited:' + $proc.ExitCode) }
         Start-Sleep -Seconds 2
