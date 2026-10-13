@@ -1,0 +1,72 @@
+name: Verify Anthares Reserva Browser without deploy
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/anthares-reserva-browser-verify-only.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: anthares-reserva-browser-verify-only
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE_URL: https://anthares-reserva-browser.anthares1.workers.dev
+      ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify existing deployment only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANTHARES_RESERVA_TOKEN"
+          curl -fsS --max-time 15 "$BASE_URL/health" -o /tmp/health.json
+          curl -fsS --max-time 15 -H "Authorization: Bearer $ANTHARES_RESERVA_TOKEN" "$BASE_URL/status" -o /tmp/status.json
+          python3 - <<'PY'
+          import datetime, json, os
+          health=json.load(open('/tmp/health.json', encoding='utf-8'))
+          status=json.load(open('/tmp/status.json', encoding='utf-8'))
+          assert health.get('ok') is True, health
+          assert health.get('service') == 'anthares-reserva-browser', health
+          assert health.get('provider') == 'cloudflare', health
+          assert health.get('browser_binding') is True, health
+          assert health.get('render_required') is False, health
+          assert status.get('ok') is True, status
+          assert status.get('browser_binding') is True, status
+          result={
+            'checked_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'health_ok': True,
+            'status_ok': True,
+            'version': health.get('version'),
+            'provider': health.get('provider'),
+            'browser_binding': health.get('browser_binding'),
+            'render_required': health.get('render_required'),
+            'deployment_url': os.environ['BASE_URL'],
+            'deploy_performed': False,
+          }
+          os.makedirs('infra/reserva-browser', exist_ok=True)
+          with open('infra/reserva-browser/status.json','w',encoding='utf-8') as f:
+            json.dump(result,f,indent=2,sort_keys=True); f.write('\n')
+          print(json.dumps(result,indent=2,sort_keys=True))
+          PY
+      - name: Persist sanitized verification
+        if: always()
+        shell: bash
+        run: |
+          test -f infra/reserva-browser/status.json || exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add infra/reserva-browser/status.json
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: record Anthares Reserva Browser verification"
+          git pull --rebase origin main
+          git push origin HEAD:main
