@@ -164,8 +164,16 @@ func heartbeatLoop(cfg Config) {
 			failures++
 			fmt.Fprintf(os.Stderr, "heartbeat error (%d/4): %v\n", failures, err)
 			if failures >= 4 {
-				fmt.Fprintln(os.Stderr, "control heartbeat unavailable; exiting for supervisor recovery")
-				os.Exit(23)
+				if issueQueueConfigured() {
+					// GitHub/GitLab issue queues are independent transports. Keep the
+					// process alive when HTTP control is unavailable so queue-only
+					// recovery remains continuously reachable.
+					fmt.Fprintln(os.Stderr, "control heartbeat unavailable; issue queue transport remains active")
+					failures = 4
+				} else {
+					fmt.Fprintln(os.Stderr, "control heartbeat unavailable; exiting for supervisor recovery")
+					os.Exit(23)
+				}
 			}
 		} else {
 			failures = 0
