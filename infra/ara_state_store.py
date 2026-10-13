@@ -213,22 +213,25 @@ class PostgresStore:
         timeout = max(1, min(int(timeout_seconds or 30), 120))
         jid = job_id or uuid.uuid4().hex
         with self._conn() as c, c.cursor() as cur:
-            if idempotency_key:
-                cur.execute("SELECT * FROM ara_jobs WHERE device_id=%s AND idempotency_key=%s",
-                            (device_id, idempotency_key))
-                existing = cur.fetchone()
-                if existing:
-                    cols = [d.name for d in cur.description]
-                    c.commit()
-                    return self._row(dict(zip(cols, existing)))
             cur.execute(
                 """INSERT INTO ara_jobs(id,device_id,type,args,timeout_seconds,expires_at,status,idempotency_key)
                    VALUES(%s,%s,%s,%s::jsonb,%s,now()+(%s||' seconds')::interval,'queued',%s)
+                   ON CONFLICT DO NOTHING
                    RETURNING *""",
                 (jid, device_id, job_type, json.dumps(args or {}), timeout, timeout + 30, idempotency_key),
             )
+            inserted = cur.fetchone()
+            if inserted is None:
+                if not idempotency_key:
+                    raise RuntimeError("ARA job id collision")
+                cur.execute("SELECT * FROM ara_jobs WHERE device_id=%s AND idempotency_key=%s",
+                            (device_id, idempotency_key))
+                existing = cur.fetchone()
+                if existing is None:
+                    raise RuntimeError("ARA idempotency conflict without matching job")
+                inserted = existing
             cols = [d.name for d in cur.description]
-            row = self._row(dict(zip(cols, cur.fetchone())))
+            row = self._row(dict(zip(cols, inserted)))
             c.commit()
             return row
 
