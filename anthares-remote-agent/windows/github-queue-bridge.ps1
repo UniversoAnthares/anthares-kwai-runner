@@ -34,7 +34,7 @@ try {
         $stream = $null
         try { $stream = [System.IO.File]::Open($receipt, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None) } catch { continue }
         try {
-          $bytes = [Text.Encoding]::UTF8.GetBytes(("{\"id\":\"$id\",\"state\":\"started\"}"))
+          $bytes = [Text.Encoding]::UTF8.GetBytes((@{id=$id;state="started"} | ConvertTo-Json -Compress))
           $stream.Write($bytes, 0, $bytes.Length)
           $stream.Flush($true)
         } finally { $stream.Dispose() }
