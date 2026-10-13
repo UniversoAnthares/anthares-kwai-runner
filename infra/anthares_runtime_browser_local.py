@@ -203,6 +203,7 @@ def _ensure_browser():
             kwargs["storage_state"] = restored
         _CONTEXT = _BROWSER.new_context(**kwargs)
         _PAGE = _CONTEXT.new_page()
+        _persist()
         return _CONTEXT, _PAGE
 
 
