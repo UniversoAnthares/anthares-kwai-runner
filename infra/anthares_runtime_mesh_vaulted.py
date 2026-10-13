@@ -1,6 +1,8 @@
 """Bind the vault-backed local browser to the generic Anthares runtime mesh."""
 from __future__ import annotations
 
+from flask import jsonify
+
 import anthares_runtime_mesh as _mesh
 import anthares_runtime_browser_local as _local
 
@@ -44,6 +46,13 @@ def _hybrid_request(method, path, payload=None):
 
 
 def register(app):
+    @app.get("/v1/runtime/browser/signing-public-key")
+    def browser_signing_public_key():
+        try:
+            return jsonify(ok=True, algorithm="ECDSA-P256-SHA256", jwk=_local.public_jwk())
+        except Exception as exc:
+            return jsonify(ok=False, error=type(exc).__name__), 503
+
     _mesh._browser_ready = _hybrid_ready
     _mesh._browser_request = _hybrid_request
     return _mesh.register(app)
