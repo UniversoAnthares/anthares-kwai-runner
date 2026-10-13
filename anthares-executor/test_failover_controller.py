@@ -3,10 +3,11 @@ from failover_controller import FailoverController
 
 
 class FakeClient:
-    def __init__(self, healthy=True, identity=True, upload=True):
+    def __init__(self, healthy=True, identity=True, upload=True, heartbeat_ok=True):
         self.healthy = healthy
         self.identity = identity
         self.upload = upload
+        self.heartbeat_ok = heartbeat_ok
         self.calls = []
 
     def health(self):
@@ -21,7 +22,9 @@ class FakeClient:
 
     def heartbeat(self, *args):
         self.calls.append("heartbeat")
-        return 200, {"ok": True}
+        if self.heartbeat_ok:
+            return 200, {"ok": True}
+        return 409, {"error": "stale_lease"}
 
     def start_browser(self):
         self.calls.append("start")
@@ -50,7 +53,7 @@ class FailoverTests(unittest.TestCase):
         result = ctl.execute_readonly_kwai_probe("job", "z" * 32, 1)
         self.assertTrue(result["ok"])
         self.assertEqual(result["executor"], "reserve")
-        self.assertEqual(second.calls, ["health", "lease", "start", "probe", "stop", "complete"])
+        self.assertEqual(second.calls, ["health", "lease", "heartbeat", "start", "probe", "stop", "complete"])
         self.assertEqual(first.calls, ["health"])
 
     def test_probe_never_invokes_publication_method(self):
@@ -61,6 +64,15 @@ class FailoverTests(unittest.TestCase):
         self.assertNotIn("publish", client.calls)
         self.assertTrue(result["identity_verified"])
         self.assertTrue(result["upload_surface_verified"])
+
+    def test_lost_heartbeat_fails_closed_before_browser_start(self):
+        client = FakeClient(True, heartbeat_ok=False)
+        ctl = FailoverController([{"name": "only", "priority": 1, "client": client}])
+        result = ctl.execute_readonly_kwai_probe("job3", "x" * 32, 1)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"], "lease_heartbeat_failed")
+        self.assertNotIn("start", client.calls)
+        self.assertIn("complete", client.calls)
 
 
 if __name__ == "__main__":
