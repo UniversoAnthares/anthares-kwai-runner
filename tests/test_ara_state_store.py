@@ -39,6 +39,13 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(second["id"], job["id"])
         self.assertEqual(second["attempts"], 2)
 
+    def test_side_effect_deadline_after_lease_is_uncertain(self):
+        job = self.s.enqueue("pc", "shell", {"command": "example"}, timeout_seconds=5)
+        self.s.lease_next("pc")
+        self.clock.add(36)
+        self.assertEqual(self.s.get_job("pc", job["id"])["status"], "uncertain")
+        self.assertIsNone(self.s.lease_next("pc"))
+
     def test_side_effect_lease_becomes_uncertain_not_replayed(self):
         job=self.s.enqueue("pc","shell",{"command":"example"},timeout_seconds=120)
         leased=self.s.lease_next("pc", lease_seconds=10)
