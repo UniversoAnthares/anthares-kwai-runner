@@ -53,11 +53,11 @@ if marker not in s:
 s = s.replace(marker, helper, 1)
 
 s = s.replace('post = ku.find_id(final, FINAL_POST_ID)', 'post = find_final_post(final)')
-# Do not rewrite the helper's own exact-ID check into a generic fallback.
-s = s.replace('        post = ku.find_id(nodes, FINAL_POST_ID)\n', '        post = ku.find_id(nodes, FINAL_POST_ID)\n')
+# The original exact-ID lookup is replaced in commit only after the helper is inserted.
+s = s.replace('post = ku.find_id(nodes, FINAL_POST_ID)', 'post = find_final_post(nodes)')
 
 old_focus = '''        with HIDKeyboard(self.adb, 314) as keyboard:
-            self.focus_target(keyboard, post_rid, "26-post-focus", max_steps=35)
+            self.focus_target(keyboard, FINAL_POST_ID, "26-post-focus", max_steps=35)
             # Irreversible boundary starts only after exact resource-id focus is proven.
             self.emit("PUBLISH_REQUESTED", job=self.cfg.job_id, transport="hid-uhid")
             keyboard.enter()
