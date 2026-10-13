@@ -1,43 +1,46 @@
 $ErrorActionPreference='Continue'
-$root='C:\ProgramData\AntharesRemoteAgent'
+$root='D:\AntharsWork\AntharesRemoteAgent'
+$canonicalTask='Anthares Remote Agent SYSTEM'
+$watchdogTask='Anthares Remote Recovery Watchdog'
+$userTask='Anthares Remote Agent User'
+$canonicalScript=Join-Path $root 'run-agent-system-supervisor.ps1'
+$watchdogLoop=Join-Path $root 'recovery-watchdog-loop.ps1'
 $log=Join-Path $root 'recovery-watchdog.log'
 $state=Join-Path $root 'recovery-watchdog-state.json'
-$canonicalTask='Anthares Remote Agent SYSTEM'
-
-function Log([string]$m){ try{"$(Get-Date -Format o) $m" | Add-Content -Path $log -Encoding UTF8}catch{} }
-function Get-AuxServices {
-  @(Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object {
-    $_.Name -match 'meshagent|meshcentral|winremote' -or $_.DisplayName -match 'mesh agent|meshcentral|winremote' -or $_.PathName -match 'meshagent|meshcentral|winremote'
-  })
+function Log([string]$m){try{"$(Get-Date -Format o) $m"|Add-Content -Path $log -Encoding UTF8}catch{}}
+function Get-SystemAgents{@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -eq 0 -and $_.Name -match '^anthares-remote-agent(?:-v4|-standard)?\.exe$'})}
+function Retire-InteractiveAgents{
+  Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -ne 0 -and $_.Name -match '^anthares-remote-agent(?:-v4|-standard)?\.exe$'}|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue;Log("retired interactive agent pid=$($_.ProcessId)")}catch{}}
+  try{$t=Get-ScheduledTask -TaskName $userTask -ErrorAction SilentlyContinue;if($t){Disable-ScheduledTask -TaskName $userTask -ErrorAction SilentlyContinue|Out-Null}}catch{}
 }
-function Repair-Service($svc){
-  try{
-    if($svc.StartMode -eq 'Disabled'){ sc.exe config $svc.Name start= auto | Out-Null }
-    sc.exe failure $svc.Name reset= 86400 actions= restart/5000/restart/15000/restart/30000 | Out-Null
-    sc.exe failureflag $svc.Name 1 | Out-Null
-    $fresh=Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
-    if($fresh -and $fresh.Status -ne 'Running'){ Start-Service -Name $svc.Name -ErrorAction SilentlyContinue; Log("restarted auxiliary service $($svc.Name)") }
-  }catch{ Log("aux repair failed $($svc.Name): $($_.Exception.GetType().Name)") }
-}
-
-$systemAgents=@(Get-Process -Name 'anthares-remote-agent-v4','anthares-remote-agent' -ErrorAction SilentlyContinue | Where-Object {$_.SessionId -eq 0})
-$task=Get-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue
-if($task){
-  if($systemAgents.Count -eq 0 -or $task.State -ne 'Running'){
-    try{ Start-ScheduledTask -TaskName $canonicalTask -ErrorAction Stop; Log('started canonical SYSTEM task') }catch{ Log("canonical task start failed: $($_.Exception.GetType().Name)") }
+function Ensure-Task([string]$name,[string]$script){
+  $task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+  $actionText=if($task){(($task.Actions|ForEach-Object{$_.Execute+' '+$_.Arguments}) -join ';')}else{''}
+  $needs=(-not $task)-or([string]$task.Principal.UserId -notmatch '^(SYSTEM|SISTEMA|S-1-5-18)$')-or([string]$task.Principal.RunLevel -ne 'Highest')-or($actionText -notmatch [regex]::Escape($script))
+  if($needs){
+    $a=New-ScheduledTaskAction -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+$script+'"') -WorkingDirectory $root
+    $tr=New-ScheduledTaskTrigger -AtStartup
+    $pr=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $st=New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
+    Register-ScheduledTask -TaskName $name -Action $a -Trigger $tr -Principal $pr -Settings $st -Force|Out-Null
+    Log("repaired task $name")
   }
-}else{ Log('canonical SYSTEM task missing') }
-
-$aux=Get-AuxServices
-foreach($svc in $aux){ Repair-Service $svc }
-
-try{
-  [pscustomobject]@{
-    updated_at=(Get-Date).ToUniversalTime().ToString('o')
-    canonical_task_present=[bool]$task
-    canonical_task_state=if($task){[string]$task.State}else{'missing'}
-    system_agent_count=$systemAgents.Count
-    auxiliary_services=@($aux | ForEach-Object {$_.Name})
-    role='canonical-root-recovery'
-  } | ConvertTo-Json -Depth 4 | Set-Content -Path $state -Encoding UTF8
-}catch{}
+  Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+}
+New-Item -ItemType Directory -Force -Path $root|Out-Null
+Retire-InteractiveAgents
+$task=Ensure-Task $canonicalTask $canonicalScript
+$wd=Ensure-Task $watchdogTask $watchdogLoop
+$agents=@(Get-SystemAgents)
+if($agents.Count -eq 0 -or -not $task -or [string]$task.State -ne 'Running'){
+  try{Start-ScheduledTask -TaskName $canonicalTask -ErrorAction Stop;Start-Sleep 3;Log('started canonical SYSTEM task')}catch{Log("canonical task start failed: $($_.Exception.GetType().Name)")}
+  $agents=@(Get-SystemAgents)
+}
+try{[pscustomobject]@{
+  updated_at=(Get-Date).ToUniversalTime().ToString('o');install_root=$root
+  canonical_task_present=[bool](Get-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue)
+  watchdog_task_present=[bool](Get-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue)
+  system_agent_count=$agents.Count;system_agent_pids=@($agents|ForEach-Object{$_.ProcessId})
+  interactive_agent_count=@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -ne 0 -and $_.Name -like 'anthares-remote-agent*'}).Count
+  role='canonical-root-recovery'
+}|ConvertTo-Json -Depth 4|Set-Content $state -Encoding UTF8}catch{}
