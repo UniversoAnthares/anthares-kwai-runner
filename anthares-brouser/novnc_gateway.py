@@ -106,7 +106,7 @@ async def browser_login(request: Request):
     supplied = params.get("access_token", [""])[0].encode("utf-8")
     if not hmac.compare_digest(supplied, _secret()):
         raise HTTPException(status_code=401, detail="unauthorized")
-    response = RedirectResponse(url="/novnc/vnc.html", status_code=303)
+    response = RedirectResponse(url="/novnc/vnc.html?path=novnc%2Fwebsockify", status_code=303)
     _set_session_cookie(response)
     return response
 
@@ -132,7 +132,7 @@ def revoke_session(
 
 @router.get("/novnc")
 def novnc_root(_: int = Depends(_require_cookie)):
-    return RedirectResponse(url="/novnc/vnc.html", status_code=303, headers={"Cache-Control": "no-store"})
+    return RedirectResponse(url="/novnc/vnc.html?path=novnc%2Fwebsockify", status_code=303, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/novnc/{asset_path:path}")
