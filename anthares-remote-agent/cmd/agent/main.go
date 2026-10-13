@@ -143,7 +143,7 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string,error) {
     case "ping": return "pong",nil
     case "system_info": return systemInfoJSON(ctx)
     case "process_list": return run(ctx,"tasklist","/FO","CSV")
-    case "process_start": return processStartJSON(job.Args["path"], job.Args["args"])
+    case "process_start": return processStartJSON(job.Args["path"], job.Args["args_json"])
     case "process_kill": return processKillJSON(job.Args["pid"])
     case "service_status": return serviceStatusJSON(ctx,job.Args["name"])
     case "service_start": return serviceControlJSON(ctx,job.Args["name"],true)
