@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import json
 import os
 import secrets
 import threading
@@ -8,14 +9,54 @@ import time
 import requests
 from flask import Response, jsonify, request
 
+from ara_state_store import build_store
+
 _LOCK = threading.Lock()
-_DEVICES = {}
+_STORE = None
 _DEVICE_HASH_CACHE = {}
 _DEVICE_HASH_TTL = 60
 _DEVICE_HASH_BASE = "https://raw.githubusercontent.com/UniversoAnthares/anthares-kwai-runner/main/anthares-remote-agent/devices"
 _PROBE_DEVICE = "DESKTOP-FTDK0HP"
 _BLOBS = {}
 _MAX_TRANSFER = 100 * 1024 * 1024
+
+
+def _store():
+    global _STORE
+    if _STORE is None:
+        with _LOCK:
+            if _STORE is None:
+                _STORE = build_store()
+    return _STORE
+
+
+def enqueue_job(device, job_type, args=None, timeout=30, idempotency_key=None):
+    return _store().enqueue(device, job_type, args or {}, timeout, idempotency_key=idempotency_key)
+
+
+def get_job(device, job_id):
+    return _store().get_job(device, job_id)
+
+
+def device_status(device, freshness_seconds=45):
+    return _store().status(device, freshness_seconds=freshness_seconds)
+
+
+def wait_for_job(device, job_id, wait_seconds):
+    deadline = time.time() + max(1, min(float(wait_seconds), 130.0))
+    while time.time() < deadline:
+        job = get_job(device, job_id)
+        if not job:
+            return None
+        if job.get("status") in ("done", "failed", "expired"):
+            return job
+        time.sleep(0.20)
+    return get_job(device, job_id)
+
+
+def execute_job(device, job_type, args=None, timeout=30, idempotency_key=None):
+    job = enqueue_job(device, job_type, args or {}, timeout, idempotency_key=idempotency_key)
+    return wait_for_job(device, job["id"], min(int(timeout or 30) + 8, 130))
 
 
 def register(app, control_token):
@@ -66,57 +107,15 @@ def register(app, control_token):
         actual = hashlib.sha256(got.encode("utf-8")).hexdigest()
         return secrets.compare_digest(actual, expected)
 
-    def state(device):
-        return _DEVICES.setdefault(device, {"heartbeat": None, "queue": [], "jobs": {}})
-
-    def enqueue(device, job_type, args=None, timeout=30):
-        job_id = secrets.token_hex(16)
-        job = {
-            "id": job_id,
-            "type": job_type,
-            "args": args or {},
-            "timeout_seconds": max(1, min(int(timeout or 30), 120)),
-            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "status": "queued",
-        }
-        s = state(device)
-        s["jobs"][job_id] = job
-        s["queue"].append(job_id)
-        return job
-
-    def wait_for_job(device, job_id, wait_seconds):
-        deadline = time.time() + max(1, min(float(wait_seconds), 130.0))
-        while time.time() < deadline:
-            with _LOCK:
-                job = state(device)["jobs"].get(job_id)
-                if not job:
-                    return None
-                if job.get("status") in ("done", "failed"):
-                    return dict(job)
-            time.sleep(0.20)
-        with _LOCK:
-            job = state(device)["jobs"].get(job_id)
-            return dict(job) if job else None
-
-    def execute(device, job_type, args=None, timeout=30):
-        with _LOCK:
-            job = enqueue(device, job_type, args or {}, timeout)
-        return wait_for_job(device, job["id"], min(int(timeout or 30) + 8, 130))
-
     def stash_blob(data, mime="application/octet-stream", filename="download.bin", ttl=300):
         token = secrets.token_urlsafe(32)
         now = time.time()
         with _LOCK:
-            # Opportunistic cleanup keeps this in-memory courier bounded.
             for key, item in list(_BLOBS.items()):
                 if item["expires"] <= now:
                     _BLOBS.pop(key, None)
-            _BLOBS[token] = {
-                "data": data,
-                "mime": mime,
-                "filename": filename,
-                "expires": now + max(30, min(int(ttl), 900)),
-            }
+            _BLOBS[token] = {"data": data, "mime": mime, "filename": filename,
+                             "expires": now + max(30, min(int(ttl), 900))}
         return token
 
     @app.post("/v1/device/heartbeat")
@@ -124,10 +123,7 @@ def register(app, control_token):
         device = device_id()
         if not device_auth_ok(device):
             return jsonify(error="unauthorized"), 401
-        body = request.get_json(silent=True) or {}
-        body["seen_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        with _LOCK:
-            state(device)["heartbeat"] = body
+        _store().heartbeat(device, request.get_json(silent=True) or {})
         return jsonify(ok=True)
 
     @app.get("/v1/device/jobs/next")
@@ -135,30 +131,18 @@ def register(app, control_token):
         device = device_id()
         if not device_auth_ok(device):
             return jsonify(error="unauthorized"), 401
-        with _LOCK:
-            s = state(device)
-            while s["queue"]:
-                job_id = s["queue"].pop(0)
-                job = s["jobs"].get(job_id)
-                if not job or job.get("status") != "queued":
-                    continue
-                job["status"] = "leased"
-                return jsonify(job=job)
-        return ("", 204)
+        job = _store().lease_next(device, lease_seconds=45)
+        return jsonify(job=job) if job else ("", 204)
 
     @app.post("/v1/device/jobs/<job_id>/result")
     def ara_result(job_id):
         device = device_id()
         if not device_auth_ok(device):
             return jsonify(error="unauthorized"), 401
-        body = request.get_json(silent=True) or {}
-        with _LOCK:
-            job = state(device)["jobs"].get(job_id)
-            if not job:
-                return jsonify(error="unknown_job"), 404
-            job["result"] = body
-            job["status"] = "done" if bool(body.get("ok")) else "failed"
-        return jsonify(ok=True)
+        job = _store().complete(device, job_id, request.get_json(silent=True) or {})
+        if not job:
+            return jsonify(error="unknown_job"), 404
+        return jsonify(ok=True, status=job.get("status"))
 
     @app.post("/v1/control/jobs")
     def ara_create_job():
@@ -169,8 +153,8 @@ def register(app, control_token):
         job_type = str(body.get("type") or "").strip()
         if not device or not job_type:
             return jsonify(error="missing_device_id_or_type"), 400
-        with _LOCK:
-            job = enqueue(device, job_type, body.get("args") or {}, body.get("timeout_seconds") or 30)
+        job = enqueue_job(device, job_type, body.get("args") or {}, body.get("timeout_seconds") or 30,
+                          body.get("idempotency_key"))
         return jsonify(ok=True, job=job), 201
 
     @app.get("/v1/control/jobs/<job_id>")
@@ -180,11 +164,8 @@ def register(app, control_token):
         device = request.args.get("device_id", "").strip()
         if not device:
             return jsonify(error="missing_device_id"), 400
-        with _LOCK:
-            job = state(device)["jobs"].get(job_id)
-            if not job:
-                return jsonify(error="not_found"), 404
-            return jsonify(job=job)
+        job = get_job(device, job_id)
+        return jsonify(job=job) if job else (jsonify(error="not_found"), 404)
 
     @app.post("/v1/control/execute")
     def ara_execute():
@@ -196,17 +177,15 @@ def register(app, control_token):
         timeout = max(1, min(int(body.get("timeout_seconds") or 30), 120))
         if not device or not job_type:
             return jsonify(error="missing_device_id_or_type"), 400
-        job = execute(device, job_type, body.get("args") or {}, timeout)
+        job = execute_job(device, job_type, body.get("args") or {}, timeout, body.get("idempotency_key"))
         if not job:
             return jsonify(error="job_lost"), 503
         if job.get("status") not in ("done", "failed"):
             return jsonify(ok=False, status=job.get("status"), job_id=job.get("id"), error="timeout_waiting_for_device"), 504
         result = job.get("result") or {}
-        return jsonify(
-            ok=bool(result.get("ok")), status=job.get("status"), job_id=job.get("id"),
-            output=result.get("output"), error=result.get("error"),
-            started_at=result.get("started_at"), ended_at=result.get("ended_at"),
-        ), (200 if result.get("ok") else 500)
+        return jsonify(ok=bool(result.get("ok")), status=job.get("status"), job_id=job.get("id"),
+                       output=result.get("output"), error=result.get("error"),
+                       started_at=result.get("started_at"), ended_at=result.get("ended_at")), (200 if result.get("ok") else 500)
 
     @app.get("/v1/control/status")
     def ara_status():
@@ -215,24 +194,18 @@ def register(app, control_token):
         device = request.args.get("device_id", "").strip()
         if not device:
             return jsonify(error="missing_device_id"), 400
-        with _LOCK:
-            s = state(device)
-            return jsonify(heartbeat=s["heartbeat"], queued=len(s["queue"]))
+        return jsonify(**device_status(device))
 
     @app.get("/v1/control/capabilities")
     def ara_capabilities():
         if not control_auth_ok():
             return jsonify(error="unauthorized"), 401
-        return jsonify(
-            ok=True,
-            protocol="anthares-remote-agent/0.2",
-            capabilities=[
-                "status", "system_info", "shell", "process_list", "clipboard_get", "clipboard_set",
-                "screenshot", "file_stat", "file_list", "file_read", "file_write",
-                "file_read_chunk", "file_write_chunk", "job_start", "job_list", "job_status", "job_logs", "job_cancel",
-                "pull_100mb", "push_chunked", "elevated_via_system_agent",
-            ],
-        )
+        return jsonify(ok=True, protocol="anthares-remote-agent/0.3",
+                       durability="postgres", lease_recovery=True, idempotency=True,
+                       capabilities=["status", "system_info", "shell", "process_list", "clipboard_get", "clipboard_set",
+                                     "screenshot", "file_stat", "file_list", "file_read", "file_write",
+                                     "file_read_chunk", "file_write_chunk", "job_start", "job_list", "job_status", "job_logs", "job_cancel",
+                                     "pull_100mb", "push_chunked", "elevated_via_system_agent"])
 
     @app.post("/v1/control/screenshot")
     def ara_screenshot_bridge():
@@ -241,7 +214,7 @@ def register(app, control_token):
         body = request.get_json(silent=True) or {}
         device = str(body.get("device_id") or _PROBE_DEVICE).strip()
         display = str(body.get("display") if body.get("display") is not None else "0")
-        job = execute(device, "screenshot", {"display": display}, 45)
+        job = execute_job(device, "screenshot", {"display": display}, 45)
         result = (job or {}).get("result") or {}
         if not result.get("ok"):
             return jsonify(ok=False, error=result.get("error") or "screenshot_failed"), 500
@@ -263,12 +236,12 @@ def register(app, control_token):
         path = str(body.get("path") or "")
         if not path:
             return jsonify(error="missing_path"), 400
-        stat_job = execute(device, "file_stat", {"path": path}, 30)
+        stat_job = execute_job(device, "file_stat", {"path": path}, 30)
         stat_result = (stat_job or {}).get("result") or {}
         if not stat_result.get("ok"):
             return jsonify(ok=False, error=stat_result.get("error") or "stat_failed"), 500
         try:
-            meta = __import__("json").loads(stat_result.get("output") or "{}")
+            meta = json.loads(stat_result.get("output") or "{}")
             size = int(meta.get("size") or 0)
         except Exception:
             return jsonify(ok=False, error="invalid_stat_payload"), 500
@@ -276,23 +249,21 @@ def register(app, control_token):
             return jsonify(ok=False, error="path_is_directory"), 400
         if size > _MAX_TRANSFER:
             return jsonify(ok=False, error="file_exceeds_100mb", size=size), 413
-        offset = 0
-        chunks = []
+        offset, chunks = 0, []
         while offset < size:
-            job = execute(device, "file_read_chunk", {"path": path, "offset": str(offset), "length": str(4 * 1024 * 1024)}, 45)
+            job = execute_job(device, "file_read_chunk", {"path": path, "offset": str(offset), "length": str(4 * 1024 * 1024)}, 45)
             result = (job or {}).get("result") or {}
             if not result.get("ok"):
                 return jsonify(ok=False, error=result.get("error") or "read_chunk_failed", offset=offset), 500
             try:
-                payload = __import__("json").loads(result.get("output") or "{}")
+                payload = json.loads(result.get("output") or "{}")
                 chunk = base64.b64decode(payload.get("base64") or "", validate=True)
                 next_offset = int(payload.get("next_offset"))
             except Exception:
                 return jsonify(ok=False, error="invalid_chunk_payload", offset=offset), 500
             if next_offset <= offset and offset < size:
                 return jsonify(ok=False, error="non_advancing_chunk", offset=offset), 500
-            chunks.append(chunk)
-            offset = next_offset
+            chunks.append(chunk); offset = next_offset
         data = b"".join(chunks)
         token = stash_blob(data, "application/octet-stream", os.path.basename(path) or "download.bin", 600)
         return jsonify(ok=True, size=len(data), download_url=f"/v1/blob/{token}")
@@ -311,9 +282,8 @@ def register(app, control_token):
         device = request.args.get("device_id", "").strip()
         if device != _PROBE_DEVICE:
             return jsonify(error="not_found"), 404
-        with _LOCK:
-            hb = state(device)["heartbeat"]
-        return jsonify(device_id=device, connected=bool(hb), heartbeat=hb)
+        status = device_status(device)
+        return jsonify(device_id=device, connected=status["connected"], heartbeat=status["heartbeat"], queued=status["queued"])
 
     @app.post("/v1/public/ping")
     def ara_public_ping_create():
@@ -321,15 +291,14 @@ def register(app, control_token):
         device = str(body.get("device_id") or "").strip()
         if device != _PROBE_DEVICE:
             return jsonify(error="not_found"), 404
-        with _LOCK:
-            job = enqueue(device, "ping", {}, 15)
+        key = request.headers.get("Idempotency-Key") or secrets.token_hex(16)
+        job = enqueue_job(device, "ping", {}, 15, key)
         return jsonify(job_id=job["id"], status=job["status"]), 202
 
     @app.get("/v1/public/ping/<job_id>")
     def ara_public_ping_get(job_id):
-        with _LOCK:
-            job = state(_PROBE_DEVICE)["jobs"].get(job_id)
-            if not job or job.get("type") != "ping":
-                return jsonify(error="not_found"), 404
-            result = job.get("result") or {}
-            return jsonify(status=job.get("status"), ok=result.get("ok"), output=result.get("output") if result.get("ok") else None)
+        job = get_job(_PROBE_DEVICE, job_id)
+        if not job or job.get("type") != "ping":
+            return jsonify(error="not_found"), 404
+        result = job.get("result") or {}
+        return jsonify(status=job.get("status"), ok=result.get("ok"), output=result.get("output") if result.get("ok") else None)
