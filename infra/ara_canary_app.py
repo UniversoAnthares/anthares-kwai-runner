@@ -1,7 +1,6 @@
 """Explicit Anthares Remote Agent canary entrypoint.
 
-Unlike sitecustomize.py, this module is imported directly by Gunicorn, so ARA route
-registration does not depend on interpreter startup path behavior.
+The dedicated canary uses its own Flask app, independent of the existing X worker.
 """
 import os
 
@@ -14,12 +13,12 @@ if not (os.getenv("ARA_DATABASE_URL") or os.getenv("DATABASE_URL")):
     raise RuntimeError("ARA canary requires a durable PostgreSQL connection")
 build_store()
 
-import x_render_worker_v3 as _worker
+from flask import Flask
 import anthares_remote_control_routes as _relay
 from ara_public_probe_guard import register as _register_probe_guard
 from ara_runtime_truth import register as _register_runtime_truth
 
-app = _worker.app
+app = Flask("anthares_remote_agent_canary")
 _register_probe_guard(app)
 _register_runtime_truth(app)
 _relay.register(app, os.getenv("ARA_SHARED", ""))
