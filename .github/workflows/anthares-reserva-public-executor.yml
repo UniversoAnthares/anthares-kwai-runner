@@ -64,3 +64,18 @@ jobs:
             sleep 5
           done
           python -c 'import json; d=json.load(open("/tmp/reserva-selftest.json")); assert d.get("ok") is True and d.get("browser_started") is True and d.get("host_ok") is True, d; print("RESERVA_BROWSER=PASS")'
+      - name: Diagnose migrated Kwai authentication safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://anthares-reserva-browser.anthares1.workers.dev'
+          curl -fsS --max-time 60 "$BASE/_auth_selftest" -o /tmp/reserva-auth.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/reserva-auth.json'))
+          safe={k:d.get(k) for k in ('ok','capsule_decrypted','cookie_count','identity_verified','upload_surface_verified','session_state','evidence','studio','error') if k in d}
+          print('RESERVA_AUTH_DIAGNOSTIC='+json.dumps(safe,separators=(',',':')))
+          assert d.get('ok') is True
+          assert d.get('capsule_decrypted') is True
+          PY
+          rm -f /tmp/reserva-auth.json
