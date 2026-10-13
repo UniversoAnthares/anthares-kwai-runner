@@ -1,0 +1,41 @@
+name: ARA stage validated 0.3.1 patch
+
+on:
+  push:
+    branches:
+      - fix/ara-0.3.1-resilience
+    paths:
+      - '.github/workflows/ara-copy-0.3.1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - name: Copy the already validated agent patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin feature/anthares-remote-agent
+          git checkout origin/feature/anthares-remote-agent -- anthares-remote-agent/cmd/agent/main.go .github/workflows/ara-spool-release.yml
+          cd anthares-remote-agent
+          go test ./... -count=1
+          go vet ./...
+      - name: Commit patch to clean main-based branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add anthares-remote-agent/cmd/agent/main.go .github/workflows/ara-spool-release.yml
+          git commit -m 'fix(ara): keep agent online across transient control outages'
+          git push origin HEAD:fix/ara-0.3.1-resilience
