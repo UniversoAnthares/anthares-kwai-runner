@@ -170,6 +170,36 @@ start_vnc
 start_novnc
 start_chromium
 
+# End-to-end check: signed cookie -> FastAPI WebSocket -> loopback x11vnc RFB.
+(
+  for attempt in $(seq 1 20); do
+    if python - "$API_PORT" <<'PY'
+import sys
+import websocket
+sys.path.insert(0, "/opt/anthares-brouser")
+from novnc_gateway import COOKIE_NAME, _issue
+port = sys.argv[1]
+ws = websocket.create_connection(
+    f"ws://127.0.0.1:{port}/novnc/websockify",
+    origin="https://anthares-browser-qa-render.onrender.com",
+    cookie=f"{COOKIE_NAME}={_issue()}",
+    timeout=5,
+)
+try:
+    banner = ws.recv()
+    assert isinstance(banner, bytes) and banner.startswith(b"RFB "), repr(banner)[:80]
+finally:
+    ws.close()
+PY
+    then
+      log "authenticated noVNC websocket-to-RFB handshake PASS"
+      exit 0
+    fi
+    sleep 2
+  done
+  log "authenticated noVNC websocket-to-RFB handshake FAILED"
+) &
+
 READY_FAILURES=0
 MAX_READY_FAILURES=${MAX_READY_FAILURES:-6}
 SUPERVISOR_INTERVAL=${SUPERVISOR_INTERVAL:-5}
