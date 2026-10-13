@@ -281,3 +281,19 @@ def post():
         return jsonify(ok=True, **_publish(text, media_url))
     except Exception as exc:
         return jsonify(ok=False, error=str(exc)), 500
+
+
+# Gunicorn adds infra to sys.path after interpreter startup. Register the ARA
+# integration explicitly once the Flask app exists so device/MCP routes cannot
+# disappear after a deploy merely because the automatic sitecustomize hook was
+# skipped.
+try:
+    import sitecustomize as _ara_sitecustomize  # noqa: F401,E402
+except Exception as _ara_bootstrap_exc:
+    print(
+        "ARA_EXPLICIT_BOOTSTRAP_ERROR="
+        + type(_ara_bootstrap_exc).__name__
+        + ":"
+        + str(_ara_bootstrap_exc)[:240],
+        flush=True,
+    )
