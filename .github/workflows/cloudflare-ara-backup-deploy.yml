@@ -27,6 +27,9 @@ jobs:
           test -s cloudflare-ara-backup/trusted-keys/render-mcp.pem
           grep -q 'ARA_TRUSTED_MCP_PUBLIC_KEYS_JSON' cloudflare-ara-backup/src/index.js
           grep -q 'independent_of_render_postgres' cloudflare-ara-backup/src/index.js
+          grep -q 'shared-fencing-v1' cloudflare-ara-backup/src/index.js
+          grep -q 'floot-postgres-v1' cloudflare-ara-backup/src/index.js
+          node --check cloudflare-ara-backup/src/index.js
       - name: Build Render-independent verifier
         shell: bash
         run: |
@@ -65,7 +68,7 @@ jobs:
           set -euo pipefail
           cd cloudflare-ara-backup
           npx --yes wrangler@4.43.0 deploy
-      - name: Verify persistence and health
+      - name: Verify persistence, fencing and health
         shell: bash
         run: |
           set -euo pipefail
@@ -74,6 +77,11 @@ jobs:
           echo "$health" | grep -q '"ok":true'
           echo "$health" | grep -q 'cloudflare-durable-object-sqlite'
           echo "$health" | grep -q '"independent_of_render_postgres":true'
+          echo "$health" | grep -q '"shared_fencing":"floot-postgres-v1"'
           self="$(curl -fsS https://anthares-ara-backup.anthares1.workers.dev/_selftest)"
           echo "$self"
           echo "$self" | grep -q '"ok":true'
+          code="$(curl -sS -o /tmp/auth.json -w '%{http_code}' -H 'X-Anthares-Device: DESKTOP-FTDK0HP' https://anthares-ara-backup.anthares1.workers.dev/v1/device/auth-check)"
+          cat /tmp/auth.json
+          test "$code" = 401
+          echo 'ARA_SHARED_FENCING_DEPLOYED=1'
