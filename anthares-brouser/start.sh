@@ -91,14 +91,16 @@ start_xvfb() {
   return 1
 }
 
-vnc_banner_ready() {
+vnc_socket_ready() {
+  # LibVNCServer may wait briefly for client bytes to distinguish native RFB
+  # from WebSocket. Waiting for the RFB greeting here can therefore deadlock
+  # its WebSocket autodetection. Startup readiness only proves the loopback
+  # listener; the authenticated end-to-end test below proves actual RFB.
   python <<'PY'
 import socket
 try:
-    with socket.create_connection(("127.0.0.1", 5900), timeout=1.5) as sock:
-        sock.settimeout(1.5)
-        data = sock.recv(12)
-        raise SystemExit(0 if data.startswith(b"RFB ") else 1)
+    with socket.create_connection(("127.0.0.1", 5900), timeout=0.35):
+        raise SystemExit(0)
 except Exception:
     raise SystemExit(1)
 PY
@@ -108,15 +110,15 @@ start_vnc() {
   log "starting loopback-only VNC"
   x11vnc -display "$DISPLAY" -forever -shared -nopw -rfbport 5900 -localhost >/tmp/x11vnc.log 2>&1 &
   VNC_PID=$!
-  for _ in $(seq 1 50); do
+  for _ in $(seq 1 30); do
     if ! kill -0 "$VNC_PID" 2>/dev/null; then break; fi
-    if vnc_banner_ready; then
-      log "VNC RFB ready"
+    if vnc_socket_ready; then
+      log "VNC loopback listener ready"
       return 0
     fi
     sleep 0.2
   done
-  log "VNC failed RFB readiness; forcing container-level recovery"
+  log "VNC failed listener readiness; forcing container-level recovery"
   tail -n 50 /tmp/x11vnc.log 2>/dev/null || true
   return 1
 }
@@ -169,7 +171,7 @@ start_novnc
 start_chromium
 
 (
-  for attempt in $(seq 1 20); do
+  for attempt in $(seq 1 12); do
     if python - "$API_PORT" <<'PY'
 import os, sys, websocket
 sys.path.insert(0, "/opt/anthares-brouser")
@@ -178,7 +180,7 @@ port = sys.argv[1]
 origin = os.environ.get("NOVNC_PUBLIC_ORIGIN", "https://anthares-browser-qa-render.onrender.com")
 ws = websocket.create_connection(
     f"ws://127.0.0.1:{port}/novnc/websockify", origin=origin,
-    cookie=f"{COOKIE_NAME}={_issue()}", timeout=5,
+    cookie=f"{COOKIE_NAME}={_issue()}", timeout=15,
 )
 try:
     banner = ws.recv()
