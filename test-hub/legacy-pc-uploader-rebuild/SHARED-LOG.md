@@ -1366,3 +1366,11 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Anthares Browser Vault Smoke run `38330972424` still reports job `smoke` queued, with no conclusion. Do not count it as passing or failing; do not enqueue redundant runs.
 - No fourth executor request, publish guard, destructive reset, daemon activation, or publication performed. Kwai authentication remains UNKNOWN pending restored execution and actual UI identity proof.
 - Next operator/agent with a live Windows transport should inspect executor/supervisor PID, heartbeat, dedicated clone sync, git auth and locks, then consume the three existing requests in order and record each result. Parallel browser agent should inspect runner capacity/queue before re-running QA.
+
+## 2026-10-12 — Agent continuidade — Anthares Remote supersedes retired transports
+- User confirmed MeshCentral is retired and Remote Desktop Commander / AI Commander must no longer be used; Anthares Remote is the authorized replacement. Future diagnostics must use Anthares Remote / its control plane, not the retired connectors.
+- Render workspace `anthares-site` verified: `anthares-remote-control`, `anthares-remote-mcp`, `anthares-remote-mcp-v2`, both ARA infra canaries exist and are unsuspended; `anthares-ara-state` Postgres 18 free instance reports available.
+- Render deployments: remote-control `3e4ae610` LIVE; both MCP gateways `7c5a91c8` LIVE. Application logs report signed MCP servers started. This proves service deployment, not end-to-end device execution.
+- Render Postgres direct SQL inspection blocked by empty external IP allowlist. Preserve private DB posture; test via authorized internal application path, not by opening public access.
+- Anthares Browser Vault Smoke `38330972424` still queued at last check. No additional workflow was dispatched.
+- Remaining: validate Anthares Remote authenticated device/queue roundtrip and recover existing three Kwai executor requests; verify Kwai account UI before probe/prepare. No publication performed.
