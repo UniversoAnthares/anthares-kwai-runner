@@ -23,7 +23,8 @@ jobs:
           node --experimental-default-type=module --check cloudflare-x-vault/src/index.js
           grep -q 'anthares.encrypted-browser-state.v1' cloudflare-x-vault/src/index.js
           grep -q 'BROWSER_KEY' cloudflare-x-vault/src/index.js
-          grep -q 'BROWSER_JWK_KEY' cloudflare-x-vault/src/index.js
+          grep -q 'BROWSER_CONTROL_JWK_KEY' cloudflare-x-vault/src/index.js
+          grep -q 'BROWSER_RUNTIME_JWK_KEY' cloudflare-x-vault/src/index.js
           grep -q 'ANTHARES_STATE' cloudflare-x-vault/wrangler.toml
       - name: Deploy durable session vault
         env:
@@ -34,12 +35,13 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           cd cloudflare-x-vault
           npx --yes wrangler@4.43.0 deploy
-      - name: Seed browser verifier key
+      - name: Seed browser verifier keys
         run: |
           set -euo pipefail
           out="$(curl --fail-with-body -sS -X POST https://anthares-x-vault.anthares1.workers.dev/browser-key/refresh)"
           echo "$out"
           echo "$out" | grep -q '"refreshed":true'
+          echo "$out" | grep -q '"authorities":2'
       - name: Verify durable vault health
         run: |
           set -euo pipefail
@@ -48,3 +50,4 @@ jobs:
           echo "$out" | grep -q '"service":"anthares-x-vault"'
           echo "$out" | grep -q '"persistent_state":true'
           echo "$out" | grep -q '"browser_state_slot":true'
+          echo "$out" | grep -q '"browser_identity":"dual-public-key"'
