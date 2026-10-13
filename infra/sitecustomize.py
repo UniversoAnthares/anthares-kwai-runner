@@ -8,6 +8,8 @@ try:
     _register_probe_guard(_worker.app)
     _register_remote(_worker.app, _os.getenv("ARA_SHARED", ""))
 
+    from anthares_remote_mcp_bridge import register as _register_mcp_bridge
+    _register_mcp_bridge(_worker.app)
     from anthares_remote_browser_bridge import register as _register_browser
     _register_browser(_worker.app)
     from anthares_remote_secure_bootstrap import register as _register_secure_bootstrap
