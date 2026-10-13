@@ -22,7 +22,7 @@ func fileRemove(cfg Config, path string, recursive bool) (string, error) {
     if err != nil { return "", err }
     for _, root := range cfg.AllowedRoots {
         ar, _ := filepath.Abs(root)
-        if filepath.Clean(ar) == filepath.Clean(p) {
+        if pathWithin(ar, p) && pathWithin(p, ar) {
             return "", errors.New("refusing to remove an allowed root")
         }
     }
