@@ -1,0 +1,35 @@
+name: ARA OAuth Smoke
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ara-oauth-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  oauth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify authorization page no longer depends on Windows clipboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          challenge='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+          body="$(curl -fsSG 'https://anthares-ara-mcp.anthares1.workers.dev/oauth/authorize' \
+            --data-urlencode 'client_id=https://chatgpt.com/oauth/client.json' \
+            --data-urlencode 'redirect_uri=https://chatgpt.com/connector_platform_oauth_redirect' \
+            --data-urlencode 'response_type=code' \
+            --data-urlencode "code_challenge=$challenge" \
+            --data-urlencode 'code_challenge_method=S256' \
+            --data-urlencode 'resource=https://anthares-ara-mcp.anthares1.workers.dev' \
+            --data-urlencode 'scope=ara.read ara.write' \
+            --data-urlencode 'state=smoke')"
+          printf '%s' "$body" | grep -q 'código de configuração fornecido na conversa'
+          printf '%s' "$body" | grep -q 'name="approval"'
+          if printf '%s' "$body" | grep -q 'área de transferência do agente remoto'; then
+            echo 'legacy clipboard flow still present'
+            exit 1
+          fi
+          echo 'ARA_OAUTH_OWNER_CODE_PAGE_OK=1'
