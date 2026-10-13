@@ -1,0 +1,64 @@
+name: Anthares Runtime Mesh QA
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/anthares_runtime_mesh.py'
+      - 'infra/sitecustomize.py'
+      - 'tools/test_anthares_runtime_mesh.py'
+      - 'anthares-brouser/**'
+      - '.github/workflows/anthares-runtime-mesh-qa.yml'
+  push:
+    branches: [main, feature/runtime-mesh-remote-browser]
+    paths:
+      - 'infra/anthares_runtime_mesh.py'
+      - 'infra/sitecustomize.py'
+      - 'tools/test_anthares_runtime_mesh.py'
+      - 'anthares-brouser/**'
+      - '.github/workflows/anthares-runtime-mesh-qa.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  mesh-contract:
+    runs-on: macos-14
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install --quiet flask requests
+      - run: python3 tools/test_anthares_runtime_mesh.py
+      - run: python3 -m py_compile infra/anthares_runtime_mesh.py infra/sitecustomize.py
+
+  browser-container-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build isolated Anthares-browser
+        run: docker build -t anthares-browser ./anthares-brouser
+      - name: Start isolated browser without host desktop integration
+        run: |
+          docker run -d --name anthares-browser \
+            -e VNC_PASSWORD=qa-only \
+            -e CONTROL_TOKEN=qa-control \
+            -p 127.0.0.1:18080:8080 \
+            anthares-browser
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18080/health | grep -q '"cdp_ready":true'; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/health | tee /tmp/browser-health.json
+          grep -q '"cdp_ready":true' /tmp/browser-health.json
+          docker port anthares-browser | grep -q '8080/tcp -> 127.0.0.1:18080'
+          ! docker port anthares-browser | grep -q '9222'
+      - name: Verify API control uses isolated CDP
+        run: |
+          curl -fsS -H 'Authorization: Bearer qa-control' http://127.0.0.1:18080/status | tee /tmp/status.json
+          grep -q '"cdp_bind":"127.0.0.1"' /tmp/status.json
+          curl -fsS -X POST -H 'Authorization: Bearer qa-control' -H 'Content-Type: application/json' \
+            -d '{"url":"https://example.com/","wait_ms":1000}' http://127.0.0.1:18080/navigate | grep -q 'example.com'
+      - if: always()
+        run: docker logs anthares-browser || true
