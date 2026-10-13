@@ -1,0 +1,19 @@
+{
+  "build_status": "SUCCESS",
+  "checked_at": "2026-10-13T16:31:04.660277+00:00",
+  "deployment_status": "COMPLETED",
+  "health": {
+    "ok": true,
+    "service": "anthares-remote-control",
+    "version": "0.1.1"
+  },
+  "health_error": null,
+  "health_ok": true,
+  "health_url": "https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/health",
+  "production_failover_modified": false,
+  "project_id": "default",
+  "public_url": "https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run",
+  "service_id": "anthares-ara-northflank",
+  "service_name": "anthares-ara-northflank",
+  "service_type": "combined"
+}
