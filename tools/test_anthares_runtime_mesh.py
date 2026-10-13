@@ -125,7 +125,8 @@ def test_health_prefers_durable_device_status_when_available():
     reset(); c = app_client()
     browser = SimpleNamespace(ok=True, status_code=200, headers={"content-type": "application/json"}, json=lambda: {"ok": True, "cdp_ready": True})
     with patch.object(mesh._remote, "device_status", create=True, return_value={"connected": True}), patch.object(mesh.requests, "get", return_value=browser):
-        body = c.get("/v1/runtime/health").get_json()
+        body = c.get("/v1/runtime/health?device_id=test-remote-device").get_json()
+    assert body["remote"]["device_id"] == "test-remote-device"
     assert body["remote"]["connected"] is True
 
 
