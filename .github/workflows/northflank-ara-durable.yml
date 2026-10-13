@@ -112,7 +112,7 @@ jobs:
                   "billing": {
                       "deploymentPlan": "nf-compute-20",
                       "storageClass": "nvme",
-                      "storage": 4096,
+                      "storage": 6144,
                       "replicas": 1
                   },
                   "tlsEnabled": False,
