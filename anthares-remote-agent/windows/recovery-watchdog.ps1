@@ -5,6 +5,9 @@ $watchdogTask='Anthares Remote Recovery Watchdog'
 $userTask='Anthares Remote Agent User'
 $canonicalScript=Join-Path $root 'run-agent-system-supervisor.ps1'
 $watchdogLoop=Join-Path $root 'recovery-watchdog-loop.ps1'
+$exe=Join-Path $root 'anthares-remote-agent-v4.exe'
+$lastGood=Join-Path $root 'anthares-remote-agent-v4.lastgood.exe'
+$baseline=Join-Path $root 'integrity-baseline.json'
 $log=Join-Path $root 'recovery-watchdog.log'
 $state=Join-Path $root 'recovery-watchdog-state.json'
 function Log([string]$m){try{"$(Get-Date -Format o) $m"|Add-Content -Path $log -Encoding UTF8}catch{}}
@@ -27,17 +30,34 @@ function Ensure-Task([string]$name,[string]$script){
   }
   Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
 }
+function Ensure-BinaryIntegrity{
+  if(-not (Test-Path $baseline)){return $false}
+  try{$expected=[string]((Get-Content $baseline -Raw|ConvertFrom-Json).v4_sha256)}catch{return $false}
+  if([string]::IsNullOrWhiteSpace($expected)){return $false}
+  $current=if(Test-Path $exe){(Get-FileHash $exe -Algorithm SHA256).Hash}else{''}
+  if($current -eq $expected){return $false}
+  $backup=if(Test-Path $lastGood){(Get-FileHash $lastGood -Algorithm SHA256).Hash}else{''}
+  if($backup -ne $expected){Log("rollback refused: lastgood hash does not match baseline");return $false}
+  Log("binary mismatch detected; restoring lastgood")
+  try{Stop-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue}catch{}
+  Get-SystemAgents|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
+  Start-Sleep -Milliseconds 500
+  Copy-Item $lastGood $exe -Force
+  Log("automatic rollback restored sha256=$expected")
+  return $true
+}
 New-Item -ItemType Directory -Force -Path $root|Out-Null
 Retire-InteractiveAgents
+$rolledBack=Ensure-BinaryIntegrity
 $task=Ensure-Task $canonicalTask $canonicalScript
 $wd=Ensure-Task $watchdogTask $watchdogLoop
 $agents=@(Get-SystemAgents)
-if($agents.Count -eq 0 -or -not $task -or [string]$task.State -ne 'Running'){
+if($rolledBack -or $agents.Count -eq 0 -or -not $task -or [string]$task.State -ne 'Running'){
   try{Start-ScheduledTask -TaskName $canonicalTask -ErrorAction Stop;Start-Sleep 3;Log('started canonical SYSTEM task')}catch{Log("canonical task start failed: $($_.Exception.GetType().Name)")}
   $agents=@(Get-SystemAgents)
 }
 try{[pscustomobject]@{
-  updated_at=(Get-Date).ToUniversalTime().ToString('o');install_root=$root
+  updated_at=(Get-Date).ToUniversalTime().ToString('o');install_root=$root;automatic_rollback=$rolledBack
   canonical_task_present=[bool](Get-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue)
   watchdog_task_present=[bool](Get-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue)
   system_agent_count=$agents.Count;system_agent_pids=@($agents|ForEach-Object{$_.ProcessId})
