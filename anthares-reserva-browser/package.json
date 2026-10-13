@@ -1,0 +1,15 @@
+{
+  "name": "anthares-reserva-browser",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "check": "node --check src/index.js"
+  },
+  "dependencies": {
+    "@cloudflare/puppeteer": "^1.0.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
