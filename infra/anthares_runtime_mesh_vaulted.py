@@ -27,10 +27,47 @@ def _diagnostic_local_health():
         }
 
 
+def _external_ready():
+    """Use the browser readiness contract, never its liveness-only /health route."""
+    url, token = _mesh._browser_cfg()
+    if not url or not token:
+        return {"configured": False, "healthy": False, "error": "browser_not_configured"}
+    try:
+        response = _mesh.requests.get(url + "/ready", timeout=8)
+        body = (
+            response.json()
+            if response.headers.get("content-type", "").startswith("application/json")
+            else {}
+        )
+        # FastAPI wraps HTTPException details under `detail`; normalize both forms.
+        evidence = body.get("detail") if isinstance(body.get("detail"), dict) else body
+        cdp_ready = bool(evidence.get("cdp_ready"))
+        chromium_running = bool(evidence.get("chromium_running"))
+        ready = bool(response.ok and evidence.get("ok") and cdp_ready and chromium_running)
+        return {
+            "configured": True,
+            "healthy": ready,
+            "status": response.status_code,
+            "cdp_ready": cdp_ready,
+            "chromium_running": chromium_running,
+            "profile_dir_exists": bool(evidence.get("profile_dir_exists")),
+            "profile_dir_writable": bool(evidence.get("profile_dir_writable")),
+            "durable_volume_verified": bool(evidence.get("durable_volume_verified")),
+            "readiness_path": "/ready",
+        }
+    except Exception as exc:
+        return {
+            "configured": True,
+            "healthy": False,
+            "error": type(exc).__name__,
+            "readiness_path": "/ready",
+        }
+
+
 def _hybrid_ready():
     url, _ = _mesh._browser_cfg()
     if url:
-        return _ORIGINAL_READY()
+        return _external_ready()
     result = _diagnostic_local_health()
     if not result.get("healthy") and "error_detail" not in result:
         try:
