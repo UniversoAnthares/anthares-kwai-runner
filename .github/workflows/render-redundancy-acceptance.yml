@@ -29,17 +29,17 @@ permissions:
 
 jobs:
   policy:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Existing provider-router tests
-        run: python tools/test_provider_router.py
+        run: python3 tools/test_provider_router.py
       - name: Render failover acceptance
-        run: python tools/render_redundancy_acceptance.py
+        run: python3 tools/render_redundancy_acceptance.py
 
   control-plane-live:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     timeout-minutes: 5
     steps:
       - name: Cloudflare control plane health
@@ -65,7 +65,7 @@ jobs:
           echo "$out" | grep -q '"ok":true'
 
   render-independence:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     timeout-minutes: 5
     steps:
       - name: Probe Render as an execution provider
