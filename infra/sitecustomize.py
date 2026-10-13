@@ -12,6 +12,8 @@ try:
     _register_browser(_worker.app)
     from anthares_remote_secure_bootstrap import register as _register_secure_bootstrap
     _register_secure_bootstrap(_worker.app)
+    from ara_install_probe import register as _register_install_probe
+    _register_install_probe(_worker.app)
 
     # Deliberately omitted: anthares_remote_bootstrap. Its public routes enqueue shell
     # jobs without controller authentication and are not safe for a public service.
