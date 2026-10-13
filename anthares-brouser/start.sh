@@ -25,10 +25,18 @@ log() {
 
 stop_pid() {
   local pid="${1:-}"
-  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-    kill "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
+  if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+    return 0
   fi
+  kill -TERM "$pid" 2>/dev/null || true
+  for _ in $(seq 1 32); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.25
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -KILL "$pid" 2>/dev/null || true
+  fi
+  wait "$pid" 2>/dev/null || true
 }
 
 cleanup() {
@@ -54,8 +62,6 @@ trap shutdown INT TERM
 
 start_api() {
   log "starting control API on 0.0.0.0:${API_PORT}"
-  # Render must reach the public service port. Keep CDP/VNC/noVNC loopback-only;
-  # only this token-protected HTTP API is exposed on the Render interface.
   uvicorn app:app --host 0.0.0.0 --port "$API_PORT" --app-dir /opt/anthares-brouser --no-access-log &
   API_PID=$!
 }
@@ -88,7 +94,7 @@ PY
 
 start_xvfb() {
   log "starting isolated Xvfb on ${DISPLAY}"
-  Xvfb "$DISPLAY" -screen 0 1440x900x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
+  Xvfb "$DISPLAY" -screen 0 1024x720x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
   XVFB_PID=$!
   for _ in $(seq 1 80); do
     if xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then
@@ -128,16 +134,27 @@ start_chromium() {
     --disable-default-apps \
     --disable-extensions \
     --disable-gpu \
+    --disable-software-rasterizer \
     --disable-sync \
     --disable-translate \
+    --disable-breakpad \
+    --disable-crash-reporter \
+    --disable-notifications \
+    --disable-site-isolation-trials \
+    --disable-features=IsolateOrigins,site-per-process,OptimizationHints,MediaRouter,Translate,BackForwardCache,InterestFeedContentSuggestions \
+    --disk-cache-size=16777216 \
+    --media-cache-size=1048576 \
+    --js-flags=--max-old-space-size=128 \
+    --mute-audio \
     --no-first-run \
     --no-service-autorun \
     --password-store=basic \
-    --renderer-process-limit=3 \
+    --renderer-process-limit=1 \
     --remote-debugging-address=127.0.0.1 \
     --remote-debugging-port="$CDP_PORT" \
     --remote-allow-origins='*' \
-    --start-maximized \
+    --window-size=1024,720 \
+    --force-device-scale-factor=1 \
     --user-data-dir="$CHROME_PROFILE_DIR" \
     "$START_URL" >/tmp/chromium.log 2>&1 &
   CHROME_PID=$!
@@ -154,6 +171,14 @@ try:
 except Exception:
     raise SystemExit(1)
 PY
+}
+
+memory_current_bytes() {
+  if [[ -r /sys/fs/cgroup/memory.current ]]; then
+    cat /sys/fs/cgroup/memory.current
+  else
+    printf '0\n'
+  fi
 }
 
 restart_display_stack() {
@@ -180,8 +205,6 @@ start_chromium
 
 LAST_SNAPSHOT=$(date +%s)
 SNAPSHOT_INTERVAL=${GITLAB_SNAPSHOT_INTERVAL:-1800}
-# On a new production slot, write a first checkpoint promptly rather than
-# waiting the full periodic interval. Preserve the existing restore semantics.
 if [[ "${GITLAB_STATE_ENABLED:-0}" == "1" && ! -f /run/anthares-brouser/first-checkpoint-done ]]; then
   SNAPSHOT_INTERVAL=${GITLAB_FIRST_SNAPSHOT_INTERVAL:-120}
 fi
@@ -190,7 +213,9 @@ MAX_READY_FAILURES=${MAX_READY_FAILURES:-6}
 SUPERVISOR_INTERVAL=${SUPERVISOR_INTERVAL:-5}
 KWAI_PROBE_DONE=0
 KWAI_PROBE_ATTEMPTS=0
-KWAI_PROBE_MAX_ATTEMPTS=${KWAI_PROBE_MAX_ATTEMPTS:-3}
+KWAI_PROBE_MAX_ATTEMPTS=${KWAI_PROBE_MAX_ATTEMPTS:-1}
+KWAI_PROBE_TIMEOUT=${KWAI_PROBE_TIMEOUT:-28}
+KWAI_PROBE_MEMORY_MAX_BYTES=${KWAI_PROBE_MEMORY_MAX_BYTES:-340000000}
 
 log "supervisor active"
 while kill -0 "$API_PID" 2>/dev/null; do
@@ -217,8 +242,6 @@ while kill -0 "$API_PID" 2>/dev/null; do
     tail -n 20 /tmp/chromium.log 2>/dev/null || true
     start_chromium
     READY_FAILURES=0
-    KWAI_PROBE_DONE=0
-    KWAI_PROBE_ATTEMPTS=0
     continue
   fi
 
@@ -235,8 +258,6 @@ while kill -0 "$API_PID" 2>/dev/null; do
     start_chromium
     LAST_SNAPSHOT=$(date +%s)
     READY_FAILURES=0
-    KWAI_PROBE_DONE=0
-    KWAI_PROBE_ATTEMPTS=0
     continue
   fi
 
@@ -246,13 +267,24 @@ while kill -0 "$API_PID" 2>/dev/null; do
     fi
     READY_FAILURES=0
     if (( KWAI_PROBE_DONE == 0 && KWAI_PROBE_ATTEMPTS < KWAI_PROBE_MAX_ATTEMPTS )); then
-      KWAI_PROBE_ATTEMPTS=$((KWAI_PROBE_ATTEMPTS + 1))
-      log "running fail-closed Kwai runtime probe (${KWAI_PROBE_ATTEMPTS}/${KWAI_PROBE_MAX_ATTEMPTS})"
-      if python /opt/anthares-brouser/kwai_runtime_probe.py; then
-        KWAI_PROBE_DONE=1
-        log "Kwai identity and upload surface verified"
+      CURRENT_MEMORY=$(memory_current_bytes)
+      if (( CURRENT_MEMORY > 0 && CURRENT_MEMORY >= KWAI_PROBE_MEMORY_MAX_BYTES )); then
+        log "deferring Kwai runtime probe; memory=${CURRENT_MEMORY} limit=${KWAI_PROBE_MEMORY_MAX_BYTES}"
       else
-        log "Kwai runtime probe did not prove authenticated upload readiness"
+        KWAI_PROBE_ATTEMPTS=$((KWAI_PROBE_ATTEMPTS + 1))
+        log "running bounded fail-closed Kwai runtime probe (${KWAI_PROBE_ATTEMPTS}/${KWAI_PROBE_MAX_ATTEMPTS})"
+        set +e
+        timeout "${KWAI_PROBE_TIMEOUT}s" python /opt/anthares-brouser/kwai_runtime_probe.py
+        PROBE_RC=$?
+        set -e
+        if (( PROBE_RC == 0 )); then
+          KWAI_PROBE_DONE=1
+          log "Kwai identity and upload surface verified"
+        elif (( PROBE_RC == 124 )); then
+          log "Kwai runtime probe timed out safely"
+        else
+          log "Kwai runtime probe did not prove authenticated upload readiness (rc=${PROBE_RC})"
+        fi
       fi
     fi
   else
@@ -264,8 +296,6 @@ while kill -0 "$API_PID" 2>/dev/null; do
       stop_pid "$CHROME_PID"
       start_chromium
       READY_FAILURES=0
-      KWAI_PROBE_DONE=0
-      KWAI_PROBE_ATTEMPTS=0
     fi
   fi
 done
