@@ -20,7 +20,10 @@ JWKS_URL = ISSUER + "/.well-known/jwks"
 AUDIENCE = "anthares-session-migration"
 REPOSITORY = "UniversoAnthares/anthares-kwai-runner"
 REF = "refs/heads/feature/anthares-executor-failover"
-WORKFLOW_REF = REPOSITORY + "/.github/workflows/anthares-executor-qa.yml@" + REF
+ALLOWED_WORKFLOW_REFS = {
+    REPOSITORY + "/.github/workflows/anthares-executor-qa.yml@" + REF,
+    REPOSITORY + "/.github/workflows/anthares-executor-restored-qa.yml@" + REF,
+}
 AAD = b"anthares-github-oidc-session-handoff-v1"
 _JWKS_CACHE = {"expires": 0.0, "keys": []}
 
@@ -78,14 +81,11 @@ def _verify_oidc(token: str) -> dict:
     now = int(time.time())
     aud = claims.get("aud")
     audiences = aud if isinstance(aud, list) else [aud]
-    required = {
-        "iss": ISSUER,
-        "repository": REPOSITORY,
-        "ref": REF,
-        "workflow_ref": WORKFLOW_REF,
-    }
+    required = {"iss": ISSUER, "repository": REPOSITORY, "ref": REF}
     if any(claims.get(k) != v for k, v in required.items()) or AUDIENCE not in audiences:
         raise HTTPException(status_code=403, detail="github_oidc_claims_rejected")
+    if claims.get("workflow_ref") not in ALLOWED_WORKFLOW_REFS:
+        raise HTTPException(status_code=403, detail="github_oidc_workflow_rejected")
     if claims.get("sub") != f"repo:{REPOSITORY}:ref:{REF}":
         raise HTTPException(status_code=403, detail="github_oidc_subject_rejected")
     if claims.get("event_name") not in {"push", "workflow_dispatch"}:
@@ -148,15 +148,5 @@ def github_oidc_capsule(req: OidcCapsuleRequest):
     nonce = secrets.token_bytes(12)
     ciphertext = AESGCM(aes_key).encrypt(nonce, plaintext, AAD)
     wrapped = recipient.encrypt(aes_key, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
-    envelope = {
-        "version": 3,
-        "alg": "RSA-OAEP-256+A256GCM",
-        "aad": base64.b64encode(AAD).decode("ascii"),
-        "wrapped_key": base64.b64encode(wrapped).decode("ascii"),
-        "nonce": base64.b64encode(nonce).decode("ascii"),
-        "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
-        "cookie_count": len(cookies),
-        "local_storage_count": len(storage),
-        "source_identity_verified": True,
-    }
+    envelope = {"version": 3, "alg": "RSA-OAEP-256+A256GCM", "aad": base64.b64encode(AAD).decode("ascii"), "wrapped_key": base64.b64encode(wrapped).decode("ascii"), "nonce": base64.b64encode(nonce).decode("ascii"), "ciphertext": base64.b64encode(ciphertext).decode("ascii"), "cookie_count": len(cookies), "local_storage_count": len(storage), "source_identity_verified": True}
     return JSONResponse(envelope, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
