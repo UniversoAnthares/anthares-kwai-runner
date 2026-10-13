@@ -1,0 +1,1 @@
+Forced secondary-control validation completed: the Windows supervisor moved the agent to anthares-ara-infra-canary-v2; heartbeat, job polling, execution and result delivery succeeded through the secondary control; the force flag was removed and automatic failback returned the agent to anthares-ara-control.
