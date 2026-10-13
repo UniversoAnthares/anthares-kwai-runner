@@ -8,7 +8,8 @@ param([string]$Repository = $env:ANTHARES_GITHUB_QUEUE_REPOSITORY,
 $ErrorActionPreference = 'Stop'
 if ($Repository -notmatch '^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$') { throw 'Private repository owner/name required' }
 if ([string]::IsNullOrWhiteSpace($Token)) { throw 'GitHub queue token required' }
-$root = 'C:\ProgramData\AntharesRemoteAgent\github-queue'
+$repoHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Repository.ToLowerInvariant()))).Substring(0,16)
+$root = Join-Path 'C:\ProgramData\AntharesRemoteAgent\github-queue' $repoHash
 New-Item -ItemType Directory -Path $root -Force | Out-Null
 $headers = @{Authorization = "Bearer $Token"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28'}
 $api = "https://api.github.com/repos/$Repository"
