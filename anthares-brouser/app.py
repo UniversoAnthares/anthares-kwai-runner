@@ -182,12 +182,25 @@ def _profile_size() -> int:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {
-        "ok": True,
-        "profile_dir_exists": PROFILE_DIR.exists(),
-        "chromium_running": bool(chromium_processes()),
-        "cdp_ready": _cdp_ready(),
+    """Liveness only; use /ready for real browser readiness."""
+    return {"ok": True, "service": "anthares-browser", "readiness_path": "/ready"}
+
+
+@app.get("/ready")
+def ready() -> dict[str, Any]:
+    """Fail closed if the browser or persistent-profile mount is unavailable."""
+    profile_exists = PROFILE_DIR.is_dir()
+    browser_running = bool(chromium_processes())
+    cdp_ready = _cdp_ready() if browser_running else False
+    evidence = {
+        "ok": profile_exists and browser_running and cdp_ready,
+        "profile_dir_exists": profile_exists,
+        "chromium_running": browser_running,
+        "cdp_ready": cdp_ready,
     }
+    if not evidence["ok"]:
+        raise HTTPException(status_code=503, detail=evidence)
+    return evidence
 
 
 @app.get("/status")
