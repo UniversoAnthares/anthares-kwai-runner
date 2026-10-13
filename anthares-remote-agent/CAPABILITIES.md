@@ -1,16 +1,23 @@
 # Anthares Remote Agent — capability contracts
 
-Version: 0.3 draft
+Version: 0.3
 
 All operations are submitted as a job with `id`, `type`, `args` (`map[string]string`) and optional `timeout_seconds`. Normal synchronous timeout is 30 seconds and is capped at 120 seconds. Results contain `id`, `ok`, `output` or `error`, `started_at`, and `ended_at`.
 
-## Core
+## Core and diagnostics
 
 | type | args | output | authorization / limits |
 |---|---|---|---|
 | `ping` | none | `pong` | authenticated device channel |
 | `system_info` | none | JSON OS/CPU/RAM/GPU/disks/boot/agent version | read-only |
+| `safe_environment` | none | allowlisted non-secret environment values | read-only |
+| `network_info` | none | interfaces, addresses, gateways and DNS | read-only |
+| `tcp_connections` | none | up to 2000 TCP connection rows | read-only |
+| `scheduled_tasks` | none | up to 2000 scheduled tasks | read-only |
+| `event_log` | `name`,`max` | metadata for up to 200 events | defaults to System/Application; other logs require `ANTHARES_ALLOWED_EVENT_LOGS` |
 | `process_list` | none | tasklist CSV | read-only |
+| `process_info` | `pid` | process metadata without command line | read-only |
+| `service_list` | none | service inventory | read-only |
 
 ## Shell
 
@@ -28,6 +35,7 @@ Every file operation requires `ANTHARES_ALLOWED_ROOTS` and passes root-containme
 |---|---|---|
 | `file_stat` | `path` | metadata JSON |
 | `file_list` | `path` | JSON, max 1000 entries |
+| `file_acl` | `path` | Windows owner/ACL JSON |
 | `file_read` | `path` | base64, max 1 MiB |
 | `file_write` | `path`,`base64` | atomic write, max 1 MiB |
 | `file_read_chunk` | `path`,`offset`,`length` | JSON + base64, chunk max 512 KiB |
@@ -54,15 +62,15 @@ Clipboard content must never be logged by the MCP layer. These operations requir
 
 ## Processes
 
-`process_start`: args `path`, optional `args_json`. `args_json` is a JSON array of strings, limited to 64 arguments and 32 KiB total argument data. The executable path must exactly match one entry in `ANTHARES_ALLOWED_EXECUTABLES` (semicolon-separated absolute paths). Legacy shell-style argument strings are rejected; the agent passes each decoded argument directly to the executable without invoking `cmd.exe`.
+`process_start`: args `path`, optional `args_json`. `args_json` is a JSON array of strings, limited to 64 arguments and 32 KiB total argument data. The executable path must exactly match one entry in `ANTHARES_ALLOWED_EXECUTABLES` (semicolon-separated absolute paths). Shell-style argument strings are rejected; decoded arguments are passed directly to the executable without invoking `cmd.exe`.
 
 `process_kill`: arg `pid`. The agent resolves the executable path of the PID and permits termination only when it exactly matches `ANTHARES_ALLOWED_EXECUTABLES`. System PIDs 0–4 are always rejected.
 
-`process_list` remains read-only and does not require the process allowlist.
+`process_list` and `process_info` remain read-only and do not require the process allowlist.
 
 ## Windows services
 
-`service_status`: arg `name`, read-only.
+`service_list` and `service_status` are read-only.
 
 `service_start` / `service_stop`: arg `name`. Mutating operations require an exact case-insensitive match in `ANTHARES_ALLOWED_SERVICES` (semicolon-separated service names).
 
@@ -78,12 +86,16 @@ Clipboard content must never be logged by the MCP layer. These operations requir
 
 `job_cancel`: `job_id`; terminates the stored process tree.
 
-Long jobs use a separate hidden PowerShell process and persisted metadata under `%PROGRAMDATA%\\AntharesRemoteAgent\\jobs`.
+Long jobs use a separate hidden PowerShell process and persisted metadata under `%PROGRAMDATA%\\AntharesRemoteAgent\\jobs`, so status/log discovery survives restart of the Anthares Remote Agent process while the underlying Windows process remains alive.
 
 ## Concurrency and delivery
 
-The polling loop accepts multiple jobs concurrently. `ANTHARES_MAX_CONCURRENT` defaults to 4 and is clamped to 1–8. Result delivery is retried up to five times with exponential delays. The agent channel requires HTTPS and bearer/device authentication.
+The polling loop accepts multiple jobs concurrently. `ANTHARES_MAX_CONCURRENT` defaults to 4 and accepts values 1–8. Result delivery is retried up to five times with exponential delays. The agent channel requires HTTPS plus bearer/device authentication.
+
+## Validation model
+
+The implementation is intentionally testable without AI Commander, MeshCentral, WinRemote or another pre-existing remote-control agent. CI uses native GitHub-hosted Windows runners for compile, vet, filesystem lifecycle and Windows runtime probes. Clipboard and screenshot probes are executed when the hosted Windows session exposes an interactive clipboard/desktop; otherwise those two probes are explicitly skipped because the GitHub runner itself has no interactive desktop.
 
 ## MCP mapping guidance
 
-The MCP integration should expose one typed tool per capability rather than a generic unrestricted dispatcher. Mutating tools should preserve the agent's allowlists and should not add bypass parameters. Sensitive outputs (clipboard, screenshots, command output) should only be returned to the requesting authorized conversation and should not be copied into public logs.
+The MCP integration should expose one typed tool per capability rather than a generic unrestricted dispatcher. Mutating tools must preserve the agent's allowlists and must not add bypass parameters. Sensitive outputs (clipboard, screenshots, command output) should only be returned to the requesting authorized conversation and should not be copied into public logs.
