@@ -1,0 +1,116 @@
+name: Resolve ARA PR104 after MCP safety merge
+
+on:
+  push:
+    branches: [ops/ara-104-resolve]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/ara-capabilities
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: anthares-remote-agent/go.mod
+      - name: Merge current MCP base and preserve capability implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'anthares-integration-bot'
+          git config user.email '81930373+UniversoAnthares@users.noreply.github.com'
+          git fetch origin feature/anthares-remote-agent
+          set +e
+          git merge --no-commit --no-ff origin/feature/anthares-remote-agent
+          merge_rc=$?
+          set -e
+          if [ "$merge_rc" -ne 0 ]; then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            printf 'Conflicts:\n%s\n' "$conflicts"
+            unexpected="$(printf '%s\n' "$conflicts" | grep -Ev '^(anthares-remote-agent/cmd/agent/(capabilities|main)\.go)$' || true)"
+            if [ -n "$unexpected" ]; then
+              echo "Unexpected merge conflicts:" >&2
+              echo "$unexpected" >&2
+              exit 1
+            fi
+            git checkout --ours -- anthares-remote-agent/cmd/agent/capabilities.go anthares-remote-agent/cmd/agent/main.go
+            git add anthares-remote-agent/cmd/agent/capabilities.go anthares-remote-agent/cmd/agent/main.go
+          fi
+      - name: Reapply fail-closed headless policy to expanded capability surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          cap = Path('anthares-remote-agent/cmd/agent/capabilities.go')
+          s = cap.read_text()
+          before = s.count('exec.Command(')
+          s = s.replace('exec.Command(', 'hiddenCommandContext(context.Background(), ')
+          after = s.count('exec.Command(')
+          if before != 3 or after != 0:
+              raise SystemExit(f'capabilities.go expected 3 exec.Command calls, saw {before}; remaining {after}')
+          s = s.replace('\n\t"os/exec"', '')
+          cap.write_text(s)
+
+          main = Path('anthares-remote-agent/cmd/agent/main.go')
+          s = main.read_text()
+          n = s.count('exec.CommandContext(ctx, ')
+          if n != 2:
+              raise SystemExit(f'main.go expected 2 exec.CommandContext calls, saw {n}')
+          s = s.replace('exec.CommandContext(ctx, ', 'hiddenCommandContext(ctx, ')
+          s = s.replace('\n\t"os/exec"', '')
+          old = '''\tcase "job_start":\n\t\tif !cfg.AllowShell {\n\t\t\treturn "", errors.New("shell disabled")\n\t\t}\n\t\treturn startDetachedJob(job.Args["command"], job.Args["name"])'''
+          new = '''\tcase "job_start":\n\t\tif !cfg.AllowShell {\n\t\t\treturn "", errors.New("shell disabled")\n\t\t}\n\t\tif err := rejectInteractiveCommand(job.Args["command"]); err != nil {\n\t\t\treturn "", err\n\t\t}\n\t\treturn startDetachedJob(job.Args["command"], job.Args["name"])'''
+          if old not in s:
+              raise SystemExit('job_start block not found')
+          s = s.replace(old, new, 1)
+          old = '''\t\tif cmd == "" {\n\t\t\treturn "", errors.New("missing command")\n\t\t}\n\t\tshell := strings.ToLower(strings.TrimSpace(job.Args["shell"]))'''
+          new = '''\t\tif cmd == "" {\n\t\t\treturn "", errors.New("missing command")\n\t\t}\n\t\tif err := rejectInteractiveCommand(cmd); err != nil {\n\t\t\treturn "", err\n\t\t}\n\t\tshell := strings.ToLower(strings.TrimSpace(job.Args["shell"]))'''
+          if old not in s:
+              raise SystemExit('shell validation block not found')
+          s = s.replace(old, new, 1)
+          main.write_text(s)
+
+          win = Path('anthares-remote-agent/cmd/agent/windows_ops.go')
+          s = win.read_text()
+          if s.count('exec.CommandContext(ctx, ') != 1:
+              raise SystemExit('windows_ops.go shell execution shape changed')
+          s = s.replace('exec.CommandContext(ctx, ', 'hiddenCommandContext(ctx, ', 1)
+          replacements = {
+              'exec.Command(path, args...)': 'hiddenCommandContext(context.Background(), path, args...)',
+              'exec.Command("powershell.exe", ': 'hiddenCommandContext(context.Background(), "powershell.exe", ',
+              'exec.Command("taskkill", ': 'hiddenCommandContext(context.Background(), "taskkill", ',
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'windows_ops.go pattern missing: {old}')
+              s = s.replace(old, new)
+          win.write_text(s)
+          PY
+          cd anthares-remote-agent
+          gofmt -w cmd/agent/*.go
+          test -z "$(gofmt -l cmd/agent/*.go)"
+          go test ./... -count=1
+          go vet ./...
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o /tmp/ara-agent-amd64.exe ./cmd/agent
+          test -s /tmp/ara-agent-amd64.exe
+      - name: Commit resolved integration to PR104 branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No integration changes required.'
+          else
+            git commit -m 'merge(ara): preserve MCP headless guards in expanded capabilities'
+          fi
+          git push origin HEAD:feature/ara-capabilities
