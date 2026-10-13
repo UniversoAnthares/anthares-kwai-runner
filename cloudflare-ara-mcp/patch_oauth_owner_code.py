@@ -5,7 +5,7 @@ import re
 p = Path(__file__).with_name("src") / "index.js"
 s = p.read_text(encoding="utf-8")
 
-OWNER_HASH = "RX9fWZQjkwOZ9hD-xhv7YkGqlHZRo-oMK5V2QDkVU-8"
+OWNER_HASH = "tJskpBl5Q2cyatlRUFw7FYnXFtsJvpfHXv3ersczcJE"
 
 if "OWNER_APPROVAL_HASH=" not in s:
     needle = "const te=new TextEncoder();"
@@ -30,15 +30,15 @@ if n != 1 and "async function ownerCodeOk" not in s:
     raise SystemExit(f"approval helper patch count={n}")
 
 health_pattern = r" if\(req\.method==='GET'&&\(u\.pathname==='/'\|\|u\.pathname==='/health'\)\)\{.*?\n if\(req\.method==='GET'&&u\.pathname==='\/\.well-known\/ara-control-key'\)"
-health_repl = """ if(req.method==='GET'&&(u.pathname==='/'||u.pathname==='/health')){await st(env).ensure();let controlReady=false,connected=false;try{const s=await status(env,DEFAULT_DEVICE);controlReady=true;connected=!!s.connected;}catch{}const pinned=!!(await st(env).pinnedClient());return json({ok:controlReady,service:'anthares-ara-mcp',provider:'cloudflare',render_independent:true,control:CONTROL,control_ready:controlReady,device_connected:connected,oauth:true,mcp:true,oauth_owner_code_mode:'chat_setup_code',oauth_client_pinned:pinned},controlReady?200:503);}\n if(req.method==='GET'&&u.pathname==='/.well-known/ara-control-key')"""
+health_repl = """ if(req.method==='GET'&&(u.pathname==='/'||u.pathname==='/health')){await st(env).ensure();let controlReady=false,connected=false;try{const s=await status(env,DEFAULT_DEVICE);controlReady=true;connected=!!s.connected;}catch{}const pinned=!!(await st(env).pinnedClient());return json({ok:controlReady,service:'anthares-ara-mcp',provider:'cloudflare',render_independent:true,control:CONTROL,control_ready:controlReady,device_connected:connected,oauth:true,mcp:true,oauth_owner_code_mode:'email_setup_code',oauth_client_pinned:pinned},controlReady?200:503);}\n if(req.method==='GET'&&u.pathname==='/.well-known/ara-control-key')"""
 s, n = re.subn(health_pattern, health_repl, s, count=1, flags=re.S)
-if n != 1 and "oauth_owner_code_mode:'chat_setup_code'" not in s:
+if n != 1 and "oauth_owner_code_mode:'email_setup_code'" not in s:
     raise SystemExit(f"health patch count={n}")
 
 get_pattern = r" if\(req\.method==='GET'&&u\.pathname==='/oauth/authorize'\)\{.*?\n if\(req\.method==='POST'&&u\.pathname==='/oauth/authorize'\)"
-get_repl = """ if(req.method==='GET'&&u.pathname==='/oauth/authorize'){const cid=u.searchParams.get('client_id')||'',red=u.searchParams.get('redirect_uri')||'',challenge=u.searchParams.get('code_challenge')||'',method=u.searchParams.get('code_challenge_method')||'',resource=u.searchParams.get('resource')||ORIGIN,scopes=parseScopes(u.searchParams.get('scope'));if(!(await clientAllowed(env,cid))||!validRedirect(red)||u.searchParams.get('response_type')!=='code'||method!=='S256'||challenge.length<43||resource!==ORIGIN||!scopes)return json({error:'invalid_request'},400);const tx=await st(env).signToken({typ:'oauth_pending',iss:ORIGIN,aud:ORIGIN,exp:Math.floor(Date.now()/1000)+600,jti:rand(16),clientId:cid,redirectUri:red,challenge,scopes,scp:scopes,state:u.searchParams.get('state')||''});return html(`<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>Anthares Remote</title></head><body><main><h1>Anthares Remote</h1><p>Digite o código de configuração fornecido na conversa do ChatGPT. Esta autorização não depende da área de transferência nem da sessão interativa do Windows.</p><form method=\"post\" action=\"/oauth/authorize\"><input type=\"hidden\" name=\"tx\" value=\"${esc(tx)}\"><label>Código <input type=\"password\" name=\"approval\" autocomplete=\"one-time-code\" required autofocus></label><button type=\"submit\">Autorizar</button></form></main></body></html>`);}\n if(req.method==='POST'&&u.pathname==='/oauth/authorize')"""
+get_repl = """ if(req.method==='GET'&&u.pathname==='/oauth/authorize'){const cid=u.searchParams.get('client_id')||'',red=u.searchParams.get('redirect_uri')||'',challenge=u.searchParams.get('code_challenge')||'',method=u.searchParams.get('code_challenge_method')||'',resource=u.searchParams.get('resource')||ORIGIN,scopes=parseScopes(u.searchParams.get('scope'));if(!(await clientAllowed(env,cid))||!validRedirect(red)||u.searchParams.get('response_type')!=='code'||method!=='S256'||challenge.length<43||resource!==ORIGIN||!scopes)return json({error:'invalid_request'},400);const tx=await st(env).signToken({typ:'oauth_pending',iss:ORIGIN,aud:ORIGIN,exp:Math.floor(Date.now()/1000)+600,jti:rand(16),clientId:cid,redirectUri:red,challenge,scopes,scp:scopes,state:u.searchParams.get('state')||''});return html(`<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>Anthares Remote</title></head><body><main><h1>Anthares Remote</h1><p>Digite o código de configuração enviado ao e-mail cadastrado. Esta autorização não depende da área de transferência nem da sessão interativa do Windows.</p><form method=\"post\" action=\"/oauth/authorize\"><input type=\"hidden\" name=\"tx\" value=\"${esc(tx)}\"><label>Código <input type=\"password\" name=\"approval\" autocomplete=\"one-time-code\" required autofocus></label><button type=\"submit\">Autorizar</button></form></main></body></html>`);}\n if(req.method==='POST'&&u.pathname==='/oauth/authorize')"""
 s, n = re.subn(get_pattern, get_repl, s, count=1, flags=re.S)
-if n != 1 and "código de configuração fornecido na conversa" not in s:
+if n != 1 and "código de configuração enviado ao e-mail cadastrado" not in s:
     raise SystemExit(f"authorize GET patch count={n}")
 
 post_pattern = r" if\(req\.method==='POST'&&u\.pathname==='/oauth/authorize'\)\{.*?\n if\(req\.method==='POST'&&u\.pathname==='/oauth/token'\)"
@@ -54,7 +54,7 @@ required = [
     "OWNER_APPROVAL_HASH=",
     "async pinnedClient()",
     "async function ownerCodeOk",
-    "oauth_owner_code_mode:'chat_setup_code'",
+    "oauth_owner_code_mode:'email_setup_code'",
     "authorization_replayed",
     "await clientAllowed(env,cid)",
 ]
