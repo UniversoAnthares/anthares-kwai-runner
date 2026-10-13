@@ -110,6 +110,15 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string,error) {
     case "clipboard_get": return run(ctx,"powershell.exe","-NoProfile","-NonInteractive","-Command","Get-Clipboard -Raw")
     case "clipboard_set": return runWithStdin(ctx,job.Args["text"],"powershell.exe","-NoProfile","-NonInteractive","-Command","$input | Set-Clipboard")
     case "screenshot": return screenshotBase64(ctx,job.Args["display"])
+    case "service_status":
+        name:=strings.TrimSpace(job.Args["name"])
+        if name=="" || len(name)>128 || strings.ContainsAny(name," \\t\\r\\n/\\\\\"'&|;<>") {return "",errors.New("invalid service name")}
+        return run(ctx,"sc.exe","query",name)
+    case "file_remove":
+        p,err:=safePath(cfg,job.Args["path"]); if err!=nil{return "",err}
+        if strings.EqualFold(job.Args["recursive"],"true") || job.Args["recursive"]=="1" {return "",errors.New("recursive removal disabled")}
+        if err:=os.Remove(p);err!=nil{return "",err}
+        return "removed",nil
     case "file_stat": return fileStatJSON(cfg,job.Args["path"])
     case "file_list": return fileListJSON(cfg,job.Args["path"])
     case "file_read_chunk":
