@@ -1,0 +1,98 @@
+name: Cloudflare ARA Render Independence
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare-ara-mcp/**'
+      - 'cloudflare-ara-backup/**'
+      - '.github/workflows/cloudflare-ara-independence-deploy.yml'
+concurrency:
+  group: anthares-ara-render-independent
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -s cloudflare-ara-mcp/src/index.js
+          test -s cloudflare-ara-mcp/wrangler.toml
+          test -s cloudflare-ara-backup/src/index.js
+          test -s cloudflare-ara-backup/trusted-keys/render-mcp-v2.pem
+          test -s cloudflare-ara-backup/trusted-keys/render-mcp.pem
+          grep -q 'render_independent:true' cloudflare-ara-mcp/src/index.js
+          grep -q 'ARA_TRUSTED_MCP_PUBLIC_KEYS_JSON' cloudflare-ara-backup/src/index.js
+      - name: Wrangler dry-run MCP
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd cloudflare-ara-mcp
+          npx --yes wrangler@4.43.0 deploy --dry-run --outdir /tmp/ara-mcp-build
+      - name: Deploy Cloudflare MCP gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd cloudflare-ara-mcp
+          npx --yes wrangler@4.43.0 deploy
+      - name: Pin all trusted MCP keys into Cloudflare control
+        shell: bash
+        run: |
+          set -euo pipefail
+          gateway_key=''
+          for i in $(seq 1 20); do
+            gateway_key="$(curl -fsS https://anthares-ara-mcp.anthares1.workers.dev/.well-known/ara-control-key 2>/dev/null || true)"
+            if printf '%s' "$gateway_key" | grep -q 'BEGIN PUBLIC KEY'; then break; fi
+            sleep 2
+          done
+          printf '%s' "$gateway_key" | grep -q 'BEGIN PUBLIC KEY'
+          k1="$(cat cloudflare-ara-backup/trusted-keys/render-mcp-v2.pem)"
+          k2="$(cat cloudflare-ara-backup/trusted-keys/render-mcp.pem)"
+          keys="$(jq -cn --arg a "$k1" --arg b "$k2" --arg c "$gateway_key" '[$a,$b,$c]')"
+          cd cloudflare-ara-backup
+          printf '%s' "$keys" | npx --yes wrangler@4.43.0 secret put ARA_TRUSTED_MCP_PUBLIC_KEYS_JSON
+      - name: Deploy Cloudflare durable control
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd cloudflare-ara-backup
+          npx --yes wrangler@4.43.0 deploy
+      - name: Verify durable control
+        shell: bash
+        run: |
+          set -euo pipefail
+          h="$(curl -fsS https://anthares-ara-backup.anthares1.workers.dev/healthz)"
+          echo "$h"
+          echo "$h" | grep -q '"ok":true'
+          echo "$h" | grep -q '"independent_of_render_postgres":true'
+          s="$(curl -fsS https://anthares-ara-backup.anthares1.workers.dev/_selftest)"
+          echo "$s"
+          echo "$s" | grep -q '"ok":true'
+      - name: Verify Render-independent MCP gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            code="$(curl -sS -o /tmp/mcp-health.json -w '%{http_code}' https://anthares-ara-mcp.anthares1.workers.dev/health || true)"
+            cat /tmp/mcp-health.json || true
+            if [ "$code" = 200 ] && grep -q '"ok":true' /tmp/mcp-health.json; then break; fi
+            sleep 2
+          done
+          test "$code" = 200
+          grep -q '"render_independent":true' /tmp/mcp-health.json
+          grep -q '"control_ready":true' /tmp/mcp-health.json
+          meta="$(curl -fsS https://anthares-ara-mcp.anthares1.workers.dev/.well-known/oauth-authorization-server)"
+          echo "$meta" | grep -q 'oauth/authorize'
+          unauth="$(curl -sS -o /tmp/mcp-unauth.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1"}}}' https://anthares-ara-mcp.anthares1.workers.dev/mcp)"
+          test "$unauth" = 401
+          echo 'RENDER_INDEPENDENT_CLOUDFLARE_STACK_OK=1'
