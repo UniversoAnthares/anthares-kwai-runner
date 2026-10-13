@@ -1,8 +1,11 @@
 name: Kwai Stage4 Vault Restore Proof
 
 on:
+  workflow_dispatch:
   workflow_run:
-    workflows: ["Kwai Stage4 Real Auth and Vault"]
+    workflows:
+      - "Kwai Stage4 Real Auth and Vault"
+      - "Kwai Proven Runtime Autologin V2"
     types: [completed]
 
 permissions:
@@ -11,7 +14,7 @@ permissions:
 
 jobs:
   restore-proof:
-    if: github.event.workflow_run.conclusion == 'success'
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     name: fresh-emulator-encrypted-session-restore
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -48,7 +51,7 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 4096
           script: |
-            set -euo pipefail
+            set -eu
             bash kwai_vault_install.sh
             python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
             test -s kwai-session.enc
