@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /opt/anthares-brouser
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py novnc_gateway.py profile_store.py start.sh qa40_render.py kwai_runtime_probe.py pid1.sh migration_app.py migration_capsule.py ./
+COPY app.py novnc_gateway.py profile_store.py start.sh qa40_render.py kwai_runtime_probe.py pid1.sh migration_app.py migration_capsule.py migration_oidc.py ./
 RUN mv /opt/anthares-brouser/app.py /opt/anthares-brouser/base_app.py \
     && mv /opt/anthares-brouser/migration_app.py /opt/anthares-brouser/app.py \
     && chmod +x /opt/anthares-brouser/start.sh /opt/anthares-brouser/qa40_render.py /opt/anthares-brouser/kwai_runtime_probe.py /opt/anthares-brouser/pid1.sh \
