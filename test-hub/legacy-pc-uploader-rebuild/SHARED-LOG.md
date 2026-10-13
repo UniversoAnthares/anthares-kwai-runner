@@ -1381,3 +1381,9 @@ Before every subsequent investigation/change/test, all agents must read THIS fil
 - Browser smoke run `38330972424` job `115080372808` remains queued; no new run dispatched.
 - Anthares Remote MCP v2 README confirms signed clipboard_set reached Windows in an earlier live OAuth authorization test, while native ChatGPT MCP registration and tool execution remain separate pending acceptance criteria.
 - Follow-up for infra agent: compare canary commit with main control branch and test authenticated command outcome semantics before promoting; for MCP agent: finish ChatGPT OAuth registration; for browser agent: investigate runner availability; for legacy agent: consume three existing queue requests after authenticated ARA transport is available.
+
+## 2026-10-13 — OAuth deployment verified, manual acceptance gate
+- Both Render gateways (`anthares-remote-mcp-v2`, `anthares-remote-mcp`) latest commit `a71d16399409dee5677f5505a68a5df5503742ac` LIVE (02:19:42 and 02:19:53 UTC), after signed-code persistence fix `f2408c13` and expiry/replay fixes.
+- Runtime logs show `npm run qa:remote` executed at startup; this is not proof of a successful ChatGPT OAuth callback/token exchange.
+- User previously reported entering authorization code and seeing no subsequent completion. Need a single fresh manual OAuth authorization attempt now that both gateways are live, then inspect authorization/token-exchange outcomes. Do not declare OAuth connected without native tool discovery and real ARA tool call.
+- Anthares Browser Vault Smoke `38330972424` remains queued; no duplicate run dispatched. Kwai historical publishing remains disarmed.
