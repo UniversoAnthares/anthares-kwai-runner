@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import secrets
 import time
@@ -62,6 +63,37 @@ def _remember_device_hash(device, token_hash):
         app.logger.exception("failed to persist ARA device auth hash")
 
 
+def _finalize_expired_uncertain(device=None):
+    """Move expired unknown outcomes out of the active-pending count.
+
+    The audit record is preserved permanently in PostgreSQL. We do not retry the
+    operation and do not pretend it succeeded; after its deadline it becomes an
+    expired terminal record with an explicit unknown-outcome result.
+    """
+    marker = {
+        "ok": False,
+        "error": "execution_outcome_unknown",
+        "reconciled": "expired_after_deadline",
+    }
+    with store.connection() as conn:
+        if device:
+            conn.execute(
+                """UPDATE ara_jobs
+                   SET status='expired', lease_until=NULL,
+                       result=COALESCE(result,%s::jsonb)
+                   WHERE device_id=%s AND status='uncertain' AND expires_at<=now()""",
+                (json.dumps(marker), device),
+            )
+        else:
+            conn.execute(
+                """UPDATE ara_jobs
+                   SET status='expired', lease_until=NULL,
+                       result=COALESCE(result,%s::jsonb)
+                   WHERE status='uncertain' AND expires_at<=now()""",
+                (json.dumps(marker),),
+            )
+
+
 def device_ok(device):
     if not device or any(
         c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
@@ -97,6 +129,7 @@ def device_ok(device):
 @app.get("/healthz")
 def health():
     try:
+        _finalize_expired_uncertain()
         with store.connection() as conn:
             conn.execute("SELECT 1")
         return jsonify(
@@ -138,6 +171,7 @@ def next_job():
     device = device_id()
     if not device_ok(device):
         return jsonify(error="unauthorized"), 401
+    _finalize_expired_uncertain(device)
     job = store.lease_next(device)
     return (jsonify(job=job), 200) if job else ("", 204)
 
@@ -188,6 +222,7 @@ def get_job(job_id):
     device = request.args.get("device_id", "").strip()
     if not device:
         return jsonify(error="missing_device_id"), 400
+    _finalize_expired_uncertain(device)
     job = store.get_job(device, job_id)
     if not job:
         return jsonify(error="not_found"), 404
@@ -201,6 +236,7 @@ def status():
     device = request.args.get("device_id", "").strip()
     if not device:
         return jsonify(error="missing_device_id"), 400
+    _finalize_expired_uncertain(device)
     return jsonify(store.device_status(device))
 
 
@@ -218,6 +254,7 @@ def selftest():
 
 try:
     store.initialize()
+    _finalize_expired_uncertain()
     _STARTUP_SELFTEST = store.transactional_selftest()
     app.logger.info("ARA_POSTGRES_SELFTEST=PASS checks=%s", _STARTUP_SELFTEST["checks"])
 except Exception as exc:
