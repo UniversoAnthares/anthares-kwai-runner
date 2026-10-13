@@ -88,20 +88,32 @@ func serviceAllowed(name string) bool {
     return false
 }
 
-func processStartJSON(path, argLine string) (string, error) {
+func parseProcessArgs(argsJSON string) ([]string, error) {
+    if strings.TrimSpace(argsJSON) == "" { return nil, nil }
+    var args []string
+    if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+        return nil, errors.New("args_json must be a JSON array of strings")
+    }
+    if len(args) > 64 { return nil, errors.New("too many process arguments") }
+    total := 0
+    for _, arg := range args {
+        total += len(arg)
+        if len(arg) > 8192 || total > 32768 { return nil, errors.New("process arguments exceed limit") }
+    }
+    return args, nil
+}
+
+func processStartJSON(path, argsJSON string) (string, error) {
     path = strings.TrimSpace(path)
     if path == "" { return "", errors.New("missing process path") }
     if !executableAllowed(path) { return "", errors.New("executable is not authorized") }
-    args := []string{}
-    target := path
-    if strings.TrimSpace(argLine) != "" {
-        args = []string{"/d", "/s", "/c", fmt.Sprintf("\"%s\" %s", strings.ReplaceAll(path, "\"", ""), argLine)}
-        target = "cmd.exe"
-    }
-    cmd := exec.Command(target, args...)
+    args, err := parseProcessArgs(argsJSON)
+    if err != nil { return "", err }
+    cmd := exec.Command(path, args...)
     if err := cmd.Start(); err != nil { return "", err }
+    pid := cmd.Process.Pid
     _ = cmd.Process.Release()
-    out, _ := json.Marshal(map[string]any{"pid": cmd.Process.Pid, "status": "started"})
+    out, _ := json.Marshal(map[string]any{"pid": pid, "status": "started"})
     return string(out), nil
 }
 
