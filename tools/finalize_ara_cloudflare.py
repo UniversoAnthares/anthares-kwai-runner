@@ -2,12 +2,9 @@
 from pathlib import Path
 import re
 
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    if old not in text:
-        raise SystemExit(f"missing patch target: {label}")
-    return text.replace(old, new, 1)
-
+# This script intentionally edits only non-workflow files. Workflow files are
+# maintained directly through the repository API because GitHub Actions tokens
+# are not allowed to create/update workflows without the workflows permission.
 
 # 1) Cloudflare Durable Object is the single ARA controller authority.
 p = Path("cloudflare-ara-backup/src/index.js")
@@ -71,9 +68,9 @@ if "floot.app" in s or "onrender.com" in s:
     raise SystemExit("external runtime dependency still present in canonical controller")
 p.write_text(s, encoding="utf-8")
 
-# 2) Agent exits after persistent control failure so whichever SYSTEM supervisor
-# is active can recover it. Do not rewrite supervisor policy here: other recovery
-# transports are being developed concurrently and are intentionally preserved.
+# 2) A persistently broken heartbeat must terminate the agent so its active
+# SYSTEM supervisor can recover it. No supervisor transport policy is rewritten
+# here, preserving concurrently developed GitHub/GitLab recovery channels.
 p = Path("anthares-remote-agent/cmd/agent/main.go")
 s = p.read_text(encoding="utf-8")
 old = '''func heartbeatLoop(cfg Config) {
@@ -110,26 +107,7 @@ elif "os.Exit(23)" not in s:
     raise SystemExit("heartbeatLoop target missing")
 p.write_text(s, encoding="utf-8")
 
-# 3) Build production agent on main so the fixed binary is produced remotely.
-p = Path(".github/workflows/anthares-remote-agent-build.yml")
-s = p.read_text(encoding="utf-8")
-if "      - main\n" not in s:
-    s = s.replace(
-        "      - feature/anthares-remote-agent\n      - feature/ara-chatgpt-mcp",
-        "      - main\n      - feature/anthares-remote-agent\n      - feature/ara-chatgpt-mcp",
-    )
-p.write_text(s, encoding="utf-8")
-
-# 4) Update the canonical control deploy checks.
-p = Path(".github/workflows/cloudflare-ara-backup-deploy.yml")
-s = p.read_text(encoding="utf-8")
-s = s.replace("shared-fencing-v1", "cloudflare-single-authority-v1")
-s = s.replace("floot-postgres-v1", "cloudflare-single-authority-v1")
-s = s.replace("ARA_SHARED_FENCING_DEPLOYED=1", "ARA_CLOUDFLARE_SINGLE_AUTHORITY_DEPLOYED=1")
-p.write_text(s, encoding="utf-8")
-
-# 5) Reserve is a second hostname bound to the SAME controller Worker. It gives
-# transport redundancy without split-brain Durable Object state.
+# 3) Reserve hostname is only a transport proxy to the SAME canonical Worker.
 reserve = Path("cloudflare-ara-reserva")
 (reserve / "src").mkdir(parents=True, exist_ok=True)
 (reserve / "wrangler.toml").write_text('''name = "anthares-ara-reserva"
@@ -159,7 +137,7 @@ export default {
 };
 ''', encoding="utf-8")
 
-# 6) Documentation reflects the proven ChatGPT OAuth connection.
+# 4) Operational record; append once.
 p = Path("docs/ARA-RENDER-INDEPENDENCE.md")
 s = p.read_text(encoding="utf-8")
 marker = "## Fechamento operacional — 13/10/2026"
@@ -174,13 +152,5 @@ if marker not in s:
 - O agente encerra após quatro falhas consecutivas de heartbeat para permitir recuperação pelo supervisor SYSTEM ativo.
 '''
 p.write_text(s, encoding="utf-8")
-
-# These old manual workflows can reintroduce the removed Floot fencing.
-for obsolete in [
-    Path(".github/workflows/ara-shared-fencing-deploy.yml"),
-    Path(".github/workflows/ara-shared-fencing-integrate.yml"),
-]:
-    if obsolete.exists():
-        obsolete.unlink()
 
 print("ARA_CLOUDFLARE_FINALIZER_PATCH_OK=1")
