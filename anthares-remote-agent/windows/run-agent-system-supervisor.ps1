@@ -8,12 +8,14 @@ if (Test-Path $queueAuthLoader) {
 }
 
 # Keep mutable Anthares runtime data off the nearly-full system drive. The
-# executable and protected credentials stay under ProgramData, while temporary
-# files, browser profiles, downloads, installers and other work products live on D:.
+# executable and protected credentials stay under ProgramData, while mutable
+# runtime products live on D:.
 $workRoot = ([string]$env:ANTHARES_WORK_ROOT).Trim()
 if ([string]::IsNullOrWhiteSpace($workRoot)) { $workRoot = 'D:\AntharsWork' }
+$logRoot = Join-Path $workRoot 'logs'
+$runtimeRoot = Join-Path $workRoot 'legacy-pc-runtime\supervisor'
 try {
-    @($workRoot, (Join-Path $workRoot 'temp'), (Join-Path $workRoot 'logs'), (Join-Path $workRoot 'downloads'), (Join-Path $workRoot 'installers'), (Join-Path $workRoot 'ara-jobs'), (Join-Path $workRoot 'browser-profiles')) |
+    @($workRoot, (Join-Path $workRoot 'temp'), $logRoot, (Join-Path $workRoot 'downloads'), (Join-Path $workRoot 'installers'), (Join-Path $workRoot 'ara-jobs'), (Join-Path $workRoot 'browser-profiles'), (Join-Path $workRoot 'legacy-pc-runtime'), $runtimeRoot) |
         ForEach-Object { New-Item -ItemType Directory -Path $_ -Force | Out-Null }
     $env:ANTHARES_WORK_ROOT = $workRoot
     $env:TEMP = Join-Path $workRoot 'temp'
@@ -32,9 +34,9 @@ $env:ANTHARES_DEVICE_ID = 'DESKTOP-FTDK0HP'
 $v4Exe = Join-Path $root 'anthares-remote-agent-v4.exe'
 $legacyExe = Join-Path $root 'anthares-remote-agent.exe'
 $exe = if (Test-Path $legacyExe) { $legacyExe } elseif (Test-Path $v4Exe) { $v4Exe } else { $legacyExe }
-$stdout = Join-Path $root 'agent-system.stdout.log'
-$stderr = Join-Path $root 'agent-system.stderr.log'
-$stateFile = Join-Path $root 'system-supervisor-state.json'
+$stdout = Join-Path $logRoot 'agent-system.stdout.log'
+$stderr = Join-Path $logRoot 'agent-system.stderr.log'
+$stateFile = Join-Path $runtimeRoot 'system-supervisor-state.json'
 
 function Control-OrDefault([string]$value, [string]$fallback) {
     $candidate = ([string]$value).Trim().TrimEnd('/')
@@ -77,6 +79,7 @@ function Save-State([string]$active, [string]$mode, [string]$reason, [int]$agent
             binary=(Split-Path $exe -Leaf); github_queue=[bool](Github-QueueConfigured); gitlab_queue=[bool](Gitlab-QueueConfigured)
             queue_failover=[bool](Queue-TransportConfigured); cloudflare_controls=$true; render_required=$false
             work_root=$env:ANTHARES_WORK_ROOT; http_candidates=@($httpCandidates)
+            stdout_path=$stdout; stderr_path=$stderr; state_path=$stateFile
         } | ConvertTo-Json -Depth 4 | Set-Content -Path $stateFile -Encoding UTF8
     } catch {}
 }
