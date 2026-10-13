@@ -118,9 +118,10 @@ async function runAuthenticatedProbe(env) {
 export default { async fetch(request,env) {
   const url=new URL(request.url);
   if(url.pathname==="/health"&&request.method==="GET") return json({ok:true,service:"anthares-reserva-browser",mode:"on-demand",authenticated_session:"not_verified"});
+  const supplied=(request.headers.get("authorization")||"").replace(/^Bearer /i,"");
+  if(!sameSecret(supplied,env.ANTHARES_RESERVA_TOKEN)) return json({error:"unauthorized"},401);
   if(url.pathname==="/_selftest"&&request.method==="GET"){const r=await runProbe(env,"lucasrosalem");return json({ok:r.ok,browser_started:r.ok,host_ok:r.profile?.host_ok===true,mode:r.mode||"isolated_ephemeral"},r.ok?200:503);}
   if(url.pathname==="/_auth_selftest"&&request.method==="GET"){const r=await runAuthenticatedProbe(env);return json(r,r.ok?200:503);}
   if(url.pathname!=="/probe"||request.method!=="POST") return json({error:"not_found"},404);
-  const supplied=(request.headers.get("authorization")||"").replace(/^Bearer /i,""); if(!sameSecret(supplied,env.ANTHARES_RESERVA_TOKEN)) return json({error:"unauthorized"},401);
   let body; try{body=await request.json();}catch{return json({error:"invalid_json"},400);} const handle=String(body?.handle||"").replace(/^@/,""); if(!/^[a-zA-Z0-9._-]{1,40}$/.test(handle)) return json({error:"invalid_handle"},400); const r=await runProbe(env,handle); return json(r,r.ok?200:503);
 }};
