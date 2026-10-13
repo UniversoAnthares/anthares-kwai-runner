@@ -24,10 +24,15 @@ if (-not $task) {
 }
 
 try {
+    # A crashed long-running task can remain logically "Running" after its
+    # supervisor process disappeared. Clear that stale state first so the
+    # subsequent start is guaranteed to create a fresh supervisor process.
+    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 750
     Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
-    Log 'RECOVERY started-system-supervisor'
+    Log 'RECOVERY restarted-system-supervisor'
     exit 0
 } catch {
-    Log ('ERROR start-failed ' + $_.Exception.GetType().Name)
+    Log ('ERROR restart-failed ' + $_.Exception.GetType().Name)
     exit 3
 }
