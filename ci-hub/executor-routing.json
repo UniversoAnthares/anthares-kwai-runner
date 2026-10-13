@@ -1,12 +1,12 @@
 {
-  "revision": "2026-10-12-executors-r4",
+  "revision": "2026-10-12-executors-r5",
   "android_execution": {
-    "priority": ["circleci", "bitrise", "render"],
+    "priority": ["circleci", "bitrise", "firebase_test_lab"],
     "github_actions": "retired_from_android_execution",
     "failover": {
       "failure_threshold": 1,
       "queue_threshold_seconds": 90,
-      "order": ["circleci", "bitrise", "render"]
+      "order": ["circleci", "bitrise", "firebase_test_lab"]
     }
   },
   "browser_execution": {
@@ -20,41 +20,54 @@
     },
     "shared_test": "ci/shared/anthares-browser-runtime-qa.sh",
     "cases_per_ci_provider": 40,
-    "tertiary_note": "Render is runtime/browser-control fallback; it is not yet equivalent to the Dockerized 40-case CI proof."
+    "tertiary_note": "Render is runtime/browser-control fallback; it is not an Android emulator and is not yet equivalent to the Dockerized 40-case CI proof."
   },
   "providers": {
     "circleci": {
-      "rank": 1,
+      "android_rank": 1,
+      "browser_rank": 1,
       "status": "active_browser_qa_wired_android_historically_proven",
-      "runtime": "Linux machine executor with Docker; Android machine executor for Android workloads",
+      "runtime": "Linux machine executor with Docker; Android machine executor with KVM",
       "config": ".circleci/config.yml",
       "browser_qa_entrypoint": "ci/shared/provider-smoke.sh"
     },
     "bitrise": {
-      "rank": 2,
-      "status": "active_browser_qa_wired",
+      "android_rank": 2,
+      "browser_rank": 2,
+      "status": "active_browser_qa_wired_android_pending_live_proof",
       "runtime": "Linux Android and Docker stack",
       "config": "bitrise.yml",
       "browser_qa_entrypoint": "ci/shared/anthares-browser-runtime-qa.sh"
     },
+    "firebase_test_lab": {
+      "android_rank": 3,
+      "status": "standby_pending_live_proof",
+      "runtime": "Firebase Test Lab Spark Android device execution; automated fallback only",
+      "config": "ci/firebase-test-lab/run_kwai_robo.sh",
+      "interactive_manual_auth": false
+    },
     "render": {
-      "rank": 3,
+      "browser_rank": 3,
       "status": "active_runtime_fallback_not_equivalent_ci_proof",
       "runtime": "independent hosted service/browser worker infrastructure",
-      "role": "tertiary runtime and browser-control fallback"
+      "role": "tertiary runtime and browser-control fallback",
+      "android_eligible": false
     },
     "cirrus": {
-      "status": "retired_provider_shutdown",
-      "config": ".cirrus.yml",
-      "active": false
+      "status": "retired_provider_shutdown_2026-06-01",
+      "active": false,
+      "android_eligible": false,
+      "browser_eligible": false
     },
     "gitlab": {
       "status": "blocked_ci_quota_exceeded",
-      "active": false
+      "active": false,
+      "android_eligible": false
     },
     "github_actions": {
       "status": "manual_diagnostic_only_due_hosted_runner_queueing",
-      "active": false
+      "active": false,
+      "android_eligible": false
     }
   }
 }

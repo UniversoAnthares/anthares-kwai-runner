@@ -20,16 +20,19 @@ def load_state():
 def choose(manifest, state):
     cfg = manifest["android_execution"]
     limit = int(cfg["failover"]["queue_threshold_seconds"])
+    providers = manifest.get("providers", {})
     for provider in cfg["priority"]:
-        s = state.get(provider, {})
+        meta = providers.get(provider, {})
+        if meta.get("android_eligible") is False:
+            continue
+        s = state.get(provider)
+        if not isinstance(s, dict):
+            continue
         if s.get("disabled") is True:
             continue
-        if s.get("healthy") is False:
+        if s.get("healthy") is not True or s.get("ready") is not True:
             continue
-        if s.get("ready") is False:
-            continue
-        queued = int(s.get("queue_seconds", 0) or 0)
-        if queued > limit:
+        if int(s.get("queue_seconds", 0) or 0) > limit:
             continue
         return provider
     return None
@@ -37,8 +40,7 @@ def choose(manifest, state):
 
 def main():
     manifest = load_manifest()
-    state = load_state()
-    selected = choose(manifest, state)
+    selected = choose(manifest, load_state())
     print("ANDROID_EXECUTOR_PRIORITY=" + ",".join(manifest["android_execution"]["priority"]))
     print("GITHUB_ACTIONS_ANDROID=" + manifest["android_execution"]["github_actions"])
     if selected:

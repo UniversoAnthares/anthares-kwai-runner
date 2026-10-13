@@ -1,43 +1,39 @@
-# Anthares Android Executor Contract
+# Anthares execution provider contract
 
-The Android executor is a disposable cloud VM created only when a job exists.
+GitHub remains the canonical repository and history source, but GitHub-hosted Actions runners are not the primary runtime compute path.
 
-## Provider order
+## Android / Kwai
 
-GitHub Actions hosted runners are retired from the Android execution path. GitHub remains the canonical repository and run-history source, not the Android compute provider.
+Priority:
 
-Android/Kwai execution priority is:
+1. CircleCI — proven Android 35 machine executor with KVM.
+2. Bitrise — Linux Android stack with AVD Manager; configured, live Android acceptance still required.
+3. Firebase Test Lab — Spark no-cost Android device fallback for bounded automated validation. This lane is not interactive manual authentication.
 
-1. CircleCI — primary. Proven Android 35 machine executor with nested virtualization/KVM.
-2. Cirrus CI — secondary. KVM-enabled Android SDK container.
-3. Bitrise — tertiary. Linux Android stack with AVD Manager.
+Render is not an Android executor. GitLab shared runners are not Android executors because the available substrate exposes neither KVM nor Binder. Cirrus CI is retired and cannot be selected because the service shut down on 2026-06-01.
 
-Failover rule: if a provider cannot start within 90 seconds or the executor fails before the Android/Kwai readiness gate, move to the next provider. A publication that crossed the publication boundary is never retried blindly; it must enter reconciliation first.
+## Anthares-browser / runtime QA
 
-GitLab shared runners are coordination/generic CI only. They are not Android executors because the shared runner substrate does not expose KVM or Binder.
+Priority:
 
-## Lifecycle
+1. CircleCI.
+2. Bitrise.
+3. Render — tertiary browser/runtime-control fallback, not yet equivalent to the Dockerized 40-case CI proof.
 
-1. controller requests a job;
-2. routing selects CircleCI, then Cirrus, then Bitrise;
-3. provider provisions a disposable Android-capable runner;
-4. workflow boots Android API 35 with hardware acceleration;
-5. validated Kwai vault is downloaded and checksum-verified;
-6. job automation runs;
-7. result/evidence is returned;
-8. VM is destroyed.
+GitHub Actions is manual diagnostic only while hosted-runner allocation is congested. GitLab is not in the active browser route while its CI quota is blocked.
 
-## Operational invariants
+## Failover
 
-- no PC dependency;
+Before the publication boundary, if a provider fails readiness or cannot start within 90 seconds, select the next healthy/ready provider. A provider with no live status is not eligible. After a possible publication, never retry blindly on another provider; reconcile first.
+
+## Invariants
+
+- no PC dependency or fallback;
 - no persistent local runner host;
-- no credentials in repository files;
-- no private repository dependency;
+- no secrets or authenticated session material in repository files;
 - one active Kwai publication lease at a time;
-- retries must be idempotent;
-- visual tunnel is diagnostic/authentication only;
-- GitHub Actions hosted runners are not eligible for Android execution;
-- provider health and queue delay determine failover;
-- after a possible publication, reconciliation is mandatory before another provider may retry.
+- provider capability must match the role;
+- retired providers cannot appear in active priorities;
+- no-cost quota exhaustion fails closed rather than enabling billing.
 
-Provider routing machine-readable source: `ci-hub/executor-routing.json`.
+Machine-readable source: `ci-hub/executor-routing.json`.
