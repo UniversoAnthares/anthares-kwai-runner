@@ -17,7 +17,7 @@ def load_state():
     return json.loads(raw)
 
 
-def choose(manifest, state, workload="generic_android"):
+def choose(manifest, state, workload="manual_auth"):
     cfg = manifest["android_execution"]
     limit = int(cfg["failover"]["queue_threshold_seconds"])
     providers = manifest.get("providers", {})
@@ -46,7 +46,7 @@ def choose(manifest, state, workload="generic_android"):
 
 def main():
     manifest = load_manifest()
-    workload = os.environ.get("ANTHARES_EXECUTOR_WORKLOAD", "generic_android").strip()
+    workload = os.environ.get("ANTHARES_EXECUTOR_WORKLOAD", "manual_auth").strip()
     if workload not in {"generic_android", "manual_auth"}:
         print("ANDROID_EXECUTOR_WORKLOAD=INVALID")
         return 2
