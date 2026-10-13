@@ -128,7 +128,7 @@ class NoVNCGatewayTests(unittest.TestCase):
         self.login()
         r = self.client.get("/novnc", follow_redirects=False)
         self.assertEqual(r.status_code, 303)
-        self.assertEqual(r.headers["location"], "/novnc/vnc.html")
+        self.assertEqual(r.headers["location"], "/novnc/vnc.html?path=novnc%2Fwebsockify")
 
     def test_missing_file_is_404(self):
         self.login()
