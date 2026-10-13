@@ -76,6 +76,14 @@ class AndroidExecutorRoutingTests(unittest.TestCase):
         self.assertIn("ANDROID_EXECUTOR_DISPATCHED=0", text)
         self.assertIn("ANDROID_EXECUTOR_SELECTION_ONLY=1", text)
 
+    def test_malformed_json_status_fails_closed(self):
+        with patch.dict(os.environ, {"ANTHARES_EXECUTOR_STATUS_JSON": "{not-json"}):
+            self.assertEqual(router.load_state(), {})
+
+    def test_array_json_status_fails_closed(self):
+        with patch.dict(os.environ, {"ANTHARES_EXECUTOR_STATUS_JSON": "[]"}):
+            self.assertEqual(router.load_state(), {})
+
     def test_main_rejects_unknown_workload(self):
         with patch.dict(os.environ, {"ANTHARES_EXECUTOR_WORKLOAD": "manual_and_publish"}), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(router.main(), 2)
