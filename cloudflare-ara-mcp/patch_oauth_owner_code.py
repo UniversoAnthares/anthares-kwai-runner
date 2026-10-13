@@ -13,7 +13,7 @@ assignment = f"const OWNER_APPROVAL_HASH='{OWNER_HASH}';"
 if re.search(r"const OWNER_APPROVAL_HASH='[^']*';", s):
     s = re.sub(r"const OWNER_APPROVAL_HASH='[^']*';", lambda _: assignment, s, count=1)
 elif needle in s:
-    s = s.replace(needle, assignment + "\\n" + needle, 1)
+    s = s.replace(needle, assignment + "\n" + needle, 1)
 else:
     raise SystemExit("owner hash insertion target missing")
 
