@@ -65,6 +65,11 @@ func main() {
 	}
 	fmt.Printf("Anthares Remote Agent starting device=%s os=%s/%s concurrency=%d\n", cfg.DeviceID, runtime.GOOS, runtime.GOARCH, cfg.MaxConcurrent)
 	go heartbeatLoop(cfg)
+	// Replay previously persisted results before leasing new work.
+	if err := replayEncryptedResults(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, "pending result replay error:", err)
+		os.Exit(1)
+	}
 
 	sem := make(chan struct{}, cfg.MaxConcurrent)
 	for {
