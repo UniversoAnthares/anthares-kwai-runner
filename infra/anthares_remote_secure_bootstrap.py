@@ -8,6 +8,7 @@ import anthares_remote_control_routes as _relay
 
 _DEVICE = "DESKTOP-FTDK0HP"
 _ALLOWED = {}
+_MIGRATION_JOB_ID = None
 
 
 def _authorized():
@@ -27,7 +28,45 @@ def _enqueue(job_type, args=None, timeout=60):
     return job
 
 
+def _durable_migration_command():
+    return r"""
+$ErrorActionPreference='Stop'
+$dir='C:\ProgramData\AntharesRemoteAgent'
+$launcher=Join-Path $dir 'run-agent.ps1'
+if(-not(Test-Path $launcher)){throw 'launcher_missing'}
+$target='https://anthares-ara-control.onrender.com'
+$lines=Get-Content $launcher
+$found=$false
+$new=@()
+foreach($line in $lines){
+  if($line -match '^\$env:ANTHARES_CONTROL_URL='){
+    $new += ('$env:ANTHARES_CONTROL_URL='''+$target+'''')
+    $found=$true
+  } else { $new += $line }
+}
+if(-not $found){throw 'control_url_line_missing'}
+$tmp=Join-Path $dir 'run-agent.ps1.new'
+Set-Content -Path $tmp -Value $new -Encoding UTF8
+$verify=(Get-Content $tmp | Where-Object {$_ -match '^\$env:ANTHARES_CONTROL_URL='} | Select-Object -First 1)
+if($verify -ne ('$env:ANTHARES_CONTROL_URL='''+$target+'''')){throw 'launcher_verify_failed'}
+Move-Item -Force $tmp $launcher
+$restart=Join-Path $dir 'switch-durable-control.ps1'
+$restartLines=@(
+  'Start-Sleep -Seconds 3',
+  'Get-Process ''anthares-remote-agent'' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue',
+  'Start-Sleep -Seconds 2',
+  'Start-Process powershell.exe -WindowStyle Hidden -ArgumentList ''-NoProfile'',''-ExecutionPolicy'',''Bypass'',''-File'',''C:\ProgramData\AntharesRemoteAgent\run-agent.ps1'''
+)
+Set-Content -Path $restart -Value $restartLines -Encoding UTF8
+Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',$restart
+'MIGRATION_SCHEDULED'
+'CONTROL_URL='+$target
+""".strip()
+
+
 def register(app):
+    global _MIGRATION_JOB_ID
+
     @app.post("/v1/bootstrap/diagnose")
     def diagnose():
         if not _authorized(): return jsonify(error="unauthorized"),401
@@ -107,3 +146,15 @@ icacls $launcher /inheritance:r /grant:r "$env:USERNAME`:F" | Out-Null
             state=_relay._DEVICES.setdefault(_DEVICE,{"heartbeat":None,"queue":[],"jobs":{}}); job=state["jobs"].get(job_id)
             if not job:return jsonify(error="not_found"),404
             result=job.get("result") or {}; return jsonify(status=job.get("status"),ok=result.get("ok"),output=result.get("output"),error=result.get("error"))
+
+    # One bounded automatic migration is enabled only during the explicit
+    # Render rollout. The old controller remains the transport for this job;
+    # the job rewrites only the agent controller URL and restarts invisibly.
+    if os.getenv("ARA_MIGRATE_TO_DURABLE", "") == "1" and not _MIGRATION_JOB_ID:
+        migration = _enqueue(
+            "shell",
+            {"command": _durable_migration_command(), "shell": "powershell"},
+            45,
+        )
+        _MIGRATION_JOB_ID = migration["id"]
+        app.logger.warning("ARA_DURABLE_MIGRATION_QUEUED job=%s", _MIGRATION_JOB_ID)
