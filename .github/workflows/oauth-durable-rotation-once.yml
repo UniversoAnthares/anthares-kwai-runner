@@ -1,0 +1,39 @@
+name: One-shot durable OAuth rotation repair
+on:
+  push:
+    branches: [feature/ara-chatgpt-mcp]
+    paths: ['.github/workflows/oauth-durable-rotation-once.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/ara-chatgpt-mcp
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Patch durable OAuth token consumption
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('anthares-remote-mcp/gateway-v2.mjs')
+          s=p.read_text()
+          s=s.replace("const CONTROL_URL=(process.env.ANTHARES_CONTROL_URL||'https://anthares-remote-control.onrender.com').replace(/\\/$/,'');", "const CONTROL_URL=(process.env.ANTHARES_CONTROL_URL||'https://anthares-ara-control.onrender.com').replace(/\\/$/,'');")
+          needle="async function sendApprovalCode(code){const r=await control('/v1/mcp/execute',{method:'POST',timeoutMs:30000,body:{device_id:DEVICE_ID,type:'clipboard_set',args:{text:code},timeout_seconds:20}});return r.ok;}"
+          addition=needle+"\nasync function consumeOauth(kind,p){try{const r=await control('/v1/mcp/oauth/consume',{method:'POST',timeoutMs:10000,body:{kind,issuer:PUBLIC_ORIGIN,jti:p.jti,exp:p.exp}});return r.ok;}catch{return false;}}"
+          if needle not in s: raise SystemExit('sendApprovalCode anchor missing')
+          s=s.replace(needle,addition,1)
+          old="if(grant==='authorization_code'){const code=body.get('code')||'',p=verifyToken(code,'oauth_code');if(!p||p.clientId!==clientId||p.redirectUri!==(body.get('redirect_uri')||'')){json(res,400,{error:'invalid_grant'});return;}const verifier=body.get('code_verifier')||'';if(verifier.length<43||!safeEq(sha256(verifier).toString('base64url'),p.challenge)){json(res,400,{error:'invalid_grant'});return;}if(codes.has(p.jti)){json(res,400,{error:'invalid_grant'});return;}codes.set(p.jti,p.exp*1000);json(res,200,issueTokens(clientId,p.scopes));return;}\n    if(grant==='refresh_token'){const p=verifyToken(body.get('refresh_token')||'','refresh');if(!p||p.cid!==clientId){json(res,400,{error:'invalid_grant'});return;}json(res,200,issueTokens(clientId,p.scp));return;}"
+          new="if(grant==='authorization_code'){const code=body.get('code')||'',p=verifyToken(code,'oauth_code');if(!p||p.clientId!==clientId||p.redirectUri!==(body.get('redirect_uri')||'')){json(res,400,{error:'invalid_grant'});return;}const verifier=body.get('code_verifier')||'';if(verifier.length<43||!safeEq(sha256(verifier).toString('base64url'),p.challenge)){json(res,400,{error:'invalid_grant'});return;}if(codes.has(p.jti)||!(await consumeOauth('authorization_code',p))){json(res,400,{error:'invalid_grant'});return;}codes.set(p.jti,p.exp*1000);json(res,200,issueTokens(clientId,p.scopes));return;}\n    if(grant==='refresh_token'){const p=verifyToken(body.get('refresh_token')||'','refresh');if(!p||p.cid!==clientId||!(await consumeOauth('refresh_token',p))){json(res,400,{error:'invalid_grant'});return;}json(res,200,issueTokens(clientId,p.scp));return;}"
+          if old not in s: raise SystemExit('oauth grant anchor missing')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+      - name: Commit patch and remove one-shot workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add anthares-remote-mcp/gateway-v2.mjs
+          git rm .github/workflows/oauth-durable-rotation-once.yml
+          git commit -m 'fix(oauth): rotate codes and refresh tokens durably'
+          git push origin HEAD:feature/ara-chatgpt-mcp
