@@ -33,6 +33,11 @@ The temporary recovery bootstrap has been disabled again and returns HTTP 401 wi
 ## Deployment
 
 Canonical Render service: `anthares-remote-mcp-v2` (`srv-db6o0d5g1s2s738s7bp0`).
+Redundant Render service: `anthares-remote-mcp` (`srv-db6naljbc2fs739og1s0`).
+
+Both public `/health` endpoints were independently checked and returned HTTP 200 with `oauth=configured`, `control=signed-ready`, and `mcp=ready`. Both OAuth protected-resource metadata endpoints returned HTTP 200. The redundant deployment `dep-db6o79mk1f9s73asgcb0` reached `live`.
+
+These health checks prove availability of both signed bridges, not ChatGPT account registration or successful native MCP tool execution.
 Control service: `anthares-remote-control` (`srv-db6mj8navr4c73cqvgo0`).
 
 The public `/health` endpoint is healthy only when OAuth, the internal MCP and the signed control bridge are all ready.
