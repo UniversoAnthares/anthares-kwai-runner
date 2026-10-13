@@ -1,0 +1,35 @@
+name: Anthares Reserva Migration Key
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/anthares-reserva-ci]
+    paths:
+      - '.github/workflows/anthares-reserva-migration-key.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate migration key and store private half only in Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /tmp/reserva-migration-private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/reserva-migration-private.pem -pubout -out /tmp/reserva-migration-public.pem
+          cd anthares-reserva-browser
+          npm install --no-audit --no-fund >/dev/null
+          cat /tmp/reserva-migration-private.pem | npx wrangler secret put RESERVA_MIGRATION_PRIVATE_KEY >/dev/null
+          echo -n RESERVA_MIGRATION_PUBLIC_KEY_B64=
+          openssl pkey -pubin -in /tmp/reserva-migration-public.pem -outform DER | base64 -w0
+          echo
+          shred -u /tmp/reserva-migration-private.pem || rm -f /tmp/reserva-migration-private.pem
+          rm -f /tmp/reserva-migration-public.pem
