@@ -1,4 +1,4 @@
-name: Kwai Android ARM64 Metadata Boot
+name: Kwai Android ARM64 Sparse Data Matrix 30
 on:
   workflow_dispatch:
   push:
@@ -8,16 +8,51 @@ on:
 permissions:
   contents: read
 jobs:
-  android-metadata-boot:
-    name: "Android ARM64 boot with metadata GPT"
+  matrix30:
+    name: "case-${{ matrix.id }} data=${{ matrix.data }} gfx=${{ matrix.gfx }} hw=${{ matrix.hw }} net=${{ matrix.net }} qemu=${{ matrix.qemu }}"
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 18
+    timeout-minutes: 22
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        include:
+          - {id: 1, data: sparse-raw, gfx: virtio-pci, hw: ranchu, net: on, qemu: off, ram: 4096, smp: 4}
+          - {id: 2, data: sparse-raw, gfx: virtio-pci, hw: ranchu, net: on, qemu: on, ram: 4096, smp: 4}
+          - {id: 3, data: sparse-raw, gfx: virtio-mmio, hw: ranchu, net: on, qemu: on, ram: 4096, smp: 4}
+          - {id: 4, data: sparse-raw, gfx: none, hw: ranchu, net: on, qemu: on, ram: 3072, smp: 2}
+          - {id: 5, data: fresh2, gfx: virtio-pci, hw: ranchu, net: on, qemu: off, ram: 4096, smp: 4}
+          - {id: 6, data: fresh4, gfx: virtio-pci, hw: ranchu, net: on, qemu: off, ram: 4096, smp: 4}
+          - {id: 7, data: fresh8, gfx: virtio-pci, hw: ranchu, net: on, qemu: off, ram: 4096, smp: 4}
+          - {id: 8, data: fresh4, gfx: virtio-pci, hw: ranchu, net: on, qemu: on, ram: 3072, smp: 2}
+          - {id: 9, data: original, gfx: virtio-pci, hw: ranchu, net: on, qemu: off, ram: 4096, smp: 4}
+          - {id: 10, data: original, gfx: virtio-mmio, hw: ranchu, net: off, qemu: on, ram: 3072, smp: 2}
+          - {id: 11, data: sparse-raw, gfx: virtio-pci, hw: goldfish, net: on, qemu: on, ram: 4096, smp: 4}
+          - {id: 12, data: sparse-raw, gfx: virtio-mmio, hw: goldfish, net: on, qemu: on, ram: 4096, smp: 4}
+          - {id: 13, data: fresh4, gfx: virtio-pci, hw: goldfish, net: on, qemu: on, ram: 4096, smp: 4}
+          - {id: 14, data: original, gfx: virtio-pci, hw: goldfish, net: on, qemu: on, ram: 4096, smp: 4}
+          - {id: 15, data: sparse-raw, gfx: none, hw: goldfish, net: off, qemu: on, ram: 3072, smp: 2}
+          - {id: 16, data: sparse-raw, gfx: virtio-pci, hw: ranchu, net: adb, qemu: on, ram: 4096, smp: 4}
+          - {id: 17, data: sparse-raw, gfx: virtio-mmio, hw: ranchu, net: adb, qemu: on, ram: 4096, smp: 4}
+          - {id: 18, data: fresh4, gfx: virtio-pci, hw: ranchu, net: adb, qemu: on, ram: 4096, smp: 4}
+          - {id: 19, data: original, gfx: virtio-pci, hw: ranchu, net: adb, qemu: on, ram: 4096, smp: 4}
+          - {id: 20, data: original, gfx: virtio-mmio, hw: ranchu, net: adb, qemu: on, ram: 3072, smp: 2}
+          - {id: 21, data: sparse-raw, gfx: virtio-pci, hw: ranchu, net: off, qemu: on, ram: 3072, smp: 2}
+          - {id: 22, data: fresh4, gfx: virtio-mmio, hw: ranchu, net: on, qemu: on, ram: 3072, smp: 2}
+          - {id: 23, data: fresh4, gfx: none, hw: ranchu, net: on, qemu: on, ram: 3072, smp: 2}
+          - {id: 24, data: sparse-raw, gfx: virtio-pci, hw: ranchu, net: on, qemu: on, ram: 3072, smp: 2}
+          - {id: 25, data: sparse-raw, gfx: virtio-pci, hw: ranchu, net: on, qemu: on, ram: 5120, smp: 4}
+          - {id: 26, data: sparse-raw, gfx: virtio-pci, hw: ranchu, net: on, qemu: on, ram: 4096, smp: 2}
+          - {id: 27, data: sparse-raw, gfx: virtio-pci, hw: ranchu, net: on, qemu: off, ram: 3072, smp: 2}
+          - {id: 28, data: fresh4, gfx: virtio-pci, hw: ranchu, net: off, qemu: on, ram: 3072, smp: 2}
+          - {id: 29, data: sparse-raw, gfx: none, hw: ranchu, net: adb, qemu: on, ram: 3072, smp: 2}
+          - {id: 30, data: fresh4, gfx: none, hw: ranchu, net: adb, qemu: on, ram: 3072, smp: 2}
     steps:
-      - name: Install QEMU and Android ARM64 image
+      - name: Install runtime and Android image
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless file cpio gdisk e2fsprogs util-linux >/dev/null
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless gdisk e2fsprogs util-linux adb android-sdk-libsparse-utils file >/dev/null
           mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
           curl -fLsS --retry 2 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
           unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
@@ -27,83 +62,80 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-30;default;arm64-v8a" >/dev/null
           DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
           gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
-          test -s /tmp/android-Image
           echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
-
-      - name: Inspect ramdisk fstab and required early partitions
+          file "$DIR/userdata.img" || true
+      - name: Build metadata and userdata
         run: |
           set -euo pipefail
-          rm -rf /tmp/ramdisk && mkdir -p /tmp/ramdisk
-          cd /tmp/ramdisk
-          gzip -dc "$ANDROID_DIR/ramdisk.img" | cpio -idmu --quiet
-          find . -type f \( -name 'fstab*' -o -name '*fstab*' \) -print > /tmp/fstab-files.txt
-          : > /tmp/fstab-dump.txt
-          while read -r f; do
-            echo "===== $f =====" >> /tmp/fstab-dump.txt
-            cat "$f" >> /tmp/fstab-dump.txt || true
-          done < /tmp/fstab-files.txt
-          grep -E 'metadata|system|vendor|userdata|super|product' /tmp/fstab-dump.txt || true
-          echo FSTAB_INSPECTION=PASS
-
-      - name: Create GPT metadata partition expected by Android first stage
-        run: |
-          set -euo pipefail
-          truncate -s 128M /tmp/metadata-disk.img
-          sgdisk -o /tmp/metadata-disk.img >/dev/null
-          sgdisk -n 1:2048:0 -c 1:metadata /tmp/metadata-disk.img >/dev/null
-          LOOP=$(sudo losetup --find --show --partscan /tmp/metadata-disk.img)
-          trap 'sudo losetup -d "$LOOP" || true' EXIT
+          truncate -s 192M /tmp/meta.img
+          sgdisk -o /tmp/meta.img >/dev/null
+          sgdisk -n 1:2048:0 -c 1:metadata /tmp/meta.img >/dev/null
+          LOOP=$(sudo losetup --find --show --partscan /tmp/meta.img)
           sleep 1
-          test -b "${LOOP}p1"
           sudo mkfs.ext4 -F -L metadata "${LOOP}p1" >/dev/null
-          sudo blkid "${LOOP}p1" || true
           sudo losetup -d "$LOOP"
-          trap - EXIT
-          sgdisk -p /tmp/metadata-disk.img
-          echo METADATA_GPT_READY=PASS
-
-      - name: Boot Android past missing-metadata checkpoint
+          DATA='${{ matrix.data }}'
+          case "$DATA" in
+            original) USERIMG="$ANDROID_DIR/userdata.img" ;;
+            sparse-raw)
+              if simg2img "$ANDROID_DIR/userdata.img" /tmp/userdata.raw 2>/tmp/simg.err; then USERIMG=/tmp/userdata.raw; else cp "$ANDROID_DIR/userdata.img" /tmp/userdata.raw; USERIMG=/tmp/userdata.raw; fi ;;
+            fresh2) truncate -s 2G /tmp/userdata.raw; mkfs.ext4 -F -L data /tmp/userdata.raw >/dev/null; USERIMG=/tmp/userdata.raw ;;
+            fresh4) truncate -s 4G /tmp/userdata.raw; mkfs.ext4 -F -L data /tmp/userdata.raw >/dev/null; USERIMG=/tmp/userdata.raw ;;
+            fresh8) truncate -s 8G /tmp/userdata.raw; mkfs.ext4 -F -L data /tmp/userdata.raw >/dev/null; USERIMG=/tmp/userdata.raw ;;
+          esac
+          file "$USERIMG" || true
+          dumpe2fs -h "$USERIMG" 2>/dev/null | head -30 || true
+          echo "USERIMG=$USERIMG" >> "$GITHUB_ENV"
+      - name: Boot and probe strict Android readiness
         run: |
           set +e
-          timeout 210 qemu-system-aarch64 \
-            -machine virt \
-            -cpu cortex-a72 \
-            -m 2048 \
-            -smp 2 \
-            -accel tcg \
-            -nographic \
-            -no-reboot \
-            -kernel /tmp/android-Image \
-            -initrd "$ANDROID_DIR/ramdisk.img" \
-            -drive if=none,file="$ANDROID_DIR/system.img",format=raw,readonly=on,id=system \
-            -device virtio-blk-device,drive=system \
-            -drive if=none,file="$ANDROID_DIR/vendor.img",format=raw,readonly=on,id=vendor \
-            -device virtio-blk-device,drive=vendor \
-            -drive if=none,file="$ANDROID_DIR/userdata.img",format=raw,id=userdata \
-            -device virtio-blk-device,drive=userdata \
-            -drive if=none,file=/tmp/metadata-disk.img,format=raw,id=metadata \
-            -device virtio-blk-device,drive=metadata \
-            -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive root=/dev/ram0 rw" \
-            > /tmp/android-qemu.log 2>&1
-          grep -E 'init first stage|init second stage|metadata|partition\(s\) not found|Failed to mount|required partitions|InitFatalReboot|Android|SELinux|VFS|panic' /tmp/android-qemu.log | tail -120 || true
-          if grep -Eq 'partition\(s\) not found.*metadata|partitions not found.*metadata' /tmp/android-qemu.log; then
-            echo METADATA_CHECKPOINT=FAIL
-            exit 1
-          fi
-          if grep -Eq 'init second stage started|SecondStageMain|second stage|property_service|servicemanager|zygote|userdata|super|product|Failed to mount required partitions' /tmp/android-qemu.log; then
-            echo METADATA_CHECKPOINT=PASS
-            echo ANDROID_BOOT_ADVANCED=PASS
-          else
-            echo METADATA_CHECKPOINT=INCONCLUSIVE
-            exit 1
-          fi
-
+          EXTRA='androidboot.selinux=permissive root=/dev/ram0 rw'
+          [ '${{ matrix.qemu }}' = 'on' ] && EXTRA="$EXTRA qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30 androidboot.adb.secure=0"
+          DEVICES=''
+          case '${{ matrix.gfx }}' in
+            virtio-mmio) DEVICES="$DEVICES -device virtio-gpu-device" ;;
+            virtio-pci) DEVICES="$DEVICES -device virtio-gpu-pci" ;;
+          esac
+          case '${{ matrix.net }}' in
+            on) DEVICES="$DEVICES -netdev user,id=n0 -device virtio-net-device,netdev=n0" ;;
+            adb) DEVICES="$DEVICES -netdev user,id=n0,hostfwd=tcp::5555-:5555 -device virtio-net-device,netdev=n0"; EXTRA="$EXTRA androidboot.adb.secure=0 service.adb.tcp.port=5555" ;;
+          esac
+          timeout 190 qemu-system-aarch64 -machine virt -cpu cortex-a72 -m ${{ matrix.ram }} -smp ${{ matrix.smp }} -accel tcg -nographic -no-reboot \
+            -kernel /tmp/android-Image -initrd "$ANDROID_DIR/ramdisk.img" \
+            -drive if=none,file=/tmp/meta.img,format=raw,id=metadata -device virtio-blk-device,drive=metadata \
+            -drive if=none,file="$ANDROID_DIR/system.img",format=raw,readonly=on,id=system -device virtio-blk-device,drive=system \
+            -drive if=none,file="$ANDROID_DIR/vendor.img",format=raw,readonly=on,id=vendor -device virtio-blk-device,drive=vendor \
+            -drive if=none,file="$USERIMG",format=raw,id=userdata -device virtio-blk-device,drive=userdata \
+            $DEVICES \
+            -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=${{ matrix.hw }} $EXTRA" \
+            > /tmp/android-qemu.log 2>&1 &
+          QPID=$!
+          : > /tmp/adb-boot.txt
+          for i in $(seq 1 34); do
+            if [ '${{ matrix.net }}' = 'adb' ]; then
+              adb connect 127.0.0.1:5555 >/tmp/adb-connect.txt 2>&1 || true
+              adb -s 127.0.0.1:5555 shell getprop sys.boot_completed >/tmp/adb-boot.txt 2>&1 || true
+              grep -q '^1' /tmp/adb-boot.txt && break
+            fi
+            sleep 5
+          done
+          kill "$QPID" 2>/dev/null || true
+          grep -E 'init second stage|Invalid ext4|/data/misc_de|system_server|SystemServer|ActivityManager|PackageManager|surfaceflinger|SurfaceFlinger|zygote|BOOT_COMPLETED|boot_completed|adbd|Fatal signal|received signal' /tmp/android-qemu.log | tail -240 || true
+          cat /tmp/adb-connect.txt /tmp/adb-boot.txt 2>/dev/null || true
+          if grep -q '^1' /tmp/adb-boot.txt 2>/dev/null; then echo RESULT=ADB_BOOT_COMPLETE; exit 0; fi
+          if grep -Eq 'BOOT_COMPLETED|sys.boot_completed.*1|SystemServer.*Start|ActivityManager.*system_server|PackageManagerService' /tmp/android-qemu.log; then echo RESULT=FRAMEWORK_READY; exit 0; fi
+          if grep -q 'Invalid ext4 superblock on .*/vdc' /tmp/android-qemu.log; then echo RESULT=DATA_INVALID; exit 1; fi
+          if grep -q 'init second stage started' /tmp/android-qemu.log; then echo RESULT=SECOND_STAGE_ONLY; exit 1; fi
+          echo RESULT=EARLY_FAIL
+          exit 1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-metadata-boot-diagnostics
+          name: sparse-data-case-${{ matrix.id }}
           path: |
             /tmp/android-qemu.log
-            /tmp/fstab-dump.txt
-            /tmp/fstab-files.txt
+            /tmp/adb-connect.txt
+            /tmp/adb-boot.txt
+            /tmp/simg.err
+          if-no-files-found: warn
           retention-days: 3

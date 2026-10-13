@@ -1,0 +1,123 @@
+name: Anthares ARM64 First Stage Fstab QA4
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-arm64-first-stage-fstab-qa4.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  fstab:
+    name: "fstab-${{ matrix.variant }}"
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        variant: [control, root, system_etc, both]
+    steps:
+      - name: Prepare Android 30 ARM64 package and QEMU
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless gdisk e2fsprogs cpio gzip >/dev/null
+          rm -rf "$HOME/android-sdk" /tmp/android-tools
+          mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
+          curl -fLsS --retry 4 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
+          cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
+          export ANDROID_HOME="$HOME/android-sdk"
+          (yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null) || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'system-images;android-30;default;arm64-v8a' >/dev/null
+          DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
+          gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
+          echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
+
+      - name: Extract vendor fstab and build first-stage ramdisk variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR="$ANDROID_DIR"
+          START=$(sgdisk -i 1 "$DIR/vendor.img" | awk '/First sector:/ {print $3}')
+          END=$(sgdisk -i 1 "$DIR/vendor.img" | awk '/Last sector:/ {print $3}')
+          dd if="$DIR/vendor.img" of=/tmp/vendor-p1.img bs=512 skip="$START" count="$((END-START+1))" status=none
+          debugfs -R 'dump /etc/fstab.ranchu /tmp/fstab.ranchu' /tmp/vendor-p1.img >/dev/null 2>&1
+          test -s /tmp/fstab.ranchu
+          sudo rm -rf /tmp/ramdisk-root
+          sudo mkdir /tmp/ramdisk-root
+          sudo bash -c "cd /tmp/ramdisk-root && gzip -dc '$DIR/ramdisk.img' | cpio -idm --quiet"
+          V='${{ matrix.variant }}'
+          case "$V" in
+            control) ;;
+            root) sudo cp /tmp/fstab.ranchu /tmp/ramdisk-root/fstab.ranchu ;;
+            system_etc) sudo mkdir -p /tmp/ramdisk-root/system/etc; sudo cp /tmp/fstab.ranchu /tmp/ramdisk-root/system/etc/fstab.ranchu ;;
+            both) sudo cp /tmp/fstab.ranchu /tmp/ramdisk-root/fstab.ranchu; sudo mkdir -p /tmp/ramdisk-root/system/etc; sudo cp /tmp/fstab.ranchu /tmp/ramdisk-root/system/etc/fstab.ranchu ;;
+          esac
+          if [ "$V" = control ]; then
+            cp "$DIR/ramdisk.img" /tmp/ramdisk-test.img
+          else
+            sudo bash -c 'cd /tmp/ramdisk-root && find . -print0 | cpio --null -o --format=newc --quiet | gzip -9 > /tmp/ramdisk-test.img'
+            sudo chown "$USER":"$(id -gn)" /tmp/ramdisk-test.img
+          fi
+          echo "VARIANT=$V" | tee /tmp/fstab-variant.txt
+          grep -nE 'system|vendor|product|system_ext|/data|/metadata' /tmp/fstab.ranchu | tee -a /tmp/fstab-variant.txt
+
+      - name: Build correct metadata and userdata devices
+        shell: bash
+        run: |
+          set -euo pipefail
+          truncate -s 192M /tmp/meta.img
+          sgdisk -o /tmp/meta.img >/dev/null
+          sgdisk -n 1:2048:0 -c 1:metadata /tmp/meta.img >/dev/null
+          L=$(sudo losetup --find --show --partscan /tmp/meta.img)
+          sleep 1
+          sudo mkfs.ext4 -F -L metadata "${L}p1" >/dev/null
+          sudo losetup -d "$L"
+          truncate -s 4G /tmp/data.img
+          mkfs.ext4 -F -L data -O ^64bit,^metadata_csum -b 4096 -I 256 -E lazy_itable_init=0,lazy_journal_init=0 /tmp/data.img >/dev/null
+
+      - name: Boot and classify first-stage boundary
+        shell: bash
+        run: |
+          set +e
+          Q=(qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 4096 -smp 4 -accel tcg -nographic -no-reboot -kernel /tmp/android-Image -initrd /tmp/ramdisk-test.img)
+          add(){ local f="$1" id="$2" ro="$3"; local o="if=none,file=$f,format=raw,id=$id"; [ "$ro" = 1 ] && o="$o,readonly=on"; Q+=( -drive "$o" -device "virtio-blk-device,drive=$id" ); }
+          # On this QEMU virt path enumeration is reverse of addition: vendor=vda, system=vdb, data=vdc, metadata=vdd.
+          add /tmp/meta.img meta 0
+          add /tmp/data.img data 0
+          add "$ANDROID_DIR/system.img" system 1
+          add "$ANDROID_DIR/vendor.img" vendor 1
+          CMD='console=ttyAMA0 earlycon=pl011,0x09000000 loglevel=8 ignore_loglevel androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive androidboot.init_log_level=7 androidboot.boot_devices=a003c00.virtio_mmio root=/dev/ram0 rw qemu=1 androidboot.qemu=1 androidboot.serialno=ANTHARESFSTAB'
+          Q+=( -append "$CMD" )
+          printf 'ARG=%q\n' "${Q[@]}" > /tmp/qemu-argv.txt
+          timeout 150 "${Q[@]}" > /tmp/android-qemu.log 2>&1
+          RC=$?
+          set -e
+          grep -E 'fstab|first stage|FirstStage|super|by-name|metadata|/metadata|/data|dm-|logical|init second stage|Failed to|FATAL|InitFatalReboot|received signal' /tmp/android-qemu.log | tail -600 > /tmp/checkpoints.txt || true
+          cat /tmp/checkpoints.txt
+          SECOND=$(grep -c 'init second stage started' /tmp/android-qemu.log || true)
+          META=$(grep -cE 'target=/metadata.*=0|EXT4-fs .*metadata|Mounted /metadata' /tmp/android-qemu.log || true)
+          DATA=$(grep -cE 'EXT4-fs \(vdc\): mounted|target=/data.*=0' /tmp/android-qemu.log || true)
+          FSTAB_ERR=$(grep -cEi 'failed to read default fstab|missing/incompatible/empty fstab|fstab.*not found' /tmp/android-qemu.log || true)
+          echo "QEMU_RC=$RC SECOND=$SECOND META=$META DATA=$DATA FSTAB_ERR=$FSTAB_ERR VARIANT=${{ matrix.variant }}"
+          if [ "$SECOND" -gt 0 ]; then echo FIRST_STAGE_FSTAB_BOUNDARY=PASS; exit 0; fi
+          echo FIRST_STAGE_FSTAB_BOUNDARY=FAIL
+          exit 1
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-stage-fstab-${{ matrix.variant }}-${{ github.run_id }}
+          path: |
+            /tmp/android-qemu.log
+            /tmp/checkpoints.txt
+            /tmp/qemu-argv.txt
+            /tmp/fstab-variant.txt
+          if-no-files-found: warn
+          retention-days: 3

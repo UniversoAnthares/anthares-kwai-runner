@@ -1,0 +1,79 @@
+name: Anthares Browser Vault Smoke
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/anthares_runtime_mesh_vaulted.py'
+      - 'infra/anthares_runtime_browser_local.py'
+      - 'infra/anthares_runtime_mesh.py'
+      - 'infra/sitecustomize.py'
+      - '.github/workflows/anthares-browser-vault-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile runtime modules
+        run: |
+          python -m py_compile \
+            infra/anthares_runtime_mesh_vaulted.py \
+            infra/anthares_runtime_browser_local.py \
+            infra/anthares_runtime_mesh.py \
+            infra/sitecustomize.py
+      - name: Verify production entrypoint selects vault adapter
+        run: |
+          grep -Fq 'from anthares_runtime_mesh_vaulted import register as _register_runtime_mesh' infra/sitecustomize.py
+          ! grep -Fq 'from anthares_runtime_mesh import register as _register_runtime_mesh' infra/sitecustomize.py
+      - name: Install import-only dependencies
+        run: python -m pip install -q flask requests cryptography playwright
+      - name: Test vault crypto and adapter routing without desktop fallback
+        env:
+          ARA_SHARED: smoke-only-secret
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, 'infra')
+          from flask import Flask
+          import anthares_runtime_browser_local as local
+          import anthares_runtime_mesh as mesh
+          import anthares_runtime_mesh_vaulted as vaulted
+
+          jwk = local.public_jwk()
+          assert jwk['kty'] == 'EC' and jwk['crv'] == 'P-256'
+          state = {'cookies': [{'name':'a','value':'b','domain':'example.com','path':'/'}], 'origins': []}
+          encrypted = local._encrypt_state(state)
+          assert encrypted and local._decrypt_state(encrypted) == state
+
+          local.health = lambda: {
+              'configured': True, 'healthy': True,
+              'backend': 'local_playwright_vault', 'isolated': True,
+              'headless': True, 'chromium_running': True,
+              'host_desktop_fallback': False,
+          }
+          local.browser_request = lambda method, path, payload=None: (
+              None, {'ok': True, 'backend':'local_playwright_vault', 'method':method, 'path':path}, 200
+          )
+          mesh._browser_cfg = lambda: ('', '')
+          assert vaulted._hybrid_ready()['healthy'] is True
+          _, body, status = vaulted._hybrid_request('GET', '/status')
+          assert status == 200 and body['backend'] == 'local_playwright_vault'
+
+          app = Flask(__name__)
+          vaulted.register(app)
+          c = app.test_client()
+          r = c.get('/v1/runtime/browser/signing-public-key')
+          assert r.status_code == 200 and r.json['ok'] is True and r.json['jwk']['crv'] == 'P-256'
+          h = c.get('/v1/runtime/health')
+          assert h.status_code == 200
+          payload = h.get_json()
+          assert payload['browser']['backend'] == 'local_playwright_vault'
+          assert payload['host_desktop_fallback'] is False
+          print('ANTHARES_BROWSER_VAULT_SMOKE=PASS')
+          PY

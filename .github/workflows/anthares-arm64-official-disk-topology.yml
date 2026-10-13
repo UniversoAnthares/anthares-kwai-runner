@@ -1,0 +1,110 @@
+name: Anthares ARM64 Official Disk Topology
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-arm64-official-disk-topology.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  boot:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - name: Prepare Android package and QEMU
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless gdisk e2fsprogs cpio gzip >/dev/null
+          rm -rf "$HOME/android-sdk" /tmp/android-tools
+          mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
+          curl -fLsS --retry 4 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
+          cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
+          export ANDROID_HOME="$HOME/android-sdk"
+          (yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null) || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'system-images;android-30;default;arm64-v8a' >/dev/null
+          DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
+          gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
+          echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
+
+      - name: Build first-stage ramdisk with packaged ranchu fstab
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR="$ANDROID_DIR"
+          START=$(sgdisk -i 1 "$DIR/vendor.img" | awk '/First sector:/ {print $3}')
+          END=$(sgdisk -i 1 "$DIR/vendor.img" | awk '/Last sector:/ {print $3}')
+          dd if="$DIR/vendor.img" of=/tmp/vendor-p1.img bs=512 skip="$START" count="$((END-START+1))" status=none
+          debugfs -R 'dump /etc/fstab.ranchu /tmp/fstab.ranchu' /tmp/vendor-p1.img >/dev/null 2>&1
+          test -s /tmp/fstab.ranchu
+          sudo rm -rf /tmp/ramdisk-root && sudo mkdir /tmp/ramdisk-root
+          sudo bash -c "cd /tmp/ramdisk-root && gzip -dc '$DIR/ramdisk.img' | cpio -idm --quiet"
+          sudo cp /tmp/fstab.ranchu /tmp/ramdisk-root/fstab.ranchu
+          sudo bash -c 'cd /tmp/ramdisk-root && find . -print0 | cpio --null -o --format=newc --quiet | gzip -9 > /tmp/ramdisk-test.img'
+          sudo chown "$USER":"$(id -gn)" /tmp/ramdisk-test.img
+          grep -nE 'system|vendor|product|system_ext|/data|/metadata' /tmp/fstab.ranchu | tee /tmp/fstab.txt
+
+      - name: Build official writable data and cache images
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The packaged userdata.img is only the emulator seed placeholder. The official launcher expands it.
+          truncate -s 4G /tmp/userdata-qemu.img
+          mkfs.ext4 -F -L data -O ^64bit,^metadata_csum -b 4096 -I 256 -E lazy_itable_init=0,lazy_journal_init=0 /tmp/userdata-qemu.img >/dev/null
+          truncate -s 66M /tmp/cache.img
+          mkfs.ext4 -F -L cache -O ^64bit,^metadata_csum -b 4096 -I 256 -E lazy_itable_init=0,lazy_journal_init=0 /tmp/cache.img >/dev/null
+          sgdisk -p "$ANDROID_DIR/system.img" | tee /tmp/system-gpt.txt
+          sgdisk -p "$ANDROID_DIR/encryptionkey.img" | tee /tmp/encryption-gpt.txt
+
+      - name: Boot exact ARM64 emulator storage order
+        shell: bash
+        run: |
+          set +e
+          Q=(qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 4096 -smp 4 -accel tcg -nographic -no-reboot -kernel /tmp/android-Image -initrd /tmp/ramdisk-test.img)
+          add(){ local f="$1" id="$2" ro="$3"; local o="if=none,file=$f,format=raw,id=$id"; [ "$ro" = 1 ] && o="$o,readonly=on"; Q+=( -drive "$o" -device "virtio-blk-device,drive=$id" ); }
+          # AOSP aosp-emu-30 ARM64 order. ARM enumeration reverses CLI order:
+          # vendor, encryption, userdata, cache, system -> vde, vdd, vdc, vdb, vda.
+          add "$ANDROID_DIR/vendor.img" vendor 1
+          add "$ANDROID_DIR/encryptionkey.img" encrypt 0
+          add /tmp/userdata-qemu.img userdata 0
+          add /tmp/cache.img cache 0
+          add "$ANDROID_DIR/system.img" system 1
+          CMD='console=ttyAMA0 earlycon=pl011,0x09000000 loglevel=8 ignore_loglevel androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive androidboot.init_log_level=7 androidboot.boot_devices=a003600.virtio_mmio root=/dev/ram0 rw qemu=1 androidboot.qemu=1 androidboot.serialno=ANTHARESOFFICIAL'
+          Q+=( -append "$CMD" )
+          printf 'ARG=%q\n' "${Q[@]}" > /tmp/qemu-argv.txt
+          timeout 180 "${Q[@]}" > /tmp/android-qemu.log 2>&1
+          RC=$?
+          set -e
+          grep -E 'fstab|first stage|FirstStage|super|by-name|metadata|/metadata|/data|dm-|logical|init second stage|zygote|Failed to|FATAL|InitFatalReboot|received signal|EXT4-fs' /tmp/android-qemu.log | tail -1000 > /tmp/checkpoints.txt || true
+          cat /tmp/checkpoints.txt
+          SECOND=$(grep -c 'init second stage started' /tmp/android-qemu.log || true)
+          SUPER_ERR=$(grep -c 'partition(s) not found.*super' /tmp/android-qemu.log || true)
+          META_ERR=$(grep -c 'partition(s) not found.*metadata' /tmp/android-qemu.log || true)
+          DATA=$(grep -cE 'EXT4-fs \(vdc\): mounted|target=/data.*=0' /tmp/android-qemu.log || true)
+          echo "QEMU_RC=$RC SECOND=$SECOND SUPER_ERR=$SUPER_ERR META_ERR=$META_ERR DATA=$DATA"
+          if [ "$SECOND" -gt 0 ]; then
+            echo ARM64_OFFICIAL_STORAGE_FIRST_STAGE=PASS
+            exit 0
+          fi
+          echo ARM64_OFFICIAL_STORAGE_FIRST_STAGE=FAIL
+          exit 1
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-official-storage-${{ github.run_id }}
+          path: |
+            /tmp/android-qemu.log
+            /tmp/checkpoints.txt
+            /tmp/qemu-argv.txt
+            /tmp/fstab.txt
+            /tmp/system-gpt.txt
+            /tmp/encryption-gpt.txt
+          if-no-files-found: warn
+          retention-days: 3

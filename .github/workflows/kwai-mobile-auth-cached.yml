@@ -1,0 +1,205 @@
+name: Kwai Manual Auth Cached
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/kwai-mobile-auth-cached.yml'
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+env:
+  ANTHARES_CONTROL_URL: https://anthares-control.anthares1.workers.dev
+  KWAI_EXPECTED_ACCOUNT: lucasrosalem
+  KWAI_SESSION_FILE: kwai-session.enc
+  KWAI_AUTH_STRATEGY: mobile_only
+
+jobs:
+  manual-auth:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      REMOTE_USER: anthares
+      KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore proven slim AVD
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/kwai-speed.avd
+            ~/.android/avd/kwai-speed.ini
+          key: kwai-speed-avd-direct-slim-android35-v4
+          fail-on-cache-miss: true
+
+      - name: Restore proven Android 35 image
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: kwai-speed-android35-google-apis-x86_64-v1
+          fail-on-cache-miss: true
+
+      - name: Restore proven emulator binary
+        uses: actions/cache/restore@v4
+        with:
+          path: /usr/local/lib/android/sdk/emulator
+          key: kwai-speed-emulator-ubuntu24-v1
+          fail-on-cache-miss: true
+
+      - name: Prepare remote display only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KWAI_PASSWORD"
+          sudo chmod 666 /dev/kvm
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb x11vnc novnc websockify nginx apache2-utils scrcpy
+          curl -fsSL --retry 5 --retry-all-errors -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x /tmp/cloudflared
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          test -x "$SDK/platform-tools/adb"
+          test -x "$SDK/emulator/emulator"
+          test -d "$SDK/system-images/android-35/google_apis/x86_64"
+          test -d "$HOME/.android/avd/kwai-speed.avd/snapshots/kwai-ready"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+          echo KWAI_CACHED_ANDROID_PREREQS=PASS
+
+      - name: Boot cached Android and install Kwai
+        id: initial
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export PATH="$SDK/platform-tools:$PATH"
+          export ANDROID_SDK_HOME="$HOME"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          nohup "$SDK/emulator/emulator" -avd kwai-speed -snapshot kwai-ready -no-snapshot-save -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 >/tmp/kwai-manual-emulator.log 2>&1 &
+          timeout 75 adb wait-for-device
+          timeout 75 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 1; done'
+          grep -F "Successfully loaded snapshot 'kwai-ready'" /tmp/kwai-manual-emulator.log >/dev/null
+          curl --fail --location --retry 5 --retry-all-errors --connect-timeout 15 --max-time 300 --output kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          rm -rf kwai-vault && mkdir kwai-vault
+          unzip -oq kwai-vault.zip -d kwai-vault
+          bash kwai_vault_install.sh
+          adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+          adb shell am force-stop com.kwai.video || true
+          adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+          sleep 5
+          test -n "$(adb shell pidof com.kwai.video 2>/dev/null | tr -d '\r' || true)"
+          python3 tools/kwai_login_surface_recovery.py >/tmp/kwai-manual-login-surface.log 2>&1 || true
+          python3 tools/kwai_android_login_entry.py auto >>/tmp/kwai-manual-login-surface.log 2>&1 || true
+          echo KWAI_MANUAL_ANDROID_READY=1
+
+      - name: Start protected manual login window
+        shell: bash
+        run: |
+          set -euo pipefail
+          REMOTE_PASSWORD="$(openssl rand -hex 18)"
+          echo "::add-mask::$REMOTE_PASSWORD"
+          echo "REMOTE_PASSWORD=$REMOTE_PASSWORD" >> "$GITHUB_ENV"
+          export DISPLAY=:99
+          nohup Xvfb :99 -screen 0 1280x800x24 -ac >/tmp/xvfb.log 2>&1 &
+          sleep 2
+          nohup scrcpy --no-audio --stay-awake --max-size=1080 --window-title='Kwai Authentication' >/tmp/scrcpy.log 2>&1 &
+          sleep 4
+          nohup x11vnc -display :99 -forever -shared -nopw -localhost -rfbport 5900 >/tmp/x11vnc.log 2>&1 &
+          nohup websockify --web=/usr/share/novnc 6081 127.0.0.1:5900 >/tmp/websockify.log 2>&1 &
+          sudo htpasswd -bc /etc/nginx/.kwai-htpasswd "$REMOTE_USER" "$REMOTE_PASSWORD" >/dev/null
+          sudo tee /etc/nginx/sites-available/default >/dev/null <<'NGINX'
+          server {
+            listen 6080;
+            server_name _;
+            auth_basic "Anthares Kwai authentication";
+            auth_basic_user_file /etc/nginx/.kwai-htpasswd;
+            location / {
+              proxy_pass http://127.0.0.1:6081;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+              proxy_set_header Host $host;
+              proxy_read_timeout 3600;
+            }
+          }
+          NGINX
+          sudo nginx -t
+          sudo systemctl restart nginx
+          nohup /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 >/tmp/cloudflared.log 2>&1 &
+          URL=''
+          for _ in $(seq 1 60); do
+            URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | tail -1 || true)"
+            [ -n "$URL" ] && break
+            sleep 2
+          done
+          test -n "$URL"
+          READY=0
+          for _ in $(seq 1 30); do
+            unauth="$(curl -s --connect-timeout 4 -o /dev/null -w '%{http_code}' "$URL/vnc.html" || true)"
+            auth="$(curl -s --connect-timeout 4 -u "$REMOTE_USER:$REMOTE_PASSWORD" -o /dev/null -w '%{http_code}' "$URL/vnc.html" || true)"
+            if [ "$unauth" = 401 ] && [ "$auth" = 200 ]; then READY=1; break; fi
+            sleep 2
+          done
+          test "$READY" = 1
+          python3 - "$URL" "$REMOTE_USER" "$REMOTE_PASSWORD" > kwai-mobile-auth-access.json <<'PY'
+          import datetime,json,sys
+          expires=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(minutes=22)).isoformat()
+          print(json.dumps({"url":sys.argv[1]+"/vnc.html?autoconnect=1&resize=scale","username":sys.argv[2],"password":sys.argv[3],"expires_at":expires}))
+          PY
+          chmod 600 kwai-mobile-auth-access.json
+          echo KWAI_MANUAL_TUNNEL_READY=1
+
+      - name: Publish temporary private access bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-mobile-auth-access-${{ github.run_id }}
+          path: kwai-mobile-auth-access.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Wait for manual Kwai login
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS+1200))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            set +e
+            KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py >/tmp/kwai-manual-proof.txt 2>&1
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ] && grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/kwai-manual-proof.txt && grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/kwai-manual-proof.txt; then
+              echo KWAI_MANUAL_IDENTITY_CONFIRMED=1
+              exit 0
+            fi
+            sleep 8
+          done
+          echo KWAI_MANUAL_AUTH_TIMEOUT=1
+          exit 72
+
+      - name: Seal verified session in private vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee kwai-mobile-auth-proof.txt
+          grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' kwai-mobile-auth-proof.txt
+          grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-mobile-auth-proof.txt
+          bash kwai_session_state.sh save | tee kwai-mobile-session-save.txt
+          test -s kwai-session.enc
+          python3 tools/kwai_session_vault_client.py push --path kwai-session.enc
+          echo KWAI_MANUAL_SESSION_STORED=1
+
+      - name: Upload privacy-safe proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-mobile-auth-proof-${{ github.run_id }}
+          path: |
+            kwai-mobile-auth-proof.txt
+            kwai-mobile-session-save.txt
+            /tmp/kwai-manual-login-surface.log
+            /tmp/kwai-manual-emulator.log
+          if-no-files-found: warn
+          retention-days: 2

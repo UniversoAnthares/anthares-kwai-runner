@@ -1,0 +1,73 @@
+name: Anthares ARM64 Alternate Kernel Storage Proof
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/anthares-arm64-alternate-kernel-proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  storage:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 12
+    steps:
+      - name: Install ARM64 kernel and build GPT disk plus initramfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm linux-image-virtual busybox-static cpio gzip gdisk >/dev/null
+          KERNEL="$(find /boot -maxdepth 1 -name 'vmlinuz-*' | sort -V | tail -1)"
+          test -s "$KERNEL"
+          echo "HOST_KERNEL=$KERNEL"
+          file "$KERNEL"
+          if sudo gzip -t "$KERNEL" 2>/dev/null; then sudo gzip -dc "$KERNEL" > /tmp/arm64-Image; else sudo cp "$KERNEL" /tmp/arm64-Image; fi
+          sudo chown "$(id -u):$(id -g)" /tmp/arm64-Image
+          file /tmp/arm64-Image
+          truncate -s 64M /tmp/storage-gpt.img
+          sgdisk -og -n 1:2048:+8M -t 1:8300 -c 1:super /tmp/storage-gpt.img >/dev/null
+          sgdisk -p /tmp/storage-gpt.img
+          mkdir -p /tmp/proof-root/{bin,proc,sys,dev}
+          cp "$(command -v busybox)" /tmp/proof-root/bin/busybox
+          cat > /tmp/proof-root/init <<'SH'
+          #!/bin/busybox sh
+          /bin/busybox mount -t proc proc /proc
+          /bin/busybox mount -t sysfs sysfs /sys
+          /bin/busybox mount -t devtmpfs devtmpfs /dev || true
+          /bin/busybox mdev -s || true
+          /bin/busybox sleep 3
+          echo '=== STORAGE_PROOF_BEGIN ==='
+          /bin/busybox cat /proc/cmdline
+          /bin/busybox ls -l /sys/class/block
+          for f in /sys/class/block/*/uevent; do [ -f "$f" ] && /bin/busybox cat "$f"; done
+          echo '=== STORAGE_PROOF_END ==='
+          /bin/busybox poweroff -f || true
+          while true; do /bin/busybox sleep 30; done
+          SH
+          chmod 755 /tmp/proof-root/init
+          (cd /tmp/proof-root && find . -print0 | cpio --null -o --format=newc --quiet | gzip -9 > /tmp/proof-initrd.img)
+      - name: Prove QEMU GPT storage discovery with alternate kernel
+        shell: bash
+        run: |
+          set +e
+          timeout 70 qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 2048 -smp 2 -accel tcg -nographic -no-reboot -kernel /tmp/arm64-Image -initrd /tmp/proof-initrd.img -drive if=none,file=/tmp/storage-gpt.img,format=raw,id=disk0 -device virtio-blk-device,drive=disk0 -append 'console=ttyAMA0 earlycon=pl011,0x09000000 loglevel=5 rdinit=/init' > /tmp/storage-proof.log 2>&1
+          rc=$?
+          set -e
+          echo "QEMU_EXIT=$rc"
+          sed -n '/=== STORAGE_PROOF_BEGIN ===/,/=== STORAGE_PROOF_END ===/p' /tmp/storage-proof.log | tee /tmp/storage-proof.txt
+          grep -q '=== STORAGE_PROOF_END ===' /tmp/storage-proof.txt
+          grep -Eq 'DEVNAME=vda1|DEVNAME=vdb1' /tmp/storage-proof.txt
+          echo 'ARM64_ALTERNATE_KERNEL_GPT_STORAGE=PASS'
+      - name: Preserve boot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-alternate-kernel-storage-${{ github.run_id }}
+          path: |
+            /tmp/storage-proof.log
+            /tmp/storage-proof.txt
+          if-no-files-found: warn
+          retention-days: 3

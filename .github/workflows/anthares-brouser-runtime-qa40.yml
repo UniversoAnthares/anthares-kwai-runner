@@ -1,0 +1,17 @@
+name: Anthares-browser - 40 Runtime QA (manual fallback only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retired:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Explain retirement
+        run: |
+          echo 'GitHub-hosted runners are retired from automatic Anthares-browser runtime QA.'
+          echo 'Primary: CircleCI. Secondary: Cirrus CI. Tertiary: Bitrise.'
+          echo 'Canonical test: ci/shared/anthares-browser-runtime-qa.sh'

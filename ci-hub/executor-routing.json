@@ -1,0 +1,105 @@
+{
+  "revision": "2026-10-12-circleci-retired-gitlab-github-android-r6",
+  "android_execution": {
+    "priority": [
+      "github_actions",
+      "bitrise",
+      "firebase_test_lab"
+    ],
+    "github_actions": "primary_android_executor_live_validation_required",
+    "failover": {
+      "failure_threshold": 1,
+      "queue_threshold_seconds": 90,
+      "order": [
+        "github_actions",
+        "bitrise",
+        "firebase_test_lab"
+      ]
+    }
+  },
+  "browser_execution": {
+    "priority": [
+      "gitlab",
+      "bitrise",
+      "render"
+    ],
+    "github_actions": "android_only_no_browser_default",
+    "redundancy": "gitlab_ci_primary_render_runtime_fallback_bitrise_pending_live_proof",
+    "failover": {
+      "failure_threshold": 1,
+      "queue_threshold_seconds": 90,
+      "order": [
+        "gitlab",
+        "bitrise",
+        "render"
+      ]
+    },
+    "shared_test": "ci/shared/anthares-browser-runtime-qa.sh",
+    "cases_per_ci_provider": 40,
+    "tertiary_note": "Render is runtime/browser-control fallback; Bitrise is not eligible until a live QA run passes. Browser QA 40-case parity on GitLab requires live proof."
+  },
+  "providers": {
+    "circleci": {
+      "status": "retired_per_owner_2026-10-12",
+      "active": false,
+      "android_eligible": false,
+      "browser_eligible": false
+    },
+    "bitrise": {
+      "android_rank": 2,
+      "browser_rank": 2,
+      "status": "standby_disabled_pending_live_runtime_proof",
+      "runtime": "Linux Android and Docker stack",
+      "config": "bitrise.yml",
+      "browser_qa_entrypoint": "ci/shared/anthares-browser-runtime-qa.sh",
+      "active": false,
+      "android_eligible": true,
+      "browser_eligible": true,
+      "interactive_manual_auth": true
+    },
+    "firebase_test_lab": {
+      "android_rank": 3,
+      "status": "standby_disabled_pending_live_proof_noninteractive_only",
+      "runtime": "Firebase Test Lab Spark Android device execution; automated fallback only",
+      "config": "ci/firebase-test-lab/run_kwai_robo.sh",
+      "interactive_manual_auth": false,
+      "active": false,
+      "android_eligible": true
+    },
+    "render": {
+      "browser_rank": 3,
+      "status": "active_runtime_fallback_not_equivalent_ci_proof",
+      "runtime": "independent hosted service/browser worker infrastructure",
+      "role": "tertiary runtime and browser-control fallback",
+      "android_eligible": false,
+      "active": true,
+      "browser_eligible": true
+    },
+    "cirrus": {
+      "status": "retired_provider_shutdown_2026-06-01",
+      "active": false,
+      "android_eligible": false,
+      "browser_eligible": false
+    },
+    "gitlab": {
+      "status": "active_verified_pipelines_2940767397_2940780957",
+      "active": true,
+      "android_eligible": false,
+      "browser_eligible": true,
+      "browser_rank": 1,
+      "runtime": "GitLab SaaS hosted Linux Docker CI",
+      "config": ".gitlab-ci.yml",
+      "browser_qa_entrypoint": "ci/shared/anthares-browser-runtime-qa.sh"
+    },
+    "github_actions": {
+      "status": "android_primary_hardware_acceleration_supported_live_kwai_probe_pending",
+      "active": true,
+      "android_eligible": true,
+      "browser_eligible": false,
+      "android_rank": 1,
+      "interactive_manual_auth": true,
+      "runtime": "GitHub-hosted ubuntu-24.04 /dev/kvm emulator",
+      "config": ".github/workflows/anthares-android-replacement.yml"
+    }
+  }
+}

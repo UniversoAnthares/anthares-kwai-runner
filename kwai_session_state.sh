@@ -14,6 +14,19 @@ PKG="com.kwai.video"
 
 log(){ printf '%s\n' "$*"; }
 
+resolve_session_key(){
+  if [ -n "${KWAI_SESSION_ENCRYPTION_KEY:-}" ]; then
+    return 0
+  fi
+  if [ -n "${KWAI_PASSWORD:-}" ]; then
+    export KWAI_SESSION_ENCRYPTION_KEY="$KWAI_PASSWORD"
+    log "KWAI_SESSION_KEY_LEGACY_FALLBACK=1"
+    return 0
+  fi
+  log "KWAI_SESSION_KEY_MISSING"
+  return 1
+}
+
 root_ready(){
   adb root >/dev/null 2>&1 || true
   adb wait-for-device
@@ -22,7 +35,7 @@ root_ready(){
 
 restore_state(){
   [ -s "$STATE_FILE" ] || { log "KWAI_SESSION_CACHE_MISS"; return 1; }
-  [ -n "${KWAI_SESSION_ENCRYPTION_KEY:-}" ] || { log "KWAI_SESSION_KEY_MISSING"; return 1; }
+  resolve_session_key || return 1
   root_ready || { log "KWAI_SESSION_ROOT_UNAVAILABLE"; return 1; }
   local archive staging
   archive="$(mktemp)"
@@ -68,9 +81,6 @@ PY
 }
 
 save_state(){
-  # Existing Stage4 workflow already writes a non-secret proof file for the
-  # winning identity candidate. Recover only that verified handle when the
-  # caller did not export KWAI_EXPECTED_ACCOUNT, then re-prove it live below.
   if [ -z "${KWAI_EXPECTED_ACCOUNT:-}" ]; then
     local candidate proof_file
     for candidate in lucasrosalem universo.anthares; do
@@ -95,7 +105,7 @@ save_state(){
     return 1
   fi
   rm -f "$proof"
-  [ -n "${KWAI_SESSION_ENCRYPTION_KEY:-}" ] || { log "KWAI_SESSION_KEY_MISSING"; return 1; }
+  resolve_session_key || return 1
   root_ready || { log "KWAI_SESSION_ROOT_UNAVAILABLE"; return 1; }
   local tmp archive
   tmp="${STATE_FILE}.tmp"

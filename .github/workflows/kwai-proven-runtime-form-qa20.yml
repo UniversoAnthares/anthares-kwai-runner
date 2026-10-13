@@ -1,4 +1,4 @@
-name: Kwai Proven Runtime Form QA20
+name: Kwai Proven Runtime Form QA20 R2
 
 on:
   workflow_dispatch:
@@ -65,7 +65,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kwai-form-qa20-${{ matrix.attempt }}-${{ github.run_id }}
+          name: kwai-form-qa20-r2-${{ matrix.attempt }}-${{ github.run_id }}
           path: |
             form-gate-home.txt
             form-gate-method.txt

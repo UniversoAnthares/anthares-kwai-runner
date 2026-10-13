@@ -24,7 +24,7 @@ Corrected edit/source policy v3: RESTORED/STAGED on isolated branch `UniversoAnt
 - Hard QA gate checks chronological metadata, live/video boundary, mandatory microcuts, adaptive layout/full-frame preservation, 1080x1920 output and duration before any publication.
 - `publish()` re-runs QA immediately before the real Post click.
 
-Current TikTok execution transport: replacement local transport CONSTRUCTED/STAGED via Anthares Local Executor v2. First queue round-trip is still pending proof. Legacy WinRemote/Desktop Commander/AI Commander are no longer architectural requirements after first successful supervisor heartbeat.
+Current TikTok execution transport: PROVEN through Anthares Local Executor v2. A dedicated clean clone at `D:\AntharesWork\anthares-local-executor` is self-healed by `anthares_executor_supervisor.py`; Startup persistence is installed for the Lucas session. Two independent GitHub queue `status` requests completed successfully, including one queued after the installation workflow had already finished, proving the daemon persists independently of the bootstrap runner.
 Identity blocker remains: before any next real publication, verify/choose the intended TikTok posting account because the recovered session is @lucasrosalem4 while prior target assumptions referenced @universo.anthares.
 Continuous social scheduler remains OFF.
 
@@ -54,16 +54,18 @@ Timeline ledger: FOUND — source-segment-history.json implementation recovered
 Source selection: FOUND — live-media metadata + source-history selection recovered
 Logging: RESTORED
 
-Anthares Local Executor replacement transport: RESTORED/STAGED
+Anthares Local Executor replacement transport: PROVEN
 - Control plane: immutable GitHub JSON queue on isolated `anthares-clipper:legacy-pc-rebuild` branch.
 - Executor: `anthares_local_executor_v2.py`, allowlist-only; no arbitrary shell command surface.
 - Self-healing supervisor: `anthares_executor_supervisor.py`, heartbeat/PID monitoring every 20s.
-- Persistence: verified Startup launcher at `C:\Users\Lucas\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Anthares-Local-Executor.cmd`.
-- PC code paths staged: `D:\AntharesWork\anthares-pc-legacy\anthares_local_executor_v2.py` and `anthares_executor_supervisor.py`.
+- Dedicated clean PC clone: `D:\AntharesWork\anthares-local-executor`; the shared reconstruction clone is no longer used by the daemon.
+- Persistence: Startup launcher at `C:\Users\Lucas\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Anthares-Local-Executor.cmd` points to the dedicated clone.
+- Persistent Git authentication: dedicated repo uses the Lucas GitHub CLI credential helper; private-branch fetch succeeded outside the checkout workspace.
 - Publish safety: publish actions require both queue `publish=true` and matching local guard file.
-- Smoke request pending: `c9c9bf17-67e2-4c07-90f1-724933aa62c6` action=`status`; no result yet.
-- Immediate MeshCentral launch outcome: UNKNOWN because command channel returned OK without observable heartbeat. Next Windows user logon will launch supervisor through Startup even if all three former executors remain unavailable.
-- Status: architecture CONSTRUCTED; end-to-end GitHub queue round-trip not yet PROVEN.
+- Bootstrap proof: workflow run `38317528263` completed successfully on self-hosted runner `DESKTOP-FTDK0HP`; supervisor pid 5956 and executor pid 9440 were live.
+- First queue proof: request `c9c9bf17-67e2-4c07-90f1-724933aa62c6` action=`status` returned `status=ok`, returncode 0.
+- Persistence proof: request `c6008e8c-0c81-4a43-8f3e-3489448064cd`, queued after the bootstrap workflow completed, independently returned `status=ok`, returncode 0 at 2026-10-12T22:36:30Z.
+- Former WinRemote/Desktop Commander/AI Commander transports are no longer architectural requirements.
 
 ## Archaeology
 Historical primary repository: FOUND — UniversoAnthares/anthares-clipper
@@ -83,6 +85,6 @@ TikTok self-hosted historical window: FOUND — bounded before commit 21ffa81 cl
 ## Coordination
 Canonical path: `UniversoAnthares/anthares-kwai-runner/test-hub/legacy-pc-uploader-rebuild/`
 SHARED-LOG.md: RESTORED/CANONICAL
-STATE.md: UPDATED with TikTok v3 corrections, current Kwai runtime progress, and Anthares Local Executor replacement transport
+STATE.md: UPDATED with TikTok v3 corrections, current Kwai runtime progress, and PROVEN Anthares Local Executor transport
 Functional reconstruction branch: `UniversoAnthares/anthares-clipper:legacy-pc-rebuild`
 Current rule: read canonical SHARED-LOG before any further investigation/change/test; append result after each step. Do not modify modern cloud systems for this reconstruction.

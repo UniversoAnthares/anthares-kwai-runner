@@ -1,0 +1,68 @@
+name: Anthares Android Userdata Forensics
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/anthares-userdata-forensics.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 8
+    steps:
+      - name: Install Android ARM64 image and forensic tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq unzip curl default-jre-headless gdisk e2fsprogs util-linux file >/dev/null
+          mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
+          curl -fLsS --retry 3 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
+          cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
+          export ANDROID_HOME="$HOME/android-sdk"
+          (yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null) || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-30;default;arm64-v8a" >/dev/null
+          echo "ANDROID_DIR=$ANDROID_HOME/system-images/android-30/default/arm64-v8a" >> "$GITHUB_ENV"
+      - name: Inspect and mount userdata safely
+        run: |
+          set +e
+          IMG="$ANDROID_DIR/userdata.img"
+          OUT=/tmp/userdata-forensics.txt
+          : > "$OUT"
+          echo '=== FILE ===' >> "$OUT"; file "$IMG" >> "$OUT" 2>&1
+          echo '=== SIZE ===' >> "$OUT"; stat -c '%s bytes' "$IMG" >> "$OUT" 2>&1
+          echo '=== BLKID WHOLE ===' >> "$OUT"; blkid -p "$IMG" >> "$OUT" 2>&1
+          echo '=== GPT ===' >> "$OUT"; sgdisk -p "$IMG" >> "$OUT" 2>&1
+          echo '=== DUMPE2FS WHOLE ===' >> "$OUT"; dumpe2fs -h "$IMG" >> "$OUT" 2>&1
+          mkdir -p /tmp/mnt
+          echo '=== MOUNT WHOLE RO ===' >> "$OUT"
+          sudo mount -o loop,ro "$IMG" /tmp/mnt >> "$OUT" 2>&1
+          RC=$?
+          echo "MOUNT_WHOLE_RC=$RC" >> "$OUT"
+          if [ $RC -eq 0 ]; then
+            echo '=== ROOT ===' >> "$OUT"; sudo find /tmp/mnt -maxdepth 2 -printf '%M %u:%g %p\n' | head -300 >> "$OUT" 2>&1
+            echo '=== TARGET DIRS ===' >> "$OUT"; for p in dalvik-cache misc_de misc_ce system system_de system_ce user_de user_ce; do sudo stat -c '%A %u:%g %n' "/tmp/mnt/$p" >> "$OUT" 2>&1 || true; done
+            sudo umount /tmp/mnt
+          fi
+          echo '=== LOOP PARTSCAN ===' >> "$OUT"
+          L=$(sudo losetup --find --show --partscan "$IMG")
+          echo "LOOP=$L" >> "$OUT"
+          lsblk -f "$L" >> "$OUT" 2>&1
+          for p in "${L}"p*; do
+            [ -e "$p" ] || continue
+            echo "=== PART $p ===" >> "$OUT"
+            blkid -p "$p" >> "$OUT" 2>&1
+            sudo mount -o ro "$p" /tmp/mnt >> "$OUT" 2>&1
+            PRC=$?; echo "MOUNT_PART_RC=$PRC" >> "$OUT"
+            if [ $PRC -eq 0 ]; then sudo find /tmp/mnt -maxdepth 2 -printf '%M %u:%g %p\n' | head -300 >> "$OUT" 2>&1; sudo umount /tmp/mnt; fi
+          done
+          sudo losetup -d "$L"
+          cat "$OUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: userdata-forensics
+          path: /tmp/userdata-forensics.txt
+          retention-days: 3

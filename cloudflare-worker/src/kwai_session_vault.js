@@ -92,3 +92,5 @@ export async function handleKwaiVaultSelftest(request,env,verifyGithubOidc){
   }
   return json({ok:false,error:"method_not_allowed"},405);
 }
+
+// Operational no-op: retriggered after the prior allowlist deployment was cancelled.

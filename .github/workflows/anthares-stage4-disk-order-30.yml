@@ -1,0 +1,147 @@
+name: Kwai Android ARM64 Disk Order Matrix 30
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/anthares-stage4-disk-order-30.yml'
+permissions:
+  contents: read
+jobs:
+  disk-order:
+    name: "case-${{ matrix.id }} order=${{ matrix.order }} profile=${{ matrix.profile }}"
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        include:
+          - {id: 1, order: MSVU, profile: base}
+          - {id: 2, order: MSUV, profile: base}
+          - {id: 3, order: MVSU, profile: base}
+          - {id: 4, order: MVUS, profile: base}
+          - {id: 5, order: MUSV, profile: base}
+          - {id: 6, order: MUVS, profile: base}
+          - {id: 7, order: MSVU, profile: qemu-mmio}
+          - {id: 8, order: MSUV, profile: qemu-mmio}
+          - {id: 9, order: MVSU, profile: qemu-mmio}
+          - {id: 10, order: MVUS, profile: qemu-mmio}
+          - {id: 11, order: MUSV, profile: qemu-mmio}
+          - {id: 12, order: MUVS, profile: qemu-mmio}
+          - {id: 13, order: MSVU, profile: pci-net}
+          - {id: 14, order: MSUV, profile: pci-net}
+          - {id: 15, order: MVSU, profile: pci-net}
+          - {id: 16, order: MVUS, profile: pci-net}
+          - {id: 17, order: MUSV, profile: pci-net}
+          - {id: 18, order: MUVS, profile: pci-net}
+          - {id: 19, order: MSVU, profile: qemu-pci-net}
+          - {id: 20, order: MSUV, profile: qemu-pci-net}
+          - {id: 21, order: MVSU, profile: qemu-pci-net}
+          - {id: 22, order: MVUS, profile: qemu-pci-net}
+          - {id: 23, order: MUSV, profile: qemu-pci-net}
+          - {id: 24, order: MUVS, profile: qemu-pci-net}
+          - {id: 25, order: MSVU, profile: qemu-mmio-net}
+          - {id: 26, order: MSUV, profile: qemu-mmio-net}
+          - {id: 27, order: MVSU, profile: qemu-mmio-net}
+          - {id: 28, order: MVUS, profile: qemu-mmio-net}
+          - {id: 29, order: MUSV, profile: qemu-mmio-net}
+          - {id: 30, order: MUVS, profile: qemu-mmio-net}
+    steps:
+      - name: Install runtime and Android ARM64 image
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-arm unzip curl default-jre-headless gdisk e2fsprogs util-linux >/dev/null
+          mkdir -p "$HOME/android-sdk/cmdline-tools/latest"
+          curl -fLsS --retry 2 -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+          unzip -q /tmp/cmdtools.zip -d /tmp/android-tools
+          cp -a /tmp/android-tools/cmdline-tools/. "$HOME/android-sdk/cmdline-tools/latest/"
+          export ANDROID_HOME="$HOME/android-sdk"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-30;default;arm64-v8a" >/dev/null
+          DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
+          gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
+          echo "ANDROID_DIR=$DIR" >> "$GITHUB_ENV"
+      - name: Build metadata GPT
+        run: |
+          set -euo pipefail
+          truncate -s 192M /tmp/meta.img
+          sgdisk -o /tmp/meta.img >/dev/null
+          sgdisk -n 1:2048:0 -c 1:metadata /tmp/meta.img >/dev/null
+          LOOP=$(sudo losetup --find --show --partscan /tmp/meta.img)
+          sleep 1
+          sudo mkfs.ext4 -F -L metadata "${LOOP}p1" >/dev/null
+          sudo losetup -d "$LOOP"
+      - name: Boot with selected disk order and strict data gate
+        run: |
+          set +e
+          ORDER='${{ matrix.order }}'
+          PROFILE='${{ matrix.profile }}'
+          RAM=4096
+          SMP=4
+          EXTRA='androidboot.selinux=permissive root=/dev/ram0 rw'
+          DEVICES=''
+          case "$PROFILE" in
+            qemu-mmio)
+              RAM=3072; SMP=2
+              EXTRA="$EXTRA qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30"
+              DEVICES='-device virtio-gpu-device'
+              ;;
+            pci-net)
+              DEVICES='-device virtio-gpu-pci -netdev user,id=n0 -device virtio-net-device,netdev=n0'
+              ;;
+            qemu-pci-net)
+              EXTRA="$EXTRA qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30"
+              DEVICES='-device virtio-gpu-pci -netdev user,id=n0 -device virtio-net-device,netdev=n0'
+              ;;
+            qemu-mmio-net)
+              RAM=3072; SMP=2
+              EXTRA="$EXTRA qemu=1 androidboot.qemu=1 androidboot.serialno=EMULATOR30"
+              DEVICES='-device virtio-gpu-device -netdev user,id=n0 -device virtio-net-device,netdev=n0'
+              ;;
+          esac
+          M='-drive if=none,file=/tmp/meta.img,format=raw,id=metadata -device virtio-blk-device,drive=metadata'
+          S="-drive if=none,file=$ANDROID_DIR/system.img,format=raw,readonly=on,id=system -device virtio-blk-device,drive=system"
+          V="-drive if=none,file=$ANDROID_DIR/vendor.img,format=raw,readonly=on,id=vendor -device virtio-blk-device,drive=vendor"
+          U="-drive if=none,file=$ANDROID_DIR/userdata.img,format=raw,id=userdata -device virtio-blk-device,drive=userdata"
+          DISKS=''
+          for C in $(echo "$ORDER" | grep -o .); do
+            case "$C" in M) DISKS="$DISKS $M";; S) DISKS="$DISKS $S";; V) DISKS="$DISKS $V";; U) DISKS="$DISKS $U";; esac
+          done
+          timeout 180 qemu-system-aarch64 -machine virt -cpu cortex-a72 -m "$RAM" -smp "$SMP" -accel tcg -nographic -no-reboot \
+            -kernel /tmp/android-Image -initrd "$ANDROID_DIR/ramdisk.img" \
+            $DISKS $DEVICES \
+            -append "console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu $EXTRA" \
+            > /tmp/android-qemu.log 2>&1
+          grep -E 'init second stage|metadata|Invalid ext4|/data/misc_de|dalvik-cache|app_process64|system_server|SystemServer|ActivityManager|PackageManager|surfaceflinger|zygote|BOOT_COMPLETED|boot_completed|Fatal signal|received signal' /tmp/android-qemu.log | tail -260 || true
+          echo "ORDER=$ORDER PROFILE=$PROFILE"
+          if grep -Eq 'BOOT_COMPLETED|sys.boot_completed.*1|SystemServer.*Start|ActivityManager.*system_server|PackageManagerService' /tmp/android-qemu.log; then
+            echo RESULT=FRAMEWORK_READY
+            exit 0
+          fi
+          if grep -q 'Error creating cache dir /data/dalvik-cache' /tmp/android-qemu.log; then
+            echo RESULT=DATA_NOT_MOUNTED_DALVIK
+            exit 1
+          fi
+          if grep -q "Can't open /data/misc_de" /tmp/android-qemu.log; then
+            echo RESULT=DATA_NOT_MOUNTED_MISC_DE
+            exit 1
+          fi
+          if grep -q 'Invalid ext4 superblock on .*/vdc' /tmp/android-qemu.log; then
+            echo RESULT=VDC_WRONG_DISK
+            exit 1
+          fi
+          if grep -q 'init second stage started' /tmp/android-qemu.log && grep -q "starting service 'zygote'" /tmp/android-qemu.log; then
+            echo RESULT=DATA_GATE_ADVANCED
+            exit 0
+          fi
+          echo RESULT=EARLY_FAIL
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: disk-order-case-${{ matrix.id }}
+          path: /tmp/android-qemu.log
+          if-no-files-found: warn
+          retention-days: 3
