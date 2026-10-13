@@ -110,7 +110,11 @@ jobs:
           curl -fsS -X POST -H "Authorization: Bearer $EXECUTOR_TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/kwai/probe > /tmp/result.json
           python - <<'PY'
           import json
-          assert json.load(open('/tmp/result.json')).get('ok') is True, 'kwai_probe_failed'
+          result=json.load(open('/tmp/result.json'))
+          assert result.get('ok') is True, 'kwai_probe_failed'
+          assert result.get('identity_verified') is True, 'kwai_identity_not_verified'
+          assert result.get('session_state') == 'authenticated', 'kwai_session_not_authenticated'
+          assert result.get('upload_surface_verified') is True, 'kwai_upload_surface_not_verified'
           PY
       - name: Save sanitized result
         if: always()
@@ -133,7 +137,7 @@ jobs:
         shell: bash
         run: |
           curl -sS -X POST -H "Authorization: Bearer $EXECUTOR_TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/browser/stop >/dev/null || true
-          if python -c "import json,sys;sys.exit(0 if json.load(open('/tmp/result.json')).get('ok') else 1)" 2>/dev/null; then curl -sS -X POST -H "Authorization: Bearer $EXECUTOR_TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/profile/snapshot >/dev/null || true; fi
+          if python -c "import json,sys;r=json.load(open('/tmp/result.json'));sys.exit(0 if r.get('identity_verified') is True and r.get('session_state') == 'authenticated' and r.get('upload_surface_verified') is True else 1)" 2>/dev/null; then curl -sS -X POST -H "Authorization: Bearer $EXECUTOR_TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/profile/snapshot >/dev/null || true; fi
       - name: Upload sanitized result artifact
         if: always()
         uses: actions/upload-artifact@v4
