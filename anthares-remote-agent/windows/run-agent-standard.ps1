@@ -3,9 +3,9 @@ $root = 'C:\ProgramData\AntharesRemoteAgent'
 . (Join-Path $root 'agent-env.ps1')
 
 $env:ANTHARES_DEVICE_ID = 'DESKTOP-FTDK0HP'
-$primary = 'https://anthares-ara-control.onrender.com'
-$secondary = 'https://anthares-ara-infra-canary-v2.onrender.com'
-$tertiary = 'https://anthares-ara-backup.anthares1.workers.dev'
+$primary = 'https://anthares-ara-backup.anthares1.workers.dev'
+$secondary = 'https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run'
+$tertiary = 'https://anthares-ara-control.onrender.com'
 $exe = Join-Path $root 'anthares-remote-agent-standard.exe'
 $stdout = Join-Path $root 'agent-standard.stdout.log'
 $stderr = Join-Path $root 'agent-standard.stderr.log'
