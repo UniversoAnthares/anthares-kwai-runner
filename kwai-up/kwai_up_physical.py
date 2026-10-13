@@ -83,8 +83,10 @@ def online_devices(raw: str) -> list[str]:
 
 def choose_serial(raw: str, requested: str = "") -> str:
     devices = online_devices(raw)
-    if requested and requested in devices:
-        return requested
+    if requested:
+        if requested in devices:
+            return requested
+        raise ku.KwaiUpError(f"adb-serial-stale:{requested}:online={len(devices)}")
     network = [d for d in devices if ":" in d and not d.startswith("127.")]
     if len(network) == 1:
         return network[0]
@@ -134,11 +136,8 @@ class PhysicalADB(ku.ADB):
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=15,
         )
         if probe.returncode == 0:
-            try:
-                self.serial = choose_serial(probe.stdout, self.serial)
-            except ku.KwaiUpError:
-                # A stale DHCP address can be replaced by the unique non-loopback TCP device.
-                self.serial = choose_serial(probe.stdout, "")
+            # Fail closed: never redirect an authenticated publication to a different device.
+            self.serial = choose_serial(probe.stdout, self.serial)
 
     def run(self, *args: str, timeout: int = 45, check: bool = True) -> str:
         last = ""
