@@ -46,16 +46,29 @@ jobs:
           print('COOKIE_COUNT='+str(d.get('cookie_count',0)))
           print('LOCAL_STORAGE_COUNT='+str(d.get('local_storage_count',0)))
           print('RENDER_SOURCE_AUTH_EVIDENCE='+json.dumps(safe,separators=(',',':')))
+          raw=open('/tmp/reserva-capsule.json','rb').read()
+          size=3000
+          parts=[raw[i:i+size] for i in range(0,len(raw),size)]
+          assert 1 <= len(parts) <= 8
+          for i,p in enumerate(parts): open(f'/tmp/reserva-capsule-{i}','wb').write(p)
+          open('/tmp/reserva-capsule-count','w').write(str(len(parts)))
+          print('CAPSULE_CHUNKS='+str(len(parts)))
           PY
-      - name: Store encrypted capsule only inside Cloudflare
+      - name: Store encrypted capsule chunks only inside Cloudflare
         shell: bash
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           cd anthares-reserva-browser
           npm install --no-audit --no-fund >/dev/null
-          cat /tmp/reserva-capsule.json | npx wrangler secret put RESERVA_KWAI_CAPSULE >/dev/null
-          rm -f /tmp/reserva-capsule.json
+          count=$(cat /tmp/reserva-capsule-count)
+          for i in $(seq 0 $((count-1))); do
+            cat "/tmp/reserva-capsule-$i" | npx wrangler secret put "RESERVA_KWAI_CAPSULE_$i" >/dev/null
+          done
+          for i in $(seq "$count" 7); do
+            printf '' | npx wrangler secret put "RESERVA_KWAI_CAPSULE_$i" >/dev/null || true
+          done
+          rm -f /tmp/reserva-capsule.json /tmp/reserva-capsule-* /tmp/reserva-capsule-count
           npx wrangler deploy >/dev/null
           echo CAPSULE_STORED=1
       - name: Prove restored Kwai session without exposing credentials
@@ -63,13 +76,13 @@ jobs:
         run: |
           set -euo pipefail
           BASE='https://anthares-reserva-browser.anthares1.workers.dev'
-          sleep 30
+          sleep 35
           code=000
           for i in $(seq 1 6); do
             code=$(curl -sS --max-time 70 -o /tmp/auth-proof.json -w '%{http_code}' "$BASE/_auth_selftest" || true)
             [ "$code" = 200 ] && break
             echo "AUTH_PROBE_RETRY=$code"
-            sleep 15
+            sleep 20
           done
           python - "$code" <<'PY'
           import json,sys
