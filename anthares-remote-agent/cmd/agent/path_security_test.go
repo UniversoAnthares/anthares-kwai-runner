@@ -84,3 +84,20 @@ func TestPathWithinCaseSensitivity(t *testing.T) {
  }
  _ = cfg
 }
+
+func TestSecurePathRejectsFileAsAncestor(t *testing.T) {
+ cfg,root:=testConfig(t)
+ ancestor:=filepath.Join(root,"not-a-directory")
+ if err:=os.WriteFile(ancestor,[]byte("file"),0600);err!=nil{t.Fatal(err)}
+ if _,err:=securePath(cfg,filepath.Join(ancestor,"child.txt"));err==nil{
+  t.Fatal("regular file accepted as directory ancestor")
+ }
+}
+
+func TestFileRemoveRefusesAllowedRootAlternateCase(t *testing.T) {
+ if runtime.GOOS!="windows"{t.Skip("Windows case-insensitive filesystem test")}
+ cfg,root:=testConfig(t)
+ upper:=strings.ToUpper(root)
+ if _,err:=fileRemove(cfg,upper,true);err==nil{t.Fatal("alternate case bypassed allowed-root guard")}
+ if _,err:=os.Stat(root);err!=nil{t.Fatalf("allowed root deleted: %v",err)}
+}
