@@ -11,7 +11,7 @@ COPY anthares-executor/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY anthares-executor/app.py ./app.py
 COPY anthares-executor/supervisor.sh ./supervisor.sh
-COPY anthares-brouser/profile_store.py ./profile_store.py
+COPY anthares-executor/profile_store.py ./profile_store.py
 RUN chmod 0755 ./supervisor.sh \
  && mkdir -p /data/chrome-profile /run/anthares-executor
 
