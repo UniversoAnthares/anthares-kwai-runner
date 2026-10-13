@@ -1,0 +1,12 @@
+{
+  "authenticated_status_checked": false,
+  "authenticated_status_ok": false,
+  "browser_binding": true,
+  "checked_at": "2026-10-13T16:36:36.392033+00:00",
+  "deploy_performed": false,
+  "deployment_url": "https://anthares-reserva-browser.anthares1.workers.dev",
+  "health_ok": true,
+  "provider": "cloudflare",
+  "render_required": false,
+  "version": "2026-10-13-reserva-browser-v4"
+}
