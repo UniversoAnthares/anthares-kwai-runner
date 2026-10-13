@@ -21,6 +21,7 @@ jobs:
     env:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      ARA_DEVICE_HASH_DESKTOP_FTDK0HP: ${{ secrets.ARA_DEVICE_HASH_DESKTOP_FTDK0HP }}
     steps:
       - name: Create PostgreSQL, inject durable config, rebuild, and prove restart recovery
         shell: bash
@@ -148,7 +149,8 @@ jobs:
               "PORT": "10000",
               "ARA_SHARED": shared,
               "ARA_DATABASE_URL": postgres_uri,
-              "DATABASE_URL": postgres_uri
+              "DATABASE_URL": postgres_uri,
+              "ARA_DEVICE_HASH_DESKTOP_FTDK0HP": os.getenv("ARA_DEVICE_HASH_DESKTOP_FTDK0HP", "")
           }
           updated = api("POST", f"/projects/{project}/services/{service_id}/runtime-environment",
                         {"runtimeEnvironment": runtime, "runtimeFiles": {}})
