@@ -29,6 +29,12 @@ class StoreTests(unittest.TestCase):
         self.clock.add(46)
         self.assertFalse(self.s.status("pc", 45)["connected"])
 
+    def test_job_id_collision_does_not_overwrite_existing_job(self):
+        original = self.s.enqueue("pc", "ping", job_id="fixed-id")
+        with self.assertRaisesRegex(RuntimeError, "job id collision"):
+            self.s.enqueue("pc", "shell", {"command": "example"}, job_id="fixed-id")
+        self.assertEqual(self.s.get_job("pc", "fixed-id"), original)
+
     def test_idempotent_enqueue(self):
         a=self.s.enqueue("pc","ping",idempotency_key="same")
         b=self.s.enqueue("pc","ping",idempotency_key="same")
