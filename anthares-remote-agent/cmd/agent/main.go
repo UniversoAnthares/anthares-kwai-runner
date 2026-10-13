@@ -240,7 +240,7 @@ func postResultRetry(cfg Config, result Result) error {
     var last error
     for attempt:=0; attempt<5; attempt++ {
         if err:=postResult(cfg,result); err==nil { return nil } else { last=err }
-        time.Sleep(time.Duration(1<<attempt)*time.Second)
+        if attempt < 4 { time.Sleep(time.Duration(1<<attempt)*time.Second) }
     }
     return last
 }
