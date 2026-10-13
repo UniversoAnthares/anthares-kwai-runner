@@ -3,8 +3,9 @@
 This browser is a dedicated headless Chromium process inside the Render Linux
 instance. It never attaches to a host/user desktop. Playwright storage state is
 encrypted locally and persisted in the dedicated /browser-state slot of the
-Cloudflare durable vault using the already-established Render->vault signing
-identity derived from X_WORKER_TOKEN.
+Cloudflare durable vault. The browser-vault signing/encryption identity is
+deterministically derived from ARA_SHARED, so no additional production secret
+is required; only its public P-256 key is exposed to the vault for verification.
 """
 from __future__ import annotations
 
@@ -13,9 +14,13 @@ import hashlib
 import json
 import os
 import threading
+import time
 from typing import Any
 
 import requests
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from playwright.sync_api import sync_playwright
 
@@ -31,10 +36,11 @@ VAULT_URL = os.getenv(
     "ANTHARES_BROWSER_STATE_VAULT_URL",
     "https://anthares-x-vault.anthares1.workers.dev/browser-state",
 )
+P256_ORDER = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
 
 
-def _token() -> str:
-    return os.getenv("X_WORKER_TOKEN", "")
+def _secret() -> str:
+    return os.getenv("ARA_SHARED", "")
 
 
 def _b64(data: bytes) -> str:
@@ -45,11 +51,40 @@ def _b64d(text: str) -> bytes:
     return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
 
 
+def _derive_signer():
+    secret = _secret()
+    if not secret:
+        raise RuntimeError("remote shared identity unavailable")
+    raw = hashlib.sha256(("browser-vault-sign:" + secret).encode()).digest()
+    scalar = int.from_bytes(raw, "big") % (P256_ORDER - 1) + 1
+    return ec.derive_private_key(scalar, ec.SECP256R1())
+
+
+def public_jwk() -> dict[str, Any]:
+    public = _derive_signer().public_key().public_numbers()
+    return {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": _b64(public.x.to_bytes(32, "big")),
+        "y": _b64(public.y.to_bytes(32, "big")),
+        "ext": True,
+    }
+
+
 def _enc_key() -> bytes:
-    token = _token()
-    if not token:
-        raise RuntimeError("browser vault signing identity unavailable")
-    return hashlib.sha256(("browser-state:" + token).encode()).digest()
+    secret = _secret()
+    if not secret:
+        raise RuntimeError("remote shared identity unavailable")
+    return hashlib.sha256(("browser-vault-enc:" + secret).encode()).digest()
+
+
+def _signature(body: str) -> tuple[str, str]:
+    ts = str(int(time.time() * 1000))
+    digest = hashlib.sha256(body.encode()).hexdigest()
+    der = _derive_signer().sign((ts + "." + digest).encode(), ec.ECDSA(hashes.SHA256()))
+    r, s = decode_dss_signature(der)
+    raw = r.to_bytes(32, "big") + s.to_bytes(32, "big")
+    return ts, _b64(raw)
 
 
 def _encrypt_state(state: dict[str, Any]) -> str:
@@ -75,12 +110,10 @@ def _decrypt_state(ciphertext: str) -> dict[str, Any]:
 
 
 def _signed_headers(body: str) -> dict[str, str]:
-    import x_render_worker_v3 as xworker
-
-    ts, sig = xworker._signature(body)
+    ts, sig = _signature(body)
     headers = {
-        "X-Anthares-Timestamp": ts,
-        "X-Anthares-Signature": sig,
+        "X-Anthares-Browser-Timestamp": ts,
+        "X-Anthares-Browser-Signature": sig,
     }
     if body:
         headers["Content-Type"] = "application/json"
@@ -88,7 +121,7 @@ def _signed_headers(body: str) -> dict[str, str]:
 
 
 def _vault_pull() -> dict[str, Any] | None:
-    if not _token():
+    if not _secret():
         return None
     r = requests.get(VAULT_URL, headers=_signed_headers(""), timeout=20)
     if r.status_code == 404:
@@ -109,7 +142,7 @@ def _context_state() -> dict[str, Any]:
 
 def _persist() -> bool:
     global _LAST_PERSIST_OK
-    if not _token() or _CONTEXT is None:
+    if not _secret() or _CONTEXT is None:
         _LAST_PERSIST_OK = False
         return False
     try:
@@ -155,6 +188,7 @@ def _ensure_browser():
             headless=True,
             args=[
                 "--disable-dev-shm-usage",
+                "--no-sandbox",
                 "--no-first-run",
                 "--no-default-browser-check",
                 "--disable-background-networking",
@@ -183,7 +217,7 @@ def health() -> dict[str, Any]:
             "headless": True,
             "chromium_running": True,
             "host_desktop_fallback": False,
-            "vault_enabled": bool(_token()),
+            "vault_enabled": bool(_secret()),
             "restore_status": _RESTORE_STATUS,
             "last_persist_ok": _LAST_PERSIST_OK,
             "url": page.url,
@@ -197,9 +231,10 @@ def health() -> dict[str, Any]:
             "headless": True,
             "chromium_running": False,
             "host_desktop_fallback": False,
-            "vault_enabled": bool(_token()),
+            "vault_enabled": bool(_secret()),
             "restore_status": _RESTORE_STATUS,
             "error": type(exc).__name__,
+            "error_detail": str(exc)[:1000],
         }
 
 
@@ -211,7 +246,7 @@ def browser_request(method: str, path: str, payload: dict[str, Any] | None = Non
             h = health()
             return None, {
                 "ok": True,
-                "version": "anthares-runtime-browser-local-v2",
+                "version": "anthares-runtime-browser-local-v3",
                 **h,
                 "title": page.title(),
             }, 200
@@ -282,4 +317,5 @@ def browser_request(method: str, path: str, payload: dict[str, Any] | None = Non
             "ok": False,
             "error": "browser_operation_failed",
             "detail": type(exc).__name__,
+            "error_detail": str(exc)[:1000],
         }, 500
