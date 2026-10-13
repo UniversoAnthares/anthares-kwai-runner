@@ -1,0 +1,106 @@
+name: ARA transient-outage resilience patch
+
+on:
+  push:
+    branches:
+      - feature/anthares-remote-agent
+    paths:
+      - '.github/workflows/ara-resilience-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - name: Patch the agent and validate it
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('anthares-remote-agent/cmd/agent/main.go')
+          s = p.read_text()
+          old = '''\tgo heartbeatLoop(cfg)
+\t// Replay previously persisted results before leasing new work.
+\tif err := replayEncryptedResults(cfg); err != nil {
+\t\tfmt.Fprintln(os.Stderr, "pending result replay error:", err)
+\t\tos.Exit(1)
+\t}
+'''
+          new = '''\tgo heartbeatLoop(cfg)
+\t// A transient control-plane outage must not terminate the agent. Keep any
+\t// encrypted pending results on disk and retry them while the process stays up.
+\tif err := replayEncryptedResults(cfg); err != nil {
+\t\tfmt.Fprintln(os.Stderr, "pending result replay deferred:", err)
+\t}
+\tgo resultReplayLoop(cfg)
+'''
+          if old not in s:
+              raise SystemExit('startup replay block not found')
+          s = s.replace(old, new, 1)
+          old = '''\t\t\tif err := postResultRetry(cfg, result); err != nil {
+\t\t\t\t// Keep the encrypted pending file for replay on next start.
+\t\t\t\tfmt.Fprintf(os.Stderr, "fatal result upload error job=%s: %v\\n", result.ID, err)
+\t\t\t\tos.Exit(1)
+\t\t\t}
+\t\t\tif err := os.Remove(filepath.Join(resultSpoolDir(cfg), result.ID+".pending")); err != nil {
+\t\t\t\tfmt.Fprintf(os.Stderr, "fatal result cleanup error job=%s: %v\\n", result.ID, err)
+\t\t\t\tos.Exit(1)
+\t\t\t}
+'''
+          new = '''\t\t\tif err := postResultRetry(cfg, result); err != nil {
+\t\t\t\t// The encrypted pending file remains durable. A background replay
+\t\t\t\t// loop will retry it without taking the device offline.
+\t\t\t\tfmt.Fprintf(os.Stderr, "result upload deferred job=%s: %v\\n", result.ID, err)
+\t\t\t\treturn
+\t\t\t}
+\t\t\tif err := os.Remove(filepath.Join(resultSpoolDir(cfg), result.ID+".pending")); err != nil {
+\t\t\t\t// A later replay is idempotent at the control plane, so cleanup
+\t\t\t\t// failure is recoverable and must not terminate the agent.
+\t\t\t\tfmt.Fprintf(os.Stderr, "result cleanup deferred job=%s: %v\\n", result.ID, err)
+\t\t\t}
+'''
+          if old not in s:
+              raise SystemExit('result delivery block not found')
+          s = s.replace(old, new, 1)
+          marker = '''func heartbeat(cfg Config) error {'''
+          insert = '''func resultReplayLoop(cfg Config) {
+\tticker := time.NewTicker(15 * time.Second)
+\tdefer ticker.Stop()
+\tfor range ticker.C {
+\t\tif err := replayEncryptedResults(cfg); err != nil {
+\t\t\tfmt.Fprintln(os.Stderr, "pending result replay deferred:", err)
+\t\t}
+\t}
+}
+
+'''
+          if marker not in s:
+              raise SystemExit('heartbeat marker not found')
+          s = s.replace(marker, insert + marker, 1)
+          s = s.replace('AntharesRemoteAgent/0.3"', 'AntharesRemoteAgent/0.3.1"', 1)
+          s = s.replace('"version": "0.3.0"', '"version": "0.3.1"', 1)
+          p.write_text(s)
+          PY
+          cd anthares-remote-agent
+          gofmt -w cmd/agent/main.go
+          go test ./... -count=1
+          go vet ./...
+      - name: Commit resilient agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add anthares-remote-agent/cmd/agent/main.go
+          git commit -m 'fix(ara): keep agent online across transient result upload failures'
+          git push origin HEAD:feature/anthares-remote-agent
