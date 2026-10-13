@@ -2,6 +2,22 @@ env:
   KWAI_VAULT_URL: https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
   KWAI_VAULT_SHA256: 96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543
 
+browser_runtime_task:
+  name: Anthares-browser runtime QA (Cirrus secondary)
+  compute_engine_instance:
+    image_project: cirrus-images
+    image: family/docker-kvm
+    platform: linux
+    nested_virtualization: true
+    cpu: 4
+    memory: 16G
+  timeout_in: 40m
+  browser_qa_script: |
+    set -Eeuo pipefail
+    export CI_PROVIDER=cirrus
+    docker info
+    ANTHARES_BROWSER_QA_CASES=40 bash ci/shared/anthares-browser-runtime-qa.sh
+
 kwai_android_task:
   name: Kwai Android executor (Cirrus secondary)
   container:
