@@ -35,6 +35,33 @@ def device_id():
     return request.headers.get("X-Anthares-Device", "").strip()
 
 
+def _valid_hash(value):
+    return len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _remember_device_hash(device, token_hash):
+    if not device or not _valid_hash(token_hash):
+        return
+    try:
+        with store.connection() as conn:
+            conn.execute(
+                """CREATE TABLE IF NOT EXISTS ara_device_auth(
+                     device_id TEXT PRIMARY KEY,
+                     token_hash TEXT NOT NULL,
+                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                   )"""
+            )
+            conn.execute(
+                """INSERT INTO ara_device_auth(device_id,token_hash,updated_at)
+                   VALUES(%s,%s,now())
+                   ON CONFLICT(device_id) DO UPDATE
+                   SET token_hash=excluded.token_hash, updated_at=now()""",
+                (device, token_hash),
+            )
+    except Exception:
+        app.logger.exception("failed to persist ARA device auth hash")
+
+
 def device_ok(device):
     if not device or any(
         c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
@@ -45,7 +72,7 @@ def device_ok(device):
         c if c.isalnum() else "_" for c in device.upper()
     )
     expected = os.getenv(env_key, "").strip().lower()
-    if not (len(expected) == 64 and all(c in "0123456789abcdef" for c in expected)):
+    if not _valid_hash(expected):
         cached = _HASH_CACHE.get(device)
         if cached and time.time() - cached[1] < _HASH_TTL:
             expected = cached[0]
@@ -53,9 +80,7 @@ def device_ok(device):
             try:
                 response = requests.get(f"{DEVICE_HASH_BASE}/{device}.sha256", timeout=6)
                 expected = response.text.strip().lower() if response.ok else ""
-                if len(expected) == 64 and all(
-                    c in "0123456789abcdef" for c in expected
-                ):
+                if _valid_hash(expected):
                     _HASH_CACHE[device] = (expected, time.time())
                 else:
                     expected = ""
@@ -63,7 +88,10 @@ def device_ok(device):
                 expected = ""
     got = bearer()
     actual = hashlib.sha256(got.encode()).hexdigest() if got else ""
-    return bool(expected and actual) and secrets.compare_digest(actual, expected)
+    valid = bool(expected and actual) and secrets.compare_digest(actual, expected)
+    if valid:
+        _remember_device_hash(device, actual)
+    return valid
 
 
 @app.get("/healthz")
@@ -83,8 +111,15 @@ def health():
 
 @app.get("/")
 def root():
-    """Expose the same readiness contract at the service root for generic probes."""
     return health()
+
+
+@app.get("/v1/device/auth-check")
+def auth_check():
+    device = device_id()
+    if not device_ok(device):
+        return jsonify(ok=False, error="unauthorized"), 401
+    return jsonify(ok=True)
 
 
 @app.post("/v1/device/heartbeat")
