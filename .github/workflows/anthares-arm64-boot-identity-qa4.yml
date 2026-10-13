@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        variant: [uuid_super, uuid_vbmeta, boot_devices, boot_device]
+        variant: [uuid_super, mmio600, mmio3c00, mmio300]
     steps:
       - name: Prepare Android 30 ARM64 package and QEMU
         shell: bash
@@ -48,7 +48,11 @@ jobs:
           dd if="$DIR/vendor.img" of=/tmp/vendor-p1.img bs=512 skip="$START" count="$((END-START+1))" status=none
           debugfs -R 'dump /etc/fstab.ranchu /tmp/fstab.ranchu' /tmp/vendor-p1.img >/dev/null 2>&1
           test -s /tmp/fstab.ranchu
-          cp "$DIR/ramdisk.img" /tmp/ramdisk-test.img
+          mkdir -p /tmp/ramdisk-root
+          gzip -dc "$DIR/ramdisk.img" > /tmp/ramdisk-original.cpio
+          (cd /tmp/ramdisk-root && cpio -idm --quiet --no-absolute-filenames < /tmp/ramdisk-original.cpio) || true
+          cp /tmp/fstab.ranchu /tmp/ramdisk-root/fstab.ranchu
+          (cd /tmp/ramdisk-root && find . -print0 | cpio --null -o --format=newc --quiet | gzip -9 > /tmp/ramdisk-test.img)
           SUPER_UUID=$(sgdisk -i 2 "$DIR/system.img" | awk '/Partition unique GUID:/ {print $4}')
           VBMETA_UUID=$(sgdisk -i 1 "$DIR/system.img" | awk '/Partition unique GUID:/ {print $4}')
           echo "SUPER_UUID=$SUPER_UUID" >> "$GITHUB_ENV"
@@ -83,9 +87,9 @@ jobs:
           CMD='console=ttyAMA0 earlycon=pl011,0x09000000 loglevel=8 ignore_loglevel androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive androidboot.init_log_level=7 androidboot.boot_devices=a003c00.virtio_mmio root=/dev/ram0 rw qemu=1 androidboot.qemu=1 androidboot.serialno=ANTHARESFSTAB'
           case '${{ matrix.variant }}' in
             uuid_super) CMD="$CMD androidboot.boot_part_uuid=$SUPER_UUID" ;;
-            uuid_vbmeta) CMD="$CMD androidboot.boot_part_uuid=$VBMETA_UUID" ;;
-            boot_devices) CMD="$CMD androidboot.boot_devices=a003c00.virtio_mmio,10000000.pci" ;;
-            boot_device) CMD="$CMD androidboot.boot_device=a003c00.virtio_mmio" ;;
+            mmio600) CMD="$CMD androidboot.boot_devices=a003600.virtio_mmio" ;;
+            mmio3c00) CMD="$CMD androidboot.boot_devices=a003c00.virtio_mmio" ;;
+            mmio300) CMD="$CMD androidboot.boot_devices=a003000.virtio_mmio" ;;
           esac
           echo "BOOT_IDENTITY_VARIANT=${{ matrix.variant }} SUPER_UUID=$SUPER_UUID VBMETA_UUID=$VBMETA_UUID"
           Q+=( -append "$CMD" )
