@@ -6,10 +6,21 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-TERMINAL = {"done", "failed", "expired"}
+FINAL = {"done", "failed", "expired"}
+SAFE_RETRY_TYPES = {
+    "ping", "system_info", "process_list", "clipboard_get",
+    "file_stat", "file_list", "file_read", "file_read_chunk",
+    "job_list", "job_status", "job_logs",
+}
+
 
 def utcnow():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def is_safe_retry(job_type):
+    return str(job_type or "") in SAFE_RETRY_TYPES
+
 
 class MemoryStore:
     """Reference implementation used by tests and as explicit dev fallback only."""
@@ -30,13 +41,16 @@ class MemoryStore:
 
     def status(self, device_id, freshness_seconds=45):
         with self._lock:
+            self._reap(device_id)
             hb = copy.deepcopy(self._devices.get(device_id))
             queued = sum(1 for jid in self._queue.get(device_id, [])
                          if self._jobs.get(jid, {}).get("status") == "queued")
+            uncertain = sum(1 for row in self._jobs.values()
+                            if row["device_id"] == device_id and row.get("status") == "uncertain")
         connected = bool(hb and self._now() - hb.get("_seen_epoch", 0) <= freshness_seconds)
         if hb:
             hb.pop("_seen_epoch", None)
-        return {"heartbeat": hb, "connected": connected, "queued": queued}
+        return {"heartbeat": hb, "connected": connected, "queued": queued, "uncertain": uncertain}
 
     def enqueue(self, device_id, job_type, args=None, timeout_seconds=30,
                 idempotency_key=None, job_id=None):
@@ -67,24 +81,28 @@ class MemoryStore:
             self._queue.setdefault(device_id, []).append(jid)
             return copy.deepcopy(row)
 
-    def _expire_and_requeue(self, device_id):
+    def _reap(self, device_id):
         now = self._now()
         for row in self._jobs.values():
-            if row["device_id"] != device_id or row["status"] in TERMINAL:
+            if row["device_id"] != device_id or row["status"] in FINAL or row["status"] == "uncertain":
                 continue
             if now >= row["expires_epoch"]:
                 row["status"] = "expired"
                 row["lease_until"] = None
-            elif row["status"] == "leased" and row.get("lease_until") and now >= row["lease_until"]:
-                row["status"] = "queued"
+                continue
+            if row["status"] == "leased" and row.get("lease_until") and now >= row["lease_until"]:
                 row["lease_until"] = None
-                if row["id"] not in self._queue.setdefault(device_id, []):
-                    self._queue[device_id].append(row["id"])
+                if is_safe_retry(row["type"]):
+                    row["status"] = "queued"
+                    if row["id"] not in self._queue.setdefault(device_id, []):
+                        self._queue[device_id].append(row["id"])
+                else:
+                    row["status"] = "uncertain"
 
     def lease_next(self, device_id, lease_seconds=35):
         lease_seconds = max(5, min(int(lease_seconds), 120))
         with self._lock:
-            self._expire_and_requeue(device_id)
+            self._reap(device_id)
             q = self._queue.setdefault(device_id, [])
             while q:
                 jid = q.pop(0)
@@ -102,9 +120,7 @@ class MemoryStore:
             row = self._jobs.get(job_id)
             if not row or row["device_id"] != device_id:
                 return None
-            if row["status"] in {"done", "failed"}:
-                return copy.deepcopy(row)
-            if row["status"] == "expired":
+            if row["status"] in FINAL:
                 return copy.deepcopy(row)
             row["result"] = copy.deepcopy(result or {})
             row["status"] = "done" if bool((result or {}).get("ok")) else "failed"
@@ -113,7 +129,7 @@ class MemoryStore:
 
     def get_job(self, device_id, job_id):
         with self._lock:
-            self._expire_and_requeue(device_id)
+            self._reap(device_id)
             row = self._jobs.get(job_id)
             return copy.deepcopy(row) if row and row["device_id"] == device_id else None
 
@@ -171,23 +187,26 @@ class PostgresStore:
             hb, seen = cur.fetchone()
             c.commit()
         hb = dict(hb)
-        hb["seen_at"] = seen.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
+        hb["seen_at"] = seen.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         return hb
 
     def status(self, device_id, freshness_seconds=45):
         with self._conn() as c, c.cursor() as cur:
+            self._reap(cur, device_id)
             cur.execute("SELECT heartbeat,seen_at FROM ara_devices WHERE device_id=%s", (device_id,))
             row = cur.fetchone()
             cur.execute("SELECT count(*) FROM ara_jobs WHERE device_id=%s AND status='queued'", (device_id,))
             queued = cur.fetchone()[0]
+            cur.execute("SELECT count(*) FROM ara_jobs WHERE device_id=%s AND status='uncertain'", (device_id,))
+            uncertain = cur.fetchone()[0]
             c.commit()
         if not row:
-            return {"heartbeat": None, "connected": False, "queued": queued}
+            return {"heartbeat": None, "connected": False, "queued": queued, "uncertain": uncertain}
         hb, seen = row
         hb = dict(hb)
-        hb["seen_at"] = seen.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
+        hb["seen_at"] = seen.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         connected = (datetime.now(timezone.utc) - seen).total_seconds() <= freshness_seconds
-        return {"heartbeat": hb, "connected": connected, "queued": queued}
+        return {"heartbeat": hb, "connected": connected, "queued": queued, "uncertain": uncertain}
 
     def enqueue(self, device_id, job_type, args=None, timeout_seconds=30,
                 idempotency_key=None, job_id=None):
@@ -213,21 +232,30 @@ class PostgresStore:
             c.commit()
             return row
 
+    def _reap(self, cur, device_id):
+        safe = list(SAFE_RETRY_TYPES)
+        cur.execute(
+            """UPDATE ara_jobs SET status='expired', lease_until=NULL
+               WHERE device_id=%s AND status IN ('queued','leased') AND expires_at<=now()""",
+            (device_id,),
+        )
+        cur.execute(
+            """UPDATE ara_jobs SET status='queued', lease_until=NULL
+               WHERE device_id=%s AND status='leased' AND lease_until<=now()
+                 AND expires_at>now() AND type=ANY(%s)""",
+            (device_id, safe),
+        )
+        cur.execute(
+            """UPDATE ara_jobs SET status='uncertain', lease_until=NULL
+               WHERE device_id=%s AND status='leased' AND lease_until<=now()
+                 AND expires_at>now() AND NOT (type=ANY(%s))""",
+            (device_id, safe),
+        )
+
     def lease_next(self, device_id, lease_seconds=35):
         lease_seconds = max(5, min(int(lease_seconds), 120))
         with self._conn() as c, c.cursor() as cur:
-            cur.execute(
-                """UPDATE ara_jobs SET
-                     status=CASE WHEN expires_at<=now() THEN 'expired' ELSE 'queued' END,
-                     lease_until=NULL
-                   WHERE device_id=%s AND status='leased' AND lease_until<=now()""",
-                (device_id,),
-            )
-            cur.execute(
-                """UPDATE ara_jobs SET status='expired', lease_until=NULL
-                   WHERE device_id=%s AND status IN ('queued','leased') AND expires_at<=now()""",
-                (device_id,),
-            )
+            self._reap(cur, device_id)
             cur.execute(
                 """SELECT id FROM ara_jobs
                    WHERE device_id=%s AND status='queued' AND expires_at>now()
@@ -257,7 +285,7 @@ class PostgresStore:
             if not found:
                 c.commit()
                 return None
-            if found[0] in TERMINAL:
+            if found[0] in FINAL:
                 cur.execute("SELECT * FROM ara_jobs WHERE id=%s", (job_id,))
             else:
                 status = "done" if bool((result or {}).get("ok")) else "failed"
@@ -273,11 +301,7 @@ class PostgresStore:
 
     def get_job(self, device_id, job_id):
         with self._conn() as c, c.cursor() as cur:
-            cur.execute(
-                """UPDATE ara_jobs SET status='expired',lease_until=NULL
-                   WHERE id=%s AND device_id=%s AND status IN ('queued','leased') AND expires_at<=now()""",
-                (job_id, device_id),
-            )
+            self._reap(cur, device_id)
             cur.execute("SELECT * FROM ara_jobs WHERE id=%s AND device_id=%s", (job_id, device_id))
             row = cur.fetchone()
             if not row:
@@ -292,9 +316,9 @@ class PostgresStore:
     def _row(row):
         if not row:
             return None
-        for k in ("created_at","expires_at","lease_until"):
+        for k in ("created_at", "expires_at", "lease_until"):
             if row.get(k):
-                row[k] = row[k].astimezone(timezone.utc).isoformat().replace("+00:00","Z")
+                row[k] = row[k].astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         return row
 
 
