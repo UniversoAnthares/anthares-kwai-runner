@@ -3,9 +3,12 @@ name: Provision Render-independent X worker on Northflank
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - infra/northflank-x/**
       - infra/x_render_worker_v3.py
+      - infra/anthares_runtime_browser_local.py
+      - infra/anthares_runtime_mesh_vaulted.py
       - infra/sitecustomize.py
       - .github/workflows/northflank-x-worker.yml
 
@@ -19,27 +22,31 @@ concurrency:
 jobs:
   provision:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
       X_WORKER_TOKEN: ${{ secrets.X_WORKER_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
     steps:
       - name: Require existing credentials
         shell: bash
         run: |
-          test -n "$NORTHFLANK_API_TOKEN" || { echo 'NORTHFLANK_API_TOKEN missing'; exit 1; }
-          test -n "$X_WORKER_TOKEN" || { echo 'X_WORKER_TOKEN missing'; exit 1; }
+          set -euo pipefail
+          test -n "$NORTHFLANK_API_TOKEN"
+          test -n "$X_WORKER_TOKEN"
+          test -n "$ARA_SHARED"
 
-      - name: Provision/update Northflank X worker
+      - name: Provision, verify and register Northflank browser authority
         shell: bash
         run: |
           python3 - <<'PY'
-          import json, os, sys, urllib.request, urllib.error
+          import json, os, sys, time, urllib.request, urllib.error
 
-          token=os.environ['NORTHFLANK_API_TOKEN']
+          api_token=os.environ['NORTHFLANK_API_TOKEN']
           worker_token=os.environ['X_WORKER_TOKEN']
+          ara_shared=os.environ['ARA_SHARED']
           base='https://api.northflank.com/v1'
-          headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
+          headers={'Authorization':'Bearer '+api_token,'Content-Type':'application/json'}
 
           def api(method,path,data=None,allow=()):
               body=None if data is None else json.dumps(data).encode()
@@ -50,51 +57,76 @@ jobs:
                       return json.loads(raw) if raw else {}
               except urllib.error.HTTPError as e:
                   raw=e.read().decode('utf-8','replace')
-                  if e.code in allow: return {'_status':e.code,'_body':raw}
-                  print('Northflank HTTP',e.code,path,raw[:1200]); raise
+                  if e.code in allow:return {'_status':e.code,'_body':raw}
+                  raise RuntimeError(f'Northflank HTTP {e.code} {path}: {raw[:800]}')
 
           projects=api('GET','/projects').get('data',{}).get('projects',[])
-          if isinstance(projects,dict): projects=list(projects.values())
+          if isinstance(projects,dict):projects=list(projects.values())
           project=next((p.get('id') for p in projects if p.get('name')=='Default'),None)
-          if not project: sys.exit('Northflank Default project not found')
+          if not project:sys.exit('Northflank Default project not found')
 
           services=api('GET',f'/projects/{project}/services').get('data',{}).get('services',[])
-          if isinstance(services,dict): services=list(services.values())
+          if isinstance(services,dict):services=list(services.values())
           name='anthares-x-northflank'
           target=next((s for s in services if s.get('name')==name),None)
           runtime={
-            'PORT':'10000',
-            'EXPECTED_X_HANDLE':'lucasyahn',
-            'X_WORKER_TOKEN':worker_token,
+            'PORT':'10000','EXPECTED_X_HANDLE':'lucasyahn','X_WORKER_TOKEN':worker_token,
             'X_VAULT_URL':'https://anthares-x-vault.anthares1.workers.dev/state',
+            'ARA_SHARED':ara_shared,'ANTHARES_BROWSER_STATE_AUTHORITY':'runtime',
             'ANTHARES_REQUIRE_RUNTIME_MESH':'1'
           }
           if not target:
               payload={
-                'name':name,
-                'description':'Canonical Render-independent X/browser worker',
+                'name':name,'description':'Canonical Render-independent X/browser worker',
                 'billing':{'deploymentPlan':'nf-compute-10'},
                 'deployment':{'instances':1,'docker':{'configType':'default'}},
                 'ports':[{'name':'http','internalPort':10000,'public':True,'protocol':'HTTP'}],
                 'buildSource':'git',
-                'vcsData':{
-                  'projectUrl':'https://github.com/UniversoAnthares/anthares-kwai-runner',
-                  'projectType':'github','projectBranch':'main'
-                },
-                'buildSettings':{'dockerfile':{
-                  'buildEngine':'buildkit','dockerFilePath':'/infra/northflank-x/Dockerfile','dockerWorkDir':'/'
-                }},
-                'runtimeEnvironment':runtime,
-                'disabledCI':True
+                'vcsData':{'projectUrl':'https://github.com/UniversoAnthares/anthares-kwai-runner','projectType':'github','projectBranch':'main'},
+                'buildSettings':{'dockerfile':{'buildEngine':'buildkit','dockerFilePath':'/infra/northflank-x/Dockerfile','dockerWorkDir':'/'}},
+                'runtimeEnvironment':runtime,'disabledCI':True
               }
               created=api('POST',f'/projects/{project}/services/combined',payload)
               service_id=(created.get('data') or {}).get('id') or name
           else:
               service_id=target.get('id') or name
-              # Runtime values are reconciled without exposing their contents in logs.
               api('PATCH',f'/projects/{project}/services/{service_id}',{'runtimeEnvironment':runtime},allow=(400,404,405))
 
-          started=api('POST',f'/projects/{project}/services/{service_id}/build',{},allow=(409,))
-          print('NORTHFLANK_X_SERVICE='+service_id)
-          print('BUILD_ACCEPTED='+str(started.get('_status') in (None,409)).lower())
+          api('POST',f'/projects/{project}/services/{service_id}/build',{},allow=(409,))
+          ports=api('GET',f'/projects/{project}/services/{service_id}/ports').get('data',{}).get('ports',[])
+          public=next((p for p in ports if p.get('public') and p.get('dns')),None)
+          if not public:sys.exit('Northflank X worker has no public DNS')
+          public_base='https://'+public['dns']
+
+          last='not_ready'
+          jwk=None
+          for _ in range(60):
+              try:
+                  with urllib.request.urlopen(public_base+'/v1/runtime/browser/signing-public-key',timeout=20) as r:
+                      data=json.loads(r.read().decode())
+                  if data.get('ok') and (data.get('jwk') or {}).get('crv')=='P-256':
+                      jwk=data['jwk'];break
+                  last=json.dumps(data)[:500]
+              except Exception as exc:
+                  last=type(exc).__name__+':'+str(exc)[:300]
+              time.sleep(10)
+          if not jwk:sys.exit('Northflank browser authority not ready: '+last)
+
+          body=json.dumps({'authority':'runtime','jwk':jwk},separators=(',',':')).encode()
+          req=urllib.request.Request(
+              'https://anthares-x-vault.anthares1.workers.dev/browser-key/register',
+              data=body,method='POST',
+              headers={'Authorization':'Bearer '+ara_shared,'Content-Type':'application/json'}
+          )
+          with urllib.request.urlopen(req,timeout=30) as r:
+              registered=json.loads(r.read().decode())
+          if not registered.get('ok') or not registered.get('registered'):
+              sys.exit('Vault browser authority registration failed')
+
+          with urllib.request.urlopen('https://anthares-x-vault.anthares1.workers.dev/browser-key/status',timeout=20) as r:
+              status=json.loads(r.read().decode())
+          if status.get('runtime') is not True or status.get('render_dependency') is not False:
+              sys.exit('Vault runtime authority status invalid')
+
+          print(json.dumps({'ok':True,'service':service_id,'public_url':public_base,'runtime_key_registered':True,'render_dependency':False},sort_keys=True))
           PY
