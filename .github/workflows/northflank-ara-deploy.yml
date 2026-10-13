@@ -16,54 +16,92 @@ jobs:
     env:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
     steps:
-      - name: Check credentials and provision isolated service
+      - name: Provision isolated service and start build
         shell: bash
         run: |
           python3 - <<'PY'
           import json, os, secrets, sys, urllib.request, urllib.error
-          token=os.getenv("NORTHFLANK_API_TOKEN","")
+
+          token = os.getenv("NORTHFLANK_API_TOKEN", "")
           if not token:
               sys.exit("NORTHFLANK_API_TOKEN secret is absent")
-          base="https://api.northflank.com/v1"
-          def api(method,path,data=None):
-              body=json.dumps(data).encode() if data is not None else None
-              req=urllib.request.Request(base+path, data=body, method=method,
-                  headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"})
+
+          base = "https://api.northflank.com/v1"
+          headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+
+          def api(method, path, data=None, allow=None):
+              body = json.dumps(data).encode() if data is not None else None
+              req = urllib.request.Request(base + path, data=body, method=method, headers=headers)
               try:
-                  with urllib.request.urlopen(req,timeout=35) as r:
-                      return json.load(r)
+                  with urllib.request.urlopen(req, timeout=35) as r:
+                      raw = r.read().decode("utf-8", errors="replace")
+                      return json.loads(raw) if raw else {}
               except urllib.error.HTTPError as e:
-                  print("Northflank HTTP",e.code,"at",path)
-                  print(e.read().decode()[:1500])
+                  raw = e.read().decode("utf-8", errors="replace")
+                  if allow and e.code in allow:
+                      return {"_http_status": e.code, "_body": raw}
+                  print("Northflank HTTP", e.code, "at", path)
+                  print(raw[:1500])
                   sys.exit(1)
-          projects=api("GET","/projects")
-          entries=projects.get("data",{}).get("projects",[])
-          if isinstance(entries,dict): entries=list(entries.values())
-          matches=[p for p in entries if p.get("name")=="Default"]
-          if len(matches)!=1:
-              sys.exit("Expected exactly one project named Default; found "+str(len(matches)))
-          project=matches[0].get("id")
-          print("Selected Northflank project:",project)
-          existing=api("GET",f"/projects/{project}/services")
-          services=existing.get("data",{}).get("services",[])
-          if isinstance(services,dict): services=list(services.values())
-          if any(s.get("name")=="anthares-ara-northflank" for s in services):
-              print("Service already exists; no duplicate created.")
-              sys.exit(0)
-          # Isolated service only; generated tokens deliberately differ from existing controllers.
-          payload={
-              "name":"anthares-ara-northflank",
-              "description":"Isolated ARA controller canary; in-memory state, not production failover",
-              "billing":{"deploymentPlan":"nf-compute-10"},
-              "deployment":{"instances":1,"docker":{"configType":"default"}},
-              "ports":[{"name":"http","internalPort":10000,"public":True,"protocol":"HTTP"}],
-              "buildSource":"git",
-              "vcsData":{"projectUrl":"https://github.com/UniversoAnthares/anthares-kwai-runner","projectType":"github","projectBranch":"main"},
-              "buildSettings":{"dockerfile":{"buildEngine":"buildkit","dockerFilePath":"/infra/northflank/Dockerfile","dockerWorkDir":"/"}},
-              "runtimeEnvironment":{"PORT":"10000","DEVICE_TOKEN":secrets.token_urlsafe(48),"CONTROL_TOKEN":secrets.token_urlsafe(48)},
-              "disabledCI":True
-          }
-          created=api("POST",f"/projects/{project}/services/combined",payload)
-          print("Created isolated Northflank service:",created.get("data",{}).get("id","unknown"))
+
+          projects = api("GET", "/projects")
+          entries = projects.get("data", {}).get("projects", [])
+          if isinstance(entries, dict):
+              entries = list(entries.values())
+          matches = [p for p in entries if p.get("name") == "Default"]
+          if len(matches) != 1:
+              sys.exit("Expected exactly one project named Default; found " + str(len(matches)))
+          project = matches[0].get("id")
+          print("Selected Northflank project:", project)
+
+          existing = api("GET", f"/projects/{project}/services")
+          services = existing.get("data", {}).get("services", [])
+          if isinstance(services, dict):
+              services = list(services.values())
+          target = next((s for s in services if s.get("name") == "anthares-ara-northflank"), None)
+
+          if not target:
+              payload = {
+                  "name": "anthares-ara-northflank",
+                  "description": "Isolated ARA controller canary; in-memory state, not production failover",
+                  "billing": {"deploymentPlan": "nf-compute-10"},
+                  "deployment": {"instances": 1, "docker": {"configType": "default"}},
+                  "ports": [{"name": "http", "internalPort": 10000, "public": True, "protocol": "HTTP"}],
+                  "buildSource": "git",
+                  "vcsData": {
+                      "projectUrl": "https://github.com/UniversoAnthares/anthares-kwai-runner",
+                      "projectType": "github",
+                      "projectBranch": "main"
+                  },
+                  "buildSettings": {
+                      "dockerfile": {
+                          "buildEngine": "buildkit",
+                          "dockerFilePath": "/infra/northflank/Dockerfile",
+                          "dockerWorkDir": "/"
+                      }
+                  },
+                  "runtimeEnvironment": {
+                      "PORT": "10000",
+                      "DEVICE_TOKEN": secrets.token_urlsafe(48),
+                      "CONTROL_TOKEN": secrets.token_urlsafe(48)
+                  },
+                  "disabledCI": True
+              }
+              created = api("POST", f"/projects/{project}/services/combined", payload)
+              service_id = (created.get("data") or {}).get("id") or "anthares-ara-northflank"
+              print("Created isolated Northflank service:", service_id)
+          else:
+              service_id = target.get("id") or "anthares-ara-northflank"
+              print("Service already exists:", service_id)
+
+          # Creating a service with CI disabled does not start an initial build.
+          # Start one explicitly. A 409 means a build is already running and is safe to accept.
+          started = api("POST", f"/projects/{project}/services/{service_id}/build", {}, allow={409})
+          if started.get("_http_status") == 409:
+              print("A Northflank build is already in progress.")
+          else:
+              build_data = started.get("data") or {}
+              print("Northflank build started:", build_data.get("id") or "accepted")
+
           print("Controller remains isolated; no production failover changes.")
           PY
