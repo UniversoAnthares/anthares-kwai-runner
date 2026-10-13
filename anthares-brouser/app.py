@@ -16,7 +16,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from novnc_gateway import router as novnc_router
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="Anthares-browser control API", version="0.2.3")
+app = FastAPI(title="Anthares-browser control API", version="0.2.4")
 app.include_router(novnc_router)
 PROFILE_DIR = Path(os.environ.get("CHROME_PROFILE_DIR", "/data/chrome-profile"))
 CONTROL_TOKEN = os.environ.get("CONTROL_TOKEN", "")
@@ -90,13 +90,19 @@ def _page_target() -> dict[str, Any]:
 
 
 def _cdp_ready() -> bool:
+    """Infrastructure readiness only; do not execute JS in a potentially stalled page.
+
+    Kwai can temporarily monopolize a renderer while loading. Treating Runtime.evaluate
+    latency as browser death caused false 503s and destructive restart loops. A live CDP
+    HTTP endpoint plus an addressable page target is sufficient for readiness. Command
+    endpoints keep their own fail-closed websocket timeouts.
+    """
     try:
-        result = _cdp_call(
-            "Runtime.evaluate",
-            {"expression": "1", "returnByValue": True},
-            timeout=2.5,
-        )
-        return result.get("result", {}).get("value") == 1
+        version = _json_get("/json/version")
+        if not isinstance(version, dict) or not version.get("webSocketDebuggerUrl"):
+            return False
+        target = _page_target()
+        return bool(target.get("webSocketDebuggerUrl"))
     except HTTPException:
         return False
 
