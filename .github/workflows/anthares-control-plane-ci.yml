@@ -7,6 +7,11 @@ on:
     paths:
       - 'anthares-control-plane/**'
       - '.github/workflows/anthares-control-plane-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'anthares-control-plane/**'
+      - '.github/workflows/anthares-control-plane-ci.yml'
 
 permissions:
   contents: read
