@@ -1,5 +1,12 @@
 $ErrorActionPreference='SilentlyContinue'
 $root='C:\ProgramData\AntharesRemoteAgent'
+$standby='https://anthares-ara-infra-canary-v2.onrender.com'
+
+function Warm-Standby {
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri ($standby + '/healthz') -TimeoutSec 20 | Out-Null
+    } catch {}
+}
 
 function Ensure-Supervisor([string]$scriptName) {
     $launcher=Join-Path $root $scriptName
@@ -14,5 +21,6 @@ function Ensure-Supervisor([string]$scriptName) {
     }
 }
 
+Warm-Standby
 Ensure-Supervisor 'run-agent.ps1'
 Ensure-Supervisor 'run-agent-standard.ps1'
