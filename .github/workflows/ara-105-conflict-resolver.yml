@@ -34,7 +34,7 @@ jobs:
           if [ "$merge_rc" -ne 0 ]; then
             conflicts="$(git diff --name-only --diff-filter=U)"
             printf 'Conflicts:\n%s\n' "$conflicts"
-            unexpected="$(printf '%s\n' "$conflicts" | grep -Ev '^(infra/sitecustomize\.py|tools/test_anthares_runtime_mesh\.py)$' || true)"
+            unexpected="$(printf '%s\n' "$conflicts" | grep -Ev '^(infra/ara_state_store\.py|infra/sitecustomize\.py|tools/test_anthares_runtime_mesh\.py)$' || true)"
             if [ -n "$unexpected" ]; then
               echo 'Unexpected merge conflicts:' >&2
               echo "$unexpected" >&2
