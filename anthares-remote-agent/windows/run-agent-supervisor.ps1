@@ -2,6 +2,11 @@ $ErrorActionPreference = 'Continue'
 $root = 'C:\ProgramData\AntharesRemoteAgent'
 . (Join-Path $root 'agent-env.ps1')
 
+# The fallback supervisor must never share the standard agent's queue or result
+# spool. A distinct device identity prevents duplicate leases and conflicting
+# result replays while preserving the same device credential and capabilities.
+$env:ANTHARES_DEVICE_ID = 'DESKTOP-FTDK0HP-SYSTEM'
+
 $primary = 'https://anthares-ara-control.onrender.com'
 $secondary = 'https://anthares-ara-infra-canary-v2.onrender.com'
 $exe = Join-Path $root 'anthares-remote-agent.exe'
@@ -31,6 +36,7 @@ function Save-State([string]$active, [string]$reason, [int]$agentPid = 0) {
             updated_at = (Get-Date).ToUniversalTime().ToString('o')
             supervisor_pid = $PID
             agent_pid = $agentPid
+            device_id = $env:ANTHARES_DEVICE_ID
         } | ConvertTo-Json | Set-Content -Path $stateFile -Encoding UTF8
     } catch {}
 }
