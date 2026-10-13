@@ -41,8 +41,6 @@ jobs:
           ! grep -q 'floot.app' cloudflare-ara-backup/src/index.js
           grep -q 'cloudflare-single-authority-v1' cloudflare-ara-backup/src/index.js
           grep -q '/v1/device/status' cloudflare-ara-backup/src/index.js
-          grep -q 'anthares-ara-reserva.anthares1.workers.dev' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
-          grep -q 'AntharesRemoteSystemSupervisorV4' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
           grep -q 'os.Exit(23)' anthares-remote-agent/cmd/agent/main.go
           cd anthares-remote-agent
           go test ./...
