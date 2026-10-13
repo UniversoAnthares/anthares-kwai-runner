@@ -1,0 +1,58 @@
+name: ARA spool native validation and Windows build
+
+on:
+  push:
+    branches:
+      - feature/anthares-remote-agent
+    paths:
+      - 'anthares-remote-agent/**'
+      - '.github/workflows/ara-spool-release.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  linux-spool:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: anthares-remote-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - name: Linux tests including encrypted spool and replay
+        run: go test ./... -count=1
+
+  windows-spool-and-build:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: anthares-remote-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - name: Windows tests including encrypted spool and replay
+        shell: pwsh
+        run: go test ./... -count=1
+      - name: Build Windows amd64 agent
+        shell: pwsh
+        run: |
+          $env:GOOS='windows'
+          $env:GOARCH='amd64'
+          $env:CGO_ENABLED='0'
+          go build -trimpath -ldflags='-s -w' -o anthares-remote-agent-0.3.0-windows-amd64.exe ./cmd/agent
+      - name: SHA256
+        shell: pwsh
+        run: Get-FileHash .\anthares-remote-agent-0.3.0-windows-amd64.exe -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anthares-remote-agent-0.3.0-windows-amd64
+          path: anthares-remote-agent/anthares-remote-agent-0.3.0-windows-amd64.exe
+          if-no-files-found: error
+          retention-days: 1
