@@ -56,6 +56,20 @@ function Ensure-BinaryIntegrity{
 New-Item -ItemType Directory -Force -Path $root|Out-Null
 Retire-InteractiveAgents
 $rolledBack=Ensure-BinaryIntegrity
+# Never start an unverified binary when a pinned integrity baseline exists.
+if(Test-Path $baseline){
+  try {
+    $expected=[string]((Get-Content $baseline -Raw -ErrorAction Stop|ConvertFrom-Json).v4_sha256)
+    $actual=if(Test-Path $exe){(Get-FileHash $exe -Algorithm SHA256 -ErrorAction Stop).Hash}else{''}
+    if(-not [string]::IsNullOrWhiteSpace($expected) -and $actual -ne $expected){
+      Log('recovery halted: binary integrity mismatch remains after rollback attempt')
+      return
+    }
+  } catch {
+    Log("recovery halted: unable to verify integrity baseline: $($_.Exception.Message)")
+    return
+  }
+}
 $task=Ensure-Task $canonicalTask $canonicalScript
 $wd=Ensure-Task $watchdogTask $watchdogLoop
 $agents=@(Get-SystemAgents)
