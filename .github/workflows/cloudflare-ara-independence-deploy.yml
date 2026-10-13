@@ -32,7 +32,25 @@ jobs:
           test -s cloudflare-ara-backup/trusted-keys/render-mcp-v2.pem
           test -s cloudflare-ara-backup/trusted-keys/render-mcp.pem
           grep -q 'render_independent:true' cloudflare-ara-mcp/src/index.js
+          grep -q 'binding = "ARA_CONTROL"' cloudflare-ara-mcp/wrangler.toml
           grep -q 'ARA_TRUSTED_MCP_PUBLIC_KEYS_JSON' cloudflare-ara-backup/src/index.js
+      - name: Build Cloudflare service-binding MCP client
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('cloudflare-ara-mcp/src/index.js')
+          s=p.read_text()
+          pattern=r"async function control\(env,path,\{method='GET',body,timeoutMs=30000\}=\{\}\)\{.*?\nasync function controlJson"
+          repl="""async function control(env,path,{method='GET',body,timeoutMs=30000}={}){\n  const raw=body===undefined?'':JSON.stringify(body);\n  const sig=await st(env).signControl(method,path,raw);\n  const controller=new AbortController();\n  const timer=setTimeout(()=>controller.abort(),timeoutMs);\n  try{\n    const request=new Request(CONTROL+path,{method,headers:{'content-type':'application/json','x-ara-timestamp':sig.timestamp,'x-ara-signature':sig.signature,'x-ara-signer':'anthares-remote-mcp'},body:body===undefined?undefined:raw,signal:controller.signal});\n    return await env.ARA_CONTROL.fetch(request);\n  }finally{clearTimeout(timer);}\n}\nasync function controlJson"""
+          out,n=re.subn(pattern,repl,s,count=1,flags=re.S)
+          if n != 1:
+              raise SystemExit(f'control patch count={n}')
+          p.write_text(out)
+          PY
+          grep -q 'env.ARA_CONTROL.fetch' cloudflare-ara-mcp/src/index.js
       - name: Wrangler dry-run MCP
         shell: bash
         run: |
