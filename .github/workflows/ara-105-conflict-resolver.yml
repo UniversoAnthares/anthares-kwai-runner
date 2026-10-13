@@ -1,0 +1,78 @@
+name: Resolve ARA PR105 against current main
+
+on:
+  push:
+    branches: [ops/ara-105-resolve]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/ara-infra
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Merge main and resolve known durable-runtime conflicts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'anthares-integration-bot'
+          git config user.email '81930373+UniversoAnthares@users.noreply.github.com'
+          git fetch origin main
+          set +e
+          git merge --no-commit --no-ff origin/main
+          merge_rc=$?
+          set -e
+          if [ "$merge_rc" -ne 0 ]; then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            printf 'Conflicts:\n%s\n' "$conflicts"
+            unexpected="$(printf '%s\n' "$conflicts" | grep -Ev '^(infra/sitecustomize\.py|tools/test_anthares_runtime_mesh\.py)$' || true)"
+            if [ -n "$unexpected" ]; then
+              echo 'Unexpected merge conflicts:' >&2
+              echo "$unexpected" >&2
+              exit 1
+            fi
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              git checkout --ours -- "$f"
+              git add "$f"
+            done <<< "$conflicts"
+          fi
+      - name: Validate durable queue, route security and runtime mesh
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet flask requests cryptography 'psycopg[binary]'
+          python -m py_compile \
+            infra/ara_state_store.py \
+            infra/anthares_remote_control_routes.py \
+            infra/ara_canary_app.py \
+            infra/ara_public_probe_guard.py \
+            infra/ara_runtime_truth.py \
+            infra/anthares_runtime_mesh.py \
+            infra/anthares_runtime_mesh_vaulted.py \
+            infra/sitecustomize.py
+          python -m unittest -v \
+            tests.test_ara_state_store \
+            tests.test_ara_route_security \
+            tests.test_ara_legacy_state_compat \
+            tools.test_anthares_runtime_mesh
+      - name: Commit resolved integration to PR105 branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No integration changes required.'
+          else
+            git commit -m 'merge(ara): reconcile durable infra with current main'
+          fi
+          git push origin HEAD:feature/ara-infra
