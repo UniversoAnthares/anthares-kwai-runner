@@ -1,0 +1,77 @@
+name: Anthares Render Redundancy Acceptance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [anthares-render-redundancy]
+    paths:
+      - 'tools/render_redundancy_acceptance.py'
+      - 'tools/provider_router.py'
+      - '.github/workflows/render-redundancy-acceptance.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/render_redundancy_acceptance.py'
+      - 'tools/provider_router.py'
+      - '.github/workflows/render-redundancy-acceptance.yml'
+      - 'tools/RENDER_REDUNDANCY.md'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Existing provider-router tests
+        run: python tools/test_provider_router.py
+      - name: Render failover acceptance
+        run: python tools/render_redundancy_acceptance.py
+
+  control-plane-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Cloudflare control plane health
+        run: |
+          set -euo pipefail
+          out="$(curl -fsS --retry 3 --max-time 15 https://anthares-control.anthares1.workers.dev/health)"
+          echo "$out"
+          echo "$out" | grep -q '"ok":true'
+          echo "$out" | grep -q '"service":"anthares-control"'
+          echo "$out" | grep -q '"provider":"cloudflare"'
+          echo "$out" | grep -q '"pc_fallback":false'
+      - name: Cloudflare failover self-test
+        run: |
+          set -euo pipefail
+          out="$(curl -fsS --retry 3 --max-time 15 https://anthares-control.anthares1.workers.dev/failover-self-test)"
+          echo "$out"
+          echo "$out" | grep -q '"ok":true'
+      - name: Git provider self-test
+        run: |
+          set -euo pipefail
+          out="$(curl -fsS --retry 3 --max-time 15 https://anthares-control.anthares1.workers.dev/git-provider-self-test)"
+          echo "$out"
+          echo "$out" | grep -q '"ok":true'
+
+  render-independence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe Render without making it a dependency
+        run: |
+          set +e
+          code=$(curl -sS -o /tmp/render-health.json -w '%{http_code}' --max-time 15 https://anthares-remote-control.onrender.com/health)
+          echo "RENDER_HTTP=$code"
+          cat /tmp/render-health.json 2>/dev/null || true
+          exit 0
+      - name: Prove backup authority remains outside Render
+        run: |
+          set -euo pipefail
+          out="$(curl -fsS --retry 3 --max-time 15 https://anthares-control.anthares1.workers.dev/health)"
+          echo "$out" | grep -q '"provider":"cloudflare"'
+          echo "$out" | grep -q '"queue_bound":true'
+          echo 'RENDER_INDEPENDENCE_OK=1'
