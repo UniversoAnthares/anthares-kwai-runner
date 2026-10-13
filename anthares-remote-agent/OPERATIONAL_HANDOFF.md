@@ -10,10 +10,15 @@
 - Dedicated Render control plane `anthares-ara-control` (`srv-db6r95gm7kps73b23jf0`) is isolated from the existing X worker and uses PostgreSQL `anthares-ara-state` (`dpg-db6n9nqvcj2c73afk82g-a`).
 - The existing `anthares-remote-control` service remains the X worker and was not repointed.
 - Both MCP gateways (`anthares-remote-mcp` and `anthares-remote-mcp-v2`) use `https://anthares-ara-control.onrender.com`; both post-change deploys are live.
-- Real Windows device `DESKTOP-FTDK0HP` is connected through ARA 0.3.0. Live `session_status` returned `connected=true`; real `system_info` jobs completed through the durable control plane.
+- The canonical live device is now `DESKTOP-FTDK0HP-SYSTEM`, ARA 0.3.0. Both MCP gateways have `ANTHARES_DEVICE_ID=DESKTOP-FTDK0HP-SYSTEM`, eliminating split routing to the stale user-session device.
+- The legacy `DESKTOP-FTDK0HP` heartbeat is intentionally stale/disconnected, but its control queue has drained to `queued=0`, `leased=0`, `uncertain=0`; it is no longer the MCP default.
+- Current canonical device status was validated at 2026-10-13 06:28 UTC: `connected=true`, `queued=0`, `leased=0`, `uncertain=0`.
 - A deliberate redeploy of `anthares-ara-control` completed live at 2026-10-13 05:38:01 UTC. The device resumed heartbeat/polling after replacement and a new real job completed after the restart.
 - Root readiness was hardened in commit `2d6e5bd39c5365d38b573504d19dd05bd0a9729c`; generic `HEAD /` and `GET /` probes return HTTP 200 using PostgreSQL fail-closed readiness.
-- MCP transport semantics were corrected in commit `13041c9f5233907b37b7716535e386658de0c9dc`: a completed remote operation with `ok=false` now returns HTTP 200 with its structured operation result. HTTP 5xx is reserved for control-plane/infrastructure failure. A deliberately rejected `file_stat` was validated end-to-end with structured `ok=false` while `/v1/mcp/execute` returned HTTP 200.
+- MCP transport semantics were corrected in commit `13041c9f5233907b37b7716535e386658de0c9dc`: a completed remote operation with `ok=false` now returns HTTP 200 with its structured operation result. HTTP 5xx is reserved for control-plane/infrastructure failure.
+- Signed-control retries are idempotent across transient 502/503/504 responses. Each `/v1/mcp/execute` carries an idempotency key, retries are bounded, and signatures are regenerated per attempt.
+- PostgreSQL uncertain-job handling is bounded. Late device results may resolve `uncertain`; once the execution deadline has passed, remaining unknown outcomes become terminal `expired` records with an explicit `execution_outcome_unknown` audit marker instead of remaining operationally pending forever. Production commit: `22f2d800a9f31095020f5ff601f8724a90299b52`.
+- After aligning both MCP gateways to `DESKTOP-FTDK0HP-SYSTEM`, the control service showed no HTTP 500/502/503/504 in the post-cutover validation window; subsequent MCP executions returned HTTP 200.
 - Signed bridge capability response reports PostgreSQL durability, PostgreSQL OAuth one-time-token storage, replay protection, rotating service-key refresh, redundant MCP keys and two trusted MCP services.
 
 ## CI acceptance status
@@ -35,8 +40,8 @@ GitLab Windows artifacts are cross-builds on Linux; this fact remains documented
 - Workspace: `anthares-site` (`tea-d9hnkbt8nd3s73f0876g`).
 - PostgreSQL `anthares-ara-state`: `available`, PostgreSQL 18, free plan, Oregon; free instance reports expiration **2026-11-12**.
 - Dedicated control service: `anthares-ara-control` (`srv-db6r95gm7kps73b23jf0`), URL `https://anthares-ara-control.onrender.com`, branch `ara-postgres-control-service`.
-- MCP primary: `anthares-remote-mcp` (`srv-db6naljbc2fs739og1s0`) — live after control URL correction.
-- MCP secondary: `anthares-remote-mcp-v2` (`srv-db6o0d5g1s2s738s7bp0`) — live after control URL correction.
+- MCP primary: `anthares-remote-mcp` (`srv-db6naljbc2fs739og1s0`) — live, canonical device `DESKTOP-FTDK0HP-SYSTEM`.
+- MCP secondary: `anthares-remote-mcp-v2` (`srv-db6o0d5g1s2s738s7bp0`) — live, canonical device `DESKTOP-FTDK0HP-SYSTEM`.
 - X worker preserved: `anthares-remote-control` (`srv-db6mj8navr4c73cqvgo0`), start command remains `x_render_worker_v3:app`.
 
 ## Current production evidence
