@@ -20,13 +20,18 @@ def load_state():
 def choose(manifest, state):
     cfg = manifest["android_execution"]
     limit = int(cfg["failover"]["queue_threshold_seconds"])
+    retired = set(manifest.get("retired_providers", {}))
     for provider in cfg["priority"]:
-        s = state.get(provider, {})
+        if provider in retired:
+            continue
+        s = state.get(provider)
+        if not isinstance(s, dict):
+            continue
         if s.get("disabled") is True:
             continue
-        if s.get("healthy") is False:
+        if s.get("healthy") is not True:
             continue
-        if s.get("ready") is False:
+        if s.get("ready") is not True:
             continue
         queued = int(s.get("queue_seconds", 0) or 0)
         if queued > limit:

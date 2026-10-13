@@ -12,6 +12,14 @@ provider_failover_acceptance:
     - grep -q '"error":"no_ready_provider"' /tmp/control.json
     - grep -q '"error":"checkpoint_diverged"' /tmp/control.json
     - echo "GIT_PROVIDER_FAILOVER=PROVEN"
+android_executor_routing_contract:
+  stage: validate
+  image: python:3.12-alpine
+  script:
+    - PYTHONPATH=tools python -m unittest tools/test_android_executor_router.py -v
+    - ANTHARES_EXECUTOR_STATUS_JSON='{"circleci":{"healthy":true,"ready":true,"queue_seconds":91},"bitrise":{"healthy":true,"ready":true,"queue_seconds":2}}' python tools/android_executor_router.py | tee /tmp/router.txt
+    - grep -q '^ANDROID_EXECUTOR_SELECTED=bitrise$' /tmp/router.txt
+    - echo "ANDROID_PROVIDER_FAILOVER_CONTRACT=PASS"
 real_workload_clipper_validation:
   stage: workload
   image: python:3.12-alpine

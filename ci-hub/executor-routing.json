@@ -1,48 +1,63 @@
 {
-  "revision": "2026-10-12-executors-r3",
+  "revision": "2026-10-12-executors-r4",
   "android_execution": {
-    "priority": ["circleci", "cirrus", "bitrise"],
+    "priority": ["circleci", "bitrise", "firebase_test_lab"],
     "github_actions": "retired_from_android_execution",
     "failover": {
       "failure_threshold": 1,
       "queue_threshold_seconds": 90,
-      "order": ["circleci", "cirrus", "bitrise"]
+      "order": ["circleci", "bitrise", "firebase_test_lab"]
     }
   },
   "browser_execution": {
-    "priority": ["circleci", "cirrus", "bitrise"],
+    "priority": ["circleci", "gitlab", "bitrise"],
     "github_actions": "retired_from_browser_runtime_qa",
     "redundancy": "three_independent_providers",
     "failover": {
       "failure_threshold": 1,
       "queue_threshold_seconds": 90,
-      "order": ["circleci", "cirrus", "bitrise"]
+      "order": ["circleci", "gitlab", "bitrise"]
     },
     "shared_test": "ci/shared/anthares-browser-runtime-qa.sh",
     "cases_per_provider": 40
   },
   "providers": {
     "circleci": {
-      "rank": 1,
+      "android_rank": 1,
+      "browser_rank": 1,
       "status": "proven",
-      "runtime": "Linux machine executor with Docker; Android machine executor for Android workloads",
+      "runtime": "Linux machine executor with Docker; Android machine executor with KVM",
       "config": ".circleci/config.yml"
     },
-    "cirrus": {
-      "rank": 2,
-      "status": "configured",
-      "runtime": "Docker/KVM Compute Engine VM for browser QA; Android SDK container with kvm=true for Android",
-      "config": ".cirrus.yml"
-    },
     "bitrise": {
-      "rank": 3,
-      "status": "configured",
-      "runtime": "Linux Android & Docker stack",
+      "android_rank": 2,
+      "browser_rank": 3,
+      "status": "configured_pending_live_proof",
+      "runtime": "Linux Android stack with AVD Manager and Docker",
       "config": "bitrise.yml"
+    },
+    "firebase_test_lab": {
+      "android_rank": 3,
+      "status": "standby_pending_live_proof",
+      "runtime": "Firebase Test Lab Spark Android device execution; automated fallback only",
+      "config": "ci/firebase-test-lab/run_kwai_robo.sh"
+    },
+    "gitlab": {
+      "browser_rank": 2,
+      "status": "proven_generic_ci",
+      "runtime": "shared Linux runner for browser/generic CI; no KVM or Binder",
+      "android_eligible": false,
+      "config": ".gitlab-ci.yml"
     }
   },
-  "non_android": {
-    "gitlab": "coordination_and_generic_ci_only",
-    "github": "canonical_repository_and_history_only"
+  "retired_providers": {
+    "cirrus": {
+      "reason": "service_shutdown_2026-06-01",
+      "eligible": false
+    }
+  },
+  "repository_roles": {
+    "github": "canonical_repository_and_history_only",
+    "gitlab": "mirror_coordination_and_browser_generic_ci"
   }
 }
