@@ -101,3 +101,12 @@ func TestFileRemoveRefusesAllowedRootAlternateCase(t *testing.T) {
  if _,err:=fileRemove(cfg,upper,true);err==nil{t.Fatal("alternate case bypassed allowed-root guard")}
  if _,err:=os.Stat(root);err!=nil{t.Fatalf("allowed root deleted: %v",err)}
 }
+
+func TestFileCopyRejectsDirectorySource(t *testing.T) {
+ cfg,root:=testConfig(t)
+ src:=filepath.Join(root,"directory")
+ if err:=os.Mkdir(src,0700);err!=nil{t.Fatal(err)}
+ if _,err:=fileCopy(cfg,src,filepath.Join(root,"copy"));err==nil{
+  t.Fatal("directory source accepted by fileCopy")
+ }
+}
