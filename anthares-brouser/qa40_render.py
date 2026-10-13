@@ -81,7 +81,13 @@ def run_cases():
         for path in ('/status','/page','/targets','/screenshot'):
             code,_=request(path,auth=False)
             if code!=401: raise AssertionError(f'unauthenticated {path} => {code}')
-        code,status=request('/status'); assert code==200 and status.get('cdp_ready') is True and status.get('cdp_bind')=='127.0.0.1',status
+        for attempt in range(20):
+            code,status=request('/status')
+            if code==200 and status.get('cdp_ready') is True and status.get('cdp_bind')=='127.0.0.1':
+                break
+            time.sleep(1)
+        else:
+            raise AssertionError(f'CDP did not stabilize: {status}')
         for case in range(1,41):
             value=f'render40-case-{case:02d}'; checks={}
             code,nav=request('/navigate','POST',{'url':f'http://127.0.0.1:{PAGE_PORT}/?case={case}','wait_ms':25}); checks['navigate']=code==200 and f'case={case}' in nav.get('url','')
