@@ -98,7 +98,7 @@ start_xvfb() {
 
 start_vnc() {
   log "starting loopback-only VNC"
-  x11vnc -display "$DISPLAY" -forever -shared -passwd "$VNC_PASSWORD" -rfbport 5900 -localhost >/tmp/x11vnc.log 2>&1 &
+  x11vnc -display "$DISPLAY" -forever -shared -nopw -rfbport 5900 -localhost >/tmp/x11vnc.log 2>&1 &
   VNC_PID=$!
 }
 
