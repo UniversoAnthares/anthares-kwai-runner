@@ -1,6 +1,7 @@
 """Signed MCP failover surface for the durable ARA canary control service."""
 import base64
 import json
+import os
 import threading
 import time
 
@@ -12,10 +13,12 @@ from cryptography.hazmat.primitives import serialization
 from ara_state_store import build_store
 
 _SIGNER = "anthares-remote-mcp"
-_KEY_URLS = (
-    "https://anthares-remote-mcp-v2.onrender.com/.well-known/ara-control-key",
-    "https://anthares-remote-mcp.onrender.com/.well-known/ara-control-key",
-)
+_KEY_URLS = ["https://anthares-ara-mcp.anthares1.workers.dev/.well-known/ara-control-key"]
+if os.getenv("ARA_ALLOW_RENDER_KEY_FALLBACK", "0") == "1":
+    _KEY_URLS.extend((
+        "https://anthares-remote-mcp-v2.onrender.com/.well-known/ara-control-key",
+        "https://anthares-remote-mcp.onrender.com/.well-known/ara-control-key",
+    ))
 _LOCK = threading.Lock()
 _KEY_CACHE = {"keys": [], "at": 0.0, "sources": []}
 _REPLAY = {}
