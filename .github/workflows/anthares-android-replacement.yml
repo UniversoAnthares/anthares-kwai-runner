@@ -45,6 +45,8 @@ jobs:
     needs: routing-contract
     steps:
       - uses: actions/checkout@v4
+      - name: Install Android SDK command-line tools (no emulator action)
+        uses: android-actions/setup-android@v3
       - name: Start accelerated headless Android 35 and verify real Kwai APK
         shell: bash
         run: |
@@ -55,11 +57,12 @@ jobs:
           sudo chmod 666 /dev/kvm
           test -n "${ANDROID_HOME:-}"
           export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-          emulator -accel-check
           PHASE=SDK
           IMG='system-images;android-35;google_apis;x86_64'
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "$IMG"
+          sdkmanager 'platform-tools' 'emulator' "$IMG"
+          PHASE=KVM_ACCEL
+          emulator -accel-check
           echo no | avdmanager create avd --force --name anthares-github-api35 --package "$IMG" --device pixel_2
           PHASE=BOOT
           nohup emulator -avd anthares-github-api35 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on > /tmp/anthares-github-emulator.log 2>&1 &
