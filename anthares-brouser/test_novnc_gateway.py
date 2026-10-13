@@ -95,6 +95,28 @@ class NoVNCGatewayTests(unittest.TestCase):
             r = self.client.post("/novnc/login", data={"access_token": SECRET})
             self.assertEqual(r.status_code, 403)
 
+    def test_https_proxy_header_ignored_without_explicit_trust(self):
+        with patch.dict(os.environ, {"NOVNC_COOKIE_SECURE": "1", "NOVNC_TRUST_PROXY_HTTPS": "0"}):
+            r = self.client.post("/novnc/login", data={"access_token": SECRET},
+                                 headers={"X-Forwarded-Proto": "https"})
+            self.assertEqual(r.status_code, 403)
+
+    def test_render_https_proxy_can_login_when_explicitly_trusted(self):
+        with patch.dict(os.environ, {"NOVNC_COOKIE_SECURE": "1", "NOVNC_TRUST_PROXY_HTTPS": "1"}):
+            r = self.client.post("/novnc/login", data={"access_token": SECRET},
+                                 headers={"X-Forwarded-Proto": "https"},
+                                 follow_redirects=False)
+            self.assertEqual(r.status_code, 303)
+            self.assertIn("secure", r.headers["set-cookie"].lower())
+
+    def test_proxy_header_http_and_malformed_denied(self):
+        with patch.dict(os.environ, {"NOVNC_COOKIE_SECURE": "1", "NOVNC_TRUST_PROXY_HTTPS": "1"}):
+            for proto in ("http", "https,http", "ftp", ""):
+                with self.subTest(proto=proto):
+                    r = self.client.post("/novnc/login", data={"access_token": SECRET},
+                                         headers={"X-Forwarded-Proto": proto})
+                    self.assertEqual(r.status_code, 403)
+
     def test_session_requires_bearer(self):
         self.assertEqual(self.client.post("/novnc/session").status_code, 401)
 
