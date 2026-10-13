@@ -28,7 +28,7 @@ jobs:
       - name: Apply queue-only finalizer
         run: python3 tools/finalize_ara_queue_only.py
 
-      - name: Validate agent and supervisor
+      - name: Validate agent and supervisors
         shell: bash
         run: |
           set -euo pipefail
@@ -38,9 +38,15 @@ jobs:
           cd ..
           grep -q 'issue-queue-only mode' anthares-remote-agent/cmd/agent/main.go
           grep -q 'AntharesRemoteSystemSupervisorV7' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
-          grep -q "cloudflare_controls=\$false" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
-          ! grep -q "'https://anthares-ara-backup.anthares1.workers.dev'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
-          ! grep -q "'https://anthares-control.anthares1.workers.dev'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q 'cloudflare_required=$false' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q 'render_required=$false' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q "mode='issue-queues-only'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          ! grep -q 'onrender.com' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          ! grep -q 'workers.dev' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q 'cloudflare_required=$false' anthares-remote-agent/windows/run-agent-user-fallback.ps1
+          grep -q 'render_required=$false' anthares-remote-agent/windows/run-agent-user-fallback.ps1
+          ! grep -q 'onrender.com' anthares-remote-agent/windows/run-agent-user-fallback.ps1
+          ! grep -q 'workers.dev' anthares-remote-agent/windows/run-agent-user-fallback.ps1
           echo 'ARA_QUEUE_ONLY_VALIDATION_OK=1'
 
       - name: Commit finalized runtime
