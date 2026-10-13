@@ -46,6 +46,32 @@ start_api() {
   API_PID=$!
 }
 
+wait_api_health() {
+  for _ in $(seq 1 150); do
+    if ! kill -0 "$API_PID" 2>/dev/null; then
+      log "control API exited during startup"
+      return 1
+    fi
+    if python - "$API_PORT" <<'PY'
+import sys
+import urllib.request
+port = sys.argv[1]
+try:
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=1) as response:
+        raise SystemExit(0 if response.status == 200 else 1)
+except Exception:
+    raise SystemExit(1)
+PY
+    then
+      log "control API ready"
+      return 0
+    fi
+    sleep 0.1
+  done
+  log "control API failed to become healthy"
+  return 1
+}
+
 start_xvfb() {
   log "starting isolated Xvfb on ${DISPLAY}"
   Xvfb "$DISPLAY" -screen 0 1440x900x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
@@ -74,8 +100,6 @@ start_novnc() {
 }
 
 start_chromium() {
-  # Remove only stale singleton markers. A live Chromium is always stopped before
-  # this function is called, so the persistent profile remains safe to reuse.
   rm -f "$CHROME_PROFILE_DIR/SingletonLock" \
         "$CHROME_PROFILE_DIR/SingletonSocket" \
         "$CHROME_PROFILE_DIR/SingletonCookie" 2>/dev/null || true
@@ -109,7 +133,6 @@ local_ready() {
   python - "$API_PORT" <<'PY'
 import sys
 import urllib.request
-
 port = sys.argv[1]
 try:
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/ready", timeout=4) as response:
@@ -131,10 +154,11 @@ restart_display_stack() {
   start_chromium
 }
 
-# Bind the public API first so Render can route /health immediately during cold
-# starts. Browser readiness remains fail-closed through /ready.
+# Bring the HTTP control plane fully online before launching Chromium. On the
+# constrained free instance Chromium can saturate CPU during cold start; waiting
+# here prevents it from starving Uvicorn and causing Render 503s.
 start_api
-sleep 0.2
+wait_api_health
 start_xvfb
 start_vnc
 start_novnc
