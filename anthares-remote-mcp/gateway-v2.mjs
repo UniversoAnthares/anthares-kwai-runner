@@ -57,16 +57,16 @@ const server=createServer(async(req,res)=>{try{
     if(TOKEN_SECRET.length<32){json(res,503,{error:'oauth_not_configured'});return;}
     const clientId=u.searchParams.get('client_id')||'',redirectUri=u.searchParams.get('redirect_uri')||'',responseType=u.searchParams.get('response_type')||'',challengeCode=u.searchParams.get('code_challenge')||'',method=u.searchParams.get('code_challenge_method')||'',resource=u.searchParams.get('resource')||PUBLIC_ORIGIN,scopes=parseScopes(u.searchParams.get('scope'));
     if(!validateClientId(clientId)||!validateRedirect(redirectUri)||responseType!=='code'||method!=='S256'||challengeCode.length<43||resource!==PUBLIC_ORIGIN||!scopes){json(res,400,{error:'invalid_request'});return;}
-    const tx=randomBytes(24).toString('base64url');const approval=randomBytes(9).toString('base64url');
+    const approval=randomBytes(9).toString('base64url');const tx=signToken({typ:'oauth_pending',iss:PUBLIC_ORIGIN,aud:PUBLIC_ORIGIN,exp:Math.floor(Date.now()/1000)+600,jti:randomBytes(16).toString('hex'),clientId,redirectUri,challenge:challengeCode,resource,scopes,state:u.searchParams.get('state')||'',approvalHash:createHash('sha256').update(approval).digest('hex')});
     if(!(await sendApprovalCode(approval))){json(res,503,{error:'device_authorization_unavailable'});return;}
-    transactions.set(tx,{clientId,redirectUri,challenge:challengeCode,resource,scopes,state:u.searchParams.get('state')||'',approval,expires:Date.now()+10*60000});
+    // Pending OAuth transactions are signed and survive a gateway process restart.
     const html=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Remote Agent</title></head><body><main><h1>Anthares Remote Agent</h1><p>Um código de autorização foi colocado no clipboard do computador cadastrado. Cole-o abaixo para autorizar o ChatGPT.</p><p>Escopos: ${esc(scopes.join(', '))}</p><form method="post" action="/oauth/authorize"><input type="hidden" name="tx" value="${esc(tx)}"><label>Código <input type="password" name="approval" autocomplete="one-time-code" required autofocus></label><button type="submit">Autorizar</button></form></main></body></html>`;
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",'Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});res.end(html);return;
   }
   if(req.method==='POST'&&u.pathname==='/oauth/authorize'){
-    const body=form(await readBody(req,65536));const tx=body.get('tx')||'',approval=body.get('approval')||'';const p=transactions.get(tx);
+    const body=form(await readBody(req,65536));const tx=body.get('tx')||'',approval=body.get('approval')||'';const p=verifyToken(tx,'oauth_pending');
     if(!p||p.expires<Date.now()){transactions.delete(tx);json(res,400,{error:'authorization_expired'});return;}
-    if(!safeEq(approval,p.approval)){json(res,403,{error:'authorization_denied'});return;}
+    if(!safeEq(createHash('sha256').update(approval).digest('hex'),p.approvalHash)){json(res,403,{error:'authorization_denied'});return;}
     transactions.delete(tx);const code=randomBytes(32).toString('base64url');codes.set(code,{...p,approval:undefined,expires:Date.now()+5*60000});const target=new URL(p.redirectUri);target.searchParams.set('code',code);if(p.state)target.searchParams.set('state',p.state);target.searchParams.set('iss',PUBLIC_ORIGIN);res.writeHead(302,{Location:target.toString(),'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();return;
   }
   if(req.method==='POST'&&u.pathname==='/oauth/token'){
