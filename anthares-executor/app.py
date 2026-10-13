@@ -109,10 +109,10 @@ async def run_probe(handle: str) -> dict[str, Any]:
         return {"ok": False, "error": "chromium_not_ready", "identity_verified": False, "upload_surface_verified": False}
     async with async_playwright() as pw:
         browser = await pw.chromium.connect_over_cdp(CDP_URL)
+        context = browser.contexts[0]
+        pages = context.pages
+        page = pages[0] if pages else await context.new_page()
         try:
-            context = browser.contexts[0]
-            pages = context.pages
-            page = pages[0] if pages else await context.new_page()
             await page.route(re.compile(r".*\\.(png|jpe?g|gif|webp|avif|mp4|webm|mp3|woff2?|ttf)(\\?.*)?$", re.I), lambda route: route.abort())
             profile = await inspect_profile(page, handle)
             exact = profile.get("host") == "www.kwai.com" and profile.get("path") == "/@" + handle.lower()
@@ -137,11 +137,11 @@ async def run_probe(handle: str) -> dict[str, Any]:
             }
         finally:
             try:
-                for p in browser.contexts[0].pages:
-                    await p.goto("about:blank", wait_until="commit", timeout=3000)
+                await page.goto("about:blank", wait_until="commit", timeout=3000)
             except Exception:
                 pass
-            await browser.close()
+            # Do not call browser.close() on a CDP-attached persistent Chromium.
+            # Leaving the async_playwright context disconnects the client only.
 
 
 @app.post("/v1/probe")
