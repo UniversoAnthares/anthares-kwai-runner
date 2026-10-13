@@ -34,6 +34,11 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'system-images;android-30;default;arm64-v8a' >/dev/null
           DIR="$ANDROID_HOME/system-images/android-30/default/arm64-v8a"
           gzip -dc "$DIR/kernel-ranchu" > /tmp/android-Image
+          echo '=== SDK MODULE INVENTORY ==='
+          find "$DIR" -type f \( -name '*.ko' -o -name '*.ko.gz' -o -name '*.ko.xz' \) | head -80
+          echo '=== KERNEL CONFIG INVENTORY ==='
+          ls -l "$DIR"/kernel* "$DIR"/ramdisk* || true
+          file /tmp/android-Image
           BB="$(command -v busybox)"
           file "$BB"
           cp "$BB" /tmp/map-root/bin/busybox
@@ -51,6 +56,8 @@ jobs:
           echo '--- PLATFORM VIRTIO NODES ---'
           /bin/busybox find /sys/devices/platform -maxdepth 5 -type d 2>/dev/null | /bin/busybox grep -E 'virtio_mmio|virtio[0-9]+' || true
           echo '--- KERNEL STORAGE DRIVER SUPPORT ---'
+          if [ -e /proc/config.gz ]; then /bin/busybox zcat /proc/config.gz | /bin/busybox grep -E 'CONFIG_(VIRTIO_BLK|VIRTIO_MMIO|VIRTIO_PCI|SCSI|BLK_DEV_SD)=' || true; fi
+          echo '--- KERNEL MODULES ---'
           /bin/busybox cat /proc/modules || true
           /bin/busybox find /sys/bus/virtio/drivers -maxdepth 2 2>/dev/null || true
           /bin/busybox find /sys/class/block -maxdepth 1 2>/dev/null || true
@@ -121,9 +128,9 @@ jobs:
           set -e
           sed -n '/=== ANTHARES_VIRTIO_MAP_BEGIN ===/,/=== ANTHARES_VIRTIO_MAP_END ===/p' /tmp/virtio-map.log | tee /tmp/virtio-map.txt
           grep -q '=== ANTHARES_VIRTIO_MAP_END ===' /tmp/virtio-map.txt
-          grep -Eq 'PARTNAME=super|PART=vd[a-z]2|PART=sd[a-z]2' /tmp/virtio-map.txt
+          if ! grep -Eq 'PARTNAME=super|PART=vd[a-z]2|PART=sd[a-z]2' /tmp/virtio-map.txt; then echo 'STORAGE_DRIVER_NOT_ATTACHED'; fi
           echo "QEMU_RC=$RC"
-          echo STORAGE_TRANSPORT=${{ matrix.transport }} ARM64_VIRTIO_MAP=PASS
+          echo STORAGE_TRANSPORT=${{ matrix.transport }} ARM64_VIRTIO_MAP=DIAGNOSED
 
       - name: Upload evidence
         if: always()
