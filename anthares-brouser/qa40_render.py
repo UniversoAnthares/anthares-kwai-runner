@@ -2,6 +2,7 @@
 import base64, json, os, secrets, signal, subprocess, tempfile, threading, time, urllib.error, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
+import profile_store
 
 RESULT_PORT=int(os.environ.get('PORT','10000'))
 API_PORT=18080  # loopback-only browser API; never compete with Render's public port
@@ -9,7 +10,7 @@ PAGE_PORT=18081
 TOKEN=secrets.token_urlsafe(32)
 VNC_PASSWORD=secrets.token_urlsafe(24)
 ROOT=Path('/opt/anthares-brouser')
-RESULT={'ok':False,'cases':[],'restart_profile':False}
+RESULT={'ok':False,'cases':[],'restart_profile':False,'gitlab_snapshot':{'state':'not_checked'}}
 
 def request(path,method='GET',body=None,auth=True,timeout=15):
     headers={'Authorization':f'Bearer {TOKEN}'} if auth else {}
@@ -54,7 +55,12 @@ def run_cases():
         def log_message(self,*args): pass
     page_server=ThreadingHTTPServer(('127.0.0.1',PAGE_PORT),lambda *a,**k:Quiet(*a,directory=str(page_root),**k)); threading.Thread(target=page_server.serve_forever,daemon=True).start()
     stack=None
+    gitlab_enabled=profile_store.configured()
     try:
+        if gitlab_enabled:
+            os.environ['GITLAB_STATE_SLOT']='qa'
+            prior=profile_store.restore('/data/chrome-profile')
+            RESULT['gitlab_snapshot']={'state':'restored' if prior.get('ok') else 'initial','prior':prior.get('reason','ok')}
         stack=start_stack()
         for path in ('/status','/page','/targets','/screenshot'):
             code,_=request(path,auth=False)
@@ -80,6 +86,12 @@ def run_cases():
         if not RESULT['restart_profile']: raise AssertionError(f'profile restart failed: {restored}')
         with urllib.request.urlopen('http://127.0.0.1:6080/vnc.html',timeout=10) as r: RESULT['novnc_internal']=b'noVNC' in r.read()
         if not RESULT['novnc_internal']: raise AssertionError('internal noVNC unavailable')
+        if gitlab_enabled:
+            stop_stack(stack); stack=None
+            saved=profile_store.backup('/data/chrome-profile')
+            RESULT['gitlab_snapshot']['saved']=saved.get('ok',False)
+            RESULT['gitlab_snapshot']['chunks']=saved.get('chunks',0)
+            if not saved.get('ok'): raise AssertionError('GitLab encrypted snapshot write failed')
         RESULT['ok']=len(RESULT['cases'])==40 and all(x['ok'] for x in RESULT['cases']) and RESULT['restart_profile'] and RESULT['novnc_internal']
     except Exception as exc:
         RESULT['error']=type(exc).__name__; RESULT['error_detail']=str(exc)[:1500]
