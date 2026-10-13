@@ -95,3 +95,72 @@ jobs:
       - name: Stop router
         if: always()
         run: docker rm -f anthares-reserva >/dev/null 2>&1 || true
+
+  restored-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      GITLAB_STATE_KEY: ${{ secrets.GITLAB_STATE_KEY }}
+      CONTROL_TOKEN: ${{ secrets.CONTROL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check restore prerequisites without exposing secrets
+        id: state
+        run: |
+          key=0; token=0
+          if test -n "${GITLAB_STATE_KEY:-}" || test -n "${CONTROL_TOKEN:-}"; then key=1; fi
+          if test -n "${GITLAB_TOKEN:-}"; then token=1; fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+          echo "STATE_KEY_AVAILABLE=$key"
+          echo "GITLAB_TOKEN_AVAILABLE=$token"
+      - name: Report safe migration gate
+        if: steps.state.outputs.key != '1' || steps.state.outputs.token != '1'
+        run: echo 'ANTHARES_RESTORE_GATE=BLOCKED_SECRET_MIGRATION'
+      - name: Build restored executor
+        if: steps.state.outputs.key == '1' && steps.state.outputs.token == '1'
+        run: docker build -f anthares-executor/Dockerfile -t anthares-executor:restored .
+      - name: Start with encrypted GitLab profile
+        if: steps.state.outputs.key == '1' && steps.state.outputs.token == '1'
+        run: |
+          docker run -d --name anthares-executor-restored \
+            --memory=2g --shm-size=256m \
+            -e ANTHARES_EXECUTOR_TOKEN=qa-local-token \
+            -e KWAI_EXPECTED_ACCOUNT=lucasrosalem \
+            -e GITLAB_STATE_ENABLED=1 \
+            -e GITLAB_STATE_PROJECT=87307279 \
+            -e GITLAB_STATE_BRANCH=browser-state \
+            -e GITLAB_STATE_SLOT=runtime \
+            -e GITLAB_TOKEN="$GITLAB_TOKEN" \
+            -e GITLAB_STATE_KEY="${GITLAB_STATE_KEY:-${CONTROL_TOKEN:-}}" \
+            -p 18082:8080 anthares-executor:restored
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18082/ready >/tmp/ready.json; then break; fi
+            if ! docker inspect -f '{{.State.Running}}' anthares-executor-restored 2>/dev/null | grep -q true; then docker logs --tail 80 anthares-executor-restored; exit 3; fi
+            sleep 1
+          done
+          cat /tmp/ready.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/ready.json')); s=d.get('state') or {}
+          assert d.get('ok') is True and d.get('chromium') is True and s.get('ok') is True and s.get('generation'), (d,s)
+          print('ANTHARES_ENCRYPTED_PROFILE_RESTORE=PASS')
+          PY
+      - name: Probe restored Kwai session read-only
+        if: steps.state.outputs.key == '1' && steps.state.outputs.token == '1'
+        run: |
+          curl --fail-with-body --max-time 55 -sS -H 'Authorization: Bearer qa-local-token' -H 'Content-Type: application/json' \
+            -d '{"job_id":"restored-${{ github.run_id }}","generation":1,"handle":"lucasrosalem"}' http://127.0.0.1:18082/v1/probe | tee /tmp/restored.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/restored.json'))
+          print('ANTHARES_RESTORED_KWAI_PROBE='+json.dumps({k:d.get(k) for k in ('ok','identity_verified','upload_surface_verified','session_state','read_only')},separators=(',',':')))
+          assert d.get('ok') is True
+          PY
+      - name: Logs on failure
+        if: failure() && steps.state.outputs.key == '1' && steps.state.outputs.token == '1'
+        run: docker logs --tail 120 anthares-executor-restored || true
+      - name: Stop restored executor
+        if: always()
+        run: docker rm -f anthares-executor-restored >/dev/null 2>&1 || true
