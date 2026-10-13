@@ -96,10 +96,11 @@ class PhysicalContractTests(unittest.TestCase):
     def test_commit_requires_exact_post_focus_before_enter(self):
         source = MODULE.read_text(encoding="utf-8")
         commit_body = source.split("    def commit(self) -> int:", 1)[1].split("    def verify(self) -> int:", 1)[0]
-        self.assertIn("self.focus_target(keyboard, FINAL_POST_ID", commit_body)
+        self.assertIn("trusted_focused_final_post(nodes)", commit_body)
+        self.assertIn("hid-focus-target-timeout:trusted-final-post", commit_body)
         self.assertIn("PUBLISH_REQUESTED", commit_body)
         self.assertIn("keyboard.enter()", commit_body)
-        self.assertLess(commit_body.index("self.focus_target(keyboard, FINAL_POST_ID"), commit_body.index("keyboard.enter()"))
+        self.assertLess(commit_body.index("trusted_focused_final_post(nodes)"), commit_body.index("keyboard.enter()"))
 
     def test_physical_job_routes_to_verified_adapter(self):
         source = (ROOT / "kwai_up_physical_job.py").read_text(encoding="utf-8")
