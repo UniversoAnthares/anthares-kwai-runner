@@ -1,0 +1,18 @@
+$ErrorActionPreference='SilentlyContinue'
+$root='C:\ProgramData\AntharesRemoteAgent'
+
+function Ensure-Supervisor([string]$scriptName) {
+    $launcher=Join-Path $root $scriptName
+    if(-not (Test-Path $launcher)){ return }
+    $escaped=[regex]::Escape($scriptName)
+    $running=Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object {
+        $_.CommandLine -match $escaped
+    }
+    if(-not $running){
+        $cmd="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcher`""
+        ([wmiclass]'Win32_Process').Create($cmd) | Out-Null
+    }
+}
+
+Ensure-Supervisor 'run-agent.ps1'
+Ensure-Supervisor 'run-agent-standard.ps1'
