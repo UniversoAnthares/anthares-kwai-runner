@@ -13,6 +13,11 @@ on:
         description: Interactive login window, max 45
         required: false
         default: '20'
+  push:
+    branches: [main]
+    paths:
+      - 'anthares-brouser/**'
+      - '.github/workflows/anthares-browser-cloud-fallback.yml'
   schedule:
     - cron: '37 */6 * * *'
 
