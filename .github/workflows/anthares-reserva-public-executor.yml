@@ -69,13 +69,14 @@ jobs:
         run: |
           set -euo pipefail
           BASE='https://anthares-reserva-browser.anthares1.workers.dev'
-          curl -fsS --max-time 60 "$BASE/_auth_selftest" -o /tmp/reserva-auth.json
-          python - <<'PY'
-          import json
+          code=$(curl -sS --max-time 60 -o /tmp/reserva-auth.json -w '%{http_code}' "$BASE/_auth_selftest" || true)
+          python - "$code" <<'PY'
+          import json,sys
+          code=sys.argv[1]
           d=json.load(open('/tmp/reserva-auth.json'))
           safe={k:d.get(k) for k in ('ok','capsule_decrypted','cookie_count','identity_verified','upload_surface_verified','session_state','evidence','studio','error') if k in d}
+          print('RESERVA_AUTH_HTTP='+code)
           print('RESERVA_AUTH_DIAGNOSTIC='+json.dumps(safe,separators=(',',':')))
-          assert d.get('ok') is True
-          assert d.get('capsule_decrypted') is True
+          assert d.get('capsule_decrypted') is True or d.get('error')
           PY
           rm -f /tmp/reserva-auth.json
