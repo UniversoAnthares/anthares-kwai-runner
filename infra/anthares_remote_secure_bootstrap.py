@@ -8,69 +8,33 @@ import anthares_remote_control_routes as _relay
 
 _DEVICE = "DESKTOP-FTDK0HP"
 _ALLOWED = {}
-_MIGRATION_JOB_ID = None
 
 
 def _authorized():
-    if os.getenv("ARA_BOOTSTRAP_ACTIVE", "") == "1": return True
+    if os.getenv("ARA_BOOTSTRAP_ACTIVE", "") == "1":
+        return True
     supplied = request.headers.get("X-Anthares-Bootstrap", "")
     expected = os.getenv("ARA_BROWSER_APPROVED_CHALLENGE", "")
     return bool(supplied and expected) and secrets.compare_digest(supplied, expected)
 
 
 def _enqueue(job_type, args=None, timeout=60):
-    job_id = secrets.token_hex(16)
-    job = {"id":job_id,"type":job_type,"args":args or {},"timeout_seconds":max(1,min(int(timeout),120)),"created_at":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),"status":"queued"}
-    with _relay._LOCK:
-        state = _relay._DEVICES.setdefault(_DEVICE,{"heartbeat":None,"queue":[],"jobs":{}})
-        state["jobs"][job_id]=job; state["queue"].append(job_id)
-    _ALLOWED[job_id]=time.time()+900
+    job = _relay.enqueue_job(
+        _DEVICE,
+        job_type,
+        args or {},
+        max(1, min(int(timeout), 120)),
+    )
+    _ALLOWED[job["id"]] = time.time() + 900
     return job
 
 
-def _durable_migration_command():
-    return r"""
-$ErrorActionPreference='Stop'
-$dir='C:\ProgramData\AntharesRemoteAgent'
-$launcher=Join-Path $dir 'run-agent.ps1'
-if(-not(Test-Path $launcher)){throw 'launcher_missing'}
-$target='https://anthares-ara-control.onrender.com'
-$lines=Get-Content $launcher
-$found=$false
-$new=@()
-foreach($line in $lines){
-  if($line -match '^\$env:ANTHARES_CONTROL_URL='){
-    $new += ('$env:ANTHARES_CONTROL_URL='''+$target+'''')
-    $found=$true
-  } else { $new += $line }
-}
-if(-not $found){throw 'control_url_line_missing'}
-$tmp=Join-Path $dir 'run-agent.ps1.new'
-Set-Content -Path $tmp -Value $new -Encoding UTF8
-$verify=(Get-Content $tmp | Where-Object {$_ -match '^\$env:ANTHARES_CONTROL_URL='} | Select-Object -First 1)
-if($verify -ne ('$env:ANTHARES_CONTROL_URL='''+$target+'''')){throw 'launcher_verify_failed'}
-Move-Item -Force $tmp $launcher
-$restart=Join-Path $dir 'switch-durable-control.ps1'
-$restartLines=@(
-  'Start-Sleep -Seconds 3',
-  'Get-Process ''anthares-remote-agent'' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue',
-  'Start-Sleep -Seconds 2',
-  'Start-Process powershell.exe -WindowStyle Hidden -ArgumentList ''-NoProfile'',''-ExecutionPolicy'',''Bypass'',''-File'',''C:\ProgramData\AntharesRemoteAgent\run-agent.ps1'''
-)
-Set-Content -Path $restart -Value $restartLines -Encoding UTF8
-Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',$restart
-'MIGRATION_SCHEDULED'
-'CONTROL_URL='+$target
-""".strip()
-
-
 def register(app):
-    global _MIGRATION_JOB_ID
-
     @app.post("/v1/bootstrap/diagnose")
     def diagnose():
-        if not _authorized(): return jsonify(error="unauthorized"),401
-        command=r"""
+        if not _authorized():
+            return jsonify(error="unauthorized"), 401
+        command = r"""
 $ErrorActionPreference='Continue'
 'WHO='+(whoami)
 $node=Get-Command node -ErrorAction SilentlyContinue; 'NODE='+[bool]$node; if($node){node --version}
@@ -83,13 +47,14 @@ if(Test-Path $tp){'TUNNEL_HELP_BEGIN'; & $tp --help 2>&1 | Select-Object -First 
 Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object {$_.TaskName -like '*Secure MCP Tunnel*' -or $_.TaskName -like '*Anthares*'} | ForEach-Object {[pscustomobject]@{TaskName=$_.TaskName;State=$_.State;Actions=@($_.Actions|ForEach-Object{[pscustomobject]@{Execute=$_.Execute;Arguments=$_.Arguments;WorkingDirectory=$_.WorkingDirectory}})}} | ConvertTo-Json -Depth 5 -Compress
 'TASKS_END'
 """.strip()
-        job=_enqueue("shell",{"command":command,"shell":"powershell"},90)
-        return jsonify(job_id=job["id"],status="queued"),202
+        job = _enqueue("shell", {"command": command, "shell": "powershell"}, 90)
+        return jsonify(job_id=job["id"], status="queued"), 202
 
     @app.post("/v1/bootstrap/tunnel-details")
     def tunnel_details():
-        if not _authorized(): return jsonify(error="unauthorized"),401
-        command=r"""
+        if not _authorized():
+            return jsonify(error="unauthorized"), 401
+        command = r"""
 $ErrorActionPreference='Continue'
 $tp='C:\Users\Lucas\AntharesWork\openai-tunnel-client\tunnel-client.exe'
 if(-not(Test-Path $tp)){throw 'tunnel_client_missing'}
@@ -102,16 +67,18 @@ $files=@('C:\Users\Lucas\AntharesWork\openai-tunnel-client\start-meshcentral-tun
 foreach($f in $files){if(Test-Path $f){'FILE='+$f; $raw=Get-Content $f -Raw; $raw=$raw -replace '(?i)(sk-[A-Za-z0-9_\-]{8,})','<REDACTED_KEY>'; $raw=$raw -replace '(?im)(CONTROL_PLANE_API_KEY\s*=\s*)[^\r\n]+','$1<REDACTED>'; $raw}}
 'SCRIPTS_END'
 """.strip()
-        job=_enqueue("shell",{"command":command,"shell":"powershell"},90)
-        return jsonify(job_id=job["id"],status="queued"),202
+        job = _enqueue("shell", {"command": command, "shell": "powershell"}, 90)
+        return jsonify(job_id=job["id"], status="queued"), 202
 
     @app.post("/v1/bootstrap/install-mcp")
     def install_mcp():
-        if not _authorized(): return jsonify(error="unauthorized"),401
-        token=os.getenv("ARA_SHARED","")
-        if not token: return jsonify(error="control_secret_missing"),503
-        token_b64=base64.b64encode(token.encode()).decode()
-        command=(r"""
+        if not _authorized():
+            return jsonify(error="unauthorized"), 401
+        token = os.getenv("ARA_SHARED", "")
+        if not token:
+            return jsonify(error="control_secret_missing"), 503
+        token_b64 = base64.b64encode(token.encode()).decode()
+        command = (r"""
 $ErrorActionPreference='Stop'
 $root='C:\ProgramData\AntharesRemoteMCP'
 $repo=Join-Path $root 'repo'
@@ -123,38 +90,36 @@ Push-Location $src
 try { npm install --omit=dev } finally { Pop-Location }
 $secret=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__TOKEN_B64__'))
 $launcher=Join-Path $root 'start-local.ps1'
-$lines=@('$env:ANTHARES_CONTROL_URL=''https://anthares-remote-control.onrender.com''','$env:ANTHARES_DEVICE_ID=''DESKTOP-FTDK0HP''',('$env:ARA_SHARED='''+$secret.Replace("'","''")+''''),('Set-Location '''+$src.Replace("'","''")+''''),'& node server.mjs')
+$lines=@('$env:ANTHARES_CONTROL_URL=''https://anthares-ara-control.onrender.com''','$env:ANTHARES_DEVICE_ID=''DESKTOP-FTDK0HP''',('$env:ARA_SHARED='''+$secret.Replace("'","''")+''''),('Set-Location '''+$src.Replace("'","''")+''''),'& node server.mjs')
 Set-Content -Path $launcher -Value $lines -Encoding UTF8
 icacls $launcher /inheritance:r /grant:r "$env:USERNAME`:F" | Out-Null
 'INSTALL_MCP=OK'; 'PATH='+$src; 'PACKAGE_JSON='+[bool](Test-Path (Join-Path $src 'package.json')); 'NODE_MODULES='+[bool](Test-Path (Join-Path $src 'node_modules'))
-""".strip()).replace('__TOKEN_B64__',token_b64)
-        job=_enqueue("shell",{"command":command,"shell":"powershell"},120)
-        return jsonify(job_id=job["id"],status="queued"),202
+""".strip()).replace("__TOKEN_B64__", token_b64)
+        job = _enqueue("shell", {"command": command, "shell": "powershell"}, 120)
+        return jsonify(job_id=job["id"], status="queued"), 202
 
     @app.post("/v1/bootstrap/recover-runner")
     def recover_runner():
-        if not _authorized(): return jsonify(error="unauthorized"),401
-        command=r"""$ErrorActionPreference='Stop'; $root='C:\actions-runner'; if(-not(Test-Path (Join-Path $root 'run.cmd'))){throw 'runner_not_installed'}; $p=Get-Process 'Runner.Listener' -ErrorAction SilentlyContinue; if(-not $p){Start-Process -FilePath 'cmd.exe' -ArgumentList '/c','run.cmd' -WorkingDirectory $root -WindowStyle Hidden; Start-Sleep -Seconds 6}; $p=Get-Process 'Runner.Listener' -ErrorAction SilentlyContinue; if($p){'RUNNER=ONLINE';'PID='+(($p|Select-Object -First 1).Id)}else{throw 'runner_not_started'}"""
-        job=_enqueue("shell",{"command":command,"shell":"powershell"},30)
-        return jsonify(job_id=job["id"],status="queued"),202
+        if not _authorized():
+            return jsonify(error="unauthorized"), 401
+        command = r"""$ErrorActionPreference='Stop'; $root='C:\actions-runner'; if(-not(Test-Path (Join-Path $root 'run.cmd'))){throw 'runner_not_installed'}; $p=Get-Process 'Runner.Listener' -ErrorAction SilentlyContinue; if(-not $p){Start-Process -FilePath 'cmd.exe' -ArgumentList '/c','run.cmd' -WorkingDirectory $root -WindowStyle Hidden; Start-Sleep -Seconds 6}; $p=Get-Process 'Runner.Listener' -ErrorAction SilentlyContinue; if($p){'RUNNER=ONLINE';'PID='+(($p|Select-Object -First 1).Id)}else{throw 'runner_not_started'}"""
+        job = _enqueue("shell", {"command": command, "shell": "powershell"}, 30)
+        return jsonify(job_id=job["id"], status="queued"), 202
 
     @app.get("/v1/bootstrap/job/<job_id>")
     def job_status(job_id):
-        if not _authorized(): return jsonify(error="unauthorized"),401
-        if _ALLOWED.get(job_id,0)<time.time(): _ALLOWED.pop(job_id,None); return jsonify(error="not_found"),404
-        with _relay._LOCK:
-            state=_relay._DEVICES.setdefault(_DEVICE,{"heartbeat":None,"queue":[],"jobs":{}}); job=state["jobs"].get(job_id)
-            if not job:return jsonify(error="not_found"),404
-            result=job.get("result") or {}; return jsonify(status=job.get("status"),ok=result.get("ok"),output=result.get("output"),error=result.get("error"))
-
-    # One bounded automatic migration is enabled only during the explicit
-    # Render rollout. The old controller remains the transport for this job;
-    # the job rewrites only the agent controller URL and restarts invisibly.
-    if os.getenv("ARA_MIGRATE_TO_DURABLE", "") == "1" and not _MIGRATION_JOB_ID:
-        migration = _enqueue(
-            "shell",
-            {"command": _durable_migration_command(), "shell": "powershell"},
-            45,
+        if not _authorized():
+            return jsonify(error="unauthorized"), 401
+        if _ALLOWED.get(job_id, 0) < time.time():
+            _ALLOWED.pop(job_id, None)
+            return jsonify(error="not_found"), 404
+        job = _relay.get_job(_DEVICE, job_id)
+        if not job:
+            return jsonify(error="not_found"), 404
+        result = job.get("result") or {}
+        return jsonify(
+            status=job.get("status"),
+            ok=result.get("ok"),
+            output=result.get("output"),
+            error=result.get("error"),
         )
-        _MIGRATION_JOB_ID = migration["id"]
-        app.logger.warning("ARA_DURABLE_MIGRATION_QUEUED job=%s", _MIGRATION_JOB_ID)
