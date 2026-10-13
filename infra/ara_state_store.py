@@ -90,6 +90,8 @@ class MemoryStore:
             if row["device_id"] != device_id or row["status"] in FINAL or row["status"] == "uncertain":
                 continue
             if now >= row["expires_epoch"]:
+                # Side-effecting work already leased may have executed; never
+                # report it as safely expired or replay it after a restart.
                 row["status"] = "uncertain" if row["status"] == "leased" and not is_safe_retry(row["type"]) else "expired"
                 row["lease_until"] = None
                 continue

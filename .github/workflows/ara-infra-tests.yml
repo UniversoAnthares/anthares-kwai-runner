@@ -1,0 +1,82 @@
+name: ARA infra durability tests
+
+on:
+  push:
+    branches: [feature/ara-infra]
+    paths:
+      - 'infra/ara_state_store.py'
+      - 'infra/ara_legacy_state_compat.py'
+      - 'infra/anthares_remote_control_routes.py'
+      - 'infra/anthares_remote_browser_bridge.py'
+      - 'infra/anthares_remote_bootstrap.py'
+      - 'infra/anthares_remote_secure_bootstrap.py'
+      - 'infra/anthares_remote_switch.py'
+      - 'infra/ara_public_probe_guard.py'
+      - 'infra/ara_runtime_truth.py'
+      - 'infra/ara_canary_app.py'
+      - 'infra/sitecustomize.py'
+      - 'tests/test_ara_state_store.py'
+      - 'tests/test_ara_legacy_state_compat.py'
+      - 'tests/test_ara_postgres_store_integration.py'
+      - 'tests/test_ara_route_security.py'
+      - '.github/workflows/ara-infra-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  durability:
+    name: ARA validation (${{ matrix.priority }} / ${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - priority: primary
+            runner: ubuntu-24.04
+          - priority: backup-1
+            runner: ubuntu-22.04
+          - priority: backup-2
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ara_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ara_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ara_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: pip install flask requests 'psycopg[binary]'
+      - name: Run durability and security tests
+        run: >-
+          python -m unittest -v
+          tests.test_ara_state_store
+          tests.test_ara_legacy_state_compat
+          tests.test_ara_postgres_store_integration
+          tests.test_ara_route_security
+      - name: Syntax compile
+        run: >-
+          python -m py_compile
+          infra/ara_state_store.py
+          infra/ara_legacy_state_compat.py
+          infra/ara_public_probe_guard.py
+          infra/ara_runtime_truth.py
+          infra/anthares_remote_control_routes.py
+          infra/anthares_remote_browser_bridge.py
+          infra/anthares_remote_bootstrap.py
+          infra/anthares_remote_secure_bootstrap.py
+          infra/anthares_remote_switch.py
+          infra/ara_canary_app.py
+          infra/sitecustomize.py

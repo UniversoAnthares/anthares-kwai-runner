@@ -22,22 +22,9 @@ def _authorized():
 
 
 def _enqueue(job_type, args=None, timeout=60):
-    job_id = secrets.token_hex(16)
-    job = {
-        "id": job_id,
-        "type": job_type,
-        "args": args or {},
-        "timeout_seconds": max(1, min(int(timeout), 120)),
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "status": "queued",
-    }
-    with _relay._LOCK:
-        state = _relay._DEVICES.setdefault(_DEVICE, {"heartbeat": None, "queue": [], "jobs": {}})
-        state["jobs"][job_id] = job
-        state["queue"].append(job_id)
-    _ALLOWED[job_id] = time.time() + 900
+    job = _relay.enqueue_job(_DEVICE, job_type, args or {}, timeout)
+    _ALLOWED[job["id"]] = time.time() + 900
     return job
-
 
 def register(app):
     @app.post("/v1/bootstrap/diagnose")
@@ -84,10 +71,8 @@ if($p){'RUNNER=ONLINE';'PID='+(($p|Select-Object -First 1).Id)}else{throw 'runne
         if _ALLOWED.get(job_id, 0) < time.time():
             _ALLOWED.pop(job_id, None)
             return jsonify(error="not_found"), 404
-        with _relay._LOCK:
-            state = _relay._DEVICES.setdefault(_DEVICE, {"heartbeat": None, "queue": [], "jobs": {}})
-            job = state["jobs"].get(job_id)
-            if not job:
-                return jsonify(error="not_found"), 404
-            result = job.get("result") or {}
-            return jsonify(status=job.get("status"), ok=result.get("ok"), output=result.get("output"), error=result.get("error"))
+        job = _relay.get_job(_DEVICE, job_id)
+        if not job:
+            return jsonify(error="not_found"), 404
+        result = job.get("result") or {}
+        return jsonify(status=job.get("status"), ok=result.get("ok"), output=result.get("output"), error=result.get("error"))
