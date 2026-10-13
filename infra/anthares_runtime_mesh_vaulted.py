@@ -1,9 +1,20 @@
 """Bind the vault-backed local browser to the generic Anthares runtime mesh."""
 from __future__ import annotations
 
+import os
+
 from flask import Response, jsonify
 
 import anthares_runtime_mesh as _mesh
+
+_BROWSER_STATE_AUTHORITY = os.getenv("ANTHARES_BROWSER_STATE_AUTHORITY", "runtime").strip().lower()
+if _BROWSER_STATE_AUTHORITY not in {"runtime", "control"}:
+    raise RuntimeError("invalid ANTHARES_BROWSER_STATE_AUTHORITY")
+os.environ.setdefault(
+    "ANTHARES_BROWSER_STATE_VAULT_URL",
+    f"https://anthares-x-vault.anthares1.workers.dev/browser-state/{_BROWSER_STATE_AUTHORITY}",
+)
+
 import anthares_runtime_browser_local as _local
 
 _ORIGINAL_REQUEST = _mesh._browser_request
@@ -118,6 +129,7 @@ def register(app):
             "restore_status": result.get("restore_status"),
             "last_persist_ok": result.get("last_persist_ok"),
             "host_desktop_fallback": bool(result.get("host_desktop_fallback")),
+            "vault_authority": _BROWSER_STATE_AUTHORITY,
         }
         fields["persistence_proven"] = bool(
             fields["healthy"]
