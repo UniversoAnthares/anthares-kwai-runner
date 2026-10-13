@@ -123,7 +123,7 @@ jobs:
             add "$ANDROID_DIR/vendor.img" vendor 1
           fi
 
-          CMD='console=ttyAMA0 androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive root=/dev/ram0 rw qemu=1 androidboot.qemu=1 androidboot.serialno=ANTHARESVDC'
+          CMD='console=ttyAMA0 earlycon=pl011,0x09000000 loglevel=8 ignore_loglevel initcall_debug androidboot.console=ttyAMA0 androidboot.hardware=ranchu androidboot.selinux=permissive androidboot.init_log_level=7 androidboot.boot_devices=a003c00.virtio_mmio root=/dev/ram0 rw qemu=1 androidboot.qemu=1 androidboot.serialno=ANTHARESVDC'
           EXTRA=()
           if [ "$FAMILY" = order ]; then
             [ "$V" = 6 ] && CMD="$CMD androidboot.boot_devices=a003c00.virtio_mmio"
@@ -156,6 +156,7 @@ jobs:
           timeout 175 "${Q[@]}" > /tmp/android-qemu.log 2>&1
           RC=$?
 
+          echo '--- SERIAL LAST 120 ---'; tail -120 /tmp/android-qemu.log
           grep -E 'virtio_blk|\[vd[a-d]\]|/data|metadata|EXT4-fs \(vdc\)|mount.*vdc|Invalid ext4|init second stage|dalvik-cache|misc_de|zygote|system_server|SystemServer|ActivityManager|PackageManager|SurfaceFlinger|surfaceflinger|BOOT_COMPLETED|boot_completed|received signal' /tmp/android-qemu.log | tail -500 > /tmp/checkpoints.txt || true
           cat /tmp/checkpoints.txt
           MAP=$(grep -E 'virtio_blk.*\[vdc\]' /tmp/android-qemu.log | tail -1 || true)
@@ -172,6 +173,7 @@ jobs:
           if grep -q 'Invalid ext4 superblock on .*/dev/block/vdc' /tmp/android-qemu.log; then echo RESULT=VDC_NOT_DATA; exit 1; fi
           if [ "$SECOND" -gt 0 ]; then echo RESULT=SECOND_STAGE_DATA_NOT_MOUNTED; exit 1; fi
           echo RESULT=EARLY_FAIL
+          echo '--- INIT CRASH CONTEXT ---'; grep -B 35 -A 15 -E 'FirstStageMain|InitFatalReboot|Failed to|FATAL|init:.*error' /tmp/android-qemu.log | tail -160 || true
           exit 1
 
       - uses: actions/upload-artifact@v4
