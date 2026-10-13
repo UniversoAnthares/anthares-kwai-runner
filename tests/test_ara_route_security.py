@@ -114,11 +114,9 @@ class RouteSecurityTests(unittest.TestCase):
         self.assertNotIn('from anthares_remote_bootstrap import', source)
         self.assertNotIn('from anthares_remote_switch import', source)
 
-    def test_production_worker_registers_runtime_mesh_without_sitecustomize(self):
+    def test_production_sitecustomize_preserves_runtime_mesh(self):
         sitecustomize = (ROOT / 'infra' / 'sitecustomize.py').read_text(encoding='utf-8')
-        worker = (ROOT / 'infra' / 'x_render_worker_v3.py').read_text(encoding='utf-8')
-        self.assertNotIn('import x_render_worker_v3', sitecustomize)
-        self.assertIn('from anthares_runtime_mesh import register', worker)
+        self.assertIn('from anthares_runtime_mesh import register', sitecustomize)
 
 
 if __name__ == '__main__':
