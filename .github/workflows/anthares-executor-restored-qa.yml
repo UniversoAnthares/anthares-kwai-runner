@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: anthares-executor-restored-profile-${{ github.ref }}
@@ -96,3 +97,64 @@ jobs:
       - name: Stop executor
         if: always()
         run: docker rm -f anthares-executor-restored >/dev/null 2>&1 || true
+
+  oidc-source-handoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Create ephemeral recipient key
+        run: |
+          umask 077
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /tmp/recipient.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/recipient.pem -pubout -out /tmp/recipient.pub.pem >/dev/null 2>&1
+      - name: Request repository-bound GitHub OIDC token
+        run: |
+          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=anthares-session-migration"
+          curl --fail --silent --show-error --max-time 15 \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url" -o /tmp/oidc.json
+          python - <<'PY'
+          import json, pathlib
+          token=json.load(open('/tmp/oidc.json'))['value']
+          assert token.count('.') == 2 and len(token) > 100
+          pathlib.Path('/tmp/oidc.token').write_text(token)
+          pathlib.Path('/tmp/oidc.json').unlink()
+          print('GITHUB_OIDC_TOKEN=ACQUIRED_NOT_EXPOSED')
+          PY
+      - name: Request encrypted Kwai handoff capsule from Render
+        run: |
+          python - <<'PY'
+          import json
+          request={'id_token':open('/tmp/oidc.token').read(),'public_key_pem':open('/tmp/recipient.pub.pem').read()}
+          open('/tmp/request.json','w').write(json.dumps(request,separators=(',',':')))
+          PY
+          code=$(curl --silent --show-error --max-time 90 -o /tmp/capsule.json -w '%{http_code}' \
+            -H 'Content-Type: application/json' --data-binary @/tmp/request.json \
+            https://anthares-browser-qa-render-v2.onrender.com/migration/github-oidc-capsule)
+          rm -f /tmp/request.json /tmp/oidc.token
+          echo "HANDOFF_HTTP=$code"
+          if test "$code" != 200; then
+            python - <<'PY'
+          import json
+          try:
+              d=json.load(open('/tmp/capsule.json'))
+              print('HANDOFF_REJECTED='+json.dumps(d,separators=(',',':'))[:1000])
+          except Exception:
+              print('HANDOFF_REJECTED_NON_JSON')
+          PY
+            exit 3
+          fi
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/capsule.json'))
+          assert d.get('version') == 3 and d.get('alg') == 'RSA-OAEP-256+A256GCM'
+          assert d.get('source_identity_verified') is True and int(d.get('cookie_count',0)) > 0
+          for key in ('wrapped_key','nonce','ciphertext','aad'):
+              assert isinstance(d.get(key),str) and len(d[key]) > 8
+          print('ANTHARES_OIDC_SOURCE_HANDOFF=PASS')
+          print('SOURCE_IDENTITY_VERIFIED=true')
+          print('COOKIE_COUNT='+str(d['cookie_count']))
+          print('LOCAL_STORAGE_COUNT='+str(d.get('local_storage_count',0)))
+          PY
+      - name: Destroy ephemeral handoff material
+        if: always()
+        run: rm -f /tmp/recipient.pem /tmp/recipient.pub.pem /tmp/capsule.json /tmp/oidc.token /tmp/oidc.json /tmp/request.json
