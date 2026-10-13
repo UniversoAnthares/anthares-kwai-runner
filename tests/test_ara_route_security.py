@@ -62,6 +62,17 @@ class RouteSecurityTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(ara_runtime_truth.backend_name(), 'unavailable')
 
+    def test_canary_requires_durable_database_and_controller_secret(self):
+        source = (ROOT / 'infra' / 'ara_canary_app.py').read_text(encoding='utf-8')
+        self.assertIn('if not os.getenv("ARA_SHARED"):', source)
+        self.assertIn('if not (os.getenv("ARA_DATABASE_URL") or os.getenv("DATABASE_URL")):', source)
+        self.assertIn('build_store()', source)
+
+    def test_no_implicit_sitecustomize_route_registration(self):
+        source = (ROOT / 'infra' / 'sitecustomize.py').read_text(encoding='utf-8')
+        self.assertNotIn('_relay.register(', source)
+        self.assertNotIn('import x_render_worker_v3', source)
+
     def test_canary_entrypoint_does_not_register_legacy_bootstrap_modules(self):
         source = (ROOT / 'infra' / 'ara_canary_app.py').read_text(encoding='utf-8')
         self.assertNotIn('from anthares_remote_bootstrap import', source)
