@@ -25,7 +25,6 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   policy:
@@ -50,6 +49,8 @@ jobs:
           echo "$out" | grep -q '"ok":true'
           echo "$out" | grep -q '"service":"anthares-control"'
           echo "$out" | grep -q '"provider":"cloudflare"'
+          echo "$out" | grep -q '"persistent_state":true'
+          echo "$out" | grep -q '"queue_bound":true'
           echo "$out" | grep -q '"pc_fallback":false'
       - name: Cloudflare failover self-test
         run: |
@@ -57,12 +58,9 @@ jobs:
           out="$(curl -fsS --retry 3 --max-time 15 https://anthares-control.anthares1.workers.dev/failover-self-test)"
           echo "$out"
           echo "$out" | grep -q '"ok":true'
-      - name: Git provider self-test
-        run: |
-          set -euo pipefail
-          out="$(curl -fsS --retry 3 --max-time 15 https://anthares-control.anthares1.workers.dev/git-provider-self-test)"
-          echo "$out"
-          echo "$out" | grep -q '"ok":true'
+          echo "$out" | grep -q '"primary":"render"'
+          echo "$out" | grep -q '"after_render_failure":"github"'
+          echo "$out" | grep -q '"local_retired":true'
 
   render-independence:
     runs-on: macos-14
@@ -80,5 +78,6 @@ jobs:
           set -euo pipefail
           out="$(curl -fsS --retry 3 --max-time 15 https://anthares-control.anthares1.workers.dev/health)"
           echo "$out" | grep -q '"provider":"cloudflare"'
+          echo "$out" | grep -q '"persistent_state":true'
           echo "$out" | grep -q '"queue_bound":true'
           echo 'RENDER_INDEPENDENCE_OK=1'
