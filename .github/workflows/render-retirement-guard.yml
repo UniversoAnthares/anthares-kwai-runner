@@ -1,0 +1,64 @@
+name: Render retirement guard
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - cloudflare-x-vault/**
+      - cloudflare-tiktok-router/**
+      - anthares-remote-agent/windows/**
+      - anthares-remote-mcp/**
+      - infra/ara_device_auth_failover.py
+      - .github/workflows/render-retirement-guard.yml
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce Render as final fallback only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def text(path): return Path(path).read_text(encoding='utf-8-sig')
+          errors=[]
+
+          # Canonical services must contain zero Render runtime references.
+          zero_render=[
+            'cloudflare-x-vault/src/index.js',
+            'anthares-remote-mcp/extended-preload.mjs',
+            'infra/ara_device_auth_failover.py',
+            'anthares-remote-agent/windows/watchdog-dual-supervisor.ps1',
+          ]
+          for p in zero_render:
+            if 'onrender.com' in text(p): errors.append(f'{p}: Render runtime reference remains')
+
+          # HTTP compatibility supervisors may retain Render only after Cloudflare/Northflank.
+          for p in ['anthares-remote-agent/windows/run-agent-supervisor.ps1','anthares-remote-agent/windows/run-agent-standard.ps1']:
+            s=text(p)
+            primary=next((ln for ln in s.splitlines() if ln.strip().startswith('$primary =')), '')
+            secondary=next((ln for ln in s.splitlines() if ln.strip().startswith('$secondary =')), '')
+            if 'onrender.com' in primary or 'onrender.com' in secondary:
+              errors.append(f'{p}: Render is still primary/secondary')
+            if 'anthares-ara-backup.anthares1.workers.dev' not in primary:
+              errors.append(f'{p}: Cloudflare is not primary')
+            if 'code.run' not in secondary:
+              errors.append(f'{p}: Northflank is not secondary')
+
+          router=text('cloudflare-tiktok-router/src/index.js')
+          if "ALLOW_RENDER_FALLBACK||'0'" not in router:
+            errors.append('TikTok router: Render fallback is not default-off')
+          if "!['GET','HEAD'].includes(request.method)" not in router:
+            errors.append('TikTok router: unsafe automatic write failover guard missing')
+
+          if errors:
+            raise SystemExit('\n'.join(errors))
+          print('RENDER_FINAL_FALLBACK_ONLY=1')
+          PY
