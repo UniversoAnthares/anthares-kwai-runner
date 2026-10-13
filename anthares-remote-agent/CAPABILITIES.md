@@ -54,7 +54,7 @@ Clipboard content must never be logged by the MCP layer. These operations requir
 
 ## Processes
 
-`process_start`: args `path`, optional `args`. The executable path must exactly match one entry in `ANTHARES_ALLOWED_EXECUTABLES` (semicolon-separated absolute paths).
+`process_start`: args `path`, optional `args_json`. `args_json` is a JSON array of strings, limited to 64 arguments and 32 KiB total argument data. The executable path must exactly match one entry in `ANTHARES_ALLOWED_EXECUTABLES` (semicolon-separated absolute paths). Legacy shell-style argument strings are rejected; the agent passes each decoded argument directly to the executable without invoking `cmd.exe`.
 
 `process_kill`: arg `pid`. The agent resolves the executable path of the PID and permits termination only when it exactly matches `ANTHARES_ALLOWED_EXECUTABLES`. System PIDs 0–4 are always rejected.
 
