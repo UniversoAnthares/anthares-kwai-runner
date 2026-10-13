@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "check": "node --check src/index.js"
+    "check": "node --check src/index.js && node --check src/entry.js"
   },
   "dependencies": {
     "@cloudflare/puppeteer": "^1.1.0"
