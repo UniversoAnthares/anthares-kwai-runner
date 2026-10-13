@@ -1,0 +1,29 @@
+name: Scan ARA PR102 conflicts
+
+on:
+  push:
+    branches: [ops/ara-104-resolve]
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/anthares-remote-agent
+          fetch-depth: 0
+      - name: Scan merge with main
+        shell: bash
+        run: |
+          set -uo pipefail
+          git config user.name ara-conflict-scan
+          git config user.email ara-conflict-scan@users.noreply.github.com
+          git fetch origin main
+          git merge --no-commit --no-ff origin/main
+          rc=$?
+          echo "merge_rc=$rc"
+          echo 'conflicts:'
+          git diff --name-only --diff-filter=U || true
+          exit 0
