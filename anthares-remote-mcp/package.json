@@ -1,12 +1,13 @@
 {
   "name": "anthares-remote-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
     "qa": "node qa.mjs",
-    "start:http": "npm run qa && ARA_MCP_TRANSPORT=http node server.mjs"
+    "qa:oauth": "node oauth-qa.mjs",
+    "start:http": "npm run qa && npm run qa:oauth && node gateway.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",
