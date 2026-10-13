@@ -2,6 +2,15 @@
 try:
     import os as _os
     import x_render_worker_v3 as _worker
+
+    # Recovery-only escape hatch for the legacy X-hosted control surface. It is
+    # opt-in per service and never overrides the durable production controller.
+    # This lets an already-installed Windows agent receive one bounded migration
+    # job even when an unrelated DATABASE_URL exists on the X worker.
+    if _os.getenv("ARA_FORCE_VOLATILE", "") == "1":
+        import ara_state_store as _ara_state
+        _ara_state.build_store = lambda: _ara_state.MemoryStore()
+
     from anthares_remote_control_routes import register as _register_remote
     _register_remote(_worker.app, _os.getenv("ARA_SHARED", ""))
     from anthares_remote_bootstrap import register as _register_bootstrap
