@@ -1,6 +1,6 @@
 import puppeteer from "@cloudflare/puppeteer";
 
-const VERSION = "2026-10-13-reserva-browser-v2";
+const VERSION = "2026-10-13-reserva-browser-v3";
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: {
@@ -30,9 +30,12 @@ export default {
         ok: true,
         service: "anthares-reserva-browser",
         version: VERSION,
+        provider: "cloudflare",
         mode: "on-demand",
         browser_binding: !!env.BROWSER,
         authenticated_session: "not_verified",
+        persistent_profile: false,
+        render_required: false,
         purpose: "emergency browser continuity",
       });
     }
@@ -42,9 +45,12 @@ export default {
         ok: !!env.BROWSER,
         service: "anthares-reserva-browser",
         version: VERSION,
+        provider: "cloudflare",
         browser_binding: !!env.BROWSER,
         continuous_runtime: false,
+        persistent_profile: false,
         production_login: "not_verified",
+        render_required: false,
       });
     }
     if (url.pathname !== "/probe" || request.method !== "POST") return json({ error: "not_found" }, 404);
