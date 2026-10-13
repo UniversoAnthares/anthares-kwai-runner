@@ -39,7 +39,6 @@ async function signedFetchWithRetry(origin, path, method, requestBody, deadline)
   const idempotent = method === 'GET' || method === 'HEAD' || Boolean(requestBody?.idempotency_key);
   const attempts = idempotent ? 3 : 1;
   let lastError = null;
-  let lastResponse = null;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const remaining = deadline - Date.now();
@@ -60,7 +59,6 @@ async function signedFetchWithRetry(origin, path, method, requestBody, deadline)
         body: requestBody === undefined ? undefined : payload,
         signal: controller.signal,
       });
-      lastResponse = response;
       if (!RETRYABLE_STATUS.has(response.status) || attempt === attempts - 1) return response;
       await response.arrayBuffer().catch(() => {});
     } catch (error) {
@@ -74,7 +72,6 @@ async function signedFetchWithRetry(origin, path, method, requestBody, deadline)
     await sleep(delay);
   }
 
-  if (lastResponse) return lastResponse;
   if (lastError) throw lastError;
   throw new Error('control request deadline exceeded');
 }
@@ -83,9 +80,6 @@ export async function signedControlFetch(controlOrigin, path, { method = 'GET', 
   const upperMethod = String(method || 'GET').toUpperCase();
   let requestBody = body;
 
-  // Every MCP execute gets a stable idempotency key before any retry or failover.
-  // Primary and secondary share durable PostgreSQL state, so the same operation
-  // cannot be dispatched twice when Render transiently returns 502/503/504.
   if (
     upperMethod === 'POST' &&
     new URL(path, PRIMARY_CONTROL + '/').pathname === '/v1/mcp/execute' &&
@@ -98,24 +92,23 @@ export async function signedControlFetch(controlOrigin, path, { method = 'GET', 
   }
 
   const deadline = Date.now() + Math.max(1000, timeoutMs);
-  let lastResponse = null;
+  const origins = controlOrigins(controlOrigin);
   let lastError = null;
 
-  for (const origin of controlOrigins(controlOrigin)) {
+  for (let index = 0; index < origins.length; index++) {
+    const origin = origins[index];
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
     try {
       const response = await signedFetchWithRetry(origin, path, upperMethod, requestBody, deadline);
-      lastResponse = response;
-      if (!FAILOVER_STATUSES.has(response.status)) return response;
-      // Drain before switching origins so pooled connections are reusable.
+      const canFailOver = index < origins.length - 1;
+      if (!FAILOVER_STATUSES.has(response.status) || !canFailOver) return response;
       await response.arrayBuffer().catch(() => {});
     } catch (error) {
       lastError = error;
     }
   }
 
-  if (lastResponse) return lastResponse;
   throw lastError || new Error('all ARA control origins unavailable');
 }
 
