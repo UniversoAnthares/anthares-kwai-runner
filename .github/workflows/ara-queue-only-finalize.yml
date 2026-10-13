@@ -1,0 +1,64 @@
+name: ARA queue-only finalize
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/finalize_ara_queue_only.py'
+      - '.github/workflows/ara-queue-only-finalize.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ara-queue-only-finalize
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply queue-only finalizer
+        run: python3 tools/finalize_ara_queue_only.py
+
+      - name: Validate agent and supervisor
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd anthares-remote-agent
+          go test ./... -count=1
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4.exe ./cmd/agent
+          cd ..
+          grep -q 'issue-queue-only mode' anthares-remote-agent/cmd/agent/main.go
+          grep -q 'AntharesRemoteSystemSupervisorV7' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q "cloudflare_controls=\$false" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          ! grep -q "'https://anthares-ara-backup.anthares1.workers.dev'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          ! grep -q "'https://anthares-control.anthares1.workers.dev'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          echo 'ARA_QUEUE_ONLY_VALIDATION_OK=1'
+
+      - name: Commit finalized runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'UniversoAnthares'
+          git config user.email '81930373+UniversoAnthares@users.noreply.github.com'
+          git add anthares-remote-agent/cmd/agent/main.go anthares-remote-agent/cmd/agent/issue_queue.go anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          if git diff --cached --quiet; then
+            echo 'Queue-only runtime already finalized.'
+            exit 0
+          fi
+          git commit -m 'fix(ara): make private issue queues canonical runtime'
+          git push origin HEAD:main
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anthares-remote-agent-v4-queue-only
+          path: anthares-remote-agent/dist/anthares-remote-agent-v4.exe
+          if-no-files-found: error
