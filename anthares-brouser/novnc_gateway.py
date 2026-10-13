@@ -185,6 +185,13 @@ async def novnc_websocket(websocket: WebSocket):
     """
     expiry = _expiry(websocket.cookies.get(COOKIE_NAME))
     if not expiry or not _same_origin(websocket):
+        import logging
+        logging.getLogger("anthares.novnc").warning(
+            "websocket denied: cookie_present=%s cookie_valid=%s origin_valid=%s host=%s origin=%s",
+            bool(websocket.cookies.get(COOKIE_NAME)), bool(expiry),
+            _same_origin(websocket), websocket.headers.get("host", ""),
+            websocket.headers.get("origin", ""),
+        )
         await websocket.close(code=1008)
         return
 
