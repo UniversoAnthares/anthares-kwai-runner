@@ -1,0 +1,41 @@
+name: Anthares Runtime Mesh QA
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/anthares_runtime_mesh.py'
+      - 'infra/sitecustomize.py'
+      - 'tools/test_anthares_runtime_mesh.py'
+      - '.github/workflows/anthares-runtime-mesh-qa.yml'
+  push:
+    branches: [main, feature/runtime-mesh-remote-browser-v2]
+    paths:
+      - 'infra/anthares_runtime_mesh.py'
+      - 'infra/sitecustomize.py'
+      - 'tools/test_anthares_runtime_mesh.py'
+      - '.github/workflows/anthares-runtime-mesh-qa.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  mesh-contract:
+    runs-on: macos-14
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create isolated test environment
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --quiet flask requests
+      - name: Run runtime mesh contract tests
+        run: |
+          . .venv/bin/activate
+          python tools/test_anthares_runtime_mesh.py
+      - name: Compile integration modules
+        run: |
+          . .venv/bin/activate
+          python -m py_compile infra/anthares_runtime_mesh.py infra/sitecustomize.py
