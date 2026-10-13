@@ -17,7 +17,7 @@ jobs:
         run: |
           set -euo pipefail
           challenge='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-          body="$(curl -fsSG 'https://anthares-ara-mcp.anthares1.workers.dev/oauth/authorize' \
+          code="$(curl -sS -o /tmp/oauth-body -w '%{http_code}' -G 'https://anthares-ara-mcp.anthares1.workers.dev/oauth/authorize' \
             --data-urlencode 'client_id=https://chatgpt.com/oauth/client.json' \
             --data-urlencode 'redirect_uri=https://chatgpt.com/connector_platform_oauth_redirect' \
             --data-urlencode 'response_type=code' \
@@ -26,9 +26,13 @@ jobs:
             --data-urlencode 'resource=https://anthares-ara-mcp.anthares1.workers.dev' \
             --data-urlencode 'scope=ara.read ara.write' \
             --data-urlencode 'state=smoke')"
-          printf '%s' "$body" | grep -q 'código de configuração fornecido na conversa'
-          printf '%s' "$body" | grep -q 'name="approval"'
-          if printf '%s' "$body" | grep -q 'área de transferência do agente remoto'; then
+          echo "HTTP=$code"
+          cat /tmp/oauth-body
+          echo
+          test "$code" = 200
+          grep -q 'código de configuração fornecido na conversa' /tmp/oauth-body
+          grep -q 'name="approval"' /tmp/oauth-body
+          if grep -q 'área de transferência do agente remoto' /tmp/oauth-body; then
             echo 'legacy clipboard flow still present'
             exit 1
           fi
