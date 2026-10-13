@@ -11,13 +11,13 @@ if (Test-Path $queueAuthLoader) {
 # GitHub and GitLab issue queues are independent transports and automatically
 # back each other up. Render and Cloudflare are intentionally not referenced.
 $env:ANTHARES_DEVICE_ID = 'DESKTOP-FTDK0HP'
-$exe = Join-Path $root 'anthares-remote-agent.exe'
+$v4Exe = Join-Path $root 'anthares-remote-agent-v4.exe'
+$legacyExe = Join-Path $root 'anthares-remote-agent.exe'
+$exe = if (Test-Path $v4Exe) { $v4Exe } else { $legacyExe }
 $stdout = Join-Path $root 'agent-system.stdout.log'
 $stderr = Join-Path $root 'agent-system.stderr.log'
 $stateFile = Join-Path $root 'system-supervisor-state.json'
 
-# HTTP control is optional. It can be restored later through generic environment
-# variables without changing this supervisor. No provider is hard-coded.
 $httpCandidates = @(
     ([string]$env:ANTHARES_CONTROL_PRIMARY_URL).TrimEnd('/'),
     ([string]$env:ANTHARES_CONTROL_SECONDARY_URL).TrimEnd('/'),
@@ -29,8 +29,7 @@ $mutex = New-Object System.Threading.Mutex($true, 'Global\AntharesRemoteSystemSu
 if (-not $created) { exit 0 }
 
 function Test-Control([string]$origin) {
-    if ([string]::IsNullOrWhiteSpace($origin)) { return $false }
-    if ($origin -notmatch '^https://') { return $false }
+    if ([string]::IsNullOrWhiteSpace($origin) -or $origin -notmatch '^https://') { return $false }
     foreach ($healthPath in @('/healthz', '/health')) {
         try {
             $r = Invoke-WebRequest -UseBasicParsing -Uri ($origin + $healthPath) -TimeoutSec 10
@@ -39,121 +38,49 @@ function Test-Control([string]$origin) {
     }
     return $false
 }
-
-function Github-QueueConfigured {
-    return (-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_REPOSITORY)) -and
-           (-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_TOKEN))
-}
-
-function Gitlab-QueueConfigured {
-    return (-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_PROJECT)) -and
-           (-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_TOKEN))
-}
-
-function Queue-TransportConfigured {
-    return (Github-QueueConfigured) -or (Gitlab-QueueConfigured)
-}
-
-function Choose-Control {
-    foreach ($candidate in $httpCandidates) {
-        if (Test-Control $candidate) { return $candidate }
-    }
-    return $null
-}
+function Github-QueueConfigured { return (-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_REPOSITORY)) -and (-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_TOKEN)) }
+function Gitlab-QueueConfigured { return (-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_PROJECT)) -and (-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_TOKEN)) }
+function Queue-TransportConfigured { return (Github-QueueConfigured) -or (Gitlab-QueueConfigured) }
+function Choose-Control { foreach ($candidate in $httpCandidates) { if (Test-Control $candidate) { return $candidate } }; return $null }
 
 function Save-State([string]$active, [string]$mode, [string]$reason, [int]$agentPid = 0) {
     try {
         [pscustomobject]@{
-            active_control = $active
-            mode = $mode
-            reason = $reason
-            updated_at = (Get-Date).ToUniversalTime().ToString('o')
-            supervisor_pid = $PID
-            agent_pid = $agentPid
-            device_id = $env:ANTHARES_DEVICE_ID
-            identity = 'SYSTEM'
-            session = 0
-            github_queue = [bool](Github-QueueConfigured)
-            gitlab_queue = [bool](Gitlab-QueueConfigured)
-            queue_failover = [bool](Queue-TransportConfigured)
-            cloudflare_required = $false
-            render_required = $false
+            active_control=$active; mode=$mode; reason=$reason; updated_at=(Get-Date).ToUniversalTime().ToString('o')
+            supervisor_pid=$PID; agent_pid=$agentPid; device_id=$env:ANTHARES_DEVICE_ID; identity='SYSTEM'; session=0
+            binary=(Split-Path $exe -Leaf); github_queue=[bool](Github-QueueConfigured); gitlab_queue=[bool](Gitlab-QueueConfigured)
+            queue_failover=[bool](Queue-TransportConfigured); cloudflare_required=$false; render_required=$false
         } | ConvertTo-Json | Set-Content -Path $stateFile -Encoding UTF8
     } catch {}
 }
-
 function Start-Agent([string]$control, [string]$mode) {
     if (-not (Test-Path $exe)) { throw "agent executable not found: $exe" }
-    if ([string]::IsNullOrWhiteSpace($control)) {
-        Remove-Item Env:ANTHARES_CONTROL_URL -ErrorAction SilentlyContinue
-    } else {
-        $env:ANTHARES_CONTROL_URL = $control
-    }
+    if ([string]::IsNullOrWhiteSpace($control)) { Remove-Item Env:ANTHARES_CONTROL_URL -ErrorAction SilentlyContinue } else { $env:ANTHARES_CONTROL_URL = $control }
     Save-State $control $mode 'agent-start'
     return Start-Process -FilePath $exe -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
 }
 
 try {
     while ($true) {
-        # Never terminate an agent this supervisor did not start. This preserves a
-        # working recovery path during upgrades. Once it exits, V4 takes over.
-        $existing = @(Get-Process -Name 'anthares-remote-agent','anthares-remote-agent-standard' -ErrorAction SilentlyContinue)
-        if ($existing.Count -gt 0) {
-            Save-State '' 'preserve-existing' 'waiting-for-existing-agent'
-            Start-Sleep -Seconds 5
-            continue
-        }
-
-        # Reload encrypted credentials each cycle so provisioning does not require
-        # a reboot or supervisor reinstall.
-        if (Test-Path $queueAuthLoader) {
-            try { . $queueAuthLoader } catch { Write-Error -Message ('issue queue auth reload deferred: ' + $_.Exception.Message) -ErrorAction Continue }
-        }
-
+        $existing = @(Get-Process -Name 'anthares-remote-agent','anthares-remote-agent-standard','anthares-remote-agent-v4' -ErrorAction SilentlyContinue)
+        if ($existing.Count -gt 0) { Save-State '' 'preserve-existing' 'waiting-for-existing-agent'; Start-Sleep -Seconds 5; continue }
+        if (Test-Path $queueAuthLoader) { try { . $queueAuthLoader } catch { Write-Error -Message ('issue queue auth reload deferred: ' + $_.Exception.Message) -ErrorAction Continue } }
         $queueReady = Queue-TransportConfigured
         $active = Choose-Control
-        if ($queueReady) {
-            # Queue-first mode survives every HTTP control outage. If a generic
-            # HTTP control happens to be healthy, the same process can use it too.
-            $mode = if ($active) { 'issue-queues+http' } else { 'issue-queues-only' }
-        } elseif ($active) {
-            $mode = 'http-only'
-        } else {
-            Save-State '' 'waiting' 'no-control-transport-configured'
-            Start-Sleep -Seconds 10
-            continue
-        }
-
-        try {
-            $proc = Start-Agent $active $mode
-        } catch {
-            Save-State $active $mode ('start-failed:' + $_.Exception.GetType().Name)
-            Start-Sleep -Seconds 5
-            continue
-        }
-
+        if ($queueReady) { $mode = if ($active) { 'issue-queues+http' } else { 'issue-queues-only' } }
+        elseif ($active) { $mode = 'http-only' }
+        else { Save-State '' 'waiting' 'no-control-transport-configured'; Start-Sleep -Seconds 10; continue }
+        try { $proc = Start-Agent $active $mode } catch { Save-State $active $mode ('start-failed:' + $_.Exception.GetType().Name); Start-Sleep -Seconds 5; continue }
         Save-State $active $mode 'running' $proc.Id
         $activeFailures = 0
         while (-not $proc.HasExited) {
             Start-Sleep -Seconds 10
-
-            # When at least one issue queue is configured, do not restart a healthy
-            # process merely because an HTTP provider disappears. The GitHub and
-            # GitLab pollers continue independently inside the same agent.
             if (Queue-TransportConfigured) {
-                $currentControlHealthy = $false
-                if ($active) { $currentControlHealthy = Test-Control $active }
+                $currentControlHealthy = $false; if ($active) { $currentControlHealthy = Test-Control $active }
                 $reason = if ($currentControlHealthy) { 'running-queue-with-http' } else { 'running-queue-failover' }
-                Save-State $active $mode $reason $proc.Id
-                continue
+                Save-State $active $mode $reason $proc.Id; continue
             }
-
-            # Legacy/generic HTTP-only mode still fails over automatically among
-            # environment-provided HTTPS origins.
-            if ($active -and (Test-Control $active)) {
-                $activeFailures = 0
-                continue
-            }
+            if ($active -and (Test-Control $active)) { $activeFailures = 0; continue }
             $activeFailures++
             if ($activeFailures -lt 2) { continue }
             $alternate = Choose-Control
@@ -163,17 +90,9 @@ try {
                 try { $proc.WaitForExit(5000) | Out-Null } catch {}
                 break
             }
-            Save-State $active $mode 'http-unhealthy-no-alternate' $proc.Id
-            $activeFailures = 0
+            Save-State $active $mode 'http-unhealthy-no-alternate' $proc.Id; $activeFailures = 0
         }
-
-        if ($proc.HasExited) {
-            Save-State $active $mode ('agent-exited:' + $proc.ExitCode)
-        }
+        if ($proc.HasExited) { Save-State $active $mode ('agent-exited:' + $proc.ExitCode) }
         Start-Sleep -Seconds 2
     }
-}
-finally {
-    try { $mutex.ReleaseMutex() } catch {}
-    $mutex.Dispose()
-}
+} finally { try { $mutex.ReleaseMutex() } catch {}; $mutex.Dispose() }
