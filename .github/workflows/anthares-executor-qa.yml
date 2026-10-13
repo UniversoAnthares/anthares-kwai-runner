@@ -1,0 +1,97 @@
+name: Anthares Executor QA
+
+on:
+  push:
+    branches: [feature/anthares-executor-failover]
+    paths:
+      - 'anthares-executor/**'
+      - 'anthares-reserva/**'
+      - '.github/workflows/anthares-executor-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-executor-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  executor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build portable executor
+        run: docker build -f anthares-executor/Dockerfile -t anthares-executor:test .
+      - name: Start executor without persistent credentials
+        run: |
+          docker run -d --name anthares-executor \
+            --memory=1g --shm-size=256m \
+            -e ANTHARES_EXECUTOR_TOKEN=qa-token-not-secret \
+            -e KWAI_EXPECTED_ACCOUNT=lucasrosalem \
+            -p 18080:8080 anthares-executor:test
+          for i in $(seq 1 80); do
+            curl -fsS http://127.0.0.1:18080/ready && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/ready
+      - name: Verify fail-closed authentication
+        run: |
+          test "$(curl -sS -o /tmp/noauth -w '%{http_code}' http://127.0.0.1:18080/v1/capabilities)" = 401
+          curl -fsS -H 'Authorization: Bearer qa-token-not-secret' http://127.0.0.1:18080/v1/capabilities | tee /tmp/capabilities.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/capabilities.json'))
+          assert d['ok'] is True and d['publishing_enabled'] is False and d['max_concurrency']==1
+          PY
+      - name: Real remote Kwai read-only probe
+        run: |
+          curl --fail-with-body --max-time 55 -sS \
+            -H 'Authorization: Bearer qa-token-not-secret' \
+            -H 'Content-Type: application/json' \
+            -d '{"job_id":"github-qa-${{ github.run_id }}","generation":1,"handle":"lucasrosalem"}' \
+            http://127.0.0.1:18080/v1/probe | tee /tmp/probe.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/probe.json'))
+          assert d['ok'] is True
+          assert d['read_only'] is True
+          assert d['job_id'].startswith('github-qa-')
+          assert 'identity_verified' in d and 'upload_surface_verified' in d
+          print(json.dumps({k:d[k] for k in ('ok','identity_verified','upload_surface_verified','session_state','read_only')},separators=(',',':')))
+          PY
+      - name: Logs on failure
+        if: failure()
+        run: docker logs --tail 120 anthares-executor || true
+      - name: Stop executor
+        if: always()
+        run: docker rm -f anthares-executor >/dev/null 2>&1 || true
+
+  router:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build router
+        run: docker build -f anthares-reserva/Dockerfile -t anthares-reserva:test .
+      - name: Verify router authentication and empty-provider fail closed
+        run: |
+          docker run -d --name anthares-reserva -e ANTHARES_RESERVA_TOKEN=qa-router-token -e ANTHARES_PROVIDER_CONFIG='[]' -p 18081:8080 anthares-reserva:test
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:18081/health && break; sleep 1; done
+          test "$(curl -sS -o /tmp/noauth -w '%{http_code}' http://127.0.0.1:18081/v1/providers)" = 401
+          curl --fail-with-body -sS -H 'Authorization: Bearer qa-router-token' -H 'Content-Type: application/json' \
+            -d '{"job_id":"router-qa-${{ github.run_id }}","generation":1,"account":"lucasrosalem","operation":"kwai.readonly_probe"}' \
+            http://127.0.0.1:18081/v1/dispatch | tee /tmp/router.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/router.json'))
+          assert d['ok'] is False and d['status']=='failed'
+          assert d['result']['error']=='no_healthy_provider'
+          PY
+      - name: Logs on failure
+        if: failure()
+        run: docker logs --tail 100 anthares-reserva || true
+      - name: Stop router
+        if: always()
+        run: docker rm -f anthares-reserva >/dev/null 2>&1 || true
