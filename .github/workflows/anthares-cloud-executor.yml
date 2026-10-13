@@ -1,0 +1,167 @@
+name: Anthares Cloud Executor
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Execution mode
+        required: true
+        default: runtime-selftest
+        type: choice
+        options:
+          - runtime-selftest
+          - authenticated-kwai-probe
+      request_id:
+        description: Opaque request identifier
+        required: false
+        default: manual
+        type: string
+  push:
+    branches:
+      - feature/anthares-reserva-ci
+    paths:
+      - '.github/workflows/anthares-cloud-executor.yml'
+      - 'anthares-executor/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-cloud-executor
+  cancel-in-progress: false
+
+jobs:
+  executor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: anthares-executor
+    env:
+      EXECUTOR_TOKEN: ci-cloud-executor-token-0123456789abcdef
+      MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'runtime-selftest' }}
+      REQUEST_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.request_id || github.sha }}
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      GITLAB_STATE_KEY: ${{ secrets.GITLAB_STATE_KEY || secrets.CONTROL_TOKEN }}
+      GITLAB_STATE_PROJECT: ${{ secrets.GITLAB_STATE_PROJECT }}
+      GITLAB_STATE_BRANCH: browser-state
+      GITLAB_STATE_SLOT: runtime
+      KWAI_EXPECTED_ACCOUNT: lucasrosalem
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build isolated executor
+        run: docker build -t anthares-executor:cloud .
+
+      - name: Start isolated executor
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            -d --name anthares-cloud-executor
+            -p 127.0.0.1:18080:8080
+            -e ANTHARES_EXECUTOR_TOKEN="$EXECUTOR_TOKEN"
+            -e ANTHARES_EXECUTOR_ID=github-actions-reserva
+            -e MEMORY_LIMIT_BYTES=6000000000
+            -e LEASE_TTL_SECONDS=180
+            -e KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT"
+          )
+          if [[ -n "${GITLAB_TOKEN:-}" && -n "${GITLAB_STATE_KEY:-}" ]]; then
+            args+=(
+              -e GITLAB_TOKEN="$GITLAB_TOKEN"
+              -e GITLAB_STATE_KEY="$GITLAB_STATE_KEY"
+              -e GITLAB_STATE_BRANCH="$GITLAB_STATE_BRANCH"
+              -e GITLAB_STATE_SLOT="$GITLAB_STATE_SLOT"
+            )
+            if [[ -n "${GITLAB_STATE_PROJECT:-}" ]]; then args+=(-e GITLAB_STATE_PROJECT="$GITLAB_STATE_PROJECT"); fi
+          fi
+          docker run "${args[@]}" anthares-executor:cloud
+          for i in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:18080/health > /tmp/health.json && break
+            sleep .5
+          done
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/health.json'))
+          assert data['ok'] is True
+          PY
+
+      - name: Runtime self-test
+        if: env.MODE == 'runtime-selftest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST -H "Authorization: Bearer $EXECUTOR_TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/browser/start > /tmp/start.json
+          curl -fsS http://127.0.0.1:18080/health > /tmp/running.json
+          python - <<'PY'
+          import json
+          assert json.load(open('/tmp/start.json'))['ok'] is True
+          assert json.load(open('/tmp/running.json'))['chromium_ready'] is True
+          json.dump({'ok':True,'mode':'runtime-selftest','browser_started':True}, open('/tmp/result.json','w'))
+          PY
+
+      - name: Authenticated Kwai read-only probe
+        if: env.MODE == 'authenticated-kwai-probe'
+        shell: bash
+        run: |
+          set -euo pipefail
+          health=$(cat /tmp/health.json)
+          configured=$(python -c "import json;print('true' if json.load(open('/tmp/health.json')).get('encrypted_profile_store_configured') else 'false')")
+          if [[ "$configured" != true ]]; then
+            printf '%s\n' '{"ok":false,"mode":"authenticated-kwai-probe","error":"encrypted_profile_secrets_not_configured"}' > /tmp/result.json
+            exit 2
+          fi
+          curl -fsS -X POST -H "Authorization: Bearer $EXECUTOR_TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/profile/restore > /tmp/restore.json
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/restore.json'))
+          assert data.get('ok') is True, 'profile_restore_failed'
+          PY
+          curl -fsS -X POST -H "Authorization: Bearer $EXECUTOR_TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/browser/start > /tmp/start.json
+          curl -fsS -X POST -H "Authorization: Bearer $EXECUTOR_TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/kwai/probe > /tmp/result.json
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/result.json'))
+          assert data.get('ok') is True, 'kwai_probe_failed'
+          # No publication is performed; identity/upload surface booleans remain evidence only.
+          PY
+
+      - name: Save sanitized result
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          path='/tmp/result.json'
+          if not os.path.exists(path):
+              result={'ok':False,'error':'executor_step_failed'}
+          else:
+              try: result=json.load(open(path))
+              except Exception: result={'ok':False,'error':'invalid_result'}
+          safe={k:v for k,v in result.items() if k in {'ok','mode','browser_started','identity_verified','upload_surface_verified','session_state','error','read_only','evidence'}}
+          safe['request_id']=os.environ.get('REQUEST_ID','')[:128]
+          json.dump(safe, open('cloud-executor-result.json','w'), separators=(',',':'))
+          print(json.dumps(safe, separators=(',',':')))
+          PY
+
+      - name: Stop browser and snapshot only after authenticated successful probe
+        if: always() && env.MODE == 'authenticated-kwai-probe'
+        shell: bash
+        run: |
+          curl -sS -X POST -H "Authorization: Bearer $EXECUTOR_TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/browser/stop >/dev/null || true
+          if python -c "import json,sys;sys.exit(0 if json.load(open('/tmp/result.json')).get('ok') else 1)" 2>/dev/null; then
+            curl -sS -X POST -H "Authorization: Bearer $EXECUTOR_TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18080/v1/profile/snapshot >/dev/null || true
+          fi
+
+      - name: Upload sanitized result artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: anthares-cloud-executor-result-${{ github.run_id }}
+          path: anthares-executor/cloud-executor-result.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f anthares-cloud-executor >/dev/null 2>&1 || true
