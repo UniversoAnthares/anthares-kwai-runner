@@ -1,12 +1,10 @@
 name: Anthares Reserva Browser Deploy
 
+# Cloudflare quota is currently exhausted. Keep the deployment recipe available
+# for an explicit operator-triggered recovery after quota/billing is restored,
+# but never consume quota automatically on pushes.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'anthares-reserva-browser/**'
-      - '.github/workflows/anthares-reserva-browser-deploy.yml'
 
 permissions:
   contents: read
