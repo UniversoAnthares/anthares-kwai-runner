@@ -22,7 +22,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: anthares-remote-mcp/package-lock.json
       - run: npm install
-      - run: node qa.mjs
+      - run: npm run qa
+      - run: npm run qa:oauth
