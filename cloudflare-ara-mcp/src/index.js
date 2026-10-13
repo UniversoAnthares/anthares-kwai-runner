@@ -6,7 +6,7 @@ const DEFAULT_DEVICE='DESKTOP-FTDK0HP';
 const FALLBACK_DEVICE='DESKTOP-FTDK0HP-SYSTEM';
 const SCOPES=new Set(['ara.read','ara.write']);
 const WRITE_TOOLS=new Set(['remote_exec','clipboard_set','file_write','file_write_chunk','file_mkdir','file_remove','file_rename','file_copy','file_write_atomic','remote_job_start','remote_job_cancel','process_start','process_kill','service_start','service_stop']);
-const OWNER_APPROVAL_HASH='RX9fWZQjkwOZ9hD-xhv7YkGqlHZRo-oMK5V2QDkVU-8';
+const OWNER_APPROVAL_HASH='6Z-3WlmAvh6o7m_W0eYEpEo23YKZtjn-DLJpyjtEfQ0';
 const te=new TextEncoder();
 const td=new TextDecoder();
 
