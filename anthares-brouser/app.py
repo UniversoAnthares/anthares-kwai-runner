@@ -15,7 +15,7 @@ import websocket
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="Anthares-browser control API", version="0.2.1")
+app = FastAPI(title="Anthares-browser control API", version="0.2.2")
 PROFILE_DIR = Path(os.environ.get("CHROME_PROFILE_DIR", "/data/chrome-profile"))
 CONTROL_TOKEN = os.environ.get("CONTROL_TOKEN", "")
 CDP_PORT = int(os.environ.get("CDP_PORT", "9222"))
@@ -89,8 +89,12 @@ def _page_target() -> dict[str, Any]:
 
 def _cdp_ready() -> bool:
     try:
-        _page_target()
-        return True
+        result = _cdp_call(
+            "Runtime.evaluate",
+            {"expression": "1", "returnByValue": True},
+            timeout=2.5,
+        )
+        return result.get("result", {}).get("value") == 1
     except HTTPException:
         return False
 
@@ -105,6 +109,7 @@ def _cdp_call(method: str, params: dict[str, Any] | None = None, timeout: float 
                 target["webSocketDebuggerUrl"],
                 timeout=min(2.0, max(0.2, deadline - time.monotonic())),
                 suppress_origin=True,
+                http_no_proxy=["127.0.0.1", "localhost", "::1"],
             )
             break
         except Exception as exc:
