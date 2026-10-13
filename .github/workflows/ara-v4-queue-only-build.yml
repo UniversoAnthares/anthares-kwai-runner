@@ -1,0 +1,28 @@
+name: ARA V4 Windows build (queue-only)
+on:
+  push:
+    paths:
+      - '.github/workflows/ara-v4-queue-only-build.yml'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: anthares-remote-agent/go.mod
+      - name: Compile Windows V4
+        working-directory: anthares-remote-agent
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: go build -trimpath -ldflags='-s -w' -o ../anthares-remote-agent-v4.exe ./cmd/agent
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anthares-remote-agent-v4-queue-only
+          path: anthares-remote-agent-v4.exe
+          retention-days: 7
