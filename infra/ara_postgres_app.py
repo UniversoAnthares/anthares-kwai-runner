@@ -7,8 +7,10 @@ import requests
 from flask import Flask, jsonify, request
 
 import ara_postgres_store as store
+from ara_postgres_mcp_bridge import register as register_mcp
 
 app = Flask(__name__)
+register_mcp(app)
 CONTROL_TOKEN = os.getenv("ANTHARES_REMOTE_CONTROL_TOKEN", "")
 DEVICE_HASH_BASE = os.getenv(
     "ARA_DEVICE_HASH_BASE",
