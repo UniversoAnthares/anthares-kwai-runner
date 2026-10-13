@@ -221,7 +221,9 @@ def register(app):
             return jsonify(ok=False, error="missing_owner"), 400
         with _LOCK:
             active = bool(_BROWSER_LEASE["token"] and _BROWSER_LEASE["expires_at"] > _now())
-            if active and _BROWSER_LEASE["owner"] != owner:
+            if active:
+                # Owner names are not credentials: never reveal a live token on reacquire.
+                # Existing holders must use the authenticated renew endpoint.
                 return jsonify(ok=False, error="lease_conflict", lease=_lease_snapshot()), 409
             if not active:
                 _BROWSER_LEASE["generation"] += 1
