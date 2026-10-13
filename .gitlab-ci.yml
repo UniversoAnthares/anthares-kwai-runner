@@ -30,3 +30,29 @@ android_kwai_capability_gate:
   image: alpine:3.20
   script:
     - echo "ANDROID_KWAI_GITLAB_HOSTED_RUNNER=UNSUPPORTED_KVM_DEVICE_GATE"
+
+# ARA primary provider. Requires the GitLab mirror to contain this branch.
+ara_go_linux:
+  stage: validate
+  image: golang:1.22
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "feature/ara-capabilities"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  script:
+    - cd anthares-remote-agent
+    - go test ./... -count=1
+    - go test -race ./...
+    - go vet ./...
+
+ara_windows_crossbuild:
+  stage: validate
+  image: golang:1.22
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "feature/ara-capabilities"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  script:
+    - cd anthares-remote-agent
+    - GOOS=windows GOARCH=amd64 go build -o /tmp/ara-amd64.exe ./cmd/agent
+    - GOOS=windows GOARCH=arm64 go build -o /tmp/ara-arm64.exe ./cmd/agent
+    - test -s /tmp/ara-amd64.exe
+    - test -s /tmp/ara-arm64.exe

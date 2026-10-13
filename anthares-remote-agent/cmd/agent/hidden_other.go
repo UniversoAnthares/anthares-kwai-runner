@@ -3,10 +3,10 @@
 package main
 
 import (
- "context"
- "os/exec"
+	"context"
+	"os/exec"
 )
 
 func hiddenCommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
- return exec.CommandContext(ctx,name,args...)
+	return exec.CommandContext(ctx, name, args...)
 }

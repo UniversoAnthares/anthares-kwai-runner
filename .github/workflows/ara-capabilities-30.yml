@@ -1,0 +1,70 @@
+name: ARA capabilities 30-way QA
+# retrigger 2026-10-12 after cancelled queued run
+
+on:
+  push:
+    branches: [feature/ara-capabilities]
+    paths:
+      - 'anthares-remote-agent/**'
+      - '.github/workflows/ara-capabilities-30.yml'
+  pull_request:
+    branches: [feature/anthares-remote-agent]
+    paths:
+      - 'anthares-remote-agent/**'
+      - '.github/workflows/ara-capabilities-30.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        include:
+          - {name: '01 linux full', os: ubuntu-latest, cmd: 'go test ./...'}
+          - {name: '02 windows full', os: windows-latest, cmd: 'go test ./...'}
+          - {name: '03 linux race', os: ubuntu-latest, cmd: 'go test -race ./...'}
+          - {name: '04 linux vet', os: ubuntu-latest, cmd: 'go vet ./...'}
+          - {name: '05 windows vet', os: windows-latest, cmd: 'go vet ./...'}
+          - {name: '06 linux build', os: ubuntu-latest, cmd: 'go build ./cmd/agent'}
+          - {name: '07 windows build', os: windows-latest, cmd: 'go build ./cmd/agent'}
+          - {name: '08 authorized path linux', os: ubuntu-latest, cmd: 'go test ./cmd/agent -run TestSecurePathAllowsAuthorizedPath -count=20'}
+          - {name: '09 authorized path windows', os: windows-latest, cmd: 'go test ./cmd/agent -run TestSecurePathAllowsAuthorizedPath -count=20'}
+          - {name: '10 outside root linux', os: ubuntu-latest, cmd: 'go test ./cmd/agent -run TestSecurePathRejectsOutsideRoot -count=20'}
+          - {name: '11 outside root windows', os: windows-latest, cmd: 'go test ./cmd/agent -run TestSecurePathRejectsOutsideRoot -count=20'}
+          - {name: '12 symlink escape linux', os: ubuntu-latest, cmd: 'go test ./cmd/agent -run TestSecurePathRejectsSymlinkEscape -count=20'}
+          - {name: '13 lifecycle linux', os: ubuntu-latest, cmd: 'go test ./cmd/agent -run TestFilesystemLifecycle -count=10'}
+          - {name: '14 lifecycle windows', os: windows-latest, cmd: 'go test ./cmd/agent -run TestFilesystemLifecycle -count=10'}
+          - {name: '15 root-delete guard linux', os: ubuntu-latest, cmd: 'go test ./cmd/agent -run TestFileRemoveRefusesAllowedRoot -count=20'}
+          - {name: '16 root-delete guard windows', os: windows-latest, cmd: 'go test ./cmd/agent -run TestFileRemoveRefusesAllowedRoot -count=20'}
+          - {name: '17 atomic limit linux', os: ubuntu-latest, cmd: 'go test ./cmd/agent -run TestAtomicWriteLimit -count=5'}
+          - {name: '18 atomic limit windows', os: windows-latest, cmd: 'go test ./cmd/agent -run TestAtomicWriteLimit -count=5'}
+          - {name: '19 win amd64 cross-build', os: ubuntu-latest, cmd: 'GOOS=windows GOARCH=amd64 go build ./cmd/agent'}
+          - {name: '20 win arm64 cross-build', os: ubuntu-latest, cmd: 'GOOS=windows GOARCH=arm64 go build ./cmd/agent'}
+          - {name: '21 linux amd64 build', os: ubuntu-latest, cmd: 'GOOS=linux GOARCH=amd64 go build ./cmd/agent'}
+          - {name: '22 linux arm64 build', os: ubuntu-latest, cmd: 'GOOS=linux GOARCH=arm64 go build ./cmd/agent'}
+          - {name: '23 gofmt linux', os: ubuntu-latest, cmd: 'test -z "$(gofmt -l cmd/agent/*.go)"'}
+          - {name: '24 windows admin runtime', os: windows-latest, cmd: 'go test ./cmd/agent -run "TestWindows(ProcessInfoSelf|ServiceList|NetworkInfo|TCPConnections|ScheduledTasks|SystemEventLog|EventLogRejectsSecurityByDefault|FileACL)" -v'}
+          - {name: '25 repeat full suite', os: ubuntu-latest, cmd: 'go test ./... -count=10'}
+          - {name: '26 shuffled suite', os: ubuntu-latest, cmd: 'go test ./... -shuffle=on -count=5'}
+          - {name: '27 coverage suite', os: ubuntu-latest, cmd: 'go test ./... -cover'}
+          - {name: '28 strict timeout', os: ubuntu-latest, cmd: 'go test ./... -timeout=30s'}
+          - {name: '29 json runner', os: ubuntu-latest, cmd: 'go test -json ./...'}
+          - {name: '30 windows shell jobs interactive', os: windows-latest, cmd: 'go test ./cmd/agent -run "TestWindows(ShellCmdStructured|ShellExitCode|DetachedJobLifecycle|ClipboardRoundTrip|ScreenshotProbe)" -v'}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: anthares-remote-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: anthares-remote-agent/go.mod
+      - name: Run distinct capability probe
+        shell: bash
+        run: ${{ matrix.cmd }}
