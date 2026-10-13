@@ -23,6 +23,17 @@ class LeaseKeeper:
         self.thread = None
 
     def __enter__(self):
+        # Refresh once immediately so a newly accepted lease cannot silently age
+        # while profile restore/browser startup is still in progress.
+        try:
+            status, body = self.client.heartbeat(self.job_id, self.lease, self.generation)
+            if status != 200:
+                self.failed = (status, body.get("error", "heartbeat_failed"))
+                return self
+        except Exception as exc:
+            self.failed = (0, type(exc).__name__)
+            return self
+
         def run():
             while not self.stop_event.wait(self.interval):
                 try:
@@ -36,6 +47,10 @@ class LeaseKeeper:
         self.thread = threading.Thread(target=run, name="anthares-lease-heartbeat", daemon=True)
         self.thread.start()
         return self
+
+    def assert_alive(self):
+        if self.failed:
+            raise RuntimeError("lease_heartbeat_failed")
 
     def __exit__(self, *_):
         self.stop_event.set()
@@ -68,9 +83,6 @@ class FailoverController:
             client = ExecutorClient(url, os.environ[token_env])
             providers.append({"name": name, "priority": int(item.get("priority", 100)), "client": client})
         return sorted(providers, key=lambda p: (p["priority"], p["name"]))
-
-    def _available(self, provider):
-        return self.failures.get(provider["name"], 0) <= time.monotonic()
 
     def _mark_failure(self, provider):
         self.failures[provider["name"]] = time.monotonic() + self.cooldown
@@ -110,17 +122,21 @@ class FailoverController:
             if status not in (200, 201):
                 return {**result, "error": body.get("error", "lease_rejected")}
             accepted = True
-            with LeaseKeeper(client, job_id, lease, generation):
+            with LeaseKeeper(client, job_id, lease, generation) as keeper:
+                keeper.assert_alive()
                 if health.get("encrypted_profile_store_configured"):
                     status, restored = client.restore_profile()
+                    keeper.assert_alive()
                     if status != 200 or not restored.get("ok"):
                         raise RuntimeError("profile_restore_failed")
                     result["profile_generation"] = restored.get("generation")
                 status, started = client.start_browser()
+                keeper.assert_alive()
                 if status != 200 or not started.get("ok"):
                     raise RuntimeError("browser_start_failed")
                 browser_started = True
                 status, probe = client.probe_kwai()
+                keeper.assert_alive()
                 if status != 200 or not probe.get("ok"):
                     raise RuntimeError("kwai_probe_failed")
                 result.update({
@@ -132,6 +148,7 @@ class FailoverController:
                 })
         except Exception as exc:
             self._mark_failure(provider)
+            result["ok"] = False
             result["error"] = str(exc)[:80]
         finally:
             if browser_started:
