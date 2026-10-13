@@ -1,0 +1,48 @@
+name: Anthares-browser vault restore live proof
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/anthares-browser-vault-restore-live-once.yml']
+permissions:
+  contents: read
+jobs:
+  restore-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wait for the commit-triggered Render restart
+        run: sleep 75
+      - name: Verify durable browser state after restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://anthares-x-render-worker-v3.onrender.com'
+          status="$(curl -fsS --retry 24 --retry-all-errors --retry-delay 5 --max-time 20 "$base/v1/runtime/browser/persistence-status")"
+          health="$(curl -fsS --retry 12 --retry-all-errors --retry-delay 5 --max-time 20 "$base/v1/runtime/health")"
+          printf '%s\n' "$status"
+          python3 - "$status" "$health" <<'PY'
+          import json, sys
+          status_text, health_text = sys.argv[1], sys.argv[2]
+          values = {}
+          for line in status_text.splitlines():
+              if '=' in line:
+                  k, v = line.split('=', 1)
+                  values[k.strip()] = v.strip()
+          expected = {
+              'healthy': 'True',
+              'backend': 'local_playwright_vault',
+              'vault_enabled': 'True',
+              'restore_status': 'restored',
+              'last_persist_ok': 'True',
+              'host_desktop_fallback': 'False',
+              'persistence_proven': 'True',
+          }
+          for key, wanted in expected.items():
+              assert values.get(key) == wanted, (key, values)
+          health = json.loads(health_text)
+          assert health.get('ok') is True, health
+          browser = health.get('browser') or {}
+          assert browser.get('healthy') is True, browser
+          assert health.get('host_desktop_fallback') is False, health
+          print('BROWSER_VAULT_RESTORE_AFTER_RESTART=PASS')
+          PY
