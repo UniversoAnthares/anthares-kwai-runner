@@ -8,6 +8,7 @@ on:
       - 'infra/anthares_runtime_mesh.py'
       - 'infra/sitecustomize.py'
       - 'tools/test_anthares_runtime_mesh.py'
+      - 'tools/test_remote_browser_bridge.py'
       - '.github/workflows/anthares-runtime-mesh-qa.yml'
   push:
     branches: [main, feature/runtime-mesh-remote-browser-v2]
@@ -15,6 +16,7 @@ on:
       - 'infra/anthares_runtime_mesh.py'
       - 'infra/sitecustomize.py'
       - 'tools/test_anthares_runtime_mesh.py'
+      - 'tools/test_remote_browser_bridge.py'
       - '.github/workflows/anthares-runtime-mesh-qa.yml'
 
 permissions:
@@ -35,6 +37,7 @@ jobs:
         run: |
           . .venv/bin/activate
           python tools/test_anthares_runtime_mesh.py
+          python tools/test_remote_browser_bridge.py
       - name: Compile integration modules
         run: |
           . .venv/bin/activate
