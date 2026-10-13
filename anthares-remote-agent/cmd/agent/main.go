@@ -94,6 +94,12 @@ func main() {
 		go func() {
 			defer func() { <-sem }()
 			result := executeJob(cfg, j)
+			// Persist the result before attempting network delivery. Until
+			// replay is wired in, do not silently execute without a spool.
+			if err := saveEncryptedResult(resultSpoolDir(cfg), cfg.DeviceToken, result); err != nil {
+				fmt.Fprintf(os.Stderr, "fatal result spool error job=%s: %v\n", result.ID, err)
+				os.Exit(1)
+			}
 			if err := postResultRetry(cfg, result); err != nil {
 				// Stop accepting new work if a completed result cannot be delivered.
 				// Restart recovery still requires a durable encrypted result spool.
