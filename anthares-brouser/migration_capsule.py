@@ -1,6 +1,5 @@
 import base64
 import json
-import os
 import secrets
 import time
 
@@ -25,61 +24,72 @@ def _is_kwai_domain(domain: str) -> bool:
 
 
 def _cookie_projection(cookie: dict) -> dict:
-    allowed = {
-        "name", "value", "domain", "path", "expires", "httpOnly", "secure",
-        "sameSite", "priority", "sameParty", "sourceScheme", "sourcePort",
-    }
+    allowed = {"name", "value", "domain", "path", "expires", "httpOnly", "secure", "sameSite", "priority", "sameParty", "sourceScheme", "sourcePort"}
     return {key: cookie[key] for key in allowed if key in cookie}
+
+
+def _evaluate_value(expression: str):
+    result = base_app._cdp_call("Runtime.evaluate", {
+        "expression": expression,
+        "returnByValue": True,
+        "awaitPromise": True,
+        "userGesture": False,
+    }, timeout=8.0)
+    if result.get("exceptionDetails"):
+        raise HTTPException(status_code=422, detail="migration_javascript_exception")
+    return result.get("result", {}).get("value")
 
 
 @router.get("/migration/kwai-capsule")
 def export_kwai_capsule():
-    """Export only an RSA/AES encrypted Kwai cookie capsule.
-
-    The private half exists only in the Anthares-Reserva Cloudflare Worker.
-    No plaintext cookie, token or state key is returned or logged here.
-    This route is temporary and must be removed after migration validation.
-    """
+    """One-way encrypted cookie + localStorage capsule for Anthares-Reserva."""
     with base_app._BROWSER_LOCK:
         base_app._cdp_call("Network.enable", timeout=5.0)
-        result = base_app._cdp_call("Network.getAllCookies", timeout=8.0)
+        base_app._cdp_call("Network.setBlockedURLs", {"urls": ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.avif", "*.mp4", "*.webm", "*.mov", "*.m3u8", "*.mp3", "*.woff", "*.woff2", "*.ttf"]}, timeout=5.0)
+        cookies_result = base_app._cdp_call("Network.getAllCookies", timeout=8.0)
+        try:
+            base_app._cdp_call("Page.navigate", {"url": "https://www.kwai.com/@lucasrosalem"}, timeout=8.0)
+            time.sleep(2.5)
+            local_storage = _evaluate_value("JSON.stringify(Object.fromEntries(Array.from({length:localStorage.length},(_,i)=>{const k=localStorage.key(i);return [k,localStorage.getItem(k)]})))")
+            evidence = _evaluate_value("""(() => { const body=(document.body?.innerText||'').slice(0,24000); const nodes=[...document.querySelectorAll('a,button,input,[role=button],[role=menuitem],span,div')]; const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'}; const txt=e=>((e.innerText||e.textContent||'')+' '+(e.getAttribute?.('aria-label')||'')).replace(/\\s+/g,' ').trim(); const login=nodes.some(e=>vis(e)&&(/^(log\\s*in|login|sign\\s*in|entrar|fazer login)$/i.test(txt(e))||['password','tel'].includes((e.getAttribute?.('type')||'').toLowerCase()))); const owner=nodes.some(e=>vis(e)&&(/^(edit profile|editar perfil|account settings|configura[cç][oõ]es da conta)$/i.test(txt(e))||/edit[-_ ]?profile|profile[-_ ]?edit/i.test(e.getAttribute?.('data-testid')||'')||/\\/(profile|account)\\/(edit|settings)(\\/|$)/i.test(e.getAttribute?.('href')||''))); const logout=nodes.some(e=>vis(e)&&/^(log\\s*out|logout|sign\\s*out|sair)$/i.test(txt(e))); return {host_ok:location.hostname==='www.kwai.com',path_ok:location.pathname.replace(/\\/$/,'').toLowerCase()==='/@lucasrosalem',login_gate:login,owner_edit:owner,logout_visible:logout,body_present:body.length>0}; })()""")
+        finally:
+            try:
+                base_app._cdp_call("Page.navigate", {"url": "about:blank"}, timeout=5.0)
+                base_app._cdp_call("Network.setBlockedURLs", {"urls": []}, timeout=3.0)
+            except Exception:
+                pass
 
-    cookies = [
-        _cookie_projection(cookie)
-        for cookie in result.get("cookies", [])
-        if _is_kwai_domain(str(cookie.get("domain", "")))
-    ]
+    cookies = [_cookie_projection(c) for c in cookies_result.get("cookies", []) if _is_kwai_domain(str(c.get("domain", "")))]
     if not cookies:
         raise HTTPException(status_code=409, detail="no_kwai_cookie_state")
     if len(cookies) > 128:
         raise HTTPException(status_code=413, detail="kwai_cookie_state_too_large")
+    try:
+        storage = json.loads(local_storage or "{}")
+    except Exception:
+        storage = {}
+    if not isinstance(storage, dict) or len(storage) > 256:
+        raise HTTPException(status_code=413, detail="kwai_local_storage_too_large")
+    storage = {str(k): str(v) for k, v in storage.items() if len(str(k)) <= 512 and len(str(v)) <= 32768}
 
-    plaintext = json.dumps(
-        {"version": 1, "created_at": int(time.time()), "cookies": cookies},
-        separators=(",", ":"), ensure_ascii=False,
-    ).encode("utf-8")
-    if len(plaintext) > 128 * 1024:
-        raise HTTPException(status_code=413, detail="kwai_cookie_state_too_large")
+    plaintext = json.dumps({"version": 2, "created_at": int(time.time()), "cookies": cookies, "local_storage": storage}, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    if len(plaintext) > 512 * 1024:
+        raise HTTPException(status_code=413, detail="kwai_state_too_large")
 
     public_key = serialization.load_der_public_key(base64.b64decode(PUBLIC_KEY_DER_B64))
     aes_key = secrets.token_bytes(32)
     nonce = secrets.token_bytes(12)
     ciphertext = AESGCM(aes_key).encrypt(nonce, plaintext, AAD)
-    wrapped_key = public_key.encrypt(
-        aes_key,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None,
-        ),
-    )
+    wrapped_key = public_key.encrypt(aes_key, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
     envelope = {
-        "version": 1,
+        "version": 2,
         "alg": "RSA-OAEP-256+A256GCM",
         "aad": base64.b64encode(AAD).decode("ascii"),
         "wrapped_key": base64.b64encode(wrapped_key).decode("ascii"),
         "nonce": base64.b64encode(nonce).decode("ascii"),
         "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
         "cookie_count": len(cookies),
+        "local_storage_count": len(storage),
+        "source_evidence": evidence if isinstance(evidence, dict) else {},
     }
     return JSONResponse(envelope, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
