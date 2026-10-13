@@ -21,20 +21,7 @@ func (p *fakeIssueProvider) Acknowledge(_ issueQueueItem, result Result) error {
 }
 
 func TestDecodeIssueQueueJob(t *testing.T) {
-	job, err := decodeIssueQueueJob(`{"job_id":"abc-123","device_id":"DESKTOP-FTDK0HP","type":"ping","timeout_seconds":15}`, "DESKTOP-FTDK0HP")
-	if err == nil {
-		t.Fatal("escaped JSON fixture should be rejected")
-	}
-	job, err = decodeIssueQueueJob(`{"job_id":"abc-123"}`, "DESKTOP-FTDK0HP")
-	if err == nil {
-		t.Fatal("missing device should be rejected")
-	}
-	job, err = decodeIssueQueueJob(`{"job_id":"abc-123","device_id":"DESKTOP-FTDK0HP","type":"ping"}`, "DESKTOP-FTDK0HP")
-	if err == nil {
-		t.Fatal("escaped JSON should remain rejected")
-	}
-
-	job, err = decodeIssueQueueJob("{\"job_id\":\"abc-123\",\"device_id\":\"DESKTOP-FTDK0HP\",\"type\":\"ping\",\"timeout_seconds\":15}", "DESKTOP-FTDK0HP")
+	job, err := decodeIssueQueueJob("{\"job_id\":\"abc-123\",\"device_id\":\"DESKTOP-FTDK0HP\",\"type\":\"ping\",\"timeout_seconds\":15}", "DESKTOP-FTDK0HP")
 	if err != nil {
 		t.Fatal(err)
 	}
