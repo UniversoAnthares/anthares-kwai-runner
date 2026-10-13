@@ -61,7 +61,7 @@ def probe(name: str, url: str) -> Probe:
 
 def main() -> int:
     checks = [
-        probe("reserva_control", f"{RESERVA_CONTROL}/health"),
+        probe("reserva_control", f"{RESERVA_CONTROL}/healthz"),
         probe("control_plane", f"{CONTROL}/health"),
         probe("control_failover_self_test", f"{CONTROL}/failover-self-test"),
     ]
