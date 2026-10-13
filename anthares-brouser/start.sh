@@ -38,7 +38,16 @@ cleanup() {
   stop_pid "$XVFB_PID"
   stop_pid "$API_PID"
 }
-trap cleanup EXIT INT TERM
+
+shutdown() {
+  log "shutdown requested; stopping isolated browser stack"
+  trap - EXIT INT TERM
+  cleanup
+  exit 0
+}
+
+trap cleanup EXIT
+trap shutdown INT TERM
 
 start_api() {
   log "starting control API on 0.0.0.0:${API_PORT}"
@@ -154,9 +163,6 @@ restart_display_stack() {
   start_chromium
 }
 
-# Bring the HTTP control plane fully online before launching Chromium. On the
-# constrained free instance Chromium can saturate CPU during cold start; waiting
-# here prevents it from starving Uvicorn and causing Render 503s.
 start_api
 wait_api_health
 start_xvfb
