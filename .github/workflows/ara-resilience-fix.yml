@@ -29,61 +29,18 @@ jobs:
           from pathlib import Path
           p = Path('anthares-remote-agent/cmd/agent/main.go')
           s = p.read_text()
-          old = '''\tgo heartbeatLoop(cfg)
-\t// Replay previously persisted results before leasing new work.
-\tif err := replayEncryptedResults(cfg); err != nil {
-\t\tfmt.Fprintln(os.Stderr, "pending result replay error:", err)
-\t\tos.Exit(1)
-\t}
-'''
-          new = '''\tgo heartbeatLoop(cfg)
-\t// A transient control-plane outage must not terminate the agent. Keep any
-\t// encrypted pending results on disk and retry them while the process stays up.
-\tif err := replayEncryptedResults(cfg); err != nil {
-\t\tfmt.Fprintln(os.Stderr, "pending result replay deferred:", err)
-\t}
-\tgo resultReplayLoop(cfg)
-'''
+          old = "\tgo heartbeatLoop(cfg)\n\t// Replay previously persisted results before leasing new work.\n\tif err := replayEncryptedResults(cfg); err != nil {\n\t\tfmt.Fprintln(os.Stderr, \"pending result replay error:\", err)\n\t\tos.Exit(1)\n\t}\n"
+          new = "\tgo heartbeatLoop(cfg)\n\t// A transient control-plane outage must not terminate the agent. Keep any\n\t// encrypted pending results on disk and retry them while the process stays up.\n\tif err := replayEncryptedResults(cfg); err != nil {\n\t\tfmt.Fprintln(os.Stderr, \"pending result replay deferred:\", err)\n\t}\n\tgo resultReplayLoop(cfg)\n"
           if old not in s:
               raise SystemExit('startup replay block not found')
           s = s.replace(old, new, 1)
-          old = '''\t\t\tif err := postResultRetry(cfg, result); err != nil {
-\t\t\t\t// Keep the encrypted pending file for replay on next start.
-\t\t\t\tfmt.Fprintf(os.Stderr, "fatal result upload error job=%s: %v\\n", result.ID, err)
-\t\t\t\tos.Exit(1)
-\t\t\t}
-\t\t\tif err := os.Remove(filepath.Join(resultSpoolDir(cfg), result.ID+".pending")); err != nil {
-\t\t\t\tfmt.Fprintf(os.Stderr, "fatal result cleanup error job=%s: %v\\n", result.ID, err)
-\t\t\t\tos.Exit(1)
-\t\t\t}
-'''
-          new = '''\t\t\tif err := postResultRetry(cfg, result); err != nil {
-\t\t\t\t// The encrypted pending file remains durable. A background replay
-\t\t\t\t// loop will retry it without taking the device offline.
-\t\t\t\tfmt.Fprintf(os.Stderr, "result upload deferred job=%s: %v\\n", result.ID, err)
-\t\t\t\treturn
-\t\t\t}
-\t\t\tif err := os.Remove(filepath.Join(resultSpoolDir(cfg), result.ID+".pending")); err != nil {
-\t\t\t\t// A later replay is idempotent at the control plane, so cleanup
-\t\t\t\t// failure is recoverable and must not terminate the agent.
-\t\t\t\tfmt.Fprintf(os.Stderr, "result cleanup deferred job=%s: %v\\n", result.ID, err)
-\t\t\t}
-'''
+          old = "\t\t\tif err := postResultRetry(cfg, result); err != nil {\n\t\t\t\t// Keep the encrypted pending file for replay on next start.\n\t\t\t\tfmt.Fprintf(os.Stderr, \"fatal result upload error job=%s: %v\\n\", result.ID, err)\n\t\t\t\tos.Exit(1)\n\t\t\t}\n\t\t\tif err := os.Remove(filepath.Join(resultSpoolDir(cfg), result.ID+\".pending\")); err != nil {\n\t\t\t\tfmt.Fprintf(os.Stderr, \"fatal result cleanup error job=%s: %v\\n\", result.ID, err)\n\t\t\t\tos.Exit(1)\n\t\t\t}\n"
+          new = "\t\t\tif err := postResultRetry(cfg, result); err != nil {\n\t\t\t\t// Keep the encrypted pending file and retry it in the background.\n\t\t\t\tfmt.Fprintf(os.Stderr, \"result upload deferred job=%s: %v\\n\", result.ID, err)\n\t\t\t\treturn\n\t\t\t}\n\t\t\tif err := os.Remove(filepath.Join(resultSpoolDir(cfg), result.ID+\".pending\")); err != nil {\n\t\t\t\t// Replaying an acknowledged result is idempotent at the control plane.\n\t\t\t\tfmt.Fprintf(os.Stderr, \"result cleanup deferred job=%s: %v\\n\", result.ID, err)\n\t\t\t}\n"
           if old not in s:
               raise SystemExit('result delivery block not found')
           s = s.replace(old, new, 1)
-          marker = '''func heartbeat(cfg Config) error {'''
-          insert = '''func resultReplayLoop(cfg Config) {
-\tticker := time.NewTicker(15 * time.Second)
-\tdefer ticker.Stop()
-\tfor range ticker.C {
-\t\tif err := replayEncryptedResults(cfg); err != nil {
-\t\t\tfmt.Fprintln(os.Stderr, "pending result replay deferred:", err)
-\t\t}
-\t}
-}
-
-'''
+          marker = "func heartbeat(cfg Config) error {"
+          insert = "func resultReplayLoop(cfg Config) {\n\tticker := time.NewTicker(15 * time.Second)\n\tdefer ticker.Stop()\n\tfor range ticker.C {\n\t\tif err := replayEncryptedResults(cfg); err != nil {\n\t\t\tfmt.Fprintln(os.Stderr, \"pending result replay deferred:\", err)\n\t\t}\n\t}\n}\n\n"
           if marker not in s:
               raise SystemExit('heartbeat marker not found')
           s = s.replace(marker, insert + marker, 1)
