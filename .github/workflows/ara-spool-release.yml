@@ -46,13 +46,15 @@ jobs:
           $env:GOOS='windows'
           $env:GOARCH='amd64'
           $env:CGO_ENABLED='0'
-          go build -trimpath -ldflags='-s -w' -o anthares-remote-agent-0.3.0-windows-amd64.exe ./cmd/agent
+          go build -trimpath -ldflags='-s -w' -o anthares-remote-agent-0.3.1-windows-amd64.exe ./cmd/agent
       - name: SHA256
         shell: pwsh
-        run: Get-FileHash .\anthares-remote-agent-0.3.0-windows-amd64.exe -Algorithm SHA256 | Format-List
+        run: Get-FileHash .\anthares-remote-agent-0.3.1-windows-amd64.exe -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: anthares-remote-agent-0.3.0-windows-amd64
-          path: anthares-remote-agent/anthares-remote-agent-0.3.0-windows-amd64.exe
+          name: anthares-remote-agent-0.3.1-windows-amd64
+          path: anthares-remote-agent/anthares-remote-agent-0.3.1-windows-amd64.exe
           if-no-files-found: error
           retention-days: 1
+
+# Triggered after the 0.3.1 transient-outage resilience patch passed Go tests and vet.
