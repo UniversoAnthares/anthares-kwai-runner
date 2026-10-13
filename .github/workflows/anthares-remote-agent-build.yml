@@ -3,6 +3,7 @@ name: Anthares Remote Agent build
 on:
   push:
     branches:
+      - main
       - feature/anthares-remote-agent
       - feature/ara-chatgpt-mcp
     paths:
