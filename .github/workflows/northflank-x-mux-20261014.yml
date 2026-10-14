@@ -50,7 +50,7 @@ jobs:
           service=next((s for s in services if s.get('name')=='anthares-ara-northflank'),None)
           if not service:raise SystemExit('EXISTING_ARA_SERVICE_NOT_FOUND')
           sid=service.get('id') or 'anthares-ara-northflank'
-          details=api('GET',f'/projects/{project}/services/combined/{sid}').get('data') or {}
+          details=api('GET',f'/projects/{project}/services/{sid}').get('data') or {}
           original=(details.get('buildSettings') or {}).get('dockerfile') or {}
           original_path=original.get('dockerFilePath') or '/infra/northflank/Dockerfile'
           if original_path not in ['/infra/northflank/Dockerfile','/infra/northflank-mux/Dockerfile']:
