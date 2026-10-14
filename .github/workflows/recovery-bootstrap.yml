@@ -21,7 +21,7 @@ concurrency:
 jobs:
   verify-recovery-readiness:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,10 +31,11 @@ jobs:
         working-directory: anthares-reserva-browser
         run: |
           set -euo pipefail
-          npm ci --ignore-scripts
+          npm install --ignore-scripts --no-audit --no-fund
           npm run check
           node --check src/tiktok-owner-entry.js
           grep -Eq '^main = "src/tiktok-owner-entry.js"$' wrangler.toml
+          echo 'RECOVERY_SOURCE_VALIDATION_OK=1'
       - name: Verify active Worker health without deployment
         run: |
           set -euo pipefail
@@ -48,5 +49,17 @@ jobs:
           assert d.get('ok') is True, 'worker health not OK'
           assert d.get('service') == 'anthares-reserva-browser', 'unexpected service'
           assert d.get('provider') == 'cloudflare', 'unexpected provider'
+          assert d.get('browser_binding') is True, 'browser binding unavailable'
+          assert d.get('durable_state_binding') is True, 'durable state binding unavailable'
+          assert d.get('render_required') is False, 'unexpected Render dependency'
           print('RECOVERY_WORKER_READINESS_OK=1')
           PY
+      - name: Verify unauthenticated protection boundary
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/recovery-unauth.json -w '%{http_code}' --max-time 15 \
+            -X POST https://anthares-reserva-browser.anthares1.workers.dev/tiktok/import \
+            -H 'content-type: application/json' \
+            --data '{}')"
+          test "$code" = "401"
+          echo 'RECOVERY_AUTH_BOUNDARY_OK=1'
