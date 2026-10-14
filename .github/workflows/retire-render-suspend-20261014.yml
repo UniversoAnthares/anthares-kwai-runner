@@ -1,9 +1,6 @@
 name: One-time suspend retired Render services (preserve X until migration)
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/retire-render-suspend-20261014.yml
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
