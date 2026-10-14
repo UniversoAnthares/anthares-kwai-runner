@@ -1,5 +1,5 @@
 $ErrorActionPreference='Continue'
-$root='D:\AntharsWork\AntharesRemoteAgent'
+$root='C:\ProgramData\AntharesRemoteAgent'
 $envFile=Join-Path $root 'agent-env.ps1'
 if(Test-Path $envFile){. $envFile}
 $queueAuthLoader=Join-Path $root 'load-issue-queue-auth.ps1'
@@ -15,11 +15,11 @@ $logRoot='D:\AntharsWork\logs'
 $runtimeRoot='D:\AntharsWork\legacy-pc-runtime\supervisor'
 @('D:\AntharsWork\temp',$logRoot,'D:\AntharsWork\ara-jobs',$runtimeRoot)|ForEach-Object{New-Item -ItemType Directory -Force -Path $_|Out-Null}
 $exe=Join-Path $root 'anthares-remote-agent-v4.exe'
-$stdout=Join-Path $logRoot 'agent-system.stdout.log'
-$stderr=Join-Path $logRoot 'agent-system.stderr.log'
+$stdout=Join-Path $logRoot 'agent-v4-system.stdout.log'
+$stderr=Join-Path $logRoot 'agent-v4-system.stderr.log'
 $stateFile=Join-Path $runtimeRoot 'system-supervisor-state.json'
 $created=$false
-$mutex=New-Object System.Threading.Mutex($true,'Global\AntharesRemoteSystemSupervisorV10',[ref]$created)
+$mutex=New-Object System.Threading.Mutex($true,'Global\AntharesRemoteSystemSupervisorV11',[ref]$created)
 if(-not $created){exit 0}
 function Load-QueueAuth{if(Test-Path $queueAuthLoader){try{. $queueAuthLoader}catch{}}}
 function Queue-Configured{
@@ -39,10 +39,6 @@ function Save-State([string]$reason,[int]$agentPid=0){
   }|ConvertTo-Json -Depth 4|Set-Content -Path $stateFile -Encoding UTF8}catch{}
 }
 try{
-  Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{
-    $_.SessionId -eq 0 -and $_.Name -match '^anthares-remote-agent(?:-v4|-standard)?\.exe$'
-  }|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
-  Start-Sleep -Milliseconds 700
   while($true){
     Load-QueueAuth
     if(-not (Queue-Configured)){Save-State 'waiting-for-private-queue-credential';Start-Sleep 15;continue}
