@@ -20,6 +20,28 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: anthares-remote-agent/go.mod
+      - name: Guard Phase 4 control invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          root = Path('anthares-remote-agent/windows')
+          phase4 = (root / 'phase4-migrate-task.ps1').read_text(encoding='utf-8')
+          installer = (root / 'install-system-v8.ps1').read_text(encoding='utf-8')
+          supervisor = (root / 'run-agent-system-supervisor.ps1').read_text(encoding='utf-8')
+          watchdog = (root / 'recovery-watchdog.ps1').read_text(encoding='utf-8')
+          loop = (root / 'recovery-watchdog-loop.ps1').read_text(encoding='utf-8')
+          forbidden = r'D:\AntharsWork\AntharesRemoteAgent\run-agent-system-supervisor.ps1'
+          assert forbidden not in phase4, 'Phase 4 task must never execute supervisor from D:'
+          assert r"$root='C:\ProgramData\AntharesRemoteAgent'" in supervisor, 'canonical supervisor root drifted from C:\ProgramData'
+          assert 'existing SYSTEM private queue credential is missing' in installer, 'installer no longer fails closed when SYSTEM credential is absent'
+          assert 'queue_credential_validated=$true' in installer, 'installer no longer records credential validation'
+          assert "'load-issue-queue-auth.ps1'" in loop and '.lastgood' in loop, 'watchdog loop no longer self-heals queue loader'
+          assert 'waiting-for-private-queue-credential' in watchdog, 'watchdog lost explicit credential-wait state'
+          assert 'interactive_agent_count' in watchdog, 'watchdog lost single-executor enforcement'
+          print('ARA_PHASE4_CONTROL_INVARIANTS=OK')
+          PY
       - name: Test
         working-directory: anthares-remote-agent
         run: go test ./... -count=1
