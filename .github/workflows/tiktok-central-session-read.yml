@@ -33,7 +33,11 @@ jobs:
           json.dump({'cookies':cookies,'origins':st.get('origins') or []},open('/tmp/storage-state.json','w'))
           print('CENTRAL_TIKTOK_SESSION_AVAILABLE=1')
           print('CENTRAL_TIKTOK_COOKIE_COUNT='+str(len(cookies)))
-          q=json.load(open('/tmp/queue.json')); jobs=q.get('jobs') or []
+          q=json.load(open('/tmp/queue.json')); raw=q.get('jobs') or []
+          if isinstance(raw,dict): jobs=list(raw.values())
+          elif isinstance(raw,list): jobs=raw
+          else: jobs=[]
+          jobs=[j for j in jobs if isinstance(j,dict)]
           target=[]
           for j in jobs:
               if j.get('platform')!='tiktok': continue
@@ -44,6 +48,7 @@ jobs:
           print('TARGET_INTERVAL_OVERLAP_COUNT='+str(len(target)))
           print('TARGET_INTERVAL_OVERLAPS='+json.dumps(target,separators=(',',':')))
           print('TIKTOK_QUEUE_JOB_COUNT='+str(sum(1 for j in jobs if j.get('platform')=='tiktok')))
+          print('QUEUE_COUNTS='+json.dumps(q.get('counts') or {},separators=(',',':')))
           PY
       - name: Validate exact TikTok identity and inventory profile read-only
         shell: bash
