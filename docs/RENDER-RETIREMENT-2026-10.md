@@ -1,54 +1,36 @@
 # Render retirement policy — 2026-10
 
-Render is no longer an allowed canonical dependency. It may remain only as a final emergency fallback until its free resources expire.
+Render is retired as an Anthares execution platform. It must not be used as primary, secondary, emergency fallback, QA runner, browser worker, publication worker, MCP gateway, control plane, persistence layer, keepalive target, scheduled probe, or job executor.
 
 ## Canonical replacements
 
-- ARA control/state: Cloudflare Workers + Durable Objects/SQLite.
+- ARA private execution: GitHub + GitLab private issue queues under SYSTEM/session 0.
+- ARA control/state: Cloudflare Workers + Durable Objects/SQLite where HTTP control is explicitly needed.
 - ARA MCP/OAuth: Cloudflare Worker `anthares-ara-mcp`.
-- ARA independent recovery: private GitHub/GitLab issue queues.
-- PostgreSQL/HA experiments: Neon project `anthares-ara-ha`.
-- Container/browser compute: Northflank.
-- CI, validators and probes: GitHub Actions and GitLab CI.
-
-## Render services by disposition
-
-### Already superseded; fallback only
-- `anthares-ara-control`
-- `anthares-remote-mcp`
-- `anthares-remote-mcp-v2`
-- `anthares-ara-infra-canary`
-- `anthares-ara-infra-canary-v2`
-- PostgreSQL `anthares-ara-state`
-
-### Migration in progress to Northflank
-- `anthares-x-render-worker-v3`
-- `anthares-remote-control` browser/runtime surface
-
-### CI/test/probe workloads; move to GitHub/GitLab and do not treat as services
-- `anthares-browser-qa-render`
-- `anthares-browser-qa-render-v2`
-- `anthares-x-render-worker-authprobe`
-- `anthares-x-upload-bench`
-- `anthares-x-microcut-e2e`
-- `anthares-x-real-fullflow-test`
-- `anthares-gitlab-qa-runner`
-- `anthares-gitlab-kwai-qa-isolated`
-- `anthares-gitlab-kwai-qa-bootstrap`
-- `kwai-up-validator`
-- `kwai-up-uiauto-builder`
-- `anthares-legacy-executor-probe`
-- `anthares-youtube-source-probe`
-
-### Social/browser workers requiring separate runtime verification before retirement
-- `anthares-tiktok-render`
-- `anthares-tiktok-render-v2`
-- `anthares-tiktok-render-rootless`
+- Independent PostgreSQL/fencing: Neon-backed PostgreSQL authority.
+- Container/browser compute: Northflank where persistent container compute is required and capacity exists.
+- Finite CI/execution: GitHub Actions and GitLab SaaS/shared runners.
 
 ## Invariants
 
-1. No new code may use an `onrender.com` endpoint as its first or only route.
-2. Any Render endpoint must be last in a failover list or guarded by an explicit emergency flag.
-3. Persistent state must live outside Render.
-4. A migration is complete only after a real operation succeeds on the replacement service.
-5. Do not delete the Render fallback until the replacement has passed its real-operation check.
+1. Operational source code must not contain an `onrender.com` default or fallback.
+2. No scheduled workflow may wake, probe or keep a Render service alive.
+3. No Render-hosted runner may retain a GitLab runner token.
+4. No Render-hosted publication/control/MCP worker may retain execution credentials.
+5. Persistent state must live outside Render.
+6. A service is migrated only after its replacement is proven and its Render execution path is disabled.
+7. Remaining Render resources may exist temporarily only as inert account objects pending physical suspension/deletion; their existence is not permission to execute work.
+
+## Current migration evidence
+
+- TikTok container path is served through the Cloudflare router with Northflank as the configured upstream and no Render fallback.
+- Central social routing revision `2026-10-14-render-retired-r2` excludes Render from priorities and probes.
+- ARA private GitHub and GitLab queues have both consumed real jobs from `DESKTOP-FTDK0HP`; the SYSTEM supervisor reports `github_queue=true`, `gitlab_queue=true`, and `http_control_enabled=false`.
+- Render-hosted GitLab runner credentials were cleared so those services cannot pull jobs after redeploy.
+- Render-hosted MCP/control/X/TikTok execution credentials were cleared or invalidated so they cannot accept authenticated task execution after redeploy.
+- Scheduled Render browser/GitLab keepalive jobs were retired.
+- Neon/PostgreSQL self-test and fencing checks are healthy and independent of Render.
+
+## Physical-resource cleanup
+
+Render account objects must be suspended or deleted once the management surface exposes that operation. Until then they remain credential-disabled and absent from all routing and scheduling.
