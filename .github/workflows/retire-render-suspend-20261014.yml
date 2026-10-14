@@ -23,9 +23,9 @@ jobs:
           owner='tea-d9hnkbt8nd3s73f0876g'
           targets=[["srv-db6r95gm7kps73b23jf0","anthares-ara-control"],["srv-db6ootl9fdbs73do9sm0","anthares-browser-qa-render-v2"],["srv-db6onc7f3r2c73btqcr0","anthares-browser-qa-render"],["srv-db6o0d5g1s2s738s7bp0","anthares-remote-mcp-v2"],["srv-db6ne4favr4c73cu9g9g","anthares-ara-infra-canary-v2"],["srv-db6nd1gu01pc73fg0rr0","anthares-ara-infra-canary"],["srv-db6naljbc2fs739og1s0","anthares-remote-mcp"],["srv-db6mj8navr4c73cqvgo0","anthares-remote-control"],["srv-db6lvqrl550s73bhq170","anthares-legacy-executor-probe"],["srv-db6j0e8n74is73a7vfm0","kwai-up-uiauto-builder"],["srv-db6iqllg1s2s739fq0k0","anthares-x-real-fullflow-test"],["srv-db6hikg473hc73df1upg","kwai-up-validator"],["srv-db6eajflot8c739t5m50","anthares-x-render-worker-authprobe"],["srv-db6d4iijnfac73db30jg","anthares-x-upload-bench"],["srv-db659q3bc2fs73artvfg","anthares-x-microcut-e2e"],["srv-db5ao359fdbs73c72m30","anthares-gitlab-kwai-qa-bootstrap"],["srv-db59mqcs728c73cbd7o0","anthares-gitlab-kwai-qa-isolated"],["srv-db4q57942hec73ejdbpg","anthares-gitlab-qa-runner"],["srv-db255bmk1f9s73955f3g","anthares-youtube-source-probe"],["srv-db18d3tg1s2s7391l4ng","anthares-tiktok-render-rootless"],["srv-db18bih42hec73egl1jg","anthares-tiktok-render-v2"],["srv-db18acnavr4c73ao8r6g","anthares-tiktok-render"]]
           headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'anthares-render-retirement/1'}
-          def call(method,path):
+          def call(method,path,payload=None):
               for attempt in range(8):
-                  req=urllib.request.Request('https://api.render.com/v1'+path,method=method,headers=headers)
+                  req=urllib.request.Request('https://api.render.com/v1'+path,method=method,headers={**headers,'Content-Type':'application/json'},data=(json.dumps(payload).encode() if payload is not None else None))
                   try:
                       with urllib.request.urlopen(req,timeout=30) as r:
                           raw=r.read().decode('utf-8','replace')
@@ -40,6 +40,10 @@ jobs:
               _,info=call('GET','/services/'+service_id)
               if info.get('ownerId')!=owner or info.get('name')!=expected_name:
                   raise RuntimeError('SERVICE_IDENTITY_MISMATCH '+service_id)
+              if info.get('autoDeployTrigger')!='off':
+                  call('PATCH','/services/'+service_id,{'autoDeployTrigger':'off'})
+                  print('AUTODEPLOY_DISABLED',expected_name,flush=True)
+                  time.sleep(7)
               if info.get('suspended')!='suspended':
                   code,_=call('POST','/services/'+service_id+'/suspend')
                   if code!=202: raise RuntimeError('UNEXPECTED_SUSPEND_STATUS '+service_id+' '+str(code))
