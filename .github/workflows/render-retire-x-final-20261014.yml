@@ -1,0 +1,103 @@
+name: One-time suspend final Render X worker after Northflank proof
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/render-retire-x-final-20261014.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-retire-x-final-20261014
+  cancel-in-progress: false
+
+jobs:
+  suspend-final-x:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Wait for Northflank mux, prove real X session, suspend last Render worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, time, urllib.request, urllib.error
+          render=os.getenv('RENDER_API_KEY','')
+          shared=os.getenv('ARA_SHARED','')
+          if not render or not shared: raise SystemExit('REQUIRED_SECRET_MISSING')
+          base='https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run'
+          expected='lucasyahn'
+
+          def get(url,auth=False,accepted=(200,)):
+              h={'User-Agent':'anthares-render-retirement/3'}
+              if auth:h['Authorization']='Bearer '+shared
+              req=urllib.request.Request(url,headers=h)
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      raw=r.read().decode('utf-8','replace')
+                      return r.status,(json.loads(raw) if raw else {})
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode('utf-8','replace')
+                  try: payload=json.loads(raw) if raw else {}
+                  except Exception: payload={}
+                  if e.code in accepted:return e.code,payload
+                  raise
+
+          # Wait for the co-hosted X runtime to be deployed, without weakening ARA PostgreSQL health.
+          deadline=time.monotonic()+900
+          last='not-ready'
+          session=None
+          while time.monotonic()<deadline:
+              try:
+                  _,ara=get(base+'/healthz',accepted=(200,503,404))
+                  _,xh=get(base+'/x/health',accepted=(200,503,404))
+                  _,key=get(base+'/x/v1/runtime/browser/signing-public-key',accepted=(200,503,404))
+                  status,verify=get(base+'/x/verify',auth=True,accepted=(200,401,503,404))
+                  if (ara.get('ok') is True and ara.get('backend')=='postgres' and
+                      xh.get('ok') is True and key.get('ok') is True and (key.get('jwk') or {}).get('crv')=='P-256' and
+                      status==200 and verify.get('ok') is True and str(verify.get('handle','')).lower()==expected and verify.get('durable') is True):
+                      session=verify;break
+                  last=json.dumps({'ara':ara.get('ok'),'x':xh.get('ok'),'key':key.get('ok'),'verify_status':status,'verify_ok':verify.get('ok'),'handle':verify.get('handle')},sort_keys=True)
+              except Exception as exc:
+                  last=type(exc).__name__+':'+str(exc)[:240]
+              time.sleep(12)
+          if not session:
+              raise SystemExit('NORTHFLANK_X_REAL_SESSION_NOT_PROVEN '+last)
+          print('NORTHFLANK_X_REAL_SESSION_PROVEN handle='+expected+' durable=1',flush=True)
+
+          # Suspend the one intentionally-preserved Render worker only after proof above.
+          sid='srv-db6gcoad0e5s73alefn0'
+          headers={'Authorization':'Bearer '+render,'Accept':'application/json','User-Agent':'anthares-render-retirement/3'}
+          def api(method,path,payload=None):
+              data=None if payload is None else json.dumps(payload).encode()
+              req=urllib.request.Request('https://api.render.com/v1'+path,data=data,method=method,headers={**headers,'Content-Type':'application/json'})
+              for attempt in range(8):
+                  try:
+                      with urllib.request.urlopen(req,timeout=30) as r:
+                          raw=r.read().decode('utf-8','replace')
+                          return r.status,(json.loads(raw) if raw else {})
+                  except urllib.error.HTTPError as e:
+                      if e.code==429:
+                          time.sleep(min(60,10*(attempt+1)));continue
+                      raise RuntimeError(f'RENDER_HTTP_{e.code} '+e.read().decode('utf-8','replace')[:250])
+              raise RuntimeError('RENDER_RATE_LIMIT_RETRY_EXHAUSTED')
+          _,info=api('GET','/services/'+sid)
+          if info.get('name')!='anthares-x-render-worker-v3' or info.get('ownerId')!='tea-d9hnkbt8nd3s73f0876g':
+              raise SystemExit('RENDER_X_IDENTITY_MISMATCH')
+          if info.get('autoDeployTrigger')!='off':
+              api('PATCH','/services/'+sid,{'autoDeployTrigger':'off'})
+          if info.get('suspended')!='suspended':
+              code,_=api('POST','/services/'+sid+'/suspend')
+              if code!=202:raise SystemExit('RENDER_X_SUSPEND_UNEXPECTED_'+str(code))
+          for _ in range(30):
+              _,cur=api('GET','/services/'+sid)
+              if cur.get('suspended')=='suspended':break
+              time.sleep(4)
+          else:raise SystemExit('RENDER_X_SUSPEND_NOT_CONFIRMED')
+          print('FINAL_RENDER_X_SUSPENDED=1',flush=True)
+          PY
