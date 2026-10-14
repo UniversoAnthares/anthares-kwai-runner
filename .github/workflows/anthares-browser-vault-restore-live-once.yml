@@ -10,13 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Wait for the commit-triggered Render restart
+      - name: Wait for the Northflank browser runtime restart
         run: sleep 75
       - name: Verify durable browser state after restart
         shell: bash
         run: |
           set -euo pipefail
-          base='https://anthares-x-render-worker-v3.onrender.com'
+          base='https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x'
           status="$(curl -fsS --retry 24 --retry-all-errors --retry-delay 5 --max-time 20 "$base/v1/runtime/browser/persistence-status")"
           health="$(curl -fsS --retry 12 --retry-all-errors --retry-delay 5 --max-time 20 "$base/v1/runtime/health")"
           printf '%s\n' "$status"
