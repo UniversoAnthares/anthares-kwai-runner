@@ -1,0 +1,32 @@
+pipeline:
+  id: pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d
+  name: pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d
+  stages:
+    - name: Build and Test
+      platform:
+        os: linux
+        arch: amd64
+      runtime: cloud
+      clone:
+        enabled: true
+      cache:
+        enabled: true
+      steps:
+        - name: Install pytest
+          id: install_pytest
+          run:
+            shell: bash
+            script: pip install --quiet pytest
+        - name: Run Python tests
+          id: test_python
+          run:
+            shell: bash
+            script: |-
+              mkdir -p .harness/reports
+              PYTHONPATH="${PYTHONPATH}:$(pwd)" pytest tests/ --junitxml=.harness/reports/junit.xml -v
+            report:
+              type: junit
+              paths:
+                - .harness/reports/junit.xml
+  tags:
+    onboarding: "true"
