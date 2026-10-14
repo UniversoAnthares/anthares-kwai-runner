@@ -18,17 +18,17 @@ jobs:
       matrix:
         include:
           - { id: "01", label: "01 Runner GitHub" }
-          - { id: "02", label: "02 OIDC GitHub -> Render" }
-          - { id: "03", label: "03 Render health/revision" }
+          - { id: "02", label: "02 OIDC GitHub -> Cloudflare/Northflank" }
+          - { id: "03", label: "03 TikTok worker health/revision" }
           - { id: "04", label: "04 TikTok session persistence" }
           - { id: "05", label: "05 Alternate account identity" }
           - { id: "06", label: "06 MP4 cloud accessibility" }
-          - { id: "07", label: "07 Render browser readiness" }
+          - { id: "07", label: "07 TikTok browser readiness" }
           - { id: "08", label: "08 TikTok upload page auth" }
           - { id: "09", label: "09 MP4 upload dry-run" }
           - { id: "10", label: "10 Publish controls dry-run" }
     env:
-      RENDER_WORKER_URL: "https://anthares-tiktok-render-rootless.onrender.com"
+      TIKTOK_WORKER_URL: "https://anthares-tiktok-worker.anthares1.workers.dev"
     steps:
       - name: Execute isolated diagnostic
         env:
@@ -36,7 +36,7 @@ jobs:
         run: |
           python - <<'PY'
           import json,os,urllib.parse,urllib.request,urllib.error
-          tid=os.environ['TEST_ID']; base=(os.environ.get('RENDER_WORKER_URL') or '').rstrip('/')
+          tid=os.environ['TEST_ID']; base=(os.environ.get('TIKTOK_WORKER_URL') or '').rstrip('/')
           def oidc(aud='anthares-render-worker'):
               u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+('&' if '?' in os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] else '?')+urllib.parse.urlencode({'audience':aud})
               q=urllib.request.Request(u,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN'],'Accept':'application/json'})
@@ -51,7 +51,7 @@ jobs:
           elif tid=='02':
               d=get('/session-status',True); print(json.dumps(d)); assert 'ok' in d
           elif tid=='03':
-              d=get('/health'); print(json.dumps(d)); assert d.get('ok') and d.get('service')=='anthares-tiktok-render'
+              d=get('/health'); print(json.dumps(d)); assert d.get('ok')
           elif tid=='04':
               d=get('/session-status',True); print(json.dumps(d)); assert d.get('bootstrapped')
           elif tid=='05':
