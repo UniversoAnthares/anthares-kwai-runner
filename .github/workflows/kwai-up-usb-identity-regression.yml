@@ -1,0 +1,27 @@
+name: Kwai-up USB identity regression
+
+on:
+  push:
+    branches: [kwai-up]
+    paths:
+      - 'kwai-up/kwai_up_physical.py'
+      - 'kwai-up/tests/test_physical_serial.py'
+      - '.github/workflows/kwai-up-usb-identity-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate syntax
+        run: python -m compileall -q kwai-up
+      - name: Verify exact ADB serial and recovery fail closed
+        run: python -m unittest discover -s kwai-up/tests -p test_physical_serial.py -v

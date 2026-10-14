@@ -1,0 +1,94 @@
+name: Kwai-up validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'kwai-up/**'
+      - '.github/workflows/kwai-up-validation.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: kwai-up-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: kwai-up-${{ matrix.case }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 30
+      matrix:
+        case:
+          - '01'
+          - '02'
+          - '03'
+          - '04'
+          - '05'
+          - '06'
+          - '07'
+          - '08'
+          - '09'
+          - '10'
+          - '11'
+          - '12'
+          - '13'
+          - '14'
+          - '15'
+          - '16'
+          - '17'
+          - '18'
+          - '19'
+          - '20'
+          - '21'
+          - '22'
+          - '23'
+          - '24'
+          - '25'
+          - '26'
+          - '27'
+          - '28'
+          - '29'
+          - '30'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install verification dependency
+        run: python -m pip install -r kwai-up/requirements.txt
+      - name: Compile
+        run: python -m py_compile kwai-up/kwai_up.py kwai-up/kwai_up_safe.py kwai-up/kwai_up_job.py kwai-up/tests/test_contract.py kwai-up/tests/test_safe_entrypoint.py kwai-up/tests/test_job_ledger.py
+      - name: Contract tests
+        env:
+          KWAI_UP_CASE: ${{ matrix.case }}
+        run: python -m unittest discover -s kwai-up/tests -p 'test_*.py' -v
+      - name: Static live-boundary assertions
+        env:
+          KWAI_UP_CASE: ${{ matrix.case }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          core=Path('kwai-up/kwai_up.py').read_text(encoding='utf-8')
+          safe=Path('kwai-up/kwai_up_safe.py').read_text(encoding='utf-8')
+          job=Path('kwai-up/kwai_up_job.py').read_text(encoding='utf-8')
+          readme=Path('kwai-up/README.md').read_text(encoding='utf-8')
+          allcode=core+safe+job
+          assert 'com.kwai.video' in core
+          assert 'PUBLISH_REQUESTED' in core
+          assert 'READY_TO_PUBLISH' in core
+          assert 'profile_grid_changed' in core
+          assert 'memuc' not in allcode.casefold()
+          assert '/sdcard/Movies/KwaiUp' in core
+          assert 'self.verify_identity()' in safe
+          assert 'KWAI_UP_EXPECTED_ACCOUNT' in safe
+          assert 'por\\s+favor\\s+aguarde' in safe
+          assert 'BEGIN IMMEDIATE' in job
+          assert 'source-interval-overlap' in job
+          assert 'media-sha256-already-seen' in job
+          assert 'UNCERTAIN' in job
+          assert 'kwai_up_safe.py prepare' in readme
+          print('KWAI_UP_CONTRACT_OK')
+          PY

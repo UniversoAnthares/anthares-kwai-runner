@@ -1,0 +1,37 @@
+name: Kwai-up apply exact media patch
+
+on:
+  push:
+    branches: [kwai-up]
+    paths:
+      - '.github/workflows/kwai-up-apply-exact-media-patch.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: kwai-up
+          fetch-depth: 0
+      - name: Apply exact staged-media patch
+        run: python kwai-up/patch_exact_media_selection.py
+      - name: Contract compile
+        run: |
+          python -m py_compile kwai-up/kwai_up_physical.py
+          python kwai-up/tests/test_physical_contract.py -v
+      - name: Commit patched publisher
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add kwai-up/kwai_up_physical.py
+          if git diff --cached --quiet; then
+            echo KWAI_UP_EXACT_MEDIA_COMMIT=NO_CHANGE
+          else
+            git commit -m 'Select exact staged media on physical Kwai executor'
+            git push origin HEAD:kwai-up
+          fi
