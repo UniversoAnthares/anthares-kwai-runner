@@ -1,0 +1,27 @@
+name: CI Hosted Runner Proof
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ci-hosted-runner-proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Provar executor e PHP nativo
+        run: |
+          set -euxo pipefail
+          uname -a
+          node --version
+          php --version
+          printf '<?php echo "lint-ok\\n";\n' > /tmp/anthares-ci.php
+          php -l /tmp/anthares-ci.php
+          php /tmp/anthares-ci.php
+          echo ANTHARES_PUBLIC_GITHUB_ACTIONS_OK
