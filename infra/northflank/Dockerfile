@@ -4,15 +4,18 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PORT=10000
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates fonts-liberation fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir flask requests "psycopg[binary]" cryptography gunicorn playwright \
+RUN mkdir -p /ms-playwright \
+    && pip install --no-cache-dir flask requests "psycopg[binary]" cryptography gunicorn playwright \
     && python -m playwright install --with-deps chromium \
-    && useradd --create-home --uid 10001 ara
+    && useradd --create-home --uid 10001 ara \
+    && chown -R ara:ara /ms-playwright
 
 COPY infra/ /app/
 RUN chown -R ara:ara /app
