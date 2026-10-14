@@ -1,26 +1,41 @@
 # Anthares execution provider contract
 
-GitHub remains the canonical repository and history source, but GitHub-hosted Actions runners are not the primary runtime compute path.
+GitHub remains the canonical repository and history source. General CI uses GitHub Actions as the primary hosted executor, with independently verified fallbacks.
+
+## General CI
+
+Priority:
+
+1. GitHub Actions — primary general CI.
+2. Harness — verified hosted Linux CI with automatic push trigger.
+3. AppVeyor — verified hosted Windows build/test and artifact upload.
+4. Floot — verified remote Node execution and PHP 8.4 via php-wasm.
+5. Cloudflare Workers Builds — verified Git-connected build/deploy.
+6. GitLab CI — last-resort hosted Linux fallback.
+
+CircleCI is retired and must not be selected by active routing.
 
 ## Android / Kwai
 
 Priority:
 
-1. CircleCI — proven Android 35 machine executor with KVM.
-2. Bitrise — Linux Android stack with AVD Manager; configured, live Android acceptance still required.
-3. Firebase Test Lab — Spark no-cost Android device fallback for bounded automated validation. This lane is not interactive manual authentication.
+1. Physical Android device — primary authenticated device path.
+2. MEmu Android — standby fallback only after primary-device failure.
+3. GitHub Actions — remote Android secondary; live acceptance still required for the current replacement path.
+4. Bitrise — Linux Android stack; live runtime proof still required.
+5. Firebase Test Lab — bounded noninteractive Android fallback.
 
-Render is not an Android executor. GitLab shared runners are not Android executors because the available substrate exposes neither KVM nor Binder. Cirrus CI is retired and cannot be selected because the service shut down on 2026-06-01.
+Render is not an Android executor. CircleCI and Cirrus CI are retired.
 
 ## Anthares-browser / runtime QA
 
 Priority:
 
-1. CircleCI.
+1. GitLab CI.
 2. Bitrise.
-3. Render — tertiary browser/runtime-control fallback, not yet equivalent to the Dockerized 40-case CI proof.
+3. Render — legacy tertiary fallback only while retirement/migration is unfinished.
 
-GitHub Actions is manual diagnostic only while hosted-runner allocation is congested. GitLab is not in the active browser route while its CI quota is blocked.
+GitHub Actions is not the default browser executor. Bitrise is not eligible until a live browser QA proof passes.
 
 ## Failover
 
@@ -28,8 +43,8 @@ Before the publication boundary, if a provider fails readiness or cannot start w
 
 ## Invariants
 
-- no PC dependency or fallback;
-- no persistent local runner host;
+- no PC dependency or fallback for hosted CI;
+- no persistent local runner host for hosted CI;
 - no secrets or authenticated session material in repository files;
 - one active Kwai publication lease at a time;
 - provider capability must match the role;
