@@ -84,6 +84,8 @@ try{
   $wd=Ensure-Task $watchdogTask $watchdogLoop
   $queueCredentialPresent=Test-Path $credential
   $queueCredentialLoaded=Test-QueueCredential
+  $githubQueue=(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_REPOSITORY))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_TOKEN))
+  $gitlabQueue=(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_PROJECT))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_TOKEN))
   Get-InteractiveAgents|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue;Log("stopped interactive agent pid=$($_.ProcessId)")}catch{}}
   $agents=@(Get-SystemV4)
   $restartAttempted=$false
@@ -107,6 +109,7 @@ try{
     canonical_task_state=[string](Get-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue).State
     watchdog_task_state=[string](Get-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue).State
     queue_credential_present=[bool]$queueCredentialPresent;queue_credential_loaded=[bool]$queueCredentialLoaded
+    github_queue=$githubQueue;gitlab_queue=$gitlabQueue;dual_queue_redundancy=($githubQueue -and $gitlabQueue)
     system_v4_count=$agents.Count;system_v4_pids=@($agents|ForEach-Object{$_.ProcessId})
     restart_cooldown_seconds=$restartCooldownSeconds;restart_attempted=$restartAttempted
     interactive_agent_count=$interactive.Count;interactive_agent_pids=@($interactive|ForEach-Object{$_.ProcessId})
