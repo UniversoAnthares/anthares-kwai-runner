@@ -1,0 +1,74 @@
+name: Retire Render operational defaults
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/retire-render-operational-defaults.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Replace live-code Render defaults
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          replacements={
+            'anthares-remote-mcp/server.mjs':[
+              ('https://anthares-remote-control.onrender.com','https://anthares-ara-backup.anthares1.workers.dev')],
+            'anthares-remote-mcp/remote-server.mjs':[
+              ('https://anthares-remote-control.onrender.com','https://anthares-ara-backup.anthares1.workers.dev')],
+            'anthares-remote-mcp/gateway.mjs':[
+              ('https://anthares-remote-mcp.onrender.com','https://anthares-ara-mcp.anthares1.workers.dev')],
+            'anthares-remote-mcp/gateway-v2.mjs':[
+              ('https://anthares-remote-mcp.onrender.com','https://anthares-ara-mcp.anthares1.workers.dev')],
+            'anthares-remote-mcp/remote-qa.mjs':[
+              ('https://anthares-remote-control.onrender.com','https://anthares-ara-backup.anthares1.workers.dev')],
+            'anthares-brouser/novnc_gateway.py':[
+              ('https://anthares-browser-qa-render.onrender.com','')],
+          }
+          changed=[]
+          for name,repls in replacements.items():
+              p=Path(name)
+              if not p.exists():
+                  continue
+              s=p.read_text(encoding='utf-8-sig')
+              old=s
+              for a,b in repls:
+                  s=s.replace(a,b)
+              if s!=old:
+                  p.write_text(s,encoding='utf-8')
+                  changed.append(name)
+          if not changed:
+              raise SystemExit('no operational defaults changed')
+          print('changed=',','.join(changed))
+          for name in changed:
+              text=Path(name).read_text(encoding='utf-8-sig')
+              assert 'onrender.com' not in text, name+' still contains onrender.com'
+          PY
+          node --check anthares-remote-mcp/server.mjs
+          node --check anthares-remote-mcp/remote-server.mjs
+          node --check anthares-remote-mcp/gateway.mjs
+          node --check anthares-remote-mcp/gateway-v2.mjs
+          python3 -m py_compile anthares-brouser/novnc_gateway.py
+          git diff --check
+      - name: Commit operational retirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add anthares-remote-mcp/server.mjs anthares-remote-mcp/remote-server.mjs anthares-remote-mcp/gateway.mjs anthares-remote-mcp/gateway-v2.mjs anthares-remote-mcp/remote-qa.mjs anthares-brouser/novnc_gateway.py
+          git commit -m "Remove Render from operational MCP and browser defaults"
+          git push origin HEAD:main
