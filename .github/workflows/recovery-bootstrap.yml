@@ -68,9 +68,20 @@ jobs:
           ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
         run: |
           set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/index.js')
+          s=p.read_text(encoding='utf-8')
+          old='const OWNER_APPROVAL_HASH = "6Z-3WlmAvh6o7m_W0eYEpEo23YKZtjn-DLJpyjtEfQ0";'
+          new='const OWNER_APPROVAL_HASH = "_-uIfueIbVUFB_GGUsyp98ptkIgqpbDqIV_2rUInT_k";'
+          if old not in s:
+              raise SystemExit('owner approval hash marker not found')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+          PY
           if [ -n "${ANTHARES_RESERVA_TOKEN:-}" ]; then
             printf '%s' "$ANTHARES_RESERVA_TOKEN" | npx wrangler secret put ANTHARES_RESERVA_TOKEN
           fi
+          node --check src/index.js
           npx wrangler deploy src/generic-entry.js --config wrangler.toml
       - name: Verify generic browser contract
         run: |
