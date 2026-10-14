@@ -1,0 +1,1 @@
+ARA V4 promotion pending: local task wrapper still points to legacy agent; direct connector write is blocked by platform policy. Canonical target is run-agent-system-supervisor.ps1 / anthares-remote-agent-v4.exe.
