@@ -33,7 +33,6 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$NORTHFLANK_API_TOKEN"
-          test -n "$X_WORKER_TOKEN"
           test -n "$ARA_SHARED"
 
       - name: Provision, verify and register Northflank browser authority
@@ -43,8 +42,8 @@ jobs:
           import json, os, sys, time, urllib.request, urllib.error
 
           api_token=os.environ['NORTHFLANK_API_TOKEN']
-          worker_token=os.environ['X_WORKER_TOKEN']
           ara_shared=os.environ['ARA_SHARED']
+          worker_token=os.environ.get('X_WORKER_TOKEN') or ara_shared
           base='https://api.northflank.com/v1'
           headers={'Authorization':'Bearer '+api_token,'Content-Type':'application/json'}
 
