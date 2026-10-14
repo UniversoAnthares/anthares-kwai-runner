@@ -1,4 +1,4 @@
-name: Provision Render-independent X worker on Northflank
+name: Provision X worker on Northflank (Render retired)
 
 on:
   workflow_dispatch:
@@ -77,7 +77,7 @@ jobs:
           }
           if not target:
               payload={
-                'name':name,'description':'Canonical Render-independent X/browser worker',
+                'name':name,'description':'Canonical X/browser worker after Render retirement',
                 'billing':{'deploymentPlan':'nf-compute-10'},
                 'deployment':{'instances':1,'docker':{'configType':'default'}},
                 'ports':[{'name':'http','internalPort':10000,'public':True,'protocol':'HTTP'}],
