@@ -90,6 +90,11 @@ jobs:
           if needle not in s:
               raise SystemExit('owner session patch target missing')
           s=s.replace(needle,repl,1)
+          # Expose CircleCI from the authenticated owner dashboard rather than relying on a manually typed deep link.
+          dashboard='<form method="post" action="/owner/start">'
+          if dashboard not in s:
+              raise SystemExit('owner dashboard marker missing')
+          s=s.replace(dashboard,'<p><a href="/owner/circleci">Ativação CircleCI</a></p>'+dashboard,1)
           p.write_text(s,encoding='utf-8')
 
           p=Path('src/generic-entry.js')
