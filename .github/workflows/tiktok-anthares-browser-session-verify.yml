@@ -1,0 +1,99 @@
+name: Verify TikTok session in Anthares browser
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/tiktok-anthares-browser-session-verify.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      EXPECTED_TIKTOK_USERNAME: universo.anthares
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read central TikTok session with approved OIDC identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ARA_SHARED:-}" || { echo ARA_SHARED_MISSING; exit 10; }
+          sep='&'; [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]] || sep='?'
+          aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
+          jwt="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$jwt"
+          curl -fsS --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/tiktok/session-state -o /tmp/session.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/session.json'))
+          st=d.get('state') or {}
+          assert d.get('available') is True and st.get('cookies'), 'CENTRAL_TIKTOK_SESSION_UNAVAILABLE'
+          json.dump({'cookies':st.get('cookies') or [],'origins':st.get('origins') or []},open('/tmp/storage-state.json','w'))
+          print('CENTRAL_TIKTOK_SESSION_AVAILABLE=1')
+          print('CENTRAL_TIKTOK_COOKIE_COUNT='+str(len(st.get('cookies') or [])))
+          PY
+      - name: Install isolated Anthares browser runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet playwright cryptography requests
+          python3 -m playwright install chromium
+      - name: Validate exact TikTok identity read-only and refresh state
+        shell: bash
+        env:
+          TIKTOK_STORAGE_STATE_FILE: /tmp/storage-state.json
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,sys,time
+          from playwright.sync_api import sync_playwright
+          sys.path.insert(0,os.path.join(os.getcwd(),'direct-tiktok-publisher'))
+          import tiktok_worker as tw
+          state=tw.storage_state()
+          with sync_playwright() as p:
+              browser=p.chromium.launch(headless=True,args=['--disable-dev-shm-usage','--no-sandbox','--disable-gpu'])
+              context=browser.new_context(storage_state=state,viewport={'width':1440,'height':1000},locale='pt-BR')
+              page=context.new_page()
+              page.goto('https://www.tiktok.com/foryou',wait_until='domcontentloaded',timeout=60000)
+              time.sleep(5)
+              tw.validate_tiktok_session(page,context)
+              refreshed=context.storage_state()
+              json.dump(refreshed,open('/tmp/refreshed-state.json','w'))
+              print('ANTHARES_BROWSER_TIKTOK_IDENTITY_PROVEN=universo.anthares')
+              print('ANTHARES_BROWSER_TIKTOK_COOKIE_COUNT='+str(len(refreshed.get('cookies') or [])))
+              context.close();browser.close()
+          PY
+      - name: Persist refreshed authenticated state to durable Anthares browser vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,hashlib,json,os,time,requests
+          from cryptography.hazmat.primitives import hashes
+          from cryptography.hazmat.primitives.asymmetric import ec
+          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+          secret=os.environ['ARA_SHARED']
+          state=json.load(open('/tmp/refreshed-state.json'))
+          assert state.get('cookies'),'REFRESHED_STATE_EMPTY'
+          def b64(b):return base64.urlsafe_b64encode(b).rstrip(b'=').decode()
+          order=int('FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551',16)
+          scalar=int.from_bytes(hashlib.sha256(('browser-vault-sign:'+secret).encode()).digest(),'big')%(order-1)+1
+          private=ec.derive_private_key(scalar,ec.SECP256R1())
+          nums=private.public_key().public_numbers()
+          jwk={'kty':'EC','crv':'P-256','x':b64(nums.x.to_bytes(32,'big')),'y':b64(nums.y.to_bytes(32,'big')),'ext':True}
+          reg=requests.post('https://anthares-x-vault.anthares1.workers.dev/browser-key/register',headers={'Authorization':'Bearer '+secret},json={'authority':'runtime','jwk':jwk},timeout=30)
+          assert reg.status_code==200 and reg.json().get('registered'),('REGISTER',reg.status_code)
+          key=hashlib.sha256(('browser-vault-enc:'+secret).encode()).digest();nonce=os.urandom(12)
+          raw=json.dumps(state,separators=(',',':')).encode();cipher=AESGCM(key).encrypt(nonce,raw,b'anthares-browser-runtime-state-v1')
+          ciphertext=b64(nonce+cipher);body=json.dumps({'schema':'anthares.encrypted-browser-state.v1','ciphertext':ciphertext,'sha256':hashlib.sha256(ciphertext.encode()).hexdigest()},separators=(',',':'))
+          ts=str(int(time.time()*1000));digest=hashlib.sha256(body.encode()).hexdigest();der=private.sign((ts+'.'+digest).encode(),ec.ECDSA(hashes.SHA256()));r,s=decode_dss_signature(der);sig=b64(r.to_bytes(32,'big')+s.to_bytes(32,'big'))
+          out=requests.post('https://anthares-x-vault.anthares1.workers.dev/browser-state/runtime',headers={'X-Anthares-Browser-Timestamp':ts,'X-Anthares-Browser-Signature':sig,'Content-Type':'application/json'},data=body,timeout=30)
+          assert out.status_code==200 and out.json().get('stored'),('VAULT',out.status_code)
+          print('ANTHARES_BROWSER_TIKTOK_SESSION_REFRESHED_AND_PERSISTED=1')
+          print('RENDER_DEPENDENCY=false')
+          PY
