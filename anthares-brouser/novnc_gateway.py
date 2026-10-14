@@ -169,7 +169,7 @@ def novnc_static(asset_path: str, _: int = Depends(_require_cookie)):
 def _same_origin(websocket: WebSocket) -> bool:
     origin = urlsplit(websocket.headers.get("origin", ""))
     public_url = urlsplit(os.environ.get(
-        "NOVNC_PUBLIC_ORIGIN", "https://anthares-browser-qa-render.onrender.com"
+        "NOVNC_PUBLIC_ORIGIN", ""
     ))
     return bool(
         origin.scheme == "https"
