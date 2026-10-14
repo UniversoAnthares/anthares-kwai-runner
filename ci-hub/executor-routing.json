@@ -1,19 +1,31 @@
 {
-  "revision": "2026-10-12-circleci-retired-gitlab-github-android-r6",
+  "revision": "2026-10-14-physical-primary-memu-fallback-r7",
   "android_execution": {
     "priority": [
+      "physical_android",
+      "memu_android",
       "github_actions",
       "bitrise",
       "firebase_test_lab"
     ],
-    "github_actions": "primary_android_executor_live_validation_required",
+    "primary_device": "physical_android",
+    "fallback_device": "memu_android",
+    "github_actions": "remote_android_secondary_live_validation_required",
     "failover": {
-      "failure_threshold": 1,
+      "failure_threshold": 3,
       "queue_threshold_seconds": 90,
       "order": [
+        "physical_android",
+        "memu_android",
         "github_actions",
         "bitrise",
         "firebase_test_lab"
+      ],
+      "memu_only_after_primary_failure": true,
+      "non_failover_failure_classes": [
+        "content",
+        "policy",
+        "platform"
       ]
     }
   },
@@ -39,6 +51,28 @@
     "tertiary_note": "Render is runtime/browser-control fallback; Bitrise is not eligible until a live QA run passes. Browser QA 40-case parity on GitLab requires live proof."
   },
   "providers": {
+    "physical_android": {
+      "android_rank": 1,
+      "status": "primary_physical_device",
+      "runtime": "authorized physical Android device via ADB/device bridge",
+      "active": true,
+      "android_eligible": true,
+      "interactive_manual_auth": true,
+      "standby_only": false,
+      "requires_authenticated_kwai": true
+    },
+    "memu_android": {
+      "android_rank": 2,
+      "status": "standby_fallback_only",
+      "runtime": "MEmu Android emulator on Windows, hidden/no-focus, ADB controlled",
+      "active": true,
+      "android_eligible": true,
+      "interactive_manual_auth": true,
+      "standby_only": true,
+      "fallback_for": "physical_android",
+      "requires_authenticated_kwai": true,
+      "must_not_be_primary": true
+    },
     "circleci": {
       "status": "retired_per_owner_2026-10-12",
       "active": false,
@@ -46,7 +80,7 @@
       "browser_eligible": false
     },
     "bitrise": {
-      "android_rank": 2,
+      "android_rank": 4,
       "browser_rank": 2,
       "status": "standby_disabled_pending_live_runtime_proof",
       "runtime": "Linux Android and Docker stack",
@@ -58,7 +92,7 @@
       "interactive_manual_auth": true
     },
     "firebase_test_lab": {
-      "android_rank": 3,
+      "android_rank": 5,
       "status": "standby_disabled_pending_live_proof_noninteractive_only",
       "runtime": "Firebase Test Lab Spark Android device execution; automated fallback only",
       "config": "ci/firebase-test-lab/run_kwai_robo.sh",
@@ -68,9 +102,9 @@
     },
     "render": {
       "browser_rank": 3,
-      "status": "active_runtime_fallback_not_equivalent_ci_proof",
-      "runtime": "independent hosted service/browser worker infrastructure",
-      "role": "tertiary runtime and browser-control fallback",
+      "status": "retirement_pending_runtime_migration",
+      "runtime": "legacy independent hosted service/browser worker infrastructure",
+      "role": "legacy tertiary runtime only while being retired",
       "android_eligible": false,
       "active": true,
       "browser_eligible": true
@@ -92,11 +126,11 @@
       "browser_qa_entrypoint": "ci/shared/anthares-browser-runtime-qa.sh"
     },
     "github_actions": {
-      "status": "android_primary_hardware_acceleration_supported_live_kwai_probe_pending",
+      "status": "remote_android_secondary_hardware_acceleration_supported_live_kwai_probe_pending",
       "active": true,
       "android_eligible": true,
       "browser_eligible": false,
-      "android_rank": 1,
+      "android_rank": 3,
       "interactive_manual_auth": true,
       "runtime": "GitHub-hosted ubuntu-24.04 /dev/kvm emulator",
       "config": ".github/workflows/anthares-android-replacement.yml"
