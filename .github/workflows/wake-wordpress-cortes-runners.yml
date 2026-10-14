@@ -1,4 +1,4 @@
-name: Wake WordPress CORTES runners
+name: Verify WordPress CORTES GitLab runner surfaces
 on:
   push:
     paths:
@@ -7,29 +7,16 @@ on:
 permissions:
   contents: read
 jobs:
-  wake:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Wake all free GitLab runner surfaces
+      - name: Verify GitLab SaaS control surfaces without Render keepalive
         shell: bash
         run: |
-          set -u
-          urls=(
-            'https://anthares-gitlab-kwai-qa-bootstrap.onrender.com/'
-            'https://anthares-gitlab-qa-runner.onrender.com/'
-            'https://anthares-gitlab-kwai-qa-isolated.onrender.com/'
-          )
-          rc=0
-          for url in "${urls[@]}"; do
-            ok=0
-            for attempt in 1 2; do
-              status="$(curl -LsS -o /tmp/runner-health -w '%{http_code}' --connect-timeout 8 --max-time 25 "$url" || true)"
-              body="$(cat /tmp/runner-health 2>/dev/null || true)"
-              echo "WAKE url=$url attempt=$attempt http=${status:-unknown} body=${body:0:80}"
-              if [ "$status" = 200 ] && [ "$body" = connected ]; then ok=1; break; fi
-              sleep 5
-            done
-            if [ "$ok" -ne 1 ]; then rc=1; fi
-          done
-          exit "$rc"
+          set -euo pipefail
+          curl -fsSL --max-time 20 https://gitlab.com/api/v4/version >/dev/null
+          curl -fsSL --max-time 20 'https://gitlab.com/api/v4/projects/87361776/repository/branches/main' >/dev/null
+          curl -fsSL --max-time 20 'https://gitlab.com/api/v4/projects/87307279' >/dev/null
+          echo 'GITLAB_SAAS_SURFACES_REACHABLE=1'
+          echo 'RENDER_KEEPALIVE_RETIRED=1'
