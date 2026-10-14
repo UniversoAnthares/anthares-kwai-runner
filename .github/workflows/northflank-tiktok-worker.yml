@@ -112,7 +112,7 @@ jobs:
           set -euo pipefail
           test -n "$NORTHFLANK_TIKTOK_URL"
           cd cloudflare-tiktok-router
-          npx --yes wrangler@4.43.0 deploy --var "NORTHFLANK_TIKTOK_URL:$NORTHFLANK_TIKTOK_URL" --var "ALLOW_RENDER_FALLBACK:0" --var "RENDER_TIKTOK_FALLBACK:https://anthares-tiktok-render-rootless.onrender.com"
+          npx --yes wrangler@4.43.0 deploy --var "NORTHFLANK_TIKTOK_URL:$NORTHFLANK_TIKTOK_URL"
 
       - name: Verify stable route uses Northflank without Render
         run: |
