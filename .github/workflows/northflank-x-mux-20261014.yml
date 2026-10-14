@@ -1,4 +1,5 @@
 name: Consolidate X browser into existing Northflank ARA service
+# convergence trigger 2026-10-14: retire final Render worker only after real X proof
 on:
   push:
     branches: [main]
