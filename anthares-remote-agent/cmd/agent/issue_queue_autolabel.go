@@ -118,7 +118,7 @@ func (p *githubIssueProvider) autoQueueMissingLabels(deviceID string) (int, erro
 			continue
 		}
 
-		body, _ := json.Marshal(map[string][]string{"labels": {"ara-queued"}})
+		body, _ := json.Marshal(map[string][]string{"labels": []string{"ara-queued"}})
 		labelReq, _ := http.NewRequest(
 			http.MethodPost,
 			"https://api.github.com/repos/"+p.repo+"/issues/"+strconv.Itoa(issue.Number)+"/labels",
