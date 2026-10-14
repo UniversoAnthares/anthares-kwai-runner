@@ -19,6 +19,23 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Authorize dedicated TikTok session verifier deterministically
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('cloudflare-worker/src/index.js')
+          s=p.read_text(encoding='utf-8-sig')
+          target='"tiktok-central-session-read.yml"'
+          addition='"tiktok-central-session-read.yml","tiktok-anthares-browser-session-verify.yml"'
+          if '"tiktok-anthares-browser-session-verify.yml"' not in s:
+              if target not in s:
+                  raise SystemExit('OIDC allowlist anchor missing')
+              s=s.replace(target, addition, 1)
+              p.write_text(s, encoding='utf-8')
+          print('TIKTOK_SESSION_VERIFIER_OIDC_ALLOWLIST_OK=1')
+          PY
       - name: Validate deploy snapshot
         shell: bash
         run: |
@@ -26,10 +43,11 @@ jobs:
           test -s cloudflare-worker/src/index.js
           test -s cloudflare-worker/wrangler.toml
           grep -q 'tiktok-central-session-read.yml' cloudflare-worker/src/index.js
+          grep -q 'tiktok-anthares-browser-session-verify.yml' cloudflare-worker/src/index.js
           grep -q '2026-10-05-queue-fencing-v16' cloudflare-worker/src/index.js
           grep -q '2026-10-14-render-retired-r2' cloudflare-worker/src/index.js
           ! grep -q 'onrender.com' cloudflare-worker/src/index.js
-          echo 'SNAPSHOT_VALID=queue-fencing-v16-render-retired-r2'
+          echo 'SNAPSHOT_VALID=queue-fencing-v16-render-retired-r2-session-verifier-authorized'
       - name: Validate private Kwai session vault before deploy
         shell: bash
         run: |
@@ -63,3 +81,10 @@ jobs:
           echo "$failover" | grep -q '"primary":"github"'
           echo "$failover" | grep -q '"render_retired":true'
           echo 'CONTROL_HEALTH_OK=1'
+      - name: Verify protected TikTok session endpoint remains closed to unauthenticated callers
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/tiktok-session-unauth.json -w '%{http_code}' --max-time 20 https://anthares-control.anthares1.workers.dev/tiktok/session-state)"
+          test "$code" = "401"
+          echo 'TIKTOK_SESSION_UNAUTH_BOUNDARY_OK=1'
