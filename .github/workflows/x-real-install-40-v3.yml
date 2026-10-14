@@ -1,0 +1,96 @@
+name: X real install proof 40 v3
+on:
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths:
+      - .github/workflows/x-real-install-40-v3.yml
+      - scripts/x_real_install_probe.sh
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        api: [28,29,30,31,33]
+        arch: [x86,x86_64]
+        mode: [0,1,2,3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire and verify official X APK
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+          API: ${{ matrix.api }}
+          MODE: ${{ matrix.mode }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence /tmp/apkeep-out /tmp/xout
+          printf 'api=%s arch=%s mode=%s\n' "$API" "$ARCH" "$MODE" | tee evidence/variant.txt
+
+          set +e
+          timeout 300 docker run --rm -v /tmp/apkeep-out:/output ghcr.io/efforg/apkeep:stable \
+            -a com.twitter.android -d apk-pure \
+            -o "acknowledge_dangers=true,arch=$ARCH" /output \
+            > evidence/apkeep-arch.txt 2>&1
+          rc=$?
+          set -e
+          echo "apkeep_rc=$rc" | tee evidence/download-result.txt
+
+          if ! find /tmp/apkeep-out -type f \( -name '*.apk' -o -name '*.xapk' -o -name '*.apkm' \) -print -quit | grep -q .; then
+            rm -rf /tmp/apkeep-out/*
+            timeout 300 docker run --rm -v /tmp/apkeep-out:/output ghcr.io/efforg/apkeep:stable \
+              -a com.twitter.android -d apk-pure \
+              -o "acknowledge_dangers=true" /output \
+              > evidence/apkeep-universal.txt 2>&1
+          fi
+
+          find /tmp/apkeep-out -type f -name '*.apk' -exec cp '{}' /tmp/xout/ \;
+          while IFS= read -r -d '' b; do unzip -qo "$b" -d /tmp/xout; done < <(find /tmp/apkeep-out -type f \( -name '*.xapk' -o -name '*.apkm' \) -print0)
+          mapfile -t APKS < <(find /tmp/xout -type f -name '*.apk' -print | sort)
+          ((${#APKS[@]} > 0)) || { echo NO_APK_DOWNLOADED | tee evidence/verdict.txt; exit 70; }
+
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          BT="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          AAPT="$BT/aapt"
+          APKSIGNER="$BT/apksigner"
+          [[ -x "$AAPT" && -x "$APKSIGNER" ]] || { yes | sdkmanager 'build-tools;35.0.0' >/dev/null; BT="$SDK_ROOT/build-tools/35.0.0"; AAPT="$BT/aapt"; APKSIGNER="$BT/apksigner"; }
+
+          OFFICIAL_SHA256=0fd9a0cfb07b65950997b4eaebdc53931392391aa406538a3b04073bc2ce2fe9
+          : > evidence/apk-verification.txt
+          for apk in "${APKS[@]}"; do
+            base="$(basename "$apk")"
+            "$AAPT" dump badging "$apk" > "evidence/badging-$base.txt" 2>&1
+            pkg="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" "evidence/badging-$base.txt" | head -1)"
+            [[ "$pkg" == com.twitter.android ]] || { echo WRONG_PACKAGE | tee evidence/verdict.txt; exit 71; }
+            "$APKSIGNER" verify --verbose --print-certs "$apk" > "evidence/apksigner-$base.txt" 2>&1
+            grep -Ei 'certificate SHA-(256|1) digest:' "evidence/apksigner-$base.txt" >> evidence/apk-verification.txt || true
+            grep -Eqi "certificate SHA-256 digest:[[:space:]]*$OFFICIAL_SHA256([[:space:]]|$)" "evidence/apksigner-$base.txt" || { echo OFFICIAL_CERT_NOT_CONFIRMED | tee evidence/verdict.txt; exit 73; }
+          done
+          cat evidence/badging-*.txt | grep -E "^(package:|sdkVersion:|targetSdkVersion:|native-code:)" > evidence/compatibility.txt || true
+          grep -q "sdkVersion:'28'" evidence/compatibility.txt || true
+          echo VERIFIED_OFFICIAL_X_APK | tee evidence/verdict.txt
+
+      - name: Install and launch X with bash-safe probe
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: ${{ matrix.arch }}
+          target: google_apis
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          script: bash scripts/x_real_install_probe.sh '${{ matrix.mode }}' '${{ matrix.api }}-${{ matrix.arch }}-${{ matrix.mode }}'
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-real-v3-${{ matrix.api }}-${{ matrix.arch }}-${{ matrix.mode }}-${{ github.run_id }}
+          path: evidence/
+          retention-days: 3
+          if-no-files-found: warn

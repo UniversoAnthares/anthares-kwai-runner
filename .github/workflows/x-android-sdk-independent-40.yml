@@ -1,0 +1,268 @@
+name: Android SDK and emulator independent 40
+on:
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths: [.github/workflows/x-android-sdk-independent-40.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sdk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        include:
+          - variant: 1
+            api: 29
+            arch: x86_64
+            mode: kvm
+            target: default
+          - variant: 2
+            api: 29
+            arch: x86_64
+            mode: kvm
+            target: google_apis
+          - variant: 3
+            api: 29
+            arch: x86_64
+            mode: software
+            target: default
+          - variant: 4
+            api: 29
+            arch: x86_64
+            mode: software
+            target: google_apis
+          - variant: 5
+            api: 29
+            arch: x86
+            mode: kvm
+            target: default
+          - variant: 6
+            api: 29
+            arch: x86
+            mode: kvm
+            target: google_apis
+          - variant: 7
+            api: 29
+            arch: x86
+            mode: software
+            target: default
+          - variant: 8
+            api: 29
+            arch: x86
+            mode: software
+            target: google_apis
+          - variant: 9
+            api: 30
+            arch: x86_64
+            mode: kvm
+            target: default
+          - variant: 10
+            api: 30
+            arch: x86_64
+            mode: kvm
+            target: google_apis
+          - variant: 11
+            api: 30
+            arch: x86_64
+            mode: software
+            target: default
+          - variant: 12
+            api: 30
+            arch: x86_64
+            mode: software
+            target: google_apis
+          - variant: 13
+            api: 30
+            arch: x86
+            mode: kvm
+            target: default
+          - variant: 14
+            api: 30
+            arch: x86
+            mode: kvm
+            target: google_apis
+          - variant: 15
+            api: 30
+            arch: x86
+            mode: software
+            target: default
+          - variant: 16
+            api: 30
+            arch: x86
+            mode: software
+            target: google_apis
+          - variant: 17
+            api: 31
+            arch: x86_64
+            mode: kvm
+            target: default
+          - variant: 18
+            api: 31
+            arch: x86_64
+            mode: kvm
+            target: google_apis
+          - variant: 19
+            api: 31
+            arch: x86_64
+            mode: software
+            target: default
+          - variant: 20
+            api: 31
+            arch: x86_64
+            mode: software
+            target: google_apis
+          - variant: 21
+            api: 31
+            arch: x86
+            mode: kvm
+            target: default
+          - variant: 22
+            api: 31
+            arch: x86
+            mode: kvm
+            target: google_apis
+          - variant: 23
+            api: 31
+            arch: x86
+            mode: software
+            target: default
+          - variant: 24
+            api: 31
+            arch: x86
+            mode: software
+            target: google_apis
+          - variant: 25
+            api: 32
+            arch: x86_64
+            mode: kvm
+            target: default
+          - variant: 26
+            api: 32
+            arch: x86_64
+            mode: kvm
+            target: google_apis
+          - variant: 27
+            api: 32
+            arch: x86_64
+            mode: software
+            target: default
+          - variant: 28
+            api: 32
+            arch: x86_64
+            mode: software
+            target: google_apis
+          - variant: 29
+            api: 32
+            arch: x86
+            mode: kvm
+            target: default
+          - variant: 30
+            api: 32
+            arch: x86
+            mode: kvm
+            target: google_apis
+          - variant: 31
+            api: 32
+            arch: x86
+            mode: software
+            target: default
+          - variant: 32
+            api: 32
+            arch: x86
+            mode: software
+            target: google_apis
+          - variant: 33
+            api: 33
+            arch: x86_64
+            mode: kvm
+            target: default
+          - variant: 34
+            api: 33
+            arch: x86_64
+            mode: kvm
+            target: google_apis
+          - variant: 35
+            api: 33
+            arch: x86_64
+            mode: software
+            target: default
+          - variant: 36
+            api: 33
+            arch: x86_64
+            mode: software
+            target: google_apis
+          - variant: 37
+            api: 33
+            arch: x86
+            mode: kvm
+            target: default
+          - variant: 38
+            api: 33
+            arch: x86
+            mode: kvm
+            target: google_apis
+          - variant: 39
+            api: 33
+            arch: x86
+            mode: software
+            target: default
+          - variant: 40
+            api: 33
+            arch: x86
+            mode: software
+            target: google_apis
+    steps:
+      - name: Host preflight and SDK package verification
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}" | tee evidence/report.txt
+          test -x "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" || command -v sdkmanager
+          test -x "${ANDROID_HOME}/emulator/emulator"
+          test -x "${ANDROID_HOME}/platform-tools/adb"
+          if [[ "${{ matrix.mode }}" == kvm ]]; then
+            test -c /dev/kvm
+            sudo chmod 666 /dev/kvm
+          fi
+          "${ANDROID_HOME}/emulator/emulator" -version | tee -a evidence/report.txt
+      - name: Install image and create AVD without third-party action
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "system-images;android-${{ matrix.api }};${{ matrix.target }};${{ matrix.arch }}" > evidence/sdk-install.log 2>&1
+          printf 'no\n' | avdmanager create avd -n anthares -k "system-images;android-${{ matrix.api }};${{ matrix.target }};${{ matrix.arch }}" --force > evidence/avd.log 2>&1
+      - name: Boot raw emulator and collect evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
+          opts=(-avd anthares -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect)
+          if [[ "${{ matrix.mode }}" == software ]]; then opts+=(-accel off); else opts+=(-accel on); fi
+          timeout 330 emulator "${opts[@]}" > evidence/emulator.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; adb emu kill >/dev/null 2>&1 || true' EXIT
+          for n in $(seq 1 60); do
+            state=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
+            if [[ "$state" == 1 ]]; then break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then echo 'emulator exited'; tail -70 evidence/emulator.log; exit 21; fi
+            sleep 5
+          done
+          test "${state:-}" = 1 || { tail -70 evidence/emulator.log; exit 22; }
+          adb shell getprop ro.product.cpu.abi | tee evidence/abi.txt
+          adb shell pm path com.android.settings
+          echo RAW_EMULATOR_BOOT_PASS
+      - name: Preserve logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-independent-${{ matrix.variant }}-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: ignore
+          retention-days: 2
