@@ -27,7 +27,9 @@ jobs:
           test -s cloudflare-worker/wrangler.toml
           grep -q 'tiktok-central-session-read.yml' cloudflare-worker/src/index.js
           grep -q '2026-10-05-queue-fencing-v16' cloudflare-worker/src/index.js
-          echo 'SNAPSHOT_VALID=queue-fencing-v16'
+          grep -q '2026-10-14-render-retired-r2' cloudflare-worker/src/index.js
+          ! grep -q 'onrender.com' cloudflare-worker/src/index.js
+          echo 'SNAPSHOT_VALID=queue-fencing-v16-render-retired-r2'
       - name: Validate private Kwai session vault before deploy
         shell: bash
         run: |
@@ -45,13 +47,19 @@ jobs:
           cd cloudflare-worker
           npx --yes wrangler@4.43.0 deploy
           echo 'WRANGLER_DEPLOY_OK=1'
-      - name: Verify public health
+      - name: Verify public health and retired Render routing
         shell: bash
         run: |
           set -euo pipefail
           out="$(curl -fsS https://anthares-control.anthares1.workers.dev/health)"
-          echo "$out"
+          strategy="$(curl -fsS https://anthares-control.anthares1.workers.dev/strategy)"
+          failover="$(curl -fsS https://anthares-control.anthares1.workers.dev/failover-self-test)"
+          echo "$out"; echo "$strategy"; echo "$failover"
           echo "$out" | grep -q '"service":"anthares-control"'
           echo "$out" | grep -q '"version":"2026-10-05-queue-fencing-v16"'
           echo "$out" | grep -q '"pc_fallback":false'
+          echo "$out" | grep -q '"routing_revision":"2026-10-14-render-retired-r2"'
+          ! echo "$strategy" | grep -q '"render"'
+          echo "$failover" | grep -q '"primary":"github"'
+          echo "$failover" | grep -q '"render_retired":true'
           echo 'CONTROL_HEALTH_OK=1'
