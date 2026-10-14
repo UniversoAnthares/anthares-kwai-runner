@@ -44,6 +44,11 @@ if timeout 10 adb shell uiautomator dump /sdcard/kwai-30.xml >/dev/null 2>&1 && 
           echo "RESULT_AFTER_TAP=NATIVE_CHOOSER_VISIBLE"
         else
           echo "RESULT_AFTER_TAP=PROFILE_TAPPED_CHOOSER_NOT_YET_VISIBLE"
+          if timeout 70 python3 tools/kwai_login_surface_recovery.py >/dev/null 2>&1; then
+            echo "PROFILE_LOGIN_CHAIN=LOGIN_SURFACE_REACHED"
+          else
+            echo "PROFILE_LOGIN_CHAIN=NOT_REACHED"
+          fi
         fi
       else
         echo "RESULT_AFTER_TAP=UI_DUMP_UNAVAILABLE"
