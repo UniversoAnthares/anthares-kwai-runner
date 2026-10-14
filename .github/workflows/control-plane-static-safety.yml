@@ -8,6 +8,8 @@ on:
       - 'direct-tiktok-publisher/publisher_common.py'
       - 'direct-tiktok-publisher/tiktok_cloud_publish.py'
       - '.github/workflows/tiktok-github-direct-publisher.yml'
+      - '.github/workflows/tiktok-anthares-browser-session-verify.yml'
+      - '.github/workflows/cloudflare-central-deploy.yml'
       - 'tests/test_cloud_only_runtime.py'
       - '.github/workflows/control-plane-static-safety.yml'
 permissions:
@@ -47,7 +49,8 @@ jobs:
           ! grep -q 'onrender.com' "$F"
           python - <<'PY'
           import re
-          p=open('cloudflare-worker/src/index.js',encoding='utf-8-sig').read()
+          from pathlib import Path
+          p=Path('cloudflare-worker/src/index.js').read_text(encoding='utf-8-sig')
           m=re.search(r'function priorities\(\)\{return (\{.*?\});\}',p)
           assert m, 'priorities missing'
           x=m.group(1)
@@ -65,7 +68,27 @@ jobs:
           assert 'anthares.us/wp-content' not in p
           assert 'complete_without_evidence_rejected:true' in p
           assert '2026-10-14-render-retired-r2' in p
+          # OIDC must remain strict: issuer, audience, repository, main ref,
+          # event allowlist and cryptographic signature validation all remain required.
+          for marker in [
+              'https://token.actions.githubusercontent.com',
+              'https://anthares-control.anthares1.workers.dev',
+              'claims.repository',
+              'claims.ref!=="refs/heads/main"',
+              'claims.event_name',
+              'crypto.subtle.verify',
+              'jwt_signature',
+          ]:
+              assert marker in p, f'OIDC invariant missing: {marker}'
+          deploy=Path('.github/workflows/cloudflare-central-deploy.yml').read_text(encoding='utf-8')
+          assert 'tiktok-anthares-browser-session-verify.yml' in deploy, 'session verifier deploy authorization missing'
+          assert 'TIKTOK_SESSION_VERIFIER_OIDC_ALLOWLIST_OK=1' in deploy
+          verifier=Path('.github/workflows/tiktok-anthares-browser-session-verify.yml').read_text(encoding='utf-8')
+          assert 'id-token: write' in verifier
+          assert 'CONTROL_OIDC_AUTH_BROKEN=1' in verifier
+          assert 'CENTRAL_TIKTOK_SESSION_ABSENT=1' in verifier
           print('CONTROL_STATIC_SAFETY=OK')
+          print('TIKTOK_VERIFIER_OIDC_CONTRACT=GUARDED')
           PY
           python tests/test_cloud_only_runtime.py
       - name: Probe deployed controller read-only
