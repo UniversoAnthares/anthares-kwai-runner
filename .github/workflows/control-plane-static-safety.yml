@@ -44,6 +44,7 @@ jobs:
           ! grep -q 'LOCAL_EXECUTOR' "$F"
           ! grep -q 'ANTHARES_LOCAL_HEALTH_URL' "$F"
           ! grep -q 'GOOGLE_HEALTH_URL' "$F"
+          ! grep -q 'onrender.com' "$F"
           python - <<'PY'
           import re
           p=open('cloudflare-worker/src/index.js',encoding='utf-8-sig').read()
@@ -52,15 +53,18 @@ jobs:
           x=m.group(1)
           assert '"local"' not in x, x
           assert '"google"' not in x, x
-          assert 'cuts:["render","github"]' in x
-          assert 'tiktok:["render","github"]' in x
+          assert '"render"' not in x, x
+          assert 'cuts:["github"]' in x
+          assert 'tiktok:["github"]' in x
           assert 'kwai:["github"]' in x
           assert 'kwai_live:["hls_origin","github"]' in x
-          assert 'render_offline_github' in p and 'recovery_returns_render' in p
+          assert 'control:["cloudflare","github"]' in x
+          assert 'primary_github' in p and 'github_offline_null' in p
           assert 'retired_injected_never_selected' in p
           assert 'const today=localDay()' in p
           assert 'anthares.us/wp-content' not in p
           assert 'complete_without_evidence_rejected:true' in p
+          assert '2026-10-14-render-retired-r2' in p
           print('CONTROL_STATIC_SAFETY=OK')
           PY
           python tests/test_cloud_only_runtime.py
@@ -78,15 +82,15 @@ jobs:
           import json
           h=json.load(open('/tmp/health.json')); s=json.load(open('/tmp/strategy.json')); f=json.load(open('/tmp/failover.json'))
           assert h.get('pc_fallback') is False, h
-          assert h.get('routing_revision')=='2026-10-06-cloud-only-failover-r1', h
+          assert h.get('routing_revision')=='2026-10-14-render-retired-r2', h
           assert s.get('oracle') is False and s.get('google_compute') is False, s
-          retired={'local','pc','windows','oracle','google','google_compute'}
+          retired={'local','pc','windows','oracle','google','google_compute','render'}
           routes={x for values in s.get('execution_priority',{}).values() for x in values}
           assert routes.isdisjoint(retired), (routes,retired)
-          assert retired.issubset(set(s.get('retired_executors',[]))), s
+          assert {'local','pc','windows','oracle','google','google_compute'}.issubset(set(s.get('retired_executors',[]))), s
           assert f.get('ok') is True, f
-          assert f.get('primary')=='render' and f.get('after_render_failure')=='github' and f.get('after_github_failure') is None, f
-          assert f.get('recovered_primary')=='render', f
+          assert f.get('primary')=='github' and f.get('after_github_failure') is None, f
+          assert f.get('render_retired') is True, f
           assert f.get('checks') and all(f['checks'].values()), f
-          print('DEPLOYED_CLOUD_ONLY_FAILOVER=PROVEN')
+          print('DEPLOYED_RENDER_RETIRED_FAILOVER=PROVEN')
           PY
