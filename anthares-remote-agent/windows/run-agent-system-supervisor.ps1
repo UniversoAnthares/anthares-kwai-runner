@@ -36,6 +36,8 @@ function Configure-HttpTransport{
 }
 function Save-State([string]$reason,[int]$agentPid=0){
   $httpEnabled=(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_CONTROL_URL))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_DEVICE_TOKEN))
+  $githubQueue=(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_REPOSITORY))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_TOKEN))
+  $gitlabQueue=(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_PROJECT))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_TOKEN))
   try{[pscustomobject]@{
     active_control=if($httpEnabled){$env:ANTHARES_CONTROL_URL}else{'private-issue-queues'}
     mode=if($httpEnabled){'single-process-dual-transport'}else{'issue-queues-only'}
@@ -43,8 +45,9 @@ function Save-State([string]$reason,[int]$agentPid=0){
     updated_at=(Get-Date).ToUniversalTime().ToString('o');supervisor_pid=$PID;agent_pid=$agentPid
     device_id=$env:ANTHARES_DEVICE_ID;identity=[Security.Principal.WindowsIdentity]::GetCurrent().Name
     session=(Get-Process -Id $PID -ErrorAction SilentlyContinue).SessionId;binary=(Split-Path $exe -Leaf)
-    github_queue=(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_TOKEN))
-    gitlab_queue=(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_TOKEN))
+    github_queue=$githubQueue
+    gitlab_queue=$gitlabQueue
+    dual_queue_redundancy=($githubQueue -and $gitlabQueue)
     http_control_enabled=$httpEnabled;http_control=if($httpEnabled){$env:ANTHARES_CONTROL_URL}else{$null}
     single_executor=$true;work_root=$env:ANTHARES_WORK_ROOT;install_root=$root
     stdout_path=$stdout;stderr_path=$stderr
