@@ -5,9 +5,11 @@ from datetime import datetime, timezone
 
 SERVICES = {
  "github": {"kind":"http","target":"https://api.github.com/zen"},
+ "harness": {"kind":"env_http","env":"ANTHARES_HARNESS_HEALTH_URL"},
+ "appveyor": {"kind":"env_http","env":"ANTHARES_APPVEYOR_HEALTH_URL"},
+ "floot": {"kind":"env_http","env":"ANTHARES_FLOOT_HEALTH_URL"},
  "cloudflare": {"kind":"env_http","env":"ANTHARES_CLOUDFLARE_HEALTH_URL"},
  "render": {"kind":"env_http","env":"ANTHARES_RENDER_HEALTH_URL"},
- "circleci": {"kind":"env_http","env":"ANTHARES_CIRCLECI_HEALTH_URL","auth_env":"CIRCLECI_TOKEN"},
  "wordpress": {"kind":"env_http","env":"ANTHARES_WORDPRESS_HEALTH_URL"},
  "telegram": {"kind":"env_http","env":"ANTHARES_TELEGRAM_HEALTH_URL"},
  "kwai": {"kind":"env_http","env":"ANTHARES_KWAI_HEALTH_URL"},
