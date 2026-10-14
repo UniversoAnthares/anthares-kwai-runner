@@ -1,0 +1,117 @@
+name: Consolidate X browser into existing Northflank ARA service
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/northflank-x-mux-20261014.yml
+permissions:
+  contents: read
+concurrency:
+  group: northflank-ara-x-mux
+  cancel-in-progress: false
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Preserve ARA, deploy X mux, verify PostgreSQL and vault, rollback on failure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, time, urllib.request, urllib.error
+          token=os.getenv('NORTHFLANK_API_TOKEN','')
+          shared=os.getenv('ARA_SHARED','')
+          if not token or not shared:raise SystemExit('NORTHFLANK_API_TOKEN_OR_ARA_SHARED_MISSING')
+          api_base='https://api.northflank.com/v1'
+          headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
+          def api(method,path,data=None):
+              raw=None if data is None else json.dumps(data).encode()
+              req=urllib.request.Request(api_base+path,data=raw,method=method,headers=headers)
+              try:
+                  with urllib.request.urlopen(req,timeout=45) as r:
+                      data=r.read().decode('utf-8','replace')
+                      return json.loads(data) if data else {}
+              except urllib.error.HTTPError as e:
+                  raise RuntimeError(f'NORTHFLANK_API_HTTP_{e.code} at {path}: '+e.read().decode('utf-8','replace')[:400])
+          def get_json(url,auth=False):
+              h={'Authorization':'Bearer '+shared} if auth else {}
+              req=urllib.request.Request(url,headers=h)
+              with urllib.request.urlopen(req,timeout=20) as r:
+                  return json.load(r)
+          projects=api('GET','/projects').get('data',{}).get('projects',[])
+          if isinstance(projects,dict):projects=list(projects.values())
+          project=next((p.get('id') for p in projects if p.get('name')=='Default'),None)
+          if not project:raise SystemExit('NORTHFLANK_DEFAULT_PROJECT_NOT_FOUND')
+          services=api('GET',f'/projects/{project}/services').get('data',{}).get('services',[])
+          if isinstance(services,dict):services=list(services.values())
+          service=next((s for s in services if s.get('name')=='anthares-ara-northflank'),None)
+          if not service:raise SystemExit('EXISTING_ARA_SERVICE_NOT_FOUND')
+          sid=service.get('id') or 'anthares-ara-northflank'
+          details=api('GET',f'/projects/{project}/services/combined/{sid}').get('data') or {}
+          original=(details.get('buildSettings') or {}).get('dockerfile') or {}
+          original_path=original.get('dockerFilePath') or '/infra/northflank/Dockerfile'
+          if original_path not in ['/infra/northflank/Dockerfile','/infra/northflank-mux/Dockerfile']:
+              raise SystemExit('UNEXPECTED_EXISTING_DOCKERFILE '+original_path)
+          ports=api('GET',f'/projects/{project}/services/{sid}/ports').get('data',{}).get('ports',[])
+          public=next((p for p in ports if p.get('public') and p.get('dns')),None)
+          if not public:raise SystemExit('NORTHFLANK_ARA_PUBLIC_PORT_MISSING')
+          base='https://'+public['dns']
+          baseline=get_json(base+'/_canary/persistence-proof')
+          if not baseline.get('ok') or baseline.get('backend')!='postgres':
+              raise SystemExit('ARA_BASELINE_NOT_HEALTHY')
+          print('ARA_BASELINE_OK service='+sid+' existing_dockerfile='+original_path,flush=True)
+          mux_path='/infra/northflank-mux/Dockerfile'
+          def patch(path):
+              return api('PATCH',f'/projects/{project}/services/combined/{sid}',{
+                'buildSettings':{'dockerfile':{'buildEngine':'buildkit','dockerFilePath':path,'dockerWorkDir':'/'}}})
+          changed=False
+          try:
+              if original_path!=mux_path:
+                  patch(mux_path);changed=True
+              api('POST',f'/projects/{project}/services/{sid}/build',{})
+              print('NORTHFLANK_MUX_BUILD_REQUESTED',flush=True)
+              deadline=time.monotonic()+850
+              last='pending'
+              jwk=None
+              while time.monotonic()<deadline:
+                  try:
+                      health=get_json(base+'/healthz')
+                      xhealth=get_json(base+'/x/health')
+                      key=get_json(base+'/x/v1/runtime/browser/signing-public-key')
+                      if health.get('ok') and health.get('backend')=='postgres' and xhealth.get('ok') and key.get('ok') and (key.get('jwk') or {}).get('crv')=='P-256':
+                          jwk=key['jwk'];break
+                      last='ARA='+str(health.get('ok'))+' X='+str(xhealth.get('ok'))+' key='+str(key.get('ok'))
+                  except Exception as e:last=type(e).__name__+':'+str(e)[:160]
+                  time.sleep(10)
+              if not jwk:raise RuntimeError('NORTHFLANK_MUX_NOT_HEALTHY '+last)
+              req=urllib.request.Request(
+                  'https://anthares-x-vault.anthares1.workers.dev/browser-key/register',
+                  data=json.dumps({'authority':'runtime','jwk':jwk}).encode(),method='POST',
+                  headers={'Authorization':'Bearer '+shared,'Content-Type':'application/json'})
+              with urllib.request.urlopen(req,timeout=30) as r:reg=json.load(r)
+              if not reg.get('ok') or not reg.get('registered'):
+                  raise RuntimeError('RUNTIME_BROWSER_KEY_REGISTRATION_FAILED')
+              status=get_json('https://anthares-x-vault.anthares1.workers.dev/browser-key/status')
+              if not status.get('runtime') or status.get('render_dependency') is not False:
+                  raise RuntimeError('RUNTIME_BROWSER_KEY_NOT_DURABLE')
+              print('MUX_DEPLOYMENT_PROVEN',json.dumps({'ok':True,'ara_postgres':True,'x_worker_health':True,'runtime_key_registered':True,'public_x_base':base+'/x','render_dependency':False},sort_keys=True),flush=True)
+              try:
+                  proof=get_json(base+'/x/verify',auth=True)
+                  print('X_REAL_SESSION_PROOF',json.dumps({'ok':bool(proof.get('ok')),'handle':proof.get('handle'),'durable':proof.get('durable')},sort_keys=True),flush=True)
+              except Exception as e:
+                  print('X_REAL_SESSION_NOT_PROVEN',type(e).__name__,flush=True)
+          except Exception as e:
+              print('MUX_DEPLOY_FAILED',type(e).__name__,str(e)[:400],flush=True)
+              if changed:
+                  try:
+                      patch(original_path)
+                      api('POST',f'/projects/{project}/services/{sid}/build',{})
+                      print('ROLLBACK_ARA_BUILD_REQUESTED',flush=True)
+                  except Exception as rollback_error:
+                      print('ROLLBACK_FAILED',type(rollback_error).__name__,str(rollback_error)[:250],flush=True)
+              raise
+          
+          PY
