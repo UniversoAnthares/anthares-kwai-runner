@@ -9,18 +9,15 @@ if(-not(Test-Path $breakGlass)){
 . (Join-Path $root 'agent-env.ps1')
 
 # Legacy HTTP supervisor: explicit break-glass only. Canonical execution is
-# private issue queues under SYSTEM/session 0. Render remains final fallback.
+# private issue queues under SYSTEM/session 0. Render is retired.
 $env:ANTHARES_DEVICE_ID = 'DESKTOP-FTDK0HP-SYSTEM'
 
 $primary = 'https://anthares-ara-backup.anthares1.workers.dev'
 $secondary = 'https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run'
-$tertiary = 'https://anthares-ara-control.onrender.com'
-$quaternary = 'https://anthares-ara-infra-canary-v2.onrender.com'
 $exe = Join-Path $root 'anthares-remote-agent.exe'
 $stdout = Join-Path $root 'agent.stdout.log'
 $stderr = Join-Path $root 'agent.stderr.log'
 $forceSecondary = Join-Path $root 'force-secondary.flag'
-$forceTertiary = Join-Path $root 'force-tertiary.flag'
 
 $created = $false
 $mutex = New-Object System.Threading.Mutex($true, 'Global\AntharesRemoteAgentSupervisor', [ref]$created)
@@ -33,30 +30,19 @@ function Test-Control([string]$origin) {
     } catch { return $false }
 }
 function Save-State([string]$active,[string]$reason,[int]$agentPid=0){
-    try{[pscustomobject]@{active_control=$active;reason=$reason;updated_at=(Get-Date).ToUniversalTime().ToString('o');supervisor_pid=$PID;agent_pid=$agentPid;device_id=$env:ANTHARES_DEVICE_ID;break_glass=$true}|ConvertTo-Json|Set-Content -Path $stateFile -Encoding UTF8}catch{}
+    try{[pscustomobject]@{active_control=$active;reason=$reason;updated_at=(Get-Date).ToUniversalTime().ToString('o');supervisor_pid=$PID;agent_pid=$agentPid;device_id=$env:ANTHARES_DEVICE_ID;break_glass=$true;render_required=$false}|ConvertTo-Json|Set-Content -Path $stateFile -Encoding UTF8}catch{}
 }
 function Choose-Control {
-    if (Test-Path $forceTertiary) {
-        if (Test-Control $tertiary) { return $tertiary }
-        if (Test-Control $primary) { return $primary }
-        if (Test-Control $secondary) { return $secondary }
-        if (Test-Control $quaternary) { return $quaternary }
-        return $null
-    }
     if (Test-Path $forceSecondary) {
         if (Test-Control $secondary) { return $secondary }
         if (Test-Control $primary) { return $primary }
-        if (Test-Control $quaternary) { return $quaternary }
-        if (Test-Control $tertiary) { return $tertiary }
         return $null
     }
     if (Test-Control $primary) { return $primary }
     if (Test-Control $secondary) { return $secondary }
-    if (Test-Control $quaternary) { return $quaternary }
-    if (Test-Control $tertiary) { return $tertiary }
     return $null
 }
-function Preferred-Alternate([string]$active){foreach($candidate in @($primary,$secondary,$quaternary,$tertiary)){if($candidate -ne $active -and (Test-Control $candidate)){return $candidate}};return $null}
+function Preferred-Alternate([string]$active){foreach($candidate in @($primary,$secondary)){if($candidate -ne $active -and (Test-Control $candidate)){return $candidate}};return $null}
 
 try {
     while ($true) {
