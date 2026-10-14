@@ -23,9 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      ANTHARES_BROWSER_PRIMARY_URL: https://anthares-browser-qa-render.onrender.com
+      ANTHARES_BROWSER_PRIMARY_URL: ${{ vars.ANTHARES_BROWSER_PERSISTENT_RESERVE_URL }}
       ANTHARES_BROWSER_PERSISTENT_RESERVE_URL: ${{ vars.ANTHARES_BROWSER_PERSISTENT_RESERVE_URL }}
-      ANTHARES_REMOTE_QUEUE_PROVIDER: github-private-issues
+      ANTHARES_REMOTE_QUEUE_PROVIDER: github-gitlab-private-issues
       ANTHARES_REMOTE_QUEUE_E2E_PROVEN: '1'
     steps:
       - uses: actions/checkout@v4
@@ -39,5 +39,5 @@ jobs:
       - name: Record architecture
         if: always()
         run: |
-          echo 'Anthares Remote uses the proven private GitHub issue queue; Render and Cloudflare are not Remote runtime dependencies.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'GitHub-hosted Actions is a finite-job watchdog only. A persistent browser reserve must expose /health and /ready before it counts as equivalent browser continuity.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Anthares Remote uses independent private GitHub and GitLab issue queues; Render is retired.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'GitHub-hosted Actions is a finite-job watchdog only. A non-Render persistent browser reserve must expose /health and /ready before it counts as equivalent browser continuity.' >> "$GITHUB_STEP_SUMMARY"
