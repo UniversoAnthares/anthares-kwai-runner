@@ -11,6 +11,18 @@ jobs:
           name: Provider hub smoke
           command: CI_PROVIDER=circleci bash ci/shared/provider-smoke.sh
 
+  circleci_token_present:
+    docker:
+      - image: cimg/base:stable
+    resource_class: small
+    steps:
+      - run:
+          name: Verify CircleCI API credential
+          command: |
+            set -Eeuo pipefail
+            TOKEN="${CIRCLECI_TOKEN:-${CIRCLE_TOKEN:-}}"
+            test -n "$TOKEN"
+
   activate_wordpress_circleci:
     docker:
       - image: cimg/base:stable
@@ -21,16 +33,22 @@ jobs:
           command: |
             set -Eeuo pipefail
             TOKEN="${CIRCLECI_TOKEN:-${CIRCLE_TOKEN:-}}"
-            test -n "$TOKEN" || { echo "CIRCLECI_ACTIVATION=NO_API_TOKEN"; exit 23; }
             response="$(curl -fsS -X POST \
               'https://circleci.com/api/v1.1/project/github/UniversoAnthares/anthares-wordpress/follow' \
               -H "Circle-Token: $TOKEN")"
-            echo "$response" | grep -q '"followed"[[:space:]]*:[[:space:]]*true' || {
-              echo "CIRCLECI_ACTIVATION=FOLLOW_RESPONSE_UNEXPECTED"
-              echo "$response" | head -c 1200
-              exit 1
-            }
-            echo "CIRCLECI_ACTIVATION=FOLLOWED"
+            echo "$response" | grep -q '"followed"[[:space:]]*:[[:space:]]*true'
+
+  cloudflare_token_present:
+    docker:
+      - image: cimg/base:stable
+    resource_class: small
+    steps:
+      - run:
+          name: Verify Cloudflare deploy credential
+          command: |
+            set -Eeuo pipefail
+            TOKEN="${CLOUDFLARE_API_TOKEN:-${CF_API_TOKEN:-}}"
+            test -n "$TOKEN"
 
   deploy_anthares_browser:
     docker:
@@ -43,15 +61,17 @@ jobs:
           command: |
             set -Eeuo pipefail
             export CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-${CF_API_TOKEN:-}}"
-            test -n "$CLOUDFLARE_API_TOKEN" || { echo "ANTHARES_BROWSER_DEPLOY=NO_CLOUDFLARE_TOKEN"; exit 24; }
             cd anthares-reserva-browser
             npm ci
             npx wrangler deploy
-            echo "ANTHARES_BROWSER_DEPLOY=OK"
 
 workflows:
   anthares_circleci_recovery:
     jobs:
       - provider_smoke
-      - activate_wordpress_circleci
-      - deploy_anthares_browser
+      - circleci_token_present
+      - activate_wordpress_circleci:
+          requires: [circleci_token_present]
+      - cloudflare_token_present
+      - deploy_anthares_browser:
+          requires: [cloudflare_token_present]
