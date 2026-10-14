@@ -5,7 +5,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 const port=3197;
 const token='ara-remote-qa-client-token-0123456789-abcdefghijklmnopqrstuvwxyz';
-const child=spawn(process.execPath,['remote-server.mjs'],{cwd:new URL('.',import.meta.url),env:{...process.env,ARA_INTERNAL_MCP_PORT:String(port),ARA_MCP_CLIENT_TOKEN:token,ANTHARES_CONTROL_URL:'https://anthares-remote-control.onrender.com'},stdio:['ignore','pipe','pipe']});
+const child=spawn(process.execPath,['remote-server.mjs'],{cwd:new URL('.',import.meta.url),env:{...process.env,ARA_INTERNAL_MCP_PORT:String(port),ARA_MCP_CLIENT_TOKEN:token,ANTHARES_CONTROL_URL:'https://anthares-ara-backup.anthares1.workers.dev'},stdio:['ignore','pipe','pipe']});
 let stderr='';child.stderr.on('data',c=>{stderr+=c.toString();});
 async function ready(){for(let i=0;i<50;i++){try{const r=await fetch(`http://127.0.0.1:${port}/health`);if(r.ok)return;}catch{}await sleep(100);}throw new Error(`remote MCP did not start: ${stderr}`);}
 const required=['session_status','system_info','capabilities','remote_exec','process_list','clipboard_get','clipboard_set','screenshot','file_stat','file_list','file_read','file_write','file_read_chunk','file_write_chunk','remote_job_start','remote_job_list','remote_job_status','remote_job_logs','remote_job_cancel','process_start','process_kill','service_status','service_start','service_stop','file_mkdir','file_remove','file_rename','file_copy','file_sha256','file_write_atomic'];
