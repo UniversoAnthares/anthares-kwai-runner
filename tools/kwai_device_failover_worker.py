@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """Fail-closed Kwai Android executor with physical-primary/MEmu-standby routing.
 
-This worker does not claim work. It accepts exactly one already-selected job through
+This worker does not claim work. It accepts exactly one already-leased job through
 KWAI_* environment variables, so the central queue/ledger remains authoritative.
 It may switch from the physical device to MEmu only before an irreversible publish
 request and only for executor/device failures.
+
+The irreversible boundary is fenced by two externally configured queue callbacks:
+ANTHARES_QUEUE_STARTED_COMMAND_JSON and ANTHARES_QUEUE_COMPLETE_COMMAND_JSON.
+Each value must be a JSON argv array. No shell is used. Publication is impossible
+unless the STARTED callback succeeds. After a verified publication, the job is
+persisted locally as published_pending_ack before COMPLETE is attempted; a retry
+will only retry COMPLETE and will never publish the same job again.
 """
 from __future__ import annotations
 
@@ -25,6 +32,7 @@ import android_executor_router as routing
 from android_device_adapters import AndroidExecutorRouter
 
 STATE_PATH = pathlib.Path(os.getenv("ANTHARES_ANDROID_HEALTH_STATE", str(ROOT / ".state" / "android-device-health.json")))
+ACK_PATH = pathlib.Path(os.getenv("ANTHARES_ANDROID_ACK_STATE", str(ROOT / ".state" / "android-publish-ack.json")))
 PHYSICAL_SAFE = ROOT / "kwai-up" / "kwai_up_safe.py"
 
 DEVICE_PATTERNS = re.compile(
@@ -48,19 +56,35 @@ def required(name: str) -> str:
     return value
 
 
-def load_health() -> dict:
+def load_json_file(path: pathlib.Path) -> dict:
     try:
-        value = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        value = json.loads(path.read_text(encoding="utf-8"))
         return value if isinstance(value, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
 
 
-def save_health(value: dict) -> None:
-    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = STATE_PATH.with_suffix(STATE_PATH.suffix + ".tmp")
+def save_json_file(path: pathlib.Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    tmp.replace(STATE_PATH)
+    tmp.replace(path)
+
+
+def load_health() -> dict:
+    return load_json_file(STATE_PATH)
+
+
+def save_health(value: dict) -> None:
+    save_json_file(STATE_PATH, value)
+
+
+def load_ack_state() -> dict:
+    return load_json_file(ACK_PATH)
+
+
+def save_ack_state(value: dict) -> None:
+    save_json_file(ACK_PATH, value)
 
 
 def merge_health(probes: dict, history: dict) -> dict:
@@ -152,19 +176,77 @@ def run_process(args: list[str], env: dict, timeout: int = 420) -> tuple[int, st
     return p.returncode, out
 
 
-def run_physical(media: pathlib.Path) -> tuple[bool, str, str]:
+def callback_argv(kind: str) -> list[str]:
+    name = f"ANTHARES_QUEUE_{kind.upper()}_COMMAND_JSON"
+    raw = required(name)
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{name}-invalid-json") from exc
+    if not isinstance(value, list) or not value or not all(isinstance(x, str) and x for x in value):
+        raise RuntimeError(f"{name}-must-be-json-argv")
+    return value
+
+
+def queue_callback(kind: str, executor: str) -> tuple[bool, str]:
+    env = os.environ.copy()
+    env["ANTHARES_SELECTED_EXECUTOR"] = executor
+    env["ANTHARES_QUEUE_CALLBACK_KIND"] = kind
+    try:
+        rc, out = run_process(callback_argv(kind), env, timeout=60)
+    except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+        return False, str(exc)
+    return rc == 0, out
+
+
+def mark_pending_ack(job_id: str, executor: str) -> None:
+    state = load_ack_state()
+    state[job_id] = {
+        "state": "published_pending_ack",
+        "executor": executor,
+        "published_at": int(time.time()),
+    }
+    save_ack_state(state)
+
+
+def mark_acknowledged(job_id: str) -> None:
+    state = load_ack_state()
+    row = state.setdefault(job_id, {})
+    row["state"] = "completed_acknowledged"
+    row["acknowledged_at"] = int(time.time())
+    save_ack_state(state)
+
+
+def retry_pending_ack(job_id: str) -> int | None:
+    state = load_ack_state()
+    row = state.get(job_id)
+    if not isinstance(row, dict) or row.get("state") != "published_pending_ack":
+        return None
+    executor = str(row.get("executor") or "unknown")
+    print(f"KWAI_DEVICE_STATE=PUBLISHED_PENDING_ACK EXECUTOR={executor}", flush=True)
+    ok, detail = queue_callback("complete", executor)
+    if ok:
+        mark_acknowledged(job_id)
+        print(f"KWAI_DEVICE_STATE=VERIFIED_ACK_REPAIRED EXECUTOR={executor}", flush=True)
+        return 0
+    print("KWAI_DEVICE_STATE=PUBLISHED_PENDING_ACK COMPLETE_CALLBACK_FAILED", flush=True)
+    if detail:
+        print(detail[-1200:], flush=True)
+    return 91
+
+
+def run_physical_prepare(media: pathlib.Path) -> tuple[bool, str, str, dict]:
     env = physical_env(media)
     rc, out = run_process([sys.executable, str(PHYSICAL_SAFE), "prepare"], env)
     if rc != 0 or "KWAI_UP_STATE=READY_TO_PUBLISH" not in out:
-        return False, classify_failure(out, rc), out
+        return False, classify_failure(out, rc), out, env
+    return True, "", out, env
 
-    # Nothing else may take the job after this point. The commit mode owns the
-    # irreversible boundary and any ambiguous outcome must remain UNCERTAIN.
+
+def run_physical_commit(env: dict, prepare_out: str) -> tuple[bool, str, str]:
     rc, commit_out = run_process([sys.executable, str(PHYSICAL_SAFE), "commit"], env)
-    combined = out + "\n" + commit_out
-    if rc != 0:
-        return False, "uncertain", combined
-    if "KWAI_UP_STATE=VERIFIED" not in commit_out:
+    combined = prepare_out + "\n" + commit_out
+    if rc != 0 or "KWAI_UP_STATE=VERIFIED" not in commit_out:
         return False, "uncertain", combined
     return True, "", combined
 
@@ -173,8 +255,6 @@ def memu_publisher() -> pathlib.Path:
     raw = os.getenv("ANTHARES_MEMU_PUBLISHER_PATH", "").strip()
     if raw:
         return pathlib.Path(raw)
-    # Standard local checkout path; callers may override it. This is source only,
-    # not permission to start the PC as a primary executor.
     return pathlib.Path(r"C:\Users\Lucas\anthares-clipper\fallback\memu\kwai_memu_publish.py")
 
 
@@ -193,15 +273,30 @@ def run_memu(media: pathlib.Path) -> tuple[bool, str, str]:
     rc, out = run_process([sys.executable, str(publisher)], env, timeout=480)
     if rc == 0 and "KWAI_MEMU_PUBLISH=OK" in out:
         return True, "", out
-    # The historical publisher knows whether the post button was crossed; do not
-    # risk a second executor after any ambiguous post-click outcome.
     if re.search(r"toque em Publicar|publicação confirmada|após o toque|KWAI_MEMU_PUBLISH", out, re.I):
         return False, "uncertain", out
     return False, classify_failure(out, rc), out
 
 
+def finalize_verified_publish(job_id: str, executor: str) -> int:
+    mark_pending_ack(job_id, executor)
+    ok, detail = queue_callback("complete", executor)
+    if ok:
+        mark_acknowledged(job_id)
+        print(f"KWAI_DEVICE_STATE=VERIFIED EXECUTOR={executor}", flush=True)
+        return 0
+    print(f"KWAI_DEVICE_STATE=PUBLISHED_PENDING_ACK EXECUTOR={executor}", flush=True)
+    if detail:
+        print(detail[-1200:], flush=True)
+    return 91
+
+
 def main() -> int:
-    required("KWAI_QUEUE_JOB_ID")
+    job_id = required("KWAI_QUEUE_JOB_ID")
+    repaired = retry_pending_ack(job_id)
+    if repaired is not None:
+        return repaired
+
     url = required("KWAI_VIDEO_URL")
     history = load_health()
     probes = AndroidExecutorRouter().status()
@@ -215,35 +310,52 @@ def main() -> int:
 
     media = download_media(url)
     try:
+        physical_env_data = None
+        prepare_out = ""
         if selected == "physical_android":
-            ok, failure_class, detail = run_physical(media)
+            prepared, failure_class, detail, physical_env_data = run_physical_prepare(media)
+            if not prepared:
+                history = record_result(history, "physical_android", False, failure_class, detail)
+                if failure_class == "uncertain":
+                    print("KWAI_DEVICE_STATE=UNCERTAIN EXECUTOR=physical_android", flush=True)
+                    return 90
+                if failure_class not in routing.DEVICE_FAILURES:
+                    print(f"KWAI_DEVICE_STATE=FAILED_NO_FAILOVER CLASS={failure_class}", flush=True)
+                    return 80
+                probes2 = AndroidExecutorRouter().status()
+                state2 = merge_health(probes2, history)
+                selected2 = routing.choose(manifest, state2, workload="kwai_publish")
+                if selected2 != "memu_android":
+                    print("KWAI_DEVICE_STATE=PHYSICAL_FAILED_MEMU_NOT_ELIGIBLE", flush=True)
+                    return 81
+                selected = selected2
+            else:
+                prepare_out = detail
+
+        # Central STARTED is the fence immediately before any irreversible action.
+        started, started_detail = queue_callback("started", selected)
+        if not started:
+            print(f"KWAI_DEVICE_STATE=START_FENCE_FAILED EXECUTOR={selected}", flush=True)
+            if started_detail:
+                print(started_detail[-1200:], flush=True)
+            return 84
+
+        if selected == "physical_android":
+            ok, failure_class, detail = run_physical_commit(physical_env_data, prepare_out)
             history = record_result(history, "physical_android", ok, failure_class, detail)
-            if ok:
-                print("KWAI_DEVICE_STATE=VERIFIED EXECUTOR=physical_android", flush=True)
-                return 0
-            if failure_class == "uncertain":
+            if not ok:
                 print("KWAI_DEVICE_STATE=UNCERTAIN EXECUTOR=physical_android", flush=True)
                 return 90
-            if failure_class not in routing.DEVICE_FAILURES:
-                print(f"KWAI_DEVICE_STATE=FAILED_NO_FAILOVER CLASS={failure_class}", flush=True)
-                return 80
-
-            # Re-evaluate with updated circuit state. MEmu remains impossible until
-            # the physical device is explicitly unavailable/degraded by policy.
-            probes2 = AndroidExecutorRouter().status()
-            state2 = merge_health(probes2, history)
-            selected2 = routing.choose(manifest, state2, workload="kwai_publish")
-            if selected2 != "memu_android":
-                print("KWAI_DEVICE_STATE=PHYSICAL_FAILED_MEMU_NOT_ELIGIBLE", flush=True)
-                return 81
-            selected = selected2
+            return finalize_verified_publish(job_id, "physical_android")
 
         if selected == "memu_android":
             ok, failure_class, detail = run_memu(media)
             record_result(history, "memu_android", ok, failure_class, detail)
             if ok:
-                print("KWAI_DEVICE_STATE=VERIFIED EXECUTOR=memu_android FAILOVER=1", flush=True)
-                return 0
+                rc = finalize_verified_publish(job_id, "memu_android")
+                if rc == 0:
+                    print("KWAI_DEVICE_FAILOVER=1", flush=True)
+                return rc
             if failure_class == "uncertain":
                 print("KWAI_DEVICE_STATE=UNCERTAIN EXECUTOR=memu_android", flush=True)
                 return 90
