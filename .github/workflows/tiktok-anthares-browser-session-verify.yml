@@ -8,10 +8,13 @@ on:
 permissions:
   contents: read
   id-token: write
+concurrency:
+  group: tiktok-anthares-browser-session-verify
+  cancel-in-progress: true
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 10
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
       EXPECTED_TIKTOK_USERNAME: universo.anthares
@@ -26,15 +29,27 @@ jobs:
           aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
           jwt="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           echo "::add-mask::$jwt"
-          curl -fsS --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/tiktok/session-state -o /tmp/session.json
+          code='000'
+          for attempt in $(seq 1 18); do
+            code="$(curl -sS -o /tmp/session.json -w '%{http_code}' --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/tiktok/session-state || true)"
+            echo "TIKTOK_SESSION_HTTP=$code attempt=$attempt"
+            if [ "$code" = "200" ] || [ "$code" = "404" ]; then break; fi
+            if [ "$code" = "401" ] && [ "$attempt" -lt 18 ]; then sleep 5; continue; fi
+            break
+          done
+          if [ "$code" = "401" ]; then echo 'CONTROL_OIDC_AUTH_BROKEN=1'; cat /tmp/session.json || true; exit 41; fi
+          if [ "$code" = "404" ]; then echo 'CENTRAL_TIKTOK_SESSION_ABSENT=1'; cat /tmp/session.json || true; exit 42; fi
+          test "$code" = "200" || { echo "CONTROL_SESSION_READ_TRANSPORT_FAILURE=$code"; cat /tmp/session.json || true; exit 43; }
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/session.json'))
           st=d.get('state') or {}
-          assert d.get('available') is True and st.get('cookies'), 'CENTRAL_TIKTOK_SESSION_UNAVAILABLE'
-          json.dump({'cookies':st.get('cookies') or [],'origins':st.get('origins') or []},open('/tmp/storage-state.json','w'))
+          cookies=st.get('cookies') or []
+          assert d.get('available') is True and cookies, 'CENTRAL_TIKTOK_SESSION_UNAVAILABLE'
+          json.dump({'cookies':cookies,'origins':st.get('origins') or []},open('/tmp/storage-state.json','w'))
+          print('CONTROL_OIDC_AUTH_OK=1')
           print('CENTRAL_TIKTOK_SESSION_AVAILABLE=1')
-          print('CENTRAL_TIKTOK_COOKIE_COUNT='+str(len(st.get('cookies') or [])))
+          print('CENTRAL_TIKTOK_COOKIE_COUNT='+str(len(cookies)))
           PY
       - name: Install isolated Anthares browser runtime
         shell: bash
@@ -97,4 +112,3 @@ jobs:
           print('ANTHARES_BROWSER_TIKTOK_SESSION_REFRESHED_AND_PERSISTED=1')
           print('RENDER_DEPENDENCY=false')
           PY
-# refresh-trigger 2026-10-14T19:50-04:00
