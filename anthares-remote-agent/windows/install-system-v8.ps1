@@ -14,27 +14,40 @@ if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrat
 }
 Log ('elevated identity='+$identity.Name)
 
-New-Item -ItemType Directory -Force -Path $root,$work,(Join-Path $work 'logs'),(Join-Path $work 'temp'),(Join-Path $work 'legacy-pc-runtime\supervisor') | Out-Null
+New-Item -ItemType Directory -Force -Path $root,$work,(Join-Path $work 'logs'),(Join-Path $work 'temp'),(Join-Path $work 'ara-jobs'),(Join-Path $work 'legacy-pc-runtime\supervisor') | Out-Null
 $base='https://raw.githubusercontent.com/UniversoAnthares/anthares-kwai-runner/main/anthares-remote-agent/windows/'
-foreach($name in @('run-agent-system-supervisor.ps1','load-issue-queue-auth.ps1','recovery-watchdog.ps1','recovery-watchdog-loop.ps1')){
+$critical=@('run-agent-system-supervisor.ps1','load-issue-queue-auth.ps1','recovery-watchdog.ps1','recovery-watchdog-loop.ps1')
+$scriptHashes=[ordered]@{}
+foreach($name in $critical){
   $dst=Join-Path $root $name
   if(Test-Path $dst){Copy-Item $dst ($dst+'.pre-v8-'+(Get-Date -Format 'yyyyMMddHHmmss')+'.bak') -Force}
   Invoke-WebRequest -UseBasicParsing -Uri ($base+$name) -OutFile $dst -TimeoutSec 30
   $errors=$null;$tokens=$null
   [Management.Automation.Language.Parser]::ParseFile($dst,[ref]$tokens,[ref]$errors)|Out-Null
   if($errors.Count){throw "$name syntax errors: $($errors.Count)"}
+  Copy-Item $dst ($dst+'.lastgood') -Force
+  $scriptHashes[$name]=(Get-FileHash $dst -Algorithm SHA256).Hash
 }
 
 $v4=Join-Path $root 'anthares-remote-agent-v4.exe'
 if(-not(Test-Path $v4)){throw 'anthares-remote-agent-v4.exe is missing'}
 $v4Hash=(Get-FileHash $v4 -Algorithm SHA256).Hash
 Copy-Item $v4 (Join-Path $root 'anthares-remote-agent-v4.lastgood.exe') -Force
-[ordered]@{v4_sha256=$v4Hash;updated_at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $root 'integrity-baseline.json') -Encoding UTF8
+[ordered]@{v4_sha256=$v4Hash;script_sha256=$scriptHashes;updated_at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json -Depth 5|Set-Content (Join-Path $root 'integrity-baseline.json') -Encoding UTF8
 Set-Content -LiteralPath (Join-Path $root 'v4-validated.flag') -Value ('validated sha256='+$v4Hash) -Encoding ASCII
 Log ('V4 pinned sha256='+$v4Hash)
 
 $credential=Join-Path $root 'secrets\issue-queue.json'
 if(-not(Test-Path $credential)){throw 'existing SYSTEM private queue credential is missing'}
+$loader=Join-Path $root 'load-issue-queue-auth.ps1'
+Remove-Item Env:ANTHARES_GITHUB_QUEUE_TOKEN -ErrorAction SilentlyContinue
+Remove-Item Env:ANTHARES_GITHUB_QUEUE_REPOSITORY -ErrorAction SilentlyContinue
+Remove-Item Env:ANTHARES_GITLAB_QUEUE_TOKEN -ErrorAction SilentlyContinue
+Remove-Item Env:ANTHARES_GITLAB_QUEUE_PROJECT -ErrorAction SilentlyContinue
+. $loader
+$queueReady=(((-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_TOKEN))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_REPOSITORY))) -or ((-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_TOKEN))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_PROJECT))))
+if(-not $queueReady){throw 'SYSTEM private queue credential exists but could not be loaded'}
+Log 'private queue credential validated without exposing token'
 
 function Register-SystemTask([string]$name,[string]$script){
   $action=New-ScheduledTaskAction -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+$script+'"') -WorkingDirectory $root
@@ -65,6 +78,6 @@ while((Get-Date)-lt $deadline){
 }
 if(-not $verified){throw 'V4 SYSTEM runtime did not reach session 0 within 60 seconds; legacy transport left intact'}
 
-$result=[ordered]@{ok=$true;v4_sha256=$v4Hash;system_v4_pid=$agentPid;system_task=(Get-ScheduledTask -TaskName $canonicalTask).State;watchdog_task=(Get-ScheduledTask -TaskName $watchdogTask).State;system_state=$state;legacy_preserved_until_queue_proof=$true;jobs_path_migration_performed=$false;render_required=$false;completed_at=(Get-Date).ToUniversalTime().ToString('o')}
+$result=[ordered]@{ok=$true;install_root=$root;work_root=$work;v4_sha256=$v4Hash;system_v4_pid=$agentPid;system_task=(Get-ScheduledTask -TaskName $canonicalTask).State;watchdog_task=(Get-ScheduledTask -TaskName $watchdogTask).State;system_state=$state;queue_credential_validated=$true;legacy_preserved_until_queue_proof=$true;jobs_path_migration_performed=$false;render_required=$false;completed_at=(Get-Date).ToUniversalTime().ToString('o')}
 $result | ConvertTo-Json | Set-Content (Join-Path $work 'legacy-pc-runtime\supervisor\install-result.json') -Encoding UTF8
 Log ('SUCCESS '+($result|ConvertTo-Json -Compress))
