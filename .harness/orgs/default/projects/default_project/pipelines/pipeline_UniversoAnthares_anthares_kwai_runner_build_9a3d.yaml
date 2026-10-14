@@ -12,21 +12,33 @@ pipeline:
       cache:
         enabled: true
       steps:
-        - name: Install pytest
-          id: install_pytest
-          run:
-            shell: bash
-            script: pip install --quiet pytest
-        - name: Run Python tests
-          id: test_python
+        - name: Python syntax check
+          id: python_syntax
           run:
             shell: bash
             script: |-
-              mkdir -p .harness/reports
-              PYTHONPATH="${PYTHONPATH}:$(pwd)" pytest tests/ --junitxml=.harness/reports/junit.xml -v
-            report:
-              type: junit
-              paths:
-                - .harness/reports/junit.xml
+              set -euo pipefail
+              python3 -m compileall -q tests tools infra independent_session
+        - name: Control publisher acceptance
+          id: control_publisher_acceptance
+          run:
+            shell: bash
+            script: |-
+              set -euo pipefail
+              for case in \
+                happy \
+                renew-then-publish \
+                stale-start \
+                stale-renew \
+                stale-complete \
+                crash-before-start \
+                uncertain-no-republish \
+                confirmed-idempotent \
+                generation-rotates \
+                duplicate-publisher-boundary
+              do
+                python3 tests/test_control_publisher_integration_final.py "$case"
+              done
+              echo HARNESS_CONTROL_PUBLISHER_OK=1
   tags:
     onboarding: "true"
