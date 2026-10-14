@@ -18,14 +18,14 @@ jobs:
       max-parallel: 6
       matrix:
         include:
-          - { id: "02", label: "02 OIDC public runner -> Render" }
+          - { id: "02", label: "02 OIDC public runner -> Cloudflare/Northflank" }
           - { id: "04", label: "04 TikTok session persistence" }
           - { id: "05", label: "05 Alternate account identity" }
           - { id: "08", label: "08 TikTok upload auth dry-run" }
           - { id: "09", label: "09 MP4 dry-run" }
           - { id: "10", label: "10 Publish guard dry-run" }
     env:
-      RENDER_WORKER_URL: "https://anthares-tiktok-render-rootless.onrender.com"
+      TIKTOK_WORKER_URL: "https://anthares-tiktok-worker.anthares1.workers.dev"
     steps:
       - name: Focused post-deploy probe
         env:
@@ -33,7 +33,7 @@ jobs:
         run: |
           python - <<'PY'
           import json,os,urllib.parse,urllib.request,urllib.error
-          base=os.environ['RENDER_WORKER_URL'].rstrip('/'); tid=os.environ['TEST_ID']
+          base=os.environ['TIKTOK_WORKER_URL'].rstrip('/'); tid=os.environ['TEST_ID']
           u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+('&' if '?' in os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] else '?')+urllib.parse.urlencode({'audience':'anthares-render-worker'})
           q=urllib.request.Request(u,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN'],'Accept':'application/json'})
           with urllib.request.urlopen(q,timeout=20) as r: token=json.load(r)['value']
