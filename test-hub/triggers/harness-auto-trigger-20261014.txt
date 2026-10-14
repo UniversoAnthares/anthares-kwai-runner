@@ -1,0 +1,3 @@
+Harness automatic trigger probe.
+Created 2026-10-14 after successful manual Harness execution.
+Purpose: verify whether a push to main automatically starts the Harness pipeline.
