@@ -1,0 +1,47 @@
+name: Anthares CI Primary
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'anthares-remote-agent/**'
+      - '.github/workflows/ci-primary.yml'
+      - 'appveyor.yml'
+      - 'azure-pipelines.yml'
+      - 'cloudflare-ci/**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-ci-primary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: anthares-remote-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: anthares-remote-agent/go.mod
+      - name: Format gate
+        run: |
+          bad="$(gofmt -l .)"
+          if [ -n "$bad" ]; then printf '%s\n' "$bad"; exit 1; fi
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./... -count=1
+      - name: Build Linux
+        run: go build -o ../.ci-agent-linux ./cmd/agent
+      - name: Verify artifact
+        run: test -s ../.ci-agent-linux
