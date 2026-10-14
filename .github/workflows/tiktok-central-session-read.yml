@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - name: Read protected TikTok session through approved GitHub OIDC identity
+      - name: Read protected TikTok session and dedupe state through approved OIDC
         shell: bash
         run: |
           set -euo pipefail
@@ -25,17 +25,27 @@ jobs:
           code="$(curl -sS -o /tmp/session.json -w '%{http_code}' --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/tiktok/session-state)"
           echo "TIKTOK_SESSION_HTTP=$code"
           test "$code" = "200"
+          curl -fsS --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/queue-health -o /tmp/queue.json
           python3 - <<'PY'
           import json
-          d=json.load(open('/tmp/session.json'))
-          st=d.get('state') or {}
-          cookies=st.get('cookies') or []
+          d=json.load(open('/tmp/session.json')); st=d.get('state') or {}; cookies=st.get('cookies') or []
           assert d.get('available') is True and cookies, 'CENTRAL_TIKTOK_SESSION_UNAVAILABLE'
           json.dump({'cookies':cookies,'origins':st.get('origins') or []},open('/tmp/storage-state.json','w'))
           print('CENTRAL_TIKTOK_SESSION_AVAILABLE=1')
           print('CENTRAL_TIKTOK_COOKIE_COUNT='+str(len(cookies)))
+          q=json.load(open('/tmp/queue.json')); jobs=q.get('jobs') or []
+          target=[]
+          for j in jobs:
+              if j.get('platform')!='tiktok': continue
+              sid=str(j.get('source_id') or '')
+              try: a=float(j.get('source_start')); b=float(j.get('source_end'))
+              except Exception: a=b=-1
+              if sid=='9CIk-I_3VhM' and max(8,a)<min(98,b): target.append({k:j.get(k) for k in ('id','status','source_id','source_start','source_end','media_sha256','publication_started','confirmed','remote_id','error_class')})
+          print('TARGET_INTERVAL_OVERLAP_COUNT='+str(len(target)))
+          print('TARGET_INTERVAL_OVERLAPS='+json.dumps(target,separators=(',',':')))
+          print('TIKTOK_QUEUE_JOB_COUNT='+str(sum(1 for j in jobs if j.get('platform')=='tiktok')))
           PY
-      - name: Validate exact TikTok identity read-only
+      - name: Validate exact TikTok identity and inventory profile read-only
         shell: bash
         env:
           EXPECTED_TIKTOK_USERNAME: universo.anthares
@@ -45,7 +55,7 @@ jobs:
           python3 -m pip install --quiet playwright requests
           python3 -m playwright install chromium
           python3 - <<'PY'
-          import os,sys,time
+          import json,os,sys,time
           from playwright.sync_api import sync_playwright
           sys.path.insert(0,os.path.join(os.getcwd(),'direct-tiktok-publisher'))
           import tiktok_worker as tw
@@ -53,10 +63,11 @@ jobs:
           with sync_playwright() as p:
               browser=p.chromium.launch(headless=True,args=['--disable-dev-shm-usage','--no-sandbox','--disable-gpu'])
               context=browser.new_context(storage_state=state,viewport={'width':1440,'height':1000},locale='pt-BR')
-              page=context.new_page()
-              page.goto('https://www.tiktok.com/foryou',wait_until='domcontentloaded',timeout=60000)
-              time.sleep(5)
+              page=context.new_page(); page.goto('https://www.tiktok.com/foryou',wait_until='domcontentloaded',timeout=60000); time.sleep(5)
               tw.validate_tiktok_session(page,context)
               print('ANTHARES_BROWSER_TIKTOK_IDENTITY_PROVEN=universo.anthares')
               context.close(); browser.close()
+          vids=tw.inventory_profile_videos('universo.anthares')
+          print('PROFILE_VIDEO_COUNT='+str(len(vids)))
+          print('PROFILE_VIDEO_IDS='+json.dumps(sorted(list(vids))))
           PY
