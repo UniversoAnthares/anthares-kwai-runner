@@ -14,9 +14,9 @@ if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrat
 }
 Log ('elevated identity='+$identity.Name)
 
-New-Item -ItemType Directory -Force -Path $root,(Join-Path $root 'secrets'),$work,(Join-Path $work 'logs'),(Join-Path $work 'temp'),(Join-Path $work 'legacy-pc-runtime\supervisor') | Out-Null
+New-Item -ItemType Directory -Force -Path $root,$work,(Join-Path $work 'logs'),(Join-Path $work 'temp'),(Join-Path $work 'legacy-pc-runtime\supervisor') | Out-Null
 $base='https://raw.githubusercontent.com/UniversoAnthares/anthares-kwai-runner/main/anthares-remote-agent/windows/'
-foreach($name in @('run-agent-system-supervisor.ps1','load-issue-queue-auth.ps1')){
+foreach($name in @('run-agent-system-supervisor.ps1','load-issue-queue-auth.ps1','recovery-watchdog.ps1','recovery-watchdog-loop.ps1')){
   $dst=Join-Path $root $name
   if(Test-Path $dst){Copy-Item $dst ($dst+'.pre-v8-'+(Get-Date -Format 'yyyyMMddHHmmss')+'.bak') -Force}
   Invoke-WebRequest -UseBasicParsing -Uri ($base+$name) -OutFile $dst -TimeoutSec 30
@@ -27,61 +27,45 @@ foreach($name in @('run-agent-system-supervisor.ps1','load-issue-queue-auth.ps1'
 
 $v4=Join-Path $root 'anthares-remote-agent-v4.exe'
 if(-not(Test-Path $v4)){throw 'anthares-remote-agent-v4.exe is missing'}
-Set-Content -LiteralPath (Join-Path $root 'v4-validated.flag') -Value 'validated: Cloudflare MCP + private GitHub issue queue production proof' -Encoding ASCII
+$v4Hash=(Get-FileHash $v4 -Algorithm SHA256).Hash
+Copy-Item $v4 (Join-Path $root 'anthares-remote-agent-v4.lastgood.exe') -Force
+[ordered]@{v4_sha256=$v4Hash;updated_at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $root 'integrity-baseline.json') -Encoding UTF8
+Set-Content -LiteralPath (Join-Path $root 'v4-validated.flag') -Value ('validated sha256='+$v4Hash) -Encoding ASCII
+Log ('V4 pinned sha256='+$v4Hash)
 
-# Reuse the already-authorized GitHub CLI credential and seal a machine-scoped
-# copy for SYSTEM. The plaintext token is never written to disk or logged.
-$gh='C:\Program Files\GitHub CLI\gh.exe'
 $credential=Join-Path $root 'secrets\issue-queue.json'
-if(Test-Path $gh){
-  try{
-    $token=(& $gh auth token 2>$null).Trim()
-    if($token){
-      Add-Type -AssemblyName System.Security
-      $entropy=[Text.Encoding]::UTF8.GetBytes('AntharesRemoteAgentIssueQueueV1')
-      $plain=[Text.Encoding]::UTF8.GetBytes($token)
-      try{$cipher=[Security.Cryptography.ProtectedData]::Protect($plain,$entropy,[Security.Cryptography.DataProtectionScope]::LocalMachine)}finally{[Array]::Clear($plain,0,$plain.Length);$token=$null}
-      [ordered]@{github_repository='UniversoAnthares/anthares-ara-queue';github_author='UniversoAnthares';github_token_dpapi=[Convert]::ToBase64String($cipher);interval_seconds=5} | ConvertTo-Json | Set-Content -LiteralPath $credential -Encoding UTF8
-      & icacls.exe $credential /inheritance:r /grant:r 'SYSTEM:(F)' 'Administrators:(F)' | Out-Null
-      Log 'machine-scoped private queue credential installed'
-    }
-  }catch{Log ('queue credential reuse deferred: '+$_.Exception.Message)}
-}
-if(-not(Test-Path $credential)){Log 'warning: SYSTEM GitHub queue credential is not installed; HTTP failover will still operate'}
+if(-not(Test-Path $credential)){throw 'existing SYSTEM private queue credential is missing'}
 
-$task='Anthares Remote Agent SYSTEM'
-$action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\ProgramData\AntharesRemoteAgent\run-agent-system-supervisor.ps1"'
-$trigger=New-ScheduledTaskTrigger -AtStartup
-$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 12 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
-$system=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-Register-ScheduledTask -TaskName $task -Action $action -Trigger $trigger -Settings $settings -Principal $system -Force | Out-Null
-Start-ScheduledTask -TaskName $task
-Log 'SYSTEM task registered and start requested'
+function Register-SystemTask([string]$name,[string]$script){
+  $action=New-ScheduledTaskAction -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+$script+'"') -WorkingDirectory $root
+  $trigger=New-ScheduledTaskTrigger -AtStartup
+  $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+  $system=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+  Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings -Principal $system -Force | Out-Null
+}
+
+$canonicalTask='Anthares Remote Agent SYSTEM'
+$watchdogTask='Anthares Remote Recovery Watchdog'
+Register-SystemTask $canonicalTask (Join-Path $root 'run-agent-system-supervisor.ps1')
+Register-SystemTask $watchdogTask (Join-Path $root 'recovery-watchdog-loop.ps1')
+Stop-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue
+Stop-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue
+Start-ScheduledTask -TaskName $canonicalTask
+Start-ScheduledTask -TaskName $watchdogTask
+Log 'SYSTEM supervisor and watchdog registered and started'
 
 $state=Join-Path $work 'legacy-pc-runtime\supervisor\system-supervisor-state.json'
-$deadline=(Get-Date).AddSeconds(45)
+$deadline=(Get-Date).AddSeconds(60)
 $verified=$false
+$agentPid=0
 while((Get-Date)-lt $deadline){
   Start-Sleep -Seconds 2
-  if(-not(Test-Path $state)){continue}
-  try{
-    $s=Get-Content $state -Raw | ConvertFrom-Json
-    if($s.agent_pid -and (Get-Process -Id ([int]$s.agent_pid) -ErrorAction SilentlyContinue)){$verified=$true;break}
-  }catch{}
+  $agents=@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -eq 0 -and $_.Name -eq 'anthares-remote-agent-v4.exe'})
+  if($agents.Count -gt 0){$agentPid=[int]$agents[0].ProcessId;$verified=$true;break}
 }
-if(-not $verified){throw 'SYSTEM runtime did not reach running state within 45 seconds; user fallback left unchanged'}
+if(-not $verified){throw 'V4 SYSTEM runtime did not reach session 0 within 60 seconds; legacy transport left intact'}
 
-# SYSTEM has proved local liveness. Retire the user-level writer, but keep the
-# task definition disabled for deliberate emergency rollback.
-$userTask=Get-ScheduledTask -TaskName 'Anthares Remote Agent User' -ErrorAction SilentlyContinue
-if($userTask){
-  Stop-ScheduledTask -TaskName 'Anthares Remote Agent User' -ErrorAction SilentlyContinue
-  Disable-ScheduledTask -TaskName 'Anthares Remote Agent User' | Out-Null
-  Log 'user fallback disabled after SYSTEM local proof'
-}
-
-$result=[ordered]@{ok=$true;system_task=(Get-ScheduledTask -TaskName $task).State;system_state=$state;user_fallback_disabled=[bool]$userTask;render_required=$false;completed_at=(Get-Date).ToUniversalTime().ToString('o')}
+$result=[ordered]@{ok=$true;v4_sha256=$v4Hash;system_v4_pid=$agentPid;system_task=(Get-ScheduledTask -TaskName $canonicalTask).State;watchdog_task=(Get-ScheduledTask -TaskName $watchdogTask).State;system_state=$state;legacy_preserved_until_queue_proof=$true;jobs_path_migration_performed=$false;render_required=$false;completed_at=(Get-Date).ToUniversalTime().ToString('o')}
 $result | ConvertTo-Json | Set-Content (Join-Path $work 'legacy-pc-runtime\supervisor\install-result.json') -Encoding UTF8
 Log ('SUCCESS '+($result|ConvertTo-Json -Compress))
-Write-Host 'Anthares Remote SYSTEM instalado e validado.'
-Write-Host 'Pode fechar esta janela.'
+Write-Host 'Anthares Remote V4 SYSTEM instalado e validado localmente.'
