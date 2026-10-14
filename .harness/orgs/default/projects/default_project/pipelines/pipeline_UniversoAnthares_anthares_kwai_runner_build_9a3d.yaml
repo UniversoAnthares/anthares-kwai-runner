@@ -10,7 +10,7 @@ pipeline:
       clone:
         enabled: true
       cache:
-        enabled: true
+        enabled: false
       steps:
         - name: Python syntax check
           id: python_syntax
@@ -25,6 +25,7 @@ pipeline:
             shell: bash
             script: |-
               set -euo pipefail
+              rm -f .qa-control-publisher.log
               for case in \
                 happy \
                 renew-then-publish \
@@ -39,6 +40,16 @@ pipeline:
               do
                 python3 tests/test_control_publisher_integration_final.py "$case"
               done
+              grep -q 'PUBLISH_HAPPY' .qa-control-publisher.log
+              grep -q 'RENEW_THEN_PUBLISH_OK' .qa-control-publisher.log
+              grep -q 'STALE_START_SUPPRESSED' .qa-control-publisher.log
+              grep -q 'STALE_RENEW_SUPPRESSED' .qa-control-publisher.log
+              grep -q 'STALE_COMPLETION_SUPPRESSED' .qa-control-publisher.log
+              grep -q 'CRASH_BEFORE_START_OBSERVED' .qa-control-publisher.log
+              grep -q 'UNCERTAIN_POST_PUBLISH_NO_REPUBLISH' .qa-control-publisher.log
+              grep -q 'CONFIRMED_IDEMPOTENT_NO_REPUBLISH' .qa-control-publisher.log
+              grep -q 'GENERATION_ROTATION_SEMANTICS_OK' .qa-control-publisher.log
+              grep -q 'EXACTLY_ONE_PUBLISHER_PER_GENERATION' .qa-control-publisher.log
               echo HARNESS_CONTROL_PUBLISHER_OK=1
   tags:
     onboarding: "true"
