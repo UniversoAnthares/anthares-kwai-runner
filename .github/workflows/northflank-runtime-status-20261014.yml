@@ -1,0 +1,52 @@
+name: Northflank runtime status probe
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/northflank-runtime-status-20261014.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - name: Inspect existing Anthares ARA service without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          token=os.environ.get('NORTHFLANK_API_TOKEN','')
+          if not token: raise SystemExit('NORTHFLANK_API_TOKEN_MISSING')
+          h={'Authorization':'Bearer '+token}
+          def get(path):
+              req=urllib.request.Request('https://api.northflank.com/v1'+path,headers=h)
+              with urllib.request.urlopen(req,timeout=30) as r:return json.loads(r.read() or b'{}')
+          projects=get('/projects').get('data',{}).get('projects',[])
+          if isinstance(projects,dict):projects=list(projects.values())
+          pid=next((p.get('id') for p in projects if p.get('name')=='Default'),None)
+          if not pid:raise SystemExit('DEFAULT_PROJECT_NOT_FOUND')
+          services=get(f'/projects/{pid}/services').get('data',{}).get('services',[])
+          if isinstance(services,dict):services=list(services.values())
+          s=next((x for x in services if x.get('name')=='anthares-ara-northflank'),None)
+          if not s:raise SystemExit('ARA_SERVICE_NOT_FOUND')
+          sid=s.get('id') or 'anthares-ara-northflank'
+          print('SERVICE_ID_PRESENT=1')
+          print('SERVICE_STATUS='+str(s.get('status') or s.get('deploymentStatus') or 'unknown'))
+          try:
+              detail=get(f'/projects/{pid}/services/{sid}')
+              data=detail.get('data',detail)
+              for key in ('status','deploymentStatus','buildStatus','createdAt','updatedAt'):
+                  if key in data: print(key.upper()+'='+str(data.get(key)))
+          except Exception as e: print('DETAIL_ERROR='+type(e).__name__)
+          try:
+              ports=get(f'/projects/{pid}/services/{sid}/ports').get('data',{}).get('ports',[])
+              public=next((p for p in ports if p.get('public') and p.get('dns')),None)
+              print('PUBLIC_DNS_PRESENT='+str(bool(public)).lower())
+              if public: print('PUBLIC_DNS='+str(public.get('dns')))
+          except Exception as e: print('PORTS_ERROR='+type(e).__name__)
+          PY
