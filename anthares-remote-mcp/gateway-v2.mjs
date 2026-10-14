@@ -2,10 +2,10 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { createHash, createHmac, generateKeyPairSync, randomBytes, sign, timingSafeEqual } from 'node:crypto';
 
-const PUBLIC_ORIGIN=(process.env.ARA_PUBLIC_URL||'https://anthares-remote-mcp.onrender.com').replace(/\/$/,'');
+const PUBLIC_ORIGIN=(process.env.ARA_PUBLIC_URL||'https://anthares-ara-mcp.anthares1.workers.dev').replace(/\/$/,'');
 const PUBLIC_PORT=Number(process.env.PORT||3000);
 const INTERNAL_PORT=Number(process.env.ARA_INTERNAL_MCP_PORT||3118);
-const CONTROL_URL=(process.env.ANTHARES_CONTROL_URL||'https://anthares-remote-control.onrender.com').replace(/\/$/,'');
+const CONTROL_URL=(process.env.ANTHARES_CONTROL_URL||'https://anthares-ara-backup.anthares1.workers.dev').replace(/\/$/,'');
 const DEVICE_ID=process.env.ANTHARES_DEVICE_ID||'DESKTOP-FTDK0HP';
 const TOKEN_SECRET=process.env.ARA_OAUTH_TOKEN_SECRET||'';
 const SCOPES=new Set(['ara.read','ara.write']);
