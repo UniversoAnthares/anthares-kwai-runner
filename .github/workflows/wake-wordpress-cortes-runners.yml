@@ -1,0 +1,35 @@
+name: Wake WordPress CORTES runners
+on:
+  push:
+    paths:
+      - '.github/workflows/wake-wordpress-cortes-runners.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Wake all free GitLab runner surfaces
+        shell: bash
+        run: |
+          set -u
+          urls=(
+            'https://anthares-gitlab-qa-runner.onrender.com/'
+            'https://anthares-gitlab-kwai-qa-isolated.onrender.com/'
+            'https://anthares-gitlab-kwai-qa-bootstrap.onrender.com/'
+          )
+          rc=0
+          for url in "${urls[@]}"; do
+            ok=0
+            for attempt in 1 2 3 4 5 6; do
+              status="$(curl -LsS -o /tmp/runner-health -w '%{http_code}' --connect-timeout 8 --max-time 25 "$url" || true)"
+              body="$(cat /tmp/runner-health 2>/dev/null || true)"
+              echo "WAKE url=$url attempt=$attempt http=${status:-unknown} body=${body:0:80}"
+              if [ "$status" = 200 ] && [ "$body" = connected ]; then ok=1; break; fi
+              sleep 8
+            done
+            if [ "$ok" -ne 1 ]; then rc=1; fi
+          done
+          exit "$rc"
