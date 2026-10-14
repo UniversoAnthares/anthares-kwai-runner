@@ -1,0 +1,63 @@
+name: One-time suspend retired Render services (preserve X until migration)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/retire-render-suspend-20261014.yml
+permissions:
+  contents: read
+concurrency:
+  group: render-retirement-physical-suspension
+  cancel-in-progress: false
+jobs:
+  suspend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Suspend verified Anthares services in confirmed Render workspace
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.request, urllib.error
+          token=os.environ.get('RENDER_API_KEY','')
+          if not token: raise SystemExit('RENDER_API_KEY_NOT_CONFIGURED')
+          owner='tea-d9hnkbt8nd3s73f0876g'
+          targets=[["srv-db6r95gm7kps73b23jf0","anthares-ara-control"],["srv-db6ootl9fdbs73do9sm0","anthares-browser-qa-render-v2"],["srv-db6onc7f3r2c73btqcr0","anthares-browser-qa-render"],["srv-db6o0d5g1s2s738s7bp0","anthares-remote-mcp-v2"],["srv-db6ne4favr4c73cu9g9g","anthares-ara-infra-canary-v2"],["srv-db6nd1gu01pc73fg0rr0","anthares-ara-infra-canary"],["srv-db6naljbc2fs739og1s0","anthares-remote-mcp"],["srv-db6mj8navr4c73cqvgo0","anthares-remote-control"],["srv-db6lvqrl550s73bhq170","anthares-legacy-executor-probe"],["srv-db6j0e8n74is73a7vfm0","kwai-up-uiauto-builder"],["srv-db6iqllg1s2s739fq0k0","anthares-x-real-fullflow-test"],["srv-db6hikg473hc73df1upg","kwai-up-validator"],["srv-db6eajflot8c739t5m50","anthares-x-render-worker-authprobe"],["srv-db6d4iijnfac73db30jg","anthares-x-upload-bench"],["srv-db659q3bc2fs73artvfg","anthares-x-microcut-e2e"],["srv-db5ao359fdbs73c72m30","anthares-gitlab-kwai-qa-bootstrap"],["srv-db59mqcs728c73cbd7o0","anthares-gitlab-kwai-qa-isolated"],["srv-db4q57942hec73ejdbpg","anthares-gitlab-qa-runner"],["srv-db255bmk1f9s73955f3g","anthares-youtube-source-probe"],["srv-db18d3tg1s2s7391l4ng","anthares-tiktok-render-rootless"],["srv-db18bih42hec73egl1jg","anthares-tiktok-render-v2"],["srv-db18acnavr4c73ao8r6g","anthares-tiktok-render"]]
+          headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'anthares-render-retirement/1'}
+          def call(method,path):
+              for attempt in range(8):
+                  req=urllib.request.Request('https://api.render.com/v1'+path,method=method,headers=headers)
+                  try:
+                      with urllib.request.urlopen(req,timeout=30) as r:
+                          raw=r.read().decode('utf-8','replace')
+                          return r.status,json.loads(raw) if raw else {}
+                  except urllib.error.HTTPError as e:
+                      if e.code==429:
+                          time.sleep(min(75,15*(attempt+1)));continue
+                      raise RuntimeError(f'{method} {path}: HTTP {e.code} {e.read().decode()[:250]}')
+              raise RuntimeError(f'{method} {path}: rate limit retry exhausted')
+          completed=[]
+          for service_id,expected_name in targets:
+              _,info=call('GET','/services/'+service_id)
+              if info.get('ownerId')!=owner or info.get('name')!=expected_name:
+                  raise RuntimeError('SERVICE_IDENTITY_MISMATCH '+service_id)
+              if info.get('suspended')!='suspended':
+                  code,_=call('POST','/services/'+service_id+'/suspend')
+                  if code!=202: raise RuntimeError('UNEXPECTED_SUSPEND_STATUS '+service_id+' '+str(code))
+              completed.append((service_id,expected_name))
+              print('SUSPEND_REQUESTED',expected_name,service_id,flush=True)
+              time.sleep(7)
+          unconfirmed=[]
+          for service_id,expected_name in completed:
+              status='unknown'
+              for retry in range(8):
+                  _,info=call('GET','/services/'+service_id)
+                  status=info.get('suspended')
+                  if status=='suspended':break
+                  time.sleep(5)
+              if status!='suspended':unconfirmed.append(expected_name+':'+str(status))
+          print('SUSPEND_SUMMARY',json.dumps({'requested':len(completed),'confirmed':len(completed)-len(unconfirmed),'unconfirmed':unconfirmed,'x_worker_preserved':'srv-db6gcoad0e5s73alefn0'},sort_keys=True))
+          if unconfirmed:raise SystemExit(1)
+          PY
