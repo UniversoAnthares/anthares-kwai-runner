@@ -27,6 +27,8 @@ class ExecutorStatus:
     consecutive_failures: int = 0
     last_failure_class: str = ""
     adb_serial: str = ""
+    boot_completed: bool = False
+    package_installed: bool = False
     detail: str = ""
 
     def to_dict(self) -> dict:
@@ -90,22 +92,37 @@ class AdbDeviceAdapter:
                 detail=(state.stderr or state.stdout).strip(),
             )
 
+        boot = self._adb("shell", "getprop", "sys.boot_completed")
+        boot_completed = boot.returncode == 0 and boot.stdout.strip() == "1"
+        if not boot_completed:
+            return ExecutorStatus(
+                executor_id=self.executor_id,
+                online=True,
+                healthy=False,
+                ready=False,
+                authenticated=False,
+                adb_serial=self.serial,
+                boot_completed=False,
+                last_failure_class="boot",
+                detail="android boot not completed",
+            )
+
         package = self._adb("shell", "pm", "path", self.package)
         installed = package.returncode == 0 and "package:" in package.stdout
         if not installed:
             return ExecutorStatus(
                 executor_id=self.executor_id,
                 online=True,
-                healthy=True,
+                healthy=False,
                 ready=False,
                 authenticated=False,
                 adb_serial=self.serial,
+                boot_completed=True,
+                package_installed=False,
                 last_failure_class="device",
                 detail=f"{self.package} not installed",
             )
 
-        # Authentication is intentionally fail-closed. A worker may set the explicit
-        # per-device readiness bit only after its own Kwai identity/session probe.
         auth_env = os.environ.get(self.auth_env_name(), "").strip().lower()
         authenticated = auth_env in {"1", "true", "yes", "ready"}
         return ExecutorStatus(
@@ -115,7 +132,13 @@ class AdbDeviceAdapter:
             ready=authenticated,
             authenticated=authenticated,
             adb_serial=self.serial,
-            detail=f"adb and {self.package} ready" if authenticated else "Kwai session not proven ready",
+            boot_completed=True,
+            package_installed=True,
+            detail=(
+                f"adb, boot and {self.package} ready"
+                if authenticated
+                else "device healthy; Kwai session not proven ready"
+            ),
         )
 
     def auth_env_name(self) -> str:
@@ -144,8 +167,6 @@ class MEmuAdapter(AdbDeviceAdapter):
 
     @classmethod
     def from_env(cls) -> "MEmuAdapter":
-        # MEmu commonly exposes a local ADB endpoint, but no port is guessed here.
-        # The real serial must be supplied by deployment/configuration.
         return cls(
             os.environ.get("ANTHARES_MEMU_ADB_SERIAL", ""),
             adb=os.environ.get("ANTHARES_ADB", "adb"),
