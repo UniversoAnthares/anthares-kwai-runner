@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-14-ci-redundancy-r8",
+  "revision": "2026-10-14-ci-redundancy-r9",
   "ci_execution": {
     "priority": [
       "github_actions",
@@ -21,7 +21,7 @@
       "harness": "verified automatic push trigger and successful hosted run",
       "appveyor": "verified successful hosted Windows build, test and artifact upload",
       "floot": "verified remote Node execution and PHP 8.4 via php-wasm",
-      "cloudflare": "kept near end of failover chain",
+      "cloudflare": "verified Git-connected Workers build and successful live deployment on 2026-10-14",
       "gitlab": "kept last per owner request"
     }
   },
@@ -128,9 +128,11 @@
     },
     "cloudflare": {
       "ci_rank": 5,
-      "status": "configured_pending_final_live_ci_validation",
-      "active": false,
-      "runtime": "Cloudflare Workers/Builds orchestration"
+      "status": "active_verified_git_build_deploy_2026-10-14",
+      "active": true,
+      "runtime": "Cloudflare Workers Builds",
+      "project": "anthares-reserva-browser",
+      "production_branch": "main"
     },
     "bitrise": {
       "android_rank": 4,
