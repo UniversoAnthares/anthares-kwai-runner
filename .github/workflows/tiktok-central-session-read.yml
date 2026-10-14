@@ -1,12 +1,121 @@
-name: Retired legacy TikTok Render central-session workflow
+name: TikTok central session to Anthares-browser vault
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/tiktok-central-session-read.yml
 permissions:
   contents: read
+  id-token: write
+concurrency:
+  group: tiktok-central-session-browser-bridge
+  cancel-in-progress: true
 jobs:
-  retired:
+  bridge:
     runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
     steps:
-      - run: |
-          echo 'RETIRED_RENDER_WORKFLOW=1'
-          echo 'Canonical TikTok execution is Cloudflare router -> Northflank.'
+      - name: Validate bridge secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ARA_SHARED:-}" || { echo 'ARA_SHARED_MISSING'; exit 10; }
+          echo 'ARA_SHARED_PRESENT=1'
+      - name: Read protected TikTok session through approved GitHub OIDC identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          sep='&'; [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]] || sep='?'
+          aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
+          jwt="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+          test -n "$jwt"
+          echo "::add-mask::$jwt"
+          code="$(curl -sS -o /tmp/tiktok-session.json -w '%{http_code}' --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/tiktok/session-state)"
+          echo "TIKTOK_SESSION_HTTP=$code"
+          test "$code" = "200"
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/tiktok-session.json',encoding='utf-8'))
+          state=d.get('state') or {}
+          cookies=state.get('cookies') or []
+          assert d.get('available') is True, 'TIKTOK_SESSION_UNAVAILABLE'
+          assert isinstance(cookies,list) and cookies, 'TIKTOK_SESSION_COOKIES_MISSING'
+          print('TIKTOK_SESSION_AVAILABLE=1')
+          print('TIKTOK_SESSION_COOKIE_COUNT='+str(len(cookies)))
+          print('TIKTOK_SESSION_ORIGIN_COUNT='+str(len(state.get('origins') or [])))
+          PY
+      - name: Re-encrypt session directly into durable Anthares-browser runtime vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet cryptography requests
+          python3 - <<'PY'
+          import base64,hashlib,json,os,time
+          import requests
+          from cryptography.hazmat.primitives import hashes
+          from cryptography.hazmat.primitives.asymmetric import ec
+          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+          secret=os.environ['ARA_SHARED']
+          d=json.load(open('/tmp/tiktok-session.json',encoding='utf-8'))
+          src=d.get('state') or {}
+          state={'cookies':src.get('cookies') or [],'origins':src.get('origins') or []}
+          if not state['cookies']:
+              raise SystemExit('TIKTOK_SESSION_COOKIES_MISSING')
+
+          def b64(data:bytes)->str:
+              return base64.urlsafe_b64encode(data).rstrip(b'=').decode('ascii')
+
+          key=hashlib.sha256(('browser-vault-enc:'+secret).encode()).digest()
+          nonce=os.urandom(12)
+          raw=json.dumps(state,separators=(',',':')).encode()
+          cipher=AESGCM(key).encrypt(nonce,raw,b'anthares-browser-runtime-state-v1')
+          ciphertext=b64(nonce+cipher)
+          body=json.dumps({'schema':'anthares.encrypted-browser-state.v1','ciphertext':ciphertext,'sha256':hashlib.sha256(ciphertext.encode('ascii')).hexdigest()},separators=(',',':'))
+
+          order=int('FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551',16)
+          scalar=int.from_bytes(hashlib.sha256(('browser-vault-sign:'+secret).encode()).digest(),'big')%(order-1)+1
+          private=ec.derive_private_key(scalar,ec.SECP256R1())
+          ts=str(int(time.time()*1000))
+          digest=hashlib.sha256(body.encode()).hexdigest()
+          der=private.sign((ts+'.'+digest).encode(),ec.ECDSA(hashes.SHA256()))
+          r,s=decode_dss_signature(der)
+          sig=b64(r.to_bytes(32,'big')+s.to_bytes(32,'big'))
+          resp=requests.post('https://anthares-x-vault.anthares1.workers.dev/browser-state/runtime',headers={'X-Anthares-Browser-Timestamp':ts,'X-Anthares-Browser-Signature':sig,'Content-Type':'application/json'},data=body,timeout=30)
+          if resp.status_code!=200:
+              raise SystemExit('BROWSER_VAULT_HTTP_'+str(resp.status_code))
+          out=resp.json()
+          assert out.get('ok') and out.get('stored'), out
+          print('TIKTOK_SESSION_BRIDGED_TO_BROWSER_VAULT=1')
+          print('BROWSER_VAULT_SAVED_AT='+str(out.get('saved_at') or ''))
+          PY
+      - name: Probe Render-independent Anthares browser targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cf='https://anthares-reserva-browser.anthares1.workers.dev/health'
+          nf='https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x/v1/runtime/health'
+          curl -fsS --max-time 20 "$cf" -o /tmp/cf.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/cf.json'))
+          assert d.get('ok') is True and d.get('render_required') is False, d
+          print('CLOUDFLARE_RESERVE_RENDER_INDEPENDENT=1')
+          PY
+          code="$(curl -sS -o /tmp/nf.json -w '%{http_code}' --max-time 30 "$nf" || true)"
+          echo "NORTHFLANK_BROWSER_HEALTH_HTTP=$code"
+          if [ "$code" = "200" ]; then
+            python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/nf.json'))
+          b=d.get('browser') or {}
+          print('NORTHFLANK_BROWSER_HEALTHY='+str(bool(b.get('healthy'))).lower())
+          print('NORTHFLANK_BROWSER_RESTORE_STATUS='+str(b.get('restore_status') or ''))
+          PY
+          fi
