@@ -9,7 +9,7 @@ $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 $principal=[Security.Principal.WindowsPrincipal]::new($identity)
 if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
   Log 'requesting elevation'
-  Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'))
+  Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'))
   exit 0
 }
 Log ('elevated identity='+$identity.Name)
@@ -68,4 +68,3 @@ if(-not $verified){throw 'V4 SYSTEM runtime did not reach session 0 within 60 se
 $result=[ordered]@{ok=$true;v4_sha256=$v4Hash;system_v4_pid=$agentPid;system_task=(Get-ScheduledTask -TaskName $canonicalTask).State;watchdog_task=(Get-ScheduledTask -TaskName $watchdogTask).State;system_state=$state;legacy_preserved_until_queue_proof=$true;jobs_path_migration_performed=$false;render_required=$false;completed_at=(Get-Date).ToUniversalTime().ToString('o')}
 $result | ConvertTo-Json | Set-Content (Join-Path $work 'legacy-pc-runtime\supervisor\install-result.json') -Encoding UTF8
 Log ('SUCCESS '+($result|ConvertTo-Json -Compress))
-Write-Host 'Anthares Remote V4 SYSTEM instalado e validado localmente.'
