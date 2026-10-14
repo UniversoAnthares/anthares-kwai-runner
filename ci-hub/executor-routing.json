@@ -1,5 +1,30 @@
 {
-  "revision": "2026-10-14-physical-primary-memu-fallback-r7",
+  "revision": "2026-10-14-ci-redundancy-r8",
+  "ci_execution": {
+    "priority": [
+      "github_actions",
+      "harness",
+      "appveyor",
+      "floot",
+      "cloudflare",
+      "gitlab"
+    ],
+    "primary": "github_actions",
+    "redundancy": [
+      "harness",
+      "appveyor",
+      "floot",
+      "cloudflare",
+      "gitlab"
+    ],
+    "notes": {
+      "harness": "verified automatic push trigger and successful hosted run",
+      "appveyor": "verified successful hosted Windows build, test and artifact upload",
+      "floot": "verified remote Node execution and PHP 8.4 via php-wasm",
+      "cloudflare": "kept near end of failover chain",
+      "gitlab": "kept last per owner request"
+    }
+  },
   "android_execution": {
     "priority": [
       "physical_android",
@@ -79,6 +104,34 @@
       "android_eligible": false,
       "browser_eligible": false
     },
+    "harness": {
+      "ci_rank": 2,
+      "status": "active_verified_push_trigger_success_2026-10-14",
+      "active": true,
+      "runtime": "Harness Cloud hosted Linux CI",
+      "config": ".harness/orgs/default/projects/default_project/pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d.yaml"
+    },
+    "appveyor": {
+      "ci_rank": 3,
+      "status": "active_verified_success_2026-10-14",
+      "active": true,
+      "runtime": "AppVeyor hosted Windows Visual Studio 2022",
+      "config": "appveyor.yml",
+      "artifact": "anthares-remote-agent-windows"
+    },
+    "floot": {
+      "ci_rank": 4,
+      "status": "active_verified_remote_node_php_wasm_2026-10-14",
+      "active": true,
+      "runtime": "Floot remote VM",
+      "php": "8.4 via php-wasm"
+    },
+    "cloudflare": {
+      "ci_rank": 5,
+      "status": "configured_pending_final_live_ci_validation",
+      "active": false,
+      "runtime": "Cloudflare Workers/Builds orchestration"
+    },
     "bitrise": {
       "android_rank": 4,
       "browser_rank": 2,
@@ -116,7 +169,8 @@
       "browser_eligible": false
     },
     "gitlab": {
-      "status": "active_verified_pipelines_2940767397_2940780957",
+      "ci_rank": 6,
+      "status": "active_verified_pipelines_2940767397_2940780957_but_last_in_general_ci_failover",
       "active": true,
       "android_eligible": false,
       "browser_eligible": true,
@@ -126,14 +180,15 @@
       "browser_qa_entrypoint": "ci/shared/anthares-browser-runtime-qa.sh"
     },
     "github_actions": {
-      "status": "remote_android_secondary_hardware_acceleration_supported_live_kwai_probe_pending",
+      "ci_rank": 1,
+      "status": "primary_general_ci_and_remote_android_secondary",
       "active": true,
       "android_eligible": true,
       "browser_eligible": false,
       "android_rank": 3,
       "interactive_manual_auth": true,
-      "runtime": "GitHub-hosted ubuntu-24.04 /dev/kvm emulator",
-      "config": ".github/workflows/anthares-android-replacement.yml"
+      "runtime": "GitHub-hosted runners",
+      "config": ".github/workflows"
     }
   }
 }
