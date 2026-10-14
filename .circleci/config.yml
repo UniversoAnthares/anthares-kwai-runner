@@ -21,10 +21,7 @@ jobs:
           command: |
             set -Eeuo pipefail
             TOKEN="${CIRCLECI_TOKEN:-${CIRCLE_TOKEN:-}}"
-            if [ -z "$TOKEN" ]; then
-              echo "CIRCLECI_ACTIVATION=NO_API_TOKEN"
-              exit 0
-            fi
+            test -n "$TOKEN" || { echo "CIRCLECI_ACTIVATION=NO_API_TOKEN"; exit 23; }
             response="$(curl -fsS -X POST \
               'https://circleci.com/api/v1.1/project/github/UniversoAnthares/anthares-wordpress/follow' \
               -H "Circle-Token: $TOKEN")"
@@ -42,14 +39,11 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Deploy generic Anthares Browser when credential is available
+          name: Deploy generic Anthares Browser
           command: |
             set -Eeuo pipefail
             export CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-${CF_API_TOKEN:-}}"
-            if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-              echo "ANTHARES_BROWSER_DEPLOY=NO_CLOUDFLARE_TOKEN"
-              exit 0
-            fi
+            test -n "$CLOUDFLARE_API_TOKEN" || { echo "ANTHARES_BROWSER_DEPLOY=NO_CLOUDFLARE_TOKEN"; exit 24; }
             cd anthares-reserva-browser
             npm ci
             npx wrangler deploy
