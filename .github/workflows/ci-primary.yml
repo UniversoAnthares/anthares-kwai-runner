@@ -5,12 +5,17 @@ on:
     branches: [main]
     paths:
       - 'anthares-remote-agent/**'
+      - 'tests/test_control_publisher_integration_final.py'
       - '.github/workflows/ci-primary.yml'
       - 'appveyor.yml'
       - 'azure-pipelines.yml'
       - 'cloudflare-ci/**'
   pull_request:
     branches: [main]
+    paths:
+      - 'anthares-remote-agent/**'
+      - 'tests/test_control_publisher_integration_final.py'
+      - '.github/workflows/ci-primary.yml'
   workflow_dispatch:
 
 permissions:
@@ -22,6 +27,7 @@ concurrency:
 
 jobs:
   go-agent:
+    name: Go agent
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -31,8 +37,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
-          cache-dependency-path: anthares-remote-agent/go.mod
+          go-version-file: anthares-remote-agent/go.mod
+          cache: false
       - name: Report legacy formatting drift
         run: |
           bad="$(gofmt -l .)"
@@ -44,7 +50,54 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./... -count=1
-      - name: Build Linux
-        run: go build -o ../.ci-agent-linux ./cmd/agent
-      - name: Verify artifact
-        run: test -s ../.ci-agent-linux
+      - name: Build Linux amd64
+        run: go build -o agent-linux-amd64 ./cmd/agent
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: anthares-remote-agent-linux-amd64
+          path: anthares-remote-agent/agent-linux-amd64
+          if-no-files-found: error
+          retention-days: 7
+
+  control-publisher:
+    name: Control publisher acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Python syntax check
+        run: python -m compileall -q tests
+      - name: Acceptance matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .qa-control-publisher.log
+          for case in \
+            happy \
+            renew-then-publish \
+            stale-start \
+            stale-renew \
+            stale-complete \
+            crash-before-start \
+            uncertain-no-republish \
+            confirmed-idempotent \
+            generation-rotates \
+            duplicate-publisher-boundary
+          do
+            python tests/test_control_publisher_integration_final.py "$case"
+          done
+          grep -q 'PUBLISH_HAPPY' .qa-control-publisher.log
+          grep -q 'RENEW_THEN_PUBLISH_OK' .qa-control-publisher.log
+          grep -q 'STALE_START_SUPPRESSED' .qa-control-publisher.log
+          grep -q 'STALE_RENEW_SUPPRESSED' .qa-control-publisher.log
+          grep -q 'STALE_COMPLETION_SUPPRESSED' .qa-control-publisher.log
+          grep -q 'CRASH_BEFORE_START_OBSERVED' .qa-control-publisher.log
+          grep -q 'UNCERTAIN_POST_PUBLISH_NO_REPUBLISH' .qa-control-publisher.log
+          grep -q 'CONFIRMED_IDEMPOTENT_NO_REPUBLISH' .qa-control-publisher.log
+          grep -q 'GENERATION_ROTATION_SEMANTICS_OK' .qa-control-publisher.log
+          grep -q 'EXACTLY_ONE_PUBLISHER_PER_GENERATION' .qa-control-publisher.log
+          echo GITHUB_CONTROL_PUBLISHER_OK
