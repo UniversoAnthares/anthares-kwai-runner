@@ -3,6 +3,7 @@ import app, { BrowserState } from "./entry.js";
 
 export { BrowserState };
 
+const GENERIC_VERSION = "2026-10-14-generic-browser-v2";
 const ALLOWED_HOSTS = new Set([
   "app.circleci.com",
   "circleci.com",
@@ -109,6 +110,24 @@ async function closeGeneric(env) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === "/health" && request.method === "GET") {
+      let base = {};
+      try {
+        const response = await app.fetch(request, env, ctx);
+        if (response.ok) base = await response.json();
+      } catch {}
+      return json({
+        ...base,
+        ok: true,
+        service: "anthares-reserva-browser",
+        generic_browser: true,
+        generic_browser_version: GENERIC_VERSION,
+        generic_browser_allowed_hosts: [...ALLOWED_HOSTS],
+        browser_binding: !!env.BROWSER,
+        durable_state_binding: !!env.BROWSER_STATE,
+        render_required: false,
+      });
+    }
     if (url.pathname === "/browser/navigate" && request.method === "POST") {
       if (!authorized(request, env)) return json({error:"unauthorized"}, 401);
       let body;
@@ -119,14 +138,6 @@ export default {
     if (url.pathname === "/browser/close" && request.method === "POST") {
       if (!authorized(request, env)) return json({error:"unauthorized"}, 401);
       return json(await closeGeneric(env));
-    }
-    if (url.pathname === "/health" && request.method === "GET") {
-      const response = await app.fetch(request, env, ctx);
-      if (!response.ok) return response;
-      const body = await response.json();
-      body.generic_browser = true;
-      body.generic_browser_allowed_hosts = [...ALLOWED_HOSTS];
-      return json(body);
     }
     return app.fetch(request, env, ctx);
   },
