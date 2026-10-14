@@ -1,0 +1,17 @@
+version: 2.1
+
+jobs:
+  provider_smoke:
+    docker:
+      - image: cimg/base:stable
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Provider hub smoke
+          command: CI_PROVIDER=circleci bash ci/shared/provider-smoke.sh
+
+workflows:
+  anthares_circleci_smoke:
+    jobs:
+      - provider_smoke
