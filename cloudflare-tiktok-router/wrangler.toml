@@ -2,7 +2,3 @@ name = "anthares-tiktok-worker"
 main = "src/index.js"
 compatibility_date = "2026-10-13"
 workers_dev = true
-
-[vars]
-ALLOW_RENDER_FALLBACK = "0"
-RENDER_TIKTOK_FALLBACK = "https://anthares-tiktok-render-rootless.onrender.com"
