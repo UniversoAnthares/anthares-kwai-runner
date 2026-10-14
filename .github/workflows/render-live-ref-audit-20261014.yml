@@ -1,0 +1,36 @@
+name: Audit remaining operational Render endpoint references
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/render-live-ref-audit-20261014.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: List remaining onrender runtime references
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          roots=[Path('.github/workflows'),Path('infra'),Path('anthares-remote-mcp'),Path('anthares-remote-agent'),Path('anthares-brouser')]
+          rows=[]
+          for root in roots:
+              if not root.exists(): continue
+              for p in root.rglob('*'):
+                  if not p.is_file(): continue
+                  try:s=p.read_text(encoding='utf-8-sig')
+                  except Exception:continue
+                  if 'onrender.com' not in s:continue
+                  # Retirement tooling may call api.render.com, but no live service should retain onrender.com.
+                  hosts=sorted(set(re.findall(r'https?://([A-Za-z0-9.-]+\.onrender\.com)',s)))
+                  rows.append((str(p),hosts))
+          print('REMAINING_ONRENDER_FILES='+str(len(rows)))
+          for p,hosts in rows:
+              print(p+' :: '+','.join(hosts))
+          PY
