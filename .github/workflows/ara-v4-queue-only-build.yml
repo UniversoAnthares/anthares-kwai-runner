@@ -3,6 +3,9 @@ on:
   push:
     paths:
       - '.github/workflows/ara-v4-queue-only-build.yml'
+      - 'anthares-remote-agent/cmd/agent/**'
+      - 'anthares-remote-agent/go.mod'
+      - 'anthares-remote-agent/go.sum'
   workflow_dispatch:
 jobs:
   build:
