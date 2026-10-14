@@ -13,8 +13,6 @@ import subprocess
 from dataclasses import dataclass, asdict
 from typing import Callable, Optional
 
-KWAI_PACKAGE = os.environ.get("KWAI_ANDROID_PACKAGE", "com.kwai.video")
-
 
 @dataclass
 class ExecutorStatus:
@@ -37,10 +35,12 @@ class ExecutorStatus:
 
 class AdbDeviceAdapter:
     executor_id = "android"
+    default_package = "com.kwai.video"
 
-    def __init__(self, serial: str, *, adb: str = "adb", run: Callable = subprocess.run):
+    def __init__(self, serial: str, *, adb: str = "adb", package: str | None = None, run: Callable = subprocess.run):
         self.serial = (serial or "").strip()
         self.adb = adb
+        self.package = (package or self.default_package).strip()
         self._run = run
 
     def _adb(self, *args: str, timeout: int = 15) -> subprocess.CompletedProcess:
@@ -90,7 +90,7 @@ class AdbDeviceAdapter:
                 detail=(state.stderr or state.stdout).strip(),
             )
 
-        package = self._adb("shell", "pm", "path", KWAI_PACKAGE)
+        package = self._adb("shell", "pm", "path", self.package)
         installed = package.returncode == 0 and "package:" in package.stdout
         if not installed:
             return ExecutorStatus(
@@ -101,7 +101,7 @@ class AdbDeviceAdapter:
                 authenticated=False,
                 adb_serial=self.serial,
                 last_failure_class="device",
-                detail=f"{KWAI_PACKAGE} not installed",
+                detail=f"{self.package} not installed",
             )
 
         # Authentication is intentionally fail-closed. A worker may set the explicit
@@ -115,7 +115,7 @@ class AdbDeviceAdapter:
             ready=authenticated,
             authenticated=authenticated,
             adb_serial=self.serial,
-            detail="adb and Kwai package ready" if authenticated else "Kwai session not proven ready",
+            detail=f"adb and {self.package} ready" if authenticated else "Kwai session not proven ready",
         )
 
     def auth_env_name(self) -> str:
@@ -124,10 +124,15 @@ class AdbDeviceAdapter:
 
 class PhysicalDeviceAdapter(AdbDeviceAdapter):
     executor_id = "physical_android"
+    default_package = "kwai.lite.video"
 
     @classmethod
     def from_env(cls) -> "PhysicalDeviceAdapter":
-        return cls(os.environ.get("ANTHARES_PHYSICAL_ADB_SERIAL", ""))
+        return cls(
+            os.environ.get("ANTHARES_PHYSICAL_ADB_SERIAL", ""),
+            adb=os.environ.get("ANTHARES_ADB", "adb"),
+            package=os.environ.get("ANTHARES_PHYSICAL_KWAI_PACKAGE", cls.default_package),
+        )
 
     def auth_env_name(self) -> str:
         return "ANTHARES_PHYSICAL_KWAI_AUTHENTICATED"
@@ -135,12 +140,17 @@ class PhysicalDeviceAdapter(AdbDeviceAdapter):
 
 class MEmuAdapter(AdbDeviceAdapter):
     executor_id = "memu_android"
+    default_package = "com.kwai.video"
 
     @classmethod
     def from_env(cls) -> "MEmuAdapter":
         # MEmu commonly exposes a local ADB endpoint, but no port is guessed here.
         # The real serial must be supplied by deployment/configuration.
-        return cls(os.environ.get("ANTHARES_MEMU_ADB_SERIAL", ""))
+        return cls(
+            os.environ.get("ANTHARES_MEMU_ADB_SERIAL", ""),
+            adb=os.environ.get("ANTHARES_ADB", "adb"),
+            package=os.environ.get("ANTHARES_MEMU_KWAI_PACKAGE", cls.default_package),
+        )
 
     def auth_env_name(self) -> str:
         return "ANTHARES_MEMU_KWAI_AUTHENTICATED"
