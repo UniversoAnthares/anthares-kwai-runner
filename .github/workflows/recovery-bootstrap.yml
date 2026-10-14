@@ -77,6 +77,7 @@ jobs:
           node --check src/index.js
           node --check src/entry.js
           node --check src/generic-entry.js
+          grep -q 'main = "src/generic-entry.js"' wrangler.toml
       - name: Deploy generic browser
         working-directory: anthares-reserva-browser
         env:
@@ -87,17 +88,18 @@ jobs:
           if [ -n "${ANTHARES_RESERVA_TOKEN:-}" ]; then
             printf '%s' "$ANTHARES_RESERVA_TOKEN" | npx wrangler secret put ANTHARES_RESERVA_TOKEN
           fi
-          npx wrangler deploy
+          npx wrangler deploy src/generic-entry.js --config wrangler.toml
       - name: Verify generic browser contract
         run: |
           set -euo pipefail
           for attempt in $(seq 1 12); do
-            if curl -fsS --max-time 10 https://anthares-reserva-browser.anthares1.workers.dev/health -o /tmp/health.json; then
+            if curl -fsS --max-time 10 "https://anthares-reserva-browser.anthares1.workers.dev/health?rev=${GITHUB_SHA}" -o /tmp/health.json; then
               if python - <<'PY'
           import json
           d=json.load(open('/tmp/health.json', encoding='utf-8'))
           assert d.get('ok') is True, d
           assert d.get('generic_browser') is True, d
+          assert d.get('generic_browser_version') == '2026-10-14-generic-browser-v2', d
           hosts=set(d.get('generic_browser_allowed_hosts') or [])
           assert 'app.circleci.com' in hosts, d
           assert 'github.com' in hosts, d
@@ -107,4 +109,5 @@ jobs:
             fi
             sleep 5
           done
+          cat /tmp/health.json || true
           exit 13
