@@ -17,4 +17,4 @@ RUN mkdir -p /ms-playwright \
     && chown -R ara:ara /app /ms-playwright
 USER ara
 EXPOSE 10000
-CMD ["sh","-c","exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 4 --timeout 240 northflank_mux:app"]
+CMD ["sh","-c","set -eu; expected=$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()'); if [ ! -x \"$expected\" ] && [ -x /usr/bin/chromium ]; then mkdir -p \"$(dirname \"$expected\")\"; ln -sf /usr/bin/chromium \"$expected\"; fi; exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 4 --timeout 240 northflank_mux:app"]
