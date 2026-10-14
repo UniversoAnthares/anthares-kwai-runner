@@ -1,79 +1,42 @@
 {
-  "revision": "2026-10-14-ci-redundancy-r9",
+  "revision": "2026-10-14-ci-redundancy-r10",
   "ci_execution": {
-    "priority": [
-      "github_actions",
-      "harness",
-      "appveyor",
-      "floot",
-      "cloudflare",
-      "gitlab"
-    ],
+    "priority": ["github_actions", "harness", "appveyor", "floot", "cloudflare", "gitlab"],
     "primary": "github_actions",
-    "redundancy": [
-      "harness",
-      "appveyor",
-      "floot",
-      "cloudflare",
-      "gitlab"
-    ],
+    "redundancy": ["harness", "appveyor", "floot", "cloudflare", "gitlab"],
     "notes": {
       "harness": "verified automatic push trigger and successful hosted run",
       "appveyor": "verified successful hosted Windows build, test and artifact upload",
       "floot": "verified remote Node execution and PHP 8.4 via php-wasm",
-      "cloudflare": "verified Git-connected Workers build and successful live deployment on 2026-10-14",
-      "gitlab": "kept last per owner request"
+      "cloudflare": "verified Git-connected Workers build, live deployment and recovery-readiness checks on 2026-10-14",
+      "gitlab": "last in general CI failover; shared runner currently blocked by ci_quota_exceeded"
     }
   },
   "android_execution": {
-    "priority": [
-      "physical_android",
-      "memu_android",
-      "github_actions",
-      "bitrise",
-      "firebase_test_lab"
-    ],
+    "priority": ["physical_android", "memu_android", "github_actions", "bitrise", "firebase_test_lab"],
     "primary_device": "physical_android",
     "fallback_device": "memu_android",
     "github_actions": "remote_android_secondary_live_validation_required",
     "failover": {
       "failure_threshold": 3,
       "queue_threshold_seconds": 90,
-      "order": [
-        "physical_android",
-        "memu_android",
-        "github_actions",
-        "bitrise",
-        "firebase_test_lab"
-      ],
+      "order": ["physical_android", "memu_android", "github_actions", "bitrise", "firebase_test_lab"],
       "memu_only_after_primary_failure": true,
-      "non_failover_failure_classes": [
-        "content",
-        "policy",
-        "platform"
-      ]
+      "non_failover_failure_classes": ["content", "policy", "platform"]
     }
   },
   "browser_execution": {
-    "priority": [
-      "gitlab",
-      "bitrise",
-      "render"
-    ],
-    "github_actions": "android_only_no_browser_default",
-    "redundancy": "gitlab_ci_primary_render_runtime_fallback_bitrise_pending_live_proof",
+    "priority": ["cloudflare", "bitrise", "gitlab", "render"],
+    "primary": "cloudflare",
+    "redundancy": "cloudflare_primary_bitrise_pending_gitlab_quota_blocked_render_final_legacy",
     "failover": {
       "failure_threshold": 1,
       "queue_threshold_seconds": 90,
-      "order": [
-        "gitlab",
-        "bitrise",
-        "render"
-      ]
+      "order": ["cloudflare", "bitrise", "gitlab", "render"]
     },
     "shared_test": "ci/shared/anthares-browser-runtime-qa.sh",
     "cases_per_ci_provider": 40,
-    "tertiary_note": "Render is runtime/browser-control fallback; Bitrise is not eligible until a live QA run passes. Browser QA 40-case parity on GitLab requires live proof."
+    "tertiary_note": "Cloudflare is the proven active browser runtime. Bitrise remains ineligible until live proof; GitLab is blocked by CI quota; Render is final legacy redundancy only."
   },
   "providers": {
     "physical_android": {
@@ -128,11 +91,13 @@
     },
     "cloudflare": {
       "ci_rank": 5,
-      "status": "active_verified_git_build_deploy_2026-10-14",
+      "browser_rank": 1,
+      "status": "active_verified_git_build_deploy_and_recovery_2026-10-14",
       "active": true,
-      "runtime": "Cloudflare Workers Builds",
+      "runtime": "Cloudflare Workers Builds + Browser Rendering + Durable Objects",
       "project": "anthares-reserva-browser",
-      "production_branch": "main"
+      "production_branch": "main",
+      "browser_eligible": true
     },
     "bitrise": {
       "android_rank": 4,
@@ -156,10 +121,10 @@
       "android_eligible": true
     },
     "render": {
-      "browser_rank": 3,
-      "status": "retirement_pending_runtime_migration",
+      "browser_rank": 4,
+      "status": "final_legacy_redundancy_retirement_pending",
       "runtime": "legacy independent hosted service/browser worker infrastructure",
-      "role": "legacy tertiary runtime only while being retired",
+      "role": "final browser/runtime fallback only while being retired",
       "android_eligible": false,
       "active": true,
       "browser_eligible": true
@@ -172,11 +137,11 @@
     },
     "gitlab": {
       "ci_rank": 6,
-      "status": "active_verified_pipelines_2940767397_2940780957_but_last_in_general_ci_failover",
-      "active": true,
+      "status": "standby_quota_blocked_ci_quota_exceeded_2026-10-14",
+      "active": false,
       "android_eligible": false,
       "browser_eligible": true,
-      "browser_rank": 1,
+      "browser_rank": 3,
       "runtime": "GitLab SaaS hosted Linux Docker CI",
       "config": ".gitlab-ci.yml",
       "browser_qa_entrypoint": "ci/shared/anthares-browser-runtime-qa.sh"
