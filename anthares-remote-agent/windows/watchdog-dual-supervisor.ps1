@@ -1,26 +1,18 @@
 $ErrorActionPreference='SilentlyContinue'
+# Retired by Phase 4. A second HTTP/user-session supervisor violates the
+# single-writer SYSTEM/session-0 invariant and can resurrect legacy control.
+# Canonical recovery is recovery-watchdog-loop.ps1 -> recovery-watchdog.ps1.
 $root='C:\ProgramData\AntharesRemoteAgent'
-$standby='https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run'
-
-function Warm-Standby {
-    try {
-        Invoke-WebRequest -UseBasicParsing -Uri ($standby + '/healthz') -TimeoutSec 20 | Out-Null
-    } catch {}
-}
-
-function Ensure-Supervisor([string]$scriptName) {
-    $launcher=Join-Path $root $scriptName
-    if(-not (Test-Path $launcher)){ return }
-    $escaped=[regex]::Escape($scriptName)
-    $running=Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object {
-        $_.CommandLine -match $escaped
-    }
-    if(-not $running){
-        $cmd="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcher`""
-        ([wmiclass]'Win32_Process').Create($cmd) | Out-Null
-    }
-}
-
-Warm-Standby
-Ensure-Supervisor 'run-agent.ps1'
-Ensure-Supervisor 'run-agent-standard.ps1'
+$state='D:\AntharsWork\legacy-pc-runtime\supervisor\dual-supervisor-retired.json'
+try{
+  New-Item -ItemType Directory -Force -Path (Split-Path $state) | Out-Null
+  [pscustomobject]@{
+    retired=$true
+    replacement=(Join-Path $root 'recovery-watchdog-loop.ps1')
+    canonical_executor='SYSTEM/session-0'
+    canonical_transport='private-issue-queues'
+    render_required=$false
+    updated_at=(Get-Date).ToUniversalTime().ToString('o')
+  } | ConvertTo-Json | Set-Content -Path $state -Encoding UTF8
+}catch{}
+exit 0
