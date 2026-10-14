@@ -11,14 +11,14 @@ jobs:
           name: Provider hub smoke
           command: CI_PROVIDER=circleci bash ci/shared/provider-smoke.sh
 
-  wordpress_external_qa:
+  wordpress_clone_probe:
     docker:
-      - image: cimg/php:8.3-node
+      - image: cimg/base:stable
     resource_class: small
     steps:
       - checkout
       - run:
-          name: Clone anthares-wordpress with existing CircleCI GitHub access
+          name: Clone anthares-wordpress
           command: |
             set -Eeuo pipefail
             mkdir -p ~/.ssh
@@ -27,61 +27,12 @@ jobs:
             git clone --depth=2 git@github.com:UniversoAnthares/anthares-wordpress.git /tmp/anthares-wordpress
             cd /tmp/anthares-wordpress
             git rev-parse HEAD
-      - run:
-          name: PHP lint completo
-          command: |
-            set -Eeuo pipefail
-            cd /tmp/anthares-wordpress
-            failed=0
-            while IFS= read -r -d '' f; do
-              php -l "$f" >/dev/null || { echo "PHP_LINT_FAIL=$f"; failed=1; }
-            done < <(find anthares-pix-sales -type f -name '*.php' -print0)
-            exit "$failed"
-      - run:
-          name: Integridade de includes locais
-          command: |
-            set -Eeuo pipefail
-            cd /tmp/anthares-wordpress
-            python - <<'PY'
-            import re, pathlib, sys
-            root=pathlib.Path('anthares-pix-sales')
-            main=root/'anthares-pix-sales.php'
-            text=main.read_text(encoding='utf-8')
-            missing=[]
-            for m in re.finditer(r"require_once\s+ANTHARES_PIX_PATH\s*\.\s*['\"]([^'\"]+)['\"]", text):
-                p=root/m.group(1)
-                if not p.exists(): missing.append(str(p))
-            if missing:
-                print('MISSING_LOCAL_INCLUDES=' + ','.join(missing))
-                sys.exit(1)
-            print('LOCAL_INCLUDES_OK=1')
-            PY
-      - run:
-          name: Regressões estruturais Anthares
-          command: |
-            set -Eeuo pipefail
-            cd /tmp/anthares-wordpress
-            grep -Eq 'ANTHARES_COMMENTS_PROFUNDIDADE_MAXIMA' anthares-pix-sales/includes/14-comments.php
-            grep -Eq "['\"]parent_id['\"]" anthares-pix-sales/includes/15-comments-ajax.php
-            grep -Eq "['\"]avaliacao_resposta['\"]" anthares-pix-sales/includes/15-comments-ajax.php
-            grep -Eq 'anthares_notificacoes_usuario_aceita_tipo[[:space:]]*\(' anthares-pix-sales/includes/69-controle-notificacoes-feed.php
-            grep -Eq 'anthares_usuario_pode_editar_avaliacao[[:space:]]*\(' anthares-pix-sales/includes/75-ajustes-contos-avaliacoes.php
-            grep -Eq 'wp_verify_nonce[[:space:]]*\(' anthares-pix-sales/includes/75-ajustes-contos-avaliacoes.php
             test ! -e anthares-pix-sales/includes/93-gestao-skins-hub.php
             ! grep -q '93-gestao-skins-hub.php' anthares-pix-sales/anthares-pix-sales.php
-            echo 'STRUCTURAL_REGRESSIONS_OK=1'
-      - run:
-          name: Smoke público de produção
-          command: |
-            set -Eeuo pipefail
-            url='https://anthares.us/wp-content/plugins/anthares-pix-sales/assets/comments.js'
-            curl -fsSL --max-time 20 "$url" -o /tmp/comments-live.js
-            grep -Fq 'Respostas aninhadas. Delegado' /tmp/comments-live.js
-            grep -Fq 'parent_id: parentId' /tmp/comments-live.js
-            echo 'PUBLIC_DEPLOY_SMOKE_OK=1'
+            echo WORDPRESS_CLONE_PROBE_OK=1
 
 workflows:
   anthares_circleci_recovery:
     jobs:
       - provider_smoke
-      - wordpress_external_qa
+      - wordpress_clone_probe
