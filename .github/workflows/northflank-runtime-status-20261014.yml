@@ -41,14 +41,18 @@ jobs:
           for key in ('status','deploymentStatus','buildStatus','createdAt','updatedAt'):
               if key in detail: print(key.upper()+'='+str(detail.get(key)))
           ports=get(f'/projects/{pid}/services/{sid}/ports').get('data',{}).get('ports',[])
+          print('PORT_COUNT='+str(len(ports)))
+          for p in ports:
+              safe={k:p.get(k) for k in ('name','port','internalPort','public','protocol','dns','mode') if k in p}
+              print('PORT='+json.dumps(safe,sort_keys=True))
           public=next((p for p in ports if p.get('public') and p.get('dns')),None)
           print('PUBLIC_DNS_PRESENT='+str(bool(public)).lower())
           if public: print('PUBLIC_DNS='+str(public.get('dns')))
-          q=urllib.parse.urlencode({'type':'runtime','queryType':'range','duration':1200,'lineLimit':120,'direction':'backward'})
+          q=urllib.parse.urlencode({'type':'runtime','queryType':'range','duration':1200,'lineLimit':80,'direction':'backward'})
           try:
               logs=get(f'/projects/{pid}/services/{sid}/logs?{q}').get('data',[])
               print('RUNTIME_LOG_LINES='+str(len(logs)))
-              for row in logs[-80:]:
+              for row in logs[-50:]:
                   line=str(row.get('log') or '').replace('\n',' ')[:1200]
                   print('RUNTIME_LOG '+str(row.get('ts') or '')+' '+line)
           except Exception as e:
