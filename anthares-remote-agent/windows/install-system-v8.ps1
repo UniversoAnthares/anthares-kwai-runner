@@ -84,8 +84,9 @@ function Invoke-GitHubQueueProof {
         if(-not [bool]$remoteResult.ok){throw ('queue proof command failed: '+[string]$remoteResult.error)}
         $health=([string]$remoteResult.output)|ConvertFrom-Json
         if(-not [bool]$health.ok -or -not [bool]$health.queue_configured){throw 'agent_health proof returned unhealthy queue configuration'}
+        if(-not [bool]$health.http_control){throw 'agent_health proof returned MCP HTTP transport disabled'}
         if([string]$health.device_id -ne 'DESKTOP-FTDK0HP'){throw 'agent_health proof returned wrong device'}
-        return [pscustomobject]@{ok=$true;issue=$number;job_id=$jobId;agent_pid=[int]$health.pid;queue_providers=@($health.queue_providers)}
+        return [pscustomobject]@{ok=$true;issue=$number;job_id=$jobId;agent_pid=[int]$health.pid;queue_providers=@($health.queue_providers);http_control=[bool]$health.http_control}
       }
     }
     throw 'GitHub queue proof timed out without ARA_RESULT_B64 response'
@@ -117,11 +118,11 @@ if(-not $verified){throw 'V4 SYSTEM runtime did not reach session 0 within 60 se
 
 $proof=Invoke-GitHubQueueProof
 if(-not $proof.ok){throw 'Phase 4 queue proof failed; legacy transport left intact'}
-Log ('queue proof passed issue='+$proof.issue+' job='+$proof.job_id+' pid='+$proof.agent_pid)
+Log ('dual-transport proof passed issue='+$proof.issue+' job='+$proof.job_id+' pid='+$proof.agent_pid)
 
 foreach($oldTask in @('Anthares Remote Agent User','Anthares-GitHub-Queue-Bridge')){try{Disable-ScheduledTask -TaskName $oldTask -ErrorAction SilentlyContinue|Out-Null}catch{}}
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -ne 0 -and $_.Name -match '^anthares-remote-agent(?:-v4|-standard)?\.exe$'}|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
 
-$result=[ordered]@{ok=$true;install_root=$root;work_root=$work;v4_sha256=$v4Hash;system_v4_pid=$agentPid;system_task=(Get-ScheduledTask -TaskName $canonicalTask).State;watchdog_task=(Get-ScheduledTask -TaskName $watchdogTask).State;system_state=$state;queue_credential_validated=$true;queue_end_to_end_proof=$true;queue_proof_issue=$proof.issue;queue_proof_job_id=$proof.job_id;queue_providers=$proof.queue_providers;single_executor_enforced=$true;legacy_preserved_until_queue_proof=$false;jobs_path_migration_performed=$false;render_required=$false;completed_at=(Get-Date).ToUniversalTime().ToString('o')}
+$result=[ordered]@{ok=$true;install_root=$root;work_root=$work;v4_sha256=$v4Hash;system_v4_pid=$agentPid;system_task=(Get-ScheduledTask -TaskName $canonicalTask).State;watchdog_task=(Get-ScheduledTask -TaskName $watchdogTask).State;system_state=$state;queue_credential_validated=$true;queue_end_to_end_proof=$true;mcp_http_transport_configured=$true;queue_proof_issue=$proof.issue;queue_proof_job_id=$proof.job_id;queue_providers=$proof.queue_providers;single_executor_enforced=$true;legacy_preserved_until_queue_proof=$false;jobs_path_migration_performed=$false;render_required=$false;completed_at=(Get-Date).ToUniversalTime().ToString('o')}
 $result | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $work 'legacy-pc-runtime\supervisor\install-result.json') -Encoding UTF8
 Log ('SUCCESS '+($result|ConvertTo-Json -Compress -Depth 5))
