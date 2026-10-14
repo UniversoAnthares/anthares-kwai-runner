@@ -1,0 +1,97 @@
+name: Recover vault-backed Anthares browser on Northflank
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/northflank-anthares-browser-recover.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: northflank-anthares-browser-recover
+  cancel-in-progress: true
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      ARA_DEVICE_HASH_DESKTOP_FTDK0HP: ${{ secrets.ARA_DEVICE_HASH_DESKTOP_FTDK0HP }}
+    steps:
+      - name: Configure existing Render-independent service and rebuild
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,time,urllib.request,urllib.error
+          token=os.environ.get('NORTHFLANK_API_TOKEN','');shared=os.environ.get('ARA_SHARED','')
+          if not token or not shared: raise SystemExit('REQUIRED_SECRET_MISSING')
+          print('::add-mask::'+token);print('::add-mask::'+shared)
+          base='https://api.northflank.com/v1';h={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
+          def api(method,path,data=None,allow=()):
+              req=urllib.request.Request(base+path,method=method,headers=h,data=(json.dumps(data).encode() if data is not None else None))
+              try:
+                  with urllib.request.urlopen(req,timeout=45) as r:
+                      raw=r.read().decode('utf-8','replace');return json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  if e.code in allow:return {'_status':e.code}
+                  raise
+          projects=api('GET','/projects').get('data',{}).get('projects',[])
+          if isinstance(projects,dict):projects=list(projects.values())
+          pid=next((p.get('id') for p in projects if p.get('name')=='Default'),None)
+          services=api('GET',f'/projects/{pid}/services').get('data',{}).get('services',[])
+          if isinstance(services,dict):services=list(services.values())
+          svc=next((s for s in services if s.get('name')=='anthares-ara-northflank'),None)
+          if not svc:raise SystemExit('ARA_SERVICE_NOT_FOUND')
+          sid=svc.get('id') or 'anthares-ara-northflank'
+          addons=api('GET',f'/projects/{pid}/addons').get('data',{}).get('addons',[])
+          if isinstance(addons,dict):addons=list(addons.values())
+          addon=next((a for a in addons if a.get('name')=='anthares-ara-postgres'),None)
+          if not addon:raise SystemExit('ARA_POSTGRES_NOT_FOUND')
+          aid=addon.get('id') or 'anthares-ara-postgres'
+          creds=api('GET',f'/projects/{pid}/addons/{aid}/credentials').get('data',{}).get('envs',{})
+          pg=creds.get('POSTGRES_URI') or creds.get('DATABASE_URL') or ''
+          if not pg:raise SystemExit('POSTGRES_URI_MISSING')
+          print('::add-mask::'+pg)
+          runtime={
+            'PORT':'10000','ARA_SHARED':shared,'ARA_DATABASE_URL':pg,'DATABASE_URL':pg,
+            'ARA_DEVICE_HASH_DESKTOP_FTDK0HP':os.environ.get('ARA_DEVICE_HASH_DESKTOP_FTDK0HP',''),
+            'X_WORKER_TOKEN':shared,'EXPECTED_X_HANDLE':'lucasyahn',
+            'X_VAULT_URL':'https://anthares-x-vault.anthares1.workers.dev/state',
+            'ANTHARES_BROWSER_STATE_AUTHORITY':'runtime','ANTHARES_REQUIRE_RUNTIME_MESH':'1'
+          }
+          api('POST',f'/projects/{pid}/services/{sid}/runtime-environment',{'runtimeEnvironment':runtime,'runtimeFiles':{}})
+          detail=api('GET',f'/projects/{pid}/services/{sid}').get('data',{})
+          path=((detail.get('buildSettings') or {}).get('dockerfile') or {}).get('dockerFilePath')
+          if path!='/infra/northflank/Dockerfile':
+              api('PATCH',f'/projects/{pid}/services/combined/{sid}',{'buildSettings':{'dockerfile':{'buildEngine':'buildkit','dockerFilePath':'/infra/northflank/Dockerfile','dockerWorkDir':'/'}}})
+          started=api('POST',f'/projects/{pid}/services/{sid}/build',{},allow=(409,))
+          print('NORTHFLANK_BROWSER_BUILD_REQUESTED=1')
+          ports=api('GET',f'/projects/{pid}/services/{sid}/ports').get('data',{}).get('ports',[])
+          public=next((p for p in ports if p.get('public') and p.get('dns')),None)
+          if not public:raise SystemExit('PUBLIC_DNS_MISSING')
+          print('PUBLIC_DNS='+public['dns'])
+          open('/tmp/public-base','w').write('https://'+public['dns'])
+          PY
+      - name: Wait for recovered browser and durable state
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(cat /tmp/public-base)"
+          ok=0
+          for i in $(seq 1 45); do
+            if curl -fsS --max-time 12 "$base/healthz" -o /tmp/ara.json \
+              && curl -fsS --max-time 20 "$base/x/v1/runtime/browser/persistence-status" -o /tmp/browser.txt; then
+              if grep -q '^healthy=True$' /tmp/browser.txt \
+                && grep -q '^vault_enabled=True$' /tmp/browser.txt \
+                && grep -q '^restore_status=restored$' /tmp/browser.txt \
+                && grep -q '^host_desktop_fallback=False$' /tmp/browser.txt; then ok=1; break; fi
+            fi
+            sleep 10
+          done
+          cat /tmp/ara.json 2>/dev/null || true
+          cat /tmp/browser.txt 2>/dev/null || true
+          test "$ok" = 1 || { echo ANTHARES_BROWSER_RECOVERY_NOT_PROVEN; exit 41; }
+          echo ANTHARES_BROWSER_NORTHFLANK_RECOVERED=1
+          echo RENDER_DEPENDENCY=false
