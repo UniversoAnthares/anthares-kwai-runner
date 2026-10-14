@@ -15,6 +15,31 @@ on:
         required: true
         default: "NO"
         type: string
+      queue_job_id:
+        description: Canonical queue job id for fenced promotion validation
+        required: false
+        default: ""
+        type: string
+      lease_generation:
+        description: Canonical lease generation for fenced promotion validation
+        required: false
+        default: ""
+        type: string
+      source_id:
+        description: Canonical source id used by the dedupe ledger
+        required: false
+        default: ""
+        type: string
+      source_start:
+        description: Canonical source interval start in seconds
+        required: false
+        default: ""
+        type: string
+      source_end:
+        description: Canonical source interval end in seconds; must satisfy end > start
+        required: false
+        default: ""
+        type: string
 permissions:
   contents: read
   id-token: write
@@ -85,6 +110,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate fenced canonical promotion contract
         shell: bash
+        env:
+          KWAI_QUEUE_JOB_ID: ${{ inputs.queue_job_id }}
+          KWAI_LEASE_GENERATION: ${{ inputs.lease_generation }}
+          KWAI_SOURCE_ID: ${{ inputs.source_id }}
+          KWAI_SOURCE_START: ${{ inputs.source_start }}
+          KWAI_SOURCE_END: ${{ inputs.source_end }}
         run: |
           set -euo pipefail
           python3 kwai_real_publish_promotion_gate.py
