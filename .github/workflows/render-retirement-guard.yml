@@ -11,6 +11,8 @@ on:
       - anthares-remote-mcp/**
       - infra/ara_device_auth_failover.py
       - infra/ara_canary_mcp_bridge.py
+      - ci-hub/executor-routing.json
+      - EXECUTOR.md
       - .github/workflows/tiktok*.yml
       - .github/workflows/render-retirement-guard.yml
 
@@ -28,7 +30,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
+          import json, re
 
           def text(path): return Path(path).read_text(encoding='utf-8-sig')
           errors=[]
@@ -69,7 +71,25 @@ jobs:
           if "primary_provider:'northflank'" not in router:
             errors.append('TikTok router: Northflank upstream not declared')
 
+          manifest=json.loads(text('ci-hub/executor-routing.json'))
+          browser=manifest.get('browser_execution',{})
+          order=browser.get('priority') or []
+          failover=(browser.get('failover') or {}).get('order') or []
+          if not order or order[0] != 'cloudflare':
+            errors.append('executor-routing: Cloudflare is not browser primary')
+          if not failover or failover[0] != 'cloudflare':
+            errors.append('executor-routing: Cloudflare is not first browser failover target')
+          if 'render' in order and order[-1] != 'render':
+            errors.append('executor-routing: Render must be final browser fallback')
+          cf=(manifest.get('providers') or {}).get('cloudflare') or {}
+          if not cf.get('active') or not cf.get('browser_eligible'):
+            errors.append('executor-routing: Cloudflare browser provider not active/eligible')
+          gl=(manifest.get('providers') or {}).get('gitlab') or {}
+          if gl.get('active'):
+            errors.append('executor-routing: quota-blocked GitLab must not be active')
+
           if errors:
             raise SystemExit('\n'.join(errors))
           print('RENDER_OPERATIONAL_DEPENDENCY_ZERO=1')
+          print('CLOUDFLARE_BROWSER_PRIMARY_GUARD_OK=1')
           PY
