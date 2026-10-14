@@ -19,7 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,os,urllib.request,urllib.error
+          import json,os,urllib.request,urllib.parse
           token=os.environ.get('NORTHFLANK_API_TOKEN','')
           if not token: raise SystemExit('NORTHFLANK_API_TOKEN_MISSING')
           h={'Authorization':'Bearer '+token}
@@ -37,16 +37,20 @@ jobs:
           sid=s.get('id') or 'anthares-ara-northflank'
           print('SERVICE_ID_PRESENT=1')
           print('SERVICE_STATUS='+str(s.get('status') or s.get('deploymentStatus') or 'unknown'))
+          detail=get(f'/projects/{pid}/services/{sid}').get('data',{})
+          for key in ('status','deploymentStatus','buildStatus','createdAt','updatedAt'):
+              if key in detail: print(key.upper()+'='+str(detail.get(key)))
+          ports=get(f'/projects/{pid}/services/{sid}/ports').get('data',{}).get('ports',[])
+          public=next((p for p in ports if p.get('public') and p.get('dns')),None)
+          print('PUBLIC_DNS_PRESENT='+str(bool(public)).lower())
+          if public: print('PUBLIC_DNS='+str(public.get('dns')))
+          q=urllib.parse.urlencode({'type':'runtime','queryType':'range','duration':1200,'lineLimit':120,'direction':'backward'})
           try:
-              detail=get(f'/projects/{pid}/services/{sid}')
-              data=detail.get('data',detail)
-              for key in ('status','deploymentStatus','buildStatus','createdAt','updatedAt'):
-                  if key in data: print(key.upper()+'='+str(data.get(key)))
-          except Exception as e: print('DETAIL_ERROR='+type(e).__name__)
-          try:
-              ports=get(f'/projects/{pid}/services/{sid}/ports').get('data',{}).get('ports',[])
-              public=next((p for p in ports if p.get('public') and p.get('dns')),None)
-              print('PUBLIC_DNS_PRESENT='+str(bool(public)).lower())
-              if public: print('PUBLIC_DNS='+str(public.get('dns')))
-          except Exception as e: print('PORTS_ERROR='+type(e).__name__)
+              logs=get(f'/projects/{pid}/services/{sid}/logs?{q}').get('data',[])
+              print('RUNTIME_LOG_LINES='+str(len(logs)))
+              for row in logs[-80:]:
+                  line=str(row.get('log') or '').replace('\n',' ')[:1200]
+                  print('RUNTIME_LOG '+str(row.get('ts') or '')+' '+line)
+          except Exception as e:
+              print('RUNTIME_LOG_ERROR='+type(e).__name__+':'+str(e)[:200])
           PY
