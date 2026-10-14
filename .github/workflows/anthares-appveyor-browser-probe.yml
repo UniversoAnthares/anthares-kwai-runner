@@ -1,0 +1,70 @@
+name: Anthares Browser AppVeyor Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/anthares-appveyor-browser-probe.yml'
+      - 'anthares-reserva-browser/src/appveyor-probe2-entry.js'
+      - 'anthares-reserva-browser/wrangler-appveyor-probe.toml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-appveyor-browser-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser worker dependencies
+        working-directory: anthares-reserva-browser
+        run: npm install --ignore-scripts
+      - name: Generate ephemeral probe credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="$(openssl rand -hex 32)"
+          echo "::add-mask::$token"
+          echo "PROBE_TOKEN=$token" >> "$GITHUB_ENV"
+      - name: Install ephemeral probe secret
+        working-directory: anthares-reserva-browser
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s' "$PROBE_TOKEN" | npx wrangler secret put ANTHARES_PROBE_TOKEN --config wrangler-appveyor-probe.toml
+      - name: Deploy temporary hidden AppVeyor probe
+        working-directory: anthares-reserva-browser
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy --config wrangler-appveyor-probe.toml
+      - name: Probe AppVeyor in Anthares Browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/appveyor-probe.json -w '%{http_code}' --max-time 45 -X POST -H "Authorization: Bearer $PROBE_TOKEN" https://anthares-reserva-browser.anthares1.workers.dev/browser/appveyor-probe)"
+          echo "HTTP=$code"
+          cat /tmp/appveyor-probe.json
+          test "$code" = "200"
+      - name: Remove ephemeral probe secret
+        if: always()
+        working-directory: anthares-reserva-browser
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler secret delete ANTHARES_PROBE_TOKEN --config wrangler-appveyor-probe.toml || true
+      - name: Restore normal Anthares Browser worker
+        if: always()
+        working-directory: anthares-reserva-browser
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy --config wrangler.toml
