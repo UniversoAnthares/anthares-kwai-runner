@@ -1,0 +1,84 @@
+name: Retire Render from central control source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/retire-render-central-source.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove Render from central routing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('cloudflare-worker/src/index.js')
+          s=p.read_text(encoding='utf-8-sig')
+          original=s
+
+          s,n=re.subn(r'const ROUTING_REVISION="[^"]+";', 'const ROUTING_REVISION="2026-10-14-render-retired-r2";', s, count=1)
+          assert n==1, 'routing revision not found'
+
+          s,n=re.subn(
+              r'const RENDER_SESSION_PUBLIC_KEY=.*?\nasync function verifyRenderSessionSignature\(request,body\)\{.*?\n\}\n',
+              '', s, count=1, flags=re.S)
+          assert n==1, 'legacy Render signature block not found'
+
+          old='''  const body=await request.text(); let trusted=await verifyRenderSessionSignature(request,body); if(!trusted){const token=(request.headers.get("Authorization")||"").replace(/^Bearer\\s+/i,""); trusted=(await verifyGithubOidc(token,env)).ok;} if(!trusted)return json({error:"unauthorized"},401); let data; try{data=JSON.parse(body);}catch{return json({error:"invalid_json"},400);}'''
+          new='''  const body=await request.text(); const token=(request.headers.get("Authorization")||"").replace(/^Bearer\\s+/i,""); const trusted=(await verifyGithubOidc(token,env)).ok; if(!trusted)return json({error:"unauthorized"},401); let data; try{data=JSON.parse(body);}catch{return json({error:"invalid_json"},400);}'''
+          assert old in s, 'TikTok session POST auth block not found'
+          s=s.replace(old,new,1)
+
+          s,n=re.subn(
+              r'async function activeProbes\(env\)\{.*?\n\}\nasync function refreshProbeState',
+              '''async function activeProbes(env){\n const pairs=[];\n const hls=env.HLS_HEALTH_URL||"";\n if(hls)pairs.push(["hls_origin",{executor:"hls_origin",url:hls,...await probeHls(hls)}]);\n return Object.fromEntries(pairs);\n}\nasync function refreshProbeState''',
+              s, count=1, flags=re.S)
+          assert n==1, 'activeProbes block not found'
+
+          oldp='function priorities(){return {cuts:["render","github"],tiktok:["render","github"],kwai:["github"],kwai_live:["hls_origin","github"],control:["cloudflare","github","render"]};}'
+          newp='function priorities(){return {cuts:["github"],tiktok:["github"],kwai:["github"],kwai_live:["hls_origin","github"],control:["cloudflare","github"]};}'
+          assert oldp in s, 'legacy priorities not found'
+          s=s.replace(oldp,newp,1)
+
+          s,n=re.subn(
+              r'function selectHost\(role,executors\)\{.*?\n\}',
+              '''function selectHost(role,executors){\n const order=priorities()[role]||[],t=Date.now();\n return order.find(id=>{const e=executors.find(x=>x.executor===id); if(!e||e.disabled_until&&Date.parse(e.disabled_until)>t)return false; if(e.heartbeat_at&&t-Date.parse(e.heartbeat_at)>10*60*1000)return false; if(!capacityOk(role,e))return false; if(role==="tiktok"&&id==="github"&&!(e.ready_for_tiktok===true&&Date.parse(e.tiktok_ready_until||0)>t))return false; return e.healthy!==false;})||null;\n}''',
+              s, count=1, flags=re.S)
+          assert n==1, 'selectHost block not found'
+
+          s,n=re.subn(
+              r'async function failoverSelfTest\(\)\{.*?\n\}\nexport default',
+              '''async function failoverSelfTest(){\n const until=new Date(Date.now()+15*60*1000).toISOString(),hb=now(),stale=new Date(Date.now()-11*60*1000).toISOString(),disabled=until;\n const base=[\n  {executor:"github",healthy:true,heartbeat_at:hb,ready_for_tiktok:true,tiktok_ready_until:until,capabilities:["cuts","tiktok","kwai","kwai_live","control"],daily_limit:100,published_today:0},\n  {executor:"hls_origin",healthy:true,heartbeat_at:hb,capabilities:["kwai_live"]},\n  ...["local","oracle","google_compute"].map(executor=>({executor,healthy:true,heartbeat_at:hb,ready_for_tiktok:true,tiktok_ready_until:until,capabilities:["cuts","tiktok","kwai","kwai_live","control"]}))\n ];\n const withPatch=changes=>base.map(e=>changes[e.executor]?{...e,...changes[e.executor]}:e);\n const primary=selectHost("tiktok",base),none=selectHost("tiktok",withPatch({github:{healthy:false}}));\n const checks={\n  primary_github:primary==="github",\n  github_offline_null:none===null,\n  stale_heartbeat_null:selectHost("tiktok",withPatch({github:{heartbeat_at:stale}}))===null,\n  circuit_breaker_null:selectHost("tiktok",withPatch({github:{disabled_until:disabled}}))===null,\n  capacity_null:selectHost("tiktok",withPatch({github:{daily_limit:100,published_today:100}}))===null,\n  readiness_null:selectHost("tiktok",withPatch({github:{ready_for_tiktok:false,tiktok_ready_until:null}}))===null,\n  cuts_github_only:selectHost("cuts",base)==="github",\n  kwai_github_only:selectHost("kwai",base)==="github",\n  live_hls_primary:selectHost("kwai_live",base)==="hls_origin",\n  live_hls_failover:selectHost("kwai_live",withPatch({hls_origin:{healthy:false}}))==="github",\n  retired_absent_priorities:Object.values(priorities()).flat().every(id=>!retiredExecutor(id)),\n  retired_injected_never_selected:["cuts","tiktok","kwai","kwai_live"].every(role=>!retiredExecutor(selectHost(role,base)))\n };\n return {ok:Object.values(checks).every(Boolean),routing_revision:ROUTING_REVISION,checks,primary,after_github_failure:none,local_retired:true,oracle_retired:true,google_compute_retired:true,render_retired:true,priority:priorities().tiktok};\n}\nexport default''',
+              s, count=1, flags=re.S)
+          assert n==1, 'failoverSelfTest block not found'
+
+          assert 'onrender.com' not in s, 'onrender.com remains in central source'
+          assert '"render"' not in s, 'render executor remains in central source'
+          assert s!=original
+          p.write_text(s,encoding='utf-8')
+          PY
+          node --experimental-default-type=module --check cloudflare-worker/src/index.js
+          git diff --check
+          git diff -- cloudflare-worker/src/index.js
+      - name: Commit Render retirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare-worker/src/index.js
+          git commit -m "Retire Render from central social routing"
+          git push origin HEAD:main
