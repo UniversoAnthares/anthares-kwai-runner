@@ -1,0 +1,38 @@
+name: X Northflank identity probe now
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/x-northflank-verify-now-20261014.yml]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Verify real migrated X session
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ARA_SHARED"
+          echo "::add-mask::$ARA_SHARED"
+          python3 - <<'PY'
+          import json,os,urllib.error,urllib.request
+          url='https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x/verify'
+          req=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['ARA_SHARED'],'Accept':'application/json','User-Agent':'AntharesXProbe/1'})
+          try:
+            with urllib.request.urlopen(req,timeout=180) as r:
+              raw=r.read().decode('utf-8','replace'); data=json.loads(raw) if raw else {}; code=r.status
+          except urllib.error.HTTPError as e:
+            raw=e.read().decode('utf-8','replace')
+            try:data=json.loads(raw) if raw else {}
+            except Exception:data={'raw':raw[:400]}
+            code=e.code
+          safe={'http':code,'ok':data.get('ok'),'handle':data.get('handle'),'durable':data.get('durable'),'error':data.get('error')}
+          print(json.dumps(safe,sort_keys=True))
+          if code!=200 or data.get('ok') is not True or str(data.get('handle','')).lower()!='lucasyahn' or data.get('durable') is not True:
+            raise SystemExit('X_VERIFY_FAILED')
+          print('X_VERIFY_PROVEN=1')
+          PY
