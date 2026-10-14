@@ -1,6 +1,6 @@
 name = "anthares-reserva-browser"
 account_id = "5c24be052e5144391f73a8e03491e88e"
-main = "src/entry.js"
+main = "src/generic-entry.js"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 
