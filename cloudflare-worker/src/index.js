@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 
 ﻿const memory = new Map();
 const CONTROL_VERSION="2026-10-05-queue-fencing-v16";
-const ROUTING_REVISION="2026-10-06-cloud-only-failover-r1";
+const ROUTING_REVISION="2026-10-14-render-retired-r2";
 
 function json(data, status=200) {
   return Response.json(data, {status, headers: {
@@ -10,12 +10,6 @@ function json(data, status=200) {
   }});
 }
 function now(){ return new Date().toISOString(); }
-const RENDER_SESSION_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwC4W6GV170DkktCjACQ8\nbql3gMbRF+F/+7Hup6I/ixHOCYoa7zDypZHMaxnzTYpbVoipMrSn1I4UEn/Fl/2m\nShxz1hSJ5OfUGmZ7MHZ8L+Z0mqY631m3md8UbyaBQqWMoANyE5SOUKk99X5Hz5CG\nPcm91HPst2PwsgjB+imhrguQ1EFRFqkoRUgOau0Af8do3buAUi5PPpSR/Rz4KEJV\nrcD18H754oXmRmAL+E0jFzJosW7Jvv/mK7TQasrpweLMz+OAngY7Weh6Huuttq+9\nZ5RRzjRIaU+W4NQo/1sRKJlJJtq8AChHuNQCB9/2l4rEXVLJRmJSyKqW0JLySPgY\nMQIDAQAB\n-----END PUBLIC KEY-----";
-async function verifyRenderSessionSignature(request,body){
- const ts=Number(request.headers.get("X-Anthares-Render-Timestamp")||0),sig=String(request.headers.get("X-Anthares-Render-Signature")||"");
- if(!ts||Math.abs(Date.now()-ts)>300000||!sig)return false;
- try{const b64=RENDER_SESSION_PUBLIC_KEY.replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\\s+/g,"");const bin=atob(b64),der=Uint8Array.from(bin,c=>c.charCodeAt(0));const key=await crypto.subtle.importKey("spki",der,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);const raw=Uint8Array.from(atob(sig),c=>c.charCodeAt(0));const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(body));const hex=[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");return await crypto.subtle.verify("RSASSA-PKCS1-v1_5",key,raw,new TextEncoder().encode(String(ts)+"."+hex));}catch(e){return false;}
-}
 import {handleKwaiSessionVault,handleKwaiVaultSelftest} from "./kwai_session_vault.js";
 
 async function tiktokSessionState(request,env){
@@ -24,7 +18,7 @@ async function tiktokSessionState(request,env){
   const row=await read(env,"tiktok:session-state"); if(!row)return json({ok:false,available:false},404); return json({ok:true,available:true,updated_at:row.updated_at,state:row.state});
  }
  if(request.method==="POST"){
-  const body=await request.text(); let trusted=await verifyRenderSessionSignature(request,body); if(!trusted){const token=(request.headers.get("Authorization")||"").replace(/^Bearer\s+/i,""); trusted=(await verifyGithubOidc(token,env)).ok;} if(!trusted)return json({error:"unauthorized"},401); let data; try{data=JSON.parse(body);}catch{return json({error:"invalid_json"},400);}
+  const body=await request.text(); const token=(request.headers.get("Authorization")||"").replace(/^Bearer\s+/i,""); const trusted=(await verifyGithubOidc(token,env)).ok; if(!trusted)return json({error:"unauthorized"},401); let data; try{data=JSON.parse(body);}catch{return json({error:"invalid_json"},400);}
   if(!data||!Array.isArray(data.cookies)||data.cookies.length>256)return json({error:"invalid_storage_state"},400);
   await write(env,"tiktok:session-state",{updated_at:now(),state:{cookies:data.cookies,origins:Array.isArray(data.origins)?data.origins:[]}}); return json({ok:true,cookies:data.cookies.length,updated_at:now()});
  }
@@ -103,11 +97,7 @@ async function probeHls(url,timeoutMs=5000){
  finally{clearTimeout(timer);}
 }
 async function activeProbes(env){
- const targets={
-  render:env.RENDER_HEALTH_URL||"https://anthares-tiktok-render-rootless.onrender.com/health",
-  
- };
- const pairs=await Promise.all(Object.entries(targets).filter(([,url])=>!!url).map(async([executor,url])=>[executor,{executor,url,...await probe(url)}]));
+ const pairs=[];
  const hls=env.HLS_HEALTH_URL||"";
  if(hls)pairs.push(["hls_origin",{executor:"hls_origin",url:hls,...await probeHls(hls)}]);
  return Object.fromEntries(pairs);
@@ -295,7 +285,7 @@ export class AntharesQueue extends DurableObject {
   }
  }
 }
-function priorities(){return {cuts:["render","github"],tiktok:["render","github"],kwai:["github"],kwai_live:["hls_origin","github"],control:["cloudflare","github","render"]};}
+function priorities(){return {cuts:["github"],tiktok:["github"],kwai:["github"],kwai_live:["hls_origin","github"],control:["cloudflare","github"]};}
 const ROLE_CAPACITY={cuts:["cuts"],tiktok:["tiktok"],kwai:["kwai"],kwai_live:["kwai_live"],control:["control"]};
 function capacityOk(role,e){if(!e)return false;const cap=Number(e.daily_limit??e.capacity_daily??0);const used=Number(e.published_today??0);if(cap>0&&used>=cap)return false;const caps=Array.isArray(e.capabilities)?e.capabilities:[];const required=ROLE_CAPACITY[role]||[];if(required.length&&caps.length&&!required.some(x=>caps.includes(x)))return false;return true;}
 async function dailyConfirmed(env,platform){
@@ -305,7 +295,7 @@ async function dailyConfirmed(env,platform){
 async function persistRouting(env,selected){ return await queueStub(env).setRouting(selected); }
 function selectHost(role,executors){
  const order=priorities()[role]||[],t=Date.now();
- return order.find(id=>{const e=executors.find(x=>x.executor===id); if(!e||e.disabled_until&&Date.parse(e.disabled_until)>t)return false; if(e.heartbeat_at&&t-Date.parse(e.heartbeat_at)>10*60*1000)return false; if(!capacityOk(role,e))return false; if(role==="cuts"&&id==="render"&&!(e.probe&&e.probe.ready_for_cuts===true))return false; if(role==="tiktok"){if(id==="render"){if(!(e.probe&&e.probe.ready_for_tiktok===true))return false;}else{if(!(e.ready_for_tiktok===true&&Date.parse(e.tiktok_ready_until||0)>t))return false;}} return e.healthy!==false;})||null;
+ return order.find(id=>{const e=executors.find(x=>x.executor===id); if(!e||e.disabled_until&&Date.parse(e.disabled_until)>t)return false; if(e.heartbeat_at&&t-Date.parse(e.heartbeat_at)>10*60*1000)return false; if(!capacityOk(role,e))return false; if(role==="tiktok"&&id==="github"&&!(e.ready_for_tiktok===true&&Date.parse(e.tiktok_ready_until||0)>t))return false; return e.healthy!==false;})||null;
 }
 async function publicState(env){
  const probes=await refreshProbeState(env),executors=await queueStub(env).executors(),merged=executors.map(e=>probes[e.executor]?{...e,healthy:probes[e.executor].healthy,heartbeat_at:probes[e.executor].checked_at,probe:probes[e.executor]}:e);
@@ -318,31 +308,27 @@ async function publicState(env){
 async function failoverSelfTest(){
  const until=new Date(Date.now()+15*60*1000).toISOString(),hb=now(),stale=new Date(Date.now()-11*60*1000).toISOString(),disabled=until;
  const base=[
-  {executor:"render",healthy:true,heartbeat_at:hb,probe:{ready_for_tiktok:true,ready_for_cuts:true},capabilities:["cuts","tiktok"],daily_limit:100,published_today:0},
   {executor:"github",healthy:true,heartbeat_at:hb,ready_for_tiktok:true,tiktok_ready_until:until,capabilities:["cuts","tiktok","kwai","kwai_live","control"],daily_limit:100,published_today:0},
   {executor:"hls_origin",healthy:true,heartbeat_at:hb,capabilities:["kwai_live"]},
   ...["local","oracle","google_compute"].map(executor=>({executor,healthy:true,heartbeat_at:hb,ready_for_tiktok:true,tiktok_ready_until:until,capabilities:["cuts","tiktok","kwai","kwai_live","control"]}))
  ];
  const withPatch=changes=>base.map(e=>changes[e.executor]?{...e,...changes[e.executor]}:e);
- const primary=selectHost("tiktok",base),github=selectHost("tiktok",withPatch({render:{healthy:false}})),none=selectHost("tiktok",withPatch({render:{healthy:false},github:{healthy:false}})),recovered=selectHost("tiktok",withPatch({render:{healthy:true,heartbeat_at:hb,disabled_until:null,published_today:0,probe:{ready_for_tiktok:true,ready_for_cuts:true}}}));
+ const primary=selectHost("tiktok",base),none=selectHost("tiktok",withPatch({github:{healthy:false}}));
  const checks={
-  primary_render:primary==="render",
-  render_offline_github:github==="github",
-  all_cloud_offline_null:none===null,
-  stale_heartbeat_github:selectHost("tiktok",withPatch({render:{heartbeat_at:stale}}))==="github",
-  circuit_breaker_github:selectHost("tiktok",withPatch({render:{disabled_until:disabled}}))==="github",
-  capacity_github:selectHost("tiktok",withPatch({render:{daily_limit:100,published_today:100}}))==="github",
-  readiness_github:selectHost("tiktok",withPatch({render:{probe:{ready_for_tiktok:false,ready_for_cuts:true}}}))==="github",
-  recovery_returns_render:recovered==="render",
-  cuts_failover:selectHost("cuts",withPatch({render:{healthy:false}}))==="github",
+  primary_github:primary==="github",
+  github_offline_null:none===null,
+  stale_heartbeat_null:selectHost("tiktok",withPatch({github:{heartbeat_at:stale}}))===null,
+  circuit_breaker_null:selectHost("tiktok",withPatch({github:{disabled_until:disabled}}))===null,
+  capacity_null:selectHost("tiktok",withPatch({github:{daily_limit:100,published_today:100}}))===null,
+  readiness_null:selectHost("tiktok",withPatch({github:{ready_for_tiktok:false,tiktok_ready_until:null}}))===null,
+  cuts_github_only:selectHost("cuts",base)==="github",
   kwai_github_only:selectHost("kwai",base)==="github",
-  kwai_outage_null:selectHost("kwai",withPatch({github:{healthy:false}}))===null,
   live_hls_primary:selectHost("kwai_live",base)==="hls_origin",
   live_hls_failover:selectHost("kwai_live",withPatch({hls_origin:{healthy:false}}))==="github",
   retired_absent_priorities:Object.values(priorities()).flat().every(id=>!retiredExecutor(id)),
   retired_injected_never_selected:["cuts","tiktok","kwai","kwai_live"].every(role=>!retiredExecutor(selectHost(role,base)))
  };
- return {ok:Object.values(checks).every(Boolean),routing_revision:ROUTING_REVISION,checks,primary,after_render_failure:github,after_github_failure:none,recovered_primary:recovered,local_retired:true,oracle_retired:true,google_compute_retired:true,priority:priorities().tiktok};
+ return {ok:Object.values(checks).every(Boolean),routing_revision:ROUTING_REVISION,checks,primary,after_github_failure:none,local_retired:true,oracle_retired:true,google_compute_retired:true,render_retired:true,priority:priorities().tiktok};
 }
 export default {
  async fetch(request,env={}){
