@@ -49,7 +49,7 @@ jobs:
           print('TIKTOK_SESSION_COOKIE_COUNT='+str(len(cookies)))
           print('TIKTOK_SESSION_ORIGIN_COUNT='+str(len(state.get('origins') or [])))
           PY
-      - name: Re-encrypt session directly into durable Anthares-browser runtime vault
+      - name: Register runtime browser key and bridge the encrypted session
         shell: bash
         run: |
           set -euo pipefail
@@ -72,16 +72,24 @@ jobs:
           def b64(data:bytes)->str:
               return base64.urlsafe_b64encode(data).rstrip(b'=').decode('ascii')
 
+          order=int('FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551',16)
+          scalar=int.from_bytes(hashlib.sha256(('browser-vault-sign:'+secret).encode()).digest(),'big')%(order-1)+1
+          private=ec.derive_private_key(scalar,ec.SECP256R1())
+          nums=private.public_key().public_numbers()
+          jwk={'kty':'EC','crv':'P-256','x':b64(nums.x.to_bytes(32,'big')),'y':b64(nums.y.to_bytes(32,'big')),'ext':True}
+          reg=requests.post('https://anthares-x-vault.anthares1.workers.dev/browser-key/register',headers={'Authorization':'Bearer '+secret,'Content-Type':'application/json'},json={'authority':'runtime','jwk':jwk},timeout=30)
+          if reg.status_code!=200:
+              raise SystemExit('BROWSER_KEY_REGISTER_HTTP_'+str(reg.status_code))
+          rj=reg.json()
+          assert rj.get('ok') and rj.get('registered') and rj.get('authority')=='runtime',rj
+          print('BROWSER_RUNTIME_KEY_REGISTERED=1')
+
           key=hashlib.sha256(('browser-vault-enc:'+secret).encode()).digest()
           nonce=os.urandom(12)
           raw=json.dumps(state,separators=(',',':')).encode()
           cipher=AESGCM(key).encrypt(nonce,raw,b'anthares-browser-runtime-state-v1')
           ciphertext=b64(nonce+cipher)
           body=json.dumps({'schema':'anthares.encrypted-browser-state.v1','ciphertext':ciphertext,'sha256':hashlib.sha256(ciphertext.encode('ascii')).hexdigest()},separators=(',',':'))
-
-          order=int('FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551',16)
-          scalar=int.from_bytes(hashlib.sha256(('browser-vault-sign:'+secret).encode()).digest(),'big')%(order-1)+1
-          private=ec.derive_private_key(scalar,ec.SECP256R1())
           ts=str(int(time.time()*1000))
           digest=hashlib.sha256(body.encode()).hexdigest()
           der=private.sign((ts+'.'+digest).encode(),ec.ECDSA(hashes.SHA256()))
@@ -91,9 +99,9 @@ jobs:
           if resp.status_code!=200:
               raise SystemExit('BROWSER_VAULT_HTTP_'+str(resp.status_code))
           out=resp.json()
-          assert out.get('ok') and out.get('stored'), out
+          assert out.get('ok') and out.get('stored'),out
           print('TIKTOK_SESSION_BRIDGED_TO_BROWSER_VAULT=1')
-          print('BROWSER_VAULT_SAVED_AT='+str(out.get('saved_at') or ''))
+          print('BROWSER_VAULT_UPDATED_AT='+str(out.get('updated_at') or ''))
           PY
       - name: Probe Render-independent Anthares browser targets
         shell: bash
@@ -105,7 +113,7 @@ jobs:
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/cf.json'))
-          assert d.get('ok') is True and d.get('render_required') is False, d
+          assert d.get('ok') is True and d.get('render_required') is False,d
           print('CLOUDFLARE_RESERVE_RENDER_INDEPENDENT=1')
           PY
           code="$(curl -sS -o /tmp/nf.json -w '%{http_code}' --max-time 30 "$nf" || true)"
