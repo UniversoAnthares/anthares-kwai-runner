@@ -11,6 +11,9 @@ $baseline=Join-Path $root 'integrity-baseline.json'
 $credential=Join-Path $root 'secrets\issue-queue.json'
 $log=Join-Path $root 'recovery-watchdog.log'
 $state=Join-Path $root 'recovery-watchdog-state.json'
+$restartStamp=Join-Path $root 'recovery-last-restart.txt'
+$credential=Join-Path $root 'secrets\issue-queue.json'
+$restartCooldownSeconds=120
 $critical=@('run-agent-system-supervisor.ps1','load-issue-queue-auth.ps1','recovery-watchdog-loop.ps1')
 function Log([string]$m){try{"$(Get-Date -Format o) $m"|Add-Content -Path $log -Encoding UTF8}catch{}}
 function Get-SystemV4{@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -eq 0 -and $_.Name -eq 'anthares-remote-agent-v4.exe'})}
@@ -95,6 +98,8 @@ try{
     watchdog_task_state=[string](Get-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue).State
     queue_credential_present=[bool]$queueCredentialPresent;queue_credential_loaded=[bool]$queueCredentialLoaded
     system_v4_count=$agents.Count;system_v4_pids=@($agents|ForEach-Object{$_.ProcessId})
+    credential_file_present=(Test-Path $credential);restart_cooldown_seconds=$restartCooldownSeconds
+    restart_attempted=$canRestart
     interactive_agent_count=$interactive.Count;interactive_agent_pids=@($interactive|ForEach-Object{$_.ProcessId})
     legacy_preserved_until_queue_proof=$true
   }|ConvertTo-Json -Depth 4|Set-Content $state -Encoding UTF8
