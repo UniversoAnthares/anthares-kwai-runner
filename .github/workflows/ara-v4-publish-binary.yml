@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'anthares-remote-agent/**'
+      - 'infra/anthares_remote_bootstrap.py'
+      - '.github/workflows/anthares-remote-agent-install-selfhosted.yml'
       - '.github/workflows/ara-v4-publish-binary.yml'
   workflow_dispatch:
 
@@ -30,16 +32,29 @@ jobs:
           phase4 = (root / 'phase4-migrate-task.ps1').read_text(encoding='utf-8')
           installer = (root / 'install-system-v8.ps1').read_text(encoding='utf-8')
           supervisor = (root / 'run-agent-system-supervisor.ps1').read_text(encoding='utf-8')
+          http_supervisor = (root / 'run-agent-supervisor.ps1').read_text(encoding='utf-8')
+          standard_supervisor = (root / 'run-agent-standard.ps1').read_text(encoding='utf-8')
           watchdog = (root / 'recovery-watchdog.ps1').read_text(encoding='utf-8')
           loop = (root / 'recovery-watchdog-loop.ps1').read_text(encoding='utf-8')
+          dual = (root / 'watchdog-dual-supervisor.ps1').read_text(encoding='utf-8')
+          bootstrap = Path('infra/anthares_remote_bootstrap.py').read_text(encoding='utf-8')
+          legacy_workflow = Path('.github/workflows/anthares-remote-agent-install-selfhosted.yml').read_text(encoding='utf-8')
           forbidden = r'D:\AntharsWork\AntharesRemoteAgent\run-agent-system-supervisor.ps1'
           assert forbidden not in phase4, 'Phase 4 task must never execute supervisor from D:'
           assert r"$root='C:\ProgramData\AntharesRemoteAgent'" in supervisor, 'canonical supervisor root drifted from C:\ProgramData'
           assert 'existing SYSTEM private queue credential is missing' in installer, 'installer no longer fails closed when SYSTEM credential is absent'
           assert 'queue_credential_validated=$true' in installer, 'installer no longer records credential validation'
+          assert 'queue_end_to_end_proof=$true' in installer, 'installer no longer requires a real queue command proof'
           assert "'load-issue-queue-auth.ps1'" in loop and '.lastgood' in loop, 'watchdog loop no longer self-heals queue loader'
           assert 'waiting-for-private-queue-credential' in watchdog, 'watchdog lost explicit credential-wait state'
           assert 'interactive_agent_count' in watchdog, 'watchdog lost single-executor enforcement'
+          for name, text in [('HTTP supervisor', http_supervisor), ('standard HTTP supervisor', standard_supervisor)]:
+              assert 'allow-http-compat.flag' in text, f'{name} lost explicit break-glass requirement'
+              assert 'break-glass-required' in text, f'{name} no longer fails closed by default'
+          assert 'Ensure-Supervisor' not in dual, 'retired dual watchdog can still spawn legacy supervisors'
+          assert 'return jsonify(**_RETIREMENT), 410' in bootstrap, 'legacy public bootstrap mutation surface is active again'
+          assert 'runs-on: self-hosted' not in legacy_workflow, 'retired legacy installer can still execute on the PC'
+          assert 'exit 1' in legacy_workflow and 'legacy installer retired' in legacy_workflow.lower(), 'legacy installer is no longer fail-closed'
           print('ARA_PHASE4_CONTROL_INVARIANTS=OK')
           PY
       - name: Test
