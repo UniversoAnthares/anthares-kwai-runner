@@ -1,44 +1,62 @@
 pipeline:
-  id: pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d
+  identifier: pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d
   name: pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d
   stages:
-    - name: Build and Test
-      platform:
-        os: linux
-        arch: amd64
-      runtime: cloud
-      clone:
-        enabled: true
-      cache:
-        enabled: false
-      steps:
-        - name: Python syntax check
-          id: python_syntax
-          run:
-            shell: bash
-            script: |-
-              set -euo pipefail
-              python3 -m compileall -q tests tools infra independent_session
-        - name: Control publisher acceptance
-          id: control_publisher_acceptance
-          run:
-            shell: bash
-            script: |-
-              set -euo pipefail
-              for case in \
-                happy \
-                renew-then-publish \
-                stale-start \
-                stale-renew \
-                stale-complete \
-                crash-before-start \
-                uncertain-no-republish \
-                confirmed-idempotent \
-                generation-rotates \
-                duplicate-publisher-boundary
-              do
-                python3 tests/test_control_publisher_integration_final.py "$case"
-              done
-              echo HARNESS_CONTROL_PUBLISHER_OK=1
-  tags:
-    onboarding: "true"
+    - stage:
+        name: Build and Test
+        identifier: Build_and_Test
+        type: CI
+        spec:
+          cache:
+            enabled: false
+          cloneCodebase: true
+          buildIntelligence:
+            enabled: false
+          infrastructure:
+            type: KubernetesDirect
+            spec:
+              connectorRef: account.harnessImage
+              namespace: default
+              automountServiceAccountToken: true
+              nodeSelector: {}
+              os: Linux
+          execution:
+            steps:
+              - step:
+                  identifier: Python_syntax_check
+                  name: Python syntax check
+                  type: Run
+                  spec:
+                    shell: Sh
+                    command: |-
+                      set -euo pipefail
+                      python3 -m compileall -q tests
+              - step:
+                  identifier: Control_publisher_acceptance
+                  name: Control publisher acceptance
+                  type: Run
+                  spec:
+                    shell: Sh
+                    command: |-
+                      set -euo pipefail
+                      for case in \
+                        happy \
+                        renew-then-publish \
+                        stale-start \
+                        stale-renew \
+                        stale-complete \
+                        crash-before-start \
+                        uncertain-no-republish \
+                        confirmed-idempotent \
+                        generation-rotates \
+                        duplicate-publisher-boundary
+                      do
+                        python3 tests/test_control_publisher_integration_final.py "$case"
+                      done
+                      echo HARNESS_CONTROL_PUBLISHER_OK=1
+  properties:
+    ci:
+      codebase:
+        connectorRef: connector_Github_ab52
+        build: <+input>
+        repoName: UniversoAnthares/anthares-kwai-runner
