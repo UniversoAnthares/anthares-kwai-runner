@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
-const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-remote-control.onrender.com').replace(/\/$/, '');
+const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-ara-backup.anthares1.workers.dev').replace(/\/$/, '');
 const CONTROL_TOKEN = process.env.ARA_SHARED || '';
 const DEFAULT_DEVICE = process.env.ANTHARES_DEVICE_ID || 'DESKTOP-FTDK0HP';
 let browserLease = null;
