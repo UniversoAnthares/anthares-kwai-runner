@@ -113,5 +113,5 @@ jobs:
                   except Exception as rollback_error:
                       print('ROLLBACK_FAILED',type(rollback_error).__name__,str(rollback_error)[:250],flush=True)
               raise
-          
           PY
+# retrigger after verified suspension of 22 Render services, 2026-10-14
