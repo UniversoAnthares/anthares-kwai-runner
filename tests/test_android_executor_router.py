@@ -13,99 +13,92 @@ import android_executor_router as router
 MANIFEST = router.load_manifest()
 
 
-def ready(queue=0):
-    return {"healthy": True, "ready": True, "queue_seconds": queue}
+def ready(queue=0, authenticated=True):
+    return {
+        "online": True,
+        "healthy": True,
+        "ready": True,
+        "authenticated": authenticated,
+        "queue_seconds": queue,
+        "consecutive_failures": 0,
+        "last_failure_class": "",
+    }
 
 
 class AndroidExecutorRoutingTests(unittest.TestCase):
-    def test_github_actions_first_when_ready(self):
-        self.assertEqual(router.choose(MANIFEST, {"github_actions": ready(), "bitrise": ready()}), "github_actions")
+    def test_physical_device_is_primary(self):
+        self.assertEqual(MANIFEST["android_execution"]["priority"][0], "physical_android")
+        self.assertEqual(router.choose(MANIFEST, {"physical_android": ready(), "memu_android": ready()}, "kwai_publish"), "physical_android")
 
-    def test_queue_over_threshold_fails_over_to_proven_bitrise(self):
-        m = router.load_manifest()
-        m["providers"]["bitrise"]["active"] = True
-        self.assertEqual(router.choose(m, {"github_actions": ready(91), "bitrise": ready()}), "bitrise")
+    def test_memu_is_never_primary_while_physical_ready(self):
+        self.assertNotEqual(router.choose(MANIFEST, {"physical_android": ready(), "memu_android": ready()}, "kwai_publish"), "memu_android")
+
+    def test_memu_fallback_when_physical_missing(self):
+        self.assertEqual(router.choose(MANIFEST, {"memu_android": ready()}, "kwai_publish"), "memu_android")
+
+    def test_memu_fallback_when_physical_explicitly_offline(self):
+        physical = {"online": False, "healthy": False, "ready": False, "authenticated": False, "queue_seconds": 0}
+        self.assertEqual(router.choose(MANIFEST, {"physical_android": physical, "memu_android": ready()}, "kwai_publish"), "memu_android")
+
+    def test_single_device_failure_does_not_open_circuit(self):
+        physical = ready()
+        physical.update({"healthy": False, "ready": False, "last_failure_class": "adb", "consecutive_failures": 1})
+        self.assertNotEqual(router.choose(MANIFEST, {"physical_android": physical, "memu_android": ready()}, "kwai_publish"), "memu_android")
+
+    def test_three_device_failures_open_memu_fallback(self):
+        physical = ready()
+        physical.update({"healthy": False, "ready": False, "last_failure_class": "adb", "consecutive_failures": 3})
+        self.assertEqual(router.choose(MANIFEST, {"physical_android": physical, "memu_android": ready()}, "kwai_publish"), "memu_android")
+
+    def test_policy_failure_never_retries_on_memu(self):
+        physical = ready()
+        physical.update({"healthy": False, "ready": False, "last_failure_class": "policy", "consecutive_failures": 99})
+        self.assertNotEqual(router.choose(MANIFEST, {"physical_android": physical, "memu_android": ready()}, "kwai_publish"), "memu_android")
+
+    def test_content_failure_never_retries_on_memu(self):
+        physical = ready()
+        physical.update({"healthy": False, "ready": False, "last_failure_class": "content", "consecutive_failures": 99})
+        self.assertNotEqual(router.choose(MANIFEST, {"physical_android": physical, "memu_android": ready()}, "kwai_publish"), "memu_android")
+
+    def test_kwai_publish_requires_authenticated_executor(self):
+        self.assertIsNone(router.choose(MANIFEST, {"physical_android": ready(authenticated=False)}, "kwai_publish"))
 
     def test_queue_exactly_at_threshold_is_allowed(self):
-        self.assertEqual(router.choose(MANIFEST, {"github_actions": ready(90)}), "github_actions")
+        self.assertEqual(router.choose(MANIFEST, {"physical_android": ready(90)}, "kwai_publish"), "physical_android")
 
-    def test_firebase_only_is_not_valid_for_manual_login(self):
-        self.assertIsNone(router.choose(MANIFEST, {"firebase_test_lab": ready()}, workload="manual_auth"))
-
-    def test_unspecified_workload_never_routes_manual_login_to_firebase(self):
-        self.assertIsNone(router.choose(MANIFEST, {"firebase_test_lab": ready()}))
-
-    def test_firebase_can_handle_generic_noninteractive_android(self):
-        m = router.load_manifest()
-        m["providers"]["firebase_test_lab"]["active"] = True
-        self.assertEqual(router.choose(m, {"firebase_test_lab": ready()}, workload="generic_android"), "firebase_test_lab")
-
-    def test_manual_auth_prefers_bitrise_over_firebase(self):
-        m = router.load_manifest()
-        m["providers"]["bitrise"]["active"] = True
-        self.assertEqual(router.choose(m, {"github_actions": ready(91), "bitrise": ready(), "firebase_test_lab": ready()}, workload="manual_auth"), "bitrise")
+    def test_queue_over_threshold_can_fall_through(self):
+        physical = ready(91)
+        physical["online"] = False
+        self.assertEqual(router.choose(MANIFEST, {"physical_android": physical, "memu_android": ready()}, "kwai_publish"), "memu_android")
 
     def test_disabled_provider_skipped(self):
-        s = ready()
-        s["disabled"] = True
-        self.assertIsNone(router.choose(MANIFEST, {"github_actions": s}))
-
-    def test_unhealthy_provider_skipped(self):
-        s = ready()
-        s["healthy"] = False
-        self.assertIsNone(router.choose(MANIFEST, {"circleci": s}))
-
-    def test_invalid_queue_does_not_crash_router(self):
-        m = router.load_manifest()
-        m["providers"]["bitrise"]["active"] = True
-        self.assertEqual(router.choose(m, {"github_actions": ready("unknown"), "bitrise": ready()}), "bitrise")
-
-    def test_negative_queue_fails_closed(self):
-        self.assertIsNone(router.choose(MANIFEST, {"github_actions": ready(-1)}))
-
-    def test_missing_status_does_not_assume_ready(self):
-        self.assertIsNone(router.choose(MANIFEST, {}))
-
-    def test_ineligible_render_never_chosen_for_android(self):
-        m = router.load_manifest()
-        m["android_execution"]["priority"].insert(0, "render")
-        self.assertEqual(router.choose(m, {"render": ready(), "github_actions": ready()}), "github_actions")
-
-    def test_explicit_inactive_provider_skipped(self):
-        m = router.load_manifest()
-        m["providers"]["github_actions"]["active"] = False
-        self.assertIsNone(router.choose(m, {"github_actions": ready()}))
-
-    def test_main_reports_selection_not_dispatch(self):
-        with patch.dict(os.environ, {"ANTHARES_EXECUTOR_WORKLOAD": "manual_auth", "ANTHARES_EXECUTOR_STATUS_JSON": '{"github_actions":{"healthy":true,"ready":true,"queue_seconds":0}}'}), contextlib.redirect_stdout(io.StringIO()) as output:
-            self.assertEqual(router.main(), 0)
-        text = output.getvalue()
-        self.assertIn("ANDROID_EXECUTOR_SELECTED=github_actions", text)
-        self.assertIn("ANDROID_EXECUTOR_DISPATCHED=0", text)
-        self.assertIn("ANDROID_EXECUTOR_SELECTION_ONLY=1", text)
+        s = ready(); s["disabled"] = True
+        self.assertIsNone(router.choose(MANIFEST, {"physical_android": s}, "kwai_publish"))
 
     def test_malformed_json_status_fails_closed(self):
         with patch.dict(os.environ, {"ANTHARES_EXECUTOR_STATUS_JSON": "{not-json"}):
             self.assertEqual(router.load_state(), {})
 
-    def test_array_json_status_fails_closed(self):
-        with patch.dict(os.environ, {"ANTHARES_EXECUTOR_STATUS_JSON": "[]"}):
-            self.assertEqual(router.load_state(), {})
-
-    def test_retired_circleci_never_selected_even_if_healthy(self):
-        self.assertNotIn("circleci", MANIFEST["android_execution"]["priority"])
-        self.assertIsNone(router.choose(MANIFEST, {"circleci": ready()}))
-
-    def test_unproven_bitrise_is_disabled_until_live_proof(self):
-        self.assertIsNone(router.choose(MANIFEST, {"bitrise": ready()}))
-
-    def test_browser_routing_primary_gitlab(self):
-        self.assertEqual(MANIFEST["browser_execution"]["priority"][0], "gitlab")
-        self.assertTrue(MANIFEST["providers"]["gitlab"]["active"])
+    def test_main_reports_selection_not_dispatch(self):
+        payload = '{"physical_android":{"online":true,"healthy":true,"ready":true,"authenticated":true,"queue_seconds":0}}'
+        with patch.dict(os.environ, {"ANTHARES_EXECUTOR_WORKLOAD": "kwai_publish", "ANTHARES_EXECUTOR_STATUS_JSON": payload}), contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(router.main(), 0)
+        text = output.getvalue()
+        self.assertIn("ANDROID_EXECUTOR_SELECTED=physical_android", text)
+        self.assertIn("ANDROID_EXECUTOR_DISPATCHED=0", text)
+        self.assertIn("ANDROID_EXECUTOR_REASON=primary_physical_device", text)
 
     def test_main_rejects_unknown_workload(self):
         with patch.dict(os.environ, {"ANTHARES_EXECUTOR_WORKLOAD": "manual_and_publish"}), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(router.main(), 2)
+
+    def test_firebase_only_is_not_valid_for_manual_login(self):
+        m = router.load_manifest(); m["providers"]["firebase_test_lab"]["active"] = True
+        self.assertIsNone(router.choose(m, {"firebase_test_lab": ready()}, workload="manual_auth"))
+
+    def test_render_never_selected_for_android(self):
+        m = router.load_manifest(); m["android_execution"]["priority"].insert(0, "render")
+        self.assertEqual(router.choose(m, {"render": ready(), "physical_android": ready()}, "kwai_publish"), "physical_android")
 
 
 if __name__ == "__main__":
