@@ -7,7 +7,7 @@ import { signedControlFetch } from './control-client.mjs';
 import { servicePublicKey } from './service-signing.mjs';
 import { registerExtendedTools } from './extended-tools.mjs';
 
-const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-remote-control.onrender.com').replace(/\/$/, '');
+const CONTROL_URL = (process.env.ANTHARES_CONTROL_URL || 'https://anthares-ara-backup.anthares1.workers.dev').replace(/\/$/, '');
 const DEFAULT_DEVICE = process.env.ANTHARES_DEVICE_ID || 'DESKTOP-FTDK0HP';
 const CLIENT_TOKEN = process.env.ARA_MCP_CLIENT_TOKEN || '';
 
