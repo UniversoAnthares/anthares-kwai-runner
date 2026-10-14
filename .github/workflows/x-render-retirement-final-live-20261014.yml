@@ -1,0 +1,160 @@
+name: Final live X migration proof and Render retirement
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/x-render-retirement-final-live-20261014.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: x-render-retirement-final-live-20261014
+  cancel-in-progress: false
+
+jobs:
+  prove-and-retire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      X_BASE: https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x
+      RENDER_SERVICE_ID: srv-db6gcoad0e5s73alefn0
+    steps:
+      - name: Wait for Northflank X identity proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ARA_SHARED"
+          test -n "$RENDER_API_KEY"
+          echo "::add-mask::$ARA_SHARED"
+          echo "::add-mask::$RENDER_API_KEY"
+          python3 - <<'PY'
+          import json, os, time, urllib.error, urllib.request
+          base=os.environ['X_BASE'].rstrip('/')
+          token=os.environ['ARA_SHARED']
+          def call(path,method='GET',payload=None,timeout=120):
+              h={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'AntharesXFinalMigration/1'}
+              data=None
+              if payload is not None:
+                  h['Content-Type']='application/json'; data=json.dumps(payload).encode()
+              req=urllib.request.Request(base+path,method=method,headers=h,data=data)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as r:
+                      raw=r.read().decode('utf-8','replace'); return r.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode('utf-8','replace')
+                  try: body=json.loads(raw) if raw else {}
+                  except Exception: body={'raw':raw[:300]}
+                  return e.code,body
+              except Exception as e:
+                  return 0,{'error':type(e).__name__}
+          deadline=time.time()+1100
+          last={}
+          while time.time()<deadline:
+              hc,h=call('/health',timeout=30)
+              vc,v=call('/verify',timeout=150)
+              last={'health_http':hc,'health':h,'verify_http':vc,'verify':v}
+              if hc==200 and h.get('ok') is True and vc==200 and v.get('ok') is True and v.get('durable') is True and str(v.get('handle','')).lower()=='lucasyahn':
+                  print('NORTHFLANK_X_IDENTITY_PROVEN=lucasyahn')
+                  print('NORTHFLANK_X_DURABLE_STATE=1')
+                  raise SystemExit(0)
+              time.sleep(12)
+          raise SystemExit('NORTHFLANK_X_NOT_READY '+json.dumps(last,sort_keys=True)[:800])
+          PY
+
+      - name: Publish one real X migration proof
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$ARA_SHARED"
+          python3 - <<'PY' | tee /tmp/x-proof.out
+          import json,os,urllib.error,urllib.request
+          base=os.environ['X_BASE'].rstrip('/')
+          token=os.environ['ARA_SHARED']
+          payload={
+            'text':'Teste técnico — migração da infraestrutura do Universo Anthares para fora do Render concluída.',
+            'media_url':'https://samplelib.com/lib/preview/mp4/sample-5s.mp4'
+          }
+          req=urllib.request.Request(base+'/post',method='POST',data=json.dumps(payload).encode(),headers={
+            'Authorization':'Bearer '+token,'Content-Type':'application/json','Accept':'application/json','User-Agent':'AntharesXFinalMigration/1'})
+          try:
+              with urllib.request.urlopen(req,timeout=260) as r:
+                  raw=r.read().decode('utf-8','replace'); data=json.loads(raw) if raw else {}
+                  code=r.status
+          except urllib.error.HTTPError as e:
+              raw=e.read().decode('utf-8','replace')
+              try:data=json.loads(raw) if raw else {}
+              except Exception:data={'raw':raw[:400]}
+              code=e.code
+          safe={'http':code,'ok':data.get('ok'),'handle':data.get('handle'),'post_url':data.get('post_url'),'video_verified':data.get('video_verified')}
+          print(json.dumps(safe,sort_keys=True))
+          if code!=200 or data.get('ok') is not True or data.get('video_verified') is not True:
+              raise SystemExit('X_REAL_PUBLICATION_FAILED')
+          url=str(data.get('post_url') or '')
+          if '/lucasyahn/status/' not in url:
+              raise SystemExit('X_REAL_PUBLICATION_IDENTITY_MISMATCH')
+          print('REAL_X_POST_URL='+url)
+          PY
+          url="$(grep '^REAL_X_POST_URL=' /tmp/x-proof.out | tail -1 | cut -d= -f2-)"
+          test -n "$url"
+          echo "post_url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Record proof before retiring Render
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POST_URL: ${{ steps.publish.outputs.post_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; token=os.environ['GH_TOKEN']; post=os.environ['POST_URL']
+          body=json.dumps({'title':'[X-RENDER-RETIREMENT-PROOF] Northflank real publication passed','body':'Real X publication from the consolidated Northflank worker succeeded before final Render suspension.\n\nPost: '+post+'\n\nRender service to retire: `srv-db6gcoad0e5s73alefn0`.','labels':[]}).encode()
+          req=urllib.request.Request('https://api.github.com/repos/'+repo+'/issues',method='POST',data=body,headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json','User-Agent':'AntharesXFinalMigration/1'})
+          with urllib.request.urlopen(req,timeout=30) as r:
+              data=json.load(r)
+          print('PROOF_ISSUE='+str(data.get('html_url') or ''))
+          PY
+
+      - name: Suspend the final Render web service
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$RENDER_API_KEY"
+          python3 - <<'PY'
+          import json,os,time,urllib.error,urllib.request
+          token=os.environ['RENDER_API_KEY']; sid=os.environ['RENDER_SERVICE_ID']; base='https://api.render.com/v1'
+          h={'Authorization':'Bearer '+token,'Accept':'application/json','Content-Type':'application/json','User-Agent':'AntharesFinalRenderRetirement/1'}
+          def call(method,path,payload=None):
+              data=None if payload is None else json.dumps(payload).encode()
+              for i in range(8):
+                  req=urllib.request.Request(base+path,method=method,headers=h,data=data)
+                  try:
+                      with urllib.request.urlopen(req,timeout=40) as r:
+                          raw=r.read().decode('utf-8','replace'); return r.status,json.loads(raw) if raw else {}
+                  except urllib.error.HTTPError as e:
+                      if e.code==429: time.sleep(min(60,10*(i+1))); continue
+                      raw=e.read().decode('utf-8','replace')
+                      raise SystemExit(f'RENDER_HTTP_{e.code} {raw[:300]}')
+              raise SystemExit('RENDER_RATE_LIMIT')
+          _,info=call('GET','/services/'+sid)
+          if info.get('name')!='anthares-x-render-worker-v3' or info.get('ownerId')!='tea-d9hnkbt8nd3s73f0876g':
+              raise SystemExit('RENDER_SERVICE_IDENTITY_MISMATCH')
+          if info.get('autoDeployTrigger')!='off':
+              call('PATCH','/services/'+sid,{'autoDeployTrigger':'off'})
+          if info.get('suspended')!='suspended':
+              code,_=call('POST','/services/'+sid+'/suspend')
+              if code not in (200,202): raise SystemExit('RENDER_SUSPEND_STATUS_'+str(code))
+          for _ in range(24):
+              _,final=call('GET','/services/'+sid)
+              if final.get('suspended')=='suspended' and final.get('autoDeployTrigger')=='off':
+                  print('FINAL_RENDER_X_SUSPENDED=1'); raise SystemExit(0)
+              time.sleep(5)
+          raise SystemExit('FINAL_RENDER_X_NOT_SUSPENDED')
+          PY
