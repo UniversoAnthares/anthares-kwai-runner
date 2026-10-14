@@ -1,40 +1,13 @@
-name: Anthares-browser keepalive
+name: Anthares-browser keepalive (Render retired)
 
 on:
-  schedule:
-    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: anthares-browser-keepalive
-  cancel-in-progress: true
-
 jobs:
-  ping:
+  retired:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
-    strategy:
-      fail-fast: false
-      matrix:
-        url:
-          - https://anthares-browser-qa-render.onrender.com/ready
-          - https://anthares-browser-qa-render-v2.onrender.com/ready
     steps:
-      - name: Wake and verify Chromium readiness
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 12); do
-            if curl --fail --silent --show-error \
-              --connect-timeout 15 --max-time 20 \
-              "${{ matrix.url }}"; then
-              exit 0
-            fi
-            echo "Readiness attempt ${attempt}/12 failed; retrying in 10s"
-            sleep 10
-          done
-          echo "Anthares-browser did not become ready within the bounded warmup window" >&2
-          exit 1
+      - run: echo 'Render browser keepalive retired. Browser continuity must use non-Render infrastructure.'
