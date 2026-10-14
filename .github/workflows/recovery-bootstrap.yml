@@ -70,18 +70,42 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
+
           p=Path('src/index.js')
           s=p.read_text(encoding='utf-8')
           old='const OWNER_APPROVAL_HASH = "6Z-3WlmAvh6o7m_W0eYEpEo23YKZtjn-DLJpyjtEfQ0";'
           new='const OWNER_APPROVAL_HASH = "_-uIfueIbVUFB_GGUsyp98ptkIgqpbDqIV_2rUInT_k";'
           if old not in s:
               raise SystemExit('owner approval hash marker not found')
-          p.write_text(s.replace(old,new,1),encoding='utf-8')
+          s=s.replace(old,new,1)
+
+          needle='''    if (u.pathname === "/session" && request.method === "POST") {\n      const body = await request.json();\n      const id = String(body.session_id || "");\n      if (id) await this.ctx.storage.put("session_id", id); else await this.ctx.storage.delete("session_id");\n      return json({ok:true, active:!!id});\n    }\n    return json({error:"not_found"}, 404);'''
+          repl='''    if (u.pathname === "/session" && request.method === "POST") {\n      const body = await request.json();\n      const id = String(body.session_id || "");\n      if (id) await this.ctx.storage.put("session_id", id); else await this.ctx.storage.delete("session_id");\n      return json({ok:true, active:!!id});\n    }\n    if (u.pathname === "/owner-session" && request.method === "POST") {\n      const body = await request.json();\n      const token = String(body.token || ""); const exp = Number(body.exp || 0);\n      if (!token || exp <= Math.floor(Date.now()/1000)) return json({error:"invalid_owner_session"},400);\n      await this.ctx.storage.put("owner_session", {token,exp});\n      return json({ok:true});\n    }\n    if (u.pathname === "/owner-session/verify" && request.method === "POST") {\n      const body = await request.json(); const token = String(body.token || "");\n      const row = await this.ctx.storage.get("owner_session");\n      const ok = !!row && Number(row.exp) > Math.floor(Date.now()/1000) && String(row.token || "") === token;\n      return json({ok});\n    }\n    if (u.pathname === "/oauth-state" && request.method === "POST") {\n      const body = await request.json(); const id=String(body.id||"");\n      if(!id || !body.payload) return json({error:"invalid_oauth_state"},400);\n      await this.ctx.storage.put("oauth:"+id, body.payload); return json({ok:true});\n    }\n    if (u.pathname === "/oauth-state/consume" && request.method === "POST") {\n      const body = await request.json(); const id=String(body.id||""); const key="oauth:"+id;\n      const payload = await this.ctx.storage.get(key); if(payload) await this.ctx.storage.delete(key);\n      return json(payload ? {ok:true,payload} : {ok:false});\n    }\n    return json({error:"not_found"}, 404);'''
+          if needle not in s:
+              raise SystemExit('durable object patch target missing')
+          s=s.replace(needle,repl,1)
+
+          needle='''async function issueOwnerSession(env) {\n  const payload = b64url(te.encode(JSON.stringify({exp:Math.floor(Date.now()/1000)+3600, nonce:crypto.randomUUID()})));\n  return `${payload}.${await hmac(env, payload)}`;\n}\nasync function ownerAuthorized(request, env) {\n  const token = cookieValue(request, OWNER_COOKIE);\n  const [payload, sig, extra] = String(token).split(".");\n  if (!payload || !sig || extra !== undefined || !sameSecret(sig, await hmac(env, payload))) return false;\n  try { const p = JSON.parse(td.decode(fromB64url(payload))); return Number(p.exp) > Math.floor(Date.now()/1000); } catch { return false; }\n}'''
+          repl='''async function issueOwnerSession(env) {\n  const token = b64url(crypto.getRandomValues(new Uint8Array(32)));\n  const exp = Math.floor(Date.now()/1000)+3600;\n  const r = await stateStub(env).fetch("https://state/owner-session", {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token,exp})});\n  if(!r.ok) throw new Error("owner_session_store_failed");\n  return token;\n}\nasync function ownerAuthorized(request, env) {\n  const token = cookieValue(request, OWNER_COOKIE); if(!token) return false;\n  const r = await stateStub(env).fetch("https://state/owner-session/verify", {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token})});\n  if(!r.ok) return false; return !!(await r.json()).ok;\n}'''
+          if needle not in s:
+              raise SystemExit('owner session patch target missing')
+          s=s.replace(needle,repl,1)
+          p.write_text(s,encoding='utf-8')
+
+          p=Path('src/generic-entry.js')
+          s=p.read_text(encoding='utf-8')
+          needle='''async function ownerAuthorized(request, env) {\n  if (!env.ANTHARES_RESERVA_TOKEN) return false;\n  const token=cookieValue(request,OWNER_COOKIE); const [payload,sig,extra]=String(token).split(".");\n  if(!payload||!sig||extra!==undefined||!sameSecret(sig,await hmac(env,payload))) return false;\n  try { const p=JSON.parse(td.decode(fromB64url(payload))); return Number(p.exp)>Math.floor(Date.now()/1000); } catch { return false; }\n}\nasync function oauthKey(env) {\n  const raw=new Uint8Array(await crypto.subtle.digest("SHA-256",te.encode("anthares-circleci-oauth-v1:"+env.ANTHARES_RESERVA_TOKEN)));\n  return crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt","decrypt"]);\n}\nasync function sealOAuthState(env, payload) {\n  const iv=crypto.getRandomValues(new Uint8Array(12));\n  const cipher=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv,additionalData:te.encode("circleci-oauth-state-v1")},await oauthKey(env),te.encode(JSON.stringify(payload))));\n  const out=new Uint8Array(iv.length+cipher.length); out.set(iv); out.set(cipher,iv.length); return b64url(out);\n}\nasync function openOAuthState(env, value) {\n  const blob=fromB64url(value); if(blob.length<29) throw new Error("invalid_oauth_state");\n  const clear=await crypto.subtle.decrypt({name:"AES-GCM",iv:blob.slice(0,12),additionalData:te.encode("circleci-oauth-state-v1")},await oauthKey(env),blob.slice(12));\n  const p=JSON.parse(td.decode(clear)); if(Number(p.exp)<=Math.floor(Date.now()/1000)) throw new Error("oauth_state_expired"); return p;\n}'''
+          repl='''async function ownerAuthorized(request, env) {\n  const token=cookieValue(request,OWNER_COOKIE); if(!token) return false;\n  const stub=env.BROWSER_STATE.get(env.BROWSER_STATE.idFromName("owner"));\n  const r=await stub.fetch("https://state/owner-session/verify",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token})});\n  if(!r.ok) return false; return !!(await r.json()).ok;\n}\nasync function sealOAuthState(env, payload) {\n  const id=b64url(crypto.getRandomValues(new Uint8Array(32)));\n  const r=await genericStub(env).fetch("https://state/oauth-state",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,payload})});\n  if(!r.ok) throw new Error("oauth_state_store_failed"); return id;\n}\nasync function openOAuthState(env, value) {\n  const r=await genericStub(env).fetch("https://state/oauth-state/consume",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id:String(value||"")})});\n  if(!r.ok) throw new Error("invalid_oauth_state"); const d=await r.json(); if(!d.ok||!d.payload) throw new Error("invalid_oauth_state");\n  const p=d.payload; if(Number(p.exp)<=Math.floor(Date.now()/1000)) throw new Error("oauth_state_expired"); return p;\n}'''
+          if needle not in s:
+              raise SystemExit('generic owner/oauth patch target missing')
+          s=s.replace(needle,repl,1)
+          p.write_text(s,encoding='utf-8')
           PY
           if [ -n "${ANTHARES_RESERVA_TOKEN:-}" ]; then
             printf '%s' "$ANTHARES_RESERVA_TOKEN" | npx wrangler secret put ANTHARES_RESERVA_TOKEN
           fi
           node --check src/index.js
+          node --check src/generic-entry.js
           npx wrangler deploy src/generic-entry.js --config wrangler.toml
       - name: Verify generic browser contract
         run: |
