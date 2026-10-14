@@ -2,13 +2,13 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
-const PUBLIC_ORIGIN = (process.env.ARA_PUBLIC_URL || 'https://anthares-remote-mcp.onrender.com').replace(/\/$/, '');
+const PUBLIC_ORIGIN = (process.env.ARA_PUBLIC_URL || 'https://anthares-ara-mcp.anthares1.workers.dev').replace(/\/$/, '');
 const PUBLIC_PORT = Number(process.env.PORT || 3000);
 const INTERNAL_PORT = Number(process.env.ARA_INTERNAL_MCP_PORT || 3118);
 const ADMIN_PASSWORD = process.env.ARA_OAUTH_ADMIN_PASSWORD || '';
 const TOKEN_SECRET = process.env.ARA_OAUTH_TOKEN_SECRET || '';
 const CONTROL_TOKEN = process.env.ARA_SHARED || '';
-const CONTROL_URL = process.env.ANTHARES_CONTROL_URL || 'https://anthares-remote-control.onrender.com';
+const CONTROL_URL = process.env.ANTHARES_CONTROL_URL || 'https://anthares-ara-backup.anthares1.workers.dev';
 const SCOPES = new Set(['ara.read', 'ara.write']);
 const WRITE_TOOLS = new Set([
   'remote_exec','clipboard_set','file_write','file_write_chunk','remote_job_start','remote_job_cancel',
