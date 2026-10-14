@@ -3,16 +3,18 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PORT=10000
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium ca-certificates fonts-liberation fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY infra/ /app/
-RUN pip install --no-cache-dir flask gunicorn requests "psycopg[binary]" cryptography playwright \
+RUN mkdir -p /ms-playwright \
+    && pip install --no-cache-dir flask gunicorn requests "psycopg[binary]" cryptography playwright \
     && python -m playwright install chromium \
     && useradd --create-home --uid 10001 ara \
-    && chown -R ara:ara /app
+    && chown -R ara:ara /app /ms-playwright
 USER ara
 EXPOSE 10000
-CMD ["sh","-c","exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 4 --timeout 180 northflank_mux:app"]
+CMD ["sh","-c","exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 4 --timeout 240 northflank_mux:app"]
