@@ -283,6 +283,8 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string, error) {
 	switch job.Type {
 	case "ping":
 		return "pong", nil
+	case "agent_health":
+		return agentHealthJSON(cfg)
 	case "system_info":
 		return systemInfoJSON(ctx)
 	case "safe_environment":
