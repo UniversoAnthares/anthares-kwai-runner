@@ -1,0 +1,75 @@
+name: Retire remaining live Render runtime references
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/retire-remaining-render-runtime-refs-20261014.yml
+permissions:
+  contents: write
+concurrency:
+  group: retire-remaining-render-runtime-refs
+  cancel-in-progress: false
+jobs:
+  migrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove remaining operational Render service endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          router='https://anthares-tiktok-worker.anthares1.workers.dev'
+          old_tiktok={
+            'https://anthares-tiktok-render-rootless.onrender.com',
+            'https://anthares-tiktok-worker.onrender.com',
+          }
+          changed=[]
+          for p in Path('.github/workflows').glob('tiktok*.yml'):
+              s=p.read_text(encoding='utf-8-sig'); old=s
+              for endpoint in old_tiktok:
+                  s=s.replace(endpoint,router)
+              # Keep old variable names if changing them would unnecessarily alter workflow logic.
+              if s!=old:
+                  p.write_text(s,encoding='utf-8'); changed.append(str(p))
+
+          # The MCP signing-key authority is Cloudflare only. Remove the dormant Render escape hatch.
+          p=Path('infra/ara_canary_mcp_bridge.py')
+          s=p.read_text(encoding='utf-8-sig'); old=s
+          block='''if os.getenv("ARA_ALLOW_RENDER_KEY_FALLBACK", "0") == "1":\n    _KEY_URLS.extend((\n        "https://anthares-remote-mcp-v2.onrender.com/.well-known/ara-control-key",\n        "https://anthares-remote-mcp.onrender.com/.well-known/ara-control-key",\n    ))\n'''
+          if block not in s:
+              raise SystemExit('EXPECTED_RENDER_MCP_FALLBACK_BLOCK_NOT_FOUND')
+          s=s.replace(block,'')
+          p.write_text(s,encoding='utf-8'); changed.append(str(p))
+
+          # The old one-time migration workflow itself is converted to a static guard so it cannot reintroduce legacy endpoint literals.
+          p=Path('.github/workflows/retire-render-operational-defaults.yml')
+          p.write_text('''name: Verify Render operational defaults remain retired\non:\n  workflow_dispatch:\n  push:\n    branches: [main]\n    paths:\n      - .github/workflows/retire-render-operational-defaults.yml\npermissions:\n  contents: read\njobs:\n  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Verify canonical replacements\n        shell: bash\n        run: |\n          set -euo pipefail\n          grep -q "anthares-ara-backup.anthares1.workers.dev" anthares-remote-mcp/server.mjs\n          grep -q "anthares-ara-mcp.anthares1.workers.dev" anthares-remote-mcp/gateway.mjs\n          ! grep -q "onrender\\.com" anthares-remote-mcp/server.mjs\n          ! grep -q "onrender\\.com" anthares-remote-mcp/remote-server.mjs\n          ! grep -q "onrender\\.com" anthares-remote-mcp/gateway.mjs\n          ! grep -q "onrender\\.com" anthares-remote-mcp/gateway-v2.mjs\n          ! grep -q "onrender\\.com" infra/ara_canary_mcp_bridge.py\n          echo RENDER_OPERATIONAL_DEFAULTS_RETIRED=1\n''',encoding='utf-8')
+          changed.append(str(p))
+          print('CHANGED',*changed,sep='\n')
+          PY
+          python3 -m py_compile infra/ara_canary_mcp_bridge.py
+          if grep -RInE 'https?://[A-Za-z0-9.-]+\.onrender\.com' .github/workflows/tiktok*.yml infra/ara_canary_mcp_bridge.py; then
+            echo 'LIVE_RENDER_ENDPOINT_REMAINS' >&2
+            exit 1
+          fi
+          git diff --check
+      - name: Commit migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/tiktok*.yml infra/ara_canary_mcp_bridge.py .github/workflows/retire-render-operational-defaults.yml
+          if git diff --cached --quiet; then
+            echo RENDER_RUNTIME_REFS_ALREADY_RETIRED=1
+            exit 0
+          fi
+          git commit -m 'Remove remaining operational Render endpoints'
+          git pull --rebase origin main
+          git push origin HEAD:main
