@@ -1,4 +1,5 @@
 stages: [validate, workload]
+
 provider_failover_acceptance:
   stage: validate
   image: python:3.12-alpine
@@ -12,6 +13,7 @@ provider_failover_acceptance:
     - grep -q '"error":"no_ready_provider"' /tmp/control.json
     - grep -q '"error":"checkpoint_diverged"' /tmp/control.json
     - echo "GIT_PROVIDER_FAILOVER=PROVEN"
+
 real_workload_clipper_validation:
   stage: workload
   image: python:3.12-alpine
@@ -25,30 +27,45 @@ real_workload_clipper_validation:
     - python -m py_compile clipper.py
     - python -c "import clipper; print('GITLAB_REAL_WORKLOAD_CLIPPER_IMPORT=PROVEN',flush=True)"
     - python -c "import os; r=['WP_SITE_URL','WP_USERNAME','WP_APP_PASSWORD','YOUTUBE_CLIENT_ID','YOUTUBE_CLIENT_SECRET','YOUTUBE_REFRESH_TOKEN']; m=[x for x in r if not os.getenv(x)]; print('GITLAB_CLIPPER_RUNTIME_SECRETS=' + ('READY' if not m else 'MISSING:' + ','.join(m)))"
+
 android_kwai_capability_gate:
   stage: validate
   image: alpine:3.20
   script:
     - echo "ANDROID_KWAI_GITLAB_HOSTED_RUNNER=UNSUPPORTED_KVM_DEVICE_GATE"
 
-# ARA primary provider. Requires the GitLab mirror to contain this branch.
 ara_go_linux:
   stage: validate
   image: golang:1.22
   rules:
-    - if: '$CI_COMMIT_BRANCH == "feature/ara-capabilities"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - anthares-remote-agent/**/*
+        - .gitlab-ci.yml
+    - if: '$CI_COMMIT_BRANCH =~ /^feature\//'
     - if: '$CI_PIPELINE_SOURCE == "web"'
   script:
     - cd anthares-remote-agent
+    - test -z "$(gofmt -l .)"
+    - go vet ./...
     - go test ./... -count=1
     - go test -race ./...
-    - go vet ./...
+    - go build -o /tmp/ara-linux-amd64 ./cmd/agent
+    - test -s /tmp/ara-linux-amd64
+  artifacts:
+    paths:
+      - /tmp/ara-linux-amd64
+    expire_in: 7 days
 
 ara_windows_crossbuild:
   stage: validate
   image: golang:1.22
   rules:
-    - if: '$CI_COMMIT_BRANCH == "feature/ara-capabilities"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - anthares-remote-agent/**/*
+        - .gitlab-ci.yml
+    - if: '$CI_COMMIT_BRANCH =~ /^feature\//'
     - if: '$CI_PIPELINE_SOURCE == "web"'
   script:
     - cd anthares-remote-agent
@@ -56,3 +73,8 @@ ara_windows_crossbuild:
     - GOOS=windows GOARCH=arm64 go build -o /tmp/ara-arm64.exe ./cmd/agent
     - test -s /tmp/ara-amd64.exe
     - test -s /tmp/ara-arm64.exe
+  artifacts:
+    paths:
+      - /tmp/ara-amd64.exe
+      - /tmp/ara-arm64.exe
+    expire_in: 7 days
