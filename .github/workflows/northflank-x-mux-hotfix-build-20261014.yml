@@ -1,0 +1,46 @@
+name: Rebuild Northflank X mux after Playwright path fix
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/northflank-x-mux-hotfix-build-20261014.yml]
+permissions:
+  contents: read
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - name: Trigger build of existing mux service
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$NORTHFLANK_API_TOKEN"
+          echo "::add-mask::$NORTHFLANK_API_TOKEN"
+          python3 - <<'PY'
+          import json,os,urllib.request
+          token=os.environ['NORTHFLANK_API_TOKEN']; base='https://api.northflank.com/v1'
+          h={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
+          def call(method,path,data=None):
+              req=urllib.request.Request(base+path,method=method,headers=h,data=(json.dumps(data).encode() if data is not None else None))
+              with urllib.request.urlopen(req,timeout=45) as r:
+                  raw=r.read().decode('utf-8','replace'); return json.loads(raw) if raw else {}
+          projects=call('GET','/projects').get('data',{}).get('projects',[])
+          if isinstance(projects,dict):projects=list(projects.values())
+          project=next((p.get('id') for p in projects if p.get('name')=='Default'),None)
+          if not project:raise SystemExit('DEFAULT_PROJECT_NOT_FOUND')
+          services=call('GET',f'/projects/{project}/services').get('data',{}).get('services',[])
+          if isinstance(services,dict):services=list(services.values())
+          svc=next((s for s in services if s.get('name')=='anthares-ara-northflank'),None)
+          if not svc:raise SystemExit('ARA_SERVICE_NOT_FOUND')
+          sid=svc.get('id') or 'anthares-ara-northflank'
+          details=call('GET',f'/projects/{project}/services/{sid}').get('data') or {}
+          path=((details.get('buildSettings') or {}).get('dockerfile') or {}).get('dockerFilePath')
+          if path!='/infra/northflank-mux/Dockerfile':raise SystemExit('MUX_DOCKERFILE_NOT_ACTIVE '+str(path))
+          try:
+              call('POST',f'/projects/{project}/services/{sid}/build',{})
+          except Exception as e:
+              if '409' not in str(e):raise
+          print('NORTHFLANK_MUX_HOTFIX_BUILD_REQUESTED=1')
+          PY
