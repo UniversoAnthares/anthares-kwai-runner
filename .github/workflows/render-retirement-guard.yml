@@ -53,8 +53,10 @@ jobs:
               errors.append(f'{p}: Northflank is not secondary')
 
           router=text('cloudflare-tiktok-router/src/index.js')
-          if "ALLOW_RENDER_FALLBACK||'0'" not in router:
-            errors.append('TikTok router: Render fallback is not default-off')
+          if 'onrender.com' in router or 'ALLOW_RENDER_FALLBACK' in router:
+            errors.append('TikTok router: retired Render fallback must be absent')
+          if "primary_provider:'northflank'" not in router:
+            errors.append('TikTok router: Northflank upstream not declared')
           if "!['GET','HEAD'].includes(request.method)" not in router:
             errors.append('TikTok router: unsafe automatic write failover guard missing')
 
