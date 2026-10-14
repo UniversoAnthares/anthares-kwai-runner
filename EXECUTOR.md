@@ -11,7 +11,7 @@ Priority:
 3. AppVeyor — verified hosted Windows build/test and artifact upload.
 4. Floot — verified remote Node execution and PHP 8.4 via php-wasm.
 5. Cloudflare Workers Builds — verified Git-connected build/deploy.
-6. GitLab CI — last-resort hosted Linux fallback.
+6. GitLab CI — last-resort hosted Linux fallback; currently quota-blocked.
 
 CircleCI is retired and must not be selected by active routing.
 
@@ -31,11 +31,12 @@ Render is not an Android executor. CircleCI and Cirrus CI are retired.
 
 Priority:
 
-1. GitLab CI.
-2. Bitrise.
-3. Render — legacy tertiary fallback only while retirement/migration is unfinished.
+1. Cloudflare Browser Rendering + Durable Objects — active proven browser runtime.
+2. Bitrise — configured standby; not eligible until a live browser QA proof passes.
+3. GitLab CI — configured standby but currently blocked by `ci_quota_exceeded`.
+4. Render — final legacy fallback only while retirement/migration is unfinished.
 
-GitHub Actions is not the default browser executor. Bitrise is not eligible until a live browser QA proof passes.
+GitHub Actions is not the default browser executor. Cloudflare is the only currently proven active browser path that is independent of the local PC and Render.
 
 ## Failover
 
@@ -49,6 +50,7 @@ Before the publication boundary, if a provider fails readiness or cannot start w
 - one active Kwai publication lease at a time;
 - provider capability must match the role;
 - retired providers cannot appear in active priorities;
-- no-cost quota exhaustion fails closed rather than enabling billing.
+- no-cost quota exhaustion fails closed rather than enabling billing;
+- recovery verification must not redeploy a competing Worker entrypoint.
 
 Machine-readable source: `ci-hub/executor-routing.json`.
