@@ -1,39 +1,32 @@
 $ErrorActionPreference='Stop'
-$root='D:\AntharsWork\AntharesRemoteAgent'
-$result=Join-Path $root 'phase4-migration-result.json'
-$task='Anthares Remote Agent SYSTEM'
-$watchdog='Anthares Remote Recovery Watchdog'
-$userTask='Anthares Remote Agent User'
-$oldRecovery='Anthares Remote Recovery'
-$oldBridge='Anthares-GitHub-Queue-Bridge'
-$newExe=Join-Path $root 'anthares-remote-agent-v4.phase4.new.exe'
-$exe=Join-Path $root 'anthares-remote-agent-v4.exe'
-$lastGood=Join-Path $root 'anthares-remote-agent-v4.lastgood.exe'
+$stageRoot='D:\AntharsWork\AntharesRemoteAgent'
+$installRoot='C:\ProgramData\AntharesRemoteAgent'
+$workRoot='D:\AntharsWork'
+$result=Join-Path $workRoot 'legacy-pc-runtime\supervisor\phase4-migration-result.json'
+$newExe=Join-Path $stageRoot 'anthares-remote-agent-v4.phase4.new.exe'
+$exe=Join-Path $installRoot 'anthares-remote-agent-v4.exe'
+$backup=Join-Path $installRoot 'anthares-remote-agent-v4.pre-phase4.exe'
+$installer=Join-Path $PSScriptRoot 'install-system-v8.ps1'
+New-Item -ItemType Directory -Force -Path $installRoot,(Split-Path $result) | Out-Null
 try{
+  $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+  $principal=[Security.Principal.WindowsPrincipal]::new($identity)
+  if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Phase 4 migration must run elevated/SYSTEM'}
   if(-not(Test-Path $newExe)){throw 'staged V4 missing'}
-  $oldHash=if(Test-Path $exe){(Get-FileHash $exe -Algorithm SHA256).Hash}else{''}
+  if(-not(Test-Path $installer)){throw 'canonical install-system-v8.ps1 missing beside migration script'}
   $newHash=(Get-FileHash $newExe -Algorithm SHA256).Hash
-  if(Test-Path $exe){Copy-Item $exe (Join-Path $root 'anthares-remote-agent-v4.pre-phase4.exe') -Force}
-  foreach($n in @($userTask,$oldRecovery,$oldBridge)){try{Disable-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue|Out-Null}catch{}}
-  try{Stop-ScheduledTask -TaskName $watchdog -ErrorAction SilentlyContinue}catch{}
-  try{Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue}catch{}
-  Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.Name -match '^anthares-remote-agent(?:-v4|-standard)?\.exe$'}|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
-  Start-Sleep -Seconds 1
+  $oldHash=''
+  if(Test-Path $exe){$oldHash=(Get-FileHash $exe -Algorithm SHA256).Hash;Copy-Item $exe $backup -Force}
   Copy-Item $newExe $exe -Force
-  Copy-Item $exe $lastGood -Force
-  [pscustomobject]@{v4_sha256=$newHash;promoted_at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $root 'integrity-baseline.json') -Encoding UTF8
-  $tr=New-ScheduledTaskTrigger -AtStartup
-  $pr=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-  $st=New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
-  $a=New-ScheduledTaskAction -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -Argument '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "D:\AntharsWork\AntharesRemoteAgent\run-agent-system-supervisor.ps1"' -WorkingDirectory $root
-  Register-ScheduledTask -TaskName $task -Action $a -Trigger $tr -Principal $pr -Settings $st -Force|Out-Null
-  $wa=New-ScheduledTaskAction -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -Argument '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "D:\AntharsWork\AntharesRemoteAgent\recovery-watchdog-loop.ps1"' -WorkingDirectory $root
-  Register-ScheduledTask -TaskName $watchdog -Action $wa -Trigger $tr -Principal $pr -Settings $st -Force|Out-Null
-  Start-ScheduledTask -TaskName $task
-  Start-Sleep -Seconds 3
-  Start-ScheduledTask -TaskName $watchdog
-  [pscustomobject]@{ok=$true;old_hash=$oldHash;new_hash=$newHash;installed_hash=(Get-FileHash $exe -Algorithm SHA256).Hash;root=$root;at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content $result -Encoding UTF8
+  if((Get-FileHash $exe -Algorithm SHA256).Hash -ne $newHash){throw 'staged V4 copy verification failed'}
+  & $installer
+  $installResult=Join-Path $workRoot 'legacy-pc-runtime\supervisor\install-result.json'
+  if(-not(Test-Path $installResult)){throw 'canonical installer did not produce install-result.json'}
+  $verified=Get-Content $installResult -Raw | ConvertFrom-Json
+  if(-not $verified.ok -or -not $verified.queue_credential_validated -or [int]$verified.system_v4_pid -le 0){throw 'canonical SYSTEM installation did not verify runtime'}
+  [pscustomobject]@{ok=$true;old_hash=$oldHash;new_hash=$newHash;installed_hash=(Get-FileHash $exe -Algorithm SHA256).Hash;install_root=$installRoot;work_root=$workRoot;system_v4_pid=$verified.system_v4_pid;at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content $result -Encoding UTF8
 }catch{
-  [pscustomobject]@{ok=$false;error=$_.Exception.Message;at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content $result -Encoding UTF8
+  if((Test-Path $backup) -and (Test-Path $exe)){try{Copy-Item $backup $exe -Force}catch{}}
+  [pscustomobject]@{ok=$false;error=$_.Exception.Message;install_root=$installRoot;work_root=$workRoot;at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content $result -Encoding UTF8
   throw
 }
