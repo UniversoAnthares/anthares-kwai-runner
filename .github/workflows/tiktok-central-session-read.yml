@@ -1,4 +1,4 @@
-name: TikTok central session identity verification
+name: TikTok strong session identity verification
 on:
   workflow_dispatch:
   push:
@@ -22,57 +22,68 @@ jobs:
           aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
           jwt="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           echo "::add-mask::$jwt"
-          code="$(curl -sS -o /tmp/session.json -w '%{http_code}' --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/tiktok/session-state)"
-          echo "TIKTOK_SESSION_HTTP=$code"
-          test "$code" = "200"
+          curl -fsS --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/tiktok/session-state -o /tmp/session.json
           curl -fsS --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/queue-health -o /tmp/queue.json
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/session.json')); st=d.get('state') or {}; cookies=st.get('cookies') or []
           assert d.get('available') is True and cookies, 'CENTRAL_TIKTOK_SESSION_UNAVAILABLE'
           json.dump({'cookies':cookies,'origins':st.get('origins') or []},open('/tmp/storage-state.json','w'))
-          print('CENTRAL_TIKTOK_SESSION_AVAILABLE=1')
-          print('CENTRAL_TIKTOK_COOKIE_COUNT='+str(len(cookies)))
           q=json.load(open('/tmp/queue.json')); raw=q.get('jobs') or []
-          if isinstance(raw,dict): jobs=list(raw.values())
-          elif isinstance(raw,list): jobs=raw
-          else: jobs=[]
+          jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
           jobs=[j for j in jobs if isinstance(j,dict)]
-          target=[]
+          overlaps=[]
           for j in jobs:
               if j.get('platform')!='tiktok': continue
-              sid=str(j.get('source_id') or '')
               try: a=float(j.get('source_start')); b=float(j.get('source_end'))
-              except Exception: a=b=-1
-              if sid=='9CIk-I_3VhM' and max(8,a)<min(98,b): target.append({k:j.get(k) for k in ('id','status','source_id','source_start','source_end','media_sha256','publication_started','confirmed','remote_id','error_class')})
-          print('TARGET_INTERVAL_OVERLAP_COUNT='+str(len(target)))
-          print('TARGET_INTERVAL_OVERLAPS='+json.dumps(target,separators=(',',':')))
+              except Exception: continue
+              if str(j.get('source_id') or '')=='9CIk-I_3VhM' and max(8,a)<min(98,b):
+                  overlaps.append({k:j.get(k) for k in ('id','status','source_id','source_start','source_end','media_sha256','publication_started','confirmed','remote_id','error_class')})
+          print('CENTRAL_TIKTOK_SESSION_AVAILABLE=1')
+          print('CENTRAL_TIKTOK_COOKIE_COUNT='+str(len(cookies)))
+          print('TARGET_INTERVAL_OVERLAP_COUNT='+str(len(overlaps)))
+          print('TARGET_INTERVAL_OVERLAPS='+json.dumps(overlaps,separators=(',',':')))
           print('TIKTOK_QUEUE_JOB_COUNT='+str(sum(1 for j in jobs if j.get('platform')=='tiktok')))
-          print('QUEUE_COUNTS='+json.dumps(q.get('counts') or {},separators=(',',':')))
           PY
-      - name: Validate exact TikTok identity and inventory profile read-only
+      - name: Require strong account identity evidence
         shell: bash
         env:
-          EXPECTED_TIKTOK_USERNAME: universo.anthares
           TIKTOK_STORAGE_STATE_FILE: /tmp/storage-state.json
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet playwright requests
+          python3 -m pip install --quiet playwright
           python3 -m playwright install chromium
           python3 - <<'PY'
-          import json,os,sys,time
+          import json,re,time
           from playwright.sync_api import sync_playwright
-          sys.path.insert(0,os.path.join(os.getcwd(),'direct-tiktok-publisher'))
-          import tiktok_worker as tw
-          state=tw.storage_state()
+          state=json.load(open('/tmp/storage-state.json'))
+          expected='universo.anthares'
+          def hydration_user(page):
+              try:
+                  raw=page.locator('#__UNIVERSAL_DATA_FOR_REHYDRATION__').text_content(timeout=5000)
+                  d=json.loads(raw or '{}')
+                  u=(d.get('__DEFAULT_SCOPE__',{}).get('webapp.app-context',{}).get('user',{}) or {})
+                  return str(u.get('uniqueId') or '').strip().lower()
+              except Exception:
+                  return ''
+          strong=set()
           with sync_playwright() as p:
               browser=p.chromium.launch(headless=True,args=['--disable-dev-shm-usage','--no-sandbox','--disable-gpu'])
-              context=browser.new_context(storage_state=state,viewport={'width':1440,'height':1000},locale='pt-BR')
-              page=context.new_page(); page.goto('https://www.tiktok.com/foryou',wait_until='domcontentloaded',timeout=60000); time.sleep(5)
-              tw.validate_tiktok_session(page,context)
-              print('ANTHARES_BROWSER_TIKTOK_IDENTITY_PROVEN=universo.anthares')
-              context.close(); browser.close()
-          vids=tw.inventory_profile_videos('universo.anthares')
-          print('PROFILE_VIDEO_COUNT='+str(len(vids)))
-          print('PROFILE_VIDEO_IDS='+json.dumps(sorted(list(vids))))
+              ctx=browser.new_context(storage_state=state,viewport={'width':1440,'height':1000},locale='pt-BR')
+              page=ctx.new_page()
+              for url in ['https://www.tiktok.com/profile','https://www.tiktok.com/tiktokstudio/upload?from=webapp','https://www.tiktok.com/upload?lang=pt-BR']:
+                  try:
+                      page.goto(url,wait_until='domcontentloaded',timeout=60000); time.sleep(3)
+                      m=re.search(r'tiktok\.com/@([^/?#]+)',page.url,re.I)
+                      if m: strong.add(m.group(1).lower())
+                      hu=hydration_user(page)
+                      if hu: strong.add(hu)
+                      print('IDENTITY_PROBE_PATH='+url.split('tiktok.com/',1)[-1]+' FINAL_HAS_PROFILE='+str(bool(m)).lower()+' HYDRATION_USER_PRESENT='+str(bool(hu)).lower())
+                  except Exception as exc:
+                      print('IDENTITY_PROBE_ERROR='+type(exc).__name__)
+              print('STRONG_ACCOUNT_CANDIDATES='+json.dumps(sorted(strong)))
+              if expected not in strong:
+                  raise RuntimeError('STRONG_TIKTOK_IDENTITY_NOT_PROVEN')
+              print('STRONG_TIKTOK_IDENTITY_PROVEN='+expected)
+              ctx.close(); browser.close()
           PY
