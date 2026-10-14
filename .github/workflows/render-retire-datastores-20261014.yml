@@ -1,0 +1,110 @@
+name: One-time suspend retired Render datastores
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/render-retire-datastores-20261014.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-retire-datastores-20261014
+  cancel-in-progress: false
+
+jobs:
+  suspend-datastores:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Prove replacements and suspend Render PostgreSQL/Key Value
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, time, urllib.request, urllib.error
+
+          token=os.getenv('RENDER_API_KEY','')
+          if not token: raise SystemExit('RENDER_API_KEY_NOT_CONFIGURED')
+          owner='tea-d9hnkbt8nd3s73f0876g'
+          nf='https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run'
+
+          def public_json(url):
+              req=urllib.request.Request(url,headers={'User-Agent':'anthares-render-retirement/2'})
+              with urllib.request.urlopen(req,timeout=25) as r:
+                  return json.load(r)
+
+          # Render must not be the persistence authority before its datastores are suspended.
+          proof=public_json(nf+'/_canary/persistence-proof')
+          if proof.get('ok') is not True or proof.get('backend')!='postgres':
+              raise SystemExit('EXTERNAL_POSTGRES_PROOF_NOT_HEALTHY')
+          xvault=public_json('https://anthares-x-vault.anthares1.workers.dev/health')
+          if xvault.get('ok') is not True or xvault.get('persistent_state') is not True or xvault.get('render_independent') is not True:
+              raise SystemExit('EXTERNAL_X_VAULT_NOT_HEALTHY')
+          print('EXTERNAL_PERSISTENCE_PROVEN postgres=1 x_vault=1',flush=True)
+
+          headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'anthares-render-retirement/2'}
+          def api(method,path,payload=None,allow=()):
+              body=None if payload is None else json.dumps(payload).encode()
+              req=urllib.request.Request('https://api.render.com/v1'+path,data=body,method=method,headers={**headers,'Content-Type':'application/json'})
+              for attempt in range(8):
+                  try:
+                      with urllib.request.urlopen(req,timeout=30) as r:
+                          raw=r.read().decode('utf-8','replace')
+                          return r.status,(json.loads(raw) if raw else {})
+                  except urllib.error.HTTPError as e:
+                      if e.code==429:
+                          time.sleep(min(60,10*(attempt+1)));continue
+                      if e.code in allow:
+                          return e.code,{}
+                      raise RuntimeError(f'{method} {path}: HTTP {e.code} '+e.read().decode('utf-8','replace')[:300])
+              raise RuntimeError('rate limit retry exhausted '+path)
+
+          _,pgrows=api('GET','/postgres?limit=100&ownerId='+owner)
+          pgs=[]
+          for row in pgrows if isinstance(pgrows,list) else []:
+              p=row.get('postgres',row) if isinstance(row,dict) else {}
+              if p.get('owner',{}).get('id')==owner or p.get('ownerId')==owner:
+                  pgs.append(p)
+          target=[p for p in pgs if p.get('name')=='anthares-ara-state']
+          if len(target)!=1:
+              raise SystemExit('EXPECTED_ONE_ANTHARES_ARA_STATE_FOUND_'+str(len(target)))
+          pg=target[0]; pgid=pg.get('id')
+          if pg.get('suspended')!='suspended' and pg.get('status')!='suspended':
+              code,_=api('POST','/postgres/'+pgid+'/suspend')
+              if code!=202: raise SystemExit('POSTGRES_SUSPEND_UNEXPECTED_'+str(code))
+          for _ in range(30):
+              _,cur=api('GET','/postgres/'+pgid)
+              if cur.get('suspended')=='suspended' or cur.get('status')=='suspended': break
+              time.sleep(4)
+          else: raise SystemExit('POSTGRES_SUSPEND_NOT_CONFIRMED')
+          print('RENDER_POSTGRES_SUSPENDED name=anthares-ara-state id='+pgid,flush=True)
+
+          _,kvrows=api('GET','/key-value?limit=100&ownerId='+owner)
+          kvs=[]
+          for row in kvrows if isinstance(kvrows,list) else []:
+              k=row.get('keyValue',row) if isinstance(row,dict) else {}
+              kid=(k.get('owner') or {}).get('id') or k.get('ownerId')
+              if kid==owner and str(k.get('name','')).startswith('anthares'):
+                  kvs.append(k)
+          if len(kvs)>1:
+              raise SystemExit('MULTIPLE_ANTHARES_KEY_VALUE_INSTANCES_REFUSE_BULK_SUSPEND')
+          if kvs:
+              kv=kvs[0]; kid=kv.get('id'); name=kv.get('name','')
+              if kv.get('status')!='suspended' and kv.get('suspended')!='suspended':
+                  code,_=api('POST','/key-value/'+kid+'/suspend')
+                  if code!=202: raise SystemExit('KEY_VALUE_SUSPEND_UNEXPECTED_'+str(code))
+              for _ in range(30):
+                  _,cur=api('GET','/key-value/'+kid)
+                  if cur.get('status')=='suspended' or cur.get('suspended')=='suspended': break
+                  time.sleep(4)
+              else: raise SystemExit('KEY_VALUE_SUSPEND_NOT_CONFIRMED')
+              print('RENDER_KEY_VALUE_SUSPENDED name='+name+' id='+kid,flush=True)
+          else:
+              print('RENDER_KEY_VALUE_NONE_TO_SUSPEND',flush=True)
+
+          print('RENDER_DATASTORES_RETIRED=1',flush=True)
+          PY
