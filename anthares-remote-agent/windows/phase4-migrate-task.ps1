@@ -23,8 +23,8 @@ try{
   $installResult=Join-Path $workRoot 'legacy-pc-runtime\supervisor\install-result.json'
   if(-not(Test-Path $installResult)){throw 'canonical installer did not produce install-result.json'}
   $verified=Get-Content $installResult -Raw | ConvertFrom-Json
-  if(-not $verified.ok -or -not $verified.queue_credential_validated -or -not $verified.queue_end_to_end_proof -or [int]$verified.system_v4_pid -le 0){throw 'canonical SYSTEM installation did not prove end-to-end queue runtime'}
-  [pscustomobject]@{ok=$true;old_hash=$oldHash;new_hash=$newHash;installed_hash=(Get-FileHash $exe -Algorithm SHA256).Hash;install_root=$installRoot;work_root=$workRoot;system_v4_pid=$verified.system_v4_pid;queue_end_to_end_proof=$true;queue_proof_issue=$verified.queue_proof_issue;at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content $result -Encoding UTF8
+  if(-not $verified.ok -or -not $verified.queue_credential_validated -or -not $verified.queue_end_to_end_proof -or -not $verified.mcp_http_transport_configured -or [int]$verified.system_v4_pid -le 0){throw 'canonical SYSTEM installation did not prove dual-transport runtime'}
+  [pscustomobject]@{ok=$true;old_hash=$oldHash;new_hash=$newHash;installed_hash=(Get-FileHash $exe -Algorithm SHA256).Hash;install_root=$installRoot;work_root=$workRoot;system_v4_pid=$verified.system_v4_pid;queue_end_to_end_proof=$true;mcp_http_transport_configured=$true;queue_proof_issue=$verified.queue_proof_issue;at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content $result -Encoding UTF8
 }catch{
   if((Test-Path $backup) -and (Test-Path $exe)){try{Copy-Item $backup $exe -Force}catch{}}
   [pscustomobject]@{ok=$false;error=$_.Exception.Message;install_root=$installRoot;work_root=$workRoot;at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json|Set-Content $result -Encoding UTF8
