@@ -12,7 +12,6 @@ $credential=Join-Path $root 'secrets\issue-queue.json'
 $log=Join-Path $root 'recovery-watchdog.log'
 $state=Join-Path $root 'recovery-watchdog-state.json'
 $restartStamp=Join-Path $root 'recovery-last-restart.txt'
-$credential=Join-Path $root 'secrets\issue-queue.json'
 $restartCooldownSeconds=120
 $critical=@('run-agent-system-supervisor.ps1','load-issue-queue-auth.ps1','recovery-watchdog-loop.ps1')
 function Log([string]$m){try{"$(Get-Date -Format o) $m"|Add-Content -Path $log -Encoding UTF8}catch{}}
@@ -23,8 +22,8 @@ function Restore-CriticalScripts{
     $live=Join-Path $root $name;$good=$live+'.lastgood'
     if(-not(Test-Path $good)){continue}
     $restore=$false
-    if(-not(Test-Path $live)){$restore=$true}else{try{$restore=((Get-FileHash $live -Algorithm SHA256).Hash -ne (Get-FileHash $good -Algorithm SHA256).Hash)}catch{$restore=$true}}
-    if($restore){try{Copy-Item $good $live -Force;Log("restored critical script $name")}catch{Log("failed restoring critical script $name: $($_.Exception.Message)")}}
+    if(-not(Test-Path $live)){$restore=$true}else{try{$restore=((Get-FileHash -LiteralPath $live -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $good -Algorithm SHA256).Hash)}catch{$restore=$true}}
+    if($restore){try{Copy-Item -LiteralPath $good -Destination $live -Force;Log("restored critical script $name")}catch{Log("failed restoring critical script $name: $($_.Exception.Message)")}}
   }
 }
 function Ensure-Task([string]$name,[string]$script){
@@ -69,6 +68,15 @@ function Test-QueueCredential{
     return (((-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_TOKEN))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_REPOSITORY))) -or ((-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_TOKEN))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_PROJECT))))
   }catch{Log("queue credential load failed: $($_.Exception.GetType().Name)");return $false}
 }
+function Can-Restart{
+  try{
+    if(-not(Test-Path $restartStamp)){return $true}
+    $raw=(Get-Content -LiteralPath $restartStamp -Raw -ErrorAction Stop).Trim()
+    $last=[DateTimeOffset]::Parse($raw)
+    return ((([DateTimeOffset]::UtcNow-$last).TotalSeconds) -ge $restartCooldownSeconds)
+  }catch{return $true}
+}
+function Mark-Restart{try{[DateTimeOffset]::UtcNow.ToString('o')|Set-Content -LiteralPath $restartStamp -Encoding ASCII}catch{}}
 try{
   Restore-CriticalScripts
   Ensure-BinaryIntegrity
@@ -78,19 +86,21 @@ try{
   $queueCredentialLoaded=Test-QueueCredential
   Get-InteractiveAgents|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue;Log("stopped interactive agent pid=$($_.ProcessId)")}catch{}}
   $agents=@(Get-SystemV4)
+  $restartAttempted=$false
   if($agents.Count -eq 0){
-    if($queueCredentialLoaded){
+    if($queueCredentialLoaded -and (Can-Restart)){
+      $restartAttempted=$true;Mark-Restart
       Stop-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue
       Start-Sleep -Seconds 1
       Start-ScheduledTask -TaskName $canonicalTask -ErrorAction Stop
       Start-Sleep -Seconds 3
       $agents=@(Get-SystemV4)
-    }elseif([string]$task.State -ne 'Running'){
+    }elseif(-not $queueCredentialLoaded -and [string]$task.State -ne 'Running'){
       Start-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue
     }
   }
   $interactive=@(Get-InteractiveAgents)
-  $reason=if($agents.Count -gt 0){'system-agent-running'}elseif(-not $queueCredentialLoaded){'waiting-for-private-queue-credential'}else{'system-agent-missing'}
+  $reason=if($agents.Count -gt 0){'system-agent-running'}elseif(-not $queueCredentialLoaded){'waiting-for-private-queue-credential'}elseif(-not (Can-Restart)){'restart-cooldown'}else{'system-agent-missing'}
   [pscustomobject]@{
     updated_at=(Get-Date).ToUniversalTime().ToString('o');ok=$true;install_root=$root;role='canonical-root-recovery';reason=$reason
     canonical_task_present=[bool]$task;watchdog_task_present=[bool]$wd
@@ -98,8 +108,7 @@ try{
     watchdog_task_state=[string](Get-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue).State
     queue_credential_present=[bool]$queueCredentialPresent;queue_credential_loaded=[bool]$queueCredentialLoaded
     system_v4_count=$agents.Count;system_v4_pids=@($agents|ForEach-Object{$_.ProcessId})
-    credential_file_present=(Test-Path $credential);restart_cooldown_seconds=$restartCooldownSeconds
-    restart_attempted=$canRestart
+    restart_cooldown_seconds=$restartCooldownSeconds;restart_attempted=$restartAttempted
     interactive_agent_count=$interactive.Count;interactive_agent_pids=@($interactive|ForEach-Object{$_.ProcessId})
     legacy_preserved_until_queue_proof=$true
   }|ConvertTo-Json -Depth 4|Set-Content $state -Encoding UTF8
