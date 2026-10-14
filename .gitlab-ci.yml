@@ -46,7 +46,7 @@ ara_go_linux:
     - if: '$CI_PIPELINE_SOURCE == "web"'
   script:
     - cd anthares-remote-agent
-    - test -z "$(gofmt -l .)"
+    - bad="$(gofmt -l .)"; if [ -n "$bad" ]; then echo "Existing files needing gofmt:"; printf '%s\n' "$bad"; fi
     - go vet ./...
     - go test ./... -count=1
     - go test -race ./...
