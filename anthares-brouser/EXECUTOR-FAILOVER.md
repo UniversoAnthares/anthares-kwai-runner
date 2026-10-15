@@ -1,11 +1,33 @@
-# Alternative executors for Anthares-browser
+# Anthares Browser — executor failover policy
 
-Priority and failover are **control-plane choices**, not a claim that all providers are provisioned.
+Anthares Browser is the only supported browser-automation surface. Provider executors are backends behind that surface and never become competing browser products.
 
-1. GitLab CI (independent GitLab-hosted runners). Repository mirror: https://gitlab.com/universo-anthares-group/anthares-kwai-runner ; verify source SHA matches GitHub before any run. GitLab project default branch is duo-main and is not automatically the same commit as GitHub main.
-2. Render (remote container runtime). Existing Render services are not dedicated browser CI runners. Only use a separately authenticated test endpoint with explicit capacity and limits. Do not reuse public production endpoints as arbitrary command execution.
-3. Anthares infrastructure (independent of Render). PENDING: deploy a private job worker with persistent queue, auth, leases and telemetry, then verify remotely with PC off.
+## Current order
 
-Do not automatically fail over on test failures: fail over only on infrastructure failure (runner unavailable, scheduling timeout, provider outage). Keep a common SHA and test manifest across all three providers. Never silently fall back to GitHub Actions or to the user's computer.
+1. Anthares Browser persistent runtime on approved Anthares infrastructure when its readiness contract proves Chromium running, durable state restored and `host_desktop_fallback=false`.
+2. GitHub Actions public hosted Chromium for bounded/read-only or one-shot browser jobs when public Actions is currently quota-eligible. The job must load the canonical `browser-state/runtime` vault state and use the same identity gate as publication.
+3. Private auxiliary paths, including Codespaces, only after their authorization and quota gates are proven for the current round.
 
-To claim operational failover: prove each provider executes the same test manifest, reports an exit status, retains redacted logs and is accessible without GitHub-hosted runners.
+## Ineligible providers
+
+- Browserless: retired and replaced by Anthares Browser.
+- Render: retired.
+- TinyFish: retired.
+- CircleCI: retired.
+- GitLab CI: ineligible while the current quota probe reports `ci_quota_exceeded`.
+- Cloudflare Browser Rendering: ineligible while its Browser Rendering quota is exhausted; this does not imply that Cloudflare Workers or Durable Objects are unavailable.
+
+## Failover rules
+
+Classify the failure before changing executor:
+
+- Anthares component defect, with provider capacity available: repair the Anthares component first.
+- Explicit provider/quota exhaustion: select the next currently eligible backend.
+- Authentication/account boundary: fail closed and require the smallest authorization action available.
+- Publication outcome ambiguity: reconcile; never replay the publication boundary.
+
+Every backend must use the same canonical session authority, account gate, lease/dedupe contract and evidence format. The user's PC is administration/recovery only and is never a browser execution fallback.
+
+## Operational proof
+
+A backend is eligible only after a current practical run proves browser launch/navigation, exit status and redacted evidence. Historical success is recorded as historical evidence and does not override a current quota or readiness failure.
