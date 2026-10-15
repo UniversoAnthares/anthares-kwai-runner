@@ -1,4 +1,8 @@
-"""Cookie-authenticated Browserless bridge for Anthares Remote Agent."""
+"""Cookie-authenticated browser-facing bridge for Anthares Remote Agent.
+
+This module exposes Anthares Remote operations to an authenticated web control
+surface. It is not Browserless and it is not the Anthares Browser runtime.
+"""
 import base64
 import hashlib
 import hmac
