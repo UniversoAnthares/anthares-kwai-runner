@@ -9,6 +9,7 @@ const td = new TextDecoder();
 
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 function sameSecret(a,b){a=String(a||"");b=String(b||"");if(!a||a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;}
+function machineAuthorized(request,env){const supplied=(request.headers.get("authorization")||"").replace(/^Bearer /i,"");return sameSecret(supplied,env.ANTHARES_RESERVA_TOKEN);}
 function cookieValue(request,name){for(const part of (request.headers.get("cookie")||"").split(";")){const [k,...rest]=part.trim().split("=");if(k===name)return rest.join("=");}return "";}
 const b64url=bytes=>{let s="";for(const b of bytes)s+=String.fromCharCode(b);return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");};
 const fromB64url=value=>{let s=String(value||"").replace(/-/g,"+").replace(/_/g,"/");while(s.length%4)s+="=";const raw=atob(s);return Uint8Array.from(raw,c=>c.charCodeAt(0));};
@@ -91,7 +92,10 @@ export default {
       return html(browserPage(ok?`Autenticação criptografada salva (${count} cookies) e Chromium encerrado.`:`Falha ao salvar: ${err}`,null),ok?200:503);
     }
 
-    if(url.pathname==="/tiktok/northflank/status"&&request.method==="GET")return json(await nf(env,"/interactive-browser/status"));
+    if(url.pathname==="/tiktok/northflank/status"&&request.method==="GET"){
+      if(!machineAuthorized(request,env))return json({error:"unauthorized"},401);
+      return json(await nf(env,"/interactive-browser/status"));
+    }
     return baseApp.fetch(request,env,ctx);
   }
 };
