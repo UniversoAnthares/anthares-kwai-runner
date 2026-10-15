@@ -45,16 +45,17 @@ jobs:
           print('TARGET_INTERVAL_OVERLAPS='+json.dumps(overlaps,separators=(',',':')))
           print('TIKTOK_QUEUE_JOB_COUNT='+str(sum(1 for j in jobs if j.get('platform')=='tiktok')))
           PY
-      - name: Require strong account identity evidence
+      - name: Require strong account identity evidence and capture baseline
         shell: bash
         env:
           TIKTOK_STORAGE_STATE_FILE: /tmp/storage-state.json
+          EXPECTED_TIKTOK_USERNAME: universo.anthares
         run: |
           set -euo pipefail
           python3 -m pip install --quiet playwright
           python3 -m playwright install chromium
           python3 - <<'PY'
-          import json,re,time
+          import json,re,time,os,sys
           from playwright.sync_api import sync_playwright
           state=json.load(open('/tmp/storage-state.json'))
           expected='universo.anthares'
@@ -72,18 +73,19 @@ jobs:
               ctx=browser.new_context(storage_state=state,viewport={'width':1440,'height':1000},locale='pt-BR')
               page=ctx.new_page()
               for url in ['https://www.tiktok.com/profile','https://www.tiktok.com/tiktokstudio/upload?from=webapp','https://www.tiktok.com/upload?lang=pt-BR']:
-                  try:
-                      page.goto(url,wait_until='domcontentloaded',timeout=60000); time.sleep(3)
-                      m=re.search(r'tiktok\.com/@([^/?#]+)',page.url,re.I)
-                      if m: strong.add(m.group(1).lower())
-                      hu=hydration_user(page)
-                      if hu: strong.add(hu)
-                      print('IDENTITY_PROBE_PATH='+url.split('tiktok.com/',1)[-1]+' FINAL_HAS_PROFILE='+str(bool(m)).lower()+' HYDRATION_USER_PRESENT='+str(bool(hu)).lower())
-                  except Exception as exc:
-                      print('IDENTITY_PROBE_ERROR='+type(exc).__name__)
+                  page.goto(url,wait_until='domcontentloaded',timeout=60000); time.sleep(3)
+                  m=re.search(r'tiktok\.com/@([^/?#]+)',page.url,re.I)
+                  if m: strong.add(m.group(1).lower())
+                  hu=hydration_user(page)
+                  if hu: strong.add(hu)
               print('STRONG_ACCOUNT_CANDIDATES='+json.dumps(sorted(strong)))
-              if expected not in strong:
-                  raise RuntimeError('STRONG_TIKTOK_IDENTITY_NOT_PROVEN')
+              if expected not in strong: raise RuntimeError('STRONG_TIKTOK_IDENTITY_NOT_PROVEN')
               print('STRONG_TIKTOK_IDENTITY_PROVEN='+expected)
               ctx.close(); browser.close()
+          sys.path.insert(0,os.path.join(os.getcwd(),'direct-tiktok-publisher'))
+          import tiktok_worker as tw
+          vids=tw.inventory_profile_videos(expected)
+          ids=sorted({str(v.get('id') or '') for v in vids if str(v.get('id') or '')})
+          print('PROFILE_BASELINE_COUNT='+str(len(ids)))
+          print('PROFILE_BASELINE_IDS='+json.dumps(ids))
           PY
