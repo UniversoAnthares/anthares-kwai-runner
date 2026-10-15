@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Capture worker tail around health request
+      - name: Capture worker tail around OAuth email send
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -21,13 +21,24 @@ jobs:
         run: |
           set -u
           cd cloudflare-ara-mcp
-          (timeout 20s npx --yes wrangler@4.43.0 tail anthares-ara-mcp --format=json > /tmp/tail.log 2>&1 || true) &
+          (timeout 25s npx --yes wrangler@4.43.0 tail anthares-ara-mcp --format=json > /tmp/tail.log 2>&1 || true) &
           TPID=$!
           sleep 7
-          code="$(curl -sS -o /tmp/health.body -w '%{http_code}' --max-time 20 https://anthares-ara-mcp.anthares1.workers.dev/health || true)"
-          echo "HTTP=$code"
-          cat /tmp/health.body || true
-          sleep 4
+          verifier="$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=\n')"
+          challenge="$(printf '%s' "$verifier" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
+          code="$(curl -sS -o /tmp/auth.body -w '%{http_code}' --max-time 20 --get \
+            --data-urlencode 'client_id=https://chatgpt.com/oauth/client.json' \
+            --data-urlencode 'redirect_uri=https://chatgpt.com/connector_platform_oauth_redirect' \
+            --data-urlencode 'response_type=code' \
+            --data-urlencode "code_challenge=$challenge" \
+            --data-urlencode 'code_challenge_method=S256' \
+            --data-urlencode 'scope=ara.read ara.write' \
+            --data-urlencode 'resource=https://anthares-ara-mcp.anthares1.workers.dev' \
+            --data-urlencode 'state=email-tail-probe' \
+            'https://anthares-ara-mcp.anthares1.workers.dev/oauth/authorize' || true)"
+          echo "OAUTH_HTTP=$code"
+          cat /tmp/auth.body || true
+          sleep 5
           wait "$TPID" || true
           echo '---TAIL---'
           cat /tmp/tail.log || true
