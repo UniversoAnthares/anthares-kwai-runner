@@ -1,0 +1,51 @@
+name: Northflank Chromium real E2E
+on:
+  push:
+    paths:
+      - .github/workflows/northflank-browser-e2e.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Start Chromium, capture screenshot, and close
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ARA_SHARED"
+          echo "::add-mask::$ARA_SHARED"
+          base='https://anthares-tiktok-worker.anthares1.workers.dev'
+          auth=(-H "Authorization: Bearer $ARA_SHARED")
+          for i in $(seq 1 18); do
+            code="$(curl -sS -o /tmp/status.json -w '%{http_code}' --max-time 12 "${auth[@]}" "$base/interactive-browser/status" || true)"
+            if [ "$code" = 200 ]; then break; fi
+            sleep 5
+          done
+          test "$code" = 200 || { cat /tmp/status.json 2>/dev/null || true; exit 31; }
+          curl --fail-with-body -sS --max-time 35 "${auth[@]}" -H 'content-type: application/json' -X POST "$base/interactive-browser/start" --data '{}' -o /tmp/start.json
+          cat /tmp/start.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/start.json'))
+          assert d.get('ok') is True,d
+          assert d.get('active') is True,d
+          PY
+          curl --fail-with-body -sS --max-time 35 "${auth[@]}" "$base/interactive-browser/screenshot" -o /tmp/shot.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/shot.json'))
+          assert d.get('ok') is True,d
+          assert d.get('mime')=='image/jpeg',d
+          assert len(d.get('image_b64') or '')>5000,len(d.get('image_b64') or '')
+          assert 'tiktok.com' in (d.get('url') or ''),d.get('url')
+          print('NORTHFLANK_CHROMIUM_SCREENSHOT_OK=1')
+          print('SCREENSHOT_B64_BYTES='+str(len(d['image_b64'])))
+          PY
+          curl --fail-with-body -sS --max-time 20 "${auth[@]}" -H 'content-type: application/json' -X POST "$base/interactive-browser/close" --data '{}' -o /tmp/close.json
+          grep -q '"ok":true' /tmp/close.json
+          echo NORTHFLANK_CHROMIUM_REAL_E2E_OK=1
