@@ -111,40 +111,61 @@ func issueQueueLoop(cfg Config) {
 		interval = time.Duration(v) * time.Second
 	}
 	fmt.Fprintf(os.Stdout, "Anthares issue queue enabled providers=%d interval=%s\n", len(providers), interval)
-	// Bound queue execution independently of HTTP jobs. Never execute the same
-	// job twice when both GitHub and GitLab expose its envelope.
+
 	workers := cfg.MaxConcurrent
-	if workers < 1 { workers = 1 }
-	for {
-		var batch []issueQueueItem
-		seen := make(map[string]bool)
-		for _, provider := range providers {
-			items, err := provider.Poll(cfg.DeviceID)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "issue queue poll deferred provider=%s: %v\n", provider.Name(), err)
-				continue
+	if workers < 1 {
+		workers = 1
+	}
+	sem := make(chan struct{}, workers)
+	items := make(chan issueQueueItem, workers*len(providers)*4)
+	inFlight := make(map[string]bool)
+	var inFlightMu sync.Mutex
+
+	for _, provider := range providers {
+		go func(provider issueQueueProvider) {
+			for {
+				polled, err := provider.Poll(cfg.DeviceID)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "issue queue poll deferred provider=%s: %v\n", provider.Name(), err)
+				} else {
+					for _, item := range polled {
+						items <- item
+					}
+				}
+				time.Sleep(interval)
 			}
-			for _, item := range items {
-				if seen[item.Job.ID] { continue }
-				seen[item.Job.ID] = true
-				batch = append(batch, item)
-			}
+		}(provider)
+	}
+
+	for item := range items {
+		if item.Job.ID == "" {
+			continue
 		}
-		sem := make(chan struct{}, workers)
-		var wg sync.WaitGroup
-		for _, item := range batch {
-			sem <- struct{}{}
-			wg.Add(1)
+		inFlightMu.Lock()
+		if inFlight[item.Job.ID] {
+			inFlightMu.Unlock()
+			continue
+		}
+		select {
+		case sem <- struct{}{}:
+			inFlight[item.Job.ID] = true
+			inFlightMu.Unlock()
 			go func(item issueQueueItem) {
-				defer wg.Done()
-				defer func() { <-sem }()
+				defer func() {
+					<-sem
+					inFlightMu.Lock()
+					delete(inFlight, item.Job.ID)
+					inFlightMu.Unlock()
+				}()
 				if err := processIssueQueueItem(cfg, item); err != nil {
 					fmt.Fprintf(os.Stderr, "issue queue item deferred provider=%s source=%s: %v\n", item.Provider.Name(), item.Source, err)
 				}
 			}(item)
+		default:
+			// Leave the job queued. The provider will rediscover it on the next
+			// poll rather than blocking discovery behind long-running work.
+			inFlightMu.Unlock()
 		}
-		wg.Wait()
-		time.Sleep(interval)
 	}
 }
 
@@ -328,39 +349,46 @@ func (p *githubIssueProvider) Poll(deviceID string) ([]issueQueueItem, error) {
 	if err := p.verify(); err != nil {
 		return nil, err
 	}
-	u := "https://api.github.com/repos/" + p.repo + "/issues?state=open&labels=ara-queued&per_page=30"
-	req, _ := http.NewRequest(http.MethodGet, u, nil)
-	p.auth(req)
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("GitHub issue poll status %d", resp.StatusCode)
-	}
-	var issues []struct {
-		Number      int    `json:"number"`
-		Body        string `json:"body"`
-		PullRequest any    `json:"pull_request"`
-		User        struct{ Login string `json:"login"` } `json:"user"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&issues); err != nil {
-		return nil, err
-	}
 	var out []issueQueueItem
-	for _, issue := range issues {
-		if issue.PullRequest != nil || issue.Number <= 0 {
-			continue
-		}
-		if p.expectedAuthor != "" && !strings.EqualFold(issue.User.Login, p.expectedAuthor) {
-			continue
-		}
-		job, err := decodeIssueQueueJob(issue.Body, deviceID)
+	for page := 1; page <= 20; page++ {
+		u := "https://api.github.com/repos/" + p.repo + "/issues?state=open&labels=ara-queued&per_page=100&page=" + strconv.Itoa(page)
+		req, _ := http.NewRequest(http.MethodGet, u, nil)
+		p.auth(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
-			continue
+			return nil, err
 		}
-		out = append(out, issueQueueItem{Provider: p, Source: strconv.Itoa(issue.Number), Job: job})
+		if resp.StatusCode/100 != 2 {
+			resp.Body.Close()
+			return nil, fmt.Errorf("GitHub issue poll status %d", resp.StatusCode)
+		}
+		var issues []struct {
+			Number      int    `json:"number"`
+			Body        string `json:"body"`
+			PullRequest any    `json:"pull_request"`
+			User        struct{ Login string `json:"login"` } `json:"user"`
+		}
+		err = json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&issues)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		for _, issue := range issues {
+			if issue.PullRequest != nil || issue.Number <= 0 {
+				continue
+			}
+			if p.expectedAuthor != "" && !strings.EqualFold(issue.User.Login, p.expectedAuthor) {
+				continue
+			}
+			job, err := decodeIssueQueueJob(issue.Body, deviceID)
+			if err != nil {
+				continue
+			}
+			out = append(out, issueQueueItem{Provider: p, Source: strconv.Itoa(issue.Number), Job: job})
+		}
+		if len(issues) < 100 {
+			break
+		}
 	}
 	return out, nil
 }
@@ -452,38 +480,45 @@ func (p *gitlabIssueProvider) Poll(deviceID string) ([]issueQueueItem, error) {
 	if err := p.verify(); err != nil {
 		return nil, err
 	}
-	u := "https://gitlab.com/api/v4/projects/" + p.apiProject() + "/issues?state=opened&labels=ara-queued&per_page=30"
-	req, _ := http.NewRequest(http.MethodGet, u, nil)
-	p.auth(req)
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("GitLab issue poll status %d", resp.StatusCode)
-	}
-	var issues []struct {
-		IID         int    `json:"iid"`
-		Description string `json:"description"`
-		Author      struct{ Username string `json:"username"` } `json:"author"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&issues); err != nil {
-		return nil, err
-	}
 	var out []issueQueueItem
-	for _, issue := range issues {
-		if issue.IID <= 0 {
-			continue
-		}
-		if p.expectedAuthor != "" && !strings.EqualFold(issue.Author.Username, p.expectedAuthor) {
-			continue
-		}
-		job, err := decodeIssueQueueJob(issue.Description, deviceID)
+	for page := 1; page <= 20; page++ {
+		u := "https://gitlab.com/api/v4/projects/" + p.apiProject() + "/issues?state=opened&labels=ara-queued&per_page=100&page=" + strconv.Itoa(page)
+		req, _ := http.NewRequest(http.MethodGet, u, nil)
+		p.auth(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
-			continue
+			return nil, err
 		}
-		out = append(out, issueQueueItem{Provider: p, Source: strconv.Itoa(issue.IID), Job: job})
+		if resp.StatusCode/100 != 2 {
+			resp.Body.Close()
+			return nil, fmt.Errorf("GitLab issue poll status %d", resp.StatusCode)
+		}
+		var issues []struct {
+			IID         int    `json:"iid"`
+			Description string `json:"description"`
+			Author      struct{ Username string `json:"username"` } `json:"author"`
+		}
+		err = json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&issues)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		for _, issue := range issues {
+			if issue.IID <= 0 {
+				continue
+			}
+			if p.expectedAuthor != "" && !strings.EqualFold(issue.Author.Username, p.expectedAuthor) {
+				continue
+			}
+			job, err := decodeIssueQueueJob(issue.Description, deviceID)
+			if err != nil {
+				continue
+			}
+			out = append(out, issueQueueItem{Provider: p, Source: strconv.Itoa(issue.IID), Job: job})
+		}
+		if len(issues) < 100 {
+			break
+		}
 	}
 	return out, nil
 }
