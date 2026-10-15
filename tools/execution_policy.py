@@ -19,7 +19,16 @@ class Action(str, Enum):
     FAIL_CLOSED = "FAIL_CLOSED"
 
 
-RETIRED = {"render", "tinyfish", "circleci", "browserless"}
+RETIRED = {
+    "render",
+    "tinyfish",
+    "circleci",
+    "browserless",
+    "winremote",
+    "meshcentral",
+    "codespaces",
+    "github_codespaces",
+}
 ANTHARES_COMPONENTS = {
     "anthares_remote",
     "anthares_browser",
@@ -63,8 +72,10 @@ def decide(component: str, failure: str, quota_state: str = "UNKNOWN", agent_ava
 def validate_surface(role: str, provider: str) -> bool:
     role = role.strip().lower()
     provider = provider.strip().lower()
+    if provider in RETIRED:
+        return False
     if role == "remote_control":
         return provider == "anthares_remote"
     if role == "browser":
         return provider == "anthares_browser"
-    return provider not in RETIRED
+    return True
