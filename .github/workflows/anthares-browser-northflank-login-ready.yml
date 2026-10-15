@@ -21,7 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,os,subprocess
+          import json,os,subprocess,time
           base='https://anthares-tiktok-worker.anthares1.workers.dev'
           token=os.environ.get('ARA_SHARED','')
           if not token:raise SystemExit('ARA_SHARED_MISSING')
@@ -35,9 +35,14 @@ jobs:
               try: d=json.load(open('/tmp/nf-response.json'))
               except: d={}
               return p.stdout,d
-          code,status=call('/interactive-browser/status')
+          for attempt in range(1,7):
+              code,status=call('/interactive-browser/status')
+              if code=='200' and status.get('ok'):break
+              time.sleep(5)
           print('NORTHFLANK_STATUS_HTTP='+code)
           print('NORTHFLANK_BROWSER_ACTIVE='+str(status.get('active')))
+          print('NORTHFLANK_STATUS_ERROR='+str(status.get('error',''))[:120])
+          print('NORTHFLANK_STATUS_DETAIL='+str(status.get('detail',''))[:150])
           if code!='200' or not status.get('ok'):raise SystemExit('NORTHFLANK_BROWSER_NOT_READY')
           code,start=call('/interactive-browser/start','POST',{})
           print('NORTHFLANK_START_HTTP='+code)
