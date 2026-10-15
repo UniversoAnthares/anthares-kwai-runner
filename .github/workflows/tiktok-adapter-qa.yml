@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'direct-tiktok-publisher/tiktok_publish_adapter.py'
+      - 'direct-tiktok-publisher/tiktok_adapter_execute.py'
       - 'tests/test_tiktok_publish_adapter.py'
       - '.github/workflows/tiktok-adapter-qa.yml'
 permissions:
@@ -16,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Compile adapter
-        run: python3 -m py_compile direct-tiktok-publisher/tiktok_publish_adapter.py
+        run: python3 -m py_compile direct-tiktok-publisher/tiktok_publish_adapter.py direct-tiktok-publisher/tiktok_adapter_execute.py
       - name: Run adapter contract tests
         run: python3 -m unittest tests.test_tiktok_publish_adapter -v
       - name: Prove current one-shot can be represented by adapter
@@ -47,4 +48,34 @@ jobs:
           assert d['spec']['destination']=='tiktok'
           assert d['job']['media_sha256']=='5a43c90508464c016e3f26f4cf17c04ca9bfa3e9ec9afb7bd160e7a740b395e9'
           print('TIKTOK_ADAPTER_CURRENT_ONESHOT=REPRESENTABLE')
+          PY
+      - name: Prove adapter can prepare an arbitrary validated publication plan
+        run: |
+          printf 'synthetic-adapter-media' >/tmp/adapter-media.mp4
+          SHA="$(sha256sum /tmp/adapter-media.mp4 | awk '{print $1}')"
+          cat > /tmp/generic-spec.json <<JSON
+          {
+            "account":"universo.anthares",
+            "source_id":"arbitrary-source-2",
+            "source_start":101.5,
+            "source_end":147.25,
+            "media_sha256":"$SHA",
+            "media_path":"/tmp/adapter-media.mp4",
+            "destination":"tiktok",
+            "source_url":"https://example.invalid/source",
+            "source_title":"Fonte arbitraria",
+            "title":"Trecho parametrizado",
+            "summary":"Metadados parametrizados"
+          }
+          JSON
+          python3 direct-tiktok-publisher/tiktok_adapter_execute.py /tmp/generic-spec.json --plan /tmp/generic-plan.json --prepare-only | tee /tmp/adapter-ready.txt
+          python3 - <<'PY'
+          import json
+          p=json.load(open('/tmp/generic-plan.json'))
+          assert p['source_id']=='arbitrary-source-2'
+          assert p['source_start']==101.5 and p['source_end']==147.25
+          assert p['account']=='universo.anthares'
+          assert p['destination']=='tiktok'
+          assert p['dedupe_key'].startswith('universo.anthares::tiktok::arbitrary-source-2:101.5:147.25::')
+          print('TIKTOK_ADAPTER_EXECUTABLE_BOUNDARY=PROVEN')
           PY
