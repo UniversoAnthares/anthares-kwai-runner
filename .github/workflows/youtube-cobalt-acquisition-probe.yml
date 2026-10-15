@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Probe current no-turnstile Cobalt instances and download source
+      - name: Probe Cobalt redirect and tunnel paths
         shell: bash
         env:
           SOURCE_URL: https://www.youtube.com/watch?v=9CIk-I_3VhM
@@ -21,24 +21,37 @@ jobs:
           python3 - <<'PY'
           import json,os,urllib.request
           apis=['https://rue-cobalt.xenon.zone','https://cobaltapi.cjs.nz']
-          src=os.environ['SOURCE_URL']; selected=None
+          src=os.environ['SOURCE_URL']; candidates=[]
           for api in apis:
-              try:
-                  req=urllib.request.Request(api+'/',data=json.dumps({'url':src,'videoQuality':'720','youtubeVideoCodec':'h264','youtubeVideoContainer':'mp4','downloadMode':'auto','alwaysProxy':True}).encode(),headers={'Accept':'application/json','Content-Type':'application/json','User-Agent':'Anthares/1.0'},method='POST')
-                  with urllib.request.urlopen(req,timeout=45) as r: body=json.loads(r.read().decode())
-                  status=body.get('status'); url=body.get('url')
-                  print('COBALT_INSTANCE='+api+' STATUS='+str(status)+' URL_PRESENT='+str(bool(url)).lower())
-                  if status in ('tunnel','redirect') and url: selected=(api,url); break
-              except Exception as exc: print('COBALT_INSTANCE='+api+' ERROR='+type(exc).__name__)
-          if not selected: raise SystemExit('NO_COBALT_SOURCE_AVAILABLE')
-          api,url=selected; print('COBALT_SELECTED='+api)
-          req=urllib.request.Request(url,headers={'User-Agent':'Anthares/1.0'})
-          with urllib.request.urlopen(req,timeout=120) as r,open('/tmp/source.mp4','wb') as out:
-              while True:
-                  chunk=r.read(1024*1024)
-                  if not chunk: break
-                  out.write(chunk)
-          print('DOWNLOADED_BYTES='+str(os.path.getsize('/tmp/source.mp4')))
+              for proxy in (False,True):
+                  try:
+                      payload={'url':src,'videoQuality':'720','youtubeVideoCodec':'h264','youtubeVideoContainer':'mp4','downloadMode':'auto','alwaysProxy':proxy}
+                      req=urllib.request.Request(api+'/',data=json.dumps(payload).encode(),headers={'Accept':'application/json','Content-Type':'application/json','User-Agent':'Anthares/1.0'},method='POST')
+                      with urllib.request.urlopen(req,timeout=45) as r: body=json.loads(r.read().decode())
+                      status=body.get('status'); url=body.get('url')
+                      print('COBALT_INSTANCE='+api+' PROXY='+str(proxy).lower()+' STATUS='+str(status)+' URL_PRESENT='+str(bool(url)).lower())
+                      if status in ('tunnel','redirect') and url: candidates.append({'api':api,'proxy':proxy,'status':status,'url':url})
+                  except Exception as exc:
+                      print('COBALT_INSTANCE='+api+' PROXY='+str(proxy).lower()+' ERROR='+type(exc).__name__)
+          if not candidates: raise SystemExit('NO_COBALT_SOURCE_AVAILABLE')
+          json.dump(candidates,open('/tmp/candidates.json','w'))
+          PY
+          python3 - <<'PY'
+          import json,subprocess,os
+          candidates=json.load(open('/tmp/candidates.json'))
+          ok=False
+          for i,c in enumerate(candidates):
+              out=f'/tmp/source-{i}.mp4'; hdr=f'/tmp/headers-{i}.txt'
+              print('DOWNLOAD_ATTEMPT='+str(i)+' STATUS='+c['status']+' API='+c['api']+' PROXY='+str(c['proxy']).lower())
+              p=subprocess.run(['curl','--http1.1','-L','--fail-with-body','--connect-timeout','20','--max-time','180','-A','Mozilla/5.0','-D',hdr,'-o',out,c['url']],text=True)
+              size=os.path.getsize(out) if os.path.exists(out) else 0
+              print('DOWNLOAD_RC='+str(p.returncode)+' BYTES='+str(size))
+              if os.path.exists(hdr):
+                  lines=[x.strip() for x in open(hdr,errors='ignore') if x.lower().startswith(('http/','content-type:','content-length:','estimated-content-length:','location:'))]
+                  print('RESPONSE_HEADERS='+json.dumps(lines[-12:]))
+              if p.returncode==0 and size>1000000:
+                  os.replace(out,'/tmp/source.mp4'); ok=True; break
+          if not ok: raise SystemExit('COBALT_DOWNLOAD_FAILED')
           PY
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
           ffprobe -v error -show_entries format=duration,size -of json /tmp/source.mp4
