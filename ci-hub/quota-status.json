@@ -1,0 +1,68 @@
+{
+  "schema": "anthares.quota-status.v1",
+  "observed_at": "2026-10-15T03:10:00Z",
+  "rules": {
+    "stale_data_is_not_ready": true,
+    "quota_failure_is_not_component_failure": true,
+    "aggregate_provider_status_forbidden_when_products_have_separate_quotas": true,
+    "billing_enablement_requires_owner_decision": true
+  },
+  "entries": {
+    "github_actions_public": {
+      "state": "READY",
+      "confidence": "verified",
+      "scope": "public repositories",
+      "evidence": "anthares-kwai-runner public workflow activity observed on 2026-10-15",
+      "recheck": "before quota-sensitive batch"
+    },
+    "github_actions_private": {
+      "state": "BLOCKED_QUOTA",
+      "confidence": "owner_reported_plus_current_failure_pattern",
+      "scope": "private repositories",
+      "evidence": "owner reports exhausted private-repository quota; recent private anthares-wordpress workflows are failing",
+      "reopen_condition": "fresh successful private-repository hosted job"
+    },
+    "gitlab_ci_user_namespace": {
+      "state": "BLOCKED_QUOTA",
+      "confidence": "verified",
+      "scope": "UniversoAnthares/anthares-kwai-runner",
+      "evidence": "pipeline 2948879575 jobs failed before runner start with failure_reason=ci_quota_exceeded",
+      "reopen_condition": "fresh job starts without ci_quota_exceeded"
+    },
+    "gitlab_ci_group_namespace": {
+      "state": "BLOCKED_QUOTA",
+      "confidence": "verified",
+      "scope": "universo-anthares-group/anthares-kwai-runner",
+      "evidence": "pipeline 2947796926 jobs failed before runner start with failure_reason=ci_quota_exceeded",
+      "reopen_condition": "fresh job starts without ci_quota_exceeded"
+    },
+    "cloudflare_browser_rendering": {
+      "state": "BLOCKED_QUOTA",
+      "confidence": "historical_pending_fresh_probe",
+      "scope": "Browser Rendering",
+      "evidence": "previous quota exhaustion recorded in Anthares architecture; must be revalidated independently",
+      "reopen_condition": "fresh Browser Rendering request succeeds without quota response"
+    },
+    "cloudflare_workers_builds": {
+      "state": "READY",
+      "confidence": "historical_recent",
+      "scope": "Workers Builds",
+      "evidence": "Git-connected build/deploy verified 2026-10-14",
+      "recheck": "before relying on it for migration"
+    },
+    "cloudflare_workers_runtime": {
+      "state": "READY",
+      "confidence": "verified_indirectly",
+      "scope": "Workers runtime used by Anthares Remote bridge",
+      "evidence": "Anthares Remote heartbeat and command round-trip succeeded 2026-10-15",
+      "recheck": "every round via Anthares Remote session and command probe"
+    },
+    "cloudflare_durable_objects": {
+      "state": "UNKNOWN",
+      "confidence": "pending_direct_quota_probe",
+      "scope": "Durable Objects",
+      "evidence": "current architecture references it; quota consumption not directly measured in this round",
+      "selection_policy": "do not infer quota from Workers or Browser Rendering status"
+    }
+  }
+}
