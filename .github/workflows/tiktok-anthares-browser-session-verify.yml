@@ -52,6 +52,36 @@ jobs:
           print('CENTRAL_TIKTOK_SESSION_AVAILABLE=1')
           print('CENTRAL_TIKTOK_COOKIE_COUNT='+str(len(cookies)))
           PY
+      - name: Restore central state to first-party Cloudflare browser and verify independently
+        shell: bash
+        env:
+          ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          token=os.environ.get('ANTHARES_RESERVA_TOKEN') or hashlib.sha256(('anthares-reserva-browser-v1:'+os.environ['ARA_SHARED']).encode()).hexdigest()
+          base='https://anthares-reserva-browser.anthares1.workers.dev'
+          def call(path,body):
+              with open('/tmp/cloudflare-browser-input.json','w') as f:json.dump(body,f)
+              p=subprocess.run(['curl','-sS','--max-time','130','-A','AntharesBrowserRecovery/1.0','-X','POST','-H','Authorization: Bearer '+token,'-H','Content-Type: application/json','--data-binary','@/tmp/cloudflare-browser-input.json','-o','/tmp/cloudflare-browser-response.json','-w','%{http_code}',base+path],capture_output=True,text=True)
+              try: response=json.load(open('/tmp/cloudflare-browser-response.json'))
+              except: response={}
+              return p.stdout,response
+          state=json.load(open('/tmp/storage-state.json'))
+          code,result=call('/tiktok/import',{'state':state})
+          print('CLOUDFLARE_TIKTOK_IMPORT_HTTP='+code)
+          print('CLOUDFLARE_TIKTOK_IMPORT_STORED='+str(result.get('stored')))
+          if code!='200' or not result.get('stored'): raise SystemExit('CLOUDFLARE_IMPORT_FAILED')
+          code,result=call('/tiktok/session/verify',{})
+          print('CLOUDFLARE_TIKTOK_VERIFY_HTTP='+code)
+          for key in ('ok','persisted_state','identity_verified','studio_verified','session_state','error'):
+              print('CLOUDFLARE_TIKTOK_'+key.upper()+'='+str(result.get(key)))
+          if code!='200' or not result.get('identity_verified') or not result.get('studio_verified'):
+              print('CLOUDFLARE_TIKTOK_STRONG_IDENTITY=NOT_PROVEN')
+          else:
+              print('CLOUDFLARE_TIKTOK_BROWSER_SESSION=AVAILABLE_REQUIRES_STRONG_GATE')
+          PY
       - name: Install isolated Anthares browser runtime
         shell: bash
         run: |
