@@ -1,0 +1,154 @@
+name: CORTES method 1+2 authenticated media once
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cortes-method12-authenticated-media-once.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  method12:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SOURCE_ID: 9CIk-I_3VhM
+      SOURCE_URL: https://www.youtube.com/watch?v=9CIk-I_3VhM
+      SOURCE_START: '8'
+      SOURCE_END: '98'
+      YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+      YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require authenticated YouTube session secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${YOUTUBE_COOKIES:-}" && -z "${YOUTUBE_COOKIES_B64:-}" ]]; then
+            echo 'METHOD12_AUTH_SECRET=ABSENT'
+            exit 20
+          fi
+          echo 'METHOD12_AUTH_SECRET=PRESENT'
+
+      - name: Install media stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          python3 -m pip install --disable-pip-version-check -q -U 'yt-dlp[default]' yt-dlp-ejs bgutil-ytdlp-pot-provider
+          node --version
+          yt-dlp --version
+          mkdir -p /tmp/method12
+
+      - name: Materialize private cookie file without logging it
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, os, pathlib
+          raw=os.environ.get('YOUTUBE_COOKIES','')
+          b64=os.environ.get('YOUTUBE_COOKIES_B64','').strip()
+          if b64:
+              raw=base64.b64decode(b64).decode('utf-8')
+          if not raw.strip():
+              raise SystemExit('empty cookie secret')
+          p=pathlib.Path('/tmp/method12/youtube-cookies.txt')
+          p.write_text(raw,encoding='utf-8')
+          p.chmod(0o600)
+          print('METHOD12_COOKIE_FILE=READY')
+          PY
+
+      - name: Prove authenticated metadata first
+        shell: bash
+        run: |
+          set -euo pipefail
+          yt-dlp --cookies /tmp/method12/youtube-cookies.txt --no-playlist --skip-download \
+            --js-runtimes node --remote-components ejs:npm \
+            --print '%(id)s|%(duration)s|%(title)s' "$SOURCE_URL" > /tmp/method12/metadata.txt
+          python3 - <<'PY'
+          s=open('/tmp/method12/metadata.txt',encoding='utf-8').read().strip()
+          assert s.startswith('9CIk-I_3VhM|'), s[:80]
+          print('METHOD12_AUTH_METADATA=PROVEN')
+          print('METHOD12_METADATA='+s)
+          PY
+
+      - name: Method 1 - authenticated bounded extraction only
+        shell: bash
+        run: |
+          set -euo pipefail
+          yt-dlp \
+            --cookies /tmp/method12/youtube-cookies.txt \
+            --no-playlist \
+            --js-runtimes node \
+            --remote-components ejs:npm \
+            --download-sections "*${SOURCE_START}-${SOURCE_END}" \
+            --force-keyframes-at-cuts \
+            -f 'bv*[height<=720]+ba/b[height<=720]/b' \
+            --merge-output-format mp4 \
+            -o '/tmp/method12/partial.%(ext)s' \
+            "$SOURCE_URL" 2>&1 | tee /tmp/method12/yt-dlp.log
+          test -s /tmp/method12/partial.mp4
+          bytes="$(stat -c%s /tmp/method12/partial.mp4)"
+          dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/method12/partial.mp4)"
+          DUR="$dur" python3 - <<'PY'
+          import os
+          d=float(os.environ['DUR'])
+          assert 70 <= d <= 95, d
+          print('METHOD1_PARTIAL_DURATION='+str(round(d,3)))
+          PY
+          echo METHOD1_PARTIAL_BYTES=$bytes
+          echo METHOD1_PARTIAL_EXTRACTION=PROVEN
+
+      - name: Method 2 - remote edit and normalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          ffmpeg -hide_banner -loglevel error -y -i /tmp/method12/partial.mp4 \
+            -vf 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920' \
+            -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p \
+            -c:a aac -b:a 128k -movflags +faststart \
+            /tmp/method12/final.mp4
+          test -s /tmp/method12/final.mp4
+          dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/method12/final.mp4)"
+          sha="$(sha256sum /tmp/method12/final.mp4 | awk '{print $1}')"
+          bytes="$(stat -c%s /tmp/method12/final.mp4)"
+          python3 - <<PY
+          import json
+          json.dump({
+            'source_id':'9CIk-I_3VhM',
+            'source_start':8,
+            'source_end':98,
+            'method1':'bounded_authenticated_youtube_transfer',
+            'method2':'remote_ffmpeg_vertical_normalize',
+            'full_source_download_requested':False,
+            'method3_fallback':'PENDING_NOT_USED',
+            'final_duration_seconds':float('$dur'),
+            'final_bytes':int('$bytes'),
+            'final_sha256':'$sha',
+            'social_publish':False
+          },open('/tmp/method12/result.json','w'),indent=2)
+          print('METHOD2_FINAL_DURATION='+str(round(float('$dur'),3)))
+          print('METHOD2_FINAL_BYTES='+str(int('$bytes')))
+          print('METHOD2_FINAL_SHA256=$sha')
+          print('METHOD2_REMOTE_EDIT=PROVEN')
+          PY
+
+      - name: Upload proof artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cortes-method12-authenticated-${{ github.run_id }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            /tmp/method12/result.json
+            /tmp/method12/final.mp4
+            /tmp/method12/yt-dlp.log
+
+      - name: Remove authentication material
+        if: always()
+        shell: bash
+        run: rm -f /tmp/method12/youtube-cookies.txt
