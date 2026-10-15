@@ -1,13 +1,8 @@
 {
   "name": "Anthares Chrome remoto privado (Kwai + TikTok, sem Android)",
   "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
-  "features": {
-    "ghcr.io/devcontainers/features/sshd:1": {
-      "version": "latest"
-    }
-  },
   "postCreateCommand": "bash .devcontainer/kwai-install.sh",
-  "postStartCommand": "python control_plane/persistence_probe.py kwai && bash .devcontainer/kwai-start.sh && bash .devcontainer/tiktok-start.sh",
+  "postStartCommand": "python control_plane/persistence_probe.py kwai && bash .devcontainer/kwai-start.sh",
   "forwardPorts": [
     6080,
     8765,
