@@ -1,0 +1,36 @@
+name: Admin media transfer once
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/admin-media-transfer-once.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  transfer:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Validate exact prebuilt clip
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $p='D:\AntharesWork\e2e-video-test-20261013\microcuts_semantic_validation_9CIk-I_3VhM_8_98.mp4'
+          if(-not (Test-Path $p)){ throw 'MEDIA_NOT_FOUND' }
+          $expected='5A43C90508464C016E3F26F4CF17C04CA9BFA3E9EC9AFB7BD160E7A740B395E9'
+          $actual=(Get-FileHash -Algorithm SHA256 $p).Hash
+          if($actual -ne $expected){ throw "MEDIA_SHA_MISMATCH:$actual" }
+          $f=Get-Item $p
+          if($f.Length -ne 11398993){ throw "MEDIA_SIZE_MISMATCH:$($f.Length)" }
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\anthares-media" | Out-Null
+          Copy-Item -LiteralPath $p -Destination "$env:RUNNER_TEMP\anthares-media\tiktok_9CIk-I_3VhM_8_98.mp4" -Force
+          Write-Output "MEDIA_TRANSFER_SHA256=$actual"
+          Write-Output "MEDIA_TRANSFER_BYTES=$($f.Length)"
+      - name: Upload immutable clip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiktok-9CIk-I_3VhM-8-98-validated
+          path: ${{ runner.temp }}\anthares-media\tiktok_9CIk-I_3VhM_8_98.mp4
+          if-no-files-found: error
+          retention-days: 7
