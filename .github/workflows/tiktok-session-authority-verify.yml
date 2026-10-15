@@ -1,0 +1,32 @@
+name: TikTok canonical session authority verify
+on:
+  push:
+    branches: [main]
+    paths: ['.tiktok-session-authority-verify-trigger']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      EXPECTED_TIKTOK_USERNAME: universo.anthares
+      TIKTOK_STORAGE_STATE_FILE: /tmp/tiktok-canonical-state.json
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install read-only browser verifier
+        run: |
+          python3 -m pip install --disable-pip-version-check -q playwright cryptography
+          python3 -m playwright install chromium
+      - name: Resolve durable authority
+        run: |
+          set -euo pipefail
+          test -n "${ARA_SHARED:-}" || { echo ARA_SHARED_MISSING; exit 12; }
+          python3 direct-tiktok-publisher/tiktok_session_authority.py
+          test -s "$TIKTOK_STORAGE_STATE_FILE"
+      - name: Verify exact account without publication
+        run: |
+          set -euo pipefail
+          python3 direct-tiktok-publisher/strong_identity_gate.py
+          echo TIKTOK_CANONICAL_SESSION_AUTHORITY_PROVEN=1
