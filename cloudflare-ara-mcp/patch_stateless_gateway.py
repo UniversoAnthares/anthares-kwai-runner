@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re
 
 p = Path(__file__).with_name('src') / 'index.js'
 s = p.read_text(encoding='utf-8')
@@ -31,7 +30,9 @@ if 'class StatelessGatewayState{' not in s:
   async hmac(input){const {secret}=await this.ensure();const k=await crypto.subtle.importKey('raw',fromB64url(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return b64urlBytes(new Uint8Array(await crypto.subtle.sign('HMAC',k,te.encode(input))));}
   async signToken(payload){const body=b64urlBytes(te.encode(JSON.stringify(payload)));return `${body}.${await this.hmac(body)}`;}
   async verifyToken(token,type){const parts=String(token||'').split('.');if(parts.length!==2)return null;const [body,sig]=parts;if(!eq(sig,await this.hmac(body)))return null;try{const p=JSON.parse(td.decode(fromB64url(body)));if(p.typ!==type||p.iss!==ORIGIN||p.aud!==ORIGIN||!p.exp||p.exp<=Math.floor(Date.now()/1000)||!Array.isArray(p.scp))return null;return p;}catch{return null;}}
-  async consume(kind,jti,exp){if(kind==='oauth_pending')return true;return consumeViaControl(this.env,kind,jti,exp);}
+  async consume(kind,jti,exp){return consumeViaControl(this.env,kind,jti,exp);}
+  async createEmailChallenge(txId){const h=await this.hmac('email-otp:'+String(txId));let n=0;for(let i=0;i<Math.min(20,h.length);i++)n=(n*67+h.charCodeAt(i))%100000000;return String(n).padStart(8,'0');}
+  async verifyEmailChallenge(txId,code){return eq(await this.createEmailChallenge(txId),String(code||''));}
   async pinnedClient(){return String(this.env.ARA_PINNED_CLIENT||'');}
   async pinClient(clientId){const p=await this.pinnedClient();return !p||p===String(clientId);}
 }
@@ -42,7 +43,9 @@ if 'class StatelessGatewayState{' not in s:
 required = [
     'class StatelessGatewayState{',
     'stateless_gateway_secrets_missing',
-    "if(kind==='oauth_pending')return true",
+    'return consumeViaControl(this.env,kind,jti,exp)',
+    "this.hmac('email-otp:'",
+    'verifyEmailChallenge(txId,code)',
     'const _statelessStates=new WeakMap()',
 ]
 for item in required:
