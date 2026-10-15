@@ -1,4 +1,5 @@
 name: Bootstrap TikTok Android hosted login
+# rerun marker: 2026-10-15 display-wake-fix
 on:
   push:
     paths:
