@@ -113,7 +113,7 @@ jobs:
           assert d.get('render_required') is False, d
           print('RESERVA_AUTHENTICATED_STATUS_OK=1')
           PY
-          curl -fsS --max-time 20 https://anthares-reserva-browser.anthares1.workers.dev/tiktok/northflank/status -o /tmp/nf-browser.json
+          curl -fsS --max-time 20 -H "Authorization: Bearer $RESERVE_TOKEN" https://anthares-reserva-browser.anthares1.workers.dev/tiktok/northflank/status -o /tmp/nf-browser.json
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/nf-browser.json',encoding='utf-8'))
