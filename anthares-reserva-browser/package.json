@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "check": "node --check src/index.js && node --check src/entry.js && node --check src/tiktok-owner-entry.js && node --check src/northflank-owner-entry.js && node --check src/generic-entry.js"
+    "check": "node --check src/index.js && node --check src/entry.js && node --check src/tiktok-owner-entry.js && node --check src/northflank-owner-entry.js && node --check src/secure-owner-entry.js && node --check src/generic-entry.js"
   },
   "dependencies": {
     "@cloudflare/puppeteer": "^1.1.0"
