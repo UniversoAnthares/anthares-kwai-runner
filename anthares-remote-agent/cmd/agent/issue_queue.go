@@ -111,7 +111,13 @@ func issueQueueLoop(cfg Config) {
 		interval = time.Duration(v) * time.Second
 	}
 	fmt.Fprintf(os.Stdout, "Anthares issue queue enabled providers=%d interval=%s\n", len(providers), interval)
+	// Bound queue execution independently of HTTP jobs. Never execute the same
+	// job twice when both GitHub and GitLab expose its envelope.
+	workers := cfg.MaxConcurrent
+	if workers < 1 { workers = 1 }
 	for {
+		var batch []issueQueueItem
+		seen := make(map[string]bool)
 		for _, provider := range providers {
 			items, err := provider.Poll(cfg.DeviceID)
 			if err != nil {
@@ -119,11 +125,25 @@ func issueQueueLoop(cfg Config) {
 				continue
 			}
 			for _, item := range items {
-				if err := processIssueQueueItem(cfg, item); err != nil {
-					fmt.Fprintf(os.Stderr, "issue queue item deferred provider=%s source=%s: %v\n", provider.Name(), item.Source, err)
-				}
+				if seen[item.Job.ID] { continue }
+				seen[item.Job.ID] = true
+				batch = append(batch, item)
 			}
 		}
+		sem := make(chan struct{}, workers)
+		var wg sync.WaitGroup
+		for _, item := range batch {
+			sem <- struct{}{}
+			wg.Add(1)
+			go func(item issueQueueItem) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				if err := processIssueQueueItem(cfg, item); err != nil {
+					fmt.Fprintf(os.Stderr, "issue queue item deferred provider=%s source=%s: %v\n", item.Provider.Name(), item.Source, err)
+				}
+			}(item)
+		}
+		wg.Wait()
 		time.Sleep(interval)
 	}
 }
