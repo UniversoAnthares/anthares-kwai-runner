@@ -54,6 +54,14 @@ jobs:
           print('TIKTOK_BACKEND_OK='+str(status.get('ok')))
           print('TIKTOK_BACKEND_ERROR='+str(status.get('error',''))[:100])
           if code!=200 or status.get('ok') is not True:
+              direct=subprocess.run(['curl','-sS','--max-time','15','-A','AntharesBrowserHealth/1.0','-o','/tmp/northflank-direct.json','-w','%{http_code}','-H','Authorization: Bearer '+os.environ.get('ARA_SHARED',''),'https://anthares-tiktok-worker.anthares1.workers.dev/interactive-browser/status'],capture_output=True,text=True)
+              print('DIRECT_NORTHFLANK_HTTP='+direct.stdout)
+              raw=open('/tmp/northflank-direct.json',errors='replace').read(400)
+              try:
+                  d=json.loads(raw)
+                  print('DIRECT_NORTHFLANK_OK='+str(d.get('ok')))
+                  print('DIRECT_NORTHFLANK_ERROR='+str(d.get('error',''))[:120])
+              except: print('DIRECT_NORTHFLANK_RESPONSE_PREFIX='+raw[:180].replace('\\n',' '))
               raise SystemExit('TIKTOK_BACKEND_UNAVAILABLE')
           print('ANTHARES_BROWSER_CLOUDFLARE_READINESS=PROVEN')
           PY
