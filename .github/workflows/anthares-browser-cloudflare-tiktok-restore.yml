@@ -23,13 +23,17 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,os,urllib.request,urllib.parse,hashlib,subprocess,tempfile
+          import json,os,urllib.request,urllib.parse,hashlib,subprocess,tempfile,time
           base='https://anthares-reserva-browser.anthares1.workers.dev'
           sep='&' if '?' in os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] else '?'
           u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+sep+urllib.parse.urlencode({'audience':'https://anthares-control.anthares1.workers.dev'})
           with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r:
               jwt=json.load(r)['value']
-          p=subprocess.run(['curl','-sS','--max-time','30','-A','AntharesBrowserRecovery/1.0','-H','Authorization: Bearer '+jwt,'-o','/tmp/anthares-central-state.json','-w','%{http_code}','https://anthares-control.anthares1.workers.dev/tiktok/session-state'],capture_output=True,text=True)
+          for attempt in range(1,13):
+              p=subprocess.run(['curl','-sS','--max-time','30','-A','AntharesBrowserRecovery/1.0','-H','Authorization: Bearer '+jwt,'-o','/tmp/anthares-central-state.json','-w','%{http_code}','https://anthares-control.anthares1.workers.dev/tiktok/session-state'],capture_output=True,text=True)
+              if p.stdout=='200': break
+              if p.stdout!='401': break
+              time.sleep(5)
           print('CENTRAL_SESSION_HTTP='+p.stdout)
           if p.stdout!='200': raise SystemExit('CENTRAL_SESSION_FETCH_FAILED')
           state=json.load(open('/tmp/anthares-central-state.json'))
