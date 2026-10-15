@@ -1,5 +1,8 @@
 param([int]$IntervalSeconds=30,[int]$BackoffMaxSeconds=300)
 $ErrorActionPreference='Continue'
+$env:USERPROFILE='C:\Users\Lucas'
+$env:HOMEDRIVE='C:'
+$env:HOMEPATH='\Users\Lucas'
 $base=Split-Path $PSScriptRoot -Parent
 Import-Module (Join-Path $base 'src\AntharesAndroidRuntime.psm1') -Force
 $backoff=$IntervalSeconds
