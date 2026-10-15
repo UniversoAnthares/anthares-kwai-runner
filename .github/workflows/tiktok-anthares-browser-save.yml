@@ -1,0 +1,61 @@
+name: TikTok Anthares Browser Save Recovery
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  save-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Derive reserve API token
+        env:
+          ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
+          ARA_SHARED: ${{ secrets.ARA_SHARED }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANTHARES_RESERVA_TOKEN:-}" ]; then
+            token="$ANTHARES_RESERVA_TOKEN"
+          else
+            test -n "${ARA_SHARED:-}"
+            token="$(python3 - <<'PY'
+          import hashlib, os
+          print(hashlib.sha256(('anthares-reserva-browser-v1:'+os.environ['ARA_SHARED']).encode()).hexdigest())
+          PY
+          )"
+          fi
+          echo "::add-mask::$token"
+          printf 'RESERVE_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+      - name: Save active TikTok session
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 35 -X POST \
+            -H "Authorization: Bearer $RESERVE_TOKEN" \
+            https://anthares-reserva-browser.anthares1.workers.dev/tiktok/session/save \
+            -o /tmp/save.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/save.json', encoding='utf-8'))
+          assert d.get('ok') is True, d
+          print('TIKTOK_SESSION_SAVED=1')
+          PY
+      - name: Verify persisted identity after fresh restore
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 55 -X POST \
+            -H "Authorization: Bearer $RESERVE_TOKEN" \
+            https://anthares-reserva-browser.anthares1.workers.dev/tiktok/session/verify \
+            -o /tmp/verify.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/verify.json', encoding='utf-8'))
+          safe={k:d.get(k) for k in ('ok','persisted_state','identity_verified','studio_verified','session_state','restore_status','state_refreshed')}
+          print('TIKTOK_VERIFY_SAFE='+json.dumps(safe,separators=(',',':')))
+          assert d.get('persisted_state') is True, d
+          assert d.get('identity_verified') is True, d
+          assert d.get('studio_verified') is True, d
+          print('TIKTOK_SESSION_RECOVERY_PROVEN=1')
+          PY
