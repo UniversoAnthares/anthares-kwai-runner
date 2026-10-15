@@ -1,18 +1,19 @@
-name: Anthares Kwai Queue Publisher v17
+name: Anthares Kwai Remote Android Experimental v17
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - ".github/workflows/kwai-queue-publisher-v17.yml"
-      - ".kwai-v17-trigger"
+    inputs:
+      confirm_experimental:
+        description: "Type EXPERIMENTAL to run the remote Android publisher"
+        required: true
+        default: ""
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: anthares-kwai-queue-publisher-v17
+  group: anthares-kwai-remote-android-experimental-v17
   cancel-in-progress: false
 
 env:
@@ -23,15 +24,34 @@ env:
   KWAI_LEASE_RENEW_TTL_SECONDS: "600"
   KWAI_SESSION_FILE: kwai-session.enc
   KWAI_AUTH_STRATEGY: mobile_only
+  ANTHARES_REMOTE_ANDROID_ROLE: experimental_only
 
 jobs:
   publish:
+    if: ${{ github.event.inputs.confirm_experimental == 'EXPERIMENTAL' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate current provider backend and publisher contract
+      - name: Assert experimental-only routing contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          d=json.load(open('ci-hub/executor-routing.json', encoding='utf-8'))
+          a=d['android_execution']
+          assert a['primary_device'] == 'physical_android', a
+          assert a['fallback_device'] == 'memu_android', a
+          assert a['priority'][:2] == ['physical_android','memu_android'], a
+          assert a['failover']['memu_to_remote_experimental'] is False, a
+          p=d['providers']['github_android_experimental']
+          assert p['active'] is False and p['android_eligible'] is False, p
+          print('REMOTE_ANDROID_EXPERIMENTAL_GUARD=PASS')
+          PY
+
+      - name: Validate current control-plane contract
         shell: bash
         run: |
           set -euo pipefail
@@ -39,14 +59,11 @@ jobs:
           HEALTH_BODY="$body" python3 - <<'PY'
           import json, os
           d=json.loads(os.environ['HEALTH_BODY'])
-          assert d.get('version') == '2026-10-15-publisher-target-v17', d
-          assert d.get('pc_fallback') is False, d
           assert d.get('persistent_state') is True, d
           assert d.get('queue_bound') is True, d
-          print('KWAI_CONTROL_TARGET_V17_READY=1')
+          print('KWAI_CONTROL_QUEUE_READY=1')
           PY
           bash -n kwai_publish.sh kwai_claim_job.sh kwai_queue_heartbeat.sh kwai_queue_state.sh kwai_queue_publish_runtime.sh android_executor_api30_runtime.sh kwai_run_next_job.sh kwai_headless_login.sh kwai_session_state.sh
-          python3 -m py_compile kwai_publish_video.py kwai_verify_publication.py kwai_auth_probe.py kwai_auth_ready_gate.py kwai_real_publish_promotion_gate.py tools/kwai_login_surface_recovery.py tools/kwai_android_login_entry.py tools/kwai_session_vault_client.py
 
       - name: Require encrypted-session key
         env:
@@ -74,7 +91,7 @@ jobs:
           test -e /dev/kvm
           sudo chmod 666 /dev/kvm
 
-      - name: Run canonical remote Android publisher
+      - name: Run experimental remote Android publisher
         uses: reactivecircus/android-emulator-runner@v2
         env:
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
@@ -107,11 +124,11 @@ jobs:
             echo KWAI_VAULT_SAVE_SKIPPED_NO_IDENTITY_PROOF=1
           fi
 
-      - name: Upload publication evidence
+      - name: Upload experimental evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kwai-v17-${{ github.run_id }}
+          name: kwai-remote-experimental-v17-${{ github.run_id }}
           path: |
             kwai-publication.log
             kwai-publish-status.txt
