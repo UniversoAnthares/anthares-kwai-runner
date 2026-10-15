@@ -3,8 +3,8 @@
 # can decrypt credentials provisioned by an administrator on the same machine.
 $ErrorActionPreference = 'Stop'
 try { Add-Type -AssemblyName System.Security -ErrorAction Stop } catch { throw 'System.Security is required for DPAPI queue credentials' }
-$root = 'C:\ProgramData\AntharesRemoteAgent\secrets'
-$configPath = Join-Path $root 'issue-queue.json'
+$secretRoot = 'C:\ProgramData\AntharesRemoteAgent\secrets'
+$configPath = Join-Path $secretRoot 'issue-queue.json'
 if (-not (Test-Path $configPath)) { return }
 
 function Unprotect-ARASecret([string]$encoded) {
