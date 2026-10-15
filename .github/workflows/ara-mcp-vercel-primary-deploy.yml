@@ -1,0 +1,51 @@
+name: ARA MCP Vercel Primary Deploy
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare-ara-mcp/patch_vercel_primary.py'
+      - '.github/workflows/ara-mcp-vercel-primary-deploy.yml'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-ara-mcp-vercel-primary
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch MCP ingress to Vercel/Neon primary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 cloudflare-ara-mcp/patch_vercel_primary.py
+          node --check cloudflare-ara-mcp/src/index.js
+          grep -q "const CONTROL='https://anthares-ara-vercel-reserve.vercel.app'" cloudflare-ara-mcp/src/index.js
+          grep -q "consumeViaControl(env,'authorization_code'" cloudflare-ara-mcp/src/index.js
+          grep -q "consumeViaControl(env,'refresh_token'" cloudflare-ara-mcp/src/index.js
+          ! grep -q "st(env).consume('refresh_token'" cloudflare-ara-mcp/src/index.js
+          echo 'ARA_MCP_PATCH_VALID=1'
+      - name: Deploy compatibility ingress without replacing Durable Object identity
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          cd cloudflare-ara-mcp
+          npx --yes wrangler@4.43.0 deploy
+          echo 'ARA_MCP_DEPLOY_OK=1'
+      - name: Verify ingress and Vercel control target
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 2
+          code="$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 20 https://anthares-ara-mcp.anthares1.workers.dev/health || true)"
+          cat /tmp/health.json || true
+          test "$code" = "200" || test "$code" = "503"
+          grep -q 'anthares-ara-vercel-reserve.vercel.app' /tmp/health.json
+          echo 'ARA_MCP_INGRESS_REACHABLE=1'
