@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - name: Read protected TikTok session and dedupe state through approved OIDC
+      - name: Read protected TikTok session and audit dedupe queue lease fence through approved OIDC
         shell: bash
         run: |
           set -euo pipefail
@@ -25,25 +25,58 @@ jobs:
           curl -fsS --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/tiktok/session-state -o /tmp/session.json
           curl -fsS --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/queue-health -o /tmp/queue.json
           python3 - <<'PY'
-          import json
+          import json,time
           d=json.load(open('/tmp/session.json')); st=d.get('state') or {}; cookies=st.get('cookies') or []
           assert d.get('available') is True and cookies, 'CENTRAL_TIKTOK_SESSION_UNAVAILABLE'
           json.dump({'cookies':cookies,'origins':st.get('origins') or []},open('/tmp/storage-state.json','w'))
           q=json.load(open('/tmp/queue.json')); raw=q.get('jobs') or []
           jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
           jobs=[j for j in jobs if isinstance(j,dict)]
-          overlaps=[]
-          for j in jobs:
-              if j.get('platform')!='tiktok': continue
+          tjobs=[j for j in jobs if str(j.get('platform') or '').lower()=='tiktok']
+          overlaps=[]; published=[]; started_ambiguous=[]; uncertain=[]; orphan_leases=[]
+          now=time.time()
+          for j in tjobs:
+              status=str(j.get('status') or '').lower()
               try: a=float(j.get('source_start')); b=float(j.get('source_end'))
-              except Exception: continue
-              if str(j.get('source_id') or '')=='9CIk-I_3VhM' and max(8,a)<min(98,b):
-                  overlaps.append({k:j.get(k) for k in ('id','status','source_id','source_start','source_end','media_sha256','publication_started','confirmed','remote_id','error_class')})
+              except Exception: a=b=None
+              same_source=str(j.get('source_id') or '')=='9CIk-I_3VhM'
+              if same_source and a is not None and max(8,a)<min(98,b):
+                  overlaps.append(j)
+              if status in {'published','completed','confirmed'} or bool(j.get('confirmed')) or j.get('remote_id'):
+                  if same_source and a is not None and max(8,a)<min(98,b): published.append(j)
+              if bool(j.get('publication_started')) and not bool(j.get('confirmed')) and not j.get('remote_id'):
+                  started_ambiguous.append(j)
+              if status in {'uncertain','uncertain_reconcile','reconcile_pending','ambiguous'} or str(j.get('error_class') or '').lower() in {'uncertain','uncertain_reconcile','ambiguous_outcome'}:
+                  uncertain.append(j)
+              if status in {'leased','processing','running'}:
+                  exp=j.get('lease_expires_at') or j.get('lease_expiry') or j.get('lease_until')
+                  if exp:
+                      try:
+                          if isinstance(exp,(int,float)) and float(exp)<now: orphan_leases.append(j)
+                      except Exception: pass
+          def compact(rows):
+              return [{k:j.get(k) for k in ('id','status','source_id','source_start','source_end','media_sha256','publication_started','confirmed','remote_id','lease_expires_at','lease_until','error_class')} for j in rows]
           print('CENTRAL_TIKTOK_SESSION_AVAILABLE=1')
           print('CENTRAL_TIKTOK_COOKIE_COUNT='+str(len(cookies)))
+          print('TIKTOK_QUEUE_JOB_COUNT='+str(len(tjobs)))
           print('TARGET_INTERVAL_OVERLAP_COUNT='+str(len(overlaps)))
-          print('TARGET_INTERVAL_OVERLAPS='+json.dumps(overlaps,separators=(',',':')))
-          print('TIKTOK_QUEUE_JOB_COUNT='+str(sum(1 for j in jobs if j.get('platform')=='tiktok')))
+          print('TARGET_INTERVAL_OVERLAPS='+json.dumps(compact(overlaps),separators=(',',':')))
+          print('TARGET_INTERVAL_PUBLISHED_COUNT='+str(len(published)))
+          print('PUBLICATION_STARTED_AMBIGUOUS_COUNT='+str(len(started_ambiguous)))
+          print('UNCERTAIN_RECONCILE_COUNT='+str(len(uncertain)))
+          print('ORPHAN_LEASE_COUNT='+str(len(orphan_leases)))
+          hazards=[]
+          if published: hazards.append('TARGET_ALREADY_PUBLISHED')
+          if started_ambiguous: hazards.append('PUBLICATION_STARTED_AMBIGUOUS')
+          if uncertain: hazards.append('UNCERTAIN_RECONCILE_PRESENT')
+          if orphan_leases: hazards.append('ORPHAN_LEASE_PRESENT')
+          # Any target overlap is relevant to dedupe; a clean prepublish audit requires
+          # either no overlap or only a clearly terminal non-published failed/cancelled job.
+          unsafe_overlap=[j for j in overlaps if str(j.get('status') or '').lower() not in {'failed','cancelled','canceled','aborted'}]
+          if unsafe_overlap: hazards.append('UNSAFE_TARGET_OVERLAP')
+          print('PREPUBLISH_HAZARDS='+json.dumps(hazards,separators=(',',':')))
+          if hazards: raise SystemExit('TIKTOK_PREPUBLISH_AUDIT_BLOCKED:'+','.join(hazards))
+          print('TIKTOK_PREPUBLISH_QUEUE_FENCE_AUDIT=PROVEN_CLEAN')
           PY
       - name: Require strong account identity evidence and capture baseline
         shell: bash
