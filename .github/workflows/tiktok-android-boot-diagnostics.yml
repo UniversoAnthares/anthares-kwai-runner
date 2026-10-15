@@ -1,0 +1,64 @@
+name: TikTok Android boot diagnostics (20 variants)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/tiktok-android-boot-diagnostics.yml
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        variant: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - name: Probe emulator boot without GUI or secrets
+        shell: bash
+        run: |
+          set -uo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$SDK" ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          v=${{ matrix.variant }}
+          api=$(( (v-1)%2 == 0 ? 35 : 34 ))
+          accel=$(( (v-1)%4 < 2 ? 1 : 0 ))
+          mem=$(( 1536 + ((v-1)%5)*512 ))
+          gpu="swiftshader_indirect"
+          ((v%3==0)) && gpu="off"
+          echo "VARIANT=$v API=$api ACCEL=$accel MEMORY=$mem GPU=$gpu"
+          echo "KVM=$(test -e /dev/kvm && echo yes || echo no)"
+          "$SDK/emulator/emulator" -version | head -3 || true
+          if [ "$accel" -eq 1 ] && [ ! -e /dev/kvm ]; then
+            echo 'RESULT=KVM_UNAVAILABLE'
+            exit 0
+          fi
+          image="$SDK/system-images/android-$api/google_apis_playstore/x86_64"
+          if [ ! -d "$image" ]; then
+            echo "RESULT=IMAGE_MISSING $image"
+            exit 0
+          fi
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -f -n "diag-$v" -k "system-images;android-$api;google_apis_playstore;x86_64" -d pixel_6 >/tmp/avd.log 2>&1 || { cat /tmp/avd.log; echo RESULT=AVD_CREATE_FAILED; exit 0; }
+          args=(-avd "diag-$v" -no-window -no-audio -no-boot-anim -gpu "$gpu" -memory "$mem" -cores 2 -no-snapshot-load -wipe-data)
+          if [ "$accel" -eq 1 ]; then args+=(-accel on); else args+=(-accel off); fi
+          nohup "$SDK/emulator/emulator" "${args[@]}" >/tmp/emulator.log 2>&1 &
+          pid=$!
+          for i in $(seq 1 45); do
+            "$SDK/platform-tools/adb" devices | grep -q 'emulator-.*device' && break
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 2
+          done
+          if "$SDK/platform-tools/adb" devices | grep -q 'emulator-.*device'; then
+            echo RESULT=ADB_DEVICE
+            timeout 20 "$SDK/platform-tools/adb" shell getprop sys.boot_completed || true
+          else
+            echo RESULT=NO_ADB_DEVICE
+          fi
+          echo '--- emulator diagnostic tail ---'
+          tail -35 /tmp/emulator.log || true
+          "$SDK/platform-tools/adb" emu kill >/dev/null 2>&1 || true
+          kill "$pid" 2>/dev/null || true
+          exit 0
