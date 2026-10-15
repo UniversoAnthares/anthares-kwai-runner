@@ -20,7 +20,7 @@ env:
   SOURCE_URL: https://www.youtube.com/watch?v=9CIk-I_3VhM
   SOURCE_START: '8'
   SOURCE_END: '98'
-  JOB_ID: cortes-method12-9CIk-I_3VhM-8-98-kwai-canary-v2
+  JOB_ID: cortes-method12-9CIk-I_3VhM-8-98-kwai-canary-v3
   KWAI_EXPECTED_ACCOUNT: lucasrosalem
   KWAI_LEASE_TTL_SECONDS: '900'
   KWAI_LEASE_RENEW_INTERVAL_SECONDS: '120'
@@ -50,7 +50,7 @@ jobs:
           print('EXPERIMENTAL_CANARY_ONLY=1')
           PY
 
-      - name: Fetch clipper runtime secrets through Anthares control broker
+      - name: Get central OIDC token
         shell: bash
         run: |
           set -euo pipefail
@@ -59,20 +59,8 @@ jobs:
           aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
           CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           echo "::add-mask::$CT"; printf '%s' "$CT" >/tmp/method12/control-token
-          code="$(curl -sS --connect-timeout 10 --max-time 30 -o /tmp/method12/runtime.json -w '%{http_code}' -X POST "$CONTROL/runtime-secrets" -H "Authorization: Bearer $CT" -H 'content-type: application/json' --data '{"scope":"clipper-publish"}')"
-          echo "RUNTIME_SECRETS_HTTP=$code"
-          test "$code" = 200
-          python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/method12/runtime.json')); vals=d.get('values') or {}
-          req=['WP_SITE_URL','WP_USERNAME','WP_APP_PASSWORD','YOUTUBE_COOKIES']
-          miss=[k for k in req if not vals.get(k)]
-          if miss: raise SystemExit('RUNTIME_SECRET_MISSING='+','.join(miss))
-          keep={k:vals[k] for k in req}
-          for v in keep.values(): print('::add-mask::'+str(v).replace('\r','').replace('\n','%0A'))
-          json.dump(keep,open('/tmp/method12/secrets.json','w'))
-          print('RUNTIME_SECRETS_READY=1')
-          PY
+          curl -fsS -H "Authorization: Bearer $CT" "$CONTROL/queue-health" >/tmp/method12/queue-before.json
+          echo CENTRAL_QUEUE_ACCESS=PROVEN
 
       - name: Install acquisition and processing stack
         shell: bash
@@ -80,36 +68,30 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
-          python3 -m pip install --disable-pip-version-check -q 'yt-dlp[default]' yt-dlp-ejs bgutil-ytdlp-pot-provider requests
+          python3 -m pip install --disable-pip-version-check -q 'yt-dlp[default]' yt-dlp-ejs bgutil-ytdlp-pot-provider
           yt-dlp --version
 
-      - name: Method 1 - extract only the requested YouTube interval
+      - name: Method 1 - partial source acquisition only
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import base64,json
-          s=json.load(open('/tmp/method12/secrets.json'))['YOUTUBE_COOKIES'].strip()
-          try:
-              if not s.lstrip().startswith('#') and '\t' not in s and '\n' not in s:
-                  d=base64.b64decode(s,validate=True).decode()
-                  if 'youtube' in d.lower() or 'netscape' in d.lower(): s=d
-          except Exception: pass
-          open('/tmp/method12/cookies.txt','w').write(s.strip()+'\n')
-          PY
-          set +e
-          yt-dlp --cookies /tmp/method12/cookies.txt --no-playlist \
-            --download-sections "*${SOURCE_START}-${SOURCE_END}" --force-keyframes-at-cuts \
+          yt-dlp --no-playlist \
+            --download-sections "*${SOURCE_START}-${SOURCE_END}" \
+            --force-keyframes-at-cuts \
             -f 'bv*+ba/b' --merge-output-format mp4 \
-            -o '/tmp/method12/partial.%(ext)s' "$SOURCE_URL" >/tmp/method12/yt-dlp.log 2>&1
-          rc=$?
-          set -e
-          cat /tmp/method12/yt-dlp.log
-          test "$rc" -eq 0 || { echo METHOD1_PARTIAL_EXTRACTION_FAILED=1; exit "$rc"; }
+            -o '/tmp/method12/partial.%(ext)s' "$SOURCE_URL" 2>&1 | tee /tmp/method12/yt-dlp.log
           test -s /tmp/method12/partial.mp4
+          bytes="$(stat -c%s /tmp/method12/partial.mp4)"
+          dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/method12/partial.mp4)"
+          echo METHOD1_PARTIAL_BYTES=$bytes
+          echo METHOD1_PARTIAL_DURATION=$dur
+          DUR="$dur" python3 - <<'PY'
+          import os
+          d=float(os.environ['DUR']); assert 70 <= d <= 95,d
+          PY
           echo METHOD1_PARTIAL_EXTRACTION=PROVEN
 
-      - name: Method 2 - remote vertical edit and validation
+      - name: Method 2 - remote edit and normalize
         shell: bash
         run: |
           set -euo pipefail
@@ -128,30 +110,21 @@ jobs:
           sha256sum /tmp/method12/final.mp4 | tee /tmp/method12/final.sha256
           echo METHOD2_REMOTE_EDIT=PROVEN
 
-      - name: Upload temporary canary media to WordPress
+      - name: Serve canary media locally for canonical publisher
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json,requests
-          s=json.load(open('/tmp/method12/secrets.json'))
-          auth=(s['WP_USERNAME'],''.join(s['WP_APP_PASSWORD'].split()))
-          with open('/tmp/method12/final.mp4','rb') as f:
-              r=requests.post(s['WP_SITE_URL'].rstrip('/')+'/wp-json/wp/v2/media',auth=auth,data=f,
-                  headers={'Content-Type':'video/mp4','Content-Disposition':'attachment; filename="cortes-method12-canary.mp4"'},timeout=300)
-          if r.status_code not in (200,201): raise SystemExit('WP_MEDIA_UPLOAD_FAILED '+str(r.status_code)+' '+r.text[:400])
-          d=r.json(); assert d.get('id') and d.get('source_url'),d
-          json.dump({'id':d['id'],'source_url':d['source_url']},open('/tmp/method12/wp-media.json','w'))
-          print('WP_CANARY_MEDIA_ID='+str(d['id']))
-          print('WP_CANARY_MEDIA_URL='+d['source_url'])
-          PY
+          nohup python3 -m http.server 8765 --directory /tmp/method12 >/tmp/method12/http.log 2>&1 &
+          echo $! >/tmp/method12/http.pid
+          for i in $(seq 1 10); do curl -fsS --max-time 2 http://127.0.0.1:8765/final.mp4 -o /dev/null && break; sleep 1; done
+          curl -fsSI http://127.0.0.1:8765/final.mp4 | head
+          echo METHOD12_LOCAL_MEDIA_SERVER=READY
 
       - name: Dedupe and enqueue exactly one Kwai canary
         shell: bash
         run: |
           set -euo pipefail
           CT="$(cat /tmp/method12/control-token)"
-          curl -fsS -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/method12/queue-before.json
           python3 - <<'PY'
           import json,os
           q=json.load(open('/tmp/method12/queue-before.json')); raw=q.get('jobs') or []
@@ -170,11 +143,11 @@ jobs:
           PY
           python3 - <<'PY' >/tmp/method12/enqueue.json
           import json,os
-          m=json.load(open('/tmp/method12/wp-media.json')); sha=open('/tmp/method12/final.sha256').read().split()[0]
+          sha=open('/tmp/method12/final.sha256').read().split()[0]
           print(json.dumps({'id':os.environ['JOB_ID'],'platform':'kwai','executor':'github_android_experimental',
-          'dedupe_key':'lucasrosalem::'+os.environ['SOURCE_ID']+':'+os.environ['SOURCE_START']+':'+os.environ['SOURCE_END']+':method12-v2',
+          'dedupe_key':'lucasrosalem::'+os.environ['SOURCE_ID']+':'+os.environ['SOURCE_START']+':'+os.environ['SOURCE_END']+':method12-v3',
           'source_id':os.environ['SOURCE_ID'],'source_start':float(os.environ['SOURCE_START']),'source_end':float(os.environ['SOURCE_END']),
-          'video_url':m['source_url'],'video_title':'Teste CORTES método 1+2','expected_account':os.environ['KWAI_EXPECTED_ACCOUNT'],
+          'video_url':'http://127.0.0.1:8765/final.mp4','video_title':'Teste CORTES método 1+2','expected_account':os.environ['KWAI_EXPECTED_ACCOUNT'],
           'media_sha256':sha,'canary':True}))
           PY
           curl -fsS -X POST "$CONTROL/job/enqueue" -H "Authorization: Bearer $CT" -H 'Content-Type: application/json' --data-binary @/tmp/method12/enqueue.json -o /tmp/method12/enqueued.json
@@ -199,7 +172,7 @@ jobs:
           test -e /dev/kvm
           sudo chmod 666 /dev/kvm
 
-      - name: Publish one canary and verify it
+      - name: Publish one method 1+2 canary and verify it
         uses: reactivecircus/android-emulator-runner@v2
         env:
           KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
@@ -232,18 +205,6 @@ jobs:
             echo KWAI_VAULT_SAVE_SKIPPED_NO_IDENTITY_PROOF=1
           fi
 
-      - name: Remove temporary WordPress media after confirmed success
-        if: success()
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import json,requests
-          s=json.load(open('/tmp/method12/secrets.json')); m=json.load(open('/tmp/method12/wp-media.json'))
-          auth=(s['WP_USERNAME'],''.join(s['WP_APP_PASSWORD'].split()))
-          r=requests.delete(s['WP_SITE_URL'].rstrip('/')+f'/wp-json/wp/v2/media/{m["id"]}?force=true',auth=auth,timeout=60)
-          print('WP_CANARY_CLEANUP_HTTP='+str(r.status_code))
-          PY
-
       - name: Preserve evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -254,7 +215,6 @@ jobs:
           path: |
             /tmp/method12/yt-dlp.log
             /tmp/method12/final.sha256
-            /tmp/method12/wp-media.json
             /tmp/method12/enqueued.json
             /tmp/method12/queue-before.json
             /tmp/method12/session-restore.log
