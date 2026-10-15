@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import subprocess
 import time
 from dataclasses import dataclass, asdict
@@ -54,14 +53,18 @@ class BackendSnapshot:
     android_boot_completed: bool
     state: str
     health_score: int
+    boot_media_ok: bool = True
     kwai_package: Optional[str] = None
     foreground: Optional[str] = None
 
 
-def run(cmd: list[str], timeout: float = 8.0) -> CommandResult:
+def run(cmd: list[str], timeout: float = 8.0, env: Optional[dict[str, str]] = None) -> CommandResult:
     started = time.monotonic()
+    merged_env = os.environ.copy()
+    if env:
+        merged_env.update(env)
     try:
-        cp = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        cp = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=merged_env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         return CommandResult(cp.returncode, cp.stdout or "", cp.stderr or "", int((time.monotonic() - started) * 1000))
     except subprocess.TimeoutExpired as exc:
         out = exc.stdout.decode(errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
@@ -81,7 +84,7 @@ def parse_adb_devices(text: str) -> dict[str, str]:
     return result
 
 
-def health_score(process_running: bool, transport: str, boot: bool, screenshot_ok: bool = False, package_ok: bool = False, ui_ok: bool = False) -> int:
+def health_score(process_running: bool, transport: str, boot: bool, screenshot_ok: bool = False, package_ok: bool = False, ui_ok: bool = False, boot_media_ok: bool = True) -> int:
     score = 0
     score += 15 if process_running else 0
     score += 25 if transport == "device" else (5 if transport == "offline" else 0)
@@ -89,6 +92,8 @@ def health_score(process_running: bool, transport: str, boot: bool, screenshot_o
     score += 15 if screenshot_ok else 0
     score += 10 if package_ok else 0
     score += 10 if ui_ok else 0
+    if not boot_media_ok:
+        score = min(score, 10)
     return min(100, score)
 
 
@@ -111,11 +116,12 @@ class AdbTransport:
 
     def recover(self) -> list[dict]:
         steps: list[dict] = []
+
         def step(name: str, args: list[str], wait: float = 0.0) -> None:
             r = self._cmd(*args, timeout=12)
-            steps.append({"step": name, "code": r.code, "stdout": r.stdout.strip(), "stderr": r.stderr.strip(), "state": self.state()})
             if wait:
                 time.sleep(wait)
+            steps.append({"step": name, "code": r.code, "stdout": r.stdout.strip(), "stderr": r.stderr.strip(), "state": self.state()})
 
         if self.state() == "device":
             return [{"step": "already_healthy", "state": "device"}]
@@ -140,16 +146,13 @@ class AdbTransport:
 
     def screenshot(self, destination: Path) -> bool:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        cp = run([str(self.adb), "-s", self.serial, "exec-out", "screencap", "-p"], timeout=12)
-        if cp.code != 0:
+        try:
+            cp = subprocess.run([str(self.adb), "-s", self.serial, "exec-out", "screencap", "-p"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=12, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except subprocess.TimeoutExpired:
             return False
-        data = cp.stdout.encode("latin1", errors="ignore") if isinstance(cp.stdout, str) else cp.stdout
-        if not data.startswith(b"\x89PNG"):
-            cp2 = subprocess.run([str(self.adb), "-s", self.serial, "exec-out", "screencap", "-p"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=12, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            data = cp2.stdout
-        if not data.startswith(b"\x89PNG"):
+        if cp.returncode != 0 or not cp.stdout.startswith(b"\x89PNG"):
             return False
-        destination.write_bytes(data)
+        destination.write_bytes(cp.stdout)
         return True
 
 
@@ -157,36 +160,38 @@ class MEmuAdapter:
     NAME = "memu4"
     VM_NAME = "MEmu_4"
     DEFAULT_SERIAL = "127.0.0.1:21543"
+    OWNER_PROFILE = Path(r"C:\Users\Lucas")
 
     def __init__(self):
         self.root = self._discover_root()
         self.adb_path = self.root / "adb.exe"
         self.memuc_path = self.root / "memuc.exe"
+        self.memu_path = self.root / "MEmu.exe"
         hyperv = self.root.parent / "MEmuHyperv" / "MEmuManage.exe"
         self.manage_path = hyperv if hyperv.exists() else self.root / "MEmuManage.exe"
+        self.vm_dir = self.root / "MemuHyperv VMs" / self.VM_NAME
+        self.hyperv_json = self.vm_dir / "hyperv.json"
+        self.base_disk = self.root / "image" / "71" / "MEmu71-2022103100023FFF-disk1.vmdk"
+        self.data_disk = self.vm_dir / "MEmu71-2022103100023FFF-disk2.vmdk"
         self.serial = self._discover_serial() or self.DEFAULT_SERIAL
         self.transport = AdbTransport(self.adb_path, self.serial)
 
+    @property
+    def owner_env(self) -> dict[str, str]:
+        return {"USERPROFILE": str(self.OWNER_PROFILE), "HOMEDRIVE": "C:", "HOMEPATH": r"\Users\Lucas"}
+
     @staticmethod
     def _discover_root() -> Path:
-        candidates = [
-            Path(r"D:\Program Files\Microvirt\MEmu"),
-            Path(r"C:\Program Files\Microvirt\MEmu"),
-            Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Microvirt" / "MEmu",
-        ]
+        candidates = [Path(r"D:\Program Files\Microvirt\MEmu"), Path(r"C:\Program Files\Microvirt\MEmu"), Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Microvirt" / "MEmu"]
         for root in candidates:
             if (root / "adb.exe").exists():
                 return root
         raise FileNotFoundError("MEmu adb.exe not found")
 
     def _discover_serial(self) -> Optional[str]:
-        if not self.adb_path.exists():
-            return None
-        devices = parse_adb_devices(run([str(self.adb_path), "devices", "-l"]).stdout)
+        devices = parse_adb_devices(run([str(self.adb_path), "devices", "-l"]).stdout) if self.adb_path.exists() else {}
         local = [s for s in devices if s.startswith("127.0.0.1:")]
-        if self.DEFAULT_SERIAL in local:
-            return self.DEFAULT_SERIAL
-        return local[0] if local else None
+        return self.DEFAULT_SERIAL if self.DEFAULT_SERIAL in local else (local[0] if local else None)
 
     def _process_running(self) -> bool:
         r = run(["tasklist", "/FI", "IMAGENAME eq MEmuHeadless.exe", "/FO", "CSV", "/NH"])
@@ -195,10 +200,54 @@ class MEmuAdapter:
     def _vm_info(self) -> tuple[bool, bool]:
         if not self.manage_path.exists():
             return False, False
-        r = run([str(self.manage_path), "list", "vms"], timeout=8)
-        registered = f'"{self.VM_NAME}"' in r.stdout
-        inaccessible = '"<inaccessible>"' in r.stdout and "000000000004" in r.stdout
-        return registered, inaccessible
+        r = run([str(self.manage_path), "list", "vms"], timeout=8, env=self.owner_env)
+        return f'"{self.VM_NAME}"' in r.stdout, '"<inaccessible>"' in r.stdout and "000000000004" in r.stdout
+
+    def boot_media_ok(self) -> bool:
+        if not self.hyperv_json.exists() or not self.base_disk.exists() or not self.data_disk.exists():
+            return False
+        try:
+            data = json.loads(self.hyperv_json.read_text(encoding="utf-8-sig"))
+            attachments = data["HcsSystem"]["VirtualMachine"]["Devices"]["Scsi"]["Boot Disk Controller"]["Attachments"]
+            p0 = Path(attachments["0"]["Path"])
+            p1 = Path(attachments["1"]["Path"])
+            return p0.exists() and p1.exists()
+        except Exception:
+            return False
+
+    def repair_boot_media(self) -> dict:
+        if not self.hyperv_json.exists():
+            return {"ok": False, "error": "BOOT_CONFIG_MISSING"}
+        if not self.base_disk.exists() or not self.data_disk.exists():
+            return {"ok": False, "error": "BOOT_DISK_MISSING", "base_exists": self.base_disk.exists(), "data_exists": self.data_disk.exists()}
+        data = json.loads(self.hyperv_json.read_text(encoding="utf-8-sig"))
+        attachments = data["HcsSystem"]["VirtualMachine"]["Devices"]["Scsi"]["Boot Disk Controller"]["Attachments"]
+        before = {"0": attachments["0"]["Path"], "1": attachments["1"]["Path"]}
+        backup = self.hyperv_json.with_name("hyperv.json.anthares-runtime-backup")
+        if not backup.exists():
+            backup.write_bytes(self.hyperv_json.read_bytes())
+        attachments["0"]["Path"] = str(self.base_disk)
+        attachments["1"]["Path"] = str(self.data_disk)
+        self.hyperv_json.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
+        return {"ok": self.boot_media_ok(), "before": before, "after": {"0": str(self.base_disk), "1": str(self.data_disk)}, "backup": str(backup)}
+
+    def start(self) -> dict:
+        media = self.repair_boot_media() if not self.boot_media_ok() else {"ok": True, "unchanged": True}
+        if not media.get("ok"):
+            return {"ok": False, "error": "BOOT_MEDIA_INVALID", "media": media}
+        run([str(self.memuc_path), "setconfig", "-n", self.VM_NAME, "enable_audio", "0"], timeout=10, env=self.owner_env)
+        if self._process_running():
+            return {"ok": True, "already_running": True, "media": media}
+        try:
+            subprocess.Popen([str(self.memu_path), self.VM_NAME], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, **self.owner_env}, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as exc:
+            return {"ok": False, "error": "BACKEND_START_FAILED", "detail": str(exc), "media": media}
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            if self._process_running():
+                return {"ok": True, "media": media}
+            time.sleep(1)
+        return {"ok": False, "error": "BACKEND_START_TIMEOUT", "media": media}
 
     def kwai_package(self) -> Optional[str]:
         if self.transport.state() != "device":
@@ -227,8 +276,8 @@ class MEmuAdapter:
 
     def identity_signal(self, expected: str = "@lucasrosalem") -> dict:
         ui = self.dump_ui()
-        text_hit = expected.lower() in ui.lower()
-        return {"expected": expected, "ui_exact_match": text_hit, "foreground": self.foreground(), "package": self.kwai_package(), "auth_valid": bool(text_hit)}
+        hit = expected.lower() in ui.lower()
+        return {"expected": expected, "ui_exact_match": hit, "foreground": self.foreground(), "package": self.kwai_package(), "auth_valid": bool(hit)}
 
     def launch_kwai(self) -> dict:
         pkg = self.kwai_package()
@@ -242,10 +291,11 @@ class MEmuAdapter:
         proc = self._process_running()
         registered, inaccessible = self._vm_info()
         ts = self.transport.state() if self.adb_path.exists() else "missing"
-        boot = False
-        if ts == "device":
-            boot = self.transport.shell("getprop", "sys.boot_completed", timeout=4).stdout.strip() == "1"
-        if proc and ts == "offline":
+        boot = ts == "device" and self.transport.shell("getprop", "sys.boot_completed", timeout=4).stdout.strip() == "1"
+        media_ok = self.boot_media_ok()
+        if not media_ok:
+            state = BackendState.DEGRADED.value
+        elif proc and ts == "offline":
             state = BackendState.RUNNING_TRANSPORT_OFFLINE.value
         elif ts == "device" and boot:
             state = BackendState.ANDROID_READY.value
@@ -255,12 +305,19 @@ class MEmuAdapter:
             state = BackendState.STOPPED.value
         pkg = self.kwai_package() if ts == "device" else None
         fg = self.foreground() if ts == "device" else None
-        return BackendSnapshot(self.NAME, proc, registered, inaccessible, self.serial, ts, boot, state, health_score(proc, ts, boot, package_ok=bool(pkg)), pkg, fg)
+        return BackendSnapshot(self.NAME, proc, registered, inaccessible, self.serial, ts, boot, state, health_score(proc, ts, boot, package_ok=bool(pkg), boot_media_ok=media_ok), media_ok, pkg, fg)
 
     def recover_transport(self) -> dict:
         before = asdict(self.snapshot())
-        steps = self.transport.recover()
-        boot = self.transport.wait_boot(20) if self.transport.state() == "device" else False
+        steps: list[dict] = []
+        if not before["boot_media_ok"]:
+            media = self.repair_boot_media()
+            steps.append({"step": "repair_boot_media", **media})
+        if not self._process_running():
+            started = self.start()
+            steps.append({"step": "start_backend", **started})
+        steps.extend(self.transport.recover())
+        boot = self.transport.wait_boot(30) if self.transport.state() == "device" else False
         after = asdict(self.snapshot())
         return {"ok": after["transport_state"] == "device" and boot, "before": before, "steps": steps, "after": after}
 
@@ -282,7 +339,7 @@ class RuntimeManager:
 
     def recover(self) -> dict:
         out = self.adapter.recover_transport()
-        self.persist({"operation": "recover_transport", "result": out})
+        self.persist({"operation": "recover", "result": out})
         return out
 
     def identity(self) -> dict:
