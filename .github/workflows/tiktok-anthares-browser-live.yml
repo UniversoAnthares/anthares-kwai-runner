@@ -41,14 +41,18 @@ jobs:
       - name: Mint TikTok Live View
         run: |
           set -euo pipefail
-          curl -fsS --max-time 40 -X POST \
+          code="$(curl -sS --max-time 40 -o /tmp/live.json -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $RESERVE_TOKEN" \
             https://anthares-reserva-browser.anthares1.workers.dev/tiktok/session/live \
-            -o /tmp/live.json
+            )"
+          echo "LIVE_HTTP=$code"
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/live.json', encoding='utf-8'))
-          assert d.get('ok') is True, d
+          if d.get('ok') is not True:
+              print('LIVE_ERROR='+str(d.get('error') or '')[:120])
+              print('LIVE_DETAIL='+str(d.get('detail') or '')[:180])
+              raise SystemExit('ANTHARES_BROWSER_LIVE_UNAVAILABLE')
           url=d.get('live_view_url') or ''
           assert url.startswith('https://'), d
           open('/tmp/anthares-tiktok-live-url.txt','w',encoding='utf-8').write(url+'\n')
