@@ -22,6 +22,7 @@ jobs:
     env:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
       CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +31,7 @@ jobs:
           set -euo pipefail
           test -n "$NORTHFLANK_API_TOKEN"
           test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$ARA_SHARED"
 
       - name: Provision/update Northflank TikTok worker
         id: nf
@@ -37,7 +39,8 @@ jobs:
         run: |
           python3 - <<'PY' | tee /tmp/northflank-tiktok.out
           import json, os, sys, time, urllib.request, urllib.error
-          token=os.environ['NORTHFLANK_API_TOKEN']
+          token=os.environ['NORTHFLANK_API_TOKEN']; shared=os.environ['ARA_SHARED']
+          print('::add-mask::'+shared)
           base='https://api.northflank.com/v1'
           headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
           def api(method,path,data=None,allow=()):
@@ -65,7 +68,8 @@ jobs:
             'EXPECTED_TIKTOK_USERNAME':'universo.anthares',
             'EXPECTED_TIKTOK_USER_ID':'7577123938226406401',
             'GITHUB_OIDC_AUDIENCE':'anthares-render-worker',
-            'ANTHARES_CONTROL_URL':'https://anthares-control.anthares1.workers.dev'
+            'ANTHARES_CONTROL_URL':'https://anthares-control.anthares1.workers.dev',
+            'RENDER_WORKER_TOKEN':shared
           }
           if not target:
               payload={
@@ -82,7 +86,7 @@ jobs:
               service_id=(created.get('data') or {}).get('id') or name
           else:
               service_id=target.get('id') or name
-              api('PATCH',f'/projects/{project}/services/{service_id}',{'runtimeEnvironment':runtime},allow=(400,404,405))
+              api('POST',f'/projects/{project}/services/{service_id}/runtime-environment',{'runtimeEnvironment':runtime,'runtimeFiles':{}},allow=(400,404,405))
           api('POST',f'/projects/{project}/services/{service_id}/build',{},allow=(409,))
           ports=api('GET',f'/projects/{project}/services/{service_id}/ports').get('data',{}).get('ports',[])
           public=next((p for p in ports if p.get('public') and p.get('dns')),None)
@@ -99,7 +103,7 @@ jobs:
               time.sleep(10)
           else:sys.exit('Northflank TikTok worker health failed: '+last)
           print('NORTHFLANK_TIKTOK_URL='+public_base)
-          print(json.dumps({'ok':True,'service':service_id,'public_url':public_base,'render_dependency':False},sort_keys=True))
+          print(json.dumps({'ok':True,'service':service_id,'public_url':public_base,'render_dependency':False,'interactive_browser':True},sort_keys=True))
           PY
           url="$(grep '^NORTHFLANK_TIKTOK_URL=' /tmp/northflank-tiktok.out | tail -1 | cut -d= -f2-)"
           test -n "$url"
@@ -126,3 +130,6 @@ jobs:
           health="$(curl --fail-with-body -sS "$router/health")"
           echo "$health"
           echo "$health" | grep -q '"ok":true'
+          browser="$(curl --fail-with-body -sS -H "Authorization: Bearer $ARA_SHARED" "$router/interactive-browser/status")"
+          echo "$browser"
+          echo "$browser" | grep -q '"backend":"northflank_chromium_cdp"'
