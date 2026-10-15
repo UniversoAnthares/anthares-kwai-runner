@@ -5,7 +5,7 @@ import re
 p = Path(__file__).with_name("src") / "index.js"
 s = p.read_text(encoding="utf-8")
 
-OWNER_HASH = "6Z-3WlmAvh6o7m_W0eYEpEo23YKZtjn-DLJpyjtEfQ0"
+OWNER_HASH = "oKIPoMc8wkK1Oust1YK0o0L8ShCOyc1IPPbd26jT1Ss"
 
 # Always rotate the configured hash; existing source may contain a stale hash.
 needle = "const te=new TextEncoder();"
