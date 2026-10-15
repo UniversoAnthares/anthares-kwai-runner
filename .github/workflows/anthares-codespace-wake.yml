@@ -1,6 +1,10 @@
 name: Anthares Codespace Wake
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.anthares-codespace-wake-trigger'
   issue_comment:
     types: [created]
   pull_request:
@@ -30,6 +34,7 @@ jobs:
   wake:
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.number == 12 &&
        github.actor == github.repository_owner &&
