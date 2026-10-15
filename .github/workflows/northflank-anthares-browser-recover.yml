@@ -1,3 +1,4 @@
+# Recovery trigger 2026-10-15T01:12Z: validate Northflank Chromium runtime and durable browser state
 name: Recover vault-backed Anthares browser on Northflank
 on:
   push:
