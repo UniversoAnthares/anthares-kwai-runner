@@ -1,4 +1,5 @@
 name: Anthares Browser Cloudflare live readiness
+# Validate internal TikTok service binding after Cloudflare deployment.
 on:
   workflow_dispatch:
   push:
