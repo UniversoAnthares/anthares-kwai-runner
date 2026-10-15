@@ -51,7 +51,9 @@ jobs:
           code,status=req('/tiktok/northflank/status',token)
           print('TIKTOK_STATUS_HTTP='+str(code))
           print('TIKTOK_STATUS_FIELDS='+','.join(sorted(status.keys())))
-          if code!=200:
-              raise SystemExit('TIKTOK_STATUS_UNAVAILABLE')
+          print('TIKTOK_BACKEND_OK='+str(status.get('ok')))
+          print('TIKTOK_BACKEND_ERROR='+str(status.get('error',''))[:100])
+          if code!=200 or status.get('ok') is not True:
+              raise SystemExit('TIKTOK_BACKEND_UNAVAILABLE')
           print('ANTHARES_BROWSER_CLOUDFLARE_READINESS=PROVEN')
           PY
