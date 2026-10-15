@@ -61,7 +61,7 @@ jobs:
             primary=next((ln for ln in s.splitlines() if ln.strip().startswith('$primary =')), '')
             secondary=next((ln for ln in s.splitlines() if ln.strip().startswith('$secondary =')), '')
             if 'anthares-ara-backup.anthares1.workers.dev' not in primary:
-              errors.append(f'{p}: Cloudflare is not primary')
+              errors.append(f'{p}: Cloudflare Workers runtime is not primary')
             if 'code.run' not in secondary:
               errors.append(f'{p}: Northflank is not secondary')
 
@@ -73,26 +73,32 @@ jobs:
 
           manifest=json.loads(text('ci-hub/executor-routing.json'))
           browser=manifest.get('browser_execution',{})
-          order=browser.get('priority') or []
-          failover=(browser.get('failover') or {}).get('order') or []
-          if not order or order[0] != 'cloudflare':
-            errors.append('executor-routing: Cloudflare is not browser primary')
-          if not failover or failover[0] != 'cloudflare':
-            errors.append('executor-routing: Cloudflare is not first browser failover target')
-          if 'render' in order or 'render' in failover:
-            errors.append('executor-routing: retired Render must not appear in browser routing')
-          cf=(manifest.get('providers') or {}).get('cloudflare') or {}
-          if not cf.get('active') or not cf.get('browser_eligible'):
-            errors.append('executor-routing: Cloudflare browser provider not active/eligible')
+          if browser.get('primary_surface',browser.get('primary'))!='anthares_browser':
+            errors.append('executor-routing: Anthares Browser is not the exclusive browser surface')
+          if browser.get('allow_direct_external_browser_fallbacks') is not False:
+            errors.append('executor-routing: direct external browser fallback enabled')
+          backends=browser.get('backend_priority') or []
+          selected=browser.get('current_selected_backend')
+          if selected and selected not in backends:
+            errors.append('executor-routing: selected browser backend is outside backend priority')
+          if 'render' in backends or selected=='render':
+            errors.append('executor-routing: retired Render must not appear in browser backends')
+          if selected:
+            row=(manifest.get('providers') or {}).get(selected) or {}
+            if row.get('browser_backend_eligible') is not True:
+              errors.append('executor-routing: selected browser backend is not eligible')
+          cfb=(manifest.get('providers') or {}).get('cloudflare_browser_rendering') or {}
+          if cfb.get('active') or cfb.get('browser_eligible'):
+            errors.append('executor-routing: quota-blocked Cloudflare Browser Rendering is still eligible')
           render=(manifest.get('providers') or {}).get('render') or {}
           if render.get('active') or render.get('browser_eligible') or render.get('android_eligible'):
             errors.append('executor-routing: retired Render provider is still operationally eligible')
-          gl=(manifest.get('providers') or {}).get('gitlab') or {}
+          gl=(manifest.get('providers') or {}).get('gitlab_ci') or {}
           if gl.get('active'):
             errors.append('executor-routing: quota-blocked GitLab must not be active')
 
           if errors:
             raise SystemExit('\n'.join(errors))
           print('RENDER_OPERATIONAL_DEPENDENCY_ZERO=1')
-          print('CLOUDFLARE_BROWSER_PRIMARY_GUARD_OK=1')
+          print('ANTHARES_BROWSER_ROUTING_GUARD_OK=1')
           PY
