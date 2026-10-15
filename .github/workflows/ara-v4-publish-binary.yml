@@ -1,4 +1,4 @@
-name: Publish ARA V4 recovery binary
+name: Publish ARA V4 C8 recovery binary
 
 on:
   push:
@@ -31,6 +31,7 @@ jobs:
           root = Path('anthares-remote-agent/windows')
           phase4 = (root / 'phase4-migrate-task.ps1').read_text(encoding='utf-8')
           installer = (root / 'install-system-v8.ps1').read_text(encoding='utf-8')
+          deploy = (root / 'deploy-current-system.ps1').read_text(encoding='utf-8')
           supervisor = (root / 'run-agent-system-supervisor.ps1').read_text(encoding='utf-8')
           http_supervisor = (root / 'run-agent-supervisor.ps1').read_text(encoding='utf-8')
           standard_supervisor = (root / 'run-agent-standard.ps1').read_text(encoding='utf-8')
@@ -42,6 +43,10 @@ jobs:
           forbidden = r'D:\AntharsWork\AntharesRemoteAgent\run-agent-system-supervisor.ps1'
           assert forbidden not in phase4, 'Phase 4 task must never execute supervisor from D:'
           assert r"$root='C:\ProgramData\AntharesRemoteAgent'" in supervisor, 'canonical supervisor root drifted from C:\ProgramData'
+          assert "'anthares-remote-agent-v4-c8.exe'" in supervisor, 'canonical supervisor is not pinned to the C8 binary'
+          assert "'anthares-remote-agent-v4-c8.exe'" in installer, 'installer is not pinned to the C8 binary'
+          assert "'anthares-remote-agent-v4-c8.exe'" in deploy, 'deploy-current is not pinned to the C8 binary'
+          assert "'anthares-remote-agent-v4-c8.exe'" in watchdog, 'watchdog is not pinned to the C8 binary'
           assert 'single-process-dual-transport' in supervisor, 'canonical SYSTEM supervisor lost dual-transport mode'
           assert "recovery_transport='private-issue-queues'" in supervisor, 'private queues are no longer the recovery transport'
           assert 'anthares-ara-backup.anthares1.workers.dev' in supervisor, 'connected ChatGPT MCP HTTP transport is no longer wired into canonical V4'
@@ -65,7 +70,7 @@ jobs:
       - name: Test
         working-directory: anthares-remote-agent
         run: go test ./... -count=1
-      - name: Build Windows V4
+      - name: Build Windows V4 C8
         working-directory: anthares-remote-agent
         env:
           GOOS: windows
@@ -73,17 +78,17 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4.exe ./cmd/agent
-          sha256sum dist/anthares-remote-agent-v4.exe | tee dist/anthares-remote-agent-v4.exe.sha256
+          go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4-c8.exe ./cmd/agent
+          sha256sum dist/anthares-remote-agent-v4-c8.exe | tee dist/anthares-remote-agent-v4-c8.exe.sha256
       - name: Publish stable recovery release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if ! gh release view ara-v4-latest >/dev/null 2>&1; then
-            gh release create ara-v4-latest --target "$GITHUB_SHA" --title 'ARA V4 latest recovery binary' --notes 'Stable recovery asset for Anthares Remote. Updated automatically after validated agent changes.'
+            gh release create ara-v4-latest --target "$GITHUB_SHA" --title 'ARA V4 C8 latest recovery binary' --notes 'Stable C8 recovery asset for Anthares Remote. Updated automatically after validated agent changes.'
           fi
           gh release upload ara-v4-latest \
-            anthares-remote-agent/dist/anthares-remote-agent-v4.exe \
-            anthares-remote-agent/dist/anthares-remote-agent-v4.exe.sha256 \
+            anthares-remote-agent/dist/anthares-remote-agent-v4-c8.exe \
+            anthares-remote-agent/dist/anthares-remote-agent-v4-c8.exe.sha256 \
             --clobber
