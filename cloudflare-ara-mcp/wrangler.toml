@@ -14,3 +14,11 @@ new_sqlite_classes = ["GatewayState"]
 [[services]]
 binding = "ARA_CONTROL"
 service = "anthares-ara-backup"
+
+# Requires Cloudflare Email Routing and verified destination.
+[[send_email]]
+name = "AUTH_EMAIL_SEND"
+destination_address = "lucasyahn@gmail.com"
+
+[vars]
+AUTH_EMAIL_FROM = "noreply@anthares.us"
