@@ -1,0 +1,1 @@
+{"name":"anthares-remote-primary","private":true,"type":"module","dependencies":{"@modelcontextprotocol/sdk":"^1.18.2","pg":"^8.16.3","zod":"^3.25.76"}}
