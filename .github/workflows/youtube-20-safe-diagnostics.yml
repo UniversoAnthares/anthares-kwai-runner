@@ -58,8 +58,8 @@ jobs:
           rnd,case,client,mode,rc,out,err=sys.argv[1:]
           try:
               d=json.load(open(out))
-              valid=bool(d.get('id')=='9CIk-I_3VhM' and d.get('formats'))
-          except (ValueError,OSError):
+              valid=bool(isinstance(d,dict) and d.get('id')=='9CIk-I_3VhM' and d.get('formats'))
+          except (ValueError,OSError,TypeError,AttributeError):
               valid=False
           try:
               e=open(err,errors='replace').read()
@@ -91,7 +91,9 @@ jobs:
           import glob,json,sys,collections
           rnd=int(sys.argv[1]); rows=[]
           for p in sorted(glob.glob(f'/tmp/ytdiag/r{rnd}-c*.result')):
-              try: rows.append(json.load(open(p)))
+              try:
+                  item=json.load(open(p))
+                  if isinstance(item,dict): rows.append(item)
               except Exception: pass
           cats=collections.Counter(r.get('category') for r in rows)
           good=[r for r in rows if r.get('valid_formats')]
