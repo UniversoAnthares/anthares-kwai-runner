@@ -1,0 +1,32 @@
+name: Inventory Northflank resources
+on:
+  push:
+    paths:
+      - .github/workflows/northflank-inventory-probe.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - name: Inventory project resources
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request
+          t=os.environ['NORTHFLANK_API_TOKEN'];base='https://api.northflank.com/v1';h={'Authorization':'Bearer '+t}
+          def get(p):
+            with urllib.request.urlopen(urllib.request.Request(base+p,headers=h),timeout=30) as r:return json.loads(r.read().decode() or '{}')
+          ps=(get('/projects').get('data') or {}).get('projects') or []
+          if isinstance(ps,dict):ps=list(ps.values())
+          p=next(x for x in ps if x.get('name')=='Default');pid=p['id']
+          ss=(get(f'/projects/{pid}/services').get('data') or {}).get('services') or []
+          if isinstance(ss,dict):ss=list(ss.values())
+          aa=(get(f'/projects/{pid}/addons').get('data') or {}).get('addons') or []
+          if isinstance(aa,dict):aa=list(aa.values())
+          print(json.dumps({'services':[{'id':x.get('id'),'name':x.get('name'),'type':x.get('serviceType'),'billing':x.get('billing')} for x in ss],'addons':[{'id':x.get('id'),'name':x.get('name'),'type':x.get('type'),'status':x.get('status')} for x in aa]},sort_keys=True,default=str))
+          PY
