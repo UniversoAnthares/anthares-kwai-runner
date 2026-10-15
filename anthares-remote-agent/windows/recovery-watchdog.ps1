@@ -23,7 +23,7 @@ function Restore-CriticalScripts{
     if(-not(Test-Path $good)){continue}
     $restore=$false
     if(-not(Test-Path $live)){$restore=$true}else{try{$restore=((Get-FileHash -LiteralPath $live -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $good -Algorithm SHA256).Hash)}catch{$restore=$true}}
-    if($restore){try{Copy-Item -LiteralPath $good -Destination $live -Force;Log("restored critical script $name")}catch{Log("failed restoring critical script $name: $($_.Exception.Message)")}}
+    if($restore){try{Copy-Item -LiteralPath $good -Destination $live -Force;Log("restored critical script $name")}catch{Log("failed restoring critical script ${name}: $($_.Exception.Message)")}}
   }
 }
 function Ensure-Task([string]$name,[string]$script){
