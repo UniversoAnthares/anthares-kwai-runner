@@ -23,13 +23,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sed -i 's|OWNER_HASH = ".*"|OWNER_HASH = "vxu4cLd0Hse12HJlSz5prARSYPta3iEMLDZ9RQaC94Y"|' cloudflare-ara-mcp/patch_oauth_owner_code.py
           python3 cloudflare-ara-mcp/patch_oauth_owner_code.py
           python3 cloudflare-ara-mcp/patch_vercel_primary.py
           python3 cloudflare-ara-mcp/patch_stateless_gateway.py
           python3 cloudflare-ara-mcp/patch_stateless_wrangler.py
           node --check cloudflare-ara-mcp/src/index.js
-          grep -q "OWNER_APPROVAL_HASH='vxu4cLd0Hse12HJlSz5prARSYPta3iEMLDZ9RQaC94Y'" cloudflare-ara-mcp/src/index.js
+          grep -q "OWNER_APPROVAL_HASH='oKIPoMc8wkK1Oust1YK0o0L8ShCOyc1IPPbd26jT1Ss'" cloudflare-ara-mcp/src/index.js
           grep -q 'class StatelessGatewayState' cloudflare-ara-mcp/src/index.js
           grep -q "const CONTROL='https://anthares-ara-vercel-reserve.vercel.app'" cloudflare-ara-mcp/src/index.js
           ! grep -q 'durable_objects' cloudflare-ara-mcp/wrangler.toml
