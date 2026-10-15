@@ -1,0 +1,69 @@
+name: Normalize control OIDC allowlist
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/normalize-control-oidc-allowlist.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: normalize-control-oidc-allowlist
+  cancel-in-progress: false
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Persist dedicated verifier in strict OIDC allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('cloudflare-worker/src/index.js')
+          s=p.read_text(encoding='utf-8-sig')
+          verifier='"tiktok-anthares-browser-session-verify.yml"'
+          if verifier not in s:
+              anchor='"tiktok-central-session-read.yml"'
+              assert anchor in s, 'OIDC allowlist anchor missing'
+              s=s.replace(anchor, anchor+','+verifier, 1)
+              p.write_text(s, encoding='utf-8')
+          # Preserve strict trust boundaries while adding only this workflow identity.
+          for marker in [
+              'https://token.actions.githubusercontent.com',
+              'https://anthares-control.anthares1.workers.dev',
+              'claims.repository',
+              'claims.ref!=="refs/heads/main"',
+              'claims.event_name',
+              'crypto.subtle.verify',
+              'jwt_signature',
+              verifier,
+          ]:
+              assert marker in p.read_text(encoding='utf-8-sig'), marker
+          print('CANONICAL_TIKTOK_VERIFIER_OIDC_ALLOWLIST_OK=1')
+          PY
+          node --experimental-default-type=module --check cloudflare-worker/src/index.js
+          git diff --check
+      - name: Commit canonical source if changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- cloudflare-worker/src/index.js; then
+            echo 'CANONICAL_SOURCE_ALREADY_NORMALIZED=1'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add cloudflare-worker/src/index.js
+          git commit -m 'control: persist TikTok verifier OIDC authorization'
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo 'CANONICAL_SOURCE_NORMALIZED=1'
