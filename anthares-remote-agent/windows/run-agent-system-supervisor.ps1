@@ -10,7 +10,7 @@ $env:TEMP='D:\AntharsWork\temp'
 $env:TMP=$env:TEMP
 # Vercel + Neon is the normal low-latency control plane.
 # GitLab and GitHub private issue queues remain independent recovery transports.
-$httpControl='https://anthares-ara-vercel-reserve.vercel.app'
+$httpControl='https://anthares-remote-primary.vercel.app'
 Remove-Item Env:ANTHARES_CONTROL_PRIMARY_URL -ErrorAction SilentlyContinue
 Remove-Item Env:ANTHARES_CONTROL_SECONDARY_URL -ErrorAction SilentlyContinue
 Remove-Item Env:ANTHARES_CONTROL_TERTIARY_URL -ErrorAction SilentlyContinue
