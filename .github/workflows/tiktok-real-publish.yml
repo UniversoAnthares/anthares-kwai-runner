@@ -1,57 +1,256 @@
-name: TikTok GitHub Direct V15
+name: TikTok one-shot real clip
 on:
   push:
+    branches: [main]
     paths: ['.tiktok-render-lean-v14-trigger']
 permissions:
   contents: read
   id-token: write
+concurrency:
+  group: tiktok-one-shot-real-9CIk-I_3VhM-8-98
+  cancel-in-progress: false
 jobs:
-  preflight:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      max-parallel: 15
-      matrix:
-        replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
-    steps:
-      - name: Fifteen central-session probes
-        env:
-          CONTROL: https://anthares-control.anthares1.workers.dev
-          N: ${{ matrix.replica }}
-        run: |
-          set -euo pipefail
-          CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
-          curl --fail-with-body -sS "$CONTROL/tiktok/session-state" -H "Authorization: Bearer $CT" >/tmp/c.json
-          python3 - <<'PY'
-          import json,os
-          d=json.load(open('/tmp/c.json')); c=(d.get('state') or {}).get('cookies') or []
-          assert d.get('available') is True and c
-          print('PREFLIGHT_REPLICA_'+os.environ['N']+'=PROVEN cookies='+str(len(c)))
-          PY
-  direct-v15:
-    needs: preflight
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
     env:
       CONTROL: https://anthares-control.anthares1.workers.dev
+      EXPECTED_TIKTOK_USERNAME: universo.anthares
+      SOURCE_ID: 9CIk-I_3VhM
+      SOURCE_START: '8'
+      SOURCE_END: '98'
+      SOURCE_URL: https://www.youtube.com/watch?v=9CIk-I_3VhM
+      JOB_ID: tiktok-9CIk-I_3VhM-8-98-real-v1
+      TIKTOK_STORAGE_STATE_FILE: /tmp/tiktok-storage-state.json
+      TIKTOK_YOUTUBE_PLAN: /tmp/tiktok-plan.json
+      TIKTOK_PUBLISH_EVIDENCE: /tmp/tiktok-publish-evidence.json
+      TIKTOK_PUBLISHED_KEYS: /tmp/tiktok-published-keys.json
+      ATD_ARTIFACT_DIR: /tmp/tiktok-artifacts
     steps:
       - uses: actions/checkout@v4
-      - name: Install browser runtime
+
+      - name: Install browser and acquisition stack
+        shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --disable-pip-version-check -q playwright requests
-          python3 -m playwright install --with-deps chromium
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg >/dev/null
-      - name: Obtain control OIDC
-        id: oidc
+          python3 -m pip install --disable-pip-version-check -q playwright requests yt-dlp bgutil-ytdlp-pot-provider faster-whisper
+          python3 -m playwright install chromium
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+
+      - name: Obtain approved OIDC and prove session, dedupe, account and baseline
+        shell: bash
         run: |
           set -euo pipefail
-          CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          sep='&'; [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]] || sep='?'
+          aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
+          CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           echo "::add-mask::$CT"
-          echo "token=$CT" >> "$GITHUB_OUTPUT"
-      - name: Execute one fenced direct canary
-        env:
-          CONTROL_TOKEN: ${{ steps.oidc.outputs.token }}
-        run: python3 tiktok_direct_canary_v15.py
+          printf '%s' "$CT" >/tmp/control-token
+          curl -fsS --max-time 30 -H "Authorization: Bearer $CT" "$CONTROL/tiktok/session-state" -o /tmp/session.json
+          curl -fsS --max-time 30 -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/queue.json
+          python3 - <<'PY'
+          import json,os
+          d=json.load(open('/tmp/session.json')); st=d.get('state') or {}; cookies=st.get('cookies') or []
+          assert d.get('available') is True and cookies, 'CENTRAL_TIKTOK_SESSION_UNAVAILABLE'
+          json.dump({'cookies':cookies,'origins':st.get('origins') or []},open(os.environ['TIKTOK_STORAGE_STATE_FILE'],'w'))
+          q=json.load(open('/tmp/queue.json')); raw=q.get('jobs') or []
+          jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
+          overlaps=[]
+          for j in [x for x in jobs if isinstance(x,dict) and x.get('platform')=='tiktok']:
+              try: a=float(j.get('source_start')); b=float(j.get('source_end'))
+              except Exception: continue
+              if str(j.get('source_id') or '')==os.environ['SOURCE_ID'] and max(float(os.environ['SOURCE_START']),a)<min(float(os.environ['SOURCE_END']),b): overlaps.append(j.get('id'))
+          assert not overlaps, 'CENTRAL_TIMELINE_DEDUPE_BLOCK:'+','.join(map(str,overlaps))
+          print('CENTRAL_SESSION=PROVEN cookies='+str(len(cookies)))
+          print('CENTRAL_INTERVAL_DEDUPE=PROVEN')
+          PY
+          python3 - <<'PY'
+          import json,re,time,os,sys
+          from playwright.sync_api import sync_playwright
+          state=json.load(open(os.environ['TIKTOK_STORAGE_STATE_FILE'])); expected=os.environ['EXPECTED_TIKTOK_USERNAME'].lower()
+          strong=set()
+          def hydration_user(page):
+              try:
+                  raw=page.locator('#__UNIVERSAL_DATA_FOR_REHYDRATION__').text_content(timeout=5000)
+                  d=json.loads(raw or '{}'); u=(d.get('__DEFAULT_SCOPE__',{}).get('webapp.app-context',{}).get('user',{}) or {})
+                  return str(u.get('uniqueId') or '').strip().lower()
+              except Exception: return ''
+          with sync_playwright() as p:
+              b=p.chromium.launch(headless=True,args=['--disable-dev-shm-usage','--no-sandbox','--disable-gpu'])
+              c=b.new_context(storage_state=state,viewport={'width':1440,'height':1000},locale='pt-BR'); page=c.new_page()
+              for url in ('https://www.tiktok.com/profile','https://www.tiktok.com/tiktokstudio/upload?from=webapp','https://www.tiktok.com/upload?lang=pt-BR'):
+                  page.goto(url,wait_until='domcontentloaded',timeout=60000); time.sleep(3)
+                  m=re.search(r'tiktok\.com/@([^/?#]+)',page.url,re.I)
+                  if m: strong.add(m.group(1).lower())
+                  hu=hydration_user(page)
+                  if hu: strong.add(hu)
+              if expected not in strong: raise RuntimeError('STRONG_TIKTOK_IDENTITY_NOT_PROVEN:'+json.dumps(sorted(strong)))
+              print('STRONG_TIKTOK_IDENTITY_PROVEN='+expected)
+              c.close(); b.close()
+          sys.path.insert(0,os.path.join(os.getcwd(),'direct-tiktok-publisher'))
+          import tiktok_worker as tw
+          vids=tw.inventory_profile_videos(expected)
+          ids=sorted({str(v.get('id') or '') for v in vids if str(v.get('id') or '')})
+          json.dump(ids,open('/tmp/profile-baseline.json','w'))
+          print('PROFILE_BASELINE_IDS='+json.dumps(ids))
+          PY
+
+      - name: Start YouTube PO-token provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull brainicism/bgutil-ytdlp-pot-provider:latest >/dev/null
+          docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider:latest >/dev/null
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:4416/ >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          exit 11
+
+      - name: Extract, microcut and verticalize the real source interval
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/tiktok-media
+          yt-dlp --no-playlist --remote-components ejs:github \
+            --extractor-args 'youtube:player_client=mweb' \
+            --extractor-args 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416' \
+            --download-sections "*${SOURCE_START}-${SOURCE_END}" --force-keyframes-at-cuts \
+            -f 'bv*[height<=720]+ba/b[height<=720]' --merge-output-format mp4 \
+            -o '/tmp/tiktok-media/source.%(ext)s' "$SOURCE_URL"
+          SRC="$(find /tmp/tiktok-media -maxdepth 1 -type f -name 'source.*' | head -n 1)"
+          test -n "$SRC" && test -s "$SRC"
+          export SRC
+          python3 - <<'PY'
+          import json,os,sys,hashlib
+          from pathlib import Path
+          sys.path.insert(0,str(Path('scripts').resolve()))
+          import instagram_prepare_media as ip
+          src=Path(os.environ['SRC']); micro=Path('/tmp/tiktok-media/microcut.mp4'); final=Path('/tmp/tiktok-media/final.mp4')
+          meta=ip.microcut(src,micro); layout=ip.verticalize(micro,final)
+          dur=ip.duration(final); w,h=ip.dimensions(final)
+          assert final.stat().st_size>500000 and 30<=dur<=100, (final.stat().st_size,dur)
+          assert w*16==h*9, (w,h)
+          sha=hashlib.sha256(final.read_bytes()).hexdigest()
+          plan={'segment_id':os.environ['SOURCE_ID']+':'+os.environ['SOURCE_START']+':'+os.environ['SOURCE_END'],'source_id':os.environ['SOURCE_ID'],'source_start':float(os.environ['SOURCE_START']),'source_end':float(os.environ['SOURCE_END']),'source_url':os.environ['SOURCE_URL'],'source_title':'A Poetica de Aristoteles - Parte 2 (LIVE)','title':'A Poetica de Aristoteles — trecho','summary':'Trecho sobre a Poetica de Aristoteles.','media_path':str(final),'media_sha256':sha,'duration_seconds':round(dur,3),'microcut':meta,'layout':layout}
+          json.dump(plan,open(os.environ['TIKTOK_YOUTUBE_PLAN'],'w'),ensure_ascii=False,indent=2)
+          print('REAL_MEDIA_PREPARED=1')
+          print('REAL_MEDIA_DURATION='+str(round(dur,3)))
+          print('REAL_MEDIA_DIMENSIONS='+str(w)+'x'+str(h))
+          print('REAL_MEDIA_SHA256='+sha)
+          PY
+
+      - name: Recheck dedupe, reserve exact central job and lease it
+        shell: bash
+        run: |
+          set -euo pipefail
+          sep='&'; [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]] || sep='?'
+          aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
+          CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$CT"; printf '%s' "$CT" >/tmp/control-token
+          curl -fsS -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/queue2.json
+          python3 - <<'PY'
+          import json,os
+          q=json.load(open('/tmp/queue2.json')); raw=q.get('jobs') or []; jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
+          for j in [x for x in jobs if isinstance(x,dict) and x.get('platform')=='tiktok']:
+              try:a=float(j.get('source_start'));b=float(j.get('source_end'))
+              except Exception:continue
+              if str(j.get('source_id') or '')==os.environ['SOURCE_ID'] and max(float(os.environ['SOURCE_START']),a)<min(float(os.environ['SOURCE_END']),b): raise RuntimeError('RACE_DEDUPE_BLOCK:'+str(j.get('id')))
+          print('SECOND_DEDUPE_GATE=PROVEN')
+          PY
+          SHA="$(python3 -c 'import json,os;print(json.load(open(os.environ["TIKTOK_YOUTUBE_PLAN"]))["media_sha256"])')"
+          python3 - <<'PY' >/tmp/enqueue.json
+          import json,os
+          print(json.dumps({'id':os.environ['JOB_ID'],'platform':'tiktok','executor':'github','dedupe_key':os.environ['EXPECTED_TIKTOK_USERNAME']+'::'+os.environ['SOURCE_ID']+':'+os.environ['SOURCE_START']+':'+os.environ['SOURCE_END'],'source_id':os.environ['SOURCE_ID'],'source_start':float(os.environ['SOURCE_START']),'source_end':float(os.environ['SOURCE_END']),'media_sha256':json.load(open(os.environ['TIKTOK_YOUTUBE_PLAN']))['media_sha256']}))
+          PY
+          curl -fsS -X POST "$CONTROL/job/enqueue" -H "Authorization: Bearer $CT" -H 'Content-Type: application/json' --data-binary @/tmp/enqueue.json -o /tmp/enqueued.json
+          python3 - <<'PY'
+          import json,os
+          d=json.load(open('/tmp/enqueued.json')); assert d.get('ok') is True,d; assert not d.get('deduplicated'),d; assert (d.get('job') or {}).get('id')==os.environ['JOB_ID'],d
+          print('CENTRAL_JOB_ENQUEUED='+os.environ['JOB_ID'])
+          PY
+          curl -fsS "$CONTROL/github-queue-get/lease?platform=tiktok&ttl_seconds=3600" -H "Authorization: Bearer $CT" -o /tmp/lease.json
+          python3 - <<'PY'
+          import json,os
+          d=json.load(open('/tmp/lease.json')); j=d.get('job') or {}; assert j.get('id')==os.environ['JOB_ID'],d; g=int(j.get('lease_generation') or 0); assert g>0,d
+          open('/tmp/lease-generation','w').write(str(g)); print('CENTRAL_JOB_LEASED generation='+str(g))
+          PY
+
+      - name: Final strong identity gate immediately before publication boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,time,os
+          from playwright.sync_api import sync_playwright
+          state=json.load(open(os.environ['TIKTOK_STORAGE_STATE_FILE'])); expected=os.environ['EXPECTED_TIKTOK_USERNAME'].lower(); strong=set()
+          with sync_playwright() as p:
+              b=p.chromium.launch(headless=True,args=['--disable-dev-shm-usage','--no-sandbox','--disable-gpu']); c=b.new_context(storage_state=state,viewport={'width':1440,'height':1000},locale='pt-BR'); page=c.new_page()
+              page.goto('https://www.tiktok.com/upload?lang=pt-BR',wait_until='domcontentloaded',timeout=60000); time.sleep(4)
+              try:
+                  raw=page.locator('#__UNIVERSAL_DATA_FOR_REHYDRATION__').text_content(timeout=5000); d=json.loads(raw or '{}'); uid=str((d.get('__DEFAULT_SCOPE__',{}).get('webapp.app-context',{}).get('user',{}) or {}).get('uniqueId') or '').strip().lower()
+                  if uid: strong.add(uid)
+              except Exception: pass
+              m=re.search(r'tiktok\.com/@([^/?#]+)',page.url,re.I)
+              if m: strong.add(m.group(1).lower())
+              if expected not in strong: raise RuntimeError('FINAL_STRONG_IDENTITY_GATE_FAILED:'+json.dumps(sorted(strong)))
+              print('FINAL_STRONG_IDENTITY_GATE=PROVEN account='+expected)
+              c.close();b.close()
+          PY
+
+      - name: Cross publication boundary once and reconcile
+        shell: bash
+        run: |
+          set -euo pipefail
+          CT="$(cat /tmp/control-token)"; GEN="$(cat /tmp/lease-generation)"
+          python3 - "$JOB_ID" "$GEN" <<'PY' >/tmp/started.json
+          import json,sys
+          print(json.dumps({'id':sys.argv[1],'executor':'github','lease_generation':int(sys.argv[2])}))
+          PY
+          curl -fsS -X POST "$CONTROL/github-queue/started" -H "Authorization: Bearer $CT" -H 'Content-Type: application/json' --data-binary @/tmp/started.json -o /tmp/started-response.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/started-response.json')); assert d.get('ok') is True and (d.get('job') or {}).get('publication_started') is True,d
+          print('PUBLICATION_STARTED_FENCE=RECORDED')
+          PY
+          set +e
+          (cd direct-tiktok-publisher && python3 tiktok_cloud_publish.py)
+          RC=$?
+          set -e
+          if [ "$RC" -ne 0 ]; then
+            python3 - "$JOB_ID" "$GEN" <<'PY' >/tmp/fail.json
+          import json,sys
+          print(json.dumps({'id':sys.argv[1],'executor':'github','lease_generation':int(sys.argv[2]),'error_class':'publisher_failed_after_start','error_message':'one-shot publisher failed after publication_started; reconciliation required','published_possible':True}))
+          PY
+            curl -fsS -X POST "$CONTROL/github-queue/fail" -H "Authorization: Bearer $CT" -H 'Content-Type: application/json' --data-binary @/tmp/fail.json -o /tmp/fail-response.json || true
+            echo 'PUBLISH_RESULT=UNCERTAIN_RECONCILIATION_REQUIRED'
+            exit "$RC"
+          fi
+          test -s "$TIKTOK_PUBLISH_EVIDENCE"
+          REMOTE_ID="$(python3 -c 'import json,os;d=json.load(open(os.environ["TIKTOK_PUBLISH_EVIDENCE"])); assert d.get("confirmed") is True and d.get("remote_id"); print(d["remote_id"])')"
+          REMOTE_URL="$(python3 -c 'import json,os;d=json.load(open(os.environ["TIKTOK_PUBLISH_EVIDENCE"])); print(d.get("remote_url") or "")')"
+          python3 - "$JOB_ID" "$GEN" "$REMOTE_ID" "$REMOTE_URL" <<'PY' >/tmp/complete.json
+          import json,sys
+          print(json.dumps({'id':sys.argv[1],'executor':'github','lease_generation':int(sys.argv[2]),'confirmed':True,'remote_id':sys.argv[3],'confirmation_evidence':sys.argv[4] or ('profile:'+sys.argv[3])}))
+          PY
+          curl -fsS -X POST "$CONTROL/github-queue/complete" -H "Authorization: Bearer $CT" -H 'Content-Type: application/json' --data-binary @/tmp/complete.json -o /tmp/complete-response.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/complete-response.json')); j=d.get('job') or {}; assert d.get('ok') is True and j.get('status')=='published' and j.get('confirmed') is True and j.get('remote_id'),d
+          print('CENTRAL_PUBLICATION_CONFIRMED=1')
+          print('REMOTE_ID='+str(j.get('remote_id')))
+          PY
+          echo "REMOTE_URL=$REMOTE_URL"
+
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiktok-one-shot-real-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            /tmp/tiktok-plan.json
+            /tmp/tiktok-publish-evidence.json
+            /tmp/tiktok-artifacts/**
