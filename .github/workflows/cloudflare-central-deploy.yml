@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Authorize dedicated TikTok session verifier deterministically
+      - name: Authorize dedicated TikTok verifier and reconciliation workflows deterministically
         shell: bash
         run: |
           set -euo pipefail
@@ -27,14 +27,20 @@ jobs:
           from pathlib import Path
           p=Path('cloudflare-worker/src/index.js')
           s=p.read_text(encoding='utf-8-sig')
-          target='"tiktok-central-session-read.yml"'
-          addition='"tiktok-central-session-read.yml","tiktok-anthares-browser-session-verify.yml"'
-          if '"tiktok-anthares-browser-session-verify.yml"' not in s:
-              if target not in s:
-                  raise SystemExit('OIDC allowlist anchor missing')
-              s=s.replace(target, addition, 1)
-              p.write_text(s, encoding='utf-8')
-          print('TIKTOK_SESSION_VERIFIER_OIDC_ALLOWLIST_OK=1')
+          anchor='"tiktok-central-session-read.yml"'
+          required=[
+              'tiktok-anthares-browser-session-verify.yml',
+              'tiktok-reconcile-uncertain.yml',
+          ]
+          for name in required:
+              marker='"'+name+'"'
+              if marker in s:
+                  continue
+              if anchor not in s:
+                  raise SystemExit('OIDC allowlist anchor missing for '+name)
+              s=s.replace(anchor, anchor+','+marker, 1)
+          p.write_text(s, encoding='utf-8')
+          print('TIKTOK_OIDC_ALLOWLIST_OK=1')
           PY
       - name: Validate deploy snapshot
         shell: bash
@@ -44,10 +50,11 @@ jobs:
           test -s cloudflare-worker/wrangler.toml
           grep -q 'tiktok-central-session-read.yml' cloudflare-worker/src/index.js
           grep -q 'tiktok-anthares-browser-session-verify.yml' cloudflare-worker/src/index.js
+          grep -q 'tiktok-reconcile-uncertain.yml' cloudflare-worker/src/index.js
           grep -q '2026-10-05-queue-fencing-v16' cloudflare-worker/src/index.js
           grep -q '2026-10-14-render-retired-r2' cloudflare-worker/src/index.js
           ! grep -q 'onrender.com' cloudflare-worker/src/index.js
-          echo 'SNAPSHOT_VALID=queue-fencing-v16-render-retired-r2-session-verifier-authorized'
+          echo 'SNAPSHOT_VALID=queue-fencing-v16-render-retired-r2-tiktok-reconcile-authorized'
       - name: Validate private Kwai session vault before deploy
         shell: bash
         run: |
