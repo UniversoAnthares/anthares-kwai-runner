@@ -1,0 +1,90 @@
+name: Repair Northflank Chromium v3
+on:
+  push:
+    paths:
+      - .github/workflows/northflank-chromium-v3-repair.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: northflank-chromium-v3-repair
+  cancel-in-progress: true
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Rebuild existing TikTok service and wait for v3
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$NORTHFLANK_API_TOKEN"
+          test -n "$ARA_SHARED"
+          echo "::add-mask::$NORTHFLANK_API_TOKEN"
+          echo "::add-mask::$ARA_SHARED"
+          python3 - <<'PY' > /tmp/base
+          import json,os,time,urllib.request,urllib.error
+          token=os.environ['NORTHFLANK_API_TOKEN']; shared=os.environ['ARA_SHARED']
+          api='https://api.northflank.com/v1'; h={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
+          def call(method,path,data=None):
+              req=urllib.request.Request(api+path,method=method,headers=h,data=(json.dumps(data).encode() if data is not None else None))
+              try:
+                  with urllib.request.urlopen(req,timeout=40) as r:
+                      raw=r.read().decode(); return json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  if method=='POST' and path.endswith('/build') and e.code==409:return {}
+                  raise
+          ps=(call('GET','/projects').get('data') or {}).get('projects') or []
+          if isinstance(ps,dict):ps=list(ps.values())
+          pid=next(p.get('id') for p in ps if p.get('name')=='Default')
+          ss=(call('GET',f'/projects/{pid}/services').get('data') or {}).get('services') or []
+          if isinstance(ss,dict):ss=list(ss.values())
+          s=next(x for x in ss if x.get('name')=='anthares-tiktok-northflank')
+          sid=s.get('id') or 'anthares-tiktok-northflank'
+          call('POST',f'/projects/{pid}/services/{sid}/build',{})
+          ports=(call('GET',f'/projects/{pid}/services/{sid}/ports').get('data') or {}).get('ports') or []
+          public=next(p for p in ports if p.get('public') and p.get('dns'))
+          print('https://'+public['dns'])
+          PY
+          base="$(cat /tmp/base)"
+          test -n "$base"
+          echo "NORTHFLANK_BASE=$base"
+          ready=0
+          for i in $(seq 1 90); do
+            code="$(curl -sS -o /tmp/revision.json -w '%{http_code}' --max-time 20 -H "Authorization: Bearer $ARA_SHARED" "$base/interactive-browser/revision" || true)"
+            if [ "$code" = 200 ] && grep -q '"revision":"2026-10-15-cdp-v3"' /tmp/revision.json; then ready=1; break; fi
+            sleep 8
+          done
+          cat /tmp/revision.json 2>/dev/null || true
+          test "$ready" = 1 || { echo V3_ROLLOUT_NOT_PROVEN; exit 41; }
+          echo NORTHFLANK_CHROMIUM_V3_LIVE=1
+          printf '%s' "$base" > /tmp/nf-base
+      - name: Real Chromium start screenshot close
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(cat /tmp/nf-base)"
+          auth=(-H "Authorization: Bearer $ARA_SHARED")
+          start_code="$(curl -sS -o /tmp/start.json -w '%{http_code}' --max-time 75 "${auth[@]}" -H 'content-type: application/json' -X POST "$base/interactive-browser/start" --data '{}' || true)"
+          echo "START_HTTP=$start_code"
+          cat /tmp/start.json 2>/dev/null || true
+          test "$start_code" = 200 || exit 51
+          shot_code="$(curl -sS -o /tmp/shot.json -w '%{http_code}' --max-time 45 "${auth[@]}" "$base/interactive-browser/screenshot" || true)"
+          echo "SCREENSHOT_HTTP=$shot_code"
+          if [ "$shot_code" != 200 ]; then cat /tmp/shot.json 2>/dev/null || true; exit 52; fi
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/shot.json'))
+          assert d.get('ok') is True,d
+          assert d.get('mime')=='image/jpeg',d
+          assert len(d.get('image_b64') or '')>5000,len(d.get('image_b64') or '')
+          assert 'tiktok.com' in (d.get('url') or ''),d.get('url')
+          print('NORTHFLANK_CHROMIUM_SCREENSHOT_OK=1')
+          print('SCREENSHOT_B64_BYTES='+str(len(d['image_b64'])))
+          PY
+          curl --fail-with-body -sS --max-time 20 "${auth[@]}" -H 'content-type: application/json' -X POST "$base/interactive-browser/close" --data '{}' -o /tmp/close.json
+          grep -q '"ok":true' /tmp/close.json
+          echo NORTHFLANK_CHROMIUM_REAL_E2E_OK=1
