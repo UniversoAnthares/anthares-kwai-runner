@@ -6,6 +6,10 @@ Operational invariants:
 - Anthares Browser is the only browser-automation surface.
 - Browserless, TinyFish, Render and CircleCI are never operational fallbacks.
 - External infrastructure may support Anthares internals only when its own health and quota are eligible.
+
+When ANTHARES_RESILIENCE_REPORT_ONLY=1, missing external runtime evidence is reported
+without turning a finite CI policy watchdog red. Real runtime verification remains a
+separate per-round requirement and must never be fabricated inside GitHub Actions.
 """
 from __future__ import annotations
 
@@ -22,6 +26,7 @@ BROWSER_PRIMARY = os.environ.get("ANTHARES_BROWSER_PRIMARY_URL", "").rstrip("/")
 BROWSER_RESERVE = os.environ.get("ANTHARES_BROWSER_PERSISTENT_RESERVE_URL", "").rstrip("/")
 REMOTE_HEARTBEAT_FRESH = os.environ.get("ANTHARES_REMOTE_HEARTBEAT_FRESH", "0") == "1"
 REMOTE_COMMAND_ROUNDTRIP = os.environ.get("ANTHARES_REMOTE_COMMAND_ROUNDTRIP", "0") == "1"
+REPORT_ONLY = os.environ.get("ANTHARES_RESILIENCE_REPORT_ONLY", "0") == "1"
 
 
 @dataclass
@@ -39,7 +44,7 @@ def probe(name: str, url: str) -> Probe:
         return Probe(name, "", False, None, 0, "disabled")
     started = time.monotonic()
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "AntharesResilience/3.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "AntharesResilience/3.1"})
         with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
             raw = response.read(65536)
             body = raw.decode("utf-8", "replace")
@@ -78,9 +83,14 @@ def main() -> int:
         browser_route = "anthares-browser-unavailable"
 
     continuity_ok = (primary_ok or reserve_ok) and remote_ok
+    runtime_evidence_complete = bool(BROWSER_PRIMARY or BROWSER_RESERVE) and (
+        REMOTE_HEARTBEAT_FRESH or REMOTE_COMMAND_ROUNDTRIP
+    )
     result = {
         "ok": continuity_ok,
         "continuity_ok": continuity_ok,
+        "report_only": REPORT_ONLY,
+        "runtime_evidence_complete": runtime_evidence_complete,
         "architecture": {
             "single_writer_required": True,
             "remote_control_surface": "anthares-remote",
@@ -110,6 +120,8 @@ def main() -> int:
         "checks": [asdict(item) for item in checks],
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    if REPORT_ONLY:
+        return 0
     return 0 if continuity_ok else 2
 
 
