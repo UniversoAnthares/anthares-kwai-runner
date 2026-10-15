@@ -1,0 +1,55 @@
+name: TikTok Anthares Browser Live Recovery
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tiktok-anthares-browser-live.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tiktok-anthares-browser-live
+  cancel-in-progress: true
+
+jobs:
+  mint-live-view:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Derive reserve API token without exposing it
+        env:
+          ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
+          ARA_SHARED: ${{ secrets.ARA_SHARED }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANTHARES_RESERVA_TOKEN:-}" ]; then
+            token="$ANTHARES_RESERVA_TOKEN"
+          else
+            test -n "${ARA_SHARED:-}"
+            token="$(python3 - <<'PY'
+          import hashlib, os
+          print(hashlib.sha256(('anthares-reserva-browser-v1:'+os.environ['ARA_SHARED']).encode()).hexdigest())
+          PY
+          )"
+          fi
+          echo "::add-mask::$token"
+          printf 'RESERVE_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+      - name: Mint TikTok Live View
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 40 -X POST \
+            -H "Authorization: Bearer $RESERVE_TOKEN" \
+            https://anthares-reserva-browser.anthares1.workers.dev/tiktok/session/live \
+            -o /tmp/live.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/live.json', encoding='utf-8'))
+          assert d.get('ok') is True, d
+          url=d.get('live_view_url') or ''
+          assert url.startswith('https://'), d
+          print('ANTHARES_TIKTOK_LIVE_VIEW='+url)
+          print('ANTHARES_TIKTOK_SESSION_REUSED='+str(bool(d.get('reused'))).lower())
+          PY
