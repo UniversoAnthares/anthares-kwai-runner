@@ -1,4 +1,4 @@
-name: Repair Northflank Chromium v5
+name: Repair Northflank Chromium v6
 on:
   push:
     paths:
@@ -17,7 +17,7 @@ jobs:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
     steps:
-      - name: Rebuild existing TikTok service and wait for v5
+      - name: Rebuild existing TikTok service and wait for v6
         shell: bash
         run: |
           set -euo pipefail
@@ -55,12 +55,12 @@ jobs:
           ready=0
           for i in $(seq 1 90); do
             code="$(curl -sS -o /tmp/revision.json -w '%{http_code}' --max-time 20 -H "Authorization: Bearer $ARA_SHARED" "$base/interactive-browser/revision" || true)"
-            if [ "$code" = 200 ] && grep -q '"revision":"2026-10-15-cdp-v5"' /tmp/revision.json; then ready=1; break; fi
+            if [ "$code" = 200 ] && grep -q '"revision":"2026-10-15-cdp-v6"' /tmp/revision.json; then ready=1; break; fi
             sleep 8
           done
           cat /tmp/revision.json 2>/dev/null || true
-          test "$ready" = 1 || { echo V5_ROLLOUT_NOT_PROVEN; exit 41; }
-          echo NORTHFLANK_CHROMIUM_V5_LIVE=1
+          test "$ready" = 1 || { echo V6_ROLLOUT_NOT_PROVEN; exit 41; }
+          echo NORTHFLANK_CHROMIUM_V6_LIVE=1
           printf '%s' "$base" > /tmp/nf-base
       - name: Real Chromium start screenshot close
         shell: bash
@@ -68,11 +68,11 @@ jobs:
           set -euo pipefail
           base="$(cat /tmp/nf-base)"
           auth=(-H "Authorization: Bearer $ARA_SHARED")
-          start_code="$(curl -sS -o /tmp/start.json -w '%{http_code}' --max-time 75 "${auth[@]}" -H 'content-type: application/json' -X POST "$base/interactive-browser/start" --data '{}' || true)"
+          start_code="$(curl -sS -o /tmp/start.json -w '%{http_code}' --max-time 140 "${auth[@]}" -H 'content-type: application/json' -X POST "$base/interactive-browser/start" --data '{}' || true)"
           echo "START_HTTP=$start_code"
           cat /tmp/start.json 2>/dev/null || true
           test "$start_code" = 200 || exit 51
-          shot_code="$(curl -sS -o /tmp/shot.json -w '%{http_code}' --max-time 45 "${auth[@]}" "$base/interactive-browser/screenshot" || true)"
+          shot_code="$(curl -sS -o /tmp/shot.json -w '%{http_code}' --max-time 60 "${auth[@]}" "$base/interactive-browser/screenshot" || true)"
           echo "SCREENSHOT_HTTP=$shot_code"
           if [ "$shot_code" != 200 ]; then cat /tmp/shot.json 2>/dev/null || true; exit 52; fi
           python3 - <<'PY'
