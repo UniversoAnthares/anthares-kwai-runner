@@ -1,9 +1,25 @@
+import json
 import sys
 import time
 
 import tiktok_web_publish_v2 as v2
+from tiktok_session_authority import load_canonical_state
 
 t = v2.t
+
+# The publication process must resolve the same durable session authority used by
+# Anthares Browser. Any control-plane/session-file copy is bootstrap material only.
+_state, _authority = load_canonical_state()
+t.tw.STORAGE_RAW = json.dumps(_state, separators=(",", ":"))
+t.tw.STORAGE_FILE = ""
+t.tw.EXPECTED_USERNAME = "universo.anthares"
+print(
+    "TIKTOK_SESSION_AUTHORITY=runtime "
+    + "sha256=" + _authority["ciphertext_sha256"]
+    + " cookies=" + str(_authority["cookie_count"]),
+    flush=True,
+)
+
 _original_wait_confirmation = t.wait_confirmation
 
 
