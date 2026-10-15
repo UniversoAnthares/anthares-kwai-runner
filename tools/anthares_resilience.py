@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Fail-closed resilience check for Anthares-browser and Anthares Remote.
+"""Fail-closed resilience check for Anthares Browser and Anthares Remote.
 
-Active architecture after Cloudflare quota exhaustion:
-- Anthares-browser: persistent primary browser plus an optional persistent reserve.
-- Anthares Remote: private GitHub/GitLab issue queues; no Render/Cloudflare runtime.
-- GitHub Actions: finite-job watchdog/executor only, never a persistent browser.
-
-An on-demand browser or finite CI runner is not counted as equivalent persistent
-browser continuity. This script deliberately reports that gap instead of masking it.
+Operational invariants:
+- Anthares Remote is the only remote-control surface.
+- Anthares Browser is the only browser-automation surface.
+- Browserless, TinyFish, Render and CircleCI are never operational fallbacks.
+- External infrastructure may support Anthares internals only when its own health and quota are eligible.
 """
 from __future__ import annotations
 
@@ -22,8 +20,8 @@ from dataclasses import asdict, dataclass
 TIMEOUT = float(os.environ.get("ANTHARES_HEALTH_TIMEOUT", "8"))
 BROWSER_PRIMARY = os.environ.get("ANTHARES_BROWSER_PRIMARY_URL", "").rstrip("/")
 BROWSER_RESERVE = os.environ.get("ANTHARES_BROWSER_PERSISTENT_RESERVE_URL", "").rstrip("/")
-QUEUE_PROVIDER = os.environ.get("ANTHARES_REMOTE_QUEUE_PROVIDER", "github-private-issues").strip()
-QUEUE_E2E_PROVEN = os.environ.get("ANTHARES_REMOTE_QUEUE_E2E_PROVEN", "0") == "1"
+REMOTE_HEARTBEAT_FRESH = os.environ.get("ANTHARES_REMOTE_HEARTBEAT_FRESH", "0") == "1"
+REMOTE_COMMAND_ROUNDTRIP = os.environ.get("ANTHARES_REMOTE_COMMAND_ROUNDTRIP", "0") == "1"
 
 
 @dataclass
@@ -41,7 +39,7 @@ def probe(name: str, url: str) -> Probe:
         return Probe(name, "", False, None, 0, "disabled")
     started = time.monotonic()
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "AntharesResilience/2.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "AntharesResilience/3.0"})
         with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
             raw = response.read(65536)
             body = raw.decode("utf-8", "replace")
@@ -55,8 +53,14 @@ def probe(name: str, url: str) -> Probe:
 
 def browser_pair(prefix: str, origin: str) -> list[Probe]:
     if not origin:
-        return [Probe(f"{prefix}_liveness", "", False, None, 0, "disabled"), Probe(f"{prefix}_readiness", "", False, None, 0, "disabled")]
-    return [probe(f"{prefix}_liveness", f"{origin}/health"), probe(f"{prefix}_readiness", f"{origin}/ready")]
+        return [
+            Probe(f"{prefix}_liveness", "", False, None, 0, "disabled"),
+            Probe(f"{prefix}_readiness", "", False, None, 0, "disabled"),
+        ]
+    return [
+        probe(f"{prefix}_liveness", f"{origin}/health"),
+        probe(f"{prefix}_readiness", f"{origin}/ready"),
+    ]
 
 
 def main() -> int:
@@ -64,35 +68,35 @@ def main() -> int:
     by_name = {item.name: item for item in checks}
     primary_ok = bool(BROWSER_PRIMARY) and by_name["browser_primary_liveness"].ok and by_name["browser_primary_readiness"].ok
     reserve_ok = bool(BROWSER_RESERVE) and by_name["browser_reserve_liveness"].ok and by_name["browser_reserve_readiness"].ok
+    remote_ok = REMOTE_HEARTBEAT_FRESH and REMOTE_COMMAND_ROUNDTRIP
 
     if primary_ok:
-        browser_route = "primary"
+        browser_route = "anthares-browser-primary"
     elif reserve_ok:
-        browser_route = "persistent-reserve"
+        browser_route = "anthares-browser-persistent-reserve"
     else:
-        browser_route = "none-equivalent"
+        browser_route = "anthares-browser-unavailable"
 
-    queue_transport_ok = QUEUE_E2E_PROVEN and QUEUE_PROVIDER in {"github-private-issues", "gitlab-private-issues", "github+gitlab-private-issues"}
-    continuity_ok = (primary_ok or reserve_ok) and queue_transport_ok
-
+    continuity_ok = (primary_ok or reserve_ok) and remote_ok
     result = {
         "ok": continuity_ok,
         "continuity_ok": continuity_ok,
         "architecture": {
-            "layer_1": "AUTOCURA",
-            "layer_2": "CONTINUIDADE",
             "single_writer_required": True,
-            "pc_as_ci_runner": False,
-            "paid_services_allowed": False,
-            "render_required_for_remote": False,
-            "cloudflare_required": False,
-            "github_actions_role": "finite_jobs_only",
+            "remote_control_surface": "anthares-remote",
+            "browser_surface": "anthares-browser",
+            "other_remote_allowed": False,
+            "browserless_allowed": False,
+            "tinyfish_allowed": False,
+            "render_allowed": False,
+            "circleci_allowed": False,
+            "paid_services_allowed_without_owner_decision": False,
         },
         "remote_control": {
-            "route": QUEUE_PROVIDER,
-            "e2e_proven": QUEUE_E2E_PROVEN,
-            "render_required": False,
-            "cloudflare_required": False,
+            "route": "anthares-remote",
+            "heartbeat_fresh": REMOTE_HEARTBEAT_FRESH,
+            "command_roundtrip": REMOTE_COMMAND_ROUNDTRIP,
+            "healthy": remote_ok,
         },
         "decision": {
             "browser_route": browser_route,
@@ -100,6 +104,7 @@ def main() -> int:
             "browser_persistent_reserve_ok": reserve_ok,
             "browser_equivalent_continuity": primary_ok or reserve_ok,
             "browser_redundancy_complete": primary_ok and reserve_ok,
+            "remote_ok": remote_ok,
             "degraded": not continuity_ok or not (primary_ok and reserve_ok),
         },
         "checks": [asdict(item) for item in checks],
