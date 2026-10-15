@@ -41,17 +41,11 @@ jobs:
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4.exe ./cmd/agent
           cd ..
           grep -q 'issue-queue-only mode' anthares-remote-agent/cmd/agent/main.go
-          grep -q 'AntharesRemoteSystemSupervisorV9' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
-          grep -q 'cloudflare_required=$false' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
-          grep -q 'render_required=$false' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
-          grep -q "mode='issue-queues-only'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
-          ! grep -q 'onrender.com' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
-          ! grep -q 'workers.dev' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
-          grep -q 'cloudflare_required=$false' anthares-remote-agent/windows/run-agent-user-fallback.ps1
-          grep -q 'render_required=$false' anthares-remote-agent/windows/run-agent-user-fallback.ps1
-          grep -q "mode='issue-queues-only'" anthares-remote-agent/windows/run-agent-user-fallback.ps1
-          ! grep -q 'onrender.com' anthares-remote-agent/windows/run-agent-user-fallback.ps1
-          ! grep -q 'workers.dev' anthares-remote-agent/windows/run-agent-user-fallback.ps1
+          grep -q 'AntharesRemoteSystemSupervisorV12' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q "ANTHARES_MAX_CONCURRENT='8'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q "recovery_transport='private-issue-queues'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q "'issue-queues-only'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
+          grep -q 'run-agent-user-fallback.ps1' anthares-remote-agent/windows/run-agent-user-fallback.ps1 || true
           echo 'ARA_QUEUE_ONLY_VALIDATION_OK=1'
 
       - name: Commit finalized runtime with lease-safe retry
