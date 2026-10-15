@@ -1,0 +1,78 @@
+name: TikTok uncertain publication reconcile
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.tiktok-reconcile-trigger'
+      - 'direct-tiktok-publisher/tiktok_reconcile_uncertain.py'
+      - '.github/workflows/tiktok-reconcile-uncertain.yml'
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  reconcile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CONTROL: https://anthares-control.anthares1.workers.dev
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      EXPECTED_TIKTOK_USERNAME: universo.anthares
+      TIKTOK_RECONCILE_TEXT: A Poetica de Aristoteles trecho
+      TIKTOK_RECONCILE_EVIDENCE: /tmp/tiktok-reconcile-evidence.json
+      JOB_ID: tiktok-9CIk-I_3VhM-8-98-real-v1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install read-only reconciliation browser
+        run: |
+          python3 -m pip install --disable-pip-version-check -q playwright cryptography requests
+          python3 -m playwright install chromium
+      - name: Reconcile exact Studio publication without publishing
+        run: python3 direct-tiktok-publisher/tiktok_reconcile_uncertain.py
+      - name: Close existing central uncertain job with recovered evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          sep='&'; [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]] || sep='?'
+          aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
+          CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$CT"
+          curl -fsS -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/q.json
+          python3 - <<'PY' >/tmp/complete.json
+          import json,os
+          q=json.load(open('/tmp/q.json')); raw=q.get('jobs') or []
+          jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
+          matches=[j for j in jobs if isinstance(j,dict) and j.get('id')==os.environ['JOB_ID']]
+          assert len(matches)==1,('target_job_count',len(matches))
+          j=matches[0]
+          assert j.get('publication_started') is True,j
+          assert not j.get('confirmed'),j
+          gen=int(j.get('lease_generation') or 0); assert gen>0,j
+          e=json.load(open(os.environ['TIKTOK_RECONCILE_EVIDENCE']))
+          assert e.get('confirmed') is True and e.get('remote_id') and e.get('remote_url'),e
+          print(json.dumps({
+            'id':os.environ['JOB_ID'],'executor':'github','lease_generation':gen,
+            'confirmed':True,'remote_id':e['remote_id'],
+            'confirmation_evidence':e['remote_url']
+          }))
+          PY
+          curl -fsS -X POST "$CONTROL/github-queue/complete" \
+            -H "Authorization: Bearer $CT" -H 'Content-Type: application/json' \
+            --data-binary @/tmp/complete.json -o /tmp/complete-response.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/complete-response.json')); j=d.get('job') or {}
+          assert d.get('ok') is True,d
+          assert j.get('status')=='published' and j.get('confirmed') is True and j.get('remote_id'),d
+          print('CENTRAL_UNCERTAIN_RECONCILED=PUBLISHED')
+          print('REMOTE_ID='+str(j['remote_id']))
+          print('REMOTE_URL='+str(j.get('confirmation_evidence') or ''))
+          PY
+      - name: Preserve reconciliation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiktok-reconcile-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: /tmp/tiktok-reconcile-evidence.json
