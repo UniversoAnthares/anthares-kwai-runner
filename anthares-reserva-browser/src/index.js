@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import puppeteer from "@cloudflare/puppeteer";
 
 const VERSION = "2026-10-13-reserva-browser-v4";
-const OWNER_APPROVAL_HASH = "6Z-3WlmAvh6o7m_W0eYEpEo23YKZtjn-DLJpyjtEfQ0";
+const OWNER_APPROVAL_HASH = "IRlR9i7d87m5AJejNUd0j5JIoMDAisN7i9ci_9Wtdmk";
 const OWNER_COOKIE = "anthares_reserva_owner";
 const START_URL = "https://www.kwai.com/";
 const te = new TextEncoder();
