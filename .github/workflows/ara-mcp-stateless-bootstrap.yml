@@ -1,69 +1,59 @@
-name: ARA MCP Stateless Bootstrap
+name: ARA MCP Stateless Email OTP
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'cloudflare-ara-mcp/patch_oauth_owner_code.py'
+      - 'cloudflare-ara-mcp/src/index.js'
+      - 'cloudflare-ara-mcp/patch_vercel_primary.py'
       - 'cloudflare-ara-mcp/patch_stateless_gateway.py'
       - 'cloudflare-ara-mcp/patch_stateless_wrangler.py'
       - '.github/workflows/ara-mcp-stateless-bootstrap.yml'
 permissions:
   contents: read
 concurrency:
-  group: anthares-ara-mcp-stateless-bootstrap
+  group: anthares-ara-mcp-stateless
   cancel-in-progress: true
 jobs:
-  bootstrap:
+  deploy:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Materialize runtime patches
+      - name: Materialize stateless email OTP runtime
         shell: bash
         run: |
           set -euo pipefail
-          python3 cloudflare-ara-mcp/patch_oauth_owner_code.py
           python3 cloudflare-ara-mcp/patch_vercel_primary.py
           python3 cloudflare-ara-mcp/patch_stateless_gateway.py
           python3 cloudflare-ara-mcp/patch_stateless_wrangler.py
           node --check cloudflare-ara-mcp/src/index.js
-          grep -q "OWNER_APPROVAL_HASH='oKIPoMc8wkK1Oust1YK0o0L8ShCOyc1IPPbd26jT1Ss'" cloudflare-ara-mcp/src/index.js
+          grep -q "const AUTH_EMAIL='lucasyahn@gmail.com'" cloudflare-ara-mcp/src/index.js
+          grep -q "oauth_owner_code_mode:'email_otp'" cloudflare-ara-mcp/src/index.js
           grep -q 'class StatelessGatewayState' cloudflare-ara-mcp/src/index.js
+          grep -q "this.hmac('email-otp:'" cloudflare-ara-mcp/src/index.js
           grep -q "const CONTROL='https://anthares-ara-vercel-reserve.vercel.app'" cloudflare-ara-mcp/src/index.js
+          ! grep -q 'OWNER_APPROVAL_HASH' cloudflare-ara-mcp/src/index.js
           ! grep -q 'durable_objects' cloudflare-ara-mcp/wrangler.toml
           ! grep -q 'GATEWAY_STATE' cloudflare-ara-mcp/wrangler.toml
-          echo 'STATELESS_PATCH_VALID=1'
-      - name: Generate one-time stateless key material locally
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const fs=require('fs');
-          const {generateKeyPairSync,randomBytes}=require('crypto');
-          const {privateKey,publicKey}=generateKeyPairSync('ed25519');
-          fs.writeFileSync('/tmp/ara-private-jwk',JSON.stringify(privateKey.export({format:'jwk'})),{mode:0o600});
-          fs.writeFileSync('/tmp/ara-public-jwk',JSON.stringify(publicKey.export({format:'jwk'})),{mode:0o600});
-          fs.writeFileSync('/tmp/ara-oauth-secret',randomBytes(48).toString('base64url'),{mode:0o600});
-          NODE
-          test -s /tmp/ara-private-jwk
-          test -s /tmp/ara-public-jwk
-          test -s /tmp/ara-oauth-secret
-      - name: Store key material as Cloudflare encrypted secrets
+          grep -q 'AUTH_EMAIL_SEND' cloudflare-ara-mcp/wrangler.toml
+          grep -q 'lucasyahn@gmail.com' cloudflare-ara-mcp/wrangler.toml
+          echo 'STATELESS_EMAIL_OTP_PATCH_VALID=1'
+      - name: Verify existing stateless secrets
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
         run: |
           set -euo pipefail
-          test -n "$CLOUDFLARE_API_TOKEN"
           cd cloudflare-ara-mcp
-          npx --yes wrangler@4.43.0 secret put ARA_SIGNING_PRIVATE_JWK < /tmp/ara-private-jwk
-          npx --yes wrangler@4.43.0 secret put ARA_SIGNING_PUBLIC_JWK < /tmp/ara-public-jwk
-          npx --yes wrangler@4.43.0 secret put ARA_OAUTH_SECRET < /tmp/ara-oauth-secret
-          rm -f /tmp/ara-private-jwk /tmp/ara-public-jwk /tmp/ara-oauth-secret
-          echo 'STATELESS_SECRETS_STORED=1'
-      - name: Deploy stateless compatibility ingress
+          npx --yes wrangler@4.43.0 secret list > /tmp/secrets.json
+          cat /tmp/secrets.json
+          grep -q 'ARA_SIGNING_PRIVATE_JWK' /tmp/secrets.json
+          grep -q 'ARA_SIGNING_PUBLIC_JWK' /tmp/secrets.json
+          grep -q 'ARA_OAUTH_SECRET' /tmp/secrets.json
+          echo 'STATELESS_SECRETS_PRESENT=1'
+      - name: Deploy stateless gateway
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -72,15 +62,18 @@ jobs:
           set -euo pipefail
           cd cloudflare-ara-mcp
           npx --yes wrangler@4.43.0 deploy
-          echo 'STATELESS_MCP_DEPLOY_OK=1'
-      - name: Verify no Durable Object write dependency
+          echo 'STATELESS_EMAIL_OTP_DEPLOYED=1'
+      - name: Verify quota-independent ingress
         shell: bash
         run: |
           set -euo pipefail
-          sleep 2
+          sleep 3
           code="$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 20 https://anthares-ara-mcp.anthares1.workers.dev/health || true)"
           cat /tmp/health.json || true
           test "$code" = "200" || test "$code" = "503"
           ! grep -q 'Exceeded allowed rows written' /tmp/health.json
           grep -q 'anthares-ara-vercel-reserve.vercel.app' /tmp/health.json
-          echo 'STATELESS_INGRESS_PROVEN=1'
+          grep -q '"oauth_owner_code_mode":"email_otp"' /tmp/health.json
+          curl -fsS --max-time 20 https://anthares-ara-mcp.anthares1.workers.dev/.well-known/oauth-authorization-server > /tmp/oauth.json
+          grep -q 'oauth/authorize' /tmp/oauth.json
+          echo 'STATELESS_EMAIL_OTP_INGRESS_PROVEN=1'
