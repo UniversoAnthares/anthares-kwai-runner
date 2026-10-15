@@ -36,7 +36,8 @@ jobs:
               except urllib.error.HTTPError as e:
                   return e.code,{'http_error_excerpt':e.read(400).decode('utf-8','replace').replace('\\n',' ')[:300], 'server':e.headers.get('server',''), 'cf_ray_present':bool(e.headers.get('cf-ray'))}
           code,health=req('/health')
-          print('HEALTH_HTTP='+str(code))\n          if code!=200: print('HEALTH_DENIAL='+json.dumps(health))
+          print('HEALTH_HTTP='+str(code))
+          if code!=200: print('HEALTH_DENIAL='+json.dumps(health))
           print('HEALTH_OK='+str(health.get('ok')))
           print('BROWSER_BINDING='+str(health.get('browser_binding')))
           print('DURABLE_STATE_BINDING='+str(health.get('durable_state_binding')))
