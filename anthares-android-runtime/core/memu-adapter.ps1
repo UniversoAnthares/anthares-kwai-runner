@@ -1,9 +1,11 @@
 Set-StrictMode -Version Latest
 $script:MemuRoot='D:\Program Files\Microvirt\MEmu'
 $script:Manager='D:\Program Files\Microvirt\MEmuHyperv\MEmuManage.exe'
+$script:Memuc=Join-Path $script:MemuRoot 'memuc.exe'
 $script:MemuExe=Join-Path $script:MemuRoot 'MEmu.exe'
 $script:Adb=Join-Path $script:MemuRoot 'adb.exe'
 $script:Vm='MEmu_4'
+$script:VmIndex='4'
 $script:VmConfig='D:\Program Files\Microvirt\MEmu\MemuHyperv VMs\MEmu_4\MEmu_4.memu'
 function Get-MEmuInfo {
     $r=Invoke-AntharesProcess $script:Manager @('showvminfo',$script:Vm,'--machinereadable') 7000
@@ -18,7 +20,13 @@ function Get-MEmuInfo {
     [ordered]@{backend='memu4';vm=$script:Vm;vm_state=$state;serial=$serial;manager_ok=$r.ok;manager_error=[string]$r.stderr;config=$script:VmConfig}
 }
 function Start-MEmuManaged {
-    $r=Invoke-AntharesProcess $script:Manager @('startvm',$script:Vm,'--type','headless') 30000
-    if($r.ok){return [ordered]@{ok=$true;method='manager';detail=$r}}
+    $oldCompat=$env:__COMPAT_LAYER
+    try {
+        $env:__COMPAT_LAYER='RunAsInvoker'
+        $r=Invoke-AntharesProcess $script:Memuc @('start','-i',$script:VmIndex) 30000
+    } finally {
+        $env:__COMPAT_LAYER=$oldCompat
+    }
+    if($r.ok){return [ordered]@{ok=$true;method='memuc_official_launcher';detail=$r}}
     try {Start-ScheduledTask -TaskName 'Anthares-MEmu-Standby-Watchdog' -ErrorAction Stop; return [ordered]@{ok=$true;method='watchdog';detail=$r}} catch {return [ordered]@{ok=$false;method='watchdog';detail=$r;error=$_.Exception.Message}}
 }
