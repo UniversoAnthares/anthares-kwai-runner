@@ -1,8 +1,14 @@
 # Continuidade operacional Anthares
 
-Atualizado: 2026-10-15T03:10Z.
+Atualizado: 2026-10-15T05:30Z.
 
 Este arquivo é normativo para qualquer agente/chat que trabalhe na infraestrutura Anthares. Antes de modificar, testar, migrar ou diagnosticar qualquer componente, o agente deve ler `ci-hub/executor-routing.json`, `ci-hub/provider-status.json`, `test-hub/README.md` e os findings recentes da área.
+
+## Fontes de continuidade obrigatórias
+
+Antes de decidir ou executar a próxima fase, o agente deve também reconstruir a fundo o estado dos chats **`SISTEMA DE UPLOADS`** e **`ITENS FIXOS, TOTAIS`**. Não basta reutilizar uma conclusão antiga da lista fixa: decisões e implementações mais recentes nesses dois chats prevalecem sobre texto histórico de fases. Quando houver conflito, adaptar a fase e deixar a alteração registrada em finding/continuidade para os próximos agentes.
+
+Regra de precedência: **instrução mais recente e comprovada > descrição histórica de fase > hipótese antiga de agente**. Em particular, a antiga intenção de aposentar o MEmu ao chegar à fase F21 foi superada: `MEmu_4` deve permanecer como componente gerenciado de standby/bootstrap, iniciando com o computador, sem janela interativa visível e com áudio desativado, até nova decisão explícita do proprietário.
 
 ## Superfícies exclusivas
 
@@ -25,12 +31,13 @@ Todo problema deve ser classificado antes da correção:
 
 No início de **cada nova rodada** de trabalho, antes de novas mutações:
 
-1. Anthares Remote: `session_status` deve mostrar heartbeat recente e, quando a rodada depender de execução remota, deve haver um `remote_exec` simples bem-sucedido.
-2. Roteamento: confirmar que `executor-routing.json` ainda mantém Remote exclusivo e Browser exclusivo e que aposentados continuam inelegíveis.
-3. Provedor usado na rodada: verificar quota/saúde mais recente do domínio específico; não reutilizar status histórico como atual.
-4. Fluxos já fechados relevantes: revalidar ao menos o sinal de saúde que prova que não regrediram. Ex.: Cloudflare control/vault HTTP 200; Northflank BUILD=SUCCESS/DEPLOY=COMPLETED; CI público aloca runner quando ele for usado.
-5. Se uma regressão aparecer, corrigir a regressão antes de avançar na nova fase, salvo se ela estiver em camada independente e documentada como tal.
-6. Atualizar `ci-hub/provider-status.json` quando houver evidência nova que altere elegibilidade, quota, estado operacional ou data da última verificação.
+1. Reconciliar `SISTEMA DE UPLOADS` + `ITENS FIXOS, TOTAIS` com o estado real do repositório/runtime e identificar decisões superadas.
+2. Anthares Remote: `session_status` deve mostrar heartbeat recente e, quando a rodada depender de execução remota, deve haver um `remote_exec` simples bem-sucedido.
+3. Roteamento: confirmar que `executor-routing.json` ainda mantém Remote exclusivo e Browser exclusivo e que aposentados continuam inelegíveis.
+4. Provedor usado na rodada: verificar quota/saúde mais recente do domínio específico; não reutilizar status histórico como atual.
+5. Fluxos já fechados relevantes: revalidar ao menos o sinal de saúde que prova que não regrediram. Ex.: Cloudflare control/vault HTTP 200; Northflank BUILD=SUCCESS/DEPLOY=COMPLETED; CI público aloca runner quando ele for usado.
+6. Se uma regressão aparecer, corrigir a regressão antes de avançar na nova fase, salvo se ela estiver em camada independente e documentada como tal.
+7. Atualizar `ci-hub/provider-status.json` quando houver evidência nova que altere elegibilidade, quota, estado operacional ou data da última verificação.
 
 ## Quotas são domínios separados
 
@@ -51,13 +58,22 @@ Nunca tratar “Cloudflare”, “GitHub” ou “GitLab” como uma única cota
 6. Codex/Kilo/Work são recursos de implementação, não provedores de runtime nem remotes.
 7. Ação manual do proprietário é último recurso e deve ser reduzida ao menor passo irreduzível.
 
+## Lista fixa — adaptação vigente
+
+- F14/F16: concluídas conforme findings e testes já registrados.
+- F15: mantida para o fim, conforme decisão vigente da lista fixa.
+- **F17 é a pendência corrente:** provar sessão Kwai autenticada do alvo exato `@lucasrosalem`, persistente após reinício, sem publicar conteúdo.
+- F18–F20: somente depois da prova de F17.
+- F21 histórico (“aposentar MEmu”) está **SUPERSEDED**. Estado vigente: preservar `MEmu_4` como standby/bootstrap gerenciado; autostart no boot, invisível/não interativo e mudo.
+- Não fechar F17 usando evidência de TikTok: a prova precisa ser da sessão Kwai e da conta exata.
+
 ## Estado desta rodada
 
-- Anthares Remote: verificado conectado e executando comandos em 2026-10-15T03:06Z.
+- Anthares Remote: verificado conectado e executando comandos nesta rodada; fila sem lease pendente e roundtrip `ARA_ROUNDTRIP_OK`.
+- `MEmu_4`: em execução e acessível por ADB em `127.0.0.1:21543`; pacote Kwai presente e foreground observado no app.
+- Watchdog local `Anthares-MEmu-Standby-Watchdog`: encontrado, porém ainda apontava historicamente para `MEmu` e gatilho de logon; precisa ser corrigido para `MEmu_4`/boot como parte de F17.
+- Áudio de `MEmu_4`: configuração ainda não estava comprovadamente desativada no início desta rodada; faz parte da correção corrente.
 - GitLab CI: bloqueado por `ci_quota_exceeded`, verificado no pipeline 2947796926.
-- GitHub Actions público: runner alocado e executado em 2026-10-15T03:08Z; a falha observada no watchdog foi lógica/configuração, não quota.
-- Cloudflare control e vault: HTTP 200 em 2026-10-15T03:07Z; estado persistente ativo.
-- Anthares Reserva Browser: `/health` HTTP 200; binding de browser/estado presente; autenticação real não validada nesta rodada.
-- Northflank ARA e TikTok: build success e deploy completed em 2026-10-15T03:09Z.
-- GitHub Actions privado: bloqueio de quota informado pelo proprietário; billing API não está disponível neste conector, portanto permanece pendente de verificação direta.
-- Cloudflare Browser Rendering: último estado conhecido bloqueado por 429; revalidação deve ocorrer apenas por caminho interno do Anthares Browser quando necessária.
+- GitHub Actions público: runner alocado e executado em 2026-10-15; não confundir com quota de Actions privado.
+- Cloudflare control/vault: último sinal operacional HTTP 200; Browser Rendering continua inelegível enquanto o 429 não for superado pelo caminho interno do Anthares Browser.
+- Northflank ARA/TikTok: último estado conhecido build success/deploy completed; saldo de quota não deve ser inferido desse sinal.
