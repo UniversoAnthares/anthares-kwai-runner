@@ -2,8 +2,8 @@
 """Load the canonical TikTok browser session from the Anthares Browser runtime vault.
 
 The durable `runtime` slot is the sole publication authority. GitHub secrets and
-control-plane copies may transport/bootstrap state, but publishers must resolve
-and validate the current state from this vault immediately before identity gates.
+control-plane copies may transport/bootstrap state, while publishers resolve the
+current state from this vault immediately before identity gates.
 """
 from __future__ import annotations
 
@@ -12,10 +12,9 @@ import hashlib
 import json
 import os
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
+import requests
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
@@ -85,20 +84,27 @@ def load_canonical_state() -> tuple[dict, dict]:
     if not VAULT_URL.endswith("/browser-state/runtime"):
         raise SessionAuthorityError("canonical_session_authority_must_be_runtime")
     ts, sig = _signature()
-    request = urllib.request.Request(
-        VAULT_URL,
-        headers={
-            "X-Anthares-Browser-Timestamp": ts,
-            "X-Anthares-Browser-Signature": sig,
-            "Accept": "application/json",
-        },
-        method="GET",
-    )
+    headers = {
+        "X-Anthares-Browser-Timestamp": ts,
+        "X-Anthares-Browser-Signature": sig,
+        "Accept": "application/json",
+        "User-Agent": "AntharesTikTokSessionAuthority/1.0",
+    }
     try:
-        with urllib.request.urlopen(request, timeout=25) as response:
-            payload = json.loads(response.read().decode("utf-8", "replace") or "{}")
-    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as exc:
-        raise SessionAuthorityError("canonical_session_vault_unavailable") from exc
+        response = requests.get(VAULT_URL, headers=headers, timeout=25)
+    except requests.RequestException as exc:
+        raise SessionAuthorityError("canonical_session_vault_transport_failed") from exc
+    if response.status_code != 200:
+        try:
+            error = str((response.json() or {}).get("error") or "")
+        except Exception:
+            error = ""
+        suffix = error if error in {"unauthorized", "persistent_state_unavailable", "vault_integrity_failed"} else str(response.status_code)
+        raise SessionAuthorityError("canonical_session_vault_http_" + suffix)
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise SessionAuthorityError("canonical_session_vault_invalid_json") from exc
     ciphertext = str(payload.get("ciphertext") or "")
     if not payload.get("ok") or not payload.get("available") or not ciphertext:
         raise SessionAuthorityError("canonical_session_vault_empty")
@@ -113,6 +119,7 @@ def load_canonical_state() -> tuple[dict, dict]:
         "ciphertext_sha256": actual_sha,
         "cookie_count": len(state["cookies"]),
         "expected_username": EXPECTED_USERNAME,
+        "updated_at": payload.get("updated_at"),
     }
     return state, meta
 
