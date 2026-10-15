@@ -1,0 +1,27 @@
+name: ARA Vercel Reserve Probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ara-vercel-reserve-probe.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Probe production control endpoints
+        shell: bash
+        run: |
+          set -u
+          base='https://anthares-ara-vercel-reserve.vercel.app'
+          for path in '/health' '/v1/mcp/status?device_id=DESKTOP-FTDK0HP' '/v1/device/jobs/next'; do
+            echo "=== $path ==="
+            code="$(curl -sS -D /tmp/h -o /tmp/b -w '%{http_code}' --max-time 20 "$base$path" || true)"
+            echo "HTTP=$code"
+            grep -Ei '^(content-type|www-authenticate|x-vercel-id|server):' /tmp/h || true
+            cat /tmp/b || true
+            echo
+          done
