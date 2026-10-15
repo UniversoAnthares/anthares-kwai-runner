@@ -1,0 +1,180 @@
+name: TikTok Android protected interactive login v3
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  statuses: write
+concurrency:
+  group: tiktok-android-interactive-login-v3
+  cancel-in-progress: true
+jobs:
+  interactive-login:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      REMOTE_USER: anthares
+      TIKTOK_PACKAGE: com.zhiliaoapp.musically
+      EXPECTED_TIKTOK_USERNAME: universo.anthares
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate encrypted one-time GUI password
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import secrets,string
+          a=string.ascii_letters+string.digits
+          open('/tmp/gui-password','w').write(''.join(secrets.choice(a) for _ in range(20)))
+          PY
+          cat >/tmp/gui-public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA13iuCjhajq4DPMMtt+r6
+          njvtRWOoFE57ywv0aGu3J1NWT6cLBi2fT8o8V/MKq8L3ePjUfj0LLfU6g2YDo2u8
+          BwWWgIm0e5qUn1I8Emc6lFLW6ZqGhZoeODnm4Ged0kXPKG44Y6JtxwHk8bQEkZy7
+          V0dNDh/lmEZv0zebIxeQjHNuP53USVAN93xxxmT81IwLFRbzha93ktAe0lR0PRJj
+          gMJS+A/S3YljkzjMGOnHrDbEW0/fng6dKcZSNXPoaF1O1okQs3X2zm0fFeR0H6zG
+          U4dZbjo/16un2naIxLX7DkY7hgP66KQGHgkUTtv8I3AfHQoxDA6IO32NGvULbnyh
+          QwIDAQAB
+          -----END PUBLIC KEY-----
+          PEM
+          openssl pkeyutl -encrypt -pubin -inkey /tmp/gui-public.pem -in /tmp/gui-password -out /tmp/gui-password.enc
+
+      - name: Upload encrypted GUI credential
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiktok-android-gui-credential-${{ github.run_id }}
+          path: /tmp/gui-password.enc
+          retention-days: 1
+
+      - name: Prepare fresh Android image and AVD
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$SDK" ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" 'emulator' 'platform-tools' 'system-images;android-35;google_apis_playstore;x86_64'
+          rm -rf "$ANDROID_AVD_HOME/tiktok-auth.avd" "$ANDROID_AVD_HOME/tiktok-auth.ini"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -f -n tiktok-auth -k 'system-images;android-35;google_apis_playstore;x86_64' -d pixel_6
+          "$SDK/emulator/emulator" -version | head -3
+
+      - name: Install remote-display stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb x11vnc novnc websockify nginx apache2-utils scrcpy
+          curl -fsSL --retry 3 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x /tmp/cloudflared
+
+      - name: Boot fresh Android and prove ADB framebuffer
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"; ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          sudo chmod 666 /dev/kvm
+          "$ADB" kill-server || true
+          "$ADB" start-server
+          nohup "$SDK/emulator/emulator" -avd tiktok-auth -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 -no-snapshot-load -wipe-data -port 5554 >/tmp/tiktok-emulator.log 2>&1 &
+          EMU_PID=$!
+          ready=0
+          for i in $(seq 1 120); do
+            if "$ADB" devices | grep -q '^emulator-5554[[:space:]]*device'; then ready=1; break; fi
+            kill -0 "$EMU_PID" 2>/dev/null || { tail -80 /tmp/tiktok-emulator.log; exit 31; }
+            sleep 2
+          done
+          [ "$ready" = 1 ] || { echo ADB_DEVICE_TIMEOUT; tail -100 /tmp/tiktok-emulator.log; exit 32; }
+          timeout 180 bash -c 'until [ "$("$1" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done' _ "$ADB"
+          "$ADB" -s emulator-5554 shell settings put global stay_on_while_plugged_in 3 || true
+          "$ADB" -s emulator-5554 shell svc power stayon true || true
+          "$ADB" -s emulator-5554 shell input keyevent KEYCODE_WAKEUP || true
+          "$ADB" -s emulator-5554 shell wm dismiss-keyguard || true
+          "$ADB" -s emulator-5554 exec-out screencap -p >/tmp/android-screen.png
+          test "$(stat -c%s /tmp/android-screen.png)" -gt 10000
+          "$ADB" -s emulator-5554 shell am start -a android.intent.action.VIEW -d "market://details?id=$TIKTOK_PACKAGE" com.android.vending >/dev/null || true
+
+      - name: Start protected Android GUI
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REMOTE_PASSWORD="$(cat /tmp/gui-password)"
+          export DISPLAY=:99
+          nohup Xvfb :99 -screen 0 1280x800x24 -ac >/tmp/tiktok-xvfb.log 2>&1 &
+          sleep 2
+          nohup scrcpy -s emulator-5554 --no-audio --stay-awake --turn-screen-on --max-size=1080 --window-title='TikTok Android' >/tmp/tiktok-scrcpy.log 2>&1 &
+          sleep 6
+          pgrep -f 'scrcpy.*emulator-5554' >/dev/null || { cat /tmp/tiktok-scrcpy.log; exit 41; }
+          nohup x11vnc -display :99 -forever -shared -nopw -localhost -rfbport 5900 >/tmp/tiktok-x11vnc.log 2>&1 &
+          nohup websockify --web=/usr/share/novnc 6081 127.0.0.1:5900 >/tmp/tiktok-websockify.log 2>&1 &
+          sudo htpasswd -bc /etc/nginx/.tiktok-htpasswd "$REMOTE_USER" "$REMOTE_PASSWORD" >/dev/null
+          sudo tee /etc/nginx/sites-available/default >/dev/null <<'NGINX'
+          server {
+            listen 6080;
+            server_name _;
+            auth_basic "Anthares private TikTok Android";
+            auth_basic_user_file /etc/nginx/.tiktok-htpasswd;
+            location / {
+              proxy_pass http://127.0.0.1:6081;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+              proxy_read_timeout 3600;
+            }
+          }
+          NGINX
+          sudo nginx -t >/dev/null
+          sudo systemctl restart nginx
+          nohup /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 >/tmp/tiktok-cloudflared.log 2>&1 &
+          for i in $(seq 1 60); do URL=$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/tiktok-cloudflared.log | tail -1 || true); [ -n "$URL" ] && break; sleep 2; done
+          test -n "${URL:-}"
+          for i in $(seq 1 30); do
+            A=$(curl -s -o /dev/null -w '%{http_code}' "$URL/vnc.html" || true)
+            B=$(curl -s -u "$REMOTE_USER:$REMOTE_PASSWORD" -o /dev/null -w '%{http_code}' "$URL/vnc.html" || true)
+            [ "$A" = 401 ] && [ "$B" = 200 ] && break
+            sleep 2
+          done
+          test "$A" = 401; test "$B" = 200
+          GUI_URL="$URL/vnc.html?autoconnect=1&resize=scale"
+          payload=$(jq -nc --arg state pending --arg target_url "$GUI_URL" --arg description 'TikTok Android login v3 ready' --arg context 'tiktok/android-interactive-login-v3' '{state:$state,target_url:$target_url,description:$description,context:$context}')
+          curl -fsS -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -d "$payload" "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" >/dev/null
+          echo "TIKTOK_ANDROID_GUI_URL=$GUI_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep login window open and verify owner
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADB="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb"
+          deadline=$((SECONDS+1800)); found=0
+          while [ $SECONDS -lt $deadline ]; do
+            pgrep -f 'cloudflared tunnel' >/dev/null || exit 7
+            "$ADB" -s emulator-5554 shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+            if "$ADB" -s emulator-5554 shell pm path "$TIKTOK_PACKAGE" | grep -q package:; then "$ADB" -s emulator-5554 shell monkey -p "$TIKTOK_PACKAGE" -c android.intent.category.LAUNCHER 1 >/dev/null || true; fi
+            "$ADB" -s emulator-5554 shell uiautomator dump /sdcard/tiktok-window.xml >/dev/null 2>&1 || true
+            "$ADB" -s emulator-5554 pull /sdcard/tiktok-window.xml /tmp/tiktok-window.xml >/dev/null 2>&1 || true
+            if grep -Fqi "$EXPECTED_TIKTOK_USERNAME" /tmp/tiktok-window.xml 2>/dev/null; then found=1; break; fi
+            sleep 8
+          done
+          test "$found" = 1
+          echo 'TIKTOK_ANDROID_AUTH_INTERACTIVE_SIGNAL=PROVEN' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop emulator and persist authenticated device
+        if: always()
+        shell: bash
+        run: |
+          ADB="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb"
+          "$ADB" -s emulator-5554 emu kill >/dev/null 2>&1 || true
+          sleep 5
+      - name: Save authenticated Android device
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.android/avd/tiktok-auth.avd
+            ~/.android/avd/tiktok-auth.ini
+          key: tiktok-auth-v3-${{ github.run_id }}
