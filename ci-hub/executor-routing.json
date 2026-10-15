@@ -1,159 +1,112 @@
 {
-  "revision": "2026-10-14-render-retired-r11",
-  "ci_execution": {
-    "priority": ["github_actions", "harness", "appveyor", "floot", "cloudflare", "gitlab"],
-    "primary": "github_actions",
-    "redundancy": ["harness", "appveyor", "floot", "cloudflare", "gitlab"],
-    "notes": {
-      "harness": "verified automatic push trigger and successful hosted run",
-      "appveyor": "verified successful hosted Windows build, test and artifact upload",
-      "floot": "verified remote Node execution and PHP 8.4 via php-wasm",
-      "cloudflare": "verified Git-connected Workers build, live deployment and recovery-readiness checks on 2026-10-14",
-      "gitlab": "last in general CI failover; shared runner currently blocked by ci_quota_exceeded"
-    }
-  },
-  "android_execution": {
-    "priority": ["physical_android", "memu_android", "github_actions", "bitrise", "firebase_test_lab"],
-    "primary_device": "physical_android",
-    "fallback_device": "memu_android",
-    "github_actions": "remote_android_secondary_live_validation_required",
-    "failover": {
-      "failure_threshold": 3,
-      "queue_threshold_seconds": 90,
-      "order": ["physical_android", "memu_android", "github_actions", "bitrise", "firebase_test_lab"],
-      "memu_only_after_primary_failure": true,
-      "non_failover_failure_classes": ["content", "policy", "platform"]
-    }
+  "revision": "2026-10-15-fixed-routing-r12",
+  "regression_check_required_each_round": true,
+  "remote_control": {
+    "primary": "anthares_remote",
+    "priority": ["anthares_remote"],
+    "allow_other_remotes": false,
+    "health_requires": ["fresh_heartbeat", "successful_command_roundtrip"],
+    "on_failure": "classify_then_repair_anthares_or_migrate_external_dependency"
   },
   "browser_execution": {
-    "priority": ["cloudflare", "bitrise", "gitlab"],
-    "primary": "cloudflare",
-    "redundancy": "cloudflare_primary_bitrise_pending_gitlab_quota_blocked_render_retired",
-    "failover": {
-      "failure_threshold": 1,
-      "queue_threshold_seconds": 90,
-      "order": ["cloudflare", "bitrise", "gitlab"]
-    },
-    "shared_test": "ci/shared/anthares-browser-runtime-qa.sh",
-    "cases_per_ci_provider": 40,
-    "tertiary_note": "Cloudflare is the proven active browser runtime. Bitrise remains ineligible until live proof; GitLab is blocked by CI quota. Render is retired and excluded from operational routing."
+    "primary": "anthares_browser",
+    "priority": ["anthares_browser"],
+    "allow_direct_external_browser_fallbacks": false,
+    "superseded": ["browserless", "tinyfish"],
+    "note": "Cloudflare Browser Rendering is infrastructure, never an alternate browser product or direct fallback."
+  },
+  "ci_execution": {
+    "priority": [
+      "github_actions_public",
+      "harness",
+      "appveyor",
+      "floot",
+      "cloudflare_workers_builds",
+      "github_actions_private",
+      "gitlab_ci"
+    ],
+    "quota_policy": "BLOCKED_QUOTA providers are ineligible until fresh successful proof",
+    "notes": {
+      "github_actions_public": "eligible independently of private-repository Actions quota",
+      "github_actions_private": "quota-constrained; require fresh successful private-repository run before selection",
+      "gitlab_ci": "BLOCKED_QUOTA: current public and private GitLab jobs report ci_quota_exceeded",
+      "cloudflare_workers_builds": "separate status from Browser Rendering, Durable Objects and Workers runtime"
+    }
+  },
+  "retired": {
+    "render": {"active": false, "action": "migrate_all_remaining_functions"},
+    "tinyfish": {"active": false, "action": "migrate_all_remaining_functions"},
+    "circleci": {"active": false, "action": "migrate_all_remaining_functions"},
+    "browserless": {"active": false, "action": "superseded_by_anthares_browser"}
+  },
+  "escalation": {
+    "anthares_component_failure": "repair_anthares_component",
+    "blocked_quota": "migrate_to_eligible_provider",
+    "provider_down": "failover_after_checkpoint_and_lease_validation",
+    "auth_required": "authorized_session_flow_then_manual_owner_only_if_unavoidable",
+    "retired_provider": "permanent_migration",
+    "unsupported_capability": "eligible_provider_or_available_implementation_agent",
+    "implementation_agents": ["codex", "kilo", "work"],
+    "manual_owner": ["mfa", "captcha", "account_authorization", "billing_or_plan_decision", "irreducible_security_boundary"]
   },
   "providers": {
-    "physical_android": {
-      "android_rank": 1,
-      "status": "primary_physical_device",
-      "runtime": "authorized physical Android device via ADB/device bridge",
+    "anthares_remote": {
       "active": true,
-      "android_eligible": true,
-      "interactive_manual_auth": true,
-      "standby_only": false,
-      "requires_authenticated_kwai": true
+      "remote_control_eligible": true,
+      "status": "READY_verified_2026-10-15_command_roundtrip",
+      "exclusive_for_remote_control": true
     },
-    "memu_android": {
-      "android_rank": 2,
-      "status": "standby_fallback_only",
-      "runtime": "MEmu Android emulator on Windows, hidden/no-focus, ADB controlled",
+    "anthares_browser": {
       "active": true,
-      "android_eligible": true,
-      "interactive_manual_auth": true,
-      "standby_only": true,
-      "fallback_for": "physical_android",
-      "requires_authenticated_kwai": true,
-      "must_not_be_primary": true
-    },
-    "circleci": {
-      "status": "retired_per_owner_2026-10-12",
-      "active": false,
-      "android_eligible": false,
-      "browser_eligible": false
-    },
-    "harness": {
-      "ci_rank": 2,
-      "status": "active_verified_push_trigger_success_2026-10-14",
-      "active": true,
-      "runtime": "Harness Cloud hosted Linux CI",
-      "config": ".harness/orgs/default/projects/default_project/pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d.yaml"
-    },
-    "appveyor": {
-      "ci_rank": 3,
-      "status": "active_verified_success_2026-10-14",
-      "active": true,
-      "runtime": "AppVeyor hosted Windows Visual Studio 2022",
-      "config": "appveyor.yml",
-      "artifact": "anthares-remote-agent-windows"
-    },
-    "floot": {
-      "ci_rank": 4,
-      "status": "active_verified_remote_node_php_wasm_2026-10-14",
-      "active": true,
-      "runtime": "Floot remote VM",
-      "php": "8.4 via php-wasm"
-    },
-    "cloudflare": {
-      "ci_rank": 5,
-      "browser_rank": 1,
-      "status": "active_verified_git_build_deploy_and_recovery_2026-10-14",
-      "active": true,
-      "runtime": "Cloudflare Workers Builds + Browser Rendering + Durable Objects",
-      "project": "anthares-reserva-browser",
-      "production_branch": "main",
-      "browser_eligible": true
-    },
-    "bitrise": {
-      "android_rank": 4,
-      "browser_rank": 2,
-      "status": "standby_disabled_pending_live_runtime_proof",
-      "runtime": "Linux Android and Docker stack",
-      "config": "bitrise.yml",
-      "browser_qa_entrypoint": "ci/shared/anthares-browser-runtime-qa.sh",
-      "active": false,
-      "android_eligible": true,
       "browser_eligible": true,
-      "interactive_manual_auth": true
+      "exclusive_browser_surface": true,
+      "status": "ACTIVE_requires_internal_infrastructure_health_checks"
     },
-    "firebase_test_lab": {
-      "android_rank": 5,
-      "status": "standby_disabled_pending_live_proof_noninteractive_only",
-      "runtime": "Firebase Test Lab Spark Android device execution; automated fallback only",
-      "config": "ci/firebase-test-lab/run_kwai_robo.sh",
-      "interactive_manual_auth": false,
-      "active": false,
-      "android_eligible": true
-    },
-    "render": {
-      "status": "retired_2026-10-14",
-      "role": "historical_record_only",
-      "android_eligible": false,
-      "active": false,
-      "browser_eligible": false
-    },
-    "cirrus": {
-      "status": "retired_provider_shutdown_2026-06-01",
-      "active": false,
-      "android_eligible": false,
-      "browser_eligible": false
-    },
-    "gitlab": {
-      "ci_rank": 6,
-      "status": "standby_quota_blocked_ci_quota_exceeded_2026-10-14",
-      "active": false,
-      "android_eligible": false,
-      "browser_eligible": true,
-      "browser_rank": 3,
-      "runtime": "GitLab SaaS hosted Linux Docker CI",
-      "config": ".gitlab-ci.yml",
-      "browser_qa_entrypoint": "ci/shared/anthares-browser-runtime-qa.sh"
-    },
-    "github_actions": {
-      "ci_rank": 1,
-      "status": "primary_general_ci_and_remote_android_secondary",
+    "github_actions_public": {
       "active": true,
-      "android_eligible": true,
+      "status": "READY_public_repo_runs_observed_2026-10-15",
+      "ci_eligible": true
+    },
+    "github_actions_private": {
+      "active": false,
+      "status": "BLOCKED_QUOTA_owner_reported_and_private_runs_failing_2026-10-15",
+      "ci_eligible": false,
+      "reopen_condition": "fresh_successful_private_repo_job"
+    },
+    "gitlab_ci": {
+      "active": false,
+      "status": "BLOCKED_QUOTA_ci_quota_exceeded_2026-10-15",
+      "ci_eligible": false,
+      "reopen_condition": "fresh_job_starts_and_finishes_without_ci_quota_exceeded"
+    },
+    "cloudflare_workers_builds": {
+      "active": true,
+      "status": "READY_last_verified_2026-10-14",
+      "ci_eligible": true,
+      "scope": "worker_compatible_build_deploy_only"
+    },
+    "cloudflare_browser_rendering": {
+      "active": false,
+      "status": "BLOCKED_QUOTA_historical_current_revalidation_required",
       "browser_eligible": false,
-      "android_rank": 3,
-      "interactive_manual_auth": true,
-      "runtime": "GitHub-hosted runners",
-      "config": ".github/workflows"
-    }
+      "direct_fallback_for_anthares_browser": false
+    },
+    "cloudflare_workers_runtime": {
+      "active": true,
+      "status": "READY_required_by_current_anthares_remote_control_bridge",
+      "separate_quota_domain": true
+    },
+    "cloudflare_durable_objects": {
+      "active": true,
+      "status": "READY_current_control_state_path",
+      "separate_quota_domain": true
+    },
+    "harness": {"active": true, "ci_eligible": true, "status": "READY_last_verified_2026-10-14"},
+    "appveyor": {"active": true, "ci_eligible": true, "status": "READY_last_verified_2026-10-14"},
+    "floot": {"active": true, "ci_eligible": true, "status": "READY_last_verified_2026-10-14"},
+    "render": {"active": false, "status": "RETIRED"},
+    "tinyfish": {"active": false, "status": "RETIRED"},
+    "circleci": {"active": false, "status": "RETIRED"},
+    "browserless": {"active": false, "status": "SUPERSEDED"}
   }
 }
