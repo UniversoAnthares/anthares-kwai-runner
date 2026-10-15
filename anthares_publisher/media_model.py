@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Canonical Anthares media domain: Source -> Clip -> Publication.
 
-This module is intentionally persistence-free. Runtime queue, lease, dedupe,
-retry and reconciliation state remain authoritative in the central Cloudflare
-control plane. Keeping this layer pure prevents a second operational store.
+This module is intentionally persistence-free and provider-neutral. Queue,
+lease, dedupe, retry and reconciliation backends may change or fail over
+without changing canonical media identity. Keeping this layer pure prevents
+any infrastructure provider from becoming the domain authority.
 """
 from __future__ import annotations
 
@@ -103,7 +104,7 @@ class Publication:
     def dedupe_key(self): return _stable_id(self.clip.master_id,self.platform,self.account_id)
 
     def control_payload(self):
-        """Canonical enqueue payload for the sole central queue authority."""
+        """Canonical enqueue payload accepted by any compatible control backend."""
         return {
             "id":self.publication_id,
             "platform":self.platform,
