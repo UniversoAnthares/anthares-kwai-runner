@@ -1,4 +1,5 @@
 name: Verify TikTok session in Anthares browser
+# Read-only identity verification precedes any one-shot publication.
 on:
   push:
     branches: [main]
