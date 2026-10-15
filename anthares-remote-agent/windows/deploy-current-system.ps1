@@ -11,7 +11,7 @@ $repo='UniversoAnthares/anthares-kwai-runner'
 $releaseBase='https://github.com/'+$repo+'/releases/download/ara-v4-latest'
 $rawBase='https://raw.githubusercontent.com/'+$repo+'/main/anthares-remote-agent/windows'
 $tracked=@(
-  'anthares-remote-agent-v4.exe','anthares-remote-agent-v4.lastgood.exe','integrity-baseline.json','v4-validated.flag',
+  'anthares-remote-agent-v4-c8.exe','anthares-remote-agent-v4-c8.lastgood.exe','integrity-baseline.json','v4-validated.flag',
   'run-agent-system-supervisor.ps1','run-agent-system-supervisor.ps1.lastgood',
   'load-issue-queue-auth.ps1','load-issue-queue-auth.ps1.lastgood',
   'recovery-watchdog.ps1','recovery-watchdog.ps1.lastgood',
@@ -21,7 +21,7 @@ function Log([string]$m){try{"$(Get-Date -Format o) $m"|Tee-Object -FilePath $lo
 function Stop-ARA{
   try{Stop-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue}catch{}
   try{Stop-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue}catch{}
-  Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.Name -match '^anthares-remote-agent(?:-v4|-standard)?\.exe$'}|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
+  Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.Name -match '^anthares-remote-agent(?:-v4(?:-c8)?|-standard)?\.exe$'}|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
 }
 function Start-ARA{
   try{Start-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue}catch{}
@@ -63,34 +63,34 @@ if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrat
 New-Item -ItemType Directory -Force -Path $root,$stage,(Split-Path $log),(Split-Path $result)|Out-Null
 Log ('begin elevated identity='+$identity.Name)
 try{
-  $newExe=Join-Path $stage 'anthares-remote-agent-v4.exe'
-  $shaFile=Join-Path $stage 'anthares-remote-agent-v4.exe.sha256'
+  $newExe=Join-Path $stage 'anthares-remote-agent-v4-c8.exe'
+  $shaFile=Join-Path $stage 'anthares-remote-agent-v4-c8.exe.sha256'
   $installer=Join-Path $stage 'install-system-v8.ps1'
-  Invoke-WebRequest -UseBasicParsing -Uri ($releaseBase+'/anthares-remote-agent-v4.exe') -OutFile $newExe -TimeoutSec 60
-  Invoke-WebRequest -UseBasicParsing -Uri ($releaseBase+'/anthares-remote-agent-v4.exe.sha256') -OutFile $shaFile -TimeoutSec 30
+  Invoke-WebRequest -UseBasicParsing -Uri ($releaseBase+'/anthares-remote-agent-v4-c8.exe') -OutFile $newExe -TimeoutSec 60
+  Invoke-WebRequest -UseBasicParsing -Uri ($releaseBase+'/anthares-remote-agent-v4-c8.exe.sha256') -OutFile $shaFile -TimeoutSec 30
   Invoke-WebRequest -UseBasicParsing -Uri ($rawBase+'/install-system-v8.ps1') -OutFile $installer -TimeoutSec 30
 
   $expected=((Get-Content -LiteralPath $shaFile -Raw).Trim() -split '\s+')[0].ToUpperInvariant()
   if($expected -notmatch '^[0-9A-F]{64}$'){throw 'release checksum file is invalid'}
   $actual=(Get-FileHash -LiteralPath $newExe -Algorithm SHA256).Hash.ToUpperInvariant()
-  if($actual -ne $expected){throw 'downloaded V4 checksum mismatch'}
+  if($actual -ne $expected){throw 'downloaded V4 C8 checksum mismatch'}
   $errors=$null;$tokens=$null
   [Management.Automation.Language.Parser]::ParseFile($installer,[ref]$tokens,[ref]$errors)|Out-Null
   if($errors.Count){throw ('installer syntax errors: '+$errors.Count)}
-  Log ('release verified sha256='+$actual)
+  Log ('release verified c8 sha256='+$actual)
 
   Save-Rollback
   Stop-ARA
-  Copy-Item -LiteralPath $newExe -Destination (Join-Path $root 'anthares-remote-agent-v4.exe') -Force
-  if((Get-FileHash -LiteralPath (Join-Path $root 'anthares-remote-agent-v4.exe') -Algorithm SHA256).Hash.ToUpperInvariant() -ne $actual){throw 'installed V4 checksum mismatch before installer'}
+  Copy-Item -LiteralPath $newExe -Destination (Join-Path $root 'anthares-remote-agent-v4-c8.exe') -Force
+  if((Get-FileHash -LiteralPath (Join-Path $root 'anthares-remote-agent-v4-c8.exe') -Algorithm SHA256).Hash.ToUpperInvariant() -ne $actual){throw 'installed V4 C8 checksum mismatch before installer'}
 
   & $installer
   $installResult=Join-Path $work 'legacy-pc-runtime\supervisor\install-result.json'
   if(-not(Test-Path -LiteralPath $installResult)){throw 'installer did not produce install-result.json'}
   $r=Get-Content -LiteralPath $installResult -Raw|ConvertFrom-Json
-  if(-not [bool]$r.ok -or -not [bool]$r.queue_end_to_end_proof -or -not [bool]$r.mcp_http_transport_configured -or -not [bool]$r.single_executor_enforced -or [int]$r.system_v4_pid -le 0){throw 'installer did not prove canonical dual-transport runtime'}
+  if(-not [bool]$r.ok -or -not [bool]$r.queue_end_to_end_proof -or -not [bool]$r.mcp_http_transport_configured -or -not [bool]$r.single_executor_enforced -or [int]$r.system_v4_pid -le 0 -or [string]$r.canonical_binary -ne 'anthares-remote-agent-v4-c8.exe'){throw 'installer did not prove canonical C8 dual-transport runtime'}
 
-  $out=[ordered]@{ok=$true;sha256=$actual;system_v4_pid=[int]$r.system_v4_pid;queue_end_to_end_proof=$true;mcp_http_transport_configured=$true;single_executor_enforced=$true;queue_proof_issue=$r.queue_proof_issue;rollback_dir=$backup;completed_at=(Get-Date).ToUniversalTime().ToString('o')}
+  $out=[ordered]@{ok=$true;canonical_binary='anthares-remote-agent-v4-c8.exe';sha256=$actual;system_v4_pid=[int]$r.system_v4_pid;queue_end_to_end_proof=$true;mcp_http_transport_configured=$true;single_executor_enforced=$true;queue_proof_issue=$r.queue_proof_issue;rollback_dir=$backup;completed_at=(Get-Date).ToUniversalTime().ToString('o')}
   $out|ConvertTo-Json -Depth 5|Set-Content -LiteralPath $result -Encoding UTF8
   Log ('SUCCESS '+($out|ConvertTo-Json -Compress))
 }catch{
