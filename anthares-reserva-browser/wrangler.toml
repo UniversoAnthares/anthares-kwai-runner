@@ -3,6 +3,7 @@ account_id = "5c24be052e5144391f73a8e03491e88e"
 main = "src/northflank-owner-entry.js"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
+keep_vars = true
 
 [browser]
 binding = "BROWSER"
@@ -17,4 +18,5 @@ new_sqlite_classes = ["BrowserState"]
 
 # Required secrets: ANTHARES_RESERVA_TOKEN and NORTHFLANK_BROWSER_TOKEN.
 # Interactive TikTok login runs on the existing Northflank Chromium service.
+# Dashboard-managed secrets/vars are preserved across deployments.
 # The Cloudflare Browser binding remains only for legacy/non-TikTok recovery paths.
