@@ -28,3 +28,24 @@ jobs:
           probe vercel-healthz 'https://anthares-ara-vercel-reserve.vercel.app/healthz'
           probe cf-healthz 'https://anthares-ara-backup.anthares1.workers.dev/healthz'
           probe mcp-health 'https://anthares-ara-mcp.anthares1.workers.dev/health'
+      - name: Trigger OAuth email OTP to configured owner
+        shell: bash
+        run: |
+          set -euo pipefail
+          verifier="$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=\n')"
+          challenge="$(printf '%s' "$verifier" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
+          code="$(curl -sS -o /tmp/auth -w '%{http_code}' --max-time 20 --get \
+            --data-urlencode 'client_id=https://chatgpt.com/oauth/client.json' \
+            --data-urlencode 'redirect_uri=https://chatgpt.com/connector_platform_oauth_redirect' \
+            --data-urlencode 'response_type=code' \
+            --data-urlencode "code_challenge=$challenge" \
+            --data-urlencode 'code_challenge_method=S256' \
+            --data-urlencode 'scope=ara.read ara.write' \
+            --data-urlencode 'resource=https://anthares-ara-mcp.anthares1.workers.dev' \
+            --data-urlencode 'state=email-delivery-probe' \
+            'https://anthares-ara-mcp.anthares1.workers.dev/oauth/authorize' || true)"
+          echo "OAUTH_AUTHORIZE_HTTP=$code"
+          cat /tmp/auth
+          test "$code" = "200"
+          grep -q 'Digite o código' /tmp/auth
+          echo 'ARA_OAUTH_EMAIL_OTP_TRIGGERED=1'
