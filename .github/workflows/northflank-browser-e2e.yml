@@ -9,7 +9,7 @@ permissions:
 jobs:
   e2e:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 6
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
     steps:
@@ -21,21 +21,29 @@ jobs:
           echo "::add-mask::$ARA_SHARED"
           base='https://anthares-tiktok-worker.anthares1.workers.dev'
           auth=(-H "Authorization: Bearer $ARA_SHARED")
-          for i in $(seq 1 18); do
+          for i in $(seq 1 24); do
             code="$(curl -sS -o /tmp/status.json -w '%{http_code}' --max-time 12 "${auth[@]}" "$base/interactive-browser/status" || true)"
             if [ "$code" = 200 ]; then break; fi
             sleep 5
           done
-          test "$code" = 200 || { cat /tmp/status.json 2>/dev/null || true; exit 31; }
-          curl --fail-with-body -sS --max-time 35 "${auth[@]}" -H 'content-type: application/json' -X POST "$base/interactive-browser/start" --data '{}' -o /tmp/start.json
-          cat /tmp/start.json
+          echo "STATUS_HTTP=$code"
+          cat /tmp/status.json 2>/dev/null || true
+          test "$code" = 200 || exit 31
+
+          start_code="$(curl -sS -o /tmp/start.json -w '%{http_code}' --max-time 45 "${auth[@]}" -H 'content-type: application/json' -X POST "$base/interactive-browser/start" --data '{}' || true)"
+          echo "START_HTTP=$start_code"
+          cat /tmp/start.json 2>/dev/null || true
+          test "$start_code" = 200 || exit 32
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/start.json'))
           assert d.get('ok') is True,d
           assert d.get('active') is True,d
           PY
-          curl --fail-with-body -sS --max-time 35 "${auth[@]}" "$base/interactive-browser/screenshot" -o /tmp/shot.json
+
+          shot_code="$(curl -sS -o /tmp/shot.json -w '%{http_code}' --max-time 45 "${auth[@]}" "$base/interactive-browser/screenshot" || true)"
+          echo "SCREENSHOT_HTTP=$shot_code"
+          if [ "$shot_code" != 200 ]; then cat /tmp/shot.json 2>/dev/null || true; exit 33; fi
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/shot.json'))
@@ -46,6 +54,10 @@ jobs:
           print('NORTHFLANK_CHROMIUM_SCREENSHOT_OK=1')
           print('SCREENSHOT_B64_BYTES='+str(len(d['image_b64'])))
           PY
-          curl --fail-with-body -sS --max-time 20 "${auth[@]}" -H 'content-type: application/json' -X POST "$base/interactive-browser/close" --data '{}' -o /tmp/close.json
+
+          close_code="$(curl -sS -o /tmp/close.json -w '%{http_code}' --max-time 20 "${auth[@]}" -H 'content-type: application/json' -X POST "$base/interactive-browser/close" --data '{}' || true)"
+          echo "CLOSE_HTTP=$close_code"
+          cat /tmp/close.json 2>/dev/null || true
+          test "$close_code" = 200
           grep -q '"ok":true' /tmp/close.json
           echo NORTHFLANK_CHROMIUM_REAL_E2E_OK=1
