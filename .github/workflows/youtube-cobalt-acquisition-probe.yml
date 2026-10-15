@@ -1,0 +1,46 @@
+name: YouTube cloud acquisition fallback probe
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/youtube-cobalt-acquisition-probe.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Probe current no-turnstile Cobalt instances and download source
+        shell: bash
+        env:
+          SOURCE_URL: https://www.youtube.com/watch?v=9CIk-I_3VhM
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request
+          apis=['https://rue-cobalt.xenon.zone','https://cobaltapi.cjs.nz']
+          src=os.environ['SOURCE_URL']; selected=None
+          for api in apis:
+              try:
+                  req=urllib.request.Request(api+'/',data=json.dumps({'url':src,'videoQuality':'720','youtubeVideoCodec':'h264','youtubeVideoContainer':'mp4','downloadMode':'auto','alwaysProxy':True}).encode(),headers={'Accept':'application/json','Content-Type':'application/json','User-Agent':'Anthares/1.0'},method='POST')
+                  with urllib.request.urlopen(req,timeout=45) as r: body=json.loads(r.read().decode())
+                  status=body.get('status'); url=body.get('url')
+                  print('COBALT_INSTANCE='+api+' STATUS='+str(status)+' URL_PRESENT='+str(bool(url)).lower())
+                  if status in ('tunnel','redirect') and url: selected=(api,url); break
+              except Exception as exc: print('COBALT_INSTANCE='+api+' ERROR='+type(exc).__name__)
+          if not selected: raise SystemExit('NO_COBALT_SOURCE_AVAILABLE')
+          api,url=selected; print('COBALT_SELECTED='+api)
+          req=urllib.request.Request(url,headers={'User-Agent':'Anthares/1.0'})
+          with urllib.request.urlopen(req,timeout=120) as r,open('/tmp/source.mp4','wb') as out:
+              while True:
+                  chunk=r.read(1024*1024)
+                  if not chunk: break
+                  out.write(chunk)
+          print('DOWNLOADED_BYTES='+str(os.path.getsize('/tmp/source.mp4')))
+          PY
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+          ffprobe -v error -show_entries format=duration,size -of json /tmp/source.mp4
+          test "$(stat -c%s /tmp/source.mp4)" -gt 1000000
+          echo CLOUD_SOURCE_ACQUISITION=PROVEN
