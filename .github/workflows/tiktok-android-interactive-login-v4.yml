@@ -111,7 +111,7 @@ jobs:
           export DISPLAY=:99
           nohup Xvfb :99 -screen 0 1280x800x24 -ac >/tmp/tiktok-xvfb.log 2>&1 &
           sleep 2
-          nohup scrcpy -s emulator-5554 --no-audio --stay-awake --turn-screen-on --max-size=1080 --window-title='TikTok Android' >/tmp/tiktok-scrcpy.log 2>&1 &
+          nohup scrcpy -s emulator-5554 --stay-awake --max-size=1080 --window-title='TikTok Android' >/tmp/tiktok-scrcpy.log 2>&1 &
           sleep 6
           pgrep -f 'scrcpy.*emulator-5554' >/dev/null || { cat /tmp/tiktok-scrcpy.log; exit 41; }
           nohup x11vnc -display :99 -forever -shared -nopw -localhost -rfbport 5900 >/tmp/tiktok-x11vnc.log 2>&1 &
