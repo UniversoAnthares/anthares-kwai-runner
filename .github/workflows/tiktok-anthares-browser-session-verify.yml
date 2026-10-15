@@ -1,5 +1,6 @@
 name: Verify TikTok session in Anthares browser
 # Read-only identity verification precedes any one-shot publication.
+# Triggered 2026-10-15 to revalidate the durable TikTok session before Northflank handoff.
 on:
   push:
     branches: [main]
