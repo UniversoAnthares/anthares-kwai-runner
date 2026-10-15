@@ -1,0 +1,38 @@
+name: Probe Northflank resources for Chromium
+on:
+  push:
+    paths:
+      - .github/workflows/northflank-resource-probe.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - name: Print sanitized resource shape
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request
+          token=os.environ.get('NORTHFLANK_API_TOKEN','')
+          if not token: raise SystemExit('missing token')
+          base='https://api.northflank.com/v1';h={'Authorization':'Bearer '+token}
+          def get(path):
+            with urllib.request.urlopen(urllib.request.Request(base+path,headers=h),timeout=30) as r:
+              return json.loads(r.read().decode() or '{}')
+          projects=(get('/projects').get('data') or {}).get('projects') or []
+          if isinstance(projects,dict): projects=list(projects.values())
+          pid=next(p['id'] for p in projects if p.get('name')=='Default')
+          services=(get(f'/projects/{pid}/services').get('data') or {}).get('services') or []
+          if isinstance(services,dict): services=list(services.values())
+          s=next(x for x in services if x.get('name')=='anthares-ara-northflank')
+          sid=s.get('id') or 'anthares-ara-northflank'
+          d=(get(f'/projects/{pid}/services/{sid}').get('data') or {})
+          keep=['id','name','serviceType','billing','deployment','deploymentSettings','resources','instances','autoscaling','status','buildSettings']
+          out={k:d.get(k) for k in keep if k in d}
+          print(json.dumps(out,sort_keys=True,default=str))
+          PY
