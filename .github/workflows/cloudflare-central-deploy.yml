@@ -19,6 +19,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Apply canonical publisher target migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 cloudflare-worker/patches/apply-publisher-target-v17.py
+          grep -q '2026-10-15-publisher-target-v17' cloudflare-worker/src/index.js
+          grep -q 'idx_jobs_target_status_created' cloudflare-worker/src/index.js
+          grep -q 'account_id' cloudflare-worker/src/index.js
       - name: Authorize dedicated TikTok verifier and reconciliation workflows deterministically
         shell: bash
         run: |
@@ -51,10 +59,10 @@ jobs:
           grep -q 'tiktok-central-session-read.yml' cloudflare-worker/src/index.js
           grep -q 'tiktok-anthares-browser-session-verify.yml' cloudflare-worker/src/index.js
           grep -q 'tiktok-reconcile-uncertain.yml' cloudflare-worker/src/index.js
-          grep -q '2026-10-05-queue-fencing-v16' cloudflare-worker/src/index.js
+          grep -q '2026-10-15-publisher-target-v17' cloudflare-worker/src/index.js
           grep -q '2026-10-14-render-retired-r2' cloudflare-worker/src/index.js
           ! grep -q 'onrender.com' cloudflare-worker/src/index.js
-          echo 'SNAPSHOT_VALID=queue-fencing-v16-render-retired-r2-tiktok-reconcile-authorized'
+          echo 'SNAPSHOT_VALID=publisher-target-v17-render-retired-r2-tiktok-reconcile-authorized'
       - name: Validate private Kwai session vault before deploy
         shell: bash
         run: |
@@ -81,7 +89,7 @@ jobs:
           failover="$(curl -fsS https://anthares-control.anthares1.workers.dev/failover-self-test)"
           echo "$out"; echo "$strategy"; echo "$failover"
           echo "$out" | grep -q '"service":"anthares-control"'
-          echo "$out" | grep -q '"version":"2026-10-05-queue-fencing-v16"'
+          echo "$out" | grep -q '"version":"2026-10-15-publisher-target-v17"'
           echo "$out" | grep -q '"pc_fallback":false'
           echo "$out" | grep -q '"routing_revision":"2026-10-14-render-retired-r2"'
           ! echo "$strategy" | grep -q '"render"'
