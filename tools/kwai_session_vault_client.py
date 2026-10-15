@@ -19,7 +19,7 @@ BASE="https://anthares-control.anthares1.workers.dev"
 AUDIENCE=BASE
 ACCOUNT="lucasrosalem"
 MAX_BYTES=17_900_000
-EXPECTED_VERSION="2026-10-05-queue-fencing-v16"
+EXPECTED_VERSION="2026-10-15-publisher-target-v17"
 
 def get_json(url,headers=None,data=None,timeout=20):
     safe_headers={"User-Agent":"curl/8.5.0","Accept":"application/json"}
@@ -33,7 +33,7 @@ def preflight():
     h=get_json(BASE+"/health")
     if (h.get("version")!=EXPECTED_VERSION or h.get("persistent_state") is not True
             or h.get("queue_bound") is not True or h.get("pc_fallback") is not False):
-        raise RuntimeError("cloudflare durable control not ready")
+        raise RuntimeError("approved durable control backend not ready")
 
 def oidc():
     request_url=os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL","")
@@ -119,11 +119,9 @@ def main():
         if a.action=="pull":return pull(headers,a.path)
         return push(headers,a.path)
     except urllib.error.HTTPError as exc:
-        # HTTP status is safe diagnostic metadata; never log token or body.
         print("KWAI_PRIVATE_VAULT_HTTP_STATUS="+str(exc.code))
         return 1
     except (OSError,ValueError,RuntimeError,urllib.error.URLError) as exc:
-        # No exception strings: network errors may include sensitive URLs.
         print("KWAI_PRIVATE_VAULT_ERROR="+type(exc).__name__)
         return 1
 
