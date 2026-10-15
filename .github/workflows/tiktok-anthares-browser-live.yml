@@ -1,4 +1,5 @@
 name: TikTok Anthares Browser Live Recovery
+# Generate owner-only Cloudflare live view for correct account authentication.
 
 on:
   workflow_dispatch:
