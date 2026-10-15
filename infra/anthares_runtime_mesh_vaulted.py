@@ -141,12 +141,15 @@ def register(app):
         if not fields["persistence_proven"]:
             code = _diagnostic_code(result)
             fields["diagnostic"] = code
+            detail = str(result.get("error_detail") or "").replace("\n", " ").replace("\r", " ")[:700]
             app.logger.warning(
-                "browser_persistence_unproven diagnostic=%s healthy=%s restore=%s persist=%s",
+                "browser_persistence_unproven diagnostic=%s healthy=%s restore=%s persist=%s error=%s detail=%s",
                 code,
                 fields["healthy"],
                 fields["restore_status"],
                 fields["last_persist_ok"],
+                result.get("error"),
+                detail,
             )
         body = "\n".join(f"{key}={value}" for key, value in fields.items()) + "\n"
         return Response(body, status=200 if fields["healthy"] else 503, mimetype="text/plain")
