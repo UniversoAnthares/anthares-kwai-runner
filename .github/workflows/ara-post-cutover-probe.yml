@@ -1,0 +1,29 @@
+name: ARA Post Cutover Probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ara-post-cutover-probe.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Probe MCP and reserve
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== Cloudflare MCP health ==='
+          c1="$(curl -sS -o /tmp/mcp -w '%{http_code}' --max-time 20 https://anthares-ara-mcp.anthares1.workers.dev/health || true)"
+          echo "HTTP=$c1"; cat /tmp/mcp; echo
+          echo '=== Vercel reserve health ==='
+          c2="$(curl -sS -o /tmp/res -w '%{http_code}' --max-time 20 https://anthares-ara-vercel-reserve.vercel.app/health || true)"
+          echo "HTTP=$c2"; cat /tmp/res; echo
+          test "$c1" = "200" || test "$c1" = "503"
+          grep -q '"control_ready":true' /tmp/mcp
+          grep -q '"oauth_owner_code_mode":"email_otp"' /tmp/mcp
+          test "$c2" = "200"
+          echo 'ARA_POST_CUTOVER_CONTROL_READY=1'
