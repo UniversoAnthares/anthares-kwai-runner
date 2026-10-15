@@ -23,11 +23,13 @@ async function digest(s){
 export async function handleKwaiSessionVault(request,env,verifyGithubOidc){
   const authHeader=request.headers.get("Authorization")||"";
   const token=authHeader.replace(/^Bearer\s+/i,"");
-  const auth=await verifyGithubOidc(token,env,["kwai-queue-publisher.yml","kwai-private-vault-probe.yml","kwai-mobile-auth-acceptance.yml"]);
+  const allowed=["kwai-queue-publisher.yml","kwai-queue-publisher-v17.yml","kwai-private-vault-probe.yml","kwai-mobile-auth-acceptance.yml"];
+  const auth=await verifyGithubOidc(token,env,allowed);
   const claims=auth.claims||{};
   const workflow=String(claims.job_workflow_ref||claims.workflow_ref||"");
   const prefix="UniversoAnthares/anthares-kwai-runner/.github/workflows/";
-  const publisher=workflow.includes(prefix+"kwai-queue-publisher.yml@refs/heads/main");
+  const publisher=workflow.includes(prefix+"kwai-queue-publisher.yml@refs/heads/main")||
+                  workflow.includes(prefix+"kwai-queue-publisher-v17.yml@refs/heads/main");
   const mobileAuth=workflow.includes(prefix+"kwai-mobile-auth-acceptance.yml@refs/heads/main");
   const probeOnly=workflow.includes(prefix+"kwai-private-vault-probe.yml@refs/heads/main");
   const isProbe=request.method==="GET"&&new URL(request.url).searchParams.get("probe")==="1";
