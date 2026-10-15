@@ -6,7 +6,7 @@ p=Path(__file__).with_name('src')/'index.js'
 s=p.read_text(encoding='utf-8')
 
 helper_anchor="async function status(env,device=DEFAULT_DEVICE){return controlJson(env,`/v1/mcp/status?device_id=${encodeURIComponent(device)}`);}"
-helper=helper_anchor+"\nasync function bootstrapOtpStatus(env){try{return await controlJson(env,'/v1/mcp/oauth/bootstrap-status');}catch{return{active:false};}}\nasync function verifyBootstrapOtp(env,code){try{const r=await controlJson(env,'/v1/mcp/oauth/bootstrap-verify',{method:'POST',body:{code:String(code||'')}});return!!r.ok;}catch{return false;}}"
+helper=helper_anchor+"\nasync function bootstrapOtpStatus(env){try{const r=await controlJson(env,'/v1/mcp/oauth/bootstrap-status');console.log('oauth_bootstrap_status active='+String(!!r.active));return r;}catch(e){console.error('oauth_bootstrap_status_error '+String(e?.message||e).slice(0,180));return{active:false};}}\nasync function verifyBootstrapOtp(env,code){try{const r=await controlJson(env,'/v1/mcp/oauth/bootstrap-verify',{method:'POST',body:{code:String(code||'')}});return!!r.ok;}catch(e){console.error('oauth_bootstrap_verify_error '+String(e?.message||e).slice(0,180));return false;}}"
 if 'async function bootstrapOtpStatus(' not in s:
     if helper_anchor not in s: raise SystemExit('status helper anchor missing')
     s=s.replace(helper_anchor,helper,1)
@@ -26,7 +26,7 @@ if n!=1 and 'const bs=await bootstrapOtpStatus(env);if(!bs.active)' not in s:
 
 s=s.replace('Digite o código de configuração enviado ao e-mail cadastrado.','Digite o código temporário enviado ao e-mail cadastrado.')
 
-for required in ['bootstrapOtpStatus','verifyBootstrapOtp','bootstrap-status','bootstrap-verify']:
+for required in ['bootstrapOtpStatus','verifyBootstrapOtp','bootstrap-status','bootstrap-verify','oauth_bootstrap_status_error']:
     if required not in s: raise SystemExit('missing '+required)
 
 p.write_text(s,encoding='utf-8')
