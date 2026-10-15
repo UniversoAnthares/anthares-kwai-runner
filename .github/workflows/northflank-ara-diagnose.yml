@@ -1,3 +1,4 @@
+# Diagnostic trigger 2026-10-15T01:18Z: investigate Chromium persistence timeout on Northflank
 name: Diagnose Northflank ARA controller
 on:
   workflow_dispatch:
