@@ -9,7 +9,9 @@ $ErrorActionPreference='Stop'
 $Root='C:\ProgramData\AntharesAndroidRuntime'
 $Adb='D:\Program Files\Microvirt\MEmu\adb.exe'
 $Mgr='D:\Program Files\Microvirt\MEmuHyperv\MEmuManage.exe'
+$Memuc='D:\Program Files\Microvirt\MEmu\memuc.exe'
 $Vm='MEmu_4'
+$VmIndex='4'
 $PhysicalSerial=if($env:ANTHARES_PHYSICAL_ADB_SERIAL){$env:ANTHARES_PHYSICAL_ADB_SERIAL}else{'993fce720408'}
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
 
@@ -19,6 +21,10 @@ function Run([string]$File,[string[]]$Args,[int]$Timeout=12){
   $psi.Arguments=(($Args|ForEach-Object{if($_ -match '\s'){ '"'+$_+'"' }else{$_}})-join ' ')
   $p=New-Object Diagnostics.Process;$p.StartInfo=$psi
   try{[void]$p.Start();$o=$p.StandardOutput.ReadToEndAsync();$e=$p.StandardError.ReadToEndAsync();if(-not $p.WaitForExit($Timeout*1000)){try{$p.Kill()}catch{};return @{ok=$false;timeout=$true;stdout='';stderr='timeout'}};@{ok=($p.ExitCode -eq 0);code=$p.ExitCode;stdout=$o.Result;stderr=$e.Result}}catch{@{ok=$false;code=$null;stdout='';stderr=$_.Exception.Message}}finally{if($p){$p.Dispose()}}
+}
+function StartMemuOfficial{
+  $old=$env:__COMPAT_LAYER
+  try{$env:__COMPAT_LAYER='RunAsInvoker';Run $Memuc @('start','-i',$VmIndex) 35}finally{$env:__COMPAT_LAYER=$old}
 }
 function Event([string]$Op,$Data){
   $row=[ordered]@{timestamp=(Get-Date).ToUniversalTime().ToString('o');operation=$Op;data=$Data}
@@ -52,7 +58,8 @@ function RecoverTransport([string]$Kind,[switch]$MayStart,[switch]$MayReset){
   if($before.healthy){return [ordered]@{ok=$true;action='already_healthy';before=$before;after=$before}}
   if($Kind -eq 'memu' -and $before.backend_state -ne 'running'){
     if(-not $MayStart){return [ordered]@{ok=$false;action='backend_start_not_authorized';before=$before;after=$before}}
-    [void](Run $Mgr @('startvm',$Vm,'--type','headless') 35)
+    $start=StartMemuOfficial
+    if(-not $start.ok){return [ordered]@{ok=$false;action='backend_start_failed';before=$before;after=(Probe $Kind);start=$start}}
   }
   [void](Adb @('start-server') $null 8)
   $serial=if($Kind -eq 'physical'){$PhysicalSerial}else{(MemuInfo).serial}
