@@ -1,4 +1,4 @@
-name: Repair Northflank Chromium v4
+name: Repair Northflank Chromium v5
 on:
   push:
     paths:
@@ -17,7 +17,7 @@ jobs:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
     steps:
-      - name: Rebuild existing TikTok service and wait for v4
+      - name: Rebuild existing TikTok service and wait for v5
         shell: bash
         run: |
           set -euo pipefail
@@ -55,12 +55,12 @@ jobs:
           ready=0
           for i in $(seq 1 90); do
             code="$(curl -sS -o /tmp/revision.json -w '%{http_code}' --max-time 20 -H "Authorization: Bearer $ARA_SHARED" "$base/interactive-browser/revision" || true)"
-            if [ "$code" = 200 ] && grep -q '"revision":"2026-10-15-cdp-v4"' /tmp/revision.json; then ready=1; break; fi
+            if [ "$code" = 200 ] && grep -q '"revision":"2026-10-15-cdp-v5"' /tmp/revision.json; then ready=1; break; fi
             sleep 8
           done
           cat /tmp/revision.json 2>/dev/null || true
-          test "$ready" = 1 || { echo V4_ROLLOUT_NOT_PROVEN; exit 41; }
-          echo NORTHFLANK_CHROMIUM_V4_LIVE=1
+          test "$ready" = 1 || { echo V5_ROLLOUT_NOT_PROVEN; exit 41; }
+          echo NORTHFLANK_CHROMIUM_V5_LIVE=1
           printf '%s' "$base" > /tmp/nf-base
       - name: Real Chromium start screenshot close
         shell: bash
