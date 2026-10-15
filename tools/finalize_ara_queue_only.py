@@ -1,148 +1,36 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re
 
 main = Path('anthares-remote-agent/cmd/agent/main.go')
 s = main.read_text(encoding='utf-8')
 
-old_main = re.compile(r'''func main\(\) \{.*?\n\}\n\nfunc loadConfig\(\) \(Config, error\) \{''', re.S)
-new_main = r'''func main() {
-	cfg, err := loadConfig()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "config error:", err)
-		os.Exit(2)
-	}
-	fmt.Printf("Anthares Remote Agent starting device=%s os=%s/%s concurrency=%d\n", cfg.DeviceID, runtime.GOOS, runtime.GOARCH, cfg.MaxConcurrent)
-
-	// GitHub/GitLab issue queues are a complete, independent control transport.
-	// When no HTTP origin is configured, run cleanly in queue-only mode instead
-	// of manufacturing a fake endpoint and producing permanent network failures.
-	if strings.TrimSpace(cfg.ControlURL) == "" {
-		if !issueQueueConfigured() {
-			fmt.Fprintln(os.Stderr, "config error: no control transport configured")
-			os.Exit(2)
-		}
-		fmt.Println("Anthares Remote Agent running in issue-queue-only mode")
-		select {}
-	}
-
-	go heartbeatLoop(cfg)
-	if err := replayEncryptedResults(cfg); err != nil {
-		fmt.Fprintln(os.Stderr, "pending result replay deferred:", err)
-	}
-	go resultReplayLoop(cfg)
-
-	sem := make(chan struct{}, cfg.MaxConcurrent)
-	for {
-		sem <- struct{}{}
-		job, err := pollJob(cfg)
-		if err != nil {
-			<-sem
-			fmt.Fprintln(os.Stderr, "poll error:", err)
-			time.Sleep(3 * time.Second)
-			continue
-		}
-		if job == nil {
-			<-sem
-			time.Sleep(2 * time.Second)
-			continue
-		}
-		if err := validateJobID(job.ID); err != nil || strings.TrimSpace(job.Type) == "" {
-			<-sem
-			fmt.Fprintln(os.Stderr, "rejecting malformed remote job")
-			continue
-		}
-		j := *job
-		go func() {
-			defer func() { <-sem }()
-			result := executeJob(cfg, j)
-			if err := saveEncryptedResult(resultSpoolDir(cfg), cfg.DeviceToken, result); err != nil {
-				fmt.Fprintf(os.Stderr, "fatal result spool error job=%s: %v\n", result.ID, err)
-				os.Exit(1)
-			}
-			if err := postResultRetry(cfg, result); err != nil {
-				fmt.Fprintf(os.Stderr, "result upload deferred job=%s: %v\n", result.ID, err)
-				return
-			}
-			if err := os.Remove(filepath.Join(resultSpoolDir(cfg), result.ID+".pending")); err != nil {
-				fmt.Fprintf(os.Stderr, "result cleanup deferred job=%s: %v\n", result.ID, err)
-			}
-		}()
-	}
-}
-
-func loadConfig() (Config, error) {'''
-s, n = old_main.subn(lambda _m: new_main, s, count=1)
-if n != 1:
-    raise SystemExit('main/loadConfig patch target missing')
-
-old_validation = '''\tif c.ControlURL == "" || c.DeviceToken == "" || c.DeviceID == "" {
-\t\treturn c, errors.New("ANTHARES_CONTROL_URL, ANTHARES_DEVICE_TOKEN and ANTHARES_DEVICE_ID are required")
-\t}
-\tu, err := url.Parse(c.ControlURL)
-\tif err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
-\t\treturn c, errors.New("ANTHARES_CONTROL_URL must be an HTTPS origin without credentials, path, query or fragment")
-\t}
-'''
-new_validation = '''\tif c.DeviceID == "" {
-\t\treturn c, errors.New("ANTHARES_DEVICE_ID is required")
-\t}
-\tif c.ControlURL == "" {
-\t\tif !issueQueueConfigured() {
-\t\t\treturn c, errors.New("no control transport configured")
-\t\t}
-\t\treturn c, nil
-\t}
-\tif c.DeviceToken == "" {
-\t\treturn c, errors.New("ANTHARES_DEVICE_TOKEN is required when HTTP control is configured")
-\t}
-\tu, err := url.Parse(c.ControlURL)
-\tif err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
-\t\treturn c, errors.New("ANTHARES_CONTROL_URL must be an HTTPS origin without credentials, path, query or fragment")
-\t}
-'''
-if old_validation not in s:
-    raise SystemExit('loadConfig validation target missing')
-s = s.replace(old_validation, new_validation, 1)
+# Keep this finalizer idempotent. Current main.go may already contain the
+# queue-only transport validation; only tighten HTTP idle/error polling.
+s = s.replace('time.Sleep(10 * time.Second)\n\t\t\tcontinue', 'time.Sleep(3 * time.Second)\n\t\t\tcontinue', 1)
+s = s.replace('time.Sleep(15 * time.Second)\n\t\t\tcontinue', 'time.Sleep(2 * time.Second)\n\t\t\tcontinue', 1)
+required_main = [
+    'Anthares Remote Agent running in issue-queue-only mode',
+    'if c.ControlURL == "" {',
+    'if !issueQueueConfigured() {',
+    'ANTHARES_DEVICE_TOKEN is required when HTTP control is configured',
+]
+missing = [x for x in required_main if x not in s]
+if missing:
+    raise SystemExit('main queue-only invariant missing: ' + ', '.join(missing))
 main.write_text(s, encoding='utf-8')
 
 issue = Path('anthares-remote-agent/cmd/agent/issue_queue.go')
 s = issue.read_text(encoding='utf-8')
-old_init = re.compile(r'''func init\(\) \{.*?\n\}\n\nfunc issueQueueConfigured''', re.S)
-new_init = r'''func init() {
-	if !issueQueueConfigured() {
-		return
-	}
-	go func() {
-		cfg, err := loadConfig()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "issue queue config error:", err)
-			return
-		}
-		issueQueueLoop(cfg)
-	}()
-}
-
-func issueQueueConfigured'''
-s, n = old_init.subn(lambda _m: new_init, s, count=1)
-if n != 1:
-    raise SystemExit('issue queue init target missing')
-
-old_state = '''\tif runtime.GOOS == "windows" {
-\t\treturn `C:\\ProgramData\\AntharesRemoteAgent\\issue-queue`, nil
-\t}
-'''
-new_state = '''\tif runtime.GOOS == "windows" {
-\t\tif work := strings.TrimSpace(os.Getenv("ANTHARES_WORK_ROOT")); work != "" {
-\t\t\treturn filepath.Join(work, "ara-jobs", "issue-queue"), nil
-\t\t}
-\t\treturn `C:\\ProgramData\\AntharesRemoteAgent\\issue-queue`, nil
-\t}
-'''
-if old_state in s:
-    s = s.replace(old_state, new_state, 1)
-elif 'filepath.Join(work, "ara-jobs", "issue-queue")' not in s:
-    raise SystemExit('issue queue state-dir target missing')
+required_issue = [
+    'go func() {',
+    'issueQueueLoop(cfg)',
+    'filepath.Join(work, "ara-jobs", "issue-queue")',
+    'workers := cfg.MaxConcurrent',
+    'seen := make(map[string]bool)',
+]
+missing = [x for x in required_issue if x not in s]
+if missing:
+    raise SystemExit('issue queue invariant missing: ' + ', '.join(missing))
 issue.write_text(s, encoding='utf-8')
 
 # Supervisor files are maintained directly and validated by CI. Keeping this
