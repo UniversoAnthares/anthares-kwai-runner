@@ -7,6 +7,8 @@ $script:MEmuRoot = if ($env:MEMU_HOME) { $env:MEMU_HOME } else { 'D:\Program Fil
 $script:MEmuHyperv = if ($env:MEMU_HYPERV_HOME) { $env:MEMU_HYPERV_HOME } else { 'D:\Program Files\Microvirt\MEmuHyperv' }
 $script:Adb = Join-Path $script:MEmuRoot 'adb.exe'
 $script:Manager = Join-Path $script:MEmuHyperv 'MEmuManage.exe'
+$script:Memuc = Join-Path $script:MEmuRoot 'memuc.exe'
+$script:MEmuIndex = '4'
 
 function Initialize-AntharesRuntime {
     foreach ($p in @($script:RuntimeRoot,(Join-Path $script:RuntimeRoot 'locks'),(Join-Path $script:RuntimeRoot 'evidence'))) {
@@ -108,8 +110,14 @@ function Get-AntharesAndroidHealth {
 function Start-MEmuBackend {
     $vm=Get-MEmuInfo
     if ($vm.state -eq 'running') { return [ordered]@{ ok=$true; action='already_running' } }
-    $r=Invoke-External $script:Manager @('startvm',$script:MEmuName,'--type','headless') 35
-    [ordered]@{ ok=$r.ok; action='start_headless'; stderr=$r.stderr.Trim() }
+    $oldCompat=$env:__COMPAT_LAYER
+    try {
+        $env:__COMPAT_LAYER='RunAsInvoker'
+        $r=Invoke-External $script:Memuc @('start','-i',$script:MEmuIndex) 35
+    } finally {
+        $env:__COMPAT_LAYER=$oldCompat
+    }
+    [ordered]@{ ok=$r.ok; action='start_official_launcher'; stderr=$r.stderr.Trim(); stdout=$r.stdout.Trim() }
 }
 
 function Stop-MEmuBackend {
@@ -220,7 +228,7 @@ function Release-DeviceLease {
     param([string]$Owner)
     $path=Join-Path $script:RuntimeRoot 'locks\memu4.json'
     if (-not (Test-Path $path)) { return [ordered]@{ ok=$true; action='already_free' } }
-    try { $old=Get-Content $path -Raw | ConvertFrom-Json; if ($old.owner -ne $Owner) { return [ordered]@{ ok=$false; failure_class='LOCK_TIMEOUT'; owner=$old.owner } } } catch {}
+    try { $old=Get-Content $path -Raw | ConvertFrom-Json; if ($old.owner -ne $Owner) { return [ordered]@{ ok=$false; failure_class='LOCK_TIMEOUT'; owner=$old.owner } } catch {}
     Remove-Item $path -Force
     [ordered]@{ ok=$true; action='released' }
 }
