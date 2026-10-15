@@ -42,6 +42,11 @@ jobs:
           node --check src/tiktok-entry.js
           node --check src/tiktok-owner-entry.js
           node --check src/northflank-owner-entry.js
+      - name: Deploy reserve browser
+        working-directory: anthares-reserva-browser
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
       - name: Establish deterministic reserve access token
         working-directory: anthares-reserva-browser
         env:
@@ -71,11 +76,6 @@ jobs:
           set -euo pipefail
           echo "::add-mask::$ARA_SHARED"
           printf '%s' "$ARA_SHARED" | npx wrangler secret put NORTHFLANK_BROWSER_TOKEN
-      - name: Deploy reserve browser
-        working-directory: anthares-reserva-browser
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler deploy
       - name: Verify deployed public contract
         run: |
           set -euo pipefail
