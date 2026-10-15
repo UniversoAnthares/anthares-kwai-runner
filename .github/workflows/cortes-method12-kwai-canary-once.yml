@@ -1,0 +1,305 @@
+name: CORTES method 1+2 Kwai canary once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-method12-kwai-canary-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cortes-method12-kwai-canary-once
+  cancel-in-progress: false
+
+env:
+  CONTROL: https://anthares-control.anthares1.workers.dev
+  SOURCE_ID: 9CIk-I_3VhM
+  SOURCE_URL: https://www.youtube.com/watch?v=9CIk-I_3VhM
+  SOURCE_START: '8'
+  SOURCE_END: '98'
+  KWAI_EXPECTED_ACCOUNT: lucasrosalem
+  KWAI_LEASE_TTL_SECONDS: '900'
+  KWAI_LEASE_RENEW_INTERVAL_SECONDS: '120'
+  KWAI_LEASE_RENEW_TTL_SECONDS: '900'
+  KWAI_SESSION_FILE: kwai-session.enc
+  KWAI_AUTH_STRATEGY: mobile_only
+  ANTHARES_REMOTE_ANDROID_ROLE: experimental_only
+  JOB_ID: cortes-method12-9CIk-I_3VhM-8-98-kwai-canary-v1
+
+jobs:
+  test-method12:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert this is an explicit experimental canary only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          d=json.load(open('ci-hub/executor-routing.json',encoding='utf-8'))
+          a=d['android_execution']
+          assert a['primary_device']=='physical_android'
+          assert a['fallback_device']=='memu_android'
+          p=d['providers']['github_android_experimental']
+          assert p['active'] is False and p['android_eligible'] is False
+          print('EXPERIMENTAL_CANARY_ONLY=1')
+          PY
+
+      - name: Fetch protected runtime secrets from existing GitLab bridge
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GITLAB_TOKEN:-}" || { echo GITLAB_TOKEN_MISSING; exit 12; }
+          python3 - <<'PY'
+          import json, os, urllib.request
+          token=os.environ['GITLAB_TOKEN']
+          merged={}
+          for project in ('87361774','87361776'):
+              req=urllib.request.Request(
+                  f'https://gitlab.com/api/v4/projects/{project}/variables?per_page=100',
+                  headers={'PRIVATE-TOKEN':token,'User-Agent':'anthares-method12-canary'})
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r: rows=json.load(r)
+              except Exception:
+                  continue
+              for x in rows:
+                  k=str(x.get('key') or ''); v=str(x.get('value') or '')
+                  if k and v and k not in merged: merged[k]=v
+          required=['WP_SITE_URL','WP_USERNAME','WP_APP_PASSWORD','YOUTUBE_COOKIES']
+          missing=[k for k in required if not merged.get(k)]
+          if missing: raise SystemExit('RUNTIME_SECRET_MISSING='+','.join(missing))
+          keep={k:merged[k] for k in required}
+          for v in keep.values():
+              if v: print('::add-mask::'+v.replace('\r','').replace('\n','%0A'))
+          json.dump(keep,open('/tmp/method12-secrets.json','w',encoding='utf-8'))
+          print('RUNTIME_SECRETS_READY=1')
+          PY
+
+      - name: Install acquisition and processing stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          python3 -m pip install --disable-pip-version-check -q 'yt-dlp[default]' yt-dlp-ejs bgutil-ytdlp-pot-provider requests
+          ffmpeg -version | head -n1
+          yt-dlp --version
+
+      - name: Method 1 - partial YouTube extraction only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json
+          s=json.load(open('/tmp/method12-secrets.json'))['YOUTUBE_COOKIES'].strip()
+          try:
+              if not s.lstrip().startswith('#') and '\t' not in s and '\n' not in s:
+                  d=base64.b64decode(s,validate=True).decode('utf-8')
+                  if 'youtube' in d.lower() or 'netscape' in d.lower(): s=d
+          except Exception: pass
+          open('/tmp/youtube-cookies.txt','w',encoding='utf-8').write(s.strip()+'\n')
+          PY
+          mkdir -p /tmp/method12
+          set +e
+          yt-dlp \
+            --cookies /tmp/youtube-cookies.txt \
+            --no-playlist \
+            --download-sections "*${SOURCE_START}-${SOURCE_END}" \
+            --force-keyframes-at-cuts \
+            -f 'bv*+ba/b' \
+            --merge-output-format mp4 \
+            -o '/tmp/method12/partial.%(ext)s' \
+            "$SOURCE_URL" > /tmp/method12/yt-dlp.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/method12/yt-dlp.log
+          test "$rc" -eq 0 || { echo METHOD1_PARTIAL_EXTRACTION_FAILED=1; exit "$rc"; }
+          test -s /tmp/method12/partial.mp4
+          echo METHOD1_PARTIAL_EXTRACTION=PROVEN
+
+      - name: Method 2 - remote edit/normalize without full source download
+        shell: bash
+        run: |
+          set -euo pipefail
+          ffmpeg -hide_banner -loglevel error -y -i /tmp/method12/partial.mp4 \
+            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" \
+            -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p \
+            -c:a aac -b:a 128k -movflags +faststart \
+            /tmp/method12/final.mp4
+          test -s /tmp/method12/final.mp4
+          head -c 64 /tmp/method12/final.mp4 | grep -a -q ftyp
+          dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/method12/final.mp4)"
+          DUR="$dur" python3 - <<'PY'
+          import os
+          d=float(os.environ['DUR']); assert 70 <= d <= 95,d
+          print('METHOD12_FINAL_DURATION='+str(round(d,3)))
+          PY
+          sha256sum /tmp/method12/final.mp4 | tee /tmp/method12/final.sha256
+          echo METHOD2_REMOTE_EDIT=PROVEN
+
+      - name: Upload canary media to WordPress and capture public URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,requests,os
+          s=json.load(open('/tmp/method12-secrets.json'))
+          url=s['WP_SITE_URL'].rstrip('/')+'/wp-json/wp/v2/media'
+          auth=(s['WP_USERNAME'],''.join(s['WP_APP_PASSWORD'].split()))
+          data=open('/tmp/method12/final.mp4','rb').read()
+          r=requests.post(url,auth=auth,data=data,headers={
+              'Content-Type':'video/mp4',
+              'Content-Disposition':'attachment; filename="cortes-method12-canary.mp4"'
+          },timeout=300)
+          if r.status_code not in (200,201): raise SystemExit('WP_MEDIA_UPLOAD_FAILED '+str(r.status_code)+' '+r.text[:500])
+          d=r.json(); assert d.get('id') and d.get('source_url'),d
+          json.dump({'id':d['id'],'source_url':d['source_url']},open('/tmp/method12/wp-media.json','w'))
+          print('WP_CANARY_MEDIA_ID='+str(d['id']))
+          print('WP_CANARY_MEDIA_URL='+d['source_url'])
+          PY
+
+      - name: Check central queue, dedupe and enqueue exactly this canary
+        shell: bash
+        run: |
+          set -euo pipefail
+          sep='&'; [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]] || sep='?'
+          aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
+          CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$CT"; printf '%s' "$CT" >/tmp/method12/control-token
+          curl -fsS -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/method12/queue-before.json
+          python3 - <<'PY'
+          import json,os
+          q=json.load(open('/tmp/method12/queue-before.json')); raw=q.get('jobs') or []
+          jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
+          active=[]
+          for j in jobs:
+              if not isinstance(j,dict) or j.get('platform')!='kwai': continue
+              if str(j.get('status') or '').lower() not in ('published','completed','failed','cancelled','reconciled'): active.append(j.get('id'))
+              try: a=float(j.get('source_start')); b=float(j.get('source_end'))
+              except Exception: continue
+              if str(j.get('source_id') or '')==os.environ['SOURCE_ID'] and max(float(os.environ['SOURCE_START']),a)<min(float(os.environ['SOURCE_END']),b):
+                  raise SystemExit('KWAI_TIMELINE_DEDUPE_BLOCK='+str(j.get('id')))
+          if active: raise SystemExit('KWAI_QUEUE_NOT_EMPTY='+','.join(map(str,active)))
+          print('KWAI_QUEUE_SAFE_FOR_CANARY=1')
+          PY
+          python3 - <<'PY' >/tmp/method12/enqueue.json
+          import json,os
+          m=json.load(open('/tmp/method12/wp-media.json'))
+          sha=open('/tmp/method12/final.sha256').read().split()[0]
+          print(json.dumps({
+            'id':os.environ['JOB_ID'],
+            'platform':'kwai',
+            'executor':'github_android_experimental',
+            'dedupe_key':'lucasrosalem::'+os.environ['SOURCE_ID']+':'+os.environ['SOURCE_START']+':'+os.environ['SOURCE_END']+':method12',
+            'source_id':os.environ['SOURCE_ID'],
+            'source_start':float(os.environ['SOURCE_START']),
+            'source_end':float(os.environ['SOURCE_END']),
+            'video_url':m['source_url'],
+            'video_title':'Teste CORTES método 1+2',
+            'expected_account':os.environ['KWAI_EXPECTED_ACCOUNT'],
+            'media_sha256':sha,
+            'canary':True
+          }))
+          PY
+          curl -fsS -X POST "$CONTROL/job/enqueue" -H "Authorization: Bearer $CT" -H 'Content-Type: application/json' --data-binary @/tmp/method12/enqueue.json -o /tmp/method12/enqueued.json
+          python3 - <<'PY'
+          import json,os
+          d=json.load(open('/tmp/method12/enqueued.json')); assert d.get('ok') is True,d; assert not d.get('deduplicated'),d; assert (d.get('job') or {}).get('id')==os.environ['JOB_ID'],d
+          print('METHOD12_CANARY_ENQUEUED='+os.environ['JOB_ID'])
+          PY
+
+      - name: Download validated Kwai package vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          rm -rf kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+          test -s kwai-vault/MANIFEST.tsv
+
+      - name: Restore authenticated Kwai session
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
+          test -s kwai-session.enc
+
+      - name: Enable KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+
+      - name: Publish exactly one canary through authenticated remote Android
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+          KWAI_AUTH_STRATEGY: mobile_only
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048 -cores 2
+          script: |
+            bash kwai_vault_install.sh
+            adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+            bash kwai_session_state.sh restore >/tmp/method12-session-restore.log 2>&1 || true
+            bash kwai_queue_publish_runtime.sh
+
+      - name: Persist only positively authenticated session
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -s kwai-session.enc ] && [ -s kwai-headless-status.txt ] && grep -Eq '^KWAI_SESSION_AUTHENTICATED(_RESTORED)?$' kwai-headless-status.txt && grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-headless-status.txt; then
+            python3 tools/kwai_session_vault_client.py push --path kwai-session.enc
+          else
+            echo KWAI_VAULT_SAVE_SKIPPED_NO_IDENTITY_PROOF=1
+          fi
+
+      - name: Delete temporary WordPress media only after confirmed publication
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,requests
+          s=json.load(open('/tmp/method12-secrets.json')); m=json.load(open('/tmp/method12/wp-media.json'))
+          auth=(s['WP_USERNAME'],''.join(s['WP_APP_PASSWORD'].split()))
+          url=s['WP_SITE_URL'].rstrip('/')+f'/wp-json/wp/v2/media/{m["id"]}?force=true'
+          r=requests.delete(url,auth=auth,timeout=60)
+          print('WP_CANARY_CLEANUP_HTTP='+str(r.status_code))
+          PY
+
+      - name: Preserve method 1+2 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cortes-method12-kwai-canary-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            /tmp/method12/yt-dlp.log
+            /tmp/method12/final.sha256
+            /tmp/method12/wp-media.json
+            /tmp/method12/enqueued.json
+            /tmp/method12/queue-before.json
+            /tmp/method12-session-restore.log
+            kwai-publication.log
+            kwai-publish-status.txt
+            kwai-reconcile-status.txt
+            kwai-headless-status.txt
