@@ -1,33 +1,27 @@
 param(
-    [string]$RepoRoot = "D:\AntharesWork\anthares-kwai-runner",
-    [string]$PhysicalSerial = "993fce720408",
-    [string]$MEmuSerial = "127.0.0.1:21503",
-    [string]$AdbPath = "D:\Program Files\Microvirt\MEmu\adb.exe"
+    [string]$RuntimePath = "C:\ProgramData\AntharesRemoteAgent\android-runtime\anthares-android-runtime-v2.ps1",
+    [ValidateSet('IDLE','LEASED','STARTED','COMMITTING','UNCERTAIN','VERIFIED')]
+    [string]$PublicationState = 'IDLE'
 )
 
 $ErrorActionPreference = 'Stop'
 
-$router = Join-Path $RepoRoot 'tools\android_executor_router.py'
-$probe  = Join-Path $RepoRoot 'tools\android_device_adapters.py'
-if (-not (Test-Path $router)) { throw "Canonical router missing: $router" }
-if (-not (Test-Path $probe))  { throw "Device adapter missing: $probe" }
-if (-not (Test-Path $AdbPath)) { throw "ADB missing: $AdbPath" }
+if (-not (Test-Path $RuntimePath)) {
+    $repoRuntime = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'windows\android-runtime\anthares-android-runtime.ps1'
+    if (Test-Path $repoRuntime) {
+        $RuntimePath = $repoRuntime
+    } else {
+        throw "Anthares Android Runtime missing: $RuntimePath"
+    }
+}
 
-$env:ANTHARES_ADB = $AdbPath
-$env:ANTHARES_PHYSICAL_ADB_SERIAL = $PhysicalSerial
-$env:ANTHARES_PHYSICAL_KWAI_PACKAGE = 'kwai.lite.video'
-$env:ANTHARES_MEMU_ADB_SERIAL = $MEmuSerial
-$env:ANTHARES_MEMU_KWAI_PACKAGE = 'com.kwai.video'
+# The bridge intentionally owns no ADB path, MEmu port or VM transport details.
+# Those belong to Anthares Android Runtime. Selection is fail-closed at the
+# irreversible publication boundary.
+& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $RuntimePath `
+    -Command select `
+    -Target auto `
+    -PublicationState $PublicationState `
+    -AllowBackendStart
 
-# Authentication remains fail-closed. These flags are intentionally not invented
-# here. A session/identity probe must set them to 1 only after proving the expected
-# Kwai account on each executor.
-
-$python = (Get-Command python -ErrorAction Stop).Source
-$statusJson = & $python $probe
-if ($LASTEXITCODE -ne 0) { throw 'Android device probe failed' }
-
-$env:ANTHARES_EXECUTOR_STATUS_JSON = $statusJson
-$env:ANTHARES_EXECUTOR_WORKLOAD = 'kwai_publish'
-& $python $router
 exit $LASTEXITCODE
