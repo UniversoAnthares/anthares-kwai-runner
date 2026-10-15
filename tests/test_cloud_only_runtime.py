@@ -43,10 +43,13 @@ assert m
 for retired in ('local','pc','windows','oracle','google','google_compute','render'):
  assert f'"{retired}"' not in m.group(1), (retired,m.group(1))
 for signal in (
+ 'primary_github',
+ 'github_offline_null',
+ 'stale_heartbeat_null',
+ 'circuit_breaker_null',
+ 'capacity_null',
+ 'readiness_null',
  'retired_injected_never_selected',
- 'stale_heartbeat_github',
- 'circuit_breaker_github',
- 'capacity_github',
  'render_retired',
 ):
  assert signal in worker, signal
