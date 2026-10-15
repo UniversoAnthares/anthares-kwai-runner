@@ -1,0 +1,10 @@
+{
+  "job_id": "ara-restore-system-task-v3",
+  "device_id": "DESKTOP-FTDK0HP",
+  "type": "shell",
+  "args": {
+    "shell": "powershell",
+    "command": "$u='https://raw.githubusercontent.com/UniversoAnthares/anthares-kwai-runner/main/anthares-remote-agent/windows/repair-system-startup-task.ps1'; $p='C:\\ProgramData\\AntharesRemoteAgent\\repair-system-startup-task.ps1'; Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile $p; & $p"
+  },
+  "timeout_seconds": 60
+}
