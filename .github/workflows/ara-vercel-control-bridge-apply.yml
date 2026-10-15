@@ -1,0 +1,44 @@
+name: ARA Vercel Control Bridge Apply
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'vercel-ara-primary/patch_cloudflare_control_bridge.py'
+      - '.github/workflows/ara-vercel-control-bridge-apply.yml'
+permissions:
+  contents: write
+concurrency:
+  group: ara-vercel-control-bridge-apply
+  cancel-in-progress: false
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply and validate patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 vercel-ara-primary/patch_cloudflare_control_bridge.py
+          node --check vercel-ara-primary/api/router.mjs
+          grep -q "route==='v1/mcp/status'" vercel-ara-primary/api/router.mjs
+          grep -q "route==='v1/mcp/execute'" vercel-ara-primary/api/router.mjs
+          grep -q "route==='v1/mcp/oauth/consume'" vercel-ara-primary/api/router.mjs
+      - name: Commit patched source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- vercel-ara-primary/api/router.mjs; then
+            echo 'ARA_VERCEL_CONTROL_BRIDGE_ALREADY_APPLIED=1'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add vercel-ara-primary/api/router.mjs
+          git commit -m 'feat(ara): add signed Cloudflare control bridge to Vercel reserve'
+          git push origin HEAD:main
+          echo 'ARA_VERCEL_CONTROL_BRIDGE_APPLIED=1'
