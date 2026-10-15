@@ -130,6 +130,15 @@ jobs:
           health="$(curl --fail-with-body -sS "$router/health")"
           echo "$health"
           echo "$health" | grep -q '"ok":true'
-          browser="$(curl --fail-with-body -sS -H "Authorization: Bearer $ARA_SHARED" "$router/interactive-browser/status")"
-          echo "$browser"
-          echo "$browser" | grep -q '"backend":"northflank_chromium_cdp"'
+          browser=''
+          for i in $(seq 1 48); do
+            code="$(curl -sS -o /tmp/browser.json -w '%{http_code}' --max-time 15 -H "Authorization: Bearer $ARA_SHARED" "$router/interactive-browser/status" || true)"
+            if [ "$code" = 200 ] && grep -q '"backend":"northflank_chromium_cdp"' /tmp/browser.json; then
+              browser="$(cat /tmp/browser.json)"
+              break
+            fi
+            sleep 5
+          done
+          echo "${browser:-$(cat /tmp/browser.json 2>/dev/null || true)}"
+          test -n "$browser"
+          echo NORTHFLANK_INTERACTIVE_BROWSER_ROUTE_READY=1
