@@ -30,7 +30,7 @@ jobs:
           python3 -m playwright install chromium
       - name: Recover exact existing TikTok publication evidence without publishing
         run: python3 direct-tiktok-publisher/tiktok_reconcile_uncertain.py
-      - name: Complete existing fenced job from recovered evidence
+      - name: Reconcile the existing uncertain central job
         shell: bash
         run: |
           set -euo pipefail
@@ -38,44 +38,41 @@ jobs:
           aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
           CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           echo "::add-mask::$CT"
-          curl -fsS -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/q.json
-          python3 - <<'PY' >/tmp/complete.json
+          python3 - <<'PY' >/tmp/reconcile.json
           import json,os
-          q=json.load(open('/tmp/q.json')); raw=q.get('jobs') or []
-          jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
-          matches=[j for j in jobs if isinstance(j,dict) and j.get('id')==os.environ['JOB_ID']]
-          assert len(matches)==1,('target_job_count',len(matches))
-          j=matches[0]
           e=json.load(open(os.environ['TIKTOK_RECONCILE_EVIDENCE']))
           assert e.get('confirmed') is True and e.get('remote_id') and e.get('remote_url'),e
-          if j.get('status')=='published' and j.get('confirmed') is True:
-              assert str(j.get('remote_id'))==str(e['remote_id']), (j,e)
-              print(json.dumps({'already_complete':True,'remote_id':e['remote_id'],'remote_url':e['remote_url']}))
-          else:
-              assert j.get('publication_started') is True,j
-              gen=int(j.get('lease_generation') or 0); assert gen>0,j
-              print(json.dumps({'id':os.environ['JOB_ID'],'executor':'github','lease_generation':gen,'confirmed':True,'remote_id':e['remote_id'],'confirmation_evidence':e['remote_url']}))
+          print(json.dumps({
+            'id':os.environ['JOB_ID'],
+            'executor':'github',
+            'confirmed':True,
+            'remote_id':e['remote_id'],
+            'confirmation_evidence':e['remote_url']
+          }))
           PY
-          if python3 -c "import json;raise SystemExit(0 if json.load(open('/tmp/complete.json')).get('already_complete') else 1)"; then
-            cp /tmp/complete.json /tmp/complete-response.json
-          else
-            curl -fsS -X POST "$CONTROL/github-queue/complete" \
-              -H "Authorization: Bearer $CT" -H 'Content-Type: application/json' \
-              --data-binary @/tmp/complete.json -o /tmp/complete-response.json
-          fi
-          curl -fsS -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/q-after.json
+          curl -fsS -X POST "$CONTROL/job/reconcile" \
+            -H "Authorization: Bearer $CT" -H 'Content-Type: application/json' \
+            --data-binary @/tmp/reconcile.json -o /tmp/reconcile-response.json
           python3 - <<'PY'
           import json,os
-          q=json.load(open('/tmp/q-after.json')); raw=q.get('jobs') or []
-          jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
-          j=next(x for x in jobs if isinstance(x,dict) and x.get('id')==os.environ['JOB_ID'])
+          d=json.load(open('/tmp/reconcile-response.json')); j=d.get('job') or {}
           e=json.load(open(os.environ['TIKTOK_RECONCILE_EVIDENCE']))
-          assert j.get('status')=='published',j
-          assert j.get('confirmed') is True,j
-          assert str(j.get('remote_id'))==str(e['remote_id']), (j,e)
+          assert d.get('ok') is True,d
+          assert j.get('status')=='published',d
+          assert j.get('confirmed') is True,d
+          assert str(j.get('remote_id'))==str(e['remote_id']), (d,e)
           print('CENTRAL_UNCERTAIN_RECONCILED=PUBLISHED')
           print('REMOTE_ID='+str(j['remote_id']))
           print('REMOTE_URL='+str(e['remote_url']))
+          PY
+          curl -fsS -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/q-after.json
+          python3 - <<'PY'
+          import json
+          q=json.load(open('/tmp/q-after.json'))
+          jobs=q.get('jobs') or {}
+          assert int(jobs.get('uncertain') or 0)==0,q
+          assert int(jobs.get('published') or 0)>=1,q
+          print('QUEUE_AFTER_RECONCILE='+json.dumps(jobs,separators=(',',':')))
           PY
       - name: Preserve evidence
         if: always()
@@ -84,4 +81,6 @@ jobs:
           name: tiktok-canonical-reconcile-${{ github.run_id }}
           if-no-files-found: ignore
           retention-days: 7
-          path: /tmp/tiktok-reconcile-evidence.json
+          path: |
+            /tmp/tiktok-reconcile-evidence.json
+            /tmp/reconcile-response.json
