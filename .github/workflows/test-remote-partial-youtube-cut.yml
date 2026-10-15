@@ -1,0 +1,59 @@
+name: Test remote partial YouTube cut
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_id:
+        description: YouTube video ID
+        required: false
+        default: b6gL9plY_6w
+      section_start:
+        description: Section start in seconds
+        required: false
+        default: '60'
+      section_end:
+        description: Section end in seconds
+        required: false
+        default: '150'
+  push:
+    paths:
+      - 'test-hub/remote-partial-cut/**'
+      - '.github/workflows/test-remote-partial-youtube-cut.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  partial-cut-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      TEST_YOUTUBE_VIDEO_ID: ${{ inputs.video_id || 'b6gL9plY_6w' }}
+      TEST_SECTION_START: ${{ inputs.section_start || '60' }}
+      TEST_SECTION_END: ${{ inputs.section_end || '150' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install media tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install --disable-pip-version-check -q --upgrade yt-dlp
+      - name: Extract bounded section and process remotely
+        run: python test-hub/remote-partial-cut/partial_cut_smoke.py
+      - name: Show verification manifest
+        if: always()
+        run: |
+          test -f test-output/manifest.json && cat test-output/manifest.json || true
+      - name: Upload proof artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-partial-cut-proof
+          path: |
+            test-output/manifest.json
+            test-output/partial-microcut.mp4
+          if-no-files-found: error
+          retention-days: 1
