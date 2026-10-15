@@ -20,3 +20,7 @@ new_sqlite_classes = ["BrowserState"]
 # Interactive TikTok login runs on the existing Northflank Chromium service.
 # Dashboard-managed secrets/vars are preserved across deployments.
 # The Cloudflare Browser binding remains only for legacy/non-TikTok recovery paths.
+
+[[services]]
+binding = "TIKTOK_WORKER"
+service = "anthares-tiktok-worker"
