@@ -48,7 +48,11 @@ jobs:
           echo "LIVE_HTTP=$code"
           python3 - <<'PY'
           import json
-          d=json.load(open('/tmp/live.json', encoding='utf-8'))
+          raw=open('/tmp/live.json', encoding='utf-8',errors='replace').read()
+          try: d=json.loads(raw)
+          except json.JSONDecodeError:
+              print('LIVE_RESPONSE_PREFIX='+raw[:260].replace('\\n',' '))
+              raise SystemExit('ANTHARES_BROWSER_NON_JSON_UPSTREAM')
           if d.get('ok') is not True:
               print('LIVE_ERROR='+str(d.get('error') or '')[:120])
               print('LIVE_DETAIL='+str(d.get('detail') or '')[:180])
