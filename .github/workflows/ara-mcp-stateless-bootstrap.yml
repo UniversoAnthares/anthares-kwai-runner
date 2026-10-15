@@ -74,3 +74,5 @@ jobs:
           grep -q 'anthares-ara-vercel-reserve.vercel.app' /tmp/health.json
           grep -q '"oauth_owner_code_mode":"email_otp"' /tmp/health.json
           echo 'STATELESS_EMAIL_OTP_INGRESS_PROVEN=1'
+
+# retrigger: 2026-10-15T22:08Z OAuth recovery validation
