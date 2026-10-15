@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-15-fixed-routing-r13",
+  "revision": "2026-10-15-fixed-routing-r14",
   "provider_status_source": "ci-hub/provider-status.json",
   "continuity_policy": "ci-hub/CONTINUITY.md",
   "regression_check_required_each_round": true,
@@ -11,11 +11,25 @@
     "on_failure": "classify_then_repair_anthares_or_migrate_external_dependency"
   },
   "browser_execution": {
-    "primary": "anthares_browser",
-    "priority": ["anthares_browser"],
+    "primary_surface": "anthares_browser",
+    "exclusive_surface": true,
+    "backend_priority": [
+      "anthares_browser_persistent_runtime",
+      "github_actions_public_chromium",
+      "anthares_browser_private_auxiliary"
+    ],
+    "selection_rule": "choose the first backend with a current practical readiness proof; DEGRADED, BLOCKED_QUOTA and auth-blocked backends are skipped without changing the Anthares Browser surface",
+    "current_selected_backend": "github_actions_public_chromium",
     "allow_direct_external_browser_fallbacks": false,
     "superseded": ["browserless", "tinyfish"],
-    "note": "Cloudflare Browser Rendering and Northflank are infrastructure behind Anthares components, never alternate browser products exposed as fallbacks."
+    "canonical_session_authority": "https://anthares-x-vault.anthares1.workers.dev/browser-state/runtime",
+    "notes": {
+      "anthares_browser_persistent_runtime": "DEGRADED on Northflank: service/build/deployment/Postgres healthy, Chromium readiness unresolved after browser_start_failed/chromium_closed_during_startup; repair remains open but backend is removed from selection until a fresh persistence-status proof passes",
+      "github_actions_public_chromium": "READY: run 38677301579 launched hosted Chromium, loaded the canonical runtime vault state, authenticated TikTok with 6 auth cookies and proved @universo.anthares with /profile matched",
+      "anthares_browser_private_auxiliary": "AUTH_BLOCKED until Codespaces personal authorization is installed and current wake/identity proof passes",
+      "cloudflare_browser_rendering": "BLOCKED_QUOTA and therefore not selectable",
+      "browserless": "retired and superseded by Anthares Browser"
+    }
   },
   "ci_execution": {
     "priority": [
@@ -30,7 +44,7 @@
     "selection_rule": "a provider is selectable only when provider-status.json marks it eligible and its evidence is fresh enough for the intended operation",
     "quota_policy": "BLOCKED_QUOTA providers are ineligible until fresh successful proof",
     "notes": {
-      "github_actions_public": "verified runner allocation 2026-10-15; independent of private-repository Actions quota",
+      "github_actions_public": "verified runner allocation and browser execution 2026-10-15; independent of private-repository Actions quota",
       "github_actions_private": "BLOCKED_QUOTA owner-reported; require fresh successful private-repository run or billing renewal proof",
       "gitlab_ci": "BLOCKED_QUOTA verified by failure_reason=ci_quota_exceeded",
       "cloudflare_workers_builds": "PENDING fresh quota verification; separate from Browser Rendering, Durable Objects and Workers runtime",
@@ -57,18 +71,36 @@
     "anthares_remote": {
       "active": true,
       "remote_control_eligible": true,
-      "status": "READY_verified_2026-10-15_0306Z",
-      "exclusive_for_remote_control": true
+      "status": "READY_verified_2026-10-15_0355Z",
+      "exclusive_for_remote_control": true,
+      "regression_note": "one read-only long probe was quarantined as uncertain after control timeout; reconcile before claiming queue-clean"
     },
     "anthares_browser": {
       "active": true,
       "browser_eligible": true,
       "exclusive_browser_surface": true,
-      "status": "REQUIRED_runtime_endpoint_needs_fresh_ready_proof_before_browser_task"
+      "status": "READY_via_github_actions_public_chromium_backend_2026-10-15_0338Z"
+    },
+    "anthares_browser_persistent_runtime": {
+      "active": false,
+      "browser_backend_eligible": false,
+      "status": "DEGRADED_NORTHFLANK_CHROMIUM_STARTUP",
+      "reopen_condition": "fresh persistence-status proves healthy=True vault_enabled=True restore_status=restored last_persist_ok=True host_desktop_fallback=False"
+    },
+    "github_actions_public_chromium": {
+      "active": true,
+      "browser_backend_eligible": true,
+      "status": "READY_run_38677301579_runtime_vault_identity_proven"
+    },
+    "anthares_browser_private_auxiliary": {
+      "active": false,
+      "browser_backend_eligible": false,
+      "status": "AUTH_BLOCKED_codespaces_token_missing",
+      "reopen_condition": "authorized Codespaces token plus successful wake and identity guard"
     },
     "github_actions_public": {
       "active": true,
-      "status": "READY_runner_allocated_2026-10-15_0308Z",
+      "status": "READY_runner_allocated_2026-10-15_0338Z",
       "ci_eligible": true
     },
     "github_actions_private": {
@@ -108,8 +140,9 @@
     },
     "northflank": {
       "active": true,
-      "status": "READY_services_deployed_quota_balance_unknown_2026-10-15_0309Z",
+      "status": "READY_service_build_deployment_postgres_2026-10-15_0357Z_browser_backend_degraded",
       "container_eligible": true,
+      "browser_backend_eligible": false,
       "recheck_before_capacity_increase": true
     },
     "harness": {"active": true, "ci_eligible": false, "status": "PENDING_FRESH_VERIFICATION"},
