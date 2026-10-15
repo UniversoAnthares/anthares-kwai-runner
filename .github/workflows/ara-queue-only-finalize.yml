@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - 'tools/finalize_ara_queue_only.py'
+      - 'anthares-remote-agent/cmd/agent/main.go'
+      - 'anthares-remote-agent/cmd/agent/issue_queue.go'
       - 'anthares-remote-agent/windows/run-agent-system-supervisor.ps1'
       - 'anthares-remote-agent/windows/run-agent-user-fallback.ps1'
       - '.github/workflows/ara-queue-only-finalize.yml'
