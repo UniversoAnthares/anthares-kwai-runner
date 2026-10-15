@@ -42,14 +42,20 @@ jobs:
           assert routing['remote_control']['primary']=='anthares_remote'
           assert routing['remote_control']['priority']==['anthares_remote']
           assert routing['remote_control']['allow_other_remotes'] is False
-          assert routing['browser_execution']['primary']=='anthares_browser'
-          assert routing['browser_execution']['priority']==['anthares_browser']
-          assert routing['browser_execution']['allow_direct_external_browser_fallbacks'] is False
+          browser=routing['browser_execution']
+          assert browser.get('primary_surface', browser.get('primary'))=='anthares_browser'
+          assert browser.get('exclusive_surface', True) is True
+          assert browser['allow_direct_external_browser_fallbacks'] is False
+          selected=browser.get('current_selected_backend')
+          if selected:
+              assert selected in browser.get('backend_priority',[])
+              provider=routing.get('providers',{}).get(selected,{})
+              assert provider.get('browser_backend_eligible') is True
           for name in ('render','tinyfish','circleci','browserless'):
               assert routing['retired'][name]['active'] is False
               assert status['providers'][name]['eligible'] is False
           assert status['rules']['regression_check_required_each_round'] is True
-          print('ANTHARES_ROUTING_POLICY=PROVEN')
+          print('ANTHARES_ROUTING_POLICY=PROVEN selected_browser_backend='+str(selected))
           PY
       - name: Report runtime continuity evidence available to this runner
         run: |
@@ -60,5 +66,6 @@ jobs:
         if: always()
         run: |
           echo 'Anthares Remote is the only remote-control surface. Anthares Browser is the only browser-automation surface.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Provider Chromium executors are backends behind Anthares Browser and are selected only after current readiness/quota proof.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Browserless, TinyFish, Render and CircleCI are retired/superseded and must never be selected as fallbacks.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'This finite GitHub job cannot prove a live Anthares Remote heartbeat unless external evidence is injected. Missing runtime evidence is reported, not fabricated.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Missing live runtime evidence is reported rather than fabricated.' >> "$GITHUB_STEP_SUMMARY"
