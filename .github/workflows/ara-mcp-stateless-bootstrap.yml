@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'cloudflare-ara-mcp/patch_stateless_gateway.py'
+      - 'cloudflare-ara-mcp/patch_stateless_wrangler.py'
       - '.github/workflows/ara-mcp-stateless-bootstrap.yml'
 permissions:
   contents: read
@@ -23,9 +24,12 @@ jobs:
           set -euo pipefail
           python3 cloudflare-ara-mcp/patch_vercel_primary.py
           python3 cloudflare-ara-mcp/patch_stateless_gateway.py
+          python3 cloudflare-ara-mcp/patch_stateless_wrangler.py
           node --check cloudflare-ara-mcp/src/index.js
           grep -q 'class StatelessGatewayState' cloudflare-ara-mcp/src/index.js
           grep -q "const CONTROL='https://anthares-ara-vercel-reserve.vercel.app'" cloudflare-ara-mcp/src/index.js
+          ! grep -q 'durable_objects' cloudflare-ara-mcp/wrangler.toml
+          ! grep -q 'GATEWAY_STATE' cloudflare-ara-mcp/wrangler.toml
           echo 'STATELESS_PATCH_VALID=1'
       - name: Generate one-time stateless key material locally
         shell: bash
