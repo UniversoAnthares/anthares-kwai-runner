@@ -1,0 +1,97 @@
+name: TikTok Android boot lab 20
+on:
+  push:
+    paths:
+      - '.github/workflows/tiktok-android-boot-lab-20.yml'
+  workflow_dispatch:
+jobs:
+  lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare Android image
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$SDK" ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          sudo chmod 666 /dev/kvm
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          if [ ! -d "$SDK/system-images/android-35/google_apis_playstore/x86_64" ]; then
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-35;google_apis_playstore;x86_64'
+          fi
+      - name: Run 20 controlled boot attempts
+        shell: bash
+        run: |
+          set -u
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ADB="$SDK/platform-tools/adb"
+          EMU="$SDK/emulator/emulator"
+          AVDMANAGER="$SDK/cmdline-tools/latest/bin/avdmanager"
+          export ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p /tmp/tiktok-lab
+          : >/tmp/tiktok-lab/results.tsv
+          variants=(
+            '-gpu swiftshader_indirect -memory 3072 -cores 2'
+            '-gpu swiftshader_indirect -memory 2048 -cores 2'
+            '-gpu swiftshader_indirect -memory 4096 -cores 2'
+            '-gpu swiftshader_indirect -memory 3072 -cores 1'
+            '-gpu swiftshader_indirect -memory 3072 -cores 4'
+            '-gpu swiftshader -memory 3072 -cores 2'
+            '-gpu auto -memory 3072 -cores 2'
+            '-gpu host -memory 3072 -cores 2'
+            '-gpu swiftshader_indirect -memory 3072 -cores 2 -no-snapshot-load'
+            '-gpu swiftshader_indirect -memory 3072 -cores 2 -no-snapshot-save'
+            '-gpu swiftshader_indirect -memory 3072 -cores 2 -no-snapshot'
+            '-gpu swiftshader_indirect -memory 2048 -cores 1 -no-snapshot-load'
+            '-gpu swiftshader -memory 2048 -cores 2 -no-snapshot-load'
+            '-gpu auto -memory 2048 -cores 2 -no-snapshot-load'
+            '-gpu swiftshader_indirect -memory 4096 -cores 4 -no-snapshot-load'
+            '-gpu swiftshader_indirect -memory 3072 -cores 2 -camera-back none -camera-front none'
+            '-gpu swiftshader -memory 3072 -cores 1 -camera-back none -camera-front none'
+            '-gpu swiftshader_indirect -memory 2048 -cores 2 -no-snapshot -camera-back none -camera-front none'
+            '-gpu swiftshader_indirect -memory 3072 -cores 1 -no-snapshot'
+            '-gpu swiftshader_indirect -memory 4096 -cores 2 -no-snapshot'
+          )
+          success=0
+          for i in $(seq 1 20); do
+            flags="${variants[$((i-1))]}"
+            "$ADB" kill-server >/dev/null 2>&1 || true
+            pkill -f "$EMU" >/dev/null 2>&1 || true
+            rm -rf "$ANDROID_AVD_HOME/tiktok-lab.avd" "$ANDROID_AVD_HOME/tiktok-lab.ini"
+            echo no | "$AVDMANAGER" create avd -f -n tiktok-lab -k 'system-images;android-35;google_apis_playstore;x86_64' -d pixel_6 >/tmp/tiktok-lab/avd-$i.log 2>&1 || { printf '%s\tcreate_failed\t999\t%s\n' "$i" "$flags" >>/tmp/tiktok-lab/results.tsv; continue; }
+            start=$(date +%s)
+            nohup "$EMU" -avd tiktok-lab -no-window -no-audio -no-boot-anim -accel on $flags >"/tmp/tiktok-lab/emulator-$i.log" 2>&1 &
+            ok=0
+            if timeout 35 "$ADB" wait-for-device >/dev/null 2>&1; then
+              if timeout 45 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done' _ "$ADB"; then
+                "$ADB" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+                "$ADB" exec-out screencap -p >"/tmp/tiktok-lab/screen-$i.png" 2>/dev/null || true
+                size=$(stat -c%s "/tmp/tiktok-lab/screen-$i.png" 2>/dev/null || echo 0)
+                [ "$size" -gt 5000 ] && ok=1
+              fi
+            fi
+            secs=$(( $(date +%s) - start ))
+            if [ "$ok" = 1 ]; then
+              printf '%s\tsuccess\t%s\t%s\n' "$i" "$secs" "$flags" >>/tmp/tiktok-lab/results.tsv
+              success=$((success+1))
+            else
+              printf '%s\tfail\t%s\t%s\n' "$i" "$secs" "$flags" >>/tmp/tiktok-lab/results.tsv
+              tail -25 "/tmp/tiktok-lab/emulator-$i.log" || true
+            fi
+            "$ADB" emu kill >/dev/null 2>&1 || true
+            sleep 2
+          done
+          cat /tmp/tiktok-lab/results.tsv
+          echo "SUCCESS_COUNT=$success" >> "$GITHUB_STEP_SUMMARY"
+          test "$success" -gt 0
+      - name: Upload lab evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiktok-android-boot-lab-${{ github.run_id }}
+          path: |
+            /tmp/tiktok-lab/results.tsv
+            /tmp/tiktok-lab/emulator-*.log
+          retention-days: 2
