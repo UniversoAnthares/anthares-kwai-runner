@@ -1,0 +1,47 @@
+name: ARA MCP Email OTP Deploy
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare-ara-mcp/src/index.js'
+      - 'cloudflare-ara-mcp/wrangler.toml'
+      - '.github/workflows/ara-mcp-email-otp-deploy.yml'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-ara-mcp-email-otp
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check cloudflare-ara-mcp/src/index.js
+          grep -q "oauth_owner_code_mode:'email_otp'" cloudflare-ara-mcp/src/index.js
+          ! grep -q 'OWNER_APPROVAL_HASH' cloudflare-ara-mcp/src/index.js
+          grep -q 'AUTH_EMAIL_SEND' cloudflare-ara-mcp/src/index.js
+      - name: Deploy MCP gateway
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          cd cloudflare-ara-mcp
+          npx --yes wrangler@4.43.0 deploy
+      - name: Verify deployed health metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 3
+          curl -fsS --max-time 20 https://anthares-ara-mcp.anthares1.workers.dev/health -o /tmp/health.json
+          cat /tmp/health.json
+          grep -q '"oauth_owner_code_mode":"email_otp"' /tmp/health.json
+          echo 'ARA_MCP_EMAIL_OTP_DEPLOY_OK=1'
