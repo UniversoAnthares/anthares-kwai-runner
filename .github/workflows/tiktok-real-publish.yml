@@ -67,41 +67,7 @@ jobs:
           print('CENTRAL_SESSION=PROVEN cookies='+str(len(cookies)))
           print('CENTRAL_INTERVAL_DEDUPE=PROVEN')
           PY
-          python3 - <<'PY'
-          import json,re,time,os,sys
-          from playwright.sync_api import sync_playwright
-          state=json.load(open(os.environ['TIKTOK_STORAGE_STATE_FILE'])); expected=os.environ['EXPECTED_TIKTOK_USERNAME'].lower()
-          strong=set()
-          def hydration_user(page):
-              try:
-                  raw=page.locator('#__UNIVERSAL_DATA_FOR_REHYDRATION__').text_content(timeout=5000)
-                  d=json.loads(raw or '{}'); u=(d.get('__DEFAULT_SCOPE__',{}).get('webapp.app-context',{}).get('user',{}) or {})
-                  return str(u.get('uniqueId') or '').strip().lower()
-              except Exception: return ''
-          with sync_playwright() as p:
-              for attempt in range(1,4):
-                  b=p.chromium.launch(headless=True,args=['--disable-dev-shm-usage','--no-sandbox','--disable-gpu'])
-                  c=b.new_context(storage_state=state,viewport={'width':1440,'height':1000},locale='pt-BR'); page=c.new_page()
-                  for url in ('https://www.tiktok.com/profile','https://www.tiktok.com/tiktokstudio/upload?from=webapp','https://www.tiktok.com/upload?lang=pt-BR'):
-                      try:
-                          page.goto(url,wait_until='domcontentloaded',timeout=60000); time.sleep(5)
-                          hu=hydration_user(page)
-                          if hu: strong.add(hu)
-                      except Exception:
-                          pass
-                  c.close(); b.close()
-                  print('STRONG_IDENTITY_ATTEMPT='+str(attempt)+' CANDIDATES='+json.dumps(sorted(strong)))
-                  if expected in strong: break
-                  time.sleep(3)
-              if expected not in strong: raise RuntimeError('STRONG_TIKTOK_IDENTITY_NOT_PROVEN:'+json.dumps(sorted(strong)))
-              print('STRONG_TIKTOK_IDENTITY_PROVEN='+expected)
-          sys.path.insert(0,os.path.join(os.getcwd(),'direct-tiktok-publisher'))
-          import tiktok_worker as tw
-          vids=tw.inventory_profile_videos(expected)
-          ids=sorted({str(v.get('id') or '') for v in vids if str(v.get('id') or '')})
-          json.dump(ids,open('/tmp/profile-baseline.json','w'))
-          print('PROFILE_BASELINE_IDS='+json.dumps(ids))
-          PY
+          python3 direct-tiktok-publisher/strong_identity_gate.py
 
       - name: Acquire exact validated real clip from temporary transfer branch
         shell: bash
@@ -163,30 +129,11 @@ jobs:
           open('/tmp/lease-generation','w').write(str(g)); print('CENTRAL_JOB_LEASED generation='+str(g))
           PY
 
-      - name: Final strong identity gate immediately before publication boundary
+      - name: Final identity gate immediately before publication boundary
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json,re,time,os
-          from playwright.sync_api import sync_playwright
-          state=json.load(open(os.environ['TIKTOK_STORAGE_STATE_FILE'])); expected=os.environ['EXPECTED_TIKTOK_USERNAME'].lower(); strong=set()
-          with sync_playwright() as p:
-              for attempt in range(1,4):
-                  b=p.chromium.launch(headless=True,args=['--disable-dev-shm-usage','--no-sandbox','--disable-gpu']); c=b.new_context(storage_state=state,viewport={'width':1440,'height':1000},locale='pt-BR'); page=c.new_page()
-                  try:
-                      page.goto('https://www.tiktok.com/tiktokstudio/upload?from=webapp',wait_until='domcontentloaded',timeout=60000); time.sleep(5)
-                      raw=page.locator('#__UNIVERSAL_DATA_FOR_REHYDRATION__').text_content(timeout=8000); d=json.loads(raw or '{}'); uid=str((d.get('__DEFAULT_SCOPE__',{}).get('webapp.app-context',{}).get('user',{}) or {}).get('uniqueId') or '').strip().lower()
-                      if uid: strong.add(uid)
-                  except Exception:
-                      pass
-                  c.close();b.close()
-                  print('FINAL_IDENTITY_ATTEMPT='+str(attempt)+' CANDIDATES='+json.dumps(sorted(strong)))
-                  if expected in strong: break
-                  time.sleep(3)
-              if expected not in strong: raise RuntimeError('FINAL_STRONG_IDENTITY_GATE_FAILED:'+json.dumps(sorted(strong)))
-              print('FINAL_STRONG_IDENTITY_GATE=PROVEN account='+expected)
-          PY
+          python3 direct-tiktok-publisher/strong_identity_gate.py
 
       - name: Cross publication boundary once and reconcile
         shell: bash
