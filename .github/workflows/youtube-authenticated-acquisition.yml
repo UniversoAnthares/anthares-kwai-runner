@@ -1,0 +1,113 @@
+name: YouTube authenticated acquisition (no Render)
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: YouTube URL to acquire
+        required: false
+        default: https://www.youtube.com/watch?v=9CIk-I_3VhM
+  push:
+    branches: [main]
+    paths:
+      - '.youtube-auth-acquisition-trigger'
+      - '.github/workflows/youtube-authenticated-acquisition.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+      YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require migrated YouTube session
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${YOUTUBE_COOKIES:-}" && -z "${YOUTUBE_COOKIES_B64:-}" ]]; then
+            echo 'YOUTUBE_AUTH_MIGRATION=SECRET_MISSING'
+            exit 20
+          fi
+          echo 'YOUTUBE_AUTH_MIGRATION=SECRET_PRESENT'
+
+      - name: Install acquisition stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          python3 -m pip install --quiet --disable-pip-version-check --break-system-packages 'yt-dlp[default]'
+
+      - name: Materialize cookie file
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, os, pathlib
+          raw=os.environ.get('YOUTUBE_COOKIES','')
+          b64=os.environ.get('YOUTUBE_COOKIES_B64','').strip()
+          if b64:
+              raw=base64.b64decode(b64).decode('utf-8')
+          if not raw.strip():
+              raise SystemExit('empty cookie secret')
+          p=pathlib.Path('/tmp/youtube-cookies.txt')
+          p.write_text(raw,encoding='utf-8')
+          p.chmod(0o600)
+          print('COOKIE_FILE_READY=1')
+          PY
+
+      - name: Verify authenticated metadata
+        shell: bash
+        env:
+          INPUT_VIDEO_URL: ${{ github.event.inputs.video_url }}
+        run: |
+          set -euo pipefail
+          URL="${INPUT_VIDEO_URL:-https://www.youtube.com/watch?v=9CIk-I_3VhM}"
+          yt-dlp --cookies /tmp/youtube-cookies.txt --no-playlist --skip-download --dump-single-json --no-warnings "$URL" >/tmp/source.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/source.json'))
+          assert isinstance(d,dict) and d.get('id') and d.get('formats')
+          print('AUTH_METADATA_PROVEN=1')
+          print('VIDEO_ID='+str(d.get('id')))
+          print('DURATION='+str(d.get('duration')))
+          PY
+
+      - name: Acquire source MP4
+        shell: bash
+        env:
+          INPUT_VIDEO_URL: ${{ github.event.inputs.video_url }}
+        run: |
+          set -euo pipefail
+          URL="${INPUT_VIDEO_URL:-https://www.youtube.com/watch?v=9CIk-I_3VhM}"
+          mkdir -p /tmp/anthares-source
+          yt-dlp \
+            --cookies /tmp/youtube-cookies.txt \
+            --no-playlist \
+            -f 'bv*[height<=720]+ba/b[height<=720]' \
+            --merge-output-format mp4 \
+            -o '/tmp/anthares-source/source.%(ext)s' \
+            "$URL"
+          FILE="$(find /tmp/anthares-source -maxdepth 1 -type f -name 'source.*' | head -n1)"
+          test -n "$FILE" -a -s "$FILE"
+          ffprobe -v error -show_entries format=duration,size -of json "$FILE"
+          echo 'FULL_ACQUISITION_PROVEN=1'
+
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: youtube-source-${{ github.run_id }}
+          path: /tmp/anthares-source/source.*
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Remove local auth material
+        if: always()
+        shell: bash
+        run: rm -f /tmp/youtube-cookies.txt
