@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install read-only browser verifier
         run: |
-          python3 -m pip install --disable-pip-version-check -q playwright cryptography
+          python3 -m pip install --disable-pip-version-check -q playwright cryptography requests
           python3 -m playwright install chromium
       - name: Resolve durable authority
         run: |
