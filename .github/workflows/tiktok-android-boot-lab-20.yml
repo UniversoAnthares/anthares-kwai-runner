@@ -56,13 +56,14 @@ jobs:
           )
           success=0
           for i in $(seq 1 20); do
+            avd="tiktok-lab-$i"
             flags="${variants[$((i-1))]}"
             "$ADB" kill-server >/dev/null 2>&1 || true
-            pkill -f "$EMU" >/dev/null 2>&1 || true
-            rm -rf "$ANDROID_AVD_HOME/tiktok-lab.avd" "$ANDROID_AVD_HOME/tiktok-lab.ini"
-            echo no | "$AVDMANAGER" create avd -f -n tiktok-lab -k 'system-images;android-35;google_apis_playstore;x86_64' -d pixel_6 >/tmp/tiktok-lab/avd-$i.log 2>&1 || { printf '%s\tcreate_failed\t999\t%s\n' "$i" "$flags" >>/tmp/tiktok-lab/results.tsv; continue; }
+            pkill -9 -f 'qemu-system.*headless|emulator.*-avd tiktok-lab-' >/dev/null 2>&1 || true
+            sleep 1
+            echo no | "$AVDMANAGER" create avd -f -n "$avd" -k 'system-images;android-35;google_apis_playstore;x86_64' -d pixel_6 >/tmp/tiktok-lab/avd-$i.log 2>&1 || { printf '%s\tcreate_failed\t999\t%s\n' "$i" "$flags" >>/tmp/tiktok-lab/results.tsv; continue; }
             start=$(date +%s)
-            nohup "$EMU" -avd tiktok-lab -no-window -no-audio -no-boot-anim -accel on $flags >"/tmp/tiktok-lab/emulator-$i.log" 2>&1 &
+            nohup "$EMU" -avd "$avd" -no-window -no-audio -no-boot-anim -accel on $flags >"/tmp/tiktok-lab/emulator-$i.log" 2>&1 &
             ok=0
             if timeout 35 "$ADB" wait-for-device >/dev/null 2>&1; then
               if timeout 45 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done' _ "$ADB"; then
@@ -78,10 +79,11 @@ jobs:
               success=$((success+1))
             else
               printf '%s\tfail\t%s\t%s\n' "$i" "$secs" "$flags" >>/tmp/tiktok-lab/results.tsv
-              tail -25 "/tmp/tiktok-lab/emulator-$i.log" || true
+              tail -20 "/tmp/tiktok-lab/emulator-$i.log" || true
             fi
             "$ADB" emu kill >/dev/null 2>&1 || true
-            sleep 2
+            pkill -9 -f 'qemu-system.*headless|emulator.*-avd tiktok-lab-' >/dev/null 2>&1 || true
+            sleep 1
           done
           cat /tmp/tiktok-lab/results.tsv
           echo "SUCCESS_COUNT=$success" >> "$GITHUB_STEP_SUMMARY"
