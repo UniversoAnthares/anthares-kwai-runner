@@ -1,0 +1,33 @@
+name: Admin MEmu4 ADB repair once
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/admin-memu4-adb-repair-once.yml
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 3
+    steps:
+      - name: Diagnose MEmu4 boot and ADB
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Continue'
+          $env:VBOX_USER_HOME='C:\Users\Lucas\.MEmuHyperv'
+          $env:USERPROFILE='C:\Users\Lucas'
+          $env:HOMEDRIVE='C:'
+          $env:HOMEPATH='\Users\Lucas'
+          $m='D:\Program Files\Microvirt\MEmuHyperv\MEmuManage.exe'
+          $adb='D:\Program Files\Microvirt\MEmu\adb.exe'
+          $s='127.0.0.1:21543'
+          Write-Output '=== VM ==='
+          & $m showvminfo MEmu_4 --machinereadable 2>&1 | Select-String 'VMState=|IDE-|Forwarding'
+          Write-Output '=== BIOS ==='
+          $txt=(& $m showvminfo MEmu_4 --log 0 2>&1 | Out-String)
+          ($txt -split "`r?`n") | Where-Object {$_ -match 'No PCI IDE|ELDL|Booting from|Boot failed|int13|Linux version|androidboot|Kernel panic|VFS:|adbd|BootFile|Bootable|boot.vhd'} | Select-Object -Last 100
+          Write-Output '=== ADB5038 ==='
+          & $adb -P 5038 devices -l 2>&1
+          Write-Output '=== PORTS ==='
+          Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object {$_.LocalPort -in 5038,21543} | Select-Object LocalAddress,LocalPort,OwningProcess
