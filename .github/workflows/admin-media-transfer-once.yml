@@ -34,3 +34,4 @@ jobs:
           path: ${{ runner.temp }}\anthares-media\tiktok_9CIk-I_3VhM_8_98.mp4
           if-no-files-found: error
           retention-days: 7
+# triggered 2026-10-15 to migrate the already-verified local clip into a short-lived cloud artifact
