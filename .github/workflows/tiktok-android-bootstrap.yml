@@ -11,7 +11,7 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch TikTok Android interactive login
+      - name: Dispatch TikTok Android interactive login v2
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -20,6 +20,6 @@ jobs:
             -H "Authorization: Bearer $GH_TOKEN" \
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
-            https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/tiktok-android-interactive-login.yml/dispatches \
+            https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/tiktok-android-interactive-login-v2.yml/dispatches \
             -d '{"ref":"main"}'
-          echo 'TIKTOK_ANDROID_DISPATCH=REQUESTED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'TIKTOK_ANDROID_V2_DISPATCH=REQUESTED' >> "$GITHUB_STEP_SUMMARY"
