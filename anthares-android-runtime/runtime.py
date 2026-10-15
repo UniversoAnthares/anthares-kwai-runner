@@ -4,11 +4,15 @@ import argparse, json, os, pathlib, re, subprocess, time, datetime
 ROOT = pathlib.Path(os.environ.get("ANTHARES_ANDROID_HOME", r"C:\ProgramData\AntharesAndroidRuntime"))
 MEMU = pathlib.Path(os.environ.get("MEMU_HOME", r"D:\Program Files\Microvirt\MEmu"))
 MANAGER = pathlib.Path(os.environ.get("MEMU_MANAGER", r"D:\Program Files\Microvirt\MEmuHyperv\MEmuManage.exe"))
+MEMUC = MEMU / "memuc.exe"
 VM = "MEmu_4"
+VM_INDEX = "4"
 
-def run(argv, timeout=12):
+def run(argv, timeout=12, env=None):
     try:
-        p=subprocess.run([str(a) for a in argv],capture_output=True,text=True,timeout=timeout,errors="replace")
+        proc_env=os.environ.copy()
+        if env: proc_env.update(env)
+        p=subprocess.run([str(a) for a in argv],capture_output=True,text=True,timeout=timeout,errors="replace",env=proc_env)
         return {"ok":p.returncode==0,"code":p.returncode,"stdout":p.stdout[-5000:],"stderr":p.stderr[-2000:]}
     except (OSError,subprocess.TimeoutExpired) as e:
         return {"ok":False,"code":None,"stdout":"","stderr":type(e).__name__}
@@ -52,12 +56,15 @@ def record(operation,result):
     (ROOT/"state.json").write_text(json.dumps(event,indent=2),encoding="utf-8")
     return result
 
+def start_memu_official():
+    return run([MEMUC,"start","-i",VM_INDEX],timeout=35,env={"__COMPAT_LAYER":"RunAsInvoker"})
+
 def recover(allow_vm_restart=False):
     h=health(); serial=h["serial"]
     if h["android_ready"]: return record("recover",{"ok":True,"action":"already_ready","health":h})
     if h["vm_state"]!="running":
         if h["vm_state"] not in ("poweroff","aborted","saved"): return record("recover",{"ok":False,"reason":"unexpected_vm_state","health":h})
-        start=run([MANAGER,"startvm",VM,"--type","headless"],timeout=25)
+        start=start_memu_official()
         if not start["ok"]: return record("recover",{"ok":False,"reason":"start_failed","detail":start})
     if not serial: return record("recover",{"ok":False,"reason":"serial_missing"})
     steps=[["disconnect",serial],["connect",serial],["kill-server"],["start-server"],["connect",serial]]
