@@ -33,6 +33,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
           python3 -m pip install --disable-pip-version-check -q playwright requests yt-dlp bgutil-ytdlp-pot-provider faster-whisper
           python3 -m playwright install chromium
           ffmpeg -version | head -n 1
@@ -159,7 +161,6 @@ jobs:
               if str(j.get('source_id') or '')==os.environ['SOURCE_ID'] and max(float(os.environ['SOURCE_START']),a)<min(float(os.environ['SOURCE_END']),b): raise RuntimeError('RACE_DEDUPE_BLOCK:'+str(j.get('id')))
           print('SECOND_DEDUPE_GATE=PROVEN')
           PY
-          SHA="$(python3 -c 'import json,os;print(json.load(open(os.environ["TIKTOK_YOUTUBE_PLAN"]))["media_sha256"])')"
           python3 - <<'PY' >/tmp/enqueue.json
           import json,os
           print(json.dumps({'id':os.environ['JOB_ID'],'platform':'tiktok','executor':'github','dedupe_key':os.environ['EXPECTED_TIKTOK_USERNAME']+'::'+os.environ['SOURCE_ID']+':'+os.environ['SOURCE_START']+':'+os.environ['SOURCE_END'],'source_id':os.environ['SOURCE_ID'],'source_start':float(os.environ['SOURCE_START']),'source_end':float(os.environ['SOURCE_END']),'media_sha256':json.load(open(os.environ['TIKTOK_YOUTUBE_PLAN']))['media_sha256']}))
