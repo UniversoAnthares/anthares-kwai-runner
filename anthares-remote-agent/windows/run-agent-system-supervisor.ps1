@@ -8,9 +8,9 @@ $env:ANTHARES_MAX_CONCURRENT='8'
 $env:ANTHARES_WORK_ROOT='D:\AntharsWork'
 $env:TEMP='D:\AntharsWork\temp'
 $env:TMP=$env:TEMP
-# One SYSTEM process with low-latency HTTP plus two private recovery queues.
-# Private issue queues remain the recovery authority when HTTP is unavailable.
-$httpControl='https://anthares-ara-backup.anthares1.workers.dev'
+# Vercel + Neon is the normal low-latency control plane.
+# GitLab and GitHub private issue queues remain independent recovery transports.
+$httpControl='https://anthares-ara-vercel-reserve.vercel.app'
 Remove-Item Env:ANTHARES_CONTROL_PRIMARY_URL -ErrorAction SilentlyContinue
 Remove-Item Env:ANTHARES_CONTROL_SECONDARY_URL -ErrorAction SilentlyContinue
 Remove-Item Env:ANTHARES_CONTROL_TERTIARY_URL -ErrorAction SilentlyContinue
@@ -41,7 +41,7 @@ function Save-State([string]$reason,[int]$agentPid=0){
   try{[pscustomobject]@{
     active_control=if($httpEnabled){$env:ANTHARES_CONTROL_URL}else{'private-issue-queues'}
     mode=if($httpEnabled){'single-process-dual-transport'}else{'issue-queues-only'}
-    recovery_transport='private-issue-queues';reason=$reason
+    recovery_transport='gitlab+github-private-issue-queues';reason=$reason
     updated_at=(Get-Date).ToUniversalTime().ToString('o');supervisor_pid=$PID;agent_pid=$agentPid
     device_id=$env:ANTHARES_DEVICE_ID;identity=[Security.Principal.WindowsIdentity]::GetCurrent().Name
     session=(Get-Process -Id $PID -ErrorAction SilentlyContinue).SessionId;binary=(Split-Path $exe -Leaf)
@@ -62,7 +62,7 @@ try{
     if(-not (Test-Path $exe)){Save-State 'binary-missing';Start-Sleep 10;continue}
     try{
       $p=Start-Process -FilePath $exe -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
-      $mode=if($env:ANTHARES_CONTROL_URL){'running-dual-transport'}else{'running-private-queue'}
+      $mode=if($env:ANTHARES_CONTROL_URL){'running-vercel-primary-with-private-queue-recovery'}else{'running-private-queue'}
       Save-State $mode $p.Id
       while(-not $p.HasExited){Start-Sleep 10;Load-QueueAuth;[void](Configure-HttpTransport);Save-State $mode $p.Id}
       Save-State ('agent-exited:'+ $p.ExitCode)
