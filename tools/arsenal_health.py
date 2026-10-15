@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-"""Anthares global health check. No secrets are printed or persisted."""
-import json, os, shutil, subprocess, sys, urllib.request, urllib.error
+"""Anthares global health check. No secrets are printed or persisted.
+
+Retired providers are intentionally absent from active probes. Their former
+functions must be served by Anthares-owned surfaces or another currently
+eligible provider before use.
+"""
+import json, os, urllib.request, urllib.error
 from datetime import datetime, timezone
 
 SERVICES = {
@@ -9,7 +14,6 @@ SERVICES = {
  "appveyor": {"kind":"env_http","env":"ANTHARES_APPVEYOR_HEALTH_URL"},
  "floot": {"kind":"env_http","env":"ANTHARES_FLOOT_HEALTH_URL"},
  "cloudflare": {"kind":"env_http","env":"ANTHARES_CLOUDFLARE_HEALTH_URL"},
- "render": {"kind":"env_http","env":"ANTHARES_RENDER_HEALTH_URL"},
  "wordpress": {"kind":"env_http","env":"ANTHARES_WORDPRESS_HEALTH_URL"},
  "telegram": {"kind":"env_http","env":"ANTHARES_TELEGRAM_HEALTH_URL"},
  "kwai": {"kind":"env_http","env":"ANTHARES_KWAI_HEALTH_URL"},
@@ -19,10 +23,10 @@ SERVICES = {
  "x": {"kind":"env_http","env":"ANTHARES_X_HEALTH_URL"},
  "gitlab": {"kind":"env_http","env":"ANTHARES_GITLAB_HEALTH_URL"},
  "codeberg": {"kind":"env_http","env":"ANTHARES_CODEBERG_HEALTH_URL"},
+ "anthares_remote": {"kind":"external","state":"UNKNOWN"},
+ "anthares_browser": {"kind":"external","state":"UNKNOWN"},
  "ai_commander": {"kind":"external","state":"UNKNOWN"},
  "remote_desktop_commander": {"kind":"external","state":"UNKNOWN"},
- "meshcentral": {"kind":"env_http","env":"ANTHARES_MESHCENTRAL_HEALTH_URL"},
- "winremote": {"kind":"env_http","env":"ANTHARES_WINREMOTE_HEALTH_URL"},
  "claude": {"kind":"env_http","env":"ANTHARES_CLAUDE_HEALTH_URL"},
  "grok": {"kind":"env_http","env":"ANTHARES_GROK_HEALTH_URL"},
  "perplexity": {"kind":"env_http","env":"ANTHARES_PERPLEXITY_HEALTH_URL"},
@@ -30,10 +34,14 @@ SERVICES = {
  "manus": {"kind":"env_http","env":"ANTHARES_MANUS_HEALTH_URL"},
 }
 
+RETIRED = {
+ "render", "tinyfish", "browserless", "winremote", "meshcentral", "circleci", "codespaces"
+}
+
 def probe_http(url, auth_env=None):
     if not url:
         return "AUTH_REQUIRED" if auth_env and not os.getenv(auth_env) else "UNKNOWN", "probe_not_configured"
-    headers={"User-Agent":"anthares-health/1"}
+    headers={"User-Agent":"anthares-health/2"}
     token=os.getenv(auth_env) if auth_env else None
     if auth_env and not token:
         return "AUTH_REQUIRED", "credential_not_configured"
@@ -52,7 +60,11 @@ def probe_http(url, auth_env=None):
         return "DOWN", type(e).__name__
 
 def main():
-    out={"checked_at":datetime.now(timezone.utc).isoformat(),"services":{}}
+    out={
+        "checked_at":datetime.now(timezone.utc).isoformat(),
+        "services":{},
+        "retired":sorted(RETIRED),
+    }
     for name,cfg in SERVICES.items():
         if cfg["kind"]=="http":
             state,evidence=probe_http(cfg["target"])
