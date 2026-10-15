@@ -28,10 +28,10 @@ async function writePlainState(env,state){const ciphertext=await encryptState(en
 
 async function nf(env,path,{method="GET",body}={}){
   if(!env.NORTHFLANK_BROWSER_TOKEN) return {ok:false,error:"northflank_browser_token_missing",_status:503};
-  const init={method,headers:{"authorization":"Bearer "+env.NORTHFLANK_BROWSER_TOKEN,"accept":"application/json"}};
+  const init={method,headers:{"authorization":"Bearer "+env.NORTHFLANK_BROWSER_TOKEN,"accept":"application/json","user-agent":"AntharesBrowserBridge/1.0"}};
   if(body!==undefined){init.headers["content-type"]="application/json";init.body=JSON.stringify(body);}
   try{
-    const r=await fetch(NF_BASE+path,init);let d={};try{d=await r.json();}catch{d={ok:false,error:"invalid_upstream_json"};}d._status=r.status;return d;
+    const r=await (env.TIKTOK_WORKER ? env.TIKTOK_WORKER.fetch(NF_BASE+path,init) : fetch(NF_BASE+path,init));let d={};try{d=await r.json();}catch{d={ok:false,error:"invalid_upstream_json"};}d._status=r.status;return d;
   }catch(err){return {ok:false,error:"northflank_browser_unavailable",detail:String(err?.message||err).slice(0,160),_status:503};}
 }
 async function ensureStarted(env){const state=await readPlainState(env);return nf(env,"/interactive-browser/start",{method:"POST",body:state?{state}:{}});}
