@@ -1,0 +1,38 @@
+name: MEmu4 virtualization probe
+on:
+  push:
+    branches:
+      - lab/memu4-virtualization-probe-20261015
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - name: Probe host and virtualization
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $os = Get-CimInstance Win32_OperatingSystem
+          $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+          $cs = Get-CimInstance Win32_ComputerSystem
+          $disk = Get-PSDrive C
+          Write-Host "OS=$($os.Caption) $($os.Version)"
+          Write-Host "CPU=$($cpu.Name)"
+          Write-Host "LogicalProcessors=$($cpu.NumberOfLogicalProcessors)"
+          Write-Host "VMMonitorModeExtensions=$($cpu.VMMonitorModeExtensions)"
+          Write-Host "VirtualizationFirmwareEnabled=$($cpu.VirtualizationFirmwareEnabled)"
+          Write-Host "SecondLevelAddressTranslationExtensions=$($cpu.SecondLevelAddressTranslationExtensions)"
+          Write-Host "HypervisorPresent=$($cs.HypervisorPresent)"
+          Write-Host "FreeC_GiB=$([math]::Round($disk.Free/1GB,2))"
+          Write-Host "UsedC_GiB=$([math]::Round($disk.Used/1GB,2))"
+          Write-Host '--- systeminfo virtualization lines ---'
+          systeminfo | Select-String -Pattern 'Hyper-V Requirements|Virtualization|Second Level|VM Monitor|Data Execution' | ForEach-Object { $_.Line }
+          Write-Host '--- optional features ---'
+          Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All,VirtualMachinePlatform,HypervisorPlatform -ErrorAction SilentlyContinue | Select-Object FeatureName,State | Format-Table -AutoSize
+          if (-not $cpu.VMMonitorModeExtensions -and -not $cpu.VirtualizationFirmwareEnabled) {
+            Write-Host 'MEMU_NESTED_VIRTUALIZATION=UNAVAILABLE'
+          } else {
+            Write-Host 'MEMU_NESTED_VIRTUALIZATION=POTENTIALLY_AVAILABLE'
+          }
