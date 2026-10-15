@@ -1,0 +1,33 @@
+name: ARA MCP Email OTP Diagnose
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ara-mcp-email-otp-diagnose.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture worker tail around health request
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+        run: |
+          set -u
+          cd cloudflare-ara-mcp
+          (timeout 20s npx --yes wrangler@4.43.0 tail anthares-ara-mcp --format=json > /tmp/tail.log 2>&1 || true) &
+          TPID=$!
+          sleep 7
+          code="$(curl -sS -o /tmp/health.body -w '%{http_code}' --max-time 20 https://anthares-ara-mcp.anthares1.workers.dev/health || true)"
+          echo "HTTP=$code"
+          cat /tmp/health.body || true
+          sleep 4
+          wait "$TPID" || true
+          echo '---TAIL---'
+          cat /tmp/tail.log || true
