@@ -1,4 +1,4 @@
-name: YouTube acquisition 20 safe diagnostics
+name: YouTube acquisition 5x20 safe diagnostics
 on:
   workflow_dispatch:
   push:
@@ -12,55 +12,112 @@ concurrency:
 jobs:
   diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 6
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    timeout-minutes: 35
     steps:
       - name: Install extractor
         run: python3 -m pip install --quiet --disable-pip-version-check --break-system-packages 'yt-dlp[default]'
-      - name: Probe metadata only, no download and no publication
-        env:
-          CASE: ${{ matrix.case }}
+
+      - name: Run up to five rounds of twenty probes
         shell: bash
         run: |
           set -uo pipefail
+          URL='https://www.youtube.com/watch?v=9CIk-I_3VhM'
+          mkdir -p /tmp/ytdiag
+
           clients=(web web_safari web_embedded tv tv_embedded android android_vr ios mweb web_creator web_music web_safari tv android ios mweb web web_embedded android_vr tv_embedded)
-          modes=(default default default default default default default default default default skip skip skip skip skip skip nojs nojs nojs nojs nojs)
-          i=$((CASE-1))
-          client="${clients[$i]}"
-          mode="${modes[$i]}"
-          opts=(--no-playlist --skip-download --dump-single-json --no-warnings --socket-timeout 10 --retries 0 --extractor-retries 0 --no-cache-dir)
-          if [[ "$mode" == "skip" ]]; then
-            opts+=(--extractor-args "youtube:player_client=$client;player_skip=webpage,configs")
-          elif [[ "$mode" == "nojs" ]]; then
-            opts+=(--extractor-args "youtube:player_client=$client" --no-js-runtimes)
-          else
-            opts+=(--extractor-args "youtube:player_client=$client")
-          fi
-          echo "DIAGNOSTIC_CASE=$CASE CLIENT=$client MODE=$mode"
-          set +e
-          timeout 70s yt-dlp "${opts[@]}" 'https://www.youtube.com/watch?v=9CIk-I_3VhM' >/tmp/probe.json 2>/tmp/probe.err
-          rc=$?
-          set -e
-          python3 - "$CASE" "$client" "$mode" "$rc" <<'PY'
-          import json,sys
-          case,client,mode,rc=sys.argv[1:]
+          modes=(default default default default default default default default default default skip skip skip skip skip skip nojs nojs nojs nojs)
+          uas=(
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/155 Safari/537.36'
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/155 Safari/537.36'
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18 Safari/605.1.15'
+            'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/155 Mobile Safari/537.36'
+          )
+
+          probe_case() {
+            local round="$1" case="$2"
+            local i=$((case-1))
+            local client="${clients[$i]}" mode="${modes[$i]}"
+            local ua="${uas[$(((round+case)%${#uas[@]}))]}"
+            local out="/tmp/ytdiag/r${round}-c${case}.json"
+            local err="/tmp/ytdiag/r${round}-c${case}.err"
+            local result="/tmp/ytdiag/r${round}-c${case}.result"
+            local opts=(--no-playlist --skip-download --dump-single-json --no-warnings --socket-timeout 15 --retries 1 --extractor-retries 1 --no-cache-dir --user-agent "$ua")
+            if [[ "$mode" == "skip" ]]; then
+              opts+=(--extractor-args "youtube:player_client=$client;player_skip=webpage,configs")
+            elif [[ "$mode" == "nojs" ]]; then
+              opts+=(--extractor-args "youtube:player_client=$client" --no-js-runtimes)
+            else
+              opts+=(--extractor-args "youtube:player_client=$client")
+            fi
+            set +e
+            timeout 95s yt-dlp "${opts[@]}" "$URL" >"$out" 2>"$err"
+            rc=$?
+            set -e
+            python3 - "$round" "$case" "$client" "$mode" "$rc" "$out" "$err" >"$result" <<'PY'
+          import json,sys,os
+          rnd,case,client,mode,rc,out,err=sys.argv[1:]
           try:
-              d=json.load(open('/tmp/probe.json'))
+              d=json.load(open(out))
               valid=bool(d.get('id')=='9CIk-I_3VhM' and d.get('formats'))
           except (ValueError,OSError):
               valid=False
-          err=open('/tmp/probe.err',errors='replace').read()
-          category=('auth_or_bot' if 'Sign in to confirm' in err or 'not a bot' in err else
-                    'unavailable' if 'unavailable' in err.lower() else
+          try:
+              e=open(err,errors='replace').read()
+          except OSError:
+              e=''
+          category=('auth_or_bot' if 'Sign in to confirm' in e or 'not a bot' in e else
+                    'unavailable' if 'unavailable' in e.lower() else
                     'timeout' if rc=='124' else
                     'other_error' if rc!='0' else 'ok')
-          print('DIAGNOSTIC_RESULT='+json.dumps(dict(case=int(case),client=client,mode=mode,exit=int(rc),valid_formats=valid,category=category)))
-          if not valid:
-              print('DIAGNOSTIC_ERROR_TAIL='+err[-500:].replace('\n',' '))
+          print(json.dumps(dict(round=int(rnd),case=int(case),client=client,mode=mode,exit=int(rc),valid_formats=valid,category=category,error_tail=e[-350:])))
           PY
-          # Expected access restrictions must not make the matrix red.
-          exit 0
+          }
+
+          for round in 1 2 3 4 5; do
+            echo "=== ROUND $round/5: 20 probes ==="
+            # Four at a time: enough variation without hammering the source.
+            for base in 1 5 9 13 17; do
+              pids=()
+              for offset in 0 1 2 3; do
+                case=$((base+offset))
+                probe_case "$round" "$case" &
+                pids+=("$!")
+                sleep $((1 + (case % 3)))
+              done
+              for pid in "${pids[@]}"; do wait "$pid" || true; done
+            done
+
+            python3 - "$round" <<'PY'
+          import glob,json,sys,collections
+          rnd=int(sys.argv[1]); rows=[]
+          for p in sorted(glob.glob(f'/tmp/ytdiag/r{rnd}-c*.result')):
+              try: rows.append(json.load(open(p)))
+              except Exception: pass
+          cats=collections.Counter(r.get('category') for r in rows)
+          good=[r for r in rows if r.get('valid_formats')]
+          print('ROUND_SUMMARY='+json.dumps({'round':rnd,'completed':len(rows),'categories':dict(cats),'successes':good},ensure_ascii=False))
+          open(f'/tmp/ytdiag/round-{rnd}-success','w').write('1' if good else '0')
+          PY
+
+            if [[ "$(cat /tmp/ytdiag/round-${round}-success)" == "1" ]]; then
+              echo "A working acquisition variant was found in round $round; stopping further rounds."
+              exit 0
+            fi
+
+            if [[ "$round" != "5" ]]; then
+              echo "No variant passed. Waiting 75 seconds before the next 20 probes."
+              sleep 75
+            fi
+          done
+
+          echo "All five rounds completed without a working variant."
+          exit 1
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: youtube-5x20-diagnostics-${{ github.run_id }}
+          path: /tmp/ytdiag/
+          if-no-files-found: warn
+          retention-days: 7
