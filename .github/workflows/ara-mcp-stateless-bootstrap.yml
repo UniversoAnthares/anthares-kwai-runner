@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'cloudflare-ara-mcp/src/index.js'
+      - 'cloudflare-ara-mcp/patch_email_service_api.py'
       - 'cloudflare-ara-mcp/patch_vercel_primary.py'
       - 'cloudflare-ara-mcp/patch_stateless_gateway.py'
       - 'cloudflare-ara-mcp/patch_stateless_wrangler.py'
@@ -24,6 +25,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 cloudflare-ara-mcp/patch_email_service_api.py
           python3 cloudflare-ara-mcp/patch_vercel_primary.py
           python3 cloudflare-ara-mcp/patch_stateless_gateway.py
           python3 cloudflare-ara-mcp/patch_stateless_wrangler.py
@@ -32,6 +34,8 @@ jobs:
           grep -q "oauth_owner_code_mode:'email_otp'" cloudflare-ara-mcp/src/index.js
           grep -q 'class StatelessGatewayState' cloudflare-ara-mcp/src/index.js
           grep -q "this.hmac('email-otp:'" cloudflare-ara-mcp/src/index.js
+          grep -q "AUTH_EMAIL_SEND.send({to:AUTH_EMAIL,from" cloudflare-ara-mcp/src/index.js
+          ! grep -q 'EmailMessage' cloudflare-ara-mcp/src/index.js
           grep -q "const CONTROL='https://anthares-ara-vercel-reserve.vercel.app'" cloudflare-ara-mcp/src/index.js
           ! grep -q 'OWNER_APPROVAL_HASH' cloudflare-ara-mcp/src/index.js
           ! grep -q 'durable_objects' cloudflare-ara-mcp/wrangler.toml
