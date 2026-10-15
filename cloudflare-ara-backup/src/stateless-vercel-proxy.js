@@ -1,4 +1,12 @@
+import { DurableObject } from 'cloudflare:workers';
+
 const TARGET='https://anthares-ara-vercel-reserve.vercel.app';
+
+// Kept only because historical Worker versions registered this class.
+// No runtime route or binding uses it after the stateless cutover.
+export class AraState extends DurableObject {
+  async fetch(){return new Response('retired',{status:410});}
+}
 
 export default {
   async fetch(request) {
