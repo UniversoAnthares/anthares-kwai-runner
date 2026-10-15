@@ -23,4 +23,7 @@ RUN chown -R ara:ara /app
 USER ara
 EXPOSE 10000
 
-CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 4 --timeout 240 northflank_combined_app:app"]
+# The vault-backed Anthares Browser uses Playwright's synchronous API and keeps
+# one browser/context alive across requests. Keep all accesses on one Gunicorn
+# thread; the runtime mesh already serializes browser mutations with its lease.
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 1 --timeout 240 northflank_combined_app:app"]
