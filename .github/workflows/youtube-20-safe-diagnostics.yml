@@ -1,0 +1,66 @@
+name: YouTube acquisition 20 safe diagnostics
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/youtube-20-safe-diagnostics.yml']
+permissions:
+  contents: read
+concurrency:
+  group: youtube-acquisition-diagnostics
+  cancel-in-progress: true
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        case: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+    steps:
+      - name: Install extractor
+        run: python3 -m pip install --quiet --disable-pip-version-check --break-system-packages 'yt-dlp[default]'
+      - name: Probe metadata only, no download and no publication
+        env:
+          CASE: ${{ matrix.case }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          clients=(web web_safari web_embedded tv tv_embedded android android_vr ios mweb web_creator web_music web_safari tv android ios mweb web web_embedded android_vr tv_embedded)
+          modes=(default default default default default default default default default default skip skip skip skip skip skip nojs nojs nojs nojs nojs)
+          i=$((CASE-1))
+          client="${clients[$i]}"
+          mode="${modes[$i]}"
+          opts=(--no-playlist --skip-download --dump-single-json --no-warnings --socket-timeout 10 --retries 0 --extractor-retries 0 --no-cache-dir)
+          if [[ "$mode" == "skip" ]]; then
+            opts+=(--extractor-args "youtube:player_client=$client;player_skip=webpage,configs")
+          elif [[ "$mode" == "nojs" ]]; then
+            opts+=(--extractor-args "youtube:player_client=$client" --no-js-runtimes)
+          else
+            opts+=(--extractor-args "youtube:player_client=$client")
+          fi
+          echo "DIAGNOSTIC_CASE=$CASE CLIENT=$client MODE=$mode"
+          set +e
+          timeout 70s yt-dlp "${opts[@]}" 'https://www.youtube.com/watch?v=9CIk-I_3VhM' >/tmp/probe.json 2>/tmp/probe.err
+          rc=$?
+          set -e
+          python3 - "$CASE" "$client" "$mode" "$rc" <<'PY'
+          import json,sys
+          case,client,mode,rc=sys.argv[1:]
+          try:
+              d=json.load(open('/tmp/probe.json'))
+              valid=bool(d.get('id')=='9CIk-I_3VhM' and d.get('formats'))
+          except (ValueError,OSError):
+              valid=False
+          err=open('/tmp/probe.err',errors='replace').read()
+          category=('auth_or_bot' if 'Sign in to confirm' in err or 'not a bot' in err else
+                    'unavailable' if 'unavailable' in err.lower() else
+                    'timeout' if rc=='124' else
+                    'other_error' if rc!='0' else 'ok')
+          print('DIAGNOSTIC_RESULT='+json.dumps(dict(case=int(case),client=client,mode=mode,exit=int(rc),valid_formats=valid,category=category)))
+          if not valid:
+              print('DIAGNOSTIC_ERROR_TAIL='+err[-500:].replace('\n',' '))
+          PY
+          # Expected access restrictions must not make the matrix red.
+          exit 0
