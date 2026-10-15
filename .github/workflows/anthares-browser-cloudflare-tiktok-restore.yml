@@ -29,8 +29,10 @@ jobs:
           u=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+sep+urllib.parse.urlencode({'audience':'https://anthares-control.anthares1.workers.dev'})
           with urllib.request.urlopen(urllib.request.Request(u,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as r:
               jwt=json.load(r)['value']
-          with urllib.request.urlopen(urllib.request.Request('https://anthares-control.anthares1.workers.dev/tiktok/session-state',headers={'Authorization':'Bearer '+jwt}),timeout=25) as r:
-              state=json.load(r)
+          p=subprocess.run(['curl','-sS','--max-time','30','-A','AntharesBrowserRecovery/1.0','-H','Authorization: Bearer '+jwt,'-o','/tmp/anthares-central-state.json','-w','%{http_code}','https://anthares-control.anthares1.workers.dev/tiktok/session-state'],capture_output=True,text=True)
+          print('CENTRAL_SESSION_HTTP='+p.stdout)
+          if p.stdout!='200': raise SystemExit('CENTRAL_SESSION_FETCH_FAILED')
+          state=json.load(open('/tmp/anthares-central-state.json'))
           cookies=(state.get('state') or {}).get('cookies') or []
           if not state.get('available') or not cookies: raise SystemExit('CENTRAL_TIKTOK_SESSION_ABSENT')
           token=os.environ.get('ANTHARES_RESERVA_TOKEN','')
