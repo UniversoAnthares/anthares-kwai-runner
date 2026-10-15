@@ -50,6 +50,14 @@ jobs:
           assert d.get('ok') is True, d
           url=d.get('live_view_url') or ''
           assert url.startswith('https://'), d
-          print('ANTHARES_TIKTOK_LIVE_VIEW='+url)
+          open('/tmp/anthares-tiktok-live-url.txt','w',encoding='utf-8').write(url+'\n')
           print('ANTHARES_TIKTOK_SESSION_REUSED='+str(bool(d.get('reused'))).lower())
+          print('ANTHARES_TIKTOK_LIVE_ARTIFACT_READY=1')
           PY
+      - name: Upload private live URL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anthares-tiktok-live-url
+          path: /tmp/anthares-tiktok-live-url.txt
+          retention-days: 1
+          if-no-files-found: error
