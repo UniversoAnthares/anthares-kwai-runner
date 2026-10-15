@@ -12,7 +12,7 @@ function Restore-LastGood([string]$name){
   if(-not(Test-Path $live)){$restore=$true}
   else{try{$restore=((Get-FileHash -LiteralPath $live -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $good -Algorithm SHA256).Hash)}catch{$restore=$true}}
   if($restore){
-    try{Copy-Item -LiteralPath $good -Destination $live -Force;Log("restored validated lastgood $name")}catch{Log("failed restoring $name: $($_.Exception.Message)")}
+    try{Copy-Item -LiteralPath $good -Destination $live -Force;Log("restored validated lastgood $name")}catch{Log("failed restoring ${name}: $($_.Exception.Message)")}
   }
 }
 while($true){
