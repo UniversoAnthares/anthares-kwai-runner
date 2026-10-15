@@ -98,49 +98,31 @@ jobs:
           print('PROFILE_BASELINE_IDS='+json.dumps(ids))
           PY
 
-      - name: Start YouTube PO-token provider
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker pull brainicism/bgutil-ytdlp-pot-provider:latest >/dev/null
-          docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider:latest >/dev/null
-          sleep 5
-          docker ps --filter name=bgutil-provider --format '{{.Names}} {{.Status}}'
-          test "$(docker inspect -f '{{.State.Running}}' bgutil-provider)" = 'true'
-
-      - name: Extract, microcut and verticalize the real source interval
+      - name: Acquire exact validated real clip from temporary transfer branch
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/tiktok-media
-          yt-dlp --no-playlist --remote-components ejs:github \
-            --extractor-args 'youtube:player_client=mweb' \
-            --extractor-args 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416' \
-            --download-sections "*${SOURCE_START}-${SOURCE_END}" --force-keyframes-at-cuts \
-            -f 'bv*[height<=720]+ba/b[height<=720]' --merge-output-format mp4 \
-            -o '/tmp/tiktok-media/source.%(ext)s' "$SOURCE_URL"
-          SRC="$(find /tmp/tiktok-media -maxdepth 1 -type f -name 'source.*' | head -n 1)"
-          test -n "$SRC" && test -s "$SRC"
-          export SRC
+          MEDIA=/tmp/tiktok-media/final.mp4
+          curl -fL --retry 3 --connect-timeout 20 --max-time 180 \
+            -o "$MEDIA" \
+            'https://raw.githubusercontent.com/UniversoAnthares/anthares-kwai-runner/media-transfer-tiktok-9CIk-I_3VhM-8-98/transfer-media/tiktok_9CIk-I_3VhM_8_98.mp4'
+          ACTUAL_SHA="$(sha256sum "$MEDIA" | awk '{print toupper($1)}')"
+          EXPECTED_SHA='5A43C90508464C016E3F26F4CF17C04CA9BFA3E9EC9AFB7BD160E7A740B395E9'
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+          test "$(stat -c%s "$MEDIA")" -eq 11398993
+          export MEDIA ACTUAL_SHA
           python3 - <<'PY'
-          import json,os,sys,hashlib
-          from pathlib import Path
-          sys.path.insert(0,str(Path('scripts').resolve()))
-          import instagram_prepare_media as ip
-          src=Path(os.environ['SRC']); micro=Path('/tmp/tiktok-media/microcut.mp4'); final=Path('/tmp/tiktok-media/final.mp4')
-          meta=ip.microcut(src,micro); layout=ip.verticalize(micro,final)
-          dur=ip.duration(final); w,h=ip.dimensions(final)
-          assert final.stat().st_size>500000 and 30<=dur<=100, (final.stat().st_size,dur)
-          assert w*16==h*9, (w,h)
-          sha=hashlib.sha256(final.read_bytes()).hexdigest()
-          plan={'segment_id':os.environ['SOURCE_ID']+':'+os.environ['SOURCE_START']+':'+os.environ['SOURCE_END'],'source_id':os.environ['SOURCE_ID'],'source_start':float(os.environ['SOURCE_START']),'source_end':float(os.environ['SOURCE_END']),'source_url':os.environ['SOURCE_URL'],'source_title':'A Poetica de Aristoteles - Parte 2 (LIVE)','title':'A Poetica de Aristoteles — trecho','summary':'Trecho sobre a Poetica de Aristoteles.','media_path':str(final),'media_sha256':sha,'duration_seconds':round(dur,3),'microcut':meta,'layout':layout}
+          import json,os,subprocess
+          media=os.environ['MEDIA']
+          duration=float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',media],text=True).strip())
+          assert 70 <= duration <= 80, duration
+          plan={'segment_id':os.environ['SOURCE_ID']+':'+os.environ['SOURCE_START']+':'+os.environ['SOURCE_END'],'source_id':os.environ['SOURCE_ID'],'source_start':float(os.environ['SOURCE_START']),'source_end':float(os.environ['SOURCE_END']),'source_url':os.environ['SOURCE_URL'],'source_title':'A Poetica de Aristoteles - Parte 2 (LIVE)','title':'A Poetica de Aristoteles — trecho','summary':'Trecho sobre a Poetica de Aristoteles.','media_path':media,'media_sha256':os.environ['ACTUAL_SHA'].lower(),'duration_seconds':round(duration,3),'prepared_source':'validated_transfer_branch'}
           json.dump(plan,open(os.environ['TIKTOK_YOUTUBE_PLAN'],'w'),ensure_ascii=False,indent=2)
           print('REAL_MEDIA_PREPARED=1')
-          print('REAL_MEDIA_DURATION='+str(round(dur,3)))
-          print('REAL_MEDIA_DIMENSIONS='+str(w)+'x'+str(h))
-          print('REAL_MEDIA_SHA256='+sha)
+          print('REAL_MEDIA_DURATION='+str(round(duration,3)))
+          print('REAL_MEDIA_SHA256='+os.environ['ACTUAL_SHA'])
           PY
-
       - name: Recheck dedupe, reserve exact central job and lease it
         shell: bash
         run: |
