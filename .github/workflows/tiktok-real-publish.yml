@@ -15,6 +15,7 @@ jobs:
     timeout-minutes: 35
     env:
       CONTROL: https://anthares-control.anthares1.workers.dev
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
       EXPECTED_TIKTOK_USERNAME: universo.anthares
       SOURCE_ID: 9CIk-I_3VhM
       SOURCE_START: '8'
@@ -35,27 +36,28 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
-          python3 -m pip install --disable-pip-version-check -q playwright requests yt-dlp bgutil-ytdlp-pot-provider faster-whisper
+          python3 -m pip install --disable-pip-version-check -q playwright cryptography requests yt-dlp bgutil-ytdlp-pot-provider faster-whisper
           python3 -m playwright install chromium
           ffmpeg -version | head -n 1
           ffprobe -version | head -n 1
 
-      - name: Obtain approved OIDC and prove session, dedupe, account and baseline
+      - name: Resolve canonical session, prove identity, dedupe and baseline
         shell: bash
         run: |
           set -euo pipefail
+          test -n "${ARA_SHARED:-}" || { echo ARA_SHARED_MISSING; exit 12; }
+          python3 direct-tiktok-publisher/tiktok_session_authority.py
+          test -s "$TIKTOK_STORAGE_STATE_FILE"
           sep='&'; [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]] || sep='?'
           aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
           CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           echo "::add-mask::$CT"
           printf '%s' "$CT" >/tmp/control-token
-          curl -fsS --max-time 30 -H "Authorization: Bearer $CT" "$CONTROL/tiktok/session-state" -o /tmp/session.json
           curl -fsS --max-time 30 -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/queue.json
           python3 - <<'PY'
           import json,os
-          d=json.load(open('/tmp/session.json')); st=d.get('state') or {}; cookies=st.get('cookies') or []
-          assert d.get('available') is True and cookies, 'CENTRAL_TIKTOK_SESSION_UNAVAILABLE'
-          json.dump({'cookies':cookies,'origins':st.get('origins') or []},open(os.environ['TIKTOK_STORAGE_STATE_FILE'],'w'))
+          st=json.load(open(os.environ['TIKTOK_STORAGE_STATE_FILE'])); cookies=st.get('cookies') or []
+          assert cookies, 'CANONICAL_TIKTOK_SESSION_UNAVAILABLE'
           q=json.load(open('/tmp/queue.json')); raw=q.get('jobs') or []
           jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
           overlaps=[]
@@ -64,7 +66,7 @@ jobs:
               except Exception: continue
               if str(j.get('source_id') or '')==os.environ['SOURCE_ID'] and max(float(os.environ['SOURCE_START']),a)<min(float(os.environ['SOURCE_END']),b): overlaps.append(j.get('id'))
           assert not overlaps, 'CENTRAL_TIMELINE_DEDUPE_BLOCK:'+','.join(map(str,overlaps))
-          print('CENTRAL_SESSION=PROVEN cookies='+str(len(cookies)))
+          print('CANONICAL_SESSION=PROVEN authority=runtime cookies='+str(len(cookies)))
           print('CENTRAL_INTERVAL_DEDUPE=PROVEN')
           PY
           python3 direct-tiktok-publisher/strong_identity_gate.py
@@ -94,6 +96,7 @@ jobs:
           print('REAL_MEDIA_DURATION='+str(round(duration,3)))
           print('REAL_MEDIA_SHA256='+os.environ['ACTUAL_SHA'])
           PY
+
       - name: Recheck dedupe, reserve exact central job and lease it
         shell: bash
         run: |
