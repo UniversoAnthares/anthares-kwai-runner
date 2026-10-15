@@ -37,7 +37,10 @@ jobs:
         run: npm install --ignore-scripts
       - name: Static validation
         working-directory: anthares-reserva-browser
-        run: npm run check
+        run: |
+          npm run check
+          node --check src/tiktok-entry.js
+          node --check src/tiktok-owner-entry.js
       - name: Establish deterministic reserve access token
         working-directory: anthares-reserva-browser
         env:
@@ -101,4 +104,24 @@ jobs:
           assert d.get('durable_state_binding') is True, d
           assert d.get('render_required') is False, d
           print('RESERVA_AUTHENTICATED_STATUS_OK=1')
+          PY
+      - name: Probe persisted TikTok session safely
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/tiktok-session.json -w '%{http_code}' --max-time 55 \
+            -X POST \
+            -H "Authorization: Bearer $RESERVE_TOKEN" \
+            https://anthares-reserva-browser.anthares1.workers.dev/tiktok/session/verify)"
+          python3 - "$code" <<'PY'
+          import json, sys
+          code=int(sys.argv[1])
+          d=json.load(open('/tmp/tiktok-session.json', encoding='utf-8'))
+          safe={k:d.get(k) for k in (
+              'ok','persisted_state','identity_verified','studio_verified',
+              'session_state','restore_status','state_refreshed','error','detail'
+          ) if k in d}
+          print('TIKTOK_SESSION_HTTP='+str(code))
+          print('TIKTOK_SESSION_SAFE='+json.dumps(safe, separators=(',',':'), ensure_ascii=True))
+          if code not in (200,503):
+              raise SystemExit('unexpected TikTok session probe HTTP status')
           PY
