@@ -8,7 +8,7 @@ on:
 jobs:
   probe:
     runs-on: windows-2025
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - name: Probe host and virtualization
         shell: powershell
@@ -27,12 +27,56 @@ jobs:
           Write-Host "HypervisorPresent=$($cs.HypervisorPresent)"
           Write-Host "FreeC_GiB=$([math]::Round($disk.Free/1GB,2))"
           Write-Host "UsedC_GiB=$([math]::Round($disk.Used/1GB,2))"
-          Write-Host '--- systeminfo virtualization lines ---'
           systeminfo | Select-String -Pattern 'Hyper-V Requirements|Virtualization|Second Level|VM Monitor|Data Execution' | ForEach-Object { $_.Line }
-          Write-Host '--- optional features ---'
-          Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All,VirtualMachinePlatform,HypervisorPlatform -ErrorAction SilentlyContinue | Select-Object FeatureName,State | Format-Table -AutoSize
-          if (-not $cpu.VMMonitorModeExtensions -and -not $cpu.VirtualizationFirmwareEnabled) {
-            Write-Host 'MEMU_NESTED_VIRTUALIZATION=UNAVAILABLE'
-          } else {
-            Write-Host 'MEMU_NESTED_VIRTUALIZATION=POTENTIALLY_AVAILABLE'
-          }
+
+      - name: Download official MEmu 9.5.7 installer
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          python -m pip install --disable-pip-version-check -q gdown
+          python -m gdown 1WNTXcT7HdxaP3fBq4tW9XE0J3h13vhd3 -O "$env:RUNNER_TEMP\memu-9.5.7.exe"
+          $f=Get-Item "$env:RUNNER_TEMP\memu-9.5.7.exe"
+          Write-Host "Installer_GiB=$([math]::Round($f.Length/1GB,3))"
+          Write-Host "Installer_SHA256=$((Get-FileHash $f.FullName -Algorithm SHA256).Hash)"
+
+      - name: Install MEmu silently
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Continue'
+          $before=(Get-PSDrive C).Free
+          $p=Start-Process -FilePath "$env:RUNNER_TEMP\memu-9.5.7.exe" -ArgumentList '/S' -Wait -PassThru
+          Write-Host "InstallerExitCode=$($p.ExitCode)"
+          Start-Sleep -Seconds 15
+          $after=(Get-PSDrive C).Free
+          Write-Host "InstallSpaceDelta_GiB=$([math]::Round(($before-$after)/1GB,3))"
+          Write-Host "FreeAfterInstall_GiB=$([math]::Round($after/1GB,2))"
+          Get-ChildItem 'C:\Program Files\Microvirt','C:\Program Files (x86)\Microvirt' -Filter memuc.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 5 FullName,Length | Format-Table -AutoSize
+
+      - name: Create start and stop empty Android instance
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Continue'
+          $memuc=(Get-ChildItem 'C:\Program Files\Microvirt','C:\Program Files (x86)\Microvirt' -Filter memuc.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+          if(-not $memuc){ Write-Host 'MEMUC_FOUND=false'; exit 21 }
+          Write-Host "MEMUC_FOUND=true path=$memuc"
+          & $memuc listvms
+          $createOut=& $memuc create 71 2>&1
+          Write-Host "CREATE_OUTPUT=$($createOut -join ' | ')"
+          & $memuc listvms
+          $rows=& $memuc listvms 2>&1
+          $idx=$null
+          foreach($line in $rows){ if($line -match '^\s*(\d+),'){ $idx=[int]$matches[1] } }
+          if($null -eq $idx){ Write-Host 'CREATED_INDEX=UNKNOWN'; exit 22 }
+          Write-Host "CREATED_INDEX=$idx"
+          $startOut=& $memuc start -i $idx 2>&1
+          Write-Host "START_OUTPUT=$($startOut -join ' | ')"
+          Start-Sleep -Seconds 90
+          $running=& $memuc isvmrunning -i $idx 2>&1
+          Write-Host "IS_RUNNING_OUTPUT=$($running -join ' | ')"
+          & $memuc listvms
+          $stopOut=& $memuc stop -i $idx 2>&1
+          Write-Host "STOP_OUTPUT=$($stopOut -join ' | ')"
+          Start-Sleep -Seconds 10
+          $running2=& $memuc isvmrunning -i $idx 2>&1
+          Write-Host "AFTER_STOP_OUTPUT=$($running2 -join ' | ')"
+          Write-Host "FreeEnd_GiB=$([math]::Round((Get-PSDrive C).Free/1GB,2))"
