@@ -15,11 +15,13 @@ s = main.read_text(encoding='utf-8')
 # queue-only transport validation; only tighten HTTP idle/error polling.
 s = s.replace('time.Sleep(10 * time.Second)\n\t\t\tcontinue', 'time.Sleep(3 * time.Second)\n\t\t\tcontinue', 1)
 s = s.replace('time.Sleep(15 * time.Second)\n\t\t\tcontinue', 'time.Sleep(2 * time.Second)\n\t\t\tcontinue', 1)
+s = s.replace('sem := make(chan struct{}, cfg.MaxConcurrent)', 'sem := executionSemaphore(cfg.MaxConcurrent)', 1)
 required_main = [
     'Anthares Remote Agent running in issue-queue-only mode',
     'if c.ControlURL == "" {',
     'if !issueQueueConfigured() {',
     'ANTHARES_DEVICE_TOKEN is required when HTTP control is configured',
+    'sem := executionSemaphore(cfg.MaxConcurrent)',
 ]
 missing = [x for x in required_main if x not in s]
 if missing:
@@ -32,7 +34,8 @@ s = issue.read_text(encoding='utf-8')
 # Provider loops are independent: a slow GitHub or GitLab poll cannot hold up
 # the other provider. Jobs are dispatched through one persistent bounded pool,
 # and an in-flight map prevents the same job_id from executing concurrently
-# when both providers expose it.
+# when both providers expose it. The worker semaphore is process-global so HTTP
+# and both issue queues together never exceed ANTHARES_MAX_CONCURRENT.
 queue_loop = r'''func issueQueueLoop(cfg Config) {
 	providers := issueQueueProviders()
 	if len(providers) == 0 {
@@ -48,7 +51,7 @@ queue_loop = r'''func issueQueueLoop(cfg Config) {
 	if workers < 1 {
 		workers = 1
 	}
-	sem := make(chan struct{}, workers)
+	sem := executionSemaphore(workers)
 	items := make(chan issueQueueItem, workers*len(providers)*4)
 	inFlight := make(map[string]bool)
 	var inFlightMu sync.Mutex
@@ -204,7 +207,7 @@ s = replace_block(s, 'func (p *gitlabIssueProvider) Poll(deviceID string) ([]iss
 required_issue = [
     'go func(provider issueQueueProvider)',
     'inFlight := make(map[string]bool)',
-    'sem := make(chan struct{}, workers)',
+    'sem := executionSemaphore(workers)',
     'per_page=100&page=',
     'for page := 1; page <= 20; page++',
     'filepath.Join(work, "ara-jobs", "issue-queue")',
@@ -214,6 +217,28 @@ if missing:
     raise SystemExit('issue queue invariant missing: ' + ', '.join(missing))
 issue.write_text(s, encoding='utf-8')
 
-# Supervisor files are maintained directly and validated by CI. Keeping this
-# finalizer scoped to Go avoids clobbering concurrent supervisor hardening.
+limiter = Path('anthares-remote-agent/cmd/agent/execution_limiter.go')
+limiter.write_text('''package main
+
+import "sync"
+
+var processExecutionLimiter struct {
+    once sync.Once
+    ch   chan struct{}
+}
+
+// executionSemaphore returns the single process-wide execution budget shared
+// by HTTP, GitHub and GitLab transports. All callers use the same configured
+// MaxConcurrent value from the same environment.
+func executionSemaphore(max int) chan struct{} {
+    if max < 1 {
+        max = 1
+    }
+    processExecutionLimiter.once.Do(func() {
+        processExecutionLimiter.ch = make(chan struct{}, max)
+    })
+    return processExecutionLimiter.ch
+}
+''', encoding='utf-8')
+
 print('ARA_QUEUE_ONLY_FINALIZED=1')
