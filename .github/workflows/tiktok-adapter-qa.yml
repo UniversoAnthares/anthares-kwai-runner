@@ -1,0 +1,50 @@
+name: TikTok publication adapter QA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'direct-tiktok-publisher/tiktok_publish_adapter.py'
+      - 'tests/test_tiktok_publish_adapter.py'
+      - '.github/workflows/tiktok-adapter-qa.yml'
+permissions:
+  contents: read
+jobs:
+  adapter-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile adapter
+        run: python3 -m py_compile direct-tiktok-publisher/tiktok_publish_adapter.py
+      - name: Run adapter contract tests
+        run: python3 -m unittest tests.test_tiktok_publish_adapter -v
+      - name: Prove current one-shot can be represented by adapter
+        run: |
+          cat > /tmp/spec.json <<'JSON'
+          {
+            "account":"universo.anthares",
+            "source_id":"9CIk-I_3VhM",
+            "source_start":8,
+            "source_end":98,
+            "media_sha256":"5A43C90508464C016E3F26F4CF17C04CA9BFA3E9EC9AFB7BD160E7A740B395E9",
+            "media_path":"/tmp/tiktok_9CIk-I_3VhM_8_98.mp4",
+            "destination":"tiktok",
+            "source_url":"https://www.youtube.com/watch?v=9CIk-I_3VhM",
+            "source_title":"A Poetica de Aristoteles - Parte 2 (LIVE)",
+            "title":"A Poetica de Aristoteles — trecho",
+            "summary":"Trecho sobre a Poetica de Aristoteles.",
+            "logical_id":"tiktok-9CIk-I_3VhM-8-98-real-v1"
+          }
+          JSON
+          python3 direct-tiktok-publisher/tiktok_publish_adapter.py /tmp/spec.json > /tmp/manifest.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/manifest.json'))
+          assert d['job_id']=='tiktok-9CIk-I_3VhM-8-98-real-v1'
+          assert d['segment_id']=='9CIk-I_3VhM:8:98'
+          assert d['spec']['account']=='universo.anthares'
+          assert d['spec']['destination']=='tiktok'
+          assert d['job']['media_sha256']=='5a43c90508464c016e3f26f4cf17c04ca9bfa3e9ec9afb7bd160e7a740b395e9'
+          print('TIKTOK_ADAPTER_CURRENT_ONESHOT=REPRESENTABLE')
+          PY
