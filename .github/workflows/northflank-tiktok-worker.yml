@@ -92,18 +92,24 @@ jobs:
           public=next((p for p in ports if p.get('public') and p.get('dns')),None)
           if not public:sys.exit('Northflank TikTok worker has no public DNS')
           public_base='https://'+public['dns']
+          expected_revision='2026-10-15-cdp-v2'
           last='not_ready'
-          for _ in range(60):
+          for _ in range(90):
               try:
-                  with urllib.request.urlopen(public_base+'/health',timeout=20) as r:
+                  req=urllib.request.Request(public_base+'/interactive-browser/revision',headers={'Authorization':'Bearer '+shared})
+                  with urllib.request.urlopen(req,timeout=20) as r:
                       data=json.loads(r.read().decode())
-                  if data.get('ok') is True:break
+                  if data.get('ok') is True and data.get('revision')==expected_revision:
+                      break
                   last=json.dumps(data)[:500]
-              except Exception as exc:last=type(exc).__name__+':'+str(exc)[:300]
+              except Exception as exc:
+                  last=type(exc).__name__+':'+str(exc)[:300]
               time.sleep(10)
-          else:sys.exit('Northflank TikTok worker health failed: '+last)
+          else:
+              sys.exit('Northflank TikTok worker revision did not roll out: '+last)
           print('NORTHFLANK_TIKTOK_URL='+public_base)
-          print(json.dumps({'ok':True,'service':service_id,'public_url':public_base,'render_dependency':False,'interactive_browser':True},sort_keys=True))
+          print('NORTHFLANK_EXECUTOR_REVISION='+expected_revision)
+          print(json.dumps({'ok':True,'service':service_id,'public_url':public_base,'render_dependency':False,'interactive_browser':True,'revision':expected_revision},sort_keys=True))
           PY
           url="$(grep '^NORTHFLANK_TIKTOK_URL=' /tmp/northflank-tiktok.out | tail -1 | cut -d= -f2-)"
           test -n "$url"
@@ -130,15 +136,10 @@ jobs:
           health="$(curl --fail-with-body -sS "$router/health")"
           echo "$health"
           echo "$health" | grep -q '"ok":true'
-          browser=''
-          for i in $(seq 1 48); do
-            code="$(curl -sS -o /tmp/browser.json -w '%{http_code}' --max-time 15 -H "Authorization: Bearer $ARA_SHARED" "$router/interactive-browser/status" || true)"
-            if [ "$code" = 200 ] && grep -q '"backend":"northflank_chromium_cdp"' /tmp/browser.json; then
-              browser="$(cat /tmp/browser.json)"
-              break
-            fi
-            sleep 5
-          done
-          echo "${browser:-$(cat /tmp/browser.json 2>/dev/null || true)}"
-          test -n "$browser"
+          revision="$(curl --fail-with-body -sS -H "Authorization: Bearer $ARA_SHARED" "$router/interactive-browser/revision")"
+          echo "$revision"
+          echo "$revision" | grep -q '"revision":"2026-10-15-cdp-v2"'
+          browser="$(curl --fail-with-body -sS -H "Authorization: Bearer $ARA_SHARED" "$router/interactive-browser/status")"
+          echo "$browser"
+          echo "$browser" | grep -q '"backend":"northflank_chromium_cdp"'
           echo NORTHFLANK_INTERACTIVE_BROWSER_ROUTE_READY=1
