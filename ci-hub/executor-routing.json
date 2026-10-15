@@ -1,5 +1,7 @@
 {
-  "revision": "2026-10-15-fixed-routing-r12",
+  "revision": "2026-10-15-fixed-routing-r13",
+  "provider_status_source": "ci-hub/provider-status.json",
+  "continuity_policy": "ci-hub/CONTINUITY.md",
   "regression_check_required_each_round": true,
   "remote_control": {
     "primary": "anthares_remote",
@@ -13,7 +15,7 @@
     "priority": ["anthares_browser"],
     "allow_direct_external_browser_fallbacks": false,
     "superseded": ["browserless", "tinyfish"],
-    "note": "Cloudflare Browser Rendering is infrastructure, never an alternate browser product or direct fallback."
+    "note": "Cloudflare Browser Rendering and Northflank are infrastructure behind Anthares components, never alternate browser products exposed as fallbacks."
   },
   "ci_execution": {
     "priority": [
@@ -25,12 +27,14 @@
       "github_actions_private",
       "gitlab_ci"
     ],
+    "selection_rule": "a provider is selectable only when provider-status.json marks it eligible and its evidence is fresh enough for the intended operation",
     "quota_policy": "BLOCKED_QUOTA providers are ineligible until fresh successful proof",
     "notes": {
-      "github_actions_public": "eligible independently of private-repository Actions quota",
-      "github_actions_private": "quota-constrained; require fresh successful private-repository run before selection",
-      "gitlab_ci": "BLOCKED_QUOTA: current public and private GitLab jobs report ci_quota_exceeded",
-      "cloudflare_workers_builds": "separate status from Browser Rendering, Durable Objects and Workers runtime"
+      "github_actions_public": "verified runner allocation 2026-10-15; independent of private-repository Actions quota",
+      "github_actions_private": "BLOCKED_QUOTA owner-reported; require fresh successful private-repository run or billing renewal proof",
+      "gitlab_ci": "BLOCKED_QUOTA verified by failure_reason=ci_quota_exceeded",
+      "cloudflare_workers_builds": "PENDING fresh quota verification; separate from Browser Rendering, Durable Objects and Workers runtime",
+      "harness_appveyor_floot": "listed as implementation/CI options but require fresh verification before selection"
     }
   },
   "retired": {
@@ -53,60 +57,67 @@
     "anthares_remote": {
       "active": true,
       "remote_control_eligible": true,
-      "status": "READY_verified_2026-10-15_command_roundtrip",
+      "status": "READY_verified_2026-10-15_0306Z",
       "exclusive_for_remote_control": true
     },
     "anthares_browser": {
       "active": true,
       "browser_eligible": true,
       "exclusive_browser_surface": true,
-      "status": "ACTIVE_requires_internal_infrastructure_health_checks"
+      "status": "REQUIRED_runtime_endpoint_needs_fresh_ready_proof_before_browser_task"
     },
     "github_actions_public": {
       "active": true,
-      "status": "READY_public_repo_runs_observed_2026-10-15",
+      "status": "READY_runner_allocated_2026-10-15_0308Z",
       "ci_eligible": true
     },
     "github_actions_private": {
       "active": false,
-      "status": "BLOCKED_QUOTA_owner_reported_and_private_runs_failing_2026-10-15",
+      "status": "BLOCKED_QUOTA_owner_reported_pending_billing_api_verification",
       "ci_eligible": false,
-      "reopen_condition": "fresh_successful_private_repo_job"
+      "reopen_condition": "fresh_successful_private_repo_job_or_billing_renewal_proof"
     },
     "gitlab_ci": {
       "active": false,
-      "status": "BLOCKED_QUOTA_ci_quota_exceeded_2026-10-15",
+      "status": "BLOCKED_QUOTA_ci_quota_exceeded_verified_pipeline_2947796926",
       "ci_eligible": false,
       "reopen_condition": "fresh_job_starts_and_finishes_without_ci_quota_exceeded"
     },
     "cloudflare_workers_builds": {
-      "active": true,
-      "status": "READY_last_verified_2026-10-14",
-      "ci_eligible": true,
-      "scope": "worker_compatible_build_deploy_only"
+      "active": false,
+      "status": "PENDING_FRESH_QUOTA_VERIFICATION",
+      "ci_eligible": false,
+      "scope": "worker_compatible_build_deploy_only",
+      "reopen_condition": "fresh build/deploy without quota error"
     },
     "cloudflare_browser_rendering": {
       "active": false,
-      "status": "BLOCKED_QUOTA_historical_current_revalidation_required",
+      "status": "BLOCKED_QUOTA_LAST_OBSERVED_429_revalidate_only_inside_anthares_browser",
       "browser_eligible": false,
       "direct_fallback_for_anthares_browser": false
     },
     "cloudflare_workers_runtime": {
       "active": true,
-      "status": "READY_required_by_current_anthares_remote_control_bridge",
+      "status": "READY_health_200_2026-10-15_0307Z",
       "separate_quota_domain": true
     },
     "cloudflare_durable_objects": {
       "active": true,
-      "status": "READY_current_control_state_path",
+      "status": "READY_indirect_persistent_state_2026-10-15_0307Z",
       "separate_quota_domain": true
     },
-    "harness": {"active": true, "ci_eligible": true, "status": "READY_last_verified_2026-10-14"},
-    "appveyor": {"active": true, "ci_eligible": true, "status": "READY_last_verified_2026-10-14"},
-    "floot": {"active": true, "ci_eligible": true, "status": "READY_last_verified_2026-10-14"},
+    "northflank": {
+      "active": true,
+      "status": "READY_services_deployed_quota_balance_unknown_2026-10-15_0309Z",
+      "container_eligible": true,
+      "recheck_before_capacity_increase": true
+    },
+    "harness": {"active": true, "ci_eligible": false, "status": "PENDING_FRESH_VERIFICATION"},
+    "appveyor": {"active": true, "ci_eligible": false, "status": "PENDING_FRESH_VERIFICATION"},
+    "floot": {"active": true, "ci_eligible": false, "status": "PENDING_FRESH_VERIFICATION"},
     "render": {"active": false, "status": "RETIRED"},
-    "tinyfish": {"active": false, "status": "RETIRED"},
-    "circleci": {"active": false, "status": "RETIRED"},
-    "browserless": {"active": false, "status": "SUPERSEDED"}
+    "tinyfish": {"active": false, "status": "RETIRED_QUOTA_EXHAUSTED"},
+    "circleci": {"active": false, "status": "RETIRED_ACCOUNT_RESTRICTED"},
+    "browserless": {"active": false, "status": "SUPERSEDED_BY_ANTHARES_BROWSER"}
   }
 }
