@@ -36,11 +36,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install media tools
+      - name: Install media tools and PO-token provider
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
-          python -m pip install --disable-pip-version-check -q --upgrade yt-dlp
+          python -m pip install --disable-pip-version-check -q --upgrade yt-dlp bgutil-ytdlp-pot-provider
+          docker run -d --name bgutil-provider -p 4416:4416 --init brainicism/bgutil-ytdlp-pot-provider:latest
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:4416/ >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
       - name: Extract bounded section and process remotely
         run: python test-hub/remote-partial-cut/partial_cut_smoke.py
       - name: Show verification manifest
@@ -48,12 +53,12 @@ jobs:
         run: |
           test -f test-output/manifest.json && cat test-output/manifest.json || true
       - name: Upload proof artifact
-        if: success()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: remote-partial-cut-proof
           path: |
             test-output/manifest.json
             test-output/partial-microcut.mp4
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 1
