@@ -4,6 +4,7 @@ $envFile=Join-Path $root 'agent-env.ps1'
 if(Test-Path $envFile){. $envFile}
 $queueAuthLoader=Join-Path $root 'load-issue-queue-auth.ps1'
 $env:ANTHARES_DEVICE_ID='DESKTOP-FTDK0HP'
+$env:ANTHARES_MAX_CONCURRENT='8'
 $env:ANTHARES_WORK_ROOT='D:\AntharsWork'
 $env:TEMP='D:\AntharsWork\temp'
 $env:TMP=$env:TEMP
@@ -45,6 +46,7 @@ function Save-State([string]$reason,[int]$agentPid=0){
     updated_at=(Get-Date).ToUniversalTime().ToString('o');supervisor_pid=$PID;agent_pid=$agentPid
     device_id=$env:ANTHARES_DEVICE_ID;identity=[Security.Principal.WindowsIdentity]::GetCurrent().Name
     session=(Get-Process -Id $PID -ErrorAction SilentlyContinue).SessionId;binary=(Split-Path $exe -Leaf)
+    max_concurrent=[int]$env:ANTHARES_MAX_CONCURRENT
     github_queue=$githubQueue
     gitlab_queue=$gitlabQueue
     dual_queue_redundancy=($githubQueue -and $gitlabQueue)
