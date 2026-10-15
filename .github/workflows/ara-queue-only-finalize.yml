@@ -8,6 +8,7 @@ on:
       - 'tools/finalize_ara_queue_only.py'
       - 'anthares-remote-agent/cmd/agent/main.go'
       - 'anthares-remote-agent/cmd/agent/issue_queue.go'
+      - 'anthares-remote-agent/cmd/agent/execution_limiter.go'
       - 'anthares-remote-agent/windows/run-agent-system-supervisor.ps1'
       - 'anthares-remote-agent/windows/run-agent-user-fallback.ps1'
       - '.github/workflows/ara-queue-only-finalize.yml'
@@ -38,9 +39,12 @@ jobs:
           set -euo pipefail
           cd anthares-remote-agent
           go test ./... -count=1
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4.exe ./cmd/agent
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4-c8.exe ./cmd/agent
           cd ..
           grep -q 'issue-queue-only mode' anthares-remote-agent/cmd/agent/main.go
+          grep -q 'executionSemaphore(cfg.MaxConcurrent)' anthares-remote-agent/cmd/agent/main.go
+          grep -q 'executionSemaphore(workers)' anthares-remote-agent/cmd/agent/issue_queue.go
+          test -f anthares-remote-agent/cmd/agent/execution_limiter.go
           grep -q 'AntharesRemoteSystemSupervisorV12' anthares-remote-agent/windows/run-agent-system-supervisor.ps1
           grep -q "ANTHARES_MAX_CONCURRENT='8'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
           grep -q "recovery_transport='private-issue-queues'" anthares-remote-agent/windows/run-agent-system-supervisor.ps1
@@ -62,9 +66,9 @@ jobs:
             python3 tools/finalize_ara_queue_only.py
             cd anthares-remote-agent
             go test ./... -count=1
-            GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4.exe ./cmd/agent
+            GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4-c8.exe ./cmd/agent
             cd ..
-            git add anthares-remote-agent/cmd/agent/main.go anthares-remote-agent/cmd/agent/issue_queue.go
+            git add anthares-remote-agent/cmd/agent/main.go anthares-remote-agent/cmd/agent/issue_queue.go anthares-remote-agent/cmd/agent/execution_limiter.go
             if git diff --cached --quiet; then
               echo 'Queue-only agent runtime already finalized on current main.'
               pushed=1
@@ -81,6 +85,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: anthares-remote-agent-v4-queue-only
-          path: anthares-remote-agent/dist/anthares-remote-agent-v4.exe
+          name: anthares-remote-agent-v4-c8-queue-only
+          path: anthares-remote-agent/dist/anthares-remote-agent-v4-c8.exe
           if-no-files-found: error
