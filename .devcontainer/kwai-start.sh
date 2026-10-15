@@ -49,6 +49,85 @@ start_once() {
   echo "KWAI_CODESPACE_${name}=started"
 }
 
+kill_service() {
+  local name="$1" pidfile="${PRIVATE_HOME}/${name}.pid" pid cmd marker
+  pid="$(cat "$pidfile" 2>/dev/null || true)"
+  marker="$(service_marker "$name")" || return 0
+  if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+    cmd="$(tr '\0' ' ' <"/proc/${pid}/cmdline" 2>/dev/null || true)"
+    if [[ "$cmd" == *"$marker"* ]]; then
+      kill "$pid" 2>/dev/null || true
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.2
+      done
+      kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+    fi
+  fi
+  rm -f "$pidfile"
+}
+
+port_open() {
+  local port="$1"
+  python3 - "$port" <<'PY'
+import socket,sys
+s=socket.socket(); s.settimeout(1)
+try:
+    s.connect(('127.0.0.1',int(sys.argv[1])))
+except OSError:
+    raise SystemExit(1)
+finally:
+    s.close()
+PY
+}
+
+display_ready() {
+  [[ -S /tmp/.X11-unix/X99 ]] && xdpyinfo -display :99 >/dev/null 2>&1
+}
+
+vnc_ready() {
+  local pid
+  pid="$(cat "${PRIVATE_HOME}/vnc.pid" 2>/dev/null || true)"
+  pid_matches_service vnc "$pid" && port_open 5900
+}
+
+novnc_ready() {
+  local pid
+  pid="$(cat "${PRIVATE_HOME}/novnc.pid" 2>/dev/null || true)"
+  pid_matches_service novnc "$pid" && port_open 6080 && curl --noproxy '*' -fsS --max-time 3 http://127.0.0.1:6080/vnc.html -o /dev/null
+}
+
+recover_desktop_stack() {
+  if ! display_ready; then
+    kill_service openbox
+    kill_service vnc
+    kill_service novnc
+    kill_service xvfb
+    rm -f /tmp/.X99-lock
+    start_once xvfb Xvfb :99 -screen 0 1440x900x24 -nolisten tcp
+    for _ in $(seq 1 30); do display_ready && break; sleep 0.2; done
+    display_ready || { echo "KWAI_CODESPACE_XVFB=unhealthy" >&2; return 1; }
+  fi
+
+  start_once openbox openbox-session
+
+  if ! vnc_ready; then
+    kill_service vnc
+    start_once vnc x11vnc -display :99 -localhost -rfbport 5900 -nopw -forever -shared -quiet
+    for _ in $(seq 1 30); do vnc_ready && break; sleep 0.2; done
+    vnc_ready || { echo "KWAI_CODESPACE_VNC=unhealthy" >&2; return 1; }
+  fi
+
+  if ! novnc_ready; then
+    kill_service novnc
+    start_once novnc websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900
+    for _ in $(seq 1 30); do novnc_ready && break; sleep 0.2; done
+    novnc_ready || { echo "KWAI_CODESPACE_NOVNC=unhealthy" >&2; return 1; }
+  fi
+
+  echo "KWAI_CODESPACE_DESKTOP_STACK=healthy"
+}
+
 restart_current_bridge() {
   local pidfile="${PRIVATE_HOME}/bridge.pid"
   local pids=()
@@ -88,33 +167,15 @@ restart_current_bridge() {
   echo "KWAI_CODESPACE_bridge=v2_latest_comments_loaded;chrome_profile_untouched=true"
 }
 
-start_once xvfb Xvfb :99 -screen 0 1440x900x24 -nolisten tcp
-sleep 2
-start_once openbox openbox-session
-start_once vnc x11vnc -display :99 -localhost -rfbport 5900 -nopw -forever -shared -quiet
-novnc_healthy() { curl --noproxy '*' -fsS --max-time 3 http://127.0.0.1:6080/vnc.html -o /dev/null; }
-recover_novnc() {
-  if novnc_healthy; then return 0; fi
-  local pidfile="${PRIVATE_HOME}/novnc.pid" pid cmd
-  pid="$(cat "$pidfile" 2>/dev/null || true)"
-  if pid_matches_service novnc "$pid"; then
-    cmd="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
-    if [[ "$cmd" == *"127.0.0.1:6080"* ]]; then
-      kill "$pid" || return 1
-      for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
-      kill -0 "$pid" 2>/dev/null && return 1
-    fi
-  fi
-  rm -f "$pidfile"
-  start_once novnc websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900
-  sleep 1
-  novnc_healthy
-}
-start_once novnc websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900
-recover_novnc || echo "KWAI_CODESPACE_novnc=unhealthy_check_logs" >&2
-if [[ ! -f "${PRIVATE_HOME}/novnc-watchdog.pid" ]] || ! kill -0 "$(cat "${PRIVATE_HOME}/novnc-watchdog.pid")" 2>/dev/null; then
-  (while true; do sleep 20; recover_novnc || true; done) >"${LOGS}/novnc-watchdog.log" 2>&1 </dev/null &
-  echo "$!" >"${PRIVATE_HOME}/novnc-watchdog.pid"
+recover_desktop_stack
+if [[ ! -f "${PRIVATE_HOME}/desktop-watchdog.pid" ]] || ! kill -0 "$(cat "${PRIVATE_HOME}/desktop-watchdog.pid")" 2>/dev/null; then
+  (
+    while true; do
+      sleep 10
+      recover_desktop_stack || true
+    done
+  ) >"${LOGS}/desktop-watchdog.log" 2>&1 </dev/null &
+  echo "$!" >"${PRIVATE_HOME}/desktop-watchdog.pid"
 fi
 
 start_once chrome chromium chromium \
