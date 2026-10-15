@@ -1,5 +1,8 @@
 name: TikTok Android protected interactive login v3
 on:
+  push:
+    paths:
+      - '.github/workflows/tiktok-android-interactive-login-v3.yml'
   workflow_dispatch:
 permissions:
   contents: read
