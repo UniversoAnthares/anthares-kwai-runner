@@ -15,7 +15,7 @@ Existe **um único executor canônico**:
 - trabalho/logs/jobs/estado: `D:\AntharsWork`;
 - supervisor: `windows/run-agent-system-supervisor.ps1`;
 - recuperação: `windows/recovery-watchdog-loop.ps1` -> `windows/recovery-watchdog.ps1`;
-- processo: um único `anthares-remote-agent-v4.exe` com dois transportes simultâneos.
+- processo: um único `anthares-remote-agent-v4-c8.exe` com transportes simultâneos.
 
 `D:\AntharsWork\AntharesRemoteAgent` pode existir como staging histórico, mas não é raiz válida para tarefas ou supervisores persistentes.
 
@@ -23,12 +23,13 @@ Existe **um único executor canônico**:
 
 O mesmo processo SYSTEM mantém:
 
-1. **GitHub/GitLab private issue queues** — recuperação independente e prova obrigatória de cutover. Se o controle HTTP falhar, o V4 continua vivo e executando pela fila.
-2. **HTTP MCP secundário** — `anthares-ara-backup.anthares1.workers.dev`, somente quando o `ANTHARES_DEVICE_TOKEN` já existente estiver disponível. Esse caminho dá baixa latência às ferramentas Anthares Remote conectadas no ChatGPT.
+1. **Vercel + Neon** — controle HTTP/MCP primário de baixa latência em `https://anthares-remote-primary.vercel.app`. O endpoint expõe OAuth, `/mcp`, heartbeat, leases, resultados idempotentes e estado persistente no Neon. Não depende de Cloudflare.
+2. **GitLab private issue queue** — transporte independente de recuperação e administração, já comprovado em produção.
+3. **GitHub private issue queue** — segunda rota independente de recuperação.
+
+Cloudflare deixou de fazer parte do caminho canônico do Anthares Remote. O antigo endpoint Cloudflare pode permanecer apenas como histórico até remoção definitiva das integrações que ainda apontem para ele.
 
 Não existe segundo agente para o HTTP. A redundância é de transporte dentro do mesmo processo, preservando single-writer e receipts idempotentes.
-
-Os launchers HTTP antigos `run-agent-supervisor.ps1` e `run-agent-standard.ps1` continuam apenas como break-glass e exigem `allow-http-compat.flag`; eles não fazem parte do runtime normal.
 
 Render nunca é primário, obrigatório ou autoridade de estado.
 
@@ -40,9 +41,9 @@ Render nunca é primário, obrigatório ou autoridade de estado.
 - `.lastgood` existe para scripts críticos;
 - o V4 possui baseline de hash;
 - a credencial DPAPI LocalMachine das filas é carregável pelo SYSTEM;
-- `anthares-remote-agent-v4.exe` está em sessão 0;
-- um job real `agent_health` atravessa a fila GitHub;
-- esse job confirma `queue_configured=true` **e** `http_control=true` no mesmo PID;
+- `anthares-remote-agent-v4-c8.exe` está em sessão 0;
+- um job real `agent_health` atravessa uma fila privada;
+- esse job confirma `queue_configured=true` e `http_control=true` no mesmo PID;
 - somente depois disso tarefas/executores antigos são desativados.
 
 `phase4-migrate-task.ps1` só aceita sucesso quando `queue_end_to_end_proof=true`, `mcp_http_transport_configured=true` e existe PID SYSTEM válido. Em falha, restaura o binário anterior.
@@ -58,7 +59,7 @@ O watchdog roda em SYSTEM e é independente dos serviços externos. Ele:
 - restaura supervisor, loader e watchdog a partir de `.lastgood`;
 - registra `queue_credential_present`, `queue_credential_loaded`, `system_v4_count` e `interactive_agent_count`.
 
-Se o HTTP estiver indisponível, a fila privada mantém o processo operacional. Se a fila estiver atrasada, o mesmo processo continua recebendo os commands do MCP por HTTP.
+Se o Vercel estiver indisponível, as filas privadas mantêm o processo operacional. Se uma fila estiver atrasada, o mesmo processo continua recebendo comandos MCP por Vercel.
 
 ## Diagnóstico
 
@@ -66,6 +67,7 @@ Prefira jobs tipados a shell. `agent_health` retorna PID, dispositivo, work root
 
 ## Caminhos legados aposentados
 
+- Cloudflare Anthares Remote: fora do caminho canônico por esgotamento de cota;
 - `.github/workflows/anthares-remote-agent-install-selfhosted.yml`: fail-closed;
 - `infra/anthares_remote_bootstrap.py`: HTTP 410, sem mutações;
 - `windows/watchdog-dual-supervisor.ps1`: não inicia supervisores;
@@ -78,8 +80,9 @@ Prefira jobs tipados a shell. `agent_health` retorna PID, dispositivo, work root
 - nenhum segredo em repositório, logs ou resultados;
 - credenciais privadas via DPAPI LocalMachine e ACL SYSTEM/Administrators;
 - um executor por dispositivo;
-- duas rotas independentes no mesmo processo;
+- Vercel + Neon como controle primário;
+- GitLab e GitHub como recuperação independente;
 - writes ambíguos não são repetidos automaticamente;
 - nenhuma janela visível de PowerShell/CMD;
-- Cloudflare é um transporte MCP secundário, não requisito de recuperação;
+- Cloudflare não é requisito operacional;
 - CI falha se essas invariantes forem revertidas.
