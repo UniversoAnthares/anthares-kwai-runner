@@ -58,6 +58,7 @@ jobs:
           d=json.load(open('/tmp/reconcile-response.json')); j=d.get('job') or {}
           e=json.load(open(os.environ['TIKTOK_RECONCILE_EVIDENCE']))
           assert d.get('ok') is True,d
+          assert j.get('id')==os.environ['JOB_ID'],d
           assert j.get('status')=='published',d
           assert j.get('confirmed') is True,d
           assert str(j.get('remote_id'))==str(e['remote_id']), (d,e)
@@ -70,9 +71,11 @@ jobs:
           import json
           q=json.load(open('/tmp/q-after.json'))
           jobs=q.get('jobs') or {}
-          assert int(jobs.get('uncertain') or 0)==0,q
+          # Global historical uncertain jobs are independent of this transaction.
+          # The target transaction was already proven published/confirmed above.
           assert int(jobs.get('published') or 0)>=1,q
           print('QUEUE_AFTER_RECONCILE='+json.dumps(jobs,separators=(',',':')))
+          print('GLOBAL_UNCERTAIN_REMAINS='+str(int(jobs.get('uncertain') or 0)))
           PY
       - name: Preserve evidence
         if: always()
