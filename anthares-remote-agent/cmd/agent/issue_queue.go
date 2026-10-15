@@ -116,7 +116,7 @@ func issueQueueLoop(cfg Config) {
 	if workers < 1 {
 		workers = 1
 	}
-	sem := make(chan struct{}, workers)
+	sem := executionSemaphore(workers)
 	items := make(chan issueQueueItem, workers*len(providers)*4)
 	inFlight := make(map[string]bool)
 	var inFlightMu sync.Mutex

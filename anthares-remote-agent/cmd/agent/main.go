@@ -82,7 +82,7 @@ func main() {
 	}
 	go resultReplayLoop(cfg)
 
-	sem := make(chan struct{}, cfg.MaxConcurrent)
+	sem := executionSemaphore(cfg.MaxConcurrent)
 	for {
 		sem <- struct{}{}
 		job, err := pollJob(cfg)
