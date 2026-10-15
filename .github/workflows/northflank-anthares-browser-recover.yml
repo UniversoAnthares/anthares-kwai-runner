@@ -1,4 +1,4 @@
-# Recovery trigger 2026-10-15T01:12Z: validate Northflank Chromium runtime and durable browser state
+# Recovery trigger 2026-10-15T03:37Z: revalidate Northflank Chromium runtime and durable browser state
 name: Recover vault-backed Anthares browser on Northflank
 on:
   push:
@@ -67,7 +67,7 @@ jobs:
           path=((detail.get('buildSettings') or {}).get('dockerfile') or {}).get('dockerFilePath')
           if path!='/infra/northflank/Dockerfile':
               api('PATCH',f'/projects/{pid}/services/combined/{sid}',{'buildSettings':{'dockerfile':{'buildEngine':'buildkit','dockerFilePath':'/infra/northflank/Dockerfile','dockerWorkDir':'/'}}})
-          started=api('POST',f'/projects/{pid}/services/{sid}/build',{},allow=(409,))
+          api('POST',f'/projects/{pid}/services/{sid}/build',{},allow=(409,))
           print('NORTHFLANK_BROWSER_BUILD_REQUESTED=1')
           ports=api('GET',f'/projects/{pid}/services/{sid}/ports').get('data',{}).get('ports',[])
           public=next((p for p in ports if p.get('public') and p.get('dns')),None)
