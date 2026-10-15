@@ -41,8 +41,6 @@ start_once() {
     return
   fi
   if [[ -n "$pid" ]]; then
-    # PID files live in persistent storage while Linux PIDs do not survive a
-    # Codespace stop/start. Never trust a reused PID without cmdline evidence.
     echo "KWAI_CODESPACE_${name}=stale_pidfile_ignored"
     rm -f "$pidfile"
   fi
@@ -55,9 +53,6 @@ restart_current_bridge() {
   local pidfile="${PRIVATE_HOME}/bridge.pid"
   local pids=()
   local pid cmd
-
-  # The bridge is stateless apart from its local seen-comment ledger. Restarting
-  # it must never restart Chrome or touch the persistent browser profile.
   if [[ -f "$pidfile" ]]; then
     pid="$(cat "$pidfile" 2>/dev/null || true)"
     if pid_matches_service bridge "$pid"; then
@@ -71,7 +66,6 @@ restart_current_bridge() {
     [[ "$pid" =~ ^[0-9]+$ ]] || continue
     [[ " ${pids[*]-} " == *" $pid "* ]] || pids+=("$pid")
   done < <(pgrep -f 'python.*\.devcontainer/kwai-command-bridge(-v2)?\.py' || true)
-
   for pid in "${pids[@]-}"; do
     [[ -n "$pid" ]] || continue
     cmd="$(tr '\0' ' ' <"/proc/${pid}/cmdline" 2>/dev/null || true)"
@@ -97,12 +91,8 @@ restart_current_bridge() {
 start_once xvfb Xvfb :99 -screen 0 1440x900x24 -nolisten tcp
 sleep 2
 start_once openbox openbox-session
-
-# VNC and Chrome DevTools listen on loopback only; forwarded ports remain private.
 start_once vnc x11vnc -display :99 -localhost -rfbport 5900 -nopw -forever -shared -quiet
-novnc_healthy() {
-  curl --noproxy '*' -fsS --max-time 3 http://127.0.0.1:6080/vnc.html -o /dev/null
-}
+novnc_healthy() { curl --noproxy '*' -fsS --max-time 3 http://127.0.0.1:6080/vnc.html -o /dev/null; }
 recover_novnc() {
   if novnc_healthy; then return 0; fi
   local pidfile="${PRIVATE_HOME}/novnc.pid" pid cmd
@@ -123,16 +113,11 @@ recover_novnc() {
 start_once novnc websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900
 recover_novnc || echo "KWAI_CODESPACE_novnc=unhealthy_check_logs" >&2
 if [[ ! -f "${PRIVATE_HOME}/novnc-watchdog.pid" ]] || ! kill -0 "$(cat "${PRIVATE_HOME}/novnc-watchdog.pid")" 2>/dev/null; then
-  (
-    while true; do
-      sleep 20
-      recover_novnc || true
-    done
-  ) >"${LOGS}/novnc-watchdog.log" 2>&1 </dev/null &
+  (while true; do sleep 20; recover_novnc || true; done) >"${LOGS}/novnc-watchdog.log" 2>&1 </dev/null &
   echo "$!" >"${PRIVATE_HOME}/novnc-watchdog.pid"
 fi
 
-start_once chrome chromium \
+start_once chrome chromium chromium \
   --no-sandbox \
   --disable-dev-shm-usage \
   --no-first-run \
@@ -144,8 +129,14 @@ start_once chrome chromium \
   --window-size=1400,860 \
   https://www.kwai.com/
 
-start_once inspector "${PRIVATE_HOME}/venv/bin/python" -u .devcontainer/kwai-identity-guard.py
+start_once inspector kwai-identity-guard.py "${PRIVATE_HOME}/venv/bin/python" -u .devcontainer/kwai-identity-guard.py
 restart_current_bridge
+
+# Keep the TikTok authentication path attached to the same private desktop and
+# refresh lifecycle, while preserving an entirely separate browser profile.
+if [[ -f .devcontainer/tiktok-start.sh ]]; then
+  bash .devcontainer/tiktok-start.sh
+fi
 
 echo "KWAI_CODESPACE_PRIVATE_NOVNC=http://127.0.0.1:6080/vnc.html"
 echo "KWAI_CODESPACE_PRIVATE_IDENTITY=http://127.0.0.1:8765/"
