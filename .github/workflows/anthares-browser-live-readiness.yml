@@ -25,23 +25,15 @@ jobs:
           import hashlib,json,os,urllib.request,urllib.error,subprocess
           base='https://anthares-reserva-browser.anthares1.workers.dev'
           def req(path,token=None,method='GET'):
-              headers={'Accept':'application/json'}
-              if token: headers['Authorization']='Bearer '+token
-              try:
-                  with urllib.request.urlopen(urllib.request.Request(base+path,headers=headers,method=method),timeout=22) as r:
-                      raw=r.read(32768)
-                      try: data=json.loads(raw)
-                      except: data={}
-                      return r.status,data
-              except urllib.error.HTTPError as e:
-                  return e.code,{'http_error_excerpt':e.read(400).decode('utf-8','replace').replace('\\n',' ')[:300], 'server':e.headers.get('server',''), 'cf_ray_present':bool(e.headers.get('cf-ray'))}
-          code,health=req('/health')
-          if code==403 and '1010' in health.get('http_error_excerpt',''):
-              p=subprocess.run(['curl','-sS','--max-time','15','-A','AntharesBrowserHealth/1.0','-o','/tmp/anthares-health.json','-w','%{http_code}',base+'/health'],capture_output=True,text=True)
+              args=['curl','-sS','--max-time','20','-A','AntharesBrowserHealth/1.0','-o','/tmp/anthares-probe.json','-w','%{http_code}']
+              if token: args+=['-H','Authorization: Bearer '+token]
+              if method!='GET': args+=['-X',method]
+              p=subprocess.run(args+[base+path],capture_output=True,text=True)
               code=int(p.stdout) if p.stdout.isdigit() else 0
-              try: health=json.load(open('/tmp/anthares-health.json'))
-              except: health={}
-              print('CURL_HEALTH_HTTP='+str(code))
+              try: body=json.load(open('/tmp/anthares-probe.json'))
+              except: body={}
+              return code,body
+          code,health=req('/health')
           print('HEALTH_HTTP='+str(code))
           if code!=200: print('HEALTH_DENIAL='+json.dumps(health))
           print('HEALTH_OK='+str(health.get('ok')))
