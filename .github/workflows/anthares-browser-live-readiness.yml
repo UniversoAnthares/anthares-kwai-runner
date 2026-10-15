@@ -1,0 +1,58 @@
+name: Anthares Browser Cloudflare live readiness
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/anthares-browser-live-readiness.yml']
+permissions:
+  contents: read
+concurrency:
+  group: anthares-browser-live-readiness
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      ANTHARES_RESERVA_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Verify actual Anthares Browser Cloudflare bindings and protected session status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,urllib.request,urllib.error
+          base='https://anthares-reserva-browser.anthares1.workers.dev'
+          def req(path,token=None,method='GET'):
+              headers={'Accept':'application/json'}
+              if token: headers['Authorization']='Bearer '+token
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(base+path,headers=headers,method=method),timeout=22) as r:
+                      raw=r.read(32768)
+                      try: data=json.loads(raw)
+                      except: data={}
+                      return r.status,data
+              except urllib.error.HTTPError as e:
+                  return e.code,{}
+          code,health=req('/health')
+          print('HEALTH_HTTP='+str(code))
+          print('HEALTH_OK='+str(health.get('ok')))
+          print('BROWSER_BINDING='+str(health.get('browser_binding')))
+          print('DURABLE_STATE_BINDING='+str(health.get('durable_state_binding')))
+          print('RENDER_REQUIRED='+str(health.get('render_required')))
+          if code!=200 or health.get('ok') is not True or health.get('browser_binding') is not True:
+              raise SystemExit('ANTHARES_BROWSER_LIVE_HEALTH_NOT_PROVEN')
+          token=os.environ.get('ANTHARES_RESERVA_TOKEN','')
+          if not token and os.environ.get('ARA_SHARED'):
+              token=hashlib.sha256(('anthares-reserva-browser-v1:'+os.environ['ARA_SHARED']).encode()).hexdigest()
+          if not token:
+              print('RESERVE_AUTH_SECRET_MISSING=1')
+              raise SystemExit(11)
+          code,status=req('/tiktok/northflank/status',token)
+          print('TIKTOK_STATUS_HTTP='+str(code))
+          print('TIKTOK_STATUS_FIELDS='+','.join(sorted(status.keys())))
+          if code!=200:
+              raise SystemExit('TIKTOK_STATUS_UNAVAILABLE')
+          print('ANTHARES_BROWSER_CLOUDFLARE_READINESS=PROVEN')
+          PY
