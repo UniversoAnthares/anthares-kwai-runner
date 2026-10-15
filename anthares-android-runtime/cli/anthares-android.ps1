@@ -6,6 +6,13 @@ param(
     [switch]$Pretty
 )
 $ErrorActionPreference='Stop'
+
+# MEmuHyperv stores the canonical media registry under the desktop owner's profile.
+# Anthares Remote executes as SYSTEM, so every MEmu operation must load that registry.
+$env:USERPROFILE='C:\Users\Lucas'
+$env:HOMEDRIVE='C:'
+$env:HOMEPATH='\Users\Lucas'
+
 $module=Join-Path $PSScriptRoot '..\src\AntharesAndroidRuntime.psm1'
 Import-Module $module -Force
 
