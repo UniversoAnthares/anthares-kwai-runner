@@ -89,12 +89,12 @@ func main() {
 		if err != nil {
 			<-sem
 			fmt.Fprintln(os.Stderr, "poll error:", err)
-			time.Sleep(10 * time.Second)
+			time.Sleep(3 * time.Second)
 			continue
 		}
 		if job == nil {
 			<-sem
-			time.Sleep(15 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 		if err := validateJobID(job.ID); err != nil || strings.TrimSpace(job.Type) == "" {
