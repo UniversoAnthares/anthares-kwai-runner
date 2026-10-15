@@ -8,9 +8,8 @@ $env:ANTHARES_MAX_CONCURRENT='8'
 $env:ANTHARES_WORK_ROOT='D:\AntharsWork'
 $env:TEMP='D:\AntharsWork\temp'
 $env:TMP=$env:TEMP
-# One process, two independent transports. Private issue queues are the recovery
-# authority; the Cloudflare control is enabled only when the existing device
-# bearer is present so the connected ChatGPT MCP can deliver low-latency jobs.
+# One SYSTEM process with low-latency HTTP plus two private recovery queues.
+# Private issue queues remain the recovery authority when HTTP is unavailable.
 $httpControl='https://anthares-ara-backup.anthares1.workers.dev'
 Remove-Item Env:ANTHARES_CONTROL_PRIMARY_URL -ErrorAction SilentlyContinue
 Remove-Item Env:ANTHARES_CONTROL_SECONDARY_URL -ErrorAction SilentlyContinue
@@ -18,7 +17,7 @@ Remove-Item Env:ANTHARES_CONTROL_TERTIARY_URL -ErrorAction SilentlyContinue
 $logRoot='D:\AntharsWork\logs'
 $runtimeRoot='D:\AntharsWork\legacy-pc-runtime\supervisor'
 @('D:\AntharsWork\temp',$logRoot,'D:\AntharsWork\ara-jobs',$runtimeRoot)|ForEach-Object{New-Item -ItemType Directory -Force -Path $_|Out-Null}
-$exe=Join-Path $root 'anthares-remote-agent-v4.exe'
+$exe=Join-Path $root 'anthares-remote-agent-v4-c8.exe'
 $stdout=Join-Path $logRoot 'agent-v4-system.stdout.log'
 $stderr=Join-Path $logRoot 'agent-v4-system.stderr.log'
 $stateFile=Join-Path $runtimeRoot 'system-supervisor-state.json'
