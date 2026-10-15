@@ -33,8 +33,14 @@ function Invoke-AntharesProcess {
 }
 function Invoke-AntharesAdb {
     param([string]$Adb,[string[]]$Args,[int]$TimeoutMs=8000,[int]$ServerPort=$script:AdbServerPort)
-    $all=@('-P',[string]$ServerPort)+@($Args)
-    Invoke-AntharesProcess -File $Adb -Args $all -TimeoutMs $TimeoutMs
+    try {
+        $lines = & $Adb -P ([string]$ServerPort) @Args 2>&1
+        $code = $LASTEXITCODE
+        $text = (($lines | ForEach-Object {[string]$_}) -join "`r`n")
+        return [ordered]@{ok=($code -eq 0);timeout=$false;exit_code=$code;stdout=$text;stderr=''}
+    } catch {
+        return [ordered]@{ok=$false;timeout=$false;exit_code=$null;stdout='';stderr=$_.Exception.Message}
+    }
 }
 function Get-AdbDevices {
     param([string]$Adb,[int]$ServerPort=$script:AdbServerPort)
