@@ -1,0 +1,57 @@
+name: Anthares Browser Northflank login ready
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/anthares-browser-northflank-login-ready.yml']
+permissions:
+  contents: read
+concurrency:
+  group: anthares-browser-northflank-login-ready
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Start isolated Chromium and open TikTok login without using local PC
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,subprocess
+          base='https://anthares-tiktok-worker.anthares1.workers.dev'
+          token=os.environ.get('ARA_SHARED','')
+          if not token:raise SystemExit('ARA_SHARED_MISSING')
+          def call(path,method='GET',body=None):
+              args=['curl','-sS','--max-time','75','-A','AntharesBrowserNorthflank/1.0','-o','/tmp/nf-response.json','-w','%{http_code}','-H','Authorization: Bearer '+token]
+              if method!='GET':args+=['-X',method]
+              if body is not None:
+                  with open('/tmp/nf-input.json','w') as f:json.dump(body,f)
+                  args+=['-H','Content-Type: application/json','--data-binary','@/tmp/nf-input.json']
+              p=subprocess.run(args+[base+path],capture_output=True,text=True)
+              try: d=json.load(open('/tmp/nf-response.json'))
+              except: d={}
+              return p.stdout,d
+          code,status=call('/interactive-browser/status')
+          print('NORTHFLANK_STATUS_HTTP='+code)
+          print('NORTHFLANK_BROWSER_ACTIVE='+str(status.get('active')))
+          if code!='200' or not status.get('ok'):raise SystemExit('NORTHFLANK_BROWSER_NOT_READY')
+          code,start=call('/interactive-browser/start','POST',{})
+          print('NORTHFLANK_START_HTTP='+code)
+          print('NORTHFLANK_START_OK='+str(start.get('ok')))
+          print('NORTHFLANK_START_ERROR='+str(start.get('error',''))[:120])
+          if code!='200' or not start.get('ok'):raise SystemExit('NORTHFLANK_BROWSER_START_FAILED')
+          code,nav=call('/interactive-browser/navigate','POST',{'url':'https://www.tiktok.com/login'})
+          print('NORTHFLANK_NAVIGATE_HTTP='+code)
+          print('NORTHFLANK_NAVIGATE_OK='+str(nav.get('ok')))
+          if code!='200' or not nav.get('ok'):raise SystemExit('NORTHFLANK_BROWSER_NAVIGATE_FAILED')
+          code,screen=call('/interactive-browser/screenshot')
+          print('NORTHFLANK_SCREENSHOT_HTTP='+code)
+          print('NORTHFLANK_SCREENSHOT_OK='+str(screen.get('ok')))
+          print('NORTHFLANK_SCREENSHOT_PRESENT='+str(len(screen.get('image_b64',''))>1000))
+          if code!='200' or not screen.get('ok') or len(screen.get('image_b64',''))<1000:raise SystemExit('NORTHFLANK_BROWSER_SCREENSHOT_FAILED')
+          print('ANTHARES_BROWSER_LOGIN_READY=1')
+          PY
