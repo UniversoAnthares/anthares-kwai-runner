@@ -103,6 +103,14 @@ jobs:
           nohup "$SDK/emulator/emulator" -avd tiktok-auth -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 3072 -cores 2 >/tmp/tiktok-emulator.log 2>&1 &
           timeout 90 "$ADB" wait-for-device
           timeout 120 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done' _ "$ADB"
+          "$ADB" shell settings put global stay_on_while_plugged_in 3 || true
+          "$ADB" shell svc power stayon true || true
+          "$ADB" shell input keyevent KEYCODE_WAKEUP || true
+          "$ADB" shell wm dismiss-keyguard || true
+          "$ADB" shell input keyevent 82 || true
+          sleep 2
+          "$ADB" exec-out screencap -p >/tmp/android-screen.png
+          test "$(stat -c%s /tmp/android-screen.png)" -gt 10000
           if "$ADB" shell pm path "$TIKTOK_PACKAGE" | grep -q package:; then
             "$ADB" shell monkey -p "$TIKTOK_PACKAGE" -c android.intent.category.LAUNCHER 1 >/dev/null || true
           else
@@ -116,11 +124,15 @@ jobs:
         run: |
           set -euo pipefail
           REMOTE_PASSWORD="$(cat /tmp/gui-password)"
+          ADB="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb"
+          "$ADB" shell input keyevent KEYCODE_WAKEUP || true
+          "$ADB" shell wm dismiss-keyguard || true
           export DISPLAY=:99
           nohup Xvfb :99 -screen 0 1280x800x24 -ac >/tmp/tiktok-xvfb.log 2>&1 &
           sleep 2
-          nohup scrcpy --no-audio --stay-awake --max-size=1080 --window-title='TikTok Android' >/tmp/tiktok-scrcpy.log 2>&1 &
-          sleep 4
+          nohup scrcpy --no-audio --stay-awake --turn-screen-on --disable-screensaver --max-size=1080 --window-title='TikTok Android' >/tmp/tiktok-scrcpy.log 2>&1 &
+          sleep 6
+          pgrep -f '^scrcpy|/scrcpy' >/dev/null || { cat /tmp/tiktok-scrcpy.log; exit 21; }
           nohup x11vnc -display :99 -forever -shared -nopw -localhost -rfbport 5900 >/tmp/tiktok-x11vnc.log 2>&1 &
           nohup websockify --web=/usr/share/novnc 6081 127.0.0.1:5900 >/tmp/tiktok-websockify.log 2>&1 &
           sudo htpasswd -bc /etc/nginx/.tiktok-htpasswd "$REMOTE_USER" "$REMOTE_PASSWORD" >/dev/null
@@ -166,6 +178,7 @@ jobs:
           deadline=$((SECONDS+1800)); found=0
           while [ $SECONDS -lt $deadline ]; do
             pgrep -f 'cloudflared tunnel' >/dev/null || exit 7
+            "$ADB" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
             if "$ADB" shell pm path "$TIKTOK_PACKAGE" | grep -q package:; then "$ADB" shell monkey -p "$TIKTOK_PACKAGE" -c android.intent.category.LAUNCHER 1 >/dev/null || true; fi
             "$ADB" shell uiautomator dump /sdcard/tiktok-window.xml >/dev/null 2>&1 || true
             "$ADB" pull /sdcard/tiktok-window.xml /tmp/tiktok-window.xml >/dev/null 2>&1 || true
