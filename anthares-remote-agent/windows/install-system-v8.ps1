@@ -29,13 +29,13 @@ foreach($name in $critical){
   $scriptHashes[$name]=(Get-FileHash $dst -Algorithm SHA256).Hash
 }
 
-$v4=Join-Path $root 'anthares-remote-agent-v4.exe'
-if(-not(Test-Path $v4)){throw 'anthares-remote-agent-v4.exe is missing'}
+$v4=Join-Path $root 'anthares-remote-agent-v4-c8.exe'
+if(-not(Test-Path $v4)){throw 'anthares-remote-agent-v4-c8.exe is missing'}
 $v4Hash=(Get-FileHash $v4 -Algorithm SHA256).Hash
-Copy-Item $v4 (Join-Path $root 'anthares-remote-agent-v4.lastgood.exe') -Force
-[ordered]@{v4_sha256=$v4Hash;script_sha256=$scriptHashes;updated_at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json -Depth 5|Set-Content (Join-Path $root 'integrity-baseline.json') -Encoding UTF8
-Set-Content -LiteralPath (Join-Path $root 'v4-validated.flag') -Value ('validated sha256='+$v4Hash) -Encoding ASCII
-Log ('V4 pinned sha256='+$v4Hash)
+Copy-Item $v4 (Join-Path $root 'anthares-remote-agent-v4-c8.lastgood.exe') -Force
+[ordered]@{v4_sha256=$v4Hash;binary='anthares-remote-agent-v4-c8.exe';script_sha256=$scriptHashes;updated_at=(Get-Date).ToUniversalTime().ToString('o')}|ConvertTo-Json -Depth 5|Set-Content (Join-Path $root 'integrity-baseline.json') -Encoding UTF8
+Set-Content -LiteralPath (Join-Path $root 'v4-validated.flag') -Value ('validated c8 sha256='+$v4Hash) -Encoding ASCII
+Log ('V4 C8 pinned sha256='+$v4Hash)
 
 $credential=Join-Path $root 'secrets\issue-queue.json'
 if(-not(Test-Path $credential)){throw 'existing SYSTEM private queue credential is missing'}
@@ -111,18 +111,19 @@ $verified=$false
 $agentPid=0
 while((Get-Date)-lt $deadline){
   Start-Sleep -Seconds 2
-  $agents=@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -eq 0 -and $_.Name -eq 'anthares-remote-agent-v4.exe'})
-  if($agents.Count -gt 0){$agentPid=[int]$agents[0].ProcessId;$verified=$true;break}
+  $agents=@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -eq 0 -and $_.Name -eq 'anthares-remote-agent-v4-c8.exe'})
+  if($agents.Count -eq 1){$agentPid=[int]$agents[0].ProcessId;$verified=$true;break}
+  if($agents.Count -gt 1){throw 'multiple C8 SYSTEM executors detected during install'}
 }
-if(-not $verified){throw 'V4 SYSTEM runtime did not reach session 0 within 60 seconds; legacy transport left intact'}
+if(-not $verified){throw 'V4 C8 SYSTEM runtime did not reach session 0 within 60 seconds; legacy transport left intact'}
 
 $proof=Invoke-GitHubQueueProof
 if(-not $proof.ok){throw 'Phase 4 queue proof failed; legacy transport left intact'}
 Log ('dual-transport proof passed issue='+$proof.issue+' job='+$proof.job_id+' pid='+$proof.agent_pid)
 
 foreach($oldTask in @('Anthares Remote Agent User','Anthares-GitHub-Queue-Bridge')){try{Disable-ScheduledTask -TaskName $oldTask -ErrorAction SilentlyContinue|Out-Null}catch{}}
-Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -ne 0 -and $_.Name -match '^anthares-remote-agent(?:-v4|-standard)?\.exe$'}|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -ne 0 -and $_.Name -match '^anthares-remote-agent(?:-v4(?:-c8)?|-standard)?\.exe$'}|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
 
-$result=[ordered]@{ok=$true;install_root=$root;work_root=$work;v4_sha256=$v4Hash;system_v4_pid=$agentPid;system_task=(Get-ScheduledTask -TaskName $canonicalTask).State;watchdog_task=(Get-ScheduledTask -TaskName $watchdogTask).State;system_state=$state;queue_credential_validated=$true;queue_end_to_end_proof=$true;mcp_http_transport_configured=$true;queue_proof_issue=$proof.issue;queue_proof_job_id=$proof.job_id;queue_providers=$proof.queue_providers;single_executor_enforced=$true;legacy_preserved_until_queue_proof=$false;jobs_path_migration_performed=$false;render_required=$false;completed_at=(Get-Date).ToUniversalTime().ToString('o')}
+$result=[ordered]@{ok=$true;install_root=$root;work_root=$work;canonical_binary='anthares-remote-agent-v4-c8.exe';v4_sha256=$v4Hash;system_v4_pid=$agentPid;system_task=(Get-ScheduledTask -TaskName $canonicalTask).State;watchdog_task=(Get-ScheduledTask -TaskName $watchdogTask).State;system_state=$state;queue_credential_validated=$true;queue_end_to_end_proof=$true;mcp_http_transport_configured=$true;queue_proof_issue=$proof.issue;queue_proof_job_id=$proof.job_id;queue_providers=$proof.queue_providers;single_executor_enforced=$true;legacy_preserved_until_queue_proof=$false;jobs_path_migration_performed=$false;render_required=$false;completed_at=(Get-Date).ToUniversalTime().ToString('o')}
 $result | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $work 'legacy-pc-runtime\supervisor\install-result.json') -Encoding UTF8
 Log ('SUCCESS '+($result|ConvertTo-Json -Compress -Depth 5))
