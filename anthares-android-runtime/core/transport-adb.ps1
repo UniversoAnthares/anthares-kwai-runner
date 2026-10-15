@@ -1,4 +1,5 @@
 Set-StrictMode -Version Latest
+$script:AdbServerPort=5043
 function Invoke-AntharesProcess {
     param([string]$File,[string[]]$Args,[int]$TimeoutMs=8000)
     $tmp=[IO.Path]::GetTempFileName(); $err=[IO.Path]::GetTempFileName()
@@ -15,12 +16,13 @@ function Invoke-AntharesProcess {
 }
 function Invoke-AntharesAdb {
     param([string]$Adb,[string[]]$Args,[int]$TimeoutMs=8000)
-    Invoke-AntharesProcess -File $Adb -Args $Args -TimeoutMs $TimeoutMs
+    $all=@('-P',[string]$script:AdbServerPort)+@($Args)
+    Invoke-AntharesProcess -File $Adb -Args $all -TimeoutMs $TimeoutMs
 }
 function Get-AdbDevices {
     param([string]$Adb)
     $r=Invoke-AntharesAdb $Adb @('devices','-l') 5000
     $m=[ordered]@{}
     if($r.stdout){foreach($line in ($r.stdout -split "`r?`n" | Select-Object -Skip 1)){if($line -match '^(\S+)\s+(device|offline|unauthorized)\b'){$m[$matches[1]]=$matches[2]}}}
-    [ordered]@{ok=$r.ok;devices=$m;raw=$r}
+    [ordered]@{ok=$r.ok;devices=$m;raw=$r;server_port=$script:AdbServerPort}
 }
