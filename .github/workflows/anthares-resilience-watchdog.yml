@@ -9,6 +9,7 @@ on:
     paths:
       - 'anthares-brouser/**'
       - 'tools/anthares_resilience.py'
+      - 'tools/execution_policy.py'
       - 'ci-hub/executor-routing.json'
       - 'ci-hub/provider-status.json'
       - 'ci-hub/CONTINUITY.md'
@@ -31,8 +32,9 @@ jobs:
       ANTHARES_RESILIENCE_REPORT_ONLY: '1'
     steps:
       - uses: actions/checkout@v4
-      - name: Validate resilience code
-        run: python -m py_compile tools/anthares_resilience.py
+      - name: Validate resilience and execution policy
+        run: |
+          python -m py_compile tools/anthares_resilience.py tools/execution_policy.py
       - name: Enforce routing policy
         run: |
           python - <<'PY'
@@ -51,10 +53,15 @@ jobs:
               assert selected in browser.get('backend_priority',[])
               provider=routing.get('providers',{}).get(selected,{})
               assert provider.get('browser_backend_eligible') is True
-          for name in ('render','tinyfish','circleci','browserless'):
+          retired=('render','tinyfish','circleci','browserless','winremote','meshcentral','codespaces')
+          for name in retired:
               assert routing['retired'][name]['active'] is False
+              assert routing['providers'][name]['active'] is False
               assert status['providers'][name]['eligible'] is False
+          assert all(name not in browser.get('backend_priority',[]) for name in retired)
+          assert selected not in retired
           assert status['rules']['regression_check_required_each_round'] is True
+          assert set(retired).issubset(set(status['rules']['retired_never_route']))
           print('ANTHARES_ROUTING_POLICY=PROVEN selected_browser_backend='+str(selected))
           PY
       - name: Report runtime continuity evidence available to this runner
@@ -67,5 +74,5 @@ jobs:
         run: |
           echo 'Anthares Remote is the only remote-control surface. Anthares Browser is the only browser-automation surface.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Provider Chromium executors are backends behind Anthares Browser and are selected only after current readiness/quota proof.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Browserless, TinyFish, Render and CircleCI are retired/superseded and must never be selected as fallbacks.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Render, TinyFish, Browserless, WinRemote, MeshCentral, CircleCI and Codespaces are retired and must never be selected as operational fallbacks.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Missing live runtime evidence is reported rather than fabricated.' >> "$GITHUB_STEP_SUMMARY"
