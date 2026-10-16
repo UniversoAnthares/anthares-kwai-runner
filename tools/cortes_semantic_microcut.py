@@ -5,7 +5,7 @@ import argparse, json, math, re, subprocess, unicodedata
 from collections import Counter
 from pathlib import Path
 
-FILLERS={"ah","ahn","ahem","hum","hmm","uh","uhm","eh","e","er","tipo","ne"}
+FILLERS={"ah","ahn","ahh","ahem","hum","hmm","uh","uhm","eh","ehh","ehhh","er","tipo","ne"}
 STOP={"a","o","as","os","um","uma","uns","umas","de","da","do","das","dos","e","ou","que","em","no","na","nos","nas","para","por","com","sem","se","eu","voce","voces","ele","ela","eles","elas","meu","minha","seu","sua","isso","isto","esse","essa","aquele","aquela","como","mais","menos","muito","muita","muitos","muitas","ja","nao","sim","ser","estar","ter","foi","vai","vou","tem","tinha","aqui","ali","entao","porque","quando","onde","quem","qual","quais"}
 INTRO_PATTERNS=[
     r"\bbom dia\b",r"\bboa tarde\b",r"\bboa noite\b",r"\bbem vind",r"\bsejam bem vind",
@@ -112,7 +112,10 @@ def select(args):
     ranked=score_windows(rows)
     # Never accept an intro/CTA-heavy candidate when a clean candidate exists.
     clean=[r for r in ranked if r["metrics"]["intro_hits"]==0]
-    best=(clean or ranked)[0]
+    if not clean: raise SystemExit("NO_NONINTRO_SEMANTIC_CANDIDATE")
+    best=clean[0]
+    if best["metrics"]["unique_content"] < 22 or best["metrics"]["content_density"] < 0.35:
+        raise SystemExit("SEMANTIC_CONTENT_TOO_WEAK")
     plan={
         "kind":"ANTHARES_CORTES_SEMANTIC_PLAN_V1","transcript_words":len(words),"source_duration":round(total,3),
         "source_start":round(best["s"],3),"source_end":round(best["e"],3),"source_duration_selected":round(best["e"]-best["s"],3),
