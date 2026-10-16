@@ -18,10 +18,38 @@ $tracked=@(
   'recovery-watchdog-loop.ps1','recovery-watchdog-loop.ps1.lastgood'
 )
 function Log([string]$m){try{"$(Get-Date -Format o) $m"|Tee-Object -FilePath $log -Append}catch{}}
+function Get-ARAProcesses{
+  @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.Name -match '^anthares-remote-agent(?:-v4(?:-c8)?|-standard)?\.exe$'})
+}
 function Stop-ARA{
   try{Stop-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue}catch{}
   try{Stop-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue}catch{}
-  Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.Name -match '^anthares-remote-agent(?:-v4(?:-c8)?|-standard)?\.exe$'}|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
+  # Stop the canonical supervisor explicitly. Stopping a scheduled task is not
+  # guaranteed to synchronously reap an already spawned PowerShell process.
+  Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{
+    $_.Name -eq 'powershell.exe' -and $_.CommandLine -match 'run-agent-system-supervisor\.ps1'
+  }|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
+  Get-ARAProcesses|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
+  $deadline=(Get-Date).AddSeconds(15)
+  do{
+    $alive=@(Get-ARAProcesses)
+    if($alive.Count -eq 0){break}
+    $alive|ForEach-Object{try{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}catch{}}
+    Start-Sleep -Milliseconds 250
+  }while((Get-Date) -lt $deadline)
+  if(@(Get-ARAProcesses).Count -ne 0){throw 'canonical agent did not stop before deploy'}
+}
+function Wait-BinaryWritable([string]$path,[int]$seconds=15){
+  $deadline=(Get-Date).AddSeconds($seconds)
+  do{
+    if(-not(Test-Path -LiteralPath $path)){return}
+    try{
+      $s=[IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+      $s.Dispose()
+      return
+    }catch{Start-Sleep -Milliseconds 250}
+  }while((Get-Date) -lt $deadline)
+  throw 'canonical binary remained locked after agent stop'
 }
 function Start-ARA{
   try{Start-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue}catch{}
@@ -47,7 +75,7 @@ function Restore-Rollback{
     $src=Join-Path $backup $name
     $wasPresent=$false
     try{$wasPresent=[bool]$present.$name}catch{}
-    if($wasPresent -and (Test-Path -LiteralPath $src)){Copy-Item -LiteralPath $src -Destination $dst -Force}
+    if($wasPresent -and (Test-Path -LiteralPath $src)){Wait-BinaryWritable $dst 10;Copy-Item -LiteralPath $src -Destination $dst -Force}
     elseif(-not $wasPresent -and (Test-Path -LiteralPath $dst)){Remove-Item -LiteralPath $dst -Force -ErrorAction SilentlyContinue}
   }
   Start-ARA
@@ -81,8 +109,10 @@ try{
 
   Save-Rollback
   Stop-ARA
-  Copy-Item -LiteralPath $newExe -Destination (Join-Path $root 'anthares-remote-agent-v4-c8.exe') -Force
-  if((Get-FileHash -LiteralPath (Join-Path $root 'anthares-remote-agent-v4-c8.exe') -Algorithm SHA256).Hash.ToUpperInvariant() -ne $actual){throw 'installed V4 C8 checksum mismatch before installer'}
+  $liveExe=Join-Path $root 'anthares-remote-agent-v4-c8.exe'
+  Wait-BinaryWritable $liveExe 15
+  Copy-Item -LiteralPath $newExe -Destination $liveExe -Force
+  if((Get-FileHash -LiteralPath $liveExe -Algorithm SHA256).Hash.ToUpperInvariant() -ne $actual){throw 'installed V4 C8 checksum mismatch before installer'}
 
   & $installer
   $installResult=Join-Path $work 'legacy-pc-runtime\supervisor\install-result.json'
