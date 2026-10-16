@@ -1,6 +1,6 @@
 {
-  "revision": "2026-10-15-provider-status-r4-ara-phase4",
-  "checked_at_utc": "2026-10-15T23:22:34Z",
+  "revision": "2026-10-15-provider-status-r5-phase5-retirement",
+  "checked_at_utc": "2026-10-16T02:20:49Z",
   "rules": {
     "regression_check_required_each_round": true,
     "only_remote_control_surface": "anthares_remote",
@@ -26,8 +26,8 @@
     "cloudflare_durable_objects": {"status":"BLOCKED_QUOTA_NOT_IN_ARA_PATH","evidence_class":"VERIFIED_OWNER_ERROR","verified_at_utc":"2026-10-15T23:22:34Z","evidence":"ARA Phase 1-4 production path homologated on Vercel+Neon and private issue queues; Cloudflare DO remains blocked and is not required","eligible":false,"quota_remaining":"0_rows_written_until_reset"},
     "cloudflare_browser_rendering": {"status":"BLOCKED_QUOTA_LAST_OBSERVED","evidence_class":"HISTORICAL_CURRENT_REVALIDATION_REQUIRED","verified_at_utc":null,"eligible":false},
     "cloudflare_workers_builds": {"status":"PENDING_FRESH_QUOTA_VERIFICATION","evidence_class":"PENDING_VERIFICATION","verified_at_utc":null,"eligible":false},
-    "render": {"status":"RETIRED_PERMANENT","eligible":false},
-    "tinyfish": {"status":"RETIRED_PERMANENT","eligible":false},
+    "render": {"status":"RETIRED_PERMANENT_ALL_ACCOUNT_RESOURCES_SUSPENDED","evidence_class":"VERIFIED","verified_at_utc":"2026-10-16T02:20:49Z","evidence":"all Render web services listed as suspended; Render Postgres anthares-ara-state and Key Value anthares-x-session-vault were already suspended; final worker srv-db6gcoad0e5s73alefn0 suspended and one-shot retirement workflow removed","eligible":false},
+    "tinyfish": {"status":"RETIRED_PERMANENT_SUPERSEDED","evidence_class":"VERIFIED_POLICY","verified_at_utc":"2026-10-16T02:20:49Z","evidence":"excluded from retired_never_route and all browser priorities; Anthares Browser is the exclusive browser surface","eligible":false},
     "circleci": {"status":"RETIRED_PERMANENT","eligible":false},
     "browserless": {"status":"RETIRED_PERMANENT_SUPERSEDED_BY_ANTHARES_BROWSER","eligible":false},
     "winremote": {"status":"RETIRED_PERMANENT_FUNCTIONS_TO_ANTHARES_REMOTE","eligible":false},
