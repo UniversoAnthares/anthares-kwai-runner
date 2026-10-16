@@ -1,0 +1,128 @@
+name: CORTES phase 4 source-cycle acceptance once
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cortes-phase4-source-cycle-once.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  source-cycle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      GITLAB_PROJECT_ID: '87361776'
+    steps:
+      - name: Fetch protected SSH credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GITLAB_TOKEN:-}"
+          python3 - <<'PY'
+          import json,os,urllib.request
+          req=urllib.request.Request(
+              f"https://gitlab.com/api/v4/projects/{os.environ['GITLAB_PROJECT_ID']}/variables?per_page=100",
+              headers={'PRIVATE-TOKEN':os.environ['GITLAB_TOKEN'],'User-Agent':'anthares-phase4-source-cycle'})
+          with urllib.request.urlopen(req,timeout=30) as r: rows=json.load(r)
+          vals={str(x.get('key')):str(x.get('value') or '') for x in rows}
+          need=['ANTHARES_QA_SSH_KEY','ANTHARES_QA_SSH_HOST','ANTHARES_QA_SSH_USER']
+          missing=[k for k in need if not vals.get(k)]
+          if missing: raise SystemExit('missing:'+','.join(missing))
+          out={k:vals[k] for k in need}; out['ANTHARES_QA_SSH_PORT']=vals.get('ANTHARES_QA_SSH_PORT') or '65002'
+          for v in out.values(): print('::add-mask::'+v.replace('\r','').replace('\n','%0A'))
+          json.dump(out,open('/tmp/phase4-ssh.json','w'))
+          PY
+          python3 - <<'PY'
+          import json
+          v=json.load(open('/tmp/phase4-ssh.json'))
+          open('/tmp/phase4-key','w').write(v['ANTHARES_QA_SSH_KEY'])
+          open('/tmp/phase4-host','w').write(v['ANTHARES_QA_SSH_HOST'])
+          open('/tmp/phase4-user','w').write(v['ANTHARES_QA_SSH_USER'])
+          open('/tmp/phase4-port','w').write(v['ANTHARES_QA_SSH_PORT'])
+          PY
+          chmod 600 /tmp/phase4-key
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          ssh-keyscan -p "$(cat /tmp/phase4-port)" "$(cat /tmp/phase4-host)" >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Prove regular-video daily lock and exact restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="$(cat /tmp/phase4-host)"; user="$(cat /tmp/phase4-user)"; port="$(cat /tmp/phase4-port)"
+          ssh -p "$port" -i /tmp/phase4-key -o IdentitiesOnly=yes "$user@$host" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          SITE="$HOME/domains/anthares.us/public_html"
+          PHP=/opt/alt/php85/usr/bin/php
+          WP=/usr/local/bin/wp
+          cd "$SITE"
+          "$PHP" "$WP" eval '
+          $cycleKey="anthares_cortes_source_cycle_v1";
+          $registryKey="anthares_cortes_registry_v1";
+          $missing="__ANTHARES_PHASE4_MISSING__";
+          $oldCycle=get_option($cycleKey,$missing);
+          $oldRegistry=get_option($registryKey,$missing);
+          $beforeCycle=hash("sha256",serialize($oldCycle));
+          $beforeRegistry=hash("sha256",serialize($oldRegistry));
+          $id="phase4-regular-canary-20261016";
+          $date=gmdate("Y-m-d");
+          $state=["daily_lock"=>["date"=>$date,"source"=>[
+            "video_id"=>$id,
+            "title"=>"Phase 4 reversible regular source canary",
+            "source_url"=>"https://example.invalid/phase4-regular-canary",
+            "duration_seconds"=>1201,
+            "is_short"=>false,
+            "source_kind"=>"regular_video",
+            "youtube_allowed"=>false
+          ]]];
+          $out=[];
+          try {
+            update_option($cycleKey,$state,false);
+            $active=anthares_cortes_source_cycle_active();
+            $prepared=anthares_cortes_source_prepare_locked();
+            $net=anthares_cortes_networks_get();
+            $reg=anthares_cortes_registry_get();
+            $row=$reg[$id]??null;
+            $out=[
+              "active_id"=>$active["video_id"]??null,
+              "source_kind"=>$active["source_kind"]??null,
+              "duration_seconds"=>(int)($active["duration_seconds"]??0),
+              "active_youtube_allowed"=>!empty($active["youtube_allowed"]),
+              "prepared_stage"=>$prepared["stage"]??null,
+              "registry_present"=>is_array($row),
+              "registry_source_kind"=>$row["source_kind"]??null,
+              "registry_youtube_allowed"=>!empty($row["youtube_allowed"]),
+              "youtube_enabled"=>!empty($net["youtube"]["enabled"]),
+              "youtube_suppressed_by"=>$net["youtube"]["suppressed_by"]??null
+            ];
+            if (($out["active_id"]??"")!==$id) throw new Exception("active_source_mismatch");
+            if (($out["source_kind"]??"")!=="regular_video") throw new Exception("kind_mismatch");
+            if (($out["duration_seconds"]??0)<=900) throw new Exception("duration_rule_failed");
+            if (!empty($out["active_youtube_allowed"])) throw new Exception("source_youtube_not_suppressed");
+            if (!$out["registry_present"]) throw new Exception("registry_projection_missing");
+            if (($out["registry_source_kind"]??"")!=="regular_video") throw new Exception("registry_kind_mismatch");
+            if (!empty($out["registry_youtube_allowed"])) throw new Exception("registry_youtube_not_suppressed");
+            if (!empty($out["youtube_enabled"])) throw new Exception("network_youtube_not_suppressed");
+            if (($out["youtube_suppressed_by"]??"")!=="regular_video_source") throw new Exception("suppression_reason_missing");
+            echo "PHASE4_SOURCE_CYCLE_CANARY=".wp_json_encode($out,JSON_UNESCAPED_SLASHES)."\n";
+            echo "PHASE4_REGULAR_FALLBACK=PROVEN\n";
+          } finally {
+            if ($oldCycle===$missing) delete_option($cycleKey); else update_option($cycleKey,$oldCycle,false);
+            if ($oldRegistry===$missing) delete_option($registryKey); else update_option($registryKey,$oldRegistry,false);
+          }
+          $afterCycle=get_option($cycleKey,$missing);
+          $afterRegistry=get_option($registryKey,$missing);
+          $afterCycleHash=hash("sha256",serialize($afterCycle));
+          $afterRegistryHash=hash("sha256",serialize($afterRegistry));
+          if ($beforeCycle!==$afterCycleHash || $beforeRegistry!==$afterRegistryHash) {
+            fwrite(STDERR,"PHASE4_RESTORE_MISMATCH\n"); exit(9);
+          }
+          echo "PHASE4_SOURCE_STATE_RESTORE=PROVEN\n";
+          echo "PHASE4_SOURCE_CYCLE=PROVEN\n";
+          '
+          REMOTE
+      - name: Cleanup credentials
+        if: always()
+        shell: bash
+        run: rm -f /tmp/phase4-key /tmp/phase4-host /tmp/phase4-user /tmp/phase4-port /tmp/phase4-ssh.json
