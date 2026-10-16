@@ -1,5 +1,5 @@
-﻿param(
-  [ValidateSet('health','select','recover','launch','foreground','ui')][string]$Command='health',
+param(
+  [ValidateSet('health','select','recover','launch','foreground','ui','identity')][string]$Command='health',
   [ValidateSet('auto','physical','memu')][string]$Target='auto',
   [ValidateSet('IDLE','LEASED','STARTED','COMMITTING','UNCERTAIN','VERIFIED')][string]$PublicationState='IDLE',
   [switch]$AllowBackendStart,
@@ -189,12 +189,53 @@ function ActiveProbe{
   if($Target -eq 'physical'){Probe 'physical'}elseif($Target -eq 'memu'){Probe 'memu'}else{$s=SelectExecutor;if($s.selected -eq 'physical_android'){Probe 'physical'}elseif($s.selected -eq 'memu_android'){Probe 'memu'}else{$null}}
 }
 
+function InvokeAgentCommand([string]$Cmd,[string]$Arg=''){
+  $a=@('shell','am','broadcast','-a','us.anthares.agent.COMMAND','--es','cmd',$Cmd)
+  if($Arg){$a+=@('--es','arg',$Arg)}
+  Adb $a (MemuInfo).serial 10
+}
+function GetAgentSnapshot{
+  $r=InvokeAgentCommand 'snapshot'
+  if(-not $r.ok){return ''}
+  $txt=[string]$r.stdout
+  $m=[regex]::Match($txt,'data="([\s\S]*?)"\s*$')
+  if($m.Success){return $m.Groups[1].Value}
+  $txt
+}
+function GetKwaiIdentity{
+  $h=ActiveProbe
+  $expected='@lucasrosalem'
+  if(-not $h -or -not $h.healthy){return [ordered]@{ok=$false;identity=$null;expected=$expected;reason='no_healthy_target'}}
+  [void](Adb @('shell','monkey','-p',$h.kwai_package,'-c','android.intent.category.LAUNCHER','1') $h.serial 12)
+  Start-Sleep -Seconds 2
+  $fg=Adb @('shell','dumpsys','window','windows') $h.serial 10
+  $fgLine=($fg.stdout -split "`r?`n"|Where-Object{$_ -match 'mCurrentFocus|mFocusedApp'}|Select-Object -First 1)
+  $snap=GetAgentSnapshot
+  $navigation='none'
+  if($snap -notmatch [regex]::Escape($expected)){
+    $click=InvokeAgentCommand 'click_id' 'id_home_bottom_tab_me'
+    if($click.stdout -match 'OK'){$navigation='anthares_agent_profile_id';Start-Sleep -Seconds 3;$snap=GetAgentSnapshot}
+  }
+  if($snap -notmatch [regex]::Escape($expected)){
+    [void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12)
+    $u=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10
+    $xml=[string]$u.stdout
+    if($xml -notmatch [regex]::Escape($expected)){
+      $m=[regex]::Match($xml,'resource-id="com\.kwai\.video\.basis:id/id_home_bottom_tab_me"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"')
+      if($m.Success){$x=[int](([int]$m.Groups[1].Value+[int]$m.Groups[3].Value)/2);$y=[int](([int]$m.Groups[2].Value+[int]$m.Groups[4].Value)/2);[void](Adb @('shell','input','tap',[string]$x,[string]$y) $h.serial 8);$navigation='semantic_profile_bounds';Start-Sleep -Seconds 3;[void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12);$u=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10;$xml=[string]$u.stdout}
+    }
+    if($xml -match [regex]::Escape($expected)){$snap=$xml}
+  }
+  $identity=if($snap -match [regex]::Escape($expected)){$expected}else{$null}
+  [ordered]@{ok=[bool]($identity -eq $expected -and $fgLine -match 'com\.kwai\.video');identity=$identity;expected=$expected;foreground=if($fgLine){$fgLine.Trim()}else{''};profile_marker_visible=[bool]($identity -eq $expected);navigation=$navigation}
+}
 switch($Command){
   'health'{$o=[ordered]@{ok=$true;physical=(Probe 'physical');memu=(Probe 'memu');policy=[ordered]@{priority=@('physical_android','memu_android');remote_android='experimental_only'}}}
   'select'{$o=SelectExecutor}
   'recover'{if($Target -eq 'auto'){$o=SelectExecutor}else{$o=RecoverTransport $Target -MayStart:$AllowBackendStart -MayReset:$AllowBackendReset}}
   'launch'{$h=ActiveProbe;if($h -and $h.healthy){$r=Adb @('shell','monkey','-p',$h.kwai_package,'-c','android.intent.category.LAUNCHER','1') $h.serial 12;$o=[ordered]@{ok=$r.ok;executor=$h.executor;serial=$h.serial;package=$h.kwai_package}}else{$o=[ordered]@{ok=$false;reason='no_healthy_target'}}}
   'foreground'{$h=ActiveProbe;if($h -and $h.healthy){$r=Adb @('shell','dumpsys','window','windows') $h.serial 10;$line=($r.stdout -split "`r?`n"|Where-Object{$_ -match 'mCurrentFocus|mFocusedApp'}|Select-Object -First 1);$o=[ordered]@{ok=$r.ok;executor=$h.executor;foreground=if($line){$line.Trim()}else{''}}}else{$o=[ordered]@{ok=$false;reason='no_healthy_target'}}}
+  'identity'{$o=GetKwaiIdentity}
   'ui'{$h=ActiveProbe;if($h -and $h.healthy){[void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12);$r=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10;$o=[ordered]@{ok=$r.ok;executor=$h.executor;xml=$r.stdout}}else{$o=[ordered]@{ok=$false;reason='no_healthy_target'}}}
 }
 Event $Command $o | ConvertTo-Json -Depth 12 -Compress
