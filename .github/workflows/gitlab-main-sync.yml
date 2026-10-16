@@ -1,0 +1,28 @@
+name: Sync GitHub main to GitLab
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitlab-main-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GL_AUTH: ${{ secrets.GITLAB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Synchronize without discarding GitLab history
+        run: python3 .github/scripts/gitlab_sync.py
