@@ -23,10 +23,10 @@ $env:HOMEPATH='\Users\Lucas'
 
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
 
-function Run([string]$File,[string[]]$Args,[int]$Timeout=12){
+function Run([string]$File,[string[]]$Arguments,[int]$Timeout=12){
   $psi=New-Object Diagnostics.ProcessStartInfo
   $psi.FileName=$File;$psi.UseShellExecute=$false;$psi.RedirectStandardOutput=$true;$psi.RedirectStandardError=$true;$psi.CreateNoWindow=$true
-  $psi.Arguments=(($Args|ForEach-Object{if($_ -match '\s'){ '"'+$_+'"' }else{$_}})-join ' ')
+  $psi.Arguments=(($Arguments|ForEach-Object{if($_ -match '\s'){ '"'+$_+'"' }else{$_}})-join ' ')
   $p=New-Object Diagnostics.Process;$p.StartInfo=$psi
   try{[void]$p.Start();$o=$p.StandardOutput.ReadToEndAsync();$e=$p.StandardError.ReadToEndAsync();if(-not $p.WaitForExit($Timeout*1000)){try{$p.Kill()}catch{};return @{ok=$false;timeout=$true;stdout='';stderr='timeout'}};@{ok=($p.ExitCode -eq 0);code=$p.ExitCode;stdout=$o.Result;stderr=$e.Result}}catch{@{ok=$false;code=$null;stdout='';stderr=$_.Exception.Message}}finally{if($p){$p.Dispose()}}
 }
@@ -36,19 +36,21 @@ function Event([string]$Op,$Data){
   $row|ConvertTo-Json -Depth 12|Set-Content -Encoding UTF8 (Join-Path $Root 'state.json')
   $Data
 }
-function Adb([string[]]$Args,[string]$Serial=$null,[int]$Timeout=10){$a=@();if($Serial){$a+=@('-s',$Serial)};$a+=$Args;Run $Adb $a $Timeout}
+function Adb([string[]]$Arguments,[string]$Serial=$null,[int]$Timeout=10){$a=@();if($Serial){$a+=@('-s',$Serial)};$a+=$Arguments;Run -File $Adb -Arguments $a -Timeout $Timeout}
 function Devices{
   $r=Adb @('devices','-l');$d=@{}
   foreach($line in (($r.stdout -split "`r?`n")|Select-Object -Skip 1)){$p=$line.Trim() -split '\s+';if($p.Count -ge 2){$d[$p[0]]=$p[1]}}
   $d
 }
 function MemuInfo{
-  $r=Run $Mgr @('showvminfo',$Vm,'--machinereadable') 10;$txt=$r.stdout;$state='unknown';$serial=$null
-  if($txt -match '(?m)^VMState="([^"]+)"'){$state=$Matches[1]}
+  $r=Run -File $Mgr -Arguments @('showvminfo',$Vm,'--machinereadable') -Timeout 10;$txt=$r.stdout;$state='unknown';$serial=$null;$managerState='unknown';$reconciled=$false
+  if($txt -match '(?m)^VMState="([^"]+)"'){$state=$Matches[1];$managerState=$state}
   if($txt -match 'Forwarding\(\d+\)="ADB,tcp,127\.0\.0\.1,(\d+),'){$serial='127.0.0.1:'+$Matches[1]}
-  [ordered]@{state=$state;serial=$serial;manager_ok=$r.ok;manager_error=$r.stderr.Trim()}
+  $live=Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {$_.Name -eq 'MEmuHeadless.exe' -and $_.CommandLine -match '--comment\s+MEmu_4(?:\s|$)'} | Select-Object -First 1
+  if($live -and $state -ne 'running'){$state='running';$reconciled=$true}
+  [ordered]@{state=$state;manager_state=$managerState;state_reconciled=$reconciled;serial=$serial;manager_ok=$r.ok;manager_error=$r.stderr.Trim()}
 }
-function MemuGuest([string]$Command,[int]$Timeout=8){Run $Memuc @('-n',$Vm,'execcmd',$Command) $Timeout}
+function MemuGuest([string]$Command,[int]$Timeout=8){Run -File $Memuc -Arguments @('-n',$Vm,'execcmd',$Command) -Timeout $Timeout}
 function RemoveAbortedMemuOrphan{
   $m=MemuInfo
   if($m.state -ne 'aborted'){return [ordered]@{ok=$true;action='not_applicable';state=$m.state;terminated=@()}}
@@ -64,10 +66,10 @@ function StartMemuOfficial{
   $m=MemuInfo
   if($m.state -eq 'running'){return @{ok=$true;action='already_running';stdout='';stderr=''}}
   $cleanup=if($m.state -eq 'aborted'){RemoveAbortedMemuOrphan}else{$null}
-  $r=Run $Mgr @('startvm',$Vm,'--type','headless') 35
+  $r=Run -File $Mgr -Arguments @('startvm',$Vm,'--type','headless') -Timeout 35
   if(-not $r.ok){
     $old=$env:__COMPAT_LAYER
-    try{$env:__COMPAT_LAYER='RunAsInvoker';$fallback=Run $Memuc @('start','-i',$VmIndex) 35}finally{$env:__COMPAT_LAYER=$old}
+    try{$env:__COMPAT_LAYER='RunAsInvoker';$fallback=Run -File $Memuc -Arguments @('start','-i',$VmIndex) -Timeout 35}finally{$env:__COMPAT_LAYER=$old}
     if($fallback.ok){return @{ok=$true;action='memuc_fallback_started';stdout=$fallback.stdout;stderr=$fallback.stderr;cleanup=$cleanup}}
     return @{ok=$false;action='start_failed';stdout=$r.stdout;stderr=($r.stderr+'; '+$fallback.stderr);cleanup=$cleanup}
   }
@@ -124,7 +126,7 @@ function RecoverTransport([string]$Kind,[switch]$MayStart,[switch]$MayReset){
     if($guestRepair.ok){return [ordered]@{ok=$true;action='guest_adbd_tcp_recovered';before=$before;after=$guestRepair.after;guest_repair=$guestRepair}}
   }else{$guestRepair=$null}
   if($Kind -eq 'memu' -and $MayReset){
-    [void](Run $Mgr @('controlvm',$Vm,'reset') 15);$deadline=(Get-Date).AddSeconds(45)
+    [void](Run -File $Mgr -Arguments @('controlvm',$Vm,'reset') -Timeout 15);$deadline=(Get-Date).AddSeconds(45)
     do{Start-Sleep -Seconds 2;$after=Probe $Kind;if($after.healthy){return [ordered]@{ok=$true;action='backend_reset_recovered';before=$before;after=$after;guest_repair=$guestRepair}}}while((Get-Date)-lt $deadline)
   }
   [ordered]@{ok=$false;action='recovery_exhausted';before=$before;after=(Probe $Kind);guest_repair=$guestRepair}
