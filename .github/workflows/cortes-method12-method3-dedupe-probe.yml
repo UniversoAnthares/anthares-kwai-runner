@@ -1,0 +1,53 @@
+name: CORTES method 1+2 + 3 dedupe probe
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cortes-method12-method3-dedupe-probe.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CONTROL: https://anthares-control.anthares1.workers.dev
+      SOURCE_ID: 9CIk-I_3VhM
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read queue and test candidate intervals only
+        shell: bash
+        run: |
+          set -euo pipefail
+          sep='&'; [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]] || sep='?'
+          aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
+          CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$CT"
+          curl -fsS -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/queue.json
+          python3 - <<'PY'
+          import json,os
+          q=json.load(open('/tmp/queue.json'))
+          raw=q.get('jobs') or []
+          jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
+          source=os.environ['SOURCE_ID']
+          candidates=[('METHOD12',98.0,188.0),('METHOD3',188.0,278.0)]
+          for label,a,b in candidates:
+              overlaps=[]
+              for j in jobs:
+                  if not isinstance(j,dict) or str(j.get('platform') or '').lower()!='kwai': continue
+                  if str(j.get('source_id') or '')!=source: continue
+                  try: x=float(j.get('source_start')); y=float(j.get('source_end'))
+                  except Exception: continue
+                  if max(a,x)<min(b,y):
+                      overlaps.append({'id':j.get('id'),'state':j.get('state') or j.get('status'),'start':x,'end':y,'remote_id':j.get('remote_id'),'public_url':j.get('public_url')})
+              print(label+'_CANDIDATE='+str(int(a))+'-'+str(int(b)))
+              print(label+'_OVERLAPS='+json.dumps(overlaps,separators=(',',':')))
+              blocking=[o for o in overlaps if str(o.get('state') or '').upper() in {'QUEUED','LEASED','STARTED','COMMITTING','UNCERTAIN','DONE','COMPLETED','SUCCESS'}]
+              print(label+'_FREE='+('1' if not blocking else '0'))
+          print('QUEUE_BACKEND='+str(q.get('backend') or 'unknown'))
+          print('QUEUE_READ_ONLY_PROBE=PROVEN')
+          PY
