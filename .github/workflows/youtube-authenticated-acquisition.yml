@@ -10,11 +10,11 @@ on:
       source_start:
         description: Start second for final cut
         required: false
-        default: '8'
+        default: '190'
       source_end:
         description: End second for final cut
         required: false
-        default: '98'
+        default: '280'
   push:
     branches: [main]
     paths:
@@ -31,6 +31,8 @@ jobs:
     env:
       YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
       YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+      SOURCE_START: ${{ github.event.inputs.source_start || '190' }}
+      SOURCE_END: ${{ github.event.inputs.source_end || '280' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -123,15 +125,10 @@ jobs:
 
       - name: Cut and process final master remotely
         shell: bash
-        env:
-          INPUT_SOURCE_START: ${{ github.event.inputs.source_start }}
-          INPUT_SOURCE_END: ${{ github.event.inputs.source_end }}
         run: |
           set -euo pipefail
-          START="${INPUT_SOURCE_START:-8}"
-          END="${INPUT_SOURCE_END:-98}"
           FILE="$(cat /tmp/method3/source-path.txt)"
-          ffmpeg -hide_banner -loglevel error -y -ss "$START" -to "$END" -i "$FILE" \
+          ffmpeg -hide_banner -loglevel error -y -ss "$SOURCE_START" -to "$SOURCE_END" -i "$FILE" \
             -vf 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920' \
             -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p \
             -c:a aac -b:a 128k -movflags +faststart \
@@ -171,12 +168,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json,pathlib
+          SOURCE_START="$SOURCE_START" SOURCE_END="$SOURCE_END" python3 - <<'PY'
+          import json,os,pathlib
           d={
             'source_id':'9CIk-I_3VhM',
-            'source_start':8,
-            'source_end':98,
+            'source_start':int(os.environ['SOURCE_START']),
+            'source_end':int(os.environ['SOURCE_END']),
             'method3':'full_temporary_authenticated_remote_acquisition_then_cut_process_delete',
             'fallback_role':True,
             'full_source_download_requested':True,
@@ -185,9 +182,11 @@ jobs:
             'final_duration_seconds':float(pathlib.Path('/tmp/method3/final-duration.txt').read_text()),
             'final_bytes':int(pathlib.Path('/tmp/method3/final-bytes.txt').read_text()),
             'final_sha256':pathlib.Path('/tmp/method3/final-sha.txt').read_text(),
+            'publication_canary_id':f"method3-{os.environ['SOURCE_START']}-{os.environ['SOURCE_END']}",
             'social_publish':False
           }
           pathlib.Path('/tmp/method3/result.json').write_text(json.dumps(d,indent=2),encoding='utf-8')
+          print('METHOD3_CANARY_INTERVAL=%s-%s' % (d['source_start'],d['source_end']))
           print('METHOD3_PROOF_MANIFEST=READY')
           PY
 
