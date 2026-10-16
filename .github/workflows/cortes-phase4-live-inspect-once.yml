@@ -1,0 +1,72 @@
+name: CORTES Phase 4 protected live inspect once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-phase4-live-inspect-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      GITLAB_PROJECT_ID: '87361776'
+    steps:
+      - name: Fetch protected SSH credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GITLAB_TOKEN:-}"
+          python3 - <<'PY'
+          import json, os, sys, urllib.request
+          req=urllib.request.Request(
+            f"https://gitlab.com/api/v4/projects/{os.environ['GITLAB_PROJECT_ID']}/variables?per_page=100",
+            headers={'PRIVATE-TOKEN':os.environ['GITLAB_TOKEN'],'User-Agent':'anthares-cortes-phase4'}
+          )
+          with urllib.request.urlopen(req,timeout=30) as r: rows=json.load(r)
+          vals={str(x.get('key')):str(x.get('value') or '') for x in rows}
+          need=['ANTHARES_QA_SSH_KEY','ANTHARES_QA_SSH_HOST','ANTHARES_QA_SSH_USER']
+          missing=[k for k in need if not vals.get(k)]
+          if missing: raise SystemExit('missing:'+','.join(missing))
+          out={k:vals[k] for k in need}; out['ANTHARES_QA_SSH_PORT']=vals.get('ANTHARES_QA_SSH_PORT') or '65002'
+          for v in out.values(): print('::add-mask::'+v.replace('\r','').replace('\n','%0A'))
+          json.dump(out,open('/tmp/cortes-vars.json','w'))
+          PY
+      - name: Inspect production CORTES state read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          v=json.load(open('/tmp/cortes-vars.json'))
+          open('/tmp/anthares_qa','w').write(v['ANTHARES_QA_SSH_KEY'])
+          open('/tmp/ssh_host','w').write(v['ANTHARES_QA_SSH_HOST'])
+          open('/tmp/ssh_user','w').write(v['ANTHARES_QA_SSH_USER'])
+          open('/tmp/ssh_port','w').write(v['ANTHARES_QA_SSH_PORT'])
+          PY
+          chmod 600 /tmp/anthares_qa
+          host="$(cat /tmp/ssh_host)"; user="$(cat /tmp/ssh_user)"; port="$(cat /tmp/ssh_port)"
+          install -m 700 -d ~/.ssh
+          ssh-keyscan -p "$port" "$host" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -p "$port" -i /tmp/anthares_qa -o IdentitiesOnly=yes "$user@$host" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          SITE="$HOME/domains/anthares.us/public_html"
+          PHP=/opt/alt/php85/usr/bin/php
+          WP=/usr/local/bin/wp
+          cd "$SITE"
+          "$PHP" "$WP" eval '
+            $cycle=function_exists("anthares_cortes_source_cycle_get")?anthares_cortes_source_cycle_get():null;
+            $active=function_exists("anthares_cortes_source_cycle_active")?anthares_cortes_source_cycle_active():null;
+            $regular=function_exists("anthares_cortes_regular_sources_get")?array_values(anthares_cortes_regular_sources_get()):null;
+            $registry=function_exists("anthares_cortes_registry_get")?array_values(anthares_cortes_registry_get()):null;
+            $blocker=function_exists("anthares_cortes_current_blocker")?anthares_cortes_current_blocker():null;
+            $networks=function_exists("anthares_cortes_networks_get")?anthares_cortes_networks_get():null;
+            echo "PHASE4_LIVE_STATE=".wp_json_encode(["cycle"=>$cycle,"active"=>$active,"regular"=>$regular,"registry"=>$registry,"blocker"=>$blocker,"networks"=>$networks],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE)."\n";
+          '
+          REMOTE
+          rm -f /tmp/anthares_qa /tmp/ssh_host /tmp/ssh_user /tmp/ssh_port /tmp/cortes-vars.json
