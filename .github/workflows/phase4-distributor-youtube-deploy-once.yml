@@ -1,0 +1,72 @@
+name: Phase 4 Distributor YouTube source deploy once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase4-distributor-youtube-deploy-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      GITLAB_PROJECT_ID: '87361776'
+    steps:
+      - name: Fetch protected bridge variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.request
+          req=urllib.request.Request(f"https://gitlab.com/api/v4/projects/{os.environ['GITLAB_PROJECT_ID']}/variables?per_page=100",headers={'PRIVATE-TOKEN':os.environ['GITLAB_TOKEN'],'User-Agent':'anthares-phase4-deploy'})
+          with urllib.request.urlopen(req,timeout=30) as r: rows=json.load(r)
+          vals={str(x.get('key')):str(x.get('value') or '') for x in rows}
+          need=['ANTHARES_QA_SSH_KEY','ANTHARES_QA_SSH_HOST','ANTHARES_QA_SSH_USER','GITHUB_MIRROR_TOKEN']
+          missing=[k for k in need if not vals.get(k)]
+          if missing: raise SystemExit('missing:'+','.join(missing))
+          out={k:vals[k] for k in need}; out['ANTHARES_QA_SSH_PORT']=vals.get('ANTHARES_QA_SSH_PORT') or '65002'
+          for v in out.values(): print('::add-mask::'+v.replace('\r','').replace('\n','%0A'))
+          json.dump(out,open('/tmp/vars.json','w'))
+          PY
+      - name: Checkout exact WordPress source and deploy isolated file
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          v=json.load(open('/tmp/vars.json'))
+          for k,p in [('ANTHARES_QA_SSH_KEY','/tmp/key'),('ANTHARES_QA_SSH_HOST','/tmp/host'),('ANTHARES_QA_SSH_USER','/tmp/user'),('ANTHARES_QA_SSH_PORT','/tmp/port'),('GITHUB_MIRROR_TOKEN','/tmp/ght')]: open(p,'w').write(v[k])
+          PY
+          chmod 600 /tmp/key /tmp/ght
+          git config --global credential.helper store
+          printf 'https://x-access-token:%s@github.com\n' "$(cat /tmp/ght)" > ~/.git-credentials
+          git clone --quiet https://github.com/UniversoAnthares/anthares-wordpress.git /tmp/wp
+          git -C /tmp/wp checkout --quiet ba677e1265e10197a0b062650e0cccaaf26a7f08
+          rm -f ~/.git-credentials /tmp/ght
+          src=/tmp/wp/anthares-tiktok-distributor/includes/class-atd-db.php
+          grep -F "['tiktok','kwai','youtube']" "$src" >/dev/null
+          host="$(cat /tmp/host)"; user="$(cat /tmp/user)"; port="$(cat /tmp/port)"
+          install -m 700 -d ~/.ssh
+          ssh-keyscan -p "$port" "$host" >> ~/.ssh/known_hosts 2>/dev/null
+          scp -P "$port" -i /tmp/key -o IdentitiesOnly=yes "$src" "$user@$host:/tmp/class-atd-db.phase4.php"
+          ssh -p "$port" -i /tmp/key -o IdentitiesOnly=yes "$user@$host" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          SITE="$HOME/domains/anthares.us/public_html"
+          PHP=/opt/alt/php85/usr/bin/php
+          WP=/usr/local/bin/wp
+          live="$SITE/wp-content/plugins/anthares-tiktok-distributor/includes/class-atd-db.php"
+          test -f "$live"
+          "$PHP" -l /tmp/class-atd-db.phase4.php
+          cp -a "$live" "$live.phase4-backup-$(date -u +%Y%m%dT%H%M%SZ)"
+          cp /tmp/class-atd-db.phase4.php "$live"
+          "$PHP" -l "$live"
+          cd "$SITE"
+          "$PHP" "$WP" eval 'if(!class_exists("ATD_DB")||!ATD_DB::valid_source("youtube")){fwrite(STDERR,"youtube source not active\n");exit(9);} echo "DISTRIBUTOR_YOUTUBE_SOURCE=PROVEN\n";'
+          rm -f /tmp/class-atd-db.phase4.php
+          REMOTE
+          rm -f /tmp/key /tmp/host /tmp/user /tmp/port /tmp/vars.json
