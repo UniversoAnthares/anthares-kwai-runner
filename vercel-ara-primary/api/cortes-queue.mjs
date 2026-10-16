@@ -1,0 +1,63 @@
+import crypto from 'node:crypto';
+import { Pool } from 'pg';
+
+const DEVICE_HASH_BASE='https://raw.githubusercontent.com/UniversoAnthares/anthares-kwai-runner/main/anthares-remote-agent/devices';
+const pool=new Pool({connectionString:process.env.DATABASE_URL,max:4,ssl:{rejectUnauthorized:false}});
+const hashCache=new Map();
+let schemaReady=false;
+
+function reply(res,status,body){res.statusCode=status;res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');res.end(JSON.stringify(body));}
+function bearer(req){const m=/^Bearer\s+(.+)$/i.exec(req.headers.authorization||'');return m?m[1]:'';}
+function safeEq(a,b){const aa=Buffer.from(String(a));const bb=Buffer.from(String(b));return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb);}
+function sha256hex(v){return crypto.createHash('sha256').update(String(v)).digest('hex');}
+function jsonBody(req){if(req.body&&typeof req.body==='object'&&!Buffer.isBuffer(req.body))return req.body;if(typeof req.body==='string'){try{return JSON.parse(req.body)}catch{return {}}}return {};}
+function validHex64(v){return /^[0-9a-f]{64}$/i.test(String(v||''));}
+function int(v,name){const n=Number(v);if(!Number.isInteger(n)||n<0)throw new Error(`invalid_${name}`);return n;}
+
+async function expectedDeviceHash(device){const c=hashCache.get(device);if(c&&Date.now()-c.at<60000)return c.hash;const r=await fetch(`${DEVICE_HASH_BASE}/${encodeURIComponent(device)}.sha256`,{headers:{'User-Agent':'AntharesCortesQueue/1.0','cache-control':'no-cache'}});if(!r.ok)return '';const h=(await r.text()).trim().toLowerCase();if(!validHex64(h))return '';hashCache.set(device,{hash:h,at:Date.now()});return h;}
+async function deviceAuth(req){const device=String(req.headers['x-anthares-device']||'').trim();if(!/^[A-Za-z0-9_.-]{1,200}$/.test(device))return{ok:false,device:''};const token=bearer(req);if(!token)return{ok:false,device};const expected=await expectedDeviceHash(device);return{ok:!!expected&&safeEq(sha256hex(token),expected),device};}
+
+async function ensureSchema(){if(schemaReady)return;await pool.query(`
+CREATE TABLE IF NOT EXISTS cortes_publications(
+ id text PRIMARY KEY,
+ dedupe_key text NOT NULL UNIQUE,
+ target_key text NOT NULL,
+ master_id text NOT NULL,
+ media_sha256 text NOT NULL,
+ source_id text NOT NULL,
+ source_start bigint NOT NULL,
+ source_end bigint NOT NULL,
+ duration_class text NOT NULL,
+ payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+ status text NOT NULL DEFAULT 'queued',
+ lease_owner text,
+ lease_generation integer NOT NULL DEFAULT 0,
+ lease_until timestamptz,
+ publication_started_at timestamptz,
+ confirmation_evidence jsonb,
+ remote_id text,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ CHECK(source_end>source_start),
+ CHECK(status IN ('queued','leased','started','uncertain','confirmed','failed'))
+);
+CREATE INDEX IF NOT EXISTS cortes_publications_pick ON cortes_publications(target_key,status,created_at);
+CREATE INDEX IF NOT EXISTS cortes_publications_source ON cortes_publications(source_id,target_key,source_start,source_end);
+`);schemaReady=true;}
+
+async function reap(){await ensureSchema();await pool.query(`UPDATE cortes_publications SET status='queued',lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE status='leased' AND publication_started_at IS NULL AND lease_until<=now()`);await pool.query(`UPDATE cortes_publications SET status='uncertain',lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE status IN ('leased','started') AND publication_started_at IS NOT NULL AND lease_until<=now()`);}
+
+async function enqueue(body){await ensureSchema();const id=String(body.id||'').trim(),dedupe=String(body.dedupe_key||'').trim(),target=String(body.target_key||'').trim(),master=String(body.master_id||'').trim(),sha=String(body.media_sha256||'').toLowerCase(),source=String(body.source_id||'').trim(),duration=String(body.duration_class||'').trim();const start=int(body.source_start,'source_start'),end=int(body.source_end,'source_end');if(!id||!dedupe||!target||!master||!source||!validHex64(sha)||end<=start||!['short','long'].includes(duration))throw new Error('invalid_enqueue_payload');const c=await pool.connect();try{await c.query('BEGIN');await c.query(`SELECT pg_advisory_xact_lock(hashtext($1))`,[`${source}\n${target}`]);const exact=await c.query(`SELECT * FROM cortes_publications WHERE dedupe_key=$1 OR id=$2 LIMIT 1`,[dedupe,id]);if(exact.rowCount){await c.query('COMMIT');return{ok:true,deduped:true,reason:'identity',job:exact.rows[0]};}const overlap=await c.query(`SELECT * FROM cortes_publications WHERE source_id=$1 AND target_key=$2 AND source_start<$4 AND source_end>$3 AND status<>'failed' ORDER BY created_at LIMIT 1`,[source,target,start,end]);if(overlap.rowCount){await c.query('COMMIT');return{ok:true,deduped:true,reason:'timeline_overlap',job:overlap.rows[0]};}const r=await c.query(`INSERT INTO cortes_publications(id,dedupe_key,target_key,master_id,media_sha256,source_id,source_start,source_end,duration_class,payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) RETURNING *`,[id,dedupe,target,master,sha,source,start,end,duration,JSON.stringify(body)]);await c.query('COMMIT');return{ok:true,deduped:false,job:r.rows[0]};}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}
+
+async function lease(body){await reap();const owner=String(body.owner||'').trim(),target=String(body.target_key||'').trim();const seconds=Math.max(15,Math.min(Number(body.lease_seconds||90),600));if(!owner||!target)throw new Error('missing_owner_or_target');const r=await pool.query(`WITH picked AS (SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE cortes_publications p SET status='leased',lease_owner=$2,lease_generation=p.lease_generation+1,lease_until=now()+($3||' seconds')::interval,updated_at=now() FROM picked WHERE p.id=picked.id RETURNING p.*`,[target,owner,String(seconds)]);return{ok:true,job:r.rows[0]||null};}
+
+async function transition(body,kind){await ensureSchema();const id=String(body.id||'').trim(),owner=String(body.owner||'').trim(),generation=Number(body.lease_generation);if(!id||!owner||!Number.isInteger(generation)||generation<1)throw new Error('invalid_fence');if(kind==='start'){const r=await pool.query(`UPDATE cortes_publications SET status='started',publication_started_at=COALESCE(publication_started_at,now()),updated_at=now() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_generation=$3 AND lease_until>now() RETURNING *`,[id,owner,generation]);if(!r.rowCount)return{ok:false,error:'stale_or_invalid_lease'};return{ok:true,job:r.rows[0]};}if(kind==='confirm'){const evidence=body.confirmation_evidence||null,remote=String(body.remote_id||'').trim();if(!evidence||!remote)return{ok:false,error:'confirmation_evidence_required'};const r=await pool.query(`UPDATE cortes_publications SET status='confirmed',confirmation_evidence=$4::jsonb,remote_id=$5,lease_until=NULL,updated_at=now() WHERE id=$1 AND status='started' AND lease_owner=$2 AND lease_generation=$3 RETURNING *`,[id,owner,generation,JSON.stringify(evidence),remote]);if(!r.rowCount)return{ok:false,error:'stale_or_invalid_fence'};return{ok:true,job:r.rows[0]};}if(kind==='fail'){const r=await pool.query(`UPDATE cortes_publications SET status=CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain' END,lease_owner=CASE WHEN publication_started_at IS NULL THEN NULL ELSE lease_owner END,lease_until=NULL,updated_at=now() WHERE id=$1 AND lease_owner=$2 AND lease_generation=$3 AND status IN ('leased','started') RETURNING *`,[id,owner,generation]);if(!r.rowCount)return{ok:false,error:'stale_or_invalid_fence'};return{ok:true,job:r.rows[0]};}throw new Error('invalid_transition');}
+
+async function reconcile(body){await ensureSchema();const id=String(body.id||'').trim(),evidence=body.confirmation_evidence||null,remote=String(body.remote_id||'').trim();if(!id||!evidence||!remote)return{ok:false,error:'reconciliation_evidence_required'};const r=await pool.query(`UPDATE cortes_publications SET status='confirmed',confirmation_evidence=$2::jsonb,remote_id=$3,lease_until=NULL,updated_at=now() WHERE id=$1 AND status='uncertain' RETURNING *`,[id,JSON.stringify(evidence),remote]);if(!r.rowCount)return{ok:false,error:'not_uncertain_or_missing'};return{ok:true,job:r.rows[0]};}
+
+async function getJob(id){await reap();const r=await pool.query(`SELECT * FROM cortes_publications WHERE id=$1`,[id]);return r.rows[0]||null;}
+async function retention(body){await ensureSchema();const source=String(body.source_id||'').trim(),master=String(body.master_id||'').trim(),targets=Array.isArray(body.planned_targets)?body.planned_targets.map(String):[];if(!source||!master||!targets.length)return{ok:false,error:'missing_source_master_targets'};const r=await pool.query(`SELECT target_key,status FROM cortes_publications WHERE source_id=$1 AND master_id=$2 AND target_key=ANY($3::text[])`,[source,master,targets]);const m=new Map(r.rows.map(x=>[x.target_key,x.status]));const safe=targets.every(t=>m.get(t)==='confirmed');return{ok:true,safe_to_delete:safe,statuses:Object.fromEntries(targets.map(t=>[t,m.get(t)||'missing']))};}
+
+async function selfTest(device){await ensureSchema();const stamp=crypto.randomBytes(8).toString('hex'),source=`selftest-${stamp}`,target=`kwai:selftest-${stamp}`,sha=crypto.createHash('sha256').update(stamp).digest('hex'),master=`m-${stamp}`,id=`p-${stamp}`,dedupe=`d-${stamp}`,owner=`${device}:selftest`;const base={id,dedupe_key:dedupe,target_key:target,master_id:master,media_sha256:sha,source_id:source,source_start:1000,source_end:80000,duration_class:'short'};const a=await enqueue(base);const d=await enqueue(base);const o=await enqueue({...base,id:`o-${stamp}`,dedupe_key:`od-${stamp}`,source_start:70000,source_end:120000});const l=await lease({owner,target_key:target,lease_seconds:90});const stale=await transition({id,owner,lease_generation:l.job.lease_generation+1},'start');const s=await transition({id,owner,lease_generation:l.job.lease_generation},'start');const noev=await transition({id,owner,lease_generation:l.job.lease_generation},'confirm');const c=await transition({id,owner,lease_generation:l.job.lease_generation,confirmation_evidence:{kind:'selftest'},remote_id:`remote-${stamp}`},'confirm');const ret=await retention({source_id:source,master_id:master,planned_targets:[target]});const ok=!a.deduped&&d.deduped&&d.reason==='identity'&&o.deduped&&o.reason==='timeline_overlap'&&l.job?.lease_generation===1&&stale.ok===false&&s.ok===true&&noev.ok===false&&c.ok===true&&ret.safe_to_delete===true;return{ok,dedupe:d.reason,timeline_overlap:o.reason,lease_generation:l.job?.lease_generation,stale_generation_rejected:stale.ok===false,start_fenced:s.ok===true,complete_without_evidence_rejected:noev.ok===false,confirmation_recorded:c.ok===true,retention_safe_after_confirm:ret.safe_to_delete===true,backend:'vercel-neon'};}
+
+export default async function handler(req,res){try{const url=new URL(req.url,'https://local.invalid');const action=url.searchParams.get('action')||'';if(req.method==='GET'&&action==='health'){await ensureSchema();return reply(res,200,{ok:true,service:'anthares-cortes-queue',backend:'vercel-neon',fencing:true,dedupe:true,reconciliation:true});}const auth=await deviceAuth(req);if(!auth.ok)return reply(res,401,{ok:false,error:'unauthorized'});const body=jsonBody(req);let out;if(req.method==='POST'&&action==='enqueue')out=await enqueue(body);else if(req.method==='POST'&&action==='lease')out=await lease(body);else if(req.method==='POST'&&action==='start')out=await transition(body,'start');else if(req.method==='POST'&&action==='confirm')out=await transition(body,'confirm');else if(req.method==='POST'&&action==='fail')out=await transition(body,'fail');else if(req.method==='POST'&&action==='reconcile')out=await reconcile(body);else if(req.method==='POST'&&action==='retention')out=await retention(body);else if(req.method==='POST'&&action==='self-test')out=await selfTest(auth.device);else if(req.method==='GET'&&action==='job')out={ok:true,job:await getJob(String(url.searchParams.get('id')||''))};else return reply(res,404,{ok:false,error:'not_found'});return reply(res,out?.ok===false?409:200,out);}catch(e){console.error(e);return reply(res,500,{ok:false,error:String(e?.message||e)});}}
