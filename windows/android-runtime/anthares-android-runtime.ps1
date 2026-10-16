@@ -39,7 +39,9 @@ function Event([string]$Op,$Data){
   $row|ConvertTo-Json -Depth 12|Set-Content -Encoding UTF8 (Join-Path $Root 'state.json')
   $Data
 }
+function IsMemu5038Healthy{try{$r=Run -File $Adb -Arguments @('-P','5038','devices','-l') -Timeout 5;return [bool]($r.stdout -match '(?m)^127\.0\.0\.1:21543\s+device\b')}catch{return $false}}
 function Adb([string[]]$Arguments,[string]$Serial=$null,[int]$Timeout=10,[int]$ServerPort=$PrimaryAdbServerPort){
+  if($Serial -eq '127.0.0.1:21543' -and $ServerPort -eq $PrimaryAdbServerPort -and (IsMemu5038Healthy)){$ServerPort=$FallbackAdbServerPort}
   $a=@('-P',[string]$ServerPort)
   if($Serial){$a+=@('-s',$Serial)}
   $a+=$Arguments
@@ -134,6 +136,8 @@ function StartMemuOfficial{
   }while((Get-Date)-lt $directDeadline)
 
   # REDUNDANCY ONLY: interactive launcher + ADB 5038 after SYSTEM path exhaustion.
+  [void](Run -File $Mgr -Arguments @('controlvm',$Vm,'poweroff') -Timeout 25)
+  Start-Sleep -Seconds 4
   $launcherTask='Anthares-MEmu4-Recovery-Launcher'
   $adbTask='Anthares-MEmu4-ADB5038-Interactive'
   $fallback=[ordered]@{attempted=$true;launcher_task=$launcherTask;adb_task=$adbTask;reason='system_primary_exhausted'}
@@ -168,7 +172,6 @@ function StartMemuOfficial{
     return @{ok=$false;action='interactive_fallback_failed';authority='none';cleanup=$cleanup;primary=@{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr};fallback=$fallback;after=(Probe 'memu' $PrimaryAdbServerPort)}
   }finally{
     foreach($task in @($adbTask,$launcherTask)){Disable-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue | Out-Null}
-    StopFallbackAdb
   }
 }
 function RepairGuestAdbTcp{
@@ -196,6 +199,7 @@ function RepairGuestAdbTcp{
 function Probe([string]$Kind,[int]$ServerPort=$PrimaryAdbServerPort){
   $m=MemuInfo
   if($Kind -eq 'physical'){$serial=$PhysicalSerial;$pkg='kwai.lite.video';$backend='physical_android';$backendState='external'}else{$serial=$m.serial;$pkg='com.kwai.video';$backend='memu_android';$backendState=$m.state}
+  if($Kind -eq 'memu' -and $ServerPort -eq $PrimaryAdbServerPort -and (IsMemu5038Healthy)){$ServerPort=$FallbackAdbServerPort}
   $devices=Devices $ServerPort
   $ts=if($serial -and $devices.ContainsKey($serial)){$devices[$serial]}else{'missing'}
   $boot=$false;$installed=$false
@@ -336,5 +340,8 @@ switch($Command){
   'ui'{$h=ActiveProbe;if($h -and $h.healthy){[void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12);$r=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10;$o=[ordered]@{ok=$r.ok;executor=$h.executor;xml=$r.stdout}}else{$o=[ordered]@{ok=$false;reason='no_healthy_target'}}}
 }
 Event $Command $o | ConvertTo-Json -Depth 12 -Compress
+
+
+
 
 
