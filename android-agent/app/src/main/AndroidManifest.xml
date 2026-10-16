@@ -1,44 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+
     <queries>
         <package android:name="com.kwai.video" />
         <package android:name="kwai.lite.video" />
     </queries>
-    <application android:label="Anthares Android Agent" android:theme="@style/AppTheme">
-        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
+
+    <application
+        android:label="Anthares Android Agent"
+        android:theme="@style/AppTheme"
+        android:allowBackup="false"
+        android:fullBackupContent="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="anthares-kwai" android:host="send" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="anthares-kwai" android:host="local" />
-            </intent-filter>
         </activity>
-        <provider android:name="androidx.core.content.FileProvider"
-                  android:authorities="${applicationId}.files"
-                  android:exported="false" android:grantUriPermissions="true">
-            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/kwai_file_paths" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/kwai_file_paths" />
         </provider>
-        <service android:name=".AntharesAutomationService"
-                 android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-                 android:exported="false">
-            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
-            <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config" />
+
+        <service
+            android:name=".AntharesAutomationService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
         </service>
-        <receiver android:name=".AntharesCommandReceiver" android:exported="true">
-            <intent-filter><action android:name="us.anthares.agent.COMMAND" /></intent-filter>
-        </receiver>
+
+        <receiver
+            android:name=".AntharesCommandReceiver"
+            android:exported="false" />
     </application>
 </manifest>
