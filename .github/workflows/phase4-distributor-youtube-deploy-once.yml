@@ -33,6 +33,7 @@ jobs:
           for v in out.values(): print('::add-mask::'+v.replace('\r','').replace('\n','%0A'))
           json.dump(out,open('/tmp/vars.json','w'))
           PY
+          echo STAGE=VARIABLES_OK
       - name: Checkout exact WordPress source and deploy isolated files
         shell: bash
         run: |
@@ -43,22 +44,28 @@ jobs:
           for k,p in [('ANTHARES_QA_SSH_KEY','/tmp/key'),('ANTHARES_QA_SSH_HOST','/tmp/host'),('ANTHARES_QA_SSH_USER','/tmp/user'),('ANTHARES_QA_SSH_PORT','/tmp/port'),('GITHUB_MIRROR_TOKEN','/tmp/ght')]: open(p,'w').write(v[k])
           PY
           chmod 600 /tmp/key /tmp/ght
+          echo STAGE=FILES_READY
           git config --global credential.helper store
           printf 'https://x-access-token:%s@github.com\n' "$(cat /tmp/ght)" > ~/.git-credentials
           git clone --quiet https://github.com/UniversoAnthares/anthares-wordpress.git /tmp/wp
           git -C /tmp/wp checkout --quiet b74a0aefc8e3fdbe100b43e8fee6d76460674654
           rm -f ~/.git-credentials /tmp/ght
+          echo STAGE=SOURCE_READY
           db=/tmp/wp/anthares-tiktok-distributor/includes/class-atd-db.php
           api=/tmp/wp/anthares-tiktok-distributor/includes/class-atd-api.php
           grep -F 'static function enqueue_media' "$db" >/dev/null
           grep -F "'/publisher/enqueue-media'" "$api" >/dev/null
           grep -F "'/publisher/release-media'" "$api" >/dev/null
+          echo STAGE=SOURCE_ASSERTIONS_OK
           host="$(cat /tmp/host)"; user="$(cat /tmp/user)"; port="$(cat /tmp/port)"
           install -m 700 -d ~/.ssh
           ssh-keyscan -p "$port" "$host" >> ~/.ssh/known_hosts 2>/dev/null
-          scp -P "$port" -i /tmp/key -o IdentitiesOnly=yes "$db" "$user@$host:/tmp/class-atd-db.phase4.php"
-          scp -P "$port" -i /tmp/key -o IdentitiesOnly=yes "$api" "$user@$host:/tmp/class-atd-api.phase4.php"
-          ssh -p "$port" -i /tmp/key -o IdentitiesOnly=yes "$user@$host" 'bash -se' <<'REMOTE'
+          echo STAGE=HOSTKEY_OK
+          if ! scp -P "$port" -i /tmp/key -o IdentitiesOnly=yes "$db" "$user@$host:/tmp/class-atd-db.phase4.php"; then echo STAGE=SCP_DB_FAILED; exit 21; fi
+          echo STAGE=SCP_DB_OK
+          if ! scp -P "$port" -i /tmp/key -o IdentitiesOnly=yes "$api" "$user@$host:/tmp/class-atd-api.phase4.php"; then echo STAGE=SCP_API_FAILED; exit 22; fi
+          echo STAGE=SCP_API_OK
+          if ! ssh -p "$port" -i /tmp/key -o IdentitiesOnly=yes "$user@$host" 'bash -se' <<'REMOTE'
           set -euo pipefail
           SITE="$HOME/domains/anthares.us/public_html"
           PHP=/opt/alt/php85/usr/bin/php
@@ -66,8 +73,10 @@ jobs:
           dstd="$SITE/wp-content/plugins/anthares-tiktok-distributor/includes/class-atd-db.php"
           dsta="$SITE/wp-content/plugins/anthares-tiktok-distributor/includes/class-atd-api.php"
           test -f "$dstd" && test -f "$dsta"
+          echo REMOTE_STAGE=LIVE_FILES_FOUND
           "$PHP" -l /tmp/class-atd-db.phase4.php
           "$PHP" -l /tmp/class-atd-api.phase4.php
+          echo REMOTE_STAGE=TEMP_LINT_OK
           stamp="$(date -u +%Y%m%dT%H%M%SZ)"
           cp -a "$dstd" "$dstd.phase4-backup-$stamp"
           cp -a "$dsta" "$dsta.phase4-backup-$stamp"
@@ -75,6 +84,7 @@ jobs:
           cp /tmp/class-atd-api.phase4.php "$dsta"
           "$PHP" -l "$dstd"
           "$PHP" -l "$dsta"
+          echo REMOTE_STAGE=LIVE_LINT_OK
           cd "$SITE"
           "$PHP" "$WP" eval '
             if(!class_exists("ATD_DB")||!method_exists("ATD_DB","enqueue_media")||!method_exists("ATD_DB","release_media_if_published")||!ATD_DB::valid_source("youtube")){fwrite(STDERR,"phase4 distributor methods missing\n");exit(9);} 
@@ -82,6 +92,9 @@ jobs:
             foreach(["/anthares-video/v1/publisher/enqueue-media","/anthares-video/v1/publisher/release-media"] as $route){if(!isset($routes[$route])){fwrite(STDERR,"route missing: $route\n");exit(10);}}
             echo "DISTRIBUTOR_CORTES_QUEUE=PROVEN\n";
           '
+          echo REMOTE_STAGE=RUNTIME_PROOF_OK
           rm -f /tmp/class-atd-db.phase4.php /tmp/class-atd-api.phase4.php
           REMOTE
+          then echo STAGE=REMOTE_FAILED; exit 23; fi
+          echo STAGE=REMOTE_OK
           rm -f /tmp/key /tmp/host /tmp/user /tmp/port /tmp/vars.json
