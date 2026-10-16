@@ -1,0 +1,138 @@
+name: CORTES semantic phase 3 acceptance once
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cortes-semantic-phase3-once.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  semantic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SOURCE_URL: https://www.youtube.com/watch?v=9CIk-I_3VhM
+      YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+      YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          python3 -m pip install --disable-pip-version-check -q --break-system-packages -U 'yt-dlp[default]' yt-dlp-ejs bgutil-ytdlp-pot-provider faster-whisper
+          mkdir -p /tmp/p3
+      - name: Materialize auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,os,pathlib
+          raw=os.environ.get('YOUTUBE_COOKIES',''); b64=os.environ.get('YOUTUBE_COOKIES_B64','').strip()
+          if b64: raw=base64.b64decode(b64).decode('utf-8')
+          if not raw.strip(): raise SystemExit('YOUTUBE_AUTH_MISSING')
+          p=pathlib.Path('/tmp/p3/cookies.txt'); p.write_text(raw,encoding='utf-8'); p.chmod(0o600)
+          print('AUTH=READY')
+          PY
+      - name: Fetch transcript and semantic-select
+        shell: bash
+        run: |
+          set -euo pipefail
+          yt-dlp --cookies /tmp/p3/cookies.txt --no-playlist --skip-download --js-runtimes node --remote-components ejs:npm \
+            --write-subs --write-auto-subs --sub-langs 'pt-orig,pt' --sub-format json3 -o '/tmp/p3/source.%(ext)s' "$SOURCE_URL"
+          T="$(find /tmp/p3 -maxdepth 1 -name 'source*.json3' | head -n1)"
+          test -s "$T"
+          python3 tools/cortes_semantic_microcut.py select --transcript "$T" --output /tmp/p3/semantic-plan.json --min-start 240 --target 90 --min-len 70 --max-len 110
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          p=json.load(open('/tmp/p3/semantic-plan.json',encoding='utf-8'))
+          print('SOURCE_START='+str(p['source_start']))
+          print('SOURCE_END='+str(p['source_end']))
+          PY
+      - name: Acquire bounded segment with method 1 then method 3 fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          yt-dlp --cookies /tmp/p3/cookies.txt --no-playlist --js-runtimes node --remote-components ejs:npm \
+            --download-sections "*${SOURCE_START}-${SOURCE_END}" --force-keyframes-at-cuts \
+            -f 'bv*[height<=720]+ba/b[height<=720]/b' --merge-output-format mp4 -o '/tmp/p3/partial.%(ext)s' "$SOURCE_URL" \
+            > /tmp/p3/method1.log 2>&1
+          rc=$?
+          set -e
+          if [[ $rc -eq 0 && -s /tmp/p3/partial.mp4 ]]; then
+            echo 'ACQUISITION_METHOD=METHOD1_BOUNDED' | tee /tmp/p3/acquisition.txt
+          else
+            echo 'ACQUISITION_METHOD=METHOD3_FULL_TEMP_FALLBACK' | tee /tmp/p3/acquisition.txt
+            rm -f /tmp/p3/partial.mp4
+            yt-dlp --cookies /tmp/p3/cookies.txt --no-playlist --js-runtimes node --remote-components ejs:npm \
+              -f 'bv*[height<=720]+ba/b[height<=720]/b' --merge-output-format mp4 -o '/tmp/p3/full.%(ext)s' "$SOURCE_URL" \
+              2>&1 | tee /tmp/p3/method3.log
+            FULL="$(find /tmp/p3 -maxdepth 1 -name 'full.*' | head -n1)"; test -s "$FULL"
+            ffmpeg -hide_banner -loglevel error -y -ss "$SOURCE_START" -to "$SOURCE_END" -i "$FULL" \
+              -c:v libx264 -preset veryfast -crf 20 -c:a aac -b:a 160k /tmp/p3/partial.mp4
+            rm -f "$FULL"
+            test ! -e "$FULL"
+            echo 'METHOD3_SOURCE_DELETE=PROVEN'
+          fi
+          test -s /tmp/p3/partial.mp4
+          D="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/p3/partial.mp4)"
+          python3 - "$D" <<'PY'
+          import sys
+          d=float(sys.argv[1]); assert 60 <= d <= 118,d
+          print('PARTIAL_DURATION='+str(round(d,3)))
+          PY
+      - name: Mandatory semantic microcuts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/cortes_semantic_microcut.py microcut --input /tmp/p3/partial.mp4 --output /tmp/p3/microcut.mp4 --report /tmp/p3/microcut.json --model small
+          test -s /tmp/p3/microcut.mp4
+      - name: Render vertical master and acceptance manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          ffmpeg -hide_banner -loglevel error -y -i /tmp/p3/microcut.mp4 \
+            -vf 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920' \
+            -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart /tmp/p3/final.mp4
+          DUR="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/p3/final.mp4)"
+          SHA="$(sha256sum /tmp/p3/final.mp4 | awk '{print $1}')"
+          BYTES="$(stat -c%s /tmp/p3/final.mp4)"
+          DUR="$DUR" SHA="$SHA" BYTES="$BYTES" python3 - <<'PY'
+          import json,os
+          plan=json.load(open('/tmp/p3/semantic-plan.json',encoding='utf-8'))
+          micro=json.load(open('/tmp/p3/microcut.json',encoding='utf-8'))
+          d=float(os.environ['DUR'])
+          assert 30 <= d <= 90,d
+          assert plan['metrics']['intro_hits']==0
+          assert plan['metrics']['unique_content']>=22
+          assert plan['metrics']['content_density']>=0.35
+          assert micro['intervals']>=1 and micro['removed_seconds']>=0.20
+          out={'status':'PROVEN','source_id':'9CIk-I_3VhM','source_start':plan['source_start'],'source_end':plan['source_end'],'semantic_score':plan['semantic_score'],'semantic_metrics':plan['metrics'],'selected_transcript':plan['selected_transcript'],'acquisition':open('/tmp/p3/acquisition.txt').read().strip(),'microcut':micro,'final_duration_seconds':d,'final_sha256':os.environ['SHA'],'final_bytes':int(os.environ['BYTES']),'social_publish':False}
+          json.dump(out,open('/tmp/p3/result.json','w'),ensure_ascii=False,indent=2)
+          print('PHASE3_SEMANTIC=PROVEN')
+          print('PHASE3_MICROCUT=PROVEN')
+          print('PHASE3_MASTER=PROVEN')
+          print('FINAL_SHA256='+out['final_sha256'])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cortes-phase3-semantic-${{ github.run_id }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            /tmp/p3/result.json
+            /tmp/p3/semantic-plan.json
+            /tmp/p3/microcut.json
+            /tmp/p3/final.mp4
+            /tmp/p3/acquisition.txt
+            /tmp/p3/method1.log
+            /tmp/p3/method3.log
+      - name: Cleanup auth/source
+        if: always()
+        shell: bash
+        run: rm -f /tmp/p3/cookies.txt /tmp/p3/full.*
