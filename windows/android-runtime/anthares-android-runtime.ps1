@@ -48,7 +48,6 @@ function IsMemu5038Healthy{
   }catch{return $false}
 }
 function Adb([string[]]$Arguments,[string]$Serial=$null,[int]$Timeout=10,[int]$ServerPort=$PrimaryAdbServerPort){
-  if($Serial -eq '127.0.0.1:21543' -and $ServerPort -eq $PrimaryAdbServerPort -and (IsMemu5038Healthy)){$ServerPort=$FallbackAdbServerPort}
   $a=@('-P',[string]$ServerPort)
   if($Serial){$a+=@('-s',$Serial)}
   $a+=$Arguments
@@ -206,7 +205,6 @@ function RepairGuestAdbTcp{
 function Probe([string]$Kind,[int]$ServerPort=$PrimaryAdbServerPort){
   $m=MemuInfo
   if($Kind -eq 'physical'){$serial=$PhysicalSerial;$pkg='kwai.lite.video';$backend='physical_android';$backendState='external'}else{$serial=$m.serial;$pkg='com.kwai.video';$backend='memu_android';$backendState=$m.state}
-  if($Kind -eq 'memu' -and $ServerPort -eq $PrimaryAdbServerPort -and (IsMemu5038Healthy)){$ServerPort=$FallbackAdbServerPort}
   $devices=Devices $ServerPort
   $ts=if($serial -and $devices.ContainsKey($serial)){$devices[$serial]}else{'missing'}
   $boot=$false;$installed=$false
@@ -347,6 +345,7 @@ switch($Command){
   'ui'{$h=ActiveProbe;if($h -and $h.healthy){[void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12);$r=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10;$o=[ordered]@{ok=$r.ok;executor=$h.executor;xml=$r.stdout}}else{$o=[ordered]@{ok=$false;reason='no_healthy_target'}}}
 }
 Event $Command $o | ConvertTo-Json -Depth 12 -Compress
+
 
 
 
