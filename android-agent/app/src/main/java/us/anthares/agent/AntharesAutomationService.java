@@ -1,4 +1,4 @@
-﻿package us.anthares.agent;
+package us.anthares.agent;
 
 import android.accessibilityservice.AccessibilityService;
 import android.os.Bundle;

@@ -1,4 +1,4 @@
-﻿package us.anthares.agent;
+package us.anthares.agent;
 
 import android.content.Context;
 import android.content.Intent;
