@@ -8,7 +8,8 @@ param(
 $ErrorActionPreference='Stop'
 $Root='C:\ProgramData\AntharesAndroidRuntime'
 $Adb='D:\Program Files\Microvirt\MEmu\adb.exe'
-$AdbServerPort=5037
+$PrimaryAdbServerPort=5037
+$FallbackAdbServerPort=5038
 $Mgr='D:\Program Files\Microvirt\MEmuHyperv\MEmuManage.exe'
 $Memuc='D:\Program Files\Microvirt\MEmu\memuc.exe'
 $Vm='MEmu_4'
@@ -38,11 +39,41 @@ function Event([string]$Op,$Data){
   $row|ConvertTo-Json -Depth 12|Set-Content -Encoding UTF8 (Join-Path $Root 'state.json')
   $Data
 }
-function Adb([string[]]$Arguments,[string]$Serial=$null,[int]$Timeout=10){$a=@('-P',[string]$AdbServerPort);if($Serial){$a+=@('-s',$Serial)};$a+=$Arguments;Run -File $Adb -Arguments $a -Timeout $Timeout}
-function Devices{
-  $r=Adb @('devices','-l');$d=@{}
-  foreach($line in (($r.stdout -split "`r?`n")|Select-Object -Skip 1)){$p=$line.Trim() -split '\s+';if($p.Count -ge 2){$d[$p[0]]=$p[1]}}
+function Adb([string[]]$Arguments,[string]$Serial=$null,[int]$Timeout=10,[int]$ServerPort=$PrimaryAdbServerPort){
+  $a=@('-P',[string]$ServerPort)
+  if($Serial){$a+=@('-s',$Serial)}
+  $a+=$Arguments
+  Run -File $Adb -Arguments $a -Timeout $Timeout
+}
+function Devices([int]$ServerPort=$PrimaryAdbServerPort){
+  $r=Adb @('devices','-l') $null 10 $ServerPort
+  $d=@{}
+  foreach($line in (($r.stdout -split "`r?`n")|Select-Object -Skip 1)){
+    $parts=$line.Trim() -split '\s+'
+    if($parts.Count -ge 2){$d[$parts[0]]=$parts[1]}
+  }
   $d
+}
+function StopFallbackAdb{
+  [void](Adb @('kill-server') $null 8 $FallbackAdbServerPort)
+}
+function NormalizePrimaryAdb{
+  StopFallbackAdb
+  $env:ADB_VENDOR_KEYS='C:\Users\Lucas\.android\adbkey'
+  [void](Adb @('kill-server') $null 8 $PrimaryAdbServerPort)
+  Start-Sleep -Milliseconds 800
+  [void](Adb @('start-server') $null 10 $PrimaryAdbServerPort)
+  $m=MemuInfo
+  if($m.serial){[void](Adb @('connect',$m.serial) $null 10 $PrimaryAdbServerPort)}
+  Start-Sleep -Milliseconds 800
+}
+function ConfirmStableMemu([int]$ServerPort=$PrimaryAdbServerPort){
+  for($i=0;$i -lt 3;$i++){
+    $q=Probe 'memu' $ServerPort
+    if(-not $q.healthy){return $false}
+    if($i -lt 2){Start-Sleep -Milliseconds 1200}
+  }
+  return $true
 }
 function MemuInfo{
   $r=Run -File $Mgr -Arguments @('showvminfo',$Vm,'--machinereadable') -Timeout 10;$txt=$r.stdout;$state='unknown';$serial=$null;$managerState='unknown';$reconciled=$false
@@ -64,54 +95,81 @@ function RemoveAbortedMemuOrphan{
   Start-Sleep -Milliseconds 800
   [ordered]@{ok=$true;action=if($terminated.Count){'terminated_aborted_orphan'}else{'none_found'};state=$m.state;terminated=$terminated}
 }
-function InvokeInteractiveFallback([string]$Reason,[object]$Primary=$null,[object]$Cleanup=$null){
+function StartMemuOfficial{
+  $m=MemuInfo
+  $existing=Probe 'memu' $PrimaryAdbServerPort
+  if($m.state -eq 'running' -and $existing.healthy -and (ConfirmStableMemu $PrimaryAdbServerPort)){
+    StopFallbackAdb
+    return @{ok=$true;action='already_running';authority='system';stdout='';stderr='';after=$existing}
+  }
+  $cleanup=if($m.state -eq 'aborted'){RemoveAbortedMemuOrphan}else{$null}
+
+  # PRIMARY AUTHORITY: SYSTEM owns normal recovery on ADB 5037.
+  StopFallbackAdb
+  NormalizePrimaryAdb
+  if($m.state -eq 'running'){
+    $direct=@{ok=$false;stdout='';stderr='backend_running_but_primary_transport_unhealthy'}
+    $directDeadline=(Get-Date).AddSeconds(15)
+  }else{
+    $direct=Run -File $Mgr -Arguments @('startvm',$Vm,'--type','headless') -Timeout 35
+    $directDeadline=(Get-Date).AddSeconds(75)
+  }
+  do{
+    [void](Adb @('start-server') $null 8 $PrimaryAdbServerPort)
+    $mi=MemuInfo
+    if($mi.serial){[void](Adb @('connect',$mi.serial) $null 8 $PrimaryAdbServerPort)}
+    $after=Probe 'memu' $PrimaryAdbServerPort
+    if($after.healthy -and (ConfirmStableMemu $PrimaryAdbServerPort)){
+      StopFallbackAdb
+      return @{ok=$true;action='system_headless_primary_healthy';authority='system';stdout=$direct.stdout;stderr=$direct.stderr;cleanup=$cleanup;after=$after}
+    }
+    if($mi.state -eq 'running'){
+      $guestRepair=RepairGuestAdbTcp
+      if($guestRepair.ok -and (ConfirmStableMemu $PrimaryAdbServerPort)){
+        StopFallbackAdb
+        return @{ok=$true;action='system_headless_primary_recovered';authority='system';stdout=$direct.stdout;stderr=$direct.stderr;cleanup=$cleanup;after=$guestRepair.after;guest_repair=$guestRepair}
+      }
+    }
+    Start-Sleep -Seconds 3
+  }while((Get-Date)-lt $directDeadline)
+
+  # REDUNDANCY ONLY: interactive launcher + ADB 5038 after SYSTEM path exhaustion.
   $launcherTask='Anthares-MEmu4-Recovery-Launcher'
   $adbTask='Anthares-MEmu4-ADB5038-Interactive'
-  $fallback=[ordered]@{attempted=$true;launcher_task=$launcherTask;adb_task=$adbTask;reason=$Reason}
+  $fallback=[ordered]@{attempted=$true;launcher_task=$launcherTask;adb_task=$adbTask;reason='system_primary_exhausted'}
   try{
-    $pre=Probe 'memu'
-    if($pre.backend_state -eq 'running' -and -not $pre.healthy){
-      [void](Run -File $Mgr -Arguments @('controlvm',$Vm,'poweroff') -Timeout 15)
-      $stopDeadline=(Get-Date).AddSeconds(20)
-      do{Start-Sleep -Seconds 1;$mi=MemuInfo;if($mi.state -ne 'running'){break}}while((Get-Date)-lt $stopDeadline)
-    }
     foreach($task in @($adbTask,$launcherTask)){
       $t=Get-ScheduledTask -TaskName $task -ErrorAction Stop
       if(-not $t.Settings.Enabled){Enable-ScheduledTask -TaskName $task -ErrorAction Stop | Out-Null}
     }
-    Start-ScheduledTask -TaskName $adbTask -ErrorAction SilentlyContinue
     Start-ScheduledTask -TaskName $launcherTask -ErrorAction Stop
+    Start-Sleep -Seconds 2
+    Start-ScheduledTask -TaskName $adbTask -ErrorAction SilentlyContinue
     $deadline=(Get-Date).AddSeconds(150)
     do{
       Start-Sleep -Seconds 2
-      $after=Probe 'memu'
-      if($after.healthy){$fallback.ok=$true;$fallback.after=$after;return @{ok=$true;action='interactive_fallback_healthy';authority='interactive_fallback';cleanup=$Cleanup;primary=$Primary;fallback=$fallback;after=$after}}
+      $afterFallback=Probe 'memu' $FallbackAdbServerPort
+      if($afterFallback.healthy -and (ConfirmStableMemu $FallbackAdbServerPort)){
+        $fallback.ok=$true
+        $fallback.after=$afterFallback
+        StopFallbackAdb
+        NormalizePrimaryAdb
+        if(ConfirmStableMemu $PrimaryAdbServerPort){
+          return @{ok=$true;action='interactive_fallback_handoff_healthy';authority='system';cleanup=$cleanup;primary=@{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr};fallback=$fallback;after=(Probe 'memu' $PrimaryAdbServerPort)}
+        }
+      }
     }while((Get-Date)-lt $deadline)
-    $fallback.ok=$false;$fallback.after=Probe 'memu'
-    return @{ok=$false;action='interactive_fallback_timeout';authority='none';cleanup=$Cleanup;primary=$Primary;fallback=$fallback;after=$fallback.after}
+    $fallback.ok=$false
+    $fallback.after=Probe 'memu' $FallbackAdbServerPort
+    return @{ok=$false;action='interactive_fallback_timeout';authority='none';cleanup=$cleanup;primary=@{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr};fallback=$fallback;after=$fallback.after}
   }catch{
-    $fallback.ok=$false;$fallback.error=$_.Exception.Message
-    return @{ok=$false;action='interactive_fallback_failed';authority='none';cleanup=$Cleanup;primary=$Primary;fallback=$fallback;after=(Probe 'memu')}
+    $fallback.ok=$false
+    $fallback.error=$_.Exception.Message
+    return @{ok=$false;action='interactive_fallback_failed';authority='none';cleanup=$cleanup;primary=@{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr};fallback=$fallback;after=(Probe 'memu' $PrimaryAdbServerPort)}
   }finally{
     foreach($task in @($adbTask,$launcherTask)){Disable-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue | Out-Null}
+    StopFallbackAdb
   }
-}
-function StartMemuOfficial{
-  $m=MemuInfo
-  if($m.state -eq 'running'){return @{ok=$true;action='already_running';authority='system';stdout='';stderr=''}}
-  $cleanup=if($m.state -eq 'aborted'){RemoveAbortedMemuOrphan}else{$null}
-  $direct=Run -File $Mgr -Arguments @('startvm',$Vm,'--type','headless') -Timeout 35
-  $directDeadline=(Get-Date).AddSeconds(75)
-  do{
-    [void](Adb @('start-server') $null 8)
-    $mi=MemuInfo
-    if($mi.serial){[void](Adb @('connect',$mi.serial) $null 8)}
-    $after=Probe 'memu'
-    if($after.healthy){return @{ok=$true;action='system_headless_primary_healthy';authority='system';stdout=$direct.stdout;stderr=$direct.stderr;cleanup=$cleanup;after=$after}}
-    if($mi.state -eq 'running'){$guestRepair=RepairGuestAdbTcp;if($guestRepair.ok){return @{ok=$true;action='system_headless_primary_recovered';authority='system';stdout=$direct.stdout;stderr=$direct.stderr;cleanup=$cleanup;after=$guestRepair.after;guest_repair=$guestRepair}}}
-    Start-Sleep -Seconds 3
-  }while((Get-Date)-lt $directDeadline)
-  InvokeInteractiveFallback -Reason 'system_headless_primary_exhausted' -Primary @{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr} -Cleanup $cleanup
 }
 function RepairGuestAdbTcp{
   $m=MemuInfo
@@ -135,14 +193,22 @@ function RepairGuestAdbTcp{
   $after=Probe 'memu'
   [ordered]@{ok=[bool]$after.healthy;attempted=$true;action='guest_adbd_tcp_repair';boot=$bootText;adbd=$verifiedAdbd;port=$verifiedPort;after=$after}
 }
-function Probe([string]$Kind){
+function Probe([string]$Kind,[int]$ServerPort=$PrimaryAdbServerPort){
   $m=MemuInfo
   if($Kind -eq 'physical'){$serial=$PhysicalSerial;$pkg='kwai.lite.video';$backend='physical_android';$backendState='external'}else{$serial=$m.serial;$pkg='com.kwai.video';$backend='memu_android';$backendState=$m.state}
-  $devices=Devices;$ts=if($serial -and $devices.ContainsKey($serial)){$devices[$serial]}else{'missing'}
+  $devices=Devices $ServerPort
+  $ts=if($serial -and $devices.ContainsKey($serial)){$devices[$serial]}else{'missing'}
   $boot=$false;$installed=$false
-  if($ts -eq 'device'){$b=Adb @('shell','getprop','sys.boot_completed') $serial 7;$boot=($b.ok -and $b.stdout.Trim() -eq '1');if($boot){$p=Adb @('shell','pm','path',$pkg) $serial 9;$installed=($p.ok -and $p.stdout -match 'package:')}}
+  if($ts -eq 'device'){
+    $b=Adb @('shell','getprop','sys.boot_completed') $serial 7 $ServerPort
+    $boot=($b.ok -and $b.stdout.Trim() -eq '1')
+    if($boot){
+      $pkgProbe=Adb @('shell','pm','path',$pkg) $serial 9 $ServerPort
+      $installed=($pkgProbe.ok -and $pkgProbe.stdout -match 'package:')
+    }
+  }
   $healthy=($ts -eq 'device' -and $boot -and $installed)
-  [ordered]@{executor=$backend;serial=$serial;backend_state=$backendState;transport=$ts;boot_completed=$boot;kwai_package=$pkg;package_installed=$installed;healthy=$healthy}
+  [ordered]@{executor=$backend;serial=$serial;backend_state=$backendState;transport=$ts;boot_completed=$boot;kwai_package=$pkg;package_installed=$installed;healthy=$healthy;adb_server_port=$ServerPort}
 }
 function RecoverTransport([string]$Kind,[switch]$MayStart,[switch]$MayReset){
   $mutex=$null;$lockTaken=$false
@@ -151,30 +217,51 @@ function RecoverTransport([string]$Kind,[switch]$MayStart,[switch]$MayReset){
       $created=$false
       $mutex=New-Object System.Threading.Mutex($false,'Global\AntharesMEmuRecoveryAuthority',[ref]$created)
       $lockTaken=$mutex.WaitOne(5000)
-      if(-not $lockTaken){return [ordered]@{ok=$false;action='recovery_busy';reason='another_anthares_runtime_recovery_holds_authority';after=(Probe $Kind)}}
-    }catch{return [ordered]@{ok=$false;action='recovery_lock_failed';reason=$_.Exception.Message;after=(Probe $Kind)}}
+      if(-not $lockTaken){return [ordered]@{ok=$false;action='recovery_busy';reason='another_anthares_runtime_recovery_holds_authority';after=(Probe $Kind $PrimaryAdbServerPort)}}
+    }catch{return [ordered]@{ok=$false;action='recovery_lock_failed';reason=$_.Exception.Message;after=(Probe $Kind $PrimaryAdbServerPort)}}
   }
   try{
-    $before=Probe $Kind
+    $before=Probe $Kind $PrimaryAdbServerPort
     if($before.healthy){return [ordered]@{ok=$true;action='already_healthy';before=$before;after=$before}}
     if($Kind -eq 'memu' -and $before.backend_state -ne 'running'){
       if(-not $MayStart){return [ordered]@{ok=$false;action='backend_start_not_authorized';before=$before;after=$before}}
       $start=StartMemuOfficial
-      if(-not $start.ok){return [ordered]@{ok=$false;action='backend_start_failed';before=$before;after=(Probe $Kind);start=$start}}
+      if($start.ok){return [ordered]@{ok=$true;action='backend_start_recovered';before=$before;after=(Probe $Kind $PrimaryAdbServerPort);start=$start}}
+      return [ordered]@{ok=$false;action='backend_start_failed';before=$before;after=(Probe $Kind $PrimaryAdbServerPort);start=$start}
     }
-    [void](Adb @('start-server') $null 8)
+    if($Kind -eq 'memu'){NormalizePrimaryAdb}else{[void](Adb @('start-server') $null 8 $PrimaryAdbServerPort)}
     $serial=if($Kind -eq 'physical'){$PhysicalSerial}else{(MemuInfo).serial}
-    if($serial){if($serial -match '^127\.0\.0\.1:'){[void](Adb @('disconnect',$serial) $null 7);[void](Adb @('connect',$serial) $null 8)}else{[void](Adb @('reconnect') $serial 8)}}
-    $deadline=(Get-Date).AddSeconds(25)
-    do{Start-Sleep -Milliseconds 800;$after=Probe $Kind;if($after.healthy){return [ordered]@{ok=$true;action='transport_recovered';before=$before;after=$after}}}while((Get-Date)-lt $deadline)
-    if($Kind -eq 'memu'){$guestRepair=RepairGuestAdbTcp;if($guestRepair.ok){return [ordered]@{ok=$true;action='guest_adbd_tcp_recovered';before=$before;after=$guestRepair.after;guest_repair=$guestRepair}}}else{$guestRepair=$null}
-    if($Kind -eq 'memu' -and $MayReset){[void](Run -File $Mgr -Arguments @('controlvm',$Vm,'reset') -Timeout 15);$deadline=(Get-Date).AddSeconds(45);do{Start-Sleep -Seconds 2;$after=Probe $Kind;if($after.healthy){return [ordered]@{ok=$true;action='backend_reset_recovered';before=$before;after=$after;guest_repair=$guestRepair}}}while((Get-Date)-lt $deadline)}
-    if($Kind -eq 'memu' -and $MayStart){
-      $fb=InvokeInteractiveFallback -Reason 'system_transport_guest_reset_exhausted' -Primary @{before=$before;guest_repair=$guestRepair} -Cleanup $null
-      if($fb.ok){return [ordered]@{ok=$true;action='interactive_fallback_recovered';before=$before;after=$fb.after;guest_repair=$guestRepair;fallback=$fb}}
-      return [ordered]@{ok=$false;action='recovery_exhausted';before=$before;after=(Probe $Kind);guest_repair=$guestRepair;fallback=$fb}
+    if($serial){
+      if($serial -match '^127\.0\.0\.1:'){
+        [void](Adb @('disconnect',$serial) $null 7 $PrimaryAdbServerPort)
+        [void](Adb @('connect',$serial) $null 8 $PrimaryAdbServerPort)
+      }else{[void](Adb @('reconnect') $serial 8 $PrimaryAdbServerPort)}
     }
-    [ordered]@{ok=$false;action='recovery_exhausted';before=$before;after=(Probe $Kind);guest_repair=$guestRepair}
+    $deadline=(Get-Date).AddSeconds(25)
+    do{
+      Start-Sleep -Milliseconds 800
+      $after=Probe $Kind $PrimaryAdbServerPort
+      if($after.healthy -and ($Kind -ne 'memu' -or (ConfirmStableMemu $PrimaryAdbServerPort))){return [ordered]@{ok=$true;action='transport_recovered';before=$before;after=$after}}
+    }while((Get-Date)-lt $deadline)
+    if($Kind -eq 'memu'){
+      $guestRepair=RepairGuestAdbTcp
+      if($guestRepair.ok -and (ConfirmStableMemu $PrimaryAdbServerPort)){return [ordered]@{ok=$true;action='guest_adbd_tcp_recovered';before=$before;after=$guestRepair.after;guest_repair=$guestRepair}}
+    }else{$guestRepair=$null}
+    if($Kind -eq 'memu' -and $MayReset){
+      [void](Run -File $Mgr -Arguments @('controlvm',$Vm,'reset') -Timeout 15)
+      $deadline=(Get-Date).AddSeconds(45)
+      do{
+        Start-Sleep -Seconds 2
+        $after=Probe $Kind $PrimaryAdbServerPort
+        if($after.healthy -and (ConfirmStableMemu $PrimaryAdbServerPort)){return [ordered]@{ok=$true;action='backend_reset_recovered';before=$before;after=$after;guest_repair=$guestRepair}}
+      }while((Get-Date)-lt $deadline)
+    }
+    if($Kind -eq 'memu' -and $MayStart){
+      $start=StartMemuOfficial
+      if($start.ok){return [ordered]@{ok=$true;action='backend_fallback_recovered';before=$before;after=(Probe $Kind $PrimaryAdbServerPort);guest_repair=$guestRepair;start=$start}}
+      return [ordered]@{ok=$false;action='backend_fallback_failed';before=$before;after=(Probe $Kind $PrimaryAdbServerPort);guest_repair=$guestRepair;start=$start}
+    }
+    [ordered]@{ok=$false;action='recovery_exhausted';before=$before;after=(Probe $Kind $PrimaryAdbServerPort);guest_repair=$guestRepair}
   }finally{
     if($lockTaken -and $mutex){try{$mutex.ReleaseMutex()}catch{}}
     if($mutex){$mutex.Dispose()}
