@@ -7,6 +7,7 @@ on:
     paths:
       - 'anthares-brouser/**'
       - 'ci/shared/anthares-browser-runtime-qa.sh'
+      - 'ci/shared/anthares-browser-runtime-proof.sh'
       - '.github/workflows/anthares-brouser-runtime-qa40.yml'
 
 permissions:
@@ -22,20 +23,6 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - name: Make persistence restart graceful
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('ci/shared/anthares-browser-runtime-qa.sh')
-          s=p.read_text()
-          old='  docker rm -f "$NAME" >/dev/null\n  start_container\n'
-          new='  docker stop -t 10 "$NAME" >/dev/null\n  docker rm "$NAME" >/dev/null 2>&1 || true\n  sleep 0.5\n  start_container\n'
-          if old not in s:
-              raise SystemExit('QA_GRACEFUL_RESTART_PATCH_TARGET_MISSING')
-          p.write_text(s.replace(old,new,1))
-          PY
       - name: Prove canonical Anthares Browser runtime
         shell: bash
         run: |
@@ -43,4 +30,4 @@ jobs:
           export CI_PROVIDER=github_actions_public
           export CI_RUN_ID="${GITHUB_RUN_ID}"
           export CI_COMMIT_SHA="${GITHUB_SHA}"
-          ANTHARES_BROWSER_QA_CASES=3 bash ci/shared/anthares-browser-runtime-qa.sh
+          ANTHARES_BROWSER_QA_CASES=3 bash ci/shared/anthares-browser-runtime-proof.sh
