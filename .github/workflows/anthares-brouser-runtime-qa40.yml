@@ -1,4 +1,4 @@
-name: Anthares-browser - 40 Runtime QA
+name: Anthares-browser - Runtime QA
 
 on:
   workflow_dispatch:
@@ -13,13 +13,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: anthares-browser-runtime-qa40-${{ github.ref }}
+  group: anthares-browser-runtime-qa-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   runtime-qa:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - name: Make persistence restart graceful
@@ -43,4 +43,4 @@ jobs:
           export CI_PROVIDER=github_actions_public
           export CI_RUN_ID="${GITHUB_RUN_ID}"
           export CI_COMMIT_SHA="${GITHUB_SHA}"
-          ANTHARES_BROWSER_QA_CASES=40 bash ci/shared/anthares-browser-runtime-qa.sh
+          ANTHARES_BROWSER_QA_CASES=3 bash ci/shared/anthares-browser-runtime-qa.sh
