@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: anthares-remote-agent/go.mod
-      - name: Guard Phase 4 control invariants
+      - name: Guard current control invariants
         shell: bash
         run: |
           set -euo pipefail
@@ -48,9 +48,9 @@ jobs:
           assert "'anthares-remote-agent-v4-c8.exe'" in deploy, 'deploy-current is not pinned to the C8 binary'
           assert "'anthares-remote-agent-v4-c8.exe'" in watchdog, 'watchdog is not pinned to the C8 binary'
           assert 'single-process-dual-transport' in supervisor, 'canonical SYSTEM supervisor lost dual-transport mode'
-          assert "recovery_transport='private-issue-queues'" in supervisor, 'private queues are no longer the recovery transport'
-          assert 'anthares-ara-backup.anthares1.workers.dev' in supervisor, 'connected ChatGPT MCP HTTP transport is no longer wired into canonical V4'
-          assert '$env:ANTHARES_CONTROL_URL=$httpControl' in supervisor, 'canonical V4 no longer enables the MCP HTTP transport when a device token exists'
+          assert "recovery_transport='gitlab+github-private-issue-queues'" in supervisor, 'private queues are no longer the recovery transport'
+          assert "https://anthares-remote-primary.vercel.app" in supervisor, 'Vercel+Neon primary control is no longer wired into canonical V4'
+          assert '$env:ANTHARES_CONTROL_URL=$httpControl' in supervisor, 'canonical V4 no longer enables the primary HTTP transport when a device token exists'
           assert 'single_executor=$true' in supervisor, 'canonical supervisor lost single-executor invariant'
           assert 'existing SYSTEM private queue credential is missing' in installer, 'installer no longer fails closed when SYSTEM credential is absent'
           assert 'queue_credential_validated=$true' in installer, 'installer no longer records credential validation'
@@ -65,7 +65,7 @@ jobs:
           assert 'return jsonify(**_RETIREMENT), 410' in bootstrap, 'legacy public bootstrap mutation surface is active again'
           assert 'runs-on: self-hosted' not in legacy_workflow, 'retired legacy installer can still execute on the PC'
           assert 'exit 1' in legacy_workflow and 'legacy installer retired' in legacy_workflow.lower(), 'legacy installer is no longer fail-closed'
-          print('ARA_PHASE4_CONTROL_INVARIANTS=OK')
+          print('ARA_CURRENT_CONTROL_INVARIANTS=OK')
           PY
       - name: Test
         working-directory: anthares-remote-agent
