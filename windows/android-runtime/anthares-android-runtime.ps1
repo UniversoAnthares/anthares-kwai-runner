@@ -1,4 +1,4 @@
-param(
+﻿param(
   [ValidateSet('health','select','recover','launch','foreground','ui','identity')][string]$Command='health',
   [ValidateSet('auto','physical','memu')][string]$Target='auto',
   [ValidateSet('IDLE','LEASED','STARTED','COMMITTING','UNCERTAIN','VERIFIED')][string]$PublicationState='IDLE',
@@ -215,7 +215,7 @@ function RecoverTransport([string]$Kind,[switch]$MayStart,[switch]$MayReset){
   if($Kind -eq 'memu'){
     try{
       $created=$false
-      $mutex=New-Object System.Threading.Mutex($false,'Global\AntharesMEmuRecoveryAuthority',[ref]$created)
+      $mutex=New-Object System.Threading.Mutex($false,'Global\AntharesMEmuRecoveryAuthorityV2',[ref]$created)
       $lockTaken=$mutex.WaitOne(5000)
       if(-not $lockTaken){return [ordered]@{ok=$false;action='recovery_busy';reason='another_anthares_runtime_recovery_holds_authority';after=(Probe $Kind $PrimaryAdbServerPort)}}
     }catch{return [ordered]@{ok=$false;action='recovery_lock_failed';reason=$_.Exception.Message;after=(Probe $Kind $PrimaryAdbServerPort)}}
@@ -336,4 +336,5 @@ switch($Command){
   'ui'{$h=ActiveProbe;if($h -and $h.healthy){[void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12);$r=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10;$o=[ordered]@{ok=$r.ok;executor=$h.executor;xml=$r.stdout}}else{$o=[ordered]@{ok=$false;reason='no_healthy_target'}}}
 }
 Event $Command $o | ConvertTo-Json -Depth 12 -Compress
+
 
