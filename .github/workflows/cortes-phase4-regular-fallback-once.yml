@@ -1,0 +1,158 @@
+name: CORTES Phase 4 regular fallback once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-phase4-regular-fallback-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      GITLAB_PROJECT_ID: '87361776'
+    steps:
+      - name: Fetch protected bridge variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GITLAB_TOKEN:-}"
+          python3 - <<'PY'
+          import json, os, urllib.request
+          req=urllib.request.Request(
+            f"https://gitlab.com/api/v4/projects/{os.environ['GITLAB_PROJECT_ID']}/variables?per_page=100",
+            headers={'PRIVATE-TOKEN':os.environ['GITLAB_TOKEN'],'User-Agent':'anthares-cortes-phase4'}
+          )
+          with urllib.request.urlopen(req,timeout=30) as r: rows=json.load(r)
+          vals={str(x.get('key')):str(x.get('value') or '') for x in rows}
+          need=['ANTHARES_QA_SSH_KEY','ANTHARES_QA_SSH_HOST','ANTHARES_QA_SSH_USER','GITHUB_MIRROR_TOKEN']
+          missing=[k for k in need if not vals.get(k)]
+          if missing: raise SystemExit('missing:'+','.join(missing))
+          out={k:vals[k] for k in need}; out['ANTHARES_QA_SSH_PORT']=vals.get('ANTHARES_QA_SSH_PORT') or '65002'
+          for v in out.values(): print('::add-mask::'+v.replace('\r','').replace('\n','%0A'))
+          json.dump(out,open('/tmp/cortes-vars.json','w'))
+          PY
+      - name: Build canonical regular-video lock from private policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          v=json.load(open('/tmp/cortes-vars.json'))
+          open('/tmp/github-token','w').write(v['GITHUB_MIRROR_TOKEN'])
+          PY
+          chmod 600 /tmp/github-token
+          git config --global credential.helper store
+          printf 'https://x-access-token:%s@github.com\n' "$(cat /tmp/github-token)" > ~/.git-credentials
+          git clone --quiet --depth 1 https://github.com/UniversoAnthares/anthares-clipper.git /tmp/anthares-clipper
+          rm -f ~/.git-credentials /tmp/github-token
+          python3 - <<'PY'
+          import importlib.util, json
+          from pathlib import Path
+          p=Path('/tmp/anthares-clipper/cortes_cycle_policy.py')
+          spec=importlib.util.spec_from_file_location('policy',p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+          day='2026-10-16'
+          initial={
+            'version':1,'mode':'regular_videos','live_cycle_ids':[], 'live_cursor':0,
+            'live_exhaustion_snapshot_ids':[], 'regular_cycle_ids':[], 'regular_cursor':0,'daily_lock':None
+          }
+          regular=[{
+            'video_id':'QXUoYfjmvZQ','title':'O Fim da Era Heroica: Analise de Andromaca de Euripides e o Simbolismo do Destino',
+            'source_url':'https://www.youtube.com/watch?v=QXUoYfjmvZQ','published_at':'2026-10-01T00:00:00Z',
+            'duration_seconds':1378,'is_short':False,'kind':'video'
+          },{
+            'video_id':'bu3111Hh58E','title':'Furos de Euripides na Mitologia Grega','source_url':'https://www.youtube.com/watch?v=bu3111Hh58E',
+            'published_at':'2026-10-02T00:00:00Z','duration_seconds':961,'is_short':False,'kind':'video'
+          }]
+          state,src=m.select_daily_source(initial,day,[],regular)
+          state2,src2=m.select_daily_source(state,day,[],list(reversed(regular)))
+          assert src['video_id']=='QXUoYfjmvZQ'
+          assert src['source_kind']=='regular_video' and src['youtube_allowed'] is False
+          assert src2['video_id']==src['video_id'] and state2['daily_lock']==state['daily_lock']
+          assert len(m.eligible_regular_videos(regular))==2
+          out={'state':state,'source':src,'idempotent_same_day':True,'eligible_regular_count':2}
+          json.dump(out,open('/tmp/policy.json','w'),ensure_ascii=False)
+          print('POLICY_REGULAR_LOCK=PROVEN')
+          PY
+      - name: Prove projection and dynamic YouTube suppression then restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          v=json.load(open('/tmp/cortes-vars.json'))
+          for k,f in [('ANTHARES_QA_SSH_KEY','/tmp/anthares_qa'),('ANTHARES_QA_SSH_HOST','/tmp/ssh_host'),('ANTHARES_QA_SSH_USER','/tmp/ssh_user'),('ANTHARES_QA_SSH_PORT','/tmp/ssh_port')]: open(f,'w').write(v[k])
+          PY
+          chmod 600 /tmp/anthares_qa
+          host="$(cat /tmp/ssh_host)"; user="$(cat /tmp/ssh_user)"; port="$(cat /tmp/ssh_port)"
+          install -m 700 -d ~/.ssh
+          ssh-keyscan -p "$port" "$host" >> ~/.ssh/known_hosts 2>/dev/null
+          policy_b64="$(base64 -w0 /tmp/policy.json)"
+          ssh -p "$port" -i /tmp/anthares_qa -o IdentitiesOnly=yes "$user@$host" "POLICY_B64='$policy_b64' bash -se" > /tmp/wp-proof.json <<'REMOTE'
+          set -euo pipefail
+          SITE="$HOME/domains/anthares.us/public_html"; PHP=/opt/alt/php85/usr/bin/php; WP=/usr/local/bin/wp
+          cd "$SITE"
+          "$PHP" "$WP" eval '
+            $policy=json_decode(base64_decode(getenv("POLICY_B64")),true);
+            if(!is_array($policy)||empty($policy["state"])) { fwrite(STDERR,"bad policy\n"); exit(10); }
+            $names=[
+              "cycle"=>ANTHARES_CORTES_SOURCE_CYCLE_OPTION,
+              "regular"=>ANTHARES_CORTES_REGULAR_SOURCES_OPTION,
+              "registry"=>ANTHARES_CORTES_REGISTRY_OPTION,
+              "networks"=>ANTHARES_CORTES_NETWORKS_OPTION,
+            ];
+            $snap=[]; foreach($names as $k=>$n){$snap[$k]=["exists"=>get_option($n,"__ANTHARES_MISSING__")!=="__ANTHARES_MISSING__","value"=>get_option($n,null)];}
+            $snap_hash=hash("sha256",serialize($snap)); $proof=null; $err=null;
+            try {
+              $regular=["QXUoYfjmvZQ"=>[
+                "video_id"=>"QXUoYfjmvZQ","title"=>"O Fim da Era Heroica","source_url"=>"https://www.youtube.com/watch?v=QXUoYfjmvZQ",
+                "published_at"=>"2026-10-01T00:00:00Z","duration_seconds"=>1378,"is_short"=>false,"source_kind"=>"regular_video","youtube_allowed"=>false
+              ]];
+              update_option(ANTHARES_CORTES_REGULAR_SOURCES_OPTION,$regular,false);
+              update_option(ANTHARES_CORTES_SOURCE_CYCLE_OPTION,$policy["state"],false);
+              $row=anthares_cortes_source_prepare_locked();
+              $active=anthares_cortes_source_cycle_active();
+              $dynamic=anthares_cortes_networks_get();
+              $persisted=get_option(ANTHARES_CORTES_NETWORKS_OPTION,[]);
+              $registry=anthares_cortes_registry_get();
+              $ok=is_array($active) && ($active["video_id"]??"")==="QXUoYfjmvZQ" && ($active["source_kind"]??"")==="regular_video" && empty($active["youtube_allowed"])
+                && isset($registry["QXUoYfjmvZQ"]) && count($registry)===1
+                && empty($dynamic["youtube"]["enabled"]) && (($dynamic["youtube"]["suppressed_by"]??"")==="regular_video_source")
+                && !empty($persisted["youtube"]["enabled"])
+                && !empty($row["phases"]["long"]["analyzed"]) && (int)($row["phases"]["long"]["clips_count"]??-1)===0;
+              if(!$ok) throw new Exception("fallback assertions failed");
+              $proof=["active"=>$active,"dynamic_youtube"=>$dynamic["youtube"],"persisted_youtube"=>$persisted["youtube"],"registry_count"=>count($registry),"long_phase"=>$row["phases"]["long"]];
+            } catch(Throwable $e){$err=$e->getMessage();}
+            finally {
+              foreach($names as $k=>$n){ if($snap[$k]["exists"]) update_option($n,$snap[$k]["value"],false); else delete_option($n); }
+            }
+            $after=[]; foreach($names as $k=>$n){$after[$k]=["exists"=>get_option($n,"__ANTHARES_MISSING__")!=="__ANTHARES_MISSING__","value"=>get_option($n,null)];}
+            $after_hash=hash("sha256",serialize($after));
+            $restored=hash_equals($snap_hash,$after_hash);
+            echo wp_json_encode(["ok"=>$err===null&&$restored,"proof"=>$proof,"error"=>$err,"snapshot_hash"=>$snap_hash,"after_hash"=>$after_hash,"restored"=>$restored],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
+            if($err!==null||!$restored) exit(11);
+          '
+          REMOTE
+          python3 -m json.tool /tmp/wp-proof.json >/tmp/wp-proof.pretty.json && mv /tmp/wp-proof.pretty.json /tmp/wp-proof.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/wp-proof.json'))
+          assert d['ok'] and d['restored'] and d['proof']['active']['video_id']=='QXUoYfjmvZQ'
+          print('WORDPRESS_REGULAR_FALLBACK=PROVEN')
+          print('WORDPRESS_RESTORE=PROVEN')
+          PY
+          rm -f /tmp/anthares_qa /tmp/ssh_host /tmp/ssh_user /tmp/ssh_port /tmp/cortes-vars.json
+      - name: Upload proof artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cortes-phase4-regular-fallback-proof
+          path: |
+            /tmp/policy.json
+            /tmp/wp-proof.json
+          if-no-files-found: error
+          retention-days: 1
