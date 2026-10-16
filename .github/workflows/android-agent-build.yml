@@ -17,25 +17,27 @@ jobs:
         with: { distribution: temurin, java-version: '17' }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: '8.9' }
-      - name: Build agent
+      - name: Build release agent
         working-directory: android-agent
-        run: gradle --no-daemon :app:assembleDebug
-      - name: Publish installable APK branch
+        run: gradle --no-daemon :app:assembleRelease
+      - name: Publish unsigned release APK branch
         shell: bash
         run: |
           set -euo pipefail
-          cp android-agent/app/build/outputs/apk/debug/app-debug.apk /tmp/ANTHARES-AGENT-HARDENED.apk
+          src="android-agent/app/build/outputs/apk/release/app-release-unsigned.apk"
+          test -s "$src"
+          cp "$src" /tmp/ANTHARES-AGENT-RELEASE-UNSIGNED.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout --orphan apk-dist
           git rm -rf .
           mkdir -p dist
-          cp /tmp/ANTHARES-AGENT-HARDENED.apk dist/ANTHARES-AGENT-HARDENED.apk
-          sha256sum dist/ANTHARES-AGENT-HARDENED.apk > dist/ANTHARES-AGENT-HARDENED.sha256
+          cp /tmp/ANTHARES-AGENT-RELEASE-UNSIGNED.apk dist/ANTHARES-AGENT-RELEASE-UNSIGNED.apk
+          sha256sum dist/ANTHARES-AGENT-RELEASE-UNSIGNED.apk > dist/ANTHARES-AGENT-RELEASE-UNSIGNED.sha256
           git add dist
-          git commit -m "chore(android-agent): publish hardened install APK"
+          git commit -m "chore(android-agent): publish unsigned release APK"
           git push --force origin apk-dist
       - uses: actions/upload-artifact@v4
         with:
-          name: anthares-android-agent-debug
-          path: android-agent/app/build/outputs/apk/debug/app-debug.apk
+          name: anthares-android-agent-release-unsigned
+          path: android-agent/app/build/outputs/apk/release/app-release-unsigned.apk
