@@ -1,0 +1,82 @@
+name: Phase 4 storage inspect once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase4-storage-inspect-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      GITLAB_PROJECT_ID: '87361776'
+    steps:
+      - name: Fetch protected SSH bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.request
+          req=urllib.request.Request(f"https://gitlab.com/api/v4/projects/{os.environ['GITLAB_PROJECT_ID']}/variables?per_page=100",headers={'PRIVATE-TOKEN':os.environ['GITLAB_TOKEN'],'User-Agent':'anthares-phase4-storage'})
+          with urllib.request.urlopen(req,timeout=30) as r: rows=json.load(r)
+          vals={str(x.get('key')):str(x.get('value') or '') for x in rows}
+          need=['ANTHARES_QA_SSH_KEY','ANTHARES_QA_SSH_HOST','ANTHARES_QA_SSH_USER']
+          missing=[k for k in need if not vals.get(k)]
+          if missing: raise SystemExit('missing:'+','.join(missing))
+          out={k:vals[k] for k in need}; out['ANTHARES_QA_SSH_PORT']=vals.get('ANTHARES_QA_SSH_PORT') or '65002'
+          for v in out.values(): print('::add-mask::'+v.replace('\r','').replace('\n','%0A'))
+          json.dump(out,open('/tmp/v.json','w'))
+          PY
+      - name: Read storage and distributor state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          v=json.load(open('/tmp/v.json'))
+          for k,p in [('ANTHARES_QA_SSH_KEY','/tmp/key'),('ANTHARES_QA_SSH_HOST','/tmp/host'),('ANTHARES_QA_SSH_USER','/tmp/user'),('ANTHARES_QA_SSH_PORT','/tmp/port')]: open(p,'w').write(v[k])
+          PY
+          chmod 600 /tmp/key
+          host="$(cat /tmp/host)"; user="$(cat /tmp/user)"; port="$(cat /tmp/port)"
+          install -m 700 -d ~/.ssh
+          ssh-keyscan -p "$port" "$host" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -p "$port" -i /tmp/key -o IdentitiesOnly=yes "$user@$host" 'bash -se' > /tmp/phase4-storage.json <<'REMOTE'
+          set -euo pipefail
+          SITE="$HOME/domains/anthares.us/public_html"; PHP=/opt/alt/php85/usr/bin/php; WP=/usr/local/bin/wp
+          cd "$SITE"
+          "$PHP" "$WP" eval '
+            global $wpdb;
+            $budget=function_exists("anthares_video_budget")?anthares_video_budget(0,false):null;
+            $files=function_exists("anthares_video_files")?anthares_video_files():[];
+            $rows=[];
+            foreach($files as $f){$cand=function_exists("anthares_video_candidate")?anthares_video_candidate($f):false;$rows[]=["path"=>$f["path"],"bytes"=>(int)$f["bytes"],"mtime"=>(int)$f["mtime"],"candidate"=>$cand?:false,"cortes_protected"=>function_exists("anthares_video_cortes_protected")?anthares_video_cortes_protected($f["path"],0):false];}
+            $q=class_exists("ATD_DB")?ATD_DB::table():null; $d=class_exists("ATD_DB")?ATD_DB::delivery_table():null; $dist=[];
+            if($q&&$d){$qs=$wpdb->get_results("SELECT id,source,source_id,file_url,file_hash,status FROM $q WHERE file_url IS NOT NULL AND file_url<>\"\" ORDER BY id ASC",ARRAY_A);foreach($qs as $x){$total=(int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $d WHERE queue_id=%d",$x["id"]));$open=(int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $d WHERE queue_id=%d AND status<>\"published\"",$x["id"]));$x["delivery_total"]=$total;$x["delivery_open"]=$open;$x["releasable"]=($total>0&&$open===0);$dist[]=$x;}}
+            echo wp_json_encode(["budget"=>$budget,"files"=>$rows,"distributor"=>$dist,"leases"=>function_exists("anthares_video_leases")?anthares_video_leases():[]],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
+          '
+          REMOTE
+          python3 -m json.tool /tmp/phase4-storage.json >/tmp/phase4-storage.pretty.json
+          mv /tmp/phase4-storage.pretty.json /tmp/phase4-storage.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/phase4-storage.json'))
+          print('BUDGET_BYTES='+str(d['budget']['bytes']))
+          print('RESERVED_BYTES='+str(d['budget']['reserved_bytes']))
+          print('FILE_COUNT='+str(len(d['files'])))
+          print('RELEASABLE_DISTRIBUTOR='+str(sum(1 for x in d['distributor'] if x['releasable'])))
+          print('CANDIDATE_FILES='+str(sum(1 for x in d['files'] if x['candidate'])))
+          PY
+          rm -f /tmp/key /tmp/host /tmp/user /tmp/port /tmp/v.json
+      - name: Upload inspection artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-storage-inspection
+          path: /tmp/phase4-storage.json
+          retention-days: 1
+          if-no-files-found: error
