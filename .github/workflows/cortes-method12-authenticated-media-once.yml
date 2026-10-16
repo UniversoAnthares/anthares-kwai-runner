@@ -1,11 +1,19 @@
 name: CORTES method 1+2 authenticated media once
-# rerun 2026-10-15 after YOUTUBE_COOKIES_B64 refresh
 
 on:
   push:
     branches: [main]
     paths: ['.github/workflows/cortes-method12-authenticated-media-once.yml']
   workflow_dispatch:
+    inputs:
+      source_start:
+        description: Start second for bounded method 1 acquisition
+        required: false
+        default: '100'
+      source_end:
+        description: End second for bounded method 1 acquisition
+        required: false
+        default: '190'
 
 permissions:
   contents: read
@@ -17,8 +25,8 @@ jobs:
     env:
       SOURCE_ID: 9CIk-I_3VhM
       SOURCE_URL: https://www.youtube.com/watch?v=9CIk-I_3VhM
-      SOURCE_START: '8'
-      SOURCE_END: '98'
+      SOURCE_START: ${{ github.event.inputs.source_start || '100' }}
+      SOURCE_END: ${{ github.event.inputs.source_end || '190' }}
       YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
       YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
     steps:
@@ -117,24 +125,27 @@ jobs:
           dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/method12/final.mp4)"
           sha="$(sha256sum /tmp/method12/final.mp4 | awk '{print $1}')"
           bytes="$(stat -c%s /tmp/method12/final.mp4)"
-          python3 - <<PY
-          import json
-          json.dump({
+          SOURCE_START="$SOURCE_START" SOURCE_END="$SOURCE_END" DUR="$dur" BYTES="$bytes" SHA="$sha" python3 - <<'PY'
+          import json,os
+          d={
             'source_id':'9CIk-I_3VhM',
-            'source_start':8,
-            'source_end':98,
+            'source_start':int(os.environ['SOURCE_START']),
+            'source_end':int(os.environ['SOURCE_END']),
             'method1':'bounded_authenticated_youtube_transfer',
             'method2':'remote_ffmpeg_vertical_normalize',
             'full_source_download_requested':False,
-            'method3_fallback':'PENDING_NOT_USED',
-            'final_duration_seconds':float('$dur'),
-            'final_bytes':int('$bytes'),
-            'final_sha256':'$sha',
+            'method3_fallback':'NOT_USED',
+            'final_duration_seconds':float(os.environ['DUR']),
+            'final_bytes':int(os.environ['BYTES']),
+            'final_sha256':os.environ['SHA'],
+            'publication_canary_id':f"method12-{os.environ['SOURCE_START']}-{os.environ['SOURCE_END']}",
             'social_publish':False
-          },open('/tmp/method12/result.json','w'),indent=2)
-          print('METHOD2_FINAL_DURATION='+str(round(float('$dur'),3)))
-          print('METHOD2_FINAL_BYTES='+str(int('$bytes')))
-          print('METHOD2_FINAL_SHA256=$sha')
+          }
+          json.dump(d,open('/tmp/method12/result.json','w'),indent=2)
+          print('METHOD2_FINAL_DURATION='+str(round(d['final_duration_seconds'],3)))
+          print('METHOD2_FINAL_BYTES='+str(d['final_bytes']))
+          print('METHOD2_FINAL_SHA256='+d['final_sha256'])
+          print('METHOD12_CANARY_INTERVAL=%s-%s' % (d['source_start'],d['source_end']))
           print('METHOD2_REMOTE_EDIT=PROVEN')
           PY
 
