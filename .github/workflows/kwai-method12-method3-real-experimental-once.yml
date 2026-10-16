@@ -1,0 +1,242 @@
+name: Kwai method 1+2 + method 3 real experimental once
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/kwai-method12-method3-real-experimental-once.yml']
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: kwai-method12-method3-real-experimental-once
+  cancel-in-progress: false
+
+env:
+  KWAI_EXPECTED_ACCOUNT: lucasrosalem
+  KWAI_SESSION_FILE: kwai-session.enc
+  KWAI_AUTH_STRATEGY: mobile_only
+  METHOD12_ARTIFACT_ID: '12020871785'
+  METHOD3_ARTIFACT_ID: '12021079411'
+  METHOD12_SHA: cd3d23c0fe083575c620a276500335de0fec1d9a615a164a7b0b8c931b18ec28
+  METHOD3_SHA: 4ce5276f27484e0e50bebcf06653b9bf021ea655c0888f29fc9f050c3ea8b1d3
+
+jobs:
+  real-canaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert explicit experimental routing only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          d=json.load(open('ci-hub/executor-routing.json'))
+          a=d['android_execution']
+          assert a['primary_device']=='physical_android'
+          assert a['fallback_device']=='memu_android'
+          assert a['failover']['memu_to_remote_experimental'] is False
+          p=d['providers']['github_android_experimental']
+          assert p['android_eligible'] is False
+          print('EXPERIMENTAL_ROUTING_PRESERVED=1')
+          PY
+
+      - name: Download the two already-proven final masters
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/canaries/method12 /tmp/canaries/method3
+          curl -fL --retry 3 -H "Authorization: Bearer $GH_TOKEN" -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${METHOD12_ARTIFACT_ID}/zip" -o /tmp/m12.zip
+          curl -fL --retry 3 -H "Authorization: Bearer $GH_TOKEN" -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${METHOD3_ARTIFACT_ID}/zip" -o /tmp/m3.zip
+          unzip -q /tmp/m12.zip -d /tmp/canaries/method12
+          unzip -q /tmp/m3.zip -d /tmp/canaries/method3
+          M12="$(find /tmp/canaries/method12 -type f -name final.mp4 | head -n1)"
+          M3="$(find /tmp/canaries/method3 -type f -name final.mp4 | head -n1)"
+          test -s "$M12" -a -s "$M3"
+          echo "$METHOD12_SHA  $M12" | sha256sum -c -
+          echo "$METHOD3_SHA  $M3" | sha256sum -c -
+          cp "$M12" /tmp/method12-final.mp4
+          cp "$M3" /tmp/method3-final.mp4
+          echo 'CANARY_MASTERS_SHA256=PROVEN'
+
+      - name: Require protected session key
+        env:
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        run: |
+          test -n "$KWAI_PASSWORD" || { echo 'KWAI_PASSWORD_MISSING=1'; exit 42; }
+
+      - name: Download validated Kwai package vault and session
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          rm -rf kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
+          python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
+          test -s kwai-session.enc
+
+      - name: Download clipboard helper for public URL recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o /tmp/clipper.apk https://github.com/majido/clipper/releases/download/v1.2.1/clipper.apk
+          test -s /tmp/clipper.apk
+
+      - name: Enable KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+
+      - name: Restore exact account and publish both canaries once
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048 -cores 2
+          script: |
+            set -euo pipefail
+            bash kwai_vault_install.sh
+            adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+            bash kwai_session_state.sh restore >/tmp/kwai-session-restore.log 2>&1 || true
+            bash kwai_headless_login.sh >kwai-headless-status.txt 2>&1
+            AUTH="$(python3 kwai_auth_probe.py 2>&1)"
+            printf '%s\n' "$AUTH" | tee kwai-auth-canary.txt
+            grep -q 'KWAI_AUTH_STATE=AUTHENTICATED_UI' <<<"$AUTH"
+            grep -q 'KWAI_IDENTITY_PROFILE_MATCH=1' <<<"$AUTH"
+            echo 'KWAI_CANARY_IDENTITY=PROVEN account=lucasrosalem'
+
+            adb install --bypass-low-target-sdk-block -r /tmp/clipper.apk >/tmp/clipper-install.log 2>&1 || adb install -r /tmp/clipper.apk >/tmp/clipper-install.log 2>&1 || true
+            adb shell am startservice ca.zgrs.clipper/.ClipboardService >/dev/null 2>&1 || true
+
+            cat >/tmp/publish_one.sh <<'SH'
+            #!/usr/bin/env bash
+            set -euo pipefail
+            method="$1"; media="$2"; expected_sha="$3"; title="$4"; job="$5"
+            actual="$(sha256sum "$media" | awk '{print $1}')"
+            test "$actual" = "$expected_sha"
+            size="$(stat -c%s "$media")"
+            name="anthares-${job}-${actual:0:12}.mp4"
+            remote="/sdcard/Movies/AntharesPublish/$name"
+            adb shell mkdir -p /sdcard/Movies/AntharesPublish
+            adb push "$media" "$remote" >/dev/null
+            adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$remote" >/dev/null
+            sleep 2
+            export KWAI_VIDEO_TITLE="$title"
+            export KWAI_QUEUE_JOB_ID="$job"
+            export KWAI_MEDIA_SHA256="$actual"
+            export KWAI_MEDIA_SIZE="$size"
+            export KWAI_MEDIA_NAME="$name"
+            export KWAI_ANDROID_VIDEO="$remote"
+            echo "${method}_MEDIA_SHA256=$actual"
+            python3 kwai_auth_probe.py | tee "/tmp/${method}-auth.txt"
+            grep -q 'KWAI_IDENTITY_PROFILE_MATCH=1' "/tmp/${method}-auth.txt"
+            python3 kwai_publish_video.py prepare | tee "/tmp/${method}-prepare.txt"
+            grep -q '^STATE=READY_TO_PUBLISH$' "/tmp/${method}-prepare.txt"
+            echo "${method}_PUBLISH_BOUNDARY=READY"
+            set +e
+            python3 kwai_publish_video.py commit | tee "/tmp/${method}-commit.txt"
+            rc=${PIPESTATUS[0]}
+            set -e
+            if [ "$rc" -ne 0 ]; then
+              echo "${method}_PUBLICATION=UNCERTAIN rc=$rc"
+              exit 90
+            fi
+            set +e
+            VERIFY_OUT="$(python3 kwai_verify_publication.py 2>&1)"
+            vrc=$?
+            set -e
+            printf '%s\n' "$VERIFY_OUT" | tee "/tmp/${method}-verify.txt"
+            if [ "$vrc" -ne 0 ] || ! grep -q 'KWAI_PUBLICATION_SPECIFICALLY_VERIFIED' "/tmp/${method}-verify.txt"; then
+              echo "${method}_PUBLICATION=UNCERTAIN verification=$vrc"
+              exit 90
+            fi
+            echo "${method}_PUBLICATION=CONFIRMED"
+            SH
+            chmod +x /tmp/publish_one.sh
+
+            cat >/tmp/extract_link.py <<'PY'
+            import re,subprocess,time,sys,xml.etree.ElementTree as ET
+            title=sys.argv[1].casefold(); out=sys.argv[2]
+            def adb(*a): return subprocess.run(['adb',*a],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=25).stdout
+            def snap(tag):
+                adb('shell','uiautomator','dump',f'/sdcard/{tag}.xml'); adb('pull',f'/sdcard/{tag}.xml',f'/tmp/{tag}.xml')
+                return ET.parse(f'/tmp/{tag}.xml').getroot()
+            def center(b):
+                m=re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',b or '')
+                if not m:return None
+                x1,y1,x2,y2=map(int,m.groups()); return ((x1+x2)//2,(y1+y2)//2)
+            def tap(n):
+                p=center(n.attrib.get('bounds','')); assert p; adb('shell','input','tap',str(p[0]),str(p[1])); time.sleep(2)
+            root=snap('link-profile')
+            title_nodes=[]
+            for n in root.iter('node'):
+                s=(n.attrib.get('text','')+' '+n.attrib.get('content-desc','')).casefold()
+                if title[:40] in s and center(n.attrib.get('bounds','')): title_nodes.append(n)
+            if not title_nodes: raise SystemExit('LINK_RECOVERY_NO_TITLE_NODE')
+            tap(title_nodes[0])
+            root=snap('link-post')
+            share=[]
+            for n in root.iter('node'):
+                s=(n.attrib.get('text','')+' '+n.attrib.get('content-desc','')+' '+n.attrib.get('resource-id','')).casefold()
+                if any(w in s for w in ('compartilh','share')) and center(n.attrib.get('bounds','')): share.append(n)
+            if not share: raise SystemExit('LINK_RECOVERY_NO_SHARE')
+            tap(share[0]); root=snap('link-sheet')
+            copies=[]
+            for n in root.iter('node'):
+                s=(n.attrib.get('text','')+' '+n.attrib.get('content-desc','')).casefold()
+                if any(w in s for w in ('copiar link','copy link','copiar vínculo')) and center(n.attrib.get('bounds','')): copies.append(n)
+            if not copies: raise SystemExit('LINK_RECOVERY_NO_COPY_LINK')
+            tap(copies[0])
+            raw=adb('shell','am','broadcast','-a','clipper.get')
+            urls=re.findall(r'https?://[^\s\]}>"\']+',raw)
+            if not urls: raise SystemExit('LINK_RECOVERY_CLIPBOARD_EMPTY:'+raw[-300:])
+            url=urls[-1].strip("'\"")
+            open(out,'w').write(url+'\n')
+            print('KWAI_PUBLIC_URL='+url)
+            PY
+
+            /tmp/publish_one.sh METHOD12 /tmp/method12-final.mp4 "$METHOD12_SHA" 'Anthares teste metodo 1+2 20261016' 'method12-real-cd3d23c0'
+            python3 /tmp/extract_link.py 'Anthares teste metodo 1+2 20261016' /tmp/method12-url.txt | tee /tmp/method12-link.txt
+            test -s /tmp/method12-url.txt
+
+            # Fresh exact identity proof again before the second irreversible publication.
+            AUTH2="$(python3 kwai_auth_probe.py 2>&1)"
+            printf '%s\n' "$AUTH2" | tee /tmp/method3-auth-pre.txt
+            grep -q 'KWAI_IDENTITY_PROFILE_MATCH=1' <<<"$AUTH2"
+            /tmp/publish_one.sh METHOD3 /tmp/method3-final.mp4 "$METHOD3_SHA" 'Anthares teste metodo 3 20261016' 'method3-real-4ce5276f'
+            python3 /tmp/extract_link.py 'Anthares teste metodo 3 20261016' /tmp/method3-url.txt | tee /tmp/method3-link.txt
+            test -s /tmp/method3-url.txt
+            echo 'TWO_REAL_KWAI_CANARIES=PROVEN'
+
+      - name: Persist evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-method12-method3-real-${{ github.run_id }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            kwai-headless-status.txt
+            kwai-auth-canary.txt
+            /tmp/METHOD12-*.txt
+            /tmp/METHOD3-*.txt
+            /tmp/method12-*.txt
+            /tmp/method3-*.txt
