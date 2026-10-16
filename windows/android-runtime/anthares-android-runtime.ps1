@@ -156,11 +156,11 @@ function StartMemuOfficial{
       if($afterFallback.healthy -and (ConfirmStableMemu $FallbackAdbServerPort)){
         $fallback.ok=$true
         $fallback.after=$afterFallback
-        StopFallbackAdb
         NormalizePrimaryAdb
-        if(ConfirmStableMemu $PrimaryAdbServerPort){
-          return @{ok=$true;action='interactive_fallback_handoff_healthy';authority='system';cleanup=$cleanup;primary=@{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr};fallback=$fallback;after=(Probe 'memu' $PrimaryAdbServerPort)}
-        }
+        if(ConfirmStableMemu $PrimaryAdbServerPort){StopFallbackAdb; return @{ok=$true;action='interactive_fallback_handoff_healthy';authority='system';cleanup=$cleanup;primary=@{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr};fallback=$fallback;after=(Probe 'memu' $PrimaryAdbServerPort)}}
+        Start-ScheduledTask -TaskName $adbTask -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        if(ConfirmStableMemu $FallbackAdbServerPort){return @{ok=$true;action='interactive_fallback_transport_healthy';authority='system';transport_authority='interactive_fallback';cleanup=$cleanup;primary=@{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr};fallback=$fallback;after=(Probe 'memu' $FallbackAdbServerPort)}}
       }
     }while((Get-Date)-lt $deadline)
     $fallback.ok=$false
@@ -340,6 +340,7 @@ switch($Command){
   'ui'{$h=ActiveProbe;if($h -and $h.healthy){[void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12);$r=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10;$o=[ordered]@{ok=$r.ok;executor=$h.executor;xml=$r.stdout}}else{$o=[ordered]@{ok=$false;reason='no_healthy_target'}}}
 }
 Event $Command $o | ConvertTo-Json -Depth 12 -Compress
+
 
 
 
