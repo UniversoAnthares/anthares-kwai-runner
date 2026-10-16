@@ -1,5 +1,9 @@
 version: 1.0.{build}
-image: Visual Studio 2022
+
+image:
+  - Visual Studio 2022
+  - Ubuntu
+
 platform: x64
 clone_depth: 1
 
@@ -17,32 +21,60 @@ skip_commits:
 environment:
   GOPATH: C:\gopath
 
-install:
-  - ps: |
-      $ErrorActionPreference = 'Stop'
-      $go = Get-Command go -ErrorAction SilentlyContinue
-      if (-not $go) { throw 'Go is unavailable on the AppVeyor Windows image' }
-      go version
+for:
+-
+  matrix:
+    only:
+      - image: Visual Studio 2022
 
-build_script:
-  - ps: |
-      $ErrorActionPreference = 'Stop'
-      Set-Location (Join-Path $env:APPVEYOR_BUILD_FOLDER 'anthares-remote-agent')
-      $bad = gofmt -l .
-      if ($bad) { Write-Host 'Existing files needing gofmt:'; $bad | Write-Host }
-      go vet ./...
-      if ($LASTEXITCODE -ne 0) { throw 'Go vet failed' }
-      go build -o agent.exe ./cmd/agent
-      if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
-      if (-not (Test-Path agent.exe)) { throw 'Windows executable missing' }
+  install:
+    - ps: |
+        $ErrorActionPreference = 'Stop'
+        $go = Get-Command go -ErrorAction SilentlyContinue
+        if (-not $go) { throw 'Go is unavailable on the AppVeyor Windows image' }
+        go version
 
-test_script:
-  - ps: |
-      $ErrorActionPreference = 'Stop'
-      Set-Location (Join-Path $env:APPVEYOR_BUILD_FOLDER 'anthares-remote-agent')
-      go test ./... -count=1
-      if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
+  build_script:
+    - ps: |
+        $ErrorActionPreference = 'Stop'
+        Set-Location (Join-Path $env:APPVEYOR_BUILD_FOLDER 'anthares-remote-agent')
+        $bad = gofmt -l .
+        if ($bad) { Write-Host 'Existing files needing gofmt:'; $bad | Write-Host }
+        go vet ./...
+        if ($LASTEXITCODE -ne 0) { throw 'Go vet failed' }
+        go build -o agent.exe ./cmd/agent
+        if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
+        if (-not (Test-Path agent.exe)) { throw 'Windows executable missing' }
 
-artifacts:
-  - path: anthares-remote-agent\agent.exe
-    name: anthares-remote-agent-windows
+  test_script:
+    - ps: |
+        $ErrorActionPreference = 'Stop'
+        Set-Location (Join-Path $env:APPVEYOR_BUILD_FOLDER 'anthares-remote-agent')
+        go test ./... -count=1
+        if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
+
+  artifacts:
+    - path: anthares-remote-agent\agent.exe
+      name: anthares-remote-agent-windows
+
+-
+  matrix:
+    only:
+      - image: Ubuntu
+
+  install:
+    - sh: |
+        set -euo pipefail
+        docker version
+        test -x /usr/bin/docker || command -v docker
+        chmod +x ci/shared/anthares-browser-runtime-qa.sh
+
+  build_script:
+    - sh: |
+        set -euo pipefail
+        export CI_PROVIDER=appveyor
+        export CI_RUN_ID="${APPVEYOR_BUILD_ID:-unknown}"
+        export CI_COMMIT_SHA="${APPVEYOR_REPO_COMMIT:-unknown}"
+        ANTHARES_BROWSER_QA_CASES=40 bash ci/shared/anthares-browser-runtime-qa.sh
+
+  test: off
