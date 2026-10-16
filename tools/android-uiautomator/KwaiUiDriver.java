@@ -20,7 +20,14 @@ public final class KwaiUiDriver extends UiAutomatorTestCase {
         device.waitForIdle(1500);
 
         UiObject target;
-        if ("clickText".equals(action)) {
+        if ("clickXY".equals(action)) {
+            String[] parts = value.split(",", -1);
+            if (parts.length != 2) throw new IllegalArgumentException("clickXY requires x,y");
+            int x = Integer.parseInt(parts[0]);
+            int y = Integer.parseInt(parts[1]);
+            if (x < 0 || x > 1080 || y < 0 || y > 2340) throw new IllegalArgumentException("coordinates outside physical-device bounds");
+            require(device.click(x, y), "coordinate click failed: " + value);
+        } else if ("clickText".equals(action)) {
             target = new UiObject(new UiSelector().text(value));
             require(target.exists(), "text not found: " + value);
             require(target.click(), "click failed: " + value);
