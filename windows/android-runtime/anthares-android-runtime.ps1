@@ -1,4 +1,4 @@
-param(
+﻿param(
   [ValidateSet('health','select','recover','launch','foreground','ui','identity')][string]$Command='health',
   [ValidateSet('auto','physical','memu')][string]$Target='auto',
   [ValidateSet('IDLE','LEASED','STARTED','COMMITTING','UNCERTAIN','VERIFIED')][string]$PublicationState='IDLE',
