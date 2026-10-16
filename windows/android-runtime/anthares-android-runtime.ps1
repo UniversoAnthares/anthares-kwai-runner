@@ -39,7 +39,14 @@ function Event([string]$Op,$Data){
   $row|ConvertTo-Json -Depth 12|Set-Content -Encoding UTF8 (Join-Path $Root 'state.json')
   $Data
 }
-function IsMemu5038Healthy{try{$r=Run -File $Adb -Arguments @('-P','5038','devices','-l') -Timeout 5;return [bool]($r.stdout -match '(?m)^127\.0\.0\.1:21543\s+device\b')}catch{return $false}}
+function IsMemu5038Healthy{
+  try{
+    $listener=Get-NetTCPConnection -State Listen -LocalPort $FallbackAdbServerPort -ErrorAction SilentlyContinue | Select-Object -First 1
+    if(-not $listener){return $false}
+    $r=Run -File $Adb -Arguments @('-P',[string]$FallbackAdbServerPort,'devices','-l') -Timeout 5
+    return [bool]($r.stdout -match '(?m)^127\.0\.0\.1:21543\s+device\b')
+  }catch{return $false}
+}
 function Adb([string[]]$Arguments,[string]$Serial=$null,[int]$Timeout=10,[int]$ServerPort=$PrimaryAdbServerPort){
   if($Serial -eq '127.0.0.1:21543' -and $ServerPort -eq $PrimaryAdbServerPort -and (IsMemu5038Healthy)){$ServerPort=$FallbackAdbServerPort}
   $a=@('-P',[string]$ServerPort)
