@@ -1,17 +1,32 @@
-name: Anthares-browser - 40 Runtime QA (manual fallback only)
+name: Anthares-browser - 40 Runtime QA
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'anthares-brouser/**'
+      - 'ci/shared/anthares-browser-runtime-qa.sh'
+      - '.github/workflows/anthares-brouser-runtime-qa40.yml'
 
 permissions:
   contents: read
 
+concurrency:
+  group: anthares-browser-runtime-qa40-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  retired:
+  runtime-qa:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - name: Explain retirement
+      - uses: actions/checkout@v4
+      - name: Prove canonical Anthares Browser runtime
+        shell: bash
         run: |
-          echo 'GitHub-hosted runners are retired from automatic Anthares-browser runtime QA.'
-          echo 'Primary: CircleCI. Secondary: Cirrus CI. Tertiary: Bitrise.'
-          echo 'Canonical test: ci/shared/anthares-browser-runtime-qa.sh'
+          set -euo pipefail
+          export CI_PROVIDER=github_actions_public
+          export CI_RUN_ID="${GITHUB_RUN_ID}"
+          export CI_COMMIT_SHA="${GITHUB_SHA}"
+          ANTHARES_BROWSER_QA_CASES=40 bash ci/shared/anthares-browser-runtime-qa.sh
