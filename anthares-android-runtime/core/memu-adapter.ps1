@@ -1,4 +1,4 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 $script:MemuRoot='D:\Program Files\Microvirt\MEmu'
 $script:Manager='D:\Program Files\Microvirt\MEmuHyperv\MEmuManage.exe'
 $script:Memuc=Join-Path $script:MemuRoot 'memuc.exe'
@@ -8,7 +8,7 @@ $script:Vm='MEmu_4'
 $script:VmIndex='4'
 $script:VmUuid='20261015-aaaa-aaaa-aaaa-000000000004'
 $script:VmConfig='D:\Program Files\Microvirt\MEmu\MemuHyperv VMs\MEmu_4\MEmu_4.memu'
-$script:MemuAdbServerPort=if($env:ANTHARES_MEMU_ADB_SERVER_PORT){[int]$env:ANTHARES_MEMU_ADB_SERVER_PORT}else{5038}
+$script:MemuAdbServerPort=if($env:ANTHARES_MEMU_ADB_SERVER_PORT){[int]$env:ANTHARES_MEMU_ADB_SERVER_PORT}else{5037}
 function Get-MEmuNativeProcess {
     try {
         Get-CimInstance Win32_Process -Filter "Name='MEmuHeadless.exe'" -ErrorAction Stop |
@@ -57,3 +57,4 @@ function Start-MEmuManaged {
         return [ordered]@{ok=$false;method='interactive_native_launcher';user=$user;task=$task;error='native_process_not_observed'}
     } catch {return [ordered]@{ok=$false;method='interactive_native_launcher';user=$user;task=$task;error=$_.Exception.Message}}
 }
+

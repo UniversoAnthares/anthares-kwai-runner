@@ -1,4 +1,4 @@
-param(
+﻿param(
   [ValidateSet('health','select','recover','launch','foreground','ui')][string]$Command='health',
   [ValidateSet('auto','physical','memu')][string]$Target='auto',
   [ValidateSet('IDLE','LEASED','STARTED','COMMITTING','UNCERTAIN','VERIFIED')][string]$PublicationState='IDLE',
@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference='Stop'
 $Root='C:\ProgramData\AntharesAndroidRuntime'
 $Adb='D:\Program Files\Microvirt\MEmu\adb.exe'
-$AdbServerPort=5038
+$AdbServerPort=5037
 $Mgr='D:\Program Files\Microvirt\MEmuHyperv\MEmuManage.exe'
 $Memuc='D:\Program Files\Microvirt\MEmu\memuc.exe'
 $Vm='MEmu_4'
@@ -198,3 +198,4 @@ switch($Command){
   'ui'{$h=ActiveProbe;if($h -and $h.healthy){[void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12);$r=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10;$o=[ordered]@{ok=$r.ok;executor=$h.executor;xml=$r.stdout}}else{$o=[ordered]@{ok=$false;reason='no_healthy_target'}}}
 }
 Event $Command $o | ConvertTo-Json -Depth 12 -Compress
+

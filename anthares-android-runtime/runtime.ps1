@@ -1,4 +1,4 @@
-param(
+﻿param(
  [ValidateSet('status','health','devices','recover','packages','foreground','launch','identity-probe')][string]$Action='status',
  [string]$Package=''
 )
@@ -37,7 +37,7 @@ function Recover-Runtime {
     }
     if(-not $h.serial){$o=[ordered]@{ok=$false;reason='serial_missing';health=$h};Save-Event recover $o;return $o}
     $port=[int]$h.adb_server_port
-    # The native MEmu ADB server belongs to the interactive user session (normally port 5038).
+    # The canonical SYSTEM runtime uses ADB port 5037. Port 5038 is reserved for the interactive recovery fallback only.
     # Never kill/restart it from SYSTEM: doing so changes ADB key context and can turn a healthy guest into offline.
     $steps=@(@('disconnect',$h.serial),@('connect',$h.serial),@('connect',$h.serial))
     foreach($s in $steps){
@@ -59,3 +59,4 @@ switch($Action){
  'identity-probe' {if($h.transport_state -eq 'device'){$out=[ordered]@{ok=$true;uiautomator=(Invoke-AntharesAdb -Adb $script:Adb -Args @('-s',$h.serial,'shell','uiautomator','dump','/sdcard/anthares-ui.xml') -TimeoutMs 10000 -ServerPort $port);pull=(Invoke-AntharesAdb -Adb $script:Adb -Args @('-s',$h.serial,'pull','/sdcard/anthares-ui.xml',"$root\anthares-ui.xml") -TimeoutMs 10000 -ServerPort $port)}}else{$out=[ordered]@{ok=$false;reason='transport_unavailable';health=$h}}}
 }
 $out|ConvertTo-Json -Depth 10 -Compress
+
