@@ -64,32 +64,17 @@ function RemoveAbortedMemuOrphan{
   Start-Sleep -Milliseconds 800
   [ordered]@{ok=$true;action=if($terminated.Count){'terminated_aborted_orphan'}else{'none_found'};state=$m.state;terminated=$terminated}
 }
-function StartMemuOfficial{
-  $m=MemuInfo
-  if($m.state -eq 'running'){return @{ok=$true;action='already_running';authority='system';stdout='';stderr=''}}
-  $cleanup=if($m.state -eq 'aborted'){RemoveAbortedMemuOrphan}else{$null}
-
-  # PRIMARY AUTHORITY: SYSTEM starts MEmu directly, headless.
-  $direct=Run -File $Mgr -Arguments @('startvm',$Vm,'--type','headless') -Timeout 35
-  $directDeadline=(Get-Date).AddSeconds(75)
-  do{
-    [void](Adb @('start-server') $null 8)
-    $mi=MemuInfo
-    if($mi.serial){[void](Adb @('connect',$mi.serial) $null 8)}
-    $after=Probe 'memu'
-    if($after.healthy){return @{ok=$true;action='system_headless_primary_healthy';authority='system';stdout=$direct.stdout;stderr=$direct.stderr;cleanup=$cleanup;after=$after}}
-    if($mi.state -eq 'running'){
-      $guestRepair=RepairGuestAdbTcp
-      if($guestRepair.ok){return @{ok=$true;action='system_headless_primary_recovered';authority='system';stdout=$direct.stdout;stderr=$direct.stderr;cleanup=$cleanup;after=$guestRepair.after;guest_repair=$guestRepair}}
-    }
-    Start-Sleep -Seconds 3
-  }while((Get-Date)-lt $directDeadline)
-
-  # REDUNDANCY ONLY: interactive path is allowed only after SYSTEM path failed.
+function InvokeInteractiveFallback([string]$Reason,[object]$Primary=$null,[object]$Cleanup=$null){
   $launcherTask='Anthares-MEmu4-Recovery-Launcher'
   $adbTask='Anthares-MEmu4-ADB5038-Interactive'
-  $fallback=[ordered]@{attempted=$true;launcher_task=$launcherTask;adb_task=$adbTask;reason='system_headless_primary_exhausted'}
+  $fallback=[ordered]@{attempted=$true;launcher_task=$launcherTask;adb_task=$adbTask;reason=$Reason}
   try{
+    $pre=Probe 'memu'
+    if($pre.backend_state -eq 'running' -and -not $pre.healthy){
+      [void](Run -File $Mgr -Arguments @('controlvm',$Vm,'poweroff') -Timeout 15)
+      $stopDeadline=(Get-Date).AddSeconds(20)
+      do{Start-Sleep -Seconds 1;$mi=MemuInfo;if($mi.state -ne 'running'){break}}while((Get-Date)-lt $stopDeadline)
+    }
     foreach($task in @($adbTask,$launcherTask)){
       $t=Get-ScheduledTask -TaskName $task -ErrorAction Stop
       if(-not $t.Settings.Enabled){Enable-ScheduledTask -TaskName $task -ErrorAction Stop | Out-Null}
@@ -100,16 +85,33 @@ function StartMemuOfficial{
     do{
       Start-Sleep -Seconds 2
       $after=Probe 'memu'
-      if($after.healthy){$fallback.ok=$true;$fallback.after=$after;return @{ok=$true;action='interactive_fallback_healthy';authority='interactive_fallback';cleanup=$cleanup;primary=@{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr};fallback=$fallback;after=$after}}
+      if($after.healthy){$fallback.ok=$true;$fallback.after=$after;return @{ok=$true;action='interactive_fallback_healthy';authority='interactive_fallback';cleanup=$Cleanup;primary=$Primary;fallback=$fallback;after=$after}}
     }while((Get-Date)-lt $deadline)
     $fallback.ok=$false;$fallback.after=Probe 'memu'
-    return @{ok=$false;action='interactive_fallback_timeout';authority='none';cleanup=$cleanup;primary=@{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr};fallback=$fallback;after=$fallback.after}
+    return @{ok=$false;action='interactive_fallback_timeout';authority='none';cleanup=$Cleanup;primary=$Primary;fallback=$fallback;after=$fallback.after}
   }catch{
     $fallback.ok=$false;$fallback.error=$_.Exception.Message
-    return @{ok=$false;action='interactive_fallback_failed';authority='none';cleanup=$cleanup;primary=@{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr};fallback=$fallback;after=(Probe 'memu')}
+    return @{ok=$false;action='interactive_fallback_failed';authority='none';cleanup=$Cleanup;primary=$Primary;fallback=$fallback;after=(Probe 'memu')}
   }finally{
     foreach($task in @($adbTask,$launcherTask)){Disable-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue | Out-Null}
   }
+}
+function StartMemuOfficial{
+  $m=MemuInfo
+  if($m.state -eq 'running'){return @{ok=$true;action='already_running';authority='system';stdout='';stderr=''}}
+  $cleanup=if($m.state -eq 'aborted'){RemoveAbortedMemuOrphan}else{$null}
+  $direct=Run -File $Mgr -Arguments @('startvm',$Vm,'--type','headless') -Timeout 35
+  $directDeadline=(Get-Date).AddSeconds(75)
+  do{
+    [void](Adb @('start-server') $null 8)
+    $mi=MemuInfo
+    if($mi.serial){[void](Adb @('connect',$mi.serial) $null 8)}
+    $after=Probe 'memu'
+    if($after.healthy){return @{ok=$true;action='system_headless_primary_healthy';authority='system';stdout=$direct.stdout;stderr=$direct.stderr;cleanup=$cleanup;after=$after}}
+    if($mi.state -eq 'running'){$guestRepair=RepairGuestAdbTcp;if($guestRepair.ok){return @{ok=$true;action='system_headless_primary_recovered';authority='system';stdout=$direct.stdout;stderr=$direct.stderr;cleanup=$cleanup;after=$guestRepair.after;guest_repair=$guestRepair}}}
+    Start-Sleep -Seconds 3
+  }while((Get-Date)-lt $directDeadline)
+  InvokeInteractiveFallback -Reason 'system_headless_primary_exhausted' -Primary @{ok=$false;stdout=$direct.stdout;stderr=$direct.stderr} -Cleanup $cleanup
 }
 function RepairGuestAdbTcp{
   $m=MemuInfo
@@ -167,6 +169,11 @@ function RecoverTransport([string]$Kind,[switch]$MayStart,[switch]$MayReset){
     do{Start-Sleep -Milliseconds 800;$after=Probe $Kind;if($after.healthy){return [ordered]@{ok=$true;action='transport_recovered';before=$before;after=$after}}}while((Get-Date)-lt $deadline)
     if($Kind -eq 'memu'){$guestRepair=RepairGuestAdbTcp;if($guestRepair.ok){return [ordered]@{ok=$true;action='guest_adbd_tcp_recovered';before=$before;after=$guestRepair.after;guest_repair=$guestRepair}}}else{$guestRepair=$null}
     if($Kind -eq 'memu' -and $MayReset){[void](Run -File $Mgr -Arguments @('controlvm',$Vm,'reset') -Timeout 15);$deadline=(Get-Date).AddSeconds(45);do{Start-Sleep -Seconds 2;$after=Probe $Kind;if($after.healthy){return [ordered]@{ok=$true;action='backend_reset_recovered';before=$before;after=$after;guest_repair=$guestRepair}}}while((Get-Date)-lt $deadline)}
+    if($Kind -eq 'memu' -and $MayStart){
+      $fb=InvokeInteractiveFallback -Reason 'system_transport_guest_reset_exhausted' -Primary @{before=$before;guest_repair=$guestRepair} -Cleanup $null
+      if($fb.ok){return [ordered]@{ok=$true;action='interactive_fallback_recovered';before=$before;after=$fb.after;guest_repair=$guestRepair;fallback=$fb}}
+      return [ordered]@{ok=$false;action='recovery_exhausted';before=$before;after=(Probe $Kind);guest_repair=$guestRepair;fallback=$fb}
+    }
     [ordered]@{ok=$false;action='recovery_exhausted';before=$before;after=(Probe $Kind);guest_repair=$guestRepair}
   }finally{
     if($lockTaken -and $mutex){try{$mutex.ReleaseMutex()}catch{}}
