@@ -49,9 +49,9 @@ The watchdog does not reboot Windows and does not delete/recreate the MEmu VM or
 
 ## Application identity
 
-The identity probe is semantic. It requires the Kwai package in foreground plus the exact visible account marker `@lucasrosalem` in the UI hierarchy. Process existence, emulator existence and package installation are supporting signals only.
+The identity probe is semantic. It requires the Kwai package in foreground plus the exact visible normalized handle `lucasrosalem` (the app may render it as `lucasrosalem` or `@lucasrosalem`) and an owner-only profile control such as `Editar perfil`/`Edit profile`. Process existence, emulator existence and package installation are supporting signals only.
 
-## Project continuity boundary — 2026-10-15
+## Project continuity boundary â€” 2026-10-15
 
 The reconciled project status already closes F17-F19 on the current operational Android/mobile path. `MEmu_4` is the standby Android backend. Its remaining acceptance belongs to the final boot round with F15: automatic startup, headless/invisible execution and muted audio after a real Windows boot. The Android Runtime work therefore must not reopen F17 merely because the standby MEmu backend is degraded.
 

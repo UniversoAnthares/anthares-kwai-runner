@@ -305,23 +305,26 @@ function GetKwaiIdentity{
   $fg=Adb @('shell','dumpsys','window','windows') $h.serial 10
   $fgLine=($fg.stdout -split "`r?`n"|Where-Object{$_ -match 'mCurrentFocus|mFocusedApp'}|Select-Object -First 1)
   $snap=GetAgentSnapshot
+  $xml=''
   $navigation='none'
-  if($snap -notmatch [regex]::Escape($expected)){
+  $initial=$snap
+  if($initial -notmatch '(?i)(^|\s)@?lucasrosalem($|\s)' -or $initial -notmatch '(?i)Editar perfil|Edit profile'){
     $click=InvokeAgentCommand 'click_id' 'id_home_bottom_tab_me'
     if($click.stdout -match 'OK'){$navigation='anthares_agent_profile_id';Start-Sleep -Seconds 3;$snap=GetAgentSnapshot}
   }
-  if($snap -notmatch [regex]::Escape($expected)){
-    [void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12)
-    $u=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10
-    $xml=[string]$u.stdout
-    if($xml -notmatch [regex]::Escape($expected)){
-      $m=[regex]::Match($xml,'resource-id="com\.kwai\.video\.basis:id/id_home_bottom_tab_me"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"')
-      if($m.Success){$x=[int](([int]$m.Groups[1].Value+[int]$m.Groups[3].Value)/2);$y=[int](([int]$m.Groups[2].Value+[int]$m.Groups[4].Value)/2);[void](Adb @('shell','input','tap',[string]$x,[string]$y) $h.serial 8);$navigation='semantic_profile_bounds';Start-Sleep -Seconds 3;[void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12);$u=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10;$xml=[string]$u.stdout}
-    }
-    if($xml -match [regex]::Escape($expected)){$snap=$xml}
+  [void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12)
+  $u=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10
+  $xml=[string]$u.stdout
+  if($xml -notmatch '(?i)text="@?lucasrosalem"' -or $xml -notmatch '(?i)>?Editar perfil|text="Editar perfil"|text="Edit profile"'){
+    $m=[regex]::Match($xml,'resource-id="com\.kwai\.video\.basis:id/id_home_bottom_tab_me"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"')
+    if($m.Success){$x=[int](([int]$m.Groups[1].Value+[int]$m.Groups[3].Value)/2);$y=[int](([int]$m.Groups[2].Value+[int]$m.Groups[4].Value)/2);[void](Adb @('shell','input','tap',[string]$x,[string]$y) $h.serial 8);$navigation='semantic_profile_bounds';Start-Sleep -Seconds 3;[void](Adb @('shell','uiautomator','dump','/sdcard/anthares-window.xml') $h.serial 12);$u=Adb @('shell','cat','/sdcard/anthares-window.xml') $h.serial 10;$xml=[string]$u.stdout}
   }
-  $identity=if($snap -match [regex]::Escape($expected)){$expected}else{$null}
-  [ordered]@{ok=[bool]($identity -eq $expected -and $fgLine -match 'com\.kwai\.video');identity=$identity;expected=$expected;foreground=if($fgLine){$fgLine.Trim()}else{''};profile_marker_visible=[bool]($identity -eq $expected);navigation=$navigation}
+  $evidence=($snap+' '+$xml)
+  $handleVisible=[bool]($evidence -match '(?i)text="@?lucasrosalem"|(^|\s)@?lucasrosalem($|\s)')
+  $ownerControl=[bool]($evidence -match '(?i)Editar perfil|Edit profile')
+  $foregroundKwai=[bool]($fgLine -match 'com\.kwai\.video')
+  $ok=[bool]($handleVisible -and $ownerControl -and $foregroundKwai)
+  [ordered]@{ok=$ok;identity=if($ok){$expected}else{$null};expected=$expected;visible_handle=if($handleVisible){'lucasrosalem'}else{$null};owner_control=$ownerControl;foreground=if($fgLine){$fgLine.Trim()}else{''};profile_marker_visible=$handleVisible;navigation=$navigation;signals=@(if($handleVisible){'exact_visible_handle'};if($ownerControl){'owner_edit_profile_control'};if($foregroundKwai){'foreground_kwai_package'})}
 }
 switch($Command){
   'health'{$o=[ordered]@{ok=$true;physical=(Probe 'physical');memu=(Probe 'memu');policy=[ordered]@{priority=@('physical_android','memu_android');remote_android='experimental_only'}}}
