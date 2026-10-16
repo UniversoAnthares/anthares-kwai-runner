@@ -47,7 +47,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/d8" \
             --min-api 18 \
             --output build/uiauto/dex \
-            build/uiauto/classes
+            build/uiauto/classes/us/anthares/tools/KwaiUiDriver.class \
+            build/uiauto/classes/android/test/RepetitiveTest.class
           (cd build/uiauto/dex && zip -q ../kwai-uiautomator-driver.jar classes.dex)
           sha256sum build/uiauto/kwai-uiautomator-driver.jar
       - uses: actions/upload-artifact@v4
