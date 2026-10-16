@@ -1,12 +1,20 @@
-name: YouTube authenticated acquisition (no Render)
+name: CORTES method 3 authenticated fallback
 
 on:
   workflow_dispatch:
     inputs:
       video_url:
-        description: YouTube URL to acquire
+        description: YouTube URL to acquire with method 3
         required: false
         default: https://www.youtube.com/watch?v=9CIk-I_3VhM
+      source_start:
+        description: Start second for final cut
+        required: false
+        default: '8'
+      source_end:
+        description: End second for final cut
+        required: false
+        default: '98'
   push:
     branches: [main]
     paths:
@@ -17,9 +25,9 @@ permissions:
   contents: read
 
 jobs:
-  acquire:
+  method3:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
       YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
@@ -31,10 +39,10 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${YOUTUBE_COOKIES:-}" && -z "${YOUTUBE_COOKIES_B64:-}" ]]; then
-            echo 'YOUTUBE_AUTH_MIGRATION=SECRET_MISSING'
+            echo 'METHOD3_AUTH_SECRET=ABSENT'
             exit 20
           fi
-          echo 'YOUTUBE_AUTH_MIGRATION=SECRET_PRESENT'
+          echo 'METHOD3_AUTH_SECRET=PRESENT'
 
       - name: Install acquisition stack
         shell: bash
@@ -42,7 +50,10 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
-          python3 -m pip install --quiet --disable-pip-version-check --break-system-packages 'yt-dlp[default]'
+          python3 -m pip install --quiet --disable-pip-version-check --break-system-packages -U 'yt-dlp[default]' yt-dlp-ejs bgutil-ytdlp-pot-provider
+          mkdir -p /tmp/method3
+          node --version
+          yt-dlp --version
 
       - name: Materialize cookie file
         shell: bash
@@ -56,10 +67,10 @@ jobs:
               raw=base64.b64decode(b64).decode('utf-8')
           if not raw.strip():
               raise SystemExit('empty cookie secret')
-          p=pathlib.Path('/tmp/youtube-cookies.txt')
+          p=pathlib.Path('/tmp/method3/youtube-cookies.txt')
           p.write_text(raw,encoding='utf-8')
           p.chmod(0o600)
-          print('COOKIE_FILE_READY=1')
+          print('METHOD3_COOKIE_FILE=READY')
           PY
 
       - name: Verify authenticated metadata
@@ -69,45 +80,129 @@ jobs:
         run: |
           set -euo pipefail
           URL="${INPUT_VIDEO_URL:-https://www.youtube.com/watch?v=9CIk-I_3VhM}"
-          yt-dlp --cookies /tmp/youtube-cookies.txt --no-playlist --skip-download --dump-single-json --no-warnings "$URL" >/tmp/source.json
+          yt-dlp --cookies /tmp/method3/youtube-cookies.txt --no-playlist --skip-download \
+            --js-runtimes node --remote-components ejs:npm \
+            --print '%(id)s|%(duration)s|%(title)s' "$URL" > /tmp/method3/metadata.txt
           python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/source.json'))
-          assert isinstance(d,dict) and d.get('id') and d.get('formats')
-          print('AUTH_METADATA_PROVEN=1')
-          print('VIDEO_ID='+str(d.get('id')))
-          print('DURATION='+str(d.get('duration')))
+          s=open('/tmp/method3/metadata.txt',encoding='utf-8').read().strip()
+          assert s.startswith('9CIk-I_3VhM|'), s[:80]
+          print('METHOD3_AUTH_METADATA=PROVEN')
+          print('METHOD3_METADATA='+s)
           PY
 
-      - name: Acquire source MP4
+      - name: Method 3 - acquire full source temporarily
         shell: bash
         env:
           INPUT_VIDEO_URL: ${{ github.event.inputs.video_url }}
         run: |
           set -euo pipefail
           URL="${INPUT_VIDEO_URL:-https://www.youtube.com/watch?v=9CIk-I_3VhM}"
-          mkdir -p /tmp/anthares-source
           yt-dlp \
-            --cookies /tmp/youtube-cookies.txt \
+            --cookies /tmp/method3/youtube-cookies.txt \
             --no-playlist \
-            -f 'bv*[height<=720]+ba/b[height<=720]' \
+            --js-runtimes node \
+            --remote-components ejs:npm \
+            -f 'bv*[height<=720]+ba/b[height<=720]/b' \
             --merge-output-format mp4 \
-            -o '/tmp/anthares-source/source.%(ext)s' \
-            "$URL"
-          FILE="$(find /tmp/anthares-source -maxdepth 1 -type f -name 'source.*' | head -n1)"
+            -o '/tmp/method3/source.%(ext)s' \
+            "$URL" 2>&1 | tee /tmp/method3/yt-dlp.log
+          FILE="$(find /tmp/method3 -maxdepth 1 -type f -name 'source.*' | head -n1)"
           test -n "$FILE" -a -s "$FILE"
-          ffprobe -v error -show_entries format=duration,size -of json "$FILE"
-          echo 'FULL_ACQUISITION_PROVEN=1'
+          bytes="$(stat -c%s "$FILE")"
+          dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$FILE")"
+          DUR="$dur" python3 - <<'PY'
+          import os
+          d=float(os.environ['DUR'])
+          assert d > 10000,d
+          print('METHOD3_FULL_SOURCE_DURATION='+str(round(d,3)))
+          PY
+          echo METHOD3_FULL_SOURCE_BYTES=$bytes
+          printf '%s' "$FILE" > /tmp/method3/source-path.txt
+          printf '%s' "$bytes" > /tmp/method3/source-bytes.txt
+          echo METHOD3_FULL_TEMP_ACQUISITION=PROVEN
 
-      - name: Upload source artifact
+      - name: Cut and process final master remotely
+        shell: bash
+        env:
+          INPUT_SOURCE_START: ${{ github.event.inputs.source_start }}
+          INPUT_SOURCE_END: ${{ github.event.inputs.source_end }}
+        run: |
+          set -euo pipefail
+          START="${INPUT_SOURCE_START:-8}"
+          END="${INPUT_SOURCE_END:-98}"
+          FILE="$(cat /tmp/method3/source-path.txt)"
+          ffmpeg -hide_banner -loglevel error -y -ss "$START" -to "$END" -i "$FILE" \
+            -vf 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920' \
+            -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p \
+            -c:a aac -b:a 128k -movflags +faststart \
+            /tmp/method3/final.mp4
+          test -s /tmp/method3/final.mp4
+          dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/method3/final.mp4)"
+          sha="$(sha256sum /tmp/method3/final.mp4 | awk '{print $1}')"
+          bytes="$(stat -c%s /tmp/method3/final.mp4)"
+          DUR="$dur" python3 - <<'PY'
+          import os
+          d=float(os.environ['DUR'])
+          assert 70 <= d <= 95,d
+          print('METHOD3_FINAL_DURATION='+str(round(d,3)))
+          PY
+          echo METHOD3_FINAL_BYTES=$bytes
+          echo METHOD3_FINAL_SHA256=$sha
+          printf '%s' "$dur" > /tmp/method3/final-duration.txt
+          printf '%s' "$bytes" > /tmp/method3/final-bytes.txt
+          printf '%s' "$sha" > /tmp/method3/final-sha.txt
+          echo METHOD3_REMOTE_PROCESSING=PROVEN
+
+      - name: Delete full temporary source immediately after master proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="$(cat /tmp/method3/source-path.txt)"
+          test -s /tmp/method3/final.mp4
+          rm -f -- "$FILE"
+          test ! -e "$FILE"
+          if find /tmp/method3 -maxdepth 1 -type f -name 'source.*' | grep -q .; then
+            echo 'METHOD3_SOURCE_DELETE=FAILED'
+            exit 31
+          fi
+          echo METHOD3_SOURCE_DELETE=PROVEN
+
+      - name: Write proof manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,pathlib
+          d={
+            'source_id':'9CIk-I_3VhM',
+            'source_start':8,
+            'source_end':98,
+            'method3':'full_temporary_authenticated_remote_acquisition_then_cut_process_delete',
+            'fallback_role':True,
+            'full_source_download_requested':True,
+            'full_source_bytes_before_delete':int(pathlib.Path('/tmp/method3/source-bytes.txt').read_text()),
+            'full_source_deleted':True,
+            'final_duration_seconds':float(pathlib.Path('/tmp/method3/final-duration.txt').read_text()),
+            'final_bytes':int(pathlib.Path('/tmp/method3/final-bytes.txt').read_text()),
+            'final_sha256':pathlib.Path('/tmp/method3/final-sha.txt').read_text(),
+            'social_publish':False
+          }
+          pathlib.Path('/tmp/method3/result.json').write_text(json.dumps(d,indent=2),encoding='utf-8')
+          print('METHOD3_PROOF_MANIFEST=READY')
+          PY
+
+      - name: Upload final proof artifact only
         uses: actions/upload-artifact@v4
         with:
-          name: youtube-source-${{ github.run_id }}
-          path: /tmp/anthares-source/source.*
+          name: cortes-method3-authenticated-${{ github.run_id }}
+          path: |
+            /tmp/method3/result.json
+            /tmp/method3/final.mp4
+            /tmp/method3/yt-dlp.log
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
 
-      - name: Remove local auth material
+      - name: Remove authentication and residual source material
         if: always()
         shell: bash
-        run: rm -f /tmp/youtube-cookies.txt
+        run: rm -f /tmp/method3/youtube-cookies.txt /tmp/method3/source.*
