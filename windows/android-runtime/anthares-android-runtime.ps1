@@ -21,6 +21,7 @@ $PhysicalSerial=if($env:ANTHARES_PHYSICAL_ADB_SERIAL){$env:ANTHARES_PHYSICAL_ADB
 $env:USERPROFILE='C:\Users\Lucas'
 $env:HOMEDRIVE='C:'
 $env:HOMEPATH='\Users\Lucas'
+$env:ADB_VENDOR_KEYS='C:\Users\Lucas\.android\adbkey'
 
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
 
@@ -67,31 +68,22 @@ function StartMemuOfficial{
   $m=MemuInfo
   if($m.state -eq 'running'){return @{ok=$true;action='already_running';stdout='';stderr=''}}
   $cleanup=if($m.state -eq 'aborted'){RemoveAbortedMemuOrphan}else{$null}
-  $task='Anthares-MEmu4-Interactive-Launcher'
-  $adbTask='Anthares-MEmu4-ADB5038-Interactive'
+  $task='Anthares-MEmu4-Recovery-Launcher'
   try{
     $t=Get-ScheduledTask -TaskName $task -ErrorAction Stop
     if(-not $t.Settings.Enabled){Enable-ScheduledTask -TaskName $task -ErrorAction Stop | Out-Null}
-    $at=Get-ScheduledTask -TaskName $adbTask -ErrorAction Stop
-    if(-not $at.Settings.Enabled){Enable-ScheduledTask -TaskName $adbTask -ErrorAction Stop | Out-Null}
-    Start-ScheduledTask -TaskName $adbTask -ErrorAction SilentlyContinue
+    if($t.State -eq 'Running'){Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue;Start-Sleep -Milliseconds 500}
     Start-ScheduledTask -TaskName $task -ErrorAction Stop
   }catch{
-    return @{ok=$false;action='native_start_task_failed';stdout='';stderr=$_.Exception.Message;cleanup=$cleanup}
+    return @{ok=$false;action='recovery_launcher_task_failed';stdout='';stderr=$_.Exception.Message;cleanup=$cleanup}
   }
-  $deadline=(Get-Date).AddSeconds(120)
+  $deadline=(Get-Date).AddSeconds(150)
   do{
     Start-Sleep -Seconds 2
-    $mi=MemuInfo
-    if($mi.state -eq 'running'){
-      $boot=MemuGuest '/system/bin/getprop sys.boot_completed' 6
-      $adbd=MemuGuest '/system/bin/getprop init.svc.adbd' 6
-      if($boot.ok -and $adbd.ok -and $boot.stdout.Trim() -eq '1' -and $adbd.stdout.Trim() -eq 'running'){
-        return @{ok=$true;action='native_start_guest_ready';stdout='';stderr='';cleanup=$cleanup;guest_boot='1';guest_adbd='running'}
-      }
-    }
+    $after=Probe 'memu'
+    if($after.healthy){return @{ok=$true;action='recovery_launcher_healthy';stdout='';stderr='';cleanup=$cleanup;after=$after}}
   }while((Get-Date)-lt $deadline)
-  @{ok=$false;action='native_start_timeout';stdout='';stderr='MEmu4 guest did not become ready within 120 seconds';cleanup=$cleanup;after=(Probe 'memu')}
+  @{ok=$false;action='recovery_launcher_timeout';stdout='';stderr='MEmu4 did not become healthy within 150 seconds';cleanup=$cleanup;after=(Probe 'memu')}
 }
 function RepairGuestAdbTcp{
   $m=MemuInfo

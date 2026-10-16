@@ -19,7 +19,8 @@ $ps='C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
 $launcherArgs='-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+$launcherTarget+'"'
 $launcherAction=New-ScheduledTaskAction -Execute $ps -Argument $launcherArgs -WorkingDirectory $InstallRoot
 Register-ScheduledTask -TaskName 'Anthares-MEmu4-Recovery-Launcher' -Action $launcherAction -Principal $principal -Settings $settings -Force | Out-Null
-foreach($old in @('Anthares MEmu4 Headless Boot','Anthares-MEmu4-Boot','Anthares-MEmu4-Recover')){Disable-ScheduledTask -TaskName $old -ErrorAction SilentlyContinue | Out-Null}
+foreach($old in @('Anthares MEmu4 Headless Boot','Anthares-MEmu4-Boot','Anthares-MEmu4-Recover','Anthares-MEmu4-Runtime-Recovery','Anthares-MEmu4-Interactive-Launcher')){Stop-ScheduledTask -TaskName $old -ErrorAction SilentlyContinue; Disable-ScheduledTask -TaskName $old -ErrorAction SilentlyContinue | Out-Null}
 Enable-ScheduledTask -TaskName 'Anthares-MEmu4-ADB5038-Interactive' | Out-Null
+Start-ScheduledTask -TaskName 'Anthares-MEmu4-ADB5038-Interactive' -ErrorAction SilentlyContinue
 Enable-ScheduledTask -TaskName 'Anthares-MEmu4-Recovery-Launcher' | Out-Null
 [ordered]@{ok=$true;launcher_task='Anthares-MEmu4-Recovery-Launcher';adb_task='Anthares-MEmu4-ADB5038-Interactive';adb_server_port=5038;legacy_headless_tasks_disabled=$true}|ConvertTo-Json -Compress
