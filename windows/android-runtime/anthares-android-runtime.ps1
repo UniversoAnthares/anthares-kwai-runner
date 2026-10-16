@@ -13,6 +13,14 @@ $Memuc='D:\Program Files\Microvirt\MEmu\memuc.exe'
 $Vm='MEmu_4'
 $VmIndex='4'
 $PhysicalSerial=if($env:ANTHARES_PHYSICAL_ADB_SERIAL){$env:ANTHARES_PHYSICAL_ADB_SERIAL}else{'993fce720408'}
+
+# MEmuHyperv keeps its canonical registry under Lucas' interactive profile.
+# Anthares Remote runs as SYSTEM, so force the canonical profile before every
+# hypervisor/memuc invocation instead of allowing a SYSTEM-local registry split.
+$env:USERPROFILE='C:\Users\Lucas'
+$env:HOMEDRIVE='C:'
+$env:HOMEPATH='\Users\Lucas'
+
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
 
 function Run([string]$File,[string[]]$Args,[int]$Timeout=12){
@@ -21,10 +29,6 @@ function Run([string]$File,[string[]]$Args,[int]$Timeout=12){
   $psi.Arguments=(($Args|ForEach-Object{if($_ -match '\s'){ '"'+$_+'"' }else{$_}})-join ' ')
   $p=New-Object Diagnostics.Process;$p.StartInfo=$psi
   try{[void]$p.Start();$o=$p.StandardOutput.ReadToEndAsync();$e=$p.StandardError.ReadToEndAsync();if(-not $p.WaitForExit($Timeout*1000)){try{$p.Kill()}catch{};return @{ok=$false;timeout=$true;stdout='';stderr='timeout'}};@{ok=($p.ExitCode -eq 0);code=$p.ExitCode;stdout=$o.Result;stderr=$e.Result}}catch{@{ok=$false;code=$null;stdout='';stderr=$_.Exception.Message}}finally{if($p){$p.Dispose()}}
-}
-function StartMemuOfficial{
-  $old=$env:__COMPAT_LAYER
-  try{$env:__COMPAT_LAYER='RunAsInvoker';Run $Memuc @('start','-i',$VmIndex) 35}finally{$env:__COMPAT_LAYER=$old}
 }
 function Event([string]$Op,$Data){
   $row=[ordered]@{timestamp=(Get-Date).ToUniversalTime().ToString('o');operation=$Op;data=$Data}
@@ -39,10 +43,57 @@ function Devices{
   $d
 }
 function MemuInfo{
-  $txt=(& $Mgr showvminfo $Vm --machinereadable 2>$null|Out-String);$state='unknown';$serial=$null
+  $r=Run $Mgr @('showvminfo',$Vm,'--machinereadable') 10;$txt=$r.stdout;$state='unknown';$serial=$null
   if($txt -match '(?m)^VMState="([^"]+)"'){$state=$Matches[1]}
   if($txt -match 'Forwarding\(\d+\)="ADB,tcp,127\.0\.0\.1,(\d+),'){$serial='127.0.0.1:'+$Matches[1]}
-  [ordered]@{state=$state;serial=$serial}
+  [ordered]@{state=$state;serial=$serial;manager_ok=$r.ok;manager_error=$r.stderr.Trim()}
+}
+function MemuGuest([string]$Command,[int]$Timeout=8){Run $Memuc @('-n',$Vm,'execcmd',$Command) $Timeout}
+function RemoveAbortedMemuOrphan{
+  $m=MemuInfo
+  if($m.state -ne 'aborted'){return [ordered]@{ok=$true;action='not_applicable';state=$m.state;terminated=@()}}
+  $terminated=@()
+  $ps=Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {$_.Name -eq 'MEmuHeadless.exe' -and $_.CommandLine -match '--comment\s+MEmu_4(?:\s|$)'}
+  foreach($p in $ps){
+    try{Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop;$terminated+=[int]$p.ProcessId}catch{}
+  }
+  Start-Sleep -Milliseconds 800
+  [ordered]@{ok=$true;action=if($terminated.Count){'terminated_aborted_orphan'}else{'none_found'};state=$m.state;terminated=$terminated}
+}
+function StartMemuOfficial{
+  $m=MemuInfo
+  if($m.state -eq 'running'){return @{ok=$true;action='already_running';stdout='';stderr=''}}
+  $cleanup=if($m.state -eq 'aborted'){RemoveAbortedMemuOrphan}else{$null}
+  $r=Run $Mgr @('startvm',$Vm,'--type','headless') 35
+  if(-not $r.ok){
+    $old=$env:__COMPAT_LAYER
+    try{$env:__COMPAT_LAYER='RunAsInvoker';$fallback=Run $Memuc @('start','-i',$VmIndex) 35}finally{$env:__COMPAT_LAYER=$old}
+    if($fallback.ok){return @{ok=$true;action='memuc_fallback_started';stdout=$fallback.stdout;stderr=$fallback.stderr;cleanup=$cleanup}}
+    return @{ok=$false;action='start_failed';stdout=$r.stdout;stderr=($r.stderr+'; '+$fallback.stderr);cleanup=$cleanup}
+  }
+  @{ok=$true;action='headless_started';stdout=$r.stdout;stderr=$r.stderr;cleanup=$cleanup}
+}
+function RepairGuestAdbTcp{
+  $m=MemuInfo
+  if($m.state -ne 'running' -or -not $m.serial){return [ordered]@{ok=$false;attempted=$false;reason='backend_not_running';state=$m.state}}
+  $boot=MemuGuest '/system/bin/getprop sys.boot_completed' 8
+  $adbd=MemuGuest '/system/bin/getprop init.svc.adbd' 8
+  $port=MemuGuest '/system/bin/getprop service.adb.tcp.port' 8
+  $bootText=$boot.stdout.Trim();$adbdText=$adbd.stdout.Trim();$portText=$port.stdout.Trim()
+  if(-not $boot.ok -or -not $adbd.ok -or $bootText -ne '1' -or $adbdText -ne 'running'){
+    return [ordered]@{ok=$false;attempted=$true;reason='guest_not_ready';boot=$bootText;adbd=$adbdText;port=$portText}
+  }
+  if($portText -ne '5555'){
+    [void](MemuGuest '/system/bin/setprop service.adb.tcp.port 5555' 8)
+    [void](MemuGuest '/system/bin/setprop persist.adb.tcp.port 5555' 8)
+    [void](MemuGuest '/system/bin/setprop ctl.restart adbd' 8)
+    Start-Sleep -Seconds 4
+  }
+  $verifiedPort=(MemuGuest '/system/bin/getprop service.adb.tcp.port' 8).stdout.Trim()
+  $verifiedAdbd=(MemuGuest '/system/bin/getprop init.svc.adbd' 8).stdout.Trim()
+  [void](Adb @('disconnect',$m.serial) $null 7);[void](Adb @('connect',$m.serial) $null 8);Start-Sleep -Seconds 3
+  $after=Probe 'memu'
+  [ordered]@{ok=[bool]$after.healthy;attempted=$true;action='guest_adbd_tcp_repair';boot=$bootText;adbd=$verifiedAdbd;port=$verifiedPort;after=$after}
 }
 function Probe([string]$Kind){
   $m=MemuInfo
@@ -68,11 +119,15 @@ function RecoverTransport([string]$Kind,[switch]$MayStart,[switch]$MayReset){
   }
   $deadline=(Get-Date).AddSeconds(25)
   do{Start-Sleep -Milliseconds 800;$after=Probe $Kind;if($after.healthy){return [ordered]@{ok=$true;action='transport_recovered';before=$before;after=$after}}}while((Get-Date)-lt $deadline)
+  if($Kind -eq 'memu'){
+    $guestRepair=RepairGuestAdbTcp
+    if($guestRepair.ok){return [ordered]@{ok=$true;action='guest_adbd_tcp_recovered';before=$before;after=$guestRepair.after;guest_repair=$guestRepair}}
+  }else{$guestRepair=$null}
   if($Kind -eq 'memu' -and $MayReset){
     [void](Run $Mgr @('controlvm',$Vm,'reset') 15);$deadline=(Get-Date).AddSeconds(45)
-    do{Start-Sleep -Seconds 2;$after=Probe $Kind;if($after.healthy){return [ordered]@{ok=$true;action='backend_reset_recovered';before=$before;after=$after}}}while((Get-Date)-lt $deadline)
+    do{Start-Sleep -Seconds 2;$after=Probe $Kind;if($after.healthy){return [ordered]@{ok=$true;action='backend_reset_recovered';before=$before;after=$after;guest_repair=$guestRepair}}}while((Get-Date)-lt $deadline)
   }
-  [ordered]@{ok=$false;action='recovery_exhausted';before=$before;after=(Probe $Kind)}
+  [ordered]@{ok=$false;action='recovery_exhausted';before=$before;after=(Probe $Kind);guest_repair=$guestRepair}
 }
 function SelectExecutor{
   if($PublicationState -in @('STARTED','COMMITTING','UNCERTAIN')){return [ordered]@{ok=$false;selected=$null;reason='publication_state_blocks_failover';publication_state=$PublicationState}}
