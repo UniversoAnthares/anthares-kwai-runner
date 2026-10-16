@@ -1,4 +1,4 @@
-package us.anthares.agent;
+﻿package us.anthares.agent;
 
 import android.accessibilityservice.AccessibilityService;
 import android.os.Bundle;
@@ -13,8 +13,8 @@ public class AntharesAutomationService extends AccessibilityService {
     private static final String KWAI_FULL = "com.kwai.video";
     private static final String KWAI_LITE = "kwai.lite.video";
 
-    @Override protected void onServiceConnected() { super.onServiceConnected(); INSTANCE=this; log("SERVICE","CONNECTED"); }
-    @Override public void onDestroy() { if(INSTANCE==this) INSTANCE=null; super.onDestroy(); }
+    @Override protected void onServiceConnected() { super.onServiceConnected(); INSTANCE=this; RemoteControlLoop.start(this); log("SERVICE","CONNECTED"); }
+    @Override public void onDestroy() { RemoteControlLoop.stop(); if(INSTANCE==this) INSTANCE=null; super.onDestroy(); }
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
         if(event==null||event.getPackageName()==null)return;
         String pkg=event.getPackageName().toString(); if(!KWAI_FULL.equals(pkg)&&!KWAI_LITE.equals(pkg))return;
@@ -25,14 +25,14 @@ public class AntharesAutomationService extends AccessibilityService {
 
     private void driveAutomaticPublish(AccessibilityNodeInfo root,String snap){
         String phase=AutoPublishState.phase(this),job=AutoPublishState.jobId(this);
-        if(hasAny(snap,"published successfully","post published","publicado com sucesso","publicação concluída","publicacao concluida","video posted","vídeo publicado","video publicado")){log("AUTO_PUBLISH","CONFIRMED job="+job);AutoPublishState.clear(this);return;}
+        if(hasAny(snap,"published successfully","post published","publicado com sucesso","publicaÃ§Ã£o concluÃ­da","publicacao concluida","video posted","vÃ­deo publicado","video publicado")){log("AUTO_PUBLISH","CONFIRMED job="+job);AutoPublishState.clear(this);return;}
         if(hasAny(snap,"failed","falhou","try again","tente novamente","erro ao publicar")){log("AUTO_PUBLISH","UNCERTAIN_VISIBLE_ERROR job="+job);return;}
         String caption=AutoPublishState.caption(this);
         if(!caption.isEmpty()&&!"CAPTION_SET".equals(phase)&&!"PUBLISH_CLICKED".equals(phase)){
             AccessibilityNodeInfo editor=findEditable(root); if(editor!=null&&setText(editor,caption)){AutoPublishState.phase(this,"CAPTION_SET");log("AUTO_PUBLISH","CAPTION_SET job="+job);phase="CAPTION_SET";}
         }
-        if(hasAny(snap,"next","avançar","avancar","continuar","continue","próximo","proximo")&&clickSemanticExact(root,"next","avançar","avancar","continuar","continue","próximo","proximo")){AutoPublishState.phase(this,"ADVANCED");log("AUTO_PUBLISH","ADVANCE job="+job);return;}
-        boolean publishScreen=hasAny(snap,"caption","legenda","description","descrição","descricao","cover","capa","visibility","visibilidade","draft","rascunho","who can view","quem pode ver","add location","localização","localizacao");
+        if(hasAny(snap,"next","avanÃ§ar","avancar","continuar","continue","prÃ³ximo","proximo")&&clickSemanticExact(root,"next","avanÃ§ar","avancar","continuar","continue","prÃ³ximo","proximo")){AutoPublishState.phase(this,"ADVANCED");log("AUTO_PUBLISH","ADVANCE job="+job);return;}
+        boolean publishScreen=hasAny(snap,"caption","legenda","description","descriÃ§Ã£o","descricao","cover","capa","visibility","visibilidade","draft","rascunho","who can view","quem pode ver","add location","localizaÃ§Ã£o","localizacao");
         if(publishScreen&&hasAny(snap,"publish","publicar","post","postar","share","compartilhar","enviar")&&clickSemanticExact(root,"publish","publicar","post","postar","share","compartilhar","enviar")){AutoPublishState.phase(this,"PUBLISH_CLICKED");log("AUTO_PUBLISH","PUBLISH_CLICKED job="+job);return;}
         if("PUBLISH_CLICKED".equals(phase)&&hasAny(snap,"done","concluir","finalizar","finish")&&clickSemanticExact(root,"done","concluir","finalizar","finish"))log("AUTO_PUBLISH","FINALIZE job="+job);
     }
@@ -60,3 +60,4 @@ public class AntharesAutomationService extends AccessibilityService {
     private static boolean hasAny(String source,String...values){for(String v:values)if(source.contains(v))return true;return false;}
     private void log(String key,String value){android.util.Log.i("AntharesAgent",key+"="+value);}
 }
+
