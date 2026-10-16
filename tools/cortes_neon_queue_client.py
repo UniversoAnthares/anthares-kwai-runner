@@ -50,7 +50,7 @@ def main() -> int:
         req=urllib.request.Request(url,headers={'Authorization':'Bearer '+TOKEN,'X-Anthares-Device':DEVICE,'User-Agent':'AntharesCortesQueueClient/1.0'})
         with urllib.request.urlopen(req,timeout=30) as r: out=json.loads(r.read().decode())
     else:
-        raw=open(args.json[1:],encoding='utf-8').read() if args.json.startswith('@') else args.json
+        raw=open(args.json[1:],encoding='utf-8-sig').read() if args.json.startswith('@') else args.json
         out=call(args.action,json.loads(raw))
     print(json.dumps(out,ensure_ascii=False,separators=(',',':')))
     return 0 if out.get('ok') else 2
