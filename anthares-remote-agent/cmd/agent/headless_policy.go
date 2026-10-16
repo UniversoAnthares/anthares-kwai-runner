@@ -11,7 +11,7 @@ import (
 // the supported non-interactive maintenance primitive for SYSTEM recovery.
 var interactiveCommandPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\b(sendkeys|sendinput|setforegroundwindow|showwindow|switchto|appactivate|wscript\.shell|pyautogui|pynput|autohotkey|nircmd|xdotool)\b`),
-	regexp.MustCompile(`(?i)\b(start-process|start)\b[^\r\n]*(?:-windowstyle\s+(?:normal|maximized|minimized)|\b(?:chrome|msedge|firefox|notepad|explorer|cmd|powershell)\.exe\b)`),
+	regexp.MustCompile(`(?i)(?:\bstart-process\b|(?:^|[;&|]\s*)start\s+)[^\r\n]*(?:-windowstyle\s+(?:normal|maximized|minimized)|\b(?:chrome|msedge|firefox|notepad|explorer|cmd|powershell)\.exe\b)`),
 	regexp.MustCompile(`(?i)\b(?:user32\.dll|mouse_event|keybd_event|setcursorpos|clickinput)\b`),
 }
 
