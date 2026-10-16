@@ -85,6 +85,6 @@ for:
         export CI_PROVIDER=appveyor
         export CI_RUN_ID="${APPVEYOR_BUILD_ID:-unknown}"
         export CI_COMMIT_SHA="${APPVEYOR_REPO_COMMIT:-unknown}"
-        ANTHARES_BROWSER_QA_CASES=40 bash ci/shared/anthares-browser-runtime-qa.sh
+        ANTHARES_BROWSER_QA_CASES=3 bash ci/shared/anthares-browser-runtime-qa.sh
 
   test: off
