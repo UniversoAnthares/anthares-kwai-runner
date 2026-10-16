@@ -10,178 +10,39 @@ permissions:
   contents: read
   id-token: write
 
-concurrency:
-  group: cortes-method12-kwai-canary-once
-  cancel-in-progress: false
-
-env:
-  CONTROL: https://anthares-control.anthares1.workers.dev
-  SOURCE_ID: 9CIk-I_3VhM
-  SOURCE_URL: https://www.youtube.com/watch?v=9CIk-I_3VhM
-  SOURCE_START: '8'
-  SOURCE_END: '98'
-  JOB_ID: cortes-method12-9CIk-I_3VhM-8-98-kwai-canary-v5
-  KWAI_EXPECTED_ACCOUNT: lucasrosalem
-  KWAI_LEASE_TTL_SECONDS: '900'
-  KWAI_LEASE_RENEW_INTERVAL_SECONDS: '120'
-  KWAI_LEASE_RENEW_TTL_SECONDS: '900'
-  KWAI_SESSION_FILE: kwai-session.enc
-  KWAI_AUTH_STRATEGY: mobile_only
-  ANTHARES_REMOTE_ANDROID_ROLE: experimental_only
-
 jobs:
-  test-method12:
+  dedupe-only:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 5
+    env:
+      CONTROL: https://anthares-control.anthares1.workers.dev
+      SOURCE_ID: 9CIk-I_3VhM
     steps:
       - uses: actions/checkout@v4
-      - name: Guard experimental canary scope
-        run: |
-          python3 - <<'PY'
-          import json
-          d=json.load(open('ci-hub/executor-routing.json'))
-          assert d['android_execution']['primary_device']=='physical_android'
-          assert d['android_execution']['fallback_device']=='memu_android'
-          p=d['providers']['github_android_experimental']; assert p['active'] is False and p['android_eligible'] is False
-          print('EXPERIMENTAL_CANARY_ONLY=1')
-          PY
-      - name: Install acquisition and processing stack
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg >/dev/null
-          python3 -m pip install --disable-pip-version-check -q -U 'yt-dlp[default]' yt-dlp-ejs bgutil-ytdlp-pot-provider
-          node --version
-          yt-dlp --version
-          mkdir -p /tmp/method12
-      - name: Method 1 - partial source acquisition only
-        run: |
-          set -euo pipefail
-          common=(--no-playlist --js-runtimes node --remote-components ejs:npm --download-sections "*${SOURCE_START}-${SOURCE_END}" --force-keyframes-at-cuts --merge-output-format mp4 -o '/tmp/method12/partial.%(ext)s')
-          rm -f /tmp/method12/partial.*
-          : > /tmp/method12/yt-dlp.log
-          ok=0
-          for client in web_safari android_vr tv_simply; do
-            echo "=== METHOD1_CLIENT=$client ===" | tee -a /tmp/method12/yt-dlp.log
-            set +e
-            yt-dlp "${common[@]}" --extractor-args "youtube:player_client=$client" -f 'bv*+ba/b' "$SOURCE_URL" 2>&1 | tee -a /tmp/method12/yt-dlp.log
-            rc=${PIPESTATUS[0]}
-            set -e
-            if [ "$rc" -eq 0 ] && [ -s /tmp/method12/partial.mp4 ]; then ok=1; echo "METHOD1_WORKING_CLIENT=$client" | tee -a /tmp/method12/yt-dlp.log; break; fi
-            rm -f /tmp/method12/partial.*
-          done
-          test "$ok" -eq 1
-          bytes="$(stat -c%s /tmp/method12/partial.mp4)"
-          dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/method12/partial.mp4)"
-          echo METHOD1_PARTIAL_BYTES=$bytes
-          echo METHOD1_PARTIAL_DURATION=$dur
-          DUR="$dur" python3 - <<'PY'
-          import os
-          d=float(os.environ['DUR']); assert 70 <= d <= 95,d
-          PY
-          echo METHOD1_PARTIAL_EXTRACTION=PROVEN
-      - name: Method 2 - remote edit and normalize
-        run: |
-          set -euo pipefail
-          ffmpeg -hide_banner -loglevel error -y -i /tmp/method12/partial.mp4 \
-            -vf 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920' \
-            -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart /tmp/method12/final.mp4
-          test -s /tmp/method12/final.mp4
-          head -c 64 /tmp/method12/final.mp4 | grep -a -q ftyp
-          dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/method12/final.mp4)"
-          DUR="$dur" python3 - <<'PY'
-          import os
-          d=float(os.environ['DUR']); assert 70 <= d <= 95,d
-          print('METHOD12_FINAL_DURATION='+str(round(d,3)))
-          PY
-          sha256sum /tmp/method12/final.mp4 | tee /tmp/method12/final.sha256
-          echo METHOD2_REMOTE_EDIT=PROVEN
-      - name: Serve final media locally
-        run: |
-          nohup python3 -m http.server 8765 --directory /tmp/method12 >/tmp/method12/http.log 2>&1 &
-          echo $! >/tmp/method12/http.pid
-          for i in $(seq 1 10); do curl -fsS --max-time 2 http://127.0.0.1:8765/final.mp4 -o /dev/null && break; sleep 1; done
-          curl -fsSI http://127.0.0.1:8765/final.mp4 >/dev/null
-          echo METHOD12_LOCAL_MEDIA_SERVER=READY
-      - name: Acquire central token, dedupe and enqueue canary
+      - name: Read central queue and test two publication candidates
+        shell: bash
         run: |
           set -euo pipefail
           sep='&'; [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]] || sep='?'
           aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
           CT="$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
-          echo "::add-mask::$CT"; printf '%s' "$CT" >/tmp/method12/control-token
-          curl -fsS -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/method12/queue-before.json
+          echo "::add-mask::$CT"
+          curl -fsS -H "Authorization: Bearer $CT" "$CONTROL/queue-health" -o /tmp/q.json
           python3 - <<'PY'
           import json,os
-          q=json.load(open('/tmp/method12/queue-before.json')); raw=q.get('jobs') or []; jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
-          for j in jobs:
-              if not isinstance(j,dict) or j.get('platform')!='kwai': continue
-              try:a=float(j.get('source_start')); b=float(j.get('source_end'))
-              except Exception:continue
-              if str(j.get('source_id') or '')==os.environ['SOURCE_ID'] and max(float(os.environ['SOURCE_START']),a)<min(float(os.environ['SOURCE_END']),b): raise SystemExit('KWAI_TIMELINE_DEDUPE_BLOCK='+str(j.get('id')))
-          print('KWAI_TIMELINE_DEDUPE_CLEAR=1')
+          q=json.load(open('/tmp/q.json')); raw=q.get('jobs') or []; jobs=list(raw.values()) if isinstance(raw,dict) else raw if isinstance(raw,list) else []
+          source=os.environ['SOURCE_ID']
+          for label,a,b in [('METHOD12',98.,188.),('METHOD3',188.,278.)]:
+              overlaps=[]
+              for j in jobs:
+                  if not isinstance(j,dict) or str(j.get('platform') or '').lower()!='kwai' or str(j.get('source_id') or '')!=source: continue
+                  try:x=float(j.get('source_start'));y=float(j.get('source_end'))
+                  except Exception:continue
+                  if max(a,x)<min(b,y): overlaps.append({'id':j.get('id'),'state':j.get('state') or j.get('status'),'start':x,'end':y,'remote_id':j.get('remote_id'),'public_url':j.get('public_url')})
+              blocking=[o for o in overlaps if str(o.get('state') or '').upper() in {'QUEUED','LEASED','STARTED','COMMITTING','UNCERTAIN','DONE','COMPLETED','SUCCESS'}]
+              print(label+'_CANDIDATE='+str(int(a))+'-'+str(int(b)))
+              print(label+'_OVERLAPS='+json.dumps(overlaps,separators=(',',':')))
+              print(label+'_FREE='+('1' if not blocking else '0'))
+          print('QUEUE_BACKEND='+str(q.get('backend') or 'unknown'))
+          print('QUEUE_READ_ONLY_PROBE=PROVEN')
           PY
-          python3 - <<'PY' >/tmp/method12/enqueue.json
-          import json,os
-          sha=open('/tmp/method12/final.sha256').read().split()[0]
-          print(json.dumps({'id':os.environ['JOB_ID'],'platform':'kwai','executor':'github_android_experimental','dedupe_key':'lucasrosalem::'+os.environ['SOURCE_ID']+':'+os.environ['SOURCE_START']+':'+os.environ['SOURCE_END']+':method12-v5','source_id':os.environ['SOURCE_ID'],'source_start':float(os.environ['SOURCE_START']),'source_end':float(os.environ['SOURCE_END']),'video_url':'http://127.0.0.1:8765/final.mp4','video_title':'Teste CORTES método 1+2','expected_account':os.environ['KWAI_EXPECTED_ACCOUNT'],'media_sha256':sha,'canary':True}))
-          PY
-          curl -fsS -X POST "$CONTROL/job/enqueue" -H "Authorization: Bearer $CT" -H 'Content-Type: application/json' --data-binary @/tmp/method12/enqueue.json -o /tmp/method12/enqueued.json
-          python3 - <<'PY'
-          import json,os
-          d=json.load(open('/tmp/method12/enqueued.json')); assert d.get('ok') is True and not d.get('deduplicated') and (d.get('job') or {}).get('id')==os.environ['JOB_ID'],d
-          print('METHOD12_CANARY_ENQUEUED='+os.environ['JOB_ID'])
-          PY
-      - name: Download Kwai package vault and session
-        run: |
-          set -euo pipefail
-          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
-          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
-          rm -rf kwai-vault && unzip -q kwai-vault.zip -d kwai-vault
-          python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
-          test -s kwai-session.enc
-      - name: Enable KVM
-        run: |
-          test -e /dev/kvm
-          sudo chmod 666 /dev/kvm
-      - name: Publish one method 1+2 canary and verify it
-        uses: reactivecircus/android-emulator-runner@v2
-        env:
-          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
-          KWAI_AUTH_STRATEGY: mobile_only
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          profile: pixel_5
-          ram-size: 2048M
-          cores: 2
-          disable-animations: true
-          emulator-boot-timeout: 300
-          force-avd-creation: true
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048 -cores 2
-          script: |
-            bash kwai_vault_install.sh
-            adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
-            bash kwai_session_state.sh restore >/tmp/method12/session-restore.log 2>&1 || true
-            bash kwai_queue_publish_runtime.sh
-      - name: Persist only positively authenticated session
-        if: always()
-        run: |
-          if [ -s kwai-session.enc ] && [ -s kwai-headless-status.txt ] && grep -Eq '^KWAI_SESSION_AUTHENTICATED(_RESTORED)?$' kwai-headless-status.txt && grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-headless-status.txt; then python3 tools/kwai_session_vault_client.py push --path kwai-session.enc; else echo KWAI_VAULT_SAVE_SKIPPED_NO_IDENTITY_PROOF=1; fi
-      - name: Preserve evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cortes-method12-kwai-canary-${{ github.run_id }}
-          if-no-files-found: warn
-          retention-days: 7
-          path: |
-            /tmp/method12/yt-dlp.log
-            /tmp/method12/final.sha256
-            /tmp/method12/enqueued.json
-            /tmp/method12/queue-before.json
-            /tmp/method12/session-restore.log
-            kwai-publication.log
-            kwai-publish-status.txt
-            kwai-reconcile-status.txt
-            kwai-headless-status.txt
