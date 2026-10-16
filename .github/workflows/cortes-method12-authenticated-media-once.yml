@@ -1,11 +1,6 @@
 name: CORTES method 1+2 authenticated semantic media once
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/cortes-method12-authenticated-media-once.yml'
-      - 'tools/cortes_semantic_microcut.py'
   workflow_dispatch:
     inputs:
       min_source_start:
