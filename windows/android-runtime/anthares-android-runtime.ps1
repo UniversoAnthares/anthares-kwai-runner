@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference='Stop'
 $Root='C:\ProgramData\AntharesAndroidRuntime'
 $Adb='D:\Program Files\Microvirt\MEmu\adb.exe'
+$AdbServerPort=5038
 $Mgr='D:\Program Files\Microvirt\MEmuHyperv\MEmuManage.exe'
 $Memuc='D:\Program Files\Microvirt\MEmu\memuc.exe'
 $Vm='MEmu_4'
@@ -36,7 +37,7 @@ function Event([string]$Op,$Data){
   $row|ConvertTo-Json -Depth 12|Set-Content -Encoding UTF8 (Join-Path $Root 'state.json')
   $Data
 }
-function Adb([string[]]$Arguments,[string]$Serial=$null,[int]$Timeout=10){$a=@();if($Serial){$a+=@('-s',$Serial)};$a+=$Arguments;Run -File $Adb -Arguments $a -Timeout $Timeout}
+function Adb([string[]]$Arguments,[string]$Serial=$null,[int]$Timeout=10){$a=@('-P',[string]$AdbServerPort);if($Serial){$a+=@('-s',$Serial)};$a+=$Arguments;Run -File $Adb -Arguments $a -Timeout $Timeout}
 function Devices{
   $r=Adb @('devices','-l');$d=@{}
   foreach($line in (($r.stdout -split "`r?`n")|Select-Object -Skip 1)){$p=$line.Trim() -split '\s+';if($p.Count -ge 2){$d[$p[0]]=$p[1]}}
@@ -66,14 +67,31 @@ function StartMemuOfficial{
   $m=MemuInfo
   if($m.state -eq 'running'){return @{ok=$true;action='already_running';stdout='';stderr=''}}
   $cleanup=if($m.state -eq 'aborted'){RemoveAbortedMemuOrphan}else{$null}
-  $r=Run -File $Mgr -Arguments @('startvm',$Vm,'--type','headless') -Timeout 35
-  if(-not $r.ok){
-    $old=$env:__COMPAT_LAYER
-    try{$env:__COMPAT_LAYER='RunAsInvoker';$fallback=Run -File $Memuc -Arguments @('start','-i',$VmIndex) -Timeout 35}finally{$env:__COMPAT_LAYER=$old}
-    if($fallback.ok){return @{ok=$true;action='memuc_fallback_started';stdout=$fallback.stdout;stderr=$fallback.stderr;cleanup=$cleanup}}
-    return @{ok=$false;action='start_failed';stdout=$r.stdout;stderr=($r.stderr+'; '+$fallback.stderr);cleanup=$cleanup}
+  $task='Anthares-MEmu4-Interactive-Launcher'
+  $adbTask='Anthares-MEmu4-ADB5038-Interactive'
+  try{
+    $t=Get-ScheduledTask -TaskName $task -ErrorAction Stop
+    if(-not $t.Settings.Enabled){Enable-ScheduledTask -TaskName $task -ErrorAction Stop | Out-Null}
+    $at=Get-ScheduledTask -TaskName $adbTask -ErrorAction Stop
+    if(-not $at.Settings.Enabled){Enable-ScheduledTask -TaskName $adbTask -ErrorAction Stop | Out-Null}
+    Start-ScheduledTask -TaskName $adbTask -ErrorAction SilentlyContinue
+    Start-ScheduledTask -TaskName $task -ErrorAction Stop
+  }catch{
+    return @{ok=$false;action='native_start_task_failed';stdout='';stderr=$_.Exception.Message;cleanup=$cleanup}
   }
-  @{ok=$true;action='headless_started';stdout=$r.stdout;stderr=$r.stderr;cleanup=$cleanup}
+  $deadline=(Get-Date).AddSeconds(120)
+  do{
+    Start-Sleep -Seconds 2
+    $mi=MemuInfo
+    if($mi.state -eq 'running'){
+      $boot=MemuGuest '/system/bin/getprop sys.boot_completed' 6
+      $adbd=MemuGuest '/system/bin/getprop init.svc.adbd' 6
+      if($boot.ok -and $adbd.ok -and $boot.stdout.Trim() -eq '1' -and $adbd.stdout.Trim() -eq 'running'){
+        return @{ok=$true;action='native_start_guest_ready';stdout='';stderr='';cleanup=$cleanup;guest_boot='1';guest_adbd='running'}
+      }
+    }
+  }while((Get-Date)-lt $deadline)
+  @{ok=$false;action='native_start_timeout';stdout='';stderr='MEmu4 guest did not become ready within 120 seconds';cleanup=$cleanup;after=(Probe 'memu')}
 }
 function RepairGuestAdbTcp{
   $m=MemuInfo
