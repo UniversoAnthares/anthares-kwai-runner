@@ -23,7 +23,7 @@ jobs:
           set -euo pipefail
           test -n "${GITLAB_TOKEN:-}"
           python3 - <<'PY'
-          import json, os, sys, urllib.request
+          import json, os, urllib.request
           req=urllib.request.Request(
             f"https://gitlab.com/api/v4/projects/{os.environ['GITLAB_PROJECT_ID']}/variables?per_page=100",
             headers={'PRIVATE-TOKEN':os.environ['GITLAB_TOKEN'],'User-Agent':'anthares-cortes-phase4'}
@@ -53,7 +53,7 @@ jobs:
           host="$(cat /tmp/ssh_host)"; user="$(cat /tmp/ssh_user)"; port="$(cat /tmp/ssh_port)"
           install -m 700 -d ~/.ssh
           ssh-keyscan -p "$port" "$host" >> ~/.ssh/known_hosts 2>/dev/null
-          ssh -p "$port" -i /tmp/anthares_qa -o IdentitiesOnly=yes "$user@$host" 'bash -se' <<'REMOTE'
+          ssh -p "$port" -i /tmp/anthares_qa -o IdentitiesOnly=yes "$user@$host" 'bash -se' > /tmp/phase4-state.json <<'REMOTE'
           set -euo pipefail
           SITE="$HOME/domains/anthares.us/public_html"
           PHP=/opt/alt/php85/usr/bin/php
@@ -66,7 +66,16 @@ jobs:
             $registry=function_exists("anthares_cortes_registry_get")?array_values(anthares_cortes_registry_get()):null;
             $blocker=function_exists("anthares_cortes_current_blocker")?anthares_cortes_current_blocker():null;
             $networks=function_exists("anthares_cortes_networks_get")?anthares_cortes_networks_get():null;
-            echo "PHASE4_LIVE_STATE=".wp_json_encode(["cycle"=>$cycle,"active"=>$active,"regular"=>$regular,"registry"=>$registry,"blocker"=>$blocker,"networks"=>$networks],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE)."\n";
+            echo wp_json_encode(["cycle"=>$cycle,"active"=>$active,"regular"=>$regular,"registry"=>$registry,"blocker"=>$blocker,"networks"=>$networks],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
           '
           REMOTE
+          python3 -m json.tool /tmp/phase4-state.json >/tmp/phase4-state.pretty.json
+          mv /tmp/phase4-state.pretty.json /tmp/phase4-state.json
           rm -f /tmp/anthares_qa /tmp/ssh_host /tmp/ssh_user /tmp/ssh_port /tmp/cortes-vars.json
+      - name: Upload state artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cortes-phase4-live-state
+          path: /tmp/phase4-state.json
+          if-no-files-found: error
+          retention-days: 1
