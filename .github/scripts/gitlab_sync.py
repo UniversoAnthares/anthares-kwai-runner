@@ -4,7 +4,8 @@ import subprocess
 import sys
 
 PROJECT = "UniversoAnthares/anthares-kwai-runner"
-ARCHIVE = "archive/gitlab-independent-20261016"
+PRESERVED_BRANCH = "archive/gitlab-main-pre-sync-20261016"
+
 
 def run(*args, check=True):
     p = subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -16,44 +17,54 @@ def run(*args, check=True):
         raise SystemExit(p.returncode)
     return p
 
+
+def sha(ref):
+    return run("git", "rev-parse", ref).stdout.strip()
+
+
 auth = os.environ.get("GL_AUTH", "").strip()
 if not auth:
     raise SystemExit("missing GitLab authentication")
 
 url = f"https://oauth2:{auth}@gitlab.com/{PROJECT}.git"
+source_sha = sha("HEAD")
 run("git", "config", "user.name", "Anthares GitHub-to-GitLab Sync")
 run("git", "config", "user.email", "sync@anthares.invalid")
 
 # Refresh GitLab refs without altering GitHub.
 run("git", "fetch", "--no-tags", url,
     "+refs/heads/main:refs/remotes/gitlab/main",
-    f"+refs/heads/{ARCHIVE}:refs/remotes/gitlab/archive")
+    f"+refs/heads/{PRESERVED_BRANCH}:refs/remotes/gitlab/preserved")
 
-# Keep an exact, disposable tracking branch of GitHub main in GitLab.
-run("git", "push", "--force", url, "HEAD:refs/heads/github-main")
+# Exact disposable tracking branch. Force is safe here because this branch exists
+# only to represent the GitHub source SHA for each synchronization round.
+run("git", "push", "--force", url, f"{source_sha}:refs/heads/github-main")
 
-# GitLab main is the integration branch. Start from its current tip so all
-# GitLab-only history is retained. GitLab wins only when the same lines conflict.
+# GitLab main remains the integration branch and is never force-pushed. Start
+# from its current tip so GitLab-only history is retained. On textual conflicts,
+# retain the GitLab side; all non-conflicting GitHub changes are still imported.
 run("git", "switch", "--force-create", "gitlab-sync", "refs/remotes/gitlab/main")
-ancestor = run("git", "merge-base", "--is-ancestor", "origin/main", "HEAD", check=False)
-if ancestor.returncode != 0:
-    merge = run("git", "merge", "--no-edit", "-X", "ours", "origin/main", check=False)
+if run("git", "merge-base", "--is-ancestor", source_sha, "HEAD", check=False).returncode != 0:
+    merge = run("git", "merge", "--no-edit", "-X", "ours", source_sha, check=False)
     if merge.returncode != 0:
         run("git", "status", "--short", check=False)
         run("git", "merge", "--abort", check=False)
         raise SystemExit("unresolved merge conflict; GitLab main left unchanged")
 
-# Never force the integration branch. A concurrent GitLab write makes this fail
-# safely and the next scheduled run will retry from the new tip.
+# A concurrent GitLab write causes a normal non-fast-forward failure and leaves
+# GitLab untouched; the next push/scheduled run retries from the new GitLab tip.
 run("git", "push", url, "HEAD:refs/heads/main")
 
-# Verify both upstream inclusion and preservation of the archived GitLab tip.
+# Verify the exact source handled by this run, not a moving origin/main ref.
 run("git", "fetch", "--no-tags", url,
     "+refs/heads/main:refs/remotes/gitlab/main",
     "+refs/heads/github-main:refs/remotes/gitlab/github-main",
-    f"+refs/heads/{ARCHIVE}:refs/remotes/gitlab/archive")
-run("git", "merge-base", "--is-ancestor", "origin/main", "refs/remotes/gitlab/main")
-run("git", "merge-base", "--is-ancestor", "refs/remotes/gitlab/archive", "refs/remotes/gitlab/main")
-if run("git", "rev-parse", "refs/remotes/gitlab/github-main").stdout.strip() != run("git", "rev-parse", "origin/main").stdout.strip():
+    f"+refs/heads/{PRESERVED_BRANCH}:refs/remotes/gitlab/preserved")
+run("git", "merge-base", "--is-ancestor", source_sha, "refs/remotes/gitlab/main")
+run("git", "merge-base", "--is-ancestor", "refs/remotes/gitlab/preserved", "refs/remotes/gitlab/main")
+if sha("refs/remotes/gitlab/github-main") != source_sha:
     raise SystemExit("github-main tracking branch mismatch")
+print(f"SOURCE_SHA={source_sha}")
+print(f"GITLAB_MAIN_SHA={sha('refs/remotes/gitlab/main')}")
+print("PRESERVED_GITLAB_HISTORY=PASS")
 print("GITLAB_SYNC=PASS")
