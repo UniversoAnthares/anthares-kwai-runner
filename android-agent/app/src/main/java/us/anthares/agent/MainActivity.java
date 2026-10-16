@@ -15,20 +15,15 @@ public class MainActivity extends Activity {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(28, 28, 28, 28);
-
         TextView description = new TextView(this);
         description.setText("Anthares — executor automático do Kwai\n\n" +
-                "O agente recebe o handoff remoto, baixa e valida o vídeo, abre o aplicativo oficial " +
-                "do Kwai e conduz o fluxo de publicação. Não é necessário selecionar o vídeo manualmente.\n\n" +
-                "A única configuração local necessária é manter a Acessibilidade do agente ativada.");
+                "O agente recebe o handoff remoto, valida o vídeo, abre o aplicativo oficial do Kwai " +
+                "e conduz o fluxo de publicação.\n\nMantenha a Acessibilidade do agente ativada.");
         layout.addView(description);
-
         Button accessibility = new Button(this);
         accessibility.setText("Ativar acessibilidade do agente (uma vez)");
-        accessibility.setOnClickListener(v ->
-                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        accessibility.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         layout.addView(accessibility);
-
         setContentView(layout);
         inspectIncomingLink(getIntent());
     }
@@ -42,8 +37,8 @@ public class MainActivity extends Activity {
     private void inspectIncomingLink(Intent intent) {
         if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return;
         Uri link = intent.getData();
-        if (link == null || !"anthares-kwai".equals(link.getScheme())
-                || !"send".equals(link.getHost())) return;
-        KwaiVideoHandoff.shareFromApprovedLink(this, link);
+        if (link == null || !"anthares-kwai".equals(link.getScheme())) return;
+        if ("send".equals(link.getHost())) KwaiVideoHandoff.shareFromApprovedLink(this, link);
+        else if ("local".equals(link.getHost())) LocalMediaHandoff.share(this, link);
     }
 }
