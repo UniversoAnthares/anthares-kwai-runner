@@ -42,11 +42,12 @@ jobs:
           javac -source 8 -target 8 \
             -cp "$ANDROID_HOME/platforms/android-18/android.jar:$ANDROID_HOME/platforms/android-18/uiautomator.jar" \
             -d build/uiauto/classes \
-            tools/android-uiautomator/KwaiUiDriver.java
+            tools/android-uiautomator/KwaiUiDriver.java \
+            tools/android-uiautomator/android/test/RepetitiveTest.java
           "$ANDROID_HOME/build-tools/35.0.0/d8" \
             --min-api 18 \
             --output build/uiauto/dex \
-            build/uiauto/classes/us/anthares/tools/KwaiUiDriver.class
+            build/uiauto/classes
           (cd build/uiauto/dex && zip -q ../kwai-uiautomator-driver.jar classes.dex)
           sha256sum build/uiauto/kwai-uiautomator-driver.jar
       - uses: actions/upload-artifact@v4
