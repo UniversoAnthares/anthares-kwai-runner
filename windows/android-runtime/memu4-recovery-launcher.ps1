@@ -11,12 +11,17 @@ foreach($h in $foreign){
   try{Log ("stopping unusable primary headless pid="+$h.ProcessId+" session="+$h.SessionId); Stop-Process -Id $h.ProcessId -Force -ErrorAction Stop}catch{Log ("failed stopping foreign headless: "+$_.Exception.Message)}
 }
 if($foreign.Count){Start-Sleep -Seconds 3}
-try{
-  $p=Start-Process -FilePath $memuc -ArgumentList @('start','-n','MEmu_4','-b') -Wait -PassThru -ErrorAction Stop
-  Log ("memuc exit="+$p.ExitCode)
-}catch{
-  Log ("memuc failed: "+$_.Exception.Message)
-  exit 2
+$existingInteractive=@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {$_.Name -eq 'MEmuHeadless.exe' -and $_.CommandLine -match '--comment\s+MEmu_4(?:\s|$)' -and $_.SessionId -eq $mySession})
+if($existingInteractive.Count){
+  Log ("interactive headless already present pid="+(($existingInteractive.ProcessId)-join ','))
+}else{
+  try{
+    $proc=Start-Process -FilePath $memuc -ArgumentList @('start','-n','MEmu_4','-b') -PassThru -ErrorAction Stop
+    Log ("memuc spawned pid="+$proc.Id)
+  }catch{
+    Log ("memuc failed: "+$_.Exception.Message)
+    exit 2
+  }
 }
 $deadline=(Get-Date).AddSeconds(120)
 $stable=0
