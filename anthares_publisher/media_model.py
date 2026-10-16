@@ -63,21 +63,24 @@ class Clip:
     content_sha256:str
     storage_uri:str|None=None
     master_id:str|None=None
+    rendered_duration_ms:int|None=None
 
     def __post_init__(self):
         source_id=str(self.source_id).strip(); start=int(self.start_ms); end=int(self.end_ms)
         duration_class=str(self.duration_class).strip().casefold()
         if not source_id: raise ValueError("source_id is required")
         if start<0 or end<=start: raise ValueError("invalid clip interval")
-        seconds=(end-start)/1000.0
-        if duration_class=="short" and not 30<=seconds<=90: raise ValueError("short clip must be 30-90 seconds")
-        if duration_class=="long" and not 300<=seconds<=840: raise ValueError("long clip must be 5-14 minutes")
+        rendered_ms=(end-start) if self.rendered_duration_ms is None else int(self.rendered_duration_ms)
+        if rendered_ms<=0: raise ValueError("rendered_duration_ms must be positive")
+        rendered_seconds=rendered_ms/1000.0
+        if duration_class=="short" and not 30<=rendered_seconds<=90: raise ValueError("short master must be 30-90 seconds")
+        if duration_class=="long" and not 300<=rendered_seconds<=840: raise ValueError("long master must be 5-14 minutes")
         if duration_class not in {"short","long"}: raise ValueError("duration_class must be short or long")
         digest=_sha256(self.content_sha256,"content_sha256")
         master=str(self.master_id or digest).strip()
         if not master: raise ValueError("master_id is required")
         object.__setattr__(self,"source_id",source_id); object.__setattr__(self,"start_ms",start); object.__setattr__(self,"end_ms",end)
-        object.__setattr__(self,"duration_class",duration_class); object.__setattr__(self,"content_sha256",digest); object.__setattr__(self,"master_id",master)
+        object.__setattr__(self,"duration_class",duration_class); object.__setattr__(self,"content_sha256",digest); object.__setattr__(self,"master_id",master); object.__setattr__(self,"rendered_duration_ms",rendered_ms)
 
     @property
     def clip_id(self): return _stable_id(self.source_id,self.start_ms,self.end_ms,self.duration_class,self.master_id)
@@ -117,6 +120,7 @@ class Publication:
             "source_start":self.clip.start_ms,
             "source_end":self.clip.end_ms,
             "duration_class":self.clip.duration_class,
+            "rendered_duration_ms":self.clip.rendered_duration_ms,
         }
 
 def source_safe_to_delete(processing_complete,publications):

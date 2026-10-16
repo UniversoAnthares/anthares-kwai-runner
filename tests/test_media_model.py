@@ -33,6 +33,15 @@ class MediaModelTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"short-form"):
             Publication(long,"tiktok","account-a")
 
+    def test_semantic_source_window_may_exceed_short_master_after_microcuts(self):
+        clip=Clip("live-semantic",5302000,5394199,"short","4"*64,master_id="semantic-master",rendered_duration_ms=82771)
+        self.assertEqual(clip.rendered_duration_ms,82771)
+        self.assertEqual(clip.end_ms-clip.start_ms,92199)
+        body=Publication(clip,"kwai","lucasrosalem").control_payload()
+        self.assertEqual(body["rendered_duration_ms"],82771)
+        self.assertEqual(body["source_start"],5302000)
+        self.assertEqual(body["source_end"],5394199)
+
     def test_control_payload_carries_canonical_dedupe_and_target_fields(self):
         clip=Clip("live-1",1000,61000,"short","3"*64,master_id="master-C")
         p=Publication(clip,"kwai","primary")
