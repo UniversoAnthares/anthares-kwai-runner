@@ -1,19 +1,17 @@
-name: CORTES method 1+2 authenticated media once
+name: CORTES method 1+2 authenticated semantic media once
 
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/cortes-method12-authenticated-media-once.yml']
+    paths:
+      - '.github/workflows/cortes-method12-authenticated-media-once.yml'
+      - 'tools/cortes_semantic_microcut.py'
   workflow_dispatch:
     inputs:
-      source_start:
-        description: Start second for bounded method 1 acquisition
+      min_source_start:
+        description: Earliest source second eligible for semantic selection (intro guard)
         required: false
-        default: '100'
-      source_end:
-        description: End second for bounded method 1 acquisition
-        required: false
-        default: '190'
+        default: '240'
 
 permissions:
   contents: read
@@ -21,12 +19,11 @@ permissions:
 jobs:
   method12:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       SOURCE_ID: 9CIk-I_3VhM
       SOURCE_URL: https://www.youtube.com/watch?v=9CIk-I_3VhM
-      SOURCE_START: ${{ github.event.inputs.source_start || '100' }}
-      SOURCE_END: ${{ github.event.inputs.source_end || '190' }}
+      MIN_SOURCE_START: ${{ github.event.inputs.min_source_start || '240' }}
       YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
       YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
     steps:
@@ -42,13 +39,13 @@ jobs:
           fi
           echo 'METHOD12_AUTH_SECRET=PRESENT'
 
-      - name: Install media stack
+      - name: Install media and transcript stack
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
-          python3 -m pip install --disable-pip-version-check -q -U 'yt-dlp[default]' yt-dlp-ejs bgutil-ytdlp-pot-provider
+          python3 -m pip install --disable-pip-version-check -q -U 'yt-dlp[default]' yt-dlp-ejs bgutil-ytdlp-pot-provider faster-whisper
           node --version
           yt-dlp --version
           mkdir -p /tmp/method12
@@ -63,15 +60,13 @@ jobs:
           b64=os.environ.get('YOUTUBE_COOKIES_B64','').strip()
           if b64:
               raw=base64.b64decode(b64).decode('utf-8')
-          if not raw.strip():
-              raise SystemExit('empty cookie secret')
+          if not raw.strip(): raise SystemExit('empty cookie secret')
           p=pathlib.Path('/tmp/method12/youtube-cookies.txt')
-          p.write_text(raw,encoding='utf-8')
-          p.chmod(0o600)
+          p.write_text(raw,encoding='utf-8'); p.chmod(0o600)
           print('METHOD12_COOKIE_FILE=READY')
           PY
 
-      - name: Prove authenticated metadata first
+      - name: Prove authenticated metadata
         shell: bash
         run: |
           set -euo pipefail
@@ -85,7 +80,28 @@ jobs:
           print('METHOD12_METADATA='+s)
           PY
 
-      - name: Method 1 - authenticated bounded extraction only
+      - name: Fetch transcript only and select a meaningful self-contained excerpt
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f /tmp/method12/source*.json3
+          yt-dlp --cookies /tmp/method12/youtube-cookies.txt --no-playlist --skip-download \
+            --js-runtimes node --remote-components ejs:npm \
+            --write-subs --write-auto-subs --sub-langs 'pt.*,pt' --sub-format json3 \
+            -o '/tmp/method12/source.%(ext)s' "$SOURCE_URL"
+          transcript="$(find /tmp/method12 -maxdepth 1 -type f -name 'source*.json3' | head -n1)"
+          test -n "$transcript" && test -s "$transcript"
+          python3 tools/cortes_semantic_microcut.py select \
+            --transcript "$transcript" --output /tmp/method12/semantic-plan.json \
+            --min-start "$MIN_SOURCE_START" --target 90 --min-len 70 --max-len 110
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          p=json.load(open('/tmp/method12/semantic-plan.json',encoding='utf-8'))
+          print('SOURCE_START='+str(p['source_start']))
+          print('SOURCE_END='+str(p['source_end']))
+          PY
+
+      - name: Method 1 - acquire only the transcript-selected bounded segment
         shell: bash
         run: |
           set -euo pipefail
@@ -101,22 +117,30 @@ jobs:
             -o '/tmp/method12/partial.%(ext)s' \
             "$SOURCE_URL" 2>&1 | tee /tmp/method12/yt-dlp.log
           test -s /tmp/method12/partial.mp4
-          bytes="$(stat -c%s /tmp/method12/partial.mp4)"
           dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/method12/partial.mp4)"
           DUR="$dur" python3 - <<'PY'
           import os
-          d=float(os.environ['DUR'])
-          assert 70 <= d <= 95, d
+          d=float(os.environ['DUR']); assert 60 <= d <= 118, d
           print('METHOD1_PARTIAL_DURATION='+str(round(d,3)))
+          print('METHOD1_PARTIAL_EXTRACTION=PROVEN')
           PY
-          echo METHOD1_PARTIAL_BYTES=$bytes
-          echo METHOD1_PARTIAL_EXTRACTION=PROVEN
 
-      - name: Method 2 - remote edit and normalize
+      - name: Method 2A - mandatory transcript-driven microcuts
         shell: bash
         run: |
           set -euo pipefail
-          ffmpeg -hide_banner -loglevel error -y -i /tmp/method12/partial.mp4 \
+          python3 tools/cortes_semantic_microcut.py microcut \
+            --input /tmp/method12/partial.mp4 \
+            --output /tmp/method12/microcut.mp4 \
+            --report /tmp/method12/microcut.json \
+            --model small
+          test -s /tmp/method12/microcut.mp4
+
+      - name: Method 2B - vertical social master
+        shell: bash
+        run: |
+          set -euo pipefail
+          ffmpeg -hide_banner -loglevel error -y -i /tmp/method12/microcut.mp4 \
             -vf 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920' \
             -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p \
             -c:a aac -b:a 128k -movflags +faststart \
@@ -125,38 +149,39 @@ jobs:
           dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/method12/final.mp4)"
           sha="$(sha256sum /tmp/method12/final.mp4 | awk '{print $1}')"
           bytes="$(stat -c%s /tmp/method12/final.mp4)"
-          SOURCE_START="$SOURCE_START" SOURCE_END="$SOURCE_END" DUR="$dur" BYTES="$bytes" SHA="$sha" python3 - <<'PY'
+          DUR="$dur" BYTES="$bytes" SHA="$sha" python3 - <<'PY'
           import json,os
+          plan=json.load(open('/tmp/method12/semantic-plan.json',encoding='utf-8'))
+          micro=json.load(open('/tmp/method12/microcut.json',encoding='utf-8'))
+          assert micro['intervals'] >= 1 and micro['removed_seconds'] >= 0.20, micro
           d={
-            'source_id':'9CIk-I_3VhM',
-            'source_start':int(os.environ['SOURCE_START']),
-            'source_end':int(os.environ['SOURCE_END']),
-            'method1':'bounded_authenticated_youtube_transfer',
-            'method2':'remote_ffmpeg_vertical_normalize',
-            'full_source_download_requested':False,
-            'method3_fallback':'NOT_USED',
-            'final_duration_seconds':float(os.environ['DUR']),
-            'final_bytes':int(os.environ['BYTES']),
-            'final_sha256':os.environ['SHA'],
-            'publication_canary_id':f"method12-{os.environ['SOURCE_START']}-{os.environ['SOURCE_END']}",
-            'social_publish':False
+            'source_id':'9CIk-I_3VhM','source_start':plan['source_start'],'source_end':plan['source_end'],
+            'semantic_score':plan['semantic_score'],'semantic_metrics':plan['metrics'],
+            'selected_transcript':plan['selected_transcript'],
+            'method1':'authenticated_transcript_semantic_bounded_transfer',
+            'method2':'whisper_microcuts_then_remote_ffmpeg_vertical_normalize',
+            'microcut':micro,'full_source_download_requested':False,'method3_fallback':'NOT_USED',
+            'final_duration_seconds':float(os.environ['DUR']),'final_bytes':int(os.environ['BYTES']),
+            'final_sha256':os.environ['SHA'],'social_publish':False
           }
-          json.dump(d,open('/tmp/method12/result.json','w'),indent=2)
+          json.dump(d,open('/tmp/method12/result.json','w'),ensure_ascii=False,indent=2)
           print('METHOD2_FINAL_DURATION='+str(round(d['final_duration_seconds'],3)))
-          print('METHOD2_FINAL_BYTES='+str(d['final_bytes']))
           print('METHOD2_FINAL_SHA256='+d['final_sha256'])
-          print('METHOD12_CANARY_INTERVAL=%s-%s' % (d['source_start'],d['source_end']))
+          print('METHOD12_SEMANTIC_SELECTION=PROVEN')
+          print('METHOD12_MICROCUTS=PROVEN')
           print('METHOD2_REMOTE_EDIT=PROVEN')
           PY
 
       - name: Upload proof artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cortes-method12-authenticated-${{ github.run_id }}
+          name: cortes-method12-semantic-${{ github.run_id }}
           retention-days: 7
           if-no-files-found: error
           path: |
             /tmp/method12/result.json
+            /tmp/method12/semantic-plan.json
+            /tmp/method12/microcut.json
             /tmp/method12/final.mp4
             /tmp/method12/yt-dlp.log
 
