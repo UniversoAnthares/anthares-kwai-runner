@@ -99,3 +99,7 @@ Nunca tratar “Cloudflare”, “GitHub” ou “GitLab” como uma única cota
 - Northflank: serviços previamente operacionais; saldo de quota continua exigindo verificação antes de nova capacidade.
 
 Finding detalhado desta correção: `test-hub/findings/20261015-android-runtime-physical-first-correction.md`.
+
+## Android Runtime authority rule — 2026-10-16
+
+For `MEmu_4`, there is exactly one recovery authority: **Anthares Android Runtime running from the SYSTEM path**. The direct SYSTEM/headless path is primary. The interactive `Lucas` launcher and isolated ADB helper are redundancy-only and must remain disabled outside an explicit fallback attempt. They must never run as a parallel watchdog or alternate authority. The runtime serializes MEmu recovery with the global recovery mutex and may invoke the interactive redundancy only after the SYSTEM path exhausts its bounded recovery window. Do not promote the interactive path to primary without a new explicit owner decision.
