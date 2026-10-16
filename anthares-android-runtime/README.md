@@ -1,4 +1,4 @@
-﻿# Anthares Android Runtime
+# Anthares Android Runtime
 
 The runtime centralizes control of the existing Android execution surfaces behind a stable contract. The first operational backend is `MEmu_4`; future Android backends may implement the same contract without changing the publication pipeline.
 
@@ -51,9 +51,8 @@ The watchdog does not reboot Windows and does not delete/recreate the MEmu VM or
 
 The identity probe is semantic. It requires the Kwai package in foreground plus the exact visible normalized handle `lucasrosalem` (the app may render it as `lucasrosalem` or `@lucasrosalem`) and an owner-only profile control such as `Editar perfil`/`Edit profile`. Process existence, emulator existence and package installation are supporting signals only.
 
-## Project continuity boundary Ã¢â‚¬â€ 2026-10-15
+## Project continuity boundary â€” 2026-10-15
 
 The reconciled project status already closes F17-F19 on the current operational Android/mobile path. `MEmu_4` is the standby Android backend. Its remaining acceptance belongs to the final boot round with F15: automatic startup, headless/invisible execution and muted audio after a real Windows boot. The Android Runtime work therefore must not reopen F17 merely because the standby MEmu backend is degraded.
 
 The legacy `Anthares-MEmu-Standby-Watchdog` boot action is considered superseded by this runtime design because it launches `MEmu.exe` rather than enforcing the runtime contract and its lease/backoff rules. Promotion of a replacement startup task remains part of the final boot-validation round and must preserve the current no-reboot constraint until that round is explicitly authorized.
-
