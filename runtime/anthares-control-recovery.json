@@ -1,8 +1,8 @@
 {
-  "checked_at": 1792272575,
+  "checked_at": 1792279207,
   "healthy": false,
   "last_dispatch_at": 1792272575,
   "last_healthy_at": 1792025188,
   "schema": "anthares.core.control-watchdog.v1",
-  "status": "RECOVERY_DISPATCHED"
+  "status": "RECOVERY_THROTTLED"
 }
