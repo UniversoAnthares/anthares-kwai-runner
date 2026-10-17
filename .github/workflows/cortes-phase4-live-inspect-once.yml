@@ -79,3 +79,5 @@ jobs:
           path: /tmp/phase4-state.json
           if-no-files-found: error
           retention-days: 1
+
+# full-system-test-trigger 2026-10-17T13:00-04:00
