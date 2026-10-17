@@ -1,6 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 
-const VERSION = "2026-10-13-ara-cloudflare-backup-v1";
+const VERSION = "2026-10-17-ara-write-quota-v2";
+const EPHEMERAL_REPLAY_TTL_MS = 60000;
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const ephemeralReplay = new Map();
+let ephemeralReplaySweepAt = 0;
 const SIGNER = "anthares-remote-mcp";
 const KEY_URLS = [];
 const DEVICE_HASH_BASE =
@@ -69,6 +73,24 @@ function state(env) {
   return env.ARA_STATE.get(id);
 }
 
+function consumeEphemeralReplay(signature, expiresAt) {
+  const now = Date.now();
+  if (now >= ephemeralReplaySweepAt) {
+    for (const [key, exp] of ephemeralReplay) if (Number(exp) <= now) ephemeralReplay.delete(key);
+    ephemeralReplaySweepAt = now + EPHEMERAL_REPLAY_TTL_MS;
+  }
+  const old = Number(ephemeralReplay.get(signature) || 0);
+  if (old > now) return false;
+  ephemeralReplay.set(signature, Math.max(now + 1000, Number(expiresAt) || now + EPHEMERAL_REPLAY_TTL_MS));
+  return true;
+}
+
+function replayNeedsDurability(request) {
+  const u = new URL(request.url);
+  if (request.method.toUpperCase() === "GET") return false;
+  return u.pathname === "/v1/mcp/execute" || u.pathname === "/v1/mcp/oauth/consume";
+}
+
 // ARA_TRUSTED_MCP_PUBLIC_KEYS_JSON is a JSON array of PEM-encoded Ed25519
 // SPKI public keys, supplied as a Cloudflare Worker secret. It permits
 // verification even when both Render-hosted MCP gateways are unavailable.
@@ -129,7 +151,9 @@ async function verifyMcp(request, env) {
     for (const key of keys) {
       try {
         if (await crypto.subtle.verify({ name: "Ed25519" }, key, signature, payload)) {
-          return await state(env).consumeReplay(sig, Date.now() + 60000);
+          return replayNeedsDurability(request)
+            ? await state(env).consumeReplay(sig, Date.now() + 60000)
+            : consumeEphemeralReplay(sig, Date.now() + 60000);
         }
       } catch {}
     }
@@ -182,7 +206,9 @@ async function sharedFence(_request, _device, _op = "acquire") {
 export class AraState extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.ctx = ctx;
     this.sql = ctx.storage.sql;
+    this.nextCleanupAt = 0;
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS ara_devices(
         device_id TEXT PRIMARY KEY,
@@ -205,8 +231,7 @@ export class AraState extends DurableObject {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS ara_jobs_dedupe
         ON ara_jobs(device_id,idempotency_key) WHERE idempotency_key IS NOT NULL;
-      CREATE INDEX IF NOT EXISTS ara_jobs_pick
-        ON ara_jobs(device_id,status,created_at);
+      DROP INDEX IF EXISTS ara_jobs_pick;
       CREATE TABLE IF NOT EXISTS ara_oauth_consumed(
         kind TEXT NOT NULL,
         issuer TEXT NOT NULL,
@@ -278,9 +303,16 @@ export class AraState extends DurableObject {
     }
   }
 
+  _cleanupExpired(now = Date.now()) {
+    if (now < Number(this.nextCleanupAt || 0)) return;
+    this.sql.exec("DELETE FROM ara_replay WHERE expires_at<=?", now);
+    this.sql.exec("DELETE FROM ara_oauth_consumed WHERE expires_at<=?", now);
+    this.nextCleanupAt = now + CLEANUP_INTERVAL_MS;
+  }
+
   async consumeReplay(signature, expiresAt) {
     const now = Date.now();
-    this.sql.exec("DELETE FROM ara_replay WHERE expires_at<=?", now);
+    this._cleanupExpired(now);
     const existing = this._one("SELECT signature FROM ara_replay WHERE signature=?", signature);
     if (existing) return false;
     this.sql.exec("INSERT INTO ara_replay(signature,expires_at) VALUES(?,?)", signature, Number(expiresAt));
@@ -298,7 +330,7 @@ export class AraState extends DurableObject {
     return { heartbeat: body, seen_at: iso(now) };
   }
 
-  async status(device, freshnessSeconds = 90) {
+  async status(device, freshnessSeconds = 360) {
     this._reap(device);
     const d = this._one("SELECT heartbeat,seen_at FROM ara_devices WHERE device_id=?", device);
     const counts = this._one(
@@ -384,7 +416,7 @@ export class AraState extends DurableObject {
     if (!["authorization_code", "refresh_token"].includes(kind)) return false;
     if (!issuer || issuer.length > 300 || !jti || jti.length > 128) return false;
     if (!Number.isFinite(exp) || exp <= now || exp > now + 32 * 24 * 3600 * 1000) return false;
-    this.sql.exec("DELETE FROM ara_oauth_consumed WHERE expires_at<=?", now);
+    this._cleanupExpired(now);
     const existing = this._one(
       "SELECT jti FROM ara_oauth_consumed WHERE kind=? AND issuer=? AND jti=?", kind, issuer, jti
     );
@@ -397,15 +429,8 @@ export class AraState extends DurableObject {
   }
 
   async health() {
-    const probe = "health-" + crypto.randomUUID();
-    const t = Date.now();
-    this.sql.exec(
-      "INSERT INTO ara_replay(signature,expires_at) VALUES(?,?)",
-      probe, t + 5000
-    );
-    const exists = !!this._one("SELECT signature FROM ara_replay WHERE signature=?", probe);
-    this.sql.exec("DELETE FROM ara_replay WHERE signature=?", probe);
-    return { ok: exists, backend: "cloudflare-durable-object-sqlite", version: VERSION };
+    const probe = this._one("SELECT 1 AS ok");
+    return { ok: Number(probe?.ok || 0) === 1, backend: "cloudflare-durable-object-sqlite", version: VERSION };
   }
 
   async selfTest() {

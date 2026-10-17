@@ -25,7 +25,8 @@ jobs:
           set -euo pipefail
           python3 cloudflare-worker/patches/apply-publisher-target-v17.py
           grep -q '2026-10-15-publisher-target-v17' cloudflare-worker/src/index.js
-          grep -q 'idx_jobs_target_status_created' cloudflare-worker/src/index.js
+          grep -q 'idx_jobs_target_dedupe' cloudflare-worker/src/index.js
+          ! grep -q 'CREATE INDEX IF NOT EXISTS idx_jobs_target_status_created' cloudflare-worker/src/index.js
           grep -q 'account_id' cloudflare-worker/src/index.js
       - name: Authorize dedicated TikTok verifier and reconciliation workflows deterministically
         shell: bash

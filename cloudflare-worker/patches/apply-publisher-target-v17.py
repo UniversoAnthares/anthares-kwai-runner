@@ -27,9 +27,9 @@ insert='''  try{this.sql.exec("ALTER TABLE jobs ADD COLUMN account_id TEXT NOT N
 if anchor not in s: raise SystemExit('migration anchor missing')
 s=s.replace(anchor,anchor+insert,1)
 
-s=s.replace(
-'  this.sql.exec("CREATE INDEX IF NOT EXISTS idx_jobs_reserved_day ON jobs(platform,reserved_day,status,publication_started);");',
-'  this.sql.exec("CREATE INDEX IF NOT EXISTS idx_jobs_reserved_day ON jobs(platform,reserved_day,status,publication_started);");\n  this.sql.exec("CREATE INDEX IF NOT EXISTS idx_jobs_target_status_created ON jobs(platform,account_id,status,created_at);");\n  this.sql.exec("CREATE INDEX IF NOT EXISTS idx_jobs_target_dedupe ON jobs(platform,account_id,dedupe_key);");',1)
+anchor_index='  this.sql.exec("DROP INDEX IF EXISTS idx_jobs_target_status_created;");'
+if anchor_index not in s: raise SystemExit('write-quota index anchor missing')
+s=s.replace(anchor_index,anchor_index+'\n  this.sql.exec("DROP INDEX IF EXISTS idx_jobs_platform_dedupe;");\n  this.sql.exec("CREATE INDEX IF NOT EXISTS idx_jobs_target_dedupe ON jobs(platform,account_id,dedupe_key);");',1)
 
 s=s.replace(
 'return {...p,id:r.id,platform:r.platform,dedupe_key:r.dedupe_key,status:r.status',

@@ -2,7 +2,7 @@ import core, { AraState } from './index.js';
 
 export { AraState };
 
-const HEARTBEAT_COALESCE_SECONDS = 60;
+const HEARTBEAT_COALESCE_SECONDS = 300;
 const EMPTY_POLL_COALESCE_SECONDS = 15;
 
 async function tokenKey(request, kind) {

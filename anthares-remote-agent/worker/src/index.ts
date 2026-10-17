@@ -2,6 +2,7 @@ export interface Env {
   DEVICE_STATE: DurableObjectNamespace;
   DEVICE_TOKEN: string;
   CONTROL_TOKEN: string;
+  ANTHARES_REMOTE_CONTROL_MODE?: string;
 }
 
 type Job = {
@@ -33,14 +34,16 @@ function deviceId(req: Request) {
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
-    if (url.pathname === '/health') return json({ ok: true, service: 'anthares-remote-control', version: '0.1.0' });
+    if (url.pathname === '/health') return json({ ok: true, service: 'anthares-remote-control', version: '0.2.0-write-quota', mode: String(env.ANTHARES_REMOTE_CONTROL_MODE || 'standby').toLowerCase() });
 
     if (url.pathname.startsWith('/v1/device/')) {
       if (!env.DEVICE_TOKEN || bearer(req) !== env.DEVICE_TOKEN) return json({ error: 'unauthorized' }, 401);
       const id = deviceId(req);
       if (!id) return json({ error: 'missing device id' }, 400);
       const stub = env.DEVICE_STATE.get(env.DEVICE_STATE.idFromName(id));
-      const next = new Request('https://do.local' + url.pathname, req);
+      const headers = new Headers(req.headers);
+      headers.set('x-anthares-control-mode', String(env.ANTHARES_REMOTE_CONTROL_MODE || 'standby').toLowerCase());
+      const next = new Request('https://do.local' + url.pathname, { method: req.method, headers, body: req.method === 'GET' || req.method === 'HEAD' ? undefined : req.body });
       return stub.fetch(next);
     }
 
@@ -52,6 +55,7 @@ export default {
       const stub = env.DEVICE_STATE.get(env.DEVICE_STATE.idFromName(id));
       const headers = new Headers(req.headers);
       headers.set('x-anthares-device', id);
+      headers.set('x-anthares-control-mode', String(env.ANTHARES_REMOTE_CONTROL_MODE || 'standby').toLowerCase());
       const fwd = new Request('https://do.local' + url.pathname + url.search, { method: req.method, headers, body: req.method === 'GET' ? undefined : JSON.stringify(body) });
       return stub.fetch(fwd);
     }
@@ -67,24 +71,30 @@ export class DeviceState implements DurableObject {
     const url = new URL(req.url);
 
     if (url.pathname === '/v1/device/heartbeat' && req.method === 'POST') {
+      const mode = (req.headers.get('x-anthares-control-mode') || 'standby').toLowerCase();
+      if (mode !== 'active') return json({ ok: true, standby: true, persisted: false });
       const body = await req.json().catch(() => ({}));
-      await this.state.storage.put('heartbeat', { ...body as object, seen_at: new Date().toISOString() });
-      return json({ ok: true });
+      const now = Date.now();
+      const previous = await this.state.storage.get<any>('heartbeat');
+      const previousAt = previous?.seen_at ? Date.parse(previous.seen_at) : 0;
+      const semanticOld = previous ? { ...previous } : null;
+      if (semanticOld) delete semanticOld.seen_at;
+      const semanticNew = { ...(body as object) };
+      if (!previous || JSON.stringify(semanticOld) !== JSON.stringify(semanticNew) || now - previousAt >= 60000) {
+        await this.state.storage.put('heartbeat', { ...semanticNew, seen_at: new Date(now).toISOString() });
+        return json({ ok: true, standby: false, persisted: true });
+      }
+      return json({ ok: true, standby: false, persisted: false });
     }
 
     if (url.pathname === '/v1/device/jobs/next' && req.method === 'GET') {
-      const queue = (await this.state.storage.get<string[]>('queue')) || [];
-      while (queue.length) {
-        const id = queue.shift()!;
-        const job = await this.state.storage.get<Job>('job:' + id);
-        if (!job || job.status !== 'queued') continue;
-        job.status = 'leased';
-        await this.state.storage.put('job:' + id, job);
-        await this.state.storage.put('queue', queue);
-        return json({ job });
-      }
-      await this.state.storage.put('queue', queue);
-      return new Response(null, { status: 204 });
+      const jobs = await this.state.storage.list<Job>({ prefix: 'job:' });
+      const queued = [...jobs.values()].filter(job => job && job.status === 'queued').sort((a,b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+      const job = queued[0];
+      if (!job) return new Response(null, { status: 204 });
+      job.status = 'leased';
+      await this.state.storage.put('job:' + job.id, job);
+      return json({ job });
     }
 
     const resultMatch = url.pathname.match(/^\/v1\/device\/jobs\/([^/]+)\/result$/);
@@ -111,10 +121,7 @@ export class DeviceState implements DurableObject {
         created_at: new Date().toISOString(),
         status: 'queued',
       };
-      const queue = (await this.state.storage.get<string[]>('queue')) || [];
-      queue.push(id);
       await this.state.storage.put('job:' + id, job);
-      await this.state.storage.put('queue', queue);
       return json({ ok: true, job }, 201);
     }
 
@@ -127,8 +134,9 @@ export class DeviceState implements DurableObject {
 
     if (url.pathname === '/v1/control/status' && req.method === 'GET') {
       const heartbeat = await this.state.storage.get('heartbeat');
-      const queue = (await this.state.storage.get<string[]>('queue')) || [];
-      return json({ heartbeat: heartbeat || null, queued: queue.length });
+      const jobs = await this.state.storage.list<Job>({ prefix: 'job:' });
+      const queued = [...jobs.values()].filter(job => job && job.status === 'queued').length;
+      return json({ heartbeat: heartbeat || null, queued });
     }
 
     return json({ error: 'not found' }, 404);
