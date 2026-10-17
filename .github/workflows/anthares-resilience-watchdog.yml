@@ -42,8 +42,10 @@ jobs:
           routing=json.load(open('ci-hub/executor-routing.json',encoding='utf-8'))
           status=json.load(open('ci-hub/provider-status.json',encoding='utf-8'))
           assert routing['remote_control']['primary']=='anthares_remote'
-          assert routing['remote_control']['priority']==['anthares_remote']
-          assert routing['remote_control']['allow_other_remotes'] is False
+          assert routing['remote_control']['surface']=='anthares_remote'
+          assert routing['remote_control']['backend_priority']
+          assert routing['remote_control']['current_selected_backend'] in routing['remote_control']['backend_priority']
+          assert routing['remote_control']['allow_other_remote_surfaces'] is False
           browser=routing['browser_execution']
           assert browser.get('primary_surface', browser.get('primary'))=='anthares_browser'
           assert browser.get('exclusive_surface', True) is True
