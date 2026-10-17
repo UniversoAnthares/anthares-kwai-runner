@@ -8,7 +8,7 @@ class_name = "DeviceState"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["DeviceState"]
+new_sqlite_classes = ["DeviceState"]
 
 [vars]
 ANTHARES_REMOTE_CONTROL_MODE = "standby"
