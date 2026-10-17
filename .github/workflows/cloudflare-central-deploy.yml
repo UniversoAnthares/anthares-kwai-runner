@@ -28,6 +28,18 @@ jobs:
           grep -q 'idx_jobs_target_dedupe' cloudflare-worker/src/index.js
           ! grep -q 'CREATE INDEX IF NOT EXISTS idx_jobs_target_status_created' cloudflare-worker/src/index.js
           grep -q 'account_id' cloudflare-worker/src/index.js
+      - name: Apply proven physical Android Kwai executor migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 cloudflare-worker/patches/apply-physical-android-v18.py
+          grep -q '2026-10-17-physical-android-v18' cloudflare-worker/src/index.js
+          grep -q '2026-10-17-physical-android-r1' cloudflare-worker/src/index.js
+          grep -q 'kwai:\["physical_android","github"\]' cloudflare-worker/src/index.js
+          grep -q 'X-Anthares-Executor-Signature' cloudflare-worker/src/index.js
+          grep -q 'X-Anthares-Executor-Timestamp' cloudflare-worker/src/index.js
+          grep -q 'kwai_physical_primary' cloudflare-worker/src/index.js
+          grep -q 'kwai_github_failover' cloudflare-worker/src/index.js
       - name: Authorize dedicated TikTok verifier and reconciliation workflows deterministically
         shell: bash
         run: |
@@ -60,10 +72,11 @@ jobs:
           grep -q 'tiktok-central-session-read.yml' cloudflare-worker/src/index.js
           grep -q 'tiktok-anthares-browser-session-verify.yml' cloudflare-worker/src/index.js
           grep -q 'tiktok-reconcile-uncertain.yml' cloudflare-worker/src/index.js
-          grep -q '2026-10-15-publisher-target-v17' cloudflare-worker/src/index.js
-          grep -q '2026-10-14-render-retired-r2' cloudflare-worker/src/index.js
+          grep -q '2026-10-17-physical-android-v18' cloudflare-worker/src/index.js
+          grep -q '2026-10-17-physical-android-r1' cloudflare-worker/src/index.js
           ! grep -q 'onrender.com' cloudflare-worker/src/index.js
-          echo 'SNAPSHOT_VALID=publisher-target-v17-render-retired-r2-tiktok-reconcile-authorized'
+          node --experimental-default-type=module --check cloudflare-worker/src/index.js
+          echo 'SNAPSHOT_VALID=physical-android-v18-render-retired'
       - name: Validate private Kwai session vault before deploy
         shell: bash
         run: |
@@ -81,7 +94,7 @@ jobs:
           cd cloudflare-worker
           npx --yes wrangler@4.43.0 deploy
           echo 'WRANGLER_DEPLOY_OK=1'
-      - name: Verify public health and retired Render routing
+      - name: Verify public health and physical Android routing
         shell: bash
         run: |
           set -euo pipefail
@@ -90,11 +103,14 @@ jobs:
           failover="$(curl -fsS https://anthares-control.anthares1.workers.dev/failover-self-test)"
           echo "$out"; echo "$strategy"; echo "$failover"
           echo "$out" | grep -q '"service":"anthares-control"'
-          echo "$out" | grep -q '"version":"2026-10-15-publisher-target-v17"'
+          echo "$out" | grep -q '"version":"2026-10-17-physical-android-v18"'
           echo "$out" | grep -q '"pc_fallback":false'
-          echo "$out" | grep -q '"routing_revision":"2026-10-14-render-retired-r2"'
+          echo "$out" | grep -q '"routing_revision":"2026-10-17-physical-android-r1"'
           ! echo "$strategy" | grep -q '"render"'
+          echo "$strategy" | grep -q '"kwai":\["physical_android","github"\]'
           echo "$failover" | grep -q '"primary":"github"'
+          echo "$failover" | grep -q '"kwai_physical_primary":true'
+          echo "$failover" | grep -q '"kwai_github_failover":true'
           echo "$failover" | grep -q '"render_retired":true'
           echo 'CONTROL_HEALTH_OK=1'
       - name: Verify protected TikTok session endpoint remains closed to unauthenticated callers
