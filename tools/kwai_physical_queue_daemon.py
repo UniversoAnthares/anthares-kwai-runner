@@ -220,15 +220,17 @@ def memu_identity_proven():
  env['PATH']=str(pathlib.Path(ADB).parent)+os.pathsep+env.get('PATH','')
  script=ROOT/'kwai-up'/'kwai_up_safe.py'
  if not script.is_file():return False
- try:
-  p=subprocess.run([PYTHON,str(script),'auth'],env=env,stdout=subprocess.PIPE,
-                   stderr=subprocess.STDOUT,text=True,timeout=95,check=False)
-  ok=p.returncode==0 and 'KWAI_UP_STATE=AUTHENTICATED_IDENTITY' in (p.stdout or '') and EXPECTED_ACCOUNT in (p.stdout or '').lower()
-  log('MEMU_AUTH_'+('VERIFIED' if ok else 'NOT_VERIFIED')+' rc='+str(p.returncode))
-  return ok
- except Exception as e:
-  log('MEMU_AUTH_PROBE_ERROR '+type(e).__name__)
-  return False
+ for attempt in (1,2):
+  try:
+   p=subprocess.run([PYTHON,str(script),'auth'],env=env,stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,text=True,timeout=95,check=False)
+   ok=p.returncode==0 and 'KWAI_UP_STATE=AUTHENTICATED_IDENTITY' in (p.stdout or '') and EXPECTED_ACCOUNT in (p.stdout or '').lower()
+   log('MEMU_AUTH_'+('VERIFIED' if ok else 'NOT_VERIFIED')+' attempt='+str(attempt)+' rc='+str(p.returncode))
+   if ok:return True
+  except Exception as e:
+   log('MEMU_AUTH_PROBE_ERROR '+type(e).__name__+' attempt='+str(attempt))
+  if attempt==1:time.sleep(3)
+ return False
 
 
 def once():
