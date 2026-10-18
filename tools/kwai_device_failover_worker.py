@@ -251,6 +251,37 @@ def run_physical_commit(env: dict, prepare_out: str) -> tuple[bool, str, str]:
     return True, "", combined
 
 
+def verify_memu_standby_identity() -> bool:
+    """Prove MEmu Kwai profile before standby promotion; never assume auth."""
+    serial = os.getenv("ANTHARES_MEMU_ADB_SERIAL", "127.0.0.1:21543")
+    env = os.environ.copy()
+    env["KWAI_UP_ADB_SERIAL"] = serial
+    env["KWAI_UP_PACKAGE"] = "com.kwai.video"
+    env["KWAI_UP_EXPECTED_ACCOUNT"] = os.getenv("KWAI_EXPECTED_ACCOUNT", "lucasrosalem")
+    adb = os.getenv("ANTHARES_ADB", "").strip()
+    if adb:
+        env["PATH"] = str(pathlib.Path(adb).parent) + os.pathsep + env.get("PATH", "")
+    script = ROOT / "kwai-up" / "kwai_up_safe.py"
+    if not script.is_file():
+        return False
+    try:
+        result = subprocess.run([sys.executable, str(script), "auth"], cwd=str(ROOT),
+                                env=env, capture_output=True, text=True, timeout=95, check=False)
+        output = result.stdout or ""
+        verified = (
+            result.returncode == 0
+            and "AUTHENTICATED_IDENTITY" in output
+            and env["KWAI_UP_EXPECTED_ACCOUNT"].lower().lstrip("@") in output.lower()
+        )
+        if verified:
+            os.environ["ANTHARES_MEMU_KWAI_AUTHENTICATED"] = "true"
+        print("KWAI_MEMU_STANDBY_IDENTITY=" + ("VERIFIED" if verified else "NOT_VERIFIED"), flush=True)
+        return verified
+    except (OSError, subprocess.SubprocessError):
+        print("KWAI_MEMU_STANDBY_IDENTITY=UNAVAILABLE", flush=True)
+        return False
+
+
 def memu_publisher() -> pathlib.Path:
     raw = os.getenv("ANTHARES_MEMU_PUBLISHER_PATH", "").strip()
     if raw:
@@ -322,6 +353,7 @@ def main() -> int:
                 if failure_class not in routing.DEVICE_FAILURES:
                     print(f"KWAI_DEVICE_STATE=FAILED_NO_FAILOVER CLASS={failure_class}", flush=True)
                     return 80
+                verify_memu_standby_identity()
                 probes2 = AndroidExecutorRouter().status()
                 state2 = merge_health(probes2, history)
                 selected2 = routing.choose(manifest, state2, workload="kwai_publish")
