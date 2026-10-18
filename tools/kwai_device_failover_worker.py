@@ -319,7 +319,7 @@ def memu_caption_input(value: str) -> str:
     # curly quotes or shell metacharacters. The original title remains in WP;
     # the MEmu UI receives a verified ASCII variant.
     normalized=unicodedata.normalize('NFKD', str(value or ''))
-    permitted='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,-!?#'
+    permitted='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 #'
     clean=''.join(c for c in normalized if c in permitted)
     return ' '.join(clean.split())[:120] or 'Universo Anthares'
 
