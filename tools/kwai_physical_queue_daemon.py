@@ -41,6 +41,8 @@ def key():
   _key=serialization.load_pem_private_key(PRIVATE_KEY.read_bytes(),password=None)
  return _key
 def signed_post(path,payload,timeout=30):
+ if os.getenv('CORTES_QUEUE_BACKEND','cloudflare').strip().lower()=='neon' and path.startswith('/job/'):
+  return signed_legacy_queue_call(path,payload)
  raw=compact(payload).encode('utf-8'); ts=str(int(time.time())); message=(ts+'\nPOST\n'+path+'\n').encode()+raw
  sig=base64.b64encode(key().sign(message,padding.PKCS1v15(),hashes.SHA256())).decode('ascii')
  req=urllib.request.Request(CONTROL+path,data=raw,method='POST',headers={'Content-Type':'application/json','User-Agent':'AntharesPhysicalAndroid/1','X-Anthares-Executor-Timestamp':ts,'X-Anthares-Executor-Signature':sig})
