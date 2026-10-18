@@ -453,10 +453,14 @@ class Publisher:
             raise KwaiUpError("caption-field-missing")
         self.tap_node(field, 1)
         self.adb.run("shell", "input", "keyevent", "KEYCODE_MOVE_END", check=False)
-        safe = self.cfg.caption[:150].replace("%", "%25").replace(" ", "%s")
-        for old, new in (("&", r"\&"), ("(", r"\("), (")", r"\)"), (";", r"\;")):
-            safe = safe.replace(old, new)
-        self.adb.run("shell", "input", "text", safe)
+        # Large input-text calls reorder or omit characters on the MEmu IME.
+        # Inject bounded ASCII tokens and independent Android SPACE keyevents.
+        # The subsequent editor XML proof validates the exact final caption.
+        for index, token in enumerate(self.cfg.caption[:120].split()):
+            if index:
+                self.adb.run("shell", "input", "keyevent", "KEYCODE_SPACE")
+            self.adb.run("shell", "input", "text", token, timeout=20)
+            time.sleep(0.25)
         self.adb.run("shell", "input", "keyevent", "KEYCODE_BACK", check=False)
         time.sleep(1)
 
