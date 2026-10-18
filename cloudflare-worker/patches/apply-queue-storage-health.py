@@ -11,6 +11,17 @@ assert s.count(start) == 1, 'account migration anchor changed'
 a = s.index(start)
 b = s.index(end, a) + len(end)
 s = s[:a] + '  migrateLegacyTargetAccounts(this.sql);\n' + s[b:]
+anchor = ' async lease(b,day){\n'
+assert s.count(anchor) == 1, 'lease entry changed'
+s = s.replace(anchor, anchor + '''  if(b.executor==='physical_android' && b.platform==='kwai'){
+    const key='maintenance:cortes-legacy-cleanup-20261018';
+    if(!(await this.ctx.storage.get(key))){
+      const result=await this.cleanupCortesLegacy();
+      await this.ctx.storage.put(key,{removed_count:result.removed_count,protected_count:result.protected_count,completed_at:new Date().toISOString()});
+      console.log('CORTES_LEGACY_CLEANUP_REMOVED='+result.removed_count+' PROTECTED='+result.protected_count);
+    }
+  }
+''', 1)
 assert s.count('export default {') == 1
 s = s.replace('export default {', 'const worker = {', 1)
 s = "import {migrateLegacyTargetAccounts, storageQuotaResponse} from './queue_storage_health.js';\n" + s
