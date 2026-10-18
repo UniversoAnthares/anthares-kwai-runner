@@ -21,7 +21,7 @@ async function deviceAuth(req){const device=String(req.headers['x-anthares-devic
 // can enqueue; executor operations require the independent device credential.
 const PRODUCER_AUDIENCE='https://anthares-remote-primary.vercel.app/api/cortes-queue';
 const PRODUCER_REPO='UniversoAnthares/anthares-clipper';
-const PRODUCER_WORKFLOWS=new Set(['cortes-daily.yml','cortes-full-system-test-once.yml']);
+const PRODUCER_WORKFLOWS=new Set(['cortes-daily.yml','cortes-full-system-test-once.yml','cortes-neon-short-dispatch.yml']);
 let githubJwks=null,githubJwksUntil=0;
 async function githubOidcEnqueueAuth(req){
  const token=bearer(req);
