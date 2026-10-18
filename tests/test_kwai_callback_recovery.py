@@ -8,6 +8,9 @@ import kwai_physical_queue_daemon as daemon
 
 
 class CallbackRecoveryTests(unittest.TestCase):
+    def test_storage_quota_uses_backoff_instead_of_publication(self):
+        with self.assertRaises(daemon.QueueStorageBlocked):
+            daemon.queue_failure('lease',503,{'error':'queue_storage_quota_exhausted'})
     def test_wordpress_failure_is_durable_and_retry_never_publishes(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(daemon, 'WP_PENDING', Path(directory)/'pending.json'), patch.object(daemon, 'log'):
             job={'id':'clip-1','cortes_callback_token':'local-only-token'}

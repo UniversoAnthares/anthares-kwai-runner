@@ -4,6 +4,7 @@ import base64,hashlib,json,os,pathlib,re,socket,subprocess,sys,time,urllib.error
 from cryptography.hazmat.primitives import hashes,serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from android_adb_inventory import online_devices
+from android_device_adapters import ensure_memu_transport
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 CONTROL=os.getenv('ANTHARES_CONTROL_URL','https://anthares-control.anthares1.workers.dev').rstrip('/')
@@ -17,6 +18,14 @@ LOGDIR=ROOT/'.state'; LOG=LOGDIR/'kwai-physical-queue.log'; LOCK=LOGDIR/'kwai-ph
 TTL=3600; POLL=20
 WP_PENDING=LOGDIR/'cortes-wp-callback-pending.json'
 _key=None
+
+class QueueStorageBlocked(RuntimeError):
+ pass
+
+def queue_failure(op,code,data):
+ if code==503 and data.get('error')=='queue_storage_quota_exhausted':
+  raise QueueStorageBlocked('queue_storage_quota_exhausted')
+ raise RuntimeError(f'queue-{op}:{code}:{data}')
 
 def log(msg):
  LOGDIR.mkdir(parents=True,exist_ok=True); line=time.strftime('%Y-%m-%dT%H:%M:%S')+' '+msg; print(line,flush=True)
@@ -44,7 +53,7 @@ def signed_post(path,payload,timeout=30):
 
 def qpost(op,payload):
  code,d=signed_post('/job/'+op,{'executor':EXECUTOR,**payload})
- if code//100!=2 or not d.get('ok'):raise RuntimeError(f'queue-{op}:{code}:{d}')
+ if code//100!=2 or not d.get('ok'):queue_failure(op,code,d)
  return d
 
 def adb(*a,timeout=25,check=False):
@@ -116,7 +125,7 @@ def wp_notify(job,status,remote_id='',error=''):
  b={'video_id':str(job.get('cortes_video_id') or job.get('source_id') or ''),
     'clip_id':str(job.get('cortes_clip_id') or job.get('segment_id') or ''),
     'attachment_id':int(job.get('cortes_attachment_id') or 0),
-    'network':'kwai','account_id':EXPECTED_ACCOUNT,'status':status,'remote_id':remote_id,'error':error[:400],
+    'network':'kwai','account_id':str(job.get('cortes_account_id') or 'primary'),'status':status,'remote_id':remote_id,'error':error[:400],
     'token':token}
  raw=compact(b).encode('utf-8')
  req=urllib.request.Request(url,data=raw,method='POST',headers={
@@ -200,7 +209,7 @@ def memu_identity_proven():
  """Read-only Kwai account check. Never infer login from app installation."""
  env=os.environ.copy()
  serial=env.get('ANTHARES_MEMU_ADB_SERIAL','127.0.0.1:21543')
- adb('connect',serial,timeout=20)
+ if not ensure_memu_transport(ADB,serial):return False
  env.update({'KWAI_UP_ADB_SERIAL':serial,'KWAI_UP_PACKAGE':'com.kwai.video',
              'KWAI_UP_EXPECTED_ACCOUNT':EXPECTED_ACCOUNT,'ADB_VENDOR_KEYS':ADB_KEYS})
  env['PATH']=str(pathlib.Path(ADB).parent)+os.pathsep+env.get('PATH','')
@@ -240,7 +249,7 @@ def once():
    return 75
   log('FAILOVER_TO_VERIFIED_MEMU_PENDING_LEASE')
  code,d=signed_post('/job/lease',{'executor':EXECUTOR,'platform':'kwai','ttl_seconds':TTL})
- if code//100!=2 or not d.get('ok'):raise RuntimeError(f'lease:{code}:{d}')
+ if code//100!=2 or not d.get('ok'):queue_failure('lease',code,d)
  job=d.get('job')
  if not job:log('QUEUE_EMPTY');return 0
  try:process(job,serial)
@@ -265,12 +274,16 @@ def daemon():
  log('DAEMON_STARTED pid='+str(os.getpid()))
  try:
   while True:
+   delay=POLL
    try:once()
+   except QueueStorageBlocked:
+    delay=900
+    log('QUEUE_BLOCKED reason=queue_storage_quota_exhausted retry_seconds=900 no_publication_attempted=1')
    except Exception as e:
     log('LOOP_ERROR '+repr(e));
     try:heartbeat(False,'',str(e))
     except Exception:pass
-   time.sleep(POLL)
+   time.sleep(delay)
  finally:os.close(fd);LOCK.unlink(missing_ok=True)
 def main():
  if len(sys.argv)>=3 and sys.argv[1]=='queue-op':return callback(sys.argv[2])

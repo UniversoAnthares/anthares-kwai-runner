@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from android_device_adapters import PhysicalDeviceAdapter, MEmuAdapter, AndroidExecutorRouter
+from android_device_adapters import PhysicalDeviceAdapter, MEmuAdapter, AndroidExecutorRouter, ensure_memu_transport
 
 
 class Result:
@@ -26,6 +26,24 @@ def good_run(cmd, **kwargs):
 
 
 class AndroidDeviceAdapterTests(unittest.TestCase):
+    def test_ready_memu_never_restarts_backend(self):
+        calls=[]
+        def run(cmd, **kwargs):
+            calls.append(cmd)
+            return Result(0, 'device\n')
+        self.assertTrue(ensure_memu_transport('adb', '127.0.0.1:21543', run))
+        self.assertFalse(any('powershell.exe' in cmd for cmd in calls))
+
+    def test_offline_memu_starts_only_canonical_standby_without_reset(self):
+        calls=[];states=iter([Result(1,'offline'),Result(0,'device\n')])
+        def run(cmd, **kwargs):
+            calls.append(cmd)
+            return next(states) if cmd[-1]=='get-state' else Result()
+        self.assertTrue(ensure_memu_transport('adb','127.0.0.1:21543',run))
+        recovery=next(cmd for cmd in calls if cmd[0]=='powershell.exe')
+        self.assertIn('-AllowBackendStart',recovery)
+        self.assertNotIn('-AllowBackendReset',recovery)
+        self.assertEqual(recovery[recovery.index('-Target')+1],'memu')
     def test_physical_fails_closed_without_serial(self):
         s = PhysicalDeviceAdapter("", run=good_run).probe()
         self.assertFalse(s.ready)

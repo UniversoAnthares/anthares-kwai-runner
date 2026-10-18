@@ -29,7 +29,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import android_executor_router as routing
-from android_device_adapters import AndroidExecutorRouter
+from android_device_adapters import AndroidExecutorRouter, ensure_memu_transport
 
 STATE_PATH = pathlib.Path(os.getenv("ANTHARES_ANDROID_HEALTH_STATE", str(ROOT / ".state" / "android-device-health.json")))
 ACK_PATH = pathlib.Path(os.getenv("ANTHARES_ANDROID_ACK_STATE", str(ROOT / ".state" / "android-publish-ack.json")))
@@ -262,6 +262,8 @@ def verify_memu_standby_identity() -> bool:
     adb = os.getenv("ANTHARES_ADB", "").strip()
     if adb:
         env["PATH"] = str(pathlib.Path(adb).parent) + os.pathsep + env.get("PATH", "")
+    if not ensure_memu_transport(adb or 'adb', serial):
+        return False
     script = ROOT / "kwai-up" / "kwai_up_safe.py"
     if not script.is_file():
         return False

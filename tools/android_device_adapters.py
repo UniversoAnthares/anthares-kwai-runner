@@ -10,8 +10,28 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Callable, Optional
+
+
+def ensure_memu_transport(adb, serial, run=subprocess.run):
+    """Recover the canonical MEmu4 standby only before publication STARTED."""
+    def command(args, timeout=20):
+        return run(args, capture_output=True, text=True, timeout=timeout, check=False)
+    command([adb, 'connect', serial])
+    state = command([adb, '-s', serial, 'get-state'])
+    if state.returncode == 0 and state.stdout.strip() == 'device':
+        return True
+    runtime = Path(__file__).resolve().parents[1] / 'windows' / 'android-runtime' / 'anthares-android-runtime.ps1'
+    if not runtime.is_file():
+        return False
+    command(['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+             '-File', str(runtime), '-Command', 'recover', '-Target', 'memu',
+             '-PublicationState', 'LEASED', '-AllowBackendStart'], timeout=150)
+    command([adb, 'connect', serial])
+    state = command([adb, '-s', serial, 'get-state'])
+    return state.returncode == 0 and state.stdout.strip() == 'device'
 
 
 @dataclass
