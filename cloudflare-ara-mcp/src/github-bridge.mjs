@@ -84,9 +84,16 @@ function leaseFields(content){
   return f;
 }
 async function leaseEntries(env){
-  const list=await api(env,'GET',repoUrl(HUB)+'/contents/test-hub/findings?ref=main');
-  if(!Array.isArray(list))problem('invalid_test_hub');
-  return list.filter(f=>f?.name?.startsWith('lease-claude-github-') && f.name.endsWith('.md'));
+  // GitHub Contents directory listings stop at 1,000 entries. The Test Hub
+  // already has hundreds of findings; read the exact Git tree instead.
+  const dirs=await api(env,'GET',repoUrl(HUB)+'/contents/test-hub?ref=main');
+  const findings=Array.isArray(dirs) && dirs.find(e=>e.name==='findings' && e.type==='dir' && shaPattern.test(e.sha||''));
+  if(!findings)problem('invalid_test_hub');
+  const listing=await api(env,'GET',repoUrl(HUB)+'/git/trees/'+findings.sha);
+  if(listing?.truncated || !Array.isArray(listing?.tree))problem('truncated_test_hub');
+  return listing.tree
+    .filter(e=>e.type==='blob' && e.path?.startsWith('lease-claude-github-') && e.path.endsWith('.md'))
+    .map(e=>({name:e.path,path:'test-hub/findings/'+e.path}));
 }
 async function validateLease(env,repo,branch,path){
   if(!String(path||'').startsWith(LEASE_PREFIX) || !String(path).endsWith('.md') || String(path).includes('..'))problem('lease_required',403);
