@@ -24,6 +24,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+import unicodedata
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -313,6 +314,16 @@ def run_memu(media: pathlib.Path) -> tuple[bool, str, str]:
     return False, classify_failure(out, rc), out
 
 
+def memu_caption_input(value: str) -> str:
+    # Android 'adb shell input text' cannot reliably inject accented letters,
+    # curly quotes or shell metacharacters. The original title remains in WP;
+    # the MEmu UI receives a verified ASCII variant.
+    normalized=unicodedata.normalize('NFKD', str(value or ''))
+    permitted='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,-!?#'
+    clean=''.join(c for c in normalized if c in permitted)
+    return ' '.join(clean.split())[:120] or 'Universo Anthares'
+
+
 def prepare_memu(media):
     env=os.environ.copy()
     job=required('KWAI_QUEUE_JOB_ID')
@@ -320,7 +331,7 @@ def prepare_memu(media):
         'KWAI_UP_ADB_SERIAL':required('ANTHARES_MEMU_ADB_SERIAL'),
         'KWAI_UP_PACKAGE':'com.kwai.video',
         'KWAI_UP_EXPECTED_ACCOUNT':os.getenv('KWAI_EXPECTED_ACCOUNT','lucasrosalem'),
-        'KWAI_UP_CAPTION':os.getenv('KWAI_VIDEO_TITLE',''),
+        'KWAI_UP_CAPTION':memu_caption_input(os.getenv('KWAI_VIDEO_TITLE','')),
         'KWAI_UP_MEDIA_SHA256':os.getenv('KWAI_MEDIA_SHA256',''),
         'KWAI_UP_ARTIFACT_DIR':str(ROOT/'.state'/'kwai-memu-evidence'/re.sub(r'[^A-Za-z0-9._-]+','_',job)[-100:])})
     adb=os.getenv('ANTHARES_ADB','').strip()
