@@ -12,7 +12,7 @@ NON_DEVICE_FAILURES = {"content", "policy", "platform"}
 
 
 def load_manifest():
-    return json.loads(MANIFEST.read_text(encoding="utf-8"))
+    return json.loads(MANIFEST.read_text(encoding="utf-8-sig"))
 
 
 def load_state():
