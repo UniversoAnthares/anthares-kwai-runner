@@ -101,7 +101,7 @@ def jobenv(job,serial):
   env['ANTHARES_MEMU_ADB_SERIAL']='127.0.0.1:21543'
  if not env.get('ANTHARES_MEMU_KWAI_AUTHENTICATED'):
   env['ANTHARES_MEMU_KWAI_AUTHENTICATED']='false'
- if job.get('media_sha256'):env['KWAI_MEDIA_SHA256']=str(job['media_sha256']).lower()
+ if job.get('media_sha256') and job.get('media_hash_kind')!='dispatch_identity':env['KWAI_MEDIA_SHA256']=str(job['media_sha256']).lower()
  callback=[PYTHON,str(pathlib.Path(__file__).resolve()),'queue-op']
  env['ANTHARES_QUEUE_STARTED_COMMAND_JSON']=json.dumps(callback+['started'])
  env['ANTHARES_QUEUE_COMPLETE_COMMAND_JSON']=json.dumps(callback+['complete'])
