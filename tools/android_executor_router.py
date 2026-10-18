@@ -84,6 +84,19 @@ def choose(manifest, state, workload="manual_auth"):
     for provider in cfg["priority"]:
         meta = providers.get(provider, {})
         s = state.get(provider)
+        # A connected Android can still be unusable for publication when its UI
+        # is asleep or uiautomator fails. Avoid reselecting it after a verified
+        # string of pre-publication device failures.
+        if workload == "kwai_publish" and provider == cfg.get("primary_device", "physical_android"):
+            if isinstance(s, dict):
+                failure_class = str(s.get("last_failure_class", "")).strip().lower()
+                try:
+                    failures = int(s.get("consecutive_failures", 0) or 0)
+                except (ValueError, TypeError):
+                    failures = 0
+                threshold = int(cfg.get("failover", {}).get("failure_threshold", 3))
+                if failure_class in DEVICE_FAILURES and (s.get("degraded") is True or failures >= threshold):
+                    continue
         if provider == cfg.get("fallback_device", "memu_android"):
             if not _primary_allows_memufailover(manifest, state):
                 continue
