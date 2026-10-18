@@ -15,6 +15,14 @@ manual independent GitHub-hosted executor. It runs this same implementation and 
 the same GitLab lock/audit refs. Its credentials are environment Secrets restricted to
 the runner repository's `main` branch. Existing WordPress CI remains optional.
 
+Native scheduler acceptance on 2026-10-18 transferred the isolated marker in run
+`e25e34dc-d0e5-49aa-9aaa-1e3642d9d24e`. The subsequent native main run
+`38403546-f7d2-4bf3-a351-f97821552c35` transferred actual QA fix `bc0c3dd9`
+to destination `2ee282c4`, preserving GitLab-only CI. Permanent audit commit:
+[`fdab4e21`](https://gitlab.com/UniversoAnthares/anthares-wordpress/-/commit/fdab4e21cfeb0409498652b1c17aa92d410689c1).
+Production scheduling was then reduced from the temporary minute acceptance cadence
+to `0 * * * *`; the scheduled validation branch was disabled.
+
 ## Preservation and concurrency
 
 The existing WordPress `qa/anthares-safe-mirror.sh` was inspected first. Its ancestry,

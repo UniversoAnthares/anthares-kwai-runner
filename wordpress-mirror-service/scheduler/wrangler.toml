@@ -8,9 +8,9 @@ preview_urls = false
 binding = "MIRROR_STATUS"
 id = "86eab037e16a47f7b7a81363160b1a59"
 
-# Temporarily frequent for observed native scheduler acceptance; change to hourly after proof.
+# Native scheduler acceptance passed before reducing production cadence to hourly.
 [triggers]
-crons = ["* * * * *"]
+crons = ["0 * * * *"]
 
 [vars]
-VALIDATION_REF = "validation/mirror-20261018-e2e"
+VALIDATION_REF = ""
