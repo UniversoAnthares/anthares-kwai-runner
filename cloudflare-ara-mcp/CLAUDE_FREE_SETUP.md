@@ -7,7 +7,7 @@ STATUS: STAGED / NOT DEPLOYED. Changes are on `integration/claude-free-mcp-20261
 2. The Anthares Remote MCP server already exists at `https://anthares-ara-mcp.anthares1.workers.dev/mcp`; the current production server authenticates ChatGPT clients with PKCE and owner-approved OAuth.
 3. The existing gateway previously accepted only ChatGPT OAuth client/redirect identifiers and keeps ChatGPT's authorized client pinned.
 4. This branch adds exact Claude client IDs and the official `https://claude.ai/api/mcp/auth_callback` redirect. The Claude client bypasses only the *ChatGPT client-ID pin*, with a separate owner email-OTP approval. PKCE, access tokens, refresh tokens, expiry, replay protection and signature checks remain in place.
-5. Claude scopes are restricted to `ara.read`. Remote execution, process control and file writes are still unavailable to Claude at this stage.
+5. The staged OAuth gives Claude `ara.read`, `github.read`, and `github.write` when explicitly requested and approved. `ara.write` is excluded. Arbitrary Windows remote execution and file writes remain unavailable to Claude.
 
 ## Before deployment
 - Test the authorized published-client metadata URL actually sent by Claude in its current version; prefer the exact URI that successfully resolves to a matching client metadata document and includes the official callback.
@@ -27,12 +27,12 @@ Complete the *real Anthares owner approval*, never send the approval code to a m
 Try a read-only instruction: `Consulte session_status e relate se o Anthares Remote está conectado, sem executar comandos.`
 The tool call succeeding end-to-end is the required acceptance proof.
 
-## GitHub write integration — remaining work
-- Implement a **server-side**, narrowly scoped GitHub App installation token or fine-grained repository token; store credentials as hosting secrets, never in `CLAUDE.md`, GitHub issues, OAuth URL or chat prompts.
-- Implement MCP tools with explicit repository allowlist, authenticated owner scope, exact SHA/HEAD checks, Test Hub lease check, branch names restricted to `claude/*`, and creation of draft PRs. Reject direct default-branch writes.
-- Add positive/negative tests for path traversal, cross-repository access, concurrent editing, wrong blob SHA, unauthorized scopes, expiry and duplicate requests.
-- Integrate with the existing Anthares Remote/Browser only through the signed, authorized control path; provide browser access separately and conservatively.
-- When all mechanisms are deployed, validate a harmless edit to a disposable test file in a draft branch, then independently verify the PR on GitHub.
+## GitHub write bridge — staged; credential and deployment pending
+- Staged bridge code uses a **server-side** token in Cloudflare secret `ANTHARES_GITHUB_TOKEN`. It still must be configured; never paste it in chat, `CLAUDE.md`, issues, OAuth URL or repository. Restrict the fine-grained token to the five approved repos and permissions Contents read/write, Pull requests read/write and Metadata read.
+- Implemented MCP tools `github_get_file`, `github_begin_task`, `github_create_branch`, `github_put_file`, and `github_draft_pr`; code enforces repository/branch allowlists, fresh SHA/HEAD, Test Hub lease and draft PR. Only the lease writer appends to the Test Hub on `main`.
+- Implemented offline tests in `src/github-bridge.test.mjs` and `src/claude-client-policy.test.mjs`. At commit `92fd645fa7342929161836f558e2e666538f2b89`, 5/5 syntax checks and 11/11 Node tests passed; additional live OAuth replay, scope and duplicate-PR checks remain pending.
+- Anthares Remote remains available to Claude for scoped read actions only, through its existing signed bridge. Anthares Browser has not been exposed to Claude.
+- After configuring the server credential and deploying safely, use Claude to edit a disposable `claude/*` file, open a draft PR and independently verify the GitHub result.
 
 ## No-cost boundary
 Do not subscribe to Claude Pro, enable paid Claude Code, provision a paid Anthropic API key, activate billing, or consume exhausted GitHub Actions minutes. Free usage can be rate-limited. Do not promise autonomous unlimited execution.
