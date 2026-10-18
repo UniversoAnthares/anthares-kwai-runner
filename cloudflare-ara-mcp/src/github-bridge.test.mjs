@@ -25,8 +25,10 @@ function response(body, status=200) {
 function mockResponse(url, init={}) {
   const u = new URL(url);
   const path = u.pathname + u.search;
-  if(path.includes('/contents/test-hub/findings?'))
-    return response([{name:LEASE.split('/').at(-1),path:LEASE}]);
+  if(path.includes('/contents/test-hub?'))
+    return response([{name:'findings',type:'dir',sha:'f'.repeat(40)}]);
+  if(path.includes('/git/trees/' + 'f'.repeat(40)))
+    return response({truncated:false,tree:[{type:'blob',path:LEASE.split('/').at(-1)}]});
   if(path.includes('/contents/' + LEASE))
     return response({type:'file',content:Buffer.from(LEASE_CONTENT).toString('base64')});
   if(path.includes('/git/ref/heads/')) return response({object:{sha:HEAD}});
