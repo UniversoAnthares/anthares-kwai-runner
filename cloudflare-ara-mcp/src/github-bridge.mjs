@@ -50,7 +50,11 @@ function encPath(p){return p.split('/').map(encodeURIComponent).join('/');}
 function token(env){const v=String(env.ANTHARES_GITHUB_TOKEN||'').trim();if(!v)problem('github_server_credential_unconfigured',503);return v;}
 async function api(env,method,path,body,accept404=false){
   const url=ROOT+path;
-  const headers={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Authorization':'Bearer '+token(env)};
+  const headers={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
+  // Public reads may work without a GitHub credential; writes always require one.
+  const credential=String(env.ANTHARES_GITHUB_TOKEN||'').trim();
+  if(credential)headers.Authorization='Bearer '+credential;
+  else if(method!=='GET')token(env);
   if(body!==undefined)headers['Content-Type']='application/json';
   const response=await fetch(url,{method,headers,body:body===undefined?undefined:JSON.stringify(body),redirect:'error'});
   if(response.status===404 && accept404)return null;
