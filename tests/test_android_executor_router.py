@@ -50,6 +50,30 @@ class AndroidExecutorRoutingTests(unittest.TestCase):
         physical.update({"healthy": False, "ready": False, "last_failure_class": "adb", "consecutive_failures": 3})
         self.assertEqual(router.choose(MANIFEST, {"physical_android": physical, "memu_android": ready()}, "kwai_publish"), "memu_android")
 
+    def test_ui_degraded_physical_does_not_preempt_ready_memu(self):
+        physical = ready()
+        physical.update({"last_failure_class": "device", "consecutive_failures": 4, "degraded": True})
+        self.assertEqual(
+            router.choose(MANIFEST, {"physical_android": physical, "memu_android": ready()}, "kwai_publish"),
+            "memu_android"
+        )
+
+    def test_ui_degraded_primary_waits_without_verified_standby(self):
+        physical = ready()
+        physical.update({"last_failure_class": "ui", "consecutive_failures": 5, "degraded": True})
+        self.assertIsNone(
+            router.choose(MANIFEST, {"physical_android": physical,
+                                     "memu_android": ready(authenticated=False)}, "kwai_publish")
+        )
+
+    def test_policy_failures_do_not_silently_promote_standby(self):
+        physical = ready()
+        physical.update({"last_failure_class": "policy", "consecutive_failures": 5, "degraded": True})
+        self.assertEqual(
+            router.choose(MANIFEST, {"physical_android": physical, "memu_android": ready()}, "kwai_publish"),
+            "physical_android"
+        )
+
     def test_policy_failure_never_retries_on_memu(self):
         physical = ready()
         physical.update({"healthy": False, "ready": False, "last_failure_class": "policy", "consecutive_failures": 99})
