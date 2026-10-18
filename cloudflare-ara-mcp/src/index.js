@@ -4,11 +4,12 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 // src/index.js
 import { DurableObject } from "cloudflare:workers";
 import { isClaudeClient, isClaudeCallbackPair, permittedClaudeScopes } from "./claude-client-policy.mjs";
+import { githubTools, callGithubTool } from "./github-bridge.mjs";
 var ORIGIN = "https://anthares-ara-mcp.anthares1.workers.dev";
 var CONTROL = "https://anthares-ara-vercel-reserve.vercel.app";
 var DEFAULT_DEVICE = "DESKTOP-FTDK0HP";
 var FALLBACK_DEVICE = "DESKTOP-FTDK0HP-SYSTEM";
-var SCOPES = /* @__PURE__ */ new Set(["ara.read", "ara.write"]);
+var SCOPES = /* @__PURE__ */ new Set(["ara.read", "ara.write", "github.read", "github.write"]);
 var WRITE_TOOLS = /* @__PURE__ */ new Set(["remote_exec", "clipboard_set", "file_write", "file_write_chunk", "file_mkdir", "file_remove", "file_rename", "file_copy", "file_write_atomic", "remote_job_start", "remote_job_cancel", "process_start", "process_kill", "service_start", "service_stop"]);
 var AUTH_EMAIL = "lucasyahn@gmail.com";
 var te = new TextEncoder();
@@ -422,9 +423,12 @@ function validRedirect(v, clientId) {
 }
 __name(validRedirect, "validRedirect");
 function parseScopes(v, clientId) {
-  const xs = String(v || (isClaudeClient(clientId) ? "ara.read" : "ara.read ara.write")).trim().split(/\s+/).filter(Boolean);
-  if (!xs.length || xs.some((x) => !SCOPES.has(x)) || (isClaudeClient(clientId) && !permittedClaudeScopes(xs))) return null;
-  return [...new Set(xs)];
+  const xs = String(v || (isClaudeClient(clientId) ? "ara.read github.read github.write" : "ara.read ara.write")).trim().split(/\s+/).filter(Boolean);
+  if (!xs.length || xs.some((x) => !SCOPES.has(x))) return null;
+  // A client may request ara.write, but Claude receives only the narrower scopes.
+  const granted = isClaudeClient(clientId) ? xs.filter((scope) => scope !== "ara.write") : xs;
+  if (!granted.length || (isClaudeClient(clientId) && !permittedClaudeScopes(granted))) return null;
+  return [...new Set(granted)];
 }
 __name(parseScopes, "parseScopes");
 function bearer(req) {
@@ -483,7 +487,7 @@ var index_default = { async fetch(req, env) {
     if (req.method === "GET" && (u.pathname === "/.well-known/oauth-authorization-server" || u.pathname === "/.well-known/openid-configuration")) return json({ issuer: ORIGIN, authorization_endpoint: `${ORIGIN}/oauth/authorize`, token_endpoint: `${ORIGIN}/oauth/token`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], token_endpoint_auth_methods_supported: ["none"], scopes_supported: [...SCOPES], client_id_metadata_document_supported: true, authorization_response_iss_parameter_supported: true });
     if (req.method === "GET" && u.pathname === "/oauth/authorize") {
       const cid = u.searchParams.get("client_id") || "", red = u.searchParams.get("redirect_uri") || "", challenge = u.searchParams.get("code_challenge") || "", method = u.searchParams.get("code_challenge_method") || "", resource = u.searchParams.get("resource") || ORIGIN, scopes = parseScopes(u.searchParams.get("scope"), cid);
-      if (!await clientAllowed(env, cid) || !validRedirect(red, cid) || u.searchParams.get("response_type") !== "code" || method !== "S256" || challenge.length < 43 || resource !== ORIGIN || !scopes) return json({ error: "invalid_request" }, 400);
+      if (!await clientAllowed(env, cid) || !validRedirect(red, cid) || u.searchParams.get("response_type") !== "code" || method !== "S256" || challenge.length < 43 || !(resource === ORIGIN || (isClaudeClient(cid) && resource === ORIGIN + "/mcp")) || !scopes) return json({ error: "invalid_request" }, 400);
       const tx = await st(env).signToken({ typ: "oauth_pending", iss: ORIGIN, aud: ORIGIN, exp: Math.floor(Date.now() / 1e3) + 600, jti: rand(16), clientId: cid, redirectUri: red, challenge, scopes, scp: scopes, state: u.searchParams.get("state") || "" });
       const bs = await bootstrapOtpStatus(env);
       if (!bs.active) {
@@ -544,13 +548,15 @@ var index_default = { async fetch(req, env) {
       if (rpc.method === "notifications/initialized" || String(rpc.method || "").startsWith("notifications/")) return new Response(null, { status: 202 });
       if (rpc.method === "initialize") return rpcResult(rpc.id, { protocolVersion: rpc.params?.protocolVersion || "2025-06-18", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Anthares Remote", version: "1.0.1" } });
       if (rpc.method === "ping") return rpcResult(rpc.id, {});
-      if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS.filter(t => token.scp.includes(WRITE_TOOLS.has(t.name) ? "ara.write" : "ara.read")) });
+      if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS.filter(t => token.scp.includes(WRITE_TOOLS.has(t.name) ? "ara.write" : "ara.read")).concat(githubTools.filter(t => token.scp.includes(t.scope)).map(({scope, ...tool}) => tool)) });
       if (rpc.method === "tools/call") {
         const name = rpc.params?.name || "";
-        const required = WRITE_TOOLS.has(name) ? "ara.write" : "ara.read";
+        const githubTool = githubTools.find(t => t.name === name);
+        const required = githubTool ? githubTool.scope : (WRITE_TOOLS.has(name) ? "ara.write" : "ara.read");
         if (!token.scp.includes(required)) return rpcError(rpc.id, -32003, "insufficient_scope", { required_scope: required });
         try {
-          return rpcResult(rpc.id, await callTool(env, name, rpc.params?.arguments || {}));
+          const result = githubTool ? textResult(await callGithubTool(env, name, rpc.params?.arguments || {})) : await callTool(env, name, rpc.params?.arguments || {});
+          return rpcResult(rpc.id, result);
         } catch (e) {
           return rpcResult(rpc.id, { content: [{ type: "text", text: String(e?.message || e) }], isError: true });
         }
