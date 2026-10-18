@@ -35,7 +35,7 @@ class ProfileNavigationTests(unittest.TestCase):
         publisher.cfg=SimpleNamespace(verify_timeout=10)
         publisher.verify_identity=lambda: None
         publisher.profile_fingerprints=lambda *a,**kw: ["new","old-1","old-2"]
-        with patch.object(publisher,"verify_identity",side_effect=[core.KwaiUpError("navigation-unavailable"),None]) as identity, \
+        with patch.object(publisher,"verify_identity",side_effect=[memu.ku.KwaiUpError("navigation-unavailable"),None]) as identity, \
              patch.object(memu.ku,"profile_grid_changed",return_value=True), \
              patch.object(memu.time,"sleep"):
             ok,proof=publisher.verify_after_post(["old-1","old-2","old-3"])
@@ -46,8 +46,8 @@ class ProfileNavigationTests(unittest.TestCase):
     def test_human_verification_aborts_read_only_retry(self):
         publisher=object.__new__(memu.QueuePublisher)
         publisher.cfg=SimpleNamespace(verify_timeout=10)
-        publisher.verify_identity=lambda: (_ for _ in ()).throw(core.HumanVerification("human-verification"))
-        with self.assertRaises(core.HumanVerification):
+        publisher.verify_identity=lambda: (_ for _ in ()).throw(memu.ku.HumanVerification("human-verification"))
+        with self.assertRaises(memu.ku.HumanVerification):
             publisher.verify_after_post(["old-1"])
 
 
