@@ -461,34 +461,49 @@ class Publisher:
         field = find_id(nodes, EDITOR_ID) or next((n for n in nodes if n.get("resource-id") == EDITOR_ID), None)
         if not field:
             raise KwaiUpError("caption-field-missing")
-        bridge = os.getenv("KWAI_UP_UIAUTOMATOR_JAR", "").strip()
-        if bridge:
-            # Use the Android UIAutomator setText API for complete UTF-8 input.
-            # The legacy shell input method silently drops punctuation/spaces.
-            local_jar = Path(bridge)
-            if not local_jar.is_file():
-                raise KwaiUpError("caption-uiautomator-jar-missing")
-            remote_jar = "/data/local/tmp/anthares-kwai-ui-driver.jar"
-            self.adb.run("push", str(local_jar), remote_jar, timeout=45)
-            encoded = base64.b64encode(self.cfg.caption[:150].encode("utf-8")).decode("ascii")
-            raw = self.adb.run(
-                "shell", "uiautomator", "runtest", remote_jar,
-                "-c", "us.anthares.tools.KwaiUiDriver#testAction",
-                "-e", "action", "setFirstEditText",
-                "-e", "value_base64", encoded,
-                timeout=90, check=False,
-            )
-            if "ANTHARES_UI_OK action=setFirstEditText" not in raw or "OK (1 test)" not in raw:
-                raise KwaiUpError("caption-uiautomator-set-text-failed")
-        else:
+        if os.getenv("KWAI_UP_CAPTION_INPUT_METHOD", "").strip().lower() == "adbkeyboard":
+            current_ime = self.adb.run(
+                "shell", "settings", "get", "secure", "default_input_method"
+            ).strip()
+            if current_ime != "com.android.adbkeyboard/.AdbIME":
+                raise KwaiUpError("adbkeyboard-not-selected")
             self.tap_node(field, 1)
-            self.adb.run("shell", "input", "keyevent", "KEYCODE_MOVE_END", check=False)
-            # Legacy physical Android mode; retained for other verified devices.
-            for index, token in enumerate(self.cfg.caption[:120].split()):
-                if index:
-                    self.adb.run("shell", "input", "keyevent", "KEYCODE_SPACE")
-                self.adb.run("shell", "input", "text", token, timeout=20)
-                time.sleep(0.25)
+            self.adb.run("shell", "am", "broadcast", "-a", "ADB_CLEAR_TEXT")
+            encoded = base64.b64encode(self.cfg.caption[:150].encode("utf-8")).decode("ascii")
+            self.adb.run(
+                "shell", "am", "broadcast", "-a", "ADB_INPUT_B64",
+                "--es", "msg", encoded,
+            )
+            time.sleep(1)
+        else:
+            bridge = os.getenv("KWAI_UP_UIAUTOMATOR_JAR", "").strip()
+            if bridge:
+                # Use the Android UIAutomator setText API for complete UTF-8 input.
+                # The legacy shell input method silently drops punctuation/spaces.
+                local_jar = Path(bridge)
+                if not local_jar.is_file():
+                    raise KwaiUpError("caption-uiautomator-jar-missing")
+                remote_jar = "/data/local/tmp/anthares-kwai-ui-driver.jar"
+                self.adb.run("push", str(local_jar), remote_jar, timeout=45)
+                encoded = base64.b64encode(self.cfg.caption[:150].encode("utf-8")).decode("ascii")
+                raw = self.adb.run(
+                    "shell", "uiautomator", "runtest", remote_jar,
+                    "-c", "us.anthares.tools.KwaiUiDriver#testAction",
+                    "-e", "action", "setFirstEditText",
+                    "-e", "value_base64", encoded,
+                    timeout=90, check=False,
+                )
+                if "ANTHARES_UI_OK action=setFirstEditText" not in raw or "OK (1 test)" not in raw:
+                    raise KwaiUpError("caption-uiautomator-set-text-failed")
+            else:
+                self.tap_node(field, 1)
+                self.adb.run("shell", "input", "keyevent", "KEYCODE_MOVE_END", check=False)
+                # Legacy physical Android mode; retained for other verified devices.
+                for index, token in enumerate(self.cfg.caption[:120].split()):
+                    if index:
+                        self.adb.run("shell", "input", "keyevent", "KEYCODE_SPACE")
+                    self.adb.run("shell", "input", "text", token, timeout=20)
+                    time.sleep(0.25)
         self.adb.run("shell", "input", "keyevent", "KEYCODE_BACK", check=False)
         time.sleep(1)
 
