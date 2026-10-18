@@ -359,6 +359,14 @@ def main() -> int:
     state = merge_health(probes, history)
     manifest = routing.load_manifest()
     selected = routing.choose(manifest, state, workload="kwai_publish")
+    if not selected and routing._primary_allows_memufailover(manifest, state):
+        # A physically connected phone may have an unusable/sleeping UI.
+        # Probe the MEmu account before taking a lease through the irreversible
+        # STARTED fence. The profile check cannot publish media.
+        if verify_memu_standby_identity():
+            probes = AndroidExecutorRouter().status()
+            state = merge_health(probes, history)
+            selected = routing.choose(manifest, state, workload="kwai_publish")
     print("KWAI_DEVICE_ROUTER_SELECTED=" + (selected or "NONE"), flush=True)
     if not selected:
         print("KWAI_DEVICE_STATE=QUEUED_NO_EXECUTOR", flush=True)
