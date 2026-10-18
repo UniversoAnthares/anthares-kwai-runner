@@ -85,7 +85,7 @@ def jobenv(job,serial):
 
  # Mark the primary as transport-ready, but identity verification remains in
  # kwai_up_safe.prepare() before STARTED. Never infer MEmu login readiness.
- env['ANTHARES_PHYSICAL_KWAI_AUTHENTICATED']='true'
+ env['ANTHARES_PHYSICAL_KWAI_AUTHENTICATED']='true' if serial else 'false'
  if not env.get('ANTHARES_MEMU_ADB_SERIAL'):
   env['ANTHARES_MEMU_ADB_SERIAL']='127.0.0.1:21543'
  if not env.get('ANTHARES_MEMU_KWAI_AUTHENTICATED'):
@@ -145,7 +145,23 @@ def process(job,serial):
  log(f'JOB_FAILED {jid} rc={p.returncode} possible={possible}')
 def once():
  repair_pending(); healthy,serial=preflight(); heartbeat(healthy,serial,'' if healthy else 'android-preflight-failed')
- if not healthy:log('PREFLIGHT_FAILED');return 75
+ if not healthy:
+  # Only consume CORTES work when a tested, authenticated MEmu standby is
+  # genuinely available. Its readiness is verified again inside the worker.
+  env=os.environ.copy()
+  env.setdefault('ANTHARES_ADB',ADB)
+  env.setdefault('ANTHARES_MEMU_ADB_SERIAL','127.0.0.1:21543')
+  try:
+   probe=subprocess.run([PYTHON,str(ROOT/'tools'/'android_device_adapters.py')],env=env,capture_output=True,text=True,timeout=35)
+   devices=json.loads(probe.stdout) if probe.returncode==0 else {}
+   fallback=devices.get('memu_android') or {}
+   memu_ok=all(fallback.get(k) is True for k in ('healthy','ready','authenticated'))
+  except Exception as e:
+   memu_ok=False;log('MEMU_STANDBY_PROBE_ERROR '+str(e)[-200:])
+  if not memu_ok:
+   log('PREFLIGHT_FAILED no authenticated MEmu fallback available')
+   return 75
+  log('FAILOVER_TO_VERIFIED_MEMU_PENDING_LEASE')
  code,d=signed_post('/job/lease',{'executor':EXECUTOR,'platform':'kwai','ttl_seconds':TTL})
  if code//100!=2 or not d.get('ok'):raise RuntimeError(f'lease:{code}:{d}')
  job=d.get('job')
