@@ -3,17 +3,11 @@ account_id = "5c24be052e5144391f73a8e03491e88e"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
 
-[[durable_objects.bindings]]
-name = "GATEWAY_STATE"
-class_name = "GatewayState"
-
+# Current production uses protected stateless signing/OAuth secrets and Neon replay storage.
+# Retain the historical class registration without binding runtime requests to its quota.
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GatewayState"]
-
-[[services]]
-binding = "ARA_CONTROL"
-service = "anthares-ara-backup"
 
 # Requires Cloudflare Email Routing and verified destination.
 [[send_email]]

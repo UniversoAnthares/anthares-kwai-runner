@@ -56,6 +56,8 @@ function Save-State([string]$reason,[int]$agentPid=0){
 }
 try{
   while($true){
+    # Reload rotated device configuration before every supervised agent launch.
+    if(Test-Path $envFile){. $envFile}
     Load-QueueAuth
     if(-not (Queue-Configured)){Save-State 'waiting-for-private-queue-credential';Start-Sleep 15;continue}
     [void](Configure-HttpTransport)
