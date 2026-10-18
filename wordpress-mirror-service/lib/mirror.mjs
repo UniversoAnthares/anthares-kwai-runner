@@ -24,6 +24,7 @@ const network=(url,env)=>({url,http,onAuth:authFor(url,env),headers:{'User-Agent
 async function refs(url,env){return git.listServerRefs({...network(url,env),forPush:url===DESTINATION});}
 async function remoteOid(url,ref,env){return (await refs(url,env)).find(x=>x.ref==='refs/heads/'+ref)?.oid||null;}
 async function fetchRef(dir,url,ref,remote,env,depth){
+ await git.addRemote({...gitOptions(dir),remote,url,force:true});
  return git.fetch({...gitOptions(dir),...network(url,env),ref,remote,singleBranch:true,tags:false,...(depth?{depth}:{} )});
 }
 async function localRef(dir,name,oid){await git.writeRef({...gitOptions(dir),ref:'refs/heads/'+name,value:oid,force:true});}
