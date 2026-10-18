@@ -5,8 +5,7 @@
  */
 export const CLAUDE_CALLBACK = 'https://claude.ai/api/mcp/auth_callback';
 export const CLAUDE_CLIENT_IDS = Object.freeze([
-  'https://claude.ai/oauth/mcp-oauth-client-metadata',
-  'https://claude.ai/api/oauth/mcp-oauth-client-metadata'
+  'https://claude.ai/oauth/mcp-oauth-client-metadata'
 ]);
 export function isClaudeClient(id) {
   return CLAUDE_CLIENT_IDS.includes(String(id || ''));
@@ -19,5 +18,5 @@ export function isClaudeCallbackPair(id, uri) {
 }
 export function permittedClaudeScopes(scopes) {
   return Array.isArray(scopes) && scopes.length > 0 &&
-    scopes.every(s => s === 'ara.read');
+    scopes.every(s => s === 'ara.read' || s === 'github.read' || s === 'github.write');
 }
