@@ -82,6 +82,8 @@ def preflight():
   return bool(state=='device' and model==MODEL and 'package:' in pkg and native and touch),s
  except Exception:return False,''
 def heartbeat(healthy,serial='',error=''):
+ if os.getenv('CORTES_QUEUE_BACKEND','cloudflare').strip().lower()=='neon':
+  return 202,{'ok':True,'backend':'vercel-neon','cloudflare_heartbeat_skipped':True}
  payload={'executor':EXECUTOR,'healthy':bool(healthy),'failures':0 if healthy else 1,'host':socket.gethostname(),'platform':'android','model':MODEL,'adb_serial':serial,'capabilities':['kwai'],'daily_limit':100,'expected_accounts':[EXPECTED_ACCOUNT]}
  if error:payload['last_error']=error[-300:]
  return signed_post('/heartbeat',payload)
