@@ -34,6 +34,7 @@ from android_device_adapters import AndroidExecutorRouter, ensure_memu_transport
 STATE_PATH = pathlib.Path(os.getenv("ANTHARES_ANDROID_HEALTH_STATE", str(ROOT / ".state" / "android-device-health.json")))
 ACK_PATH = pathlib.Path(os.getenv("ANTHARES_ANDROID_ACK_STATE", str(ROOT / ".state" / "android-publish-ack.json")))
 PHYSICAL_SAFE = ROOT / "tools" / "kwai_native_cortes.py"
+MEMU_SAFE = ROOT / "tools" / "kwai_memu_queue_safe.py"
 
 DEVICE_PATTERNS = re.compile(
     r"(?:\badb\b|device offline|no devices?|transport|uiautomator|profile-tab-missing|"
@@ -312,6 +313,27 @@ def run_memu(media: pathlib.Path) -> tuple[bool, str, str]:
     return False, classify_failure(out, rc), out
 
 
+def prepare_memu(media):
+    env=os.environ.copy()
+    job=required('KWAI_QUEUE_JOB_ID')
+    env.update({'KWAI_UP_JOB_ID':job,'KWAI_UP_MEDIA':str(media),
+        'KWAI_UP_ADB_SERIAL':required('ANTHARES_MEMU_ADB_SERIAL'),
+        'KWAI_UP_PACKAGE':'com.kwai.video',
+        'KWAI_UP_EXPECTED_ACCOUNT':os.getenv('KWAI_EXPECTED_ACCOUNT','lucasrosalem'),
+        'KWAI_UP_CAPTION':os.getenv('KWAI_VIDEO_TITLE',''),
+        'KWAI_UP_MEDIA_SHA256':os.getenv('KWAI_MEDIA_SHA256',''),
+        'KWAI_UP_ARTIFACT_DIR':str(ROOT/'.state'/'kwai-memu-evidence'/re.sub(r'[^A-Za-z0-9._-]+','_',job)[-100:])})
+    adb=os.getenv('ANTHARES_ADB','').strip()
+    if adb:env['PATH']=str(pathlib.Path(adb).parent)+os.pathsep+env.get('PATH','')
+    rc,out=run_process([sys.executable,str(MEMU_SAFE),'prepare'],env)
+    return rc==0 and 'KWAI_UP_STATE=READY_TO_PUBLISH' in out,out,env
+
+
+def commit_memu(env):
+    rc,out=run_process([sys.executable,str(MEMU_SAFE),'commit'],env,timeout=480)
+    return rc==0 and 'KWAI_UP_STATE=VERIFIED' in out,out
+
+
 def finalize_verified_publish(job_id: str, executor: str) -> int:
     mark_pending_ack(job_id, executor)
     ok, detail = queue_callback("complete", executor)
@@ -367,6 +389,13 @@ def main() -> int:
             else:
                 prepare_out = detail
 
+        memu_env_data=None
+        if selected == 'memu_android':
+            prepared,detail,memu_env_data=prepare_memu(media)
+            if not prepared:
+                print('KWAI_DEVICE_STATE=FAILED_MEMU_PREPARE_NO_PUBLICATION',flush=True)
+                return 82
+
         # Central STARTED is the fence immediately before any irreversible action.
         started, started_detail = queue_callback("started", selected)
         if not started:
@@ -384,7 +413,8 @@ def main() -> int:
             return finalize_verified_publish(job_id, "physical_android")
 
         if selected == "memu_android":
-            ok, failure_class, detail = run_memu(media)
+            ok, detail = commit_memu(memu_env_data)
+            failure_class='' if ok else 'uncertain'
             record_result(history, "memu_android", ok, failure_class, detail)
             if ok:
                 rc = finalize_verified_publish(job_id, "memu_android")
