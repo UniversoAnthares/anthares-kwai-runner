@@ -1,0 +1,16 @@
+name = "anthares-wordpress-mirror-scheduler"
+account_id = "5c24be052e5144391f73a8e03491e88e"
+main = "worker.mjs"
+compatibility_date = "2026-10-01"
+preview_urls = false
+
+[[kv_namespaces]]
+binding = "MIRROR_STATUS"
+id = "86eab037e16a47f7b7a81363160b1a59"
+
+# Native scheduler acceptance passed before reducing production cadence to hourly.
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+VALIDATION_REF = ""
