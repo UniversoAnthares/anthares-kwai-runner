@@ -17,10 +17,10 @@ method=""" async cleanupCortesLegacy(){
   const removed=[],protectedJobs=[];
   const current=Date.now();
   for(const j of candidates){
-    const safe=j.status==='queued'||j.status==='failed'||(j.status==='leased'&&!j.publication_started&&Number(j.lease_until||0)<current);
+    const safe=!j.publication_started&&(j.status==='queued'||j.status==='failed'||(j.status==='leased'&&Number(j.lease_until||0)<current));
     if(!safe){protectedJobs.push({id:j.id,status:j.status});continue;}
     this.sql.exec("DELETE FROM jobs WHERE id=? AND status=? AND COALESCE(publication_started,0)=0",j.id,j.status);
-    removed.push(j.id);
+    if(!this.one(j.id))removed.push(j.id);
   }
   return {ok:true,removed_count:removed.length,removed_ids:removed,protected_count:protectedJobs.length,protected_jobs:protectedJobs,cutoff};
  }
