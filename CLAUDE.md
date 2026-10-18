@@ -21,8 +21,8 @@ This repository participates in a distributed system. Claude must read `AGENTS.m
 - Keep independent work scoped: a code-review task must not start a real Kwai/TikTok publication as an audit probe.
 
 ## Claude Free connector state
-- Claude.ai Free supports one remote custom MCP connector. Current staged OAuth acceptance is read-only (`ara.read`) and requires deployment and owner OAuth approval.
+- Claude.ai Free supports one remote custom MCP connector. Staged OAuth grants `ara.read`, `github.read`, and narrowly scoped `github.write` when requested; Claude never receives `ara.write`. Deployment and owner OAuth approval remain necessary.
 - Current production MCP and its ChatGPT client pin must be preserved.
 - The built-in Claude GitHub content connector is context/read oriented; it is not equivalent to a GitHub write agent.
-- GitHub editing through Claude remains blocked until a separate scoped GitHub write tool, credential storage, branch/PR fencing, and tests are deployed.
+- GitHub tools are staged in `cloudflare-ara-mcp/src/github-bridge.mjs`; writes remain blocked until Cloudflare receives the server-side secret `ANTHARES_GITHUB_TOKEN`. Only approved repositories, `claude/*` branches, live Test Hub leases, expected HEAD/file SHA and draft PRs are authorized.
 - Never claim integration completed based only on source code, a branch, or PR.
