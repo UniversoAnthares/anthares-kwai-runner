@@ -338,7 +338,8 @@ def prepare_memu(media):
         'KWAI_UP_ADB_SERIAL':required('ANTHARES_MEMU_ADB_SERIAL'),
         'KWAI_UP_PACKAGE':'com.kwai.video',
         'KWAI_UP_EXPECTED_ACCOUNT':os.getenv('KWAI_EXPECTED_ACCOUNT','lucasrosalem'),
-        'KWAI_UP_CAPTION':memu_caption_input(os.getenv('KWAI_VIDEO_TITLE','')),
+        'KWAI_UP_CAPTION':str(os.getenv('KWAI_VIDEO_TITLE','')).strip()[:150] or 'Universo Anthares',
+        'KWAI_UP_UIAUTOMATOR_JAR':os.getenv('ANTHARES_MEMU_UIAUTOMATOR_JAR', r'D:\AntharsWork\temp\anthares-kwai-ui-bridge\kwai-uiautomator-driver.jar'),
         'KWAI_UP_MEDIA_SHA256':os.getenv('KWAI_MEDIA_SHA256',''),
         'KWAI_UP_ARTIFACT_DIR':str(ROOT/'.state'/'kwai-memu-evidence'/re.sub(r'[^A-Za-z0-9._-]+','_',job)[-100:])})
     adb=os.getenv('ANTHARES_ADB','').strip()
