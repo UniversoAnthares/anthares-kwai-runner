@@ -76,6 +76,7 @@ class SafePublisher(ku.Publisher):
         self.tap_node(tab)
         deadline = time.time() + 40
         last_blob = ""
+        attempts = 0
         while time.time() < deadline:
             nodes = self.dismiss_known_overlays(self.dump("06-auth-profile"), "06-auth-profile")
             last_blob = ku.text_blob(nodes)
@@ -84,6 +85,14 @@ class SafePublisher(ku.Publisher):
             if pattern.search(last_blob.casefold()):
                 self.emit("AUTHENTICATED_IDENTITY", account=expected.lstrip("@"))
                 return 0
+            # The Kwai feed intermittently ignores the first tap on Profile.
+            # Retry the *same* known tab when the UI proves we are still
+            # on the home feed; never infer account identity from a timeout.
+            attempts += 1
+            if attempts % 2 == 0:
+                next_tab = self.profile_tab(nodes)
+                if next_tab is not None:
+                    self.tap_node(next_tab, 1)
             time.sleep(2)
         raise ku.KwaiUpError("authenticated-identity-unverified")
 
