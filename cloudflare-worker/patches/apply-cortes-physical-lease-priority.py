@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Restrict physical Android Kwai leases to CORTES jobs without deleting legacy jobs.
+"""Scope Android physical leases to current CORTES and its verified Kwai account.
 
-Applied *after* canonical v18 patches and before Cloudflare deployment.
-Other executors retain their pre-existing queue ordering and semantics.
+Runs after publisher-target v17 and physical Android v18 migrations.
+Old/non-CORTES jobs and their historical records remain unchanged.
 """
 from pathlib import Path
 p=Path(__file__).resolve().parents[1]/"src"/"index.js"
 s=p.read_text(encoding="utf-8-sig")
-old='const j=this.sql.exec("SELECT * FROM jobs WHERE platform=? AND status=\'queued\' AND attempts<? ORDER BY created_at LIMIT 1",b.platform,MAX_ATTEMPTS).toArray()[0];'
-new=('const leaseSql=(b.executor==="physical_android"&&b.platform==="kwai")'
-     '? "SELECT * FROM jobs WHERE platform=? AND status=\'queued\' AND attempts<? AND id LIKE \'kwai-cortes-%\' ORDER BY created_at LIMIT 1"'
-     ': "SELECT * FROM jobs WHERE platform=? AND status=\'queued\' AND attempts<? ORDER BY created_at LIMIT 1";'
-     ' const j=this.sql.exec(leaseSql,b.platform,MAX_ATTEMPTS).toArray()[0];')
+old='  const candidates=this.sql.exec("SELECT q.* FROM jobs q WHERE q.platform=? AND q.status=\'queued\' AND q.attempts<? AND NOT EXISTS (SELECT 1 FROM jobs a WHERE a.platform=q.platform AND a.account_id=q.account_id AND a.id<>q.id AND ((a.status=\'leased\' AND a.lease_until>?) OR (a.status=\'uncertain\' AND a.publication_started=1))) ORDER BY q.created_at,q.id LIMIT 200",b.platform,MAX_ATTEMPTS,t).toArray();'
+new="""  if(b.executor==="physical_android"&&b.platform==="kwai"){
+    this.sql.exec("UPDATE jobs SET account_id='lucasrosalem' WHERE platform='kwai' AND id LIKE 'kwai-cortes-%' AND status='queued' AND account_id='default'");
+  }
+  const candidates=this.sql.exec("SELECT q.* FROM jobs q WHERE q.platform=? AND q.status='queued' AND q.attempts<? AND NOT EXISTS (SELECT 1 FROM jobs a WHERE a.platform=q.platform AND a.account_id=q.account_id AND a.id<>q.id AND ((a.status='leased' AND a.lease_until>?) OR (a.status='uncertain' AND a.publication_started=1))) AND (? <> 'physical_android' OR q.id LIKE 'kwai-cortes-%') ORDER BY q.created_at,q.id LIMIT 200",b.platform,MAX_ATTEMPTS,t,b.executor).toArray();"""
 if new in s:
     print("CORTES_PHYSICAL_LEASE_PRIORITY_ALREADY_APPLIED=1")
 elif s.count(old)==1:
