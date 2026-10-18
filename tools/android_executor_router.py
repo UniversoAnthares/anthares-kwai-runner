@@ -39,7 +39,7 @@ def _provider_usable(provider, meta, state, workload, limit):
         return False
     if not isinstance(state, dict):
         return False
-    if state.get("disabled") is True or state.get("busy") is True:
+    if state.get("disabled") is True or state.get("busy") is True or state.get("online") is False:
         return False
     if state.get("healthy") is not True or state.get("ready") is not True:
         return False
