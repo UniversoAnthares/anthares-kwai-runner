@@ -19,6 +19,10 @@ export function classify(source,destination,sourceInDestination,destinationInSou
  return 'MERGE_REQUIRED';
 }
 const gitOptions=(dir)=>({fs,dir,cache:{}});
+async function cleanup(dir){
+ const resolved=path.resolve(dir);if(path.dirname(resolved)!==path.resolve(os.tmpdir())||!/^anthares-(wordpress-mirror|mirror-status)-/.test(path.basename(resolved)))throw new MirrorError('UNSAFE_TEMP_DIRECTORY');
+ await fs.promises.rm(resolved,{recursive:true,force:true});
+}
 const authFor=(url,env)=>()=>({username:url===SOURCE?'x-access-token':'oauth2',password:url===SOURCE?env.GITHUB_READ_TOKEN:env.GITLAB_WRITE_TOKEN});
 const network=(url,env)=>({url,http,onAuth:authFor(url,env),headers:{'User-Agent':'AntharesWordPressMirror/1.0'}});
 async function refs(url,env){return git.listServerRefs({...network(url,env),forPush:url===DESTINATION});}
@@ -44,7 +48,8 @@ async function acquire(dir,ref,runId,env,trigger){
  const old=await remoteOid(DESTINATION,name,env);
  if(old){await fetchRef(dir,DESTINATION,name,'state',env,1);const record=await readRecord(dir,old);if(record.state==='running'&&Number(record.expires_at)>Date.now())throw new MirrorError('LOCK_BUSY');}
  const record={state:'running',run_id:runId,ref,started_at:new Date().toISOString(),expires_at:Date.now()+600000,trigger};
- const oid=await stateCommit(dir,old,record);await pushExpected(dir,name,oid,old,env);
+ const oid=await stateCommit(dir,old,record);
+ try{await pushExpected(dir,name,oid,old,env);}catch(error){if(error.code==='DESTINATION_CHANGED'||error.code==='PushRejectedError')throw new MirrorError('LOCK_BUSY');throw error;}
  return {name,oid,record};
 }
 async function release(dir,lock,result,env){
@@ -85,7 +90,11 @@ export async function synchronize({env=process.env,ref='main',trigger={type:'man
  try{
   await git.init({...gitOptions(dir),defaultBranch:'work'});
   lock=await acquire(dir,ref,runId,env,trigger);
-  if(fault==='authentication')throw new MirrorError('CONTROLLED_AUTH_FAILURE');
+  if(fault==='authentication'){
+   try{await refs(SOURCE,{...env,GITHUB_READ_TOKEN:'controlled-invalid-token'});}
+   catch(error){if([401,403].includes(error.data?.statusCode))throw new MirrorError('CONTROLLED_AUTH_REJECTED');throw new MirrorError('CONTROLLED_AUTH_TRANSPORT_FAILED');}
+   throw new MirrorError('NEGATIVE_AUTH_NOT_REJECTED');
+  }
   const source=await remoteOid(SOURCE,ref,env);
   if(!source)throw new MirrorError('SOURCE_REF_MISSING');
   const destination=await remoteOid(DESTINATION,ref,env);
@@ -111,15 +120,15 @@ export async function synchronize({env=process.env,ref='main',trigger={type:'man
   const sourceCommit=(await git.readCommit({...gitOptions(dir),oid:source})).commit;
   if(actual!==source&&!await git.isDescendent({...gitOptions(dir),oid:actual,ancestor:source}))throw new MirrorError('SOURCE_HISTORY_NOT_PRESERVED');
   if(destination&&actual!==destination&&!await git.isDescendent({...gitOptions(dir),oid:actual,ancestor:destination}))throw new MirrorError('DESTINATION_HISTORY_NOT_PRESERVED');
-  result={ok:true,run_id:runId,ref,outcome:next.kind,source_head:source,destination_before:destination,destination_head:actual,source_tree:sourceCommit.tree,destination_tree:commit.tree,changed_paths:changes,backup_ref:backup,duration_ms:Date.now()-began};
+  result={ok:true,run_id:runId,ref,outcome:next.kind,source_head:source,destination_before:destination,destination_head:actual,source_tree:sourceCommit.tree,destination_tree:commit.tree,changed_paths:changes,backup_ref:backup,executor:env.GITHUB_ACTIONS?'github-actions':env.VERCEL?'vercel':'local-validation',executor_revision:env.VERCEL_GIT_COMMIT_SHA||env.GITHUB_SHA||null,duration_ms:Date.now()-began};
  }catch(error){result={ok:false,run_id:runId,ref,error:String(error.code||'SYNC_FAILED').slice(0,100),duration_ms:Date.now()-began};}
  try{if(lock)result.audit_commit=await release(dir,lock,result,env);}catch{result.audit_error='AUDIT_WRITE_FAILED';}
- await fs.promises.rm(dir,{recursive:true,force:true});
+ await cleanup(dir);
  return result;
 }
 export async function latest({env=process.env,ref='main'}={}){
  if(!validRef(ref))throw new MirrorError('REF_NOT_ALLOWED');
  const dir=await fs.promises.mkdtemp(path.join(os.tmpdir(),'anthares-mirror-status-'));
  try{await git.init({...gitOptions(dir)});const name='mirror-state/wordpress/'+ref.replaceAll('/','-');const oid=await remoteOid(DESTINATION,name,env);if(!oid)return{state:'never_run',ref};await fetchRef(dir,DESTINATION,name,'state',env,1);return{...(await readRecord(dir,oid)),audit_commit:oid};}
- finally{await fs.promises.rm(dir,{recursive:true,force:true});}
+ finally{await cleanup(dir);}
 }

@@ -1,0 +1,44 @@
+name: WordPress Safe Mirror Fallback
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: main or isolated validation branch
+        required: true
+        default: main
+      fault:
+        description: Optional authentication failure probe (validation branch only)
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: wordpress-safe-mirror-${{ inputs.ref }}
+  cancel-in-progress: false
+jobs:
+  mirror:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: wordpress-mirror
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          sparse-checkout: wordpress-mirror-service
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Install reviewed dependencies without lifecycle scripts
+        working-directory: wordpress-mirror-service
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify preservation and conflict behavior
+        working-directory: wordpress-mirror-service
+        run: npm test
+      - name: Execute the same fenced mirror independently of Vercel
+        working-directory: wordpress-mirror-service
+        env:
+          GITHUB_READ_TOKEN: ${{ secrets.WORDPRESS_MIRROR_GITHUB_READ_TOKEN }}
+          GITLAB_WRITE_TOKEN: ${{ secrets.WORDPRESS_MIRROR_GITLAB_WRITE_TOKEN }}
+          MIRROR_REF: ${{ inputs.ref }}
+          MIRROR_FAULT: ${{ inputs.fault }}
+        run: node cli.mjs sync "$MIRROR_REF" "$MIRROR_FAULT"
