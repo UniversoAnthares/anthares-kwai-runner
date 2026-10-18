@@ -110,6 +110,28 @@ def callback(op):
   if st.get('state')!='verified':raise RuntimeError('profile-not-verified')
   qpost('complete',{'id':jid,'lease_generation':gen,'confirmed':True,**evidence(jid)});return 0
  raise RuntimeError('bad-callback')
+def wp_notify(job,status,remote_id='',error=''):
+ """Update authoritative CORTES WordPress record after queue publication proof."""
+ url=str(job.get('cortes_callback_url') or '')
+ token=str(job.get('cortes_callback_token') or '')
+ if not url or not token or '/cortes/clip-network-callback' not in url:
+  raise RuntimeError('cortes-callback-contract-missing')
+ b={'video_id':str(job.get('cortes_video_id') or job.get('source_id') or ''),
+    'clip_id':str(job.get('cortes_clip_id') or job.get('segment_id') or ''),
+    'attachment_id':int(job.get('cortes_attachment_id') or 0),
+    'network':'kwai','status':status,'remote_id':remote_id,'error':error[:400],
+    'token':token}
+ raw=compact(b).encode('utf-8')
+ req=urllib.request.Request(url,data=raw,method='POST',headers={
+  'Content-Type':'application/json','Accept':'application/json',
+  'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36'})
+ with urllib.request.urlopen(req,timeout=30) as response:
+  data=json.load(response)
+ if not isinstance(data,dict) or not data.get('ok'):
+  raise RuntimeError('cortes-callback-not-confirmed')
+ log('CORTES_WP_CALLBACK_OK '+str(job.get('id'))+' status='+status)
+
+
 def mark_ack(jid):
  try:d=json.loads(ACK.read_text(encoding='utf-8'))
  except Exception:d={}
@@ -135,9 +157,18 @@ def process(job,serial):
  p=subprocess.run([PYTHON,str(WORKER)],env=env,cwd=str(ROOT),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=1200,check=False)
  if p.stdout:
   for line in p.stdout.splitlines()[-80:]:log('WORKER '+line)
- if p.returncode==0:log('JOB_OK '+jid);return
+ if p.returncode==0:
+  log('JOB_OK '+jid)
+  try:wp_notify(job,'completed',evidence(jid)['remote_id'])
+  except Exception as e:log('CORTES_WP_CALLBACK_PENDING '+jid+' '+type(e).__name__)
+  return
  if p.returncode==91:
-  try:qpost('complete',{'id':jid,'lease_generation':gen,'confirmed':True,**evidence(jid)});mark_ack(jid);log('JOB_ACK_REPAIRED '+jid);return
+  try:
+   qpost('complete',{'id':jid,'lease_generation':gen,'confirmed':True,**evidence(jid)})
+   mark_ack(jid)
+   try:wp_notify(job,'completed',evidence(jid)['remote_id'])
+   except Exception as e:log('CORTES_WP_CALLBACK_PENDING '+jid+' '+type(e).__name__)
+   log('JOB_ACK_REPAIRED '+jid);return
   except Exception as e:log('JOB_ACK_PENDING '+jid+' '+str(e)[-200:]);return
  possible=p.returncode==90 or 'UNCERTAIN' in (p.stdout or '')
  try:qpost('fail',{'id':jid,'lease_generation':gen,'error_class':'uncertain' if possible else 'physical_android','error_message':(p.stdout or '')[-450:],'published_possible':possible})
