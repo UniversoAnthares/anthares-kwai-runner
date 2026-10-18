@@ -51,7 +51,7 @@ public final class KwaiUiDriver extends UiAutomatorTestCase {
         } else if ("setFirstEditText".equals(action)) {
             // Atomic accessibility text replacement, independent of the
             // Android IME's unreliable 'input text' and UiObject.setText.
-            UiAutomation automation = getInstrumentation().getUiAutomation();
+            UiAutomation automation = findInstrumentation().getUiAutomation();
             AccessibilityNodeInfo root = automation.getRootInActiveWindow();
             AccessibilityNodeInfo edit = findResource(root, "com.kwai.video.basis:id/editor");
             require(edit != null && edit.isEnabled(), "Kwai editor not visible");
@@ -68,6 +68,25 @@ public final class KwaiUiDriver extends UiAutomatorTestCase {
         }
         device.waitForIdle(2000);
         System.out.println("ANTHARES_UI_OK action=" + action);
+    }
+
+    // The SDK18 android.jar stub omits the inherited InstrumentationTestCase
+    // method even though the Android platform UIAutomator runner supplies it.
+    // Android 25 permits this bounded reflection on the known test superclass.
+    private android.app.Instrumentation findInstrumentation() throws Exception {
+        for (Class<?> type = getClass(); type != null; type = type.getSuperclass()) {
+            try {
+                java.lang.reflect.Method getter = type.getDeclaredMethod("getInstrumentation");
+                getter.setAccessible(true);
+                Object resolved = getter.invoke(this);
+                if (resolved instanceof android.app.Instrumentation) {
+                    return (android.app.Instrumentation) resolved;
+                }
+            } catch (NoSuchMethodException ignored) {
+                // Continue through UiAutomatorTestCase -> InstrumentationTestCase.
+            }
+        }
+        throw new IllegalStateException("instrumentation-unavailable");
     }
 
     private static AccessibilityNodeInfo findResource(AccessibilityNodeInfo root, String id) {
