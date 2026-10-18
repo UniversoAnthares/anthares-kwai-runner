@@ -1,7 +1,6 @@
 package us.anthares.tools;
 
 import android.os.Bundle;
-import android.app.UiAutomation;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.util.ArrayDeque;
 import android.util.Base64;
@@ -51,8 +50,7 @@ public final class KwaiUiDriver extends UiAutomatorTestCase {
         } else if ("setFirstEditText".equals(action)) {
             // Atomic accessibility text replacement, independent of the
             // Android IME's unreliable 'input text' and UiObject.setText.
-            UiAutomation automation = findInstrumentation().getUiAutomation();
-            AccessibilityNodeInfo root = automation.getRootInActiveWindow();
+            AccessibilityNodeInfo root = activeRoot();
             AccessibilityNodeInfo edit = findResource(root, "com.kwai.video.basis:id/editor");
             require(edit != null && edit.isEnabled(), "Kwai editor not visible");
             Bundle args = new Bundle();
@@ -60,7 +58,7 @@ public final class KwaiUiDriver extends UiAutomatorTestCase {
             require(edit.performAction(0x200000, args), "ACTION_SET_TEXT failed");
             Thread.sleep(900);
             AccessibilityNodeInfo refreshed = findResource(
-                automation.getRootInActiveWindow(), "com.kwai.video.basis:id/editor");
+                activeRoot(), "com.kwai.video.basis:id/editor");
             require(refreshed != null && value.contentEquals(refreshed.getText()),
                     "ACTION_SET_TEXT not persisted in editor");
         } else {
@@ -70,23 +68,26 @@ public final class KwaiUiDriver extends UiAutomatorTestCase {
         System.out.println("ANTHARES_UI_OK action=" + action);
     }
 
-    // The SDK18 android.jar stub omits the inherited InstrumentationTestCase
-    // method even though the Android platform UIAutomator runner supplies it.
-    // Android 25 permits this bounded reflection on the known test superclass.
-    private android.app.Instrumentation findInstrumentation() throws Exception {
-        for (Class<?> type = getClass(); type != null; type = type.getSuperclass()) {
-            try {
-                java.lang.reflect.Method getter = type.getDeclaredMethod("getInstrumentation");
-                getter.setAccessible(true);
-                Object resolved = getter.invoke(this);
-                if (resolved instanceof android.app.Instrumentation) {
-                    return (android.app.Instrumentation) resolved;
-                }
-            } catch (NoSuchMethodException ignored) {
-                // Continue through UiAutomatorTestCase -> InstrumentationTestCase.
-            }
+    // The on-device legacy UiDevice holds the initialized UiAutomatorBridge.
+    // Resolve only that bridge and its read-only active-window root.
+    private AccessibilityNodeInfo activeRoot() throws Exception {
+        UiDevice device = getUiDevice();
+        Object bridge = null;
+        try {
+            java.lang.reflect.Method method = device.getClass().getDeclaredMethod("getAutomatorBridge");
+            method.setAccessible(true);
+            bridge = method.invoke(device);
+        } catch (NoSuchMethodException ignored) {
+            // Earlier Android framework revisions use a private field.
         }
-        throw new IllegalStateException("instrumentation-unavailable");
+        if (bridge == null) {
+            java.lang.reflect.Field field = device.getClass().getDeclaredField("mUiAutomationBridge");
+            field.setAccessible(true);
+            bridge = field.get(device);
+        }
+        require(bridge != null, "UIAutomator bridge unavailable");
+        java.lang.reflect.Method method = bridge.getClass().getMethod("getRootInActiveWindow");
+        return (AccessibilityNodeInfo) method.invoke(bridge);
     }
 
     private static AccessibilityNodeInfo findResource(AccessibilityNodeInfo root, String id) {
