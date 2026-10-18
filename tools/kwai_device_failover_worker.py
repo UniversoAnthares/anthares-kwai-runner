@@ -269,22 +269,29 @@ def verify_memu_standby_identity() -> bool:
     script = ROOT / "kwai-up" / "kwai_up_safe.py"
     if not script.is_file():
         return False
-    try:
-        result = subprocess.run([sys.executable, str(script), "auth"], cwd=str(ROOT),
-                                env=env, capture_output=True, text=True, timeout=95, check=False)
-        output = result.stdout or ""
-        verified = (
-            result.returncode == 0
-            and "AUTHENTICATED_IDENTITY" in output
-            and env["KWAI_UP_EXPECTED_ACCOUNT"].lower().lstrip("@") in output.lower()
-        )
-        if verified:
-            os.environ["ANTHARES_MEMU_KWAI_AUTHENTICATED"] = "true"
-        print("KWAI_MEMU_STANDBY_IDENTITY=" + ("VERIFIED" if verified else "NOT_VERIFIED"), flush=True)
-        return verified
-    except (OSError, subprocess.SubprocessError):
-        print("KWAI_MEMU_STANDBY_IDENTITY=UNAVAILABLE", flush=True)
-        return False
+    for attempt in range(1, 3):
+        try:
+            result = subprocess.run([sys.executable, str(script), "auth"], cwd=str(ROOT),
+                                    env=env, capture_output=True, text=True, timeout=95, check=False)
+            output = result.stdout or ""
+            verified = (
+                result.returncode == 0
+                and "AUTHENTICATED_IDENTITY" in output
+                and env["KWAI_UP_EXPECTED_ACCOUNT"].lower().lstrip("@") in output.lower()
+            )
+            if verified:
+                os.environ["ANTHARES_MEMU_KWAI_AUTHENTICATED"] = "true"
+                print("KWAI_MEMU_STANDBY_IDENTITY=VERIFIED ATTEMPT=" + str(attempt), flush=True)
+                return True
+            print("KWAI_MEMU_STANDBY_AUTH_RETRY ATTEMPT=" + str(attempt)
+                  + " RC=" + str(result.returncode), flush=True)
+        except (OSError, subprocess.SubprocessError):
+            print("KWAI_MEMU_STANDBY_AUTH_RETRY ATTEMPT=" + str(attempt)
+                  + " ERROR=probe_unavailable", flush=True)
+        if attempt == 1:
+            time.sleep(3)
+    print("KWAI_MEMU_STANDBY_IDENTITY=NOT_VERIFIED", flush=True)
+    return False
 
 
 def memu_publisher() -> pathlib.Path:
