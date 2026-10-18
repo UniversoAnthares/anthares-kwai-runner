@@ -250,7 +250,16 @@ class Publisher:
 
     def dump(self, stage: str, screenshot: bool = True) -> list[dict[str, str]]:
         remote = f"/sdcard/kwaiup-{safe_token(stage)}.xml"
-        self.adb.run("shell", "uiautomator", "dump", remote)
+        # Android may transiently terminate uiautomator with exit 137 under
+        # memory pressure. Retry only the read-only UI dump, never publication.
+        for attempt in range(3):
+            try:
+                self.adb.run("shell", "uiautomator", "dump", remote)
+                break
+            except KwaiUpError as exc:
+                if "adb rc=137" not in str(exc) or attempt == 2:
+                    raise
+                time.sleep(3 * (attempt + 1))
         xml = self.adb.binary("exec-out", "cat", remote)
         (self.cfg.artifacts / f"{stage}.xml").write_bytes(xml)
         if screenshot:
