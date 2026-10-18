@@ -15,7 +15,7 @@ ADB=os.getenv('ANTHARES_ADB',r'C:\Users\Lucas\.kwai-up\platform-tools\adb.exe')
 ADB_KEYS=os.getenv('ADB_VENDOR_KEYS',r'C:\Users\Lucas\.android')
 PRIVATE_KEY=pathlib.Path(os.getenv('ANTHARES_PHYSICAL_EXECUTOR_KEY',r'D:\AntharesWork\anthares-clipper\local-control\executor-private-current.pem'))
 WORKER=ROOT/'tools'/'kwai_device_failover_worker.py'; ACK=ROOT/'.state'/'android-publish-ack.json'; PUBSTATE=ROOT/'.state'/'kwai-native-cortes'
-LOGDIR=ROOT/'.state'; LOG=LOGDIR/'kwai-physical-queue.log'; LOCK=LOGDIR/'kwai-physical-queue.lock'
+LOGDIR=ROOT/'.state'; LOG=LOGDIR/'kwai-physical-queue.log'; LOCK=LOGDIR/'kwai-physical-queue.lock'; MAINTENANCE=LOGDIR/'cortes-publisher-maintenance.pause'
 TTL=3600; POLL=20
 WP_PENDING=LOGDIR/'cortes-wp-callback-pending.json'
 _key=None
@@ -234,6 +234,9 @@ def memu_identity_proven():
 
 
 def once():
+ if MAINTENANCE.exists():
+  log('QUEUE_PAUSED_MAINTENANCE no_lease=1')
+  return 0
  repair_pending(); repair_wp_callbacks(); healthy,serial=preflight(); heartbeat(healthy,serial,'' if healthy else 'android-preflight-failed')
  if not healthy:
   # Only consume CORTES work when a tested, authenticated MEmu standby is
@@ -255,6 +258,9 @@ def once():
    log('PREFLIGHT_FAILED no authenticated MEmu fallback available')
    return 75
   log('FAILOVER_TO_VERIFIED_MEMU_PENDING_LEASE')
+ if MAINTENANCE.exists():
+  log('QUEUE_PAUSED_MAINTENANCE_BEFORE_LEASE no_lease=1')
+  return 0
  code,d=signed_post('/job/lease',{'executor':EXECUTOR,'platform':'kwai','ttl_seconds':TTL})
  if code//100!=2 or not d.get('ok'):queue_failure('lease',code,d)
  job=d.get('job')
@@ -292,11 +298,15 @@ def daemon():
     except Exception:pass
    time.sleep(delay)
  finally:os.close(fd);LOCK.unlink(missing_ok=True)
+def single_run():
+ fd=lock()
+ try:return once()
+ finally:os.close(fd);LOCK.unlink(missing_ok=True)
 def main():
  if len(sys.argv)>=3 and sys.argv[1]=='queue-op':return callback(sys.argv[2])
  if len(sys.argv)>=2 and sys.argv[1]=='heartbeat-once':
   h,s=preflight();code,d=heartbeat(h,s,'' if h else 'android-preflight-failed');print(compact({'http':code,'response':d,'healthy':h,'serial':s}));return 0 if code//100==2 and d.get('ok') else 1
- if len(sys.argv)>=2 and sys.argv[1]=='once':return once()
+ if len(sys.argv)>=2 and sys.argv[1]=='once':return single_run()
  if len(sys.argv)>=2 and sys.argv[1]=='daemon':return daemon() or 0
  print('usage: kwai_physical_queue_daemon.py daemon|once|heartbeat-once|queue-op OP');return 2
 if __name__=='__main__':raise SystemExit(main())
