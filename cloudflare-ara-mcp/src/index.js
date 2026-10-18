@@ -544,7 +544,7 @@ var index_default = { async fetch(req, env) {
       if (rpc.method === "notifications/initialized" || String(rpc.method || "").startsWith("notifications/")) return new Response(null, { status: 202 });
       if (rpc.method === "initialize") return rpcResult(rpc.id, { protocolVersion: rpc.params?.protocolVersion || "2025-06-18", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Anthares Remote", version: "1.0.1" } });
       if (rpc.method === "ping") return rpcResult(rpc.id, {});
-      if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS });
+      if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS.filter(t => token.scp.includes(WRITE_TOOLS.has(t.name) ? "ara.write" : "ara.read")) });
       if (rpc.method === "tools/call") {
         const name = rpc.params?.name || "";
         const required = WRITE_TOOLS.has(name) ? "ara.write" : "ara.read";
