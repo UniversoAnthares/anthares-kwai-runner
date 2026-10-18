@@ -143,6 +143,26 @@ def process(job,serial):
  try:qpost('fail',{'id':jid,'lease_generation':gen,'error_class':'uncertain' if possible else 'physical_android','error_message':(p.stdout or '')[-450:],'published_possible':possible})
  except Exception as e:log('QUEUE_FAIL_CALLBACK_ERROR '+jid+' '+str(e)[-200:])
  log(f'JOB_FAILED {jid} rc={p.returncode} possible={possible}')
+def memu_identity_proven():
+ """Read-only Kwai account check. Never infer login from app installation."""
+ env=os.environ.copy()
+ serial=env.get('ANTHARES_MEMU_ADB_SERIAL','127.0.0.1:21543')
+ env.update({'KWAI_UP_ADB_SERIAL':serial,'KWAI_UP_PACKAGE':'com.kwai.video',
+             'KWAI_UP_EXPECTED_ACCOUNT':EXPECTED_ACCOUNT,'ADB_VENDOR_KEYS':ADB_KEYS})
+ env['PATH']=str(pathlib.Path(ADB).parent)+os.pathsep+env.get('PATH','')
+ script=ROOT/'kwai-up'/'kwai_up_safe.py'
+ if not script.is_file():return False
+ try:
+  p=subprocess.run([PYTHON,str(script),'auth'],env=env,stdout=subprocess.PIPE,
+                   stderr=subprocess.STDOUT,text=True,timeout=95,check=False)
+  ok=p.returncode==0 and 'KWAI_UP_STATE=AUTHENTICATED_IDENTITY' in (p.stdout or '') and EXPECTED_ACCOUNT in (p.stdout or '').lower()
+  log('MEMU_AUTH_'+('VERIFIED' if ok else 'NOT_VERIFIED')+' rc='+str(p.returncode))
+  return ok
+ except Exception as e:
+  log('MEMU_AUTH_PROBE_ERROR '+type(e).__name__)
+  return False
+
+
 def once():
  repair_pending(); healthy,serial=preflight(); heartbeat(healthy,serial,'' if healthy else 'android-preflight-failed')
  if not healthy:
@@ -151,6 +171,9 @@ def once():
   env=os.environ.copy()
   env.setdefault('ANTHARES_ADB',ADB)
   env.setdefault('ANTHARES_MEMU_ADB_SERIAL','127.0.0.1:21543')
+  if memu_identity_proven():
+   os.environ['ANTHARES_MEMU_KWAI_AUTHENTICATED']='true'
+   env['ANTHARES_MEMU_KWAI_AUTHENTICATED']='true'
   try:
    probe=subprocess.run([PYTHON,str(ROOT/'tools'/'android_device_adapters.py')],env=env,capture_output=True,text=True,timeout=35)
    devices=json.loads(probe.stdout) if probe.returncode==0 else {}
