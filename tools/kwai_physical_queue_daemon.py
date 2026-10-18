@@ -4,6 +4,7 @@ import base64,hashlib,json,os,pathlib,re,socket,subprocess,sys,time,urllib.error
 from cryptography.hazmat.primitives import hashes,serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from android_adb_inventory import online_devices
+from cortes_neon_queue_adapter import signed_legacy_queue_call
 from android_device_adapters import ensure_memu_transport
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
