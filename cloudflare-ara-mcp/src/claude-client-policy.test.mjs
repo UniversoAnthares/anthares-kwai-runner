@@ -24,9 +24,11 @@ test('exact Claude OAuth redirect only', () => {
     assert.equal(isClaudeCallbackPair(CLAUDE_CLIENT_IDS[0], uri), false);
   }
 });
-test('Claude OAuth is read only', () => {
-  assert.equal(permittedClaudeScopes(['ara.read']), true);
-  for (const scopes of [[], ['ara.write'], ['ara.read','ara.write'], ['github.write']]) {
+test('Claude OAuth grants GitHub branch tools while keeping remote control read-only', () => {
+  for (const scopes of [['ara.read'], ['github.read'], ['github.write'],
+    ['ara.read','github.read','github.write']])
+    assert.equal(permittedClaudeScopes(scopes), true);
+  for (const scopes of [[], ['ara.write'], ['ara.read','ara.write'],
+    ['github.write','ara.write'], ['admin']])
     assert.equal(permittedClaudeScopes(scopes), false);
-  }
 });
