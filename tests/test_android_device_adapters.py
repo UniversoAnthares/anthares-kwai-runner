@@ -16,6 +16,8 @@ class Result:
 
 
 def good_run(cmd, **kwargs):
+    if cmd[-2:] == ["getprop", "sys.boot_completed"]:
+        return Result(0, "1\n")
     if cmd[-1] == "get-state":
         return Result(0, "device\n")
     if "pm" in cmd and "path" in cmd:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import hashlib,json,os,pathlib,re,subprocess,sys,time,xml.etree.ElementTree as ET
 from datetime import datetime,timedelta
+from android_adb_inventory import online_devices
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 STATE=ROOT/'.state'/'kwai-native-cortes'; EVID=ROOT/'.state'/'kwai-native-evidence'
@@ -36,14 +37,8 @@ def run(a,timeout=60,check=True,text=True):
 def acmd(serial,*a): return [ADB]+(['-s',serial] if serial else [])+list(a)
 def adb(serial,*a,timeout=60,check=True,text=True): return run(acmd(serial,*a),timeout,check,text)
 def devices():
- p=adb(None,'devices','-l',check=False); rows=[]
- for line in (p.stdout or '').splitlines():
-  if '\tdevice' not in line: continue
-  parts=line.split(); d={'serial':parts[0]}
-  for x in parts[1:]:
-   if ':' in x: k,v=x.split(':',1); d[k]=v
-  rows.append(d)
- return rows
+ p=adb(None,'devices','-l',check=False)
+ return online_devices(p.stdout or '') if p.returncode==0 else []
 def connect():
  for d in devices():
   if d.get('model')==MODEL or (SERIAL_HINT and d['serial']==SERIAL_HINT): return verify_device(d['serial'])

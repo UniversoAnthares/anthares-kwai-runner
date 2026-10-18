@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64,hashlib,json,os,pathlib,re,socket,subprocess,sys,time,urllib.error,urllib.request
 from cryptography.hazmat.primitives import hashes,serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+from android_adb_inventory import online_devices
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 CONTROL=os.getenv('ANTHARES_CONTROL_URL','https://anthares-control.anthares1.workers.dev').rstrip('/')
@@ -14,6 +15,7 @@ PRIVATE_KEY=pathlib.Path(os.getenv('ANTHARES_PHYSICAL_EXECUTOR_KEY',r'D:\Anthare
 WORKER=ROOT/'tools'/'kwai_device_failover_worker.py'; ACK=ROOT/'.state'/'android-publish-ack.json'; PUBSTATE=ROOT/'.state'/'kwai-native-cortes'
 LOGDIR=ROOT/'.state'; LOG=LOGDIR/'kwai-physical-queue.log'; LOCK=LOGDIR/'kwai-physical-queue.lock'
 TTL=3600; POLL=20
+WP_PENDING=LOGDIR/'cortes-wp-callback-pending.json'
 _key=None
 
 def log(msg):
@@ -49,14 +51,8 @@ def adb(*a,timeout=25,check=False):
  env=os.environ.copy(); env['ADB_VENDOR_KEYS']=ADB_KEYS
  return subprocess.run([ADB,*a],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=check,env=env)
 def devices():
- p=adb('devices','-l'); rows=[]
- for line in p.stdout.splitlines():
-  if '\tdevice' not in line:continue
-  parts=line.split(); d={'serial':parts[0]}
-  for x in parts[1:]:
-   if ':' in x:k,v=x.split(':',1);d[k]=v
-  rows.append(d)
- return rows
+ p=adb('devices','-l')
+ return online_devices(p.stdout) if p.returncode==0 else []
 def resolve_serial():
  for d in devices():
   if d.get('model')==MODEL:return d['serial']
@@ -70,7 +66,8 @@ def preflight():
  try:
   s=resolve_serial(); state=adb('-s',s,'get-state').stdout.strip(); model=adb('-s',s,'shell','getprop','ro.product.model').stdout.strip(); pkg=adb('-s',s,'shell','pm','path','kwai.lite.video').stdout
   native=adb('-s',s,'shell','test','-x','/data/local/tmp/anthares-kwai-native.sh').returncode==0
-  return bool(state=='device' and model==MODEL and 'package:' in pkg and native),s
+  touch=adb('-s',s,'shell','test','-x','/data/local/tmp/anthares-hid-tap.sh').returncode==0
+  return bool(state=='device' and model==MODEL and 'package:' in pkg and native and touch),s
  except Exception:return False,''
 def heartbeat(healthy,serial='',error=''):
  payload={'executor':EXECUTOR,'healthy':bool(healthy),'failures':0 if healthy else 1,'host':socket.gethostname(),'platform':'android','model':MODEL,'adb_serial':serial,'capabilities':['kwai'],'daily_limit':100,'expected_accounts':[EXPECTED_ACCOUNT]}
@@ -119,7 +116,7 @@ def wp_notify(job,status,remote_id='',error=''):
  b={'video_id':str(job.get('cortes_video_id') or job.get('source_id') or ''),
     'clip_id':str(job.get('cortes_clip_id') or job.get('segment_id') or ''),
     'attachment_id':int(job.get('cortes_attachment_id') or 0),
-    'network':'kwai','status':status,'remote_id':remote_id,'error':error[:400],
+    'network':'kwai','account_id':EXPECTED_ACCOUNT,'status':status,'remote_id':remote_id,'error':error[:400],
     'token':token}
  raw=compact(b).encode('utf-8')
  req=urllib.request.Request(url,data=raw,method='POST',headers={
@@ -130,6 +127,33 @@ def wp_notify(job,status,remote_id='',error=''):
  if not isinstance(data,dict) or not data.get('ok'):
   raise RuntimeError('cortes-callback-not-confirmed')
  log('CORTES_WP_CALLBACK_OK '+str(job.get('id'))+' status='+status)
+
+def pending_callbacks():
+ try:
+  d=json.loads(WP_PENDING.read_text(encoding='utf-8'))
+  return d if isinstance(d,dict) else {}
+ except FileNotFoundError:return {}
+
+def save_callbacks(rows):
+ WP_PENDING.parent.mkdir(parents=True,exist_ok=True)
+ temp=WP_PENDING.with_suffix('.tmp')
+ temp.write_text(json.dumps(rows,ensure_ascii=False),encoding='utf-8')
+ temp.replace(WP_PENDING)
+
+def notify_completed(job,remote_id):
+ # Persist retry context before calling WordPress; enqueue/central COMPLETE is
+ # not proof that the authoritative source record was updated.
+ rows=pending_callbacks(); rows[str(job['id'])]={'job':job,'remote_id':remote_id};save_callbacks(rows)
+ try:wp_notify(job,'completed',remote_id)
+ except Exception as e:
+  log('CORTES_WP_CALLBACK_PENDING '+str(job['id'])+' '+type(e).__name__)
+  return False
+ rows=pending_callbacks();rows.pop(str(job['id']),None);save_callbacks(rows)
+ return True
+
+def repair_wp_callbacks():
+ for row in list(pending_callbacks().values()):
+  notify_completed(row['job'],row['remote_id'])
 
 
 def mark_ack(jid):
@@ -159,15 +183,13 @@ def process(job,serial):
   for line in p.stdout.splitlines()[-80:]:log('WORKER '+line)
  if p.returncode==0:
   log('JOB_OK '+jid)
-  try:wp_notify(job,'completed',evidence(jid)['remote_id'])
-  except Exception as e:log('CORTES_WP_CALLBACK_PENDING '+jid+' '+type(e).__name__)
+  notify_completed(job,evidence(jid)['remote_id'])
   return
  if p.returncode==91:
   try:
    qpost('complete',{'id':jid,'lease_generation':gen,'confirmed':True,**evidence(jid)})
    mark_ack(jid)
-   try:wp_notify(job,'completed',evidence(jid)['remote_id'])
-   except Exception as e:log('CORTES_WP_CALLBACK_PENDING '+jid+' '+type(e).__name__)
+   notify_completed(job,evidence(jid)['remote_id'])
    log('JOB_ACK_REPAIRED '+jid);return
   except Exception as e:log('JOB_ACK_PENDING '+jid+' '+str(e)[-200:]);return
  possible=p.returncode==90 or 'UNCERTAIN' in (p.stdout or '')
@@ -178,6 +200,7 @@ def memu_identity_proven():
  """Read-only Kwai account check. Never infer login from app installation."""
  env=os.environ.copy()
  serial=env.get('ANTHARES_MEMU_ADB_SERIAL','127.0.0.1:21543')
+ adb('connect',serial,timeout=20)
  env.update({'KWAI_UP_ADB_SERIAL':serial,'KWAI_UP_PACKAGE':'com.kwai.video',
              'KWAI_UP_EXPECTED_ACCOUNT':EXPECTED_ACCOUNT,'ADB_VENDOR_KEYS':ADB_KEYS})
  env['PATH']=str(pathlib.Path(ADB).parent)+os.pathsep+env.get('PATH','')
@@ -195,7 +218,7 @@ def memu_identity_proven():
 
 
 def once():
- repair_pending(); healthy,serial=preflight(); heartbeat(healthy,serial,'' if healthy else 'android-preflight-failed')
+ repair_pending(); repair_wp_callbacks(); healthy,serial=preflight(); heartbeat(healthy,serial,'' if healthy else 'android-preflight-failed')
  if not healthy:
   # Only consume CORTES work when a tested, authenticated MEmu standby is
   # genuinely available. Its readiness is verified again inside the worker.
@@ -239,6 +262,7 @@ def lock():
   LOCK.unlink(missing_ok=True);return lock()
 def daemon():
  fd=lock()
+ log('DAEMON_STARTED pid='+str(os.getpid()))
  try:
   while True:
    try:once()

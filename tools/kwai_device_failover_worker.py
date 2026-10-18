@@ -33,7 +33,7 @@ from android_device_adapters import AndroidExecutorRouter
 
 STATE_PATH = pathlib.Path(os.getenv("ANTHARES_ANDROID_HEALTH_STATE", str(ROOT / ".state" / "android-device-health.json")))
 ACK_PATH = pathlib.Path(os.getenv("ANTHARES_ANDROID_ACK_STATE", str(ROOT / ".state" / "android-publish-ack.json")))
-PHYSICAL_SAFE = ROOT / "kwai-up" / "kwai_up_safe.py"
+PHYSICAL_SAFE = ROOT / "tools" / "kwai_native_cortes.py"
 
 DEVICE_PATTERNS = re.compile(
     r"(?:\badb\b|device offline|no devices?|transport|uiautomator|profile-tab-missing|"
@@ -205,6 +205,7 @@ def mark_pending_ack(job_id: str, executor: str) -> None:
         "state": "published_pending_ack",
         "executor": executor,
         "published_at": int(time.time()),
+        "lease_generation": int(os.getenv("KWAI_LEASE_GENERATION", "0")),
     }
     save_ack_state(state)
 
