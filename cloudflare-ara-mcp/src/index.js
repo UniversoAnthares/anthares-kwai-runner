@@ -3,6 +3,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 
 // src/index.js
 import { DurableObject } from "cloudflare:workers";
+import { isClaudeClient, isClaudeCallbackPair, permittedClaudeScopes } from "./claude-client-policy.mjs";
 var ORIGIN = "https://anthares-ara-mcp.anthares1.workers.dev";
 var CONTROL = "https://anthares-ara-vercel-reserve.vercel.app";
 var DEFAULT_DEVICE = "DESKTOP-FTDK0HP";
@@ -412,16 +413,17 @@ async function callTool(env, name, a = {}) {
 }
 __name(callTool, "callTool");
 function validClient(v) {
-  return v === "https://chatgpt.com/oauth/client.json" || /^https:\/\/chatgpt\.com\/oauth\/[A-Za-z0-9_-]{8,}\/client\.json$/.test(v || "");
+  return isClaudeClient(v) || v === "https://chatgpt.com/oauth/client.json" || /^https:\/\/chatgpt\.com\/oauth\/[A-Za-z0-9_-]{8,}\/client\.json$/.test(v || "");
 }
 __name(validClient, "validClient");
-function validRedirect(v) {
+function validRedirect(v, clientId) {
+  if (isClaudeClient(clientId)) return isClaudeCallbackPair(clientId, v);
   return v === "https://chatgpt.com/connector_platform_oauth_redirect" || /^https:\/\/chatgpt\.com\/connector\/oauth\/[A-Za-z0-9_-]+$/.test(v || "");
 }
 __name(validRedirect, "validRedirect");
-function parseScopes(v) {
-  const xs = String(v || "ara.read ara.write").trim().split(/\s+/).filter(Boolean);
-  if (!xs.length || xs.some((x) => !SCOPES.has(x))) return null;
+function parseScopes(v, clientId) {
+  const xs = String(v || (isClaudeClient(clientId) ? "ara.read" : "ara.read ara.write")).trim().split(/\s+/).filter(Boolean);
+  if (!xs.length || xs.some((x) => !SCOPES.has(x)) || (isClaudeClient(clientId) && !permittedClaudeScopes(xs))) return null;
   return [...new Set(xs)];
 }
 __name(parseScopes, "parseScopes");
@@ -438,6 +440,8 @@ async function issueTokens(env, cid, scopes) {
 __name(issueTokens, "issueTokens");
 async function clientAllowed(env, cid) {
   if (!validClient(cid)) return false;
+  // Claude Free is an independently authorized read-only client. Do not overwrite the ChatGPT client pin.
+  if (isClaudeClient(cid)) return true;
   const pinned = await st(env).pinnedClient();
   return !pinned || pinned === cid;
 }
@@ -478,8 +482,8 @@ var index_default = { async fetch(req, env) {
     if (req.method === "GET" && u.pathname === "/.well-known/oauth-protected-resource") return json({ resource: ORIGIN, authorization_servers: [ORIGIN], scopes_supported: [...SCOPES], resource_documentation: "https://github.com/UniversoAnthares/anthares-kwai-runner" });
     if (req.method === "GET" && (u.pathname === "/.well-known/oauth-authorization-server" || u.pathname === "/.well-known/openid-configuration")) return json({ issuer: ORIGIN, authorization_endpoint: `${ORIGIN}/oauth/authorize`, token_endpoint: `${ORIGIN}/oauth/token`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], token_endpoint_auth_methods_supported: ["none"], scopes_supported: [...SCOPES], client_id_metadata_document_supported: true, authorization_response_iss_parameter_supported: true });
     if (req.method === "GET" && u.pathname === "/oauth/authorize") {
-      const cid = u.searchParams.get("client_id") || "", red = u.searchParams.get("redirect_uri") || "", challenge = u.searchParams.get("code_challenge") || "", method = u.searchParams.get("code_challenge_method") || "", resource = u.searchParams.get("resource") || ORIGIN, scopes = parseScopes(u.searchParams.get("scope"));
-      if (!await clientAllowed(env, cid) || !validRedirect(red) || u.searchParams.get("response_type") !== "code" || method !== "S256" || challenge.length < 43 || resource !== ORIGIN || !scopes) return json({ error: "invalid_request" }, 400);
+      const cid = u.searchParams.get("client_id") || "", red = u.searchParams.get("redirect_uri") || "", challenge = u.searchParams.get("code_challenge") || "", method = u.searchParams.get("code_challenge_method") || "", resource = u.searchParams.get("resource") || ORIGIN, scopes = parseScopes(u.searchParams.get("scope"), cid);
+      if (!await clientAllowed(env, cid) || !validRedirect(red, cid) || u.searchParams.get("response_type") !== "code" || method !== "S256" || challenge.length < 43 || resource !== ORIGIN || !scopes) return json({ error: "invalid_request" }, 400);
       const tx = await st(env).signToken({ typ: "oauth_pending", iss: ORIGIN, aud: ORIGIN, exp: Math.floor(Date.now() / 1e3) + 600, jti: rand(16), clientId: cid, redirectUri: red, challenge, scopes, scp: scopes, state: u.searchParams.get("state") || "" });
       const bs = await bootstrapOtpStatus(env);
       if (!bs.active) {
