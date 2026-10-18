@@ -1,42 +1,223 @@
 {
-  "revision": "2026-10-16-provider-status-r6-phase9-browser-redundancy",
-  "checked_at_utc": "2026-10-16T13:07:41Z",
+  "revision": "2026-10-18-resilience-dual-queue-live-proof",
+  "checked_at_utc": "2026-10-18T12:39:20.560Z",
   "rules": {
     "regression_check_required_each_round": true,
     "only_remote_control_surface": "anthares_remote",
     "only_browser_surface": "anthares_browser",
-    "retired_never_route": ["render", "tinyfish", "circleci", "browserless", "winremote", "meshcentral", "codespaces"],
+    "retired_never_route": [
+      "render",
+      "tinyfish",
+      "circleci",
+      "browserless",
+      "winremote",
+      "meshcentral",
+      "codespaces"
+    ],
     "quota_failure_action": "migrate_to_freshly_verified_eligible_provider",
     "anthares_failure_action": "repair_anthares_component_before_external_migration",
-    "manual_owner_only_for": ["mfa", "captcha", "account_authorization", "billing_or_plan_decision", "irreducible_security_boundary"],
-    "implementation_agent_order_when_needed": ["codex", "kilo", "work"]
+    "manual_owner_only_for": [
+      "mfa",
+      "captcha",
+      "account_authorization",
+      "billing_or_plan_decision",
+      "irreducible_security_boundary"
+    ],
+    "implementation_agent_order_when_needed": [
+      "codex",
+      "kilo",
+      "work"
+    ]
   },
   "providers": {
-    "anthares_remote": {"status":"READY_HOMOLOGATED_PHASE4","evidence_class":"VERIFIED","verified_at_utc":"2026-10-16T13:07:41Z","evidence":"session_status connected=true; backend=vercel-neon; queued=0; leased=0; uncertain=0; Phase 4 direct roundtrip/recovery evidence remains canonical","eligible":true,"exclusive_role":"remote_control"},
-    "gitlab_private_issue_queue": {"status":"READY_RECOVERY_PRIMARY","evidence_class":"VERIFIED","verified_at_utc":"2026-10-15T23:22:22Z","evidence":"project 87307279 issue 96 executed PHASE4_GITLAB_FAILBACK_OK; issue 95 received a duplicate cross-provider job_id and returned the persisted GitHub result without re-executing","eligible":true,"scope":"Anthares Remote private recovery transport #1","ci_quota_independent":true},
-    "github_private_issue_queue": {"status":"READY_RECOVERY_SECONDARY","evidence_class":"VERIFIED","verified_at_utc":"2026-10-15T23:21:00Z","evidence":"UniversoAnthares/anthares-ara-queue issue 254 executed ara-phase4-cross-provider-20261015-2320 and returned PHASE4_GITHUB_EXEC; receipt later deduped on GitLab","eligible":true,"scope":"Anthares Remote private recovery transport #2"},
-    "vercel_neon_control": {"status":"READY_PRIMARY","evidence_class":"VERIFIED","verified_at_utc":"2026-10-16T13:07:41Z","evidence":"live Anthares Remote session connected through backend vercel-neon; prior production redeploy persistence and post-redeploy command already proven","eligible":true,"scope":"canonical low-latency Anthares Remote MCP/control plane","cloudflare_dependency":false},
-    "anthares_browser": {"status":"READY_REDUNDANT_TWO_HOSTED_PROVIDERS","evidence_class":"VERIFIED","verified_at_utc":"2026-10-16T13:07:41Z","evidence":"GitHub Actions public run 38841592885 passed canonical runtime proof; independent AppVeyor Linux build 54907970 job bw7eb3k0ts0d94c3 passed the same proof including persistence restart; duplicate AppVeyor project reproduced success but is not counted as a third provider","eligible":true,"exclusive_role":"browser_automation"},
-    "github_actions_public_chromium": {"status":"READY_BROWSER_PRIMARY","evidence_class":"VERIFIED","verified_at_utc":"2026-10-16T02:35:31Z","evidence":"run 38841592885 success using shared runtime proof; ALL_3_CASES=PASS with readiness, control API auth, CDP loopback, navigation, interaction, screenshot, noVNC and persistent profile restart","eligible":true,"scope":"Anthares Browser primary hosted Chromium backend"},
-    "appveyor_linux_chromium": {"status":"READY_BROWSER_SECONDARY","evidence_class":"VERIFIED","verified_at_utc":"2026-10-16T03:44:34Z","evidence":"build 54907970 / 1.0.425 commit 66718568e1f0e799e3d9f8348a8d0efedc192c05; Linux job bw7eb3k0ts0d94c3 success; ALL_3_CASES=PASS with health/readiness, control auth, CDP loopback, navigate/click/type/wait/evaluate/screenshot, noVNC, Chromium and persistent profile restart; duplicate project job w4g7x7ylrp9atulw reproduced success","eligible":true,"scope":"Anthares Browser independent secondary hosted Chromium backend"},
-    "anthares_reserva_browser": {"status":"DEGRADED_BY_CLOUDFLARE_DO_QUOTA","evidence_class":"VERIFIED_OWNER_ERROR","verified_at_utc":"2026-10-15T16:30:00Z","evidence":"Cloudflare reported Exceeded allowed rows written in Durable Objects free tier during OAuth reconnect; do not rely on DO-backed reserve until fresh proof","eligible":false,"scope":"Anthares internal reserve/control component"},
-    "northflank": {"status":"READY_CONTAINER_RUNTIME_BROWSER_DEGRADED","evidence_class":"VERIFIED_PARTIAL","verified_at_utc":"2026-10-16T02:37:00Z","evidence":"/healthz=200 with postgres persistence/restart recovered and /x/health=200 vault_ready=true; browser persistence/readiness endpoints were not present on live deployment, so Chromium backend remains unproven","eligible":true,"browser_eligible":false,"quota_remaining":"PENDING_VERIFICATION"},
-    "github_actions_public": {"status":"READY","evidence_class":"VERIFIED","verified_at_utc":"2026-10-16T02:35:31Z","evidence":"hosted Ubuntu runner executed Anthares Browser canonical runtime proof successfully","eligible":true},
-    "appveyor": {"status":"READY_WITH_BROWSER_LINUX_PROOF","evidence_class":"VERIFIED","verified_at_utc":"2026-10-16T03:44:34Z","evidence":"AppVeyor Linux job successfully executed shared Anthares Browser runtime proof; checkout race fixed by clone_depth 50","eligible":true},
-    "github_actions_private": {"status":"BLOCKED_QUOTA","evidence_class":"OWNER_REPORTED_PENDING_BILLING_API_VERIFICATION","verified_at_utc":null,"eligible":false},
-    "gitlab_ci": {"status":"BLOCKED_QUOTA","evidence_class":"VERIFIED","verified_at_utc":"2026-10-14T18:12:41Z","evidence":"pipeline 2947796926 failed before start with failure_reason=ci_quota_exceeded; this does not affect the GitLab Issues API control queue","eligible":false},
-    "cloudflare_workers_runtime": {"status":"READY_RUNTIME_ONLY_NOT_ARA_PRIMARY","evidence_class":"VERIFIED_PARTIAL","verified_at_utc":"2026-10-15T16:30:00Z","eligible":true,"quota_remaining":"DURABLE_OBJECT_WRITES_BLOCKED"},
-    "cloudflare_durable_objects": {"status":"BLOCKED_QUOTA_NOT_IN_ARA_PATH","evidence_class":"VERIFIED_OWNER_ERROR","verified_at_utc":"2026-10-15T23:22:34Z","evidence":"ARA Phase 1-4 production path homologated on Vercel+Neon and private issue queues; Cloudflare DO remains blocked and is not required","eligible":false,"quota_remaining":"0_rows_written_until_reset"},
-    "cloudflare_browser_rendering": {"status":"BLOCKED_QUOTA_LAST_OBSERVED","evidence_class":"HISTORICAL_CURRENT_REVALIDATION_REQUIRED","verified_at_utc":null,"eligible":false},
-    "cloudflare_workers_builds": {"status":"PENDING_FRESH_QUOTA_VERIFICATION","evidence_class":"PENDING_VERIFICATION","verified_at_utc":null,"eligible":false},
-    "render": {"status":"RETIRED_PERMANENT_ALL_ACCOUNT_RESOURCES_SUSPENDED","evidence_class":"VERIFIED","verified_at_utc":"2026-10-16T02:20:49Z","evidence":"all Render web services listed as suspended; Render Postgres anthares-ara-state and Key Value anthares-x-session-vault were already suspended; final worker srv-db6gcoad0e5s73alefn0 suspended and one-shot retirement workflow removed","eligible":false},
-    "tinyfish": {"status":"RETIRED_PERMANENT_SUPERSEDED","evidence_class":"VERIFIED_POLICY","verified_at_utc":"2026-10-16T02:20:49Z","evidence":"excluded from retired_never_route and all browser priorities; Anthares Browser is the exclusive browser surface","eligible":false},
-    "harness": {"status":"PENDING_FRESH_VERIFICATION","evidence_class":"PENDING_VERIFICATION","verified_at_utc":null,"eligible":false},
-    "floot": {"status":"PENDING_FRESH_VERIFICATION","evidence_class":"PENDING_VERIFICATION","verified_at_utc":null,"eligible":false},
-    "circleci": {"status":"RETIRED_PERMANENT","eligible":false},
-    "browserless": {"status":"RETIRED_PERMANENT_SUPERSEDED_BY_ANTHARES_BROWSER","eligible":false},
-    "winremote": {"status":"RETIRED_PERMANENT_FUNCTIONS_TO_ANTHARES_REMOTE","eligible":false},
-    "meshcentral": {"status":"RETIRED_PERMANENT_FUNCTIONS_TO_ANTHARES_REMOTE","eligible":false},
-    "codespaces": {"status":"RETIRED_SOCIAL_BROWSER_PATH_NO_CANONICAL_KWAI_OR_TIKTOK_DEPENDENCY","eligible":false}
+    "anthares_remote": {
+      "status": "READY_LIVE_VERIFIED",
+      "evidence_class": "VERIFIED",
+      "verified_at_utc": "2026-10-18T12:39:20.560Z",
+      "evidence": "Live Vercel+Neon session_status connected=true; SYSTEM agent c8 active; signed capabilities returned success after credential recovery; independent remote_exec succeeds.",
+      "eligible": true,
+      "exclusive_role": "remote_control"
+    },
+    "gitlab_private_issue_queue": {
+      "status": "READY_RECOVERY_LIVE_VERIFIED",
+      "evidence_class": "VERIFIED",
+      "verified_at_utc": "2026-10-18T12:39:20.560Z",
+      "evidence": "GitLab private project 87307279 issue 162 label ara-queued consumed and acknowledged; SYSTEM command executed once and created proof file; duplicate later submitted to GitHub.",
+      "eligible": true,
+      "scope": "Anthares Remote private recovery transport #1",
+      "ci_quota_independent": true
+    },
+    "github_private_issue_queue": {
+      "status": "READY_RECOVERY_LIVE_DEDUPE_VERIFIED",
+      "evidence_class": "VERIFIED",
+      "verified_at_utc": "2026-10-18T12:39:20.560Z",
+      "evidence": "GitHub private queue issue 314 acknowledged same job_id as GitLab issue 162; proof file remained single-execution; no duplicate side-effect.",
+      "eligible": true,
+      "scope": "Anthares Remote private recovery transport #2"
+    },
+    "vercel_neon_control": {
+      "status": "READY_PRIMARY_LIVE_VERIFIED",
+      "evidence_class": "VERIFIED",
+      "verified_at_utc": "2026-10-18T12:39:20.560Z",
+      "evidence": "Vercel production deployment READY; Anthares Remote capabilities authenticated; Neon project anthares-ara-ha active and ARA heartbeat fresh.",
+      "eligible": true,
+      "scope": "canonical low-latency Anthares Remote MCP/control plane",
+      "cloudflare_dependency": false
+    },
+    "anthares_browser": {
+      "status": "READY_REDUNDANT_TWO_HOSTED_PROVIDERS",
+      "evidence_class": "VERIFIED",
+      "verified_at_utc": "2026-10-16T13:07:41Z",
+      "evidence": "GitHub Actions public run 38841592885 passed canonical runtime proof; independent AppVeyor Linux build 54907970 job bw7eb3k0ts0d94c3 passed the same proof including persistence restart; duplicate AppVeyor project reproduced success but is not counted as a third provider",
+      "eligible": true,
+      "exclusive_role": "browser_automation"
+    },
+    "github_actions_public_chromium": {
+      "status": "READY_BROWSER_PRIMARY",
+      "evidence_class": "VERIFIED",
+      "verified_at_utc": "2026-10-16T02:35:31Z",
+      "evidence": "run 38841592885 success using shared runtime proof; ALL_3_CASES=PASS with readiness, control API auth, CDP loopback, navigation, interaction, screenshot, noVNC and persistent profile restart",
+      "eligible": true,
+      "scope": "Anthares Browser primary hosted Chromium backend"
+    },
+    "appveyor_linux_chromium": {
+      "status": "READY_BROWSER_SECONDARY",
+      "evidence_class": "VERIFIED",
+      "verified_at_utc": "2026-10-16T03:44:34Z",
+      "evidence": "build 54907970 / 1.0.425 commit 66718568e1f0e799e3d9f8348a8d0efedc192c05; Linux job bw7eb3k0ts0d94c3 success; ALL_3_CASES=PASS with health/readiness, control auth, CDP loopback, navigate/click/type/wait/evaluate/screenshot, noVNC, Chromium and persistent profile restart; duplicate project job w4g7x7ylrp9atulw reproduced success",
+      "eligible": true,
+      "scope": "Anthares Browser independent secondary hosted Chromium backend"
+    },
+    "anthares_reserva_browser": {
+      "status": "DEGRADED_BY_CLOUDFLARE_DO_QUOTA",
+      "evidence_class": "VERIFIED_OWNER_ERROR",
+      "verified_at_utc": "2026-10-15T16:30:00Z",
+      "evidence": "Cloudflare reported Exceeded allowed rows written in Durable Objects free tier during OAuth reconnect; do not rely on DO-backed reserve until fresh proof",
+      "eligible": false,
+      "scope": "Anthares internal reserve/control component"
+    },
+    "northflank": {
+      "status": "READY_CONTAINER_RUNTIME_BROWSER_DEGRADED",
+      "evidence_class": "VERIFIED_PARTIAL",
+      "verified_at_utc": "2026-10-16T02:37:00Z",
+      "evidence": "/healthz=200 with postgres persistence/restart recovered and /x/health=200 vault_ready=true; browser persistence/readiness endpoints were not present on live deployment, so Chromium backend remains unproven",
+      "eligible": true,
+      "browser_eligible": false,
+      "quota_remaining": "PENDING_VERIFICATION"
+    },
+    "github_actions_public": {
+      "status": "READY",
+      "evidence_class": "VERIFIED",
+      "verified_at_utc": "2026-10-16T02:35:31Z",
+      "evidence": "hosted Ubuntu runner executed Anthares Browser canonical runtime proof successfully",
+      "eligible": true
+    },
+    "appveyor": {
+      "status": "READY_WITH_BROWSER_LINUX_PROOF",
+      "evidence_class": "VERIFIED",
+      "verified_at_utc": "2026-10-16T03:44:34Z",
+      "evidence": "AppVeyor Linux job successfully executed shared Anthares Browser runtime proof; checkout race fixed by clone_depth 50",
+      "eligible": true
+    },
+    "github_actions_private": {
+      "status": "BLOCKED_QUOTA",
+      "evidence_class": "OWNER_REPORTED_PENDING_BILLING_API_VERIFICATION",
+      "verified_at_utc": null,
+      "eligible": false
+    },
+    "gitlab_ci": {
+      "status": "BLOCKED_QUOTA",
+      "evidence_class": "VERIFIED",
+      "verified_at_utc": "2026-10-14T18:12:41Z",
+      "evidence": "pipeline 2947796926 failed before start with failure_reason=ci_quota_exceeded; this does not affect the GitLab Issues API control queue",
+      "eligible": false
+    },
+    "cloudflare_workers_runtime": {
+      "status": "READY_RUNTIME_ONLY_NOT_ARA_PRIMARY",
+      "evidence_class": "VERIFIED_PARTIAL",
+      "verified_at_utc": "2026-10-15T16:30:00Z",
+      "eligible": true,
+      "quota_remaining": "DURABLE_OBJECT_WRITES_BLOCKED"
+    },
+    "cloudflare_durable_objects": {
+      "status": "BLOCKED_QUOTA_NOT_IN_ARA_PATH",
+      "evidence_class": "VERIFIED_LIVE",
+      "verified_at_utc": "2026-10-18T12:39:20.560Z",
+      "evidence": "Cloudflare rows_written free-tier 100000 exceeded on account anthares1; physical CORTES queue lease responds 503 queue_storage_quota_exhausted with retry_after_seconds 900; reset scheduled 2026-10-19T00:00:00Z.",
+      "eligible": false,
+      "quota_remaining": "0_rows_written_until_reset"
+    },
+    "cloudflare_browser_rendering": {
+      "status": "BLOCKED_QUOTA_LAST_OBSERVED",
+      "evidence_class": "HISTORICAL_CURRENT_REVALIDATION_REQUIRED",
+      "verified_at_utc": null,
+      "eligible": false
+    },
+    "cloudflare_workers_builds": {
+      "status": "PENDING_FRESH_QUOTA_VERIFICATION",
+      "evidence_class": "PENDING_VERIFICATION",
+      "verified_at_utc": null,
+      "eligible": false
+    },
+    "render": {
+      "status": "RETIRED_PERMANENT_ALL_ACCOUNT_RESOURCES_SUSPENDED",
+      "evidence_class": "VERIFIED",
+      "verified_at_utc": "2026-10-16T02:20:49Z",
+      "evidence": "all Render web services listed as suspended; Render Postgres anthares-ara-state and Key Value anthares-x-session-vault were already suspended; final worker srv-db6gcoad0e5s73alefn0 suspended and one-shot retirement workflow removed",
+      "eligible": false
+    },
+    "tinyfish": {
+      "status": "RETIRED_PERMANENT_SUPERSEDED",
+      "evidence_class": "VERIFIED_POLICY",
+      "verified_at_utc": "2026-10-16T02:20:49Z",
+      "evidence": "excluded from retired_never_route and all browser priorities; Anthares Browser is the exclusive browser surface",
+      "eligible": false
+    },
+    "harness": {
+      "status": "PENDING_FRESH_VERIFICATION",
+      "evidence_class": "PENDING_VERIFICATION",
+      "verified_at_utc": null,
+      "eligible": false
+    },
+    "floot": {
+      "status": "PENDING_FRESH_VERIFICATION",
+      "evidence_class": "PENDING_VERIFICATION",
+      "verified_at_utc": null,
+      "eligible": false
+    },
+    "circleci": {
+      "status": "RETIRED_PERMANENT",
+      "eligible": false
+    },
+    "browserless": {
+      "status": "RETIRED_PERMANENT_SUPERSEDED_BY_ANTHARES_BROWSER",
+      "eligible": false
+    },
+    "winremote": {
+      "status": "RETIRED_PERMANENT_FUNCTIONS_TO_ANTHARES_REMOTE",
+      "eligible": false
+    },
+    "meshcentral": {
+      "status": "RETIRED_PERMANENT_FUNCTIONS_TO_ANTHARES_REMOTE",
+      "eligible": false
+    },
+    "codespaces": {
+      "status": "RETIRED_SOCIAL_BROWSER_PATH_NO_CANONICAL_KWAI_OR_TIKTOK_DEPENDENCY",
+      "eligible": false
+    },
+    "cortes_cloudflare_publication": {
+      "status": "BLOCKED_QUOTA",
+      "evidence_class": "VERIFIED_LIVE",
+      "verified_at_utc": "2026-10-18T12:39:20.560Z",
+      "eligible": false,
+      "evidence": "Kwai physical publisher logged QUEUE_BLOCKED no_publication_attempted=1; consumer applies 900-second backoff. Independent Neon queue exists but active production CORTES ingress remains Cloudflare."
+    },
+    "cortes_neon_publication_queue": {
+      "status": "STANDBY_DATASTORE_ONLY_NO_LIVE_FAILOVER",
+      "evidence_class": "VERIFIED_PARTIAL",
+      "verified_at_utc": "2026-10-18T12:39:20.560Z",
+      "eligible": false,
+      "evidence": "Neon table cortes_publications exists with prior confirmed real Kwai job and phase4 self-test; live 2026-10-18 Cloudflare CORTES backlog cannot be inferred or safely moved from this table alone."
+    }
   }
 }
