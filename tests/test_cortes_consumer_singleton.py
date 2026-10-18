@@ -2,7 +2,7 @@
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools"))
 import kwai_physical_queue_daemon as daemon
@@ -10,7 +10,7 @@ import kwai_physical_queue_daemon as daemon
 
 class CortesSingletonTests(unittest.TestCase):
     def test_maintenance_blocks_work_before_device_or_queue_use(self):
-        with patch.object(daemon.MAINTENANCE,"exists",return_value=True), \
+        with patch.object(daemon,"MAINTENANCE",MagicMock(exists=MagicMock(return_value=True))), \
              patch.object(daemon,"repair_pending") as repair, \
              patch.object(daemon,"signed_post") as queue, \
              patch.object(daemon,"preflight") as device, \
@@ -24,12 +24,12 @@ class CortesSingletonTests(unittest.TestCase):
         with patch.object(daemon,"lock",return_value=100) as lock, \
              patch.object(daemon,"once",return_value=0) as once, \
              patch.object(daemon.os,"close") as close, \
-             patch.object(daemon.LOCK,"unlink") as unlink:
+             patch.object(daemon,"LOCK",MagicMock()) as lockpath:
             self.assertEqual(daemon.single_run(),0)
             lock.assert_called_once()
             once.assert_called_once()
             close.assert_called_once_with(100)
-            unlink.assert_called_once_with(missing_ok=True)
+            lockpath.unlink.assert_called_once_with(missing_ok=True)
 
 
 if __name__=="__main__":
