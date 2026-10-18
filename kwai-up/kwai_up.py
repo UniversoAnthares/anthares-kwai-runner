@@ -373,6 +373,16 @@ class Publisher:
         return sha, name
 
     def profile_tab(self, nodes: list[dict[str, str]]) -> dict[str, str] | None:
+        # Current Kwai home uses a reusable bottom-tab text view. Its exact
+        # 'Perfil' label identifies our own profile rather than feed authors.
+        current = [
+            node for node in nodes
+            if node.get("resource-id") == "com.kwai.video.basis:id/consume_tab_text"
+            and (node.get("text") or "").strip().casefold() in {"perfil", "profile"}
+            and center(node.get("bounds", ""))
+        ]
+        if len(current) == 1:
+            return current[0]
         for rid in PROFILE_TAB_IDS:
             found = find_id(nodes, rid)
             if found:
