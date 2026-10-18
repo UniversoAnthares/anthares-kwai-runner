@@ -90,6 +90,13 @@ jobs:
           ! grep -q 'onrender.com' cloudflare-worker/src/index.js
           node --experimental-default-type=module --check cloudflare-worker/src/index.js
           echo 'SNAPSHOT_VALID=physical-android-v18-render-retired'
+      - name: Prevent constructor write amplification and expose queue quota errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 cloudflare-worker/patches/apply-queue-storage-health.py
+          node --experimental-default-type=module --check cloudflare-worker/src/index.js
+          node --experimental-default-type=module --test tests/test_queue_storage_health.mjs
       - name: Validate private Kwai session vault before deploy
         shell: bash
         run: |
@@ -109,6 +116,7 @@ jobs:
           npx --yes wrangler@4.43.0 deploy
           echo 'WRANGLER_DEPLOY_OK=1'
       - name: Remove old Kwai queue entries without touching CORTES or uncertain publications
+        id: cleanup_legacy
         shell: bash
         run: |
           set -euo pipefail
@@ -117,7 +125,11 @@ jobs:
           sep='&'; [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]] || sep='?'
           token="$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=https%3A%2F%2Fanthares-control.anthares1.workers.dev" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
           echo "::add-mask::$token"
-          curl -fsS --max-time 30 -H "Authorization: Bearer $token" -X POST "https://anthares-control.anthares1.workers.dev/cortes/maintenance/cleanup-legacy-kwai" -o /tmp/cortes-cleanup.json
+          code="$(curl -sS --max-time 30 -w '%{http_code}' -H "Authorization: Bearer $token" -X POST "https://anthares-control.anthares1.workers.dev/cortes/maintenance/cleanup-legacy-kwai" -o /tmp/cortes-cleanup.json)"
+          if [[ "$code" != 200 ]]; then
+            python3 -c 'import json; d=json.load(open("/tmp/cortes-cleanup.json")); print("QUEUE_BLOCKED="+str(d.get("error","unknown")))'
+            exit 1
+          fi
           python3 - <<'PY'
           import json
           d=json.load(open('/tmp/cortes-cleanup.json'))
@@ -155,22 +167,31 @@ jobs:
       - name: Save deployment receipt for CORTES queue recovery
         if: always()
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
           mkdir -p .github
           status='${{ steps.deploy_cloudflare.outcome }}'
           health="$(curl -fsS --max-time 12 https://anthares-control.anthares1.workers.dev/health || true)"
           python3 - "$status" "$health" <<'PY'
-          import json,sys,datetime,pathlib
+          import base64,json,sys,datetime,pathlib,os,urllib.request,urllib.error
           try: h=json.loads(sys.argv[2])
           except Exception: h={}
           d={"checked_at_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),"deploy_outcome":sys.argv[1],"control_version":h.get("version"),"control_healthy":h.get("ok") is True}
-          pathlib.Path(".github/cloudflare-cortes-status.json").write_text(json.dumps(d,indent=2)+"\\n",encoding="utf-8")
+          d['cleanup_outcome']='${{ steps.cleanup_legacy.outcome }}'
+          try:
+            cleanup=json.load(open('/tmp/cortes-cleanup.json'))
+            d['queue_error']=cleanup.get('error')
+            d['removed_count']=cleanup.get('removed_count')
+          except Exception: pass
+          url='https://api.github.com/repos/'+os.environ['GITHUB_REPOSITORY']+'/contents/.github/cloudflare-cortes-status.json'
+          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','User-Agent':'AntharesDeploymentReceipt'}
+          body={'message':'Record Cloudflare deployment and actual queue readiness','branch':'main','content':base64.b64encode((json.dumps(d,indent=2)+'\n').encode()).decode()}
+          try:
+            with urllib.request.urlopen(urllib.request.Request(url+'?ref=main',headers=headers)) as r:body['sha']=json.load(r)['sha']
+          except urllib.error.HTTPError as e:
+            if e.code!=404:raise
+          req=urllib.request.Request(url,data=json.dumps(body).encode(),headers={**headers,'Content-Type':'application/json'},method='PUT')
+          with urllib.request.urlopen(req) as r:print('DEPLOYMENT_RECEIPT_SAVED='+str(r.status))
           PY
-          git config user.name anthares-actions
-          git config user.email actions@users.noreply.github.com
-          git add .github/cloudflare-cortes-status.json
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'Record CORTES Cloudflare deployment status'
-          git pull --rebase origin main
-          git push origin HEAD:main
