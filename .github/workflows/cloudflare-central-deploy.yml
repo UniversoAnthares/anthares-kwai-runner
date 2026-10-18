@@ -63,6 +63,12 @@ jobs:
           p.write_text(s, encoding='utf-8')
           print('TIKTOK_OIDC_ALLOWLIST_OK=1')
           PY
+      - name: Restrict physical Kwai queue consumption to CORTES jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 cloudflare-worker/patches/apply-cortes-physical-lease-priority.py
+          grep -q "id LIKE 'kwai-cortes-%'" cloudflare-worker/src/index.js
       - name: Validate deploy snapshot
         shell: bash
         run: |
