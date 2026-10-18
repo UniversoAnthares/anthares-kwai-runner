@@ -82,6 +82,14 @@ def jobenv(job,serial):
  account=str(job.get('expected_account') or job.get('account_id') or EXPECTED_ACCOUNT).lstrip('@').lower()
  if account!=EXPECTED_ACCOUNT:raise RuntimeError('unsupported-account:'+account)
  env=os.environ.copy(); env.update({'ADB_VENDOR_KEYS':ADB_KEYS,'ANTHARES_ADB':ADB,'ANTHARES_PHYSICAL_ADB_SERIAL':serial,'KWAI_QUEUE_JOB_ID':str(job['id']),'KWAI_LEASE_GENERATION':str(job['lease_generation']),'KWAI_SOURCE_ID':str(job['source_id']),'KWAI_SOURCE_START':str(job['source_start']),'KWAI_SOURCE_END':str(job['source_end']),'KWAI_VIDEO_URL':str(job['video_url']),'KWAI_VIDEO_TITLE':str(job.get('video_title') or ''),'KWAI_EXPECTED_ACCOUNT':account})
+
+ # Mark the primary as transport-ready, but identity verification remains in
+ # kwai_up_safe.prepare() before STARTED. Never infer MEmu login readiness.
+ env['ANTHARES_PHYSICAL_KWAI_AUTHENTICATED']='true'
+ if not env.get('ANTHARES_MEMU_ADB_SERIAL'):
+  env['ANTHARES_MEMU_ADB_SERIAL']='127.0.0.1:21543'
+ if not env.get('ANTHARES_MEMU_KWAI_AUTHENTICATED'):
+  env['ANTHARES_MEMU_KWAI_AUTHENTICATED']='false'
  if job.get('media_sha256'):env['KWAI_MEDIA_SHA256']=str(job['media_sha256']).lower()
  callback=[PYTHON,str(pathlib.Path(__file__).resolve()),'queue-op']
  env['ANTHARES_QUEUE_STARTED_COMMAND_JSON']=json.dumps(callback+['started'])
