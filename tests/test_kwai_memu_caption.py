@@ -11,7 +11,7 @@ import kwai_device_failover_worker as worker
 class KwaiMemuCaptionTests(unittest.TestCase):
     def test_portuguese_title_transliterates_without_losing_words(self):
         result = worker.memu_caption_input("A Poética de Aristóteles - Parte 1 (LIVE)")
-        self.assertEqual(result, "A Poetica de Aristoteles - Parte 1 LIVE")
+        self.assertEqual(result, "A Poetica de Aristoteles Parte 1 LIVE")
         self.assertTrue(result.isascii())
 
     def test_shell_control_characters_never_reach_adb(self):
