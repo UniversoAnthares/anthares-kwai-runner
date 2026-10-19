@@ -21,8 +21,10 @@ This repository participates in a distributed system. Claude must read `AGENTS.m
 - Keep independent work scoped: a code-review task must not start a real Kwai/TikTok publication as an audit probe.
 
 ## Claude Free connector state
-- Claude.ai Free supports one remote custom MCP connector. Staged OAuth grants `ara.read`, `github.read`, and narrowly scoped `github.write` when requested; Claude never receives `ara.write`. Deployment and owner OAuth approval remain necessary.
-- Current production MCP and its ChatGPT client pin must be preserved.
-- The built-in Claude GitHub content connector is context/read oriented; it is not equivalent to a GitHub write agent.
-- GitHub tools are staged in `cloudflare-ara-mcp/src/github-bridge.mjs`; writes remain blocked until Cloudflare receives the server-side secret `ANTHARES_GITHUB_TOKEN`. Only approved repositories, `claude/*` branches, live Test Hub leases, expected HEAD/file SHA and draft PRs are authorized.
-- Never claim integration completed based only on source code, a branch, or PR.
+- Production endpoint: `https://anthares-ara-mcp.anthares1.workers.dev/mcp`. Owner authorization uses exact GitHub numeric identity, PKCE and one-use codes; email delivery is not an integration dependency.
+- Real owner-authorized Claude Free tool acceptance is recorded in `test-hub/findings/20261019-1216-claude-mcp-real-acceptance-proven.md`; integration PR162 is merged. Read newer findings before relying on historical partial states.
+- Claude receives `ara.read`, `github.read`, and narrowly scoped `github.write`; it never receives unrestricted `ara.write`. Existing ChatGPT access remains preserved.
+- GitHub tools require approved repositories, `claude/*` branches, live Test Hub leases, expected HEAD/file SHA and draft PRs. The protected server-side credential remains only in Cloudflare.
+- `run_tests` executes only the reviewed `mcp-regression` suite through Anthares Remote at the pinned deployed source SHA. Supply a unique UUID request_id. The service records a Test Hub lease/result, rejects replay and arbitrary commands, and returns the tested SHA and pass/fail evidence. It does not execute unreviewed branch code or publication operations.
+- A disconnected device or failing test is a real operational failure to diagnose; never claim success from a tool catalogue or source publication alone.
+- PR164 is a disposable acceptance draft and must not be merged.
