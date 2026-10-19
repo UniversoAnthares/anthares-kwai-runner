@@ -374,8 +374,8 @@ class Publisher:
             unique = [row for row in videos if f"_display_name={name}" in row]
             if len(unique) != 1:
                 raise KwaiUpError(f"publisher-mediastore-not-dedicated:videos={len(videos)}")
-            duration = re.search(r"(?:^|[, ])duration=(\\d+)", unique[0])
-            others = [re.search(r"(?:^|[, ])duration=(\\d+)", row) for row in videos if row != unique[0]]
+            duration = re.search(r"(?:^|[, ])duration=(\d+)", unique[0])
+            others = [re.search(r"(?:^|[, ])duration=(\d+)", row) for row in videos if row != unique[0]]
             if not duration or any(not x for x in others):
                 raise KwaiUpError("publisher-media-duration-unavailable")
             target_ms = int(duration.group(1))
