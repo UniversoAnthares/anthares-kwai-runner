@@ -61,7 +61,7 @@ def qpost(op,payload):
 
 def adb(*a,timeout=25,check=False):
  env=os.environ.copy(); env['ADB_VENDOR_KEYS']=ADB_KEYS
- return subprocess.run([ADB,*a],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=check,env=env)
+ return subprocess.run([ADB,'-P','5038',*a],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=check,env=env)
 def devices():
  p=adb('devices','-l')
  return online_devices(p.stdout) if p.returncode==0 else []
@@ -119,7 +119,7 @@ def evidence(jobid):
   raise RuntimeError('public-link-proof-missing')
  proof=json.loads(proof_file.read_text(encoding='utf-8'))
  url=str(proof.get('public_url') or '')
- if proof.get('ok') is not True or proof.get('expected_account')!=EXPECTED_ACCOUNT or not re.fullmatch(r'https://(?:k\\.kwai\\.com/p/[A-Za-z0-9_-]+|www\\.kwai\\.com/@[A-Za-z0-9_.-]+/photo/[0-9]+)',url):
+ if proof.get('ok') is not True or proof.get('expected_account')!=EXPECTED_ACCOUNT or not re.fullmatch(r'https://(?:k\.kwai\.com/p/[A-Za-z0-9_-]+|www\.kwai\.com/@[A-Za-z0-9_.-]+/photo/[0-9]+)',url):
   raise RuntimeError('public-link-proof-invalid')
  return {'remote_id':url,'confirmation_evidence':proof}
 def callback(op):

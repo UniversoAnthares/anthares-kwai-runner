@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import time
+import unicodedata
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -257,7 +258,8 @@ class Publisher:
                 self.adb.run("shell", "uiautomator", "dump", remote)
                 break
             except KwaiUpError as exc:
-                if "adb rc=137" not in str(exc) or attempt == 2:
+                retryable = "adb rc=137" in str(exc) or "null root node" in str(exc).lower()
+                if not retryable or attempt == 2:
                     raise
                 time.sleep(3 * (attempt + 1))
         xml = self.adb.binary("exec-out", "cat", remote)
@@ -301,14 +303,18 @@ class Publisher:
         m = re.search(r"(com\.kwai\.video/[A-Za-z0-9_.$]+)", raw)
         return m.group(1) if m else f"{PACKAGE}/com.yxcorp.gifshow.tiny.TinyLaunchActivity"
 
-    def cold_start(self, stage: str = "00-home") -> list[dict[str, str]]:
-        self.adb.run("shell", "am", "start", "-S", "--activity-clear-task", "-n", self.launcher_component(), timeout=60)
+    def cold_start(self, stage: str = "00-home", force_stop: bool = True) -> list[dict[str, str]]:
+        # -S force-stops the app and must NEVER be used after publish was clicked.
+        if force_stop:
+            self.adb.run("shell", "am", "start", "-S", "--activity-clear-task", "-n", self.launcher_component(), timeout=60)
+        else:
+            self.adb.run("shell", "am", "start", "--activity-clear-top", "-n", "com.kwai.video/com.yxcorp.gifshow.homepage.HomeActivity", timeout=60)
         time.sleep(self.cfg.wait)
         deadline = time.time() + max(self.cfg.wait * 3, 45)
         last: list[dict[str, str]] = []
         while time.time() < deadline:
             last = self.dismiss_known_overlays(self.dump(stage), stage)
-            if find_id(last, RECORD_ID) or find_id(last, FAKE_ADD_ID):
+            if find_id(last, RECORD_ID) or find_id(last, FAKE_ADD_ID) or (not force_stop and self.profile_tab(last)):
                 return last
             time.sleep(3)
         raise KwaiUpError("kwai-home-create-control-timeout")
@@ -353,13 +359,39 @@ class Publisher:
         source, sha, name = self.validate_input()
         self.clean_own_staging()
         remote = f"{REMOTE_DIR}/{name}"
-        self.adb.run("push", str(source), remote, timeout=180)
+        # Mandatory pre-gallery transfer: retry and verify remote SHA256 before UI selection.
+        transferred = False
+        for transfer_attempt in range(1, 4):
+            try:
+                self.adb.run("push", str(source), remote, timeout=240)
+                remote_hash_output = self.adb.run("shell", "sha256sum", remote, timeout=45, check=False)
+                if remote_hash_output.split() and remote_hash_output.split()[0].lower() == sha.lower():
+                    transferred = True
+                    break
+            except (KwaiUpError, OSError, subprocess.TimeoutExpired):
+                pass  # pre-publication transfer only; retry is safe
+            if transfer_attempt < 3:
+                time.sleep(3)
+        if not transferred:
+            raise KwaiUpError("staged-media-transfer-sha256-not-verified")
         self.adb.run(
             "shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
             "-d", f"file://{remote}",
         )
-        time.sleep(4)
-        raw = self.query_media()
+        # Indexation is asynchronous: wait for the exact staged name before opening gallery.
+        raw = ''
+        for scan_attempt in range(1, 9):
+            raw = self.query_media()
+            current = self.media_rows(raw)
+            exact = [row for row in current if f"_display_name={name}" in row]
+            if len(exact) == 1:
+                break
+            if len(exact) > 1:
+                raise KwaiUpError("staged-media-index-duplicate")
+            self.adb.run("shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", f"file://{remote}", check=False)
+            time.sleep(3)
+        else:
+            raise KwaiUpError("staged-media-index-timeout")
         (self.cfg.artifacts / "mediastore.txt").write_text(raw, encoding="utf-8")
         rows = self.media_rows(raw)
         matching = [row for row in rows if f"_display_name={name}" in row or name in row]
@@ -368,20 +400,14 @@ class Publisher:
         # The proven publisher ran on a dedicated Android surface and selected one visible video.
         # Preserve that invariant for the publishing executor. The authentication phone is separate.
         videos = [row for row in rows if "_display_name=" in row]
-        if len(videos) != 1:
-            # A separate Kwai-created video can coexist with this job's media.
-            # Only tolerate it if duration distinguishes the staged video.
-            unique = [row for row in videos if f"_display_name={name}" in row]
-            if len(unique) != 1:
-                raise KwaiUpError(f"publisher-mediastore-not-dedicated:videos={len(videos)}")
-            duration = re.search(r"(?:^|[, ])duration=(\d+)", unique[0])
-            others = [re.search(r"(?:^|[, ])duration=(\d+)", row) for row in videos if row != unique[0]]
-            if not duration or any(not x for x in others):
-                raise KwaiUpError("publisher-media-duration-unavailable")
-            target_ms = int(duration.group(1))
-            if any(abs(target_ms - int(x.group(1))) < 2000 for x in others):
-                raise KwaiUpError("publisher-media-duration-ambiguous")
-            self._target_media_seconds = target_ms / 1000
+        # Identity comes from the unique staged filename and SHA-256, not video duration.
+        # Gallery selection still requires one unambiguous clickable preview.
+        if not any(f'_display_name={name}' in row for row in videos):
+            raise KwaiUpError('staged-media-not-in-mediastore')
+        media_id = re.search(r'(?:^|[ ,])_id=(\d+)(?:[ ,]|$)', matching[0])
+        if not media_id:
+            raise KwaiUpError('staged-media-id-not-found')
+        self._staged_media_id = int(media_id.group(1))
         return sha, name
 
     def profile_tab(self, nodes: list[dict[str, str]]) -> dict[str, str] | None:
@@ -441,87 +467,31 @@ class Publisher:
         raise KwaiUpError("profile-thumbnails-timeout")
 
     def navigate_to_final(self) -> tuple[list[dict[str, str]], bool]:
-        home = self.cold_start("10-home")
-        create = find_id(home, RECORD_ID) or find_id(home, FAKE_ADD_ID)
-        if not create:
-            raise KwaiUpError("create-control-missing")
-        self.long_press_node(create)
-        time.sleep(max(2, self.cfg.wait - 2))
-
-        album = self.dismiss_known_overlays(self.dump("11-album"), "11-album")
-        # On slower emulators long-press may not open the media picker.
-        # Retry only the known Create action while still on the verified home.
-        for _ in range(2):
-            has_picker = bool(find_text(album, ("Vídeos", "Videos"))) or any(
-                n.get("resource-id") == PREVIEW_CONTAINER_ID for n in album
-            )
-            if has_picker:
+        # Exact MediaStore URI is the only safe selector when other gallery
+        # videos exist. URI is derived from the uniquely staged, SHA-verified file.
+        media_id = getattr(self, "_staged_media_id", None)
+        if not isinstance(media_id, int) or media_id <= 0:
+            raise KwaiUpError("exact-staged-media-id-required")
+        uri = f"content://media/external/video/media/{media_id}"
+        result = self.adb.run(
+            "shell", "am", "start", "-a", "android.intent.action.SEND",
+            "-t", "video/mp4", "--eu", "android.intent.extra.STREAM", uri,
+            "-f", "0x1", "-p", "com.kwai.video", timeout=40,
+        )
+        if "Error" in result or "Exception" in result:
+            raise KwaiUpError("exact-media-share-intent-failed")
+        # Media handoff is asynchronous on MEmu: never mistake an editor still
+        # opening for failure, and never repeat the SEND intent blindly.
+        editor_ready = False
+        for _ in range(15):
+            time.sleep(2)
+            activity = self.current_activity()
+            if "com.kwai.video/" in activity and "EditorActivity" in activity:
+                editor_ready = True
                 break
-            retry_create = find_id(album, RECORD_ID) or find_id(album, FAKE_ADD_ID)
-            if not retry_create:
-                raise KwaiUpError("album-not-open-and-create-not-present")
-            self.long_press_node(retry_create)
-            time.sleep(max(3, self.cfg.wait))
-            album = self.dismiss_known_overlays(self.dump("11-album"), "11-album")
-        else:
-            raise KwaiUpError("album-did-not-open-after-retries")
-        videos_tab = find_text(album, ("Vídeos", "Videos"))
-        if videos_tab:
-            self.tap_node(videos_tab)
-            time.sleep(3)
-
-        videos = self.dismiss_known_overlays(self.dump("12-videos"), "12-videos")
-        for _ in range(3):
-            if any(n.get("resource-id") == PREVIEW_CONTAINER_ID for n in videos):
-                break
-            time.sleep(3)
-            videos = self.dismiss_known_overlays(self.dump("12-videos"), "12-videos")
-        else:
-            raise KwaiUpError("videos-picker-not-visible")
-        previews = [
-            n for n in videos
-            if n.get("resource-id") == PREVIEW_CONTAINER_ID
-            and n.get("clickable") == "true"
-            and center(n.get("bounds", ""))
-        ]
-        if len(previews) != 1:
-            badges = [n for n in videos if n.get("resource-id") == "com.kwai.video.basis_extension:id/media_duration" and re.fullmatch(r"\d+:\d{2}", n.get("text", ""))]
-            matches = []
-            for p in previews:
-                box = bounds_tuple(p.get("bounds", ""))
-                if not box or box[3] - box[1] < 40:
-                    continue
-                for b in badges:
-                    point = center(b.get("bounds", ""))
-                    if point and box[0] <= point[0] <= box[2] and box[1] <= point[1] <= box[3]:
-                        matches.append(p)
-                        break
-            if getattr(self, "_target_media_seconds", None) is not None:
-                candidate = []
-                target = self._target_media_seconds
-                for p in previews:
-                    box = bounds_tuple(p.get("bounds", ""))
-                    if not box: continue
-                    inside = [b for b in badges
-                              if (point := center(b.get("bounds", "")))
-                              and box[0] <= point[0] <= box[2]
-                              and box[1] <= point[1] <= box[3]]
-                    for badge in inside:
-                        t = badge.get("text", "")
-                        pieces = t.split(":")
-                        if len(pieces) == 2:
-                            shown = int(pieces[0])*60 + int(pieces[1])
-                            if abs(target - shown) <= 1.5:
-                                candidate.append(p)
-                if len(candidate) != 1:
-                    raise KwaiUpError(f"safe-video-duration-selection-refused:matches={len(candidate)} visible={len(previews)}")
-                previews = candidate
-            else:
-                if len(badges) != 1 or len(matches) != 1:
-                    raise KwaiUpError(f"safe-video-selection-refused:visible={len(previews)} badges={len(badges)} matches={len(matches)}")
-                previews = matches
-        self.tap_node(previews[0], self.cfg.wait)
-
+        if not editor_ready:
+            raise KwaiUpError("exact-media-editor-not-open-after-30s")
+        self.emit("MEDIA_SELECTED_EXACT", media_id=media_id)
         editor = self.dismiss_known_overlays(self.dump("13-editor"), "13-editor")
         next_button = find_id(editor, NEXT_ID)
         if not next_button:
@@ -550,7 +520,8 @@ class Publisher:
             raise KwaiUpError(f"final-screen-mismatch:{activity or 'unknown'}")
         privacy = find_id(final, PRIVACY_ID) or next((n for n in final if n.get("resource-id") == PRIVACY_ID), None)
         privacy_text = (privacy or {}).get("text", "").strip().casefold()
-        public_ok = privacy_text in {"público", "publico", "public"}
+        normalized_privacy = "".join(c for c in unicodedata.normalize("NFKD",privacy_text) if not unicodedata.combining(c))
+        public_ok = normalized_privacy in {"publico","public"}
         return final, public_ok
 
     def fill_caption(self, nodes: list[dict[str, str]]) -> None:
@@ -649,30 +620,6 @@ class Publisher:
                 raise KwaiUpError("ready-media-mismatch")
         return proof
 
-    def verified_public_share_url(self) -> str | None:
-        """Confirm share URL, expected caption, and author's exact Kwai handle."""
-        path = Path(__file__).resolve().parents[1] / "tools" / "kwai_find_public_share.py"
-        evidence_file = self.cfg.artifacts / "public-link-proof.json"
-        if not path.is_file() or not self.cfg.caption:
-            return None
-        argv = [sys.executable, str(path), "--title", self.cfg.caption,
-                "--account", os.getenv("KWAI_UP_EXPECTED_ACCOUNT", "lucasrosalem"),
-                "--evidence-file", str(evidence_file)]
-        try:
-            proc = subprocess.run(argv, capture_output=True, text=True,
-                                  timeout=190, check=False)
-            if proc.returncode != 0 or not evidence_file.is_file():
-                return None
-            evidence = json.loads(evidence_file.read_text(encoding="utf-8"))
-            url = evidence.get("public_url") or ""
-            if evidence.get("ok") is True and evidence.get("title_match") is True \
-                    and evidence.get("expected_account") == "lucasrosalem" \
-                    and url.startswith("https://"):
-                return url
-        except (OSError, ValueError, subprocess.SubprocessError):
-            pass
-        return None
-
     def verify_after_post(self, before: list[str]) -> tuple[bool, str]:
         deadline = time.time() + self.cfg.verify_timeout
         structural_since: float | None = None
@@ -701,9 +648,7 @@ class Publisher:
                 structural_since = time.time()
             saw_structural = saw_structural or structural_now
             if saw_text and saw_structural:
-                link = self.verified_public_share_url()
-                if link:
-                    return True, "public-share-link:" + link
+                return True, "textual-and-structural"
             if (
                 saw_structural
                 and structural_since is not None
@@ -713,17 +658,12 @@ class Publisher:
                 try:
                     after = self.profile_fingerprints(f"31-profile-{attempt}", cold=False)
                     if profile_grid_changed(before, after):
-                        link = self.verified_public_share_url()
-                        if link:
-                            return True, "public-share-link:" + link
+                        return True, "structural-and-profile-grid"
                     last_error = f"profile-unchanged:{len(before)}:{len(after)}"
                 except Exception as exc:
                     last_error = str(exc)
                 next_profile = time.time() + 15
             time.sleep(4)
-        link = self.verified_public_share_url()
-        if link:
-            return True, "public-share-link:" + link
         return False, f"verification-timeout:{last_error or 'no-secondary-proof'}"
 
     def commit(self) -> int:

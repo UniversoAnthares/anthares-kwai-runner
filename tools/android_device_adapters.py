@@ -66,7 +66,8 @@ class AdbDeviceAdapter:
         self._run = run
 
     def _adb(self, *args: str, timeout: int = 15) -> subprocess.CompletedProcess:
-        cmd = [self.adb]
+        port = "5038" if self.executor_id == "physical_android" else "5037"
+        cmd = [self.adb, "-P", port]
         if self.serial:
             cmd.extend(["-s", self.serial])
         cmd.extend(args)
