@@ -24,3 +24,13 @@ new_sqlite_classes = ["BrowserState"]
 [[services]]
 binding = "TIKTOK_WORKER"
 service = "anthares-tiktok-worker"
+
+# Cloudflare Workers Builds (Wrangler 4.135+) deploys isolated branch Previews.
+# Keep the production bindings above unchanged. Each Preview receives its own
+# Browser binding and isolated Durable Object namespace/storage.
+[previews.browser]
+binding = "BROWSER"
+
+[[previews.durable_objects.bindings]]
+name = "BROWSER_STATE"
+class_name = "BrowserState"
