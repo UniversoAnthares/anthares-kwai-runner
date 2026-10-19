@@ -23,15 +23,17 @@ on:
 permissions:
   actions: write
   contents: read
-concurrency:
-  group: anthares-gitlab-quota-watcher
-  cancel-in-progress: false
 jobs:
   watch:
     # Use only trusted scheduled parent completions as secondary triggers.
     # Every mirror push previously caused excess runs and pending cancellations.
     if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'schedule') }}
     runs-on: ubuntu-latest
+    # Evaluate the job eligibility before acquiring the mutex; discarded
+    # workflow_run push events must not replace legitimate pending work.
+    concurrency:
+      group: anthares-gitlab-quota-watcher
+      cancel-in-progress: false
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
