@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {validateTask,validateChanges,buildInstructions}=require('./anthares_free_claude_task');
-const {MODELS,PORT}=require('./anthares_free_claude_bootstrap');
+const {MODELS,PORT,extractAssistantText}=require('./anthares_free_claude_bootstrap');
 test('free models, distinct fallback',()=>{
   for(const role of ['plan','edit']){
     assert.equal(MODELS[role].length,3);
@@ -25,4 +25,13 @@ test('instructions forbid shell and protect scope',()=>{
   const t=buildInstructions({mode:'edit',prompt:'fix',scope:'tools/z.js'});
   assert.match(t,/Edit ONLY this one file: tools\/z.js/);
   assert.match(t,/No media publication, deploy, shell tool/);
+});
+
+test('9Router streaming Anthropic, OpenAI and JSON responses require generated text',()=>{
+  assert.equal(extractAssistantText(JSON.stringify({content:[{type:'text',text:'OK'}]})),'OK');
+  assert.equal(extractAssistantText('event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"O"}}\n\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"K"}}\n\ndata: [DONE]\n'),'OK');
+  assert.equal(extractAssistantText('data: {"choices":[{"delta":{"content":"O"}}]}\n\ndata: {"choices":[{"delta":{"content":"K"}}]}\n'),'OK');
+  assert.equal(extractAssistantText(JSON.stringify({error:{message:'denied'}})),'');
+  assert.equal(extractAssistantText('data: {"type":"message_start","message":{"id":"abc","content":[]}}\n\n'),'');
+  assert.equal(extractAssistantText(''), '');
 });

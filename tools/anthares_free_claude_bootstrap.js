@@ -76,22 +76,48 @@ async function probeFreeGoogleModels(apiKey){
   }
   return healthy;
 }
+function extractAssistantText(raw){
+  if(typeof raw!=='string'||!raw.trim()||raw.length>2_000_000)return '';
+  const fromObject=d=>{
+    if(!d||typeof d!=='object'||d.error)return '';
+    const a=Array.isArray(d.content)?d.content.map(v=>v?.text).filter(v=>typeof v==='string').join(''):null;
+    if(a?.trim())return a;
+    if(typeof d.content==='string'&&d.content.trim())return d.content;
+    const choice=d.choices?.[0];
+    const t=choice?.message?.content||choice?.delta?.content||choice?.text||d.delta?.text||d.content_block?.text;
+    return typeof t==='string'?t:'';
+  };
+  if(raw.trimStart().startsWith('{')){
+    try{return fromObject(JSON.parse(raw))}catch{return ''}
+  }
+  let out='';
+  for(const line of raw.split(/\r?\n/)){
+    if(!line.startsWith('data:'))continue;
+    const part=line.slice(5).trim();
+    if(!part||part==='[DONE]')continue;
+    try{out+=fromObject(JSON.parse(part))}catch{}
+  }
+  return out;
+}
 async function probeRouter(model,apiKey){
-  let status=0;
+  let status=0,format='unavailable';
   try{
     const response=await fetch('http://127.0.0.1:'+PORT+'/v1/messages',{
       method:'POST',
-      headers:{'content-type':'application/json','anthropic-version':'2023-06-01','authorization':'Bearer '+apiKey},
-      body:JSON.stringify({model,max_tokens:80,stream:false,messages:[{role:'user',content:'Responda OK.'}]}),
-      signal:AbortSignal.timeout(25000),
+      headers:{'content-type':'application/json','accept':'text/event-stream','anthropic-version':'2023-06-01','authorization':'Bearer '+apiKey},
+      body:JSON.stringify({model,max_tokens:80,stream:true,messages:[{role:'user',content:'Responda OK.'}]}),
+      signal:AbortSignal.timeout(40000),
     });
     status=response.status;
-    const data=await response.json();
-    if(response.ok&&Array.isArray(data.content)&&data.content.length){
+    format=(response.headers.get('content-type')||'unknown').split(';')[0].slice(0,48);
+    const raw=await response.text();
+    const actual=extractAssistantText(raw);
+    if(response.ok&&actual.trim()){
       console.log('ANTHARES_FREE_9ROUTER_REAL_INFERENCE=PASS');
       return;
     }
-  }catch{}
+  }catch(e){console.log('ROUTER_INFERENCE_TRANSPORT='+(/timeout/i.test(String(e?.name||''))?'TIMEOUT':'ERROR'))}
+  console.log('ROUTER_INFERENCE_RESPONSE_FORMAT='+format);
   throw Error('ROUTER_INFERENCE_FAILED_HTTP_'+status);
 }
 async function main(){
@@ -144,4 +170,4 @@ if(require.main===module)main().catch(e=>{
   console.error('ANTHARES_FREE_BOOTSTRAP_ERROR='+(/^[A-Z0-9_]+$/.test(e.message)?e.message:'INTERNAL'));
   process.exitCode=1;
 });
-module.exports={MODELS,PORT,waitReady};
+module.exports={MODELS,PORT,waitReady,extractAssistantText};
