@@ -84,7 +84,10 @@ jobs:
           fi
           for qa in qa/anthares-account-contract-qa.php qa/anthares-extreme-static-qa.php qa/anthares-orchestrator-qa.php; do
             if ! php "$qa" >>/tmp/wordpress-qa.log 2>&1; then
-              echo "::error::WORDPRESS_CONTRACT_FAILED"; exit 1
+              echo "::error::WORDPRESS_CONTRACT_FAILED_FILE=$(basename "$qa")"
+              # Only machine-readable issue codes are allowed in the public runner log.
+              grep '^CRITICAL |' /tmp/wordpress-qa.log | cut -d'|' -f2 | sort -u | head -20 | sed 's/^/WORDPRESS_QA_CODE=/' || true
+              exit 1
             fi
           done
           echo "WORDPRESS_PRIVATE_GITHUB_RUNNER=PASS"
