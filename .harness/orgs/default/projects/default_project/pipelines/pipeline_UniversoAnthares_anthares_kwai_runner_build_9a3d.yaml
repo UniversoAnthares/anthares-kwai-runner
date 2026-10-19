@@ -27,7 +27,7 @@ pipeline:
                   name: Python syntax check
                   type: Run
                   spec:
-                    shell: Sh
+                    shell: Bash
                     command: |-
                       set -euo pipefail
                       python3 -m compileall -q tests
@@ -36,7 +36,7 @@ pipeline:
                   name: Control publisher acceptance
                   type: Run
                   spec:
-                    shell: Sh
+                    shell: Bash
                     command: |-
                       set -euo pipefail
                       for case in \
