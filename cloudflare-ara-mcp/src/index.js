@@ -4,7 +4,8 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 // src/index.js
 import { DurableObject } from "cloudflare:workers";
 import { isClaudeClient, isClaudeCallbackPair, permittedClaudeScopes } from "./claude-client-policy.mjs";
-import { githubTools, callGithubTool } from "./github-bridge.mjs";
+import { githubTools, callGithubTool, recordApprovedRegression } from "./github-bridge.mjs";
+import { approvedTestTool, runApprovedTests } from "./approved-tests.mjs";
 import { ownerGithubConfigured, startOwnerGithub, finishOwnerGithub } from "./owner-github-auth.mjs";
 var ORIGIN = "https://anthares-ara-mcp.anthares1.workers.dev";
 var CONTROL = "https://anthares-ara-vercel-reserve.vercel.app";
@@ -569,14 +570,14 @@ var index_default = { async fetch(req, env) {
       if (rpc.method === "notifications/initialized" || String(rpc.method || "").startsWith("notifications/")) return new Response(null, { status: 202 });
       if (rpc.method === "initialize") return rpcResult(rpc.id, { protocolVersion: rpc.params?.protocolVersion || "2025-06-18", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Anthares Remote", version: "1.0.1" } });
       if (rpc.method === "ping") return rpcResult(rpc.id, {});
-      if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS.filter(t => token.scp.includes(WRITE_TOOLS.has(t.name) ? "ara.write" : "ara.read")).concat(githubTools.filter(t => token.scp.includes(t.scope)).map(({scope, ...tool}) => tool)) });
+      if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS.filter(t => token.scp.includes(WRITE_TOOLS.has(t.name) ? "ara.write" : "ara.read")).concat(githubTools.concat(approvedTestTool).filter(t => token.scp.includes(t.scope)).map(({scope, ...tool}) => tool)) });
       if (rpc.method === "tools/call") {
         const name = rpc.params?.name || "";
-        const githubTool = githubTools.find(t => t.name === name);
+        const githubTool = githubTools.concat(approvedTestTool).find(t => t.name === name);
         const required = githubTool ? githubTool.scope : (WRITE_TOOLS.has(name) ? "ara.write" : "ara.read");
         if (!token.scp.includes(required)) return rpcError(rpc.id, -32003, "insufficient_scope", { required_scope: required });
         try {
-          const result = githubTool ? textResult(await callGithubTool(env, name, rpc.params?.arguments || {})) : await callTool(env, name, rpc.params?.arguments || {});
+          const result = name === "run_tests" ? textResult(await runApprovedTests(env, rpc.params?.arguments || {}, (type,args,timeout)=>execute(env,type,args,timeout), (kind,jti,exp)=>st(env).consume(kind,jti,exp), (status,id,result)=>recordApprovedRegression(env,status,id,result))) : githubTool ? textResult(await callGithubTool(env, name, rpc.params?.arguments || {})) : await callTool(env, name, rpc.params?.arguments || {});
           return rpcResult(rpc.id, result);
         } catch (e) {
           return rpcResult(rpc.id, { content: [{ type: "text", text: String(e?.message || e) }], isError: true });

@@ -68,7 +68,7 @@ test('owner GitHub flow preserves OAuth PKCE, single-use codes, refresh and rest
  assert.equal(r.status,200);const tokens=await r.json();assert.equal(tokens.scope,'ara.read github.read github.write');
  assert.equal((await worker.fetch(form('/oauth/token',{grant_type:'authorization_code',client_id:cid,redirect_uri:redirect,code,code_verifier:verifier}),env)).status,400);
  const list=await worker.fetch(new Request(origin+'/mcp',{method:'POST',headers:{authorization:'Bearer '+tokens.access_token},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})}),env);
- const tools=(await list.json()).result.tools;assert(tools.some(x=>x.name==='github_get_file'));assert(tools.some(x=>x.name==='github_draft_pr'));assert(!tools.some(x=>x.name==='remote_exec'));
+ const tools=(await list.json()).result.tools;assert(tools.some(x=>x.name==='github_get_file'));assert(tools.some(x=>x.name==='github_draft_pr'));assert(tools.some(x=>x.name==='run_tests'));assert(!tools.some(x=>x.name==='remote_exec'));
  r=await worker.fetch(form('/oauth/token',{grant_type:'refresh_token',client_id:cid,refresh_token:tokens.refresh_token}),env);assert.equal(r.status,200);
  assert.equal((await worker.fetch(form('/oauth/token',{grant_type:'refresh_token',client_id:cid,refresh_token:tokens.refresh_token}),env)).status,400);
 });
@@ -99,3 +99,10 @@ test('existing pinned ChatGPT authorization and access-token contract remain val
  const p=await pending(client,callback,'ara.read ara.write');assert.equal(p.r.status,200);
 });
 test.after(()=>{globalThis.fetch=oldFetch});
+
+test('fixed test runner requires github.write and does not grant unrestricted remote shell',async()=>{
+ const now=Math.floor(Date.now()/1000);
+ const access=sign({typ:'access',iss:origin,aud:origin,exp:now+600,cid,sub:'anthares-owner',scp:['ara.read']});
+ const r=await worker.fetch(new Request(origin+'/mcp',{method:'POST',headers:{authorization:'Bearer '+access},body:JSON.stringify({jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'run_tests',arguments:{suite:'mcp-regression',request_id:'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'}}})}),env);
+ assert.equal((await r.json()).error.message,'insufficient_scope');
+});

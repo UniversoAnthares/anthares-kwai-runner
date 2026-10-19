@@ -210,3 +210,15 @@ export async function callGithubTool(env,name,args={}){
   problem('unknown_github_tool',404);
 }
 export {validateRepo,validateBranch,validatePath,validateSha,leaseFields};
+
+export async function recordApprovedRegression(env,status,id,result){
+ if(!['RUNNING','PROVEN','FAILED'].includes(status)||!/^[a-f0-9-]{36}$/i.test(id))problem('invalid_test_audit');
+ const base=await getHead(env,HUB,'main');
+ const path='test-hub/findings/mcp-regression-'+id+'-'+status.toLowerCase()+'.md';
+ if(await getFile(env,HUB,path,base,true))problem('test_audit_already_exists',409);
+ if(await getHead(env,HUB,'main')!==base)problem('test_audit_stale_head',409);
+ const now=new Date(),expires=new Date(now.getTime()+180000);
+ const content='# Approved MCP regression\nSTATUS: '+status+'\nAREA: mcp-approved-regression\nLEASE_OWNER: claude-free-mcp\nSTART_UTC: '+now.toISOString()+'\nEXPIRES_UTC: '+expires.toISOString()+'\nBASELINE_PROVEN: reviewed source '+result.tested_source_sha+'\nFAILED_AVOIDED: fixed suite only, no caller commands, mutex prevents overlap\nSUCCESS_SIGNAL: real test process exit zero and verified source\nFAILURE_SIGNAL: stale source, nonzero process exit, failed tests\nTEST_VALIDITY: real Anthares Remote result required\n'+(status==='RUNNING'?'':'SUPERSEDES: mcp-regression-'+id+'-running.md\nLEASE_STATE: CLOSED\n')+'RESULT: '+JSON.stringify(result)+'\n';
+ await api(env,'PUT',repoUrl(HUB)+'/contents/'+encPath(path),{message:'test-hub: approved MCP regression '+status+' [skip ci]',branch:'main',content:utf8Base64(content)});
+ return path;
+}
