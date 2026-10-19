@@ -31,9 +31,20 @@ def normal(text: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+",x))
 
 def snapshot() -> list[dict]:
-    adb("shell","uiautomator","dump",REMOTE,timeout=55)
-    doc=ET.fromstring(adb("shell","cat",REMOTE,timeout=25))
-    return [dict(node.attrib) for node in doc.iter("node")]
+    # MEmu occasionally reports a transient null UI root while switching
+    # activities. Only retry the read; never infer publication success.
+    last=None
+    for attempt in range(4):
+        try:
+            output=adb("shell","uiautomator","dump",REMOTE,timeout=55)
+            if "dumped to:" not in output:
+                raise RuntimeError("uiautomator_missing_root")
+            doc=ET.fromstring(adb("shell","cat",REMOTE,timeout=25))
+            return [dict(node.attrib) for node in doc.iter("node")]
+        except (RuntimeError, ET.ParseError) as exc:
+            last=exc
+            time.sleep(2*(attempt+1))
+    raise RuntimeError("uiautomator_root_unavailable") from last
 
 def visible(nodes:list[dict]) -> str:
     return " ".join((n.get("text") or "")+" "+(n.get("content-desc") or "") for n in nodes)
