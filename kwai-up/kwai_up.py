@@ -445,7 +445,7 @@ class Publisher:
             and center(n.get("bounds", ""))
         ]
         if len(previews) != 1:
-            badges = [n for n in videos if n.get("resource-id") == "com.kwai.video.basis_extension:id/media_duration" and re.fullmatch(r"\\d+:\\d{2}", n.get("text", ""))]
+            badges = [n for n in videos if n.get("resource-id") == "com.kwai.video.basis_extension:id/media_duration" and re.fullmatch(r"\d+:\d{2}", n.get("text", ""))]
             matches = []
             for p in previews:
                 box = bounds_tuple(p.get("bounds", ""))
