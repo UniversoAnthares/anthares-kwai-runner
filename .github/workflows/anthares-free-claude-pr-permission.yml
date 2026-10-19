@@ -1,0 +1,59 @@
+name: Anthares free Claude Code - verify automatic draft PR permissions
+on:
+  pull_request:
+    paths: [".github/workflows/anthares-free-claude-pr-permission.yml"]
+  push:
+    branches: [main]
+    paths: [".github/workflows/anthares-free-claude-pr-permission.yml"]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  static-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Validate diagnostic is isolated from AI and production
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo ANTHARES_PR_PERMISSION_STATIC=PASS
+  prove-create-pr:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: static-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Create only a harmless test branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="claude-free/pr-permission-proof-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          file="docs/anthares-free-pr-permission-proof-$GITHUB_RUN_ID.md"
+          git switch -c "$branch"
+          mkdir -p docs
+          printf '# Anthares GitHub Actions draft PR permission proof\n\nThis file only proves that GitHub Actions may open a draft pull request.\n' > "$file"
+          if [[ "$(git status --porcelain=v1 -uall | wc -l)" -ne 1 ]]; then
+            echo ANTHARES_PR_PERMISSION_UNEXPECTED_FILES
+            exit 1
+          fi
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "$file"
+          git commit -m 'test: isolated automated draft PR permission verification'
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" push origin "HEAD:refs/heads/$branch"
+          echo ANTHARES_PR_PERMISSION_BRANCH=PASS
+          pr_url="$(gh pr create --draft --base main --head "$branch" --title "TESTE: GitHub Actions pode criar PR automaticamente" --body "Prova automática de permissão, sem execução de IA e sem alteração na main. Arquivo de teste isolado. Não fazer merge.")"
+          [[ "$(gh pr view "$pr_url" --json isDraft --jq .isDraft)" == "true" ]]
+          [[ "$(gh pr view "$pr_url" --json headRefName --jq .headRefName)" == "$branch" ]]
+          echo ANTHARES_FREE_AUTO_PR=PASS
+          echo "PR_DE_PROVA=$pr_url"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
