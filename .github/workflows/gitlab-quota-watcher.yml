@@ -28,9 +28,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   watch:
-    # Independent scheduled parent events recover the watcher when its own
-    # cron is delayed. Do not react to untrusted PR/push parent completions.
-    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.event == 'schedule' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success') }}
+    # Run after trusted successful main-sync pushes too: an independent
+    # event source when GitHub's own five-minute cron is delayed. No PR events.
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.event == 'schedule' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.name == 'Sync GitHub main to GitLab'))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
