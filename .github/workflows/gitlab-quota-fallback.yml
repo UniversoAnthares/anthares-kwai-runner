@@ -1,6 +1,14 @@
 name: GitLab CI quota fallback - CORTES contracts
+run-name: quota-rescue-cortes-glsha-${{ inputs.gitlab_sha || github.sha }} 
 on:
   workflow_dispatch:
+    inputs:
+      gitlab_pipeline_id:
+        type: string
+        required: false
+      gitlab_sha:
+        type: string
+        required: false
   schedule:
     - cron: '17 */12 * * *'
   push:
