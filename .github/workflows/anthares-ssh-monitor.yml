@@ -2,6 +2,18 @@ name: Anthares SSH Recovery Monitor
 on:
   schedule:
     - cron: '2-57/5 * * * *'
+  # Safety net: a proved scheduled workflow can wake this monitor when
+  # GitHub delays/drops the monitor's own schedule event.
+  workflow_run:
+    workflows: ['Anthares Core Supervisor']
+    types: [completed]
+    branches: [main]
+  # A one-time verification of automatic startup after monitor revisions.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/anthares-ssh-monitor.yml'
+      - 'anthares-remote-agent/ssh-admission.py'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -11,11 +23,19 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: anthares-independent-ssh-desktop-ftdk0hp
+  # Do not block the separate SSH recovery workflow while monitor sleeps
+  # through its grace interval.
+  group: anthares-ssh-monitor-desktop-ftdk0hp
   cancel-in-progress: false
 jobs:
   monitor:
-    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && (github.event_name != 'schedule' || vars.ANTHARES_SSH_AUTORECOVERY_ENABLED == 'true')
+    if: >-
+      github.repository == 'UniversoAnthares/anthares-kwai-runner' &&
+      vars.ANTHARES_SSH_AUTORECOVERY_ENABLED == 'true' &&
+      (github.event_name != 'workflow_run' ||
+        (github.event.workflow_run.conclusion == 'success' &&
+         github.event.workflow_run.event == 'schedule' &&
+         github.event.workflow_run.head_repository.full_name == 'UniversoAnthares/anthares-kwai-runner'))
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     permissions:
