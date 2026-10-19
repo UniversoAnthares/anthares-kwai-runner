@@ -1,0 +1,32 @@
+name: Anthares private CI failover canary
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/private-ci-quota-canary.yml']
+permissions:
+  actions: write
+  contents: read
+concurrency:
+  group: anthares-ci-quota-canary
+  cancel-in-progress: false
+jobs:
+  prove-individual-private-dispatches:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Dispatch Clipper and WordPress verification separately
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const workflow_id = 'private-ci-quota-rescue.yml';
+            for (const component of ['clipper', 'wordpress']) {
+              await github.rest.actions.createWorkflowDispatch({
+                owner, repo, workflow_id, ref: 'main',
+                inputs: {component}
+              });
+              core.info('CI_CANARY_DISPATCHED=' + component);
+            }
+# Read-only code QA only; not linked to quotas in GitLab; no deployment or publishing.
