@@ -1,0 +1,87 @@
+name: Anthares Independent SSH Recovery
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Read-only SSH probe or gated canonical watchdog recovery
+        type: choice
+        options: [probe, recover]
+        default: probe
+  push:
+    branches: [codex/ssh-recovery-20261019]
+    paths:
+      - .github/workflows/anthares-ssh-recovery.yml
+      - anthares-remote-agent/ssh-client.py
+      - anthares-remote-agent/ssh-admission.py
+      - anthares-remote-agent/test-ssh-admission.py
+      - anthares-remote-agent/windows/ssh-recovery*
+      - anthares-remote-agent/windows/test-ssh-recovery.ps1
+permissions:
+  contents: read
+concurrency:
+  group: anthares-independent-ssh-desktop-ftdk0hp
+  cancel-in-progress: false
+jobs:
+  policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify recovery authority and grace
+        shell: pwsh
+        run: ./anthares-remote-agent/windows/test-ssh-recovery.ps1
+      - name: Verify SSH client syntax
+        run: python3 -m py_compile anthares-remote-agent/ssh-client.py
+      - name: Verify trigger and quota safety
+        run: python3 anthares-remote-agent/test-ssh-admission.py
+  ssh:
+    needs: policy
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && (github.event_name != 'schedule' || vars.ANTHARES_SSH_AUTORECOVERY_ENABLED == 'true')
+    environment: anthares-ssh-recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Check private-network prerequisites without exposing values
+        shell: bash
+        env:
+          CLIENT_ID: ${{ vars.TS_SSH_OIDC_CLIENT_ID }}
+          AUDIENCE: ${{ vars.TS_SSH_AUDIENCE }}
+          SSH_KEY: ${{ secrets.ARA_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ vars.ARA_SSH_HOST_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$CLIENT_ID" && test -n "$AUDIENCE" && test -n "$SSH_KEY" && test -n "$HOST_KEY" || { echo 'SSH_NOT_TESTED=missing-secure-prerequisite'; exit 2; }
+      - name: Enforce free-tier private-network budget
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 anthares-remote-agent/ssh-admission.py budget
+      - name: Join restricted private network using GitHub OIDC
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd
+        with:
+          oauth-client-id: ${{ vars.TS_SSH_OIDC_CLIENT_ID }}
+          audience: ${{ vars.TS_SSH_AUDIENCE }}
+          tags: tag:anthares-ssh-recovery
+          hostname: anthares-ssh-${{ github.run_id }}-${{ github.run_attempt }}
+          version: '1.104.1'
+          use-cache: 'false'
+          timeout: '60s'
+          retry: '1'
+          args: --accept-dns=false
+      - name: Disable subnet routes before SSH
+        run: sudo tailscale set --accept-routes=false
+      - name: Run independent SSH request
+        env:
+          ARA_SSH_PRIVATE_KEY: ${{ secrets.ARA_SSH_PRIVATE_KEY }}
+          ARA_SSH_HOST_PUBLIC_KEY: ${{ vars.ARA_SSH_HOST_PUBLIC_KEY }}
+          SSH_RECOVERY_MODE: ${{ github.event_name == 'schedule' && 'recover' || inputs.mode || 'probe' }}
+          AUTO_RECOVERY_ENABLED: ${{ vars.ANTHARES_SSH_AUTORECOVERY_ENABLED }}
+        run: python3 anthares-remote-agent/ssh-client.py
