@@ -1,3 +1,4 @@
+import {fetchWithoutRedirects} from "./secure-fetch.mjs";
 // Owner identity fallback. OAuth secrets and provider tokens never enter HTML or logs.
 const COOKIE = '__Host-ara-owner';
 const CALLBACK = '/oauth/owner/github/callback';
@@ -43,7 +44,7 @@ export async function startOwnerGithub(req,env,h) {
     'cache-control':'no-store','referrer-policy':'no-referrer'}});
 }
 async function githubFetch(url,init={}) {
-  return fetch(url,{...init,redirect:'error',signal:AbortSignal.timeout(12000)});
+  return fetchWithoutRedirects(url,{...init,signal:AbortSignal.timeout(12000)});
 }
 export async function finishOwnerGithub(req,env,h) {
   if(!configured(env))return fail('owner_identity_unavailable',503);
@@ -54,7 +55,7 @@ export async function finishOwnerGithub(req,env,h) {
   if(!await h.pending(env,p.tx))return fail('authorization_expired');
   if(u.searchParams.has('error') || !u.searchParams.get('code'))return fail('owner_authorization_denied',403);
   if(!await h.state(env).consume('oauth_owner_callback',p.nonce,Math.floor(p.exp/1000)))return fail('owner_callback_replayed',409);
-  let access='';
+  let access='',stage='provider_token';
   try {
     const r=await githubFetch('https://github.com/login/oauth/access_token',{method:'POST',
       headers:{accept:'application/json','content-type':'application/x-www-form-urlencoded'},
@@ -64,22 +65,26 @@ export async function finishOwnerGithub(req,env,h) {
     if(!r.ok||!t.access_token||t.error)return fail('owner_provider_exchange_failed',403);
     access=t.access_token;
     if(t.scope && String(t.scope).trim())return fail('owner_provider_unexpected_scope',403);
+    stage='provider_identity';
     const user=await githubFetch('https://api.github.com/user',{headers:{authorization:'Bearer '+access,
       accept:'application/vnd.github+json','user-agent':'Anthares-Owner-Identity','X-GitHub-Api-Version':'2022-11-28'}});
     const identity=await user.json();
     if(!user.ok || String(identity.id)!==String(env.ARA_OWNER_GITHUB_ID))return fail('owner_identity_denied',403);
+    stage="authorization_code";
     const result=await h.complete(env,p.tx);
     result.headers.set('set-cookie',cookie(''));
     return result;
-  } catch {
-    return fail('owner_provider_unavailable',503);
+  } catch (error) {
+    const kind=['TypeError','AbortError','TimeoutError'].includes(error?.name)?error.name:'Error';
+    console.error('oauth_owner_failure stage='+stage+' kind='+kind);
+    return Response.json({error:'owner_provider_unavailable',stage},{status:503,headers:{'cache-control':'no-store'}});
   } finally {
     // The identity-only provider credential is ephemeral; revoke without persisting it.
     if(access)try{
-      await fetch('https://api.github.com/applications/'+env.ARA_OWNER_GITHUB_CLIENT_ID+'/token',{
+      await fetchWithoutRedirects('https://api.github.com/applications/'+env.ARA_OWNER_GITHUB_CLIENT_ID+'/token',{
         method:'DELETE',headers:{authorization:'Basic '+btoa(env.ARA_OWNER_GITHUB_CLIENT_ID+':'+env.ARA_OWNER_GITHUB_CLIENT_SECRET),
           accept:'application/vnd.github+json','content-type':'application/json','user-agent':'Anthares-Owner-Identity'},
-        body:JSON.stringify({access_token:access}),redirect:'error',signal:AbortSignal.timeout(3000)});
+        body:JSON.stringify({access_token:access}),signal:AbortSignal.timeout(3000)});
     }catch{ /* Identity token is never retained even when revocation is temporarily unavailable. */ }
   }
 }

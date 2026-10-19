@@ -1,3 +1,4 @@
+import {fetchWithoutRedirects} from "./secure-fetch.mjs";
 // Anthares GitHub bridge for Claude Free: reviewed branches and draft PRs only.
 // All privileged actions require OAuth github.write plus a server-side GitHub credential.
 // Cloudflare secret: ANTHARES_GITHUB_TOKEN (fine-grained; only approved repositories).
@@ -56,7 +57,7 @@ async function api(env,method,path,body,accept404=false){
   if(credential)headers.Authorization='Bearer '+credential;
   else if(method!=='GET')token(env);
   if(body!==undefined)headers['Content-Type']='application/json';
-  const response=await fetch(url,{method,headers,body:body===undefined?undefined:JSON.stringify(body),redirect:'error'});
+  const response=await fetchWithoutRedirects(url,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
   if(response.status===404 && accept404)return null;
   if(!response.ok)problem('github_http_'+response.status, response.status===401||response.status===403?503:409);
   const result=await response.json();
