@@ -53,7 +53,7 @@ async function begin(tx,requestOrigin=origin){
 }
 async function callback(p,state=p.state){return worker.fetch(new Request(origin+'/oauth/owner/github/callback?'+new URLSearchParams({state,code:'provider-code'}),{headers:p.cookie?{cookie:p.cookie}:{}}),env);}
 test('owner GitHub flow preserves OAuth PKCE, single-use codes, refresh and restricted scopes',async()=>{
- const p=await pending();assert.equal(p.r.status,200);assert(p.tx);assert.equal(p.r.headers.get("referrer-policy"),"same-origin");
+ const p=await pending();assert.equal(p.r.status,200);assert(p.tx);assert.equal(p.r.headers.get("referrer-policy"),"same-origin");assert(p.r.headers.get("content-security-policy").includes("form-action 'self' https://github.com;"));
  const a=await begin(p.tx);
  const bad=await callback(a,'forged-state');assert.equal(bad.status,403);assert.equal(providerCalls,0);
  const result=await callback(a);assert.equal(result.status,302);
