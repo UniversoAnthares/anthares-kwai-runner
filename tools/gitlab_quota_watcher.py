@@ -62,7 +62,7 @@ def latest_runs(workflow):
 
 
 def already_handled(component, workflow, sha, runs):
-    key = f"glsha-{component}-{sha[:12]}"
+    key = f"quota-rescue-{component}-glsha-{sha}"
     if any(key in str(r.get("display_title", "")) for r in runs):
         return True
     # Additional limit: one attempt per component every 15 min, including in-progress.
