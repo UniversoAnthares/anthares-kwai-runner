@@ -31,6 +31,15 @@ jobs:
           set -euo pipefail
           git clone --quiet --depth 1 --single-branch --branch main \
             https://gitlab.com/UniversoAnthares/anthares-kwai-runner.git source
+          expected="${{ inputs.gitlab_sha }}"
+          if [ -n "$expected" ]; then
+            [[ "$expected" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::INVALID_GITLAB_SHA"; exit 1; }
+            if [ "$(git -C source rev-parse HEAD)" != "$expected" ]; then
+              git -C source fetch --quiet --depth 1 origin "$expected"
+              git -C source checkout --quiet --detach FETCH_HEAD
+            fi
+            test "$(git -C source rev-parse HEAD)" = "$expected" || { echo "::error::GITLAB_SOURCE_MISMATCH"; exit 1; }
+          fi
           echo "GITLAB_SOURCE_SHA=$(git -C source rev-parse HEAD)"
       - name: Nonmutating Test Hub preflight
         shell: bash
