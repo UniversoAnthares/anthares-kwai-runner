@@ -3,9 +3,9 @@ const {validateTask,validateChanges,buildInstructions}=require('./anthares_free_
 const {MODELS,PORT}=require('./anthares_free_claude_bootstrap');
 test('free models, distinct fallback',()=>{
   for(const role of ['plan','edit']){
-    assert.equal(MODELS[role].length,2);
+    assert.equal(MODELS[role].length,3);
     assert.notEqual(MODELS[role][0],MODELS[role][1]);
-    assert(MODELS[role].every(x=>x.startsWith('gemini/gemini-2.5-flash')));
+    assert(MODELS[role].every(x=>/^gemini\/gemini-3(?:\.8-flash|\.5-flash-lite|-flash-preview)$/.test(x)));
   }
   assert.equal(PORT,20128);
 });

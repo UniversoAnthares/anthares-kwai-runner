@@ -4,8 +4,8 @@
 const fs=require('node:fs'), os=require('node:os'), path=require('node:path');
 const crypto=require('node:crypto'), cp=require('node:child_process');
 const MODELS=Object.freeze({
-  plan:['gemini/gemini-2.5-flash','gemini/gemini-2.5-flash-lite'],
-  edit:['gemini/gemini-2.5-flash-lite','gemini/gemini-2.5-flash'],
+  plan:['gemini/gemini-3.8-flash','gemini/gemini-3-flash-preview','gemini/gemini-3.5-flash-lite'],
+  edit:['gemini/gemini-3.5-flash-lite','gemini/gemini-3-flash-preview','gemini/gemini-3.8-flash'],
 });
 const PORT=20128;
 const SECRET_NAME='ANTHARES_AI_GEMINI_PRODUCTION';
@@ -51,11 +51,56 @@ function client(){
   const root=cp.execFileSync('npm',['root','-g'],{encoding:'utf8',timeout:9000}).trim();
   return require(path.join(root,'9router/src/cli/api/client.js'));
 }
+async function probeFreeGoogleModels(apiKey){
+  const candidates=[...new Set(Object.values(MODELS).flat().map(x=>x.slice('gemini/'.length)))];
+  const healthy=[];
+  for(const model of candidates){
+    let status=0;
+    try{
+      const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',{
+        method:'POST',
+        headers:{'content-type':'application/json','x-goog-api-key':apiKey},
+        body:JSON.stringify({
+          contents:[{role:'user',parts:[{text:'Responda somente OK.'}]}],
+          generationConfig:{maxOutputTokens:64},
+        }),
+        signal:AbortSignal.timeout(14000),
+      });
+      status=response.status;
+      if(response.ok){
+        const parsed=await response.json();
+        if(Array.isArray(parsed.candidates)&&parsed.candidates.length)healthy.push(model);
+      }
+    }catch{}
+    console.log('GEMINI_FREE_MODEL_'+model+'='+ (healthy.includes(model)?'PASS':(status?'HTTP_'+status:'NETWORK_ERROR')));
+  }
+  return healthy;
+}
+async function probeRouter(model,apiKey){
+  let status=0;
+  try{
+    const response=await fetch('http://127.0.0.1:'+PORT+'/v1/messages',{
+      method:'POST',
+      headers:{'content-type':'application/json','anthropic-version':'2023-06-01','authorization':'Bearer '+apiKey},
+      body:JSON.stringify({model,max_tokens:80,stream:false,messages:[{role:'user',content:'Responda OK.'}]}),
+      signal:AbortSignal.timeout(25000),
+    });
+    status=response.status;
+    const data=await response.json();
+    if(response.ok&&Array.isArray(data.content)&&data.content.length){
+      console.log('ANTHARES_FREE_9ROUTER_REAL_INFERENCE=PASS');
+      return;
+    }
+  }catch{}
+  throw Error('ROUTER_INFERENCE_FAILED_HTTP_'+status);
+}
 async function main(){
   if(!process.env.GITHUB_ENV||!process.env.RUNNER_TEMP)throw Error('GITHUB_RUNNER_REQUIRED');
   const mode=process.env.ANTHARES_TASK_MODE;
   if(!Object.hasOwn(MODELS,mode))throw Error('INVALID_MODE');
   const key=await readGeminiSecret();
+  const available=await probeFreeGoogleModels(key);
+  if(available.length<2)throw Error('TWO_FREE_MODELS_REQUIRED');
   delete process.env.BWS_ACCESS_TOKEN;
   const home=fs.mkdtempSync(path.join(process.env.RUNNER_TEMP,'anthares-free-claude-'));
   fs.chmodSync(home,0o700);
@@ -70,27 +115,29 @@ async function main(){
     const api=client();
     const provider=await api.createApiKeyProvider({
       provider:'gemini',name:'Anthares Gemini free only',
-      apiKey:key,defaultModel:'gemini-2.5-flash',priority:1,
+      apiKey:key,defaultModel:available[0],priority:1,
     });
     if(!provider.success)throw Error('GEMINI_PROVIDER_SETUP_FAILED');
     for(const [role,models] of Object.entries(MODELS)){
-      const r=await api.createCombo({name:'anthares-free-'+role,models,kind:'llm'});
+      const r=await api.createCombo({name:'anthares-free-'+role,models:models.filter(m=>available.includes(m.slice('gemini/'.length))),kind:'llm'});
       if(!r.success)throw Error('FALLBACK_COMBO_SETUP_FAILED');
     }
     const access=await api.createApiKey('anthares-free-cli-ci');
     if(!access.success||!access.data?.key)throw Error('ROUTER_CLIENT_KEY_FAILED');
     const token=access.data.key;
+    await probeRouter('anthares-free-'+mode,token);
     process.stdout.write('::add-mask::'+token+'\n');
     fs.appendFileSync(process.env.GITHUB_ENV,[
       'ANTHROPIC_BASE_URL=http://127.0.0.1:'+PORT+'/v1',
       'ANTHROPIC_AUTH_TOKEN='+token,
       'ANTHROPIC_MODEL=anthares-free-'+mode,
       'CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1',
-      'CLAUDE_CODE_MAX_CONTEXT_TOKENS=60000',''
+      'CLAUDE_CODE_MAX_CONTEXT_TOKENS=60000',
+      'API_TIMEOUT_MS=45000',''
     ].join('\n'),{mode:0o600});
     router.unref();
     console.log('ANTHARES_FREE_ROUTER_READY=PASS');
-    console.log('ANTHARES_FREE_FALLBACK_MODELS='+MODELS[mode].length);
+    console.log('ANTHARES_FREE_FALLBACK_MODELS='+MODELS[mode].filter(m=>available.includes(m.slice('gemini/'.length))).length);
   }catch(e){router.kill();throw e}
 }
 if(require.main===module)main().catch(e=>{
