@@ -36,11 +36,20 @@ async function main(){
   const allowed=task.mode==='plan'?['Read','Glob','Grep']:['Read','Edit','Write','Glob','Grep'];
   const args=['-p','--model',process.env.ANTHROPIC_MODEL,'--permission-mode',task.mode==='plan'?'plan':'acceptEdits','--max-turns','8','--output-format','text','--allowedTools',...allowed];
   const result=cp.spawnSync('claude',args,{
-    input:buildInstructions(task),env,encoding:'utf8',timeout:190000,maxBuffer:240000,
+    input:buildInstructions(task),env,encoding:'utf8',timeout:80000,maxBuffer:240000,
     stdio:['pipe','pipe','pipe']
   });
   fs.writeFileSync(output,String(result.stdout||'').slice(0,30000),{mode:0o600});
-  if(result.error||result.status!==0)throw Error('CLAUDE_CODE_TASK_FAILED');
+  if(result.error||result.status!==0){
+    const err=String(result.stderr||'').toLowerCase();
+    let cause=result.error?.code==='ETIMEDOUT'?'TIMEOUT':
+      /unauthorized|not logged in|authentication|login|401/.test(err)?'AUTH':
+      /429|rate.limit|quota/.test(err)?'RATE_LIMIT':
+      /model.*not.*found|unknown.model|model_not_found|invalid model/.test(err)?'MODEL':
+      /gateway|connection refused|fetch failed|502|503|504/.test(err)?'GATEWAY':'UNKNOWN';
+    console.error('ANTHARES_FREE_CLAUDE_FAILURE_CLASS='+cause);
+    throw Error('CLAUDE_CODE_TASK_FAILED');
+  }
   if(task.mode==='edit'){
     if(!validateChanges(task.scope,changedPaths()))throw Error('FILE_SCOPE_GATE_FAILED');
     console.log('ANTHARES_CLAUDE_EDITS_VALIDATED=PASS');
