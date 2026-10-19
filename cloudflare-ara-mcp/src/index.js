@@ -3,11 +3,15 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 
 // src/index.js
 import { DurableObject } from "cloudflare:workers";
+import { isClaudeClient, isClaudeCallbackPair, permittedClaudeScopes } from "./claude-client-policy.mjs";
+import { githubTools, callGithubTool, recordApprovedRegression } from "./github-bridge.mjs";
+import { approvedTestTool, runApprovedTests } from "./approved-tests.mjs";
+import { ownerGithubConfigured, startOwnerGithub, finishOwnerGithub } from "./owner-github-auth.mjs";
 var ORIGIN = "https://anthares-ara-mcp.anthares1.workers.dev";
 var CONTROL = "https://anthares-ara-vercel-reserve.vercel.app";
 var DEFAULT_DEVICE = "DESKTOP-FTDK0HP";
 var FALLBACK_DEVICE = "DESKTOP-FTDK0HP-SYSTEM";
-var SCOPES = /* @__PURE__ */ new Set(["ara.read", "ara.write"]);
+var SCOPES = /* @__PURE__ */ new Set(["ara.read", "ara.write", "github.read", "github.write"]);
 var WRITE_TOOLS = /* @__PURE__ */ new Set(["remote_exec", "clipboard_set", "file_write", "file_write_chunk", "file_mkdir", "file_remove", "file_rename", "file_copy", "file_write_atomic", "remote_job_start", "remote_job_cancel", "process_start", "process_kill", "service_start", "service_stop"]);
 var AUTH_EMAIL = "lucasyahn@gmail.com";
 var te = new TextEncoder();
@@ -36,7 +40,7 @@ function json(data, status2 = 200, headers = {}) {
 }
 __name(json, "json");
 function html(body, status2 = 200) {
-  return new Response(body, { status: status2, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" } });
+  return new Response(body, { status: status2, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://github.com https://claude.ai https://chatgpt.com; base-uri 'none'; frame-ancestors 'none'", "referrer-policy": "same-origin", "x-content-type-options": "nosniff" } });
 }
 __name(html, "html");
 function esc(v) {
@@ -412,17 +416,21 @@ async function callTool(env, name, a = {}) {
 }
 __name(callTool, "callTool");
 function validClient(v) {
-  return v === "https://chatgpt.com/oauth/client.json" || /^https:\/\/chatgpt\.com\/oauth\/[A-Za-z0-9_-]{8,}\/client\.json$/.test(v || "");
+  return isClaudeClient(v) || v === "https://chatgpt.com/oauth/client.json" || /^https:\/\/chatgpt\.com\/oauth\/[A-Za-z0-9_-]{8,}\/client\.json$/.test(v || "");
 }
 __name(validClient, "validClient");
-function validRedirect(v) {
+function validRedirect(v, clientId) {
+  if (isClaudeClient(clientId)) return isClaudeCallbackPair(clientId, v);
   return v === "https://chatgpt.com/connector_platform_oauth_redirect" || /^https:\/\/chatgpt\.com\/connector\/oauth\/[A-Za-z0-9_-]+$/.test(v || "");
 }
 __name(validRedirect, "validRedirect");
-function parseScopes(v) {
-  const xs = String(v || "ara.read ara.write").trim().split(/\s+/).filter(Boolean);
+function parseScopes(v, clientId) {
+  const xs = String(v || (isClaudeClient(clientId) ? "ara.read github.read github.write" : "ara.read ara.write")).trim().split(/\s+/).filter(Boolean);
   if (!xs.length || xs.some((x) => !SCOPES.has(x))) return null;
-  return [...new Set(xs)];
+  // A client may request ara.write, but Claude receives only the narrower scopes.
+  const granted = isClaudeClient(clientId) ? xs.filter((scope) => scope !== "ara.write") : xs;
+  if (!granted.length || (isClaudeClient(clientId) && !permittedClaudeScopes(granted))) return null;
+  return [...new Set(granted)];
 }
 __name(parseScopes, "parseScopes");
 function bearer(req) {
@@ -438,6 +446,8 @@ async function issueTokens(env, cid, scopes) {
 __name(issueTokens, "issueTokens");
 async function clientAllowed(env, cid) {
   if (!validClient(cid)) return false;
+  // Claude Free is an independently authorized read-only client. Do not overwrite the ChatGPT client pin.
+  if (isClaudeClient(cid)) return true;
   const pinned = await st(env).pinnedClient();
   return !pinned || pinned === cid;
 }
@@ -459,6 +469,26 @@ function rpcError(id, code, message, data) {
   return json({ jsonrpc: "2.0", id, error: { code, message, ...data ? { data } : {} } });
 }
 __name(rpcError, "rpcError");
+async function pendingOwner(env, tx) {
+  const p = await st(env).verifyToken(tx, "oauth_pending");
+  if (!p || !await clientAllowed(env, p.clientId) || !validRedirect(p.redirectUri,p.clientId) ||
+      !parseScopes(p.scopes.join(" "),p.clientId)) return null;
+  return p;
+}
+async function completeOwner(env, tx) {
+  const p = await pendingOwner(env, tx);
+  if (!p) return json({error:"authorization_expired"},400);
+  if (!await st(env).consume("oauth_pending", p.jti, p.exp)) return json({error:"authorization_replayed"},400);
+  if (!await st(env).pinClient(p.clientId)) return json({error:"invalid_client"},400);
+      const code = await st(env).signToken({ typ: "oauth_code", iss: ORIGIN, aud: ORIGIN, exp: Math.floor(Date.now() / 1e3) + 300, jti: rand(16), clientId: p.clientId, redirectUri: p.redirectUri, challenge: p.challenge, scopes: p.scopes, scp: p.scopes });
+      const target = new URL(p.redirectUri);
+      target.searchParams.set("code", code);
+      if (p.state) target.searchParams.set("state", p.state);
+      target.searchParams.set("iss", ORIGIN);
+      return new Response(null, {status:302, headers:{location:target.toString(), "cache-control":"no-store", "referrer-policy":"no-referrer"}});
+}
+const ownerHelpers={origin:ORIGIN,state:st,pending:pendingOwner,complete:completeOwner};
+
 var index_default = { async fetch(req, env) {
   const u = new URL(req.url);
   try {
@@ -472,15 +502,16 @@ var index_default = { async fetch(req, env) {
       } catch {
       }
       const pinned = !!await st(env).pinnedClient();
-      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: "email_otp", oauth_client_pinned: pinned }, controlReady ? 200 : 503);
+      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: ownerGithubConfigured(env) ? "github_owner_identity" : "email_otp", oauth_client_pinned: pinned }, controlReady ? 200 : 503);
     }
     if (req.method === "GET" && u.pathname === "/.well-known/ara-control-key") return new Response(await st(env).publicPem(), { headers: { "content-type": "application/x-pem-file", "cache-control": "no-store" } });
     if (req.method === "GET" && u.pathname === "/.well-known/oauth-protected-resource") return json({ resource: ORIGIN, authorization_servers: [ORIGIN], scopes_supported: [...SCOPES], resource_documentation: "https://github.com/UniversoAnthares/anthares-kwai-runner" });
     if (req.method === "GET" && (u.pathname === "/.well-known/oauth-authorization-server" || u.pathname === "/.well-known/openid-configuration")) return json({ issuer: ORIGIN, authorization_endpoint: `${ORIGIN}/oauth/authorize`, token_endpoint: `${ORIGIN}/oauth/token`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], token_endpoint_auth_methods_supported: ["none"], scopes_supported: [...SCOPES], client_id_metadata_document_supported: true, authorization_response_iss_parameter_supported: true });
     if (req.method === "GET" && u.pathname === "/oauth/authorize") {
-      const cid = u.searchParams.get("client_id") || "", red = u.searchParams.get("redirect_uri") || "", challenge = u.searchParams.get("code_challenge") || "", method = u.searchParams.get("code_challenge_method") || "", resource = u.searchParams.get("resource") || ORIGIN, scopes = parseScopes(u.searchParams.get("scope"));
-      if (!await clientAllowed(env, cid) || !validRedirect(red) || u.searchParams.get("response_type") !== "code" || method !== "S256" || challenge.length < 43 || resource !== ORIGIN || !scopes) return json({ error: "invalid_request" }, 400);
+      const cid = u.searchParams.get("client_id") || "", red = u.searchParams.get("redirect_uri") || "", challenge = u.searchParams.get("code_challenge") || "", method = u.searchParams.get("code_challenge_method") || "", resource = u.searchParams.get("resource") || ORIGIN, scopes = parseScopes(u.searchParams.get("scope"), cid);
+      if (!await clientAllowed(env, cid) || !validRedirect(red, cid) || u.searchParams.get("response_type") !== "code" || method !== "S256" || challenge.length < 43 || !(resource === ORIGIN || (isClaudeClient(cid) && resource === ORIGIN + "/mcp")) || !scopes) return json({ error: "invalid_request" }, 400);
       const tx = await st(env).signToken({ typ: "oauth_pending", iss: ORIGIN, aud: ORIGIN, exp: Math.floor(Date.now() / 1e3) + 600, jti: rand(16), clientId: cid, redirectUri: red, challenge, scopes, scp: scopes, state: u.searchParams.get("state") || "" });
+      if (ownerGithubConfigured(env)) return html(`<!doctype html><html><head><meta charset="utf-8"><title>Autorizar Anthares</title></head><body><main><h1>Autorizar Anthares</h1><p>Confirme a identidade da conta proprietaria UniversoAnthares pelo GitHub.</p><p>Permissoes solicitadas: ${esc(scopes.join(", "))}</p><form method="post" action="/oauth/owner/github"><input type="hidden" name="tx" value="${esc(tx)}"><button type="submit">Autorizar com GitHub</button></form></main></body></html>`);
       const bs = await bootstrapOtpStatus(env);
       if (!bs.active) {
         const code = await st(env).createEmailChallenge(tx);
@@ -494,20 +525,19 @@ var index_default = { async fetch(req, env) {
       }
       return html(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Remote</title></head><body><main><h1>Anthares Remote</h1><p>Digite o c\xF3digo tempor\xE1rio enviado ao e-mail cadastrado. Esta autoriza\xE7\xE3o n\xE3o depende da \xE1rea de transfer\xEAncia nem da sess\xE3o interativa do Windows.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="tx" value="${esc(tx)}"><label>C\xF3digo <input type="password" name="approval" autocomplete="one-time-code" required autofocus></label><button type="submit">Autorizar</button></form></main></body></html>`);
     }
+    if (req.method === "POST" && u.pathname === "/oauth/owner/github") return startOwnerGithub(req,env,ownerHelpers);
+    if (req.method === "GET" && u.pathname === "/oauth/owner/github/callback") return finishOwnerGithub(req,env,ownerHelpers);
     if (req.method === "POST" && u.pathname === "/oauth/authorize") {
       const f = await req.formData();
-      const p = await st(env).verifyToken(f.get("tx") || "", "oauth_pending");
-      if (!p) return json({ error: "authorization_expired" }, 400);
-      if (!await clientAllowed(env, p.clientId)) return json({ error: "invalid_client" }, 400);
-      if (!await st(env).verifyEmailChallenge(f.get("tx") || "", f.get("approval") || "")) return json({ error: "authorization_denied" }, 403);
-      if (!await st(env).consume("oauth_pending", p.jti, p.exp)) return json({ error: "authorization_replayed" }, 400);
-      if (!await st(env).pinClient(p.clientId)) return json({ error: "invalid_client" }, 400);
-      const code = await st(env).signToken({ typ: "oauth_code", iss: ORIGIN, aud: ORIGIN, exp: Math.floor(Date.now() / 1e3) + 300, jti: rand(16), clientId: p.clientId, redirectUri: p.redirectUri, challenge: p.challenge, scopes: p.scopes, scp: p.scopes });
-      const target = new URL(p.redirectUri);
-      target.searchParams.set("code", code);
-      if (p.state) target.searchParams.set("state", p.state);
-      target.searchParams.set("iss", ORIGIN);
-      return Response.redirect(target.toString(), 302);
+      const tx=String(f.get("tx")||"");
+      const p=await pendingOwner(env,tx);
+      if (!p) return json({error:"authorization_expired"},400);
+      if (ownerGithubConfigured(env)) return json({error:"use_owner_github_authorization"},403);
+      let attempt=false;
+      for(let i=0;i<5;i++) if(await st(env).consume("oauth_email_attempt_"+i,p.jti,p.exp)){attempt=true;break;}
+      if(!attempt) return json({error:"authorization_attempts_exceeded"},429);
+      if (!await st(env).verifyEmailChallenge(tx,f.get("approval")||"")) return json({error:"authorization_denied"},403);
+      return completeOwner(env,tx);
     }
     if (req.method === "POST" && u.pathname === "/oauth/token") {
       const f = await req.formData();
@@ -530,7 +560,7 @@ var index_default = { async fetch(req, env) {
     if (u.pathname === "/mcp") {
       if (req.method !== "POST") return new Response("", { status: 405, headers: { Allow: "POST" } });
       const token = await st(env).verifyToken(bearer(req), "access");
-      if (!token) return json({ error: "unauthorized" }, 401, { "www-authenticate": `Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource", scope="ara.read ara.write"` });
+      if (!token) return json({ error: "unauthorized" }, 401, { "www-authenticate": `Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource", scope="ara.read ara.write github.read github.write"` });
       let rpc;
       try {
         rpc = await req.json();
@@ -540,13 +570,15 @@ var index_default = { async fetch(req, env) {
       if (rpc.method === "notifications/initialized" || String(rpc.method || "").startsWith("notifications/")) return new Response(null, { status: 202 });
       if (rpc.method === "initialize") return rpcResult(rpc.id, { protocolVersion: rpc.params?.protocolVersion || "2025-06-18", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Anthares Remote", version: "1.0.1" } });
       if (rpc.method === "ping") return rpcResult(rpc.id, {});
-      if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS });
+      if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS.filter(t => token.scp.includes(WRITE_TOOLS.has(t.name) ? "ara.write" : "ara.read")).concat(githubTools.concat(approvedTestTool).filter(t => token.scp.includes(t.scope)).map(({scope, ...tool}) => tool)) });
       if (rpc.method === "tools/call") {
         const name = rpc.params?.name || "";
-        const required = WRITE_TOOLS.has(name) ? "ara.write" : "ara.read";
+        const githubTool = githubTools.concat(approvedTestTool).find(t => t.name === name);
+        const required = githubTool ? githubTool.scope : (WRITE_TOOLS.has(name) ? "ara.write" : "ara.read");
         if (!token.scp.includes(required)) return rpcError(rpc.id, -32003, "insufficient_scope", { required_scope: required });
         try {
-          return rpcResult(rpc.id, await callTool(env, name, rpc.params?.arguments || {}));
+          const result = name === "run_tests" ? textResult(await runApprovedTests(env, rpc.params?.arguments || {}, (type,args,timeout)=>execute(env,type,args,timeout), (kind,jti,exp)=>st(env).consume(kind,jti,exp), (status,id,result)=>recordApprovedRegression(env,status,id,result))) : githubTool ? textResult(await callGithubTool(env, name, rpc.params?.arguments || {})) : await callTool(env, name, rpc.params?.arguments || {});
+          return rpcResult(rpc.id, result);
         } catch (e) {
           return rpcResult(rpc.id, { content: [{ type: "text", text: String(e?.message || e) }], isError: true });
         }

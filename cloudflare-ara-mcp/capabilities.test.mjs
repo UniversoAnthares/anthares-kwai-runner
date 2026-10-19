@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { generateKeyPairSync, verify } from 'node:crypto';
 
 const source = (await readFile(new URL('./src/index.js', import.meta.url), 'utf8'))
-  .replace('import { DurableObject } from "cloudflare:workers";', 'class DurableObject {}');
+  .replace('import { DurableObject } from "cloudflare:workers";', 'class DurableObject {}')
+  .replace(/from "\.\/([^"]+\.mjs)"/g, (_, name) => 'from "'+new URL('./src/'+name,import.meta.url).href+'"');
 const runtime = await import('data:text/javascript;base64,' + Buffer.from(source + '\nexport { callTool };').toString('base64'));
 const keys = generateKeyPairSync('ed25519');
 const env = {
