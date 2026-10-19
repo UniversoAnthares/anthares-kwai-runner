@@ -40,9 +40,19 @@ jobs:
           python-version: '3.12'
       - name: Verify three-system failover dispatch and deduplication offline
         run: python3 tools/test_gitlab_quota_watcher.py
+      - name: Retrieve GitLab API credential from Anthares Secrets when configured
+        id: bws-auth
+        if: ${{ vars.ANTHARES_SECRETS_GITLAB_TOKEN_ID != '' }}
+        continue-on-error: true
+        uses: bitwarden/sm-action@f1de238fc00c738c56140796018be9084c2b5d21
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            ${{ vars.ANTHARES_SECRETS_GITLAB_TOKEN_ID }} > ANTHARES_GITLAB_TOKEN_FROM_BW
       - name: Detect actual GitLab runner quota failures and dispatch only new work
         env:
-          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_TOKEN: ${{ env.ANTHARES_GITLAB_TOKEN_FROM_BW || secrets.GITLAB_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: python tools/gitlab_quota_watcher.py
