@@ -39,7 +39,7 @@ function json(data, status2 = 200, headers = {}) {
 }
 __name(json, "json");
 function html(body, status2 = 200) {
-  return new Response(body, { status: status2, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://github.com; base-uri 'none'; frame-ancestors 'none'", "referrer-policy": "same-origin", "x-content-type-options": "nosniff" } });
+  return new Response(body, { status: status2, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://github.com https://claude.ai https://chatgpt.com; base-uri 'none'; frame-ancestors 'none'", "referrer-policy": "same-origin", "x-content-type-options": "nosniff" } });
 }
 __name(html, "html");
 function esc(v) {
