@@ -27,16 +27,25 @@ function buildInstructions(t){
     policy+'\nCreate a specific technical plan with validation and rollback. Do not write files.\nREQUEST:\n'+t.prompt:
     policy+'\nEdit ONLY this one file: '+t.scope+'. Preserve behavior and make the minimal change. If another file is required, explain and stop.\nREQUEST:\n'+t.prompt;
 }
+function buildClaudeArgs(task,model,smoke=false){
+  const tools=smoke?'':(task.mode==='plan'?'Read,Glob,Grep':'Read,Edit,Write,Glob,Grep');
+  return ['-p','--model',model,'--permission-mode',smoke?'default':(task.mode==='plan'?'plan':'acceptEdits'),
+    '--max-turns',smoke?'3':'20','--output-format','text','--no-session-persistence',
+    '--tools',tools,'--disallowedTools','mcp__*'];
+}
 async function main(){
   const task=validateTask({mode:process.env.ANTHARES_TASK_MODE,prompt:process.env.ANTHARES_TASK_PROMPT,scope:process.env.ANTHARES_TASK_SCOPE});
   if(!process.env.ANTHROPIC_AUTH_TOKEN||!process.env.ANTHROPIC_BASE_URL)throw Error('ROUTER_NOT_CONFIGURED');
   const output=path.join(process.env.RUNNER_TEMP||'/tmp','anthares-claude-result.txt');
   const env={...process.env};
   for(const k of Object.keys(env))if(/^(BWS_|GITLAB_|GITHUB_TOKEN|GH_TOKEN|VERCEL_TOKEN|CLOUDFLARE_API_TOKEN)/.test(k))delete env[k];
-  const allowed=task.mode==='plan'?['Read','Glob','Grep']:['Read','Edit','Write','Glob','Grep'];
-  const args=['-p','--model',process.env.ANTHROPIC_MODEL,'--permission-mode',task.mode==='plan'?'plan':'acceptEdits','--max-turns','8','--output-format','text','--allowedTools',...allowed];
+  const smoke=task.mode==='plan'&&process.env.ANTHARES_SMOKE_NO_TOOLS==='1';
+  const args=buildClaudeArgs(task,process.env.ANTHROPIC_MODEL,smoke);
+  const input=smoke
+    ? 'Sem usar ferramentas, escreva exatamente dois passos curtos para a seguinte tarefa e inclua o identificador solicitado.\n'+task.prompt
+    : buildInstructions(task);
   const result=cp.spawnSync('claude',args,{
-    input:buildInstructions(task),env,encoding:'utf8',timeout:80000,maxBuffer:240000,
+    input,env,encoding:'utf8',timeout:smoke?60000:160000,maxBuffer:240000,
     stdio:['pipe','pipe','pipe']
   });
   fs.writeFileSync(output,String(result.stdout||'').slice(0,30000),{mode:0o600});
@@ -60,4 +69,4 @@ if(require.main===module)main().catch(e=>{
   console.error('ANTHARES_FREE_TASK_ERROR='+(/^[A-Z_]+$/.test(e.message)?e.message:'UNKNOWN'));
   process.exitCode=1;
 });
-module.exports={validateTask,validateChanges,buildInstructions};
+module.exports={validateTask,validateChanges,buildInstructions,buildClaudeArgs};
