@@ -1,4 +1,5 @@
 name: Anthares Secrets GitLab ephemeral runner verification
+run-name: Bitwarden GitLab protected probe (temporary runner)
 on:
   workflow_dispatch:
   push:
