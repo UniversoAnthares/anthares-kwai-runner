@@ -649,6 +649,30 @@ class Publisher:
                 raise KwaiUpError("ready-media-mismatch")
         return proof
 
+    def verified_public_share_url(self) -> str | None:
+        """Confirm share URL, expected caption, and author's exact Kwai handle."""
+        path = Path(__file__).resolve().parents[1] / "tools" / "kwai_find_public_share.py"
+        evidence_file = self.cfg.artifacts / "public-link-proof.json"
+        if not path.is_file() or not self.cfg.caption:
+            return None
+        argv = [sys.executable, str(path), "--title", self.cfg.caption,
+                "--account", os.getenv("KWAI_UP_EXPECTED_ACCOUNT", "lucasrosalem"),
+                "--evidence-file", str(evidence_file)]
+        try:
+            proc = subprocess.run(argv, capture_output=True, text=True,
+                                  timeout=190, check=False)
+            if proc.returncode != 0 or not evidence_file.is_file():
+                return None
+            evidence = json.loads(evidence_file.read_text(encoding="utf-8"))
+            url = evidence.get("public_url") or ""
+            if evidence.get("ok") is True and evidence.get("title_match") is True \
+                    and evidence.get("expected_account") == "lucasrosalem" \
+                    and url.startswith("https://"):
+                return url
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+        return None
+
     def verify_after_post(self, before: list[str]) -> tuple[bool, str]:
         deadline = time.time() + self.cfg.verify_timeout
         structural_since: float | None = None
@@ -677,7 +701,9 @@ class Publisher:
                 structural_since = time.time()
             saw_structural = saw_structural or structural_now
             if saw_text and saw_structural:
-                return True, "textual-and-structural"
+                link = self.verified_public_share_url()
+                if link:
+                    return True, "public-share-link:" + link
             if (
                 saw_structural
                 and structural_since is not None
@@ -687,12 +713,17 @@ class Publisher:
                 try:
                     after = self.profile_fingerprints(f"31-profile-{attempt}", cold=False)
                     if profile_grid_changed(before, after):
-                        return True, "structural-and-profile-grid"
+                        link = self.verified_public_share_url()
+                        if link:
+                            return True, "public-share-link:" + link
                     last_error = f"profile-unchanged:{len(before)}:{len(after)}"
                 except Exception as exc:
                     last_error = str(exc)
                 next_profile = time.time() + 15
             time.sleep(4)
+        link = self.verified_public_share_url()
+        if link:
+            return True, "public-share-link:" + link
         return False, f"verification-timeout:{last_error or 'no-secondary-proof'}"
 
     def commit(self) -> int:
