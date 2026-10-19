@@ -1,0 +1,37 @@
+name: Anthares GitLab quota event failover
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read-only inspect without dispatch
+        type: boolean
+        required: false
+        default: true
+  push:
+    branches: [main]
+    paths:
+      - 'tools/gitlab_quota_watcher.py'
+      - '.github/workflows/gitlab-quota-watcher.yml'
+permissions:
+  actions: write
+  contents: read
+concurrency:
+  group: anthares-gitlab-quota-watcher
+  cancel-in-progress: false
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Detect actual GitLab runner quota failures and dispatch only new work
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: python tools/gitlab_quota_watcher.py
