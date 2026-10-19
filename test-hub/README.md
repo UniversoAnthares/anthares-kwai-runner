@@ -168,3 +168,11 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - Latest Worker: 13f5ee1d-33fd-4310-b2ca-f16e1b2871ca, PR162 source5306fbf2. Scoped GitHub edits now use atomic expectedHeadOid; begin_task returns the post-lease base SHA.
 - PENDING: actual GitHub visible owner consent, provider callback, Claude-issued file read/edit and draft PR. GitHub requires a visible focused authorization page; Anthares Remote explicitly forbids interactive focus manipulation. Owner action is pending; no complete integration claim is authorized.
 - Canonical evidence: test-hub/findings/20261019-1105-claude-oauth-interoperability-and-branch-fencing-partial.md. Recovery lease closed pending the interactive gate; fresh lease required before further mutation.
+
+
+### Claude MCP real acceptance — 2026-10-19 12:16 UTC
+- PROVEN: owner's Claude Free session has Anthares connected and 20 tools. Real Claude calls read GitHub AGENTS.md/README and consulted connected Anthares Remote.
+- PROVEN: Claude acquired a lease, created claude/mcp-acceptance-20261019-1210, wrote and reread one disposable file, and opened draft PR #164. Independent GitHub verification confirms commit 2c320a373c648b13f9766d192cc15c0d181ceeb8 and blob 8afd94029eb32b7661540a03a3a17f9908375785. Do not merge the disposable test PR.
+- Latest Worker: 24ffad76-20a0-4911-b6c9-465ad1b135b2, source dd14ef5d in integration PR162; 23 Node/workerd tests plus signed capabilities regression pass. GitHub identity OAuth is operational; email sender-domain delivery remains unavailable.
+- Scope boundary: Claude Remote remains read-only; arbitrary command/test execution is not exposed. PR162 is deployed but remains draft/unmerged. No whole-project publication acceptance is implied.
+- Canonical evidence: test-hub/findings/20261019-1216-claude-mcp-real-acceptance-proven.md, superseding the earlier partial authorization state and closing both recovery and acceptance leases.
