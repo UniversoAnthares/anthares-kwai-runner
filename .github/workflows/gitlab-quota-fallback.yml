@@ -1,0 +1,42 @@
+name: GitLab CI quota fallback - CORTES contracts
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */12 * * *'
+  push:
+    branches: [main]
+    paths: ['.github/workflows/gitlab-quota-fallback.yml']
+permissions:
+  contents: read
+concurrency:
+  group: gitlab-quota-fallback-kwai
+  cancel-in-progress: true
+jobs:
+  gitlab-contract-tests:
+    name: Validate GitLab CORTES code on independent GitHub runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Download public GitLab canonical tests without GitLab runners
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --single-branch --branch main \
+            https://gitlab.com/UniversoAnthares/anthares-kwai-runner.git source
+          echo "GITLAB_SOURCE_SHA=$(git -C source rev-parse HEAD)"
+      - name: Preflight and lease integrity contracts
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          python3 tools/test_hub_preflight.py
+          python3 tools/test_hub_lock.py
+      - name: Publisher safety and failover contracts
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          python3 tools/test_provider_router.py
+          python3 tools/test_kwai_publisher_infra_contract.py
+          echo "CORTES_GITLAB_CI_GITHUB_BACKUP=PASS"
+# Independent CI evidence only; does not acquire publishing authority or start posting.
