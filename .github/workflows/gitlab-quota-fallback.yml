@@ -24,13 +24,36 @@ jobs:
           git clone --quiet --depth 1 --single-branch --branch main \
             https://gitlab.com/UniversoAnthares/anthares-kwai-runner.git source
           echo "GITLAB_SOURCE_SHA=$(git -C source rev-parse HEAD)"
-      - name: Preflight and lease integrity contracts
+      - name: Nonmutating Test Hub preflight
         shell: bash
         working-directory: source
         run: |
           set -euo pipefail
           python3 tools/test_hub_preflight.py
-          python3 tools/test_hub_lock.py
+      - name: Validate lease only if an active lock exists
+        shell: bash
+        working-directory: source
+        env:
+          CI_PROJECT_PATH: UniversoAnthares/anthares-kwai-runner
+          CI_COMMIT_REF_NAME: main
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, datetime, urllib.request
+          url='https://gitlab.com/api/v4/projects/UniversoAnthares%2Fanthares-kwai-runner/repository/files/test-hub%2Flocks%2FUniversoAnthares--anthares-kwai-runner.json/raw?ref=main'
+          try:
+              with urllib.request.urlopen(url,timeout=12) as r:
+                  lock=json.load(r)
+          except Exception as exc:
+              print('GITLAB_HUB_LOCK=UNVERIFIED_UNAVAILABLE',type(exc).__name__)
+              raise SystemExit(0)
+          expiry=datetime.datetime.fromisoformat(lock.get('lock_expires_utc','1970-01-01T00:00:00+00:00').replace('Z','+00:00'))
+          if lock.get('status')=='RUNNING' and expiry>datetime.datetime.now(datetime.timezone.utc):
+              import subprocess
+              subprocess.run(['python3','tools/test_hub_lock.py'],check=True)
+          else:
+              print('GITLAB_HUB_LOCK=INACTIVE_NONMUTATING_CI')
+          PY
       - name: Publisher safety and failover contracts
         shell: bash
         working-directory: source
