@@ -11,7 +11,7 @@ import urllib.request
 
 API = "https://gitlab.com/api/v4"
 PROJECT = "87307248"
-BRANCH = "test/anthares-secrets-protected-runner-20261019"
+BRANCH = "test/anthares-secrets-aihub-e2e-20261019"
 STATE = pathlib.Path(os.environ["RUNNER_TEMP"]) / "anthares-gl-sm"
 STATE.mkdir(exist_ok=True, mode=0o700)
 TOKEN = os.environ["GITLAB_TOKEN"]
@@ -88,24 +88,25 @@ def run_pipeline():
         sys.exit(2)
     pid = pipeline["id"]
     print(f"ISOLATED_PIPELINE_URL=https://gitlab.com/UniversoAnthares/anthares-kwai-runner/-/pipelines/{pid}")
-    end = time.monotonic() + 220
+    end = time.monotonic() + 240
+    required = {"anthares_secrets_smoke", "anthares_ai_hub_bitwarden_bridge"}
     while time.monotonic() < end:
         code, jobs = call("GET", "/projects/" + PROJECT + "/pipelines/" + str(pid) + "/jobs?per_page=30")
         if code != 200 or not isinstance(jobs, list):
             print("PIPELINE_JOBS_QUERY_HTTP_" + str(code))
             sys.exit(2)
-        relevant = [x for x in jobs if x.get("name") == "anthares_secrets_smoke"]
-        if relevant:
-            state = relevant[0]["status"]
-            if state == "success":
-                print("GITLAB_BITWARDEN_SECRET_READ=PROVEN")
-                return
-            if state in ("failed", "canceled", "skipped"):
-                print("GITLAB_SECRET_JOB_" + state.upper())
-                print("GITLAB_JOB_FAILURE_REASON=" + str(relevant[0].get("failure_reason", "unknown")))
+        states = {x.get("name"): x for x in jobs if x.get("name") in required}
+        for name, job in states.items():
+            if job["status"] in ("failed", "canceled", "skipped"):
+                print("INTEGRATION_JOB_" + name.upper() + "_" + job["status"].upper())
+                print("INTEGRATION_JOB_FAILURE_REASON=" + str(job.get("failure_reason", "unknown")))
                 sys.exit(2)
+        if len(states) == len(required) and all(j["status"] == "success" for j in states.values()):
+            print("GITLAB_BITWARDEN_SECRET_READ=PROVEN")
+            print("ANTHARES_AI_HUB_BITWARDEN_BRIDGE=PROVEN")
+            return
         time.sleep(6)
-    print("ISOLATED_PIPELINE_TIMED_OUT")
+    print("ISOLATED_INTEGRATION_PIPELINE_TIMED_OUT")
     sys.exit(2)
 
 
