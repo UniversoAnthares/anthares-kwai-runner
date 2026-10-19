@@ -44,7 +44,7 @@ ku.FAILURE_RE = re.compile(
 )
 
 AUTH_REQUIRED_RE = re.compile(
-    r"(?:\blog\s*in\b|\bsign\s*in\b|\bentrar\b|\bsenha\b|\bpassword\b|"
+    r"(?:\blog\s*in\b|\bsign\s*in\b|\bentrar\s+(?:na\s+conta|com\s+(?:telefone|google|facebook)|para\s+continuar)\b|\bsenha\b|\bpassword\b|"
     r"c[oó]digo\s+de\s+verifica[cç][aã]o|verification\s+code|"
     r"n[uú]mero\s+de\s+telefone|phone\s+number|continue\s+with\s+google|"
     r"continuar\s+com\s+google|continue\s+with\s+facebook|continuar\s+com\s+facebook)",
@@ -66,10 +66,10 @@ class SafePublisher(ku.Publisher):
             raise ku.KwaiUpError("KWAI_UP_EXPECTED_ACCOUNT-missing")
         return value
 
-    def verify_identity(self) -> int:
+    def verify_identity(self, *, force_stop: bool = False) -> int:
         expected = self.expected_account()
         pattern = account_pattern(expected)
-        home = self.cold_start("05-auth-home")
+        home = self.cold_start("05-auth-home", force_stop=force_stop)
         tab = self.profile_tab(home)
         if tab is None:
             raise ku.KwaiUpError("auth-profile-tab-missing")
@@ -77,10 +77,25 @@ class SafePublisher(ku.Publisher):
         deadline = time.time() + 40
         last_blob = ""
         attempts = 0
+        recovered_account_chooser = False
         while time.time() < deadline:
             nodes = self.dismiss_known_overlays(self.dump("06-auth-profile"), "06-auth-profile")
             last_blob = ku.text_blob(nodes)
+            if pattern.search(last_blob.casefold()):
+                self.emit("AUTHENTICATED_IDENTITY", account=expected.lstrip("@"))
+                return 0
             if AUTH_REQUIRED_RE.search(last_blob):
+                # One safe retry of the already linked account chooser.
+                # This does not supply credentials or bypass a login challenge.
+                chooser = "trocar de conta" in last_blob.casefold() and "login/cadastre-se" in last_blob.casefold()
+                expected_label = expected.lstrip("@").casefold()
+                account_label = expected_label in last_blob.casefold() or "lucas rosalem" in last_blob.casefold()
+                sign_in = ku.find_text(nodes, ("Entrar",))
+                if chooser and account_label and sign_in and not recovered_account_chooser:
+                    recovered_account_chooser = True
+                    self.tap_node(sign_in, 1)
+                    time.sleep(3)
+                    continue
                 raise ku.KwaiUpError("auth-required")
             if pattern.search(last_blob.casefold()):
                 self.emit("AUTHENTICATED_IDENTITY", account=expected.lstrip("@"))
@@ -89,6 +104,12 @@ class SafePublisher(ku.Publisher):
             # Retry the *same* known tab when the UI proves we are still
             # on the home feed; never infer account identity from a timeout.
             attempts += 1
+            # Profile scrolling hides @handle; bring its header back before
+            # concluding the session is unauthenticated. Never force-stop app.
+            if attempts % 2 == 0 and "editar perfil" in last_blob.casefold():
+                for _ in range(3):
+                    self.adb.run("shell","input","swipe","330","410","330","1090","230",check=False)
+                time.sleep(1)
             if attempts % 2 == 0:
                 next_tab = self.profile_tab(nodes)
                 if next_tab is not None:

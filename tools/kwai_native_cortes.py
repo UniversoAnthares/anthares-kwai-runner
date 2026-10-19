@@ -34,7 +34,7 @@ def run(a,timeout=60,check=True,text=True):
  p=subprocess.run(a,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout,check=False,text=text)
  if check and p.returncode: raise E(f'cmd-failed:{p.returncode}:{str(p.stderr)[-500:]}')
  return p
-def acmd(serial,*a): return [ADB]+(['-s',serial] if serial else [])+list(a)
+def acmd(serial,*a): return [ADB,'-P','5038']+(['-s',serial] if serial else [])+list(a)
 def adb(serial,*a,timeout=60,check=True,text=True): return run(acmd(serial,*a),timeout,check,text)
 def devices():
  p=adb(None,'devices','-l',check=False)

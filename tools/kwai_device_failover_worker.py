@@ -258,6 +258,7 @@ def verify_memu_standby_identity() -> bool:
     """Prove MEmu Kwai profile before standby promotion; never assume auth."""
     serial = os.getenv("ANTHARES_MEMU_ADB_SERIAL", "127.0.0.1:21543")
     env = os.environ.copy()
+    env["ADB_SERVER_PORT"] = "5037"
     env["KWAI_UP_ADB_SERIAL"] = serial
     env["KWAI_UP_PACKAGE"] = "com.kwai.video"
     env["KWAI_UP_EXPECTED_ACCOUNT"] = os.getenv("KWAI_EXPECTED_ACCOUNT", "lucasrosalem")
@@ -333,6 +334,8 @@ def memu_caption_input(value: str) -> str:
 
 def prepare_memu(media):
     env=os.environ.copy()
+    env['ADB_SERVER_PORT']='5037'
+    env['KWAI_UP_CAPTION_INPUT_METHOD']='adbkeyboard'
     job=required('KWAI_QUEUE_JOB_ID')
     env.update({'KWAI_UP_JOB_ID':job,'KWAI_UP_MEDIA':str(media),
         'KWAI_UP_ADB_SERIAL':required('ANTHARES_MEMU_ADB_SERIAL'),
