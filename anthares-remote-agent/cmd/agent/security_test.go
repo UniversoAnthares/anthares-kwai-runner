@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadConfigRequiresHTTPS(t *testing.T) {
@@ -95,5 +99,117 @@ func TestParseProcessArgsLimits(t *testing.T) {
 	raw := `["` + strings.Join(items, `","`) + `"]`
 	if _, err := parseProcessArgs(raw); err == nil {
 		t.Fatal("more than 64 arguments must be rejected")
+	}
+}
+
+func signTestPayload(t *testing.T, payload signedJobPayload) (string, ed25519.PrivateKey) {
+	t.Helper()
+	b, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig := ed25519.Sign(priv, b)
+	return base64.StdEncoding.EncodeToString(sig), priv
+}
+
+func makeSignedRemoteJob(t *testing.T, commandID string, scope string, issuedAt int64) (Job, ed25519.PublicKey) {
+	t.Helper()
+	payload := signedJobPayload{
+		JobID:           "rj-test-1234",
+		Type:            "remote_job",
+		CommandID:       commandID,
+		Args:            []string{},
+		Cwd:             nil,
+		TimeoutSeconds:  30,
+		Scope:           scope,
+		TokenIdentity:   "test-jti",
+		IssuedAt:        issuedAt,
+	}
+	payloadB, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig := ed25519.Sign(priv, payloadB)
+	sigObj := map[string]any{"payload": string(payloadB), "sig": base64.StdEncoding.EncodeToString(sig), "issued_at": issuedAt, "expires_at": issuedAt + 60}
+	sigB, err := json.Marshal(sigObj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := Job{
+		ID:             "rj-test-1234",
+		Type:           "remote_job",
+		Args:           map[string]string{"job_signature": string(sigB)},
+		TimeoutSeconds: 30,
+	}
+	return job, pub
+}
+
+func TestDispatchRemoteJobNoSignature(t *testing.T) {
+	_, err := dispatch(context.Background(), Config{AllowShell: true}, Job{
+		Type: "remote_job",
+		Args: map[string]string{"command_id": "git.status"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "signed job metadata") {
+		t.Fatalf("expected missing signature error, got %v", err)
+	}
+}
+
+func TestDispatchRemoteJobInvalidSignature(t *testing.T) {
+	_, err := dispatch(context.Background(), Config{AllowShell: true}, Job{
+		Type: "remote_job",
+		Args: map[string]string{"job_signature": "not-a-valid-signature"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid job_signature encoding") {
+		t.Fatalf("expected invalid signature error, got %v", err)
+	}
+}
+
+func TestDispatchRemoteJobWrongScope(t *testing.T) {
+	job, pub := makeSignedRemoteJob(t, "git.status", "ara.write", time.Now().Unix())
+	_, err := dispatch(context.Background(), Config{AllowShell: true, ARAControlPublic: pub}, job)
+	if err == nil || !strings.Contains(err.Error(), "scope is not ara.exec") {
+		t.Fatalf("expected wrong scope error, got %v", err)
+	}
+}
+
+func TestDispatchRemoteJobExpiredSignature(t *testing.T) {
+	job, pub := makeSignedRemoteJob(t, "git.status", "ara.exec", time.Now().Unix()-120)
+	_, err := dispatch(context.Background(), Config{AllowShell: true, ARAControlPublic: pub}, job)
+	if err == nil || !strings.Contains(err.Error(), "job signature expired") {
+		t.Fatalf("expected expired signature error, got %v", err)
+	}
+}
+
+func TestDispatchRemoteJobValidSignature(t *testing.T) {
+	job, pub := makeSignedRemoteJob(t, "git.status", "ara.exec", time.Now().Unix())
+	_, err := dispatch(context.Background(), Config{AllowShell: true, ARAControlPublic: pub}, job)
+	if err == nil || strings.Contains(err.Error(), "unsupported job type") {
+		t.Fatalf("remote_job should be a supported type, got: %v", err)
+	}
+}
+
+func TestDispatchShellAndJobStartStillExist(t *testing.T) {
+	_, err := dispatch(context.Background(), Config{AllowShell: false}, Job{
+		Type: "shell",
+		Args: map[string]string{"command": "echo test"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "shell disabled") {
+		t.Fatalf("expected shell disabled error, got %v", err)
+	}
+
+	_, err = dispatch(context.Background(), Config{AllowShell: false}, Job{
+		Type: "job_start",
+		Args: map[string]string{"command": "echo test", "name": "test"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "shell disabled") {
+		t.Fatalf("expected job_start shell disabled error, got %v", err)
 	}
 }
