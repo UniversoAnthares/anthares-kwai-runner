@@ -511,7 +511,7 @@ class Publisher:
         activity = ""
         post = None
         field = None
-        deadline = time.time() + 50
+        deadline = time.time() + 150
         while time.time() < deadline:
             final = self.dismiss_known_overlays(self.dump("14-final"), "14-final")
             activity = self.current_activity()
