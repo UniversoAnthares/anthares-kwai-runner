@@ -1,0 +1,66 @@
+name: Anthares free Claude Code - real cloud canary
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/anthares-free-claude-canary.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/anthares-free-claude-canary.yml'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-free-claude-live-canary
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      ANTHARES_TASK_MODE: plan
+      ANTHARES_TASK_PROMPT: 'Crie um plano conciso de dois passos para validar a sintaxe de um arquivo JavaScript. Inclua exatamente o identificador ANTHARES_REAL_CLAUDE_PLAN_OK na resposta.'
+      ANTHARES_TASK_SCOPE: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Static checks and protected path regression
+        run: |
+          set -euo pipefail
+          node --check tools/anthares_free_claude_bootstrap.js
+          node --check tools/anthares_free_claude_task.js
+          node --test tools/test_anthares_free_claude.js
+      - name: Install free router and Claude Code only in this runner
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          npm install -g --no-audit --no-fund --silent 9router@0.5.104 @anthropic-ai/claude-code@2.1.290
+          npm install --prefix "$RUNNER_TEMP/anthares-bws-sdk" --no-audit --no-fund --silent @bitwarden/sdk-napi@1.0.0
+      - name: Bootstrap existing Bitwarden Gemini and two fallback models
+        if: github.event_name == 'push'
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          node tools/anthares_free_claude_bootstrap.js
+      - name: Execute actual Claude Code prompt
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          node tools/anthares_free_claude_task.js
+          grep -Fq ANTHARES_REAL_CLAUDE_PLAN_OK "$RUNNER_TEMP/anthares-claude-result.txt"
+          echo ANTHARES_CLAUDE_REAL_CANARY=PASS
+      - name: Preserve private canary result briefly
+        if: always() && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: anthares-free-claude-canary-${{ github.run_id }}
+          path: ${{ runner.temp }}/anthares-claude-result.txt
+          if-no-files-found: ignore
+          retention-days: 2
+      - name: Ephemeral cleanup
+        if: always() && github.event_name == 'push'
+        run: |
+          rm -rf "$RUNNER_TEMP"/anthares-free-claude-* "$RUNNER_TEMP"/anthares-bws-* "$RUNNER_TEMP"/anthares-claude-*.txt
+          echo ANTHARES_CLAUDE_CANARY_CLEANUP=PASS
