@@ -27,13 +27,13 @@ function validateBranch(value) {
   if (!branchPattern.test(s) || s.includes('..') || s.includes('//') || s.endsWith('.') || s.endsWith('.lock')) problem('invalid_claude_branch');
   return s;
 }
-function validatePath(value) {
+function validatePath(value, {read=false}={}) {
   const s=String(value||'');
   if (!s || s.length>240 || s.startsWith('/') || s.includes('\\') || /[\x00-\x1f]/.test(s) || s.includes('%') || s.includes(':')) problem('invalid_path');
   const segments=s.split('/');
   if (segments.some(x=>!x || x==='.' || x==='..' || x==='.git')) problem('path_traversal');
   if (segments.some(x=>/^(?:\.env(?:\..*)?|\.npmrc|\.pypirc|id_rsa|credentials(?:\..*)?|secret(?:s)?(?:\..*)?|cookies(?:\..*)?)$/i.test(x))) problem('sensitive_path_denied',403);
-  if (s.startsWith('test-hub/findings/') || s.startsWith('anthares-kwai-session-vault/')) problem('reserved_path',403);
+  if (s.startsWith('anthares-kwai-session-vault/') || (s.startsWith('test-hub/findings/') && !(read && /^test-hub\/findings\/[^/]+\.md$/.test(s)))) problem('reserved_path',403);
   return s;
 }
 function validateSha(v){const s=String(v||'');if(!shaPattern.test(s))problem('expected_sha_required');return s;}
@@ -150,7 +150,7 @@ export const githubTools=[
 export async function callGithubTool(env,name,args={}){
   const repo=validateRepo(args.repo);
   if(name==='github_get_file'){
-    const path=validatePath(args.path);
+    const path=validatePath(args.path,{read:true});
     const ref=String(args.ref||'main');
     if(ref!=='main')validateBranch(ref);
     const head=await getHead(env,repo,ref);

@@ -163,3 +163,14 @@ test('begin-task returns the current main HEAD after its own Test Hub lease comm
   return mockResponse(url,init);
  });
 });
+
+test('Test Hub markdown findings are readable while writes and vault reads stay denied',async()=>{
+  assert.equal(validatePath('test-hub/findings/lease.md',{read:true}),'test-hub/findings/lease.md');
+  assert.throws(()=>validatePath('test-hub/findings/lease.md'));
+  assert.throws(()=>validatePath('anthares-kwai-session-vault/session.md',{read:true}));
+  assert.throws(()=>validatePath('test-hub/findings/session.json',{read:true}));
+  await withMock(async()=>{
+    const result=await callGithubTool({},'github_get_file',{repo:REPO,path:LEASE});
+    assert.match(result.content,/STATUS: RUNNING/);
+  });
+});
