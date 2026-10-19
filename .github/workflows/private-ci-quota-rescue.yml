@@ -24,7 +24,7 @@ permissions:
   contents: read
 concurrency:
   group: anthares-private-ci-quota-rescue
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 # Trusted main only; no PR/fork execution. Never deploy, mirror, publish or upload source/artifacts.
 jobs:
