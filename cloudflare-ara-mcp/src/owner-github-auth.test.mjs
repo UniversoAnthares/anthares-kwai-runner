@@ -53,7 +53,7 @@ async function begin(tx,requestOrigin=origin){
 }
 async function callback(p,state=p.state){return worker.fetch(new Request(origin+'/oauth/owner/github/callback?'+new URLSearchParams({state,code:'provider-code'}),{headers:p.cookie?{cookie:p.cookie}:{}}),env);}
 test('owner GitHub flow preserves OAuth PKCE, single-use codes, refresh and restricted scopes',async()=>{
- const p=await pending();assert.equal(p.r.status,200);assert(p.tx);
+ const p=await pending();assert.equal(p.r.status,200);assert(p.tx);assert.equal(p.r.headers.get("referrer-policy"),"same-origin");
  const a=await begin(p.tx);
  const bad=await callback(a,'forged-state');assert.equal(bad.status,403);assert.equal(providerCalls,0);
  const result=await callback(a);assert.equal(result.status,302);
@@ -87,7 +87,7 @@ test('forged callbacks, Claude remote write scope and unauthenticated MCP are re
  assert.equal((await pending(cid,'https://evil.example/callback')).r.status,400);
  const narrowed=await pending(cid,redirect,'ara.read ara.write');assert.equal(narrowed.r.status,200);assert.deepEqual(JSON.parse(Buffer.from(narrowed.tx.split('.')[0],'base64url')).scopes,['ara.read']);
  assert.equal((await pending(cid,redirect,'ara.write')).r.status,400);
- assert.equal((await worker.fetch(new Request(origin+'/mcp',{method:'POST',body:'{}'}),env)).status,401);
+ const denied=await worker.fetch(new Request(origin+'/mcp',{method:'POST',body:'{}'}),env);assert.equal(denied.status,401);assert(denied.headers.get('www-authenticate').includes('github.read github.write'));
 });
 test('existing pinned ChatGPT authorization and access-token contract remain valid',async()=>{
  const client='https://chatgpt.com/oauth/client.json',callback='https://chatgpt.com/connector_platform_oauth_redirect';

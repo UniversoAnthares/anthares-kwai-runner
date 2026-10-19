@@ -39,7 +39,7 @@ function json(data, status2 = 200, headers = {}) {
 }
 __name(json, "json");
 function html(body, status2 = 200) {
-  return new Response(body, { status: status2, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" } });
+  return new Response(body, { status: status2, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'", "referrer-policy": "same-origin", "x-content-type-options": "nosniff" } });
 }
 __name(html, "html");
 function esc(v) {
@@ -559,7 +559,7 @@ var index_default = { async fetch(req, env) {
     if (u.pathname === "/mcp") {
       if (req.method !== "POST") return new Response("", { status: 405, headers: { Allow: "POST" } });
       const token = await st(env).verifyToken(bearer(req), "access");
-      if (!token) return json({ error: "unauthorized" }, 401, { "www-authenticate": `Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource", scope="ara.read ara.write"` });
+      if (!token) return json({ error: "unauthorized" }, 401, { "www-authenticate": `Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource", scope="ara.read ara.write github.read github.write"` });
       let rpc;
       try {
         rpc = await req.json();
