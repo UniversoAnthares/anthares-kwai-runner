@@ -33,10 +33,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      - name: Retrieve GitLab API credential from Anthares Secrets when configured
+        id: bws-auth
+        if: ${{ vars.ANTHARES_SECRETS_GITLAB_TOKEN_ID != '' }}
+        continue-on-error: true
+        uses: bitwarden/sm-action@f1de238fc00c738c56140796018be9084c2b5d21
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            ${{ vars.ANTHARES_SECRETS_GITLAB_TOKEN_ID }} > ANTHARES_GITLAB_TOKEN_FROM_BW
       - name: Clone authorized private Clipper repository read-only
         shell: bash
         env:
-          GL_AUTH: ${{ secrets.GITLAB_TOKEN }}
+          GL_AUTH: ${{ env.ANTHARES_GITLAB_TOKEN_FROM_BW || secrets.GITLAB_TOKEN }}
         run: |
           set -euo pipefail
           test -n "$GL_AUTH" || { echo "::error::CLIPPER_READ_CREDENTIAL_NOT_AVAILABLE"; exit 1; }
