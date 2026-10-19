@@ -115,4 +115,11 @@ jobs:
               exit 1
             fi
           done
+          # Verify that overlapping clips with different WordPress assets remain
+          # pending, including the final cleanup/retention safety guard.
+          if ! php tests/test-cortes-overlap-identity.php >>/tmp/wordpress-qa.log 2>&1; then
+            echo "::error::WORDPRESS_CORTES_OVERLAP_IDENTITY_FAILED"
+            exit 1
+          fi
+          echo "WORDPRESS_CORTES_OVERLAP_IDENTITY=PASS"
           echo "WORDPRESS_PRIVATE_GITHUB_RUNNER=PASS"
