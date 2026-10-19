@@ -471,7 +471,7 @@ class Publisher:
         activity = self.current_activity()
         post = find_id(final, FINAL_POST_ID)
         field = find_id(final, EDITOR_ID) or next((n for n in final if n.get("resource-id") == EDITOR_ID), None)
-        if "ShareActivity" not in activity or not post or not field:
+        if not post or not field or not activity.startswith("com.kwai.video/") or not any(a in activity for a in ("ShareActivity", "HomeActivity")):
             raise KwaiUpError(f"final-screen-mismatch:{activity or 'unknown'}")
         privacy = find_id(final, PRIVACY_ID) or next((n for n in final if n.get("resource-id") == PRIVACY_ID), None)
         privacy_text = (privacy or {}).get("text", "").strip().casefold()
@@ -625,7 +625,9 @@ class Publisher:
         nodes = self.dump("25-precommit")
         activity = self.current_activity()
         post = find_id(nodes, FINAL_POST_ID)
-        if "ShareActivity" not in activity or not post:
+        field = find_id(nodes, EDITOR_ID)
+        privacy = find_id(nodes, PRIVACY_ID)
+        if not post or not field or not privacy or not activity.startswith("com.kwai.video/") or not any(a in activity for a in ("ShareActivity", "HomeActivity")):
             raise KwaiUpError("publish-boundary-lost")
         self.emit("PUBLISH_REQUESTED", job=self.cfg.job_id)
         self.tap_node(post, 1)
