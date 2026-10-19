@@ -58,3 +58,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: python tools/gitlab_quota_watcher.py
+
+# Bitwarden secret read remains opt-in until its ID is configured.
