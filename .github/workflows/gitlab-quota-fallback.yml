@@ -18,7 +18,7 @@ permissions:
   contents: read
 concurrency:
   group: gitlab-quota-fallback-kwai
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   gitlab-contract-tests:
     name: Validate GitLab CORTES code on independent GitHub runner
