@@ -21,7 +21,7 @@ ADB=os.getenv("ANTHARES_ADB",r"C:\Users\Lucas\.kwai-up\platform-tools\adb.exe")
 REMOTE="/sdcard/anthares-kwai-public-link-proof.xml"
 
 def adb(*args: str, timeout=35) -> str:
-    proc=subprocess.run([ADB,"-s",SERIAL,*args],capture_output=True,text=True,timeout=timeout)
+    proc=subprocess.run([ADB,"-s",SERIAL,*args],capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=timeout)
     if proc.returncode:
         raise RuntimeError("adb_failed:"+str(proc.returncode)+":"+str(args[:2]))
     return proc.stdout
