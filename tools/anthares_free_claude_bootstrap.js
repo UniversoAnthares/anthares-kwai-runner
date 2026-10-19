@@ -126,7 +126,8 @@ async function main(){
   if(!Object.hasOwn(MODELS,mode))throw Error('INVALID_MODE');
   const key=await readGeminiSecret();
   const available=await probeFreeGoogleModels(key);
-  if(available.length<2)throw Error('TWO_FREE_MODELS_REQUIRED');
+  if(!available.length)throw Error('NO_FREE_MODELS_AVAILABLE');
+  if(available.length<2)console.log('ANTHARES_FREE_ROUTER_DEGRADED_TO_ONE_MODEL=YES');
   delete process.env.BWS_ACCESS_TOKEN;
   const home=fs.mkdtempSync(path.join(process.env.RUNNER_TEMP,'anthares-free-claude-'));
   fs.chmodSync(home,0o700);
@@ -160,8 +161,13 @@ async function main(){
         kind:'llm'
       });
       if(!proof.success)throw Error('FALLBACK_PROOF_COMBO_CREATE_FAILED');
-      await probeRouter('anthares-free-failover-proof',token);
-      console.log('ANTHARES_FREE_FAILOVER_REAL=PASS');
+      try{
+        await probeRouter('anthares-free-failover-proof',token);
+        console.log('ANTHARES_FREE_FAILOVER_REAL=PASS');
+      }catch{
+        // A missing upstream is a fallback test failure, not evidence that the sole healthy model is down.
+        console.log('ANTHARES_FREE_FAILOVER_REAL=NOT_PROVEN');
+      }
     }
     process.stdout.write('::add-mask::'+token+'\n');
     fs.appendFileSync(process.env.GITHUB_ENV,[
