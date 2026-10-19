@@ -546,8 +546,13 @@ export default {
       if (!fence.ok) return json({ error: "fence_not_owned", fence_status: fence.status, fence_error: fence.error || null }, fence.status === 409 ? 409 : 503);
       let body = {};
       try { body = await request.json(); } catch {}
-      await st.heartbeat(auth.device, body);
-      return json({ ok: true, fence_epoch: fence.epoch ?? null });
+      try {
+        await st.heartbeat(auth.device, body);
+        return json({ ok: true, fence_epoch: fence.epoch ?? null });
+      } catch (error) {
+        console.error("ara_heartbeat_state_failure", error?.name || "error");
+        return json({ ok: false, error: "state_unavailable" }, 503);
+      }
     }
 
     if (url.pathname === "/v1/device/jobs/next" && request.method === "GET") {
@@ -555,8 +560,13 @@ export default {
       if (!auth.ok) return json({ error: "unauthorized" }, 401);
       const fence = await sharedFence(request, auth.device, "acquire");
       if (!fence.ok) return json({ error: "fence_not_owned", fence_status: fence.status, fence_error: fence.error || null }, fence.status === 409 ? 409 : 503);
-      const job = await st.leaseNext(auth.device, 35);
-      return job ? json({ job, fence_epoch: fence.epoch ?? null }) : new Response(null, { status: 204 });
+      try {
+        const job = await st.leaseNext(auth.device, 35);
+        return job ? json({ job, fence_epoch: fence.epoch ?? null }) : new Response(null, { status: 204 });
+      } catch (error) {
+        console.error("ara_job_lease_state_failure", error?.name || "error");
+        return json({ ok: false, error: "state_unavailable" }, 503);
+      }
     }
 
     const resultMatch = url.pathname.match(/^\/v1\/device\/jobs\/([A-Za-z0-9_-]{1,100})\/result$/);
