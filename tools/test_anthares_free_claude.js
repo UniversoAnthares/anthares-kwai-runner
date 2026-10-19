@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {validateTask,validateChanges,buildInstructions}=require('./anthares_free_claude_task');
+const {validateTask,validateChanges,buildInstructions,buildClaudeArgs}=require('./anthares_free_claude_task');
 const {MODELS,PORT,extractAssistantText}=require('./anthares_free_claude_bootstrap');
 test('free models, distinct fallback',()=>{
   for(const role of ['plan','edit']){
@@ -34,4 +34,19 @@ test('9Router streaming Anthropic, OpenAI and JSON responses require generated t
   assert.equal(extractAssistantText(JSON.stringify({error:{message:'denied'}})),'');
   assert.equal(extractAssistantText('data: {"type":"message_start","message":{"id":"abc","content":[]}}\n\n'),'');
   assert.equal(extractAssistantText(''), '');
+});
+
+test('canary disables all tools, production modes keep tight allowlist',()=>{
+  const plan={mode:'plan'}, edit={mode:'edit'};
+  const smoke=buildClaudeArgs(plan,'anthares-free-plan',true);
+  assert.equal(smoke[smoke.indexOf('--tools')+1],'');
+  assert.equal(smoke[smoke.indexOf('--max-turns')+1],'3');
+  assert.equal(smoke[smoke.indexOf('--permission-mode')+1],'default');
+  const a=buildClaudeArgs(plan,'anthares-free-plan');
+  assert.equal(a[a.indexOf('--tools')+1],'Read,Glob,Grep');
+  assert.equal(a[a.indexOf('--max-turns')+1],'20');
+  const b=buildClaudeArgs(edit,'anthares-free-edit');
+  assert.equal(b[b.indexOf('--tools')+1],'Read,Edit,Write,Glob,Grep');
+  assert.equal(b[b.indexOf('--disallowedTools')+1],'mcp__*');
+  assert(!b.includes('Bash'));
 });
