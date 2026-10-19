@@ -1,0 +1,104 @@
+--- a/tools/kwai_physical_queue_daemon.py
++++ b/tools/kwai_physical_queue_daemon.py
+@@ -280,64 +280,45 @@
+  if MAINTENANCE.exists():
+   log('QUEUE_PAUSED_MAINTENANCE_BEFORE_LEASE no_lease=1')
+   return 0
+- # Today (19 Oct) retains the already-running emergency spacing; future batches
+- # must provide an explicit deadline contract. No guessed deadline is allowed.
++ # One serial Android publisher; no fixed noon/midnight target that delays jobs.
++ # Safe cap: at most 100 confirmed posts/day. Default pace: one per ten minutes.
+  import datetime
+  try:
+-  completed=[line for line in LOG.read_text(encoding='utf-8').splitlines() if ' JOB_OK ' in line]
+- except OSError: completed=[]
+- if datetime.date.today() <= datetime.date(2026,10,19):
+-  try:
+-   last=datetime.datetime.fromisoformat(completed[-1][:19]) if completed else None
+-   remaining=300-(datetime.datetime.now()-last).total_seconds() if last else 0
+-   if remaining>0:
+-    log('PUBLICATION_INTERVAL_WAIT seconds='+str(int(remaining)))
+-    return 0
+-  except (ValueError,IndexError): pass
+- else:
+-  # Global deadline comes from policy; the ONLY batch-specific input is the
+-  # pending job count returned by the authoritative Neon queue.
+-  try:
+-   from cortes_neon_queue_client import call
+-   from datetime import datetime,timedelta
+-   cache_path=LOGDIR/'cortes-stats-cache.json'
+-   try:
+-    stats=call('stats',{'target_key':'kwai:'+EXPECTED_ACCOUNT})
+-    if not stats.get('ok'):raise RuntimeError('queue-stats-unavailable')
+-    cache_payload={'saved_at':time.time(),'stats':{k:stats.get(k) for k in ('ok','pending','last_confirmed_at')}}
+-    tmp=cache_path.with_suffix('.tmp')
+-    tmp.write_text(compact(cache_payload),encoding='utf-8')
+-    tmp.replace(cache_path)
+-   except Exception:
+-    old=json.loads(cache_path.read_text(encoding='utf-8'))
+-    if time.time()-float(old.get('saved_at',0))>120:raise RuntimeError('queue-stats-cache-expired')
+-    stats=old['stats']
+-    if not stats.get('ok'):raise RuntimeError('queue-stats-invalid-cache')
+-    log('PUBLICATION_SCHEDULING_CACHE_FALLBACK max_age_seconds=120')
+-   pending=int(stats.get('pending',-1))
+-   if pending<0:raise ValueError('invalid-pending-count')
+-   if not pending:
+-    log('PUBLICATION_QUEUE_EMPTY stats=verified')
+-    return 0
+-   now=datetime.now().astimezone()
+-   clock=os.getenv('CORTES_DAILY_DEADLINE','12:00')
+-   hour,minute=map(int,clock.split(':'))
+-   deadline=now.replace(hour=hour,minute=minute,second=0,microsecond=0)
+-   if deadline<=now:deadline+=timedelta(days=1)
+-   fromiso=lambda value:datetime.fromisoformat(str(value).replace('Z','+00:00')).astimezone(now.tzinfo)
+-   last_remote=fromiso(stats['last_confirmed_at']) if stats.get('last_confirmed_at') else None
+-   local_today=[datetime.fromisoformat(line[:19]).replace(tzinfo=now.tzinfo) for line in completed if line[:10]==now.date().isoformat()]
+-   last=max([v for v in [last_remote,*local_today] if v is not None],default=None)
+-   if last and last.date()==now.date():
+-    from cortes_deadline_pacing import next_due_from_count
+-    wait=(next_due_from_count(last,deadline,pending)-now).total_seconds()
+-    if wait>0:
+-     log('PUBLICATION_DYNAMIC_WAIT seconds='+str(int(wait))+' pending='+str(pending)+' deadline='+deadline.isoformat())
+-     return 0
+-   log('PUBLICATION_DYNAMIC_DUE pending='+str(pending)+' deadline='+deadline.isoformat())
+-  except Exception as err:
+-   log('PUBLICATION_SCHEDULING_RETRY error='+type(err).__name__+' no_lease=1')
++  from cortes_neon_queue_client import call
++  now=datetime.datetime.now().astimezone()
++  stats=call('stats',{'target_key':'kwai:'+EXPECTED_ACCOUNT})
++  if not stats.get('ok'):raise RuntimeError('queue_stats_invalid')
++  pending=int(stats.get('pending',-1))
++  if pending<0:raise RuntimeError('queue_pending_invalid')
++  if pending==0:
++   log('PUBLICATION_QUEUE_EMPTY stats=verified')
+    return 0
++  recent=[ln for ln in LOG.read_text(encoding='utf-8').splitlines()
++          if ' JOB_OK ' in ln] if LOG.exists() else []
++  today=now.date().isoformat()
++  posted_today=sum(ln.startswith(today) for ln in recent)
++  cap=max(1,min(100,int(os.getenv('CORTES_KWAI_DAILY_POST_LIMIT','100'))))
++  if posted_today>=cap:
++   log('PUBLICATION_DAILY_CAP_REACHED posted='+str(posted_today)+' cap='+str(cap)+' no_lease=1')
++   return 0
++  prior=[]
++  for ln in recent[-8:]:
++   try:prior.append(datetime.datetime.fromisoformat(ln[:19]).replace(tzinfo=now.tzinfo))
++   except ValueError:pass
++  if stats.get('last_confirmed_at'):
++   remote=datetime.datetime.fromisoformat(str(stats['last_confirmed_at']).replace('Z','+00:00'))
++   if remote.tzinfo is None:raise RuntimeError('queue_timestamp_missing_tz')
++   prior.append(remote.astimezone(now.tzinfo))
++  last=max(prior,default=None)
++  interval=max(300,min(1800,int(os.getenv('CORTES_KWAI_MIN_POST_INTERVAL_SECONDS','600'))))
++  if last and last>now-datetime.timedelta(seconds=interval):
++   wait=max(1,int((last+datetime.timedelta(seconds=interval)-now).total_seconds()))
++   log('PUBLICATION_INTERVAL_WAIT seconds='+str(wait)+' pending='+str(pending)+' cap='+str(cap))
++   return 0
++  log('PUBLICATION_DUE pending='+str(pending)+' posted_today='+str(posted_today)+' daily_cap='+str(cap))
++ except Exception as exc:
++  log('PUBLICATION_PACING_SAFE_RETRY error='+type(exc).__name__+' no_lease=1')
++  return 0
+  code,d=signed_post('/job/lease',{'executor':EXECUTOR,'platform':'kwai','ttl_seconds':TTL})
+  if code//100!=2 or not d.get('ok'):queue_failure('lease',code,d)
+  job=d.get('job')
+
