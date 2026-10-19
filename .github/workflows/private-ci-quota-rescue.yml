@@ -46,6 +46,16 @@ jobs:
             echo "::error::CLIPPER_SOURCE_READ_DENIED"
             exit 1
           fi
+          expected="${{ inputs.gitlab_sha }}"
+          if [ -n "$expected" ]; then
+            [[ "$expected" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::INVALID_GITLAB_SHA"; exit 1; }
+            if [ "$(git -C source rev-parse HEAD)" != "$expected" ]; then
+              git -c "http.extraheader=AUTHORIZATION: Basic $auth" -C source fetch --quiet --depth 1 origin "$expected" >/dev/null 2>&1 || { echo "::error::GITLAB_COMMIT_UNAVAILABLE"; exit 1; }
+              git -C source checkout --quiet --detach FETCH_HEAD
+            fi
+            test "$(git -C source rev-parse HEAD)" = "$expected" || { echo "::error::GITLAB_SOURCE_MISMATCH"; exit 1; }
+          fi
+          echo "ANTHARES_VALIDATED_SOURCE_SHA=$(git -C source rev-parse HEAD)"
           unset auth
       - uses: actions/setup-python@v5
         with:
@@ -74,16 +84,30 @@ jobs:
     if: ${{ inputs.component == '' || inputs.component == 'both' || inputs.component == 'wordpress' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
-    environment: wordpress-mirror
     steps:
-      - name: Clone authorized private WordPress repository read-only
-        uses: actions/checkout@v4
-        with:
-          repository: UniversoAnthares/anthares-wordpress
-          ref: main
-          token: ${{ secrets.WORDPRESS_MIRROR_GITHUB_READ_TOKEN }}
-          persist-credentials: false
-          path: source
+      - name: Clone canonical GitLab WordPress commit read-only
+        shell: bash
+        env:
+          GL_AUTH: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GL_AUTH" || { echo "::error::WORDPRESS_READ_CREDENTIAL_MISSING"; exit 1; }
+          auth="$(printf 'oauth2:%s' "$GL_AUTH" | base64 -w0)"
+          if ! git -c "http.extraheader=AUTHORIZATION: Basic $auth" clone --quiet --depth 1 --branch main \
+            https://gitlab.com/UniversoAnthares/anthares-wordpress.git source >/dev/null 2>&1; then
+            echo "::error::WORDPRESS_GITLAB_SOURCE_READ_DENIED"; exit 1
+          fi
+          expected="${{ inputs.gitlab_sha }}"
+          if [ -n "$expected" ]; then
+            [[ "$expected" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::INVALID_GITLAB_SHA"; exit 1; }
+            if [ "$(git -C source rev-parse HEAD)" != "$expected" ]; then
+              git -c "http.extraheader=AUTHORIZATION: Basic $auth" -C source fetch --quiet --depth 1 origin "$expected" >/dev/null 2>&1 || { echo "::error::GITLAB_COMMIT_UNAVAILABLE"; exit 1; }
+              git -C source checkout --quiet --detach FETCH_HEAD
+            fi
+            test "$(git -C source rev-parse HEAD)" = "$expected" || { echo "::error::GITLAB_SOURCE_MISMATCH"; exit 1; }
+          fi
+          echo "ANTHARES_VALIDATED_SOURCE_SHA=$(git -C source rev-parse HEAD)"
+          unset auth
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
