@@ -1,0 +1,45 @@
+name: Anthares Gemini Bitwarden remote production sync
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '17 1,13 * * *'
+  push:
+    branches: [main, test/anthares-bws-write-capability-20261019]
+    paths:
+      - '.github/workflows/anthares-gemini-bitwarden-sync.yml'
+      - 'tools/anthares_gemini_bitwarden_sync.js'
+      - 'tools/anthares-gemini-select.php'
+      - 'tools/anthares-gemini-canary.php'
+      - 'tools/anthares-gemini-activate.sh'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-gemini-bitwarden-production-single-authority
+  cancel-in-progress: false
+jobs:
+  synchronize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+      ANTHARES_GEMINI_ACTIVATE_PRODUCTION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned official Bitwarden SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/anthares-bws-sdk" --no-audit --no-fund --silent @bitwarden/sdk-napi@1.0.0
+      - name: Read/create Bitwarden key, sync via pinned SSH and prove WordPress Gemini request
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/anthares_gemini_bitwarden_sync.js
+          node tools/anthares_gemini_bitwarden_sync.js
+      - name: Verify no local secret artifacts remain
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/anthares-bws-sdk"
+          echo ANTHARES_EPHEMERAL_RUNNER_CLEANUP=PASS
