@@ -1,0 +1,49 @@
+name: Anthares Gemini sync independent watchdog
+on:
+  schedule:
+    - cron: '41 3,9,15,21 * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: anthares-gemini-bitwarden-monitor
+  cancel-in-progress: false
+jobs:
+  verify-last-success:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Check Gemini synchronization freshness and alert on missing success
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const target = 'anthares-gemini-bitwarden-sync.yml';
+            const latest = await github.rest.actions.listWorkflowRuns({owner,repo,workflow_id:target,branch:'main',per_page:30});
+            const successful = latest.data.workflow_runs.filter(run => run.status==='completed' && run.conclusion==='success');
+            const last = successful[0];
+            const age = last ? Date.now() - Date.parse(last.created_at) : Infinity;
+            const stale = !last || age > 17 * 3600 * 1000;
+            const title='[Anthares] Gemini / Bitwarden — sincronização sem sucesso recente';
+            const open = await github.paginate(github.rest.issues.listForRepo, {owner,repo,state:'open',per_page:100});
+            const current=open.find(item=>!item.pull_request&&item.title===title);
+            if (!stale) {
+              core.info('ANTHARES_GEMINI_WATCHDOG=HEALTHY');
+              if (current) {
+                await github.rest.issues.update({owner,repo,issue_number:current.number,state:'closed',state_reason:'completed'});
+                core.info('ANTHARES_GEMINI_WATCHDOG_INCIDENT=RESOLVED');
+              }
+            } else {
+              const text=last?'Última execução bem-sucedida: '+last.html_url+'; a sincronização passou de 17 horas sem confirmação.':'Nenhuma sincronização bem-sucedida entre os últimos 30 runs consultados.';
+              const body=text+'\n\nVerifique o workflow '+target+'. Este monitor não acessa chaves e não modifica o WordPress.';
+              if (current) {
+                await github.rest.issues.createComment({owner,repo,issue_number:current.number,body});
+                core.warning('ANTHARES_GEMINI_WATCHDOG_INCIDENT=UPDATED');
+              } else {
+                await github.rest.issues.create({owner,repo,title,body});
+                core.warning('ANTHARES_GEMINI_WATCHDOG_INCIDENT=OPENED');
+              }
+              core.setFailed('ANTHARES_GEMINI_WATCHDOG=STALE');
+            }
