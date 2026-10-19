@@ -1,6 +1,19 @@
 name: Anthares remote private CI quota rescue
+run-name: quota-rescue-${{ inputs.component || 'both' }}-glsha-${{ inputs.gitlab_sha || github.sha }}
 on:
   workflow_dispatch:
+    inputs:
+      component:
+        type: choice
+        description: Validate specified private component
+        options: [both, clipper, wordpress]
+        default: both
+      gitlab_pipeline_id:
+        type: string
+        required: false
+      gitlab_sha:
+        type: string
+        required: false
   schedule:
     - cron: '53 */12 * * *'
   push:
@@ -16,6 +29,7 @@ concurrency:
 # Trusted main only; no PR/fork execution. Never deploy, mirror, publish or upload source/artifacts.
 jobs:
   clipper-private-qa:
+    if: ${{ inputs.component == '' || inputs.component == 'both' || inputs.component == 'clipper' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -57,6 +71,7 @@ jobs:
           done
           echo "CLIPPER_PRIVATE_GITHUB_RUNNER=PASS"
   wordpress-private-qa:
+    if: ${{ inputs.component == '' || inputs.component == 'both' || inputs.component == 'wordpress' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     environment: wordpress-mirror
