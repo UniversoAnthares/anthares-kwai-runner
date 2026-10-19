@@ -1,3 +1,9 @@
+# Anthares human reboot consent guard: preserve SYSTEM; remove only reboot rights.
+. 'C:\ProgramData\AntharesRebootConsent\native.ps1'
+foreach($rebootPrivilege in @('SeShutdownPrivilege','SeRemoteShutdownPrivilege')) {
+ [AntharesRebootToken]::Remove($PID,$rebootPrivilege)
+ if([AntharesRebootToken]::Present($PID,$rebootPrivilege)){throw 'Reboot consent guard failed'}
+}
 $ErrorActionPreference='Continue'
 $root='C:\ProgramData\AntharesRemoteAgent'
 $envFile=Join-Path $root 'agent-env.ps1'
@@ -56,14 +62,35 @@ function Save-State([string]$reason,[int]$agentPid=0){
 }
 try{
   while($true){
-    # Reload rotated device configuration before every supervised agent launch.
+    # Reload protected device configuration before every supervised agent launch.
     if(Test-Path $envFile){. $envFile}
     Load-QueueAuth
     if(-not (Queue-Configured)){Save-State 'waiting-for-private-queue-credential';Start-Sleep 15;continue}
     [void](Configure-HttpTransport)
     if(-not (Test-Path $exe)){Save-State 'binary-missing';Start-Sleep 10;continue}
     try{
-      $p=Start-Process -FilePath $exe -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+      $transition=$null;$transitionHeld=$false
+      try{
+        $transition=New-Object System.Threading.Mutex($false,'Global\AntharesRemoteExecutionTransitionV1')
+        $transitionHeld=$transition.WaitOne(10000)
+        if(-not $transitionHeld){throw 'execution_transition_lock_busy'}
+        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {$_.Name -eq 'anthares-remote-agent-v4.exe'} | ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
+        # A stopped SYSTEM task may leave its child agent running.
+        # Adopt that already healthy canonical agent instead of creating
+        # a second consumer of the same queues.
+        $existing=@(Get-CimInstance Win32_Process -Filter "Name='anthares-remote-agent-v4-c8.exe'" -ErrorAction Stop |
+          Where-Object {$_.SessionId -eq 0 -and $_.ExecutablePath -ieq $exe})
+        if($existing.Count -gt 1){throw 'multiple-canonical-agents'}
+        if($existing.Count -eq 1){
+          $p=Get-Process -Id $existing[0].ProcessId -ErrorAction Stop
+          Save-State 'adopted-existing-canonical-agent' $p.Id
+        }else{
+          $p=Start-Process -FilePath $exe -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        }
+      }finally{
+        if($transitionHeld -and $transition){try{$transition.ReleaseMutex()}catch{}}
+        if($transition){$transition.Dispose()}
+      }
       $mode=if($env:ANTHARES_CONTROL_URL){'running-vercel-primary-with-private-queue-recovery'}else{'running-private-queue'}
       Save-State $mode $p.Id
       while(-not $p.HasExited){Start-Sleep 10;Load-QueueAuth;[void](Configure-HttpTransport);Save-State $mode $p.Id}
@@ -72,3 +99,5 @@ try{
     Start-Sleep 2
   }
 }finally{try{$mutex.ReleaseMutex()}catch{};$mutex.Dispose()}
+
+
