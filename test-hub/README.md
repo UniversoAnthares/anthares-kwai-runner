@@ -160,3 +160,11 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - PROVEN: `tools/provider_router.py` implementa GitHub/GitLab como peers, seleção alternada, single-writer lease, lease generation, checkpoint fencing e failover condicionado a provider indisponível + HEAD idêntico.
 - PROVEN: workflow público `37675173709` / job `112976698070` executou os 6 testes do roteador e terminou `success`.
 - A persistência de lease/checkpoint permanece no `anthares-control`; o módulo do runner é a política determinística e não cria um segundo controller.
+
+
+### Claude MCP authorization — 2026-10-19 11:05 UTC
+- PARTIAL: missing Cloudflare sender-domain configuration was isolated; official GitHub owner identity fallback is deployed, with PKCE, encrypted browser state, identity allowlist and single-use codes preserved.
+- PROVEN: real Claude Free login and consent page request ara.read/github.read/github.write; 19 Node tests, signed capabilities regression and live discovery/negative checks pass. Existing ChatGPT Remote remains operational.
+- Latest Worker: 13f5ee1d-33fd-4310-b2ca-f16e1b2871ca, PR162 source5306fbf2. Scoped GitHub edits now use atomic expectedHeadOid; begin_task returns the post-lease base SHA.
+- PENDING: actual GitHub visible owner consent, provider callback, Claude-issued file read/edit and draft PR. GitHub requires a visible focused authorization page; Anthares Remote explicitly forbids interactive focus manipulation. Owner action is pending; no complete integration claim is authorized.
+- Canonical evidence: test-hub/findings/20261019-1105-claude-oauth-interoperability-and-branch-fencing-partial.md. Recovery lease closed pending the interactive gate; fresh lease required before further mutation.
