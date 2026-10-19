@@ -5,6 +5,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 import { DurableObject } from "cloudflare:workers";
 import { isClaudeClient, isClaudeCallbackPair, permittedClaudeScopes } from "./claude-client-policy.mjs";
 import { githubTools, callGithubTool } from "./github-bridge.mjs";
+import { ownerGithubConfigured, startOwnerGithub, finishOwnerGithub } from "./owner-github-auth.mjs";
 var ORIGIN = "https://anthares-ara-mcp.anthares1.workers.dev";
 var CONTROL = "https://anthares-ara-vercel-reserve.vercel.app";
 var DEFAULT_DEVICE = "DESKTOP-FTDK0HP";
@@ -38,7 +39,7 @@ function json(data, status2 = 200, headers = {}) {
 }
 __name(json, "json");
 function html(body, status2 = 200) {
-  return new Response(body, { status: status2, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" } });
+  return new Response(body, { status: status2, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" } });
 }
 __name(html, "html");
 function esc(v) {
@@ -467,6 +468,26 @@ function rpcError(id, code, message, data) {
   return json({ jsonrpc: "2.0", id, error: { code, message, ...data ? { data } : {} } });
 }
 __name(rpcError, "rpcError");
+async function pendingOwner(env, tx) {
+  const p = await st(env).verifyToken(tx, "oauth_pending");
+  if (!p || !await clientAllowed(env, p.clientId) || !validRedirect(p.redirectUri,p.clientId) ||
+      !parseScopes(p.scopes.join(" "),p.clientId)) return null;
+  return p;
+}
+async function completeOwner(env, tx) {
+  const p = await pendingOwner(env, tx);
+  if (!p) return json({error:"authorization_expired"},400);
+  if (!await st(env).consume("oauth_pending", p.jti, p.exp)) return json({error:"authorization_replayed"},400);
+  if (!await st(env).pinClient(p.clientId)) return json({error:"invalid_client"},400);
+      const code = await st(env).signToken({ typ: "oauth_code", iss: ORIGIN, aud: ORIGIN, exp: Math.floor(Date.now() / 1e3) + 300, jti: rand(16), clientId: p.clientId, redirectUri: p.redirectUri, challenge: p.challenge, scopes: p.scopes, scp: p.scopes });
+      const target = new URL(p.redirectUri);
+      target.searchParams.set("code", code);
+      if (p.state) target.searchParams.set("state", p.state);
+      target.searchParams.set("iss", ORIGIN);
+      return new Response(null, {status:302, headers:{location:target.toString(), "cache-control":"no-store", "referrer-policy":"no-referrer"}});
+}
+const ownerHelpers={origin:ORIGIN,state:st,pending:pendingOwner,complete:completeOwner};
+
 var index_default = { async fetch(req, env) {
   const u = new URL(req.url);
   try {
@@ -480,7 +501,7 @@ var index_default = { async fetch(req, env) {
       } catch {
       }
       const pinned = !!await st(env).pinnedClient();
-      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: "email_otp", oauth_client_pinned: pinned }, controlReady ? 200 : 503);
+      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: ownerGithubConfigured(env) ? "github_owner_identity" : "email_otp", oauth_client_pinned: pinned }, controlReady ? 200 : 503);
     }
     if (req.method === "GET" && u.pathname === "/.well-known/ara-control-key") return new Response(await st(env).publicPem(), { headers: { "content-type": "application/x-pem-file", "cache-control": "no-store" } });
     if (req.method === "GET" && u.pathname === "/.well-known/oauth-protected-resource") return json({ resource: ORIGIN, authorization_servers: [ORIGIN], scopes_supported: [...SCOPES], resource_documentation: "https://github.com/UniversoAnthares/anthares-kwai-runner" });
@@ -489,6 +510,7 @@ var index_default = { async fetch(req, env) {
       const cid = u.searchParams.get("client_id") || "", red = u.searchParams.get("redirect_uri") || "", challenge = u.searchParams.get("code_challenge") || "", method = u.searchParams.get("code_challenge_method") || "", resource = u.searchParams.get("resource") || ORIGIN, scopes = parseScopes(u.searchParams.get("scope"), cid);
       if (!await clientAllowed(env, cid) || !validRedirect(red, cid) || u.searchParams.get("response_type") !== "code" || method !== "S256" || challenge.length < 43 || !(resource === ORIGIN || (isClaudeClient(cid) && resource === ORIGIN + "/mcp")) || !scopes) return json({ error: "invalid_request" }, 400);
       const tx = await st(env).signToken({ typ: "oauth_pending", iss: ORIGIN, aud: ORIGIN, exp: Math.floor(Date.now() / 1e3) + 600, jti: rand(16), clientId: cid, redirectUri: red, challenge, scopes, scp: scopes, state: u.searchParams.get("state") || "" });
+      if (ownerGithubConfigured(env)) return html(`<!doctype html><html><head><meta charset="utf-8"><title>Autorizar Anthares</title></head><body><main><h1>Autorizar Anthares</h1><p>Confirme a identidade da conta proprietaria UniversoAnthares pelo GitHub.</p><p>Permissoes solicitadas: ${esc(scopes.join(", "))}</p><form method="post" action="/oauth/owner/github"><input type="hidden" name="tx" value="${esc(tx)}"><button type="submit">Autorizar com GitHub</button></form></main></body></html>`);
       const bs = await bootstrapOtpStatus(env);
       if (!bs.active) {
         const code = await st(env).createEmailChallenge(tx);
@@ -502,20 +524,19 @@ var index_default = { async fetch(req, env) {
       }
       return html(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Remote</title></head><body><main><h1>Anthares Remote</h1><p>Digite o c\xF3digo tempor\xE1rio enviado ao e-mail cadastrado. Esta autoriza\xE7\xE3o n\xE3o depende da \xE1rea de transfer\xEAncia nem da sess\xE3o interativa do Windows.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="tx" value="${esc(tx)}"><label>C\xF3digo <input type="password" name="approval" autocomplete="one-time-code" required autofocus></label><button type="submit">Autorizar</button></form></main></body></html>`);
     }
+    if (req.method === "POST" && u.pathname === "/oauth/owner/github") return startOwnerGithub(req,env,ownerHelpers);
+    if (req.method === "GET" && u.pathname === "/oauth/owner/github/callback") return finishOwnerGithub(req,env,ownerHelpers);
     if (req.method === "POST" && u.pathname === "/oauth/authorize") {
       const f = await req.formData();
-      const p = await st(env).verifyToken(f.get("tx") || "", "oauth_pending");
-      if (!p) return json({ error: "authorization_expired" }, 400);
-      if (!await clientAllowed(env, p.clientId)) return json({ error: "invalid_client" }, 400);
-      if (!await st(env).verifyEmailChallenge(f.get("tx") || "", f.get("approval") || "")) return json({ error: "authorization_denied" }, 403);
-      if (!await st(env).consume("oauth_pending", p.jti, p.exp)) return json({ error: "authorization_replayed" }, 400);
-      if (!await st(env).pinClient(p.clientId)) return json({ error: "invalid_client" }, 400);
-      const code = await st(env).signToken({ typ: "oauth_code", iss: ORIGIN, aud: ORIGIN, exp: Math.floor(Date.now() / 1e3) + 300, jti: rand(16), clientId: p.clientId, redirectUri: p.redirectUri, challenge: p.challenge, scopes: p.scopes, scp: p.scopes });
-      const target = new URL(p.redirectUri);
-      target.searchParams.set("code", code);
-      if (p.state) target.searchParams.set("state", p.state);
-      target.searchParams.set("iss", ORIGIN);
-      return Response.redirect(target.toString(), 302);
+      const tx=String(f.get("tx")||"");
+      const p=await pendingOwner(env,tx);
+      if (!p) return json({error:"authorization_expired"},400);
+      if (ownerGithubConfigured(env)) return json({error:"use_owner_github_authorization"},403);
+      let attempt=false;
+      for(let i=0;i<5;i++) if(await st(env).consume("oauth_email_attempt_"+i,p.jti,p.exp)){attempt=true;break;}
+      if(!attempt) return json({error:"authorization_attempts_exceeded"},429);
+      if (!await st(env).verifyEmailChallenge(tx,f.get("approval")||"")) return json({error:"authorization_denied"},403);
+      return completeOwner(env,tx);
     }
     if (req.method === "POST" && u.pathname === "/oauth/token") {
       const f = await req.formData();

@@ -15,4 +15,7 @@ name = "AUTH_EMAIL_SEND"
 destination_address = "lucasyahn@gmail.com"
 
 [vars]
-AUTH_EMAIL_FROM = "noreply@anthares.us"
+AUTH_EMAIL_FROM = "contato@anthares.us"
+AUTH_OWNER_METHOD = "github"
+ARA_OWNER_GITHUB_CLIENT_ID = "Ov23li1xRCECmyI7JYsn"
+ARA_OWNER_GITHUB_ID = "81930373"
