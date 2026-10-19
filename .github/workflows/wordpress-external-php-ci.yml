@@ -1,0 +1,90 @@
+name: Anthares WordPress PHP CI — independent GitLab mirror
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/wordpress-external-php-ci.yml'
+  schedule:
+    - cron: '23 */4 * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: anthares-wordpress-php-independent-check
+  cancel-in-progress: false
+jobs:
+  wordpress-php:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+    steps:
+      - name: Fetch current mirrored WordPress main (outside WordPress billing scope)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GITLAB_TOKEN" || { echo 'WORDPRESS_CI_MISSING_GITLAB_TOKEN'; exit 1; }
+          mkdir -p "$RUNNER_TEMP/anthares-wp-ci"
+          api='https://gitlab.com/api/v4/projects/87361776'
+          curl --fail --silent --show-error --retry 2 --max-time 65 \
+            --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            "$api/repository/branches/main" \
+            -o "$RUNNER_TEMP/anthares-wp-branch.json"
+          head_sha="$(jq -r '.commit.id // empty' "$RUNNER_TEMP/anthares-wp-branch.json")"
+          test "${#head_sha}" -eq 40 || { echo 'WORDPRESS_CI_SOURCE_REF_NOT_VERIFIED'; exit 1; }
+          echo "WORDPRESS_GITLAB_SOURCE_SHA=$head_sha"
+          curl --fail --silent --show-error --retry 2 --max-time 90 \
+            --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            "$api/repository/archive.tar.gz?sha=$head_sha" \
+            -o "$RUNNER_TEMP/anthares-wp-archive.tar.gz"
+          tar -xzf "$RUNNER_TEMP/anthares-wp-archive.tar.gz" --strip-components=1 \
+            -C "$RUNNER_TEMP/anthares-wp-ci"
+          test -f "$RUNNER_TEMP/anthares-wp-ci/anthares-ai-hub/deploy/anthares-secrets-runtime-bridge.php"
+          test -f "$RUNNER_TEMP/anthares-wp-ci/anthares-ai-hub/tests/secrets-mu-contract-smoke.php"
+          echo 'WORDPRESS_CI_MIRRORED_SOURCE=PASS'
+      - name: Run canonical WordPress PHP contract and regression suite
+        id: php
+        working-directory: ${{ runner.temp }}/anthares-wp-ci
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v php >/dev/null || { echo 'WORDPRESS_PHP_RUNTIME_UNAVAILABLE'; exit 1; }
+          echo "WORDPRESS_PHP_VERSION=$(php -r 'echo PHP_VERSION;')"
+          find anthares-ai-hub -type f -name '*.php' -print0 | xargs -0 -r -n 1 php -l >/dev/null
+          for test in \
+            anthares-ai-hub/tests/secrets-mu-contract-smoke.php \
+            tests/ai-hub-free-failover-smoke.php \
+            tests/ai-hub-quota-cooldown-smoke.php \
+            tests/ai-hub-migration-smoke.php \
+            tests/ai-hub-openrouter-429-smoke.php
+          do
+            test -f "$test"
+            php -l "$test" >/dev/null
+            php "$test"
+          done
+          echo 'ANTHARES_WORDPRESS_EXTERNAL_CI=PASS'
+      - name: Reconcile single incident on failure or recovery
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          PHP_CI_OUTCOME: ${{ steps.php.outcome }}
+        with:
+          script: |
+            const {owner,repo}=context.repo;
+            const title='[Anthares WordPress] CI remoto PHP requer atenção';
+            const issues=await github.paginate(github.rest.issues.listForRepo,{owner,repo,state:'open',per_page:100});
+            const active=issues.find(x=>!x.pull_request&&x.title===title);
+            if(process.env.PHP_CI_OUTCOME==='success'){
+              if(active) await github.rest.issues.update({owner,repo,issue_number:active.number,state:'closed',state_reason:'completed'});
+              core.info('WORDPRESS_REMOTE_CI_INCIDENT=NONE_OR_RESOLVED');
+            }else{
+              const url='https://github.com/'+owner+'/'+repo+'/actions/runs/'+context.runId;
+              const body='Validação do WordPress GitLab main falhou. Verifique o run: '+url+'\nNão enviar segredos nem repetir merges concorrentes.';
+              if(active) await github.rest.issues.createComment({owner,repo,issue_number:active.number,body});
+              else await github.rest.issues.create({owner,repo,title,body});
+              core.warning('WORDPRESS_REMOTE_CI_INCIDENT=OPEN_OR_UPDATED');
+            }
+      - name: Remove downloaded repository snapshot
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/anthares-wp-ci" "$RUNNER_TEMP/anthares-wp-archive.tar.gz" "$RUNNER_TEMP/anthares-wp-branch.json"
