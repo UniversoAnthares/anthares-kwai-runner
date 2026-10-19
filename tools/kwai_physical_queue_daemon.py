@@ -111,8 +111,17 @@ def pubstate(jobid):
  try:return json.loads(p.read_text(encoding='utf-8'))
  except Exception:return {}
 def evidence(jobid):
- st=pubstate(jobid); proof=st.get('profile_verification') or {}; ev=st.get('verification_evidence') or ''
- return {'remote_id':f"kwai-profile:{EXPECTED_ACCOUNT}:{proof.get('post_time') or jobid}",'confirmation_evidence':compact({'kind':ev,'account':proof.get('account'),'caption':proof.get('caption'),'post_time':proof.get('post_time'),'screenshot':proof.get('screenshot')})}
+ # Queue COMPLETE requires independently verified, user-openable Kwai URL.
+ # Profile thumbnail changes or a click on Publish are not publication proof.
+ folder=ROOT/'.state'/'kwai-memu-evidence'/re.sub(r'[^A-Za-z0-9._-]+','_',jobid)[-100:]
+ proof_file=folder/'public-link-proof.json'
+ if not proof_file.is_file():
+  raise RuntimeError('public-link-proof-missing')
+ proof=json.loads(proof_file.read_text(encoding='utf-8'))
+ url=str(proof.get('public_url') or '')
+ if proof.get('ok') is not True or proof.get('expected_account')!=EXPECTED_ACCOUNT or not re.fullmatch(r'https://(?:k\\.kwai\\.com/p/[A-Za-z0-9_-]+|www\\.kwai\\.com/@[A-Za-z0-9_.-]+/photo/[0-9]+)',url):
+  raise RuntimeError('public-link-proof-invalid')
+ return {'remote_id':url,'confirmation_evidence':proof}
 def callback(op):
  jid=os.environ['KWAI_QUEUE_JOB_ID']; gen=int(os.environ['KWAI_LEASE_GENERATION'])
  if op=='started':qpost('started',{'id':jid,'lease_generation':gen});return 0
