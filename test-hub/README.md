@@ -176,3 +176,11 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - Latest Worker: 24ffad76-20a0-4911-b6c9-465ad1b135b2, source dd14ef5d in integration PR162; 23 Node/workerd tests plus signed capabilities regression pass. GitHub identity OAuth is operational; email sender-domain delivery remains unavailable.
 - Scope boundary: Claude Remote remains read-only; arbitrary command/test execution is not exposed. PR162 is deployed but remains draft/unmerged. No whole-project publication acceptance is implied.
 - Canonical evidence: test-hub/findings/20261019-1216-claude-mcp-real-acceptance-proven.md, superseding the earlier partial authorization state and closing both recovery and acceptance leases.
+
+
+### Claude operational closure — 2026-10-19 18:48 UTC
+- DONE: PR162 merged as 4385a0f49f4ce3bcc9bd05f1dd1689e61d3324e9; operational docs PR191 merged as 001c47e4aa067b90f58ea747baac3fa3ab37c87a. Owner GitHub identity OAuth is canonical; email is not an integration dependency.
+- DONE: fixed run_tests suite implemented and deployed in Worker f69e09b4-4ef2-48f5-acaf-fed056d462e2, exact reviewed source pin 30217080974912cbfc049072b844f473a69c0e27. Actual Anthares Remote runner returned 26 pass, 0 fail and capabilities_passed=true under the renewed current-time lease. Arbitrary shell and unreviewed branch-code execution remain denied.
+- PROVEN: live control/device health and anonymous MCP 401. Previous actual Claude owner OAuth, read/write and draft PR164 acceptance remain valid. Do not merge disposable PR164.
+- BLOCKED EXTERNALLY: Claude Free exhausted its five-hour message quota and refused the new run_tests prompt before issuing any tool call; UI reports reset at 18:00. Only acceptance of the new test tool through Claude remains unproved. No paid upgrade, identity switching or repeated quota retries.
+- Evidence and lease closure: test-hub/findings/20261019-1848-claude-final-merge-and-approved-tests.md. Future acceptance needs a fresh lease. No CORTES/Android/SSH behavior changed.
