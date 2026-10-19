@@ -59,10 +59,12 @@ def playlist_items():
     candidates=[n for n in current if "LIVE" in text(n) and proof.center(n.get("bounds",""))]
     if not candidates:raise RuntimeError("source_playlist_tile_not_found")
     tap(candidates[-1])
-    listing=nodes()
-    if not matchnode(listing,"episodio") and not any("Episódio" in text(n) for n in listing):
-        raise RuntimeError("playlist_episodes_not_displayed")
-    return listing
+    for _ in range(5):
+        time.sleep(1.5)
+        listing=nodes()
+        if matchnode(listing,"episodio") or any("Episódio" in text(n) for n in listing):
+            return listing
+    raise RuntimeError("playlist_episodes_not_displayed")
 
 def open_episode(title):
     listing=playlist_items()
