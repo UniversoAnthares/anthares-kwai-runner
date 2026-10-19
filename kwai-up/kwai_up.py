@@ -505,10 +505,24 @@ class Publisher:
             raise KwaiUpError("editor-next-missing")
         self.tap_node(next_button, self.cfg.wait)
 
-        final = self.dismiss_known_overlays(self.dump("14-final"), "14-final")
-        activity = self.current_activity()
-        post = find_id(final, FINAL_POST_ID)
-        field = find_id(final, EDITOR_ID) or next((n for n in final if n.get("resource-id") == EDITOR_ID), None)
+        # Next may first display the media processing overlay. Wait for the
+        # verified final share controls; do not click Next or Publish again.
+        final = []
+        activity = ""
+        post = None
+        field = None
+        deadline = time.time() + 50
+        while time.time() < deadline:
+            final = self.dismiss_known_overlays(self.dump("14-final"), "14-final")
+            activity = self.current_activity()
+            post = find_id(final, FINAL_POST_ID)
+            field = find_id(final, EDITOR_ID) or next((n for n in final if n.get("resource-id") == EDITOR_ID), None)
+            if post and field and activity.startswith("com.kwai.video/") and any(a in activity for a in ("ShareActivity", "HomeActivity")):
+                break
+            if any("carregando" in (n.get("text", "").casefold()) for n in final):
+                time.sleep(3)
+                continue
+            time.sleep(3)
         if not post or not field or not activity.startswith("com.kwai.video/") or not any(a in activity for a in ("ShareActivity", "HomeActivity")):
             raise KwaiUpError(f"final-screen-mismatch:{activity or 'unknown'}")
         privacy = find_id(final, PRIVACY_ID) or next((n for n in final if n.get("resource-id") == PRIVACY_ID), None)
