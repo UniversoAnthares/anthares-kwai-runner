@@ -58,6 +58,8 @@ def main():
 
         result = invoke('probe')
         print('SSH_INDEPENDENT_PROVEN=1 transport=openssh-over-tailscale executor=github-hosted', flush=True)
+        if result.get('canonical_tasks_valid') is not True:
+            raise RuntimeError('canonical recovery configuration drift; automatic repair is blocked')
         if mode == 'probe':
             if result['action_performed']:
                 raise RuntimeError('read-only probe performed a recovery action')
@@ -74,7 +76,7 @@ def main():
             time.sleep(15)
         result = invoke('recover')
         if result['action_performed']:
-            # Starting the watchdog is not proof the agent actually recovered.
+            # Starting canonical recovery is not proof the agent recovered.
             for _ in range(6):
                 time.sleep(10)
                 result = invoke('probe')
