@@ -52,6 +52,20 @@ jobs:
           cloud_region: us
           secrets: |
             ${{ vars.ANTHARES_SECRETS_GITLAB_TOKEN_ID }} > ANTHARES_GITLAB_TOKEN_FROM_BW
+      - name: Confirm selected credential source without printing its value
+        env:
+          FROM_BW: ${{ env.ANTHARES_GITLAB_TOKEN_FROM_BW }}
+          LEGACY: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "$FROM_BW" ]; then
+            echo "ANTHARES_GITLAB_CREDENTIAL_SOURCE=BITWARDEN"
+          elif [ -n "$LEGACY" ]; then
+            echo "ANTHARES_GITLAB_CREDENTIAL_SOURCE=GITHUB_FALLBACK"
+          else
+            echo "::error::GITLAB_CREDENTIAL_UNAVAILABLE"
+            exit 1
+          fi
       - name: Detect actual GitLab runner quota failures and dispatch only new work
         env:
           GITLAB_TOKEN: ${{ env.ANTHARES_GITLAB_TOKEN_FROM_BW || secrets.GITLAB_TOKEN }}
