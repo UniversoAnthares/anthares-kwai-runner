@@ -551,7 +551,9 @@ class Publisher:
             raise KwaiUpError("ready-job-mismatch")
         if proof.get("caption") != self.cfg.caption:
             raise KwaiUpError("ready-caption-mismatch")
-        if int(time.time()) - int(proof.get("created_at", 0)) > 1200:
+        # Read-only verification of an already attempted publication may run
+        # hours later. Expiry still applies to prepare/commit to prevent stale posts.
+        if self.cfg.mode != "verify" and int(time.time()) - int(proof.get("created_at", 0)) > 1200:
             raise KwaiUpError("ready-proof-expired")
         if self.cfg.media:
             sha = sha256_file(self.cfg.media)
