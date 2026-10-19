@@ -35,6 +35,9 @@ jobs:
             const d=await c.secrets().get(target);
             if(!d.success||!d.data||!d.data.projectId||!d.data.organizationId)throw Error('METADATA_UNAVAILABLE');
             stage='CREATE_PROBE';
+            console.log('BWS_SDK_CREATE_FUNCTION_ARITY='+c.secrets().create.length);
+            console.log('BWS_PROJECT_METADATA_VALID='+(!!d.data.organizationId && !!d.data.projectId));
+            if(!d.data.organizationId||!d.data.projectId)throw Error('METADATA_INVALID');
             const name='ANTHARES_TEMP_ACCESS_PROBE_'+process.env.GITHUB_RUN_ID;
             try {
               const made=await c.secrets().create(name,'Temporary write access probe; delete immediately',d.data.organizationId,'nonsecret-access-probe',[d.data.projectId]);
@@ -49,6 +52,11 @@ jobs:
               console.log('BWS_WRITE_PROBE_CLEANUP=PASS');
             } catch(e) {
               if(!created)console.log('BWS_MACHINE_WRITE_ALLOWED=NO');
+              const m=String(e?.message||'');
+              const status=(m.match(/\\b(?:400|401|403|404|409|422|500)\\b/)||[])[0]||'NOT_EXPOSED';
+              const category=/resource not found/i.test(m)?'RESOURCE_NOT_FOUND':/permission|forbidden|access denied/i.test(m)?'PERMISSION':/validat|invalid|argument|type/i.test(m)?'INVALID_ARGUMENT':/already exists|duplicate/i.test(m)?'CONFLICT':'UNCLASSIFIED';
+              console.log('BWS_CREATE_HTTP='+status);
+              console.log('BWS_CREATE_ERROR_CLASS='+category);
               throw e;
             } finally {
               if(created&&!removed){try{const del=await c.secrets().delete([id]);if(del.success)console.log('BWS_WRITE_PROBE_CLEANUP=PASS');else console.log('BWS_WRITE_PROBE_CLEANUP=REQUIRES_REVIEW');}catch{console.log('BWS_WRITE_PROBE_CLEANUP=REQUIRES_REVIEW');}}
