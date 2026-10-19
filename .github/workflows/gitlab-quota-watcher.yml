@@ -18,6 +18,7 @@ on:
     branches: [main]
     paths:
       - 'tools/gitlab_quota_watcher.py'
+      - 'tools/test_gitlab_quota_watcher.py'
       - '.github/workflows/gitlab-quota-watcher.yml'
 permissions:
   actions: write
@@ -37,6 +38,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Verify three-system failover dispatch and deduplication offline
+        run: python3 tools/test_gitlab_quota_watcher.py
       - name: Detect actual GitLab runner quota failures and dispatch only new work
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
