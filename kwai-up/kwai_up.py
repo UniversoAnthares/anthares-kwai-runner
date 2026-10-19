@@ -449,12 +449,35 @@ class Publisher:
         time.sleep(max(2, self.cfg.wait - 2))
 
         album = self.dismiss_known_overlays(self.dump("11-album"), "11-album")
+        # On slower emulators long-press may not open the media picker.
+        # Retry only the known Create action while still on the verified home.
+        for _ in range(2):
+            has_picker = bool(find_text(album, ("Vídeos", "Videos"))) or any(
+                n.get("resource-id") == PREVIEW_CONTAINER_ID for n in album
+            )
+            if has_picker:
+                break
+            retry_create = find_id(album, RECORD_ID) or find_id(album, FAKE_ADD_ID)
+            if not retry_create:
+                raise KwaiUpError("album-not-open-and-create-not-present")
+            self.long_press_node(retry_create)
+            time.sleep(max(3, self.cfg.wait))
+            album = self.dismiss_known_overlays(self.dump("11-album"), "11-album")
+        else:
+            raise KwaiUpError("album-did-not-open-after-retries")
         videos_tab = find_text(album, ("Vídeos", "Videos"))
         if videos_tab:
             self.tap_node(videos_tab)
             time.sleep(3)
 
         videos = self.dismiss_known_overlays(self.dump("12-videos"), "12-videos")
+        for _ in range(3):
+            if any(n.get("resource-id") == PREVIEW_CONTAINER_ID for n in videos):
+                break
+            time.sleep(3)
+            videos = self.dismiss_known_overlays(self.dump("12-videos"), "12-videos")
+        else:
+            raise KwaiUpError("videos-picker-not-visible")
         previews = [
             n for n in videos
             if n.get("resource-id") == PREVIEW_CONTAINER_ID
