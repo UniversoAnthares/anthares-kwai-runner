@@ -1,4 +1,4 @@
-name: Anthares Bitwarden write permission isolated probe
+name: Anthares Bitwarden modern SDK write probe
 on:
   push:
     branches: [test/anthares-bws-write-capability-20261019]
@@ -10,56 +10,52 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     steps:
-      - name: Fetch pinned Bitwarden SDK adapter
-        shell: bash
+      - name: Install official Bitwarden SDK 1.0.0
         run: |
           set -euo pipefail
-          git clone --quiet --depth 1 --branch v2 https://github.com/bitwarden/sm-action.git /tmp/anthares-sm-action
-          test "$(git -C /tmp/anthares-sm-action rev-parse HEAD)" = "f1de238fc00c738c56140796018be9084c2b5d21"
-      - name: Safely test write authorization, remove test object
+          npm install --prefix /tmp/bws-test --no-audit --no-fund --silent @bitwarden/sdk-napi@1.0.0
+          echo 'BWS_MODERN_SDK=INSTALLED'
+      - name: Create and delete disposable Bitwarden secret using project scoping
         env:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
-        shell: bash
         run: |
           set -euo pipefail
-          test -n "$BWS_ACCESS_TOKEN" || { echo BWS_TOKEN_UNAVAILABLE; exit 2; }
-          node - <<'NODE'
-          const sdk = require('/tmp/anthares-sm-action/dist/node_modules/@bitwarden/sdk-napi');
-          const target = '6edd06b7-ce2e-4519-905f-b4e800e4fe1a';
-          let stage='AUTH', id=null, created=false, removed=false;
+          test -n "$BWS_ACCESS_TOKEN"
+          node <<'NODE'
+          const sdk=require('/tmp/bws-test/node_modules/@bitwarden/sdk-napi');
+          const testId='6edd06b7-ce2e-4519-905f-b4e800e4fe1a';
+          let phase='INIT', created=null, clean=false, client;
           (async()=>{
-            const c=new sdk.BitwardenClient({apiUrl:'https://api.bitwarden.com',identityUrl:'https://identity.bitwarden.com',userAgent:'anthares-permission-probe',deviceType:sdk.DeviceType.SDK});
-            const auth=await c.loginWithAccessToken(process.env.BWS_ACCESS_TOKEN.trim());
-            if(!auth.success)throw Error('AUTH_DENIED');
-            stage='READ_METADATA';
-            const d=await c.secrets().get(target);
-            if(!d.success||!d.data||!d.data.projectId||!d.data.organizationId)throw Error('METADATA_UNAVAILABLE');
-            stage='CREATE_PROBE';
-            console.log('BWS_SDK_CREATE_FUNCTION_ARITY='+c.secrets().create.length);
-            console.log('BWS_PROJECT_METADATA_VALID='+(!!d.data.organizationId && !!d.data.projectId));
-            if(!d.data.organizationId||!d.data.projectId)throw Error('METADATA_INVALID');
-            const name='ANTHARES_TEMP_ACCESS_PROBE_'+process.env.GITHUB_RUN_ID;
-            try {
-              const made=await c.secrets().create(name,'Temporary write access probe; delete immediately',d.data.organizationId,'nonsecret-access-probe',[d.data.projectId]);
-              if(!made.success||!made.data?.id)throw Error('CREATE_DENIED');
-              created=true;
-              id=made.data.id;
-              console.log('BWS_MACHINE_WRITE_ALLOWED=YES');
-              stage='DELETE_PROBE';
-              const del=await c.secrets().delete([id]);
-              if(!del.success)throw Error('DELETE_DENIED');
-              removed=true;
-              console.log('BWS_WRITE_PROBE_CLEANUP=PASS');
-            } catch(e) {
-              if(!created)console.log('BWS_MACHINE_WRITE_ALLOWED=NO');
-              const m=String(e?.message||'');
-              const status=(m.match(/\\b(?:400|401|403|404|409|422|500)\\b/)||[])[0]||'NOT_EXPOSED';
-              const category=/resource not found/i.test(m)?'RESOURCE_NOT_FOUND':/permission|forbidden|access denied/i.test(m)?'PERMISSION':/validat|invalid|argument|type/i.test(m)?'INVALID_ARGUMENT':/already exists|duplicate/i.test(m)?'CONFLICT':'UNCLASSIFIED';
-              console.log('BWS_CREATE_HTTP='+status);
-              console.log('BWS_CREATE_ERROR_CLASS='+category);
-              throw e;
-            } finally {
-              if(created&&!removed){try{const del=await c.secrets().delete([id]);if(del.success)console.log('BWS_WRITE_PROBE_CLEANUP=PASS');else console.log('BWS_WRITE_PROBE_CLEANUP=REQUIRES_REVIEW');}catch{console.log('BWS_WRITE_PROBE_CLEANUP=REQUIRES_REVIEW');}}
-            }
-          })().catch(e=>{console.error('BWS_PROBE_FAILED_AT='+stage);console.error('BWS_PROBE_ERROR_TYPE='+String(e.name||'Unknown').replace(/[^A-Za-z]/g,''));process.exitCode=1;});
+            client=new sdk.BitwardenClient({apiUrl:'https://api.bitwarden.com',identityUrl:'https://identity.bitwarden.com',userAgent:'anthares-bws-write-canary',deviceType:sdk.DeviceType.SDK});
+            phase='LOGIN';
+            const auth=await client.auth().loginAccessToken(process.env.BWS_ACCESS_TOKEN.trim(),'/tmp/bws-canary-state');
+            if(auth?.success===false)throw Error('AUTH_FAILED');
+            console.log('BWS_MODERN_AUTH=PASS');
+            phase='READ';
+            const response=await client.secrets().get(testId);
+            const data=response?.data||response;
+            if(response?.success===false||!data?.id||!data.projectId||!data.organizationId)throw Error('READ_FAILED');
+            console.log('BWS_MODERN_READ=PASS');
+            console.log('BWS_MODERN_CREATE_ARITY='+client.secrets().create.length);
+            phase='WRITE';
+            const p=await client.secrets().create('ANTHARES_DISPOSABLE_PERMISSION_PROBE_'+process.env.GITHUB_RUN_ID,'Disposable nonproduction test',data.organizationId,'nonsecret-value',[data.projectId]);
+            if(p?.success===false||!(p?.data?.id||p?.id))throw Error('WRITE_FAILED');
+            created=p.data?.id||p.id;
+            console.log('BWS_MODERN_WRITE=PASS');
+            phase='DELETE';
+            const d=await client.secrets().delete([created]);
+            if(d?.success===false)throw Error('DELETE_FAILED');
+            clean=true;
+            console.log('BWS_MODERN_CLEANUP=PASS');
+          })().catch(e=>{
+            console.log('BWS_MODERN_FAILURE_STAGE='+phase);
+            const m=String(e?.message||'');
+            const matches=m.match(/(?:400|401|403|404|409|422|500)/);
+            console.log('BWS_MODERN_HTTP='+((matches&&matches[0])||'NOT_EXPOSED'));
+            console.log('BWS_MODERN_ERROR_CLASS='+(/permission|forbidden|denied/i.test(m)?'PERMISSION':/invalid|argument|type/i.test(m)?'ARGUMENT':/resource not found/i.test(m)?'NOT_FOUND':'OTHER'));
+            process.exitCode=1;
+          }).finally(async()=>{
+            if(created&&!clean)try{await client.secrets().delete([created]);console.log('BWS_MODERN_CLEANUP_RETRY=ATTEMPTED')}catch{console.log('BWS_MODERN_CLEANUP_RETRY=FAILED')}
+            try{require('fs').rmSync('/tmp/bws-canary-state',{force:true})}catch{}
+          });
           NODE
