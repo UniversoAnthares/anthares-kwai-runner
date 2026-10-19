@@ -4,9 +4,15 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/anthares-free-claude-canary.yml'
+      - 'tools/anthares_free_claude_bootstrap.js'
+      - 'tools/anthares_free_claude_task.js'
+      - 'tools/test_anthares_free_claude.js'
   pull_request:
     paths:
       - '.github/workflows/anthares-free-claude-canary.yml'
+      - 'tools/anthares_free_claude_bootstrap.js'
+      - 'tools/anthares_free_claude_task.js'
+      - 'tools/test_anthares_free_claude.js'
 permissions:
   contents: read
 concurrency:
@@ -37,7 +43,7 @@ jobs:
           set -euo pipefail
           npm install -g --no-audit --no-fund --silent 9router@0.5.104 @anthropic-ai/claude-code@2.1.290
           npm install --prefix "$RUNNER_TEMP/anthares-bws-sdk" --no-audit --no-fund --silent @bitwarden/sdk-napi@1.0.0
-      - name: Bootstrap existing Bitwarden Gemini and two fallback models
+      - name: Verify current free Gemini models, live 9Router inference and Bitwarden
         if: github.event_name == 'push'
         env:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
