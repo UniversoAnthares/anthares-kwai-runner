@@ -1,0 +1,90 @@
+name: Anthares remote private CI quota rescue
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '53 */12 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/private-ci-quota-rescue.yml'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-private-ci-quota-rescue
+  cancel-in-progress: true
+
+# Trusted main only; no PR/fork execution. Never deploy, mirror, publish or upload source/artifacts.
+jobs:
+  clipper-private-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Clone authorized private Clipper repository read-only
+        shell: bash
+        env:
+          GL_AUTH: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GL_AUTH" || { echo "::error::CLIPPER_READ_CREDENTIAL_NOT_AVAILABLE"; exit 1; }
+          auth="$(printf 'oauth2:%s' "$GL_AUTH" | base64 -w0)"
+          if ! git -c "http.extraheader=AUTHORIZATION: Basic $auth" clone --quiet --depth 1 --branch main \
+            https://gitlab.com/UniversoAnthares/anthares-clipper.git source >/dev/null 2>&1; then
+            echo "::error::CLIPPER_SOURCE_READ_DENIED"
+            exit 1
+          fi
+          unset auth
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate private Clipper code without exposing test output
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          if ! python -m pip install --quiet requests pillow yt-dlp imageio-ffmpeg tzdata >/dev/null 2>&1; then
+            echo "::error::CLIPPER_REQUIREMENTS_FAILED"; exit 1
+          fi
+          if ! python -m py_compile clipper.py youtube_metadata_policy.py clipper_entrypoint.py tools/gitlab_runtime_publish.py tests/test_youtube_metadata_policy.py tests/test_clipper_e2e_contract.py tests/test_workflow_metadata_entrypoint.py > /tmp/clipper-qa.log 2>&1; then
+            echo "::error::CLIPPER_COMPILE_FAILED"; exit 1
+          fi
+          if ! python -m unittest tests.test_youtube_metadata_policy tests.test_clipper_e2e_contract tests.test_workflow_metadata_entrypoint -v >> /tmp/clipper-qa.log 2>&1; then
+            echo "::error::CLIPPER_CONTRACT_FAILED"; exit 1
+          fi
+          for f in cloudflare-worker/src/index.js cloudflare-worker/src/runtime-secrets.js cloudflare-worker/src/git-provider-router.js; do
+            if ! node --check "$f" >> /tmp/clipper-qa.log 2>&1; then
+              echo "::error::CLIPPER_WORKER_SYNTAX_FAILED"; exit 1
+            fi
+          done
+          echo "CLIPPER_PRIVATE_GITHUB_RUNNER=PASS"
+  wordpress-private-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: wordpress-mirror
+    steps:
+      - name: Clone authorized private WordPress repository read-only
+        uses: actions/checkout@v4
+        with:
+          repository: UniversoAnthares/anthares-wordpress
+          ref: main
+          token: ${{ secrets.WORDPRESS_MIRROR_GITHUB_READ_TOKEN }}
+          persist-credentials: false
+          path: source
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - name: Run private WordPress QA without exposing internal findings
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          mkdir -p .qa-results
+          if ! find . -type f -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -print0 | xargs -0 -r -n1 -P 4 php -l >/tmp/wordpress-qa.log 2>&1; then
+            echo "::error::WORDPRESS_SYNTAX_FAILED"; exit 1
+          fi
+          for qa in qa/anthares-account-contract-qa.php qa/anthares-extreme-static-qa.php qa/anthares-orchestrator-qa.php; do
+            if ! php "$qa" >>/tmp/wordpress-qa.log 2>&1; then
+              echo "::error::WORDPRESS_CONTRACT_FAILED"; exit 1
+            fi
+          done
+          echo "WORDPRESS_PRIVATE_GITHUB_RUNNER=PASS"
