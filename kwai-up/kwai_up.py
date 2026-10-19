@@ -445,7 +445,20 @@ class Publisher:
             and center(n.get("bounds", ""))
         ]
         if len(previews) != 1:
-            raise KwaiUpError(f"safe-video-selection-refused:visible={len(previews)}")
+            badges = [n for n in videos if n.get("resource-id") == "com.kwai.video.basis_extension:id/media_duration" and re.fullmatch(r"\\d+:\\d{2}", n.get("text", ""))]
+            matches = []
+            for p in previews:
+                box = bounds_tuple(p.get("bounds", ""))
+                if not box or box[3] - box[1] < 40:
+                    continue
+                for b in badges:
+                    point = center(b.get("bounds", ""))
+                    if point and box[0] <= point[0] <= box[2] and box[1] <= point[1] <= box[3]:
+                        matches.append(p)
+                        break
+            if len(badges) != 1 or len(matches) != 1:
+                raise KwaiUpError(f"safe-video-selection-refused:visible={len(previews)} badges={len(badges)} matches={len(matches)}")
+            previews = matches
         self.tap_node(previews[0], self.cfg.wait)
 
         editor = self.dismiss_known_overlays(self.dump("13-editor"), "13-editor")
