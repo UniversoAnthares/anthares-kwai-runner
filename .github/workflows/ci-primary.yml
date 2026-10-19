@@ -6,6 +6,7 @@ on:
     paths:
       - 'anthares-remote-agent/**'
       - 'tests/test_control_publisher_integration_final.py'
+      - '.harness/**'
       - '.github/workflows/ci-primary.yml'
       - 'appveyor.yml'
       - 'azure-pipelines.yml'
@@ -15,6 +16,7 @@ on:
     paths:
       - 'anthares-remote-agent/**'
       - 'tests/test_control_publisher_integration_final.py'
+      - '.harness/**'
       - '.github/workflows/ci-primary.yml'
   workflow_dispatch:
 
