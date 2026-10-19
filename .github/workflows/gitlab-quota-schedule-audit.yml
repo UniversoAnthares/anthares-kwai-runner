@@ -1,0 +1,49 @@
+name: Anthares CI quota schedule audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/gitlab-quota-schedule-audit.yml']
+permissions:
+  actions: write
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Confirm watcher schedule state and recover when disabled
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const workflow_id = 'gitlab-quota-watcher.yml';
+            const response = await github.rest.actions.getWorkflow({owner,repo,workflow_id});
+            const initial = response.data.state;
+            core.info('QUOTA_WATCHER_INITIAL_STATE=' + initial);
+            if (initial === 'disabled_manually' || initial === 'disabled_inactivity') {
+              await github.rest.actions.enableWorkflow({owner,repo,workflow_id});
+              core.info('QUOTA_WATCHER_ENABLED=YES');
+            } else if (initial !== 'active') {
+              core.setFailed('QUOTA_WATCHER_NOT_ACTIVE');
+              return;
+            }
+            const last = await github.rest.actions.listWorkflowRuns({owner,repo,workflow_id,per_page:100});
+            const scheduled = last.data.workflow_runs.filter(r => r.event === 'schedule');
+            const recent = scheduled.filter(r => Date.now() - new Date(r.created_at).getTime() < 30*60*1000);
+            core.info('QUOTA_WATCHER_SCHEDULE_RUNS_TOTAL=' + scheduled.length);
+            core.info('QUOTA_WATCHER_SCHEDULE_RUNS_LAST_30_MIN=' + recent.length);
+            core.info('QUOTA_WATCHER_SCHEDULE_BEST_EFFORT=1');
+            if (recent.length === 0) {
+              const running = last.data.workflow_runs.some(r =>
+                ['queued','in_progress','waiting'].includes(r.status));
+              if (!running) {
+                await github.rest.actions.createWorkflowDispatch({
+                  owner,repo,workflow_id,ref:'main',inputs:{dry_run:'false'}
+                });
+                core.info('QUOTA_WATCHER_LIVENESS_DISPATCHED=YES');
+              } else {
+                core.info('QUOTA_WATCHER_LIVENESS_ALREADY_RUNNING=YES');
+              }
+            }
+# A liveness dispatch is CI-only and deduplicated in the watcher.
