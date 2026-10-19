@@ -75,8 +75,11 @@ test('commit SHAs must be exact',()=>{
 });
 test('all exposed mutators are narrow, and no main writer is exposed',()=>{
   assert.deepEqual(githubTools.map(x=>x.name).sort(),
-    ['github_begin_task','github_create_branch','github_draft_pr','github_get_file','github_put_file'].sort());
-  assert.equal(githubTools.filter(x=>x.scope==='github.write').length,4);
+    ['github_begin_task','github_create_branch','github_draft_pr','github_get_file','github_put_file',
+      'run_claude_code','get_claude_code_status','get_claude_code_result'].sort());
+  assert.equal(githubTools.filter(x=>x.scope==='github.write').length,5);
+  assert.equal(githubTools.find(x=>x.name==='run_claude_code').scope,'github.write');
+  assert.equal(githubTools.find(x=>x.name==='get_claude_code_result').scope,'github.read');
 });
 test('public code file can be read without credential',async()=>{
   await withMock(async()=>{
