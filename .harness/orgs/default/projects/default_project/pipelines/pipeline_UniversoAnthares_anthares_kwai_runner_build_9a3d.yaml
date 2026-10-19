@@ -12,14 +12,16 @@ pipeline:
           cloneCodebase: true
           buildIntelligence:
             enabled: false
-          infrastructure:
-            type: KubernetesDirect
-            spec:
-              connectorRef: account.harnessImage
-              namespace: default
-              automountServiceAccountToken: true
-              nodeSelector: {}
-              os: Linux
+          # Harness Cloud uses the provider-managed runner, not a Kubernetes
+          # connector. KubernetesDirect previously referenced a Docker image
+          # connector here and therefore had no valid target Kubernetes cluster.
+          # Free Harness Cloud allowances apply; no self-hosted delegate.
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
           execution:
             steps:
               - step:
