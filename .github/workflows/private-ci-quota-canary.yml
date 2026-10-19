@@ -1,9 +1,6 @@
 name: Anthares private CI failover canary
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/private-ci-quota-canary.yml']
 permissions:
   actions: write
   contents: read
