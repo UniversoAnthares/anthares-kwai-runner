@@ -152,6 +152,17 @@ async function main(){
     if(!access.success||!access.data?.key)throw Error('ROUTER_CLIENT_KEY_FAILED');
     const token=access.data.key;
     await probeRouter('anthares-free-'+mode,token);
+    if(process.env.ANTHARES_VERIFY_FAILOVER==='1'){
+      const actual=MODELS[mode].filter(m=>available.includes(m.slice('gemini/'.length)));
+      const proof=await api.createCombo({
+        name:'anthares-free-failover-proof',
+        models:['gemini/anthares-intentionally-unavailable-model',...actual],
+        kind:'llm'
+      });
+      if(!proof.success)throw Error('FALLBACK_PROOF_COMBO_CREATE_FAILED');
+      await probeRouter('anthares-free-failover-proof',token);
+      console.log('ANTHARES_FREE_FAILOVER_REAL=PASS');
+    }
     process.stdout.write('::add-mask::'+token+'\n');
     fs.appendFileSync(process.env.GITHUB_ENV,[
       'ANTHROPIC_BASE_URL=http://127.0.0.1:'+PORT+'/v1',
