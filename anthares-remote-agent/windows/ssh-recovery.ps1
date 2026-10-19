@@ -24,7 +24,7 @@ try{
   $valid=($principal -match '^(SYSTEM|SISTEMA|S-1-5-18)$') -and ([string]$task.Principal.RunLevel -eq 'Highest') -and $task.Settings.Enabled -and ([string]$task.Settings.MultipleInstances -eq 'IgnoreNew') -and ($actions.Count -eq 1)
   $expectedArgs='-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File '+$expected
   if($valid){$valid=([string]$actions[0].Execute -ieq 'powershell.exe') -and ([string]$actions[0].Arguments -ceq $expectedArgs)}
-  $pins=@{'ara-recovery.ps1'='7E7A4AF38DE022A31D1D3CD125A5428B5193FDB58059FFB5420AF418BDFCBD1B';'run-agent-system-supervisor.ps1'='0734FDEF2F98A20975303E7932BB7044016A1B24509DC2E49BD66257A3BF3011'}
+  $pins=@{'ara-recovery.ps1'='7E7A4AF38DE022A31D1D3CD125A5428B5193FDB58059FFB5420AF418BDFCBD1B';'run-agent-system-supervisor.ps1'='84DCFBE8273C444D6531320D5975B3E6747A86DE719499A8A0D9E2BDA211B264'}
   foreach($name in $pins.Keys){
     if((Get-FileHash (Join-Path $agentRoot $name)).Hash -ne $pins[$name]){$valid=$false}
   }
