@@ -28,6 +28,26 @@ def call(method, route, params=None):
             raw = resp.read()
             return resp.status, json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
+        # Parse only the offending *field names*, never print API bodies,
+        # authentication tokens, or arbitrary server-provided values.
+        error_fields = []
+        try:
+            body = json.loads(exc.read(8192))
+            safe_keys = {"runner_type", "project_id", "tag_list", "run_untagged",
+                         "access_level", "locked", "maximum_timeout", "base"}
+            if isinstance(body, dict):
+                error_fields = sorted(k for k in body.keys() if k in safe_keys)
+                if not error_fields:
+                    msg = str(body.get("message", "")).lower()
+                    for key in sorted(safe_keys):
+                        if key in msg:
+                            error_fields.append(key)
+                    if "scope" in msg or "permission" in msg:
+                        error_fields.append("permission")
+        except (ValueError, TypeError, OSError):
+            pass
+        if route == "/user/runners":
+            print("RUNNER_API_ERROR_FIELDS=" + (",".join(error_fields) or "unclassified"))
         return exc.code, {}
 
 
@@ -45,11 +65,11 @@ def create():
         "runner_type": "project_type",
         "project_id": PROJECT,
         "description": "anthares-secrets-temporary-github-hosted-20261019",
-        "tag_list": "anthares-secrets-probe",
+        "tag_list[]": "anthares-secrets-probe",
         "run_untagged": "false",
         "access_level": "ref_protected",
         "locked": "true",
-        "maximum_timeout": "300"
+        "maximum_timeout": "600"
     })
     if status not in (200, 201) or not runner.get("token"):
         print("RUNNER_CREATE_HTTP_" + str(status))
