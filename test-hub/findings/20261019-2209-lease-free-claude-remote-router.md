@@ -1,5 +1,5 @@
 # Anthares free Claude Code — isolated remote runner lease
-STATUS: RUNNING
+STATUS: CLOSED
 AREA: ai-remote-claude-router
 DATE: 2026-10-19
 LEASE_OWNER: ChatGPT/free-claude-remote
@@ -18,3 +18,7 @@ PROGRESS_2026-10-19_22:39Z:
 - Run #39335532854: actual 9Router generation PASS, Claude Code reached max 8 agentic turns.
 - Run #39336129062 at commit 48744cbd: Bitwarden, 3 free models, 9Router and actual Claude Code planning response PROVEN, cleanup PASS.
 - NEXT: draft PR with one-file edit acceptance, plus explicit failover test where safe. This renewal applies only to those tests.
+
+CLOSED_UTC: 2026-10-19T22:50:00Z
+FINAL_EVIDENCE: test-hub/findings/20261019-2250-free-claude-code-remote-real-proven.md
+FINAL_RESULT: plan/edit/failover real proven; GitHub Actions automatic PR creation awaits repository-level administrator setting; cloud runners and existing production preserved.
