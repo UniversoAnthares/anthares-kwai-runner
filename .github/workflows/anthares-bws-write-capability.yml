@@ -15,6 +15,9 @@ jobs:
           set -euo pipefail
           npm install --prefix /tmp/bws-test --no-audit --no-fund --silent @bitwarden/sdk-napi@1.0.0
           echo 'BWS_MODERN_SDK=INSTALLED'
+          echo 'BWS_TYPE_DECLARATIONS_BEGIN'
+          grep -n -A 9 -B 3 'create(' /tmp/bws-test/node_modules/@bitwarden/sdk-napi/index.d.ts | head -n 42 || true
+          echo 'BWS_TYPE_DECLARATIONS_END'
       - name: Create and delete disposable Bitwarden secret using project scoping
         env:
           BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
