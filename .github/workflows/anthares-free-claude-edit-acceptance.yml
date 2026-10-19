@@ -1,0 +1,90 @@
+name: Anthares free Claude Code - scoped edit and failover real proof
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/anthares-free-claude-edit-acceptance.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/anthares-free-claude-edit-acceptance.yml'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-free-claude-edit-proof
+  cancel-in-progress: false
+jobs:
+  static-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          set -euo pipefail
+          node --check tools/anthares_free_claude_bootstrap.js
+          node --check tools/anthares_free_claude_task.js
+          node --test tools/test_anthares_free_claude.js
+          echo ANTHARES_FREE_EDIT_STATIC=PASS
+  acceptance:
+    if: github.event_name == 'push'
+    needs: static-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      ANTHARES_TASK_MODE: edit
+      ANTHARES_TASK_SCOPE: docs/anthares-free-claude-edit-canary.md
+      ANTHARES_TASK_PROMPT: 'Crie somente docs/anthares-free-claude-edit-canary.md. O conteúdo deve ter uma linha de título Markdown e a segunda linha deve conter exatamente EDICAO_REMOTA_CLAUDE_OK. Não altere outros arquivos.'
+      ANTHARES_VERIFY_FAILOVER: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Isolate a new branch, no production write
+        run: |
+          set -euo pipefail
+          git switch -c "claude-free/proof-$GITHUB_RUN_ID"
+      - name: Install free-only gateway and Claude Code
+        run: |
+          set -euo pipefail
+          npm install -g --no-audit --no-fund --silent 9router@0.5.104 @anthropic-ai/claude-code@2.1.290
+          npm install --prefix "$RUNNER_TEMP/anthares-bws-sdk" --no-audit --no-fund --silent @bitwarden/sdk-napi@1.0.0
+      - name: Real failover with deliberately unavailable first model
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          node tools/anthares_free_claude_bootstrap.js
+      - name: Claude Code creates exactly one safe document
+        run: |
+          set -euo pipefail
+          node tools/anthares_free_claude_task.js
+          grep -Fq EDICAO_REMOTA_CLAUDE_OK "$ANTHARES_TASK_SCOPE"
+          git diff --check
+          echo ANTHARES_FREE_CLAUDE_REAL_EDIT=PASS
+      - name: Create draft PR only, never merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name 'github-actions[bot]'
+          git add -- "$ANTHARES_TASK_SCOPE"
+          git diff --cached --quiet && { echo NO_SCOPED_EDIT; exit 1; }
+          git commit -m 'test: Claude Code remote one-file edit canary'
+          branch="claude-free/proof-$GITHUB_RUN_ID"
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" push origin "HEAD:refs/heads/$branch"
+          gh pr create --draft --base main --head "$branch" --title "Teste: Claude Code gratuito editou um arquivo real" --body "Prova de edição remota, gratuita, com escopo de um arquivo e sem merge automático."
+          echo ANTHARES_FREE_CLAUDE_DRAFT_PR=PASS
+      - name: Ephemeral cleanup
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP"/anthares-free-claude-* "$RUNNER_TEMP"/anthares-bws-* "$RUNNER_TEMP"/anthares-claude-*.txt
+          echo ANTHARES_FREE_CLAUDE_EDIT_CLEANUP=PASS
