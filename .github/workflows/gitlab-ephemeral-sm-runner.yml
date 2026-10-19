@@ -3,7 +3,7 @@ run-name: Bitwarden GitLab protected probe (temporary runner)
 on:
   workflow_dispatch:
   push:
-    branches: [test/anthares-ai-hub-bws-gh-runner-20261019]
+    branches: [main]
     paths:
       - '.github/workflows/gitlab-ephemeral-sm-runner.yml'
       - 'tools/gitlab_ephemeral_sm_runner.py'
