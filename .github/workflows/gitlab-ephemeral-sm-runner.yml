@@ -1,0 +1,52 @@
+name: Anthares Secrets GitLab ephemeral runner verification
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/gitlab-ephemeral-sm-runner.yml'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-secrets-one-time-ephemeral-gitlab-runner
+  cancel-in-progress: false
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create protected runner using pre-existing masked GitLab token
+        shell: bash
+        run: |
+          test -n "$GITLAB_TOKEN" || { echo "GITLAB_TOKEN_NOT_AVAILABLE"; exit 2; }
+          python3 tools/gitlab_ephemeral_sm_runner.py create
+      - name: Register restricted ephemeral GitLab runner on GitHub-hosted Docker
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$RUNNER_TEMP/anthares-gl-sm"
+          mkdir -p "$base/config"
+          docker pull --quiet registry.gitlab.com/gitlab-org/gitlab-runner:alpine-v18.5.0 >/dev/null
+          docker run --rm --entrypoint /bin/sh \
+            -v "$base/config:/etc/gitlab-runner" \
+            -v "$base/runner_token:/run/runner_token:ro" \
+            registry.gitlab.com/gitlab-org/gitlab-runner:alpine-v18.5.0 -c \
+            'gitlab-runner register --non-interactive --url https://gitlab.com --token "$(cat /run/runner_token)" --executor docker --docker-image node:24-bookworm-slim --docker-privileged=false >/dev/null 2>&1'
+          docker run --rm --detach --name anthares-ephemeral-gl-sm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$base/config:/etc/gitlab-runner" \
+            registry.gitlab.com/gitlab-org/gitlab-runner:alpine-v18.5.0 run >/dev/null
+          echo "EPHEMERAL_RUNNER_CONNECTED"
+      - name: Run isolated GitLab pipeline and verify Bitwarden secret without reading value
+        run: python3 tools/gitlab_ephemeral_sm_runner.py pipeline
+      - name: Revoke temporary runner and remove local credentials
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f anthares-ephemeral-gl-sm >/dev/null 2>&1 || true
+          if [ -n "${GITLAB_TOKEN:-}" ]; then python3 tools/gitlab_ephemeral_sm_runner.py cleanup; fi
+          rm -rf "$RUNNER_TEMP/anthares-gl-sm"
+          echo "EPHEMERAL_CREDENTIALS_REMOVED"
