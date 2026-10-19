@@ -41,5 +41,37 @@ class QuotaWatcherContract(unittest.TestCase):
             self.assertIsNone(mod.recent_qualifying_failure("87361776"))
 
 
+    def test_timeout_retries_only_safe_read(self):
+        class Response:
+            status = 200
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self):
+                return b'{"ok":true}'
+        with patch.object(mod.urllib.request, "urlopen",
+                          side_effect=[TimeoutError("transient"), Response()]) as open_mock, \
+             patch.object(mod.time, "sleep") as sleep_mock:
+            result = mod.api("https://gitlab.com/api/v4/health", "test", gl=True)
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(open_mock.call_count, 2)
+        sleep_mock.assert_called_once()
+
+    def test_timeout_in_cortes_does_not_skip_private_projects(self):
+        called = []
+        def source(project_id):
+            if project_id == "87307248":
+                raise TimeoutError("GitLab temporarily unavailable")
+            return {"id": 5, "sha": project_id.zfill(40), "count": 1}
+        with patch.object(mod, "GL_AUTH", "fixture"), \
+             patch.object(mod, "GH_AUTH", "fixture"), \
+             patch.object(mod, "recent_qualifying_failure", side_effect=source), \
+             patch.object(mod, "latest_runs", return_value=[]), \
+             patch.object(mod, "dispatch", side_effect=lambda component, workflow, event: called.append(component)):
+            self.assertEqual(mod.main(), 1)
+        self.assertEqual(called, ["clipper", "wordpress"])
+
+
 if __name__ == "__main__":
     unittest.main()
