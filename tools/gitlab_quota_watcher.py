@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -31,8 +32,23 @@ def api(url, token="", method="GET", payload=None, gl=False):
     if raw is not None:
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=raw, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=18) as resp:
-        return json.loads(resp.read() or b"{}") if resp.status != 204 else {}
+    # A transient GitLab/GitHub timeout must not abort the other components.
+    # Retry only safe idempotent reads; never repeat workflow dispatches.
+    attempts = 2 if method == "GET" else 1
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                return json.loads(resp.read() or b"{}") if resp.status != 204 else {}
+        except urllib.error.HTTPError as exc:
+            if method == "GET" and attempt + 1 < attempts and exc.code in (429, 500, 502, 503, 504):
+                time.sleep(1)
+                continue
+            raise
+        except (urllib.error.URLError, TimeoutError, OSError):
+            if attempt + 1 >= attempts:
+                raise
+            time.sleep(1)
+    raise RuntimeError("API_READ_RETRIES_EXHAUSTED")
 
 
 def recent_qualifying_failure(project_id):
@@ -111,7 +127,7 @@ def main():
                 print(f"{component}=DEDUPED sha={event['sha'][:12]}")
                 continue
             dispatch(component, workflow, event)
-        except (urllib.error.HTTPError, urllib.error.URLError, ValueError, KeyError) as exc:
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError) as exc:
             # Never expose request URLs, response bodies, tokens or sensitive metadata.
             print(f"{component}=CONTROL_ERROR type={type(exc).__name__}")
             errors += 1
