@@ -16,7 +16,7 @@ jobs:
           npm install --prefix /tmp/bws-test --no-audit --no-fund --silent @bitwarden/sdk-napi@1.0.0
           echo 'BWS_MODERN_SDK=INSTALLED'
           echo 'BWS_TYPE_DECLARATIONS_BEGIN'
-          grep -n -A 9 -B 3 'create(' /tmp/bws-test/node_modules/@bitwarden/sdk-napi/index.d.ts | head -n 42 || true
+          find /tmp/bws-test/node_modules/@bitwarden/sdk-napi -maxdepth 2 -name '*.d.ts' -print | head -n 6
           echo 'BWS_TYPE_DECLARATIONS_END'
       - name: Create and delete disposable Bitwarden secret using project scoping
         env:
@@ -41,7 +41,7 @@ jobs:
             console.log('BWS_MODERN_READ=PASS');
             console.log('BWS_MODERN_CREATE_ARITY='+client.secrets().create.length);
             phase='WRITE';
-            const p=await client.secrets().create('ANTHARES_DISPOSABLE_PERMISSION_PROBE_'+process.env.GITHUB_RUN_ID,'Disposable nonproduction test',data.organizationId,'nonsecret-value',[data.projectId]);
+            const p=await client.secrets().create(data.organizationId,'ANTHARES_DISPOSABLE_PERMISSION_PROBE_'+process.env.GITHUB_RUN_ID,'nonsecret-value','Disposable nonproduction test',[data.projectId]);
             if(p?.success===false||!(p?.data?.id||p?.id))throw Error('WRITE_FAILED');
             created=p.data?.id||p.id;
             console.log('BWS_MODERN_WRITE=PASS');
