@@ -409,8 +409,10 @@ class Publisher:
         if not tab:
             raise KwaiUpError("profile-tab-missing")
         self.tap_node(tab)
-        deadline = time.time() + 35
+        deadline = time.time() + 60
+        attempts = 0
         while time.time() < deadline:
+            attempts += 1
             nodes = self.dismiss_known_overlays(self.dump(stage + "-profile"), stage + "-profile")
             root_ok = find_id(nodes, PROFILE_ROOT_ID) is not None or PROFILE_ROOT_ID in text_blob(nodes)
             thumbs = [n for n in nodes if n.get("resource-id") == PROFILE_THUMB_ID and bounds_tuple(n.get("bounds", ""))]
@@ -429,10 +431,13 @@ class Publisher:
                     crop = img.crop(b)
                     hashes.append(hashlib.sha256(crop.tobytes()).hexdigest())
                 return hashes
-            if root_ok:
-                time.sleep(2)
-            else:
-                time.sleep(2)
+            if attempts % 2 == 0 and not thumbs:
+                # Some feed tabs accept the tap without opening the profile.
+                # Retry only read-only profile navigation, not upload or commit.
+                next_tab = self.profile_tab(nodes)
+                if next_tab:
+                    self.tap_node(next_tab, 1)
+            time.sleep(2)
         raise KwaiUpError("profile-thumbnails-timeout")
 
     def navigate_to_final(self) -> tuple[list[dict[str, str]], bool]:
