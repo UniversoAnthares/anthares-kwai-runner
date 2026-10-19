@@ -18,11 +18,11 @@ jobs:
   clipper-private-qa:
     runs-on: ubuntu-latest
     timeout-minutes: 8
-    env:
-      GL_AUTH: ${{ secrets.GITLAB_TOKEN }}
     steps:
       - name: Clone authorized private Clipper repository read-only
         shell: bash
+        env:
+          GL_AUTH: ${{ secrets.GITLAB_TOKEN }}
         run: |
           set -euo pipefail
           test -n "$GL_AUTH" || { echo "::error::CLIPPER_READ_CREDENTIAL_NOT_AVAILABLE"; exit 1; }
