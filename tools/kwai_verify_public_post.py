@@ -60,12 +60,20 @@ def verify(url:str,expected_title:str,expected_handle:str,author_display:str):
     author=normal(author_display)
     if not match:raise RuntimeError("video_title_mismatch")
     if not author or author not in blob:raise RuntimeError("video_author_mismatch")
-    # A share link is opened independently of the profile/list that supplied
-    # it. The resulting video must display the intended author and caption.
+    matching_author_nodes=[node for node in nodes if normal(node.get("text",""))==author and center(node.get("bounds",""))]
+    if not matching_author_nodes:
+        raise RuntimeError("author_profile_entry_missing")
+    x,y=center(matching_author_nodes[0]["bounds"])
+    adb("shell","input","tap",str(x),str(y))
+    time.sleep(2)
+    profile_nodes=snapshot()
+    profile_blob=normal(visible(profile_nodes))
+    if normal(expected_handle) not in profile_blob:
+        raise RuntimeError("public_video_author_handle_mismatch")
     return {"ok":True,"public_url":url,"author_display":author_display,
             "expected_account":expected_handle,"title_match":True,
             "checked_at":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),
-            "method":"kwai_public_deeplink_opened_and_author_title_visible"}
+            "method":"kwai_public_deeplink_title_and_author_profile_handle"}
 
 def main():
     p=argparse.ArgumentParser()
