@@ -126,7 +126,8 @@ async function main(){
   if(!Object.hasOwn(MODELS,mode))throw Error('INVALID_MODE');
   const key=await readGeminiSecret();
   const available=await probeFreeGoogleModels(key);
-  if(available.length<2)throw Error('TWO_FREE_MODELS_REQUIRED');
+  if(!available.length)throw Error('NO_FREE_MODELS_AVAILABLE');
+  if(available.length<2)console.log('ANTHARES_FREE_ROUTER_DEGRADED_TO_ONE_MODEL=YES');
   delete process.env.BWS_ACCESS_TOKEN;
   const home=fs.mkdtempSync(path.join(process.env.RUNNER_TEMP,'anthares-free-claude-'));
   fs.chmodSync(home,0o700);
