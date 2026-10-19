@@ -1,9 +1,9 @@
 {
-  "checked_at_utc": "2026-10-18T21:47:38.471287+00:00",
+  "checked_at_utc": "2026-10-19T01:48:20.359347+00:00",
   "deploy_outcome": "success",
   "control_version": "2026-10-17-physical-android-v18",
   "control_healthy": true,
-  "cleanup_outcome": "failure",
-  "queue_error": "queue_storage_quota_exhausted",
-  "removed_count": null
+  "cleanup_outcome": "success",
+  "queue_error": null,
+  "removed_count": 214
 }
