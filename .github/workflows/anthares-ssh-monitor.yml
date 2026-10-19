@@ -1,0 +1,32 @@
+name: Anthares SSH Recovery Monitor
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Inspect trigger without dispatching recovery
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: anthares-independent-ssh-desktop-ftdk0hp
+  cancel-in-progress: false
+jobs:
+  monitor:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && (github.event_name != 'schedule' || vars.ANTHARES_SSH_AUTORECOVERY_ENABLED == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Trigger independent SSH only when public heartbeat is absent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.dry_run && 'true' || 'false' }}
+        run: python3 anthares-remote-agent/ssh-admission.py monitor

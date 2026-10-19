@@ -45,9 +45,21 @@ The existing cold-reserve arbiter is not changed or bypassed.
 - A 120-second cooldown is written before the side effect. Crashes/retries do
   not blindly repeat it. No synthetic failure is injected into production.
 
-The GitHub schedule is five-minute, best-effort dispatch; it cannot promise
-a 90-second recovery SLA. The 90 seconds is a minimum grace period after the
-runner starts observing. Existing local recovery remains faster and primary.
+The independent monitor runs on a five-minute, best-effort GitHub schedule.
+It uses the existing public `/health` endpoint only as a cheap trigger hint:
+a fresh device heartbeat avoids private login, not a claim of execution health.
+If unavailable/stale, it rechecks after 90 seconds and dispatches the SSH
+workflow; primary HTTP failure never prevents SSH dispatch. Windows then
+independently verifies absence for its own 90-second grace. GitHub cannot
+promise a 90-second recovery SLA. Local recovery remains faster and primary.
+
+The Personal plan currently lists 1,000 ephemeral-resource minutes/month.
+Before private login, the SSH workflow accounts all its attempts (including
+reruns) in the preceding 31 days via read-only GitHub metadata. At more than
+120 attempts it fails closed. Six-minute job timeouts reserve at most 720
+minutes for these attempts, leaving headroom for cleanup and setup tests.
+Other use of the shared tailnet quota must still be monitored. Unavailable
+accounting blocks private login; it never enables billing or a paid fallback.
 
 ## Operations
 
@@ -71,8 +83,13 @@ dependency; the local Codex conversation is not itself an external executor.
 PowerShell policy tests cover grace, existing owners, task validation, stale
 state, future timestamps and cooldown. Local restricted-key login validated
 the administrator token and live task pins while leaving agents intact.
-The first hosted run deliberately failed closed at missing-secret preflight;
-it proves hosted execution and policy tests, not SSH connectivity.
+The first hosted run failed closed at missing-secret preflight. Later the
+real independent SSH probe passed in run 39249878095, attempt 3, source
+ab47afb6656d034031bcf0abde16c0e0546bc1b7. It emitted
+`SSH_INDEPENDENT_PROVEN=1`, hostname DESKTOP-FTDK0HP, administrator=true,
+primary_count=1, reserve_count=0 and action_performed=false. This proves the
+independent channel, not a repaired real failure. Neither agent nor publisher
+was stopped to obtain evidence.
 
 Disable the repository activation variable to stop scheduled repair attempts.
 Revoke the dedicated public key line ending in
@@ -84,3 +101,4 @@ References:
 - https://docs.github.com/en/actions/reference/runners/github-hosted-runners
 - https://tailscale.com/docs/integrations/github/github-action
 - https://tailscale.com/docs/features/workload-identity-federation
+- https://tailscale.com/pricing

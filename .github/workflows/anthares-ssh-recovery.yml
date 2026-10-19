@@ -12,10 +12,10 @@ on:
     paths:
       - .github/workflows/anthares-ssh-recovery.yml
       - anthares-remote-agent/ssh-client.py
+      - anthares-remote-agent/ssh-admission.py
+      - anthares-remote-agent/test-ssh-admission.py
       - anthares-remote-agent/windows/ssh-recovery*
       - anthares-remote-agent/windows/test-ssh-recovery.ps1
-  schedule:
-    - cron: '*/5 * * * *'
 permissions:
   contents: read
 concurrency:
@@ -34,6 +34,8 @@ jobs:
         run: ./anthares-remote-agent/windows/test-ssh-recovery.ps1
       - name: Verify SSH client syntax
         run: python3 -m py_compile anthares-remote-agent/ssh-client.py
+      - name: Verify trigger and quota safety
+        run: python3 anthares-remote-agent/test-ssh-admission.py
   ssh:
     needs: policy
     if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && (github.event_name != 'schedule' || vars.ANTHARES_SSH_AUTORECOVERY_ENABLED == 'true')
@@ -43,6 +45,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -57,6 +60,10 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$CLIENT_ID" && test -n "$AUDIENCE" && test -n "$SSH_KEY" && test -n "$HOST_KEY" || { echo 'SSH_NOT_TESTED=missing-secure-prerequisite'; exit 2; }
+      - name: Enforce free-tier private-network budget
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 anthares-remote-agent/ssh-admission.py budget
       - name: Join restricted private network using GitHub OIDC
         uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd
         with:
