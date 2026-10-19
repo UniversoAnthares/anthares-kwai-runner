@@ -1,0 +1,54 @@
+name: Anthares GitLab runner and Bitwarden CLI preflight
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/gitlab-runner-capability.yml'
+permissions:
+  contents: read
+jobs:
+  capability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Verify available GitLab runners and PAT permissions safely
+        shell: bash
+        env:
+          GL_AUTH: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GL_AUTH" || { echo "GITLAB_PAT_ABSENT"; exit 1; }
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error
+          root="https://gitlab.com/api/v4"
+          headers={"PRIVATE-TOKEN":os.environ["GL_AUTH"],"Accept":"application/json"}
+          for path,label in [("/personal_access_tokens/self","PAT"),
+                             ("/projects/87307248/runners?per_page=100","RUNNERS")]:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(root+path,headers=headers),timeout=20) as r:
+                      data=json.load(r)
+                      if label=="PAT":
+                          scopes=data.get("scopes",[])
+                          print("GITLAB_PAT_SELF=READ_OK")
+                          print("RUNNER_MANAGEMENT_SCOPE="+str(any(s in scopes for s in ("api","create_runner","manage_runner"))).upper())
+                      else:
+                          own=[x for x in data if x.get("runner_type")!="instance_type"]
+                          print("CUSTOM_PROJECT_RUNNER_COUNT="+str(len(own)))
+                          print("ONLINE_CUSTOM_PROJECT_RUNNERS="+str(sum(x.get("status")=="online" for x in own)))
+              except urllib.error.HTTPError as exc:
+                  print(label+"_HTTP_STATUS="+str(exc.code))
+              except (ValueError,urllib.error.URLError) as exc:
+                  print(label+"_READ_ERROR="+type(exc).__name__)
+          PY
+      - name: Validate pinned official bws CLI archive without secrets
+        run: |
+          set -euo pipefail
+          version=2.1.0
+          archive="bws-x86_64-unknown-linux-gnu-${version}.zip"
+          curl -fsSL --retry 2 "https://github.com/bitwarden/sdk-sm/releases/download/bws-v${version}/${archive}" -o "/tmp/${archive}"
+          echo "ba8233c3a4aee5d43e3c73bbd04d99e9bc5aba13bbbfd06d89b073abe732b860  /tmp/${archive}" | sha256sum -c -
+          mkdir -p /tmp/anthares-bws
+          unzip -q "/tmp/${archive}" -d /tmp/anthares-bws
+          /tmp/anthares-bws/bws --version
+          echo "BITWARDEN_GITLAB_CLI_BINARY=PROVEN"
