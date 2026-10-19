@@ -369,7 +369,19 @@ class Publisher:
         # Preserve that invariant for the publishing executor. The authentication phone is separate.
         videos = [row for row in rows if "_display_name=" in row]
         if len(videos) != 1:
-            raise KwaiUpError(f"publisher-mediastore-not-dedicated:videos={len(videos)}")
+            # A separate Kwai-created video can coexist with this job's media.
+            # Only tolerate it if duration distinguishes the staged video.
+            unique = [row for row in videos if f"_display_name={name}" in row]
+            if len(unique) != 1:
+                raise KwaiUpError(f"publisher-mediastore-not-dedicated:videos={len(videos)}")
+            duration = re.search(r"(?:^|[, ])duration=(\\d+)", unique[0])
+            others = [re.search(r"(?:^|[, ])duration=(\\d+)", row) for row in videos if row != unique[0]]
+            if not duration or any(not x for x in others):
+                raise KwaiUpError("publisher-media-duration-unavailable")
+            target_ms = int(duration.group(1))
+            if any(abs(target_ms - int(x.group(1))) < 2000 for x in others):
+                raise KwaiUpError("publisher-media-duration-ambiguous")
+            self._target_media_seconds = target_ms / 1000
         return sha, name
 
     def profile_tab(self, nodes: list[dict[str, str]]) -> dict[str, str] | None:
@@ -456,9 +468,30 @@ class Publisher:
                     if point and box[0] <= point[0] <= box[2] and box[1] <= point[1] <= box[3]:
                         matches.append(p)
                         break
-            if len(badges) != 1 or len(matches) != 1:
-                raise KwaiUpError(f"safe-video-selection-refused:visible={len(previews)} badges={len(badges)} matches={len(matches)}")
-            previews = matches
+            if getattr(self, "_target_media_seconds", None) is not None:
+                candidate = []
+                target = self._target_media_seconds
+                for p in previews:
+                    box = bounds_tuple(p.get("bounds", ""))
+                    if not box: continue
+                    inside = [b for b in badges
+                              if (point := center(b.get("bounds", "")))
+                              and box[0] <= point[0] <= box[2]
+                              and box[1] <= point[1] <= box[3]]
+                    for badge in inside:
+                        t = badge.get("text", "")
+                        pieces = t.split(":")
+                        if len(pieces) == 2:
+                            shown = int(pieces[0])*60 + int(pieces[1])
+                            if abs(target - shown) <= 1.5:
+                                candidate.append(p)
+                if len(candidate) != 1:
+                    raise KwaiUpError(f"safe-video-duration-selection-refused:matches={len(candidate)} visible={len(previews)}")
+                previews = candidate
+            else:
+                if len(badges) != 1 or len(matches) != 1:
+                    raise KwaiUpError(f"safe-video-selection-refused:visible={len(previews)} badges={len(badges)} matches={len(matches)}")
+                previews = matches
         self.tap_node(previews[0], self.cfg.wait)
 
         editor = self.dismiss_known_overlays(self.dump("13-editor"), "13-editor")
