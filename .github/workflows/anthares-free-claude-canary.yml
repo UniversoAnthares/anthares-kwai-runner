@@ -26,6 +26,7 @@ jobs:
       ANTHARES_TASK_MODE: plan
       ANTHARES_TASK_PROMPT: 'Crie um plano conciso de dois passos para validar a sintaxe de um arquivo JavaScript. Inclua exatamente o identificador ANTHARES_REAL_CLAUDE_PLAN_OK na resposta.'
       ANTHARES_TASK_SCOPE: ''
+      ANTHARES_SMOKE_NO_TOOLS: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
