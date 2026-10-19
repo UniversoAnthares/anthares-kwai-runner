@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import os
 import re
@@ -249,7 +250,16 @@ class Publisher:
 
     def dump(self, stage: str, screenshot: bool = True) -> list[dict[str, str]]:
         remote = f"/sdcard/kwaiup-{safe_token(stage)}.xml"
-        self.adb.run("shell", "uiautomator", "dump", remote)
+        # Android may transiently terminate uiautomator with exit 137 under
+        # memory pressure. Retry only the read-only UI dump, never publication.
+        for attempt in range(3):
+            try:
+                self.adb.run("shell", "uiautomator", "dump", remote)
+                break
+            except KwaiUpError as exc:
+                if "adb rc=137" not in str(exc) or attempt == 2:
+                    raise
+                time.sleep(3 * (attempt + 1))
         xml = self.adb.binary("exec-out", "cat", remote)
         (self.cfg.artifacts / f"{stage}.xml").write_bytes(xml)
         if screenshot:
@@ -363,6 +373,16 @@ class Publisher:
         return sha, name
 
     def profile_tab(self, nodes: list[dict[str, str]]) -> dict[str, str] | None:
+        # Current Kwai home uses a reusable bottom-tab text view. Its exact
+        # 'Perfil' label identifies our own profile rather than feed authors.
+        current = [
+            node for node in nodes
+            if node.get("resource-id") == "com.kwai.video.basis:id/consume_tab_text"
+            and (node.get("text") or "").strip().casefold() in {"perfil", "profile"}
+            and center(node.get("bounds", ""))
+        ]
+        if len(current) == 1:
+            return current[0]
         for rid in PROFILE_TAB_IDS:
             found = find_id(nodes, rid)
             if found:
@@ -451,12 +471,49 @@ class Publisher:
         field = find_id(nodes, EDITOR_ID) or next((n for n in nodes if n.get("resource-id") == EDITOR_ID), None)
         if not field:
             raise KwaiUpError("caption-field-missing")
-        self.tap_node(field, 1)
-        self.adb.run("shell", "input", "keyevent", "KEYCODE_MOVE_END", check=False)
-        safe = self.cfg.caption[:150].replace("%", "%25").replace(" ", "%s")
-        for old, new in (("&", r"\&"), ("(", r"\("), (")", r"\)"), (";", r"\;")):
-            safe = safe.replace(old, new)
-        self.adb.run("shell", "input", "text", safe)
+        if os.getenv("KWAI_UP_CAPTION_INPUT_METHOD", "").strip().lower() == "adbkeyboard":
+            current_ime = self.adb.run(
+                "shell", "settings", "get", "secure", "default_input_method"
+            ).strip()
+            if current_ime != "com.android.adbkeyboard/.AdbIME":
+                raise KwaiUpError("adbkeyboard-not-selected")
+            self.tap_node(field, 1)
+            self.adb.run("shell", "am", "broadcast", "-a", "ADB_CLEAR_TEXT")
+            encoded = base64.b64encode(self.cfg.caption[:150].encode("utf-8")).decode("ascii")
+            self.adb.run(
+                "shell", "am", "broadcast", "-a", "ADB_INPUT_B64",
+                "--es", "msg", encoded,
+            )
+            time.sleep(1)
+        else:
+            bridge = os.getenv("KWAI_UP_UIAUTOMATOR_JAR", "").strip()
+            if bridge:
+                # Use the Android UIAutomator setText API for complete UTF-8 input.
+                # The legacy shell input method silently drops punctuation/spaces.
+                local_jar = Path(bridge)
+                if not local_jar.is_file():
+                    raise KwaiUpError("caption-uiautomator-jar-missing")
+                remote_jar = "/data/local/tmp/anthares-kwai-ui-driver.jar"
+                self.adb.run("push", str(local_jar), remote_jar, timeout=45)
+                encoded = base64.b64encode(self.cfg.caption[:150].encode("utf-8")).decode("ascii")
+                raw = self.adb.run(
+                    "shell", "uiautomator", "runtest", remote_jar,
+                    "-c", "us.anthares.tools.KwaiUiDriver#testAction",
+                    "-e", "action", "setFirstEditText",
+                    "-e", "value_base64", encoded,
+                    timeout=90, check=False,
+                )
+                if "ANTHARES_UI_OK action=setFirstEditText" not in raw or "OK (1 test)" not in raw:
+                    raise KwaiUpError("caption-uiautomator-set-text-failed")
+            else:
+                self.tap_node(field, 1)
+                self.adb.run("shell", "input", "keyevent", "KEYCODE_MOVE_END", check=False)
+                # Legacy physical Android mode; retained for other verified devices.
+                for index, token in enumerate(self.cfg.caption[:120].split()):
+                    if index:
+                        self.adb.run("shell", "input", "keyevent", "KEYCODE_SPACE")
+                    self.adb.run("shell", "input", "text", token, timeout=20)
+                    time.sleep(0.25)
         self.adb.run("shell", "input", "keyevent", "KEYCODE_BACK", check=False)
         time.sleep(1)
 
@@ -494,7 +551,9 @@ class Publisher:
             raise KwaiUpError("ready-job-mismatch")
         if proof.get("caption") != self.cfg.caption:
             raise KwaiUpError("ready-caption-mismatch")
-        if int(time.time()) - int(proof.get("created_at", 0)) > 1200:
+        # Read-only verification of an already attempted publication may run
+        # hours later. Expiry still applies to prepare/commit to prevent stale posts.
+        if self.cfg.mode != "verify" and int(time.time()) - int(proof.get("created_at", 0)) > 1200:
             raise KwaiUpError("ready-proof-expired")
         if self.cfg.media:
             sha = sha256_file(self.cfg.media)

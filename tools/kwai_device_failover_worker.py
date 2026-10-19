@@ -24,6 +24,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+import unicodedata
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -268,22 +269,29 @@ def verify_memu_standby_identity() -> bool:
     script = ROOT / "kwai-up" / "kwai_up_safe.py"
     if not script.is_file():
         return False
-    try:
-        result = subprocess.run([sys.executable, str(script), "auth"], cwd=str(ROOT),
-                                env=env, capture_output=True, text=True, timeout=95, check=False)
-        output = result.stdout or ""
-        verified = (
-            result.returncode == 0
-            and "AUTHENTICATED_IDENTITY" in output
-            and env["KWAI_UP_EXPECTED_ACCOUNT"].lower().lstrip("@") in output.lower()
-        )
-        if verified:
-            os.environ["ANTHARES_MEMU_KWAI_AUTHENTICATED"] = "true"
-        print("KWAI_MEMU_STANDBY_IDENTITY=" + ("VERIFIED" if verified else "NOT_VERIFIED"), flush=True)
-        return verified
-    except (OSError, subprocess.SubprocessError):
-        print("KWAI_MEMU_STANDBY_IDENTITY=UNAVAILABLE", flush=True)
-        return False
+    for attempt in range(1, 3):
+        try:
+            result = subprocess.run([sys.executable, str(script), "auth"], cwd=str(ROOT),
+                                    env=env, capture_output=True, text=True, timeout=95, check=False)
+            output = result.stdout or ""
+            verified = (
+                result.returncode == 0
+                and "AUTHENTICATED_IDENTITY" in output
+                and env["KWAI_UP_EXPECTED_ACCOUNT"].lower().lstrip("@") in output.lower()
+            )
+            if verified:
+                os.environ["ANTHARES_MEMU_KWAI_AUTHENTICATED"] = "true"
+                print("KWAI_MEMU_STANDBY_IDENTITY=VERIFIED ATTEMPT=" + str(attempt), flush=True)
+                return True
+            print("KWAI_MEMU_STANDBY_AUTH_RETRY ATTEMPT=" + str(attempt)
+                  + " RC=" + str(result.returncode), flush=True)
+        except (OSError, subprocess.SubprocessError):
+            print("KWAI_MEMU_STANDBY_AUTH_RETRY ATTEMPT=" + str(attempt)
+                  + " ERROR=probe_unavailable", flush=True)
+        if attempt == 1:
+            time.sleep(3)
+    print("KWAI_MEMU_STANDBY_IDENTITY=NOT_VERIFIED", flush=True)
+    return False
 
 
 def memu_publisher() -> pathlib.Path:
@@ -313,6 +321,16 @@ def run_memu(media: pathlib.Path) -> tuple[bool, str, str]:
     return False, classify_failure(out, rc), out
 
 
+def memu_caption_input(value: str) -> str:
+    # Android 'adb shell input text' cannot reliably inject accented letters,
+    # curly quotes or shell metacharacters. The original title remains in WP;
+    # the MEmu UI receives a verified ASCII variant.
+    normalized=unicodedata.normalize('NFKD', str(value or ''))
+    permitted='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 #'
+    clean=''.join(c for c in normalized if c in permitted)
+    return ' '.join(clean.split())[:120] or 'Universo Anthares'
+
+
 def prepare_memu(media):
     env=os.environ.copy()
     job=required('KWAI_QUEUE_JOB_ID')
@@ -320,7 +338,8 @@ def prepare_memu(media):
         'KWAI_UP_ADB_SERIAL':required('ANTHARES_MEMU_ADB_SERIAL'),
         'KWAI_UP_PACKAGE':'com.kwai.video',
         'KWAI_UP_EXPECTED_ACCOUNT':os.getenv('KWAI_EXPECTED_ACCOUNT','lucasrosalem'),
-        'KWAI_UP_CAPTION':os.getenv('KWAI_VIDEO_TITLE',''),
+        'KWAI_UP_CAPTION':str(os.getenv('KWAI_VIDEO_TITLE','')).strip()[:150] or 'Universo Anthares',
+        'KWAI_UP_UIAUTOMATOR_JAR':os.getenv('ANTHARES_MEMU_UIAUTOMATOR_JAR', r'D:\AntharsWork\temp\anthares-kwai-ui-bridge\kwai-uiautomator-driver.jar'),
         'KWAI_UP_MEDIA_SHA256':os.getenv('KWAI_MEDIA_SHA256',''),
         'KWAI_UP_ARTIFACT_DIR':str(ROOT/'.state'/'kwai-memu-evidence'/re.sub(r'[^A-Za-z0-9._-]+','_',job)[-100:])})
     adb=os.getenv('ANTHARES_ADB','').strip()

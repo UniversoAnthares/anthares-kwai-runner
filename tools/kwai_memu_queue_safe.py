@@ -34,15 +34,25 @@ def save_proof(path, data):
 class QueuePublisher(safe.SafePublisher):
     def verify_after_post(self, before):
         # Never accept navigation, toast or elapsed time as post confirmation.
+        # Account and profile evidence must both be positive. An intermittent
+        # UI read/login timeout is retryable without another publication click.
         deadline = time.monotonic() + self.cfg.verify_timeout
+        last_error = ''
         while time.monotonic() < deadline:
-            self.verify_identity()
-            after = self.profile_fingerprints('99-queue-profile-proof', cold=False)
-            if ku.profile_grid_changed(before, after):
-                self.after_fingerprints = after
-                return True, 'memu-exact-identity-new-profile-card'
+            try:
+                self.verify_identity()
+                after = self.profile_fingerprints('99-queue-profile-proof', cold=False)
+                if ku.profile_grid_changed(before, after):
+                    self.after_fingerprints = after
+                    return True, 'memu-exact-identity-new-profile-card'
+                last_error = 'profile-grid-unchanged'
+            except ku.HumanVerification:
+                raise
+            except (ku.KwaiUpError, OSError) as exc:
+                last_error = ku.safe_token(str(exc), 'read-only-profile-check-failed')
+                print('KWAI_VERIFY_RETRY_SAFE=' + last_error, flush=True)
             time.sleep(5)
-        return False, 'memu-profile-confirmation-missing'
+        return False, 'memu-profile-confirmation-missing:' + last_error
 
 
 def main():
