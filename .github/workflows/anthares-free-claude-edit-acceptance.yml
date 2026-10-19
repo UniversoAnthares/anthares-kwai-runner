@@ -38,7 +38,7 @@ jobs:
     env:
       ANTHARES_TASK_MODE: edit
       ANTHARES_TASK_SCOPE: docs/anthares-free-claude-edit-canary.md
-      ANTHARES_TASK_PROMPT: 'Crie somente docs/anthares-free-claude-edit-canary.md. O conteúdo deve ter uma linha de título Markdown e a segunda linha deve conter exatamente EDICAO_REMOTA_CLAUDE_OK. Não altere outros arquivos.'
+      ANTHARES_TASK_PROMPT: 'Após ler as regras AGENTS.md e CLAUDE.md, crie apenas docs/anthares-free-claude-edit-canary.md contendo duas linhas: # Prova Anthares Claude Code; EDICAO_REMOTA_CLAUDE_OK. Nenhum outro arquivo.'
       ANTHARES_VERIFY_FAILOVER: '1'
     steps:
       - uses: actions/checkout@v4
@@ -67,6 +67,7 @@ jobs:
           set -euo pipefail
           node tools/anthares_free_claude_task.js
           grep -Fq EDICAO_REMOTA_CLAUDE_OK "$ANTHARES_TASK_SCOPE"
+          test "$(git status --porcelain=v1 -uall | wc -l)" -eq 1
           git diff --check
           echo ANTHARES_FREE_CLAUDE_REAL_EDIT=PASS
       - name: Create draft PR only, never merge
