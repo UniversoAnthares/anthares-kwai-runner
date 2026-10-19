@@ -55,7 +55,7 @@ async function init(){
  console.log('GEMINI_REMOTE_SSH_PINNED=PASS');
  phase='BITWARDEN_AUTH';
  client=new sdk.BitwardenClient({apiUrl:'https://api.bitwarden.com',identityUrl:'https://identity.bitwarden.com',userAgent:'anthares-gemini-sync',deviceType:sdk.DeviceType.SDK});
- data(await client.auth().loginAccessToken(process.env.BWS_ACCESS_TOKEN.trim(),path.join(work,'bws-state')));
+ const login=await client.auth().loginAccessToken(process.env.BWS_ACCESS_TOKEN.trim(),path.join(work,'bws-state'));if(login?.success===false)throw Error('BWS_AUTH_FAILED');
  const test=data(await client.secrets().get(testId));
  if(!test.organizationId||!test.projectId)throw Error('BWS_PROJECT_SCOPE_MISSING');
  console.log('GEMINI_BWS_MACHINE_AUTH=PASS');
