@@ -11,7 +11,13 @@ const stage='/home/u566597497/.anthares-stage/ai-hub-20261019';
 let phase='START',work,sshInfo,client;
 function run(bin,args,opt={}){
  const r=cp.spawnSync(bin,args,{input:opt.input,encoding:'utf8',timeout:opt.timeout||32000,maxBuffer:700000,env:process.env});
- if(r.error||r.status!==0)throw Error('EXEC_FAILED');
+ if(r.error||r.status!==0){
+  const indicator=(r.stdout||'').match(/GEMINI_API_RESULT=ERROR_CODE_[a-z0-9_]+|SECRETS_SUBCLASS=FAIL|SECRETS_FAIL_CLOSED|AI_HUB_CLASSES=UNAVAILABLE|GEMINI_SETTINGS=UNAVAILABLE|GEMINI_API_RESULT=EMPTY/);
+  if(indicator)throw Error('EXEC_FAILED_'+indicator[0]);
+  if(/PHP Fatal error|Parse error|syntax error/i.test(r.stderr||''))throw Error('EXEC_FAILED_PHP_FATAL');
+  if(/critical error|erro crítico/i.test(r.stderr||''))throw Error('EXEC_FAILED_WORDPRESS_CRITICAL');
+  throw Error('EXEC_FAILED');
+ }
  return r.stdout||'';
 }
 async function variable(n){
