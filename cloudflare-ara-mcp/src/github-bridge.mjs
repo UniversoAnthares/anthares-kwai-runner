@@ -50,7 +50,7 @@ function encPath(p){return p.split('/').map(encodeURIComponent).join('/');}
 function token(env){const v=String(env.ANTHARES_GITHUB_TOKEN||'').trim();if(!v)problem('github_server_credential_unconfigured',503);return v;}
 async function api(env,method,path,body,accept404=false){
   const url=ROOT+path;
-  const headers={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
+  const headers={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'Anthares-Scoped-GitHub-Bridge'};
   // Public reads may work without a GitHub credential; writes always require one.
   const credential=String(env.ANTHARES_GITHUB_TOKEN||'').trim();
   if(credential)headers.Authorization='Bearer '+credential;
@@ -72,8 +72,8 @@ async function getHead(env,repo,branch) {
 async function getFile(env,repo,path,branch,optional=false){
   return api(env,'GET',repoUrl(repo)+'/contents/'+encPath(path)+'?ref='+encodeURIComponent(branch),undefined,optional);
 }
-function leaseBody(repo,branch,goal,created,expires,id){
-  return '# Claude GitHub task '+id+'\nSTATUS: RUNNING\nAREA: claude-github-tools\nLEASE_OWNER: claude-free-mcp\nREPO: '+repo+'\nBRANCH: '+branch+'\nSTART_UTC: '+created+'\nEXPIRES_UTC: '+expires+'\nGOAL: '+goal.replace(/[\r\n]/g,' ').slice(0,200)+'\n';
+function leaseBody(repo,branch,goal,created,expires,id,baseline){
+  return '# Claude GitHub task '+id+'\nSTATUS: RUNNING\nAREA: claude-github-tools\nLEASE_OWNER: claude-free-mcp\nREPO: '+repo+'\nBRANCH: '+branch+'\nSTART_UTC: '+created+'\nEXPIRES_UTC: '+expires+'\nGOAL: '+goal.replace(/[\r\n]/g,' ').slice(0,200)+'\nBASELINE_PROVEN: source main '+baseline+'\nFAILED_AVOIDED: no default-branch code edits, stale HEAD, missing blob SHA or conflicting lease\nSUCCESS_SIGNAL: verified disposable branch commit and draft PR\nFAILURE_SIGNAL: stale base/head, unauthorized path or conflicting lease\nTEST_VALIDITY: actual GitHub API responses required; mocked success is not live proof\n';
 }
 function leaseFields(content){
   const f={};
@@ -127,16 +127,17 @@ async function startTask(env,{repo,branch,goal}){
     const f=leaseFields(decodeB64(file.content));
     if(f.STATUS==='RUNNING'&&f.REPO===repo&&Date.parse(f.EXPIRES_UTC||'')>Date.now())problem('another_claude_lease_active',409);
   }
+  const baseline=await getHead(env,repo,'main');
   const id=new Date().toISOString().replace(/\D/g,'').slice(0,14)+'-'+crypto.randomUUID().slice(0,8);
   const path=LEASE_PREFIX+id+'.md';
   const created=new Date().toISOString();
   const expires=new Date(Date.now()+20*60000).toISOString();
   await api(env,'PUT',repoUrl(HUB)+'/contents/'+encPath(path),{
     message:'docs(test-hub): Claude GitHub task lease [skip ci]',
-    branch:'main',content:utf8Base64(leaseBody(repo,branch,goal,created,expires,id))
+    branch:'main',content:utf8Base64(leaseBody(repo,branch,goal,created,expires,id,baseline))
   });
   await validateLease(env,repo,branch,path);
-  return {repo,branch,lease_path:path,expires,authorized_actions:'branch-and-draft-pr'};
+  return {repo,branch,lease_path:path,expires,base_sha:await getHead(env,repo,'main'),authorized_actions:'branch-and-draft-pr'};
 }
 export const githubTools=[
   {name:'github_get_file',description:'Read an approved Anthares GitHub repository file and its SHA.',inputSchema:{type:'object',properties:{repo:{type:'string'},path:{type:'string'},ref:{type:'string'}},required:['repo','path']},scope:'github.read'},
@@ -151,9 +152,10 @@ export async function callGithubTool(env,name,args={}){
     const path=validatePath(args.path);
     const ref=String(args.ref||'main');
     if(ref!=='main')validateBranch(ref);
-    const f=await getFile(env,repo,path,ref);
+    const head=await getHead(env,repo,ref);
+    const f=await getFile(env,repo,path,head);
     if(f.type!=='file'||f.size>250000)problem('file_not_supported');
-    return {repo,path,ref,sha:f.sha,content:decodeB64(f.content)};
+    return {repo,path,ref,head_sha:head,sha:f.sha,content:decodeB64(f.content)};
   }
   const branch=validateBranch(args.branch);
   if(name==='github_begin_task')return startTask(env,{repo,branch,goal:args.goal});
@@ -172,17 +174,26 @@ export async function callGithubTool(env,name,args={}){
     const path=validatePath(args.path);
     const data=String(args.content??'');
     if(new TextEncoder().encode(data).length>200000)problem('content_too_large');
-    const prior=await getFile(env,repo,path,branch,true);
+    const prior=await getFile(env,repo,path,expected,true);
     const expectedFile=args.expected_file_sha;
     if(prior && (prior.type!=='file'||!shaPattern.test(String(expectedFile||''))||prior.sha!==expectedFile))problem('stale_file_sha',409);
     if(!prior && expectedFile)problem('file_missing_expected_sha',409);
     const message=String(args.message||'').slice(0,120).trim();
     if(!message)problem('commit_message_required');
     if(await getHead(env,repo,branch)!==expected)problem('stale_branch_head',409);
-    const payload={branch,message:message+' [skip ci]',content:utf8Base64(data)};
-    if(prior)payload.sha=prior.sha;
-    const changed=await api(env,'PUT',repoUrl(repo)+'/contents/'+encPath(path),payload);
-    return {repo,branch,path,commit:changed.commit?.sha,blob_sha:changed.content?.sha};
+    // GitHub performs the HEAD comparison and commit atomically; a second REST
+    // read alone cannot fence a concurrent write to another file.
+    const changed=await api(env,'POST','/graphql',{
+      query:'mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}',
+      variables:{input:{branch:{repositoryNameWithOwner:repo,branchName:branch},
+        expectedHeadOid:expected,message:{headline:message+' [skip ci]'},
+        fileChanges:{additions:[{path,contents:utf8Base64(data)}]}}}
+    });
+    if(changed.errors?.length)problem('github_commit_rejected_stale_head_or_permissions',409);
+    const commit=validateSha(changed.data?.createCommitOnBranch?.commit?.oid);
+    const confirmed=await getFile(env,repo,path,commit);
+    if(confirmed.type!=='file'||decodeB64(confirmed.content)!==data)problem('github_commit_verification_failed',409);
+    return {repo,branch,path,commit,blob_sha:confirmed.sha};
   }
   if(name==='github_draft_pr'){
     const title=String(args.title||'').trim().slice(0,120);

@@ -32,6 +32,13 @@ function mockResponse(url, init={}) {
   if(path.includes('/contents/' + LEASE))
     return response({type:'file',content:Buffer.from(LEASE_CONTENT).toString('base64')});
   if(path.includes('/git/ref/heads/')) return response({object:{sha:HEAD}});
+  if(path.includes('/contents/docs/unit.txt?ref='+'c'.repeat(40)))
+    return response({type:'file',size:3,sha:'d'.repeat(40),content:Buffer.from('new').toString('base64')});
+  if(path==='/graphql' && init.method==='POST'){
+    const p=JSON.parse(init.body).variables.input;
+    assert.equal(p.expectedHeadOid,HEAD);assert.equal(p.branch.branchName,BRANCH);assert.equal(p.branch.repositoryNameWithOwner,REPO);
+    return response({data:{createCommitOnBranch:{commit:{oid:'c'.repeat(40)}}}});
+  }
   if(path.includes('/contents/docs/unit.txt?'))
     return response({type:'file',size:8,sha:FILE_SHA,content:Buffer.from('old text').toString('base64')});
   if(path.includes('/contents/docs/unit.txt') && init.method==='PUT')
@@ -41,9 +48,9 @@ function mockResponse(url, init={}) {
     return response({number:17,html_url:'https://github.com/test/pr/17',draft:true,head:{sha:HEAD}});
   return response({message:'not found'},404);
 }
-async function withMock(task) {
+async function withMock(task,responder=mockResponse) {
   const original = globalThis.fetch;
-  globalThis.fetch = async (url, init) => mockResponse(url, init);
+  globalThis.fetch = async (url, init) => responder(url, init);
   try{return await task();}finally{globalThis.fetch=original;}
 }
 test('approved repositories only', () => {
@@ -114,4 +121,45 @@ test('write denied with absent token and forbidden paths',async()=>{
       content:'x',message:'test'
     }),/lease_mismatch/);
   });
+});
+
+test('file reads bind returned content to an immutable branch HEAD',async()=>{
+ await withMock(async()=>{
+  const r=await callGithubTool({},'github_get_file',{repo:REPO,path:'docs/unit.txt',ref:BRANCH});
+  assert.equal(r.head_sha,HEAD);
+ },(url,init)=>{
+  if(new URL(url).pathname.endsWith('/contents/docs/unit.txt'))assert.equal(new URL(url).searchParams.get('ref'),HEAD);
+  return mockResponse(url,init);
+ });
+});
+test('an atomic GitHub stale-head rejection cannot fall back to an unsafe Contents write',async()=>{
+ let mutations=0;
+ await withMock(async()=>{
+  await assert.rejects(callGithubTool(token,'github_put_file',{...common,path:'docs/unit.txt',
+   content:'new',expected_file_sha:FILE_SHA,message:'race test'}),/github_commit_rejected/);
+  assert.equal(mutations,1);
+ },(url,init)=>{
+  if(init?.method!=='GET'){
+   mutations++;assert.equal(new URL(url).pathname,'/graphql');
+   return response({errors:[{type:'STALE_DATA',message:'branch advanced'}]});
+  }
+  return mockResponse(url,init);
+ });
+});
+test('begin-task returns the current main HEAD after its own Test Hub lease commit',async()=>{
+ let saved=null,leasePath='',heads=0;
+ await withMock(async()=>{
+  const r=await callGithubTool(token,'github_begin_task',{repo:REPO,branch:BRANCH,goal:'isolated acceptance'});
+  assert.equal(r.base_sha,'e'.repeat(40));assert(r.lease_path);
+  assert.match(Buffer.from(saved,'base64').toString(),/BASELINE_PROVEN/);
+ },(url,init)=>{
+  const path=new URL(url).pathname;
+  if(path.includes('/git/ref/heads/'))return response({object:{sha:++heads===1?HEAD:'e'.repeat(40)}});
+  if(path.includes('/git/trees/'))return response({truncated:false,tree:leasePath?[{type:'blob',path:leasePath.split('/').at(-1)}]:[]});
+  if(path.includes('/contents/test-hub/findings/')){
+   if(init.method==='PUT'){const p=JSON.parse(init.body);saved=p.content;leasePath=path.split('/contents/')[1];return response({commit:{sha:'e'.repeat(40)}})}
+   return response({type:'file',content:saved});
+  }
+  return mockResponse(url,init);
+ });
 });
