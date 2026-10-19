@@ -184,3 +184,10 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - PROVEN: live control/device health and anonymous MCP 401. Previous actual Claude owner OAuth, read/write and draft PR164 acceptance remain valid. Do not merge disposable PR164.
 - BLOCKED EXTERNALLY: Claude Free exhausted its five-hour message quota and refused the new run_tests prompt before issuing any tool call; UI reports reset at 18:00. Only acceptance of the new test tool through Claude remains unproved. No paid upgrade, identity switching or repeated quota retries.
 - Evidence and lease closure: test-hub/findings/20261019-1848-claude-final-merge-and-approved-tests.md. Future acceptance needs a fresh lease. No CORTES/Android/SSH behavior changed.
+
+## Claude Code remoto gratuito — 2026-10-19
+- PROVEN: GitHub Actions efêmero, sem VPS e sem dependência de PC, inicializa Claude Code e 9Router em loopback com Gemini recuperado do Bitwarden. Planejamento: run 39336129062, ANTHARES_CLAUDE_REAL_CANARY=PASS.
+- PROVEN: fallback de modelo propositalmente indisponível para outro modelo com resposta real; edição de arquivo real isolada, validada como única alteração. Run 39337326780: ANTHARES_FREE_FAILOVER_REAL=PASS, ANTHARES_FREE_CLAUDE_REAL_EDIT=PASS. Documento de prova no PR rascunho #209; não fazer merge automático.
+- PROVEN em modo degradado: com dois modelos externos indisponíveis por 429/rede, o modelo Gemini 3.5 Flash-Lite concluiu a operação; novos runs reavaliam três modelos.
+- PENDING externo: GitHub Actions tem permissão para enviar branch, mas opção de abrir PR com GITHUB_TOKEN está desabilitada nas configurações administrativas; PR #209 foi criado pela integração GitHub já conectada. Habilitar Allow GitHub Actions to create and approve pull requests em Settings > Actions > General > Workflow permissions para PR totalmente automático.
+- Fonte de verdade: test-hub/findings/20261019-2250-free-claude-code-remote-real-proven.md. Sem mudanças no Anthares AI Hub, WordPress, CORTES ou contas pagas.
