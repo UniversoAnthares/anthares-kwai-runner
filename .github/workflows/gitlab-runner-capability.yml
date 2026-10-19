@@ -31,7 +31,9 @@ jobs:
                       if label=="PAT":
                           scopes=data.get("scopes",[])
                           print("GITLAB_PAT_SELF=READ_OK")
-                          print("RUNNER_MANAGEMENT_SCOPE="+str(any(s in scopes for s in ("api","create_runner","manage_runner"))).upper())
+                          print("GITLAB_HAS_CREATE_RUNNER_SCOPE="+str("create_runner" in scopes).upper())
+                          print("GITLAB_HAS_MANAGE_RUNNER_SCOPE="+str("manage_runner" in scopes).upper())
+                          print("GITLAB_HAS_API_SCOPE="+str("api" in scopes).upper())
                       else:
                           own=[x for x in data if x.get("runner_type")!="instance_type"]
                           print("CUSTOM_PROJECT_RUNNER_COUNT="+str(len(own)))
