@@ -1,4 +1,5 @@
 name: Anthares free Claude Code - cloud runner and model fallback
+run-name: Anthares Claude Code ${{ inputs.request_id || github.run_id }}
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +15,10 @@ on:
         required: true
       scope:
         description: 'Only for edit: exact file under tools/, docs/ or ai-runners/'
+        type: string
+        required: false
+      request_id:
+        description: 'Correlation ID filled automatically by the Claude Anthares connector'
         type: string
         required: false
   pull_request:
@@ -120,6 +125,7 @@ jobs:
           path: ${{ runner.temp }}/anthares-claude-result.txt
           if-no-files-found: ignore
           retention-days: 2
+          compression-level: 0
       - name: Destroy runner secrets and temporary state
         if: always() && github.event_name == 'workflow_dispatch'
         run: |
