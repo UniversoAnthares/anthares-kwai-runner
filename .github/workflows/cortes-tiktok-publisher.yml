@@ -10,13 +10,17 @@ on:
       - 'direct-tiktok-publisher/tiktok_cloud_publish.py'
       - 'tools/cortes_tiktok_hosted_publish.py'
       - 'tests/test_tiktok_creator_inventory.py'
+      - 'tests/test_tiktok_cloud_event_guard.py'
       - 'tests/test_cortes_tiktok_queue_consumer.py'
       - 'tools/tiktok_upload_readonly_diagnostic.py'
       - 'vercel-ara-primary/api/cortes-tiktok.mjs'
       - 'vercel-ara-primary/api/router-entry.mjs'
       - 'vercel-ara-primary/vercel.json'
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '3-58/5 * * * *'
+  workflow_run:
+    workflows: ['Anthares Core Supervisor']
+    types: [completed]
   push:
     branches: [main]
     paths:
@@ -26,6 +30,7 @@ on:
       - 'direct-tiktok-publisher/tiktok_cloud_publish.py'
       - 'tools/cortes_tiktok_hosted_publish.py'
       - 'tests/test_tiktok_creator_inventory.py'
+      - 'tests/test_tiktok_cloud_event_guard.py'
       - 'tests/test_cortes_tiktok_queue_consumer.py'
 
 permissions:
@@ -53,6 +58,7 @@ jobs:
           CORTES_TIKTOK_HOSTED_DRY_RUN=1 python3 -u tools/cortes_tiktok_hosted_publish.py
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok*.py' -v
           python3 -m unittest discover -s tests -p 'test_tiktok_creator_inventory.py' -v
+          python3 -m unittest discover -s tests -p 'test_tiktok_cloud_event_guard.py' -v
       - name: Check TikTok worker credential binding (presence only)
         run: |
           python3 - <<'PY'
@@ -97,7 +103,7 @@ jobs:
           print('CORTES_TIKTOK_STUDIO_RECONCILIATION_READY=1')
           PY
       - name: Publish or reconcile at most one queued TikTok short (main only)
-        if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == 'UniversoAnthares/anthares-kwai-runner' && github.event.workflow_run.name == 'Anthares Core Supervisor'))
         env:
           EXPECTED_TIKTOK_USERNAME: universo.anthares
           TIKTOK_PUBLISH_NOT_BEFORE_UTC: '2026-10-20T10:00:00Z'
