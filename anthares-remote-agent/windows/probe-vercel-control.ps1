@@ -8,14 +8,20 @@ if([string]::IsNullOrWhiteSpace($env:ANTHARES_DEVICE_TOKEN)){
   exit 8
 }
 $headers=@{Authorization=('Bearer '+$env:ANTHARES_DEVICE_TOKEN);'X-Anthares-Device'=$device}
-$body=@{device_id=$device;probe=$true}|ConvertTo-Json -Compress
-try{
-  $r=Invoke-WebRequest -UseBasicParsing -Method POST -Uri 'https://anthares-ara-vercel-reserve.vercel.app/v1/device/heartbeat' -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 20
-  [pscustomobject]@{ok=([int]$r.StatusCode -ge 200 -and [int]$r.StatusCode -lt 300);stage='heartbeat';status=[int]$r.StatusCode;body=$r.Content}|ConvertTo-Json -Compress
-  exit 0
-}catch{
-  $status=$null
-  if($_.Exception.Response){try{$status=[int]$_.Exception.Response.StatusCode.value__}catch{}}
-  [pscustomobject]@{ok=$false;stage='heartbeat';status=$status;error=$_.Exception.Message}|ConvertTo-Json -Compress
-  exit 7
+$routes=@('https://anthares-remote-primary.vercel.app','https://anthares-remote-secondary.vercel.app')
+$results=@()
+foreach($base in $routes){
+  try{
+    $j=Invoke-RestMethod -Method Get -Uri ($base+'/v1/device/auth-check') -Headers $headers -TimeoutSec 10 -ErrorAction Stop
+    $ready=[bool]($j.ok -eq $true -and $j.backend -eq 'vercel-neon')
+    $results += [pscustomobject]@{url=$base;ready=$ready}
+  }catch{
+    $status='network'
+    if($_.Exception.Response){try{$status=[int]$_.Exception.Response.StatusCode}catch{}}
+    $results += [pscustomobject]@{url=$base;ready=$false;http_status=$status}
+  }
 }
+$healthy=@($results|Where-Object{$_.ready}).Count
+[pscustomobject]@{ok=($healthy -ge 1);stage='authenticated_read_only_health';healthy_endpoints=$healthy;endpoints=$results}|ConvertTo-Json -Compress -Depth 4
+if($healthy -ge 1){exit 0}
+exit 7
