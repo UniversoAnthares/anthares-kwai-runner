@@ -1,0 +1,82 @@
+name: Anthares Claude Free MCP - deploy reviewed code delegation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare-ara-mcp/src/claude-code-bridge.mjs'
+      - 'cloudflare-ara-mcp/src/claude-code-bridge.test.mjs'
+      - 'cloudflare-ara-mcp/src/github-bridge.mjs'
+      - 'cloudflare-ara-mcp/src/github-bridge.test.mjs'
+      - '.github/workflows/anthares-claude-code-mcp-deploy.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: anthares-ara-mcp-reviewed-claude-delegation
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Preserve canonical owner authorization and test bridge security
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo CLOUDFLARE_TOKEN_UNAVAILABLE; exit 1; }
+          grep -Fq 'AUTH_OWNER_METHOD = "github"' cloudflare-ara-mcp/wrangler.toml
+          grep -Fq 'var ORIGIN = "https://anthares-ara-mcp.anthares1.workers.dev"' cloudflare-ara-mcp/src/index.js
+          grep -Fq 'githubTools.concat(approvedTestTool)' cloudflare-ara-mcp/src/index.js
+          node --check cloudflare-ara-mcp/src/index.js
+          node --check cloudflare-ara-mcp/src/claude-code-bridge.mjs
+          node --test cloudflare-ara-mcp/src/claude-code-bridge.test.mjs cloudflare-ara-mcp/src/github-bridge.test.mjs cloudflare-ara-mcp/src/claude-client-policy.test.mjs cloudflare-ara-mcp/src/owner-github-auth.test.mjs
+          echo ANTHARES_CLAUDE_BRIDGE_REVIEWED_TESTS=PASS
+      - name: Verify Cloudflare account and existing auth secrets
+        working-directory: cloudflare-ara-mcp
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.43.0 secret list > "$RUNNER_TEMP/claude-mcp-secrets.json"
+          for name in ARA_SIGNING_PRIVATE_JWK ARA_SIGNING_PUBLIC_JWK ARA_OAUTH_SECRET ANTHARES_GITHUB_TOKEN ARA_OWNER_GITHUB_CLIENT_SECRET; do
+            jq -e --arg name "$name" 'any(.[]; .name == $name)' "$RUNNER_TEMP/claude-mcp-secrets.json" >/dev/null || { echo "MISSING_SECRET_NAME=$name"; exit 1; }
+          done
+          echo ANTHARES_CLAUDE_MCP_SECRETS_PRESENT=PASS
+      - name: Verify currently operational owner-authorized worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 12 'https://anthares-ara-mcp.anthares1.workers.dev/health' -o "$RUNNER_TEMP/mcp-before.json"
+          jq -e '.ok == true and .oauth == true and .mcp == true and .oauth_owner_code_mode == "github_owner_identity" and .control_ready == true' "$RUNNER_TEMP/mcp-before.json" >/dev/null
+          echo ANTHARES_PREDEPLOY_OAUTH_HEALTH=PASS
+      - name: Deploy only the reviewed Claude bridge to existing free Worker
+        working-directory: cloudflare-ara-mcp
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.43.0 deploy --keep-vars
+          echo ANTHARES_CLAUDE_BRIDGE_DEPLOYED=PASS
+      - name: Verify OAuth, remote control and anonymous MCP isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 6); do
+            curl --fail --silent --show-error --max-time 10 'https://anthares-ara-mcp.anthares1.workers.dev/health' -o "$RUNNER_TEMP/mcp-after.json" || true
+            if jq -e '.ok == true and .oauth == true and .mcp == true and .oauth_owner_code_mode == "github_owner_identity" and .control_ready == true' "$RUNNER_TEMP/mcp-after.json" >/dev/null 2>&1; then break; fi
+            sleep 3
+          done
+          jq -e '.ok == true and .oauth == true and .mcp == true and .oauth_owner_code_mode == "github_owner_identity" and .control_ready == true' "$RUNNER_TEMP/mcp-after.json" >/dev/null
+          status="$(curl -sS -o "$RUNNER_TEMP/anon-mcp.json" -w '%{http_code}' --max-time 12 -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' 'https://anthares-ara-mcp.anthares1.workers.dev/mcp')"
+          test "$status" = 401 || { echo "UNEXPECTED_ANON_MCP_HTTP=$status"; exit 1; }
+          echo ANTHARES_CLAUDE_BRIDGE_ANON_MCP_DENIED=PASS
+          echo ANTHARES_CLAUDE_BRIDGE_DEPLOY_ACCEPTANCE=PASS
+      - name: Cleanup secret name inventory
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/claude-mcp-secrets.json" "$RUNNER_TEMP/mcp-before.json" "$RUNNER_TEMP/mcp-after.json" "$RUNNER_TEMP/anon-mcp.json"
