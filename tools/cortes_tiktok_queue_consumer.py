@@ -52,12 +52,12 @@ def http(url, headers=None, body=None, timeout=40):
     return out
 
 
-def oidc():
+def oidc(audience=AUDIENCE):
     base = os.getenv("ACTIONS_ID_TOKEN_REQUEST_URL", "")
     assertion = os.getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
     if not base or not assertion:
         raise SafeStop("GITHUB_OIDC_CONTEXT_REQUIRED")
-    endpoint = base + ("&" if "?" in base else "?") + urllib.parse.urlencode({"audience": AUDIENCE})
+    endpoint = base + ("&" if "?" in base else "?") + urllib.parse.urlencode({"audience": audience})
     response = http(endpoint, {"Authorization": "Bearer " + assertion}, timeout=20)
     token = str(response.get("value") or "")
     if not token:
@@ -66,10 +66,9 @@ def oidc():
 
 
 def worker_auth():
-    shared = os.getenv("ARA_SHARED", "").strip()
-    if len(shared) < 20:
-        raise SafeStop("TIKTOK_WORKER_CREDENTIAL_UNAVAILABLE")
-    return {"Authorization": "Bearer " + shared}
+    # Prefer a short-lived identity restricted to the main-branch workflow.
+    # This also survives changes to the static ARA_SHARED credential.
+    return oidc("anthares-render-worker")
 
 
 def qcall(action, credentials, payload=None):
@@ -167,6 +166,12 @@ def inventory(credentials):
 
 def main():
     control = oidc()
+    # Check the independent Neon queue before attempting the TikTok login.
+    # Queue health contains no video publication operation.
+    health = qcall("health", control)
+    if not health.get("ok") or health.get("service") != "cortes-tiktok-neon":
+        raise SafeStop("TIKTOK_NEON_QUEUE_UNAVAILABLE")
+    print("CORTES_TIKTOK_NEON_HEALTH_OK", flush=True)
     worker = worker_auth()
     session = wcall("/session-status", worker, timeout=50)
     if not (session.get("ok") and session.get("bootstrapped") and session.get("identity_verified")
