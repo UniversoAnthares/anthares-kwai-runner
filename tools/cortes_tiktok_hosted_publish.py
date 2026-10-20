@@ -101,49 +101,6 @@ def inventory(state):
     return {"ok":True,"account":EXPECTED,"items":result}
 
 
-def publish_one(job,sid,folder,state):
-    media=folder/"short.mp4"
-    download_verified(job,media)
-    plan={
-        "source_id":str(job["source_id"]),
-        "segment_id":sid,
-        "source_title":str(job.get("title") or ""),
-        "title":q.caption(job),
-        "expected_tiktok_username":EXPECTED,
-        "media_path":str(media),
-    }
-    plan_file=folder/"plan.json"
-    plan_file.write_text(json.dumps(plan,ensure_ascii=False),encoding="utf-8")
-    env=os.environ.copy()
-    env.pop("TIKTOK_STORAGE_STATE",None)
-    env.update({
-        "EXPECTED_TIKTOK_USERNAME":EXPECTED,
-        "TIKTOK_STORAGE_STATE_FILE":str(folder/"canonical-state.json"),
-        "TIKTOK_YOUTUBE_PLAN":str(plan_file),
-        "ATD_ARTIFACT_DIR":str(folder/"artifacts"),
-        "TIKTOK_AUTOMATION_HALT":str(folder/"halt.json"),
-        "TIKTOK_PUBLISH_EVIDENCE":str(folder/"publish-evidence.json"),
-        "TIKTOK_PUBLISHED_KEYS":str(folder/"published.json"),
-    })
-    (folder/"canonical-state.json").write_text(json.dumps(state,separators=(",",":")),encoding="utf-8")
-    (folder/"canonical-state.json").chmod(0o600)
-    run=subprocess.run([sys.executable,"-u",str(ROOT/"direct-tiktok-publisher"/"tiktok_cloud_publish.py")],
-                       cwd=str(ROOT),env=env,text=True,capture_output=True,timeout=375)
-    if run.returncode:
-        # Publisher logs and screenshots can contain private profile data.
-        # Keep them entirely on the ephemeral runner.
-        raise q.SafeStop("TIKTOK_BROWSER_PUBLISH_UNVERIFIED")
-    try:
-        evidence=json.loads((folder/"publish-evidence.json").read_text(encoding="utf-8"))
-    except (OSError,ValueError) as exc:
-        raise q.SafeStop("TIKTOK_PUBLISH_EVIDENCE_MISSING") from exc
-    remote=str(evidence.get("remote_id") or "")
-    if not (evidence.get("confirmed") is True and q.ID_RE.fullmatch(remote) and
-            str(evidence.get("segment_id") or "")==sid and str(evidence.get("account") or "").lstrip("@").casefold()==EXPECTED):
-        raise q.SafeStop("TIKTOK_PUBLISH_EVIDENCE_INVALID")
-    return remote
-
-
 def main():
     if os.getenv("CORTES_TIKTOK_HOSTED_DRY_RUN")=="1":
         print("CORTES_TIKTOK_HOSTED_DRY_RUN_NO_PUBLISH",flush=True)
