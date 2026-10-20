@@ -82,7 +82,7 @@ export async function dispatch(event,{get=api,post=note,getComments=comments}={}
   await post(q.issue_number,marker(q.request_id)+' CLAIMED source='+q.origin+'; plan-only; preparing Claude Code remote dispatch. No secrets or merges.');
   try {
     await get('POST','/actions/workflows/'+WORKFLOW+'/dispatches',{
-      ref:'main',inputs:{mode:'plan',task:q.task,scope:'',request_id:q.request_id}
+      ref:'main',inputs:{mode:'plan',task:q.task,scope:'',request_id:q.request_id,origin_issue:String(q.issue_number)}
     });
   } catch(e) {
     await post(q.issue_number,'[ANTHARES-COLLAB] DISPATCH_UNCERTAIN id='+q.request_id+' error='+String(e.message).slice(0,70)+'; do NOT re-dispatch automatically.');
@@ -106,7 +106,30 @@ async function waitForRun(q,{get=api,post=note,sleep=ms=>new Promise(r=>setTimeo
   await post(q.issue_number,'[ANTHARES-COLLAB] '+label+' id='+q.request_id+' conclusion='+conclusion+' run='+url+'; inspect the GitHub Actions artifact with the matching ID. No automatic merge.');
   return {...q,status:label,conclusion,run_url:url};
 }
+/**
+ * Strong gate for a nested workflow_dispatch issued by github-actions[bot].
+ * The authoritative owner-created Issue supplies the task and deterministic UUID.
+ * This does not enable bot-origin direct requests without a verified issue.
+ */
+export async function verifyDelegation({loadIssue=async n=>api('GET','/issues/'+n)}={}){
+  const number=Number(process.env.ANTHARES_COLLAB_ORIGIN_ISSUE);
+  assert(Number.isSafeInteger(number)&&number>0&&number<=10000000,'invalid_origin_issue');
+  assert(process.env.ANTHARES_TASK_MODE==='plan'&&!process.env.ANTHARES_TASK_SCOPE,'invalid_delegated_mode');
+  const issue=await loadIssue(number);
+  const event={action:'opened',sender:{id:OWNER_ID},repository:{full_name:REPO},issue};
+  const task=validateEvent(event);
+  assert(task.issue_number===number,'origin_issue_mismatch');
+  assert(task.task===process.env.ANTHARES_TASK_PROMPT,'origin_task_mismatch');
+  assert(task.request_id===process.env.ANTHARES_REQUEST_ID,'origin_request_id_mismatch');
+  return task;
+}
+
 export async function main(){
+  if(process.argv[2]==='verify'){
+    const t=await verifyDelegation();
+    console.log('ANTHARES_COLLAB_OWNER_ORIGIN_VERIFIED='+t.request_id);
+    return;
+  }
   const event=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
   const result=await dispatch(event);
   if(result.accepted)await waitForRun(result);
