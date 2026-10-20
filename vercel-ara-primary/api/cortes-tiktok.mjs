@@ -121,6 +121,13 @@ async function getNext(){
  if(uncertain.rowCount)return{ok:true,job:uncertain.rows[0],mode:'reconcile'};
  const concurrent=await pool.query('SELECT id FROM cortes_tiktok_publications WHERE status=\'leased\' AND lease_until>now() LIMIT 1');
  if(concurrent.rowCount)return{ok:true,job:null,mode:'busy'};
+ // Ten-minute cadence and at most 100 confirmed posts per Campo Grande day.
+ // An existing uncertain publication always takes priority above this gate.
+ const cadence=await pool.query("SELECT COUNT(*) FILTER (WHERE status='confirmed' AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS daily, MAX(confirmed_at) AS last_post FROM cortes_tiktok_publications");
+ const daily=Number(cadence.rows[0]?.daily||0);
+ if(daily>=100)return{ok:true,job:null,mode:'cap'};
+ const last=cadence.rows[0]?.last_post;
+ if(last&&Date.now()-new Date(last).getTime()<600000)return{ok:true,job:null,mode:'paced'};
  const q=await pool.query(
  'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)'+
  ' UPDATE cortes_tiktok_publications p SET status=\'leased\',lease_generation=p.lease_generation+1,'+
