@@ -197,3 +197,11 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - PROVEN: testes da ponte, compilação Wrangler e escopos MCP run 39345229461. Ferramentas novas: run_claude_code (github.write), get_claude_code_status e get_claude_code_result (github.read). Nenhum servidor pago nem PC usados como executor.
 - PENDING OWNER ACCEPTANCE: a sessão Claude do proprietário deve enviar uma tarefa real e consultar seu status e resultado. A permissão Actions:write do token GitHub guardado em Cloudflare ainda precisa ser comprovada nessa chamada real; não afirmar end-to-end.
 - Fonte: test-hub/findings/20261020-0005-claude-mcp-delegation-deployed-partial.md. Lease de desenvolvimento encerrado; preservar OAuth e os trabalhos Anthares existentes.
+
+
+## Anthares ChatGPT + Claude Code + Work — 2026-10-20
+
+- **PROVEN (code tests only):** PR #226 builds an owner-only, plan-only GitHub Issues collaboration gateway, deterministic idempotent dispatch, main-branch bot authority bound to exact owner issue/task/UUID, Claude Free read-only `collab_list_tasks` / `collab_get_task`, and Work via GitHub connector. CI runs 39355622185 (39 tests PASS), 39355622093 (Cloudflare build PASS) and 39355622176 (Claude runner static-check PASS).
+- **PARTIAL (deployment):** PR #226 must merge onto protected main before the issue-created workflow or new Claude MCP tools can be accepted as production-live. Issue #222 is design/owner identity evidence only; not a dispatched task. The existing independent Claude Free -> Claude Code remote run 39352658418 remains PROVEN.
+- **BLOCKER:** existing ruleset `proteger-main` rejected PR #218 merge; never bypass. Work execution can only be attested inside actual Work mode with authorized GitHub connection, not in this Chat session.
+- Full finding: `test-hub/findings/20261020-0152-multiagent-work-collab-partial.md`. Do not claim real multiagent orchestration PROVEN before owner-authored issue canary, actual remote result, Claude MCP tool read and Work session review.
