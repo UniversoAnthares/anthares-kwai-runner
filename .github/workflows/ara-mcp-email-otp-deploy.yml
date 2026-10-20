@@ -1,12 +1,8 @@
 name: ARA MCP Email OTP Deploy
+# Legacy Email OTP authorization is retired in production.
+# Recovery-only, deliberately manual. Do not auto-deploy over GitHub owner OAuth.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'cloudflare-ara-mcp/src/index.js'
-      - 'cloudflare-ara-mcp/wrangler.toml'
-      - '.github/workflows/ara-mcp-email-otp-deploy.yml'
 permissions:
   contents: read
 concurrency:
