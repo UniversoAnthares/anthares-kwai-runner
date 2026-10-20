@@ -63,6 +63,78 @@ type signedJobPayload struct {
 	IssuedAt      int64    `json:"issued_at"`
 }
 
+const seenJobsDirEnv = "ANTHARES_SEEN_JOBS_DIR"
+
+func seenJobsRoot() string {
+	if v := os.Getenv(seenJobsDirEnv); v != "" {
+		return v
+	}
+	base := os.Getenv("PROGRAMDATA")
+	if base == "" {
+		base = os.TempDir()
+	}
+	return filepath.Join(base, "AntharesRemoteAgent", "seen-jobs")
+}
+
+// isJobIDSeen returns true if the job_id was already accepted within the
+// retention window (signature expiry + 24h margin). It is used for replay
+// protection: the same job_id must never be executed twice.
+func isJobIDSeen(jobID string) bool {
+	root := seenJobsRoot()
+	path := filepath.Join(root, jobID+".seen")
+	if _, err := os.Stat(path); err != nil {
+		return false
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	// Retention: signature expiry (60s) + 24h margin
+	if time.Since(info.ModTime()) > 24*time.Hour+60*time.Second {
+		_ = os.Remove(path)
+		return false
+	}
+	return true
+}
+
+// recordJobID creates a marker file for an accepted job_id so it cannot be
+// replayed. It is best-effort: if the file cannot be created, the job still
+// proceeds (the signature remains the primary authorization).
+func recordJobID(jobID string) error {
+	root := seenJobsRoot()
+	if err := os.MkdirAll(root, 0700); err != nil {
+		return err
+	}
+	path := filepath.Join(root, jobID+".seen")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	return f.Close()
+}
+
+// cleanupSeenJobs removes marker files older than the retention window.
+func cleanupSeenJobs() {
+	root := seenJobsRoot()
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-(24*time.Hour + 60*time.Second))
+	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), ".seen") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			_ = os.Remove(filepath.Join(root, e.Name()))
+		}
+	}
+}
+
 type Result struct {
 	ID        string `json:"id"`
 	OK        bool   `json:"ok"`
@@ -499,12 +571,12 @@ func verifyJobSignature(cfg Config, job Job, sig jobSignature) (signedJobPayload
 	if payload.Type != job.Type {
 		return payload, errors.New("job signature type mismatch")
 	}
-	if sig.ExpiresAt > 0 && time.Now().Unix() > sig.ExpiresAt {
-		return payload, errors.New("job signature expired")
-	}
 	now := time.Now().Unix()
 	if sig.IssuedAt > 0 && now-sig.IssuedAt > 60 {
 		return payload, errors.New("job signature issued too long ago")
+	}
+	if sig.ExpiresAt > 0 && time.Now().Unix() > sig.ExpiresAt {
+		return payload, errors.New("job signature expired")
 	}
 	if cfg.ARAControlPublic == nil {
 		return payload, errors.New("signing public key not configured")
@@ -513,13 +585,34 @@ func verifyJobSignature(cfg Config, job Job, sig jobSignature) (signedJobPayload
 	if err != nil || len(sigBytes) != ed25519.SignatureSize {
 		return payload, errors.New("invalid job signature encoding")
 	}
-	if !ed25519.Verify(cfg.ARAControlPublic, []byte(sig.Payload), sigBytes) {
+	signedBytes := append([]byte("ara-remote-job-v1\n"), []byte(sig.Payload)...)
+	if !ed25519.Verify(cfg.ARAControlPublic, signedBytes, sigBytes) {
 		return payload, errors.New("job signature verification failed")
 	}
 	if payload.Scope != "ara.exec" {
 		return payload, errors.New("job signature scope is not ara.exec")
 	}
 	return payload, nil
+}
+
+// parseHandlerOutput interpreta o JSON devolvido pelo handler PowerShell.
+// ok=false é tratado como FALHA do job, mesmo com exit code 0.
+func parseHandlerOutput(out string) (bool, error) {
+	var result struct {
+		OK       bool   `json:"ok"`
+		Error    string `json:"error,omitempty"`
+		ExitCode int    `json:"exit_code,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		return false, nil
+	}
+	if !result.OK {
+		if result.Error == "" {
+			result.Error = "handler_reported_failure"
+		}
+		return false, errors.New(result.Error)
+	}
+	return true, nil
 }
 
 func remoteJobJSON(ctx context.Context, cfg Config, job Job) (string, error) {
@@ -534,6 +627,12 @@ func remoteJobJSON(ctx context.Context, cfg Config, job Job) (string, error) {
 	signed, err := verifyJobSignature(cfg, job, sig)
 	if err != nil {
 		return "", err
+	}
+	if isJobIDSeen(signed.JobID) {
+		return "", errors.New("job_id already executed: replay rejected")
+	}
+	if err := recordJobID(signed.JobID); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not record job_id %s for replay protection: %v\n", signed.JobID, err)
 	}
 	commandID := signed.CommandID
 	if commandID == "" {
@@ -562,20 +661,12 @@ func remoteJobJSON(ctx context.Context, cfg Config, job Job) (string, error) {
 	if err != nil {
 		return out, err
 	}
-	var result struct {
-		OK       bool   `json:"ok"`
-		Error    string `json:"error,omitempty"`
-		ExitCode int    `json:"exit_code,omitempty"`
-	}
-	if err := json.Unmarshal([]byte(out), &result); err != nil {
-		return out, nil
-	}
-	if !result.OK {
-		return out, errors.New(result.Error)
+	ok, perr := parseHandlerOutput(out)
+	if !ok {
+		return out, perr
 	}
 	return out, nil
 }
-
 func postResult(cfg Config, result Result) error {
 	if err := validateJobID(result.ID); err != nil {
 		return err
