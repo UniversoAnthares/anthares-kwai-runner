@@ -4,8 +4,8 @@
 import crypto from 'node:crypto';
 import {Pool} from 'pg';
 
-const URL='https://anthares-remote-primary.vercel.app/api/cortes-tiktok';
-const AUDIENCE=URL;
+const QUEUE_URL='https://anthares-remote-primary.vercel.app/api/cortes-tiktok';
+const AUDIENCE=QUEUE_URL;
 const CLIPPER='UniversoAnthares/anthares-clipper';
 const RUNNER='UniversoAnthares/anthares-kwai-runner';
 const SOURCE_WF='anthares-tiktok-owned-youtube.yml';
