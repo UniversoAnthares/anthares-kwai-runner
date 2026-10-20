@@ -61,29 +61,39 @@ O watchdog roda em SYSTEM e é independente dos serviços externos. Ele:
 
 Se o Vercel estiver indisponível, as filas privadas mantêm o processo operacional. Se uma fila estiver atrasada, o mesmo processo continua recebendo comandos MCP por Vercel.
 
-## Interface gráfica autorizada (sessão do usuário)
+## Política de interface: autorização, invisibilidade e silêncio
 
-O agente canônico continua **SYSTEM / sessão 0**, sem abrir janelas por shell.
-Para abrir somente páginas HTTPS aprovadas em perfis Chrome já existentes, o
-comando remoto autenticado aceita a forma estruturada:
+Regra obrigatória: o Anthares Remote não toma foco, não envia mouse/teclado
+e não lê nem manipula a janela de trabalho do usuário sem uma aprovação
+explícita **para aquela ação**. Enquanto não existir um mecanismo de aprovação
+associado a escopo e validade, as operações `screenshot`, `clipboard_get`
+e `clipboard_set` falham com `owner authorization required`.
 
-`ara-desktop-open {"profile":"Profile 2","url":"https://chatgpt.com"}`
+A operação estruturada `ara-desktop-open` cria exclusivamente um **novo**
+Chrome headless, com `--headless=new`, `--mute-audio`,
+`--disable-audio-output`, inicialização de janela escondida e
+`--no-first-run`. Utiliza um diretório de dados isolado em
+`C:\Users\Lucas\AppData\Local\AntharesRemote\HeadlessChrome\<rotulo>`,
+sem reutilizar o diretório de dados do Chrome aberto no desktop nem
+reutilizar seus cookies, logins ou sessões.
 
-Essa ação **não executa PowerShell nem CMD**. O agente valida o perfil e o host,
-obtém o token da sessão de console do Windows e solicita ao sistema a abertura
-do executável Chrome instalado no desktop desse usuário. São permitidos apenas
-os perfis Default, 2, 3, 5, 7, 8 e 9 e hosts aprovados de ChatGPT/Google.
-Não há suporte a execução de código, foco arbitrário, cliques ou digitação livre
-nessa operação. O shell ordinário permanece sob `headless_policy.go`.
+Apenas os rótulos Default/Perfil 2/3/5/7/8/9 e URLs HTTPS de
+ChatGPT/Google previamente permitidas podem ser escolhidos. O rótulo
+identifica uma **sessão headless isolada**, não a conta Google do
+perfil Chrome existente. Nenhuma autorização OAuth é concedida
+pela abertura. O consentimento de instalação de plugins/contas
+continua no fluxo oficial do ChatGPT e do Google, feito pelo titular.
 
-A resposta `launched_not_authenticated` confirma somente a criação do processo. Não
-confirma que a página terminou de carregar nem concede OAuth. Autorização de
-contas Google e instalação/conexão de plugins continuam exigindo o fluxo de
-consentimento do provedor e do ChatGPT. Nunca trate lançamento como conexão.
+O `process_start` genérico recusa binários GUI e aceita apenas um
+pequeno conjunto de executáveis CLI previamente allowlistados;
+`process_kill` recusa processos da sessão interativa do usuário.
+O filtro de shell `headless_policy.go` continua obrigatório.
 
-A funcionalidade é limitada à instalação Windows do dispositivo canônico,
-onde o perfil Chrome está em `C:\Users\Lucas\AppData\Local\Google\Chrome\User Data`.
-Em sessão de console inativa ou dispositivo diferente, falha de forma fechada.
+O agente principal ainda opera como SYSTEM na sessão 0, preservando
+watchdog e transportes de recuperação. A criação headless usa apenas o
+token da sessão ativa, sem acionar, ativar ou selecionar janelas do usuário.
+Para qualquer operação que realmente exija interagir com uma janela
+existente, o sistema deve parar e solicitar autorização específica.
 
 ## Diagnóstico
 

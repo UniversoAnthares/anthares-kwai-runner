@@ -135,6 +135,14 @@ func processStartJSON(path, argsJSON string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Never route desktop GUI executables through the generic process_start
+	// capability: HideWindow alone does not guarantee GUI/audio isolation.
+	if !knownHeadlessExecutable(path) {
+		return "", errors.New("generic process_start requires a verified headless executable; interactive windows require owner consent")
+	}
+	if err := rejectInteractiveCommand(strings.Join(args, " ")); err != nil {
+		return "", err
+	}
 	cmd := hiddenCommandContext(context.Background(), path, args...)
 	if err := cmd.Start(); err != nil {
 		return "", err
@@ -154,7 +162,9 @@ func processKillJSON(pidText string) (string, error) {
 		return "", errors.New("refusing to terminate critical system pid")
 	}
 
-	ps := fmt.Sprintf("(Get-CimInstance Win32_Process -Filter \"ProcessId=%d\" -ErrorAction Stop).ExecutablePath", pid)
+	// Only session-0 maintenance jobs may be terminated without a fresh
+	// explicit owner consent. Never kill the user's active GUI windows.
+	ps := fmt.Sprintf("$p=Get-CimInstance Win32_Process -Filter \"ProcessId=%d\" -ErrorAction Stop; if($p.SessionId -ne 0){throw 'owner authorization required for interactive process'}; $p.ExecutablePath", pid)
 	raw, err := hiddenCommandContext(context.Background(), "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("cannot identify process: %v", err)
