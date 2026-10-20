@@ -29,6 +29,15 @@ foreach($name in $critical){
   $scriptHashes[$name]=(Get-FileHash $dst -Algorithm SHA256).Hash
 }
 
+# Install the guarded single-executor failover arbiter and retain a known-good copy.
+$arbiterPath=Join-Path $work 'ara-failover-arbiter.ps1'
+if(Test-Path $arbiterPath){Copy-Item $arbiterPath ($arbiterPath+'.pre-v8-'+(Get-Date -Format 'yyyyMMddHHmmss')+'.bak') -Force}
+Invoke-WebRequest -UseBasicParsing -Uri ($base+'ara-failover-arbiter.ps1') -OutFile $arbiterPath -TimeoutSec 30
+$tokens=$null;$errors=$null
+[Management.Automation.Language.Parser]::ParseFile($arbiterPath,[ref]$tokens,[ref]$errors)|Out-Null
+if($errors.Count){throw 'ARA failover arbiter syntax invalid'}
+Copy-Item $arbiterPath ($arbiterPath+'.lastgood') -Force
+
 $v4=Join-Path $root 'anthares-remote-agent-v4-c8.exe'
 if(-not(Test-Path $v4)){throw 'anthares-remote-agent-v4-c8.exe is missing'}
 $v4Hash=(Get-FileHash $v4 -Algorithm SHA256).Hash
@@ -100,11 +109,13 @@ $watchdogTask='Anthares Remote Recovery Watchdog'
 Register-SystemTask $canonicalTask (Join-Path $root 'run-agent-system-supervisor.ps1')
 Register-SystemTask $watchdogTask (Join-Path $root 'recovery-watchdog-loop.ps1')
 Register-SystemTask 'Anthares Remote Liveness 90s' (Join-Path $root 'remote-liveness-90s.ps1')
+Register-SystemTask 'Anthares Remote Failover Arbiter' $arbiterPath
 Stop-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue
 Stop-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue
 Start-ScheduledTask -TaskName $canonicalTask
 Start-ScheduledTask -TaskName $watchdogTask
 Start-ScheduledTask -TaskName 'Anthares Remote Liveness 90s'
+Start-ScheduledTask -TaskName 'Anthares Remote Failover Arbiter'
 Log 'SYSTEM supervisor and watchdog registered and started'
 
 $state=Join-Path $work 'legacy-pc-runtime\supervisor\system-supervisor-state.json'

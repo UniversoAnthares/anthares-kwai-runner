@@ -87,13 +87,32 @@ function Can-Restart{
 function Mark-Restart{try{[DateTimeOffset]::UtcNow.ToString('o')|Set-Content -LiteralPath $restartStamp -Encoding ASCII}catch{}}
 function Restart-Canonical([string]$why){
   if(-not(Can-Restart)){return $false}
-  Mark-Restart
-  Stop-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue
-  @(Get-SystemV4)|ForEach-Object{Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
-  Start-Sleep -Seconds 1
-  Start-ScheduledTask -TaskName $canonicalTask -ErrorAction Stop
-  Log("restarted canonical SYSTEM runtime: $why")
-  return $true
+  $gate=New-Object System.Threading.Mutex($false,'Global\AntharesRemoteExecutionTransitionV1')
+  $held=$false
+  try{
+    $held=$gate.WaitOne(2500)
+    if(-not $held){Log('restart deferred: transition already active');return $false}
+    $existing=@(Get-SystemV4)
+    if($existing.Count -gt 1){Log('multiple agents require separate reconciliation; automatic restart deferred');return $false}
+    if($existing.Count -eq 1){
+      # The canonical supervisor adopts an existing SYSTEM agent.
+      Mark-Restart
+      Start-ScheduledTask -TaskName $canonicalTask -ErrorAction Stop
+      Log("supervisor reattached without stopping agent: $why")
+      return $true
+    }
+    Mark-Restart
+    Stop-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue
+    Start-ScheduledTask -TaskName $canonicalTask -ErrorAction Stop
+    Log("restarted canonical supervisor with zero agents: $why")
+    return $true
+  }catch{
+    Log("restart failed: $($_.Exception.GetType().Name)")
+    return $false
+  }finally{
+    if($held){try{$gate.ReleaseMutex()}catch{}}
+    $gate.Dispose()
+  }
 }
 try{
   Restore-CriticalScripts
