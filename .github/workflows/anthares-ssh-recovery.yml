@@ -1,5 +1,8 @@
 name: Anthares Independent SSH Recovery
 on:
+  # Somente disparo manual (aprovacao do owner via environment anthares-ssh-recovery)
+  # ou pelo monitor, que faz workflow_dispatch com mode=recover.
+  # Nao ha gatilho por push: um push em qualquer branch nao pode iniciar recuperacao.
   workflow_dispatch:
     inputs:
       mode:
@@ -7,15 +10,6 @@ on:
         type: choice
         options: [probe, recover]
         default: probe
-  push:
-    branches: [codex/ssh-recovery-20261019]
-    paths:
-      - .github/workflows/anthares-ssh-recovery.yml
-      - anthares-remote-agent/ssh-client.py
-      - anthares-remote-agent/ssh-admission.py
-      - anthares-remote-agent/test-ssh-admission.py
-      - anthares-remote-agent/windows/ssh-recovery*
-      - anthares-remote-agent/windows/test-ssh-recovery.ps1
 permissions:
   contents: read
 concurrency:
@@ -36,9 +30,18 @@ jobs:
         run: python3 -m py_compile anthares-remote-agent/ssh-client.py
       - name: Verify trigger and quota safety
         run: python3 anthares-remote-agent/test-ssh-admission.py
+      - name: Verify workflow gating (no push trigger, kill-switch, no fork secrets)
+        run: python3 anthares-remote-agent/test-ssh-workflow-gating.py
   ssh:
     needs: policy
-    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && (github.event_name != 'schedule' || vars.ANTHARES_SSH_AUTORECOVERY_ENABLED == 'true')
+    # Kill-switch efetivo em TODOS os eventos: o job so roda em modo recover
+    # se vars.ANTHARES_SSH_AUTORECOVERY_ENABLED == 'true'. Probe permanece livre.
+    # O unico gatilho e workflow_dispatch, entao inputs.mode esta sempre definido
+    # ('probe' ou 'recover'); se um gatilho novo for adicionado, inputs.mode fica
+    # vazio e o padrao seguro e probe (fail-safe).
+    if: >-
+      github.repository == 'UniversoAnthares/anthares-kwai-runner' &&
+      (inputs.mode != 'recover' || vars.ANTHARES_SSH_AUTORECOVERY_ENABLED == 'true')
     environment: anthares-ssh-recovery
     runs-on: ubuntu-24.04
     timeout-minutes: 6
@@ -50,6 +53,18 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: Enforce auto-recovery kill-switch before any network access
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          AUTO_RECOVERY_ENABLED: ${{ vars.ANTHARES_SSH_AUTORECOVERY_ENABLED }}
+        run: |
+          set -euo pipefail
+          if [ "$MODE" = "recover" ] && [ "$AUTO_RECOVERY_ENABLED" != "true" ]; then
+            echo 'SSH_RECOVERY_BLOCKED=auto-recovery-disabled mode='$MODE
+            exit 1
+          fi
+          echo 'SSH_RECOVERY_KILLSWITCH=ok mode='$MODE' enabled='${AUTO_RECOVERY_ENABLED:-unset}
       - name: Check private-network prerequisites without exposing values
         shell: bash
         env:
@@ -82,6 +97,9 @@ jobs:
         env:
           ARA_SSH_PRIVATE_KEY: ${{ secrets.ARA_SSH_PRIVATE_KEY }}
           ARA_SSH_HOST_PUBLIC_KEY: ${{ vars.ARA_SSH_HOST_PUBLIC_KEY }}
-          SSH_RECOVERY_MODE: ${{ github.event_name == 'schedule' && 'recover' || inputs.mode || 'probe' }}
+          # Sem ramo morto de 'schedule': este workflow nao tem gatilho schedule,
+          # entao github.event_name nunca e 'schedule'. Modo = input do
+          # workflow_dispatch (probe|recover); padrao seguro probe.
+          SSH_RECOVERY_MODE: ${{ inputs.mode }}
           AUTO_RECOVERY_ENABLED: ${{ vars.ANTHARES_SSH_AUTORECOVERY_ENABLED }}
         run: python3 anthares-remote-agent/ssh-client.py
