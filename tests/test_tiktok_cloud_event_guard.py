@@ -43,6 +43,23 @@ class CloudTriggerTest(unittest.TestCase):
     def test_pull_request_never_publish(self):
         self.assertFalse(h.trusted_workflow_event("pull_request","refs/heads/main",""))
 
+    def test_followup_emitted_only_when_pending(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as root:
+            output=str(Path(root)/"out.txt")
+            with patch.dict(os.environ,{"GITHUB_OUTPUT":output}), patch.object(h.q,"qcall",return_value={"ok":True,"count":{"queued":3}}):
+                h.request_followup_if_pending({})
+            self.assertEqual(Path(output).read_text().strip(),"queue_followup=true")
+
+    def test_followup_not_emitted_for_empty_or_failed_status(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as root:
+            output=str(Path(root)/"out.txt")
+            for response in ({"ok":True,"count":{"queued":0}},{"ok":False},{"ok":True,"count":{}}):
+                with patch.dict(os.environ,{"GITHUB_OUTPUT":output}), patch.object(h.q,"qcall",return_value=response):
+                    h.request_followup_if_pending({})
+            self.assertFalse(Path(output).exists())
+
     def test_invalid_payload_fails_closed(self):
         f=tempfile.NamedTemporaryFile(mode="w",delete=False)
         f.write("not json");f.close()
