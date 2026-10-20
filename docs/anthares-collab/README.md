@@ -2,12 +2,14 @@
 
 ## Estado
 
-**Código preparado no PR de integração; NÃO considerar o processamento automático em produção antes de merge em `main` e execução real de aceite.** O Claude Free → Anthares MCP → Claude Code GitHub Actions → resultado está comprovado pela execução 39352658418 e aceite do usuário. ChatGPT/Work já podem criar e ler GitHub Issues pelo conector GitHub, quando conectados e autorizados. Work não pode ser acionado diretamente por um workflow GitHub sem recurso Work oficialmente disponível: o usuário inicia uma tarefa em Work para trabalhar sobre a fila.
+**PROVEN EM PRODUÇÃO:** ChatGPT abriu a issue #230, o gateway GitHub Actions validou o proprietário e acionou o Claude Code remoto, que produziu o artefato esperado. **WORK EM SESSÃO PRÓPRIA: NÃO TESTADO** (precisa iniciar Work com o conector GitHub habilitado). O Claude Free → Anthares MCP → Claude Code GitHub Actions → resultado está comprovado pela execução 39352658418 e aceite do usuário. ChatGPT/Work já podem criar e ler GitHub Issues pelo conector GitHub, quando conectados e autorizados. Work não pode ser acionado diretamente por um workflow GitHub sem recurso Work oficialmente disponível: o usuário inicia uma tarefa em Work para trabalhar sobre a fila.
 
 Fila: https://github.com/UniversoAnthares/anthares-kwai-runner/issues
 Solicitação guarda-chuva: https://github.com/UniversoAnthares/anthares-kwai-runner/issues/222
+Aceite real: https://github.com/UniversoAnthares/anthares-kwai-runner/issues/230
+Execução Claude Code aprovada: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/39356635285
 Executor atual: `.github/workflows/anthares-free-claude.yml`
-Gateway proposto: `.github/workflows/anthares-collab-plan.yml`
+Gateway implantado: `.github/workflows/anthares-collab-plan.yml`
 
 ## Chamadas e papéis
 
@@ -48,12 +50,12 @@ Iniciar **ChatGPT Work** e conectar a mesma conta GitHub autorizada (se o recurs
 
 > Abra as issues do repositório UniversoAnthares/anthares-kwai-runner com prefixo [ANTHARES-COLLAB-PLAN]; acompanhe as tarefas sem segredos; consulte os artefatos e PRs; valide testes, aponte problemas nos comentários e faça PRs separados a partir de branches próprias, sem mesclar a main. Respeite AGENTS.md e Test Hub.
 
-Work não recebe *push* automático desta implementação. Seu trabalho começa quando o usuário inicia ou agenda explicitamente uma atividade Work, conforme os recursos disponíveis no produto.
+Work não recebe *push* automático desta implementação. Seu trabalho começa quando o usuário inicia ou agenda explicitamente uma atividade Work, conforme os recursos disponíveis no produto. O teste específico é pedir ao Work para abrir a issue #230, ler o run 39356635285 e registrar uma revisão via comentário ou PR. Criar uma issue nova com a origem literal `work` só comprova a participação real se a emissão foi feita por uma sessão Work, não por ChatGPT em nome dele.
 
 ## Para revisar no Claude
 
 Conector Anthares existente: `run_claude_code`, `get_claude_code_status`, `get_claude_code_result`, `github_get_file`.
-Após incorporar o complemento `collab_get_issue`, Claude poderá consultar as issues diretamente com o escopo `github.read`; até então, utilizar o link da issue ou a identificação enviada pelo usuário, sem presumir que exista escrita na fila. Não chamar `run_claude_code` novamente para o mesmo `request_id`.
+O complemento implantado é `collab_get_task(repo,issue_number)` e `collab_list_tasks(repo)`, ambos em `github.read`, sem escrita. Se o catálogo do Claude ainda mostrar apenas as ferramentas antigas, atualize a conexão Anthares no Claude para recarregar o catálogo. Depois teste `collab_get_task` para a issue #230 e consulte o resultado remoto usando `get_claude_code_result` com o request_id mostrado na issue. Não chamar `run_claude_code` novamente para o mesmo `request_id`.
 
 ## Segurança e execução
 
@@ -61,5 +63,5 @@ Após incorporar o complemento `collab_get_issue`, Claude poderá consultar as i
 - A chamada automática limita-se a planejamento; edição remota exige outra autorização pelo caminho já existente e abre somente PR draft.
 - Não usar máquina Windows como executor. Cloudflare autentica o Claude Free; GitHub Actions executa temporariamente sem VPS ou cobrança adicional garantida (sujeito a cotas/políticas dos fornecedores).
 - Mantenha `proteger-main` no GitHub. Se a regra de bloqueio impedir merge de um PR revisado, peça correção administrativa da regra com manutenção das restrições de revisão, nunca faça push forçado.
-- Nunca usar um job verde como prova completa: requer issue real, comentário claim, workflow dispatch, run remoto completed/success e resultado acessível; prova de Work requer operação iniciada no Work.
+- Aceite de ChatGPT em produção obtido na issue #230: claim, dispatch único, run 39356635285 completed/success, artefato contendo `ANTHARES_COLLAB_CHATGPT_WORK_OK`, comentário final COMPLETED. Aceite de Work continua dependendo de operação iniciada dentro do Work.
 - Antes de qualquer edição: seguir `AGENTS.md`, Test Hub, lease, HEAD e SHA, verificação peer GitLab, testes e revisão.
