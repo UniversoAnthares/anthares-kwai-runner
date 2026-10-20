@@ -1,16 +1,8 @@
 name: ARA MCP Stateless Email OTP
+# Recovery-only legacy Email OTP materializer. Never auto-deploy over canonical GitHub owner OAuth.
+# Deploy approved production changes with anthares-claude-code-mcp-deploy.yml instead.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'cloudflare-ara-mcp/src/index.js'
-      - 'cloudflare-ara-mcp/patch_email_service_api.py'
-      - 'cloudflare-ara-mcp/patch_vercel_primary.py'
-      - 'cloudflare-ara-mcp/patch_stateless_gateway.py'
-      - 'cloudflare-ara-mcp/patch_control_bootstrap_otp.py'
-      - 'cloudflare-ara-mcp/patch_stateless_wrangler.py'
-      - '.github/workflows/ara-mcp-stateless-bootstrap.yml'
 permissions:
   contents: read
 concurrency:

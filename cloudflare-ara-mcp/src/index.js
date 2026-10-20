@@ -399,6 +399,7 @@ async function callTool(env, name, a = {}) {
       backend: current.backend,
       auth: "oauth-scopes-and-ed25519-service-signature",
       device_connected: !!current.connected,
+      mcp_connector: { version: "1.1.0", delegated_tools: githubTools.filter(t => t.name === "run_claude_code" || t.name === "get_claude_code_status" || t.name === "get_claude_code_result").map(t => ({ name: t.name, required_scope: t.scope })) },
       capabilities: ["status", "system_info", "shell", "process_list", "process_start", "process_kill",
         "service_status", "service_start", "service_stop", "clipboard_get", "clipboard_set", "screenshot",
         "file_stat", "file_list", "file_read", "file_write", "file_read_chunk", "file_write_chunk",
@@ -502,7 +503,7 @@ var index_default = { async fetch(req, env) {
       } catch {
       }
       const pinned = !!await st(env).pinnedClient();
-      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: ownerGithubConfigured(env) ? "github_owner_identity" : "email_otp", oauth_client_pinned: pinned }, controlReady ? 200 : 503);
+      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: ownerGithubConfigured(env) ? "github_owner_identity" : "email_otp", oauth_client_pinned: pinned, mcp_server_version: "1.1.0", mcp_delegation_tools: githubTools.filter(t => t.name === "run_claude_code" || t.name === "get_claude_code_status" || t.name === "get_claude_code_result").map(t => t.name) }, controlReady ? 200 : 503);
     }
     if (req.method === "GET" && u.pathname === "/.well-known/ara-control-key") return new Response(await st(env).publicPem(), { headers: { "content-type": "application/x-pem-file", "cache-control": "no-store" } });
     if (req.method === "GET" && u.pathname === "/.well-known/oauth-protected-resource") return json({ resource: ORIGIN, authorization_servers: [ORIGIN], scopes_supported: [...SCOPES], resource_documentation: "https://github.com/UniversoAnthares/anthares-kwai-runner" });
@@ -568,7 +569,7 @@ var index_default = { async fetch(req, env) {
         return json({ error: "invalid_json" }, 400);
       }
       if (rpc.method === "notifications/initialized" || String(rpc.method || "").startsWith("notifications/")) return new Response(null, { status: 202 });
-      if (rpc.method === "initialize") return rpcResult(rpc.id, { protocolVersion: rpc.params?.protocolVersion || "2025-06-18", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Anthares Remote", version: "1.0.1" } });
+      if (rpc.method === "initialize") return rpcResult(rpc.id, { protocolVersion: rpc.params?.protocolVersion || "2025-06-18", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Anthares Remote", version: "1.1.0" } });
       if (rpc.method === "ping") return rpcResult(rpc.id, {});
       if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS.filter(t => token.scp.includes(WRITE_TOOLS.has(t.name) ? "ara.write" : "ara.read")).concat(githubTools.concat(approvedTestTool).filter(t => token.scp.includes(t.scope)).map(({scope, ...tool}) => tool)) });
       if (rpc.method === "tools/call") {
