@@ -36,6 +36,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  actions: write
 
 concurrency:
   group: cortes-tiktok-canonical-publisher
@@ -43,7 +44,10 @@ concurrency:
 
 jobs:
   tiktok:
+    if: github.event_name != 'workflow_run'
     runs-on: ubuntu-24.04
+    outputs:
+      queue_followup: ${{ steps.publish.outputs.queue_followup }}
     timeout-minutes: 15
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
@@ -103,8 +107,43 @@ jobs:
           print('CORTES_TIKTOK_STUDIO_RECONCILIATION_READY=1')
           PY
       - name: Publish or reconcile at most one queued TikTok short (main only)
+        id: publish
         if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == 'UniversoAnthares/anthares-kwai-runner' && github.event.workflow_run.name == 'Anthares Core Supervisor'))
         env:
           EXPECTED_TIKTOK_USERNAME: universo.anthares
           TIKTOK_PUBLISH_NOT_BEFORE_UTC: '2026-10-20T10:00:00Z'
         run: python3 -u tools/cortes_tiktok_hosted_publish.py
+
+  # The Neon endpoint only authorizes OIDC events from its canonical
+  # workflow_dispatch/schedule caller. For a Core Supervisor workflow_run,
+  # dispatch that canonical entrypoint instead of calling Neon directly.
+  relay:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == 'UniversoAnthares/anthares-kwai-runner' && github.event.workflow_run.name == 'Anthares Core Supervisor'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Activate the allowlisted canonical TikTok publisher
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api -X POST "repos/${{ github.repository }}/actions/workflows/cortes-tiktok-publisher.yml/dispatches" -f ref=main
+          echo CORTES_TIKTOK_CANONICAL_DISPATCH_ACK=1
+
+  # GitHub schedule is best-effort. One confirmed publish can continue its
+  # own pending Neon backlog even when the next cron event is delayed.
+  continue-backlog:
+    needs: tiktok
+    if: needs.tiktok.result == 'success' && needs.tiktok.outputs.queue_followup == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - name: Respect at least ten minutes between confirmed posts
+        run: sleep 620
+      - name: Dispatch next fenced TikTok publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api -X POST "repos/${{ github.repository }}/actions/workflows/cortes-tiktok-publisher.yml/dispatches" -f ref=main
+          echo CORTES_TIKTOK_FENCED_FOLLOWUP_ACK=1
