@@ -19,7 +19,7 @@ import urllib.request
 from urllib.parse import urlparse
 
 QUEUE = "https://anthares-remote-primary.vercel.app/api/cortes-tiktok"
-WORKER = "https://anthares-tiktok-worker.anthares1.workers.dev"
+WORKER = "https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run"
 ACCOUNT = "universo.anthares"
 AUDIENCE = QUEUE
 CALLBACK = "https://anthares.us/wp-json/anthares/v1/cortes/clip-network-callback"
