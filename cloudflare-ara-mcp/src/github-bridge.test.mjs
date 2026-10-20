@@ -151,20 +151,49 @@ test('an atomic GitHub stale-head rejection cannot fall back to an unsafe Conten
   return mockResponse(url,init);
  });
 });
-test('begin-task returns the current main HEAD after its own Test Hub lease commit',async()=>{
- let saved=null,leasePath='',heads=0;
+test('begin-task works with protected main, verifies its lease and returns source HEAD',async()=>{
+ let saved=null,leasePath='',mutations=0;
  await withMock(async()=>{
   const r=await callGithubTool(token,'github_begin_task',{repo:REPO,branch:BRANCH,goal:'isolated acceptance'});
-  assert.equal(r.base_sha,'e'.repeat(40));assert(r.lease_path);
+  assert.equal(r.base_sha,HEAD);assert.equal(r.lease_ref,'test-hub/claude-github-leases');
+  assert.equal(mutations,1);
   assert.match(Buffer.from(saved,'base64').toString(),/BASELINE_PROVEN/);
  },(url,init)=>{
-  const path=new URL(url).pathname;
-  if(path.includes('/git/ref/heads/'))return response({object:{sha:++heads===1?HEAD:'e'.repeat(40)}});
-  if(path.includes('/git/trees/'))return response({truncated:false,tree:leasePath?[{type:'blob',path:leasePath.split('/').at(-1)}]:[]});
-  if(path.includes('/contents/test-hub/findings/')){
-   if(init.method==='PUT'){const p=JSON.parse(init.body);saved=p.content;leasePath=path.split('/contents/')[1];return response({commit:{sha:'e'.repeat(40)}})}
-   return response({type:'file',content:saved});
+  const u=new URL(url),path=u.pathname;
+  if(init.method!=='GET'){
+   mutations++;assert.equal(path,'/graphql');
+   const p=JSON.parse(init.body).variables.input;
+   assert.equal(p.branch.branchName,'test-hub/claude-github-leases');
+   assert.equal(p.expectedHeadOid,HEAD);
+   saved=p.fileChanges.additions[0].contents;leasePath=p.fileChanges.additions[0].path;
+   return response({data:{createCommitOnBranch:{commit:{oid:'c'.repeat(40)}}}});
   }
+  if(path.includes('/git/trees/'))return response({truncated:false,tree:leasePath?[{type:'blob',path:leasePath.split('/').at(-1)}]:[]});
+  if(path.includes('/contents/test-hub/findings/'))return response({type:'file',content:saved});
+  return mockResponse(url,init);
+ });
+});
+
+test('a live legacy lease still blocks begin-task without a metadata mutation',async()=>{
+ await withMock(async()=>{
+  await assert.rejects(callGithubTool(token,'github_begin_task',{repo:REPO,branch:BRANCH,goal:'conflict'}),/another_claude_lease_active/);
+ },(url,init)=>{
+  assert.equal(init.method,'GET');
+  return mockResponse(url,init);
+ });
+});
+
+test('a competing coordination commit fails closed without a main write or retry',async()=>{
+ let writes=0;
+ await withMock(async()=>{
+  await assert.rejects(callGithubTool(token,'github_begin_task',{repo:REPO,branch:BRANCH,goal:'race'}),/lease_commit_rejected_stale_head_or_permissions/);
+  assert.equal(writes,1);
+ },(url,init)=>{
+  if(init.method!=='GET'){
+   writes++;assert.equal(new URL(url).pathname,'/graphql');
+   return response({errors:[{type:'STALE_DATA'}]});
+  }
+  if(new URL(url).pathname.includes('/git/trees/'))return response({truncated:false,tree:[]});
   return mockResponse(url,init);
  });
 });
@@ -178,4 +207,39 @@ test('Test Hub markdown findings are readable while writes and vault reads stay 
     const result=await callGithubTool({},'github_get_file',{repo:REPO,path:LEASE});
     assert.match(result.content,/STATUS: RUNNING/);
   });
+});
+
+test('missing coordination branch is created once from hub main without changing main',async()=>{
+ let created=false,writes=0;
+ await withMock(async()=>{
+  await assert.rejects(callGithubTool(token,'github_begin_task',{repo:REPO,branch:BRANCH,goal:'initialize'}),/another_claude_lease_active/);
+  assert.equal(writes,1);
+ },(url,init)=>{
+  const path=new URL(url).pathname;
+  if(path.endsWith('/git/ref/heads/test-hub/claude-github-leases')&&!created)return response({},404);
+  if(init.method!=='GET'){
+   writes++;assert(path.endsWith('/git/refs'));
+   assert.deepEqual(JSON.parse(init.body),{ref:'refs/heads/test-hub/claude-github-leases',sha:HEAD});
+   created=true;return response({object:{sha:HEAD}});
+  }
+  return mockResponse(url,init);
+ });
+});
+
+test('live coordination lease blocks another task even when main has none',async()=>{
+ await withMock(async()=>{
+  await assert.rejects(callGithubTool(token,'github_begin_task',{repo:REPO,branch:BRANCH,goal:'conflict'}),/another_claude_lease_active/);
+ },(url,init)=>{
+  assert.equal(init.method,'GET');
+  if(new URL(url).pathname.endsWith('/contents/test-hub') && new URL(url).searchParams.get('ref')==='main')
+   return response([{name:'findings',type:'dir',sha:'d'.repeat(40)}]);
+  if(new URL(url).pathname.endsWith('/git/trees/'+'d'.repeat(40)))return response({truncated:false,tree:[]});
+  return mockResponse(url,init);
+ });
+});
+
+test('branch-protection rejection is distinguishable from an active lease',async()=>{
+ await withMock(async()=>{
+  await assert.rejects(callGithubTool(token,'github_begin_task',{repo:REPO,branch:BRANCH,goal:'diagnostic'}),/github_branch_protection_requires_pull_request/);
+ },()=>response({message:'Repository rule violations found: Changes must be made through a pull request.'},422));
 });
