@@ -414,6 +414,11 @@ func dispatch(ctx context.Context, cfg Config, job Job) (string, error) {
 		if cmd == "" {
 			return "", errors.New("missing command")
 		}
+		// Structured, destination-allowlisted browser launch happens in the
+		// active Windows user session, never through a SYSTEM shell.
+		if handled, result, err := maybeHandleDesktopCommand(cmd); handled {
+			return result, err
+		}
 		if err := rejectInteractiveCommand(cmd); err != nil {
 			return "", err
 		}
