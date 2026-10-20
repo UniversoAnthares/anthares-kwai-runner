@@ -197,6 +197,36 @@ def publish_one_preloaded(job,sid,folder,state):
     except subprocess.TimeoutExpired as exc:
         raise q.SafeStop("TIKTOK_BROWSER_PUBLISH_TIMEOUT_RECONCILE_ONLY") from exc
     if proc.returncode:
+        # The publisher may have clicked Post. Inspect only fixed, safe markers
+        # and error categories; never print original browser text or stderr.
+        stage = "before_upload_form"
+        if (folder/"artifacts"/"tiktok-owned-upload-page.png").is_file():
+            stage = "upload_form_open"
+        if "TIKTOK_CAPTION=" in proc.stdout:
+            stage = "caption_filled"
+        if (folder/"artifacts"/"tiktok-owned-upload-ready.png").is_file():
+            stage = "upload_ready"
+        if "TIKTOK_PROFILE_VERIFY attempt=" in proc.stdout:
+            stage = "after_post_profile_reconciliation"
+        if (folder/"artifacts"/"tiktok-owned-after-post.png").is_file():
+            stage = "after_publish_click"
+        body = (proc.stderr+"\\n"+proc.stdout).lower()
+        rules = (
+            ("captcha", "platform_challenge"),
+            ("security check", "platform_challenge"),
+            ("login", "identity_expired_or_login"),
+            ("página de upload", "upload_page_unavailable"),
+            ("input[type", "upload_field_missing"),
+            ("campo de legenda", "caption_field_missing"),
+            ("botão publicar", "post_button_unavailable"),
+            ("confirmação inequívoca", "confirmation_missing"),
+            ("múltiplos vídeos novos", "profile_multiple_posts"),
+            ("nenhum vídeo novo", "profile_not_updated"),
+            ("module", "publisher_import_failure"),
+            ("timeout", "browser_timeout"),
+        )
+        category=next((v for k,v in rules if k in body),"unclassified")
+        print("CORTES_TIKTOK_PUBLISH_FAILURE_STAGE="+stage+" CATEGORY="+category,flush=True)
         raise q.SafeStop("TIKTOK_BROWSER_PUBLISH_UNVERIFIED")
     try:
         evidence=json.loads((folder/"publish-evidence.json").read_text(encoding="utf-8"))

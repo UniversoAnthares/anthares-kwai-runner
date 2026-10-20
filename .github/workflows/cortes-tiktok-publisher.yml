@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate queue consumer and TikTok safety contracts
         run: |
-          python3 -m py_compile tools/cortes_tiktok_queue_consumer.py tools/cortes_tiktok_hosted_publish.py
+          python3 -m py_compile tools/cortes_tiktok_queue_consumer.py tools/cortes_tiktok_hosted_publish.py tools/tiktok_uncertain_post_audit.py
           CORTES_TIKTOK_HOSTED_DRY_RUN=1 python3 -u tools/cortes_tiktok_hosted_publish.py
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok_queue_consumer.py' -v
       - name: Check TikTok worker credential binding (presence only)
@@ -65,6 +65,11 @@ jobs:
           else
             echo CORTES_TIKTOK_HEADFUL_PROBE_SKIPPED_NO_XVFB
           fi
+      - name: Audit original uncertain TikTok clip on owned account without upload
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          CORTES_TIKTOK_FORENSIC_SEGMENT_ID: 'g1:9CIk-I_3VhM:252:337'
+        run: python3 -u tools/tiktok_uncertain_post_audit.py
       - name: Publish or reconcile at most one queued TikTok short (main only)
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
