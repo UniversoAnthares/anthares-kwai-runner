@@ -17,7 +17,7 @@ on:
       - 'vercel-ara-primary/api/router-entry.mjs'
       - 'vercel-ara-primary/vercel.json'
   schedule:
-    - cron: '3-58/5 * * * *'
+    - cron: '*/3 * * * *'
   workflow_run:
     workflows: ['Anthares Core Supervisor']
     types: [completed]
@@ -138,8 +138,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 14
     steps:
-      - name: Respect at least ten minutes between confirmed posts
-        run: sleep 620
+      - name: Wait for the next three-minute fenced publication window
+        run: sleep 200
       - name: Dispatch next fenced TikTok publication
         env:
           GH_TOKEN: ${{ github.token }}
