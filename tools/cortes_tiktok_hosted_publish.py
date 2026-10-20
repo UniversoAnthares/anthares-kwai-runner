@@ -122,16 +122,36 @@ def inventory(state):
     return {"ok":True,"account":EXPECTED,"items":result}
 
 
+def trusted_workflow_event(event, ref, event_path):
+    """Allow cron, manual main dispatch or successful trusted Core Supervisor."""
+    if ref != "refs/heads/main":
+        return False
+    if event in ("schedule", "workflow_dispatch"):
+        return True
+    if event != "workflow_run" or not event_path:
+        return False
+    try:
+        with open(event_path, "r", encoding="utf-8") as fh:
+            source=json.load(fh).get("workflow_run") or {}
+        origin=source.get("head_repository") or {}
+        return (
+            source.get("name")=="Anthares Core Supervisor"
+            and source.get("conclusion")=="success"
+            and source.get("head_branch")=="main"
+            and origin.get("full_name")=="UniversoAnthares/anthares-kwai-runner"
+        )
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def main():
     if os.getenv("CORTES_TIKTOK_HOSTED_DRY_RUN")=="1":
         print("CORTES_TIKTOK_HOSTED_DRY_RUN_NO_PUBLISH",flush=True)
         return 0
     event=os.getenv("GITHUB_EVENT_NAME","")
-    if event not in ("schedule","workflow_dispatch"):
-        print("CORTES_TIKTOK_NON_SCHEDULE_EVENT_SKIP",flush=True)
+    if not trusted_workflow_event(event,os.getenv("GITHUB_REF",""),os.getenv("GITHUB_EVENT_PATH","")):
+        print("CORTES_TIKTOK_UNTRUSTED_OR_NONPUBLISH_EVENT_SKIP",flush=True)
         return 0
-    if os.getenv("GITHUB_REF")!="refs/heads/main":
-        raise q.SafeStop("TIKTOK_TRUSTED_MAIN_BRANCH_REQUIRED")
     if not publication_window_open():
         print("CORTES_TIKTOK_DEFERRED_UNTIL_2026_10_20_0600_CUIABA",flush=True)
         return 0
