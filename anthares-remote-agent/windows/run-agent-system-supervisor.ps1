@@ -35,10 +35,24 @@ function Queue-Configured{
   return ((-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_REPOSITORY))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_TOKEN))) -or
          ((-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_PROJECT))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_TOKEN)))
 }
-function Configure-HttpTransport{
-  if(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_DEVICE_TOKEN)){$env:ANTHARES_CONTROL_URL=$httpControl;return $true}
-  Remove-Item Env:ANTHARES_CONTROL_URL -ErrorAction SilentlyContinue
-  return $false
+. (Join-Path $root 'ara-http-selector.ps1')
+$script:HttpChosen=$false
+function Configure-HttpTransport {
+  param([switch]$Refresh)
+  if([string]::IsNullOrWhiteSpace($env:ANTHARES_DEVICE_TOKEN)){
+    Remove-Item Env:ANTHARES_CONTROL_URL -ErrorAction SilentlyContinue
+    return $false
+  }
+  if($Refresh -or -not $script:HttpChosen){
+    $choice=Select-AraHttpTransport -Token $env:ANTHARES_DEVICE_TOKEN -Device $env:ANTHARES_DEVICE_ID
+    $env:ANTHARES_CONTROL_URL=$choice.origin
+    $script:HttpChosen=$true
+    try{
+      ('{0} selection={1} origin={2}' -f [DateTimeOffset]::UtcNow.ToString('o'),$choice.reason,$choice.origin) |
+        Add-Content -Path (Join-Path $logRoot 'ara-http-selector.log') -Encoding UTF8
+    }catch{}
+  }
+  return $true
 }
 function Save-State([string]$reason,[int]$agentPid=0){
   $httpEnabled=(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_CONTROL_URL))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_DEVICE_TOKEN))
@@ -66,7 +80,7 @@ try{
     if(Test-Path $envFile){. $envFile}
     Load-QueueAuth
     if(-not (Queue-Configured)){Save-State 'waiting-for-private-queue-credential';Start-Sleep 15;continue}
-    [void](Configure-HttpTransport)
+    [void](Configure-HttpTransport -Refresh)
     if(-not (Test-Path $exe)){Save-State 'binary-missing';Start-Sleep 10;continue}
     try{
       $transition=$null;$transitionHeld=$false
@@ -91,7 +105,7 @@ try{
         if($transitionHeld -and $transition){try{$transition.ReleaseMutex()}catch{}}
         if($transition){$transition.Dispose()}
       }
-      $mode=if($env:ANTHARES_CONTROL_URL){'running-vercel-primary-with-private-queue-recovery'}else{'running-private-queue'}
+      $mode=if($env:ANTHARES_CONTROL_URL){'running-vercel-selected-with-private-queue-recovery'}else{'running-private-queue'}
       Save-State $mode $p.Id
       while(-not $p.HasExited){Start-Sleep 10;Load-QueueAuth;[void](Configure-HttpTransport);Save-State $mode $p.Id}
       Save-State ('agent-exited:'+ $p.ExitCode)

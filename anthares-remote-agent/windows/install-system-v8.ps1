@@ -16,7 +16,7 @@ Log ('elevated identity='+$identity.Name)
 
 New-Item -ItemType Directory -Force -Path $root,$work,(Join-Path $work 'logs'),(Join-Path $work 'temp'),(Join-Path $work 'ara-jobs'),(Join-Path $work 'legacy-pc-runtime\supervisor') | Out-Null
 $base='https://raw.githubusercontent.com/UniversoAnthares/anthares-kwai-runner/main/anthares-remote-agent/windows/'
-$critical=@('run-agent-system-supervisor.ps1','load-issue-queue-auth.ps1','recovery-watchdog.ps1','recovery-watchdog-loop.ps1')
+$critical=@('run-agent-system-supervisor.ps1','ara-http-selector.ps1','remote-liveness-90s.ps1','load-issue-queue-auth.ps1','recovery-watchdog.ps1','recovery-watchdog-loop.ps1')
 $scriptHashes=[ordered]@{}
 foreach($name in $critical){
   $dst=Join-Path $root $name
@@ -99,10 +99,12 @@ $canonicalTask='Anthares Remote Agent SYSTEM'
 $watchdogTask='Anthares Remote Recovery Watchdog'
 Register-SystemTask $canonicalTask (Join-Path $root 'run-agent-system-supervisor.ps1')
 Register-SystemTask $watchdogTask (Join-Path $root 'recovery-watchdog-loop.ps1')
+Register-SystemTask 'Anthares Remote Liveness 90s' (Join-Path $root 'remote-liveness-90s.ps1')
 Stop-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue
 Stop-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue
 Start-ScheduledTask -TaskName $canonicalTask
 Start-ScheduledTask -TaskName $watchdogTask
+Start-ScheduledTask -TaskName 'Anthares Remote Liveness 90s'
 Log 'SYSTEM supervisor and watchdog registered and started'
 
 $state=Join-Path $work 'legacy-pc-runtime\supervisor\system-supervisor-state.json'
