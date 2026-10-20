@@ -129,21 +129,3 @@ jobs:
           set -euo pipefail
           gh api -X POST "repos/${{ github.repository }}/actions/workflows/cortes-tiktok-publisher.yml/dispatches" -f ref=main
           echo CORTES_TIKTOK_CANONICAL_DISPATCH_ACK=1
-
-  # GitHub schedule is best-effort. One confirmed publish can continue its
-  # own pending Neon backlog even when the next cron event is delayed.
-  continue-backlog:
-    needs: tiktok
-    if: needs.tiktok.result == 'success' && needs.tiktok.outputs.queue_followup == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 14
-    steps:
-      - name: Wait for the next three-minute fenced publication window
-        run: sleep 200
-      - name: Dispatch next fenced TikTok publication
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh api -X POST "repos/${{ github.repository }}/actions/workflows/cortes-tiktok-publisher.yml/dispatches" -f ref=main
-          echo CORTES_TIKTOK_FENCED_FOLLOWUP_ACK=1
