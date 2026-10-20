@@ -99,24 +99,37 @@ function extractAssistantText(raw){
   }
   return out;
 }
-async function probeRouter(model,apiKey){
+async function probeRouter(model,apiKey,{attempts=3,request=fetch,delay=ms=>new Promise(r=>setTimeout(r,ms))}={}){
+  if(!Number.isSafeInteger(attempts)||attempts<1||attempts>3)throw Error('INVALID_ROUTER_PROBE_ATTEMPTS');
   let status=0,format='unavailable';
-  try{
-    const response=await fetch('http://127.0.0.1:'+PORT+'/v1/messages',{
-      method:'POST',
-      headers:{'content-type':'application/json','accept':'text/event-stream','anthropic-version':'2023-06-01','authorization':'Bearer '+apiKey},
-      body:JSON.stringify({model,max_tokens:80,stream:true,messages:[{role:'user',content:'Responda OK.'}]}),
-      signal:AbortSignal.timeout(40000),
-    });
-    status=response.status;
-    format=(response.headers.get('content-type')||'unknown').split(';')[0].slice(0,48);
-    const raw=await response.text();
-    const actual=extractAssistantText(raw);
-    if(response.ok&&actual.trim()){
-      console.log('ANTHARES_FREE_9ROUTER_REAL_INFERENCE=PASS');
-      return;
+  for(let i=0;i<attempts;i++){
+    status=0;format='unavailable';
+    let transient=false;
+    try{
+      const response=await request('http://127.0.0.1:'+PORT+'/v1/messages',{
+        method:'POST',
+        headers:{'content-type':'application/json','accept':'text/event-stream','anthropic-version':'2023-06-01','authorization':'Bearer '+apiKey},
+        body:JSON.stringify({model,max_tokens:160,stream:true,messages:[{role:'user',content:'Responda OK.'}]}),
+        signal:AbortSignal.timeout(i===0?40000:22000),
+      });
+      status=response.status;
+      format=(response.headers.get('content-type')||'unknown').split(';')[0].slice(0,48);
+      const raw=await response.text();
+      const actual=extractAssistantText(raw);
+      if(response.ok&&actual.trim()){
+        console.log('ANTHARES_FREE_9ROUTER_REAL_INFERENCE=PASS');
+        if(i)console.log('ANTHARES_FREE_9ROUTER_RECOVERED_AFTER_RETRY=PASS');
+        return;
+      }
+      transient=[429,502,503,504].includes(status);
+    }catch(e){
+      transient=/timeout|abort/i.test(String(e?.name||''))||/timed out/i.test(String(e?.message||''));
+      console.log('ROUTER_INFERENCE_TRANSPORT='+(transient?'TIMEOUT_OR_ABORT':'ERROR'));
     }
-  }catch(e){console.log('ROUTER_INFERENCE_TRANSPORT='+(/timeout/i.test(String(e?.name||''))?'TIMEOUT':'ERROR'))}
+    if(!transient||i+1>=attempts)break;
+    console.log('ROUTER_INFERENCE_RETRY_ATTEMPT='+(i+2));
+    await delay(950);
+  }
   console.log('ROUTER_INFERENCE_RESPONSE_FORMAT='+format);
   throw Error('ROUTER_INFERENCE_FAILED_HTTP_'+status);
 }
@@ -187,4 +200,4 @@ if(require.main===module)main().catch(e=>{
   console.error('ANTHARES_FREE_BOOTSTRAP_ERROR='+(/^[A-Z0-9_]+$/.test(e.message)?e.message:'INTERNAL'));
   process.exitCode=1;
 });
-module.exports={MODELS,PORT,waitReady,extractAssistantText};
+module.exports={probeRouter,MODELS,PORT,waitReady,extractAssistantText};
