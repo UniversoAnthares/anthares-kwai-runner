@@ -11,7 +11,7 @@ async function withMock(fn,issues=[good],comments=[{body:'[ANTHARES-COLLAB] DISP
   globalThis.fetch=async(input,opts)=>{
     assert.equal(opts.method,'GET'); assert(!opts.headers.Authorization);
     const pathname=new URL(input).pathname;
-    const data=pathname.endsWith('/comments')?comments:pathname.endsWith('/issues')?issues:good;
+    const data=pathname.endsWith('/comments')?comments:pathname.endsWith('/issues')?issues:issues[0];
     return {ok:true,json:async()=>data};
   };
   try{return await fn()}finally{globalThis.fetch=orig}
@@ -40,7 +40,7 @@ test('reject invalid repository or issue numbers',async()=>{
  await assert.rejects(callCollabIssueTool({},'collab_list_tasks',{repo:'other/repo'}));
 });
 test('reject nonowner issue even by exact number',async()=>{
- await withMock(async()=>assert.rejects(callCollabIssueTool({},'collab_get_task',{repo,issue_number:222})),[],
+ await withMock(async()=>assert.rejects(callCollabIssueTool({},'collab_get_task',{repo,issue_number:222})),[{...good,user:{id:33}}],
  []);
 });
 test('bad schema denied and HTTP error propagates',async()=>{
