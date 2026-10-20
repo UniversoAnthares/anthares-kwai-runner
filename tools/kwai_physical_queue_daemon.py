@@ -270,6 +270,51 @@ def once():
  if MAINTENANCE.exists():
   log('QUEUE_PAUSED_MAINTENANCE_BEFORE_LEASE no_lease=1')
   return 0
+ # One serial Android publisher; no fixed noon/midnight target that delays jobs.
+ # Safe cap: at most 100 confirmed posts/day. Default pace: one per ten minutes.
+ import datetime
+ try:
+  from cortes_neon_queue_client import call
+  now=datetime.datetime.now().astimezone()
+  try:
+   stats=call('stats',{'target_key':'kwai:'+EXPECTED_ACCOUNT})
+  except Exception as stats_err:
+   log('PUBLICATION_STATS_UNAVAILABLE exception='+type(stats_err).__name__+' fallback=neon_fenced_lease')
+   stats={'ok':True,'pending':1}
+  if not stats.get('ok'):
+   log('PUBLICATION_STATS_UNAVAILABLE http='+str(stats.get('http_status','unknown'))+' reason='+str(stats.get('error','unknown'))[:80]+' fallback=neon_fenced_lease')
+   stats={'ok':True,'pending':1}
+  pending=int(stats.get('pending',-1))
+  if pending<0:raise RuntimeError('queue_pending_invalid')
+  if pending==0:
+   log('PUBLICATION_QUEUE_EMPTY stats=verified')
+   return 0
+  recent=[ln for ln in LOG.read_text(encoding='utf-8').splitlines()
+          if ' JOB_OK ' in ln] if LOG.exists() else []
+  today=now.date().isoformat()
+  posted_today=sum(ln.startswith(today) for ln in recent)
+  cap=max(1,min(100,int(os.getenv('CORTES_KWAI_DAILY_POST_LIMIT','100'))))
+  if posted_today>=cap:
+   log('PUBLICATION_DAILY_CAP_REACHED posted='+str(posted_today)+' cap='+str(cap)+' no_lease=1')
+   return 0
+  prior=[]
+  for ln in recent[-8:]:
+   try:prior.append(datetime.datetime.fromisoformat(ln[:19]).replace(tzinfo=now.tzinfo))
+   except ValueError:pass
+  if stats.get('last_confirmed_at'):
+   remote=datetime.datetime.fromisoformat(str(stats['last_confirmed_at']).replace('Z','+00:00'))
+   if remote.tzinfo is None:raise RuntimeError('queue_timestamp_missing_tz')
+   prior.append(remote.astimezone(now.tzinfo))
+  last=max(prior,default=None)
+  interval=max(300,min(1800,int(os.getenv('CORTES_KWAI_MIN_POST_INTERVAL_SECONDS','600'))))
+  if last and last>now-datetime.timedelta(seconds=interval):
+   wait=max(1,int((last+datetime.timedelta(seconds=interval)-now).total_seconds()))
+   log('PUBLICATION_INTERVAL_WAIT seconds='+str(wait)+' pending='+str(pending)+' cap='+str(cap))
+   return 0
+  log('PUBLICATION_DUE pending='+str(pending)+' posted_today='+str(posted_today)+' daily_cap='+str(cap))
+ except Exception as exc:
+  log('PUBLICATION_PACING_SAFE_RETRY error='+type(exc).__name__+' no_lease=1')
+  return 0
  code,d=signed_post('/job/lease',{'executor':EXECUTOR,'platform':'kwai','ttl_seconds':TTL})
  if code//100!=2 or not d.get('ok'):queue_failure('lease',code,d)
  job=d.get('job')
