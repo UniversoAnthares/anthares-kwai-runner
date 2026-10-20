@@ -65,3 +65,10 @@ O complemento implantado é `collab_get_task(repo,issue_number)` e `collab_list_
 - Mantenha `proteger-main` no GitHub. Se a regra de bloqueio impedir merge de um PR revisado, peça correção administrativa da regra com manutenção das restrições de revisão, nunca faça push forçado.
 - Aceite de ChatGPT em produção obtido na issue #230: claim, dispatch único, run 39356635285 completed/success, artefato contendo `ANTHARES_COLLAB_CHATGPT_WORK_OK`, comentário final COMPLETED. Aceite de Work continua dependendo de operação iniciada dentro do Work.
 - Antes de qualquer edição: seguir `AGENTS.md`, Test Hub, lease, HEAD e SHA, verificação peer GitLab, testes e revisão.
+
+## Work: fila preparada para revisão real
+
+- **Issue Work pronta:** https://github.com/UniversoAnthares/anthares-kwai-runner/issues/234. Título `[ANTHARES-WORK-REVIEW]`, propositalmente fora do gatilho `[ANTHARES-COLLAB-PLAN]`; **não executa IA automaticamente**.
+- **Conector MCP em produção:** versão 1.1.0 no Cloudflare, deploy de aceite https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/39358082325, OAuth GitHub proprietário e anonimato MCP bloqueado. O legado Email OTP foi tornado manual-only.
+- **Para iniciar Work:** abra modo Work, conecte/autorize GitHub e peça: “Abra a issue UniversoAnthares/anthares-kwai-runner#234, siga a revisão definida nela, consulte #230 e os links do runner; registre sua própria evidência e não faça merge na main”. Isso iniciará o trabalho em Work; ainda não houve sessão Work verificada.
+- **Para confirmar catálogo Claude:** `collab_get_task(repo="UniversoAnthares/anthares-kwai-runner", issue_number=230)`; resultado e eventos devem remeter ao run 39356635285. Recarregue o conector Anthares no Claude se o catálogo ainda estiver desatualizado. Não dispare nova execução pelo mesmo request_id.
