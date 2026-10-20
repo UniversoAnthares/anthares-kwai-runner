@@ -306,7 +306,15 @@ def once():
    if remote.tzinfo is None:raise RuntimeError('queue_timestamp_missing_tz')
    prior.append(remote.astimezone(now.tzinfo))
   last=max(prior,default=None)
-  interval=max(300,min(1800,int(os.getenv('CORTES_KWAI_MIN_POST_INTERVAL_SECONDS','600'))))
+  # Pace against the actual remaining calendar-day window. Use a 15-minute
+  # confirmation reserve; never fall below the safe five-minute floor.
+  deadline=now.replace(hour=23,minute=45,second=0,microsecond=0)
+  available_seconds=max(0,(deadline-now).total_seconds())
+  preferred=max(300,min(1800,int(os.getenv('CORTES_KWAI_MIN_POST_INTERVAL_SECONDS','600'))))
+  required=int(max(0,available_seconds-120)/max(1,pending))
+  interval=max(300,min(preferred,required))
+  if available_seconds < pending*300:
+   log('CORTES_SAME_DAY_CAPACITY_RISK platform=kwai pending='+str(pending)+' window_seconds='+str(int(available_seconds))+' floor=300')
   if last and last>now-datetime.timedelta(seconds=interval):
    wait=max(1,int((last+datetime.timedelta(seconds=interval)-now).total_seconds()))
    log('PUBLICATION_INTERVAL_WAIT seconds='+str(wait)+' pending='+str(pending)+' cap='+str(cap))
