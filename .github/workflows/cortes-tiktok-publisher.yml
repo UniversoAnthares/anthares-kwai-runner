@@ -6,6 +6,10 @@ on:
     paths:
       - '.github/workflows/cortes-tiktok-publisher.yml'
       - 'tools/cortes_tiktok_queue_consumer.py'
+      - 'direct-tiktok-publisher/tiktok_creator_inventory.py'
+      - 'direct-tiktok-publisher/tiktok_cloud_publish.py'
+      - 'tools/cortes_tiktok_hosted_publish.py'
+      - 'tests/test_tiktok_creator_inventory.py'
       - 'tests/test_cortes_tiktok_queue_consumer.py'
       - 'tools/tiktok_upload_readonly_diagnostic.py'
       - 'vercel-ara-primary/api/cortes-tiktok.mjs'
@@ -18,6 +22,10 @@ on:
     paths:
       - '.github/workflows/cortes-tiktok-publisher.yml'
       - 'tools/cortes_tiktok_queue_consumer.py'
+      - 'direct-tiktok-publisher/tiktok_creator_inventory.py'
+      - 'direct-tiktok-publisher/tiktok_cloud_publish.py'
+      - 'tools/cortes_tiktok_hosted_publish.py'
+      - 'tests/test_tiktok_creator_inventory.py'
       - 'tests/test_cortes_tiktok_queue_consumer.py'
 
 permissions:
@@ -44,6 +52,7 @@ jobs:
           node --check vercel-ara-primary/api/cortes-tiktok.mjs
           CORTES_TIKTOK_HOSTED_DRY_RUN=1 python3 -u tools/cortes_tiktok_hosted_publish.py
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok*.py' -v
+          python3 -m unittest discover -s tests -p 'test_tiktok_creator_inventory.py' -v
       - name: Check TikTok worker credential binding (presence only)
         run: |
           python3 - <<'PY'

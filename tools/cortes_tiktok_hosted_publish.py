@@ -114,8 +114,11 @@ def download_verified(job,path):
 
 def inventory(state):
     import tiktok_worker as tw
+    from tiktok_creator_inventory import inventory_studio
     tw.STORAGE_RAW=json.dumps(state,separators=(",",":"))
-    result=tw.inventory_profile_videos(EXPECTED)
+    result=inventory_studio(EXPECTED,state)
+    if not result:
+        result=tw.inventory_profile_videos(EXPECTED)
     return {"ok":True,"account":EXPECTED,"items":result}
 
 

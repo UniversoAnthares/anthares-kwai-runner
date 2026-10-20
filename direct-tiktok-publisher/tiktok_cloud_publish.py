@@ -115,8 +115,8 @@ def _inventory_profile_videos_isolated(account: str) -> list[dict]:
     os.close(fd)
     try:
         code = (
-            "import json,sys; import tiktok_worker as tw; "
-            "json.dump(tw.inventory_profile_videos(sys.argv[2]),open(sys.argv[1],'w'),ensure_ascii=False)"
+            "import json,sys; from tiktok_creator_inventory import inventory_all_videos; "
+            "json.dump(inventory_all_videos(sys.argv[2]),open(sys.argv[1],'w'),ensure_ascii=False)"
         )
         subprocess.run(
             [sys.executable, "-c", code, path, account],
