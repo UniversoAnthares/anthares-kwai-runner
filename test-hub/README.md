@@ -191,3 +191,9 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - PROVEN em modo degradado: com dois modelos externos indisponíveis por 429/rede, o modelo Gemini 3.5 Flash-Lite concluiu a operação; novos runs reavaliam três modelos.
 - PROVEN: autorização de PR automático corrigida. Após o usuário salvar a permissão, o GitHub Actions criou sozinho o PR rascunho #212, autor github-actions[bot], no run 39339550110; log ANTHARES_FREE_AUTO_PR=PASS. Não fazer merge do PR de prova.
 - Fontes: test-hub/findings/20261019-2250-free-claude-code-remote-real-proven.md e test-hub/findings/20261019-2308-free-claude-autopr-proven.md. Sem mudanças no Anthares AI Hub, WordPress, CORTES ou contas pagas.
+
+## Delegação direta Claude Free → GitHub Claude Code — 2026-10-20
+- PROVEN: PR #214 integrado, deploy Cloudflare run 39345333579 completou; Worker versão dc6408ba-02fa-4ab5-a439-1760d3ec571e. OAuth proprietário, Anthares Remote ativo e bloqueio anônimo HTTP 401 preservados.
+- PROVEN: testes da ponte, compilação Wrangler e escopos MCP run 39345229461. Ferramentas novas: run_claude_code (github.write), get_claude_code_status e get_claude_code_result (github.read). Nenhum servidor pago nem PC usados como executor.
+- PENDING OWNER ACCEPTANCE: a sessão Claude do proprietário deve enviar uma tarefa real e consultar seu status e resultado. A permissão Actions:write do token GitHub guardado em Cloudflare ainda precisa ser comprovada nessa chamada real; não afirmar end-to-end.
+- Fonte: test-hub/findings/20261020-0005-claude-mcp-delegation-deployed-partial.md. Lease de desenvolvimento encerrado; preservar OAuth e os trabalhos Anthares existentes.
