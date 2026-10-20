@@ -1,12 +1,17 @@
-name: CORTES TikTok - authenticated readiness
+name: CORTES TikTok remote Neon consumer
 on:
   workflow_dispatch: {}
+  pull_request:
+    paths:
+      - 'tools/cortes_tiktok_neon_consumer.py'
+      - '.github/workflows/cortes-tiktok-publisher.yml'
   push:
     branches: [main]
     paths:
+      - 'tools/cortes_tiktok_neon_consumer.py'
       - '.github/workflows/cortes-tiktok-publisher.yml'
-      - 'tools/cortes_tiktok_publish.py'
-      - 'tests/test_cortes_tiktok_publish.py'
+  schedule:
+    - cron: '*/10 * * * *'
 permissions:
   contents: read
   id-token: write
@@ -16,30 +21,22 @@ concurrency:
 jobs:
   tiktok:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
-      WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
-      WP_USERNAME: ${{ secrets.WP_USERNAME }}
-      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
       ANTHARES_TIKTOK_WORKER_URL: https://anthares-tiktok-worker.anthares1.workers.dev
       CORTES_TIKTOK_PREFLIGHT: '1'
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
-      - name: Verify offline TikTok safety contracts
+      - name: Verify TikTok contract and queue consumer syntax
         run: |
-          python3 -m py_compile tools/cortes_tiktok_publish.py
+          python3 -m py_compile tools/cortes_tiktok_neon_consumer.py tools/cortes_tiktok_publish.py
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok_publish.py' -v
-      - name: Verify existing remote secret bindings by presence only
-        shell: bash
+      - name: Verify existing worker credential presence without exposing it
+        if: github.event_name != 'pull_request'
         run: |
-          python3 - <<'PY'
-          import os,json
-          names=('ARA_SHARED','WP_SITE_URL','WP_USERNAME','WP_APP_PASSWORD')
-          print(json.dumps({'required_secrets_present':{k:bool(os.environ.get(k)) for k in names}},sort_keys=True))
-          if not all(os.environ.get(k) for k in names):
-              raise SystemExit('TIKTOK_CORTES_REQUIRED_SECRET_MISSING')
-          PY
-      - name: Verify Northflank TikTok identity and WordPress stored short readiness
-        run: python3 -u tools/cortes_tiktok_publish.py
+          test -n "$ARA_SHARED" || { echo ARA_SHARED_MISSING; exit 2; }
+      - name: Verify authenticated TikTok remote queue and identity
+        if: github.event_name != 'pull_request'
+        run: python3 -u tools/cortes_tiktok_neon_consumer.py
