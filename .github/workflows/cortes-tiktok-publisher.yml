@@ -41,8 +41,9 @@ jobs:
       - name: Validate queue consumer and TikTok safety contracts
         run: |
           python3 -m py_compile tools/cortes_tiktok_queue_consumer.py tools/cortes_tiktok_hosted_publish.py tools/tiktok_uncertain_post_audit.py
+          node --check vercel-ara-primary/api/cortes-tiktok.mjs
           CORTES_TIKTOK_HOSTED_DRY_RUN=1 python3 -u tools/cortes_tiktok_hosted_publish.py
-          python3 -m unittest discover -s tests -p 'test_cortes_tiktok_queue_consumer.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_tiktok*.py' -v
       - name: Check TikTok worker credential binding (presence only)
         run: |
           python3 - <<'PY'
@@ -71,7 +72,8 @@ jobs:
           CORTES_TIKTOK_FORENSIC_SEGMENT_ID: 'g1:9CIk-I_3VhM:252:337'
         run: python3 -u tools/tiktok_uncertain_post_audit.py
       - name: Publish or reconcile at most one queued TikTok short (main only)
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         env:
           EXPECTED_TIKTOK_USERNAME: universo.anthares
+          TIKTOK_PUBLISH_NOT_BEFORE_UTC: '2026-10-20T10:00:00Z'
         run: python3 -u tools/cortes_tiktok_hosted_publish.py

@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 import urllib.request
 from pathlib import Path
 
@@ -22,6 +23,23 @@ sys.path.insert(0,str(ROOT/"direct-tiktok-publisher"))
 import cortes_tiktok_queue_consumer as q
 
 EXPECTED=q.ACCOUNT
+
+def publication_window_open(now_utc=None, not_before_utc=None):
+    """Fail closed until the explicitly configured first TikTok round."""
+    raw=str(not_before_utc or os.getenv("TIKTOK_PUBLISH_NOT_BEFORE_UTC") or "").strip()
+    if not raw:
+        return False
+    try:
+        target=datetime.fromisoformat(raw.replace("Z","+00:00"))
+        if target.tzinfo is None:
+            return False
+        now=now_utc or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            now=now.replace(tzinfo=timezone.utc)
+        return now.astimezone(timezone.utc)>=target.astimezone(timezone.utc)
+    except (TypeError,ValueError,OverflowError):
+        return False
+
 MAX_SIZE=180*1024*1024
 MIN_SIZE=32*1024
 
@@ -105,8 +123,15 @@ def main():
     if os.getenv("CORTES_TIKTOK_HOSTED_DRY_RUN")=="1":
         print("CORTES_TIKTOK_HOSTED_DRY_RUN_NO_PUBLISH",flush=True)
         return 0
-    if os.getenv("GITHUB_REF")!="refs/heads/main" or os.getenv("GITHUB_EVENT_NAME") not in ("push","schedule","workflow_dispatch"):
+    event=os.getenv("GITHUB_EVENT_NAME","")
+    if event not in ("schedule","workflow_dispatch"):
+        print("CORTES_TIKTOK_NON_SCHEDULE_EVENT_SKIP",flush=True)
+        return 0
+    if os.getenv("GITHUB_REF")!="refs/heads/main":
         raise q.SafeStop("TIKTOK_TRUSTED_MAIN_BRANCH_REQUIRED")
+    if not publication_window_open():
+        print("CORTES_TIKTOK_DEFERRED_UNTIL_2026_10_20_0600_CUIABA",flush=True)
+        return 0
 
     state=preflight_vault()
     control=q.oidc()

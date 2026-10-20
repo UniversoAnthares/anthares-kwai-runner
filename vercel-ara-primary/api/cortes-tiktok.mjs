@@ -117,22 +117,29 @@ async function reaper(){
 }
 async function getNext(){
  await reaper();
- const uncertain=await pool.query('SELECT * FROM cortes_tiktok_publications WHERE status IN (\'uncertain\',\'started\') ORDER BY created_at LIMIT 1');
- if(uncertain.rowCount)return{ok:true,job:uncertain.rows[0],mode:'reconcile'};
  const concurrent=await pool.query('SELECT id FROM cortes_tiktok_publications WHERE status=\'leased\' AND lease_until>now() LIMIT 1');
  if(concurrent.rowCount)return{ok:true,job:null,mode:'busy'};
- // Ten-minute cadence and at most 100 confirmed posts per Campo Grande day.
- // An existing uncertain publication always takes priority above this gate.
+
+ // Keep an uncertain upload isolated for reconciliation without starving safe queued clips.
+ const uncertain=await pool.query('SELECT * FROM cortes_tiktok_publications WHERE status IN (\'uncertain\',\'started\') ORDER BY created_at LIMIT 1');
  const cadence=await pool.query("SELECT COUNT(*) FILTER (WHERE status='confirmed' AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS daily, MAX(confirmed_at) AS last_post FROM cortes_tiktok_publications");
  const daily=Number(cadence.rows[0]?.daily||0);
- if(daily>=100)return{ok:true,job:null,mode:'cap'};
  const last=cadence.rows[0]?.last_post;
- if(last&&Date.now()-new Date(last).getTime()<600000)return{ok:true,job:null,mode:'paced'};
- const q=await pool.query(
- 'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)'+
- ' UPDATE cortes_tiktok_publications p SET status=\'leased\',lease_generation=p.lease_generation+1,'+
- 'lease_until=now()+interval \'8 minutes\',updated_at=now() FROM candidate WHERE p.id=candidate.id RETURNING p.*');
- return{ok:true,job:q.rows[0]||null,mode:q.rowCount?'publish':'idle'};
+ const paced=Boolean(last&&Date.now()-new Date(last).getTime()<600000);
+
+ // Preserve the 100/day cap and ten-minute cadence. An ambiguous earlier upload
+ // never returns to the publish state; the 29 confirmed-safe queued clips can proceed.
+ if(daily<100&&!paced){
+  const q=await pool.query(
+   'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)'+
+   ' UPDATE cortes_tiktok_publications p SET status=\'leased\',lease_generation=p.lease_generation+1,'+
+   'lease_until=now()+interval \'8 minutes\',updated_at=now() FROM candidate WHERE p.id=candidate.id RETURNING p.*');
+  if(q.rowCount)return{ok:true,job:q.rows[0],mode:'publish'};
+ }
+ if(uncertain.rowCount)return{ok:true,job:uncertain.rows[0],mode:'reconcile'};
+ if(daily>=100)return{ok:true,job:null,mode:'cap'};
+ if(paced)return{ok:true,job:null,mode:'paced'};
+ return{ok:true,job:null,mode:'idle'};
 }
 async function start(b){
  await schema();
