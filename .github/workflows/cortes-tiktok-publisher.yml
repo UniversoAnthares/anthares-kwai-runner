@@ -41,6 +41,12 @@ jobs:
         run: |
           python3 -m py_compile tools/cortes_tiktok_queue_consumer.py
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok_queue_consumer.py' -v
+      - name: Check TikTok worker credential binding (presence only)
+        run: |
+          python3 - <<'PY'
+          import os
+          print('TIKTOK_WORKER_SECRET_BOUND=' + str(bool(os.getenv('ARA_SHARED'))))
+          PY
       - name: Publish or reconcile one queued TikTok clip (main only)
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: python3 -u tools/cortes_tiktok_queue_consumer.py
