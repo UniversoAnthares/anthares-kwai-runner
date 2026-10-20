@@ -6,6 +6,11 @@ on:
     paths:
       - 'tools/anthares_collab_gateway.mjs'
       - 'tools/test_anthares_collab_gateway.mjs'
+      - 'cloudflare-ara-mcp/src/collab-issue-bridge.mjs'
+      - 'cloudflare-ara-mcp/src/collab-issue-bridge.test.mjs'
+      - 'cloudflare-ara-mcp/src/github-bridge.mjs'
+      - 'cloudflare-ara-mcp/src/github-bridge.test.mjs'
+      - '.github/workflows/anthares-free-claude.yml'
       - '.github/workflows/anthares-collab-plan.yml'
   workflow_dispatch: {}
 permissions:
@@ -27,7 +32,12 @@ jobs:
         run: |
           set -euo pipefail
           node --check tools/anthares_collab_gateway.mjs
-          node --test tools/test_anthares_collab_gateway.mjs
+          node --check cloudflare-ara-mcp/src/collab-issue-bridge.mjs
+          node --check cloudflare-ara-mcp/src/github-bridge.mjs
+          node --test tools/test_anthares_collab_gateway.mjs cloudflare-ara-mcp/src/collab-issue-bridge.test.mjs cloudflare-ara-mcp/src/github-bridge.test.mjs
+          grep -Fq 'node tools/anthares_collab_gateway.mjs verify' .github/workflows/anthares-free-claude.yml
+          grep -Fq "github.event.sender.id == 81930373" .github/workflows/anthares-collab-plan.yml
+          grep -Fq 'request_id:q.request_id,origin_issue:String(q.issue_number)' tools/anthares_collab_gateway.mjs
           echo ANTHARES_COLLAB_GATEWAY_CONTRACT=PASS
 
   dispatch:
