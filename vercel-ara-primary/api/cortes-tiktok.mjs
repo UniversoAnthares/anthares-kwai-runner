@@ -135,7 +135,11 @@ async function getNext(){
  if(pending>0&&remaining<pending*300000)console.warn('CORTES_SAME_DAY_CAPACITY_RISK platform=tiktok pending='+pending+' window_seconds='+Math.floor(remaining/1000));
  if(last&&Date.now()-new Date(last).getTime()<paceSeconds*1000)return{ok:true,job:null,mode:'paced'};
  const q=await pool.query(
- 'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)'+
+ // Alternate between source batches by preferring a different source from
+ // the most recently confirmed one. Per-source FIFO and fencing remain intact.
+ 'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' '+
+ 'ORDER BY CASE WHEN source_id=(SELECT source_id FROM cortes_tiktok_publications WHERE status=\'confirmed\' ORDER BY confirmed_at DESC NULLS LAST LIMIT 1) THEN 1 ELSE 0 END,created_at,id '+
+ 'FOR UPDATE SKIP LOCKED LIMIT 1)'+
  ' UPDATE cortes_tiktok_publications p SET status=\'leased\',lease_generation=p.lease_generation+1,'+
  'lease_until=now()+interval \'8 minutes\',updated_at=now() FROM candidate WHERE p.id=candidate.id RETURNING p.*');
  return{ok:true,job:q.rows[0]||null,mode:q.rowCount?'publish':'idle'};
