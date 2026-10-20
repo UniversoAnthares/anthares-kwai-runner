@@ -131,13 +131,13 @@ async function getNext(){
  const daily=Number(cadence.rows[0]?.daily||0);
  const pending=Number(cadence.rows[0]?.pending||0);
  const last=cadence.rows[0]?.last_post;
- // Same-day 23:45 local target, with a five-minute safe interval floor and
- // ten-minute preferred cadence. Never fabricate a confirmation to meet it.
+ // Same-day catch-up: three-minute verified minimum, four-minute preferred.
+ // Never overlap leases, exceed 100 confirmed/day or fabricate confirmation.
  const boundary=await pool.query("SELECT ((now() AT TIME ZONE 'America/Campo_Grande')::date + time '23:45:00') AT TIME ZONE 'America/Campo_Grande' AS deadline_utc");
  const remaining=Math.max(0,new Date(boundary.rows[0].deadline_utc).getTime()-Date.now());
  const dueSeconds=Math.floor(Math.max(0,remaining-120000)/Math.max(1,pending)/1000);
- const paceSeconds=Math.max(300,Math.min(600,dueSeconds));
- if(pending>0&&remaining<pending*300000)console.warn('CORTES_SAME_DAY_CAPACITY_RISK platform=tiktok pending='+pending+' window_seconds='+Math.floor(remaining/1000));
+ const paceSeconds=Math.max(180,Math.min(240,dueSeconds));
+ if(pending>0&&remaining<pending*180000)console.warn('CORTES_SAME_DAY_CAPACITY_RISK platform=tiktok pending='+pending+' window_seconds='+Math.floor(remaining/1000));
  const paced=Boolean(last&&Date.now()-new Date(last).getTime()<paceSeconds*1000);
 
  // Preserve the 100/day cap and adaptive same-day safe cadence. An ambiguous earlier upload
