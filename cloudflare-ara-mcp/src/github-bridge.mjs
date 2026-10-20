@@ -11,6 +11,8 @@ const APPROVED = new Set([
   'home','anthares-transcricao'
 ]);
 const HUB = OWNER + '/anthares-kwai-runner';
+// Operational metadata must not depend on bypassing main's required PR rule.
+const HUB_REF = 'test-hub/claude-github-leases';
 const LEASE_PREFIX = 'test-hub/findings/lease-claude-github-';
 const branchPattern = /^claude\/[a-z0-9][a-z0-9._/-]{0,70}$/;
 const shaPattern = /^[0-9a-f]{40}$/i;
@@ -61,7 +63,13 @@ async function api(env,method,path,body,accept404=false){
   if(body!==undefined)headers['Content-Type']='application/json';
   const response=await fetchWithoutRedirects(url,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
   if(response.status===404 && accept404)return null;
-  if(!response.ok)problem('github_http_'+response.status, response.status===401||response.status===403?503:409);
+  if(!response.ok){
+    let detail={};try{detail=await response.json();}catch{}
+    // Classify only known errors; never echo an upstream body or credential.
+    if(/repository rule|protected branch|changes must be made through a pull request/i.test(String(detail.message||'')))
+      problem('github_branch_protection_requires_pull_request',409);
+    problem('github_http_'+response.status, response.status===401||response.status===403?503:409);
+  }
   const result=await response.json();
   return result;
 }
@@ -86,32 +94,49 @@ function leaseFields(content){
   }
   return f;
 }
-async function leaseEntries(env){
+async function ensureHubRef(env){
+  const path=repoUrl(HUB)+'/git/ref/heads/'+encPath(HUB_REF);
+  if(await api(env,'GET',path,undefined,true))return;
+  const sha=await getHead(env,HUB,'main');
+  try {await api(env,'POST',repoUrl(HUB)+'/git/refs',{ref:'refs/heads/'+HUB_REF,sha});}
+  catch(e){
+    // A concurrent initializer may have created the same branch. No resets.
+    if(e.message!=='github_http_422'||!await api(env,'GET',path,undefined,true))throw e;
+  }
+}
+async function leaseEntries(env,ref='main'){
   // GitHub Contents directory listings stop at 1,000 entries. The Test Hub
   // already has hundreds of findings; read the exact Git tree instead.
-  const dirs=await api(env,'GET',repoUrl(HUB)+'/contents/test-hub?ref=main');
+  const dirs=await api(env,'GET',repoUrl(HUB)+'/contents/test-hub?ref='+encodeURIComponent(ref));
   const findings=Array.isArray(dirs) && dirs.find(e=>e.name==='findings' && e.type==='dir' && shaPattern.test(e.sha||''));
   if(!findings)problem('invalid_test_hub');
   const listing=await api(env,'GET',repoUrl(HUB)+'/git/trees/'+findings.sha);
   if(listing?.truncated || !Array.isArray(listing?.tree))problem('truncated_test_hub');
   return listing.tree
     .filter(e=>e.type==='blob' && e.path?.startsWith('lease-claude-github-') && e.path.endsWith('.md'))
-    .map(e=>({name:e.path,path:'test-hub/findings/'+e.path}));
+    .map(e=>({name:e.path,path:'test-hub/findings/'+e.path,ref}));
+}
+async function allLeaseEntries(env){
+  const entries=await leaseEntries(env);
+  if(await api(env,'GET',repoUrl(HUB)+'/git/ref/heads/'+encPath(HUB_REF),undefined,true))
+    entries.push(...await leaseEntries(env,HUB_REF));
+  return entries;
 }
 async function validateLease(env,repo,branch,path){
   if(!String(path||'').startsWith(LEASE_PREFIX) || !String(path).endsWith('.md') || String(path).includes('..'))problem('lease_required',403);
-  const lease=await getFile(env,HUB,path,'main');
+  const entries=await allLeaseEntries(env);
+  const entry=entries.find(e=>e.path===path && e.ref===HUB_REF)||entries.find(e=>e.path===path);
+  const lease=entry && await getFile(env,HUB,path,entry.ref,true);
   if(lease?.type!=='file')problem('missing_lease',403);
   const fields=leaseFields(decodeB64(lease.content));
   if(fields.STATUS!=='RUNNING'||fields.LEASE_OWNER!=='claude-free-mcp'||fields.REPO!==repo||fields.BRANCH!==branch)problem('lease_mismatch',403);
   const until=Date.parse(fields.EXPIRES_UTC||'');
   if(!Number.isFinite(until)||until<=Date.now()||until>Date.now()+31*60000)problem('lease_expired_or_invalid',403);
   // Another earlier active Claude lease for same repository must win.
-  const entries=await leaseEntries(env);
   const active=[];
   for(const item of entries){
     if(item.path===path)continue;
-    const remote=await getFile(env,HUB,item.path,'main',true);
+    const remote=await getFile(env,HUB,item.path,item.ref,true);
     if(!remote?.content)continue;
     const meta=leaseFields(decodeB64(remote.content));
     if(meta.STATUS==='RUNNING'&&meta.REPO===repo&&Date.parse(meta.EXPIRES_UTC||'')>Date.now())active.push(meta);
@@ -123,9 +148,12 @@ async function validateLease(env,repo,branch,path){
 async function startTask(env,{repo,branch,goal}){
   repo=validateRepo(repo); branch=validateBranch(branch);
   if(!String(goal||'').trim()||String(goal).length>250)problem('goal_required');
-  const items=await leaseEntries(env);
+  await ensureHubRef(env);
+  // Fence the lease scan and commit to one exact coordination HEAD.
+  const hubHead=await getHead(env,HUB,HUB_REF);
+  const items=await allLeaseEntries(env);
   for(const item of items){
-    const file=await getFile(env,HUB,item.path,'main',true);
+    const file=await getFile(env,HUB,item.path,item.ref,true);
     if(!file?.content)continue;
     const f=leaseFields(decodeB64(file.content));
     if(f.STATUS==='RUNNING'&&f.REPO===repo&&Date.parse(f.EXPIRES_UTC||'')>Date.now())problem('another_claude_lease_active',409);
@@ -135,12 +163,19 @@ async function startTask(env,{repo,branch,goal}){
   const path=LEASE_PREFIX+id+'.md';
   const created=new Date().toISOString();
   const expires=new Date(Date.now()+20*60000).toISOString();
-  await api(env,'PUT',repoUrl(HUB)+'/contents/'+encPath(path),{
-    message:'docs(test-hub): Claude GitHub task lease [skip ci]',
-    branch:'main',content:utf8Base64(leaseBody(repo,branch,goal,created,expires,id,baseline))
+  const content=leaseBody(repo,branch,goal,created,expires,id,baseline);
+  const changed=await api(env,'POST','/graphql',{
+    query:'mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}',
+    variables:{input:{branch:{repositoryNameWithOwner:HUB,branchName:HUB_REF},
+      expectedHeadOid:hubHead,message:{headline:'docs(test-hub): Claude GitHub task lease [skip ci]'},
+      fileChanges:{additions:[{path,contents:utf8Base64(content)}]}}}
   });
+  if(changed.errors?.length)problem('lease_commit_rejected_stale_head_or_permissions',409);
+  const commit=validateSha(changed.data?.createCommitOnBranch?.commit?.oid);
+  const confirmed=await getFile(env,HUB,path,commit);
+  if(confirmed?.type!=='file'||decodeB64(confirmed.content)!==content)problem('lease_commit_verification_failed',409);
   await validateLease(env,repo,branch,path);
-  return {repo,branch,lease_path:path,expires,base_sha:await getHead(env,repo,'main'),authorized_actions:'branch-and-draft-pr'};
+  return {repo,branch,lease_path:path,lease_ref:HUB_REF,expires,base_sha:await getHead(env,repo,'main'),authorized_actions:'branch-and-draft-pr'};
 }
 export const githubTools=[
   ...claudeCodeTools,
@@ -158,7 +193,9 @@ export async function callGithubTool(env,name,args={}){
   if(name==='github_get_file'){
     const path=validatePath(args.path,{read:true});
     const ref=String(args.ref||'main');
-    if(ref!=='main')validateBranch(ref);
+    if(!(repo===HUB && ref===HUB_REF && path.startsWith('test-hub/findings/'))) {
+      if(ref!=='main')validateBranch(ref);
+    }
     const head=await getHead(env,repo,ref);
     const f=await getFile(env,repo,path,head);
     if(f.type!=='file'||f.size>250000)problem('file_not_supported');
