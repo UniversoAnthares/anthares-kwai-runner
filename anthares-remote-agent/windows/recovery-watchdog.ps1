@@ -2,6 +2,9 @@ $ErrorActionPreference='Continue'
 $root='C:\ProgramData\AntharesRemoteAgent'
 $canonicalTask='Anthares Remote Agent SYSTEM'
 $watchdogTask='Anthares Remote Recovery Watchdog'
+$failoverTask='Anthares Remote Failover Arbiter'
+$failoverScript='D:\AntharsWork\ara-failover-arbiter.ps1'
+$failoverLastGood='D:\AntharsWork\ara-failover-arbiter.ps1.lastgood'
 $canonicalScript=Join-Path $root 'run-agent-system-supervisor.ps1'
 $queueLoader=Join-Path $root 'load-issue-queue-auth.ps1'
 $watchdogLoop=Join-Path $root 'recovery-watchdog-loop.ps1'
@@ -13,8 +16,8 @@ $log=Join-Path $root 'recovery-watchdog.log'
 $state=Join-Path $root 'recovery-watchdog-state.json'
 $restartStamp=Join-Path $root 'recovery-last-restart.txt'
 $restartCooldownSeconds=120
-$critical=@('run-agent-system-supervisor.ps1','load-issue-queue-auth.ps1','recovery-watchdog-loop.ps1')
-function Log([string]$m){try{"$(Get-Date -Format o) $m"|Add-Content -Path $log -Encoding UTF8}catch{}}
+$critical=@('run-agent-system-supervisor.ps1','ara-http-selector.ps1','remote-liveness-90s.ps1','load-issue-queue-auth.ps1','recovery-watchdog-loop.ps1')
+function Log([string]$m){try{"$(Get-Date -Format o) $m"|Add-Content -Path $log -Encoding UTF8;$lines=@(Get-Content -Path $log -ErrorAction SilentlyContinue);if($lines.Count -gt 50){$lines|Select-Object -Last 50|Set-Content -Path $log -Encoding UTF8}}catch{}}
 function Get-SystemV4{@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -eq 0 -and $_.Name -eq 'anthares-remote-agent-v4-c8.exe'})}
 function Get-InteractiveAgents{@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -ne 0 -and $_.Name -match '^anthares-remote-agent(?:-v4(?:-c8)?|-standard)?\.exe$'})}
 function Restore-CriticalScripts{
@@ -26,7 +29,12 @@ function Restore-CriticalScripts{
     if($restore){try{Copy-Item -LiteralPath $good -Destination $live -Force;Log("restored critical script $name")}catch{Log("failed restoring critical script ${name}: $($_.Exception.Message)")}}
   }
 }
-function Ensure-Task([string]$name,[string]$script){
+function Restore-FailoverScript{
+  if(-not(Test-Path $failoverLastGood)){return}
+  $restore=$false
+  if(-not(Test-Path $failoverScript)){$restore=$true}else{try{$restore=((Get-FileHash -LiteralPath $failoverScript -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $failoverLastGood -Algorithm SHA256).Hash)}catch{$restore=$true}}
+  if($restore){try{Copy-Item -LiteralPath $failoverLastGood -Destination $failoverScript -Force;Log('restored failover arbiter script')}catch{Log("failed restoring failover arbiter: $($_.Exception.Message)")}}
+}function Ensure-Task([string]$name,[string]$script){
   $task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
   $actionText=if($task){(($task.Actions|ForEach-Object{$_.Execute+' '+$_.Arguments}) -join ';')}else{''}
   $needs=(-not $task)-or([string]$task.Principal.UserId -notmatch '^(SYSTEM|SISTEMA|S-1-5-18)$')-or([string]$task.Principal.RunLevel -ne 'Highest')-or($actionText -notmatch [regex]::Escape($script))-or(-not $task.Settings.Enabled)
@@ -89,9 +97,13 @@ function Restart-Canonical([string]$why){
 }
 try{
   Restore-CriticalScripts
+  Restore-FailoverScript
   Ensure-BinaryIntegrity
   $task=Ensure-Task $canonicalTask $canonicalScript
   $wd=Ensure-Task $watchdogTask $watchdogLoop
+  $fo=Ensure-Task $failoverTask $failoverScript
+  $foState=[string](Get-ScheduledTask -TaskName $failoverTask -ErrorAction SilentlyContinue).State
+  if($foState -ne 'Running'){try{Start-ScheduledTask -TaskName $failoverTask -ErrorAction Stop;Log("started failover arbiter task from state=$foState");Start-Sleep -Seconds 2;$fo=Get-ScheduledTask -TaskName $failoverTask -ErrorAction SilentlyContinue}catch{Log("failed starting failover arbiter task: $($_.Exception.Message)")}}
   $queueCredentialPresent=Test-Path $credential
   $queueCredentialLoaded=Test-QueueCredential
   $githubQueue=(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_REPOSITORY))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_TOKEN))
@@ -108,9 +120,9 @@ try{
   $reason=if($taskState -eq 'Running' -and $agents.Count -eq 1 -and $interactive.Count -eq 0){'single-writer-healthy'}elseif(-not $queueCredentialLoaded){'waiting-for-private-queue-credential'}elseif(-not (Can-Restart)){'restart-cooldown'}else{'recovery-required'}
   [pscustomobject]@{
     updated_at=(Get-Date).ToUniversalTime().ToString('o');ok=($reason -eq 'single-writer-healthy');install_root=$root;role='canonical-root-recovery';reason=$reason
-    canonical_task_present=[bool]$task;watchdog_task_present=[bool]$wd
+    canonical_task_present=[bool]$task;watchdog_task_present=[bool]$wd;failover_task_present=[bool]$fo
     canonical_task_state=$taskState
-    watchdog_task_state=[string](Get-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue).State
+    watchdog_task_state=[string](Get-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue).State;failover_task_state=[string](Get-ScheduledTask -TaskName $failoverTask -ErrorAction SilentlyContinue).State
     queue_credential_present=[bool]$queueCredentialPresent;queue_credential_loaded=[bool]$queueCredentialLoaded
     github_queue=$githubQueue;gitlab_queue=$gitlabQueue;dual_queue_redundancy=($githubQueue -and $gitlabQueue)
     system_v4_count=[int]$agents.Count;system_v4_pids=@($agents|ForEach-Object{$_.ProcessId})
@@ -122,3 +134,4 @@ try{
   Log("recovery failed: $($_.Exception.Message)")
   try{[pscustomobject]@{updated_at=(Get-Date).ToUniversalTime().ToString('o');ok=$false;error=$_.Exception.Message}|ConvertTo-Json|Set-Content $state -Encoding UTF8}catch{}
 }
+
