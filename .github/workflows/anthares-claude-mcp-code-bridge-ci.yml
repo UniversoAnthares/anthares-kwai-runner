@@ -31,3 +31,11 @@ jobs:
           grep -Fq 'run-name: Anthares Claude Code' .github/workflows/anthares-free-claude.yml
           grep -Fq 'compression-level: 0' .github/workflows/anthares-free-claude.yml
           echo ANTHARES_CLAUDE_MCP_DISPATCH_CONTRACT=PASS
+      - name: Build complete Worker with new tool imports without deploying
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd cloudflare-ara-mcp
+          npx --yes wrangler@4.43.0 deploy --dry-run --outdir "$RUNNER_TEMP/anthares-claude-worker-build" --log-level error
+          grep -Flq 'run_claude_code' "$RUNNER_TEMP/anthares-claude-worker-build/worker.js" || grep -FRq 'run_claude_code' "$RUNNER_TEMP/anthares-claude-worker-build"
+          echo ANTHARES_CLAUDE_MCP_WORKER_BUNDLE=PASS
