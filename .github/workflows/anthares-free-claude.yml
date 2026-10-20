@@ -21,6 +21,10 @@ on:
         description: 'Correlation ID filled automatically by the Claude Anthares connector'
         type: string
         required: false
+      origin_issue:
+        description: 'Trusted owner-created collaboration issue number (bot dispatch only)'
+        type: string
+        required: false
   pull_request:
     paths:
       - '.github/workflows/anthares-free-claude.yml'
@@ -55,10 +59,13 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      issues: read
     env:
       ANTHARES_TASK_MODE: ${{ inputs.mode }}
       ANTHARES_TASK_PROMPT: ${{ inputs.task }}
       ANTHARES_TASK_SCOPE: ${{ inputs.scope }}
+      ANTHARES_REQUEST_ID: ${{ inputs.request_id }}
+      ANTHARES_COLLAB_ORIGIN_ISSUE: ${{ inputs.origin_issue }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,13 +73,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Permit only authorized owner, and isolate any write in its own branch
+      - name: Permit authorized owner or tightly bound issue-origin bot, and isolate edits
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_ACTOR" != 'UniversoAnthares' ]]; then
+          if [[ "$GITHUB_ACTOR" == 'UniversoAnthares' ]]; then
+            echo ANTHARES_CLAUDE_OWNER_AUTHORIZED=PASS
+          elif [[ "$GITHUB_ACTOR" == 'github-actions[bot]' ]]; then
+            # No blanket bot exemption: GitHub issue creator, schema, UUID and exact prompt validated.
+            node tools/anthares_collab_gateway.mjs verify
+          else
             echo 'AUTHORIZED_OWNER_REQUIRED'; exit 1
           fi
           if [[ "$ANTHARES_TASK_MODE" == 'edit' ]]; then
+            [[ "$GITHUB_ACTOR" == 'UniversoAnthares' ]] || { echo 'OWNER_ONLY_EDIT'; exit 1; }
             git switch -c "claude-free/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           fi
       - name: Install pinned free router, Claude Code and existing Bitwarden SDK

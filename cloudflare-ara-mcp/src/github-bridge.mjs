@@ -1,5 +1,6 @@
 import {fetchWithoutRedirects} from "./secure-fetch.mjs";
 import {claudeCodeTools,callClaudeCodeTool} from "./claude-code-bridge.mjs";
+import {collabIssueTools,callCollabIssueTool} from "./collab-issue-bridge.mjs";
 // Anthares GitHub bridge for Claude Free: reviewed branches and draft PRs only.
 // All privileged actions require OAuth github.write plus a server-side GitHub credential.
 // Cloudflare secret: ANTHARES_GITHUB_TOKEN (fine-grained; only approved repositories).
@@ -143,6 +144,7 @@ async function startTask(env,{repo,branch,goal}){
 }
 export const githubTools=[
   ...claudeCodeTools,
+  ...collabIssueTools,
   {name:'github_get_file',description:'Read an approved Anthares GitHub repository file and its SHA.',inputSchema:{type:'object',properties:{repo:{type:'string'},path:{type:'string'},ref:{type:'string'}},required:['repo','path']},scope:'github.read'},
   {name:'github_begin_task',description:'Create a 20-minute Test Hub lease before making a Claude draft-branch change.',inputSchema:{type:'object',properties:{repo:{type:'string'},branch:{type:'string'},goal:{type:'string'}},required:['repo','branch','goal']},scope:'github.write'},
   {name:'github_create_branch',description:'Create an isolated claude/* branch from an exact expected main SHA, with valid lease.',inputSchema:{type:'object',properties:{repo:{type:'string'},branch:{type:'string'},base_sha:{type:'string'},lease_path:{type:'string'}},required:['repo','branch','base_sha','lease_path']},scope:'github.write'},
@@ -152,6 +154,7 @@ export const githubTools=[
 export async function callGithubTool(env,name,args={}){
   if(claudeCodeTools.some(t=>t.name===name))return callClaudeCodeTool(env,name,args);
   const repo=validateRepo(args.repo);
+  if(collabIssueTools.some(t=>t.name===name))return callCollabIssueTool(env,name,args);
   if(name==='github_get_file'){
     const path=validatePath(args.path,{read:true});
     const ref=String(args.ref||'main');
