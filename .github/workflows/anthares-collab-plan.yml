@@ -1,0 +1,61 @@
+name: Anthares multiagent - owner-only shared task to remote Claude Code
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    paths:
+      - 'tools/anthares_collab_gateway.mjs'
+      - 'tools/test_anthares_collab_gateway.mjs'
+      - '.github/workflows/anthares-collab-plan.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: anthares-collab-issue-${{ github.event.issue.id || github.run_id }}
+  cancel-in-progress: false
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Reject unauthorized task shapes, duplicate dispatch and unexpected source
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/anthares_collab_gateway.mjs
+          node --test tools/test_anthares_collab_gateway.mjs
+          echo ANTHARES_COLLAB_GATEWAY_CONTRACT=PASS
+
+  dispatch:
+    if: >-
+      github.event_name == 'issues' &&
+      github.event.action == 'opened' &&
+      github.event.sender.id == 81930373 &&
+      github.event.issue.user.id == 81930373 &&
+      startsWith(github.event.issue.title, '[ANTHARES-COLLAB-PLAN] ')
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    permissions:
+      contents: read
+      actions: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate owner-authored task, claim once, dispatch bounded plan, link result
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/anthares_collab_gateway.mjs
+          echo ANTHARES_COLLAB_OWNER_GATEWAY=PASS
