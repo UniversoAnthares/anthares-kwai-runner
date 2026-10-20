@@ -61,6 +61,30 @@ O watchdog roda em SYSTEM e é independente dos serviços externos. Ele:
 
 Se o Vercel estiver indisponível, as filas privadas mantêm o processo operacional. Se uma fila estiver atrasada, o mesmo processo continua recebendo comandos MCP por Vercel.
 
+## Interface gráfica autorizada (sessão do usuário)
+
+O agente canônico continua **SYSTEM / sessão 0**, sem abrir janelas por shell.
+Para abrir somente páginas HTTPS aprovadas em perfis Chrome já existentes, o
+comando remoto autenticado aceita a forma estruturada:
+
+`ara-desktop-open {"profile":"Profile 2","url":"https://chatgpt.com"}`
+
+Essa ação **não executa PowerShell nem CMD**. O agente valida o perfil e o host,
+obtém o token da sessão de console do Windows e solicita ao sistema a abertura
+do executável Chrome instalado no desktop desse usuário. São permitidos apenas
+os perfis Default, 2, 3, 5, 7, 8 e 9 e hosts aprovados de ChatGPT/Google.
+Não há suporte a execução de código, foco arbitrário, cliques ou digitação livre
+nessa operação. O shell ordinário permanece sob `headless_policy.go`.
+
+A resposta `launched_not_authenticated` confirma somente a criação do processo. Não
+confirma que a página terminou de carregar nem concede OAuth. Autorização de
+contas Google e instalação/conexão de plugins continuam exigindo o fluxo de
+consentimento do provedor e do ChatGPT. Nunca trate lançamento como conexão.
+
+A funcionalidade é limitada à instalação Windows do dispositivo canônico,
+onde o perfil Chrome está em `C:\Users\Lucas\AppData\Local\Google\Chrome\User Data`.
+Em sessão de console inativa ou dispositivo diferente, falha de forma fechada.
+
 ## Diagnóstico
 
 Prefira jobs tipados a shell. `agent_health` retorna PID, dispositivo, work root, `http_control`, `queue_configured`, providers de fila, diretório de receipts e contagem de receipts, sem segredos. `ping`, `system_info`, `safe_environment`, arquivos, processos, serviços e demais capacidades tipadas continuam disponíveis. Shell é escape hatch e deve permanecer oculto/não interativo.
