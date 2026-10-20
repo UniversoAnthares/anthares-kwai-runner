@@ -1,45 +1,46 @@
-name: CORTES TikTok - authenticated readiness
+name: CORTES TikTok remote Neon consumer
+
 on:
   workflow_dispatch: {}
+  pull_request:
+    paths:
+      - '.github/workflows/cortes-tiktok-publisher.yml'
+      - 'tools/cortes_tiktok_queue_consumer.py'
+      - 'tests/test_cortes_tiktok_queue_consumer.py'
+      - 'vercel-ara-primary/api/cortes-tiktok.mjs'
+      - 'vercel-ara-primary/api/router-entry.mjs'
+      - 'vercel-ara-primary/vercel.json'
   push:
     branches: [main]
     paths:
       - '.github/workflows/cortes-tiktok-publisher.yml'
-      - 'tools/cortes_tiktok_publish.py'
-      - 'tests/test_cortes_tiktok_publish.py'
+      - 'tools/cortes_tiktok_queue_consumer.py'
+      - 'tests/test_cortes_tiktok_queue_consumer.py'
+  schedule:
+    - cron: '*/5 * * * *'
+
 permissions:
   contents: read
   id-token: write
+
 concurrency:
   group: cortes-tiktok-canonical-publisher
   cancel-in-progress: false
+
 jobs:
   tiktok:
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
-      WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
-      WP_USERNAME: ${{ secrets.WP_USERNAME }}
-      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-      ANTHARES_TIKTOK_WORKER_URL: https://anthares-tiktok-worker.anthares1.workers.dev
-      CORTES_TIKTOK_PREFLIGHT: '1'
       PYTHONUTF8: '1'
+      PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
-      - name: Verify offline TikTok safety contracts
+      - name: Validate queue consumer and TikTok safety contracts
         run: |
-          python3 -m py_compile tools/cortes_tiktok_publish.py
-          python3 -m unittest discover -s tests -p 'test_cortes_tiktok_publish.py' -v
-      - name: Verify existing remote secret bindings by presence only
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import os,json
-          names=('ARA_SHARED','WP_SITE_URL','WP_USERNAME','WP_APP_PASSWORD')
-          print(json.dumps({'required_secrets_present':{k:bool(os.environ.get(k)) for k in names}},sort_keys=True))
-          if not all(os.environ.get(k) for k in names):
-              raise SystemExit('TIKTOK_CORTES_REQUIRED_SECRET_MISSING')
-          PY
-      - name: Verify Northflank TikTok identity and WordPress stored short readiness
-        run: python3 -u tools/cortes_tiktok_publish.py
+          python3 -m py_compile tools/cortes_tiktok_queue_consumer.py
+          python3 -m unittest discover -s tests -p 'test_cortes_tiktok_queue_consumer.py' -v
+      - name: Publish or reconcile one queued TikTok clip (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: python3 -u tools/cortes_tiktok_queue_consumer.py
