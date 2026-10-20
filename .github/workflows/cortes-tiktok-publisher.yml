@@ -80,6 +80,22 @@ jobs:
         env:
           CORTES_TIKTOK_FORENSIC_SEGMENT_ID: 'g1:9CIk-I_3VhM:252:337'
         run: python3 -u tools/tiktok_uncertain_post_audit.py
+      - name: Verify the known TikTok Studio marker via production inventory (read-only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'tools')
+          sys.path.insert(0,'direct-tiktok-publisher')
+          import cortes_tiktok_queue_consumer as q
+          from tiktok_creator_inventory import inventory_studio
+          records=inventory_studio('universo.anthares')
+          evidence=q.found({'ok':True,'account':'universo.anthares','items':records},
+                           'g1:9CIk-I_3VhM:252:337')
+          if evidence!='7698574965993458964':
+              raise SystemExit('STUDIO_MARKER_REMOTE_ID_UNVERIFIED')
+          print('CORTES_TIKTOK_STUDIO_RECONCILIATION_READY=1')
+          PY
       - name: Publish or reconcile at most one queued TikTok short (main only)
         if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         env:
