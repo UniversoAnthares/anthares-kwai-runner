@@ -6,6 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import cortes_tiktok_queue_consumer as c
+import cortes_tiktok_hosted_publish as hosted
+from datetime import datetime, timezone
 
 
 def job():
@@ -20,6 +22,18 @@ def job():
 
 
 class TikTokQueueContract(unittest.TestCase):
+    def test_tiktok_publication_gate_holds_until_0600_cuiaba(self):
+        boundary = "2026-10-20T10:00:00Z"
+        before = datetime(2026, 10, 20, 9, 59, tzinfo=timezone.utc)
+        at_boundary = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
+        self.assertFalse(hosted.publication_window_open(before, boundary))
+        self.assertTrue(hosted.publication_window_open(at_boundary, boundary))
+
+    def test_tiktok_publication_gate_fails_closed_when_missing_or_invalid(self):
+        now = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
+        self.assertFalse(hosted.publication_window_open(now, None))
+        self.assertFalse(hosted.publication_window_open(now, "invalid"))
+
     def test_valid_job(self):
         self.assertEqual(c.validate_job(job()), ("g1:a4w8KAOxANc:30:80", 2))
 
