@@ -1,17 +1,24 @@
 name: TikTok strong session identity verification
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
   push:
     branches: [main]
     paths:
       - .github/workflows/tiktok-central-session-read.yml
+      - 'tools/cortes_tiktok_hosted_publish.py'
+      - 'vercel-ara-primary/api/cortes-tiktok.mjs'
 permissions:
   contents: read
   id-token: write
+concurrency:
+  group: cortes-tiktok-canonical-publisher
+  cancel-in-progress: false
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 14
     steps:
       - uses: actions/checkout@v4
       - name: Read protected TikTok session and queue summary through approved OIDC
@@ -83,3 +90,12 @@ jobs:
           print('PROFILE_BASELINE_COUNT='+str(len(ids)))
           print('PROFILE_BASELINE_PRESENT='+str(bool(ids)))
           PY
+
+      - name: Publish at most one fenced CORTES short directly from GitHub-hosted browser
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          ARA_SHARED: ${{ secrets.ARA_SHARED }}
+          EXPECTED_TIKTOK_USERNAME: universo.anthares
+        run: |
+          python3 -m pip install --disable-pip-version-check -q requests cryptography
+          python3 -u tools/cortes_tiktok_hosted_publish.py
