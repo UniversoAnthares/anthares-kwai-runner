@@ -1,4 +1,4 @@
-name: CORTES TikTok remote Neon consumer
+name: CORTES TikTok hosted canonical Neon publisher
 
 on:
   workflow_dispatch: {}
@@ -10,6 +10,8 @@ on:
       - 'vercel-ara-primary/api/cortes-tiktok.mjs'
       - 'vercel-ara-primary/api/router-entry.mjs'
       - 'vercel-ara-primary/vercel.json'
+  schedule:
+    - cron: '*/5 * * * *'
   push:
     branches: [main]
     paths:
@@ -46,6 +48,13 @@ jobs:
           import os
           print('TIKTOK_WORKER_SECRET_BOUND=' + str(bool(os.getenv('ARA_SHARED'))))
           PY
-      - name: Publish or reconcile one queued TikTok clip (main only)
+      - name: Install GitHub-hosted TikTok browser and vault dependencies
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        run: python3 -u tools/cortes_tiktok_queue_consumer.py
+        run: |
+          python3 -m pip install --disable-pip-version-check -q playwright requests cryptography
+          python3 -m playwright install chromium
+      - name: Publish or reconcile at most one queued TikTok short (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          EXPECTED_TIKTOK_USERNAME: universo.anthares
+        run: python3 -u tools/cortes_tiktok_hosted_publish.py
