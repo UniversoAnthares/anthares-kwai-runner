@@ -39,8 +39,8 @@ async function githubRole(req) {
  if(!['schedule','push','workflow_dispatch'].includes(claims.event_name))return'';
  let role='', wf='';
  if(claims.repository===CLIPPER){role='producer';wf=CLIPPER+'/.github/workflows/'+SOURCE_WF+'@refs/heads/main';}
- if(claims.repository===RUNNER){role='consumer';wf=RUNNER+'/.github/workflows/'+CONSUMER_WF+'@refs/heads/main';}
- if(!role||String(claims.job_workflow_ref||claims.workflow_ref||'')!==wf)return'';
+ if(claims.repository===RUNNER){role='consumer';wf=[CONSUMER_WF,'tiktok-central-session-read.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main');}
+ if(!role||!(Array.isArray(wf)?wf:[wf]).includes(String(claims.job_workflow_ref||claims.workflow_ref||'')))return'';
  try{
    if(!jwks||Date.now()>jwksUntil){
      const cfg=await fetch('https://token.actions.githubusercontent.com/.well-known/openid-configuration',{signal:AbortSignal.timeout(7500)});
