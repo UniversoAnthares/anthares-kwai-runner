@@ -228,10 +228,9 @@ def main() -> None:
             t.screenshot(page, "tiktok-owned-upload-ready.png")
 
             privacy = t.set_public_visibility(page)
-            if privacy is False:
-                raise RuntimeError(
-                    "A interface do TikTok não apresenta publicação pública para esta conta."
-                )
+            if privacy is not True:
+                raise RuntimeError("TIKTOK_PUBLIC_VISIBILITY_UNVERIFIED")
+            print("TIKTOK_PUBLIC_VISIBILITY_VERIFIED",flush=True)
 
             post_button = t.enabled_post_button(page) or post_button
             before = str(page.url)
