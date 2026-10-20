@@ -33,3 +33,15 @@ Claude can invoke run_tests with suite=mcp-regression and a unique request_id UU
 This controlled suite replaces the earlier missing test capability. It does not grant unrestricted shell or publication control. It requires the authorized Windows device online and the pinned source object plus configured Miniflare runtime available. Test results always state which source was actually tested.
 
 Owner authorization uses GitHub identity as the canonical method. Email is a retired optional method, not an outstanding requirement for the integration. The sender domain is unverified; enabling email later requires domain onboarding and delivery proof.
+
+## Delegar para Claude Code gratuito remoto
+
+Depois da revisão/implantação da ponte, a sessão Claude Free autenticada na integração Anthares poderá usar:
+
+- `run_claude_code(mode,task,scope?)` (escopo OAuth `github.write`): envia uma tarefa única para o executor efêmero GitHub Actions, com Gemini gratuito/9Router. `plan` produz análise sem editar; `edit` exige arquivo exato sob `tools/`, `docs/` ou `ai-runners/` e cria somente PR rascunho.
+- `get_claude_code_status(request_id)` (`github.read`): devolve `queued`, `in_progress`, `completed`, URL do run e conclusão. O `request_id` é UUID gerado internamente e enviado como input do workflow; não inventar nem reutilizar.
+- `get_claude_code_result(request_id)` (`github.read`): quando a execução termina, recupera o texto do artefato privado do GitHub Actions com retenção de 2 dias. Usar apenas o identificador retornado pela chamada inicial.
+
+A ligação usa `ANTHARES_GITHUB_TOKEN` armazenado **exclusivamente no Worker Cloudflare**. O token precisa de permissão de GitHub Actions para ler runs/artefatos e de `Actions: write` para despachar `workflow_dispatch`. Os scopes OAuth existentes `github.read` e `github.write` não são alargados; nenhuma nova credencial deve aparecer nas mensagens do Claude.
+
+**Importante:** essa ferramenta dispara trabalho e devolve um identificador; o Claude precisa consultar status e resultado em chamadas posteriores. Não permite shell local, múltiplos arquivos por tarefa, merge automático, VPS ou assinatura paga. As cotas dos modelos gratuitos variam. Status de implantação só é PROVEN após teste do código, Worker em produção com OAuth preservado e invocação real pela sessão Claude autenticada. Um resultado de CI não comprova a autorização da conta do Claude.
