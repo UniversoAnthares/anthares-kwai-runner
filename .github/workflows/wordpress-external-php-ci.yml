@@ -1,11 +1,11 @@
-name: Anthares WordPress PHP CI — independent GitLab mirror
+name: Anthares WordPress QA — Vercel independent fallback
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/wordpress-external-php-ci.yml'
   schedule:
-    - cron: '23 */4 * * *'
+    - cron: '33 6,18 * * *' # every 12h, 15min after WordPress QA rotation
   pull_request:
     paths:
       - '.github/workflows/wordpress-external-php-ci.yml'
@@ -19,12 +19,12 @@ concurrency:
 jobs:
   wordpress-php:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
-    env:
-      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+    timeout-minutes: 5
     steps:
       - name: Fetch current mirrored WordPress main (outside WordPress billing scope)
         shell: bash
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
           set -euo pipefail
           test -n "$GITLAB_TOKEN" || { echo 'WORDPRESS_CI_MISSING_GITLAB_TOKEN'; exit 1; }
@@ -86,28 +86,100 @@ jobs:
           done
           php tests/test-cortes-overlap-identity.php
           echo 'ANTHARES_CORTES_REMOTE_CI=PASS'
+      - name: Full private WordPress structural QA (no private output)
+        id: structural
+        working-directory: ${{ runner.temp }}/anthares-wp-ci
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The authorized GitLab archive has no .git; reconstruct an index of
+          # its complete tracked PHP/YML/JSON tree for exact-once QA coverage.
+          git init --quiet
+          git add --intent-to-add --all
+          mkdir -p "$RUNNER_TEMP/anthares-qa-logs"
+          failures=0
+          while IFS= read -r -d '' source; do
+            if ! php -l "$source" > /dev/null 2>&1; then
+              echo "PHP_LINT_FAILED_FILE=$source"
+              failures=1
+            fi
+          done < <(find . -type f -name '*.php' -not -path './.git/*' -print0)
+          if [ "$failures" -ne 0 ]; then
+            echo 'WORDPRESS_FULL_PHP_LINT=FAIL'
+            exit 1
+          fi
+          echo 'WORDPRESS_FULL_PHP_LINT=PASS'
+          for test in \
+            qa/anthares-orchestrator-qa.php \
+            qa/anthares-account-contract-qa.php \
+            qa/anthares-extreme-static-qa.php \
+            tests/assistant-contextual-smoke.php \
+            tests/assistant-story-policy-smoke.php
+          do
+            test -f "$test" || { echo "WORDPRESS_QA_MISSING_TEST=$test"; exit 1; }
+            if php "$test" > "$RUNNER_TEMP/anthares-qa-logs/$(basename "$test").log" 2>&1; then
+              echo "WORDPRESS_QA_PASS=$test"
+            else
+              echo "WORDPRESS_QA_FAIL=$test"
+              # No raw source, user records, or secret-bearing logs in public Actions.
+              exit 1
+            fi
+          done
+          echo 'WORDPRESS_ORCHESTRATOR_AND_ASSISTENTE_QA=PASS'
+      - name: Public WordPress synthetic smoke independent of Vercel
+        id: public
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /minha-conta/ /category/nucleos-e-personagens/; do
+            f="$(mktemp)"
+            trap 'rm -f "$f"' EXIT
+            curl --fail --silent --show-error --location \
+              --retry 2 --retry-delay 2 --connect-timeout 7 --max-time 20 \
+              -H 'Cache-Control: no-cache' \
+              "https://anthares.us${path}?anthares_qa_fallback=${GITHUB_RUN_ID}" -o "$f"
+            grep -Eq 'anthares-assistente-v1[.]6[.]3/assets/assist[.]js[?]ver=1[.]9[.](1[7-9]|[2-9][0-9])' "$f" || {
+              echo "WORDPRESS_PUBLIC_ASSET_VERSION=FAIL path=$path";exit 1;
+            }
+            grep -Eq 'id=["'"'"']anthares-ai-trigger["'"'"']' "$f" || {
+              echo "WORDPRESS_ASSISTENTE_ICON=FAIL path=$path";exit 1;
+            }
+            echo "WORDPRESS_PUBLIC_PAGE=PASS path=$path"
+            rm -f "$f"
+          done
+          asset="$(mktemp)"
+          trap 'rm -f "$asset"' EXIT
+          curl --fail --silent --show-error --location --retry 2 \
+            --connect-timeout 7 --max-time 20 \
+            'https://anthares.us/wp-content/plugins/anthares-assistente-v1.6.3/assets/assist.js?ver=1.9.17' -o "$asset"
+          grep -Fq 'currentManagementPage' "$asset" || {
+            echo 'WORDPRESS_ASSISTENTE_CONTEXT_JS=FAIL';exit 1;
+          }
+          echo 'WORDPRESS_PUBLIC_VERCEL_FALLBACK=PASS'
       - name: Reconcile single incident on failure or recovery
         if: always() && github.ref == 'refs/heads/main'
         uses: actions/github-script@v7
         env:
           PHP_CI_OUTCOME: ${{ steps.php.outcome }}
           CORTES_CI_OUTCOME: ${{ steps.cortes.outcome }}
+          STRUCTURAL_CI_OUTCOME: ${{ steps.structural.outcome }}
+          PUBLIC_CI_OUTCOME: ${{ steps.public.outcome }}
         with:
           script: |
             const {owner,repo}=context.repo;
             const title='[Anthares WordPress] CI remoto PHP requer atenção';
             const issues=await github.paginate(github.rest.issues.listForRepo,{owner,repo,state:'open',per_page:100});
             const active=issues.find(x=>!x.pull_request&&x.title===title);
-            if(process.env.PHP_CI_OUTCOME==='success' && process.env.CORTES_CI_OUTCOME==='success'){
+            if([process.env.PHP_CI_OUTCOME,process.env.CORTES_CI_OUTCOME,process.env.STRUCTURAL_CI_OUTCOME,process.env.PUBLIC_CI_OUTCOME].every(x=>x==='success')){
               if(active) await github.rest.issues.update({owner,repo,issue_number:active.number,state:'closed',state_reason:'completed'});
               core.info('WORDPRESS_REMOTE_CI_INCIDENT=NONE_OR_RESOLVED');
             }else{
               const url='https://github.com/'+owner+'/'+repo+'/actions/runs/'+context.runId;
-              const body='Validação do WordPress GitLab main falhou. Verifique o run: '+url+'\nNão enviar segredos nem repetir merges concorrentes.';
+              const body='Redundância de QA WordPress (GitLab PHP + orquestrador + Assistente + site público) falhou. Verifique o run: '+url+'\nNão enviar segredos nem repetir merges concorrentes.';
               if(active) await github.rest.issues.createComment({owner,repo,issue_number:active.number,body});
               else await github.rest.issues.create({owner,repo,title,body});
               core.warning('WORDPRESS_REMOTE_CI_INCIDENT=OPEN_OR_UPDATED');
             }
       - name: Remove downloaded repository snapshot
         if: always()
-        run: rm -rf "$RUNNER_TEMP/anthares-wp-ci" "$RUNNER_TEMP/anthares-wp-archive.tar.gz" "$RUNNER_TEMP/anthares-wp-branch.json"
+        run: rm -rf "$RUNNER_TEMP/anthares-wp-ci" "$RUNNER_TEMP/anthares-wp-archive.tar.gz" "$RUNNER_TEMP/anthares-wp-branch.json" "$RUNNER_TEMP/anthares-qa-logs"
