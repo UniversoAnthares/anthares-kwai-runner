@@ -107,8 +107,13 @@ async function enqueue(b){
  '(id,source_id,segment_id,source_start,source_end,media_url,duration_seconds,title,callback_url,callback_token,attachment_id)'+
  ' VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(segment_id) DO NOTHING RETURNING id',
  [x.id,x.source,x.sid,x.start,x.end,x.media,x.dur,x.title,x.callback,x.secret,x.attachment]);
+ // Retitle only safely queued jobs. Started, uncertain and confirmed media
+ // retain their immutable publication metadata and fencing.
+ const retitle=await pool.query(
+  'UPDATE cortes_tiktok_publications SET title=$2,updated_at=now() WHERE segment_id=$1 AND status=\'queued\' AND title IS DISTINCT FROM $2 RETURNING id',
+  [x.sid,x.title]);
  const status=await pool.query('SELECT id,status,remote_id FROM cortes_tiktok_publications WHERE segment_id=$1',[x.sid]);
- return{ok:true,created:q.rowCount===1,job:status.rows[0]||null};
+ return{ok:true,created:q.rowCount===1,updated_title:retitle.rowCount===1,job:status.rows[0]||null};
 }
 async function reaper(){
  await schema();
