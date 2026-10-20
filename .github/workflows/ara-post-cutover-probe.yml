@@ -1,6 +1,8 @@
 name: ARA Post Cutover Probe
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 */12 * * *'
   push:
     branches: [main]
     paths:
@@ -27,3 +29,16 @@ jobs:
           grep -Eq '"oauth_owner_code_mode":"(github_owner_identity|email_otp)"' /tmp/mcp
           test "$c2" = "200"
           echo 'ARA_POST_CUTOVER_CONTROL_READY=1'
+          echo '=== Four-endpoint operational readiness (read-only) ==='
+          for site in \
+            'https://anthares-remote-primary.vercel.app/health' \
+            'https://anthares-remote-secondary.vercel.app/health' \
+            'https://anthares-ara-vercel-reserve.vercel.app/healthz' \
+            'https://anthares-ara-reserva.anthares1.workers.dev/'; do
+            echo "PROBING=$site"
+            code="$(curl -sS -f --retry 2 --connect-timeout 10 --max-time 20 -o /tmp/ara-endpoint.json -w '%{http_code}' "$site")"
+            test "$code" = "200"
+            grep -q '"ok":true' /tmp/ara-endpoint.json
+          done
+          echo 'ARA_FOUR_ENDPOINTS_READY=1'
+          echo 'CLOUDFLARE_STANDBY_HEARTBEAT_NOT_REQUIRED=1'
