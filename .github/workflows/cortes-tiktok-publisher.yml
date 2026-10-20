@@ -57,6 +57,14 @@ jobs:
       - name: Read-only TikTok upload page diagnostic (once on push)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: python3 -u tools/tiktok_upload_readonly_diagnostic.py
+      - name: Read-only TikTok upload probe in virtual graphical Chromium
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          if command -v xvfb-run >/dev/null 2>&1; then
+            TIKTOK_PROBE_HEADFUL=1 xvfb-run -a python3 -u tools/tiktok_upload_readonly_diagnostic.py
+          else
+            echo CORTES_TIKTOK_HEADFUL_PROBE_SKIPPED_NO_XVFB
+          fi
       - name: Publish or reconcile at most one queued TikTok short (main only)
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
