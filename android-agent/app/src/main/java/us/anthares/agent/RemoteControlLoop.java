@@ -21,7 +21,7 @@ final class RemoteControlLoop {
     private static final String TAG="AntharesAgent";
     private static final String PREFS="anthares_remote_control";
     private static final String PRIMARY="https://anthares-remote-primary.vercel.app";
-    private static final String BACKUP="https://anthares-ara-vercel-reserve.vercel.app";
+    private static final String BACKUP="https://anthares-remote-secondary.vercel.app";
     private static volatile Thread worker;
     private static volatile boolean running;
     private RemoteControlLoop() {}

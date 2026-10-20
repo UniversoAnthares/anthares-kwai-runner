@@ -17,11 +17,17 @@ jobs:
         run: |
           set -u
           base='https://anthares-ara-vercel-reserve.vercel.app'
-          for path in '/health' '/v1/mcp/status?device_id=DESKTOP-FTDK0HP' '/v1/device/jobs/next'; do
+          for path in '/healthz' '/v1/mcp/status?device_id=DESKTOP-FTDK0HP' '/v1/device/jobs/next'; do
             echo "=== $path ==="
             code="$(curl -sS -D /tmp/h -o /tmp/b -w '%{http_code}' --max-time 20 "$base$path" || true)"
             echo "HTTP=$code"
             grep -Ei '^(content-type|www-authenticate|x-vercel-id|server):' /tmp/h || true
             cat /tmp/b || true
             echo
+            if [[ "$path" == "/healthz" ]]; then
+              test "$code" = "200" || exit 1
+              grep -q '"ok":true' /tmp/b || exit 1
+            else
+              [[ "$code" == "401" || "$code" == "403" ]] || exit 1
+            fi
           done
