@@ -25,7 +25,7 @@ jobs:
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
       ANTHARES_TIKTOK_WORKER_URL: https://anthares-tiktok-worker.anthares1.workers.dev
-      CORTES_TIKTOK_PREFLIGHT: '1'
+      CORTES_TIKTOK_PREFLIGHT: '0'
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
