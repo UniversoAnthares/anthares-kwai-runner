@@ -52,42 +52,46 @@ def _halt_if_platform_block(page, reason="") -> None:
 
 
 def _caption(plan: dict) -> str:
-    source = " ".join(str(plan.get("source_title") or "").split()).strip()
-    segment = " ".join(str(plan.get("title") or "").split()).strip()
-    summary = " ".join(str(plan.get("summary") or plan.get("resumo_curto") or "").split()).strip()
-    def clean(value: str) -> str:
-        value = value.replace("�", "")
-        value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
-        return " ".join(value.split()).strip(" .,-")
-    source, segment, summary = clean(source), clean(segment), clean(summary)
-    generic_sources = {"new anthares", "anthares", "live", "stream", "livestream"}
-    meaningful = len(segment) >= 12 and sum(1 for w in segment.split() if len(w) >= 3) >= 3
-    raw = segment if meaningful else source
-    if not raw or raw.casefold() in generic_sources:
-        raw = summary[:100] if len(summary) >= 12 else "Literatura e escrita"
-    if len(raw) > 100:
-        raw = raw[:97].rsplit(" ", 1)[0] + "..."
-    topic=(raw+" "+summary+" "+source).casefold()
-    tags=["#literatura","#escrita"]
-    thematic=[
-        (("personagem","personagens","protagonista"),"#personagens"),
-        (("dialogo","dialogos"),"#dialogos"),
-        (("narrador","ponto de vista","foco narrativo"),"#narrativa"),
-        (("cena","cenas"),"#cenaliteraria"),
-        (("conto","contos"),"#contos"),
-        (("romance","romances"),"#romance"),
-        (("poesia","poema","verso"),"#poesia"),
-        (("fantasia","fantastico"),"#fantasia"),
-        (("terror","horror","lovecraft"),"#terror"),
-        (("classico","classicos"),"#classicos"),
-        (("storytelling","historia","histórias"),"#storytelling"),
-    ]
-    for keys,tag in thematic:
-        if any(k in topic for k in keys) and tag not in tags:
-            tags.append(tag)
-        if len(tags)>=5: break
-    if "#escritores" not in tags: tags.append("#escritores")
-    return raw+" "+" ".join(tags[:5])
+    """Use the editorial clip title and relevant Brazilian discovery tags.
+
+    The unique #anthares marker is mandatory for cross-run reconciliation.
+    Hashtags are descriptive; their popularity does not guarantee reach.
+    """
+    clip = " ".join(str(plan.get("title") or "").split())
+    source = " ".join(str(plan.get("source_title") or "").split())
+    marker = re.search(r"#anthares[0-9a-f]{10}\b", clip, flags=re.I)
+    if not marker:
+        raise RuntimeError("TIKTOK_UNIQUE_IDENTITY_MARKER_MISSING")
+    clip = re.sub(r"#anthares[0-9a-f]{10}\b", "", clip, flags=re.I).strip()
+    def clean(text):
+        text = unicodedata.normalize("NFC", text.replace("\ufffd", ""))
+        text = re.sub(r"[\x00-\x1f\x7f]", " ", text)
+        text = re.sub(r"\s*[-—–|]\s*Universo Anthares\s*$", "", text, flags=re.I)
+        return " ".join(text.split()).strip(" .,-")
+    clip, source = clean(clip), clean(source)
+    headline = clip if len(clip) >= 12 else source
+    if len(headline) < 12:
+        headline = "Literatura e análise de obras"
+    # Preserve Portuguese accents and the actual editorial subject.
+    if len(headline) > 112:
+        headline = headline[:109].rsplit(" ", 1)[0].rstrip(" ,.-") + "..."
+    topic = unicodedata.normalize("NFKD", (clip+" "+source).lower())
+    topic = "".join(ch for ch in topic if not unicodedata.combining(ch))
+    topic_tags = []
+    if any(word in topic for word in ("aristoteles","poetica","tragedia","comedia")):
+        topic_tags = ["#Aristoteles", "#TeoriaLiteraria"]
+    elif any(word in topic for word in ("tolstoi","tolstoy","ivan ilitch","literatura russa")):
+        topic_tags = ["#Tolstoi", "#LiteraturaRussa"]
+    elif any(word in topic for word in ("personagem","protagonista","narrador")):
+        topic_tags = ["#Personagens", "#EscritaCriativa"]
+    elif any(word in topic for word in ("romance","classico","livro","leitura")):
+        topic_tags = ["#Livros", "#ClassicosDaLiteratura"]
+    elif any(word in topic for word in ("roteiro","cena","narrativa","escrita")):
+        topic_tags = ["#EscritaCriativa", "#Narrativa"]
+    else:
+        topic_tags = ["#Livros", "#AnaliseLiteraria"]
+    hashtags = ["#BookTokBrasil", "#Literatura"] + topic_tags
+    return headline + " " + " ".join(hashtags[:4]) + " " + marker.group(0).lower()
 
 def _fill_caption(page, caption: str) -> None:
     selectors = [
@@ -102,7 +106,18 @@ def _fill_caption(page, caption: str) -> None:
             if loc.is_visible(timeout=800):
                 loc.click()
                 loc.fill(caption)
-                print(f"TIKTOK_CAPTION={caption}", flush=True)
+                # Verify the actual composer content before the irreversible click.
+                editable=str(loc.get_attribute("contenteditable") or "").lower()=="true"
+                actual=(loc.inner_text(timeout=2000) if editable else loc.input_value(timeout=2000))
+                visible=" ".join(unicodedata.normalize("NFC",actual).split()).casefold()
+                expected_head=" ".join(caption.split())[:28].strip().casefold()
+                marker=re.search(r"#anthares[0-9a-f]{10}\b",caption,re.I)
+                if not marker or expected_head not in visible or marker.group(0).casefold() not in visible:
+                    raise RuntimeError("TIKTOK_CAPTION_READBACK_UNVERIFIED")
+                tags=re.findall(r"#[A-Za-z0-9_]+",visible)
+                if len(tags)<3:
+                    raise RuntimeError("TIKTOK_CAPTION_HASHTAGS_UNVERIFIED")
+                print("TIKTOK_CAPTION_READBACK_OK hashtag_count="+str(len(tags)),flush=True)
                 return
         except Exception:
             pass
