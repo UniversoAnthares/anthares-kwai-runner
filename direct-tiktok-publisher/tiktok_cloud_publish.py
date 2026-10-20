@@ -106,7 +106,18 @@ def _fill_caption(page, caption: str) -> None:
             if loc.is_visible(timeout=800):
                 loc.click()
                 loc.fill(caption)
-                print(f"TIKTOK_CAPTION={caption}", flush=True)
+                # Verify the actual composer content before the irreversible click.
+                editable=str(loc.get_attribute("contenteditable") or "").lower()=="true"
+                actual=(loc.inner_text(timeout=2000) if editable else loc.input_value(timeout=2000))
+                visible=" ".join(unicodedata.normalize("NFC",actual).split()).casefold()
+                expected_head=" ".join(caption.split())[:28].strip().casefold()
+                marker=re.search(r"#anthares[0-9a-f]{10}\\b",caption,re.I)
+                if not marker or expected_head not in visible or marker.group(0).casefold() not in visible:
+                    raise RuntimeError("TIKTOK_CAPTION_READBACK_UNVERIFIED")
+                tags=re.findall(r"#[A-Za-z0-9_]+",visible)
+                if len(tags)<3:
+                    raise RuntimeError("TIKTOK_CAPTION_HASHTAGS_UNVERIFIED")
+                print("TIKTOK_CAPTION_READBACK_OK hashtag_count="+str(len(tags)),flush=True)
                 return
         except Exception:
             pass
