@@ -280,6 +280,11 @@ func boolArg(v string) bool {
 }
 
 func dispatch(ctx context.Context, cfg Config, job Job) (string, error) {
+	// Interactive desktop, clipboard, and active-window capture require a
+	// separate, owner-approved per-action grant. None is issued by remote shell.
+	if interactiveSurfaceRequiresOwnerConsent(job.Type) {
+		return "", errors.New("owner authorization required for existing desktop, clipboard or window")
+	}
 	switch job.Type {
 	case "ping":
 		return "pong", nil
