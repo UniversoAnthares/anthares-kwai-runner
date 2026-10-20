@@ -70,7 +70,7 @@ def inventory_studio(account=ACCOUNT, state=None):
             # immediately enclosing card contains the caption; never scan
             # unrelated page text for video IDs.
             links=page.locator('a[href*="/video/"]').evaluate_all(
-                "(xs)=>xs.map(a=>({href:a.href,text:(a.closest('article')?.innerText||a.closest('[data-e2e]')?.innerText||a.innerText||'').slice(0,900)}))"
+                "(xs)=>xs.map(a=>({href:a.href,text:(a.innerText||a.getAttribute('aria-label')||'').slice(0,900)}))"
             )
             for link in links:
                 match=re.search(r"/video/(\d{12,25})(?:[/?#]|$)",str(link.get("href") or ""))
