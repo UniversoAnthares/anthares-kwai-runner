@@ -144,6 +144,30 @@ def trusted_workflow_event(event, ref, event_path):
         return False
 
 
+
+def request_followup_if_pending(control):
+    """After an actual confirmed publication, expose an opt-in continuation to CI.
+
+    Neon remains authoritative: this requests at most one future workflow, never
+    initiates an unfenced upload. Delay is enforced by the separate followup job.
+    """
+    try:
+        status=q.qcall("status",control)
+        count=(status.get("count") or {}) if status.get("ok") else {}
+        pending=int(count.get("queued",0))
+        if pending<=0:
+            print("CORTES_TIKTOK_AUTOCHAIN=IDLE",flush=True)
+            return
+        output=os.getenv("GITHUB_OUTPUT","")
+        if output:
+            with open(output,"a",encoding="utf-8") as handle:
+                handle.write("queue_followup=true\n")
+        print("CORTES_TIKTOK_AUTOCHAIN_QUEUED="+str(pending),flush=True)
+    except (ValueError,TypeError,OSError,q.SafeStop):
+        print("CORTES_TIKTOK_AUTOCHAIN_STATUS_UNAVAILABLE",flush=True)
+
+
+
 def main():
     if os.getenv("CORTES_TIKTOK_HOSTED_DRY_RUN")=="1":
         print("CORTES_TIKTOK_HOSTED_DRY_RUN_NO_PUBLISH",flush=True)
@@ -175,6 +199,7 @@ def main():
     if mode=="reconcile":
         if matching:
             q.finish(job,generation,matching,control)
+            request_followup_if_pending(control)
         else:
             print("CORTES_TIKTOK_UNCERTAIN_REQUIRES_REVIEW segment="+sid,flush=True)
         return 0
@@ -200,6 +225,7 @@ def main():
                 if verified!=remote:
                     raise q.SafeStop("TIKTOK_PROFILE_MARKER_CONFIRMATION_MISMATCH")
             q.finish(job,generation,remote,control)
+            request_followup_if_pending(control)
             return 0
         except Exception:
             try:
