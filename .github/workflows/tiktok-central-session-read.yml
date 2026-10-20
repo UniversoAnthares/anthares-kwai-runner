@@ -11,7 +11,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Read protected TikTok session and queue summary through approved OIDC
@@ -72,7 +72,7 @@ jobs:
                   if m: strong.add(m.group(1).lower())
                   hu=hydration_user(page)
                   if hu: strong.add(hu)
-              print('STRONG_ACCOUNT_CANDIDATES='+json.dumps(sorted(strong)))
+              print('STRONG_ACCOUNT_EVIDENCE='+json.dumps({'expected_found':expected in strong,'candidate_count':len(strong)},sort_keys=True))
               if expected not in strong: raise RuntimeError('STRONG_TIKTOK_IDENTITY_NOT_PROVEN')
               print('STRONG_TIKTOK_IDENTITY_PROVEN='+expected)
               ctx.close(); browser.close()
@@ -81,5 +81,5 @@ jobs:
           vids=tw.inventory_profile_videos(expected)
           ids=sorted({str(v.get('id') or '') for v in vids if str(v.get('id') or '')})
           print('PROFILE_BASELINE_COUNT='+str(len(ids)))
-          print('PROFILE_BASELINE_IDS='+json.dumps(ids))
+          print('PROFILE_BASELINE_PRESENT='+str(bool(ids)))
           PY
