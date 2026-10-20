@@ -122,12 +122,20 @@ async function getNext(){
 
  // Keep an uncertain upload isolated for reconciliation without starving safe queued clips.
  const uncertain=await pool.query('SELECT * FROM cortes_tiktok_publications WHERE status IN (\'uncertain\',\'started\') ORDER BY created_at LIMIT 1');
- const cadence=await pool.query("SELECT COUNT(*) FILTER (WHERE status='confirmed' AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS daily, MAX(confirmed_at) AS last_post FROM cortes_tiktok_publications");
+ const cadence=await pool.query("SELECT COUNT(*) FILTER (WHERE status='confirmed' AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS daily, MAX(confirmed_at) AS last_post, COUNT(*) FILTER (WHERE status='queued')::int AS pending FROM cortes_tiktok_publications");
  const daily=Number(cadence.rows[0]?.daily||0);
+ const pending=Number(cadence.rows[0]?.pending||0);
  const last=cadence.rows[0]?.last_post;
- const paced=Boolean(last&&Date.now()-new Date(last).getTime()<600000);
+ // Same-day 23:45 local target, with a five-minute safe interval floor and
+ // ten-minute preferred cadence. Never fabricate a confirmation to meet it.
+ const boundary=await pool.query("SELECT ((now() AT TIME ZONE 'America/Campo_Grande')::date + time '23:45:00') AT TIME ZONE 'America/Campo_Grande' AS deadline_utc");
+ const remaining=Math.max(0,new Date(boundary.rows[0].deadline_utc).getTime()-Date.now());
+ const dueSeconds=Math.floor(Math.max(0,remaining-120000)/Math.max(1,pending)/1000);
+ const paceSeconds=Math.max(300,Math.min(600,dueSeconds));
+ if(pending>0&&remaining<pending*300000)console.warn('CORTES_SAME_DAY_CAPACITY_RISK platform=tiktok pending='+pending+' window_seconds='+Math.floor(remaining/1000));
+ const paced=Boolean(last&&Date.now()-new Date(last).getTime()<paceSeconds*1000);
 
- // Preserve the 100/day cap and ten-minute cadence. An ambiguous earlier upload
+ // Preserve the 100/day cap and adaptive same-day safe cadence. An ambiguous earlier upload
  // never returns to the publish state; the 29 confirmed-safe queued clips can proceed.
  if(daily<100&&!paced){
   const q=await pool.query(
