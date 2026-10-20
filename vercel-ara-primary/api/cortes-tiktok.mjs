@@ -1,0 +1,175 @@
+// Independent Neon queue for CORTES TikTok, isolated from the Kwai publication ledger.
+// Two Github OIDC roles: Anthares Clipper produces, public kwai-runner consumes.
+// No static credentials travel between repos, and no unverified upload is retried.
+import crypto from 'node:crypto';
+import {Pool} from 'pg';
+
+const URL='https://anthares-remote-primary.vercel.app/api/cortes-tiktok';
+const AUDIENCE=URL;
+const CLIPPER='UniversoAnthares/anthares-clipper';
+const RUNNER='UniversoAnthares/anthares-kwai-runner';
+const SOURCE_WF='anthares-tiktok-owned-youtube.yml';
+const CONSUMER_WF='cortes-tiktok-publisher.yml';
+const TARGET='tiktok:universo.anthares';
+const pool=new Pool({connectionString:process.env.DATABASE_URL,max:3,ssl:{rejectUnauthorized:false}});
+let ready=false;
+let jwks=null;
+let jwksUntil=0;
+
+function reply(res,status,data){res.statusCode=status;res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');res.end(JSON.stringify(data));}
+function fail(msg){throw new Error(msg);}
+function clean(v){return String(v||'').trim();}
+function validTime(v){const n=Number(v);return Number.isInteger(n)&&n>=0&&n<=86400*120?n:null;}
+function digest(v){return crypto.createHash('sha256').update(v).digest('hex');}
+function body(req){if(req.body&&typeof req.body==='object'&&!Buffer.isBuffer(req.body))return req.body;if(typeof req.body==='string'){try{return JSON.parse(req.body)}catch{}}return{};}
+function token(req){const m=/^Bearer\s+(.+)$/i.exec(String(req.headers.authorization||''));return m?m[1]:'';}
+
+async function githubRole(req) {
+ const jwt=token(req);
+ if(jwt.length<200||jwt.length>16000)return'';
+ const fragments=jwt.split('.');
+ if(fragments.length!==3)return'';
+ let header,claims;
+ try{header=JSON.parse(Buffer.from(fragments[0],'base64url').toString('utf8'));claims=JSON.parse(Buffer.from(fragments[1],'base64url').toString('utf8'));}catch{return'';}
+ if(header.alg!=='RS256'||!/^[A-Za-z0-9_.-]{1,200}$/.test(header.kid||''))return'';
+ const now=Math.floor(Date.now()/1000),aud=Array.isArray(claims.aud)?claims.aud:[claims.aud];
+ if(claims.iss!=='https://token.actions.githubusercontent.com'||!aud.includes(AUDIENCE)||claims.ref!=='refs/heads/main')return'';
+ if(!Number.isFinite(claims.exp)||claims.exp<=now||!Number.isFinite(claims.iat)||claims.iat>now+60)return'';
+ if(claims.nbf!==undefined&&Number(claims.nbf)>now+60)return'';
+ if(!['schedule','push','workflow_dispatch'].includes(claims.event_name))return'';
+ let role='', wf='';
+ if(claims.repository===CLIPPER){role='producer';wf=CLIPPER+'/.github/workflows/'+SOURCE_WF+'@refs/heads/main';}
+ if(claims.repository===RUNNER){role='consumer';wf=RUNNER+'/.github/workflows/'+CONSUMER_WF+'@refs/heads/main';}
+ if(!role||String(claims.job_workflow_ref||claims.workflow_ref||'')!==wf)return'';
+ try{
+   if(!jwks||Date.now()>jwksUntil){
+     const cfg=await fetch('https://token.actions.githubusercontent.com/.well-known/openid-configuration',{signal:AbortSignal.timeout(7500)});
+     if(!cfg.ok)return'';
+     const meta=await cfg.json();
+     if(!String(meta.jwks_uri||'').startsWith('https://token.actions.githubusercontent.com/'))return'';
+     const keys=await fetch(meta.jwks_uri,{signal:AbortSignal.timeout(7500)});
+     if(!keys.ok)return'';
+     jwks=await keys.json();jwksUntil=Date.now()+300000;
+   }
+   const k=(jwks.keys||[]).find(x=>x.kid===header.kid&&x.kty==='RSA'&&(!x.alg||x.alg==='RS256'));
+   if(!k)return'';
+   const pub=crypto.createPublicKey({key:k,format:'jwk'});
+   return crypto.verify('RSA-SHA256',Buffer.from(fragments[0]+'.'+fragments[1]),pub,Buffer.from(fragments[2],'base64url'))?role:'';
+ }catch{return'';}
+}
+
+async function schema(){
+ if(ready)return;
+ await pool.query(
+ 'CREATE TABLE IF NOT EXISTS cortes_tiktok_publications ('+
+ 'id text PRIMARY KEY, source_id text NOT NULL, segment_id text NOT NULL UNIQUE,'+
+ 'source_start integer NOT NULL, source_end integer NOT NULL, media_url text NOT NULL,'+
+ 'duration_seconds real NOT NULL, title text NOT NULL, callback_url text NOT NULL,'+
+ 'callback_token text NOT NULL, attachment_id bigint NOT NULL,'+
+ 'status text NOT NULL DEFAULT \'queued\', lease_generation integer NOT NULL DEFAULT 0,'+
+ 'lease_until timestamptz, publication_started_at timestamptz, remote_id text,'+
+ 'confirmed_at timestamptz, last_error text, created_at timestamptz NOT NULL DEFAULT now(),'+
+ 'updated_at timestamptz NOT NULL DEFAULT now(),'+
+ 'CONSTRAINT cortes_tiktok_source_bounds CHECK(source_end>source_start),'+
+ 'CONSTRAINT cortes_tiktok_state CHECK(status IN (\'queued\',\'leased\',\'started\',\'uncertain\',\'confirmed\'))'+
+ ')');
+ await pool.query('CREATE INDEX IF NOT EXISTS cortes_tiktok_queue_ix ON cortes_tiktok_publications(status,created_at)');
+ ready=true;
+}
+
+function allowedMedia(raw){
+ try{const u=new URL(raw);return u.protocol==='https:'&&['anthares.us','www.anthares.us'].includes(u.hostname)&&u.username===''&&u.password==='';}catch{return false;}
+}
+function parseSourceSegment(sid,source){
+ const rx=/^g[0-9]+:([A-Za-z0-9_-]{6,60}):([0-9]+):([0-9]+)$/;
+ const m=rx.exec(sid);
+ if(!m||m[1]!==source)return null;
+ const start=validTime(m[2]),end=validTime(m[3]);
+ return start!==null&&end!==null&&end>start?{start,end}:null;
+}
+function normalizeEnqueue(b){
+ const source=clean(b.source_id),sid=clean(b.segment_id),limits=parseSourceSegment(sid,source);
+ const dur=Number(b.duration_seconds),callback=clean(b.callback_url),secret=clean(b.callback_token);
+ const attachment=Number(b.attachment_id),media=clean(b.media_url),title=clean(b.title);
+ if(!limits||!Number.isFinite(dur)||dur<30||dur>90)fail('invalid_segment');
+ if(!allowedMedia(media))fail('invalid_media_origin');
+ if(callback!=='https://anthares.us/wp-json/anthares/v1/cortes/clip-network-callback')fail('invalid_callback_origin');
+ if(secret.length<32||secret.length>180||!/^[A-Za-z0-9]+$/.test(secret))fail('invalid_callback_proof');
+ if(!Number.isSafeInteger(attachment)||attachment<1)fail('invalid_attachment');
+ if(title.length<8||title.length>260)fail('invalid_title');
+ const id='tt-'+digest(source+'|'+sid).slice(0,32);
+ return{id,source,sid,start:limits.start,end:limits.end,media,dur,title,callback,secret,attachment};
+}
+async function enqueue(b){
+ const x=normalizeEnqueue(b);
+ await schema();
+ const q=await pool.query('INSERT INTO cortes_tiktok_publications'+
+ '(id,source_id,segment_id,source_start,source_end,media_url,duration_seconds,title,callback_url,callback_token,attachment_id)'+
+ ' VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(segment_id) DO NOTHING RETURNING id',
+ [x.id,x.source,x.sid,x.start,x.end,x.media,x.dur,x.title,x.callback,x.secret,x.attachment]);
+ const status=await pool.query('SELECT id,status,remote_id FROM cortes_tiktok_publications WHERE segment_id=$1',[x.sid]);
+ return{ok:true,created:q.rowCount===1,job:status.rows[0]||null};
+}
+async function reaper(){
+ await schema();
+ await pool.query('UPDATE cortes_tiktok_publications SET status=\'queued\',lease_until=NULL,updated_at=now() WHERE status=\'leased\' AND lease_until<now() AND publication_started_at IS NULL');
+ await pool.query('UPDATE cortes_tiktok_publications SET status=\'uncertain\',lease_until=NULL,updated_at=now() WHERE status IN (\'leased\',\'started\') AND lease_until<now() AND publication_started_at IS NOT NULL');
+}
+async function getNext(){
+ await reaper();
+ const uncertain=await pool.query('SELECT * FROM cortes_tiktok_publications WHERE status IN (\'uncertain\',\'started\') ORDER BY created_at LIMIT 1');
+ if(uncertain.rowCount)return{ok:true,job:uncertain.rows[0],mode:'reconcile'};
+ const concurrent=await pool.query('SELECT id FROM cortes_tiktok_publications WHERE status=\'leased\' AND lease_until>now() LIMIT 1');
+ if(concurrent.rowCount)return{ok:true,job:null,mode:'busy'};
+ const q=await pool.query(
+ 'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)'+
+ ' UPDATE cortes_tiktok_publications p SET status=\'leased\',lease_generation=p.lease_generation+1,'+
+ 'lease_until=now()+interval \'8 minutes\',updated_at=now() FROM candidate WHERE p.id=candidate.id RETURNING p.*');
+ return{ok:true,job:q.rows[0]||null,mode:q.rowCount?'publish':'idle'};
+}
+async function start(b){
+ await schema();
+ const id=clean(b.id),gen=Number(b.lease_generation);
+ const r=await pool.query('UPDATE cortes_tiktok_publications SET status=\'started\',publication_started_at=now(),updated_at=now()'+
+ ' WHERE id=$1 AND status=\'leased\' AND lease_generation=$2 AND lease_until>now() RETURNING id,status,lease_generation',[id,gen]);
+ return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'stale_fence'};
+}
+async function finish(b){
+ await schema();
+ const id=clean(b.id),gen=Number(b.lease_generation),remote=clean(b.remote_id);
+ if(!/^[0-9]{12,25}$/.test(remote))return{ok:false,error:'invalid_tiktok_remote_id'};
+ const r=await pool.query('UPDATE cortes_tiktok_publications SET status=\'confirmed\',remote_id=$3,'+
+ 'confirmed_at=now(),lease_until=NULL,updated_at=now()'+
+ ' WHERE id=$1 AND lease_generation=$2 AND status IN (\'started\',\'uncertain\') RETURNING id,status,remote_id',[id,gen,remote]);
+ return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'stale_or_already_confirmed'};
+}
+async function markFail(b){
+ await schema();
+ const id=clean(b.id),gen=Number(b.lease_generation);
+ const reason=clean(b.error).slice(0,100);
+ const r=await pool.query('UPDATE cortes_tiktok_publications SET status=CASE WHEN publication_started_at IS NULL THEN \'queued\' ELSE \'uncertain\' END,'+
+ 'lease_until=NULL,last_error=$3,updated_at=now() WHERE id=$1 AND lease_generation=$2'+
+ ' AND status IN (\'leased\',\'started\') RETURNING id,status',[id,gen,reason]);
+ return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'stale_fence'};
+}
+export default async function handler(req,res){
+ try{
+  const u=new URL(req.url,'https://local.invalid'),action=u.searchParams.get('action')||'';
+  if(req.method==='GET'&&action==='health'){await schema();return reply(res,200,{ok:true,service:'cortes-tiktok-neon',isolation:'separate_from_kwai',fencing:true});}
+  const role=await githubRole(req);
+  if(!role)return reply(res,401,{ok:false,error:'unauthorized_oidc'});
+  const b=body(req);
+  if(req.method==='POST'&&action==='enqueue'&&role==='producer')return reply(res,200,await enqueue(b));
+  if(req.method==='GET'&&action==='status'){await schema();const q=await pool.query('SELECT status,count(*)::int AS count FROM cortes_tiktok_publications GROUP BY status');return reply(res,200,{ok:true,count:Object.fromEntries(q.rows.map(x=>[x.status,x.count]))});}
+  if(role==='consumer'){
+   let result;
+   if(req.method==='POST'&&action==='claim')result=await getNext();
+   else if(req.method==='POST'&&action==='start')result=await start(b);
+   else if(req.method==='POST'&&action==='confirm')result=await finish(b);
+   else if(req.method==='POST'&&action==='fail')result=await markFail(b);
+   else return reply(res,404,{ok:false,error:'not_found'});
+   return reply(res,result.ok?200:409,result);
+  }
+  return reply(res,403,{ok:false,error:'role_forbidden'});
+ }catch(e){console.error('cortes-tiktok',String(e?.message||e).slice(0,120));return reply(res,500,{ok:false,error:'queue_internal_failure'});}
+}
