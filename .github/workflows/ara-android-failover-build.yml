@@ -1,0 +1,58 @@
+name: ARA Android failover APK acceptance
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android-agent/app/src/main/java/us/anthares/agent/RemoteControlLoop.java'
+      - '.github/workflows/ara-android-failover-build.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ara-android-failover-apk-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-agent-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Android endpoint contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'BACKUP="https://anthares-remote-secondary.vercel.app"' android-agent/app/src/main/java/us/anthares/agent/RemoteControlLoop.java
+          ! grep -F 'BACKUP="https://anthares-ara-vercel-reserve.vercel.app"' android-agent/app/src/main/java/us/anthares/agent/RemoteControlLoop.java
+          python3 - <<'PY'
+          from pathlib import Path
+          namespace = {'__file__': str(Path('tests/test_ara_endpoint_contracts.py').resolve())}
+          code = Path('tests/test_ara_endpoint_contracts.py').read_text()
+          exec(compile(code, 'tests/test_ara_endpoint_contracts.py', 'exec'), namespace)
+          for name, fn in namespace.items():
+              if name.startswith('test_') and callable(fn):
+                  fn()
+                  print('PASS', name)
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Assemble debug agent (no emulator and no installation)
+        working-directory: android-agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace :app:assembleDebug
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          unzip -t app/build/outputs/apk/debug/app-debug.apk | tail -1
+          echo 'ARA_ANDROID_FAILOVER_APK_BUILD=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'PHYSICAL_INSTALLATION=NOT_ATTEMPTED' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ara-android-control-failover-debug
+          path: android-agent/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+          if-no-files-found: error
