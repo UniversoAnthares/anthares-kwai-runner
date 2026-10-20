@@ -67,13 +67,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for i in $(seq 1 6); do
-            curl --fail --silent --show-error --max-time 10 'https://anthares-ara-mcp.anthares1.workers.dev/health' -o "$RUNNER_TEMP/mcp-after.json" || true
-            if jq -e '.ok == true and .oauth == true and .mcp == true and .oauth_owner_code_mode == "github_owner_identity" and .control_ready == true' "$RUNNER_TEMP/mcp-after.json" >/dev/null 2>&1; then break; fi
-            sleep 3
+          # Cloudflare may briefly serve the previous Worker after deploy.
+          # Do not treat old-but-healthy OAuth as the new version being ready.
+          expected='.ok == true and .oauth == true and .mcp == true and .oauth_owner_code_mode == "github_owner_identity" and .control_ready == true and .mcp_server_version == "1.1.0" and (.mcp_delegation_tools | type == "array") and ([.mcp_delegation_tools[]] | sort) == (["run_claude_code","get_claude_code_status","get_claude_code_result"] | sort)'
+          confirmed=0
+          for i in $(seq 1 12); do
+            if curl --fail --silent --show-error --max-time 10 'https://anthares-ara-mcp.anthares1.workers.dev/health' -o "$RUNNER_TEMP/mcp-after.json" && jq -e "$expected" "$RUNNER_TEMP/mcp-after.json" >/dev/null 2>&1; then
+              confirmed=1
+              echo "ANTHARES_CLAUDE_DEPLOY_READY_ON_ATTEMPT=$i"
+              break
+            fi
+            sleep 2
           done
-          jq -e '.ok == true and .oauth == true and .mcp == true and .oauth_owner_code_mode == "github_owner_identity" and .control_ready == true' "$RUNNER_TEMP/mcp-after.json" >/dev/null
-          jq -e '.mcp_server_version == "1.1.0" and ([.mcp_delegation_tools[]] | sort) == (["run_claude_code","get_claude_code_status","get_claude_code_result"] | sort)' "$RUNNER_TEMP/mcp-after.json" >/dev/null
+          if [[ "$confirmed" != 1 ]]; then
+            jq '{ok, oauth, mcp, oauth_owner_code_mode, control_ready, mcp_server_version, mcp_delegation_tools}' "$RUNNER_TEMP/mcp-after.json" 2>/dev/null || true
+            echo ANTHARES_CLAUDE_DEPLOY_VERSION_NOT_VISIBLE
+            exit 1
+          fi
           echo ANTHARES_CLAUDE_NEW_TOOLS_LIVE=PASS
           status="$(curl -sS -o "$RUNNER_TEMP/anon-mcp.json" -w '%{http_code}' --max-time 12 -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' 'https://anthares-ara-mcp.anthares1.workers.dev/mcp')"
           test "$status" = 401 || { echo "UNEXPECTED_ANON_MCP_HTTP=$status"; exit 1; }
