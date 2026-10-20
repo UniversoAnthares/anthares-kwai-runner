@@ -20,35 +20,45 @@ def dismiss_known_dialog(page):
 
 
 def set_public(page):
-    text = t.page_text(page, 22000)
-    if re.search(r"\b(Todos|Everyone|Público|Public)\b", text, re.I):
-        return True
+    """Confirm the selected privacy control, never page-wide text.
 
-    for current in ("Seguidores", "Followers", "Amigos", "Friends", "Somente você", "Apenas você", "Only you"):
+    Seeing the word 'Public' in a Post button or hidden menu is insufficient.
+    A restricted selection must be changed and then checked again.
+    """
+    public = ("Todos", "Everyone", "Público", "Public")
+    restricted = ("Somente você", "Apenas você", "Only you",
+                  "Amigos", "Friends", "Seguidores", "Followers")
+
+    def visible(label):
         try:
-            loc = page.get_by_text(current, exact=True)
-            if loc.first.is_visible(timeout=700):
-                loc.first.click(timeout=8000)
-                time.sleep(1)
-                break
+            node=page.get_by_text(label,exact=True).first
+            return node if node.is_visible(timeout=650) else None
         except Exception:
-            pass
+            return None
 
-    for target in ("Todos", "Everyone", "Público", "Public"):
-        try:
-            loc = page.get_by_text(target, exact=True)
-            if loc.first.is_visible(timeout=900):
-                loc.first.click(timeout=8000)
-                time.sleep(1)
-                return True
-        except Exception:
-            pass
+    active_restricted=next((node for label in restricted if (node:=visible(label))),None)
+    if active_restricted is not None:
+        active_restricted.click(timeout=8000)
+        time.sleep(1)
+        option=None
+        for label in public:
+            try:
+                item=page.get_by_role("option",name=label,exact=True).first
+                if item.is_visible(timeout=650):
+                    option=item
+                    break
+            except Exception:
+                pass
+            option=visible(label)
+            if option is not None:break
+        if option is None:return False
+        option.click(timeout=8000)
+        time.sleep(1)
 
-    text = t.page_text(page, 22000)
-    if re.search(r"Seguidores|Followers|Somente você|Apenas você|Only you|Amigos|Friends", text, re.I):
-        return False
-    return None
-
+    # Exact, visible selected text is required. Reject ambiguous mixed states.
+    is_public=any(visible(label) is not None for label in public)
+    is_restricted=any(visible(label) is not None for label in restricted)
+    return True if is_public and not is_restricted else False
 
 _original_wait = t.wait_upload_ready
 
