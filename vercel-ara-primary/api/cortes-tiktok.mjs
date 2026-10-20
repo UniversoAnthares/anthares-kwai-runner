@@ -139,7 +139,9 @@ async function getNext(){
  // never returns to the publish state; the 29 confirmed-safe queued clips can proceed.
  if(daily<100&&!paced){
   const q=await pool.query(
-   'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)'+
+   'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' '+
+   'ORDER BY CASE WHEN source_id=(SELECT source_id FROM cortes_tiktok_publications WHERE status=\'confirmed\' ORDER BY confirmed_at DESC NULLS LAST LIMIT 1) THEN 1 ELSE 0 END,created_at,id '+
+   'FOR UPDATE SKIP LOCKED LIMIT 1)'+
    ' UPDATE cortes_tiktok_publications p SET status=\'leased\',lease_generation=p.lease_generation+1,'+
    'lease_until=now()+interval \'8 minutes\',updated_at=now() FROM candidate WHERE p.id=candidate.id RETURNING p.*');
   if(q.rowCount)return{ok:true,job:q.rows[0],mode:'publish'};
