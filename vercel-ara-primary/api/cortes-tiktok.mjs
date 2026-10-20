@@ -145,7 +145,7 @@ async function getNext(){
  if(daily<100&&!paced){
   const q=await pool.query(
    'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' '+
-   'ORDER BY CASE WHEN source_id=(SELECT source_id FROM cortes_tiktok_publications WHERE status=\'confirmed\' ORDER BY confirmed_at DESC NULLS LAST LIMIT 1) THEN 1 ELSE 0 END,created_at,id '+
+   'ORDER BY CASE WHEN source_id=(SELECT source_id FROM cortes_tiktok_publications WHERE status=\'queued\' ORDER BY created_at DESC,id DESC LIMIT 1) THEN 0 ELSE 1 END,created_at,id '+
    'FOR UPDATE SKIP LOCKED LIMIT 1)'+
    ' UPDATE cortes_tiktok_publications p SET status=\'leased\',lease_generation=p.lease_generation+1,'+
    'lease_until=now()+interval \'8 minutes\',updated_at=now() FROM candidate WHERE p.id=candidate.id RETURNING p.*');
