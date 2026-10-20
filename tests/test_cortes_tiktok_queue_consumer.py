@@ -96,6 +96,12 @@ class TikTokQueueContract(unittest.TestCase):
         finally:
             c.callback, c.qcall = orig_callback, orig_qcall
 
+    def test_worker_uses_short_lived_oidc(self):
+        from unittest.mock import patch
+        with patch.object(c, "oidc", return_value={"Authorization": "Bearer scoped"}) as mint:
+            self.assertEqual(c.worker_auth()["Authorization"], "Bearer scoped")
+            mint.assert_called_once_with("anthares-render-worker")
+
     def test_invalid_remote_id_blocks_callback(self):
         orig_callback = c.callback
         try:
