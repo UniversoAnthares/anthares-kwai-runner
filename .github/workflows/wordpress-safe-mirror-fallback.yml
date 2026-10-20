@@ -1,5 +1,9 @@
 name: WordPress Safe Mirror Fallback
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/wordpress-safe-mirror-fallback.yml'
   workflow_dispatch:
     inputs:
       ref:
@@ -13,7 +17,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: wordpress-safe-mirror-${{ inputs.ref }}
+  group: wordpress-safe-mirror-${{ inputs.ref || 'main' }}
   cancel-in-progress: false
 jobs:
   mirror:
@@ -39,6 +43,6 @@ jobs:
         env:
           GITHUB_READ_TOKEN: ${{ secrets.WORDPRESS_MIRROR_GITHUB_READ_TOKEN }}
           GITLAB_WRITE_TOKEN: ${{ secrets.WORDPRESS_MIRROR_GITLAB_WRITE_TOKEN }}
-          MIRROR_REF: ${{ inputs.ref }}
-          MIRROR_FAULT: ${{ inputs.fault }}
+          MIRROR_REF: ${{ inputs.ref || 'main' }}
+          MIRROR_FAULT: ${{ inputs.fault || '' }}
         run: node cli.mjs sync "$MIRROR_REF" "$MIRROR_FAULT"
