@@ -7,6 +7,7 @@ on:
       - '.github/workflows/cortes-tiktok-publisher.yml'
       - 'tools/cortes_tiktok_queue_consumer.py'
       - 'tests/test_cortes_tiktok_queue_consumer.py'
+      - 'tools/tiktok_upload_readonly_diagnostic.py'
       - 'vercel-ara-primary/api/cortes-tiktok.mjs'
       - 'vercel-ara-primary/api/router-entry.mjs'
       - 'vercel-ara-primary/vercel.json'
@@ -53,6 +54,9 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check -q playwright requests cryptography
           python3 -m playwright install chromium
+      - name: Read-only TikTok upload page diagnostic (once on push)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: python3 -u tools/tiktok_upload_readonly_diagnostic.py
       - name: Publish or reconcile at most one queued TikTok short (main only)
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
