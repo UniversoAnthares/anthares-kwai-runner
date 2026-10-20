@@ -45,6 +45,16 @@ jobs:
             -C "$RUNNER_TEMP/anthares-wp-ci"
           test -f "$RUNNER_TEMP/anthares-wp-ci/anthares-ai-hub/deploy/anthares-secrets-runtime-bridge.php"
           test -f "$RUNNER_TEMP/anthares-wp-ci/anthares-ai-hub/tests/secrets-mu-contract-smoke.php"
+          # The mirror's GitLab-only CI commits legitimately differ from GitHub
+          # commits; require the latest reviewed Assistente contract in the tree.
+          test -f "$RUNNER_TEMP/anthares-wp-ci/anthares-assistente-v1.6.3/includes/contextual-knowledge.php"
+          grep -Fq 'Leituras adicionais das Gestões:' "$RUNNER_TEMP/anthares-wp-ci/anthares-assistente-v1.6.3/includes/contextual-knowledge.php" || {
+            echo 'WORDPRESS_CI_ASSISTENTE_MIRROR_STALE'; exit 1;
+          }
+          grep -Fq 'Flag counts only' "$RUNNER_TEMP/anthares-wp-ci/tests/assistant-contextual-smoke.php" || {
+            echo 'WORDPRESS_CI_ASSISTENTE_QA_STALE'; exit 1;
+          }
+          echo 'WORDPRESS_CI_ASSISTENTE_MIRROR_LATEST=PASS'
           echo 'WORDPRESS_CI_MIRRORED_SOURCE=PASS'
       - name: Run canonical WordPress PHP contract and regression suite
         id: php
