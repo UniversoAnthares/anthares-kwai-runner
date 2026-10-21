@@ -127,7 +127,7 @@ start_vnc() {
 
 start_novnc() {
   log "starting loopback-only noVNC websocket proxy"
-  websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 >/tmp/novnc.log 2>&1 &
+  websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900 >/tmp/novnc.log 2>&1 &
   NOVNC_PID=$!
 }
 
