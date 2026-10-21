@@ -54,6 +54,32 @@ class BufferPinnedTests(unittest.TestCase):
             self.assertTrue(caption.splitlines()[0].endswith(" ● Universo Anthares"))
             self.assertIn("www.anthares.us",caption)
 
+    def test_recover_board_from_own_sent_pins_when_buffer_metadata_fails(self):
+        ch=b.PINNED_CHANNELS["pinterest"][0]
+        def fake(query,token=None):
+            if "channel(input:" in query:
+                raise b.BufferBlocked("BUFFER_HTTP_500")
+            if "organizations" in query:
+                return {"account":{"organizations":[{"id":"org-1"}]}}
+            return {"posts":{"edges":[{"node":{"channelId":ch,
+                "metadata":{"board":{"serviceId":"123456","name":"Universo Anthares",
+                                      "url":"https://pinterest.com/lucasyahn/anthares/"}}}}]}}
+        with patch.dict(os.environ,{"BUFFER_PINTEREST_BOARD_ID":""}), patch.object(b,"api",side_effect=fake):
+            self.assertEqual(b.resolve_pinterest_board(ch),"123456")
+
+    def test_board_history_never_accepts_another_channel(self):
+        ch=b.PINNED_CHANNELS["pinterest"][0]
+        def fake(query,token=None):
+            if "channel(input:" in query:
+                raise b.BufferBlocked("BUFFER_HTTP_500")
+            if "organizations" in query:
+                return {"account":{"organizations":[{"id":"org-1"}]}}
+            return {"posts":{"edges":[{"node":{"channelId":"attacker-other",
+                "metadata":{"board":{"serviceId":"123456"}}}}]}}
+        with patch.object(b,"api",side_effect=fake):
+            with self.assertRaisesRegex(b.BufferBlocked,"BOARD_SELECTION_REQUIRED"):
+                b.resolve_pinterest_board(ch)
+
     def test_select_single_board_or_explicit_board(self):
         choices=[{"serviceId":"1234","name":"Arte"},
                  {"serviceId":"5678","name":"Literatura"}]
