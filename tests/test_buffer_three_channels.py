@@ -78,8 +78,7 @@ class BufferPinnedTests(unittest.TestCase):
                                      "RUNNER_ENVIRONMENT":"github-hosted",
                                      "RUNNER_OS":"Linux"}), \
              patch.object(b,"channels",return_value=[c]), \
-             patch.object(b,"pinterest_boards",return_value=[
-                 {"serviceId":"5678","name":"Literatura"}]), \
+             patch.object(b,"resolve_pinterest_board",return_value="5678"), \
              patch.object(b,"api",side_effect=fake):
             result=b.schedule(master(platform))
         self.assertEqual(result["status"],"SCHEDULED_IN_BUFFER")
