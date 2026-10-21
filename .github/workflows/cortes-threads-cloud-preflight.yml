@@ -1,0 +1,33 @@
+name: CORTES Threads cloud identity preflight
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/cortes-threads-cloud-preflight.yml
+permissions:
+  contents: read
+jobs:
+  authenticated-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify official Threads API identity; never publish
+        env:
+          THREADS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import sys,os,json,urllib.request,urllib.error
+          token=os.environ.get('THREADS_TOKEN','').strip()
+          if len(token)<20:
+              print('THREADS_CLOUD=AUTH_MISSING; LOCAL_PUBLISHER_UNCHANGED');sys.exit(2)
+          request=urllib.request.Request('https://graph.threads.net/v1.0/me?fields=id,username',headers={'Authorization':'Bearer '+token,'User-Agent':'CORTES-Threads-ReadOnly/1'})
+          try:
+              with urllib.request.urlopen(request,timeout=25) as r: profile=json.load(r)
+          except urllib.error.HTTPError as e:
+              print('THREADS_CLOUD=AUTH_HTTP_'+str(e.code));sys.exit(3)
+          except Exception as e:
+              print('THREADS_CLOUD=NETWORK_'+type(e).__name__);sys.exit(3)
+          if profile.get('username')!='universoanthares' or not profile.get('id'):
+              print('THREADS_CLOUD=IDENTITY_MISMATCH');sys.exit(4)
+          print('THREADS_CLOUD=READ_ONLY_AUTH_OK; PUBLICATION_NOT_TESTED; LOCAL_PUBLISHER_UNCHANGED')
+          PY
