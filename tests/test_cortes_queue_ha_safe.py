@@ -26,7 +26,7 @@ class SafeFailover(unittest.TestCase):
         def open_(request,timeout):
             sent.append(request.full_url)
             return FakeReply({"ok":True,"deduped":False,"job":{"id":"job-1"}})
-        with patch.object(ha,"is_healthy",side_effect=lambda p:p==ha.PROVIDERS[1]):
+        with patch.object(ha,"is_healthy",side_effect=lambda p:"cortesqueue.compute" in p):
             with patch.object(ha.urllib.request,"urlopen",side_effect=open_):
                 r=ha.post("enqueue",{"id":"job-1"},self.token)
         self.assertTrue(r["ok"])
