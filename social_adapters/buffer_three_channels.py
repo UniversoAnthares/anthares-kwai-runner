@@ -70,6 +70,46 @@ def channels(token: str | None = None) -> list[dict]:
     return output
 
 
+
+def pinterest_boards(token: str | None = None) -> list[dict]:
+    """Read only Pinterest board IDs from the authenticated Buffer channel."""
+    channel_id = PINNED_CHANNELS["pinterest"][0]
+    query = ("query CortesPinterestBoards { channel(input: { id: " +
+             json.dumps(channel_id) +
+             " }) { id metadata { ... on PinterestMetadata { boards "
+             "{ serviceId name url } } } }")
+    entry = api(query, token).get("channel") or {}
+    if entry.get("id") != channel_id:
+        raise BufferBlocked("BUFFER_PINTEREST_CHANNEL_MISMATCH")
+    metadata = entry.get("metadata") or {}
+    rows = metadata.get("boards") or []
+    if not isinstance(rows, list):
+        raise BufferBlocked("BUFFER_PINTEREST_BOARD_RESPONSE_INVALID")
+    clean = []
+    for row in rows:
+        sid = str(row.get("serviceId") or "").strip()
+        name = str(row.get("name") or "").strip()
+        if sid and name and sid.isdigit():
+            clean.append({"serviceId": sid, "name": name,
+                          "url": str(row.get("url") or "")})
+    return clean
+
+
+def select_pinterest_board(boards: list[dict], explicit: str = "") -> str:
+    """No guessing across ambiguous boards; choose explicit or sole safe board."""
+    if explicit:
+        if any(str(row.get("serviceId")) == explicit for row in boards):
+            return explicit
+        raise BufferBlocked("PINTEREST_SELECTED_BOARD_NOT_OWNED_BY_ACCOUNT")
+    if len(boards) == 1:
+        return str(boards[0]["serviceId"])
+    preferred = [row for row in boards if
+                 str(row.get("name") or "").casefold() in
+                 ("universo anthares", "cortes universo anthares")]
+    if len(preferred) == 1:
+        return str(preferred[0]["serviceId"])
+    raise BufferBlocked("PINTEREST_BOARD_SELECTION_REQUIRED")
+
 def validate_channel(platform: str, channel_id: str, available: list[dict]) -> dict:
     if platform not in SERVICES:
         raise BufferBlocked("UNSUPPORTED_PLATFORM")
