@@ -1,0 +1,53 @@
+name: CORTES Queue - independent Cloudflare HA deploy
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare-cortes-queue-ha/**'
+      - '.github/workflows/cortes-queue-cloudflare-ha-deploy.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-queue-cloudflare-ha
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify no external input can select backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check cloudflare-cortes-queue-ha/src/index.mjs
+          grep -q 'cortesbackup.compute.c-14.us-east-1.aws.neon.tech' cloudflare-cortes-queue-ha/src/index.mjs
+          grep -q 'cortesqueue.compute.c-14.us-east-1.aws.neon.tech' cloudflare-cortes-queue-ha/src/index.mjs
+          ! grep -q 'vercel.app' cloudflare-cortes-queue-ha/src/index.mjs
+      - name: Publish independent Worker using existing Cloudflare credentials
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          cd cloudflare-cortes-queue-ha
+          npx --yes wrangler@4.43.0 deploy
+      - name: Confirm production Neon-backed queue and rejected anonymous write
+        shell: bash
+        run: |
+          set -euo pipefail
+          u='https://anthares-cortes-queue-ha.anthares1.workers.dev'
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 15 "$u/?action=health" -o /tmp/cortes-ha-health.json &&
+               node -e 'const r=require("/tmp/cortes-ha-health.json");process.exit(r.ok&&r.database_ok&&r.backend==="neon-cortes-linkedin"?0:1)'; then
+              break
+            fi
+            sleep 2
+          done
+          node -e 'const r=require("/tmp/cortes-ha-health.json");if(!r.ok||!r.database_ok)process.exit(2);console.log("CORTES_CLOUDFLARE_NEON_DB=PASS")'
+          code="$(curl -sS -o /tmp/cortes-ha-anonymous.json -w '%{http_code}' --max-time 20 -X POST -H 'Content-Type: application/json' -d '{}' "$u/?action=enqueue")"
+          test "$code" = '401'
+          echo 'CORTES_CLOUDFLARE_ANONYMOUS_WRITE_REJECTED=PASS'
