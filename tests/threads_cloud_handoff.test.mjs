@@ -45,3 +45,17 @@ test('cloud publisher cannot post on an automated push event',()=>{
  assert.match(src,/callControl\(jwt,'confirm'/);
  assert.match(src,/callControl\(jwt,'uncertain'/);
 });
+
+test('cloud selects oldest source-day with queued identity, not just today',()=>{
+ const src=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
+ assert.match(src,/queued_rows/);
+ assert.match(src,/\.sort\(\)/);
+ assert.match(src,/fetchCloudManifest\(\{day\}\)/);
+ assert.match(src,/NO_MATCHING_QUEUED_CLIP_IN_SOURCE_DAYS/);
+});
+test('unknown cloud submissions retain a durable reconciliation block',()=>{
+ const src=fs.readFileSync('infra/neon-cortes-threads-execution/index.mjs','utf8');
+ assert.match(src,/threads_cloud_unknown/);
+ assert.match(src,/cloud_inflight/);
+ assert.match(src,/local_pause_until=NULL/);
+});
