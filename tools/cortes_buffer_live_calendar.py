@@ -45,25 +45,15 @@ def main():
                   " paused="+str(paused).lower()+" times="+",".join(times),flush=True)
             channel_state[service]["weekly_schedule"].append(
                 {"day":day,"paused":paused,"times":times})
-    from social_adapters.buffer_three_channels import (pinterest_boards, historical_pinterest_boards,
-                                                      select_pinterest_board)
-    try:
-        boards=pinterest_boards()
-    except BufferBlocked as error:
-        if str(error) not in ("BUFFER_HTTP_500","BUFFER_GRAPHQL_OR_DATA_ERROR"):
-            raise
-        print("BUFFER_PINTEREST_BOARD_SOURCE=sent_post_history",flush=True)
-        boards=historical_pinterest_boards()
-    print("BUFFER_PINTEREST_BOARD_COUNT="+str(len(boards)),flush=True)
-    for row in boards:
-        print("BUFFER_PINTEREST_BOARD name="+str(row["name"])[:70]+
-              " board_id="+str(row["serviceId"]),flush=True)
-    try:
-        selected=select_pinterest_board(boards)
-        print("BUFFER_PINTEREST_BOARD_SELECTED="+selected,flush=True)
-    except BufferBlocked as exc:
-        print("BUFFER_PINTEREST_BOARD_SELECTION="+str(exc),flush=True)
-    channel_state["pinterest"]["boards"]=boards
+    from social_adapters.buffer_three_channels import (
+        resolve_pinterest_board, PINNED_CHANNELS, PINTEREST_PUBLIC_BOARD_ID)
+    selected=resolve_pinterest_board(PINNED_CHANNELS["pinterest"][0])
+    if selected!=PINTEREST_PUBLIC_BOARD_ID:
+        raise BufferBlocked("PINTEREST_PUBLIC_BOARD_ID_MISMATCH")
+    print("BUFFER_PINTEREST_OWNED_BOARD_VERIFIED="+selected,flush=True)
+    channel_state["pinterest"]["boards"]=[{
+        "serviceId":selected,"name":"Universo Anthares - Videos",
+        "url":"https://br.pinterest.com/lucasyahn/universo-anthares-v%C3%ADdeos/"}]
     organization=api("query CORTESBufferOrganizations { account { organizations { id } } }")
     orgs=(organization.get("account") or {}).get("organizations") or []
     for org in orgs:
