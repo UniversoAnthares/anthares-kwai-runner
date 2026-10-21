@@ -35,8 +35,18 @@ jobs:
               req=urllib.request.Request(base+'?action=buffer-pending',
                   data=b'{}',method='POST',
                   headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
-              with urllib.request.urlopen(req,timeout=22) as resp:
-                  result=json.load(resp)
+              try:
+                  with urllib.request.urlopen(req,timeout=22) as resp:
+                      result=json.load(resp)
+              except urllib.error.HTTPError as err:
+                  reason='NON_JSON'
+                  try:
+                      body=json.load(err)
+                      reason=str(body.get('error') or 'UNKNOWN')[:80]
+                  except (ValueError,TypeError):
+                      pass
+                  print('CORTES_'+name+'_HTTP='+str(err.code)+' REASON='+reason,flush=True)
+                  raise SystemExit(name+'_SIGNED_READ_HTTP_ERROR')
               if not result.get('ok') or not isinstance(result.get('jobs'),list):
                   raise SystemExit(name+'_SIGNED_READ_REJECTED')
               print('CORTES_'+name+'_OIDC_READ=PASS')
