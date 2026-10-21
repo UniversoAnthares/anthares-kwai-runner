@@ -30,7 +30,8 @@ def _fold(value: str) -> str:
 
 
 def strategic_tags(title: str, description: str = "") -> tuple[str, ...]:
-    text = _fold(title + " " + description)
+    clean_title = re.sub(r"(?:\\s*[●•|–—-]\\s*Universo Anthares)+\\s*$", "", title, flags=re.I)
+    text = _fold(clean_title + " " + description)
     found = [tag for needles, tag in THEMES if any(n in text for n in needles)]
     # Avoid duplicate editorial or source-provided tags.
     return (BASE, *found[:3]) if found else (BASE, "#LiteraturaECultura")
