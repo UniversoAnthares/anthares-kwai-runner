@@ -146,7 +146,10 @@ def publish_once(skipped=0):
             queue('media-missing', fence)
             return publish_once(skipped + 1) if skipped < 10 else 'SOURCE_MEDIA_MISSING_FOR_REPAIR'
     except Exception:
-        queue("fail",fence)
+        # Any nested skip may already have ended the previous lease. Never
+        # obscure the original error with a stale-fence cleanup failure.
+        try: queue("fail", fence)
+        except Exception: pass
         raise
     queue("start",fence)
     try:
