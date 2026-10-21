@@ -22,11 +22,17 @@ class XPublicationSafetyTests(unittest.TestCase):
 
     def test_confirm_requires_video_url_and_date(self):
         i = self.issue(1)
-        c = {"body": "CONFIRMED video https://x.com/lucasyahn/status/2109698725161631921",
+        import json
+        c = {"body": "CONFIRMED video\n" + json.dumps({
+                "kind": "X_VIDEO_CONFIRMED_V1", "account": "lucasyahn",
+                "video_verified": True,
+                "post_url": "https://x.com/lucasyahn/status/2109698725161631921",
+             }), "user": {"login": "github-actions[bot]"},
              "created_at": "2026-10-21T12:00:00Z"}
         self.assertEqual(len(confirmed_today(i, [c], self.DAY.date(), timezone.utc)), 1)
         self.assertEqual(gate([i], {1: [c]}, self.DAY)["confirmed"], 1)
         self.assertFalse(confirmed_today(i, [{**c, "created_at": "2026-10-20T12:00:00Z"}], self.DAY.date(), timezone.utc))
+        self.assertFalse(confirmed_today(i, [{**c, "user": {"login": "untrusted-user"}}], self.DAY.date(), timezone.utc))
 
     def test_reject_wrong_account_and_missing_video(self):
         self.assertIsNone(verified_post_url("https://x.com/other/status/2109698725161631921"))
