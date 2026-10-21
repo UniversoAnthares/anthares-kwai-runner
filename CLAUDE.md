@@ -16,7 +16,7 @@ This repository participates in a distributed system. Claude must read `AGENTS.m
 - CORTES: physical Android is the principal Kwai publisher; MEmu4 is an automatic fallback, never a competing simultaneous executor. Respect dedupe and independent post confirmation.
 - Preserve Anthares Android Runtime SYSTEM authority and separate interactive fallback; avoid uncontrolled dual execution.
 - Do not reboot, shut down, log off, reset queues, delete masters, clear uncertain jobs, or rotate credentials without explicit owner authorization.
-- Do not use retired WPVibe, TinyFish, MeshCentral or Remote Desktop Commander paths.
+- Avoid retired WPVibe and TinyFish integrations. For authorized Windows administration, consult `docs/REMOTE_CONTROL_PRIORITY.md` and use Anthares Remote, WinRemote, Remote Desktop Commander, MeshCentral, then AI Commander.
 - Never use paid providers, billing activation or a credit card without explicit owner authorization.
 - Keep independent work scoped: a code-review task must not start a real Kwai/TikTok publication as an audit probe.
 
