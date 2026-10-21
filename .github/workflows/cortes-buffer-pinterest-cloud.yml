@@ -10,6 +10,12 @@ on:
   schedule:
     - cron: '1,16,31,46 * * * *'
   workflow_dispatch: {}
+  # Automatically recover when the independent Buffer probe completes.
+  # Both triggers share one concurrency group and the same Neon fencing.
+  workflow_run:
+    workflows:
+      - "CORTES Pinterest - Buffer board resolver probe"
+    types: [completed]
 permissions:
   contents: read
   id-token: write
@@ -19,7 +25,7 @@ concurrency:
 jobs:
   publish-and-reconcile:
     # Safe destination is verified by the worker on each attempt.
-    if: ${{ vars.CORTES_PINTEREST_BUFFER_PAUSED != 'true' }}
+    if: ${{ vars.CORTES_PINTEREST_BUFFER_PAUSED != 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
