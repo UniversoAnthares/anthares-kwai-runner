@@ -1,4 +1,5 @@
 name: CORTES Pinterest - automatic Buffer cloud publisher
+# Refresh verified Pinterest board after user synchronized it in Buffer.
 on:
   push:
     branches: [main]
