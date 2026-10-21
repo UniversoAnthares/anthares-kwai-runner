@@ -23,6 +23,11 @@ ENDPOINT = "https://api.buffer.com"
 SERVICES = ("instagram", "pinterest", "linkedin")
 LABEL = "Universo Anthares"
 LINKEDIN_COMPANY = "145345334"
+PINNED_CHANNELS = {
+    "instagram": ("6ad8a3c3778b240e2f799ec8", "instagram.com", "/universoanthares"),
+    "pinterest": ("6ad8a46d778b240e2f79a40f", "pinterest.com", "/lucasyahn"),
+    "linkedin": ("6ad8a372778b240e2f799c72", "linkedin.com", "/company/" + LINKEDIN_COMPANY),
+}
 
 
 class BufferBlocked(RuntimeError):
@@ -60,7 +65,7 @@ def channels(token: str | None = None) -> list[dict]:
         if not org_id:
             continue
         query = ("query { channels(input: { organizationId: " + json.dumps(org_id) +
-                 " }) { id name displayName service externalLink type isDisconnected isLocked isQueuePaused } }")
+                 " }) { id name displayName service externalLink } }")
         output.extend(api(query, token).get("channels") or [])
     return output
 
@@ -70,6 +75,8 @@ def validate_channel(platform: str, channel_id: str, available: list[dict]) -> d
         raise BufferBlocked("UNSUPPORTED_PLATFORM")
     if not channel_id:
         raise BufferBlocked("BUFFER_CHANNEL_ID_REQUIRED")
+    if channel_id != PINNED_CHANNELS[platform][0]:
+        raise BufferBlocked("BUFFER_CHANNEL_ID_NOT_PINNED")
     exact = [x for x in available if str(x.get("id") or "") == channel_id]
     if len(exact) != 1:
         raise BufferBlocked("BUFFER_CHANNEL_NOT_FOUND_OR_AMBIGUOUS")
@@ -82,19 +89,16 @@ def validate_channel(platform: str, channel_id: str, available: list[dict]) -> d
     name = " ".join(str(entry.get("displayName") or entry.get("name") or "").casefold().split())
     # Names must be verified with the connected social account. Do not match
     # a personal LinkedIn profile when the page is the required target.
-    if platform == "linkedin":
-        if name != LABEL.casefold():
-            raise BufferBlocked("LINKEDIN_PAGE_NAME_MISMATCH")
-        link = str(entry.get("externalLink") or "").strip()
-        uri = urllib.parse.urlparse(link if "://" in link else "https://" + link)
-        if (uri.hostname or "").lower() not in ("linkedin.com", "www.linkedin.com") or uri.path.rstrip("/") not in ("/company/" + LINKEDIN_COMPANY, "/company/universo-anthares"):
-            raise BufferBlocked("LINKEDIN_PAGE_URL_UNVERIFIED")
-        if str(entry.get("type") or "").lower() not in ("page", "company"):
-            raise BufferBlocked("LINKEDIN_CHANNEL_NOT_PAGE")
-    if platform == "instagram" and "universoanthares" not in name.replace(" ", ""):
-        raise BufferBlocked("INSTAGRAM_IDENTITY_UNVERIFIED")
-    if platform == "pinterest" and "anthares" not in name.replace(" ", ""):
-        raise BufferBlocked("PINTEREST_IDENTITY_UNVERIFIED")
+    expected_name = {"instagram": "universoanthares", "pinterest": "lucasyahn", "linkedin": LABEL.casefold()}[platform]
+    if name != expected_name:
+        raise BufferBlocked("BUFFER_SOCIAL_ACCOUNT_NAME_UNVERIFIED")
+    url = str(entry.get("externalLink") or "").strip()
+    uri = urllib.parse.urlparse(url)
+    expected_host, expected_path = PINNED_CHANNELS[platform][1:]
+    if (uri.scheme != "https" or (uri.hostname or "").lower().removeprefix("www.") != expected_host
+            or uri.path.rstrip("/").casefold() != expected_path.casefold()
+            or uri.username or uri.password or uri.port):
+        raise BufferBlocked("BUFFER_SOCIAL_ACCOUNT_URL_UNVERIFIED")
     return entry
 
 
