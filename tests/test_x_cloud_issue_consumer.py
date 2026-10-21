@@ -38,7 +38,7 @@ class XCloudConsumerTests(unittest.TestCase):
         url = "https://x.com/lucasyahn/status/2109698725161631921"
         with patch.object(consumer, "_payload", return_value=self.payload()), \
              patch.object(consumer, "_comments", return_value=[
-                 {"body": "X_POST_SUBMISSION_STARTED_V1"}]), \
+                 {"body": "X_POST_SUBMISSION_STARTED_V1", "user": {"login": "github-actions[bot]"}}]), \
              patch.object(consumer, "_worker", return_value={
                  "status": "CONFIRMED", "post_url": url}) as worker, \
              patch.object(consumer, "_github", return_value={}) as github:
