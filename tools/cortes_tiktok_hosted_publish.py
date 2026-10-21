@@ -82,34 +82,57 @@ def preflight_vault():
     return state
 
 
+
 def download_verified(job,path):
+    """Download before STARTED. Retry transient network errors without creating posts."""
     from urllib.parse import urlparse
+    import urllib.error
     url=str(job["media_url"])
     u=urlparse(url)
     if u.scheme!="https" or u.hostname not in ("anthares.us","www.anthares.us") or u.username or u.password:
         raise q.SafeStop("TIKTOK_MEDIA_ORIGIN_DENIED")
-    request=urllib.request.Request(url,headers={"Accept":"video/mp4,application/octet-stream"})
-    total=0
-    start=time.monotonic()
-    try:
-        with urllib.request.urlopen(request,timeout=38) as stream, open(path,"wb") as output:
-            content_type=str(stream.headers.get("Content-Type") or "").lower()
-            if content_type and not any(x in content_type for x in ("video","octet-stream","application/mp4")):
-                raise q.SafeStop("TIKTOK_MEDIA_CONTENT_TYPE_INVALID")
-            while True:
-                if time.monotonic()-start>120:
-                    raise q.SafeStop("TIKTOK_MEDIA_TRANSFER_TIMEOUT")
-                b=stream.read(1024*1024)
-                if not b:break
-                total+=len(b)
-                if total>MAX_SIZE:
-                    raise q.SafeStop("TIKTOK_MEDIA_EXCEEDS_LIMIT")
-                output.write(b)
-    except OSError as exc:
-        raise q.SafeStop("TIKTOK_MEDIA_DOWNLOAD_FAILED") from exc
-    if total<MIN_SIZE:
-        raise q.SafeStop("TIKTOK_MEDIA_TOO_SMALL")
-    print("CORTES_TIKTOK_MEDIA_PREFLIGHT_OK bytes="+str(total),flush=True)
+    request=urllib.request.Request(url,headers={
+        "Accept":"video/mp4,application/octet-stream",
+        "User-Agent":"Mozilla/5.0 (compatible; AntharesCortes/1.0)",
+    })
+    retryable={408,425,429,500,502,503,504}
+    for attempt in range(1,4):
+        total=0
+        start=time.monotonic()
+        try:
+            with urllib.request.urlopen(request,timeout=38) as stream, open(path,"wb") as output:
+                content_type=str(stream.headers.get("Content-Type") or "").lower()
+                if content_type and not any(x in content_type for x in ("video","octet-stream","application/mp4")):
+                    raise q.SafeStop("TIKTOK_MEDIA_CONTENT_TYPE_INVALID")
+                while True:
+                    if time.monotonic()-start>120:
+                        raise q.SafeStop("TIKTOK_MEDIA_TRANSFER_TIMEOUT")
+                    b=stream.read(1024*1024)
+                    if not b:break
+                    total+=len(b)
+                    if total>MAX_SIZE:
+                        raise q.SafeStop("TIKTOK_MEDIA_EXCEEDS_LIMIT")
+                    output.write(b)
+        except urllib.error.HTTPError as exc:
+            if exc.code in retryable and attempt<3:
+                retry_after=exc.headers.get("Retry-After","")
+                try:delay=min(90,max(20,float(retry_after)))
+                except (ValueError,TypeError):delay=25*attempt
+                print("CORTES_TIKTOK_MEDIA_HTTP_RETRY="+str(exc.code)+" attempt="+str(attempt),flush=True)
+                time.sleep(delay)
+                continue
+            raise q.SafeStop("TIKTOK_MEDIA_HTTP_"+str(exc.code)) from exc
+        except (urllib.error.URLError,TimeoutError,ConnectionError,OSError) as exc:
+            if attempt<3:
+                print("CORTES_TIKTOK_MEDIA_NETWORK_RETRY attempt="+str(attempt),flush=True)
+                time.sleep(12*attempt)
+                continue
+            raise q.SafeStop("TIKTOK_MEDIA_DOWNLOAD_FAILED") from exc
+        if total<MIN_SIZE:
+            raise q.SafeStop("TIKTOK_MEDIA_TOO_SMALL")
+        print("CORTES_TIKTOK_MEDIA_PREFLIGHT_OK bytes="+str(total),flush=True)
+        return
+    raise q.SafeStop("TIKTOK_MEDIA_DOWNLOAD_FAILED")
 
 
 def inventory(state):
