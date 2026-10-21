@@ -111,6 +111,14 @@ def markers(rows):
     ]
 
 
+def queue_day_allowed(issue, payload, now):
+    try:
+        created = datetime.fromisoformat(issue["created_at"].replace("Z", "+00:00")).astimezone(TZ)
+    except (ValueError, KeyError):
+        return False
+    return created.date() == now.date() or bool(payload.get("reserve_from"))
+
+
 def remote(path, method="GET", payload=None, timeout=110):
     auth = os.environ["ARA_SHARED"]
     if not auth:
@@ -219,11 +227,7 @@ def run():
             continue
         # Current-day queue only. Yesterday's items enter the manually
         # reconcilable reserve queue instead of being silently posted today.
-        try:
-            posted_at = datetime.fromisoformat(issue["created_at"].replace("Z", "+00:00")).astimezone(TZ)
-        except (ValueError, KeyError):
-            continue
-        if posted_at.date() != now.date() and not payload.get("reserve_from"):
+        if not queue_day_allowed(issue, payload, now):
             continue
         status_code, identity = remote("/verify", timeout=90)
         if status_code != 200 or identity.get("ok") is not True or identity.get("handle") != "lucasyahn":
