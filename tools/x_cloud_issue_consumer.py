@@ -11,6 +11,8 @@ import json
 import os
 import re
 import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -103,6 +105,27 @@ def _list_open_x():
     return result
 
 
+
+def _confirmed_today():
+    """Independently fence the consumer at ten verified account posts per local day."""
+    from tools.x_publication_safety import confirmed_today
+    local_now = datetime.now(ZoneInfo("America/Campo_Grande"))
+    links = set()
+    for page in range(1, 7):
+        batch = _github(f"/issues?state=closed&per_page=100&sort=updated&direction=desc&page={page}")
+        for issue in batch:
+            if issue.get("pull_request") or not str(issue.get("title") or "").startswith("[X-PUBLISH]"):
+                continue
+            if not issue.get("comments"):
+                continue
+            links.update(confirmed_today(issue, _comments(issue["number"]),
+                                         local_now.date(), local_now.tzinfo))
+        if len(batch) < 100:
+            break
+    else:
+        raise RuntimeError("X_DAILY_CONFIRMATION_PAGINATION_INCOMPLETE")
+    return len(links)
+
 def _process(issue):
     body = _payload(issue)
     if (body.get("platform") != "x" or body.get("account") != "lucasyahn"
@@ -133,6 +156,10 @@ def _process(issue):
             print("X_RECONCILE_PROBE_FAILED=" + type(exc).__name__, flush=True)
         return "UNCERTAIN_PREEXISTING_RECONCILE"
 
+    # A producer may have created too many jobs: the consumer enforces the
+    # daily X budget independently of the source workflow.
+    if _confirmed_today() >= int(os.getenv("X_DAILY_TARGET", "10")):
+        return "X_DAILY_QUOTA_CONFIRMED"
     # Read-only preflight BEFORE writing irrevocable BEGIN evidence.
     verify = _worker("/verify", timeout=60)
     if not (verify.get("ok") is True and verify.get("handle") == "lucasyahn"
@@ -176,6 +203,8 @@ def main():
             continue
         print(json.dumps({"issue": issue["number"], "status": result}), flush=True)
         if result.startswith(("CONFIRMED", "RECOVERED_CONFIRMED")):
+            return 0
+        if result == "X_DAILY_QUOTA_CONFIRMED":
             return 0
         uncertain.append(issue["number"])
         # A previous uncertain item must never prevent a distinct X clip from proceeding.
