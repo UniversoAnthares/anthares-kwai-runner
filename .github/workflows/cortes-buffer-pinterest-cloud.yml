@@ -1,5 +1,11 @@
 name: CORTES Pinterest - automatic Buffer cloud publisher
 on:
+  push:
+    branches: [main]
+    paths:
+      - social_adapters/buffer_three_channels.py
+      - tools/cortes_buffer_pinterest_cloud.py
+      - .github/workflows/cortes-buffer-pinterest-cloud.yml
   schedule:
     - cron: '16,46 * * * *'
   workflow_dispatch: {}
@@ -11,8 +17,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish-and-reconcile:
-    # Remain disabled until the Pinterest board has been confirmed by Buffer.
-    if: ${{ vars.CORTES_PINTEREST_BUFFER_ENABLED == 'true' && vars.CORTES_PINTEREST_BUFFER_PAUSED != 'true' }}
+    # Safe destination is verified by the worker on each attempt.
+    if: ${{ vars.CORTES_PINTEREST_BUFFER_PAUSED != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
