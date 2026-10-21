@@ -301,7 +301,7 @@ async function pinterestBrowserAction(verb,b){
      AND (p.created_at AT TIME ZONE 'America/Campo_Grande')::date =
          (now() AT TIME ZONE 'America/Campo_Grande')::date
      AND r.ordinal > CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END
-   ORDER BY p.created_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
+   ORDER BY p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
   ) UPDATE cortes_publications p SET status='leased',lease_owner=$2,
      lease_generation=p.lease_generation+1,lease_until=now()+interval '15 minutes',updated_at=now()
     FROM picked WHERE p.id=picked.id AND p.status='queued'
