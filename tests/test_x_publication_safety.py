@@ -48,6 +48,25 @@ class XPublicationSafetyTests(unittest.TestCase):
         issues = [self.issue(i, "open") for i in (1, 2)]
         self.assertFalse(gate(issues, {}, self.DAY)["due"])
 
+    def test_same_livestream_has_distinct_windows(self):
+        import json
+        request = {
+            "kind": "X_MICROCUT_REQUEST_V1",
+            "account": "lucasyahn",
+            "source": {"video_id": "live-123"},
+            "scan_start": 600,
+        }
+        issue = {
+            "title": "[X-MICROCUT] live-123-1",
+            "number": 7,
+            "state": "closed",
+            "created_at": "2026-10-21T10:00:00Z",
+            "body": "```json\n" + json.dumps(request) + "\n```",
+        }
+        result = gate([issue], {}, self.DAY)
+        self.assertEqual(result["source_windows"], {"live-123": [600]})
+        self.assertTrue(result["due"])
+
     @patch("tools.x_publication_safety.subprocess.run")
     def test_media_geometry_and_duration(self, run):
         import json
