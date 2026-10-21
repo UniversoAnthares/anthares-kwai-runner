@@ -21,6 +21,14 @@ async function oidc(){
  requireOk(r.ok,'OIDC_FETCH_HTTP_'+r.status);
  const value=(await r.json()).value;requireOk(value,'OIDC_EMPTY');return value;
 }
+async function verifyCloudOidc(jwt){
+ const res=await fetch(CONTROL+'?action=preflight',{
+  method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},
+  body:'{}',signal:AbortSignal.timeout(15000)});
+ const result=await res.json().catch(()=>({}));
+ requireOk(res.ok&&result.ok&&result.mutations_allowed===false,'CLOUD_OIDC_PREFLIGHT_REJECTED_'+(result.error||res.status));
+ return result;
+}
 async function callControl(jwt,action,details={}){
  const r=await fetch(CONTROL+'?action=control',{
   method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},
@@ -89,6 +97,7 @@ export async function run(){
  requireOk(me.id&&me.username?.toLowerCase()==='universoanthares','WRONG_THREADS_ACCOUNT');
  const selected=await choose(),id='threads:'+selected.clip.id;
  const media=await mediaDigest(selected.clip.url);
+ const jwt=await oidc();await verifyCloudOidc(jwt);
  const publish=process.env.THREADS_ALLOW_PUBLISH==='1';
  const publicInfo={account:me.username,clip:id,bytes:media.bytes,media_verified:true,queue_candidates:selected.queued,source_day:selected.selectedDay};
  if(!publish){
@@ -96,7 +105,6 @@ export async function run(){
   return;
  }
  requireOk(process.env.GITHUB_EVENT_NAME==='workflow_dispatch','LIVE_EVENT_NOT_DISPATCH');
- const jwt=await oidc();
  const claim=await callControl(jwt,'claim');const epoch=Number(claim.lease.epoch);
  const ident={id,epoch};
  let leased=null,started=false,verified=null;
