@@ -1,0 +1,34 @@
+name: CORTES Threads continuity contracts
+on:
+  push:
+    branches:
+      - fix/threads-continuity-guard-20261021
+      - main
+    paths:
+      - 'tools/cortes_threads_*.mjs'
+      - 'tools/threads_*.mjs'
+      - 'tests/threads_*.test.mjs'
+      - 'infra/neon-threads-sync/**'
+      - '.github/workflows/cortes-threads-continuity-contracts.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  resilience:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate browser publisher and Neon sync syntax
+        run: |
+          node --check tools/cortes_threads_local_publisher.mjs
+          node --check tools/cortes_threads_continuity_guard.mjs
+          node --check tools/cortes_threads_reconcile_uncertain.mjs
+          node --check tools/cortes_threads_neon_sync.mjs
+          node --check tools/threads_primary_gate.mjs
+          node --check infra/neon-threads-sync/index.mjs
+      - name: Prove duplicate-safety and bounded pre-submit retry
+        run: node --test tests/threads_primary_gate.test.mjs tests/threads_queue_policy.test.mjs tests/threads_neon_sync_contract.test.mjs
