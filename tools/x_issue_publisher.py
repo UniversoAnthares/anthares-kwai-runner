@@ -25,6 +25,7 @@ REPO = "UniversoAnthares/anthares-kwai-runner"
 BASE = "https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x"
 TZ = ZoneInfo("America/Campo_Grande")
 START_MARKER = "X_SUBMISSION_STARTED_V1"
+LEGACY_START_MARKER = "X_POST_SUBMISSION_STARTED_V1"
 PROOF_MARKER = "X_VIDEO_CONFIRMED_V1"
 UNCERTAIN_MARKER = "X_SUBMISSION_UNCERTAIN_V1"
 ALLOWED_HOSTS = {"anthares.us", "www.anthares.us", "raw.githubusercontent.com", "github.com"}
@@ -105,7 +106,7 @@ def markers(rows):
     return [
         c.get("body", "") for c in rows
         if (c.get("user") or {}).get("login") == "github-actions[bot]"
-        and any(m in str(c.get("body", "")) for m in (START_MARKER, PROOF_MARKER, UNCERTAIN_MARKER))
+        and any(m in str(c.get("body", "")) for m in (START_MARKER, LEGACY_START_MARKER, PROOF_MARKER, UNCERTAIN_MARKER))
     ]
 
 
@@ -168,10 +169,34 @@ def run():
             except (ValueError, TypeError):
                 identity = None
             if identity and any(
-                    START_MARKER in str(x.get("body") or "")
+                    (START_MARKER in str(x.get("body") or "")
+                     or LEGACY_START_MARKER in str(x.get("body") or ""))
                     and (x.get("user") or {}).get("login") == "github-actions[bot]"
                     for x in all_comments.get(n, [])):
                 seen_fingerprints.add(identity)
+                # Read-only reconciliation can recover an acknowledged X post
+                # after the runner or GitHub comment operation failed.
+                if not any(PROOF_MARKER in str(c.get("body") or "")
+                           for c in all_comments.get(n, [])):
+                    try:
+                        _, result = remote("/post-status?idempotency_key=" +
+                                          urllib.parse.quote("x_" + identity), timeout=35)
+                        url = verified_post_url(str(result.get("post_url") or ""))
+                        if result.get("status") == "CONFIRMED" and url:
+                            proof = {"kind": PROOF_MARKER, "source_fingerprint": identity,
+                                     "post_url": url, "account": "lucasyahn",
+                                     "video_verified": True, "confirmed_at": datetime.now(TZ).isoformat()}
+                            issue_comment(n, "CONFIRMED video\n" + json.dumps(proof, ensure_ascii=False))
+                            github("issues/" + str(n), "PATCH", {"state": "closed"})
+                            all_comments[n].append({
+                                "body": "CONFIRMED video\n" + json.dumps(proof),
+                                "user": {"login": "github-actions[bot]"},
+                                "created_at": datetime.now(TZ).isoformat(),
+                            })
+                            item["state"] = "closed"
+                            print("X_RECONCILED_EXISTING_POST=" + url, flush=True)
+                    except Exception as exc:
+                        print("X_RECONCILIATION_RETRY_LATER=" + type(exc).__name__, flush=True)
             if eligible(item) and not markers(all_comments.get(n, [])):
                 candidates.append((item, p, identity))
     status = gate(all_issues, all_comments, now, target=10)
