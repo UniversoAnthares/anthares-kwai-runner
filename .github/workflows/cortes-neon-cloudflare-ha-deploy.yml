@@ -25,7 +25,7 @@ jobs:
         run: |
           test -n "$CLOUDFLARE_API_TOKEN"
           node --check infra/cloudflare-cortes-queue-ha/src/index.js
-          grep -q 'anthares-cortes-queue-ha' infra/cloudflare-cortes-queue-ha/wrangler.toml
+          grep -q 'anthares-cortes-neon-edge-ha' infra/cloudflare-cortes-queue-ha/wrangler.toml
       - name: Deploy isolated Worker without touching other Anthares services
         shell: bash
         run: |
@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          url='https://anthares-cortes-queue-ha.anthares1.workers.dev'
+          url='https://anthares-cortes-neon-edge-ha.anthares1.workers.dev'
           for i in $(seq 1 12); do
             if curl -fsS --max-time 15 "$url/healthz" -o /tmp/cortes-ha.json && grep -q '"database_ok":true' /tmp/cortes-ha.json; then break; fi
             sleep 3
