@@ -10,7 +10,8 @@ GitHub remains the canonical repository and history source. This file defines th
 - A quota-exhausted provider is `BLOCKED_QUOTA`, not `DOWN`. Routing migrates the workload instead of trying to repair healthy code.
 - An Anthares-owned component that fails while its provider quota is available is a repair target before migration.
 - GitHub Actions on private repositories is treated as quota-constrained until a fresh successful private-repository run proves availability. Public-repository Actions remain independently eligible.
-- GitLab CI is currently `BLOCKED_QUOTA`; both the public user project and the private group project returned `ci_quota_exceeded` on 2026-10-15.
+- GitLab CI is permanently excluded from **automatic execution selection** while quota is blocked (`ci_quota_exceeded` reconfirmed on 2026-10-21). The independent GitLab Issues recovery queue for Anthares Remote remains usable; it is **not** a CI runner.
+- Codeberg holds an independent Git mirror but is **not a CI runner** while repository `has_actions=false`; only a fresh verified equal `main` SHA makes the mirror eligible as a recovery source. Source mirroring is separate from video publishing.
 - Cloudflare products are tracked separately by product. Workers Builds, Workers runtime, Durable Objects and Browser Rendering must never share one aggregate status. Browser Rendering is quota-sensitive and cannot be used as a substitute for Anthares Browser.
 
 ## General hosted CI
@@ -23,7 +24,9 @@ Current priority for workloads that genuinely require hosted CI:
 4. Floot, while READY and technically compatible with the workload.
 5. Cloudflare Workers Builds for Worker-compatible build/deploy workloads only.
 6. GitHub Actions on private repositories only after a fresh quota-success proof.
-7. GitLab CI only after `ci_quota_exceeded` clears and a fresh job starts successfully.
+7. Codeberg Forgejo Actions only after repository Actions is enabled, a permitted runner is provisioned, and a real job plus publication-specific OAuth/Neon OIDC compatibility is proven. Currently ineligible.
+
+GitLab CI is intentionally not on this list. Codeberg Git mirroring alone does not grant CI execution.
 
 The router must distinguish repository visibility because GitHub quota behavior differs between public and private workloads.
 
