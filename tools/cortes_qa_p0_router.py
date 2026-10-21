@@ -55,7 +55,14 @@ def workflow_incidents():
                 continue
             rid=str(run.get("id") or "")
             if not rid.isdigit():continue
-            output.append({"id":marker("gha",repo,rid),"network":network_for(name),
+            # The Pinterest board outage can recur every 15 minutes.
+            # One stable P0 fingerprint per workflow/day avoids issue floods
+            # while the live run URL remains available in Actions.
+            if network_for(name)=="pinterest":
+                fingerprint=marker("gha",repo,name,run["conclusion"],created.date().isoformat())
+            else:
+                fingerprint=marker("gha",repo,rid)
+            output.append({"id":fingerprint,"network":network_for(name),
                            "stage":"github_actions_"+run["conclusion"],
                            "evidence":"https://github.com/"+repo+"/actions/runs/"+rid,
                            "description":name[:100]})
