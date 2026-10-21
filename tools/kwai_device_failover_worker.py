@@ -247,7 +247,12 @@ def run_physical_prepare(media: pathlib.Path) -> tuple[bool, str, str, dict]:
 
 
 def run_physical_commit(env: dict, prepare_out: str) -> tuple[bool, str, str]:
-    rc, commit_out = run_process([sys.executable, str(PHYSICAL_SAFE), "commit"], env)
+    # STARTED fence has already been recorded. Even a watchdog timeout may
+    # follow a real tap on Publish; never treat it as a safe pre-submit retry.
+    try:
+        rc, commit_out = run_process([sys.executable, str(PHYSICAL_SAFE), "commit"], env)
+    except subprocess.TimeoutExpired:
+        return False, "uncertain", prepare_out + "\nKWAI_UP_STATE=UNCERTAIN COMMIT_TIMEOUT_AFTER_STARTED"
     combined = prepare_out + "\n" + commit_out
     if rc != 0 or "KWAI_UP_STATE=VERIFIED" not in commit_out:
         return False, "uncertain", combined
