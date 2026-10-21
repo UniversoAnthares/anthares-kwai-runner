@@ -41,6 +41,8 @@ class PinterestBrowserContract(unittest.TestCase):
         worker=(ROOT/"tools"/"cortes_pinterest_browser_local.py").read_text(encoding="utf-8")
         neon=(ROOT/"infra"/"neon-cortes-queue"/"index.mjs").read_text(encoding="utf-8")
         self.assertIn("crypto.timingSafeEqual",neon)
+        self.assertIn(r'/^Bearer\s+([^\s]+)$/i',neon)
+        self.assertNotIn(r'/^Bearer\\s+',neon)
         self.assertIn('"?action=browser-" + action',worker)
         self.assertIn("pinterestBrowserAction",neon)
         self.assertIn("r.ordinal > CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END",neon)
