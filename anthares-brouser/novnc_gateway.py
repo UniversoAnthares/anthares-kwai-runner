@@ -102,7 +102,7 @@ def login_form() -> HTMLResponse:
 @router.get("/novnc/once/{token}")
 def manual_once(token: str, request: Request):
     global MANUAL_USED
-    if _secure_cookie() and request.url.scheme != "https":
+    if _secure_cookie() and request.url.scheme != "https" and request.headers.get("x-forwarded-proto") != "https":
         raise HTTPException(status_code=403, detail="HTTPS required")
     now = int(time.time())
     supplied = token.encode("utf-8", "strict")
@@ -117,7 +117,7 @@ def manual_once(token: str, request: Request):
 
 @router.post("/novnc/login")
 async def browser_login(request: Request):
-    if _secure_cookie() and request.url.scheme != "https":
+    if _secure_cookie() and request.url.scheme != "https" and request.headers.get("x-forwarded-proto") != "https":
         raise HTTPException(status_code=403, detail="HTTPS required")
     if request.headers.get("content-type", "").split(";")[0].strip() != "application/x-www-form-urlencoded":
         raise HTTPException(status_code=415, detail="unsupported form")
@@ -167,15 +167,24 @@ def novnc_static(asset_path: str, _: int = Depends(_require_cookie)):
 
 
 def _same_origin(websocket: WebSocket) -> bool:
+    """Cloudflare ephemeral hostname is established after container startup.
+
+    An authenticated cookie is always required; enforce the browser's exact
+    Origin against the forwarded public host before allowing a websocket.
+    """
     origin = urlsplit(websocket.headers.get("origin", ""))
-    public_url = urlsplit(os.environ.get(
-        "NOVNC_PUBLIC_ORIGIN", ""
-    ))
+    configured = os.environ.get("NOVNC_PUBLIC_ORIGIN", "").strip()
+    public_url = urlsplit(configured) if configured else urlsplit(
+        "https://" + (websocket.headers.get("x-forwarded-host")
+                      or websocket.headers.get("host", ""))
+    )
+    hostname = public_url.hostname or ""
     return bool(
         origin.scheme == "https"
-        and origin.hostname == public_url.hostname
+        and origin.hostname == hostname
         and origin.port == public_url.port
         and public_url.scheme == "https"
+        and (configured or hostname.endswith(".trycloudflare.com"))
     )
 
 
