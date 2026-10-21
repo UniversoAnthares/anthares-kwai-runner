@@ -58,12 +58,9 @@ GROUP BY network,day
 ON CONFLICT (target_key,local_day) DO UPDATE
   SET reserved=GREATEST(public.cortes_daily_publication_budget.reserved,EXCLUDED.reserved),updated_at=now();
 
--- The owner observed 100 actual posts on Kwai while internal confirmations lagged.
--- Count at least 100 even if legacy/direct transports did not enter the queue.
-INSERT INTO public.cortes_daily_publication_budget(target_key,local_day,reserved,updated_at)
-VALUES ('platform:kwai',DATE '2026-10-21',100,now())
-ON CONFLICT(target_key,local_day) DO UPDATE
-  SET reserved=GREATEST(public.cortes_daily_publication_budget.reserved,100),updated_at=now();
+-- Quotas derive from recorded publication starts. An operational ceiling of
+-- 100 does not assert that 100 external posts took place on a given day.
+-- Manual corrections require verified evidence and must not be embedded here.
 
 DO $triggers$
 BEGIN
