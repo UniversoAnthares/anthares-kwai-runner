@@ -67,6 +67,17 @@ class XCloudConsumerTests(unittest.TestCase):
             self.assertEqual(consumer.main(), 3)
             self.assertEqual(process.call_count, 1)
 
+    def test_daily_quota_prevents_irreversible_post(self):
+        issue = {"number": 126}
+        with patch.object(consumer, "_payload", return_value=self.payload()), \
+             patch.object(consumer, "_comments", return_value=[]), \
+             patch.object(consumer, "_confirmed_today", return_value=10), \
+             patch.object(consumer, "_worker") as worker, \
+             patch.object(consumer, "_github") as github:
+            self.assertEqual(consumer._process(issue), "X_DAILY_QUOTA_CONFIRMED")
+            worker.assert_not_called()
+            github.assert_not_called()
+
     def test_block_local_execution(self):
         with patch.dict("os.environ", {"GITHUB_ACTIONS": "false",
                                        "GH_TOKEN": "fake", "X_WORKER_CLIENT_TOKEN": "fake"}):
