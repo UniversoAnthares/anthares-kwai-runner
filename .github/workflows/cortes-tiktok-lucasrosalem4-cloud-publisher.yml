@@ -1,0 +1,50 @@
+name: CORTES TikTok @lucasrosalem4 cloud publisher
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '*/4 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/cortes_tiktok_lucasrosalem4_cloud_publish.py'
+      - 'infra/neon-cortes-lucasrosalem4/**'
+      - '.github/workflows/cortes-tiktok-lucasrosalem4-cloud-publisher.yml'
+      - 'tests/test_cortes_tiktok_lucas4_cloud.py'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: cortes-tiktok-lucasrosalem4-single-cloud-browser
+  cancel-in-progress: false
+jobs:
+  publisher:
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: 'utf-8'
+      TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: ${{ vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED }}
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated cloud browser
+        run: |
+          python3 -m pip install -q --disable-pip-version-check playwright requests
+          installed=0
+          for n in 1 2 3; do
+            if PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium; then
+              installed=1
+              break
+            fi
+            sleep $((n * 6))
+          done
+          test "$installed" -eq 1
+      - name: Validate independent account fence and publisher
+        run: |
+          python3 -m py_compile tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
+          node --check infra/neon-cortes-lucasrosalem4/index.mjs
+          python3 -m unittest discover -s tests -p 'test_cortes_tiktok_lucas4_cloud.py' -v
+      - name: Probe cloud session or publish at most one fenced short
+        run: |
+          python3 -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
