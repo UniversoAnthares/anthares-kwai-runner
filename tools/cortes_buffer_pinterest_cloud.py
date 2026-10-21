@@ -77,16 +77,31 @@ def verify_sent_post(remote_id):
 
 
 def reconcile():
+    """Read back scheduled Pinterest IDs without letting one bad item stop others.
+
+    Unidentified uncertain creates are NEVER retried or marked confirmed.
+    Reconciliation writes retain the backend's fencing and idempotence.
+    """
     jobs=queue("pending").get("jobs") or []
     total=0
+    unknown=0
     for item in jobs:
         remote_id=str(item.get("remote_id") or "")
         if not remote_id:
+            unknown+=1
             continue
-        link=verify_sent_post(remote_id)
+        try:
+            link=verify_sent_post(remote_id)
+        except (BufferBlocked, RuntimeError):
+            # Transient Buffer readback or invalid remote identity: quarantine
+            # this one post. Keep reconciling independent verified IDs.
+            print("::warning::CORTES_PINTEREST_READBACK_UNVERIFIED",flush=True)
+            continue
         if link:
             queue("reconcile",{"id":item["id"],"remote_id":remote_id,"external_link":link})
             total+=1
+    if unknown:
+        print("::warning::CORTES_PINTEREST_UNCERTAIN_WITHOUT_REMOTE_ID="+str(unknown),flush=True)
     return total
 
 
@@ -144,18 +159,30 @@ def publish_once():
         raise
 
 
+def board_gate():
+    """Require Buffer to acknowledge the EXACT owned board before any lease.
+
+    The public Pinterest URL alone cannot authorize a Buffer createPost:
+    previous mutations rejected it. A missing/500 board is an operational
+    incident, never a successful idle workflow.
+    """
+    from social_adapters.buffer_three_channels import pinterest_boards, PINTEREST_PUBLIC_BOARD_ID
+    try:
+        indexed=pinterest_boards()
+    except BufferBlocked as exc:
+        print("::error::CORTES_PINTEREST_BUFFER_BOARD_READ_FAILED",flush=True)
+        raise BufferBlocked("PINTEREST_BUFFER_BOARD_READ_FAILED") from exc
+    if not any(str(b.get("serviceId") or "")==PINTEREST_PUBLIC_BOARD_ID for b in indexed):
+        print("::error::CORTES_PINTEREST_AWAITING_BUFFER_BOARD_SYNC",flush=True)
+        raise BufferBlocked("PINTEREST_BUFFER_BOARD_NOT_SYNCED")
+    return PINTEREST_PUBLIC_BOARD_ID
+
+
 def main():
     cloud_only()
-    # Reconciliation frees queue slots; Buffer automatic mode uses native schedule.
+    # Readback comes first; never lose remote evidence on board outages.
     confirmed=reconcile()
-    # Buffer GraphQL channel metadata can remain stale even after the UI's
-    # Refresh boards has succeeded. The resolver independently verifies the
-    # exact public owned board ID; preserve all queue fencing/reconciliation.
-    from social_adapters.buffer_three_channels import (
-        resolve_pinterest_board, PINNED_CHANNELS, PINTEREST_PUBLIC_BOARD_ID)
-    board_id=resolve_pinterest_board(PINNED_CHANNELS["pinterest"][0])
-    if board_id != PINTEREST_PUBLIC_BOARD_ID:
-        raise BufferBlocked("PINTEREST_BOARD_ID_MISMATCH")
+    board_gate()
     status=publish_once()
     print(json.dumps({"pinterest_cloud":"PASS","scheduled_action":status,
                       "posts_confirmed_this_run":confirmed},separators=(",",":")))
@@ -166,7 +193,7 @@ if __name__=="__main__":
     try: sys.exit(main())
     except Exception as e:
         code=(str(e) if isinstance(e,BufferBlocked) and
-              str(e).startswith(("BUFFER_","PINTEREST_","MASTER_","TITLE_","DURATION_","CAPTION_"))
+              str(e).startswith(("BUFFER_","PINTEREST_","MASTER_","TITLE_","DURATION_","CAPTION_","PINTEREST_"))
               else type(e).__name__)
         print(json.dumps({"pinterest_cloud":"BLOCKED","reason":code}))
         sys.exit(2)

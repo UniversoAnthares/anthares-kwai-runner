@@ -27,6 +27,20 @@ class P0RouterTests(unittest.TestCase):
         self.assertEqual(result[0]["network"],"tiktok")
         self.assertTrue(result[0]["evidence"].endswith("123456"))
 
+    def test_pinterest_repeating_board_outage_is_one_p0_per_day(self):
+        now=router.NOW.isoformat()
+        runs={"workflow_runs":[
+            {"name":"CORTES Pinterest - automatic Buffer cloud publisher",
+             "conclusion":"failure","created_at":now,"id":39654653406},
+            {"name":"CORTES Pinterest - automatic Buffer cloud publisher",
+             "conclusion":"failure","created_at":now,"id":39654653407},
+        ]}
+        with patch.object(router,"http",return_value=runs):
+            incidents=router.workflow_incidents()
+        self.assertEqual(len(incidents),4)  # both repos scanned
+        self.assertEqual(len({x["id"] for x in incidents}),2)
+        self.assertTrue(all(x["network"]=="pinterest" for x in incidents))
+
     def test_action_success_never_creates_ticket(self):
         run={"workflow_runs":[{
             "name":"CORTES TikTok Neon Producer","conclusion":"success",
