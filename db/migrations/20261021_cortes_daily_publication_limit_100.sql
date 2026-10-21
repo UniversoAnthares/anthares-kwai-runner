@@ -39,7 +39,7 @@ LANGUAGE plpgsql
 SET search_path = pg_catalog,public
 AS $cortes$
 DECLARE
-  local_day date;
+  v_local_day date;
   updated_total integer;
 BEGIN
   IF NEW.status <> 'started'
@@ -52,10 +52,10 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  local_day:=(now() AT TIME ZONE 'America/Campo_Grande')::date;
+  v_local_day:=(now() AT TIME ZONE 'America/Campo_Grande')::date;
   INSERT INTO public.cortes_daily_publication_budget(
     target_key,local_day,reserved,updated_at)
-  VALUES(NEW.target_key,local_day,1,now())
+  VALUES(NEW.target_key,v_local_day,1,now())
   ON CONFLICT(target_key,local_day)
   DO UPDATE SET reserved=public.cortes_daily_publication_budget.reserved+1,
                 updated_at=now()
