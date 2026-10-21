@@ -62,7 +62,7 @@ async function identity(request){
  const now=Math.floor(Date.now()/1000);
  if(head.alg!=='RS256'||typeof head.kid!=='string'||head.kid.length>200||
     claims.iss!=='https://token.actions.githubusercontent.com'||claims.ref!=='refs/heads/main'||
-    !['schedule','workflow_dispatch','push'].includes(claims.event_name)||
+    !['schedule','workflow_dispatch','push','workflow_run'].includes(claims.event_name)||
     !Number.isFinite(claims.exp)||claims.exp<=now||
     !Number.isFinite(claims.iat)||claims.iat>now+60||
     (claims.nbf!==undefined&&claims.nbf>now+60)||
