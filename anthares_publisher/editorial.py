@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import re
 
+from .unicode_gate import clean_publication_text, clean_metadata
+
 SUFFIX = " ● Universo Anthares"
 WEBSITE = "www.anthares.us"
 _BRAND_END = re.compile(r"(?:\s*(?:●|•|\||[-–—])\s*Universo Anthares)+\s*$", re.I)
@@ -15,7 +17,7 @@ _WEBSITE = re.compile(r"(?<![\w.])(?:https?://)?(?:www\.)?anthares\.us(?:/)?(?![
 
 def branded_title(value: str, limit: int | None = None) -> str:
     """Format the human-readable title, leaving room for the exact suffix."""
-    raw = " ".join(str(value or "").split())
+    raw = " ".join(clean_publication_text(str(value or ""), field="title").split())
     raw = _BRAND_END.sub("", raw).strip(" \t-–—|●•")
     if not raw:
         raise ValueError("publication_title_required")
@@ -31,7 +33,7 @@ def branded_title(value: str, limit: int | None = None) -> str:
 
 def add_site_to_keywords(value: str) -> str:
     """Use the literal URL as a keyword; dots must not be treated as hashtag syntax."""
-    existing = str(value or "").strip()
+    existing = clean_publication_text(str(value or ""), field="text").strip() if value else ""
     if _WEBSITE.search(existing):
         return existing
     return (existing + " " if existing else "") + WEBSITE
@@ -43,7 +45,7 @@ def prepare_publication_metadata(payload: dict, *, title_limit: int | None = Non
     title is the editorial headline; text/description remain supplementary copy.
     For old text-only payloads the first nonempty line becomes the headline.
     """
-    data = dict(payload)
+    data = clean_metadata(payload)
     headline = str(data.get("title") or "").strip()
     text = str(data.get("text") or data.get("description") or "").strip()
     if not headline:
