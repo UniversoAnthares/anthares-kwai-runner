@@ -32,12 +32,14 @@ def discover_source() -> dict:
         info = ydl.extract_info(CHANNEL_URL, download=False)
     entries = list((info or {}).get("entries") or [])
     required_duration = max(MIN_SOURCE_SECONDS, SCAN_START + SCAN_SECONDS)
-    excluded = {x.strip() for x in os.getenv("X_EXCLUDED_SOURCE_IDS", "").split(",") if x.strip()}
+    windows = json.loads(os.getenv("X_SOURCE_WINDOWS_JSON", "{}"))
+    if not isinstance(windows, dict):
+        raise RuntimeError("X_SOURCE_WINDOWS_INVALID")
     for e in entries:
         if not isinstance(e, dict):
             continue
         vid = str(e.get("id") or "").strip()
-        if not vid or vid in excluded:
+        if not vid:
             continue
         live = str(e.get("live_status") or "").lower()
         duration = int(e.get("duration") or 0)
@@ -45,7 +47,13 @@ def discover_source() -> dict:
             continue
         if not duration or duration < required_duration:
             continue
-        return {"video_id": vid, "source_url": f"https://www.youtube.com/watch?v={vid}", "title": str(e.get("title") or vid), "duration": duration, "source_class": "long_form"}
+        occupied = {int(v) for v in windows.get(vid, [])}
+        for index in range(16):
+            candidate = SCAN_START + index * SCAN_SECONDS
+            if candidate + SCAN_SECONDS <= duration and candidate not in occupied:
+                return {"video_id": vid, "source_url": f"https://www.youtube.com/watch?v={vid}",
+                        "title": str(e.get("title") or vid), "duration": duration,
+                        "source_class": "long_form", "scan_start": candidate}
     raise RuntimeError(f"Nenhum vídeo longo concluído adequado encontrado no canal (mínimo {required_duration}s).")
 
 
@@ -205,8 +213,10 @@ def transcribe_words(video: Path) -> list[dict]:
 
 
 def main() -> int:
+    global SCAN_START
     WORK.mkdir(parents=True, exist_ok=True)
     source = discover_source(); scan = WORK / "scan.mp4"
+    SCAN_START = int(source.pop("scan_start"))
     download_scan(source["source_url"], scan)
     source["video"] = probe_video(scan)
     words = transcribe_words(scan)
