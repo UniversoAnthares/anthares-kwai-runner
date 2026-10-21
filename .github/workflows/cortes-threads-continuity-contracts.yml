@@ -31,4 +31,4 @@ jobs:
           node --check tools/threads_primary_gate.mjs
           node --check infra/neon-threads-sync/index.mjs
       - name: Prove duplicate-safety and bounded pre-submit retry
-        run: node --test tests/threads_primary_gate.test.mjs tests/threads_queue_policy.test.mjs
+        run: node --test tests/threads_primary_gate.test.mjs tests/threads_queue_policy.test.mjs tests/threads_neon_sync_contract.test.mjs
