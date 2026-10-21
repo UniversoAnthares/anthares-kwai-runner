@@ -71,6 +71,32 @@ class VideoReadyTests(unittest.TestCase):
         self.assertEqual(result["status"], "AUTH_OR_CONFIG_REQUIRED")
         self.assertEqual(result["destination_key"], "pinterest:primary")
 
+    def test_neon_consumer_is_fail_closed_without_explicit_arm(self):
+        p = subprocess.run(
+            [sys.executable, "tools/cortes_social_queue_consumer.py",
+             "--platform", "pinterest", "--account", "primary", "--preflight"],
+            capture_output=True, text=True,
+            env={k:v for k,v in os.environ.items() if k != "ANTHARES_SOCIAL_COMMIT"},
+            timeout=15,
+        )
+        self.assertEqual(p.returncode, 3)
+        self.assertEqual(__import__("json").loads(p.stdout)["status"], "AUTH_OR_CONFIG_REQUIRED")
+
+    def test_social_consumer_rejects_unsafe_job(self):
+        from tools.cortes_social_queue_consumer import _safe_job
+        baseline = {
+            "target_key": "pinterest:primary", "duration_class": "short",
+            "payload": {"title": "Um tema literário",
+                        "media_url": "https://anthares.us/media/clip.mp4",
+                        "duration_seconds": 60},
+        }
+        out = _safe_job(baseline, "pinterest", "primary")
+        self.assertEqual(out["media_url"], baseline["payload"]["media_url"])
+        bad = {**baseline, "payload": {**baseline["payload"],
+                                    "media_url": "https://evil.invalid/private.mp4"}}
+        with self.assertRaisesRegex(ValueError, "origin"):
+            _safe_job(bad, "pinterest", "primary")
+
     def test_linkedin_auth_gate(self):
         result = self._call("linkedin")
         self.assertEqual(result["status"], "AUTH_OR_CONFIG_REQUIRED")
