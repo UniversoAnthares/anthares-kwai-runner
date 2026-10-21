@@ -1,0 +1,26 @@
+name: CORTES Threads - Cloud Media Feed
+on:
+  push:
+    branches: [feature/threads-cloud-primary-20261021]
+    paths:
+      - tools/cortes_threads_cloud_feed.mjs
+      - tests/cortes_threads_cloud_feed.test.mjs
+      - .github/workflows/cortes-threads-cloud-feed.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  feed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate feed parser without local PC
+        run: node --test tests/cortes_threads_cloud_feed.test.mjs
+      - name: Read published media from Anthares WordPress
+        run: node tools/cortes_threads_cloud_feed.mjs /tmp/threads-cloud-feed.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: threads-cloud-feed-probe
+          path: /tmp/threads-cloud-feed.json
+          retention-days: 1

@@ -1,0 +1,34 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+const API='https://anthares.us/wp-json/wp/v2/media';
+const FILE=/^https:\/\/anthares\.us\/wp-content\/uploads\/anthares-clips\/\d{4}\/\d{2}\/short_([A-Za-z0-9_-]{11})_g(\d+)_(\d+)_(\d+)\.mp4$/;
+export const localDay=(d=new Date())=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Campo_Grande',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+export function clipFromMedia(m,day){
+ if(!m||m.mime_type!=='video/mp4'||String(m.date||'').slice(0,10)!==day)return null;
+ const url=String(m.source_url||''),z=FILE.exec(url);if(!z)return null;
+ const [,source,round,a,b]=z,start=Number(a),end=Number(b);
+ if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||end-start<5||end-start>180)return null;
+ const clip_id='g'+round+':'+source+':'+start+':'+end;
+ return{id:source+'|'+clip_id,clip_id,source,date:day,attachment_id:m.id,duration:end-start,url,stored_at:m.date_gmt||m.date};
+}
+export async function fetchCloudManifest({fetcher=fetch,day=localDay(),maxPages=12}={}){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw Error('INVALID_DATE');
+ let totalPages=1,pageCount=0;const unique=new Map();
+ for(let page=1;page<=Math.min(totalPages,maxPages);page++){
+  const u=new URL(API);for(const [k,v] of Object.entries({search:'short_',per_page:100,page,orderby:'date',order:'desc'}))u.searchParams.set(k,String(v));
+  const res=await fetcher(u,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(20000)});
+  if(!res.ok)throw Error('WORDPRESS_HTTP_'+res.status);
+  const rows=await res.json();if(!Array.isArray(rows))throw Error('WORDPRESS_NOT_ARRAY');
+  const n=Number(res.headers.get('X-WP-TotalPages')||1);totalPages=Number.isInteger(n)&&n>0?n:1;
+  pageCount++;for(const item of rows){const c=clipFromMedia(item,day);if(c)unique.set(c.id,c);}
+  if(rows.length<100)break;
+ }
+ const items=[...unique.values()].sort((a,b)=>a.stored_at.localeCompare(b.stored_at)||a.id.localeCompare(b.id));
+ return{day,source:'wp-rest-media',total:items.length,pages:pageCount,items};
+}
+if(process.argv[1]?.replaceAll('\\','/').endsWith('/cortes_threads_cloud_feed.mjs')){
+ try{const data=await fetchCloudManifest({day:process.env.CORTES_DAY||localDay()}),dest=process.argv[2];
+ if(dest){await fs.mkdir(path.dirname(dest),{recursive:true});await fs.writeFile(dest,JSON.stringify(data,null,2)+'\n','utf8');}
+ console.log(JSON.stringify({ok:true,day:data.day,total:data.total,pages:data.pages,pc_independent:true}));}
+ catch(e){console.error('CLOUD_FEED_ERROR='+e.message);process.exitCode=1;}
+}
