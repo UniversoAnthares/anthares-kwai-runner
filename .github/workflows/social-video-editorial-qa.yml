@@ -26,6 +26,8 @@ on:
       - 'anthares_publisher/buffer_distribution.py'
       - 'db/migrations/20261021_cortes_daily_publication_limit_100.sql'
       - 'tests/test_cortes_daily_publication_policy.py'
+      - 'db/migrations/20261021_cortes_confirmed_daily_quota_guard.sql'
+      - 'tests/test_cortes_daily_confirmation_guard.py'
       - 'tests/test_cortes_buffer_jsonb_payload.py'
       - 'infra/neon-cortes-linkedin/**'
       - 'cloudflare-cortes-queue-ha/**'
@@ -61,6 +63,7 @@ jobs:
           python -m unittest discover -s tests -p test_cortes_queue_ha.py -v
           python -m unittest discover -s tests -p test_cortes_queue_ha_safe.py -v
           python -m unittest discover -s tests -p test_cortes_daily_publication_policy.py -v
+          python -m unittest discover -s tests -p test_cortes_daily_confirmation_guard.py -v
           python -m unittest discover -s tests -p test_cortes_buffer_jsonb_payload.py -v
           node --check infra/neon-cortes-linkedin/index.mjs
           node --check cloudflare-cortes-queue-ha/src/index.mjs
