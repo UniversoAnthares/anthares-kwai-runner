@@ -15,6 +15,7 @@ import urllib.request
 
 from tools.cortes_queue_ha import post
 from tools.cortes_social_queue_consumer import _safe_job
+from tools.cortes_social_media_probe import available as media_available
 from social_adapters.video_social import linkedin, ConfigRequired, PlatformLimit
 
 BASE = "https://anthares-remote-primary.vercel.app/api/cortes-queue"
@@ -73,7 +74,7 @@ def account_preflight():
     os.environ["LINKEDIN_PERSONAL_AUTHOR_URN"] = author
 
 
-def publish_one():
+def publish_one(skipped=0):
     cloud_only()
     account_preflight()
     out = queue("lease", {"target_key": TARGET, "owner": OWNER})
@@ -87,6 +88,9 @@ def publish_one():
         payload = _safe_job(row, "linkedin", "personal")
         if linkedin(payload, publish=False).get("status") != "READY":
             raise ConfigRequired("PERSONAL_PREFLIGHT_FAILED")
+        if not media_available(payload["media_url"]):
+            queue("media-missing", fence)
+            return publish_one(skipped + 1) if skipped < 10 else {"linkedin_personal": "SOURCE_MEDIA_MISSING_FOR_REPAIR"}
     except Exception:
         queue("fail", fence)
         raise
