@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from tools.x_publication_safety import validate_video, verified_post_url
+from x_durable_ledger import begin as durable_begin, confirm as durable_confirm
 
 import requests
 from flask import Flask, jsonify, request
@@ -99,37 +100,6 @@ def _download_media(url: str) -> str:
         raise
 
 
-def _attempt_path(key: str) -> Path:
-    if not re.fullmatch(r"[A-Za-z0-9_.:-]{12,160}", key):
-        raise ValueError("X_IDEMPOTENCY_KEY_REQUIRED")
-    root = Path(os.environ.get("X_POST_LEDGER_DIR", "/tmp/anthares-x-submissions"))
-    root.mkdir(parents=True, exist_ok=True)
-    return root / (hashlib.sha256((EXPECTED + ":" + key).encode()).hexdigest() + ".json")
-
-
-def _begin_attempt(key: str) -> Path:
-    """Atomic local lease: a restarted/parallel worker may not blindly repost.
-
-    Production must use a persistent volume for X_POST_LEDGER_DIR or delegate
-    the canonical distributed lease to Neon.
-    """
-    path = _attempt_path(key)
-    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as stream:
-        json.dump({"status": "STARTED", "key_sha256": path.stem,
-                   "at": time.time()}, stream)
-        stream.flush()
-        os.fsync(stream.fileno())
-    return path
-
-
-def _complete_attempt(path: Path, url: str):
-    temp = path.with_suffix(".tmp")
-    with open(temp, "w", encoding="utf-8") as stream:
-        json.dump({"status": "CONFIRMED", "post_url": url, "at": time.time()}, stream)
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temp, path)
 
 
 @app.get("/health")
@@ -225,8 +195,11 @@ def post_route():
             while time.time() < deadline:
                 if button.count() and button.is_enabled():
                     try:
-                        attempt = _begin_attempt(key)
-                    except FileExistsError:
+                        attempt = durable_begin(key)
+                    except Exception as exc:
+                        from x_durable_ledger import AlreadyStarted
+                        if not isinstance(exc, AlreadyStarted):
+                            raise
                         return jsonify(ok=False, error="X_SUBMISSION_ALREADY_STARTED_RECONCILE_FIRST"), 409
                     button.click()
                     break
@@ -258,7 +231,7 @@ def post_route():
             finally:
                 check.close()
             persisted = runtime._persist()
-            _complete_attempt(attempt, after)
+            durable_confirm(attempt, after)
         return jsonify(ok=True, handle=handle, post_url=after, video_verified=True, durable=bool(persisted), render_dependency=False)
     except Exception as exc:
         return jsonify(ok=False, error=str(exc)[:700]), 503
