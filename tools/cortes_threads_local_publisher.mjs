@@ -53,9 +53,10 @@ const list=(readJson(manifestPath,{items:[]}).items||[]).flatMap(x=>{try{return 
 if(list.length===0)throw Error('MANIFEST_EMPTY');
 const today=new Date().toLocaleDateString('en-CA',{timeZone:'America/Campo_Grande'});
 const publishedToday=Object.values(ledger.items).filter(x=>x.status==='published'&&new Date(x.published_at).toLocaleDateString('en-CA',{timeZone:'America/Campo_Grande'})===today).length;
+const uncertainToday=Object.values(ledger.items).filter(x=>x.status==='submitting_uncertain'&&x.submitAt&&new Date(x.submitAt).toLocaleDateString('en-CA',{timeZone:'America/Campo_Grande'})===today).length;
 const last=ledger.lastPublished?new Date(ledger.lastPublished).getTime():0;
 if(mode==='auto'){
- if(publishedToday>=maxPerDay){log({action:"DAILY_CAP_REACHED_PENDING_PRESERVED",count:publishedToday});process.exit(0)}
+ if(publishedToday+uncertainToday>=maxPerDay){log({action:"DAILY_CAP_REACHED_PENDING_PRESERVED",count:publishedToday,uncertain:uncertainToday});process.exit(0)}
  if(last&&Date.now()-last<minGapMs){log({action:'COOLDOWN',remainingSeconds:Math.ceil((minGapMs-Date.now()+last)/1000)});process.exit(0)}
 }
 let item;
