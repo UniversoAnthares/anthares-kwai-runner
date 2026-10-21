@@ -21,7 +21,7 @@ async function pruneOwnedPinterestTabs(){
  try{const r=await fetch('http://127.0.0.1:'+port+'/json/list',{signal:AbortSignal.timeout(4500)});
   if(r.ok)list=await r.json();}catch{return}
  for(const filename of fs.readdirSync(markers)){
-  if(!/^9226-[a-f0-9]{32}\\.json$/i.test(filename))continue;
+  if(!/^9226-[a-f0-9]{32}\.json$/i.test(filename))continue;
   const marker=path.join(markers,filename);
   let entry;try{entry=JSON.parse(fs.readFileSync(marker,'utf8'))}catch{continue}
   if(Date.now()-Number(entry.created||0)<180000)continue;
