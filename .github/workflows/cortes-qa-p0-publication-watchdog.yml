@@ -1,0 +1,37 @@
+name: CORTES P0 publication incident watchdog
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_run:
+    workflows:
+      - "Anthares Publisher QA"
+      - "CORTES TikTok Publisher"
+      - "Kwai queue publisher"
+      - "Social direct adapters contract"
+    types: [completed]
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: cortes-p0-publication-errors-watchdog
+  cancel-in-progress: false
+jobs:
+  route:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
+      WP_USERNAME: ${{ secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile P0 incident router
+        run: python3 -m py_compile tools/cortes_qa_p0_router.py
+      - name: Detect publisher failures and open immediate-priority QA issues
+        run: python3 -u tools/cortes_qa_p0_router.py
