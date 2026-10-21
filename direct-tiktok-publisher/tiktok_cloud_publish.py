@@ -12,6 +12,9 @@ import tempfile
 import unicodedata
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from anthares_publisher.editorial import branded_title, add_site_to_keywords
+
 from playwright.sync_api import sync_playwright
 
 import tiktok_worker as tw
@@ -91,7 +94,8 @@ def _caption(plan: dict) -> str:
     else:
         topic_tags = ["#Livros", "#AnaliseLiteraria"]
     hashtags = ["#BookTokBrasil", "#Literatura"] + topic_tags
-    return headline + " " + " ".join(hashtags[:4]) + " " + marker.group(0).lower()
+    headline = branded_title(headline, limit=150)
+    return add_site_to_keywords(headline + " " + " ".join(hashtags[:4])) + " " + marker.group(0).lower()
 
 def _fill_caption(page, caption: str) -> None:
     selectors = [
