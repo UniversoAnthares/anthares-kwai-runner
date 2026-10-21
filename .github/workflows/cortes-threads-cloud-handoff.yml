@@ -46,6 +46,6 @@ jobs:
           access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
           cloud_region: us
           secrets: |
-            ${{ vars.BWS_THREADS_SECRET_ID }} > THREADS_ACCESS_TOKEN
+            4ef756b1-f948-4780-af26-b4ea014637bf > THREADS_ACCESS_TOKEN
       - name: Verify Threads account and execute dry run or authorized single publish
         run: node tools/cortes_threads_cloud_handoff.mjs
