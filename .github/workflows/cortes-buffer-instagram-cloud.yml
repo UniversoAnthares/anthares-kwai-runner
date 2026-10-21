@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish-and-reconcile:
-    # Remain disabled until the Instagram board has been confirmed by Buffer.
+    # Enable only after the cloud worker and canonical account are authenticated.
     if: ${{ vars.CORTES_INSTAGRAM_BUFFER_ENABLED == 'true' && vars.CORTES_INSTAGRAM_BUFFER_PAUSED != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
