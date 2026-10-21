@@ -10,16 +10,16 @@ $cfg=Join-Path $Root 'config'
 New-Item -ItemType Directory -Path $src,$cfg -Force|Out-Null
 $script=Join-Path $src 'threads_cloud_auth_reference.mjs'
 $manifest=Join-Path $cfg 'threads-cloud-auth-reference.json'
-Invoke-WebRequest -UseBasicParsing ($base+'tools/threads_cloud_auth_reference.mjs') -OutFile ($script+'.new') -TimeoutSec 25
+Invoke-WebRequest -UseBasicParsing ($base+'tools/threads_cloud_auth_reference.mjs') -OutFile ($script+'.staged.mjs') -TimeoutSec 25
 Invoke-WebRequest -UseBasicParsing ($base+'config/threads-cloud-auth-reference.json') -OutFile ($manifest+'.new') -TimeoutSec 25
-& $node --check ($script+'.new')
+& $node --check ($script+'.staged.mjs')
 if($LASTEXITCODE -ne 0){throw 'AUTH_REFERENCE_SCRIPT_SYNTAX_FAILED'}
 $policy=Get-Content ($manifest+'.new') -Raw|ConvertFrom-Json
 if($policy.schema -ne 'anthares.threads.auth-reference.v1' -or
    $policy.copy_browser_cookies -ne $false -or $policy.copy_access_token_to_folder -ne $false){
  throw 'AUTH_REFERENCE_POLICY_INVALID'
 }
-Move-Item -Force ($script+'.new') $script
+Move-Item -Force ($script+'.staged.mjs') $script
 Move-Item -Force ($manifest+'.new') $manifest
 $task='Anthares CORTES Threads Cloud Auth Reference'
 $action=New-ScheduledTaskAction -Execute $node -Argument ('"'+$script+'" --write') -WorkingDirectory $Root
