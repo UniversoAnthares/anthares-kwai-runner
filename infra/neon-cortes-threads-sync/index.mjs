@@ -79,7 +79,22 @@ function validClip(b){
  let parsed;try{parsed=new URL(u)}catch{return false}
  if(parsed.protocol!=='https:'||parsed.hostname!=='anthares.us'||parsed.username||parsed.password||parsed.port||parsed.search||parsed.hash)return false;
  const filename='short_'+source+'_g'+m[1]+'_'+m[3]+'_'+m[4]+'.mp4';
- return new RegExp('^/wp-content/uploads/anthares-clips/\\d{4}/\\d{2}/'+filename.replace('.','\\.')+'
+ return /^\/wp-content\/uploads\/anthares-clips\/\d{4}\/\d{2}\//.test(parsed.pathname)
+  &&parsed.pathname.endsWith('/'+filename);
+}
+async function enqueueClip(body){
+ if(!validClip(body))return{ok:false,error:'THREADS_ENQUEUE_INVALID'};
+ const args=[body.id,body.dedupe_key,TARGET,body.master_id,body.media_sha256,body.source_id,
+ Number(body.source_start),Number(body.source_end),JSON.stringify(body)];
+ const inserted=await query("INSERT INTO cortes_publications(id,dedupe_key,target_key,master_id,media_sha256,source_id,source_start,source_end,duration_class,payload,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'short',$9::jsonb,'queued') ON CONFLICT DO NOTHING RETURNING id,status",args);
+ if(inserted.length)return{ok:true,deduped:false,job:inserted[0]};
+ const found=await query('SELECT id,dedupe_key,target_key,master_id,media_sha256,source_id,source_start,source_end,status FROM cortes_publications WHERE id=$1 OR dedupe_key=$2 LIMIT 1',args.slice(0,2));
+ const old=found[0];
+ const names=['id','dedupe_key','target_key','master_id','media_sha256','source_id','source_start','source_end'];
+ if(!old||names.some((name,index)=>String(old[name])!==String(args[index])))return{ok:false,error:'THREADS_ENQUEUE_IDENTITY_COLLISION'};
+ return{ok:true,deduped:true,job:{id:old.id,status:old.status}};
+}
+export default {async fetch(request){
  const url=new URL(request.url),action=url.searchParams.get('action')||'';
  if(request.method==='GET'&&action==='health'){
   try{await query('SELECT 1 AS ok');return answer({ok:true,backend:'neon-functions-threads',database_ok:true,device_scoped:true,publishes_media:false})}
