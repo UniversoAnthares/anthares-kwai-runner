@@ -1,0 +1,23 @@
+# Independent Forgejo Actions capability proof for the Codeberg mirror.
+# No social publishing, no secrets, no GH OIDC, no network writes.
+# The separate .forgejo/workflows directory prevents automatic fallback
+# to the GitHub publishing workflows copied into this mirrored repository.
+name: Codeberg capability - isolated read-only runner
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  hosted-runner-proof:
+    runs-on: codeberg-tiny
+    timeout-minutes: 2
+    steps:
+      - name: Validate Forgejo runner allocation and the expected repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${FORGEJO_REPOSITORY:-}" = "UniversoAnthares/anthares-kwai-runner"
+          test "${FORGEJO_REF:-}" = "refs/heads/main"
+          test "${FORGEJO_ACTIONS:-}" = "true"
+          echo "CODEBERG_CI_RUNNER_PROOF=PASS"
+          echo "CODEBERG_PUBLISHER_NOT_ARMED=PASS"
