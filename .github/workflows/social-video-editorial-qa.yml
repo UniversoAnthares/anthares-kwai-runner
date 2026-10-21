@@ -15,6 +15,9 @@ on:
       - 'cloudflare-worker/patches/apply-publisher-target-v17.py'
       - 'vercel-ara-primary/api/cortes-queue.mjs'
       - 'tools/cortes_social_queue_consumer.py'
+      - 'tools/cortes_buffer_linkedin_cloud.py'
+      - 'tests/test_cortes_buffer_linkedin_cloud.py'
+      - '.github/workflows/cortes-buffer-linkedin-cloud.yml'
       - 'tests/test_cortes_oidc_social_fanout.mjs'
       - '.github/workflows/social-video-editorial-qa.yml'
 
@@ -37,6 +40,7 @@ jobs:
         run: |
           python -m unittest discover -s tests -p test_social_video_editorial.py -v
           python -m unittest discover -s tests -p test_buffer_three_channels.py -v
+          python -m unittest discover -s tests -p test_cortes_buffer_linkedin_cloud.py -v
           python -m unittest discover -s tests -p test_media_model.py -v
           python tests/test_direct_social_adapters.py
       - name: Validate Cloudflare queue patch in disposable checkout only
