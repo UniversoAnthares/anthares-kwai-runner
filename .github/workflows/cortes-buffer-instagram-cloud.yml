@@ -19,7 +19,7 @@ jobs:
   publish-and-reconcile:
     # Enable only after the cloud worker and canonical account are authenticated.
     if: ${{ vars.CORTES_INSTAGRAM_BUFFER_PAUSED != 'true' }}
-    runs-on: [self-hosted, cortes-instagram-only-20261021]
+    runs-on: [cortes-instagram-only-20261021]
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
