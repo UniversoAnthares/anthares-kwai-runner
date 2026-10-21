@@ -75,6 +75,7 @@ async function identity(request){
   platform=Object.keys(BUFFER_WORKFLOWS).find(p=>BUFFER_WORKFLOWS[p]===wf);
   if(platform)role='buffer';
   else if(RUNNER_PRODUCERS.has(wf))role='producer';
+  else if(wf==='cortes-neon-ha-oidc-proof.yml'){role='probe';platform='linkedin';}
  }else if(repo===CLIPPER&&CLIPPER_PRODUCERS.has(wf))role='producer';
  if(!role)return null;
  try{
@@ -219,6 +220,8 @@ export default {async fetch(request){
  if(!body||typeof body!=='object'||Array.isArray(body))return answer({ok:false,error:'INVALID_BODY'},400);
  if(JSON.stringify(body).length>65536)return answer({ok:false,error:'TOO_LARGE'},413);
  try{
+  if(action==='buffer-pending'&&actor.role==='probe')
+    return answer(await bufferAction('pending',body,'linkedin'));
   if(action==='enqueue'){
    if(actor.role!=='producer')return answer({ok:false,error:'PRODUCER_ONLY'},403);
    if(actor.workflow==='cortes-linkedin-neon-fanout.yml'&&body.platform!=='linkedin')
