@@ -39,6 +39,14 @@ class SecondaryCloudTests(unittest.TestCase):
             with self.assertRaises(q.SafeStop):
                 q.oidc()
 
+    def test_cloudflare_queue_ingress_is_independent_and_rejects_anonymous_mutation(self):
+        self.assertEqual(q.BACKUP_QUEUE,"https://anthares-cortes-tiktok-lucas4-ha.anthares1.workers.dev/")
+        edge=(ROOT/"infra"/"cloudflare-cortes-tiktok-lucas4-ha"/"src"/"index.js").read_text(encoding="utf-8")
+        self.assertIn("cortestiktok4.compute",edge)
+        self.assertIn("oidc_required",edge)
+        self.assertIn("'mirror'",edge)
+        self.assertNotIn("vercel.app",edge)
+
     def test_cloud_starts_are_budgeted_by_second_account(self):
         source=(ROOT/"infra"/"neon-cortes-lucasrosalem4"/"index.mjs").read_text(encoding="utf-8")
         self.assertIn("const TARGET='tiktok:lucasrosalem4'",source)
