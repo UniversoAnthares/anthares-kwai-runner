@@ -40,7 +40,9 @@ class PinterestCloudTests(unittest.TestCase):
     def test_missing_buffer_board_fails_ci_without_leasing(self):
         with patch.object(p,"cloud_only"), patch.object(p,"reconcile",return_value=0), \
              patch("social_adapters.buffer_three_channels.pinterest_boards",
-                   return_value=[]), patch.object(p,"publish_once") as publish:
+                   return_value=[]), patch.object(p,"alternate_pinterest_boards",
+                   return_value=[]), patch.object(p.time,"sleep"), \
+             patch.object(p,"publish_once") as publish:
             with self.assertRaisesRegex(p.BufferBlocked,"BOARD_NOT_SYNCED"):
                 p.main()
             publish.assert_not_called()
@@ -49,10 +51,47 @@ class PinterestCloudTests(unittest.TestCase):
         with patch.object(p,"cloud_only"), patch.object(p,"reconcile",return_value=0), \
              patch("social_adapters.buffer_three_channels.pinterest_boards",
                    side_effect=p.BufferBlocked("BUFFER_HTTP_500")), \
-             patch.object(p,"publish_once") as publish:
+             patch.object(p,"alternate_pinterest_boards",
+                   side_effect=p.BufferBlocked("BUFFER_HTTP_500")), \
+             patch.object(p.time,"sleep"), patch.object(p,"publish_once") as publish:
             with self.assertRaisesRegex(p.BufferBlocked,"BOARD_READ_FAILED"):
                 p.main()
             publish.assert_not_called()
+
+    def test_alternate_board_resolver_recovers_500_safely(self):
+        from social_adapters.buffer_three_channels import PINTEREST_PUBLIC_BOARD_ID
+        with patch("social_adapters.buffer_three_channels.pinterest_boards",
+                   side_effect=p.BufferBlocked("BUFFER_HTTP_500")), \
+             patch.object(p,"alternate_pinterest_boards",
+                   return_value=[{"serviceId":PINTEREST_PUBLIC_BOARD_ID}]), \
+             patch.object(p.time,"sleep") as sleep:
+            self.assertEqual(p.board_gate(),PINTEREST_PUBLIC_BOARD_ID)
+            sleep.assert_not_called()
+
+    def test_alternate_resolver_requires_pinned_pinterest_channel(self):
+        from social_adapters.buffer_three_channels import PINTEREST_PUBLIC_BOARD_ID
+        def fake(query):
+            if "organizations" in query:
+                return {"account":{"organizations":[{"id":"org-1"}]}}
+            return {"channels":[
+                {"id":"wrong-channel","service":"pinterest",
+                 "metadata":{"boards":[{"serviceId":PINTEREST_PUBLIC_BOARD_ID}]}}
+            ]}
+        with patch.object(p,"api",side_effect=fake):
+            self.assertEqual(p.alternate_pinterest_boards(),[])
+
+    def test_alternate_resolver_finds_only_own_channel(self):
+        from social_adapters.buffer_three_channels import PINTEREST_PUBLIC_BOARD_ID
+        def fake(query):
+            if "organizations" in query:
+                return {"account":{"organizations":[{"id":"org-1"}]}}
+            return {"channels":[
+                {"id":p.PINTEREST_ID,"service":"pinterest",
+                 "metadata":{"boards":[{"serviceId":PINTEREST_PUBLIC_BOARD_ID}]}}
+            ]}
+        with patch.object(p,"api",side_effect=fake):
+            self.assertEqual(p.alternate_pinterest_boards(),
+                             [{"serviceId":PINTEREST_PUBLIC_BOARD_ID}])
 
     def test_board_ready_can_resume_without_operator(self):
         from social_adapters.buffer_three_channels import PINTEREST_PUBLIC_BOARD_ID
