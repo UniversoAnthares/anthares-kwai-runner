@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 sys.path.insert(0,os.path.dirname(os.path.dirname(__file__)))
 from tools.x_publication_safety import validate_video, verified_post_url
+from x_durable_ledger import begin as durable_begin, confirm as durable_confirm
 
 import requests
 from cryptography.hazmat.primitives import hashes
@@ -215,29 +216,6 @@ def _download_media(url):
         raise
 
 
-def _attempt_file(key):
-    if not re.fullmatch(r"[A-Za-z0-9_.:-]{12,160}", key or ""):
-        raise ValueError("X_IDEMPOTENCY_KEY_REQUIRED")
-    root=Path(os.getenv("X_POST_LEDGER_DIR", "/tmp/anthares-x-submissions"))
-    root.mkdir(parents=True, exist_ok=True)
-    return root / (hashlib.sha256((EXPECTED+":"+key).encode()).hexdigest()+".json")
-
-
-def _start_attempt(key):
-    path=_attempt_file(key)
-    fd=os.open(str(path),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-    with os.fdopen(fd,"w",encoding="utf-8") as stream:
-        json.dump({"status":"STARTED","created_at":time.time()},stream)
-        stream.flush();os.fsync(stream.fileno())
-    return path
-
-
-def _confirm_attempt(path,post_url):
-    temp=path.with_suffix(".tmp")
-    with open(temp,"w",encoding="utf-8") as stream:
-        json.dump({"status":"CONFIRMED","post_url":post_url,"created_at":time.time()},stream)
-        stream.flush();os.fsync(stream.fileno())
-    os.replace(temp,path)
 
 
 def _publish(text, media_url, idempotency_key):
@@ -262,7 +240,7 @@ def _publish(text, media_url, idempotency_key):
                 attempt = None
                 while time.time() < deadline:
                     if button.is_enabled():
-                        attempt = _start_attempt(idempotency_key)
+                        attempt = durable_begin(idempotency_key)
                         button.click()
                         break
                     page.wait_for_timeout(500)
@@ -286,7 +264,7 @@ def _publish(text, media_url, idempotency_key):
                             raise RuntimeError("X_POST_UNCERTAIN_ACCOUNT_MISMATCH")
                         check.close()
                         _save_state(context.storage_state())
-                        _confirm_attempt(attempt,after)
+                        durable_confirm(attempt,after)
                         return {"handle": handle, "post_url": after, "video_verified": True}
                 raise RuntimeError("publication not confirmed")
             finally:
