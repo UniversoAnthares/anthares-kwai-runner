@@ -268,6 +268,12 @@ def main():
     token=auth()
     for issue,data in listed():
         n=issue["number"];prior=readstate(n)
+        if prior.get("phase")=="CONFIRMED":
+            url=str(prior.get("post_url") or "")
+            if re.fullmatch(r"https://x.com/lucasyahn/status/[0-9]+",url):
+                try:finish(issue,data,url)
+                except Exception:pass
+            continue
         if prior.get("phase") in STOP or int(prior.get("attempts") or 0)>=3:continue
         try:one(issue,data,token)
         except Exception as e:
