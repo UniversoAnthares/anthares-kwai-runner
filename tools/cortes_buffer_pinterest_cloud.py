@@ -148,18 +148,15 @@ def main():
     cloud_only()
     # Reconciliation frees queue slots; Buffer automatic mode uses native schedule.
     confirmed=reconcile()
-    from social_adapters.buffer_three_channels import pinterest_boards, PINTEREST_PUBLIC_BOARD_ID
-    try:
-        indexed = pinterest_boards()
-        board_ready = any(str(board.get("serviceId") or "") == PINTEREST_PUBLIC_BOARD_ID
-                          for board in indexed)
-    except BufferBlocked:
-        board_ready = False
-    if not board_ready:
-        print("CORTES_PINTEREST_AWAITING_BUFFER_BOARD_SYNC=1",flush=True)
-        status="IDLE_WAITING_FOR_BUFFER_BOARD_SYNC"
-    else:
-        status=publish_once()
+    # Buffer GraphQL channel metadata can remain stale even after the UI's
+    # Refresh boards has succeeded. The resolver independently verifies the
+    # exact public owned board ID; preserve all queue fencing/reconciliation.
+    from social_adapters.buffer_three_channels import (
+        resolve_pinterest_board, PINNED_CHANNELS, PINTEREST_PUBLIC_BOARD_ID)
+    board_id=resolve_pinterest_board(PINNED_CHANNELS["pinterest"][0])
+    if board_id != PINTEREST_PUBLIC_BOARD_ID:
+        raise BufferBlocked("PINTEREST_BOARD_ID_MISMATCH")
+    status=publish_once()
     print(json.dumps({"pinterest_cloud":"PASS","scheduled_action":status,
                       "posts_confirmed_this_run":confirmed},separators=(",",":")))
     return 0
