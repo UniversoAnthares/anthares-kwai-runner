@@ -3,6 +3,7 @@ name: Provision durable Northflank ARA controller + X worker
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - infra/northflank/Dockerfile
       - infra/northflank_combined_app.py
@@ -34,13 +35,12 @@ jobs:
 
           token = os.getenv("NORTHFLANK_API_TOKEN", "")
           shared = os.getenv("ARA_SHARED", "")
-          x_token = os.getenv("X_WORKER_TOKEN", "")
+          x_token = os.getenv("X_WORKER_TOKEN", "") or shared
           if not token:
               sys.exit("NORTHFLANK_API_TOKEN secret is absent")
           if not shared:
               sys.exit("ARA_SHARED secret is absent; refusing incompatible controller deployment")
-          if not x_token:
-              sys.exit("X_WORKER_TOKEN secret is absent; refusing to deploy an X runtime that cannot open the existing vault")
+          # The migrated browser-state authority is ARA_SHARED; the old X token is optional.
 
           for value in (token, shared, x_token):
               print("::add-mask::" + value)
