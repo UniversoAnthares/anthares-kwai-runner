@@ -23,7 +23,9 @@ PROVIDERS = (
     "https://anthares-cortes-queue-ha.anthares1.workers.dev/",
 )
 ACTIONS = frozenset({"enqueue", "buffer-lease", "buffer-start", "buffer-fail",
-                     "buffer-scheduled", "buffer-pending", "buffer-reconcile"})
+                     "buffer-scheduled", "buffer-pending", "buffer-reconcile",
+                     "personal-lease", "personal-start", "personal-fail",
+                     "personal-accepted", "personal-confirmed"})
 RETRYABLE = frozenset({"enqueue", "buffer-pending"})
 
 
