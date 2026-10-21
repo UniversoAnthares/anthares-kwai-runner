@@ -138,8 +138,11 @@ def main():
             print("CORTES_QA_SCAN source="+label+" observations="+str(len(result)))
         except (RuntimeError,urllib.error.URLError,ValueError,TypeError) as exc:
             bad.append(label)
+            items.append({"id":marker("source-failure",label,NOW.date().isoformat()),
+                          "network":"cortes-general", "stage":"qa_visibility_lost_"+label,
+                          "evidence":"https://github.com/"+HUB+"/actions",
+                          "description":"P0 audit source inaccessible; investigate credentials or network"})
             print("::error::CORTES_QA_SCAN_FAILED source="+label+" type="+type(exc).__name__)
-    if bad:return 3
     labels()
     seen=known_markers()
     posted=0
@@ -153,7 +156,7 @@ def main():
         posted+=1
         seen.add(item["id"])
         print("CORTES_QA_P0_CREATED network="+item["network"]+" issue="+str(created["number"]))
-    print("CORTES_QA_ROUTER_OK observations="+str(len(items))+" opened="+str(posted))
+    print("CORTES_QA_ROUTER_OK observations="+str(len(items))+" opened="+str(posted)+" sources_failed="+str(len(bad)))
     return 0
 
 if __name__=="__main__":
