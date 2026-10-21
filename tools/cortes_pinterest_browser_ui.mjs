@@ -14,6 +14,29 @@ const markers='D:\\AntharsWork\\cortes-social-browser-20261020\\chrome-owned-tab
 let pages=[];
 const safe=val=>String(val||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[—–]/g,'-').replace(/\s+/g,' ').trim().toLowerCase();
 function emit(data){process.stdout.write(JSON.stringify(data)+'\n')}
+
+async function pruneOwnedPinterestTabs(){
+ if(!fs.existsSync(markers))return;
+ let list=[];
+ try{const r=await fetch('http://127.0.0.1:'+port+'/json/list',{signal:AbortSignal.timeout(4500)});
+  if(r.ok)list=await r.json();}catch{return}
+ for(const filename of fs.readdirSync(markers)){
+  if(!/^9226-[a-f0-9]{32}\\.json$/i.test(filename))continue;
+  const marker=path.join(markers,filename);
+  let entry;try{entry=JSON.parse(fs.readFileSync(marker,'utf8'))}catch{continue}
+  if(Date.now()-Number(entry.created||0)<180000)continue;
+  try{process.kill(Number(entry.pid),0);continue}catch(e){if(e.code==='EPERM')continue}
+  const tab=list.find(x=>x.id===entry.id);
+  if(tab){
+   try{
+    const url=new URL(tab.url);
+    if(!['br.pinterest.com','www.pinterest.com','pinterest.com'].includes(url.hostname))continue;
+    await fetch('http://127.0.0.1:'+port+'/json/close/'+entry.id,{signal:AbortSignal.timeout(4500)});
+   }catch{continue}
+  }
+  try{fs.unlinkSync(marker)}catch{}
+ }
+}
 class Page{
  constructor(target){this.t=target;this.ws=null;this.i=0;this.pending=new Map()}
  async open(){
@@ -152,6 +175,7 @@ async function publish(p,data){
 const mode=process.argv[2]||'--preflight';
 let mediaFile=null;
 try{
+ await pruneOwnedPinterestTabs();
  const p=await page(editor);
  const auth=await session(p);
  if(mode==='--preflight'){emit({status:'READY',account_id:account,editor_url:auth.href,details:await inspect(p)})}
