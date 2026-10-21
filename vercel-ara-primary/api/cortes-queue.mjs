@@ -260,7 +260,15 @@ async function stats(body){
   count(*) FILTER (WHERE status='confirmed' AND updated_at >= (date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande'))::int AS confirmed_today,
   max(updated_at) FILTER (WHERE status='confirmed') AS last_confirmed_at
   FROM cortes_publications WHERE target_key=$1`,[target]);
- return{ok:true,target_key:target,pending:r.rows[0].pending,confirmed_today:r.rows[0].confirmed_today,last_confirmed_at:r.rows[0].last_confirmed_at};
+ // Quota reservations are authoritative for safe starts, even if confirmations lag.
+ const platform='platform:'+target.split(':',1)[0].toLowerCase();
+ const budget=await pool.query("SELECT target_key,reserved FROM cortes_daily_publication_budget WHERE local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date AND target_key=ANY($1::text[])",[[target,platform]]);
+ const rows=new Map(budget.rows.map(x=>[String(x.target_key),Number(x.reserved)||0]));
+ const reserved_today=rows.get(target)||0;
+ const platform_reserved_today=rows.get(platform)||0;
+ const effective_today=Math.max(reserved_today,platform_reserved_today,Number(r.rows[0].confirmed_today)||0);
+ return{ok:true,target_key:target,pending:r.rows[0].pending,confirmed_today:r.rows[0].confirmed_today,last_confirmed_at:r.rows[0].last_confirmed_at,
+  reserved_today,platform_reserved_today,effective_today,remaining_today:Math.max(0,100-effective_today),daily_cap_reached:effective_today>=100};
 }
 
 async function retention(body){await ensureSchema();const source=String(body.source_id||'').trim(),master=String(body.master_id||'').trim(),targets=Array.isArray(body.planned_targets)?body.planned_targets.map(String):[];if(!source||!master||!targets.length)return{ok:false,error:'missing_source_master_targets'};const r=await pool.query(`SELECT target_key,status FROM cortes_publications WHERE source_id=$1 AND master_id=$2 AND target_key=ANY($3::text[])`,[source,master,targets]);const m=new Map(r.rows.map(x=>[x.target_key,x.status]));const safe=targets.every(t=>m.get(t)==='confirmed');return{ok:true,safe_to_delete:safe,statuses:Object.fromEntries(targets.map(t=>[t,m.get(t)||'missing']))};}
