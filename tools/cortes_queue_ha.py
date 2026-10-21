@@ -17,8 +17,15 @@ import urllib.request
 
 AUDIENCE = "https://anthares-remote-primary.vercel.app/api/cortes-queue"
 PROVIDERS = (
-    "https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/",
     AUDIENCE,
+    "https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/",
+    "https://br-crimson-unit-b89nau08-cortesbackup.compute.c-14.us-east-1.aws.neon.tech/",
+)
+# Cloudflare edge routes are health-checked separately. Signed GitHub OIDC
+# writes currently receive 403 before reaching the Worker; do NOT list a
+# nonfunctional provider among publication write endpoints. Restore only
+# after a successful signed OIDC write/read/delete acceptance test.
+CLOUDFLARE_CANDIDATES = (
     "https://anthares-cortes-neon-edge-ha.anthares1.workers.dev/",
     "https://anthares-cortes-queue-ha.anthares1.workers.dev/",
 )
