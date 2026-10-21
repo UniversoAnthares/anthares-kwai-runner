@@ -74,7 +74,7 @@ jobs:
           echo "vnc=$vnc" >> "$GITHUB_OUTPUT"
 
       - name: Build Anthares-browser
-        run: docker build -t anthares-browser ./anthares-brouser
+        run: |\n          sed -i 's|127.0.0.1:6080 127.0.0.1:5900|0.0.0.0:6080 127.0.0.1:5900|' anthares-brouser/start.sh\n          docker build -t anthares-browser ./anthares-brouser
 
       - name: Start isolated Anthares-browser
         env:
