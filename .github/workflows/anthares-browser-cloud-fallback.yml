@@ -14,7 +14,7 @@ on:
         required: false
         default: '20'
   push:
-    branches: [main]
+    branches: [feature/threads-cloud-primary-20261021]
     paths:
       - 'anthares-brouser/**'
       - '.github/workflows/anthares-browser-cloud-fallback.yml'
@@ -26,7 +26,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: anthares-browser-cloud-fallback
+  group: anthares-browser-cloud-fallback-cloud-login
   cancel-in-progress: false
 
 jobs:
@@ -114,9 +114,9 @@ jobs:
           echo HOST_DESKTOP_FALLBACK=FALSE
 
       - name: Open temporary noVNC tunnel for legitimate manual login
-        if: ${{ inputs.mode == 'login' }}
+        if: ${{ inputs.mode == 'login' || github.ref == 'refs/heads/feature/threads-cloud-primary-20261021' }}
         env:
-          KEEP: ${{ inputs.keep_minutes }}
+          KEEP: ${{ inputs.keep_minutes || '35' }}
         shell: bash
         run: |
           set -euo pipefail
