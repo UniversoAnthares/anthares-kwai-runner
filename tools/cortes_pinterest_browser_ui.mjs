@@ -139,6 +139,10 @@ async function setField(p,kind,val){
  if(got!==val)throw Error('PIN_'+kind.toUpperCase()+'_NOT_VERIFIED');
 }
 async function selectBoard(p){
+ // Pinterest auto-selects the last used board after media upload. First verify
+ // an exact visible leaf label in the active editor (excluding saved drafts).
+ const already=await p.js('(()=>{const side=document.querySelector(\'[data-test-id="storyboard-drafts-sidebar"]\');const norm=s=>String(s||"").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").replace(/[—–]/g,"-").replace(/\\s+/g," ").trim().toLowerCase();const expected=norm('+JSON.stringify(board)+');const nodes=[...document.querySelectorAll("button,[role=button],span")];return nodes.some(x=>!side?.contains(x)&&norm(x.textContent)===expected&&x.getBoundingClientRect().width>0&&x.getBoundingClientRect().height>0)})()');
+ if(already)return;
  const opened=await p.js('(()=>{const list=[...document.querySelectorAll("button,[role=button]")].filter(x=>/selecionar pasta|select board|escolher pasta|choose board|pasta/i.test((x.innerText||"")+" "+(x.getAttribute("aria-label")||"")));const x=list.find(e=>/selecionar|select|pasta|board/i.test(e.innerText||e.getAttribute("aria-label")||""));if(!x)return false;x.click();return true})()');
  if(!opened)throw Error('PIN_BOARD_DROPDOWN_MISSING');
  await pause(650);
