@@ -134,7 +134,7 @@ async function writeProbe(body){
 }
 async function bufferAction(verb,b,platform){
  const dest=target(platform),owner='buffer-'+platform+':';
- const allowed=new Set(['lease','start','fail','scheduled','pending','reconcile','stats','retention']);
+ const allowed=new Set(['lease','start','fail','media-missing','scheduled','pending','reconcile','stats','retention']);
  if(!allowed.has(verb))return{ok:false,error:'UNKNOWN_BUFFER_ACTION'};
  if(verb==='stats'){
   const rows=await query(`SELECT status,count(*)::int n FROM cortes_publications
@@ -212,6 +212,15 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
       lease_until=NULL,updated_at=now(),lease_owner=CASE WHEN publication_started_at IS NULL THEN NULL ELSE lease_owner END
     WHERE id=$1 AND target_key=$2 AND lease_owner=$3 AND lease_generation=$4 AND status IN ('leased','started')
     RETURNING id,status`,[id,dest,who,fence]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'STALE_FENCE'};
+ }
+ if(verb==='media-missing'){
+  const evidence={kind:'source_media_http_404',account:dest,confirmed_on_network:false};
+  const rows=await query(`UPDATE cortes_publications SET status='failed',
+      confirmation_evidence=$5::jsonb,lease_until=NULL,lease_owner=NULL,updated_at=now()
+      WHERE id=$1 AND target_key=$2 AND status='leased'
+        AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status`,
+      [id,dest,who,fence,JSON.stringify(evidence)]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'STALE_FENCE'};
  }
  if(verb==='scheduled'){
@@ -341,15 +350,16 @@ async function personalAction(verb,b){
  const id=String(b.id||''),owner=String(b.owner||'');
  if(verb==='lease'){
   if(b.target_key!==P_TARGET||owner!==P_OWNER)return{ok:false,error:'PERSONAL_TARGET_OWNER_INVALID'};
-  const unsettled=await query("SELECT count(*)::int n FROM cortes_publications WHERE target_key=$1 AND status='uncertain'",[P_TARGET]);
-  if(Number(unsettled[0]?.n||0)>0)return{ok:true,job:null,unresolved_publication:true};
+  // A read-only permission can be unavailable to self-serve member apps.
+  // Keep accepted-but-unverified items UNCERTAIN and never retry their IDs;
+  // other distinct queued shorts must continue under the shared daily budget.
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
   const used=await query(`SELECT count(*)::int n FROM cortes_publications WHERE target_key=$1 AND status IN ('confirmed','leased','started','uncertain') AND updated_at >= ${day}`,[P_TARGET]);
   if(Number(used[0]?.n||0)>=P_LIMIT)return{ok:true,job:null,daily_limit_reached:true,limit:P_LIMIT};
   const rows=await query(`WITH picked AS (SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued' AND created_at >= ${day} ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE cortes_publications p SET status='leased',lease_owner=$2,lease_generation=p.lease_generation+1,lease_until=now()+interval '30 minutes',updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued' RETURNING p.*`,[P_TARGET,P_OWNER]);
   return{ok:true,job:rows[0]||null,limit:P_LIMIT};
  }
- if(!['start','fail','accepted','confirmed'].includes(verb))return{ok:false,error:'PERSONAL_ACTION_DENIED'};
+ if(!['start','fail','media-missing','accepted','confirmed'].includes(verb))return{ok:false,error:'PERSONAL_ACTION_DENIED'};
  const generation=Number(b.lease_generation);
  if(!id||owner!==P_OWNER||!Number.isInteger(generation)||generation<1)return{ok:false,error:'PERSONAL_INVALID_FENCE'};
  if(verb==='start'){
@@ -359,6 +369,11 @@ async function personalAction(verb,b){
  if(verb==='fail'){
   const r=await query("UPDATE cortes_publications SET status=CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain' END,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status IN ('leased','started') AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",[id,P_TARGET,owner,generation]);
   return r.length?{ok:true,job:r[0]}:{ok:false,error:'PERSONAL_STALE_FENCE'};
+ }
+ if(verb==='media-missing'){
+  const evidence={kind:'source_media_http_404',account:'personal',confirmed_on_network:false};
+  const rows=await query("UPDATE cortes_publications SET status='failed',confirmation_evidence=$5::jsonb,lease_until=NULL,lease_owner=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",[id,P_TARGET,owner,generation,JSON.stringify(evidence)]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PERSONAL_STALE_FENCE'};
  }
  const remote=String(b.remote_id||'');
  if(!/^urn:li:(share|ugcPost):[0-9]{8,25}$/.test(remote))return{ok:false,error:'PERSONAL_REMOTE_INVALID'};

@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from social_adapters.buffer_three_channels import api, schedule, BufferBlocked, PINNED_CHANNELS
+from tools.cortes_social_media_probe import available as media_available
 
 BASE="https://anthares-remote-primary.vercel.app/api/cortes-queue"
 LINKEDIN_ID=PINNED_CHANNELS["linkedin"][0]
@@ -130,7 +131,7 @@ def safe_payload(row):
     return result
 
 
-def publish_once():
+def publish_once(skipped=0):
     lease=queue("lease",{"target_key":TARGET,"owner":OWNER})
     row=lease.get("job")
     if not row:
@@ -141,8 +142,14 @@ def publish_once():
         # Editorial and destination validation before any irreversible queue write.
         from social_adapters.buffer_three_channels import prepare
         prepare(payload)
+        if not media_available(payload['media_url']):
+            queue('media-missing', fence)
+            return publish_once(skipped + 1) if skipped < 10 else 'SOURCE_MEDIA_MISSING_FOR_REPAIR'
     except Exception:
-        queue("fail",fence)
+        # Any nested skip may already have ended the previous lease. Never
+        # obscure the original error with a stale-fence cleanup failure.
+        try: queue("fail", fence)
+        except Exception: pass
         raise
     queue("start",fence)
     try:
