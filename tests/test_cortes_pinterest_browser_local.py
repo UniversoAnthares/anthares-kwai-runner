@@ -37,6 +37,22 @@ class PinterestBrowserContract(unittest.TestCase):
         self.assertIn("FOR UPDATE OF p SKIP LOCKED",vercel)
         self.assertIn("pinterestRoutedLease",vercel)
         self.assertIn("15 ELSE 14 END",neon)
+    def test_neon_device_scoped_pinterest_actions(self):
+        worker=(ROOT/"tools"/"cortes_pinterest_browser_local.py").read_text(encoding="utf-8")
+        neon=(ROOT/"infra"/"neon-cortes-queue"/"index.mjs").read_text(encoding="utf-8")
+        self.assertIn("crypto.timingSafeEqual",neon)
+        self.assertIn('"?action=browser-" + action',worker)
+        self.assertIn("pinterestBrowserAction",neon)
+        self.assertIn("r.ordinal > CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END",neon)
+        self.assertIn("CORTES_DAILY_PUBLICATION", (ROOT/"db"/"migrations"/"20261021_cortes_daily_publication_limit_100.sql").read_text(encoding="utf-8"))
+    def test_buffer_cannot_consume_browser_lane_when_old_fallback(self):
+        buffer=(ROOT/"tools"/"cortes_buffer_pinterest_cloud.py").read_text(encoding="utf-8")
+        self.assertIn('lease.get("delivery_route") != "buffer"',buffer)
+    def test_isolated_cdp_and_orphan_cleanup(self):
+        ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
+        self.assertIn("CORTES_CHROME_CDP_PORT||9226",ui)
+        self.assertIn("pruneOwnedPinterestTabs",ui)
+        self.assertIn("PINTEREST_BROWSER_ACCOUNT_NOT_VERIFIED",ui)
     def test_browser_uses_no_pinterest_api_or_login_bypass(self):
         ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
         for forbidden in ("api.pinterest.com","PINTEREST_ACCESS_TOKEN","captcha_solver","stealth_plugin"):

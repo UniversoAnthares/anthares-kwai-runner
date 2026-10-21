@@ -245,6 +245,94 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
  }
  return{ok:false,error:'ACTION_DISABLED'};
 }
+
+/** Device-authenticated Pinterest browser surplus lane; no other target enabled. */
+let deviceHash='',deviceHashUntil=0;
+async function authorizePinterestBrowser(request){
+ if((request.headers.get('x-anthares-device')||'')!=='DESKTOP-FTDK0HP')return false;
+ const token=/^Bearer\\s+([^\\s]+)$/i.exec(request.headers.get('authorization')||'')?.[1]||'';
+ if(token.length<40||token.length>4096)return false;
+ try{
+  if(!deviceHash||Date.now()>deviceHashUntil){
+   const url='https://raw.githubusercontent.com/UniversoAnthares/anthares-kwai-runner/main/anthares-remote-agent/devices/DESKTOP-FTDK0HP.sha256';
+   const r=await fetch(url,{headers:{'User-Agent':'AntharesCortesPinterestLocal/1.0','Cache-Control':'no-cache'},signal:AbortSignal.timeout(8000)});
+   if(!r.ok)return false;
+   const hash=(await r.text()).trim().toLowerCase();
+   if(!/^[a-f0-9]{64}$/.test(hash))return false;
+   deviceHash=hash;deviceHashUntil=Date.now()+60000;
+  }
+  const candidate=crypto.createHash('sha256').update(token).digest();
+  const expected=Buffer.from(deviceHash,'hex');
+  return expected.length===candidate.length&&crypto.timingSafeEqual(candidate,expected);
+ }catch{return false}
+}
+async function pinterestBrowserAction(verb,b){
+ const target='pinterest:lucasyahn',who='pinterest-browser:DESKTOP-FTDK0HP';
+ if(!['lease','start','fail','confirm','stats'].includes(verb))return{ok:false,error:'BROWSER_ACTION_DENIED'};
+ if(verb==='stats'){
+  const rows=await query('SELECT status,count(*)::int n FROM cortes_publications WHERE target_key=$1 GROUP BY status',[target]);
+  return{ok:true,target_key:target,counts:Object.fromEntries(rows.map(x=>[x.status,Number(x.n)]))};
+ }
+ if(b.target_key&&b.target_key!==target)return{ok:false,error:'WRONG_TARGET'};
+ if(String(b.owner||'')!==who)return{ok:false,error:'WRONG_BROWSER_OWNER'};
+ if(verb==='lease'){
+  const cap=await query("SELECT reserved FROM cortes_daily_publication_budget WHERE target_key=$1 AND local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date",[target]);
+  if(Number(cap[0]?.reserved||0)>=100)return{ok:true,job:null,daily_limit_reached:true,delivery_route:'browser'};
+  const sql=`WITH ranked AS (
+   SELECT id,row_number() OVER (
+      PARTITION BY (created_at AT TIME ZONE 'America/Campo_Grande')::date
+      ORDER BY created_at,id) AS ordinal,
+      extract(isodow FROM created_at AT TIME ZONE 'America/Campo_Grande')::int AS weekday
+   FROM cortes_publications WHERE target_key=$1
+  ), picked AS (
+   SELECT p.id FROM cortes_publications p JOIN ranked r ON r.id=p.id
+   WHERE p.target_key=$1 AND p.status='queued'
+     AND (p.created_at AT TIME ZONE 'America/Campo_Grande')::date =
+         (now() AT TIME ZONE 'America/Campo_Grande')::date
+     AND r.ordinal > CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END
+   ORDER BY p.created_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
+  ) UPDATE cortes_publications p SET status='leased',lease_owner=$2,
+     lease_generation=p.lease_generation+1,lease_until=now()+interval '15 minutes',updated_at=now()
+    FROM picked WHERE p.id=picked.id AND p.status='queued'
+    RETURNING p.id,p.target_key,p.payload,p.lease_generation,p.duration_class`;
+  const rows=await query(sql,[target,who]);
+  return{ok:true,job:rows[0]||null,delivery_route:'browser'};
+ }
+ const id=String(b.id||''),gen=Number(b.lease_generation);
+ if(!id||id.length>200||!Number.isSafeInteger(gen)||gen<1)
+   return{ok:false,error:'INVALID_BROWSER_FENCE'};
+ if(verb==='start'){
+  const rows=await query(`UPDATE cortes_publications
+    SET status='started',publication_started_at=COALESCE(publication_started_at,now()),updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 AND lease_generation=$4
+      AND lease_until>now() RETURNING id,status`,[id,target,who,gen]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'BROWSER_FENCE_EXPIRED'};
+ }
+ if(verb==='fail'){
+  const rows=await query(`UPDATE cortes_publications
+    SET status=CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain' END,
+        lease_until=NULL,updated_at=now(),
+        lease_owner=CASE WHEN publication_started_at IS NULL THEN NULL ELSE lease_owner END
+    WHERE id=$1 AND target_key=$2 AND status IN ('leased','started')
+      AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status`,[id,target,who,gen]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'BROWSER_FENCE_EXPIRED'};
+ }
+ const pin=String(b.remote_id||''),link=String(b.confirmation_evidence?.permalink||'');
+ if(!/^[0-9]{6,25}$/.test(pin)||link!=='https://br.pinterest.com/pin/'+pin+'/')
+   return{ok:false,error:'BROWSER_PIN_PROOF_INVALID'};
+ if(b.confirmation_evidence?.kind!=='pinterest_browser_verified_pin'||
+    String(b.confirmation_evidence.verified_id||'')!==pin)
+   return{ok:false,error:'BROWSER_PIN_PROOF_MISMATCH'};
+ const evidence={kind:'pinterest_browser_verified_pin',verified_id:pin,
+   permalink:link,route:'browser',confirmed_on_network:true};
+ const rows=await query(`UPDATE cortes_publications
+   SET status='confirmed',remote_id=$5,confirmation_evidence=$6::jsonb,
+       lease_until=NULL,lease_owner=NULL,updated_at=now()
+   WHERE id=$1 AND target_key=$2 AND status='started' AND lease_owner=$3
+     AND lease_generation=$4 AND publication_started_at IS NOT NULL
+   RETURNING id,status,remote_id`,[id,target,who,gen,pin,JSON.stringify(evidence)]);
+ return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'BROWSER_CONFIRM_REJECTED'};
+}
 export default {async fetch(request){
  const url=new URL(request.url),action=url.searchParams.get('action')||'';
  if(request.method==='GET'&&action==='health'){
@@ -258,12 +346,19 @@ export default {async fetch(request){
  }
  if(request.method!=='POST')return answer({ok:false,error:'NOT_FOUND'},404);
  if(Number(request.headers.get('content-length')||0)>65536)return answer({ok:false,error:'TOO_LARGE'},413);
- const actor=await identity(request);
- if(!actor)return answer({ok:false,error:'OIDC_UNAUTHORIZED'},401);
+ const actor=action.startsWith('browser-')?
+    (await authorizePinterestBrowser(request)?{role:'pinterest-browser'}:null):
+    await identity(request);
+ if(!actor)return answer({ok:false,error:'PUBLISHER_AUTH_UNAUTHORIZED'},401);
  let body;try{body=await request.json();}catch{return answer({ok:false,error:'INVALID_JSON'},400);}
  if(!body||typeof body!=='object'||Array.isArray(body))return answer({ok:false,error:'INVALID_BODY'},400);
  if(JSON.stringify(body).length>65536)return answer({ok:false,error:'TOO_LARGE'},413);
  try{
+  if(action.startsWith('browser-')){
+   if(actor.role!=='pinterest-browser')return answer({ok:false,error:'BROWSER_DEVICE_ONLY'},403);
+   const out=await pinterestBrowserAction(action.slice('browser-'.length),body);
+   return answer(out,out.ok?200:409);
+  }
   if(action==='buffer-pending'&&actor.role==='probe')
     return answer(await bufferAction('pending',body,'linkedin'));
   if(action==='probe'){

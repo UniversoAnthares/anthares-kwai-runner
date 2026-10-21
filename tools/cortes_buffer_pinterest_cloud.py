@@ -140,6 +140,11 @@ def publish_once():
     if not row:
         return "IDLE_BUFFER_CAPACITY" if lease.get("buffer_pending_limit") else "IDLE_NO_CUTS"
     fence={"id":row["id"],"owner":OWNER,"lease_generation":row["lease_generation"]}
+    if lease.get("delivery_route") != "buffer":
+        # Old Vercel fallback versions do not enforce the weekly allocation.
+        # Return the lease before starting; never steal a browser-lane clip.
+        queue("fail",fence)
+        raise RuntimeError("PINTEREST_BUFFER_LANE_NOT_ACKNOWLEDGED")
     try:
         payload=safe_payload(row)
         # Editorial and destination validation before any irreversible queue write.

@@ -21,7 +21,39 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT))
-from cortes_neon_queue_client import call
+
+import urllib.request
+import urllib.error
+from urllib.parse import urlparse
+
+NEON_BROWSER_QUEUE = "https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/"
+def call(action: str, payload: dict):
+    """Neon direct, device-scoped Pinterest actions; never silently falls back to Vercel."""
+    if action not in {"lease", "start", "fail", "confirm", "stats"}:
+        raise ValueError("PINTEREST_NEON_ACTION_NOT_ALLOWED")
+    url = os.getenv("CORTES_PINTEREST_NEON_URL", NEON_BROWSER_QUEUE).rstrip("/") + "/"
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname != "br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech":
+        raise RuntimeError("PINTEREST_NEON_ENDPOINT_NOT_PINNED")
+    token = os.getenv("ANTHARES_DEVICE_TOKEN", "").strip()
+    if len(token) < 40:
+        raise RuntimeError("PINTEREST_DEVICE_AUTH_MISSING")
+    request = urllib.request.Request(url + "?action=browser-" + action,
+        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        headers={"Authorization": "Bearer " + token,
+                 "X-Anthares-Device": "DESKTOP-FTDK0HP",
+                 "Content-Type": "application/json",
+                 "User-Agent": "AntharesPinterestBrowserLocal/1.0"},
+        method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=35) as result:
+            return json.load(result)
+    except urllib.error.HTTPError as exc:
+        try:
+            result = json.loads(exc.read().decode("utf-8"))
+            return result if isinstance(result, dict) else {"ok": False, "error": "NEON_HTTP_" + str(exc.code)}
+        except (ValueError, UnicodeError):
+            return {"ok": False, "error": "NEON_HTTP_" + str(exc.code)}
 from anthares_publisher.editorial import prepare_publication_metadata
 
 ACCOUNT = "lucasyahn"
