@@ -73,6 +73,13 @@ class PinterestBrowserContract(unittest.TestCase):
         self.assertIn("storyboard-drafts-sidebar",ui)
         self.assertIn("norm(x.textContent)===expected",ui)
 
+    def test_failed_or_missing_media_rotates_without_duplicating_pin(self):
+        neon=(ROOT/"infra"/"neon-cortes-queue"/"index.mjs").read_text(encoding="utf-8")
+        start=neon.index("async function pinterestBrowserAction")
+        browser=neon[start:]
+        self.assertIn("ORDER BY p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1",browser)
+        self.assertIn("CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain'",browser)
+
     def test_browser_uses_no_pinterest_api_or_login_bypass(self):
         ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
         for forbidden in ("api.pinterest.com","PINTEREST_ACCESS_TOKEN","captcha_solver","stealth_plugin"):
