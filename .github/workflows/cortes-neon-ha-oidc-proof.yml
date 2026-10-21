@@ -34,7 +34,8 @@ jobs:
           for name,base in hosts.items():
               req=urllib.request.Request(base+'?action=buffer-pending',
                   data=b'{}',method='POST',
-                  headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
+                  headers={'Authorization':'Bearer '+token,'Content-Type':'application/json',
+                           'User-Agent':'AntharesCortesCloudQueueHA/1.0'})
               try:
                   with urllib.request.urlopen(req,timeout=22) as resp:
                       result=json.load(resp)
