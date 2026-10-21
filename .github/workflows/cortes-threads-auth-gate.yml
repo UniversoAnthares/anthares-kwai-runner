@@ -17,7 +17,7 @@ jobs:
       - name: Verify existing Bitwarden integration and Threads secret identifier
         env:
           BWS_BOOTSTRAP: ${{ secrets.BWS_ACCESS_TOKEN }}
-          THREADS_SECRET_ID: ${{ vars.BWS_THREADS_SECRET_ID }}
+          THREADS_SECRET_ID: 4ef756b1-f948-4780-af26-b4ea014637bf
         run: |
           test -n "$BWS_BOOTSTRAP" || { echo "::error::BWS_BOOTSTRAP_MISSING"; exit 2; }
           test -n "$THREADS_SECRET_ID" || { echo "::error::BWS_THREADS_SECRET_ID_MISSING"; exit 2; }
@@ -28,6 +28,6 @@ jobs:
           access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
           cloud_region: us
           secrets: |
-            ${{ vars.BWS_THREADS_SECRET_ID }} > THREADS_ACCESS_TOKEN
+            4ef756b1-f948-4780-af26-b4ea014637bf > THREADS_ACCESS_TOKEN
       - name: Verify cloud Threads account without publishing
         run: node tools/cortes_threads_auth_gate.mjs
