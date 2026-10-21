@@ -181,6 +181,65 @@ async function transition(body,kind){await ensureSchema();const id=String(body.i
 
 async function reconcile(body){await ensureSchema();const id=String(body.id||'').trim(),evidence=body.confirmation_evidence||null,remote=String(body.remote_id||'').trim();if(!id||!evidence||!remote)return{ok:false,error:'reconciliation_evidence_required'};const r=await pool.query(`UPDATE cortes_publications SET status='confirmed',confirmation_evidence=$2::jsonb,remote_id=$3,lease_until=NULL,updated_at=now() WHERE id=$1 AND status='uncertain' RETURNING *`,[id,JSON.stringify(evidence),remote]);if(!r.rowCount)return{ok:false,error:'not_uncertain_or_missing'};return{ok:true,job:r.rows[0]};}
 
+// Device-authenticated, network-scoped import of public Threads post evidence.
+// No other target, account, or queued/leased cloud job is modified.
+async function threadsLedgerSync(body,device){
+ if(device!=='DESKTOP-FTDK0HP')return{ok:false,error:'threads_sync_device_not_allowed'};
+ const entries=Array.isArray(body?.entries)?body.entries:[];
+ if(entries.length<1||entries.length>150)return{ok:false,error:'threads_sync_invalid_batch'};
+ const target='threads:universoanthares';
+ const normalized=[];
+ for(const row of entries){
+  const id=String(row?.id||''),status=String(row?.status||''),url=String(row?.post_url||'');
+  if(!/^threads:[A-Za-z0-9_-]{11}\|g[0-9]+:[A-Za-z0-9_-]{11}:[0-9]+:[0-9]+$/.test(id))
+   return{ok:false,error:'threads_sync_invalid_id'};
+  if(!['confirmed','uncertain'].includes(status))return{ok:false,error:'threads_sync_invalid_status'};
+  if(status==='confirmed'){
+   let parsed;try{parsed=new URL(url)}catch{return{ok:false,error:'threads_sync_invalid_url'};}
+   if(parsed.protocol!=='https:'||!['www.threads.com','threads.com'].includes(parsed.hostname)||
+      !/^\/@universoanthares\/post\/[A-Za-z0-9_-]+\/?$/.test(parsed.pathname)||parsed.username||parsed.password||
+      parsed.search||parsed.hash||parsed.port)return{ok:false,error:'threads_sync_wrong_account_url'};
+  }else if(url)return{ok:false,error:'threads_sync_uncertain_cannot_claim_post'};
+  normalized.push({id,status,url,submitted_at:String(row?.submitted_at||'')});
+ }
+ const client=await pool.connect(),results={confirmed:0,uncertain:0,already_confirmed:0,conflicts:[]};
+ try{
+  await client.query('BEGIN');
+  for(const row of normalized){
+   const current=await client.query(
+    'SELECT status,remote_id FROM cortes_publications WHERE id=$1 AND target_key=$2 FOR UPDATE',
+    [row.id,target]);
+   if(!current.rowCount){results.conflicts.push({id:row.id,reason:'not_enqueued'});continue}
+   const existing=current.rows[0];
+   if(existing.status==='confirmed'){
+    if(row.status==='confirmed'&&existing.remote_id===row.url)results.already_confirmed++;
+    else results.conflicts.push({id:row.id,reason:'confirmed_evidence_conflict'});
+    continue;
+   }
+   if(!['queued','uncertain'].includes(existing.status)){
+    results.conflicts.push({id:row.id,reason:'cloud_lease_or_submission_active'});continue;
+   }
+   if(row.status==='uncertain'){
+    if(existing.status==='queued'){
+     await client.query(
+      "UPDATE cortes_publications SET status='uncertain',publication_started_at=COALESCE(publication_started_at,now()),updated_at=now() WHERE id=$1 AND target_key=$2",
+      [row.id,target]);
+    }
+    results.uncertain++;
+    continue;
+   }
+   const proof={kind:'threads_local_profile_verified',public_url:row.url,verified_by_device:device,sync_at:new Date().toISOString()};
+   await client.query(
+    "UPDATE cortes_publications SET status='confirmed',confirmation_evidence=$3::jsonb,remote_id=$4,lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2",
+    [row.id,target,JSON.stringify(proof),row.url]);
+   results.confirmed++;
+  }
+  await client.query('COMMIT');
+  return{ok:true,target_key:target,...results};
+ }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+}
+
+
 async function getJob(id){await reap();const r=await pool.query(`SELECT * FROM cortes_publications WHERE id=$1`,[id]);return r.rows[0]||null;}
 // Authenticated, target-scoped queue statistics for publication pacing.
 // Reap first so expired, never-started leases remain eligible for publication.
@@ -231,4 +290,4 @@ export default async function handler(req,res){try{const url=new URL(req.url,'ht
  const out=await bufferWorkerAction(verb,body);
  return reply(res,out.ok?200:409,out);
  }
- const isProducer=req.method==='POST'&&action==='enqueue';const auth=isProducer&&await githubOidcEnqueueAuth(req)?{ok:true,device:'github-oidc-dispatch'}:await deviceAuth(req);if(!auth.ok)return reply(res,401,{ok:false,error:'unauthorized'});const body=jsonBody(req);let out;if(req.method==='POST'&&action==='enqueue'){if(auth.device==='github-oidc-dispatch'&&!validOidcProducerPayload(body))return reply(res,403,{ok:false,error:'invalid_cortes_producer_payload'});out=await enqueue(body);}else if(req.method==='POST'&&action==='stats')out=await stats(body);else if(req.method==='POST'&&action==='lease')out=await lease(body);else if(req.method==='POST'&&action==='start')out=await transition(body,'start');else if(req.method==='POST'&&action==='confirm')out=await transition(body,'confirm');else if(req.method==='POST'&&action==='fail')out=await transition(body,'fail');else if(req.method==='POST'&&action==='reconcile')out=await reconcile(body);else if(req.method==='POST'&&action==='retention')out=await retention(body);else if(req.method==='POST'&&action==='self-test')out=await selfTest(auth.device);else if(req.method==='GET'&&action==='job')out={ok:true,job:await getJob(String(url.searchParams.get('id')||''))};else return reply(res,404,{ok:false,error:'not_found'});return reply(res,out?.ok===false?409:200,out);}catch(e){console.error(e);return reply(res,500,{ok:false,error:String(e?.message||e)});}}
+ const isProducer=req.method==='POST'&&action==='enqueue';const auth=isProducer&&await githubOidcEnqueueAuth(req)?{ok:true,device:'github-oidc-dispatch'}:await deviceAuth(req);if(!auth.ok)return reply(res,401,{ok:false,error:'unauthorized'});const body=jsonBody(req);let out;if(req.method==='POST'&&action==='enqueue'){if(auth.device==='github-oidc-dispatch'&&!validOidcProducerPayload(body))return reply(res,403,{ok:false,error:'invalid_cortes_producer_payload'});out=await enqueue(body);}else if(req.method==='POST'&&action==='threads-ledger-sync')out=await threadsLedgerSync(body,auth.device);else if(req.method==='POST'&&action==='stats')out=await stats(body);else if(req.method==='POST'&&action==='lease')out=await lease(body);else if(req.method==='POST'&&action==='start')out=await transition(body,'start');else if(req.method==='POST'&&action==='confirm')out=await transition(body,'confirm');else if(req.method==='POST'&&action==='fail')out=await transition(body,'fail');else if(req.method==='POST'&&action==='reconcile')out=await reconcile(body);else if(req.method==='POST'&&action==='retention')out=await retention(body);else if(req.method==='POST'&&action==='self-test')out=await selfTest(auth.device);else if(req.method==='GET'&&action==='job')out={ok:true,job:await getJob(String(url.searchParams.get('id')||''))};else return reply(res,404,{ok:false,error:'not_found'});return reply(res,out?.ok===false?409:200,out);}catch(e){console.error(e);return reply(res,500,{ok:false,error:String(e?.message||e)});}}
