@@ -6,6 +6,7 @@ const TARGETS={linkedin:'linkedin:primary',instagram:'instagram:universoanthares
 const BUFFER_WORKFLOWS={linkedin:'cortes-buffer-linkedin-cloud.yml',instagram:'cortes-buffer-instagram-cloud.yml',pinterest:'cortes-buffer-pinterest-cloud.yml'};
 const CLIPPER_PRODUCERS=new Set(['cortes-buffer-fanout-cloud.yml','cortes-neon-short-dispatch.yml','cortes-daily.yml']);
 const RUNNER_PRODUCERS=new Set(['cortes-linkedin-neon-fanout.yml','cortes-buffer-three-fanout-cloud.yml']);
+const PROBE_WORKFLOW='cortes-queue-ha-acceptance.yml';
 const LIMITS={linkedin:50,instagram:50,pinterest:25};
 const REPO='UniversoAnthares/anthares-kwai-runner';
 const CLIPPER='UniversoAnthares/anthares-clipper';
@@ -75,6 +76,7 @@ async function identity(request){
   platform=Object.keys(BUFFER_WORKFLOWS).find(p=>BUFFER_WORKFLOWS[p]===wf);
   if(platform)role='buffer';
   else if(RUNNER_PRODUCERS.has(wf))role='producer';
+  else if(wf===PROBE_WORKFLOW)role='probe';
   else if(wf==='cortes-neon-ha-oidc-proof.yml'){role='probe';platform='linkedin';}
  }else if(repo===CLIPPER&&CLIPPER_PRODUCERS.has(wf))role='producer';
  if(!role)return null;
@@ -112,6 +114,22 @@ async function enqueue(b){
    String(r.source_start)!==String(b.source_start)||String(r.source_end)!==String(b.source_end))
    return{ok:false,error:'IDENTITY_COLLISION'};
  return{ok:true,deduped:true,reason:'identity',job:{id:r.id,target_key:r.target_key,status:r.status}};
+}
+async function writeProbe(body){
+ const nonce=String(body.nonce||'');
+ if(!/^[A-Za-z0-9_-]{8,90}$/.test(nonce))return{ok:false,error:'INVALID_PROBE_NONCE'};
+ await query(`CREATE TABLE IF NOT EXISTS cortes_queue_ha_probe(
+    nonce text PRIMARY KEY,
+    service text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now())`);
+ const r=await query(`INSERT INTO cortes_queue_ha_probe(nonce,service) VALUES($1,'neon-functions')
+    ON CONFLICT (nonce) DO UPDATE SET service=EXCLUDED.service
+    RETURNING nonce,service`,[nonce]);
+ if(r.length!==1||r[0].nonce!==nonce||r[0].service!=='neon-functions')
+    return{ok:false,error:'PROBE_WRITE_NOT_VERIFIED'};
+ // Diagnostic writes never touch publication ledger, neither jobs nor posts.
+ await query('DELETE FROM cortes_queue_ha_probe WHERE nonce=$1',[nonce]);
+ return{ok:true,probe:'SIGNED_OIDC_NEON_WRITE_READ_DELETE',database_ok:true};
 }
 async function bufferAction(verb,b,platform){
  const dest=target(platform),owner='buffer-'+platform+':';
@@ -186,8 +204,10 @@ async function bufferAction(verb,b,platform){
   const remote=String(b.remote_id||''),link=String(b.external_link||'');
   let url;try{url=new URL(link);}catch{return{ok:false,error:'INVALID_PUBLIC_URL'};}
   const h=url.hostname,p=url.pathname;
+  if(url.username||url.password||url.port||url.search||url.hash)
+    return{ok:false,error:'INVALID_PUBLIC_URL'};
   const valid=platform==='linkedin'?(h==='linkedin.com'||h==='www.linkedin.com')&&
-     (p.startsWith('/feed/update/')||p.startsWith('/posts/')||p.startsWith('/company/')):
+     (p.startsWith('/feed/update/')||p.startsWith('/posts/')||/^\/company\/145345334\/posts\//.test(p)):
    platform==='instagram'?(h==='instagram.com'||h==='www.instagram.com')&&/^\/(reel|p)\/[A-Za-z0-9_-]+\/?$/.test(p):
      (h==='pinterest.com'||h==='www.pinterest.com')&&/^\/pin\/[0-9]+\/?$/.test(p);
   if(url.protocol!=='https:'||!valid||url.username||url.password)return{ok:false,error:'INVALID_PUBLIC_URL'};
@@ -222,6 +242,11 @@ export default {async fetch(request){
  try{
   if(action==='buffer-pending'&&actor.role==='probe')
     return answer(await bufferAction('pending',body,'linkedin'));
+  if(action==='probe'){
+   if(actor.role!=='probe')return answer({ok:false,error:'PROBE_WORKFLOW_ONLY'},403);
+   const out=await writeProbe(body);
+   return answer(out,out.ok?200:409);
+  }
   if(action==='enqueue'){
    if(actor.role!=='producer')return answer({ok:false,error:'PRODUCER_ONLY'},403);
    if(actor.workflow==='cortes-linkedin-neon-fanout.yml'&&body.platform!=='linkedin')
