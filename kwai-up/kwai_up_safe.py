@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import pathlib
 import re
@@ -142,6 +143,22 @@ def main() -> int:
         if mode == "prepare":
             return pub.prepare()
         if mode == "commit":
+            # Second guard before irreversible Android publishing.
+            try:
+                today = __import__("datetime").datetime.now().astimezone().date().isoformat()
+                floor_path = pathlib.Path(__file__).resolve().parents[1] / ".state" / "kwai-daily-cap-owner-confirmed.json"
+                floor = 0
+                if floor_path.exists():
+                    quotas = json.loads(floor_path.read_text(encoding="utf-8"))
+                    if quotas.get("schema") != "cortes.daily-owner-floor.v1":
+                        raise ValueError("invalid_floor_schema")
+                    floor = int(quotas.get("per_target_per_day", {}).get("kwai:lucasrosalem", {}).get(today, 0))
+                if floor >= 100:
+                    pub.emit("FAILED_SAFE", reason="kwai-daily-limit-100-owner-confirmed")
+                    return 72
+            except (OSError, ValueError, TypeError):
+                pub.emit("FAILED_SAFE", reason="kwai-daily-floor-unreadable")
+                return 72
             return pub.commit()
         return pub.verify()
     except ku.HumanVerification as exc:
