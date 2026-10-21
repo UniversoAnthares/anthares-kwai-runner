@@ -18,6 +18,7 @@ import tiktok_web_publish as t
 
 ACCOUNT="lucasrosalem4"
 QUEUE="https://br-crimson-unit-b89nau08-cortestiktok4.compute.c-14.us-east-1.aws.neon.tech/"
+BACKUP_QUEUE="https://anthares-cortes-tiktok-lucas4-ha.anthares1.workers.dev/"
 AUDIENCE="https://anthares-remote-primary.vercel.app/api/cortes-tiktok"
 SEGMENT=re.compile(r"^g\d+:[A-Za-z0-9_-]{6,60}:\d+:\d+$")
 VID=re.compile(r"^\d{12,25}$")
@@ -279,14 +280,26 @@ def publish_one(job,token,state):
                 browser.close()
 
 
+def select_queue():
+    """Only choose a healthy shared Neon ledger before any mutating request."""
+    global QUEUE
+    for address in (QUEUE,BACKUP_QUEUE):
+        try:
+            with urllib.request.urlopen(address+"?action=health",timeout=18) as resp:
+                response=read_json(resp)
+            if response.get("ok") and response.get("account")==ACCOUNT and response.get("fencing"):
+                QUEUE=address
+                print("SECONDARY_CLOUD_QUEUE_BACKEND="+("edge" if address==BACKUP_QUEUE else "neon"),flush=True)
+                return
+        except (urllib.error.URLError,TimeoutError,OSError,ValueError):
+            continue
+    raise SafeStop("SECONDARY_CLOUD_ALL_QUEUE_INGRESS_DOWN")
+
+
 def main():
     state=state_from_secret()
     token=oidc()
-    health=urllib.request.urlopen(QUEUE+"?action=health",timeout=20)
-    with health:
-        response=read_json(health)
-    if not response.get("ok") or response.get("account")!=ACCOUNT or not response.get("fencing"):
-        raise SafeStop("SECONDARY_NEON_HEALTH_NOT_VERIFIED")
+    select_queue()
     print("SECONDARY_CLOUD_QUEUE_READY=1",flush=True)
     with sync_playwright() as p:
         browser=p.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage","--disable-gpu"])
