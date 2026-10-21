@@ -1,0 +1,30 @@
+name: CORTES LinkedIn - read-only two-account authorization audit
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'tools/cortes_linkedin_account_audit.py'
+      - '.github/workflows/cortes-linkedin-account-audit.yml'
+permissions:
+  contents: read
+jobs:
+  inspect-linked-profiles:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Retrieve Buffer credential from Bitwarden
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
+      - name: Inspect LinkedIn channels without publishing or displaying personal identifiers
+        run: |
+          set -euo pipefail
+          python -u tools/cortes_linkedin_account_audit.py

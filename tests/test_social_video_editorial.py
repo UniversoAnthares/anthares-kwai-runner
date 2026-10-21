@@ -67,16 +67,18 @@ class EditorialTests(unittest.TestCase):
 
 
 class VideoReadyTests(unittest.TestCase):
-    def _call(self, platform, overrides=None):
+    def _call(self, platform, overrides=None, account="primary"):
         env = os.environ.copy()
         for key in ("PINTEREST_ACCESS_TOKEN", "PINTEREST_BOARD_ID", "PINTEREST_COVER_IMAGE_URL",
-                    "LINKEDIN_ACCESS_TOKEN", "LINKEDIN_AUTHOR_URN", "ANTHARES_SOCIAL_COMMIT"):
+                    "LINKEDIN_ACCESS_TOKEN", "LINKEDIN_AUTHOR_URN",
+                    "LINKEDIN_PERSONAL_ACCESS_TOKEN", "LINKEDIN_PERSONAL_AUTHOR_URN",
+                    "ANTHARES_SOCIAL_COMMIT"):
             env.pop(key, None)
         env.update(overrides or {})
         p = subprocess.run(
             [sys.executable, "social_adapters/direct_social.py"],
             input=__import__("json").dumps({
-                "platform": platform, "account_id": "primary",
+                "platform": platform, "account_id": account,
                 "title": "A tragédia grega",
                 "media_url": "https://example.invalid/clip.mp4",
             }), text=True, capture_output=True, env=env, timeout=15,
@@ -132,10 +134,62 @@ class VideoReadyTests(unittest.TestCase):
     def test_linkedin_ready_does_not_upload(self):
         result = self._call("linkedin", {
             "LINKEDIN_ACCESS_TOKEN": "synthetic",
-            "LINKEDIN_AUTHOR_URN": "urn:li:organization:12345",
+            "LINKEDIN_AUTHOR_URN": "urn:li:organization:145345334",
         })
         self.assertEqual(result["status"], "READY")
         self.assertTrue(result["title"].endswith(SUFFIX))
+
+
+    def test_personal_requires_its_own_credentials(self):
+        result = self._call("linkedin", {
+            "LINKEDIN_ACCESS_TOKEN": "company-only",
+            "LINKEDIN_AUTHOR_URN": "urn:li:organization:145345334",
+        }, account="personal")
+        self.assertEqual(result["status"], "AUTH_OR_CONFIG_REQUIRED")
+        self.assertEqual(result["missing"], "LINKEDIN_PERSONAL_ACCESS_TOKEN")
+
+    def test_personal_rejects_company_author(self):
+        result = self._call("linkedin", {
+            "LINKEDIN_PERSONAL_ACCESS_TOKEN": "member-token",
+            "LINKEDIN_PERSONAL_AUTHOR_URN": "urn:li:organization:145345334",
+        }, account="personal")
+        self.assertEqual(result["status"], "AUTH_OR_CONFIG_REQUIRED")
+
+    def test_company_rejects_member_author(self):
+        result = self._call("linkedin", {
+            "LINKEDIN_ACCESS_TOKEN": "member-token",
+            "LINKEDIN_AUTHOR_URN": "urn:li:person:123",
+        })
+        self.assertEqual(result["status"], "AUTH_OR_CONFIG_REQUIRED")
+
+    def test_personal_ready_with_separate_member_credentials(self):
+        result = self._call("linkedin", {
+            "LINKEDIN_PERSONAL_ACCESS_TOKEN": "member-token",
+            "LINKEDIN_PERSONAL_AUTHOR_URN": "urn:li:person:123",
+        }, account="personal")
+        self.assertEqual(result["status"], "READY")
+        self.assertEqual(result["destination_key"], "linkedin:personal")
+
+    def test_linkedin_unknown_account_blocked_before_auth(self):
+        result = self._call("linkedin", {
+            "LINKEDIN_ACCESS_TOKEN": "company-token",
+            "LINKEDIN_AUTHOR_URN": "urn:li:organization:145345334",
+        }, account="unverified")
+        self.assertEqual(result["status"], "AUTH_OR_CONFIG_REQUIRED")
+        self.assertEqual(result["missing"], "LINKEDIN_ACCOUNT_UNVERIFIED")
+
+    def test_linkedin_queue_payload_account_mismatch_blocked(self):
+        from tools.cortes_social_queue_consumer import _safe_job
+        row = {
+            "target_key": "linkedin:personal", "duration_class": "short",
+            "payload": {
+                "platform": "linkedin", "account_id": "primary",
+                "title": "Um corte", "media_url": "https://anthares.us/clip.mp4",
+                "duration_seconds": 50,
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "account_mismatch"):
+            _safe_job(row, "linkedin", "personal")
 
 
 if __name__ == "__main__":
