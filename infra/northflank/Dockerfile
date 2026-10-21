@@ -18,6 +18,7 @@ RUN mkdir -p /ms-playwright \
     && chown -R ara:ara /ms-playwright
 
 COPY infra/ /app/
+COPY tools/x_publication_safety.py /app/tools/x_publication_safety.py
 RUN chown -R ara:ara /app
 
 USER ara
