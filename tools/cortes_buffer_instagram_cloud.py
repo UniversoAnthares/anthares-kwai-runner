@@ -151,5 +151,9 @@ def main():
 if __name__=="__main__":
     try: sys.exit(main())
     except Exception as e:
-        print(json.dumps({"instagram_cloud":"BLOCKED","reason":type(e).__name__}))
+        # Only normalized queue error identifiers; no tokens, keys or JWTs.
+        from tools.cortes_queue_ha import BackendUnavailable
+        reason=(str(e) if isinstance(e,BackendUnavailable) and
+                str(e).startswith("CORTES_QUEUE_") else type(e).__name__)
+        print(json.dumps({"instagram_cloud":"BLOCKED","reason":reason}))
         sys.exit(2)
