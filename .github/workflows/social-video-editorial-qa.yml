@@ -15,6 +15,7 @@ on:
       - 'cloudflare-worker/patches/apply-publisher-target-v17.py'
       - 'vercel-ara-primary/api/cortes-queue.mjs'
       - 'tools/cortes_social_queue_consumer.py'
+      - 'tests/test_cortes_oidc_social_fanout.mjs'
       - '.github/workflows/social-video-editorial-qa.yml'
 
 permissions:
@@ -46,6 +47,7 @@ jobs:
       - name: Validate production Neon LinkedIn daily quota guard
         run: |
           node --check vercel-ara-primary/api/cortes-queue.mjs
+          node tests/test_cortes_oidc_social_fanout.mjs
           grep -q 'cortes:linkedin-daily:' vercel-ara-primary/api/cortes-queue.mjs
           grep -q 'used>=50' vercel-ara-primary/api/cortes-queue.mjs
           echo 'NEON_LINKEDIN_DAILY_LIMIT_GUARDED=PASS'
