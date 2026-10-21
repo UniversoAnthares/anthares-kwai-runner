@@ -41,11 +41,11 @@ jobs:
         run: |
           python cloudflare-worker/patches/apply-publisher-target-v17.py
           node --experimental-default-type=module --check cloudflare-worker/src/index.js
-          grep -q 'pinterest:Number.MAX_SAFE_INTEGER,linkedin:20' cloudflare-worker/src/index.js
+          grep -q 'instagram:Number.MAX_SAFE_INTEGER,pinterest:Number.MAX_SAFE_INTEGER,linkedin:Number.MAX_SAFE_INTEGER' cloudflare-worker/src/index.js
           echo 'PINTEREST_ROUND_QUOTA_UNCAPPED=PASS'
       - name: Validate production Neon LinkedIn daily quota guard
         run: |
           node --check vercel-ara-primary/api/cortes-queue.mjs
           grep -q 'cortes:linkedin-daily:' vercel-ara-primary/api/cortes-queue.mjs
-          grep -q 'used>=20' vercel-ara-primary/api/cortes-queue.mjs
+          grep -q 'used>=50' vercel-ara-primary/api/cortes-queue.mjs
           echo 'NEON_LINKEDIN_DAILY_LIMIT_GUARDED=PASS'
