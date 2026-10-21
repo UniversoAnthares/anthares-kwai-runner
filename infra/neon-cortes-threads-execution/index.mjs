@@ -74,11 +74,11 @@ async function control(){
 }
 const daySQL="(now() AT TIME ZONE 'America/Campo_Grande')::date";
 async function stats(){
- const [controlState,counts,confirmed]=await Promise.all([
+ const [controlState,counts,confirmed,queued,inflight]=await Promise.all([
   control(),database('SELECT status,count(*)::int as n FROM cortes_publications WHERE target_key=$1 GROUP BY status',[TARGET]),
-  database("SELECT id,remote_id FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND confirmation_evidence->>'kind'='threads_cloud_verified' ORDER BY updated_at DESC LIMIT 100",[TARGET])]);
+  database("SELECT id,remote_id FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND confirmation_evidence->>'kind'='threads_cloud_verified' ORDER BY updated_at DESC LIMIT 100",[TARGET]),database("SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued' ORDER BY created_at ASC LIMIT 200",[TARGET]),database("SELECT count(*)::int AS n FROM cortes_publications WHERE target_key=$1 AND status IN ('started','uncertain','leased') AND (lease_owner LIKE 'github-threads:%' OR (confirmation_evidence->>'kind')='threads_cloud_unknown')",[TARGET])]);
  return{ok:true,owner:controlState.owner||'local',epoch:Number(controlState.epoch||0),
-  lease_until:controlState.lease_until||null,confirmed:confirmed.map(z=>({id:z.id,url:z.remote_id})),
+  lease_until:controlState.lease_until||null,cloud_inflight:Number(inflight[0]?.n||0),queued_ids:queued.map(z=>z.id),confirmed:confirmed.map(z=>({id:z.id,url:z.remote_id})),
   counts:Object.fromEntries(counts.map(z=>[z.status,Number(z.n)]))};
 }
 async function action(body,role,claims){
