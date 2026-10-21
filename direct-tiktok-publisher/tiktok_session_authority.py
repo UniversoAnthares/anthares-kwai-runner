@@ -99,15 +99,15 @@ def _headers(body: bytes = b"") -> dict[str, str]:
 
 
 def _assert_runtime_url() -> None:
-    if VAULT_URL not in (
-        "https://anthares-x-vault.anthares1.workers.dev/browser-state/runtime",
-        "https://anthares-x-vault.anthares1.workers.dev/browser-state/tiktok/lucarosalem",
-    ):
-        raise SessionAuthorityError("canonical_session_authority_not_allowlisted")
-    if EXPECTED_USERNAME == "lucarosalem" and not VAULT_URL.endswith("/browser-state/tiktok/lucarosalem"):
-        raise SessionAuthorityError("tiktok_secondary_vault_isolation_required")
-    if EXPECTED_USERNAME == "universo.anthares" and not VAULT_URL.endswith("/browser-state/runtime"):
-        raise SessionAuthorityError("tiktok_primary_vault_isolation_required")
+    if EXPECTED_USERNAME == "lucarosalem":
+        if VAULT_URL != "https://anthares-x-vault.anthares1.workers.dev/browser-state/tiktok/lucarosalem":
+            raise SessionAuthorityError("tiktok_secondary_vault_isolation_required")
+    elif EXPECTED_USERNAME == "universo.anthares":
+        # Preserve the primary's existing endpoint/failover configuration.
+        if not VAULT_URL.endswith("/browser-state/runtime"):
+            raise SessionAuthorityError("tiktok_primary_vault_isolation_required")
+    else:
+        raise SessionAuthorityError("tiktok_account_not_allowlisted")
 
 
 def load_canonical_state() -> tuple[dict, dict]:
