@@ -6,7 +6,7 @@ const TARGETS={linkedin:'linkedin:primary',instagram:'instagram:universoanthares
 const BUFFER_WORKFLOWS={linkedin:'cortes-buffer-linkedin-cloud.yml',instagram:'cortes-buffer-instagram-cloud.yml',pinterest:'cortes-buffer-pinterest-cloud.yml'};
 const CLIPPER_PRODUCERS=new Set(['cortes-buffer-fanout-cloud.yml','cortes-neon-short-dispatch.yml','cortes-daily.yml']);
 const RUNNER_PRODUCERS=new Set(['cortes-linkedin-neon-fanout.yml','cortes-buffer-three-fanout-cloud.yml']);
-const PROBE_WORKFLOW='cortes-queue-ha-acceptance.yml';
+const PROBE_WORKFLOWS=new Set(['cortes-queue-ha-acceptance.yml','cortes-queue-cloudflare-ha.yml']);
 const LIMITS={linkedin:50,instagram:50,pinterest:25};
 const REPO='UniversoAnthares/anthares-kwai-runner';
 const CLIPPER='UniversoAnthares/anthares-clipper';
@@ -76,7 +76,7 @@ async function identity(request){
   platform=Object.keys(BUFFER_WORKFLOWS).find(p=>BUFFER_WORKFLOWS[p]===wf);
   if(platform)role='buffer';
   else if(RUNNER_PRODUCERS.has(wf))role='producer';
-  else if(wf===PROBE_WORKFLOW)role='probe';
+  else if(PROBE_WORKFLOWS.has(wf))role='probe';
   else if(wf==='cortes-neon-ha-oidc-proof.yml'){role='probe';platform='linkedin';}
  }else if(repo===CLIPPER&&CLIPPER_PRODUCERS.has(wf))role='producer';
  if(!role)return null;
