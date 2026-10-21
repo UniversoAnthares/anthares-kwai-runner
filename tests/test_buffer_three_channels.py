@@ -1,68 +1,74 @@
-"""Contract tests: no network, no publications."""
+"""No network and no publishing; pinned real channel identities."""
 import os
 import unittest
 from unittest.mock import patch
 from social_adapters import buffer_three_channels as b
 
 def master(platform="instagram"):
-    return {"platform": platform, "title": "Uma narrativa", "description": "#Literatura", "duration_seconds": 54,
-            "media_url": "https://anthares.us/wp-content/uploads/2026/10/teste.mp4"}
+    return {"platform":platform,"title":"Uma narrativa","description":"#Literatura","duration_seconds":54,
+            "media_url":"https://anthares.us/wp-content/uploads/2026/10/teste.mp4"}
 
+def channel(platform):
+    names={"instagram":"universoanthares","pinterest":"lucasyahn","linkedin":"Universo Anthares"}
+    urls={"instagram":"https://instagram.com/universoanthares",
+          "pinterest":"https://www.pinterest.com/lucasyahn",
+          "linkedin":"https://www.linkedin.com/company/145345334"}
+    return {"id":b.PINNED_CHANNELS[platform][0],"service":platform,
+            "name":names[platform],"displayName":names[platform],"externalLink":urls[platform]}
 
-class BufferThreeChannelTests(unittest.TestCase):
-    def test_editorial_metadata_all_three(self):
+class BufferPinnedTests(unittest.TestCase):
+    def test_all_three_verified_accounts(self):
         for platform in b.SERVICES:
-            with self.subTest(platform=platform):
-                result = b.prepare(master(platform))
-                self.assertTrue(result["caption"].splitlines()[0].endswith(" ● Universo Anthares"))
-                self.assertIn("www.anthares.us", result["caption"])
+            c=channel(platform)
+            self.assertEqual(b.validate_channel(platform,c["id"],[c]),c)
 
-    def test_block_wrong_service(self):
-        with self.assertRaisesRegex(b.BufferBlocked, "SERVICE_MISMATCH"):
-            b.validate_channel("linkedin", "a", [{"id":"a","service":"instagram","name":"Universo Anthares"}])
+    def test_wrong_destination_id_rejected(self):
+        for platform in b.SERVICES:
+            with self.assertRaisesRegex(b.BufferBlocked,"NOT_PINNED"):
+                b.validate_channel(platform,"other",[channel(platform)])
 
-    def test_block_linkedin_personal_profile(self):
-        with self.assertRaisesRegex(b.BufferBlocked, "LINKEDIN_PAGE_NAME_MISMATCH"):
-            b.validate_channel("linkedin", "a", [{"id":"a","service":"linkedin","name":"Lucas Rosalem"}])
+    def test_wrong_destination_name_rejected(self):
+        for platform in b.SERVICES:
+            c=channel(platform); c["displayName"]="Wrong Account"
+            with self.assertRaisesRegex(b.BufferBlocked,"NAME_UNVERIFIED"):
+                b.validate_channel(platform,c["id"],[c])
 
-    def test_block_wrong_instagram(self):
-        with self.assertRaisesRegex(b.BufferBlocked, "INSTAGRAM_IDENTITY_UNVERIFIED"):
-            b.validate_channel("instagram", "a", [{"id":"a","service":"instagram","name":"someone_else"}])
+    def test_fake_linkedin_profile_rejected(self):
+        c=channel("linkedin"); c["externalLink"]="https://www.linkedin.com/in/145345334"
+        with self.assertRaisesRegex(b.BufferBlocked,"URL_UNVERIFIED"):
+            b.validate_channel("linkedin",c["id"],[c])
 
-    def test_block_wrong_pinterest(self):
-        with self.assertRaisesRegex(b.BufferBlocked, "PINTEREST_IDENTITY_UNVERIFIED"):
-            b.validate_channel("pinterest", "a", [{"id":"a","service":"pinterest","name":"someone_else"}])
+    def test_wrong_pinterest_link_rejected(self):
+        c=channel("pinterest");c["externalLink"]="https://www.pinterest.com/other"
+        with self.assertRaisesRegex(b.BufferBlocked,"URL_UNVERIFIED"):
+            b.validate_channel("pinterest",c["id"],[c])
 
-    def test_queue_paused_is_blocked(self):
-        with self.assertRaisesRegex(b.BufferBlocked, "CHANNEL_UNAVAILABLE"):
-            b.validate_channel("linkedin", "a", [{"id":"a","service":"linkedin","name":"Universo Anthares","isQueuePaused":True}])
+    def test_queue_paused_rejected(self):
+        c=channel("linkedin");c["isQueuePaused"]=True
+        with self.assertRaisesRegex(b.BufferBlocked,"CHANNEL_UNAVAILABLE"):
+            b.validate_channel("linkedin",c["id"],[c])
 
-    def test_dry_run_never_network(self):
-        with patch.dict(os.environ, {"ANTHARES_SOCIAL_COMMIT":"0"}), patch.object(b, "api", side_effect=AssertionError("NETWORK")):
-            result=b.schedule(master())
-            self.assertEqual(result["status"],"DRY_RUN")
+    def test_branded_metadata(self):
+        for platform in b.SERVICES:
+            caption=b.prepare(master(platform))["caption"]
+            self.assertTrue(caption.splitlines()[0].endswith(" ● Universo Anthares"))
+            self.assertIn("www.anthares.us",caption)
 
-    def test_no_schedule_without_id(self):
-        with patch.dict(os.environ, {"ANTHARES_SOCIAL_COMMIT":"1","BUFFER_INSTAGRAM_CHANNEL_ID":""}):
-            with patch.object(b, "channels", return_value=[]):
-                with self.assertRaisesRegex(b.BufferBlocked, "CHANNEL_ID_REQUIRED"):
-                    b.schedule(master())
+    def test_dry_run_no_network(self):
+        with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"0"}),patch.object(b,"api",side_effect=AssertionError("NETWORK")):
+            self.assertEqual(b.schedule(master())["status"],"DRY_RUN")
 
-    def test_schedule_never_confirms_publication(self):
-        with patch.dict(os.environ, {"ANTHARES_SOCIAL_COMMIT":"1","BUFFER_LINKEDIN_CHANNEL_ID":"a"}):
-            with patch.object(b, "channels", return_value=[{"id":"a","service":"linkedin","name":"Universo Anthares","externalLink":"https://www.linkedin.com/company/145345334/","type":"Page"}]):
-                with patch.object(b, "api", return_value={"createPost":{"post":{"id":"buffer-123"}}}):
-                    result=b.schedule(master("linkedin"))
-        self.assertEqual(result["status"],"SCHEDULED_IN_BUFFER")
-        self.assertFalse(result["confirmed_on_social_network"])
+    def test_schedule_is_not_publication_confirmation(self):
+        platform="linkedin";c=channel(platform)
+        with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"1","BUFFER_LINKEDIN_CHANNEL_ID":c["id"]}):
+            with patch.object(b,"channels",return_value=[c]), patch.object(b,"api",return_value={"createPost":{"post":{"id":"buffer123"}}}):
+                output=b.schedule(master(platform))
+        self.assertEqual(output["status"],"SCHEDULED_IN_BUFFER")
+        self.assertFalse(output["confirmed_on_social_network"])
 
-    def test_linkedin_profile_url_rejected(self):
-        with self.assertRaisesRegex(b.BufferBlocked, "LINKEDIN_PAGE_URL_UNVERIFIED"):
-            b.validate_channel("linkedin", "a", [{"id":"a","service":"linkedin","name":"Universo Anthares","externalLink":"https://www.linkedin.com/in/someone","type":"Page"}])
-
-    def test_reject_external_video(self):
-        with self.assertRaisesRegex(b.BufferBlocked, "MASTER_MP4_URL_INVALID"):
-            b.prepare({**master(),"media_url":"https://example.org/other.mp4"})
+    def test_external_master_blocked(self):
+        with self.assertRaisesRegex(b.BufferBlocked,"MASTER_MP4_URL_INVALID"):
+            b.prepare({**master(),"media_url":"https://example.com/clip.mp4"})
 
 if __name__=="__main__":
     unittest.main()
