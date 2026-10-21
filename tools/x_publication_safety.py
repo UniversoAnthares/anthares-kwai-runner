@@ -90,7 +90,7 @@ def gate(issues, comments_by_number, now, target=10, max_inflight=2):
         if payload.get("test_fixture"):
             continue
         source = payload.get("source_id") or (payload.get("source") or {}).get("video_id")
-        if source and title.startswith("[X-MICROCUT]"):
+        if source and (title.startswith("[X-MICROCUT]") or title.startswith("[X-PUBLISH]")):
             try:
                 start = int(payload.get("scan_start"))
                 if start >= 0:
