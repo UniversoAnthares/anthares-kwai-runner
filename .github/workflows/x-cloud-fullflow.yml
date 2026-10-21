@@ -270,7 +270,7 @@ jobs:
           import json,os,urllib.request
           repo=os.environ['GITHUB_REPOSITORY']; tok=os.environ['GH_TOKEN']; n=os.environ['ISSUE_NUMBER']; media=os.environ['MEDIA_URL']
           result=json.load(open('/tmp/x-render-result.json',encoding='utf-8'))
-          body_obj={'platform':'x','account':'lucasyahn','duration_class':'long','caption':result['caption'],'media_url':media,'source_id':result['source']['video_id'],'source_url':result['source']['source_url'],'segment_start':result['segment_start'],'segment_end':result['segment_end'],'microedit':result['microedit'],'origin_issue':int(n)}
+          body_obj={'platform':'x','account':'lucasyahn','duration_class':'long','caption':result['caption'],'media_url':media,'source_id':result['source']['video_id'],'source_url':result['source']['source_url'],'segment_start':result['segment_start'],'segment_end':result['segment_end'],'microedit':result['microedit'],'scan_start':int(result['scan_start']),'origin_issue':int(n)}
           payload=json.dumps({'title':f'[X-PUBLISH] {result["source"]["video_id"]}-{n}','body':'```json\n'+json.dumps(body_obj,ensure_ascii=False,indent=2)+'\n```'},ensure_ascii=False).encode()
           headers={'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json','Content-Type':'application/json','User-Agent':'anthares-x'}
           req=urllib.request.Request(f'https://api.github.com/repos/{repo}/issues',data=payload,method='POST',headers=headers)
