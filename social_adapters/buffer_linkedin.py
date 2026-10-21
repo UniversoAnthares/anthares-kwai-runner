@@ -182,7 +182,7 @@ def schedule_video(payload: dict) -> dict:
         channelId: {json.dumps(channel_id)}
         schedulingType: automatic
         mode: addToQueue
-        assets: [{{video: {{url: {json.dumps(prepared["media_url"])}}}}]
+        assets: [{{ video: {{ url: {json.dumps(prepared["media_url"])} }} }}]
       }}) {{
         ... on PostActionSuccess {{ post {{ id text dueAt }} }}
         ... on MutationError {{ message }}
