@@ -23,7 +23,7 @@ The runner downloads the validated Kwai package from this repository's public `k
 
 ## External CI providers
 
-General CI priority is defined in `ci-hub/executor-routing.json`: GitHub Actions first, then Harness, AppVeyor, Floot, Cloudflare Workers Builds, and GitLab CI. CircleCI is retired and is kept only in historical evidence/configuration where needed for auditability.
+General CI priority is defined in `ci-hub/executor-routing.json`: GitHub Actions (when runners are assigned), AppVeyor (when a current job starts), Harness, Floot, Cloudflare Workers Builds, and a future Codeberg Actions runner **only after live authorization and execution proof**. GitLab hosted CI is excluded while quota-blocked; its independent authenticated Issues transport remains available for Anthares Remote recovery. Codeberg Git is the preferred independent **source mirror**, subject to a fresh exact SHA match before promotion; it is not itself an executor. CircleCI remains retired.
 
 ## Neutral multi-provider execution
 
