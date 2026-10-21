@@ -41,6 +41,25 @@ class P0RouterTests(unittest.TestCase):
         self.assertEqual(len({x["id"] for x in incidents}),2)
         self.assertTrue(all(x["network"]=="pinterest" for x in incidents))
 
+    def test_inaccessible_secondary_repository_keeps_pinterest_alert(self):
+        data={"workflow_runs":[{"name":"CORTES Pinterest - automatic Buffer cloud publisher",
+             "conclusion":"failure","created_at":router.NOW.isoformat(),"id":39657013484}]}
+        def read(url,*args,**kwargs):
+            if "anthares-clipper" in url:
+                raise router.urllib.error.HTTPError(url,403,"Forbidden",{},None)
+            return data
+        with patch.object(router,"http",side_effect=read):
+            result=router.workflow_incidents()
+        self.assertEqual(len([x for x in result if x["network"]=="pinterest"]),1)
+        self.assertEqual(len([x for x in result if x["stage"]=="qa_visibility_lost_github_repo"]),1)
+
+    def test_both_github_sources_inaccessible_raises_for_p0(self):
+        def deny(url,*args,**kwargs):
+            raise router.urllib.error.HTTPError(url,403,"Forbidden",{},None)
+        with patch.object(router,"http",side_effect=deny):
+            with self.assertRaisesRegex(RuntimeError,"ALL_REPOS_INACCESSIBLE"):
+                router.workflow_incidents()
+
     def test_action_success_never_creates_ticket(self):
         run={"workflow_runs":[{
             "name":"CORTES TikTok Neon Producer","conclusion":"success",
