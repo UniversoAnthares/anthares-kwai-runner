@@ -39,7 +39,8 @@ def strategic_tags(title: str, description: str = "") -> tuple[str, ...]:
 
 def linkedin_caption(title: str, description: str = "") -> str:
     headline = branded_title(title)
-    raw = clean_publication_text(str(description or ""), field="text").strip()
+    raw = (clean_publication_text(str(description), field="text").strip()
+           if str(description or "").strip() else "")
     raw = re.sub(r"(?i)(?:https?://)?(?:www\.)?anthares\.us/?", "", raw).strip()
     raw = re.sub(r"(?i)#UniversoAnthares\b", "", raw).strip()
     tags = strategic_tags(title, raw)
