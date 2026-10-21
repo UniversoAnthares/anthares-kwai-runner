@@ -94,6 +94,12 @@ def safe_payload(row):
     if row.get("target_key")!=TARGET or row.get("duration_class")!="short":
         raise RuntimeError("NEON_INSTAGRAM_TARGET_INVALID")
     payload=row.get("payload") or {}
+    if isinstance(payload,str):
+        try: payload=json.loads(payload)
+        except (ValueError,TypeError):
+            raise RuntimeError("CORTES_BUFFER_NEON_PAYLOAD_INVALID_JSON") from None
+    if not isinstance(payload,dict):
+        raise RuntimeError("CORTES_BUFFER_NEON_PAYLOAD_NOT_OBJECT")
     if payload.get("platform")!="instagram" or payload.get("account_id")!="universoanthares":
         raise RuntimeError("NEON_INSTAGRAM_ACCOUNT_INVALID")
     result={
