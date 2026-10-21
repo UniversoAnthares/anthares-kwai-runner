@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: '3,13,23,33,43,53 * * * *'
   workflow_dispatch: {}
+  # Independent wake-up when the upstream CORTES fanout completes.
+  # GitHub scheduled events can be delayed or dropped under load.
+  workflow_run:
+    workflows: ["CORTES 3 independent networks - all shorts cloud fanout"]
+    types: [completed]
 permissions:
   contents: read
   id-token: write
