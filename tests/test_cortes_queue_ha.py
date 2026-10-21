@@ -30,12 +30,12 @@ class HaTests(unittest.TestCase):
         self.assertEqual(value["status"],"primary")
         self.assertEqual(len(requested),1)
 
-    def test_neon_503_fails_over_to_secondary_for_safe_read(self):
+    def test_neon_primary_503_fails_over_to_independent_neon_backup(self):
         requested=[]
         def open_req(req,timeout):
             requested.append(req.full_url)
             if len(requested)==1:raise urllib.error.HTTPError(req.full_url,503,"unavailable",{},io.BytesIO())
-            self.assertIn("vercel.app",req.full_url)
+            self.assertIn("cortesbackup.compute",req.full_url)
             self.assertTrue(req.get_header("Authorization").startswith("Bearer "))
             return Resp({"ok":True,"jobs":[]})
         with patch.object(ha.urllib.request,"urlopen",side_effect=open_req):
