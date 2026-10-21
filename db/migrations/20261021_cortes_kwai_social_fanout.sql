@@ -87,7 +87,7 @@ BEGIN
                    target_key, source_id, segment_id, reason)
              VALUES(destination.target_key,NEW.source_id,segment,'DAILY_CAP_100')
              ON CONFLICT(target_key,source_id,segment_id)
-             DO UPDATE SET attempts = public.cortes_social_fanout_errors.attempts + 1,
+             DO UPDATE SET attempts = cortes_social_fanout_errors.attempts + 1,
                            reason='DAILY_CAP_100',last_seen_at=now();
              CONTINUE;
           END IF;
@@ -123,7 +123,7 @@ BEGIN
                  target_key,source_id,segment_id,reason)
              VALUES(destination.target_key,NEW.source_id,segment,SQLSTATE)
              ON CONFLICT(target_key,source_id,segment_id)
-             DO UPDATE SET attempts=public.cortes_social_fanout_errors.attempts+1,
+             DO UPDATE SET attempts=cortes_social_fanout_errors.attempts+1,
                            reason=EXCLUDED.reason,last_seen_at=now();
           EXCEPTION WHEN OTHERS THEN
              NULL; -- Last resort: never abort a Kwai job to report social QA.
