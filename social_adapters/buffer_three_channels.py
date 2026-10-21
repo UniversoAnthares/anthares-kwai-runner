@@ -217,6 +217,8 @@ def resolve_pinterest_board(channel_id: str, *, token: str | None = None) -> str
     boards = metadata.get("boards") or []
     if not isinstance(boards, list):
         raise BufferBlocked("PINTEREST_BOARD_LIST_INVALID")
+    if len(boards) == 0:
+        return verified_public_pinterest_board()
     pinned = os.getenv("BUFFER_PINTEREST_BOARD_ID", "").strip() or PINTEREST_PUBLIC_BOARD_ID
     if pinned != PINTEREST_PUBLIC_BOARD_ID:
         raise BufferBlocked("PINTEREST_BOARD_ENV_MISMATCH")
