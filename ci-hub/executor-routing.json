@@ -1,16 +1,26 @@
 {
-  "revision": "2026-10-16-browser-phase9-redundancy-r19",
+  "revision": "2026-10-21-codeberg-mirror-verified-failover-r20",
   "provider_status_source": "ci-hub/provider-status.json",
   "continuity_policy": "ci-hub/CONTINUITY.md",
   "regression_check_required_each_round": true,
   "remote_control": {
     "primary": "anthares_remote",
     "surface": "anthares_remote",
-    "backend_priority": ["vercel_neon_control", "gitlab_private_issue_queue", "github_private_issue_queue"],
+    "backend_priority": [
+      "vercel_neon_control",
+      "gitlab_private_issue_queue",
+      "github_private_issue_queue"
+    ],
     "current_selected_backend": "vercel_neon_control",
-    "recovery_priority": ["gitlab_private_issue_queue", "github_private_issue_queue"],
+    "recovery_priority": [
+      "gitlab_private_issue_queue",
+      "github_private_issue_queue"
+    ],
     "allow_other_remote_surfaces": false,
-    "health_requires": ["fresh_command_roundtrip", "result_acknowledgement"],
+    "health_requires": [
+      "fresh_command_roundtrip",
+      "result_acknowledgement"
+    ],
     "selection_rule": "use Vercel+Neon as the canonical MCP/control plane; preserve GitLab private issue queue as recovery transport #1 and GitHub private issue queue as recovery transport #2; all transports remain inside the Anthares Remote surface; durable receipt dedupe is mandatory across providers; Cloudflare is not part of the ARA operational path",
     "on_failure": "failover_between_anthares_remote_backends_without_switching_remote_surface_or_reexecuting_committed_job_ids"
   },
@@ -18,7 +28,11 @@
     "purpose": "kwai_only",
     "primary_device": "physical_android",
     "fallback_device": "memu_android",
-    "priority": ["physical_android", "memu_android", "github_android_experimental"],
+    "priority": [
+      "physical_android",
+      "memu_android",
+      "github_android_experimental"
+    ],
     "github_actions": "experimental_only",
     "selection_rule": "recover current device transport before failover; physical Android remains primary; MEmu4 is automatic standby after proven physical failure; GitHub Android is experimental and never selected for normal Kwai publication",
     "transport_policy": "ADB is encapsulated by Anthares Android Runtime and transport failure is distinct from device failure",
@@ -40,11 +54,20 @@
   "browser_execution": {
     "primary_surface": "anthares_browser",
     "exclusive_surface": true,
-    "backend_priority": ["github_actions_public_chromium", "appveyor_linux_chromium", "anthares_browser_persistent_runtime"],
+    "backend_priority": [
+      "github_actions_public_chromium",
+      "appveyor_linux_chromium",
+      "anthares_browser_persistent_runtime"
+    ],
     "selection_rule": "choose the first Anthares Browser backend with a current practical runtime proof; DEGRADED and BLOCKED_QUOTA backends are skipped without changing the Anthares Browser surface; provider failover must preserve the same browser runtime contract",
     "current_selected_backend": "github_actions_public_chromium",
     "allow_direct_external_browser_fallbacks": false,
-    "superseded": ["browserless", "tinyfish", "codespaces", "render_browser_runtime"],
+    "superseded": [
+      "browserless",
+      "tinyfish",
+      "codespaces",
+      "render_browser_runtime"
+    ],
     "canonical_session_authority": "https://anthares-x-vault.anthares1.workers.dev/browser-state/runtime",
     "notes": {
       "github_actions_public_chromium": "READY PRIMARY: run 38841592885 passed the shared runtime proof with health/readiness, control auth, CDP loopback, interaction, screenshot, noVNC and persistent profile restart",
@@ -57,18 +80,53 @@
     }
   },
   "ci_execution": {
-    "priority": ["github_actions_public", "appveyor", "harness", "floot", "cloudflare_workers_builds", "github_actions_private", "gitlab_ci"],
-    "selection_rule": "a provider is selectable only when provider-status.json marks it eligible and its evidence is fresh enough for the intended operation",
-    "quota_policy": "BLOCKED_QUOTA providers are ineligible until fresh successful proof"
+    "priority": [
+      "github_actions_public",
+      "appveyor",
+      "harness",
+      "floot",
+      "cloudflare_workers_builds",
+      "github_actions_private",
+      "codeberg_actions"
+    ],
+    "selection_rule": "Only providers with fresh execution evidence and a runnable job may execute. GitLab CI is blocked by quota and excluded. Codeberg Actions remains ineligible until repository Actions is enabled, a hosted/self-hosted runner and licenses are verified, and a real successful job is observed. A repository mirror is NOT a CI executor.",
+    "quota_policy": "BLOCKED_QUOTA providers are ineligible until fresh successful proof",
+    "runner_allocation_health": {
+      "github_actions_public": "DEGRADED_CURRENT_REPO_BACKLOG_20261021",
+      "appveyor": "DEGRADED_CURRENT_QUEUE_20261021",
+      "codeberg_actions": "NOT_CONFIGURED_REPOSITORY_ACTIONS_DISABLED",
+      "gitlab_ci": "BLOCKED_QUOTA_EXCLUDED"
+    }
   },
   "retired": {
-    "render": {"active": false, "action": "never_route"},
-    "tinyfish": {"active": false, "action": "never_route"},
-    "circleci": {"active": false, "action": "never_route"},
-    "browserless": {"active": false, "action": "superseded_by_anthares_browser"},
-    "winremote": {"active": false, "action": "superseded_by_anthares_remote"},
-    "meshcentral": {"active": false, "action": "superseded_by_anthares_remote"},
-    "codespaces": {"active": false, "action": "social_browser_path_retired"}
+    "render": {
+      "active": false,
+      "action": "never_route"
+    },
+    "tinyfish": {
+      "active": false,
+      "action": "never_route"
+    },
+    "circleci": {
+      "active": false,
+      "action": "never_route"
+    },
+    "browserless": {
+      "active": false,
+      "action": "superseded_by_anthares_browser"
+    },
+    "winremote": {
+      "active": false,
+      "action": "superseded_by_anthares_remote"
+    },
+    "meshcentral": {
+      "active": false,
+      "action": "superseded_by_anthares_remote"
+    },
+    "codespaces": {
+      "active": false,
+      "action": "social_browser_path_retired"
+    }
   },
   "escalation": {
     "anthares_component_failure": "repair_anthares_component",
@@ -77,39 +135,212 @@
     "auth_required": "authorized_session_flow_then_manual_owner_only_if_unavoidable",
     "retired_provider": "never_route",
     "unsupported_capability": "eligible_provider_or_available_implementation_agent",
-    "implementation_agents": ["codex", "kilo", "work"],
-    "manual_owner": ["mfa", "captcha", "account_authorization", "billing_or_plan_decision", "irreducible_security_boundary"]
+    "implementation_agents": [
+      "codex",
+      "kilo",
+      "work"
+    ],
+    "manual_owner": [
+      "mfa",
+      "captcha",
+      "account_authorization",
+      "billing_or_plan_decision",
+      "irreducible_security_boundary"
+    ]
   },
   "providers": {
-    "physical_android": {"active": true, "android_eligible": true, "role": "kwai_primary", "interactive_manual_auth": true, "status": "PRIMARY_PHYSICAL_DEVICE"},
-    "memu_android": {"active": true, "android_eligible": true, "role": "kwai_automatic_standby", "interactive_manual_auth": true, "status": "STANDBY_MEMU4"},
-    "github_android_experimental": {"active": false, "android_eligible": false, "role": "experimental_only", "interactive_manual_auth": false, "status": "EXPERIMENTAL_NOT_NORMAL_FAILOVER"},
-    "anthares_remote": {"active": true, "remote_control_eligible": true, "exclusive_for_remote_control": true, "status": "READY_HOMOLOGATED_PHASE4"},
-    "vercel_neon_control": {"active": true, "remote_backend_eligible": true, "status": "READY_PRIMARY_REDEPLOY_PERSISTENCE_PROVEN", "role": "ara_primary_mcp_control"},
-    "gitlab_private_issue_queue": {"active": true, "remote_backend_eligible": true, "status": "READY_PHASE4_FAILBACK_AND_DEDUPE_PROVEN", "role": "ara_recovery_transport_1", "ci_quota_independent": true},
-    "github_private_issue_queue": {"active": true, "remote_backend_eligible": true, "status": "READY_PHASE4_LIVE_EXECUTION_PROVEN_ISSUE_254", "role": "ara_recovery_transport_2"},
-    "cloudflare_http_control": {"active": false, "remote_backend_eligible": false, "status": "REMOVED_FROM_ARA_OPERATIONAL_PATH_DO_QUOTA_BLOCKED", "role": "none"},
-    "anthares_browser": {"active": true, "browser_eligible": true, "exclusive_browser_surface": true, "status": "READY_REDUNDANT_GITHUB_APPVEYOR"},
-    "github_actions_public_chromium": {"active": true, "browser_backend_eligible": true, "status": "READY_PRIMARY_run_38841592885"},
-    "appveyor_linux_chromium": {"active": true, "browser_backend_eligible": true, "status": "READY_SECONDARY_build_54907970_job_bw7eb3k0ts0d94c3"},
-    "anthares_browser_persistent_runtime": {"active": false, "browser_backend_eligible": false, "status": "DEGRADED_NORTHFLANK_BROWSER_UNPROVEN", "reopen_condition": "fresh browser persistence/readiness proof passes"},
-    "github_actions_public": {"active": true, "status": "READY", "ci_eligible": true},
-    "appveyor": {"active": true, "status": "READY_WITH_LINUX_BROWSER_PROOF", "ci_eligible": true},
-    "github_actions_private": {"active": false, "status": "BLOCKED_QUOTA_owner_reported_pending_billing_api_verification", "ci_eligible": false},
-    "gitlab_ci": {"active": false, "status": "BLOCKED_QUOTA_ci_quota_exceeded_verified_pipeline_2947796926", "ci_eligible": false},
-    "cloudflare_workers_builds": {"active": false, "status": "PENDING_FRESH_QUOTA_VERIFICATION", "ci_eligible": false},
-    "cloudflare_browser_rendering": {"active": false, "status": "BLOCKED_QUOTA_LAST_OBSERVED_429", "browser_eligible": false, "direct_fallback_for_anthares_browser": false},
-    "cloudflare_workers_runtime": {"active": true, "status": "READY_RUNTIME_ONLY_NOT_ARA_PRIMARY", "separate_quota_domain": true},
-    "cloudflare_durable_objects": {"active": false, "status": "BLOCKED_QUOTA_NOT_IN_ARA_PATH", "separate_quota_domain": true},
-    "northflank": {"active": true, "status": "READY_GENERIC_RUNTIME_BROWSER_BACKEND_DEGRADED", "container_eligible": true, "browser_backend_eligible": false},
-    "harness": {"active": true, "ci_eligible": false, "status": "PENDING_FRESH_VERIFICATION"},
-    "floot": {"active": true, "ci_eligible": false, "status": "PENDING_FRESH_VERIFICATION"},
-    "render": {"active": false, "status": "RETIRED"},
-    "tinyfish": {"active": false, "status": "RETIRED"},
-    "circleci": {"active": false, "status": "RETIRED"},
-    "browserless": {"active": false, "status": "RETIRED_SUPERSEDED_BY_ANTHARES_BROWSER"},
-    "winremote": {"active": false, "status": "RETIRED"},
-    "meshcentral": {"active": false, "status": "RETIRED"},
-    "codespaces": {"active": false, "status": "RETIRED_SOCIAL_BROWSER_PATH"}
+    "physical_android": {
+      "active": true,
+      "android_eligible": true,
+      "role": "kwai_primary",
+      "interactive_manual_auth": true,
+      "status": "PRIMARY_PHYSICAL_DEVICE"
+    },
+    "memu_android": {
+      "active": true,
+      "android_eligible": true,
+      "role": "kwai_automatic_standby",
+      "interactive_manual_auth": true,
+      "status": "STANDBY_MEMU4"
+    },
+    "github_android_experimental": {
+      "active": false,
+      "android_eligible": false,
+      "role": "experimental_only",
+      "interactive_manual_auth": false,
+      "status": "EXPERIMENTAL_NOT_NORMAL_FAILOVER"
+    },
+    "anthares_remote": {
+      "active": true,
+      "remote_control_eligible": true,
+      "exclusive_for_remote_control": true,
+      "status": "READY_HOMOLOGATED_PHASE4"
+    },
+    "vercel_neon_control": {
+      "active": true,
+      "remote_backend_eligible": true,
+      "status": "READY_PRIMARY_REDEPLOY_PERSISTENCE_PROVEN",
+      "role": "ara_primary_mcp_control"
+    },
+    "gitlab_private_issue_queue": {
+      "active": true,
+      "remote_backend_eligible": true,
+      "status": "READY_PHASE4_FAILBACK_AND_DEDUPE_PROVEN",
+      "role": "ara_recovery_transport_1",
+      "ci_quota_independent": true
+    },
+    "github_private_issue_queue": {
+      "active": true,
+      "remote_backend_eligible": true,
+      "status": "READY_PHASE4_LIVE_EXECUTION_PROVEN_ISSUE_254",
+      "role": "ara_recovery_transport_2"
+    },
+    "cloudflare_http_control": {
+      "active": false,
+      "remote_backend_eligible": false,
+      "status": "REMOVED_FROM_ARA_OPERATIONAL_PATH_DO_QUOTA_BLOCKED",
+      "role": "none"
+    },
+    "anthares_browser": {
+      "active": true,
+      "browser_eligible": true,
+      "exclusive_browser_surface": true,
+      "status": "READY_REDUNDANT_GITHUB_APPVEYOR"
+    },
+    "github_actions_public_chromium": {
+      "active": true,
+      "browser_backend_eligible": true,
+      "status": "READY_PRIMARY_run_38841592885"
+    },
+    "appveyor_linux_chromium": {
+      "active": true,
+      "browser_backend_eligible": true,
+      "status": "READY_SECONDARY_build_54907970_job_bw7eb3k0ts0d94c3"
+    },
+    "anthares_browser_persistent_runtime": {
+      "active": false,
+      "browser_backend_eligible": false,
+      "status": "DEGRADED_NORTHFLANK_BROWSER_UNPROVEN",
+      "reopen_condition": "fresh browser persistence/readiness proof passes"
+    },
+    "github_actions_public": {
+      "active": true,
+      "status": "READY",
+      "ci_eligible": true
+    },
+    "appveyor": {
+      "active": true,
+      "status": "READY_WITH_LINUX_BROWSER_PROOF",
+      "ci_eligible": true
+    },
+    "github_actions_private": {
+      "active": false,
+      "status": "BLOCKED_QUOTA_owner_reported_pending_billing_api_verification",
+      "ci_eligible": false
+    },
+    "gitlab_ci": {
+      "active": false,
+      "status": "BLOCKED_QUOTA_EXCLUDED_FROM_EXECUTOR_SELECTION",
+      "ci_eligible": false
+    },
+    "cloudflare_workers_builds": {
+      "active": false,
+      "status": "PENDING_FRESH_QUOTA_VERIFICATION",
+      "ci_eligible": false
+    },
+    "cloudflare_browser_rendering": {
+      "active": false,
+      "status": "BLOCKED_QUOTA_LAST_OBSERVED_429",
+      "browser_eligible": false,
+      "direct_fallback_for_anthares_browser": false
+    },
+    "cloudflare_workers_runtime": {
+      "active": true,
+      "status": "READY_RUNTIME_ONLY_NOT_ARA_PRIMARY",
+      "separate_quota_domain": true
+    },
+    "cloudflare_durable_objects": {
+      "active": false,
+      "status": "BLOCKED_QUOTA_NOT_IN_ARA_PATH",
+      "separate_quota_domain": true
+    },
+    "northflank": {
+      "active": true,
+      "status": "READY_GENERIC_RUNTIME_BROWSER_BACKEND_DEGRADED",
+      "container_eligible": true,
+      "browser_backend_eligible": false
+    },
+    "harness": {
+      "active": true,
+      "ci_eligible": false,
+      "status": "PENDING_FRESH_VERIFICATION"
+    },
+    "floot": {
+      "active": true,
+      "ci_eligible": false,
+      "status": "PENDING_FRESH_VERIFICATION"
+    },
+    "render": {
+      "active": false,
+      "status": "RETIRED"
+    },
+    "tinyfish": {
+      "active": false,
+      "status": "RETIRED"
+    },
+    "circleci": {
+      "active": false,
+      "status": "RETIRED"
+    },
+    "browserless": {
+      "active": false,
+      "status": "RETIRED_SUPERSEDED_BY_ANTHARES_BROWSER"
+    },
+    "winremote": {
+      "active": false,
+      "status": "RETIRED"
+    },
+    "meshcentral": {
+      "active": false,
+      "status": "RETIRED"
+    },
+    "codespaces": {
+      "active": false,
+      "status": "RETIRED_SOCIAL_BROWSER_PATH"
+    },
+    "codeberg_actions": {
+      "active": false,
+      "status": "BLOCKED_ACTIONS_DISABLED_AND_RUNNER_UNVERIFIED",
+      "ci_eligible": false,
+      "role": "candidate_forgejo_ci",
+      "reopen_condition": "Actions enabled, license and runner access validated, live job successful"
+    },
+    "codeberg_git_mirror": {
+      "active": true,
+      "status": "READABLE_STALE_MAIN_20_COMMITS_AT_AUDIT",
+      "source_eligible": false,
+      "role": "git_recovery_after_sha_parity"
+    }
+  },
+  "git_redundancy": {
+    "canonical": "github",
+    "recovery_order": [
+      "codeberg",
+      "gitlab_emergency_only"
+    ],
+    "codeberg": {
+      "repository": "https://codeberg.org/UniversoAnthares/anthares-kwai-runner",
+      "source_ref": "refs/heads/main",
+      "status": "STALE_VERIFIED_2026_10_21",
+      "fast_forward_possible": true,
+      "eligible_for_promotion": false,
+      "requires": "head parity verified after authenticated mirror"
+    },
+    "gitlab": {
+      "role": "EMERGENCY_SOURCE_ONLY_NO_CI",
+      "ci_eligible": false
+    },
+    "fail_closed_on_divergence": true,
+    "no_force_push": true
   }
 }
