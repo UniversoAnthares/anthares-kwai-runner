@@ -12,6 +12,23 @@ from anthares_publisher.media_model import Clip, Publication
 
 
 class EditorialTests(unittest.TestCase):
+    def test_windows_console_mojibake_is_recovered(self):
+        corrupt = "A Metamorfose [Kafka] - AN├üLISE | Trecho 157:14 ÔùÅ Universo Anthares"
+        proper = "A Metamorfose [Kafka] - ANÁLISE | Trecho 157:14 ● Universo Anthares"
+        self.assertEqual(branded_title(corrupt), proper)
+        result = prepare_publication_metadata({
+            "title": corrupt, "text": "Literatura e AN├üLISE ÔùÅ teste"})
+        self.assertEqual(result["title"], proper)
+        self.assertIn("ANÁLISE ● teste", result["text"])
+        self.assertNotIn("├", result["text"])
+
+    def test_unrecoverable_unicode_aborts_before_remote_publication(self):
+        from anthares_publisher.unicode_gate import clean_publication_text
+        with self.assertRaisesRegex(ValueError, "corrupt_blocked"):
+            clean_publication_text("T├üTULO � corrompido")
+        with self.assertRaisesRegex(ValueError, "corrupt_blocked"):
+            branded_title("Trecho � de Kafka")
+
     def test_brand_is_last_in_title_and_never_duplicated(self):
         title = branded_title("A poesia de Homero")
         self.assertEqual(title, "A poesia de Homero" + SUFFIX)
