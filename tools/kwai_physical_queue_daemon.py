@@ -19,7 +19,8 @@ ADB_KEYS=os.getenv('ADB_VENDOR_KEYS',r'C:\Users\Lucas\.android')
 PRIVATE_KEY=pathlib.Path(os.getenv('ANTHARES_PHYSICAL_EXECUTOR_KEY',r'D:\AntharesWork\anthares-clipper\local-control\executor-private-current.pem'))
 WORKER=ROOT/'tools'/'kwai_device_failover_worker.py'; ACK=ROOT/'.state'/'android-publish-ack.json'; PUBSTATE=ROOT/'.state'/'kwai-native-cortes'
 LOGDIR=ROOT/'.state'; LOG=LOGDIR/'kwai-physical-queue.log'; LOCK=LOGDIR/'kwai-physical-queue.lock'; MAINTENANCE=LOGDIR/'cortes-publisher-maintenance.pause'
-TTL=3600; POLL=20
+TTL=3600; POLL=20; EMPTY_POLL=180
+LAST_QUEUE_EMPTY=False
 WP_PENDING=LOGDIR/'cortes-wp-callback-pending.json'
 _key=None
 
@@ -246,6 +247,7 @@ def memu_identity_proven():
 
 
 def once():
+ global LAST_QUEUE_EMPTY
  if MAINTENANCE.exists():
   log('QUEUE_PAUSED_MAINTENANCE no_lease=1')
   return 0
@@ -290,8 +292,11 @@ def once():
   pending=int(stats.get('pending',-1))
   if pending<0:raise RuntimeError('queue_pending_invalid')
   if pending==0:
-   log('PUBLICATION_QUEUE_EMPTY stats=verified')
+   if not LAST_QUEUE_EMPTY:log('PUBLICATION_QUEUE_DRAINED stats=verified next_poll_seconds='+str(EMPTY_POLL))
+   LAST_QUEUE_EMPTY=True
    return 0
+  if LAST_QUEUE_EMPTY:log('PUBLICATION_QUEUE_REPLENISHED pending='+str(pending))
+  LAST_QUEUE_EMPTY=False
   recent=[ln for ln in LOG.read_text(encoding='utf-8').splitlines()
           if ' JOB_OK ' in ln] if LOG.exists() else []
   today=now.date().isoformat()
@@ -354,7 +359,9 @@ def daemon():
  try:
   while True:
    delay=POLL
-   try:once()
+   try:
+    once()
+    if LAST_QUEUE_EMPTY:delay=EMPTY_POLL
    except QueueStorageBlocked:
     delay=900
     log('QUEUE_BLOCKED reason=queue_storage_quota_exhausted retry_seconds=900 no_publication_attempted=1')
