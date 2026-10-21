@@ -99,7 +99,10 @@ def reconcile():
             print("::warning::CORTES_PINTEREST_READBACK_UNVERIFIED",flush=True)
             continue
         if link:
+            # Backend checks HTTPS Pinterest permalink, exact remote id and
+            # prior buffer_scheduled evidence atomically before marking sent.
             queue("reconcile",{"id":item["id"],"remote_id":remote_id,"external_link":link})
+            print("CORTES_PINTEREST_CONFIRMED_URL="+link,flush=True)
             total+=1
     if unknown:
         print("::warning::CORTES_PINTEREST_UNCERTAIN_WITHOUT_REMOTE_ID="+str(unknown),flush=True)

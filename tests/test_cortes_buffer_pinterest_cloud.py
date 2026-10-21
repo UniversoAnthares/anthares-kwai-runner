@@ -118,6 +118,25 @@ class PinterestCloudTests(unittest.TestCase):
             self.assertEqual(p.reconcile(),1)
             self.assertEqual(q.call_count,2)
 
+    def test_sent_pinterest_url_confirms_existing_neon_job_once(self):
+        pin_url="https://www.pinterest.com/pin/819514463494241678/"
+        calls=[]
+        def backend(action,payload=None):
+            calls.append((action,payload))
+            if action=="pending":
+                return {"jobs":[{"id":"original-job","remote_id":"6ad908b1c2fd6c7a0efc0f97"}]}
+            if action=="reconcile":
+                return {"ok":True,"job":{"status":"confirmed"}}
+            raise AssertionError(action)
+        with patch.object(p,"queue",side_effect=backend), \
+             patch.object(p,"verify_sent_post",return_value=pin_url):
+            self.assertEqual(p.reconcile(),1)
+        self.assertEqual([x[0] for x in calls],["pending","reconcile"])
+        self.assertEqual(calls[1][1],{
+            "id":"original-job","remote_id":"6ad908b1c2fd6c7a0efc0f97",
+            "external_link":pin_url,
+        })
+
     def test_no_cloud_credentials_fails_without_queue_call(self):
         with patch.dict(p.os.environ,{"GITHUB_ACTIONS":"false","BUFFER_API_KEY":""}):
             with self.assertRaisesRegex(RuntimeError,"CLOUD_ONLY"):
