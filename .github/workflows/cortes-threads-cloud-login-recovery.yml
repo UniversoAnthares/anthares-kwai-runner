@@ -72,6 +72,8 @@ jobs:
           if [ -n "$VNC_SECRET" ]; then vnc="$VNC_SECRET"; else vnc="$(openssl rand -hex 12)"; fi
           echo "control=$control" >> "$GITHUB_OUTPUT"
           echo "vnc=$vnc" >> "$GITHUB_OUTPUT"
+          echo "manual=$(openssl rand -hex 24)" >> "$GITHUB_OUTPUT"
+          echo "expires=$(($(date +%s)+2700))" >> "$GITHUB_OUTPUT"
 
       - name: Build Anthares-browser
         run: |
@@ -82,12 +84,17 @@ jobs:
         env:
           CONTROL: ${{ steps.creds.outputs.control }}
           VNC: ${{ steps.creds.outputs.vnc }}
+          MANUAL: ${{ steps.creds.outputs.manual }}
+          EXPIRES: ${{ steps.creds.outputs.expires }}
         shell: bash
         run: |
           set -euo pipefail
           docker run -d --name anthares-browser \
             -e CONTROL_TOKEN="$CONTROL" \
             -e VNC_PASSWORD="$VNC" \
+            -e NOVNC_MANUAL_TOKEN="$MANUAL" \
+            -e NOVNC_MANUAL_EXPIRES="$EXPIRES" \
+            -e NOVNC_COOKIE_SECURE=1 \
             -v "$PROFILE_DIR:/data" \
             -p 127.0.0.1:18080:8080 \
             -p 127.0.0.1:16080:6080 \
@@ -124,6 +131,7 @@ jobs:
         if: ${{ inputs.mode == 'login' || github.ref == 'refs/heads/feature/threads-cloud-primary-20261021' }}
         env:
           KEEP: ${{ inputs.keep_minutes || '35' }}
+          MANUAL: ${{ steps.creds.outputs.manual }}
         shell: bash
         run: |
           set -euo pipefail
@@ -133,12 +141,12 @@ jobs:
           fi
           curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
           chmod +x /tmp/cloudflared
-          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:16080 > /tmp/tunnel.log 2>&1 &
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:18080 > /tmp/tunnel.log 2>&1 &
           for i in $(seq 1 60); do
             url="$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log | tail -1 || true)"
             if [ -n "$url" ]; then
-              echo "NOVNC_URL=${url}/vnc.html?autoconnect=true&resize=scale"
-              printf '%s\n' "${url}/vnc.html?autoconnect=true&resize=scale" > /tmp/threads-novnc-url.txt
+              echo 'NOVNC_GATEWAY=AUTHENTICATED_ONE_TIME'
+              printf '%s\n' "${url}/novnc/once/${MANUAL}" > /tmp/threads-novnc-url.txt
               break
             fi
             sleep 1
