@@ -1,6 +1,11 @@
 name: CORTES Threads - Cloud API Auth Gate
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/threads-cloud-primary-20261021]
+    paths:
+      - tools/cortes_threads_auth_gate.mjs
+      - .github/workflows/cortes-threads-auth-gate.yml
 permissions:
   contents: read
 jobs:
