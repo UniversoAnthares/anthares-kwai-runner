@@ -27,6 +27,10 @@ class AlreadyStarted(RuntimeError):
     pass
 
 
+class DailyLimitReached(RuntimeError):
+    pass
+
+
 def _connection():
     dsn = os.getenv("X_LEDGER_DATABASE_URL") or os.getenv("ARA_DATABASE_URL") or os.getenv("DATABASE_URL")
     if not dsn:
@@ -49,14 +53,28 @@ def begin(key):
     with _connection() as conn:
         with conn.cursor() as cur:
             cur.execute(DDL)
-            cur.execute(
-                """INSERT INTO anthares_x_submission_ledger
-                   (idempotency_sha256, account, status)
-                   VALUES (%s, 'lucasyahn', 'started')
-                   ON CONFLICT DO NOTHING RETURNING idempotency_sha256""",
-                (row_id,),
-            )
-            claimed = cur.fetchone()
+        with conn.transaction():
+            with conn.cursor() as cur:
+                # Shared PostgreSQL lock fences all consumers and direct API
+                # callers, regardless of worker, browser, or deployment.
+                cur.execute("SELECT pg_advisory_xact_lock(hashtext('anthares-x:lucasyahn:daily'))")
+                cur.execute("""
+                    SELECT count(*) FROM anthares_x_submission_ledger
+                    WHERE account='lucasyahn' AND status IN ('started','confirmed')
+                      AND (created_at AT TIME ZONE 'America/Campo_Grande')::date =
+                          (now() AT TIME ZONE 'America/Campo_Grande')::date
+                """)
+                used = int((cur.fetchone() or (0,))[0])
+                if used >= 10:
+                    raise DailyLimitReached("X_DAILY_HARD_LIMIT_10")
+                cur.execute(
+                    """INSERT INTO anthares_x_submission_ledger
+                       (idempotency_sha256, account, status)
+                       VALUES (%s, 'lucasyahn', 'started')
+                       ON CONFLICT DO NOTHING RETURNING idempotency_sha256""",
+                    (row_id,),
+                )
+                claimed = cur.fetchone()
     if not claimed:
         raise AlreadyStarted("X_POST_ALREADY_ATTEMPTED_RECONCILE")
     return row_id
