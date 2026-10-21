@@ -61,6 +61,12 @@ class PinterestBrowserContract(unittest.TestCase):
         self.assertIn('videos.length>0&&ready',ui)
         self.assertIn('storyboard-drafts-sidebar',ui)
 
+    def test_video_description_uses_draftjs_and_exact_readback(self):
+        ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
+        self.assertIn('PIN_DESCRIPTION_EDITOR_NOT_READY',ui)
+        self.assertIn('PIN_DESCRIPTION_NOT_VERIFIED',ui)
+        self.assertIn('[aria-label="Descreva seu Pin"]',ui)
+
     def test_browser_uses_no_pinterest_api_or_login_bypass(self):
         ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
         for forbidden in ("api.pinterest.com","PINTEREST_ACCESS_TOKEN","captcha_solver","stealth_plugin"):
