@@ -1,0 +1,27 @@
+name: X Publication Reliability Tests
+on:
+  pull_request:
+    paths:
+      - 'tools/x_publication_safety.py'
+      - 'tools/x_cloud_issue_consumer.py'
+      - 'tests/test_x_publication_safety.py'
+      - 'tests/test_x_cloud_issue_consumer.py'
+      - 'x_cloud_prepare.py'
+      - 'x_cloud_render.py'
+      - 'x_real_fullflow_once.py'
+      - 'infra/x_runtime_worker.py'
+      - 'infra/x_render_worker_v3.py'
+      - '.github/workflows/x-*.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax without posting
+        run: python -m compileall -q tools/x_publication_safety.py tools/x_cloud_issue_consumer.py tests/test_x_publication_safety.py tests/test_x_cloud_issue_consumer.py x_cloud_prepare.py x_cloud_render.py x_real_fullflow_once.py infra/x_runtime_worker.py infra/x_render_worker_v3.py
+      - name: Unit tests without credentials or network
+        run: python -m unittest discover -s tests -p 'test_x_*.py' -v
