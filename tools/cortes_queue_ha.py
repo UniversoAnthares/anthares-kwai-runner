@@ -14,9 +14,9 @@ import urllib.request
 
 PROVIDERS=(
     "https://anthares-remote-primary.vercel.app/api/cortes-queue",
-    "https://anthares-cortes-queue-ha.anthares1.workers.dev/",
-    "https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/",
-    "https://br-crimson-unit-b89nau08-cortesbackup.compute.c-14.us-east-1.aws.neon.tech/",
+    "https://anthares-cortes-linkedin-ha.anthares1.workers.dev/",
+    "https://br-crimson-unit-b89nau08-corteslinka.compute.c-14.us-east-1.aws.neon.tech/",
+    "https://br-crimson-unit-b89nau08-corteslinkb.compute.c-14.us-east-1.aws.neon.tech/",
 )
 ACTIONS=frozenset({"enqueue","buffer-lease","buffer-start","buffer-fail",
                    "buffer-scheduled","buffer-pending","buffer-reconcile"})
