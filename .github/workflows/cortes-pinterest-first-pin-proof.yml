@@ -1,0 +1,39 @@
+name: CORTES Pinterest - promote one already scheduled Pin for live proof
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/cortes_pinterest_promote_existing_once.py
+      - tests/test_cortes_pinterest_promote_existing_once.py
+      - .github/workflows/cortes-pinterest-first-pin-proof.yml
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-pinterest-first-pin-proof-single-existing-post
+  cancel-in-progress: false
+jobs:
+  publish-existing-and-readback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify no-duplicate promotion contracts
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/cortes_pinterest_promote_existing_once.py
+          python -m unittest discover -s tests -p test_cortes_pinterest_promote_existing_once.py -v
+      - name: Read previously authorized Buffer key
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
+      - name: Promote EXACT scheduled Pinterest Pin and verify social URL
+        run: |
+          set -euo pipefail
+          python -u tools/cortes_pinterest_promote_existing_once.py
