@@ -6,6 +6,9 @@ on:
     paths:
       - '.github/workflows/cortes-tiktok-publisher.yml'
       - 'tools/cortes_tiktok_queue_consumer.py'
+      - 'infra/neon-cortes-tiktok/**'
+      - 'infra/cloudflare-cortes-tiktok-ha/**'
+      - 'tests/test_cortes_tiktok_neon_ha.mjs'
       - 'direct-tiktok-publisher/tiktok_creator_inventory.py'
       - 'direct-tiktok-publisher/tiktok_cloud_publish.py'
       - 'tools/cortes_tiktok_hosted_publish.py'
@@ -26,6 +29,9 @@ on:
     paths:
       - '.github/workflows/cortes-tiktok-publisher.yml'
       - 'tools/cortes_tiktok_queue_consumer.py'
+      - 'infra/neon-cortes-tiktok/**'
+      - 'infra/cloudflare-cortes-tiktok-ha/**'
+      - 'tests/test_cortes_tiktok_neon_ha.mjs'
       - 'direct-tiktok-publisher/tiktok_creator_inventory.py'
       - 'direct-tiktok-publisher/tiktok_cloud_publish.py'
       - 'tools/cortes_tiktok_hosted_publish.py'
@@ -59,6 +65,9 @@ jobs:
         run: |
           python3 -m py_compile tools/cortes_tiktok_queue_consumer.py tools/cortes_tiktok_hosted_publish.py tools/tiktok_uncertain_post_audit.py
           node --check vercel-ara-primary/api/cortes-tiktok.mjs
+          node --check infra/neon-cortes-tiktok/index.mjs
+          node --check infra/cloudflare-cortes-tiktok-ha/src/index.js
+          node --test tests/test_cortes_tiktok_neon_ha.mjs
           CORTES_TIKTOK_HOSTED_DRY_RUN=1 python3 -u tools/cortes_tiktok_hosted_publish.py
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok*.py' -v
           python3 -m unittest discover -s tests -p 'test_tiktok_creator_inventory.py' -v
