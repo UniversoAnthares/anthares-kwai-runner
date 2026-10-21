@@ -188,7 +188,8 @@ def prepare(payload: dict) -> dict:
     text = add_site_to_keywords(branded_title(title) + "\n" + str(payload.get("description") or "").strip())
     if len(text) > 2200:
         raise BufferBlocked("CAPTION_TOO_LONG_REQUIRES_EDITORIAL_TRUNCATION")
-    return {"platform": platform, "media_url": uri.geturl(), "caption": text}
+    return {"platform": platform, "media_url": uri.geturl(), "caption": text,
+            "pin_title": branded_title(title, limit=100)}
 
 
 def schedule(payload: dict, *, token: str | None = None) -> dict:
@@ -222,12 +223,18 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
         schedulingType: automatic
         mode: addToQueue
         METADATA
-        assets: [{ video: { url: MEDIA } }]
+        assets: [{ video: { url: MEDIA, metadata: { thumbnailOffset: 2000 } } }]
+        PINTEREST_METADATA
       }) {
         ... on PostActionSuccess { post { id } }
         ... on MutationError { message }
       }
     }"""
+    meta = ("metadata: { pinterest: { boardServiceId: " + json.dumps(pinterest_board) +
+            ", title: " + json.dumps(post["pin_title"], ensure_ascii=False) +
+            ", url: " + json.dumps("https://www.anthares.us") + " } }"
+            if platform == "pinterest" else "")
+    mutation = mutation.replace("PINTEREST_METADATA", meta)
     mutation = (mutation.replace("CAPTION", json.dumps(post["caption"], ensure_ascii=False))
                .replace("CHANNEL", json.dumps(channel_id))
                .replace("MEDIA", json.dumps(post["media_url"]))
