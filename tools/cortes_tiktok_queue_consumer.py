@@ -89,7 +89,18 @@ def caption(job):
     title = title[:74].rstrip(" .,-")
     if len(title) < 8:
         title = "Literatura e escrita"
-    return title + " " + marker(str(job.get("segment_id") or ""))
+    # Stable editorial tags accompany the per-clip title and dedupe marker.
+    # Avoid speculative claims that any tag is trending at publication time.
+    lookup = title.casefold()
+    subject = (
+        "#mitologia" if any(w in lookup for w in ("mitologia", "mito", "lenda")) else
+        "#filosofia" if any(w in lookup for w in ("filosofia", "platão", "aristóteles")) else
+        "#poesia" if any(w in lookup for w in ("poema", "poesia", "poeta")) else
+        "#escrita" if any(w in lookup for w in ("escrita", "escrever", "roteiro", "narrativa")) else
+        "#livros"
+    )
+    return " ".join((title, marker(str(job.get("segment_id") or "")),
+                     "#literatura", subject, "#UniversoAnthares"))
 
 
 def found(inventory, segment_id):
