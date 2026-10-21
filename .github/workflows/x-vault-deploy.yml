@@ -29,6 +29,7 @@ jobs:
           grep -q 'BROWSER_KEY_ADMIN_TOKEN' cloudflare-x-vault/src/index.js
           ! grep -q 'onrender.com' cloudflare-x-vault/src/index.js
           grep -q 'ANTHARES_STATE' cloudflare-x-vault/wrangler.toml
+          grep -q 'BROWSER_TIKTOK_LUCAROSALEM_KEY' cloudflare-x-vault/src/index.js
           test -n "$ARA_SHARED"
       - name: Install key-registration admin secret
         env:
@@ -54,6 +55,7 @@ jobs:
           echo "$out" | grep -q '"service":"anthares-x-vault"'
           echo "$out" | grep -q '"persistent_state":true'
           echo "$out" | grep -q '"render_independent":true'
+          echo "$out" | grep -q '"tiktok-lucarosalem"'
           status="$(curl --fail-with-body -sS https://anthares-x-vault.anthares1.workers.dev/browser-key/status)"
           echo "$status"
           echo "$status" | grep -q '"render_dependency":false'
