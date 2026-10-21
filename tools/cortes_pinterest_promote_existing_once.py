@@ -57,7 +57,7 @@ def main():
         if not verify_link(row.get("externalLink")):raise RuntimeError("PINTEREST_SENT_LINK_INVALID")
         print("PIN_ALREADY_SENT_URL="+str(row["externalLink"]),flush=True)
         return 0
-    if status!="buffer":
+    if status not in ("buffer","scheduled"):
         raise RuntimeError("PINTEREST_PIN_NOT_BUFFERED")
     board=str(((row.get("metadata") or {}).get("board") or {}).get("serviceId") or "")
     if board!=EXPECTED_BOARD:
