@@ -173,7 +173,7 @@ def _statuses(page, handle):
     links = page.locator('a[href*="/status/"]')
     for i in range(min(links.count(), 80)):
         href = links.nth(i).get_attribute("href") or ""
-        m = re.search(r"^/" + re.escape(handle) + r"/status/(\\d+)(?:/|$)", href, re.I)
+        m = re.search(r"^/" + re.escape(handle) + r"/status/(\d+)(?:/|$)", href, re.I)
         if m:
             posts.add(f"https://x.com/{handle}/status/{m.group(1)}")
     return posts
