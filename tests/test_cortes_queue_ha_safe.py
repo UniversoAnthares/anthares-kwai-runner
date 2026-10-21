@@ -58,6 +58,30 @@ class SafeFailover(unittest.TestCase):
         self.assertEqual(seen[0][1],seen[1][1])
         self.assertTrue(out["deduped"])
 
+    def test_explicit_neon_primary_never_contacts_vercel(self):
+        urls=[]
+        def open_(req,timeout):
+            urls.append(req.full_url)
+            return FakeReply({"ok":True,"jobs":[]})
+        with patch.object(ha,"is_healthy",return_value=True), patch.object(
+                ha.urllib.request,"urlopen",side_effect=open_):
+            value=ha.post("buffer-pending",{},self.token,primary="neon")
+        self.assertEqual(value["jobs"],[])
+        self.assertEqual(len(urls),1)
+        self.assertIn("cortesqueue.compute",urls[0])
+        self.assertNotIn("vercel.app",urls[0])
+
+    def test_neon_primary_401_fails_closed_without_probing_other_ingresses(self):
+        calls=[]
+        def blocked(req,timeout):
+            calls.append(req.full_url)
+            raise urllib.error.HTTPError(req.full_url,401,"Unauthorized",{},None)
+        with patch.object(ha,"is_healthy",return_value=True), patch.object(
+                ha.urllib.request,"urlopen",side_effect=blocked):
+            with self.assertRaisesRegex(ha.BackendUnavailable,"REJECTED_401"):
+                ha.post("buffer-pending",{},self.token,primary="neon")
+        self.assertEqual(len(calls),1)
+
     def test_429_cannot_be_bypassed_by_another_provider(self):
         attempts=[]
         def error(request,timeout):
