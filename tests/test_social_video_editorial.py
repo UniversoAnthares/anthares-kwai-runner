@@ -45,7 +45,8 @@ class EditorialTests(unittest.TestCase):
     def test_pinterest_round_and_linkedin_daily_cap(self):
         clip = Clip("live-1", 0, 60000, "short", "1"*64)
         self.assertIsNone(Publication(clip, "pinterest", "primary").daily_limit)
-        self.assertEqual(Publication(clip, "linkedin", "primary").daily_limit, 20)
+        self.assertIsNone(Publication(clip, "instagram", "primary").daily_limit)
+        self.assertIsNone(Publication(clip, "linkedin", "primary").daily_limit)
 
 
 class VideoReadyTests(unittest.TestCase):
