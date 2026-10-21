@@ -76,6 +76,7 @@ async function identity(request){
   platform=Object.keys(BUFFER_WORKFLOWS).find(p=>BUFFER_WORKFLOWS[p]===wf);
   if(platform)role='buffer';
   else if(RUNNER_PRODUCERS.has(wf))role='producer';
+  else if(wf==='cortes-linkedin-personal-cloud.yml')role='personal';
   else if(PROBE_WORKFLOWS.has(wf))role='probe';
   else if(wf==='cortes-neon-ha-oidc-proof.yml'){role='probe';platform='linkedin';}
  }else if(repo===CLIPPER&&CLIPPER_PRODUCERS.has(wf))role='producer';
@@ -221,12 +222,102 @@ async function bufferAction(verb,b,platform){
  }
  return{ok:false,error:'ACTION_DISABLED'};
 }
+const LINKEDIN_PERSONAL_TARGET='linkedin:personal';
+const LINKEDIN_PERSONAL_OWNER='linkedin-personal:github-cloud';
+async function personalAction(action,body){
+ const dest=LINKEDIN_PERSONAL_TARGET;
+ const owner=String(body.owner||'');
+ const id=String(body.id||'');
+ const fence=Number(body.lease_generation);
+ if(action==='pending'){
+  const jobs=await query(`SELECT id,remote_id,confirmation_evidence FROM cortes_publications
+    WHERE target_key=$1 AND status='uncertain'
+    AND confirmation_evidence->>'kind'='personal_linkedin_post_uncertain'
+    ORDER BY updated_at LIMIT 4`,[dest]);
+  return{ok:true,jobs};
+ }
+ if(action==='stats'){
+  const rows=await query('SELECT status,count(*)::int n FROM cortes_publications WHERE target_key=$1 GROUP BY status',[dest]);
+  return{ok:true,counts:Object.fromEntries(rows.map(r=>[r.status,Number(r.n)]))};
+ }
+ if(action==='lease'){
+  if(body.target_key!==dest||owner!==LINKEDIN_PERSONAL_OWNER)
+    return{ok:false,error:'PERSONAL_OWNER_MISMATCH'};
+  const rows=await query(`WITH candidate AS
+   (SELECT id FROM cortes_publications
+     WHERE target_key=$1 AND status='queued'
+       AND created_at >= (date_trunc('day', now() AT TIME ZONE 'America/Campo_Grande')
+                          AT TIME ZONE 'America/Campo_Grande')
+     ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
+   UPDATE cortes_publications p SET status='leased',lease_owner=$2,
+        lease_generation=p.lease_generation+1,lease_until=now()+interval '180 seconds',
+        updated_at=now()
+    FROM candidate WHERE p.id=candidate.id AND p.status='queued'
+    RETURNING p.id,p.target_key,p.duration_class,p.payload,p.lease_generation`,[dest,owner]);
+  return{ok:true,job:rows[0]||null};
+ }
+ if(!id||owner!==LINKEDIN_PERSONAL_OWNER||!Number.isInteger(fence)||fence<1)
+   return{ok:false,error:'PERSONAL_FENCE_REQUIRED'};
+ if(action==='start'){
+  const rows=await query(`UPDATE cortes_publications SET status='started',
+    publication_started_at=coalesce(publication_started_at,now()),updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3
+      AND lease_generation=$4 AND lease_until>now()
+    RETURNING id,status`,[id,dest,owner,fence]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PERSONAL_STALE_FENCE'};
+ }
+ if(action==='fail'){
+  const rows=await query(`UPDATE cortes_publications
+    SET status=CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain' END,
+        confirmation_evidence=CASE WHEN publication_started_at IS NULL THEN confirmation_evidence
+           ELSE jsonb_build_object('kind','personal_linkedin_post_uncertain',
+                                   'remote_id',COALESCE(remote_id,'')) END,
+        lease_until=NULL,updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status IN ('leased','started')
+      AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status`,
+     [id,dest,owner,fence]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PERSONAL_STALE_FENCE'};
+ }
+ if(action==='uncertain'){
+  const remote=String(body.remote_id||'');
+  if(remote&&!/^urn:li:(?:ugcPost|share):[0-9]+$/.test(remote))
+    return{ok:false,error:'PERSONAL_REMOTE_ID_INVALID'};
+  const evidence={kind:'personal_linkedin_post_uncertain',remote_id:remote,confirmed:false};
+  const rows=await query(`UPDATE cortes_publications SET status='uncertain',
+       remote_id=NULLIF($5,''),confirmation_evidence=$6::jsonb,
+       lease_until=NULL,updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status='started'
+      AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status`,
+    [id,dest,owner,fence,remote,JSON.stringify(evidence)]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PERSONAL_STALE_FENCE'};
+ }
+ if(action==='confirm'){
+  const remote=String(body.remote_id||'');
+  const link=String(body.external_link||'');
+  if(!/^urn:li:(?:ugcPost|share):[0-9]+$/.test(remote))
+    return{ok:false,error:'PERSONAL_REMOTE_ID_INVALID'};
+  const expected='https://www.linkedin.com/feed/update/'+remote;
+  if(link!==expected)return{ok:false,error:'PERSONAL_PUBLIC_LINK_MISMATCH'};
+  const evidence={kind:'personal_linkedin_post_verified',external_link:link,
+      author_type:'person',remote_id:remote,confirmed:true};
+  const rows=await query(`UPDATE cortes_publications SET status='confirmed',remote_id=$5,
+     confirmation_evidence=$6::jsonb,lease_until=NULL,updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status IN ('started','uncertain')
+      AND lease_generation=$4 AND
+      (lease_owner=$3 OR (status='uncertain' AND remote_id=$5))
+    RETURNING id,status,remote_id`,
+    [id,dest,owner,fence,remote,JSON.stringify(evidence)]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PERSONAL_CONFIRM_STALE'};
+ }
+ return{ok:false,error:'PERSONAL_ACTION_UNKNOWN'};
+}
+
 export default {async fetch(request){
  const url=new URL(request.url),action=url.searchParams.get('action')||'';
  if(request.method==='GET'&&action==='health'){
   try{
    const r=await query(`SELECT target_key,status,count(*)::int n FROM cortes_publications
-    WHERE target_key IN ('linkedin:primary','instagram:universoanthares','pinterest:lucasyahn')
+    WHERE target_key IN ('linkedin:primary','linkedin:personal','instagram:universoanthares','pinterest:lucasyahn')
     GROUP BY target_key,status`);
    return answer({ok:true,backend:'neon-functions-cortes',database_ok:true,
      network_isolation:true,counts:r},200);
@@ -245,6 +336,11 @@ export default {async fetch(request){
   if(action==='probe'){
    if(actor.role!=='probe')return answer({ok:false,error:'PROBE_WORKFLOW_ONLY'},403);
    const out=await writeProbe(body);
+   return answer(out,out.ok?200:409);
+  }
+  if(action.startsWith('personal-')){
+   if(actor.role!=='personal')return answer({ok:false,error:'MEMBER_WORKFLOW_ONLY'},403);
+   const out=await personalAction(action.slice('personal-'.length),body);
    return answer(out,out.ok?200:409);
   }
   if(action==='enqueue'){
