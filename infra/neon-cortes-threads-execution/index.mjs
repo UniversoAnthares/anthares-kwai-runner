@@ -89,7 +89,7 @@ async function action(body,role,claims){
  }
  if(role!=='github')return{ok:false,error:'CLOUD_OIDC_REQUIRED'};
  if(body.action==='claim'){
-  const rows=await database("UPDATE cortes_threads_executor_handoff SET owner='cloud',epoch=epoch+1,lease_until=now()+interval '10 minutes',updated_at=now() WHERE target_key=$1 AND local_paused_at>now()-interval '8 minutes' AND local_pause_until>now() AND (owner='local' OR lease_until<now()) RETURNING epoch,owner,lease_until",[TARGET]);
+  const rows=await database("UPDATE cortes_threads_executor_handoff SET owner='cloud',epoch=epoch+1,lease_until=now()+interval '10 minutes',local_pause_until=NULL,updated_at=now() WHERE target_key=$1 AND local_paused_at>now()-interval '8 minutes' AND local_pause_until>now() AND (owner='local' OR lease_until<now()) RETURNING epoch,owner,lease_until",[TARGET]);
   return rows[0]?{ok:true,lease:rows[0]}:{ok:false,error:'NO_FRESH_LOCAL_PAUSE_ACK'};
  }
  if(!Number.isSafeInteger(epoch)||epoch<1)return{ok:false,error:'INVALID_FENCE_EPOCH'};
