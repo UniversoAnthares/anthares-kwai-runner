@@ -17,7 +17,7 @@ on:
     branches: [feature/threads-cloud-primary-20261021]
     paths:
       - 'anthares-brouser/**'
-      - '.github/workflows/anthares-browser-cloud-fallback.yml'
+      - '.github/workflows/cortes-threads-cloud-login-recovery.yml'
   schedule:
     - cron: '37 */6 * * *'
 
@@ -74,7 +74,9 @@ jobs:
           echo "vnc=$vnc" >> "$GITHUB_OUTPUT"
 
       - name: Build Anthares-browser
-        run: |\n          sed -i 's|127.0.0.1:6080 127.0.0.1:5900|0.0.0.0:6080 127.0.0.1:5900|' anthares-brouser/start.sh\n          docker build -t anthares-browser ./anthares-brouser
+        run: |
+          sed -i 's|127.0.0.1:6080 127.0.0.1:5900|0.0.0.0:6080 127.0.0.1:5900|' anthares-brouser/start.sh
+          docker build -t anthares-browser ./anthares-brouser
 
       - name: Start isolated Anthares-browser
         env:
