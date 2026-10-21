@@ -1,0 +1,39 @@
+name: CORTES TikTok @lucasrosalem4 daily source manifest
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'tools/cortes_tiktok_lucasrosalem4_manifest.py'
+      - '.github/workflows/cortes-tiktok-lucasrosalem4-manifest.yml'
+  schedule:
+    - cron: '*/15 * * * *'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: cortes-tiktok-lucasrosalem4-source-manifest
+  cancel-in-progress: false
+jobs:
+  manifest:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Windows]
+    timeout-minutes: 7
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: 'utf-8'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test read-only manifest contract
+        shell: pwsh
+        run: |
+          python -m py_compile tools/cortes_tiktok_lucasrosalem4_manifest.py
+          if ($LASTEXITCODE -ne 0) { throw 'SECONDARY_MANIFEST_PY_COMPILE_FAILED' }
+      - name: Refresh isolated second-account queue manifest
+        shell: pwsh
+        run: |
+          python -u tools/cortes_tiktok_lucasrosalem4_manifest.py
+          if ($LASTEXITCODE -ne 0) { throw 'SECONDARY_MANIFEST_SYNC_FAILED' }
