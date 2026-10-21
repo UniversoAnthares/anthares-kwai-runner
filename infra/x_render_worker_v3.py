@@ -22,7 +22,7 @@ from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
 EXPECTED = os.getenv("EXPECTED_X_HANDLE", "lucasyahn").strip().lstrip("@").lower()
-TOKEN = os.getenv("X_WORKER_TOKEN", "")
+TOKEN = os.getenv("X_WORKER_TOKEN") or os.getenv("ARA_SHARED", "")
 CLIENT_TOKEN = os.getenv("X_CLIENT_TOKEN") or os.getenv("ARA_SHARED", "")
 VAULT_URL = os.getenv("X_VAULT_URL", "https://anthares-x-vault.anthares1.workers.dev/state")
 STATE_PATH = os.getenv("X_STATE_PATH", "/tmp/anthares-x-storage-state.json")
