@@ -18,7 +18,7 @@ if (!(Get-ScheduledTask -TaskName 'Anthares X Window Invisible Guard' -ErrorActi
   throw 'X_INVISIBLE_WINDOW_GUARD_MISSING'
 }
 if (!(Get-Command gh -ErrorAction SilentlyContinue)) { throw 'X_GITHUB_CLI_MISSING' }
-if (![string]::IsNullOrWhiteSpace($env:NORTHFLANK_API_TOKEN)) {
+if (-not [string]::IsNullOrWhiteSpace($env:NORTHFLANK_API_TOKEN)) {
   $secure = ConvertTo-SecureString $env:NORTHFLANK_API_TOKEN -AsPlainText -Force
   $secure | ConvertFrom-SecureString | Set-Content -Path $secret -Encoding Ascii
   & icacls $secret /inheritance:r /grant:r ("{0}:(R)" -f $env:USERNAME) 'SYSTEM:(R)' | Out-Null
@@ -32,7 +32,7 @@ $stage=Join-Path $root 'x_local_browser_consumer.download'
 $log=Join-Path $root 'x_local_consumer.log'
 $python='C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe'
 $encrypted=Get-Content -Path (Join-Path $root 'x_cloud_bridge_token.dpapi') -Raw
-$secure=ConvertTo-SecureString $encrypted
+$secure=ConvertTo-SecureString $encrypted.Trim()
 $env:NORTHFLANK_API_TOKEN=([System.Net.NetworkCredential]::new('', $secure)).Password
 $env:PYTHONUTF8='1'
 $env:PYTHONDONTWRITEBYTECODE='1'
