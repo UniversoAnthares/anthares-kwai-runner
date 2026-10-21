@@ -250,7 +250,7 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
 let deviceHash='',deviceHashUntil=0;
 async function authorizePinterestBrowser(request){
  if((request.headers.get('x-anthares-device')||'')!=='DESKTOP-FTDK0HP')return false;
- const token=/^Bearer\\s+([^\\s]+)$/i.exec(request.headers.get('authorization')||'')?.[1]||'';
+ const token=/^Bearer\s+([^\s]+)$/i.exec(request.headers.get('authorization')||'')?.[1]||'';
  if(token.length<40||token.length>4096)return false;
  try{
   if(!deviceHash||Date.now()>deviceHashUntil){
