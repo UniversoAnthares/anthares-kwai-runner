@@ -71,6 +71,30 @@ def channels(token: str | None = None) -> list[dict]:
 
 
 
+def historical_pinterest_boards(token: str | None = None) -> list[dict]:
+    """Recover owned board ID from this channel's verified sent Buffer Pins."""
+    orgs=(api("query { account { organizations { id } } }",token).get("account") or {}).get("organizations") or []
+    found={}
+    channel_id=PINNED_CHANNELS["pinterest"][0]
+    for org in orgs:
+        oid=str(org.get("id") or "")
+        if not oid:continue
+        q=('query CortesHistoricalPins { posts(first: 30, input: { organizationId: '+
+           json.dumps(oid)+', filter: {status: [sent], channelIds: ['+
+           json.dumps(channel_id)+']} }) { edges { node {channelId metadata {'+
+           ' ... on PinterestPostMetadata { board {serviceId name url} } } } } } }')
+        result=api(q,token).get("posts") or {}
+        for edge in result.get("edges") or []:
+            row=edge.get("node") or {}
+            if row.get("channelId")!=channel_id:continue
+            board=(row.get("metadata") or {}).get("board") or {}
+            sid=str(board.get("serviceId") or "")
+            if sid:
+                found[sid]={"serviceId":sid,"name":str(board.get("name") or ""),
+                            "url":str(board.get("url") or "")}
+    return list(found.values())
+
+
 def pinterest_boards(token: str | None = None) -> list[dict]:
     """Read only Pinterest board IDs from the authenticated Buffer channel."""
     channel_id = PINNED_CHANNELS["pinterest"][0]
@@ -147,7 +171,15 @@ def resolve_pinterest_board(channel_id: str, *, token: str | None = None) -> str
         raise BufferBlocked("PINTEREST_CHANNEL_ID_NOT_PINNED")
     query = ('query { channel(input: { id: ' + json.dumps(channel_id) +
              ' }) { metadata { ... on PinterestMetadata { boards { serviceId name url } } } } }')
-    details = api(query, token).get("channel") or {}
+    try:
+        details = api(query, token).get("channel") or {}
+    except BufferBlocked as exc:
+        if str(exc) not in ("BUFFER_HTTP_500","BUFFER_GRAPHQL_OR_DATA_ERROR"):
+            raise
+        # Read-only fallback: posts previously sent by the same pinned channel.
+        boards = historical_pinterest_boards(token)
+        selected = select_pinterest_board(boards, os.getenv("BUFFER_PINTEREST_BOARD_ID","").strip())
+        return selected
     metadata = details.get("metadata") or {}
     boards = metadata.get("boards") or []
     if not isinstance(boards, list):
