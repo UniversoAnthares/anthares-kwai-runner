@@ -23,6 +23,33 @@ TTL=3600; POLL=20; EMPTY_POLL=180
 LAST_QUEUE_EMPTY=False
 LAST_NETWORK_BAD=False
 WP_PENDING=LOGDIR/'cortes-wp-callback-pending.json'
+
+# Real platform counts attested by the owner when the queue's confirmed ledger lags.
+# Each local day has an independent floor, so an old report never blocks a new day.
+DAILY_OWNER_FLOOR=LOGDIR/'kwai-daily-cap-owner-confirmed.json'
+LAST_OWNER_CAP_LOGGED=''
+def owner_daily_floor():
+ import datetime
+ day=datetime.datetime.now().astimezone().date().isoformat()
+ try: record=json.loads(DAILY_OWNER_FLOOR.read_text(encoding='utf-8'))
+ except FileNotFoundError:return (day,0)
+ except (OSError,ValueError) as exc:raise RuntimeError('daily_owner_floor_unreadable') from exc
+ if record.get('schema')!='cortes.daily-owner-floor.v1':raise RuntimeError('daily_owner_floor_schema_invalid')
+ value=record.get('per_target_per_day',{}).get('kwai:'+EXPECTED_ACCOUNT,{}).get(day,0)
+ if type(value)!=int or value<0:raise RuntimeError('daily_owner_floor_invalid')
+ return day,value
+def owner_cap_reached():
+ global LAST_OWNER_CAP_LOGGED,LAST_QUEUE_EMPTY
+ day,floor=owner_daily_floor()
+ limit=max(1,min(100,int(os.getenv('CORTES_KWAI_DAILY_POST_LIMIT','100'))))
+ if floor>=limit:
+  if LAST_OWNER_CAP_LOGGED!=day:
+   log('KWAI_DAILY_CAP_BLOCKED source=owner_attested day='+day+' minimum='+str(floor)+' cap='+str(limit)+' no_lease=1 priority=P0')
+   LAST_OWNER_CAP_LOGGED=day
+  LAST_QUEUE_EMPTY=True
+  return True
+ return False
+
 _key=None
 
 class QueueStorageBlocked(RuntimeError):
@@ -261,10 +288,12 @@ def memu_identity_proven():
 
 def once():
  global LAST_QUEUE_EMPTY,LAST_NETWORK_BAD
+ repair_pending(); repair_wp_callbacks()
+ if owner_cap_reached():return 0
  if MAINTENANCE.exists():
   log('QUEUE_PAUSED_MAINTENANCE no_lease=1')
   return 0
- repair_pending(); repair_wp_callbacks(); healthy,serial=preflight(); heartbeat(healthy,serial,'' if healthy else 'android-preflight-failed')
+ healthy,serial=preflight(); heartbeat(healthy,serial,'' if healthy else 'android-preflight-failed')
  if not healthy:
   # Only consume CORTES work when a tested, authenticated MEmu standby is
   # genuinely available. Its readiness is verified again inside the worker.
@@ -352,6 +381,7 @@ def once():
    return 0
   if LAST_NETWORK_BAD:log('KWAI_ANDROID_DNS_PREFLIGHT_RECOVERED no_lease=1')
   LAST_NETWORK_BAD=False
+ if owner_cap_reached():return 0
  code,d=signed_post('/job/lease',{'executor':EXECUTOR,'platform':'kwai','ttl_seconds':TTL})
  if code//100!=2 or not d.get('ok'):queue_failure('lease',code,d)
  job=d.get('job')
