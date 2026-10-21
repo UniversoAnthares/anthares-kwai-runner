@@ -45,8 +45,15 @@ def main():
                   " paused="+str(paused).lower()+" times="+",".join(times),flush=True)
             channel_state[service]["weekly_schedule"].append(
                 {"day":day,"paused":paused,"times":times})
-    from social_adapters.buffer_three_channels import pinterest_boards, select_pinterest_board
-    boards=pinterest_boards()
+    from social_adapters.buffer_three_channels import (pinterest_boards, historical_pinterest_boards,
+                                                      select_pinterest_board)
+    try:
+        boards=pinterest_boards()
+    except BufferBlocked as error:
+        if str(error) not in ("BUFFER_HTTP_500","BUFFER_GRAPHQL_OR_DATA_ERROR"):
+            raise
+        print("BUFFER_PINTEREST_BOARD_SOURCE=sent_post_history",flush=True)
+        boards=historical_pinterest_boards()
     print("BUFFER_PINTEREST_BOARD_COUNT="+str(len(boards)),flush=True)
     for row in boards:
         print("BUFFER_PINTEREST_BOARD name="+str(row["name"])[:70]+
