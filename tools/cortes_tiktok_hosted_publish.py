@@ -247,9 +247,21 @@ def main():
     with tempfile.TemporaryDirectory(prefix="anthares-tiktok-hosted-") as tmp:
         folder=Path(tmp)
         if not matching:
-            # Download before the irreversible checkpoint. A transient 5xx
-            # here can safely leave the lease to expire back to queued.
-            download_verified(job,folder/"short.mp4")
+            # Release failed preflight leases immediately; Neon imposes a
+            # bounded per-clip cooldown, allowing other ready clips to proceed.
+            # No upload has begun, so this is safe to retry after recovery.
+            try:
+                download_verified(job,folder/"short.mp4")
+            except Exception:
+                try:
+                    q.qcall("fail",control,{
+                        "id":job["id"],"lease_generation":generation,
+                        "error":"media_preflight_failed_before_start"
+                    })
+                    print("CORTES_TIKTOK_PREFLIGHT_LEASE_RELEASED",flush=True)
+                except Exception:
+                    print("CORTES_TIKTOK_PREFLIGHT_LEASE_RELEASE_UNAVAILABLE",flush=True)
+                raise
         changed=q.qcall("start",control,{"id":job["id"],"lease_generation":generation})
         if not changed.get("ok") or (changed.get("job") or {}).get("status")!="started":
             raise q.SafeStop("TIKTOK_IRREVERSIBLE_FENCE_UNCONFIRMED")

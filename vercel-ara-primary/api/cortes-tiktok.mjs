@@ -74,6 +74,9 @@ async function schema(){
  'CONSTRAINT cortes_tiktok_state CHECK(status IN (\'queued\',\'leased\',\'started\',\'uncertain\',\'confirmed\'))'+
  ')');
  await pool.query('CREATE INDEX IF NOT EXISTS cortes_tiktok_queue_ix ON cortes_tiktok_publications(status,created_at)');
+ // Idempotent additive migration: failed media preflight must never monopolize the queue.
+ await pool.query('ALTER TABLE cortes_tiktok_publications ADD COLUMN IF NOT EXISTS preflight_failures integer NOT NULL DEFAULT 0');
+ await pool.query('ALTER TABLE cortes_tiktok_publications ADD COLUMN IF NOT EXISTS retry_not_before timestamptz');
  ready=true;
 }
 
@@ -127,12 +130,12 @@ async function getNext(){
 
  // Keep an uncertain upload isolated for reconciliation without starving safe queued clips.
  const uncertain=await pool.query('SELECT * FROM cortes_tiktok_publications WHERE status IN (\'uncertain\',\'started\') ORDER BY created_at LIMIT 1');
- const cadence=await pool.query("SELECT COUNT(*) FILTER (WHERE status='confirmed' AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS daily, MAX(confirmed_at) AS last_post, COUNT(*) FILTER (WHERE status='queued')::int AS pending FROM cortes_tiktok_publications");
+ const cadence=await pool.query("SELECT COUNT(*) FILTER (WHERE publication_started_at IS NOT NULL AND (publication_started_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS daily, MAX(publication_started_at) AS last_post, COUNT(*) FILTER (WHERE status='queued')::int AS pending FROM cortes_tiktok_publications");
  const daily=Number(cadence.rows[0]?.daily||0);
  const pending=Number(cadence.rows[0]?.pending||0);
  const last=cadence.rows[0]?.last_post;
  // Same-day catch-up: three-minute verified minimum, four-minute preferred.
- // Never overlap leases, exceed 100 confirmed/day or fabricate confirmation.
+ // Never overlap leases, exceed 100 publication starts/day or fabricate confirmation.
  const boundary=await pool.query("SELECT ((now() AT TIME ZONE 'America/Campo_Grande')::date + time '23:45:00') AT TIME ZONE 'America/Campo_Grande' AS deadline_utc");
  const remaining=Math.max(0,new Date(boundary.rows[0].deadline_utc).getTime()-Date.now());
  const dueSeconds=Math.floor(Math.max(0,remaining-120000)/Math.max(1,pending)/1000);
@@ -144,7 +147,7 @@ async function getNext(){
  // never returns to the publish state; the 29 confirmed-safe queued clips can proceed.
  if(daily<100&&!paced){
   const q=await pool.query(
-   'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' '+
+   'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' AND (retry_not_before IS NULL OR retry_not_before<=now()) '+
    'ORDER BY CASE WHEN source_id=(SELECT source_id FROM cortes_tiktok_publications WHERE status=\'queued\' ORDER BY created_at DESC,id DESC LIMIT 1) THEN 0 ELSE 1 END,created_at,id '+
    'FOR UPDATE SKIP LOCKED LIMIT 1)'+
    ' UPDATE cortes_tiktok_publications p SET status=\'leased\',lease_generation=p.lease_generation+1,'+
@@ -159,10 +162,36 @@ async function getNext(){
 async function start(b){
  await schema();
  const id=clean(b.id),gen=Number(b.lease_generation);
- const r=await pool.query('UPDATE cortes_tiktok_publications SET status=\'started\',publication_started_at=now(),updated_at=now()'+
- ' WHERE id=$1 AND status=\'leased\' AND lease_generation=$2 AND lease_until>now() RETURNING id,status,lease_generation',[id,gen]);
- return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'stale_fence'};
+ if(!id||!Number.isSafeInteger(gen)||gen<1)return{ok:false,error:'invalid_fence'};
+ // A transaction-scoped advisory lock serializes STARTED reservations for this
+ // actual TikTok account, across all independent GitHub worker instances.
+ const client=await pool.connect();
+ try{
+  await client.query('BEGIN');
+  const dayResult=await client.query("SELECT (now() AT TIME ZONE 'America/Campo_Grande')::date::text AS day");
+  const day=dayResult.rows[0].day;
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))',
+   [TARGET,day]);
+  const used=await client.query(
+   "SELECT count(*)::int AS total FROM cortes_tiktok_publications WHERE publication_started_at IS NOT NULL AND (publication_started_at AT TIME ZONE 'America/Campo_Grande')::date=$1::date",
+   [day]);
+  if(Number(used.rows[0]?.total||0)>=100){
+   // A race can reserve a lease just before the cap; release it without upload.
+   await client.query("UPDATE cortes_tiktok_publications SET status='queued',lease_until=NULL,updated_at=now() WHERE id=$1 AND status='leased' AND lease_generation=$2 AND publication_started_at IS NULL",[id,gen]);
+   await client.query('COMMIT');
+   return{ok:false,error:'daily_publication_start_limit_100'};
+  }
+  const r=await client.query(
+   "UPDATE cortes_tiktok_publications SET status='started',publication_started_at=now(),updated_at=now() WHERE id=$1 AND status='leased' AND lease_generation=$2 AND lease_until>now() AND publication_started_at IS NULL RETURNING id,status,lease_generation",
+   [id,gen]);
+  await client.query('COMMIT');
+  return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'stale_fence'};
+ }catch(e){
+  try{await client.query('ROLLBACK')}catch{}
+  throw e;
+ }finally{client.release();}
 }
+
 async function finish(b){
  await schema();
  const id=clean(b.id),gen=Number(b.lease_generation),remote=clean(b.remote_id);
@@ -176,11 +205,19 @@ async function markFail(b){
  await schema();
  const id=clean(b.id),gen=Number(b.lease_generation);
  const reason=clean(b.error).slice(0,100);
- const r=await pool.query('UPDATE cortes_tiktok_publications SET status=CASE WHEN publication_started_at IS NULL THEN \'queued\' ELSE \'uncertain\' END,'+
- 'lease_until=NULL,last_error=$3,updated_at=now() WHERE id=$1 AND lease_generation=$2'+
- ' AND status IN (\'leased\',\'started\') RETURNING id,status',[id,gen,reason]);
+ // Only pre-STARTED failure can return to queued. Apply an exponentially
+ // bounded cooldown (2,4,8,16,32 minutes) and allow other queued clips through.
+ // Once STARTED, remain UNCERTAIN until a remote-profile confirmation exists.
+ const r=await pool.query(
+ "UPDATE cortes_tiktok_publications SET status=CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain' END,"+
+ " lease_until=NULL,last_error=$3,updated_at=now(),"+
+ " preflight_failures=CASE WHEN publication_started_at IS NULL THEN LEAST(preflight_failures+1,5) ELSE preflight_failures END,"+
+ " retry_not_before=CASE WHEN publication_started_at IS NULL THEN now()+(LEAST(32,POWER(2,LEAST(preflight_failures+1,5)))::int * interval '1 minute') ELSE retry_not_before END"+
+ " WHERE id=$1 AND lease_generation=$2 AND status IN ('leased','started') RETURNING id,status,preflight_failures,retry_not_before",
+ [id,gen,reason]);
  return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'stale_fence'};
 }
+
 export default async function handler(req,res){
  try{
   const u=new URL(req.url,'https://local.invalid'),action=u.searchParams.get('action')||'';
@@ -189,7 +226,13 @@ export default async function handler(req,res){
   if(!role)return reply(res,401,{ok:false,error:'unauthorized_oidc'});
   const b=body(req);
   if(req.method==='POST'&&action==='enqueue'&&role==='producer')return reply(res,200,await enqueue(b));
-  if(req.method==='GET'&&action==='status'){await schema();const q=await pool.query('SELECT status,count(*)::int AS count FROM cortes_tiktok_publications GROUP BY status');return reply(res,200,{ok:true,count:Object.fromEntries(q.rows.map(x=>[x.status,x.count]))});}
+  if(req.method==='GET'&&action==='status'){
+   await schema();
+   const q=await pool.query('SELECT status,count(*)::int AS count FROM cortes_tiktok_publications GROUP BY status');
+   const daily=await pool.query("SELECT count(*) FILTER(WHERE publication_started_at IS NOT NULL AND (publication_started_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS started_today,count(*) FILTER(WHERE confirmed_at IS NOT NULL AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS confirmed_today FROM cortes_tiktok_publications");
+   const counts=daily.rows[0];
+   return reply(res,200,{ok:true,count:Object.fromEntries(q.rows.map(x=>[x.status,x.count])),daily:{started_today:counts.started_today,confirmed_today:counts.confirmed_today,remaining_today:Math.max(0,100-counts.started_today)}});
+  }
   if(role==='consumer'){
    let result;
    if(req.method==='POST'&&action==='claim')result=await getNext();

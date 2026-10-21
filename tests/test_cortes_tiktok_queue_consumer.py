@@ -77,7 +77,16 @@ class TikTokQueueContract(unittest.TestCase):
     def test_contextual_title_retains_marker(self):
         title = c.caption(job())
         self.assertIn(c.marker(job()["segment_id"]), title)
-        self.assertLessEqual(len(title), 100)
+        self.assertLessEqual(len(title), 180)
+        self.assertIn("#literatura", title)
+        self.assertIn("#UniversoAnthares", title)
+        self.assertIn("#livros", title)
+
+    def test_contextual_caption_has_topic_hashtag(self):
+        j = job()
+        j["title"] = "A lenda e a mitologia do Japão"
+        self.assertIn("#mitologia", c.caption(j))
+        self.assertIn("#anthares", c.caption(j))
 
     def test_inventory_post_id_requires_correct_account(self):
         sid = job()["segment_id"]
