@@ -46,6 +46,9 @@ jobs:
           python -m unittest discover -s tests -p test_cortes_buffer_linkedin_cloud.py -v
           python -m unittest discover -s tests -p test_cortes_linkedin_neon_fanout.py -v
           python -m unittest discover -s tests -p test_media_model.py -v
+          python -m unittest discover -s tests -p test_cortes_queue_ha.py -v
+          node --check infra/neon-cortes-linkedin/index.mjs
+          node --check cloudflare-cortes-queue-ha/src/index.mjs
           python tests/test_direct_social_adapters.py
       - name: Validate Cloudflare queue patch in disposable checkout only
         run: |
