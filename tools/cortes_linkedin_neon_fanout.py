@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import time
+from anthares_publisher.buffer_distribution import BUFFER_LIMIT_PER_SOURCE
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -90,7 +91,14 @@ def candidate_jobs(state):
                 "cortes_attachment_id":attachment,
                 "planned_at":str(clip.get("planned_at") or ""),
             }
-    return [output[k] for k in sorted(output)]
+    selected=[]
+    by_source={}
+    for job in output.values():
+        by_source.setdefault(job["source_id"],[]).append(job)
+    for source_id,records in sorted(by_source.items()):
+        records.sort(key=lambda j:(j["source_start"],j["source_end"],j["segment_id"]))
+        selected.extend(records[:BUFFER_LIMIT_PER_SOURCE])
+    return selected
 
 
 def oidc():

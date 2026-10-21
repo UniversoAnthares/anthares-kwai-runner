@@ -1,0 +1,35 @@
+name: CORTES Buffer 3 destinations - first 20 shorts per source
+on:
+  schedule:
+    - cron: '3,13,23,33,43,53 * * * *'
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - tools/cortes_buffer_three_fanout.py
+      - .github/workflows/cortes-buffer-three-fanout-cloud.yml
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: cortes-buffer-three-priority-fanout
+  cancel-in-progress: false
+jobs:
+  enqueue:
+    if: ${{ vars.CORTES_BUFFER_FANOUT_PAUSED != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    env:
+      WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
+      WP_USERNAME: ${{ secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Buffer priority 20 per live for Instagram Pinterest LinkedIn
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/cortes_buffer_three_fanout.py anthares_publisher/buffer_distribution.py
+          python -u tools/cortes_buffer_three_fanout.py
