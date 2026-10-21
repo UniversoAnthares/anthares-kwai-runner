@@ -99,8 +99,8 @@ def _headers(body: bytes = b"") -> dict[str, str]:
 
 
 def _assert_runtime_url() -> None:
-    if EXPECTED_USERNAME == "lucarosalem":
-        if VAULT_URL != "https://anthares-x-vault.anthares1.workers.dev/browser-state/tiktok/lucarosalem":
+    if EXPECTED_USERNAME == "lucasrosalem4":
+        if VAULT_URL != "https://anthares-x-vault.anthares1.workers.dev/browser-state/tiktok/lucasrosalem4":
             raise SessionAuthorityError("tiktok_secondary_vault_isolation_required")
     elif EXPECTED_USERNAME == "universo.anthares":
         # Preserve the primary's existing endpoint/failover configuration.
