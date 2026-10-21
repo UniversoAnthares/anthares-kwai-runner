@@ -68,10 +68,10 @@ jobs:
               if issue['comments']>100:raise RuntimeError('X_PROOF_COMMENTS_PAGINATION_REQUIRED')
               comments[n]=get(f'https://api.github.com/repos/{repo}/issues/{n}/comments?per_page=100')
           report=gate(issues,comments,datetime.now(tz),target=int(os.environ['X_DAILY_TARGET']))
-          print('X_GATE='+json.dumps({k:v for k,v in report.items() if k!='used_source_ids'},ensure_ascii=False))
+          print('X_GATE='+json.dumps({k:v for k,v in report.items() if k!='source_windows'},ensure_ascii=False))
           with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('due='+('true' if report['due'] else 'false')+'\n')
           with open(os.environ['GITHUB_ENV'],'a') as f:
-              f.write('X_EXCLUDED_SOURCE_IDS='+','.join(report['used_source_ids'])+'\n')
+              f.write('X_SOURCE_WINDOWS_JSON='+json.dumps(report['source_windows'],separators=(',',':'))+'\n')
           if report['stale_issue_numbers']:
               print('X_QA_STALE_NEEDS_RECONCILIATION='+','.join(map(str,report['stale_issue_numbers'])),flush=True)
           PY
