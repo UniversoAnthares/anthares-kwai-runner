@@ -162,6 +162,17 @@ def _identity(page):
     href = link.get_attribute("href") if link.count() else ""
     handle = (href or "").strip("/").split("/")[0].lower()
     if handle != EXPECTED:
+        # New X layout omits AppTabBar_Profile_Link while still rendering the
+        # signed-in account switcher. Read the *current* account, never a
+        # profile URL, feed handle or the name of another linked account.
+        account = page.locator('[data-testid="SideNav_AccountSwitcher_Button"]').first
+        if account.count():
+            matches = re.findall(
+                r"(?<![A-Za-z0-9_])@([A-Za-z0-9_]{1,15})(?![A-Za-z0-9_])",
+                account.inner_text(timeout=8000),
+            )
+            handle = matches[0].lower() if len(matches) == 1 else ""
+    if handle != EXPECTED:
         raise RuntimeError("identity mismatch")
     return handle
 
