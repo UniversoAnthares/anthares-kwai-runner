@@ -26,12 +26,41 @@ class SafeFailover(unittest.TestCase):
         def open_(request,timeout):
             sent.append(request.full_url)
             return FakeReply({"ok":True,"deduped":False,"job":{"id":"job-1"}})
-        with patch.object(ha,"is_healthy",side_effect=lambda p:p==ha.PROVIDERS[1]):
+        with patch.object(ha,"is_healthy",side_effect=lambda p:"cortesqueue.compute" in p):
             with patch.object(ha.urllib.request,"urlopen",side_effect=open_):
                 r=ha.post("enqueue",{"id":"job-1"},self.token)
         self.assertTrue(r["ok"])
         self.assertEqual(len(sent),1)
         self.assertIn("cortesqueue.compute",sent[0])
+
+    def test_instagram_explicit_neon_primary_before_vercel(self):
+        requested=[]
+        def request(request,timeout):
+            requested.append(request.full_url)
+            return FakeReply({"ok":True,"jobs":[]})
+        with patch.dict(ha.os.environ,{"CORTES_QUEUE_PRIMARY":"neon",
+                          "GITHUB_ACTIONS":"true","RUNNER_ENVIRONMENT":"github-hosted",
+                          "RUNNER_OS":"Linux"}):
+            with patch.object(ha,"is_healthy",return_value=True):
+                with patch.object(ha.urllib.request,"urlopen",side_effect=request):
+                    result=ha.post("buffer-pending",{},self.token)
+        self.assertTrue(result["ok"])
+        self.assertEqual(len(requested),1)
+        self.assertIn("cortesqueue.compute",requested[0])
+
+    def test_no_provider_hopping_on_401_even_with_explicit_primary(self):
+        attempted=[]
+        def deny(request,timeout):
+            attempted.append(request.full_url)
+            raise urllib.error.HTTPError(request.full_url,401,"denied",{},None)
+        with patch.dict(ha.os.environ,{"CORTES_QUEUE_PRIMARY":"neon",
+                          "GITHUB_ACTIONS":"true","RUNNER_ENVIRONMENT":"github-hosted",
+                          "RUNNER_OS":"Linux"}):
+            with patch.object(ha,"is_healthy",return_value=True):
+                with patch.object(ha.urllib.request,"urlopen",side_effect=deny):
+                    with self.assertRaisesRegex(ha.BackendUnavailable,"REJECTED_401"):
+                        ha.post("buffer-pending",{},self.token)
+        self.assertEqual(len(attempted),1)
 
     def test_never_retry_ambiguous_buffer_lease(self):
         attempted=[]

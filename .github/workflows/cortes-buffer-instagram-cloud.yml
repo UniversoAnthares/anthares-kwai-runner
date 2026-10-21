@@ -36,6 +36,7 @@ jobs:
       - name: Publish one verified Instagram Reel and reconcile scheduled posts
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
+          CORTES_QUEUE_PRIMARY: neon
         run: |
           set -euo pipefail
           python -u tools/cortes_buffer_instagram_cloud.py

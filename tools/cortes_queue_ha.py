@@ -10,6 +10,7 @@ bypassed by failover; HTTP 401/403/409/429 always stop.
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -53,7 +54,21 @@ def post(action: str, payload: dict, get_oidc, *, timeout: int = 16) -> dict:
     data = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     if len(data) > 65536:
         raise ValueError("CORTES_QUEUE_PAYLOAD_TOO_LARGE")
-    for provider in PROVIDERS:
+    # Instagram and Pinterest use the already authorized Neon OIDC role;
+    # do not try the Vercel endpoint first (its allowlist was LinkedIn-only).
+    # This is an explicit preferred origin, NOT retrying after an HTTP 401.
+    preferred = os.environ.get("CORTES_QUEUE_PRIMARY", "").strip().lower()
+    if preferred:
+        if preferred != "neon" or action not in ACTIONS:
+            raise ValueError("CORTES_QUEUE_PRIMARY_UNSUPPORTED")
+        if not (os.environ.get("GITHUB_ACTIONS") == "true" and
+                os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted" and
+                os.environ.get("RUNNER_OS") == "Linux"):
+            raise BackendUnavailable("CORTES_QUEUE_NEON_REQUIRES_CLOUD")
+        providers = tuple(sorted(PROVIDERS, key=lambda url: 0 if 'cortesqueue.compute.' in url else 1))
+    else:
+        providers = PROVIDERS
+    for provider in providers:
         if not is_healthy(provider):
             continue
         target = provider.rstrip("/") + "?" + urllib.parse.urlencode({"action": action})
