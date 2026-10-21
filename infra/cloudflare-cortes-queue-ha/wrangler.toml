@@ -1,4 +1,4 @@
-name = "anthares-cortes-queue-ha"
+name = "anthares-cortes-neon-edge-ha"
 main = "src/index.js"
 compatibility_date = "2026-10-21"
 account_id = "5c24be052e5144391f73a8e03491e88e"
