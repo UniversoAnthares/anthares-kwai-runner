@@ -1,0 +1,58 @@
+name: Buffer - Channels Read-Only Check
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  buffer-channels:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Retrieve Buffer credential privately
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
+      - name: Identify channels using read-only GraphQL calls
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.request, urllib.error
+          token = os.environ.get('BUFFER_API_KEY', '').strip()
+          if not token:
+              sys.exit('BUFFER_KEY_MISSING')
+          def gql(query):
+              req = urllib.request.Request('https://api.buffer.com', data=json.dumps({'query':query}).encode(), headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'}, method='POST')
+              try:
+                  with urllib.request.urlopen(req, timeout=25) as response:
+                      data=json.load(response)
+              except urllib.error.HTTPError as e:
+                  sys.exit('BUFFER_HTTP_'+str(e.code))
+              except (OSError,ValueError):
+                  sys.exit('BUFFER_CONNECTION_FAILURE')
+              if data.get('errors'):
+                  sys.exit('BUFFER_GRAPHQL_QUERY_REJECTED')
+              return data.get('data') or {}
+          account=gql('query { account { organizations { id name } } }').get('account') or {}
+          orgs=account.get('organizations') or []
+          print('BUFFER_AUTH=PASS')
+          print('BUFFER_ORGANIZATIONS='+str(len(orgs)))
+          seen=set()
+          for org in orgs:
+              orgid=str(org.get('id') or '')
+              if not orgid: continue
+              query='query { channels(input: {organizationId:'+json.dumps(orgid)+'}) { id name displayName service externalLink } }'
+              channels=gql(query).get('channels') or []
+              for channel in channels:
+                  service=str(channel.get('service') or '').lower()
+                  if service in ('instagram','pinterest','linkedin'):
+                      seen.add(service)
+                      info={key:channel.get(key) for key in ('id','name','displayName','service','externalLink')}
+                      print('CHANNEL '+json.dumps(info,ensure_ascii=False))
+          missing={'instagram','pinterest','linkedin'}-seen
+          if missing:
+              sys.exit('BUFFER_CHANNELS_MISSING='+','.join(sorted(missing)))
+          print('BUFFER_CHANNELS_IDENTIFIED=PASS')
+          PY
