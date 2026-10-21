@@ -350,8 +350,9 @@ async function personalAction(verb,b){
  const id=String(b.id||''),owner=String(b.owner||'');
  if(verb==='lease'){
   if(b.target_key!==P_TARGET||owner!==P_OWNER)return{ok:false,error:'PERSONAL_TARGET_OWNER_INVALID'};
-  const unsettled=await query("SELECT count(*)::int n FROM cortes_publications WHERE target_key=$1 AND status='uncertain'",[P_TARGET]);
-  if(Number(unsettled[0]?.n||0)>0)return{ok:true,job:null,unresolved_publication:true};
+  // A read-only permission can be unavailable to self-serve member apps.
+  // Keep accepted-but-unverified items UNCERTAIN and never retry their IDs;
+  // other distinct queued shorts must continue under the shared daily budget.
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
   const used=await query(`SELECT count(*)::int n FROM cortes_publications WHERE target_key=$1 AND status IN ('confirmed','leased','started','uncertain') AND updated_at >= ${day}`,[P_TARGET]);
   if(Number(used[0]?.n||0)>=P_LIMIT)return{ok:true,job:null,daily_limit_reached:true,limit:P_LIMIT};
