@@ -1,0 +1,34 @@
+name: X Durable Queue Consumer
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/10 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - tools/x_issue_publisher.py
+      - tools/x_publication_safety.py
+      - .github/workflows/x-durable-consumer.yml
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: anthares-x-account-publish-serial
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      X_PUBLISH_ARM: ${{ vars.ANTHARES_X_AUTOPUBLISH }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exactly one X issue and attempt with durable evidence
+        run: python -m tools.x_issue_publisher
