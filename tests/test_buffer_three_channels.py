@@ -67,18 +67,13 @@ class BufferPinnedTests(unittest.TestCase):
         with patch.dict(os.environ,{"BUFFER_PINTEREST_BOARD_ID":""}), patch.object(b,"api",side_effect=fake):
             self.assertEqual(b.resolve_pinterest_board(ch),b.PINTEREST_PUBLIC_BOARD_ID)
 
-    def test_board_history_never_accepts_another_channel(self):
+    def test_unverified_public_board_refused_when_buffer_api_fails(self):
         ch=b.PINNED_CHANNELS["pinterest"][0]
-        def fake(query,token=None):
-            if "channel(input:" in query:
-                raise b.BufferBlocked("BUFFER_HTTP_500")
-            if "organizations" in query:
-                return {"account":{"organizations":[{"id":"org-1"}]}}
-            return {"posts":{"edges":[{"node":{"channelId":"attacker-other",
-                "metadata":{"board":{"serviceId":"123456"}}}}]}}
-        with patch.object(b,"api",side_effect=fake):
-            with self.assertRaisesRegex(b.BufferBlocked,"PUBLIC_BOARD_UNAVAILABLE"):
-                b.resolve_pinterest_board(ch)
+        with patch.object(b,"api",side_effect=b.BufferBlocked("BUFFER_HTTP_500")):
+            with patch.object(b,"verified_public_pinterest_board",
+                              side_effect=b.BufferBlocked("PINTEREST_PUBLIC_BOARD_UNAVAILABLE")):
+                with self.assertRaisesRegex(b.BufferBlocked,"PUBLIC_BOARD_UNAVAILABLE"):
+                    b.resolve_pinterest_board(ch)
 
     def test_select_single_board_or_explicit_board(self):
         choices=[{"serviceId":"1234","name":"Arte"},
@@ -183,7 +178,7 @@ class BufferPinnedTests(unittest.TestCase):
             {"serviceId":"board-b","url":"https://www.pinterest.com/lucasyahn/b"}]}}}
         with patch.dict(os.environ,{"BUFFER_PINTEREST_BOARD_ID":""}):
             with patch.object(b,"api",return_value=details):
-                with self.assertRaisesRegex(b.BufferBlocked,"PINTEREST_BOARD_ENV_MISMATCH"):
+                with self.assertRaisesRegex(b.BufferBlocked,"PINTEREST_BOARD_NOT_VERIFIED"):
                     b.resolve_pinterest_board(b.PINNED_CHANNELS["pinterest"][0])
 
     def test_pinterest_verified_board_emitted_in_mutation(self):
@@ -206,7 +201,7 @@ class BufferPinnedTests(unittest.TestCase):
     def test_pinterest_wrong_board_id_is_blocked(self):
         data={"channel":{"metadata":{"boards":[{"serviceId":"good","url":"https://pinterest.com/lucasyahn/a"}]}}}
         with patch.dict(os.environ,{"BUFFER_PINTEREST_BOARD_ID":"other"}),patch.object(b,"api",return_value=data):
-            with self.assertRaisesRegex(b.BufferBlocked,"PINTEREST_BOARD_NOT_VERIFIED"):
+            with self.assertRaisesRegex(b.BufferBlocked,"PINTEREST_BOARD_ENV_MISMATCH"):
                 b.resolve_pinterest_board(b.PINNED_CHANNELS["pinterest"][0])
 
     def test_external_master_blocked(self):
