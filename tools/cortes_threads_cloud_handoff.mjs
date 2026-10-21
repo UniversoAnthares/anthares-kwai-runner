@@ -44,17 +44,25 @@ async function mediaDigest(uri){
  return{sha256:hash.digest('hex'),bytes:size};
 }
 async function choose(){
- const [s,manifest]=await Promise.all([gate(),fetchCloudManifest()]);
+ const s=await gate();
  const allowed=new Set(s.queued_ids);
- const clip=manifest.items.find(item=>allowed.has('threads:'+item.id));
- requireOk(clip,'NO_MATCHING_QUEUED_CLIP_TODAY');
+ const days=[...new Set((s.queued_rows||[]).map(row=>String(row.source_day||'')))]
+  .filter(day=>/^20\d\d-\d\d-\d\d$/.test(day)).sort();
+ requireOk(days.length>0,'NO_QUEUED_SOURCE_DAY');
+ let clip=null,selectedDay=null;
+ for(const day of days){
+  const manifest=await fetchCloudManifest({day});
+  clip=manifest.items.find(item=>allowed.has('threads:'+item.id))||null;
+  if(clip){selectedDay=day;break}
+ }
+ requireOk(clip,'NO_MATCHING_QUEUED_CLIP_IN_SOURCE_DAYS');
  let title;
  const url='https://www.youtube.com/oembed?url='+encodeURIComponent('https://www.youtube.com/watch?v='+clip.source)+'&format=json';
  const res=await fetch(url,{signal:AbortSignal.timeout(12000)});
  requireOk(res.ok,'SOURCE_TITLE_HTTP_'+res.status);
  title=cleanTitle((await res.json()).title);
  const tagged=captionForClip(title,clip);
- return{clip:tagged,queued:allowed.size,owner:s.owner,cloud_inflight:s.cloud_inflight||0};
+ return{clip:tagged,queued:allowed.size,selectedDay,owner:s.owner,cloud_inflight:s.cloud_inflight||0};
 }
 async function publishVideo(item,token,id){
  // Reserve first, then start the quota transaction before issuing any irreversible Graph call.
@@ -82,7 +90,7 @@ export async function run(){
  const selected=await choose(),id='threads:'+selected.clip.id;
  const media=await mediaDigest(selected.clip.url);
  const publish=process.env.THREADS_ALLOW_PUBLISH==='1';
- const publicInfo={account:me.username,clip:id,bytes:media.bytes,media_verified:true,queue_candidates:selected.queued};
+ const publicInfo={account:me.username,clip:id,bytes:media.bytes,media_verified:true,queue_candidates:selected.queued,source_day:selected.selectedDay};
  if(!publish){
   console.log(JSON.stringify({ok:true,mode:'dry_run',...publicInfo,published:false}));
   return;
