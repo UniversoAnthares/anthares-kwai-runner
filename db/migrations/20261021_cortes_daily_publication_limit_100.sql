@@ -72,9 +72,19 @@ BEGIN
 END;
 $cortes$;
 
-DROP TRIGGER IF EXISTS cortes_daily_publication_limit_100 ON public.cortes_publications;
-CREATE TRIGGER cortes_daily_publication_limit_100
-BEFORE UPDATE OF status ON public.cortes_publications
-FOR EACH ROW
-WHEN (NEW.status = 'started' AND OLD.status IS DISTINCT FROM NEW.status)
-EXECUTE FUNCTION public.cortes_reserve_daily_publication_100();
+DO $install$
+BEGIN
+  IF NOT EXISTS(
+     SELECT 1 FROM pg_trigger
+     WHERE tgname='cortes_daily_publication_limit_100'
+       AND tgrelid='public.cortes_publications'::regclass
+       AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER cortes_daily_publication_limit_100
+    BEFORE UPDATE OF status ON public.cortes_publications
+    FOR EACH ROW
+    WHEN (NEW.status = 'started' AND OLD.status IS DISTINCT FROM NEW.status)
+    EXECUTE FUNCTION public.cortes_reserve_daily_publication_100();
+  END IF;
+END
+$install$;
