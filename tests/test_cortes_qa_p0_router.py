@@ -43,7 +43,7 @@ class P0RouterTests(unittest.TestCase):
         ]}],"blocker":None}
         with patch.dict(router.os.environ,{"WP_SITE_URL":"https://anthares.us",
                                                "WP_USERNAME":"fixture",
-                                               "WP_APP_PASSWORD":"mock"}),
+                                               "WP_APP_PASSWORD":"mock"}), \
              patch.object(router,"http",return_value=state):
             result=router.wp_incidents()
         self.assertEqual(len(result),1)
