@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 import json, os, sys, urllib.parse, urllib.request, urllib.error
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from anthares_publisher.editorial import prepare_publication_metadata
+from video_social import pinterest, linkedin, ConfigRequired, PlatformLimit, PublishUncertain
 
 class AdapterError(RuntimeError): pass
 class AuthRequired(AdapterError): pass
@@ -23,7 +27,7 @@ def need(name):
     return v
 
 def destination(platform, account_id):
-    if platform not in {"instagram","threads","x"} or not account_id or ":" in account_id:
+    if platform not in {"instagram","threads","x","pinterest","linkedin"} or not account_id or ":" in account_id:
         raise AdapterError("invalid_destination")
     return f"{platform}:{account_id}"
 
@@ -33,6 +37,8 @@ def instagram(payload, publish=False):
     media=payload.get("media_url",""); text=payload.get("text","")
     if not media: raise AdapterError("instagram_media_required")
     if not publish: return {"status":"READY","destination_key":dest}
+    payload=prepare_publication_metadata(payload)
+    text=payload["text"]
     base=os.getenv("META_GRAPH_BASE","https://graph.instagram.com"); ver=os.getenv("META_GRAPH_VERSION","v24.0")
     is_video=payload.get("media_type","").lower()=="video"
     data={"access_token":token,"caption":text}
@@ -54,6 +60,8 @@ def threads(payload, publish=False):
     text=payload.get("text",""); media=payload.get("media_url","")
     if not text and not media: raise AdapterError("threads_content_required")
     if not publish: return {"status":"READY","destination_key":dest}
+    payload=prepare_publication_metadata(payload)
+    text=payload["text"]
     base=os.getenv("THREADS_GRAPH_BASE","https://graph.threads.net"); ver=os.getenv("THREADS_GRAPH_VERSION","v1.0")
     data={"access_token":token,"text":text}
     if media:
@@ -74,6 +82,9 @@ def x(payload, publish=False):
     token=need("X_USER_ACCESS_TOKEN"); text=payload.get("text","")
     if not text: raise AdapterError("x_text_required")
     if not publish: return {"status":"READY","destination_key":dest}
+    payload=prepare_publication_metadata(payload, title_limit=240)
+    text=payload["text"]
+    if len(text)>280: raise AdapterError("x_post_exceeds_280_characters")
     raw=json.dumps({"text":text}).encode()
     request=urllib.request.Request("https://api.x.com/2/tweets",data=raw,headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"},method="POST")
     try:
@@ -88,10 +99,13 @@ def x(payload, publish=False):
 def main():
     payload=json.loads(sys.stdin.read() or "{}"); platform=payload.get("platform")
     publish=os.getenv("ANTHARES_SOCIAL_COMMIT","")=="1"
-    fn={"instagram":instagram,"threads":threads,"x":x}.get(platform)
+    fn={"instagram":instagram,"threads":threads,"x":x,"pinterest":pinterest,"linkedin":linkedin}.get(platform)
     if not fn: raise AdapterError("unsupported_platform")
     try: out=fn(payload,publish)
     except AuthRequired as e: out={"status":"AUTH_REQUIRED","destination_key":destination(platform,payload.get("account_id","primary")),"missing":str(e)}
     except PaidApiDisabled as e: out={"status":"BLOCKED_PAID_API","destination_key":destination(platform,payload.get("account_id","primary")),"reason":str(e)}
+    except ConfigRequired as e: out={"status":"AUTH_OR_CONFIG_REQUIRED","destination_key":destination(platform,payload.get("account_id","primary")),"missing":str(e)}
+    except PlatformLimit: out={"status":"BLOCKED_PLATFORM_LIMIT","destination_key":destination(platform,payload.get("account_id","primary"))}
+    except PublishUncertain as e: out={"status":"UNCERTAIN","destination_key":destination(platform,payload.get("account_id","primary")),"reason":str(e)}
     print(json.dumps(out,separators=(",",":")))
 if __name__=="__main__": main()

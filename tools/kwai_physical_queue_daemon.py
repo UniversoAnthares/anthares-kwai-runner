@@ -8,6 +8,9 @@ from cortes_neon_queue_adapter import signed_legacy_queue_call
 from android_device_adapters import ensure_memu_transport
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT))
+from anthares_publisher.editorial import branded_title, add_site_to_keywords
+
 CONTROL=os.getenv('ANTHARES_CONTROL_URL','https://anthares-control.anthares1.workers.dev').rstrip('/')
 EXECUTOR='physical_android'; MODEL='M2004J19C'; EXPECTED_ACCOUNT=os.getenv('KWAI_EXPECTED_ACCOUNT','lucasrosalem').lstrip('@').lower()
 PYTHON=os.getenv('ANTHARES_PYTHON',sys.executable)
@@ -92,7 +95,7 @@ def jobenv(job,serial):
  if missing:raise RuntimeError('lease-missing:'+','.join(missing))
  account=str(job.get('expected_account') or job.get('account_id') or EXPECTED_ACCOUNT).lstrip('@').lower()
  if account!=EXPECTED_ACCOUNT:raise RuntimeError('unsupported-account:'+account)
- env=os.environ.copy(); env.update({'ADB_VENDOR_KEYS':ADB_KEYS,'ANTHARES_ADB':ADB,'ANTHARES_PHYSICAL_ADB_SERIAL':serial,'KWAI_QUEUE_JOB_ID':str(job['id']),'KWAI_LEASE_OWNER':str(job.get('lease_owner') or ''),'KWAI_LEASE_GENERATION':str(job['lease_generation']),'KWAI_SOURCE_ID':str(job['source_id']),'KWAI_SOURCE_START':str(job['source_start']),'KWAI_SOURCE_END':str(job['source_end']),'KWAI_VIDEO_URL':str(job['video_url']),'KWAI_VIDEO_TITLE':str(job.get('video_title') or ''),'KWAI_EXPECTED_ACCOUNT':account})
+ env=os.environ.copy(); env.update({'ADB_VENDOR_KEYS':ADB_KEYS,'ANTHARES_ADB':ADB,'ANTHARES_PHYSICAL_ADB_SERIAL':serial,'KWAI_QUEUE_JOB_ID':str(job['id']),'KWAI_LEASE_OWNER':str(job.get('lease_owner') or ''),'KWAI_LEASE_GENERATION':str(job['lease_generation']),'KWAI_SOURCE_ID':str(job['source_id']),'KWAI_SOURCE_START':str(job['source_start']),'KWAI_SOURCE_END':str(job['source_end']),'KWAI_VIDEO_URL':str(job['video_url']),'KWAI_VIDEO_TITLE':branded_title(add_site_to_keywords(branded_title(str(job.get('video_title') or ''))[:-len(' ● Universo Anthares')]),limit=140),'KWAI_EXPECTED_ACCOUNT':account})
 
  # Mark the primary as transport-ready, but identity verification remains in
  # kwai_up_safe.prepare() before STARTED. Never infer MEmu login readiness.

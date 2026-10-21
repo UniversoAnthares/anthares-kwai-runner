@@ -25,6 +25,11 @@ class MediaModelTests(unittest.TestCase):
         self.assertEqual(a.target_key,"kwai:primary")
         self.assertEqual(a.daily_limit,100)
 
+    def test_pinterest_consumes_every_eligible_clip_while_linkedin_remains_20(self):
+        clip=Clip("live-1",0,60000,"short","1"*64)
+        self.assertIsNone(Publication(clip,"pinterest","primary").daily_limit)
+        self.assertEqual(Publication(clip,"linkedin","primary").daily_limit,20)
+
     def test_master_class_mismatch_is_rejected(self):
         short=Clip("live-1",0,60000,"short","1"*64)
         long=Clip("live-1",0,600000,"long","2"*64)
