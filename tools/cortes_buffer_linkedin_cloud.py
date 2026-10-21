@@ -72,9 +72,14 @@ def verify_sent_post(remote_id):
     if uri.scheme!="https" or uri.hostname not in ("linkedin.com","www.linkedin.com"):
         raise RuntimeError("BUFFER_LINKEDIN_SENT_WITHOUT_PUBLIC_LINK")
     if not (uri.path.startswith("/feed/update/") or uri.path.startswith("/posts/") or
-            uri.path.startswith("/company/")):
+            uri.path.startswith("/company/145345334/posts/")):
         raise RuntimeError("BUFFER_LINKEDIN_EXTERNAL_POST_LINK_INVALID")
-    return link
+    if uri.username or uri.password or uri.port:
+        raise RuntimeError("BUFFER_LINKEDIN_EXTERNAL_POST_LINK_INVALID")
+    # Buffer may append tracking query parameters or fragments to externalLink.
+    # All canonical queue ingress providers reject these values for evidence.
+    # Remove only URL decoration; preserve the exact verified post identity.
+    return uri._replace(query="", fragment="").geturl()
 
 
 def reconcile():
