@@ -65,7 +65,7 @@ def post(action: str, payload: dict, get_oidc, *, timeout: int = 16) -> dict:
                 os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted" and
                 os.environ.get("RUNNER_OS") == "Linux"):
             raise BackendUnavailable("CORTES_QUEUE_NEON_REQUIRES_CLOUD")
-        providers = (PROVIDERS[1], PROVIDERS[0], *PROVIDERS[2:])
+        providers = tuple(sorted(PROVIDERS, key=lambda url: 0 if 'cortesqueue.compute.' in url else 1))
     else:
         providers = PROVIDERS
     for provider in providers:
