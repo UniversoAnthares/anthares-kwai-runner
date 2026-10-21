@@ -11,7 +11,7 @@ export default {async fetch(request){
  if(!health&&!(request.method==="POST"&&ACTIONS.has(action)))return respond(404,"not_found");
  if(!health){
   const auth=request.headers.get("Authorization")||"";
-  if(!/^Bearer\\s+[A-Za-z0-9_.-]{60,16000}$/i.test(auth))return respond(401,"unauthorized");
+  if(!auth.startsWith("Bearer ")||auth.length<68||auth.length>16007||!/^[A-Za-z0-9_.-]+$/.test(auth.slice(7)))return respond(401,"unauthorized");
   const ct=request.headers.get("Content-Type")||"";
   if(!ct.toLowerCase().includes("application/json"))return respond(415,"json_required");
   const len=Number(request.headers.get("Content-Length")||"0");
