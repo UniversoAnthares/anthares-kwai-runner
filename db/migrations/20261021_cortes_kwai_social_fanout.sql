@@ -2,8 +2,10 @@
 -- destination ledgers, in the SAME Neon database transaction. Runs without
 -- Vercel, WordPress credentials, GitHub Actions or the proprietor's PC.
 -- Failures for one destination are caught separately and NEVER abort Kwai.
--- Same-day local quota is 100 deliveries per destination; excess is recorded
--- as daily-cap blocked (no rollover to tomorrow).
+-- No cap on the number of durable delivery records: all eligible short masters
+-- must fan out to every destination. Platform-specific publication rate limits
+-- belong to the individual workers, never to ledger fanout. Failures are
+-- isolated by destination; no silent rollover into the next day's round.
 --
 -- Table and function definitions are idempotent; trigger installation follows
 -- as a separate guarded DO statement.
@@ -32,7 +34,6 @@ DECLARE
     calculated_sha text;
     destination record;
     social_id text;
-    daily_count bigint;
     local_day date;
 BEGIN
     IF NEW.target_key <> 'kwai:lucasrosalem'
@@ -77,21 +78,9 @@ BEGIN
        ) AS d(platform,target_key,account_id)
     LOOP
        BEGIN
-          SELECT count(*) INTO daily_count
-            FROM public.cortes_publications
-           WHERE target_key = destination.target_key
-             AND (created_at AT TIME ZONE 'America/Campo_Grande')::date = local_day;
-
-          IF daily_count >= 100 THEN
-             INSERT INTO public.cortes_social_fanout_errors(
-                   target_key, source_id, segment_id, reason)
-             VALUES(destination.target_key,NEW.source_id,segment,'DAILY_CAP_100')
-             ON CONFLICT(target_key,source_id,segment_id)
-             DO UPDATE SET attempts = cortes_social_fanout_errors.attempts + 1,
-                           reason='DAILY_CAP_100',last_seen_at=now();
-             CONTINUE;
-          END IF;
-
+          -- All eligible short masters are registered, regardless of count.
+          -- The network workers enforce provider rate limits independently;
+          -- a blocked channel must not prevent creation for the others.
           social_id := 'cortes-fanout-' || destination.platform || '-' ||
               substring(encode(sha256(convert_to(NEW.source_id || '|' || segment ||
                         '|' || destination.target_key, 'UTF8')), 'hex'), 1, 32);
