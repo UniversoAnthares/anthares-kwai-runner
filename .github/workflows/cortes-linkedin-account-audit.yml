@@ -27,4 +27,4 @@ jobs:
       - name: Inspect LinkedIn channels without publishing or displaying personal identifiers
         run: |
           set -euo pipefail
-          python -u tools/cortes_linkedin_account_audit.py
+          python -u -m tools.cortes_linkedin_account_audit
