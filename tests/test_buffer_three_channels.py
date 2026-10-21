@@ -137,6 +137,33 @@ class BufferPinnedTests(unittest.TestCase):
                 with self.assertRaisesRegex(b.BufferBlocked,"CLOUD_HOSTED_RUNNER_REQUIRED"):
                     b.schedule(master())
 
+    def test_linkedin_same_day_uses_share_now_no_buffer_queue(self):
+        profile=channel("linkedin")
+        sent=[]
+        def mock_api(query,token=None):
+            sent.append(query)
+            return {"createPost":{"post":{"id":"immediate-123"}}}
+        with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"1","BUFFER_LINKEDIN_CHANNEL_ID":profile["id"],
+                                  "GITHUB_ACTIONS":"true","RUNNER_ENVIRONMENT":"github-hosted","RUNNER_OS":"Linux"}):
+            with patch.object(b,"channels",return_value=[profile]), patch.object(b,"api",side_effect=mock_api):
+                out=b.schedule({**master("linkedin"),"same_day":True})
+        self.assertEqual(out["status"],"SCHEDULED_IN_BUFFER")
+        self.assertIn("mode: shareNow",sent[0])
+        self.assertNotIn("mode: addToQueue",sent[0])
+        self.assertFalse(out["confirmed_on_social_network"])
+
+    def test_regular_buffer_mode_remains_queue(self):
+        profile=channel("linkedin")
+        sent=[]
+        def mock_api(query,token=None):
+            sent.append(query)
+            return {"createPost":{"post":{"id":"scheduled-123"}}}
+        with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"1","BUFFER_LINKEDIN_CHANNEL_ID":profile["id"],
+                                  "GITHUB_ACTIONS":"true","RUNNER_ENVIRONMENT":"github-hosted","RUNNER_OS":"Linux"}):
+            with patch.object(b,"channels",return_value=[profile]), patch.object(b,"api",side_effect=mock_api):
+                b.schedule(master("linkedin"))
+        self.assertIn("mode: addToQueue",sent[0])
+
     def test_instagram_mutation_forces_reel(self):
         profile=channel("instagram")
         captured=[]

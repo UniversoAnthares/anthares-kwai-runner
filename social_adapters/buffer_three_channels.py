@@ -238,6 +238,14 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
     validate_channel(platform, channel_id, channels(token))
     # Explicit Reel and Pinterest board metadata are mandatory. Never fall back
     # to a generic Instagram post or an arbitrary Pinterest board.
+    # shareNow is an official Buffer mode: no queue slot and no spill into tomorrow.
+    # This does not increase LinkedIn's real account/API posting allowance.
+    if payload.get("same_day") is True:
+        if platform != "linkedin":
+            raise BufferBlocked("SAME_DAY_IMMEDIATE_LINKEDIN_ONLY")
+        mode = "shareNow"
+    else:
+        mode = "addToQueue"
     metadata = ""
     if platform == "instagram":
         metadata = "metadata: { instagram: { type: reel, shouldShareToFeed: true } }"
@@ -252,7 +260,7 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
         text: CAPTION
         channelId: CHANNEL
         schedulingType: automatic
-        mode: addToQueue
+        mode: SHARE_MODE
         METADATA
         assets: [{ video: { url: MEDIA, metadata: { thumbnailOffset: 2000 } } }]
       }) {
@@ -263,7 +271,8 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
     mutation = (mutation.replace("CAPTION", json.dumps(post["caption"], ensure_ascii=False))
                .replace("CHANNEL", json.dumps(channel_id))
                .replace("MEDIA", json.dumps(post["media_url"]))
-               .replace("METADATA", metadata))
+               .replace("METADATA", metadata)
+               .replace("SHARE_MODE", mode))
     result = api(mutation, token).get("createPost") or {}
     identifier = str((result.get("post") or {}).get("id") or "")
     if not identifier:

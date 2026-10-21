@@ -115,6 +115,7 @@ def safe_payload(row):
         "duration_seconds":payload.get("duration_seconds"),
         "title":payload.get("title") or payload.get("video_title"),
         "description":payload.get("description") or "",
+        "same_day": True,
     }
     if result["duration_seconds"] is None:
         raise RuntimeError("NEON_LINKEDIN_DURATION_MISSING")
