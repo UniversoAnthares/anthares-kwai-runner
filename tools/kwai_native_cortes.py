@@ -79,10 +79,13 @@ def wait(s,r,name,seconds=30):
  raise E('missing:'+r)
 def shot(s,name):
  EVID.mkdir(parents=True,exist_ok=True); p=run(acmd(s,'exec-out','screencap','-p'),25,True,False); f=EVID/(name+'.png'); f.write_bytes(p.stdout); return f
-def home(s):
- adb(s,'shell','am','force-stop',PKG,check=False); adb(s,'shell','monkey','-p',PKG,'-c','android.intent.category.LAUNCHER','1',check=False,timeout=25); time.sleep(3)
-def latest(s,prefix):
- home(s); _,tab,_=wait(s,RID_PROFILE,prefix+'-home',25); tap(s,tab); time.sleep(4)
+def home(s,preserve_upload=False):
+ # After Publish, force-stop can interrupt a still-uploading video.
+ if not preserve_upload: adb(s,'shell','am','force-stop',PKG,check=False)
+ adb(s,'shell','monkey','-p',PKG,'-c','android.intent.category.LAUNCHER','1',check=False,timeout=25)
+ time.sleep(3)
+def latest(s,prefix,preserve_upload=False):
+ home(s,preserve_upload=preserve_upload); _,tab,_=wait(s,RID_PROFILE,prefix+'-home',25); tap(s,tab); time.sleep(4)
  root,user,px=wait(s,RID_USER,prefix+'-profile',30); account=(user.attrib.get('text') or '').strip().lstrip('@').lower()
  if account!=ACCOUNT: raise E('profile-account:'+account)
  thumbs=[n for n in rid(root,RID_THUMB) if n.attrib.get('clickable')=='true' and center(n.attrib.get('bounds',''))]
@@ -125,11 +128,13 @@ def ptime(t):
   try:return datetime.strptime((t or '').strip(),f)
   except ValueError:pass
  return None
-def confirm(s,baseline,tries=12,delay=10):
+def confirm(s,baseline,tries=5,delay=15):
+ # Allow async upload a brief grace period before read-only profile checks.
+ time.sleep(25)
  last={}
  for i in range(tries):
   try:
-   last=latest(s,f'{safe()}-verify-{i:02d}'); changed=(last.get('caption'),last.get('post_time'))!=(baseline.get('caption'),baseline.get('post_time'))
+   last=latest(s,f'{safe()}-verify-{i:02d}',preserve_upload=True); changed=(last.get('caption'),last.get('post_time'))!=(baseline.get('caption'),baseline.get('post_time'))
    dt=ptime(last.get('post_time','')); fresh=bool(dt and datetime.now()-timedelta(minutes=20)<=dt<=datetime.now()+timedelta(minutes=5))
    title=bool(CAPTION and CAPTION.casefold() in (last.get('caption') or '').casefold())
    if last.get('account')==ACCOUNT and changed and (fresh or title): return True,last,'profile-account-title-time' if title else 'profile-account-new-post-time'
