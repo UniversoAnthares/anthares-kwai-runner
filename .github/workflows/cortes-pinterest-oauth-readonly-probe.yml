@@ -1,0 +1,32 @@
+name: CORTES Pinterest - secure OAuth availability probe
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/cortes_pinterest_oauth_readonly_probe.py
+      - .github/workflows/cortes-pinterest-oauth-readonly-probe.yml
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-pinterest-oauth-readonly
+  cancel-in-progress: false
+jobs:
+  check-authorized-oauth:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile readonly OAuth capability probe
+        run: python3 -m py_compile tools/cortes_pinterest_oauth_readonly_probe.py
+      - name: Inspect existing BWS machine account and Pinterest permissions
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BWS_ACCESS_TOKEN}" ]; then
+            echo "PIN_BWS_ACCESS_MISSING=1"
+            exit 2
+          fi
+          docker run --rm -e BWS_ACCESS_TOKEN ghcr.io/bitwarden/bws secret list \
+            | python3 -u tools/cortes_pinterest_oauth_readonly_probe.py
