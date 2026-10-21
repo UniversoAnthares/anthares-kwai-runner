@@ -1,0 +1,37 @@
+name: CORTES Instagram token verification
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/cortes-instagram-token-verification.yml
+permissions:
+  contents: read
+jobs:
+  read-only-account-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify configured Instagram identity without publishing
+        env:
+          IG_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          IG_UID: ${{ secrets.INSTAGRAM_USER_ID }}
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error,sys
+          token=os.environ.get('IG_TOKEN','').strip()
+          uid=os.environ.get('IG_UID','').strip()
+          if len(token)<20 or not uid:
+              print('RESULT=AUTH_CONFIG_MISSING');sys.exit(2)
+          for base in ('https://graph.instagram.com/v24.0','https://graph.facebook.com/v24.0'):
+              req=urllib.request.Request(f'{base}/{uid}?fields=id,username',headers={'Authorization':'Bearer '+token,'User-Agent':'Anthares-CORTES-Account-Verify/1'})
+              try:
+                  with urllib.request.urlopen(req,timeout=18) as r:body=json.load(r)
+                  if str(body.get('username','')).lower()=='universoanthares' and str(body.get('id',''))==uid:
+                      print('RESULT=INSTAGRAM_AUTH_VERIFIED_ACCOUNT=universoanthares');sys.exit(0)
+                  print('RESULT=IDENTITY_MISMATCH');sys.exit(3)
+              except urllib.error.HTTPError as e:
+                  print(f'READ_ONLY_GRAPH_HTTP_{e.code}_BASE={base.split("/")[2]}')
+              except Exception as e:
+                  print(f'READ_ONLY_GRAPH_ERROR={type(e).__name__}')
+          print('RESULT=INSTAGRAM_AUTH_NOT_VERIFIED');sys.exit(4)
+          PY
