@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/buffer-channels-readonly.yml
+      - social_adapters/buffer_three_channels.py
   workflow_dispatch:
   schedule:
     - cron: '23 9 * * *'
