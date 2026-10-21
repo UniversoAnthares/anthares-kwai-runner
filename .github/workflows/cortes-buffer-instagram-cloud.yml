@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/cortes-buffer-instagram-cloud.yml'
+      - 'tools/cortes_buffer_instagram_cloud.py'
+      - 'tools/cortes_queue_ha.py'
   schedule:
     - cron: '8,23,38,53 * * * *'
   workflow_dispatch: {}
