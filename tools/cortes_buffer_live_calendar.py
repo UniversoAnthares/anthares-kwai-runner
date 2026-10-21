@@ -45,6 +45,18 @@ def main():
                   " paused="+str(paused).lower()+" times="+",".join(times),flush=True)
             channel_state[service]["weekly_schedule"].append(
                 {"day":day,"paused":paused,"times":times})
+    from social_adapters.buffer_three_channels import pinterest_boards, select_pinterest_board
+    boards=pinterest_boards()
+    print("BUFFER_PINTEREST_BOARD_COUNT="+str(len(boards)),flush=True)
+    for row in boards:
+        print("BUFFER_PINTEREST_BOARD name="+str(row["name"])[:70]+
+              " board_id="+str(row["serviceId"]),flush=True)
+    try:
+        selected=select_pinterest_board(boards)
+        print("BUFFER_PINTEREST_BOARD_SELECTED="+selected,flush=True)
+    except BufferBlocked as exc:
+        print("BUFFER_PINTEREST_BOARD_SELECTION="+str(exc),flush=True)
+    channel_state["pinterest"]["boards"]=boards
     organization=api("query CORTESBufferOrganizations { account { organizations { id } } }")
     orgs=(organization.get("account") or {}).get("organizations") or []
     for org in orgs:
