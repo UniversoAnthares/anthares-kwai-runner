@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-const port=Number(process.env.CORTES_CHROME_CDP_PORT||9225);
-if(port!==9225)throw Error('UNAUTHORIZED_BROWSER_PORT');
+const port=Number(process.env.CORTES_CHROME_CDP_PORT||9226);
+if(port!==9226)throw Error('UNAUTHORIZED_BROWSER_PORT');
 const board='Universo Anthares — Vídeos',account='lucasyahn';
 const editor='https://br.pinterest.com/pin-creation-tool/';
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
@@ -60,10 +60,11 @@ async function until(fn,attempts=40,gap=900){
 }
 async function session(p){
  await pause(6000);
- const r=await p.js('(()=>({href:location.href,login:!![...document.querySelectorAll("button")].find(x=>/^(entrar|log in|login)$/i.test((x.innerText||"").trim())),upload:!!document.querySelector("input[type=file]"),text:document.body?.innerText.slice(0,350)||""}))()');
+ const r=await p.js('(()=>({href:location.href,login:!![...document.querySelectorAll("button")].find(x=>/^(entrar|log in|login)$/i.test((x.innerText||"").trim())),profile:[...document.querySelectorAll("a")].some(x=>{try{const u=new URL(x.href);return u.hostname.endsWith("pinterest.com")&&u.pathname==="/lucasyahn/"&&(x.querySelector("img")||/profile|perfil|account|conta/i.test([x.getAttribute("aria-label"),x.getAttribute("data-test-id")].join(" ")))}catch{return false}}),upload:!!document.querySelector("input[type=file]"),text:document.body?.innerText.slice(0,250)||""}))()');
  const url=new URL(r.href);
  if(!url.hostname.endsWith('.pinterest.com'))throw Error('PIN_WRONG_ORIGIN');
  if(r.login||!url.pathname.includes('pin-creation-tool'))throw Error('PINTEREST_BROWSER_LOGIN_REQUIRED');
+ if(!r.profile)throw Error('PINTEREST_BROWSER_ACCOUNT_NOT_VERIFIED');
  return r;
 }
 async function inspect(p){
@@ -137,7 +138,7 @@ async function publish(p,data){
  const clicked=await p.js('(()=>{const x=[...document.querySelectorAll("button,[role=button]")].filter(e=>/^(publicar|publish)$/i.test((e.innerText||"").trim()));if(x.length!==1||x[0].disabled)return false;x[0].click();return true})()');
  if(!clicked)throw Error('PIN_SUBMIT_BUTTON_MISSING');
  emit({phase:'SUBMIT_CLICKED'});
- const url=await until(()=>p.js('(()=>{const paths=[location.href,...[...document.querySelectorAll("a[href*="/pin/"]")].map(x=>x.href)];return paths.find(x=>/^https:\\/\\/(?:br\\.|www\\.)?pinterest\\.com\\/pin\\/[0-9]+\\/?(?:\\?.*)?$/.test(x))||null})()'),120,1300);
+ const url=await until(()=>p.js('(()=>{const paths=[location.href,...[...document.querySelectorAll("a")].map(x=>x.href)];return paths.find(x=>/^https:\\/\\/(?:br\\.|www\\.)?pinterest\\.com\\/pin\\/[0-9]+\\/?(?:\\?.*)?$/.test(x))||null})()'),120,1300);
  if(!url)throw Error('PIN_SUBMITTED_WITHOUT_PERMALINK');
  const pinId=new URL(url).pathname.match(/\/pin\/([0-9]+)/)?.[1];
  if(!pinId)throw Error('PIN_PERMALINK_INVALID');
