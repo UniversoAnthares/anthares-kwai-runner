@@ -123,6 +123,17 @@ def signing_public_key():
         return jsonify(ok=False, error=type(exc).__name__), 503
 
 
+@app.get("/post-status")
+def post_status():
+    if not _auth_ok():
+        return jsonify(ok=False, error="unauthorized"), 401
+    try:
+        from x_durable_ledger import readback
+        return jsonify(ok=True, **readback(request.args.get("idempotency_key", "")))
+    except Exception as exc:
+        return jsonify(ok=False, error=type(exc).__name__), 503
+
+
 @app.get("/verify")
 def verify_route():
     if not _auth_ok():
