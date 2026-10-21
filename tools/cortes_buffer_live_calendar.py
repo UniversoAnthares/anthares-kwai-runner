@@ -46,7 +46,7 @@ def main():
             channel_state[service]["weekly_schedule"].append(
                 {"day":day,"paused":paused,"times":times})
     from social_adapters.buffer_three_channels import (
-        resolve_pinterest_board, PINNED_CHANNELS, PINTEREST_PUBLIC_BOARD_ID)
+        resolve_pinterest_board, PINTEREST_PUBLIC_BOARD_ID)
     selected=resolve_pinterest_board(PINNED_CHANNELS["pinterest"][0])
     if selected!=PINTEREST_PUBLIC_BOARD_ID:
         raise BufferBlocked("PINTEREST_PUBLIC_BOARD_ID_MISMATCH")
