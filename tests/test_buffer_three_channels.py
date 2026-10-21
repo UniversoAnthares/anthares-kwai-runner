@@ -198,6 +198,15 @@ class BufferPinnedTests(unittest.TestCase):
         self.assertIn(b.PINTEREST_PUBLIC_BOARD_ID,captured[-1])
         self.assertIn("https://www.anthares.us",captured[-1])
 
+    def test_new_board_not_yet_indexed_in_buffer_is_verified_publicly(self):
+        channel=b.PINNED_CHANNELS["pinterest"][0]
+        with patch.dict(os.environ,{"BUFFER_PINTEREST_BOARD_ID":""}):
+            with patch.object(b,"api",return_value={"channel":{"metadata":{"boards":[]}}}):
+                with patch.object(b,"verified_public_pinterest_board",
+                                  return_value=b.PINTEREST_PUBLIC_BOARD_ID):
+                    self.assertEqual(b.resolve_pinterest_board(channel),
+                                     b.PINTEREST_PUBLIC_BOARD_ID)
+
     def test_pinterest_wrong_board_id_is_blocked(self):
         data={"channel":{"metadata":{"boards":[{"serviceId":"good","url":"https://pinterest.com/lucasyahn/a"}]}}}
         with patch.dict(os.environ,{"BUFFER_PINTEREST_BOARD_ID":"other"}),patch.object(b,"api",return_value=data):
