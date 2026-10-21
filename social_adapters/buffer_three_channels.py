@@ -130,6 +130,12 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
     post = prepare(payload)
     if os.getenv("ANTHARES_SOCIAL_COMMIT", "") != "1":
         return {"status": "DRY_RUN", **post}
+    # Require a GitHub-hosted Linux Actions runner. Never publish from the
+    # owner's PC, Anthares Remote, or a self-hosted GitHub runner.
+    if (os.getenv("GITHUB_ACTIONS") != "true"
+            or os.getenv("RUNNER_ENVIRONMENT") != "github-hosted"
+            or os.getenv("RUNNER_OS") != "Linux"):
+        raise BufferBlocked("BUFFER_CLOUD_HOSTED_RUNNER_REQUIRED")
     platform = post["platform"]
     channel_id = str(os.getenv("BUFFER_" + platform.upper() + "_CHANNEL_ID") or "").strip()
     validate_channel(platform, channel_id, channels(token))
