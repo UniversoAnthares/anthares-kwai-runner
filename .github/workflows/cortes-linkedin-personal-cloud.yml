@@ -1,0 +1,40 @@
+name: CORTES LinkedIn Personal - native video cloud publisher
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '5,15,25,35,45,55 * * * *'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: cortes-linkedin-personal-independent-worker
+  cancel-in-progress: false
+jobs:
+  personal:
+    # Must have an individually authorized w_member_social access token and
+    # verified immutable LinkedIn member ID. Corporate Buffer remains active.
+    if: ${{ vars.CORTES_LINKEDIN_PERSONAL_READY == 'true' && vars.CORTES_LINKEDIN_PERSONAL_PAUSED != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      LINKEDIN_PERSONAL_SUB: ${{ vars.CORTES_LINKEDIN_PERSONAL_SUB }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Read member OAuth token from Anthares Secrets Manager
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            ${{ vars.CORTES_LINKEDIN_PERSONAL_BWS_SECRET_ID }} > LINKEDIN_PERSONAL_ACCESS_TOKEN
+      - name: Publish one personal LinkedIn video and reconcile uncertain posts
+        shell: bash
+        env:
+          LINKEDIN_PERSONAL_COMMIT: '1'
+        run: |
+          set -euo pipefail
+          test -n "${LINKEDIN_PERSONAL_SUB:-}" || { echo "::error::MEMBER_SUB_REQUIRED"; exit 1; }
+          test -n "${LINKEDIN_PERSONAL_ACCESS_TOKEN:-}" || { echo "::error::MEMBER_OAUTH_REQUIRED"; exit 1; }
+          python -u tools/cortes_linkedin_personal_cloud.py
