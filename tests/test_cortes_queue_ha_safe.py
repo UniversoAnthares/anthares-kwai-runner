@@ -31,7 +31,7 @@ class SafeFailover(unittest.TestCase):
                 r=ha.post("enqueue",{"id":"job-1"},self.token)
         self.assertTrue(r["ok"])
         self.assertEqual(len(sent),1)
-        self.assertIn("vercel.app",sent[0])
+        self.assertIn("cortesqueue.compute",sent[0])
 
     def test_instagram_explicit_neon_primary_before_vercel(self):
         requested=[]
