@@ -54,6 +54,9 @@ class XConsumerTests(unittest.TestCase):
         a = fingerprint(p)
         p["segment_start"], p["segment_end"] = 1300., 1900.
         self.assertNotEqual(a, fingerprint(p))
+        p = self.payload()
+        p["scan_start"] = 780
+        self.assertNotEqual(a, fingerprint(p))
         self.assertEqual(identity("x_" + a), identity("x_" + a))
 
     def test_only_bot_markers_block_retry(self):
