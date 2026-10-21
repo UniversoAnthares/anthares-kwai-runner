@@ -29,7 +29,7 @@ if(active && (!lastSuccess||now-lastSuccess>22*60000))problems.push('PUBLICATION
 if(uncertain.length)problems.push('POST_SUBMISSION_RECONCILIATION_REQUIRED');
 const recentErrors=(()=>{try{return fs.readFileSync(at('threads-events.log'),'utf8').split(/\r?\n/).slice(-350).filter(line=>{try{const t=Date.parse(line.slice(0,24)),e=JSON.parse(line.slice(25));return now-t<30*60000&&e.action==='ERROR'}catch{return false}}).length}catch{return 0}})();
 if(recentErrors>=3)problems.push('RECURRENT_PUBLICATION_ERRORS');
-const state={schema:'anthares.threads.continuity.v1',checked_at:new Date(now).toISOString(),day,confirmed_today:currentCount,manifest_count:eligible.length,pending_count:pending.length,uncertain_count:uncertain.length,last_success:ledger.lastPublished||null,age_scheduler_min:ageLogMin,age_success_min:ageSuccessMin,recent_errors_30m:recentErrors,problems,disposition:problems.length?'ATTENTION':'HEALTHY'};
+const state={schema:'anthares.threads.continuity.v1',checked_at:new Date(now).toISOString(),day,confirmed_today:currentCount,manifest_count:eligible.length,pending_count:pending.length,uncertain_count:uncertain.length,last_success:ledger.lastPublished||null,age_scheduler_min:ageLogMin,age_success_min:ageSuccessMin,recent_errors_30m:recentErrors,problems,disposition:problems.length?'ATTENTION':'HEALTHY',last_recovery_at:previous.last_recovery_at||null,last_alarm_at:previous.last_alarm_at||null,last_alarm_fingerprint:problems.length?(previous.last_alarm_fingerprint||null):null};
 atomic('threads-continuity-state.json',state);
 const critical=problems.some(x=>x==='PUBLICATION_PROGRESS_STALLED'||x==='SCHEDULER_NO_HEARTBEAT'||x==='RECURRENT_PUBLICATION_ERRORS');
 const canRetry=critical && now-Date.parse(previous.last_recovery_at||0)>25*60000;
