@@ -10,6 +10,13 @@ import os
 import re
 import tempfile
 import time
+import json
+import hashlib
+from pathlib import Path
+from urllib.parse import urlparse
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from tools.x_publication_safety import validate_video, verified_post_url
 
 import requests
 from flask import Flask, jsonify, request
@@ -38,28 +45,89 @@ def _identity(page) -> str:
     return handle
 
 
-def _latest(page, handle: str) -> str:
+def _statuses(page, handle: str) -> set[str]:
     page.goto(f"https://x.com/{handle}", wait_until="domcontentloaded", timeout=45000)
     page.wait_for_timeout(1500)
+    urls = set()
     links = page.locator('a[href*="/status/"]')
-    for i in range(min(links.count(), 80)):
+    for i in range(min(links.count(), 100)):
         href = links.nth(i).get_attribute("href") or ""
-        m = re.search(r"/status/(\d+)", href)
-        if m:
-            return f"https://x.com/{handle}/status/{m.group(1)}"
-    return ""
+        matched = re.search(r"^/(?:%s)/status/(\\d+)(?:/|$)" % re.escape(handle), href, re.I)
+        if matched:
+            urls.add(f"https://x.com/{handle}/status/{matched.group(1)}")
+    return urls
+
+
+def _safe_media_host(url: str) -> bool:
+    try:
+        p = urlparse(url)
+        return (p.scheme == "https" and not p.username and not p.password
+                and p.port in (None, 443) and p.hostname in {
+                    "anthares.us", "www.anthares.us", "github.com",
+                    "raw.githubusercontent.com", "release-assets.githubusercontent.com",
+                    "objects.githubusercontent.com"})
+    except (ValueError, TypeError):
+        return False
 
 
 def _download_media(url: str) -> str:
-    r = requests.get(url, timeout=90, allow_redirects=True)
-    r.raise_for_status()
-    ctype = (r.headers.get("content-type") or "").lower()
-    if len(r.content) < 1024 or len(r.content) > 50_000_000 or "text/html" in ctype:
-        raise RuntimeError("invalid media response")
+    if not _safe_media_host(url):
+        raise RuntimeError("X_MEDIA_URL_UNTRUSTED")
     fd, path = tempfile.mkstemp(prefix="anthares-x-", suffix=".mp4")
-    with os.fdopen(fd, "wb") as f:
-        f.write(r.content)
+    total = 0
+    try:
+        with os.fdopen(fd, "wb") as target, requests.get(
+                url, timeout=(15, 90), allow_redirects=True, stream=True) as r:
+            r.raise_for_status()
+            if not _safe_media_host(r.url):
+                raise RuntimeError("X_MEDIA_REDIRECT_UNTRUSTED")
+            if "text/html" in (r.headers.get("content-type") or "").lower():
+                raise RuntimeError("X_MEDIA_HTML_RESPONSE")
+            for chunk in r.iter_content(256 * 1024):
+                total += len(chunk)
+                if total > 99_000_000:
+                    raise RuntimeError("X_MEDIA_OVER_99MB")
+                target.write(chunk)
+        if total < 100_000:
+            raise RuntimeError("X_MEDIA_TOO_SMALL")
+        validate_video(path)
+        return path
+    except Exception:
+        os.unlink(path)
+        raise
+
+
+def _attempt_path(key: str) -> Path:
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{12,160}", key):
+        raise ValueError("X_IDEMPOTENCY_KEY_REQUIRED")
+    root = Path(os.environ.get("X_POST_LEDGER_DIR", "/tmp/anthares-x-submissions"))
+    root.mkdir(parents=True, exist_ok=True)
+    return root / (hashlib.sha256((EXPECTED + ":" + key).encode()).hexdigest() + ".json")
+
+
+def _begin_attempt(key: str) -> Path:
+    """Atomic local lease: a restarted/parallel worker may not blindly repost.
+
+    Production must use a persistent volume for X_POST_LEDGER_DIR or delegate
+    the canonical distributed lease to Neon.
+    """
+    path = _attempt_path(key)
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        json.dump({"status": "STARTED", "key_sha256": path.stem,
+                   "at": time.time()}, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
     return path
+
+
+def _complete_attempt(path: Path, url: str):
+    temp = path.with_suffix(".tmp")
+    with open(temp, "w", encoding="utf-8") as stream:
+        json.dump({"status": "CONFIRMED", "post_url": url, "at": time.time()}, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temp, path)
 
 
 @app.get("/health")
@@ -104,15 +172,18 @@ def post_route():
     data = request.get_json(silent=True) or {}
     text = str(data.get("text") or "").strip()
     media_url = str(data.get("media_url") or "").strip()
-    if not text or not media_url:
-        return jsonify(ok=False, error="missing text/media_url"), 400
+    key = str(data.get("idempotency_key") or "").strip()
+    if not text or not media_url or not re.fullmatch(r"[A-Za-z0-9_.:-]{12,160}", key):
+        return jsonify(ok=False, error="text/media_url/idempotency_key required"), 400
+    if len(text) > 280:
+        return jsonify(ok=False, error="X_CAPTION_OVER_280"), 400
     media_path = None
     try:
         media_path = _download_media(media_url)
         with runtime._LOCK:
             context, page = runtime._ensure_browser()
             handle = _identity(page)
-            before = _latest(page, handle)
+            before = _statuses(page, handle)
             page.goto("https://x.com/compose/post", wait_until="domcontentloaded", timeout=45000)
             page.wait_for_timeout(1000)
             editor = page.locator('[data-testid="tweetTextarea_0"]').first
@@ -127,8 +198,13 @@ def post_route():
                 page.wait_for_timeout(800)
             button = page.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"]').first
             deadline = time.time() + 40
+            attempt = None
             while time.time() < deadline:
                 if button.count() and button.is_enabled():
+                    try:
+                        attempt = _begin_attempt(key)
+                    except FileExistsError:
+                        return jsonify(ok=False, error="X_SUBMISSION_ALREADY_STARTED_RECONCILE_FIRST"), 409
                     button.click()
                     break
                 page.wait_for_timeout(500)
@@ -139,20 +215,27 @@ def post_route():
             after = ""
             while time.time() < deadline:
                 page.wait_for_timeout(1800)
-                after = _latest(page, handle)
-                if after and after != before:
+                found = _statuses(page, handle) - before
+                if found:
+                    after = sorted(found, reverse=True)[0]
                     break
-            if not after or after == before:
-                raise RuntimeError("publication not confirmed")
+            if not after:
+                raise RuntimeError("X_SUBMISSION_UNCERTAIN_RECONCILE_NO_AUTOMATIC_RETRY")
             check = context.new_page()
             try:
                 check.goto(after, wait_until="domcontentloaded", timeout=45000)
                 check.wait_for_timeout(1800)
                 if check.locator("video").count() < 1:
-                    raise RuntimeError("published post has no visible video")
+                    raise RuntimeError("X_POST_UNCERTAIN_VIDEO_NOT_VISIBLE")
+                posted_text = " ".join(check.locator('[data-testid="tweetText"]').all_text_contents())
+                if " ".join(text.split()) not in " ".join(posted_text.split()):
+                    raise RuntimeError("X_POST_UNCERTAIN_CAPTION_MISMATCH")
+                if verified_post_url(after) != after:
+                    raise RuntimeError("X_POST_UNCERTAIN_WRONG_ACCOUNT")
             finally:
                 check.close()
             persisted = runtime._persist()
+            _complete_attempt(attempt, after)
         return jsonify(ok=True, handle=handle, post_url=after, video_verified=True, durable=bool(persisted), render_dependency=False)
     except Exception as exc:
         return jsonify(ok=False, error=str(exc)[:700]), 503
