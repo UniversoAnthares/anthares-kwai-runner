@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import tempfile
 import time
 import sys
@@ -22,13 +23,16 @@ from playwright.sync_api import sync_playwright
 app = Flask(__name__)
 EXPECTED = os.getenv("EXPECTED_X_HANDLE", "lucasyahn").strip().lstrip("@").lower()
 TOKEN = os.getenv("X_WORKER_TOKEN", "")
+CLIENT_TOKEN = os.getenv("X_CLIENT_TOKEN") or os.getenv("ARA_SHARED", "")
 VAULT_URL = os.getenv("X_VAULT_URL", "https://anthares-x-vault.anthares1.workers.dev/state")
 STATE_PATH = os.getenv("X_STATE_PATH", "/tmp/anthares-x-storage-state.json")
 P256_ORDER = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
 
 
 def _auth_ok(req):
-    return bool(TOKEN) and req.headers.get("Authorization", "") == "Bearer " + TOKEN
+    presented = req.headers.get("Authorization", "")
+    return any(secrets.compare_digest(presented, "Bearer " + credential)
+               for credential in (TOKEN, CLIENT_TOKEN) if credential)
 
 
 def _validate_state(data):
