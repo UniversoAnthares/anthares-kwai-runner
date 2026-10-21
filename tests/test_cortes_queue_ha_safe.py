@@ -21,7 +21,7 @@ class SafeFailover(unittest.TestCase):
         self.token=lambda: "oidc_"+("A"*90)
         self.available=(ha.PROVIDERS[0],ha.PROVIDERS[1])
 
-    def test_neon_is_used_when_vercel_health_fails(self):
+    def test_secondary_is_used_when_primary_health_fails(self):
         sent=[]
         def open_(request,timeout):
             sent.append(request.full_url)
@@ -31,7 +31,7 @@ class SafeFailover(unittest.TestCase):
                 r=ha.post("enqueue",{"id":"job-1"},self.token)
         self.assertTrue(r["ok"])
         self.assertEqual(len(sent),1)
-        self.assertIn("cortesqueue.compute",sent[0])
+        self.assertIn("vercel.app",sent[0])
 
     def test_never_retry_ambiguous_buffer_lease(self):
         attempted=[]
