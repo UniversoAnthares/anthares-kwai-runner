@@ -123,7 +123,14 @@ jobs:
       - name: Read-only proof of restored Threads account in cloud browser
         env:
           CONTROL: ${{ steps.creds.outputs.control }}
-        run: python3 tools/threads_cloud_owner_probe.py
+        run: python3 tools/threads_cloud_owner_probe.py | tee /tmp/threads-cloud-owner-proof.txt
+
+      - name: Preserve immediate cloud identity evidence without secrets
+        uses: actions/upload-artifact@v4
+        with:
+          name: threads-cloud-owner-proof
+          path: /tmp/threads-cloud-owner-proof.txt
+          retention-days: 1
 
       - name: Open temporary noVNC tunnel for legitimate manual login
         if: ${{ inputs.mode == 'login' || github.ref == 'refs/heads/feature/threads-cloud-primary-20261021' }}
