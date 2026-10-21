@@ -16,7 +16,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   enqueue:
-    if: ${{ vars.CORTES_BUFFER_FANOUT_PAUSED != 'true' }}
+    # Enable only after backend OIDC support has been deployed and proven.
+    if: ${{ vars.CORTES_BUFFER_THREE_BACKEND_READY == 'true' && vars.CORTES_BUFFER_FANOUT_PAUSED != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 9
     env:
