@@ -1,0 +1,47 @@
+name: CORTES Queue - Deploy Cloudflare/Neon independent HA
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/cloudflare-cortes-queue-ha/**'
+      - '.github/workflows/cortes-neon-cloudflare-ha-deploy.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-cloudflare-neon-ha-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail closed when Cloudflare credential is unavailable
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          node --check infra/cloudflare-cortes-queue-ha/src/index.js
+          grep -q 'anthares-cortes-neon-edge-ha' infra/cloudflare-cortes-queue-ha/wrangler.toml
+      - name: Deploy isolated Worker without touching other Anthares services
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd infra/cloudflare-cortes-queue-ha
+          npx --yes wrangler@4.43.0 deploy
+      - name: Assert cloud health and deny anonymous queue writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://anthares-cortes-neon-edge-ha.anthares1.workers.dev'
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 15 "$url/healthz" -o /tmp/cortes-ha.json && grep -q '"database_ok":true' /tmp/cortes-ha.json; then break; fi
+            sleep 3
+          done
+          grep -q '"ok":true' /tmp/cortes-ha.json
+          code="$(curl -sS --max-time 15 -o /tmp/cortes-ha-auth.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"target_key":"linkedin:primary"}' "$url/api/cortes-queue?action=buffer-lease")"
+          test "$code" = 401
+          echo 'CORTES_CLOUDFLARE_NEON_BACKUP=PASS'

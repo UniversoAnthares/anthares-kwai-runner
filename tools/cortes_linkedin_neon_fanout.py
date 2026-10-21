@@ -116,9 +116,9 @@ def enqueue(job):
     from tools.cortes_queue_ha import post
     result=post("enqueue",job,oidc)
     row=result.get("job") or {}
-    if not result.get("ok") or row.get("id")!=job["id"]:
+    if not result.get("ok") or row.get("id")!=job["id"] or row.get("target_key")!=TARGET:
         raise RuntimeError("LINKEDIN_NEON_ENQUEUE_NOT_ACKNOWLEDGED")
-    if result.get("deduped") and (result.get("reason")!="identity" or row.get("target_key")!=TARGET):
+    if result.get("deduped") and result.get("reason")!="identity":
         raise RuntimeError("LINKEDIN_NEON_WRONG_DEDUPE")
     return bool(result.get("deduped"))
 
