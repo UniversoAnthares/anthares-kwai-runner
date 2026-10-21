@@ -250,7 +250,11 @@ def prepare(payload: dict) -> dict:
             raise BufferBlocked("DURATION_INVALID")
         if not 30 <= duration <= 90:
             raise BufferBlocked("DURATION_OUT_OF_SHORT_RANGE")
-    text = add_site_to_keywords(branded_title(title) + "\n" + str(payload.get("description") or "").strip())
+    if platform == "linkedin":
+        from anthares_publisher.linkedin_editorial import linkedin_caption
+        text = linkedin_caption(title, str(payload.get("description") or ""))
+    else:
+        text = add_site_to_keywords(branded_title(title) + "\n" + str(payload.get("description") or "").strip())
     if len(text) > 2200:
         raise BufferBlocked("CAPTION_TOO_LONG_REQUIRES_EDITORIAL_TRUNCATION")
     return {"platform": platform, "media_url": uri.geturl(), "caption": text,
