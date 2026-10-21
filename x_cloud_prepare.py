@@ -12,8 +12,8 @@ from pathlib import Path
 
 CHANNEL_URL = os.getenv("X_SOURCE_CHANNEL", "https://www.youtube.com/@UniversoAnthares/streams")
 SCAN_START = int(os.getenv("X_SCAN_START", "600"))
-SCAN_SECONDS = int(os.getenv("X_SCAN_SECONDS", "300"))
-MIN_SOURCE_SECONDS = int(os.getenv("X_MIN_SOURCE_SECONDS", "1200"))
+SCAN_SECONDS = int(os.getenv("X_SCAN_SECONDS", "780"))
+MIN_SOURCE_SECONDS = int(os.getenv("X_MIN_SOURCE_SECONDS", "1800"))
 WORK = Path(os.getenv("X_CLOUD_WORK", "x-cloud-work"))
 MODEL = os.getenv("X_WHISPER_MODEL", "base")
 INVIDIOUS_BASES = tuple(
@@ -27,11 +27,17 @@ ITAG_HEIGHT = {160:144, 278:144, 133:240, 242:240, 134:360, 243:360, 135:480, 24
 
 def discover_source() -> dict:
     import yt_dlp
-    opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "playlistend": 12, "skip_download": True}
+    opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "playlistend": 60, "skip_download": True}
+    cookie_path = os.getenv("X_YT_COOKIE_FILE", "").strip()
+    if cookie_path and os.path.isfile(cookie_path):
+        opts["cookiefile"] = cookie_path
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(CHANNEL_URL, download=False)
     entries = list((info or {}).get("entries") or [])
-    required_duration = max(MIN_SOURCE_SECONDS, SCAN_START + 150)
+    required_duration = max(MIN_SOURCE_SECONDS, SCAN_START + SCAN_SECONDS)
+    windows = json.loads(os.getenv("X_SOURCE_WINDOWS_JSON", "{}"))
+    if not isinstance(windows, dict):
+        raise RuntimeError("X_SOURCE_WINDOWS_INVALID")
     for e in entries:
         if not isinstance(e, dict):
             continue
@@ -44,7 +50,13 @@ def discover_source() -> dict:
             continue
         if not duration or duration < required_duration:
             continue
-        return {"video_id": vid, "source_url": f"https://www.youtube.com/watch?v={vid}", "title": str(e.get("title") or vid), "duration": duration, "source_class": "long_form"}
+        occupied = {int(v) for v in windows.get(vid, [])}
+        for index in range(16):
+            candidate = SCAN_START + index * SCAN_SECONDS
+            if candidate + SCAN_SECONDS <= duration and candidate not in occupied:
+                return {"video_id": vid, "source_url": f"https://www.youtube.com/watch?v={vid}",
+                        "title": str(e.get("title") or vid), "duration": duration,
+                        "source_class": "long_form", "scan_start": candidate}
     raise RuntimeError(f"Nenhum vídeo longo concluído adequado encontrado no canal (mínimo {required_duration}s).")
 
 
@@ -140,12 +152,39 @@ def download_scan(source_url: str, out: Path) -> None:
     out.unlink(missing_ok=True)
     end = SCAN_START + SCAN_SECONDS
     cmd = [sys.executable, "-m", "yt_dlp", "--no-warnings", "--no-progress", "--download-sections", f"*{SCAN_START}-{end}", "--force-keyframes-at-cuts", "--merge-output-format", "mp4", "-f", "bv*[height<=720]+ba/b[height<=720]/b", "-o", str(out), source_url]
+    cookie_path = os.getenv("X_YT_COOKIE_FILE", "").strip()
+    if cookie_path and os.path.isfile(cookie_path):
+        cmd[3:3] = ["--cookies", cookie_path]
     try:
         subprocess.run(cmd, check=True, timeout=900)
         print("X_SOURCE_ROUTE=YTDLP_DIRECT", flush=True)
     except Exception as exc:
-        print(f"X_SOURCE_DIRECT_FAILED={type(exc).__name__}; trying refreshed Invidious routes", flush=True)
+        print(f"X_SOURCE_DIRECT_FAILED={type(exc).__name__}; trying safe master mirror", flush=True)
         out.unlink(missing_ok=True)
+        mirror = os.getenv("X_SOURCE_MIRROR_URL", "").strip()
+        if mirror:
+            if os.getenv("X_SOURCE_MIRROR_VIDEO_ID", "").strip() != _video_id(source_url):
+                raise RuntimeError("X_SOURCE_MIRROR_ID_MISMATCH")
+            parsed = urllib.parse.urlparse(mirror)
+            if parsed.scheme != "https" or parsed.hostname not in {
+                    "anthares.us", "www.anthares.us", "raw.githubusercontent.com",
+                    "objects.githubusercontent.com", "github.com"}:
+                raise RuntimeError("X_SOURCE_MIRROR_HOST_REJECTED")
+            try:
+                subprocess.run([
+                    "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                    "-ss", str(SCAN_START), "-i", mirror, "-t", str(SCAN_SECONDS),
+                    "-map", "0:v:0", "-map", "0:a:0?",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(out)
+                ], check=True, timeout=1200)
+                if out.exists() and out.stat().st_size >= 100_000:
+                    print("X_SOURCE_ROUTE=HOSTED_MASTER_MIRROR", flush=True)
+                    return
+            except Exception as mirror_exc:
+                print(f"X_SOURCE_MIRROR_FAILED={type(mirror_exc).__name__}", flush=True)
+                out.unlink(missing_ok=True)
+        print("X_SOURCE_MIRROR_UNAVAILABLE; trying Invidious routes", flush=True)
         _download_scan_invidious(source_url, out)
     if not out.exists() or out.stat().st_size < 100_000:
         raise RuntimeError("Trecho de varredura não foi baixado corretamente.")
@@ -182,19 +221,21 @@ def transcribe_words(video: Path) -> list[dict]:
 
 
 def main() -> int:
+    global SCAN_START
     WORK.mkdir(parents=True, exist_ok=True)
     source = discover_source(); scan = WORK / "scan.mp4"
+    SCAN_START = int(source.pop("scan_start"))
     download_scan(source["source_url"], scan)
     source["video"] = probe_video(scan)
     words = transcribe_words(scan)
     payload = {
         "kind": "X_MICROCUT_REQUEST_V1", "account": "lucasyahn", "source": source,
         "scan_start": SCAN_START, "scan_seconds": SCAN_SECONDS,
-        "target_seconds": {"min": 105, "max": 135},
+        "target_seconds": {"min": 520, "max": 780},
         "output_policy": {"orientation": "horizontal", "aspect_ratio": "16:9", "source_class": "long_form"},
         "instructions": {
-            "select": "Escolha um trecho autossuficiente, forte e interessante, de 105 a 135 segundos, sem intro/CTA/bastidor, somente de vídeo longo horizontal 16:9.",
-            "microcut": "Dentro dele remova repetição imediata, falso começo, correção substituída, fillers/hesitações prolongadas, espaços vazios e microapartes que não integram o fluxo. Preserve argumento, nuance e gramática e mantenha o resultado final longo.",
+            "select": "Escolha um trecho autossuficiente, forte e interessante, de 520 a 780 segundos, sem intro/CTA/bastidor, somente de vídeo longo horizontal 16:9.",
+            "microcut": "Dentro dele remova repetição imediata, falso começo, correção substituída, fillers/hesitações prolongadas, espaços vazios e microapartes que não integram o fluxo. Preserve argumento, nuance e gramática e garanta duração final entre 300 e 840 segundos.",
             "format": "Comente JSON X_MICROCUT_PLAN_V1 com start_word_id, end_word_id, remove [{from,to,reason}] e caption <=240 chars.",
         },
         "words": words,

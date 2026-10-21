@@ -1,0 +1,37 @@
+name: X Cloud Long Video Publisher
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: anthares-x-account-publish-serial
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: ${{ vars.ANTHARES_X_LEGACY_FALLBACK_ARM == '1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      X_WORKER_CLIENT_TOKEN: ${{ secrets.ARA_SHARED }}
+      GITHUB_ACTIONS: 'true'
+      RUNNER_ENVIRONMENT: 'github-hosted'
+      RUNNER_OS: 'Linux'
+    steps:
+      - uses: actions/checkout@v4
+      - name: One independently fenced X video; no automatic blind retry
+        run: python -u tools/x_cloud_issue_consumer.py
+      - name: Priority QA incident (deduplicated)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='[QA-P0] X cloud publication blocked or uncertain'
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --json title --jq '.[] | .title' | grep -Fx "$title" || true)"
+          if [ -z "$existing" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "Publication flow failed, uncertainty is fenced. Never blindly retry after an irreversible X POST. Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Inspect and reconcile [X-PUBLISH] issues. Other networks continue."
+          fi

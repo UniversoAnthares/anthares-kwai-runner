@@ -7,6 +7,6 @@ last Render X worker without consuming another service slot.
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 from ara_canary_app import app as ara_app
-from x_render_worker_v3 import app as x_app
+from x_runtime_worker import app as x_app
 
 app = DispatcherMiddleware(ara_app, {"/x": x_app})

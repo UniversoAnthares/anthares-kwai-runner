@@ -17,12 +17,12 @@ concurrency:
 jobs:
   fullflow:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       X_SOURCE_CHANNEL: 'https://www.youtube.com/@UniversoAnthares/streams'
       X_SCAN_START: '600'
-      X_SCAN_SECONDS: '300'
-      X_MIN_SOURCE_SECONDS: '1200'
+      X_SCAN_SECONDS: '780'
+      X_MIN_SOURCE_SECONDS: '1800'
       X_WHISPER_MODEL: 'base'
       PYTHONUTF8: '1'
     steps:
@@ -34,12 +34,17 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           python -m pip install --disable-pip-version-check 'yt-dlp[default]' yt-dlp-ejs faster-whisper
+      - name: Restore authenticated YouTube fallback
+        env:
+          YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+        run: python tools/x_restore_youtube_cookies.py
       - name: Extract real source, select strategic long cut, render 16:9
         run: python -u x_real_fullflow_once.py
       - name: Publish temporary public media branch
         id: media
         run: |
           set -e
+          test "$(stat -c%s x-cloud-output.mp4)" -lt 99000000 || { echo 'X_MEDIA_GITHUB_FILE_LIMIT'; exit 1; }
           cp x-cloud-output.mp4 /tmp/x-cloud-output.mp4
           cp x-render-result.json /tmp/x-render-result.json
           git config user.name 'Anthares X Real Full Flow'
@@ -70,9 +75,9 @@ jobs:
           import json,os,urllib.request
           result=json.load(open('/tmp/x-render-result.json',encoding='utf-8'))
           body={
-            'platform':'x','account':'lucasyahn','caption':result['caption'],'media_url':os.environ['MEDIA_URL'],
+            'platform':'x','account':'lucasyahn','duration_class':'long','caption':result['caption'],'media_url':os.environ['MEDIA_URL'],
             'source_id':result['source']['video_id'],'source_url':result['source']['source_url'],
-            'source_route':result['source_route'],'segment_start':result['segment_start'],'segment_end':result['segment_end'],
+            'source_route':result['source_route'],'scan_start':result['scan_start'],'segment_start':result['segment_start'],'segment_end':result['segment_end'],
             'microedit':result['microedit'],'output_video':result['output_video'],'real_fullflow_test':True
           }
           payload=json.dumps({'title':f'[X-PUBLISH] real-longform-{result["source"]["video_id"]}-{os.environ["GITHUB_RUN_ID"]}','body':'```json\n'+json.dumps(body,ensure_ascii=False,indent=2)+'\n```'},ensure_ascii=False).encode()
@@ -89,3 +94,10 @@ jobs:
           path: |
             x-render-result.json
             x-cloud-output.mp4
+
+      - name: Alert QA on X publication failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          X_QA_PHASE: x-real-fullflow-once
+        run: python tools/x_notify_qa.py

@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY . /app
-RUN pip install --no-cache-dir flask gunicorn playwright requests cryptography \
+RUN pip install --no-cache-dir flask gunicorn playwright requests cryptography "psycopg[binary]" \
     && python -m playwright install chromium
 
 EXPOSE 10000
-CMD ["sh","-c","gunicorn --workers 1 --threads 4 --timeout 180 --bind 0.0.0.0:${PORT} --chdir infra x_render_worker_v3:app"]
+CMD ["sh","-c","gunicorn --workers 1 --threads 4 --timeout 180 --bind 0.0.0.0:${PORT} --chdir infra x_runtime_worker:app"]

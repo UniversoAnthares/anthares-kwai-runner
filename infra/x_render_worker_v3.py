@@ -3,8 +3,15 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import tempfile
 import time
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
+sys.path.insert(0,os.path.dirname(os.path.dirname(__file__)))
+from tools.x_publication_safety import validate_video, verified_post_url
+from x_durable_ledger import begin as durable_begin, confirm as durable_confirm
 
 import requests
 from cryptography.hazmat.primitives import hashes
@@ -16,14 +23,17 @@ from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
 EXPECTED = os.getenv("EXPECTED_X_HANDLE", "lucasyahn").strip().lstrip("@").lower()
-TOKEN = os.getenv("X_WORKER_TOKEN", "")
+TOKEN = os.getenv("X_WORKER_TOKEN") or os.getenv("ARA_SHARED", "")
+CLIENT_TOKEN = os.getenv("X_CLIENT_TOKEN") or os.getenv("ARA_SHARED", "")
 VAULT_URL = os.getenv("X_VAULT_URL", "https://anthares-x-vault.anthares1.workers.dev/state")
 STATE_PATH = os.getenv("X_STATE_PATH", "/tmp/anthares-x-storage-state.json")
 P256_ORDER = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
 
 
 def _auth_ok(req):
-    return bool(TOKEN) and req.headers.get("Authorization", "") == "Bearer " + TOKEN
+    presented = req.headers.get("Authorization", "")
+    return any(secrets.compare_digest(presented, "Bearer " + credential)
+               for credential in (TOKEN, CLIENT_TOKEN) if credential)
 
 
 def _validate_state(data):
@@ -156,31 +166,59 @@ def _identity(page):
     return handle
 
 
-def _latest(page, handle):
+def _statuses(page, handle):
     page.goto(f"https://x.com/{handle}", wait_until="domcontentloaded", timeout=45000)
     page.wait_for_timeout(1400)
+    posts = set()
     links = page.locator('a[href*="/status/"]')
-    for i in range(min(links.count(), 60)):
+    for i in range(min(links.count(), 80)):
         href = links.nth(i).get_attribute("href") or ""
-        m = re.search(r"/status/(\d+)", href)
+        m = re.search(r"^/" + re.escape(handle) + r"/status/(\\d+)(?:/|$)", href, re.I)
         if m:
-            return f"https://x.com/{handle}/status/{m.group(1)}"
-    return ""
+            posts.add(f"https://x.com/{handle}/status/{m.group(1)}")
+    return posts
+
+
+def _trusted_media(url):
+    try:
+        p = urlparse(url)
+        return (p.scheme == "https" and not p.username and not p.password
+                and p.port in (None, 443) and p.hostname in {
+                    "anthares.us", "www.anthares.us", "github.com",
+                    "raw.githubusercontent.com", "objects.githubusercontent.com",
+                    "release-assets.githubusercontent.com"})
+    except (TypeError, ValueError):
+        return False
 
 
 def _download_media(url):
-    r = requests.get(url, timeout=90, allow_redirects=True)
-    r.raise_for_status()
-    ctype = (r.headers.get("content-type") or "").lower()
-    if len(r.content) < 1024 or len(r.content) > 50_000_000 or "text/html" in ctype:
-        raise RuntimeError("invalid media response")
+    if not _trusted_media(url):
+        raise RuntimeError("X_MEDIA_URL_UNTRUSTED")
     fd, path = tempfile.mkstemp(prefix="anthares-x-", suffix=".mp4")
-    with os.fdopen(fd, "wb") as f:
-        f.write(r.content)
-    return path
+    size = 0
+    try:
+        with os.fdopen(fd, "wb") as output, requests.get(
+                url, timeout=(15,90), stream=True, allow_redirects=True) as r:
+            r.raise_for_status()
+            if not _trusted_media(r.url):
+                raise RuntimeError("X_MEDIA_REDIRECT_UNTRUSTED")
+            if "text/html" in (r.headers.get("content-type") or "").lower():
+                raise RuntimeError("X_MEDIA_HTML_RESPONSE")
+            for chunk in r.iter_content(262144):
+                size += len(chunk)
+                if size > 99_000_000: raise RuntimeError("X_MEDIA_OVER_99MB")
+                output.write(chunk)
+        if size < 100_000: raise RuntimeError("X_MEDIA_TOO_SMALL")
+        validate_video(path)
+        return path
+    except Exception:
+        os.unlink(path)
+        raise
 
 
-def _publish(text, media_url):
+
+
+def _publish(text, media_url, idempotency_key):
     media_path = _download_media(media_url)
     try:
         with sync_playwright() as p:
@@ -189,7 +227,7 @@ def _publish(text, media_url):
             page = context.new_page()
             try:
                 handle = _identity(page)
-                before = _latest(page, handle)
+                before = _statuses(page, handle)
                 page.goto("https://x.com/compose/post", wait_until="domcontentloaded", timeout=45000)
                 page.wait_for_timeout(1000)
                 editor = page.locator('[data-testid="tweetTextarea_0"]').first
@@ -199,8 +237,10 @@ def _publish(text, media_url):
                 page.get_by_label("Remove media").wait_for(state="visible", timeout=60000)
                 button = page.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"]').first
                 deadline = time.time() + 30
+                attempt = None
                 while time.time() < deadline:
                     if button.is_enabled():
+                        attempt = durable_begin(idempotency_key)
                         button.click()
                         break
                     page.wait_for_timeout(500)
@@ -209,14 +249,22 @@ def _publish(text, media_url):
                 deadline = time.time() + 75
                 while time.time() < deadline:
                     page.wait_for_timeout(1800)
-                    after = _latest(page, handle)
-                    if after and after != before:
+                    candidates = _statuses(page, handle) - before
+                    if candidates:
+                        after = sorted(candidates, reverse=True)[0]
                         check = context.new_page()
                         check.goto(after, wait_until="domcontentloaded", timeout=45000)
                         check.wait_for_timeout(1800)
                         if check.locator("video").count() < 1:
-                            raise RuntimeError("published post has no visible video")
+                            raise RuntimeError("X_POST_UNCERTAIN_VIDEO_NOT_VISIBLE")
+                        posted_text=" ".join(check.locator('[data-testid="tweetText"]').all_text_contents())
+                        if " ".join(text.split()) not in " ".join(posted_text.split()):
+                            raise RuntimeError("X_POST_UNCERTAIN_CAPTION_MISMATCH")
+                        if verified_post_url(after)!=after:
+                            raise RuntimeError("X_POST_UNCERTAIN_ACCOUNT_MISMATCH")
+                        check.close()
                         _save_state(context.storage_state())
+                        durable_confirm(attempt,after)
                         return {"handle": handle, "post_url": after, "video_verified": True}
                 raise RuntimeError("publication not confirmed")
             finally:
@@ -240,8 +288,21 @@ def health():
     return jsonify(ok=True, vault_ready=vault, state_configured=bool(os.getenv("X_STORAGE_STATE", "") or os.path.exists(STATE_PATH)))
 
 
+@app.get("/post-status")
+def post_status():
+    if not _auth_ok(request):
+        return jsonify(ok=False, error="unauthorized"), 401
+    try:
+        from x_durable_ledger import readback
+        return jsonify(ok=True, **readback(request.args.get("idempotency_key", "")))
+    except Exception as exc:
+        return jsonify(ok=False, error=type(exc).__name__), 503
+
+
 @app.get("/verify")
 def verify():
+    if not _auth_ok(request):
+        return jsonify(ok=False, error="unauthorized"), 401
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
@@ -253,6 +314,27 @@ def verify():
         return jsonify(ok=True, handle=handle, durable=True)
     except Exception as exc:
         return jsonify(ok=False, error=str(exc)), 503
+
+
+
+
+@app.get("/post-status")
+def post_status():
+    if not _auth_ok(request):
+        return jsonify(ok=False, error="unauthorized"), 401
+    try:
+        key = request.args.get("idempotency_key", "")
+        filename = _attempt_file(key)
+        if not filename.exists():
+            return jsonify(ok=True, status="UNKNOWN_UNCERTAIN"), 200
+        with filename.open("r", encoding="utf-8") as f:
+            data=json.load(f)
+        return jsonify(ok=True, status=data.get("status","UNKNOWN_UNCERTAIN"),
+                       post_url=data.get("post_url","")), 200
+    except ValueError:
+        return jsonify(ok=False, error="invalid_idempotency_key"), 400
+    except Exception:
+        return jsonify(ok=False, error="ledger_unavailable"), 503
 
 
 @app.post("/ingest-state")
@@ -275,10 +357,11 @@ def post():
     body = request.get_json(silent=True) or {}
     text = str(body.get("text") or "")[:280]
     media_url = str(body.get("media_url") or "")
-    if not text or not media_url:
-        return jsonify(ok=False, error="text and media_url required"), 400
+    idempotency_key = str(body.get("idempotency_key") or "")
+    if not text or not media_url or not re.fullmatch(r"[A-Za-z0-9_.:-]{12,160}", idempotency_key):
+        return jsonify(ok=False, error="text/media_url/idempotency_key required"), 400
     try:
-        return jsonify(ok=True, **_publish(text, media_url))
+        return jsonify(ok=True, **_publish(text, media_url, idempotency_key))
     except Exception as exc:
         return jsonify(ok=False, error=str(exc)), 500
 

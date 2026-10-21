@@ -98,7 +98,7 @@ def probe(path: Path) -> dict:
     d=json.loads(p.stdout or '{}'); st=(d.get('streams') or [{}])[0]; fmt=d.get('format') or {}
     w=int(st.get('width') or 0); h=int(st.get('height') or 0); dur=float(fmt.get('duration') or 0)
     if not w or not h or w<=h or abs(w/h-16/9)>0.04: raise RuntimeError(f'X source is not horizontal 16:9: {w}x{h}')
-    if dur < 140: raise RuntimeError(f'scan too short: {dur:.2f}s')
+    if dur < 520: raise RuntimeError(f'scan too short: {dur:.2f}s')
     return {'width':w,'height':h,'duration':dur,'aspect_ratio':round(w/h,4)}
 
 
@@ -116,12 +116,12 @@ def transcribe(path: Path):
 
 
 def choose_window(words, total):
-    target=125.0; best=None
+    target=650.0; best=None
     for i in range(0,len(words),6):
         lo=words[i]['s']; hi=min(total,lo+target)
-        if hi-lo<112: continue
+        if hi-lo<520: continue
         subset=[w for w in words if lo<=w['s'] and w['e']<=hi]
-        if len(subset)<80: continue
+        if len(subset)<250: continue
         toks=[w['n'] for w in subset if w['n']]
         content=[t for t in toks if len(t)>=4 and t not in FILLERS]
         unique=len(set(content)); density=len(subset)/(hi-lo); cta=sum(t in CTA for t in toks); fillers=sum(t in FILLERS for t in toks)
@@ -131,15 +131,15 @@ def choose_window(words, total):
         if best is None or score>best[0]: best=(score,lo,hi,subset)
     if not best: raise RuntimeError('no strategic long-form window')
     score,lo,hi,subset=best
-    # align boundaries to nearby punctuation without shrinking below 112s
+    # align boundaries to nearby punctuation without shrinking below 520s
     starts=[w for w in words if lo-6<=w['e']<=lo+6 and str(w['t']).endswith(('.', '?', '!'))]
     if starts:
         candidate=min(starts,key=lambda w:abs(w['e']-lo))['e']
-        if hi-candidate>=112: lo=candidate
+        if hi-candidate>=520: lo=candidate
     ends=[w for w in words if hi-6<=w['e']<=hi+6 and str(w['t']).endswith(('.', '?', '!'))]
     if ends:
         candidate=min(ends,key=lambda w:abs(w['e']-hi))['e']
-        if candidate-lo<=135 and candidate-lo>=112: hi=candidate
+        if candidate-lo<=780 and candidate-lo>=520: hi=candidate
     selected=[w for w in words if lo<=w['s'] and w['e']<=hi]
     return lo,hi,selected,score
 
@@ -162,7 +162,7 @@ def removals(selected, lo, hi):
         if not merged or r['start']>merged[-1]['end']+0.05: merged.append({'start':r['start'],'end':r['end'],'reasons':[r['reason']]})
         else:
             merged[-1]['end']=max(merged[-1]['end'],r['end']); merged[-1]['reasons'].append(r['reason'])
-    accepted=[]; used=0; budget=min(12.0,max(0,(hi-lo)-105.0))
+    accepted=[]; used=0; budget=min(50.0,max(0,(hi-lo)-510.0))
     for r in sorted(merged,key=lambda x:(x['end']-x['start'],x['start'])):
         span=r['end']-r['start']
         if used+span<=budget:
@@ -184,8 +184,7 @@ def render(scan: Path,lo,hi,remove,out: Path):
         seq.append(f'[v{i}][a{i}]')
     flt.append(''.join(seq)+f'concat=n={len(keep)}:v=1:a=1[v][a]')
     subprocess.run(['ffmpeg','-y','-hide_banner','-loglevel','error','-i',str(scan),'-filter_complex',';'.join(flt),'-map','[v]','-map','[a]',
-                    '-vf','scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1',
-                    '-c:v','libx264','-preset','veryfast','-crf','20','-maxrate','3500k','-bufsize','7000k','-c:a','aac','-b:a','160k','-movflags','+faststart',str(out)],check=True,timeout=900)
+                    '-c:v','libx264','-preset','veryfast','-crf','23','-maxrate','800k','-bufsize','1600k','-c:a','aac','-b:a','160k','-movflags','+faststart',str(out)],check=True,timeout=900)
 
 
 def caption_for(source: dict, selected):
@@ -209,7 +208,7 @@ def main():
     removed=sum(r['end']-r['start'] for r in remove)
     render(scan,lo,hi,remove,OUT)
     outmeta=probe(OUT)
-    if outmeta['duration']<105 or outmeta['duration']>135: raise RuntimeError(f'final long-form duration invalid: {outmeta["duration"]}')
+    if outmeta['duration']<300 or outmeta['duration']>840: raise RuntimeError(f'final long-form duration invalid: {outmeta["duration"]}')
     caption=caption_for(source,selected)
     result={
         'kind':'X_REAL_FULLFLOW_RESULT_V1','account':'lucasyahn','caption':caption,'source':source,'source_route':route,

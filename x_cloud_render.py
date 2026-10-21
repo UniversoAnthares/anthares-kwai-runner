@@ -99,7 +99,7 @@ def plan_intervals(req: dict, plan: dict) -> tuple[float, float, list[dict], dic
     merged = merge_intervals(rows, lo, hi, 0.30)
     removed = sum(r["end"]-r["start"] for r in merged)
     final_est = raw_duration - removed
-    if final_est < 30:
+    if final_est < 300:
         raise RuntimeError(f"Microedição reduziria demais o corte: {final_est:.2f}s")
     meta = {
         "raw_duration":round(raw_duration,3),
@@ -131,7 +131,7 @@ def render_microcut(scan: Path, lo: float, hi: float, removals: list[dict], edit
 
 def horizontalize(edited: Path, out: Path) -> None:
     vf="scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1"
-    cmd=["ffmpeg","-y","-hide_banner","-loglevel","error","-i",str(edited),"-vf",vf,"-map","0:v:0","-map","0:a:0","-c:v","libx264","-preset","veryfast","-crf","20","-maxrate","3500k","-bufsize","7000k","-c:a","aac","-b:a","160k","-movflags","+faststart",str(out)]
+    cmd=["ffmpeg","-y","-hide_banner","-loglevel","error","-i",str(edited),"-vf",vf,"-map","0:v:0","-map","0:a:0","-c:v","libx264","-preset","veryfast","-crf","23","-maxrate","800k","-bufsize","1600k","-c:a","aac","-b:a","160k","-movflags","+faststart",str(out)]
     subprocess.run(cmd,check=True,timeout=900)
     if not out.exists() or out.stat().st_size < 200_000:
         raise RuntimeError("Arquivo final inválido.")
@@ -169,6 +169,8 @@ def main() -> int:
     render_microcut(scan,lo,hi,removals,edited)
     horizontalize(edited,OUT)
     out_meta=media_meta(OUT)
+    if not 300 <= out_meta["duration"] <= 840:
+        raise RuntimeError("X_FINAL_DURATION_OUTSIDE_LONG_FORM_POLICY")
     meta["final_duration"]=out_meta["duration"]
     meta["file_bytes"]=OUT.stat().st_size
     meta["output_video"]=out_meta
