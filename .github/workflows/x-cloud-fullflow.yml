@@ -224,3 +224,18 @@ jobs:
           path: |
             x-render-result.json
             x-cloud-output.mp4
+
+  qa-watchdog:
+    if: ${{ always() && (needs.prepare.result == 'failure' || needs.render.result == 'failure') }}
+    needs: [prepare, render]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Alert Anthares QA without blocking other networks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          X_QA_PHASE: x-cloud-fullflow
+        run: python tools/x_notify_qa.py
