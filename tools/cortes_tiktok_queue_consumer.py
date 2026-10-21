@@ -71,8 +71,31 @@ def worker_auth():
     return oidc("anthares-render-worker")
 
 
+BACKENDS = (
+    "https://br-crimson-unit-b89nau08-cortestiktok.compute.c-14.us-east-1.aws.neon.tech/",
+    "https://anthares-cortes-tiktok-ha.anthares1.workers.dev/",
+    QUEUE,
+)
+_CHOSEN = None
+
+
+def queue_backend():
+    global _CHOSEN
+    if _CHOSEN:
+        return _CHOSEN
+    for base in BACKENDS:
+        try:
+            result = http(base.rstrip("/") + "?action=health", timeout=12)
+            if result.get("ok") and result.get("service") == "cortes-tiktok-neon" and result.get("fencing"):
+                _CHOSEN = base
+                return base
+        except (SafeStop, OSError, TimeoutError):
+            continue
+    raise SafeStop("TIKTOK_ALL_QUEUE_PROVIDERS_DOWN")
+
+
 def qcall(action, credentials, payload=None):
-    return http(QUEUE + "?action=" + action, credentials, body=payload)
+    return http(queue_backend().rstrip("/") + "?action=" + action, credentials, body=payload)
 
 
 def wcall(route, credentials, payload=None, timeout=120):
