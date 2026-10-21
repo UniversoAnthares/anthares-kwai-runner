@@ -1,73 +1,53 @@
-name: Mirror GitHub main to Codeberg (verified fast-forward)
+name: Mirror to Codeberg
+
 on:
   push:
     branches: [main]
   schedule:
-    - cron: '17,47 * * * *'
+    - cron: '13,43 * * * *'
   workflow_dispatch: {}
+
 permissions:
   contents: read
 
-# Coalesce push storms: only the newest queued main-branch snapshot should
-# consume a hosted runner. Older pending mirrors must not starve publication.
+# Latest main SHA supersedes older requests. No ref is ever force-pushed.
 concurrency:
-  group: codeberg-main-verified-mirror
+  group: codeberg-safe-main-mirror
   cancel-in-progress: true
 
 jobs:
   mirror:
     runs-on: ubuntu-24.04
-    timeout-minutes: 7
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false
-      - name: Verify target and enforce no-force, fast-forward-only update
-        shell: bash
+      - name: Verify and mirror primary branch and tags without force
         env:
           CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
+        shell: bash
         run: |
           set -euo pipefail
-          export GIT_TERMINAL_PROMPT=0
           if [ -z "${CODEBERG_PUSH_URL:-}" ]; then
-            echo "::error::CODEBERG_MIRROR_AUTH_REQUIRED"
-            exit 78
-          fi
-          public="https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git"
-          git fetch --no-tags origin 'refs/heads/main:refs/remotes/origin/main'
-          latest="$(git rev-parse refs/remotes/origin/main)"
-          current="$(git ls-remote "$public" 'refs/heads/main' | cut -f1)"
-          if [ -z "$current" ]; then
-            echo "::error::CODEBERG_MAIN_NOT_FOUND"
+            echo "::error::CODEBERG_PUSH_URL_MISSING"
             exit 2
           fi
-          git fetch --no-tags "$public" 'refs/heads/main:refs/remotes/codeberg-audit/main'
-          if ! git merge-base --is-ancestor "$current" "$latest"; then
-            echo "::error::CODEBERG_DIVERGED_NO_PUSH"
-            exit 3
+          git remote add codeberg "$CODEBERG_PUSH_URL"
+          git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main' '+refs/tags/*:refs/tags/*'
+          source_sha="$(git rev-parse refs/remotes/origin/main)"
+          git fetch --quiet codeberg refs/heads/main:refs/remotes/codeberg/main || true
+          if git rev-parse -q --verify refs/remotes/codeberg/main >/dev/null; then
+            if ! git merge-base --is-ancestor refs/remotes/codeberg/main refs/remotes/origin/main; then
+              echo "::error::CODEBERG_DIVERGED_NON_FAST_FORWARD_STOP"
+              exit 3
+            fi
           fi
-          git -c core.askPass= push --quiet "$CODEBERG_PUSH_URL" "$latest:refs/heads/main"
-          mirrored="$(git ls-remote "$public" 'refs/heads/main' | cut -f1)"
-          if [ "$latest" != "$mirrored" ]; then
-            echo "::error::CODEBERG_POST_PUSH_SHA_MISMATCH"
+          git push codeberg refs/remotes/origin/main:refs/heads/main
+          git push codeberg 'refs/tags/*:refs/tags/*'
+          destination_sha="$(git ls-remote codeberg refs/heads/main | awk '{print $1}')"
+          if [ "$source_sha" != "$destination_sha" ]; then
+            echo "::error::CODEBERG_MAIN_SHA_MISMATCH"
             exit 4
           fi
-          echo "CODEBERG_MAIN_FAST_FORWARD_VERIFIED=PASS"
-          echo "CODEBERG_MAIN_SHA=$mirrored"
-
-      - name: Reconcile Codeberg default branch and Actions with existing scoped credential
-        shell: bash
-        env:
-          CODEBERG_API_TOKEN: ${{ secrets.CODEBERG_API_TOKEN }}
-          CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
-        run: |
-          set -euo pipefail
-          python3 tools/codeberg_admin_reconcile.py
-
-      - name: Verify mirror SHA and repository settings
-        shell: bash
-        run: |
-          set -euo pipefail
-          expected="$(git rev-parse refs/remotes/origin/main)"
-          EXPECTED_GITHUB_MAIN_SHA="$expected" python3 tools/codeberg_mirror_health.py
+          echo "CODEBERG_MAIN_SYNC_PROVEN=$source_sha"
