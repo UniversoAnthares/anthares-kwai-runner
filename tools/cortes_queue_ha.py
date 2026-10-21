@@ -16,8 +16,8 @@ import urllib.request
 
 AUDIENCE = "https://anthares-remote-primary.vercel.app/api/cortes-queue"
 PROVIDERS = (
-    AUDIENCE,
     "https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/",
+    AUDIENCE,
     "https://anthares-cortes-neon-edge-ha.anthares1.workers.dev/",
     "https://anthares-cortes-queue-ha.anthares1.workers.dev/",
 )
