@@ -47,6 +47,30 @@ def main():
             print("PIN_BUFFER_CHANNELS_BOARD_FOUND="+str(any(str(b.get("serviceId"))==PINTEREST_PUBLIC_BOARD_ID for b in boards)).lower())
             return boards
         inspect("CHANNELS_METADATA",q,fromlist)
+    # Inspect Buffer's actual dueAt/status after a one-time shareNow edit yielded
+    # an uncertain mutation response. No retries of that edit are permitted.
+    from urllib.parse import urlparse
+    import re
+    for idx,post_id in enumerate(("6ad908b1c2fd6c7a0efc0f97",
+                                  "6ad914067d80fe56e7308119"),1):
+        q=('query CortesPinterestPostReadback { post(input: { id: '+
+           json.dumps(post_id)+
+           ' }) { id channelId channelService status dueAt schedulingType externalLink '
+           'metadata { ... on PinterestPostMetadata { board { serviceId } } } } }')
+        def get_status(result):
+            post=result.get("post") or {}
+            if post.get("id")!=post_id or post.get("channelId")!=ch:
+                raise ValueError("UNVERIFIED")
+            board=((post.get("metadata") or {}).get("board") or {}).get("serviceId")
+            print("PIN_BUFFER_POST_"+str(idx)+"_STATUS="+str(post.get("status") or "").lower(),flush=True)
+            print("PIN_BUFFER_POST_"+str(idx)+"_DUE="+str(post.get("dueAt") or ""),flush=True)
+            print("PIN_BUFFER_POST_"+str(idx)+"_BOARD_VALID="+str(str(board)==PINTEREST_PUBLIC_BOARD_ID).lower(),flush=True)
+            link=str(post.get("externalLink") or "")
+            uri=urlparse(link)
+            if uri.scheme=="https" and uri.hostname in ("www.pinterest.com","pinterest.com","br.pinterest.com") and re.fullmatch(r"/pin/[0-9]+/?",uri.path):
+                print("PIN_BUFFER_POST_"+str(idx)+"_LIVE_URL="+link,flush=True)
+            return post
+        inspect("POST_"+str(idx),q,get_status)
     return 0
 
 if __name__=="__main__":
