@@ -13,7 +13,7 @@ permissions:
   contents: read
   id-token: write
 concurrency:
-  group: cortes-instagram-buffer-cloud-producer
+  group: cortes-instagram-onetime-exclusive-20261021
   cancel-in-progress: false
 jobs:
   publish-and-reconcile:
