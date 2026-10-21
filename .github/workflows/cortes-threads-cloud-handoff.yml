@@ -1,0 +1,51 @@
+name: CORTES Threads Cloud Handoff (fenced)
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish exactly one Neon-reserved clip after local device acknowledged pause'
+        required: true
+        type: boolean
+        default: false
+  push:
+    branches: [fix/threads-cloud-handoff-20261021]
+    paths:
+      - 'tools/cortes_threads_cloud_handoff.mjs'
+      - 'tools/cortes_threads_cloud_feed.mjs'
+      - 'tools/cortes_threads_cloud_captions.mjs'
+      - 'infra/neon-cortes-threads-execution/**'
+      - '.github/workflows/cortes-threads-cloud-handoff.yml'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: cortes-threads-cloud-single-writer
+  cancel-in-progress: false
+jobs:
+  cloud:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      THREADS_ALLOW_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify scripts and fail-closed fencing without side effects
+        run: |
+          node --check tools/cortes_threads_cloud_handoff.mjs
+          node --check tools/cortes_threads_cloud_feed.mjs
+          node --check tools/cortes_threads_cloud_captions.mjs
+          node --check infra/neon-cortes-threads-execution/index.mjs
+      - name: Run cloud and local fencing contract tests
+        run: node --test tests/threads_cloud_handoff.test.mjs
+      - name: Read account token directly from existing Bitwarden Secrets Manager
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            4ef756b1-f948-4780-af26-b4ea014637bf > THREADS_ACCESS_TOKEN
+      - name: Verify Threads account and execute dry run or authorized single publish
+        run: node tools/cortes_threads_cloud_handoff.mjs
