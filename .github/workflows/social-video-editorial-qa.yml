@@ -11,6 +11,8 @@ on:
       - 'tools/kwai_physical_queue_daemon.py'
       - 'direct-tiktok-publisher/tiktok_cloud_publish.py'
       - 'tests/test_social_video_editorial.py'
+      - 'anthares_publisher/linkedin_editorial.py'
+      - 'tests/test_linkedin_editorial.py'
       - 'tests/test_media_model.py'
       - 'cloudflare-worker/patches/apply-publisher-target-v17.py'
       - 'vercel-ara-primary/api/cortes-queue.mjs'
@@ -47,6 +49,7 @@ jobs:
       - name: Run idempotence, account and quota contracts without network calls
         run: |
           python -m unittest discover -s tests -p test_social_video_editorial.py -v
+          python -m unittest discover -s tests -p test_linkedin_editorial.py -v
           python -m unittest discover -s tests -p test_buffer_three_channels.py -v
           python -m unittest discover -s tests -p test_cortes_buffer_linkedin_cloud.py -v
           python -m unittest discover -s tests -p test_cortes_linkedin_neon_fanout.py -v
