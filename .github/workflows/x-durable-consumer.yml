@@ -32,3 +32,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify exactly one X issue and attempt with durable evidence
         run: python -m tools.x_issue_publisher
+
+      - name: Alert QA on X publication failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          X_QA_PHASE: x-durable-consumer
+        run: python tools/x_notify_qa.py
