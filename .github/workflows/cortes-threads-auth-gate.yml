@@ -1,0 +1,15 @@
+name: CORTES Threads - Cloud API Auth Gate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auth:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Threads cloud API identity without publishing
+        env:
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: node tools/cortes_threads_auth_gate.mjs
