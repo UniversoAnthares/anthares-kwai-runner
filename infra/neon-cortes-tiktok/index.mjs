@@ -219,7 +219,15 @@ async function markFail(b){
 async function handler(req,res){
  try{
   const u=new URL(req.url,'https://local.invalid'),action=u.searchParams.get('action')||'';
-  if(req.method==='GET'&&action==='health'){await schema();return reply(res,200,{ok:true,service:'cortes-tiktok-neon',isolation:'separate_from_kwai',fencing:true});}
+  if(req.method==='GET'&&action==='health'){
+    await schema();
+    const check=await pool.query('SELECT count(*)::int AS total FROM public.cortes_tiktok_publications');
+    if(!check.rows.length || !Number.isInteger(Number(check.rows[0].total)))
+      return reply(res,503,{ok:false,error:'neon_ledger_count_unverified'});
+    return reply(res,200,{ok:true,service:'cortes-tiktok-neon',
+      isolation:'separate_from_kwai',fencing:true,
+      db_ledger_total:Number(check.rows[0].total)});
+  }
   const role=await githubRole(req);
   if(!role)return reply(res,401,{ok:false,error:'unauthorized_oidc'});
   const b=body(req);
