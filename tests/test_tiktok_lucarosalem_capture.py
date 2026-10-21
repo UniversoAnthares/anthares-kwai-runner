@@ -12,17 +12,17 @@ spec.loader.exec_module(module)
 
 class SecondaryTikTokIdentityTest(unittest.TestCase):
     def test_exact_redirect(self):
-        self.assertTrue(module.verified_identity("https://www.tiktok.com/@lucarosalem", "{}"))
+        self.assertTrue(module.verified_identity("https://www.tiktok.com/@lucasrosalem4", "{}"))
         self.assertFalse(module.verified_identity("https://www.tiktok.com/@universo.anthares", "{}"))
-        self.assertFalse(module.verified_identity("https://www.tiktok.com/@lucasrosalem4", "{}"))
-        self.assertFalse(module.verified_identity("https://evil.example/@lucarosalem", "{}"))
+        self.assertFalse(module.verified_identity("https://www.tiktok.com/@lucarosalem", "{}"))
+        self.assertFalse(module.verified_identity("https://evil.example/@lucasrosalem4", "{}"))
 
     def test_reject_contradictory_hydration(self):
         payload='{"__DEFAULT_SCOPE__":{"webapp.app-context":{"user":{"uniqueId":"universo.anthares"}}}}'
-        self.assertFalse(module.verified_identity("https://www.tiktok.com/@lucarosalem",payload))
+        self.assertFalse(module.verified_identity("https://www.tiktok.com/@lucasrosalem4",payload))
 
     def test_accept_matching_authenticated_hydration(self):
-        payload='{"__DEFAULT_SCOPE__":{"webapp.app-context":{"user":{"uniqueId":"lucarosalem"}}}}'
+        payload='{"__DEFAULT_SCOPE__":{"webapp.app-context":{"user":{"uniqueId":"lucasrosalem4"}}}}'
         self.assertTrue(module.verified_identity("https://www.tiktok.com/profile",payload))
         self.assertFalse(module.verified_identity("https://www.tiktok.com/login", "{}"))
 
