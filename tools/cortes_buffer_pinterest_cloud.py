@@ -157,5 +157,8 @@ def main():
 if __name__=="__main__":
     try: sys.exit(main())
     except Exception as e:
-        print(json.dumps({"pinterest_cloud":"BLOCKED","reason":type(e).__name__}))
+        code=(str(e) if isinstance(e,BufferBlocked) and
+              str(e).startswith(("BUFFER_","PINTEREST_","MASTER_","TITLE_","DURATION_","CAPTION_"))
+              else type(e).__name__)
+        print(json.dumps({"pinterest_cloud":"BLOCKED","reason":code}))
         sys.exit(2)
