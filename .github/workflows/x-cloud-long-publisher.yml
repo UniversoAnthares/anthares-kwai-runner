@@ -1,24 +1,21 @@
 name: X Cloud Long Video Publisher
 on:
   workflow_dispatch:
-  issues:
-    types: [opened]
-  schedule:
-    - cron: '*/10 * * * *'
+
 permissions:
   contents: read
   issues: write
 concurrency:
-  group: anthares-x-long-cloud-single-publisher
+  group: anthares-x-account-publish-serial
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.event_name != 'issues' || startsWith(github.event.issue.title, '[X-PUBLISH]')
+    if: ${{ vars.ANTHARES_X_LEGACY_FALLBACK_ARM == '1' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       GH_TOKEN: ${{ github.token }}
-      X_WORKER_CLIENT_TOKEN: ${{ secrets.X_WORKER_TOKEN || secrets.ARA_SHARED }}
+      X_WORKER_CLIENT_TOKEN: ${{ secrets.ARA_SHARED }}
       GITHUB_ACTIONS: 'true'
       RUNNER_ENVIRONMENT: 'github-hosted'
       RUNNER_OS: 'Linux'
