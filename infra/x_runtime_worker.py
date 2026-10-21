@@ -55,7 +55,7 @@ def _statuses(page, handle: str) -> set[str]:
     links = page.locator('a[href*="/status/"]')
     for i in range(min(links.count(), 100)):
         href = links.nth(i).get_attribute("href") or ""
-        matched = re.search(r"^/(?:%s)/status/(\\d+)(?:/|$)" % re.escape(handle), href, re.I)
+        matched = re.search(r"^/(?:%s)/status/(\d+)(?:/|$)" % re.escape(handle), href, re.I)
         if matched:
             urls.add(f"https://x.com/{handle}/status/{matched.group(1)}")
     return urls
