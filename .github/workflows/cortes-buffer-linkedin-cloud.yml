@@ -4,7 +4,7 @@ on:
     branches: [main]
     paths: ['.github/workflows/cortes-buffer-linkedin-cloud.yml']
   schedule:
-    - cron: '7,22,37,52 * * * *'
+    - cron: '3,13,23,33,43,53 * * * *'
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -14,6 +14,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish-and-reconcile:
+    # Independently scheduled; never blocks any other network. Same-day drain,
+    # hard provider quotas and shared Neon dedupe/fencing still apply.
     # Excludes self-hosted machines and keeps a master switch for emergency pause.
     if: ${{ vars.CORTES_LINKEDIN_BUFFER_PAUSED != 'true' }}
     runs-on: ubuntu-24.04
