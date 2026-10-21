@@ -1,5 +1,10 @@
 # Shared test-hub protocol
 
+
+## Mandatory Windows-control priority (owner rule, 2026-10-21)
+
+Read [docs/REMOTE_CONTROL_PRIORITY.md](docs/REMOTE_CONTROL_PRIORITY.md) before any desktop-control tool call, recovery, delegated operation or remote-administration action. Priority is strictly **Anthares Remote > WinRemote > Remote Desktop Commander > MeshCentral > AI Commander**. This owner instruction supersedes older statements that prohibit an authorized fallback by its product name. Never bypass a security denial using another controller.
+
 Before ANY change or test in this project, the agent MUST perform the hub preflight below. Reading only README is not sufficient.
 
 ## Mandatory preflight
