@@ -87,8 +87,18 @@ jobs:
                       with urllib.request.urlopen(req,timeout=30) as r:
                           return r.status,json.load(r)
                   except urllib.error.HTTPError as exc:
-                      return exc.code,{}
+                      try:
+                          data=json.loads(exc.read(600).decode('utf-8'))
+                          reason=str(data.get('error') or 'NO_ERROR_FIELD')[:100]
+                      except (ValueError,UnicodeError):
+                          reason='NON_JSON_RESPONSE'
+                      return exc.code,{'reason':reason,
+                          'via_worker':exc.headers.get('X-Anthares-Queue-Route','ABSENT')}
               status,body=call('probe',{'nonce':nonce+'-'+name})
+              if status!=200:
+                  print('CORTES_'+name+'_PROBE_HTTP='+str(status)
+                        +' ERROR='+str(body.get('reason','UNKNOWN'))
+                        +' WORKER_ROUTE='+str(body.get('via_worker','ABSENT')))
               assert status==200 and body.get('ok') and body.get('database_ok'),(name,status)
               assert body.get('probe')=='SIGNED_OIDC_NEON_WRITE_READ_DELETE',name
               denied,_=call('enqueue',{'platform':'linkedin'})
