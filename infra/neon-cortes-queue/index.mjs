@@ -155,6 +155,7 @@ async function bufferAction(verb,b,platform){
  }
  if(verb==='lease'){
   if(b.target_key!==dest||!String(b.owner||'').startsWith(owner))return{ok:false,error:'WRONG_QUEUE_OWNER'};
+  if(platform==='linkedin')await recoverExpiredLinkedin(dest);
   const held=await query(`SELECT count(*)::int n FROM cortes_publications
    WHERE target_key=$1 AND status='uncertain'
    AND confirmation_evidence->>'kind'='buffer_scheduled'`,[dest]);
@@ -346,10 +347,23 @@ async function pinterestBrowserAction(verb,b){
 // Personal member publishing is exclusively authorized by the signed main-branch
 // GitHub workflow. Company Buffer workflows cannot operate on this queue.
 const P_TARGET='linkedin:personal',P_OWNER='linkedin-personal:github-cloud-v1',P_LIMIT=50;
+// Recover crashed leasing transactions. A post that reached 'started' may
+// have been accepted externally: quarantine as UNCERTAIN, never blind-repost.
+async function recoverExpiredLinkedin(targetKey){
+ const evidence={kind:'expired_after_publication_started',confirmed_on_network:false};
+ return await query(`UPDATE cortes_publications SET
+    status=CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain' END,
+    confirmation_evidence=CASE WHEN publication_started_at IS NULL THEN confirmation_evidence ELSE $2::jsonb END,
+    lease_owner=NULL,lease_until=NULL,updated_at=now()
+   WHERE target_key=$1 AND status IN ('leased','started')
+     AND lease_until IS NOT NULL AND lease_until<now() RETURNING id,status`,
+   [targetKey,JSON.stringify(evidence)]);
+}
 async function personalAction(verb,b){
  const id=String(b.id||''),owner=String(b.owner||'');
  if(verb==='lease'){
   if(b.target_key!==P_TARGET||owner!==P_OWNER)return{ok:false,error:'PERSONAL_TARGET_OWNER_INVALID'};
+  await recoverExpiredLinkedin(P_TARGET);
   // A read-only permission can be unavailable to self-serve member apps.
   // Keep accepted-but-unverified items UNCERTAIN and never retry their IDs;
   // other distinct queued shorts must continue under the shared daily budget.
