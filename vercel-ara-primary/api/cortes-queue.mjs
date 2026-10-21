@@ -23,7 +23,7 @@ const PRODUCER_AUDIENCE='https://anthares-remote-primary.vercel.app/api/cortes-q
 const PRODUCER_REPO='UniversoAnthares/anthares-clipper';
 const PRODUCER_WORKFLOWS=new Set(['cortes-daily.yml','cortes-full-system-test-once.yml','cortes-neon-short-dispatch.yml']);
 let githubJwks=null,githubJwksUntil=0;
-async function githubOidcEnqueueAuth(req){
+async function githubOidcEnqueueAuth(req,repo=PRODUCER_REPO,workflows=PRODUCER_WORKFLOWS){
  const token=bearer(req);
  if(token.length<60||token.length>16000)return false;
  const parts=token.split('.');
@@ -35,13 +35,13 @@ async function githubOidcEnqueueAuth(req){
  }catch{return false;}
  if(header.alg!=='RS256'||typeof header.kid!=='string'||header.kid.length>200)return false;
  const now=Math.floor(Date.now()/1000);
- if(claims.iss!=='https://token.actions.githubusercontent.com'||claims.repository!==PRODUCER_REPO||claims.ref!=='refs/heads/main')return false;
+ if(claims.iss!=='https://token.actions.githubusercontent.com'||claims.repository!==repo||claims.ref!=='refs/heads/main')return false;
  const aud=Array.isArray(claims.aud)?claims.aud:[claims.aud];
  if(!aud.includes(PRODUCER_AUDIENCE)||!Number.isFinite(claims.exp)||claims.exp<=now||!Number.isFinite(claims.iat)||claims.iat>now+60)return false;
  if(claims.nbf!==undefined&&(!Number.isFinite(claims.nbf)||claims.nbf>now+60))return false;
  if(!['schedule','workflow_dispatch','push'].includes(claims.event_name))return false;
  const workflow=String(claims.job_workflow_ref||claims.workflow_ref||'');
- if(![...PRODUCER_WORKFLOWS].some(name=>workflow===PRODUCER_REPO+'/.github/workflows/'+name+'@refs/heads/main'))return false;
+ if(![...workflows].some(name=>workflow===repo+'/.github/workflows/'+name+'@refs/heads/main'))return false;
  try{
   if(!githubJwks||Date.now()>=githubJwksUntil){
    const cfgResponse=await fetch('https://token.actions.githubusercontent.com/.well-known/openid-configuration',{signal:AbortSignal.timeout(8000)});
@@ -85,6 +85,63 @@ function validOidcProducerPayload(body){
  return body.id===id&&body.dedupe_key===id&&body.media_sha256===sha256hex(source+'|'+segment+'|'+media)&&body.master_id===source;
 }
 
+
+const BUFFER_WORKER_REPO='UniversoAnthares/anthares-kwai-runner';
+const BUFFER_WORKER_WORKFLOWS=new Set(['cortes-buffer-linkedin-cloud.yml']);
+const BUFFER_LINKEDIN_TARGET='linkedin:primary';
+async function bufferWorkerAuth(req){
+ return githubOidcEnqueueAuth(req,BUFFER_WORKER_REPO,BUFFER_WORKER_WORKFLOWS);
+}
+async function bufferWorkerAction(action,body){
+ if(action==='lease'){
+  if(body.target_key!==BUFFER_LINKEDIN_TARGET)return{ok:false,error:'buffer_wrong_target'};
+  // Stay below the Buffer Free ten-pending-post limit. Reconcile first.
+  const pending=await pool.query(`SELECT count(*)::int AS n FROM cortes_publications
+   WHERE target_key=$1 AND status='uncertain'
+   AND confirmation_evidence->>'kind'='buffer_scheduled'`,[BUFFER_LINKEDIN_TARGET]);
+  if(Number(pending.rows[0]?.n||0)>=8)return{ok:true,job:null,buffer_pending_limit:true};
+  return lease({target_key:BUFFER_LINKEDIN_TARGET,owner:String(body.owner||''),lease_seconds:180});
+ }
+ if(action==='start')return transition(body,'start');
+ if(action==='fail')return transition(body,'fail');
+ if(action==='scheduled'){
+  const id=String(body.id||''),owner=String(body.owner||''),gen=Number(body.lease_generation),
+    bufferId=String(body.buffer_post_id||'');
+  if(!id||!owner.startsWith('buffer-linkedin:')||!Number.isInteger(gen)||gen<1||
+     !/^[A-Za-z0-9_:-]{1,160}$/.test(bufferId))return{ok:false,error:'invalid_buffer_scheduled_payload'};
+  const evidence={kind:'buffer_scheduled',buffer_post_id:bufferId,confirmed_on_linkedin:false};
+  const r=await pool.query(`UPDATE cortes_publications SET status='uncertain',
+   remote_id=$4,confirmation_evidence=$5::jsonb,lease_until=NULL,lease_owner=NULL,updated_at=now()
+   WHERE id=$1 AND status='started' AND lease_owner=$2 AND lease_generation=$3
+     AND target_key=$6 RETURNING id,target_key,status,remote_id`,
+   [id,owner,gen,bufferId,JSON.stringify(evidence),BUFFER_LINKEDIN_TARGET]);
+  return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'invalid_buffer_schedule_fence'};
+ }
+ if(action==='pending'){
+  const r=await pool.query(`SELECT id,remote_id,confirmation_evidence FROM cortes_publications
+   WHERE target_key=$1 AND status='uncertain'
+   AND confirmation_evidence->>'kind'='buffer_scheduled'
+   ORDER BY updated_at ASC LIMIT 2`,[BUFFER_LINKEDIN_TARGET]);
+  return{ok:true,jobs:r.rows};
+ }
+ if(action==='reconcile'){
+  const id=String(body.id||''),remote=String(body.remote_id||''),
+    link=String(body.external_link||'');
+  let u;try{u=new URL(link)}catch{return{ok:false,error:'invalid_linkedin_evidence_url'};}
+  if(u.protocol!=='https:'||!['linkedin.com','www.linkedin.com'].includes(u.hostname)||
+     !(u.pathname.startsWith('/feed/update/')||u.pathname.startsWith('/posts/')||
+       u.pathname.startsWith('/company/')))return{ok:false,error:'invalid_linkedin_evidence_url'};
+  const evidence={kind:'buffer_linkedin_sent_verified',buffer_post_id:remote,external_link:link,
+    confirmed_on_linkedin:true};
+  const r=await pool.query(`UPDATE cortes_publications SET status='confirmed',
+    confirmation_evidence=$3::jsonb,lease_until=NULL,updated_at=now()
+    WHERE id=$1 AND target_key=$4 AND status='uncertain' AND remote_id=$2
+      AND confirmation_evidence->>'kind'='buffer_scheduled'
+    RETURNING id,status,remote_id`,[id,remote,JSON.stringify(evidence),BUFFER_LINKEDIN_TARGET]);
+  return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'not_scheduled_or_id_mismatch'};
+ }
+ return{ok:false,error:'unsupported_buffer_action'};
+}
 
 async function ensureSchema(){if(schemaReady)return;await pool.query(`
 CREATE TABLE IF NOT EXISTS cortes_publications(
@@ -165,4 +222,13 @@ async function selfTestOnce(){
 }
 async function selfTest(device){await ensureSchema();const stamp=crypto.randomBytes(8).toString('hex'),source=`selftest-${stamp}`,target=`kwai:selftest-${stamp}`,sha=crypto.createHash('sha256').update(stamp).digest('hex'),master=`m-${stamp}`,id=`p-${stamp}`,dedupe=`d-${stamp}`,owner=`${device}:selftest`;const base={id,dedupe_key:dedupe,target_key:target,master_id:master,media_sha256:sha,source_id:source,source_start:1000,source_end:80000,duration_class:'short'};const a=await enqueue(base);const d=await enqueue(base);const o=await enqueue({...base,id:`o-${stamp}`,dedupe_key:`od-${stamp}`,source_start:70000,source_end:120000});const l=await lease({owner,target_key:target,lease_seconds:90});const stale=await transition({id,owner,lease_generation:l.job.lease_generation+1},'start');const s=await transition({id,owner,lease_generation:l.job.lease_generation},'start');const noev=await transition({id,owner,lease_generation:l.job.lease_generation},'confirm');const c=await transition({id,owner,lease_generation:l.job.lease_generation,confirmation_evidence:{kind:'selftest'},remote_id:`remote-${stamp}`},'confirm');const ret=await retention({source_id:source,master_id:master,planned_targets:[target]});const ok=!a.deduped&&d.deduped&&d.reason==='identity'&&o.deduped&&o.reason==='timeline_overlap'&&l.job?.lease_generation===1&&stale.ok===false&&s.ok===true&&noev.ok===false&&c.ok===true&&ret.safe_to_delete===true;return{ok,dedupe:d.reason,timeline_overlap:o.reason,lease_generation:l.job?.lease_generation,stale_generation_rejected:stale.ok===false,start_fenced:s.ok===true,complete_without_evidence_rejected:noev.ok===false,confirmation_recorded:c.ok===true,retention_safe_after_confirm:ret.safe_to_delete===true,backend:'vercel-neon'};}
 
-export default async function handler(req,res){try{const url=new URL(req.url,'https://local.invalid');const action=url.searchParams.get('action')||'';if(req.method==='GET'&&action==='health'){await ensureSchema();return reply(res,200,{ok:true,service:'anthares-cortes-queue',backend:'vercel-neon',fencing:true,dedupe:true,reconciliation:true});}if(req.method==='GET'&&action==='self-test-once'){const auth=await deviceAuth(req);if(!auth.ok)return reply(res,401,{ok:false,error:'unauthorized'});return reply(res,200,await selfTestOnce());}const isProducer=req.method==='POST'&&action==='enqueue';const auth=isProducer&&await githubOidcEnqueueAuth(req)?{ok:true,device:'github-oidc-dispatch'}:await deviceAuth(req);if(!auth.ok)return reply(res,401,{ok:false,error:'unauthorized'});const body=jsonBody(req);let out;if(req.method==='POST'&&action==='enqueue'){if(auth.device==='github-oidc-dispatch'&&!validOidcProducerPayload(body))return reply(res,403,{ok:false,error:'invalid_cortes_producer_payload'});out=await enqueue(body);}else if(req.method==='POST'&&action==='stats')out=await stats(body);else if(req.method==='POST'&&action==='lease')out=await lease(body);else if(req.method==='POST'&&action==='start')out=await transition(body,'start');else if(req.method==='POST'&&action==='confirm')out=await transition(body,'confirm');else if(req.method==='POST'&&action==='fail')out=await transition(body,'fail');else if(req.method==='POST'&&action==='reconcile')out=await reconcile(body);else if(req.method==='POST'&&action==='retention')out=await retention(body);else if(req.method==='POST'&&action==='self-test')out=await selfTest(auth.device);else if(req.method==='GET'&&action==='job')out={ok:true,job:await getJob(String(url.searchParams.get('id')||''))};else return reply(res,404,{ok:false,error:'not_found'});return reply(res,out?.ok===false?409:200,out);}catch(e){console.error(e);return reply(res,500,{ok:false,error:String(e?.message||e)});}}
+export default async function handler(req,res){try{const url=new URL(req.url,'https://local.invalid');const action=url.searchParams.get('action')||'';if(req.method==='GET'&&action==='health'){await ensureSchema();return reply(res,200,{ok:true,service:'anthares-cortes-queue',backend:'vercel-neon',fencing:true,dedupe:true,reconciliation:true});}if(req.method==='GET'&&action==='self-test-once'){const auth=await deviceAuth(req);if(!auth.ok)return reply(res,401,{ok:false,error:'unauthorized'});return reply(res,200,await selfTestOnce());}if(req.method==='POST'&&action.startsWith('buffer-')){
+ const permitted=new Set(['lease','start','fail','scheduled','pending','reconcile']);
+ const verb=action.slice('buffer-'.length);
+ if(!permitted.has(verb))return reply(res,404,{ok:false,error:'buffer_action_not_found'});
+ if(!await bufferWorkerAuth(req))return reply(res,401,{ok:false,error:'unauthorized_buffer_worker'});
+ const body=jsonBody(req);
+ const out=await bufferWorkerAction(verb,body);
+ return reply(res,out.ok?200:409,out);
+ }
+ const isProducer=req.method==='POST'&&action==='enqueue';const auth=isProducer&&await githubOidcEnqueueAuth(req)?{ok:true,device:'github-oidc-dispatch'}:await deviceAuth(req);if(!auth.ok)return reply(res,401,{ok:false,error:'unauthorized'});const body=jsonBody(req);let out;if(req.method==='POST'&&action==='enqueue'){if(auth.device==='github-oidc-dispatch'&&!validOidcProducerPayload(body))return reply(res,403,{ok:false,error:'invalid_cortes_producer_payload'});out=await enqueue(body);}else if(req.method==='POST'&&action==='stats')out=await stats(body);else if(req.method==='POST'&&action==='lease')out=await lease(body);else if(req.method==='POST'&&action==='start')out=await transition(body,'start');else if(req.method==='POST'&&action==='confirm')out=await transition(body,'confirm');else if(req.method==='POST'&&action==='fail')out=await transition(body,'fail');else if(req.method==='POST'&&action==='reconcile')out=await reconcile(body);else if(req.method==='POST'&&action==='retention')out=await retention(body);else if(req.method==='POST'&&action==='self-test')out=await selfTest(auth.device);else if(req.method==='GET'&&action==='job')out={ok:true,job:await getJob(String(url.searchParams.get('id')||''))};else return reply(res,404,{ok:false,error:'not_found'});return reply(res,out?.ok===false?409:200,out);}catch(e){console.error(e);return reply(res,500,{ok:false,error:String(e?.message||e)});}}
