@@ -1,0 +1,26 @@
+name: CORTES Pinterest Buffer cloud contracts
+on:
+  pull_request:
+    paths:
+      - 'vercel-ara-primary/api/cortes-queue.mjs'
+      - 'tools/cortes_buffer_pinterest_cloud.py'
+      - 'tests/test_cortes_buffer_pinterest_cloud.py'
+      - '.github/workflows/cortes-buffer-pinterest-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'vercel-ara-primary/api/cortes-queue.mjs'
+      - 'tools/cortes_buffer_pinterest_cloud.py'
+      - 'tests/test_cortes_buffer_pinterest_cloud.py'
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Backend and Consumer Contracts
+        run: |
+          set -euo pipefail
+          node --check vercel-ara-primary/api/cortes-queue.mjs
+          python3 -m py_compile tools/cortes_buffer_pinterest_cloud.py
+          python3 -m unittest discover -s tests -p test_cortes_buffer_pinterest_cloud.py -v
