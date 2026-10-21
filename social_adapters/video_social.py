@@ -161,11 +161,21 @@ def _linkedin_headers():
 
 def linkedin(payload, publish=False):
     account = str(payload.get("account_id") or "primary").strip().lower()
+    if account not in ("primary", "personal"):
+        raise ConfigRequired("LINKEDIN_ACCOUNT_UNVERIFIED")
     key = "linkedin:" + account
-    token = env("LINKEDIN_ACCESS_TOKEN")
-    owner = env("LINKEDIN_AUTHOR_URN")
-    if not owner.startswith(("urn:li:person:", "urn:li:organization:")):
-        raise ConfigRequired("LINKEDIN_AUTHOR_URN")
+    # Administering the company Page does not authorize member publishing.
+    # Each identity has independently scoped credentials and an exact author type.
+    if account == "personal":
+        token = env("LINKEDIN_PERSONAL_ACCESS_TOKEN")
+        owner = env("LINKEDIN_PERSONAL_AUTHOR_URN")
+        if not owner.startswith("urn:li:person:") or len(owner) <= len("urn:li:person:"):
+            raise ConfigRequired("LINKEDIN_PERSONAL_AUTHOR_URN")
+    else:
+        token = env("LINKEDIN_ACCESS_TOKEN")
+        owner = env("LINKEDIN_AUTHOR_URN")
+        if owner != "urn:li:organization:145345334":
+            raise ConfigRequired("LINKEDIN_COMPANY_AUTHOR_URN_UNVERIFIED")
     if not (payload.get("media_path") or payload.get("media_url")):
         raise ConfigRequired("media_path_or_media_url")
     metadata = prepare_publication_metadata(payload, title_limit=200)
@@ -232,7 +242,7 @@ def linkedin(payload, publish=False):
     if not remote_id:
         raise PublishUncertain("linkedin_post_id_missing")
     verified, _ = _request(base + "/posts/" + urllib.parse.quote(remote_id, safe=""), token=token, headers=headers)
-    if str(verified.get("id") or "") != remote_id:
+    if str(verified.get("id") or "") != remote_id or str(verified.get("author") or "") != owner:
         raise PublishUncertain("linkedin_post_readback_unverified")
     return {"status": "CONFIRMED", "destination_key": key, "remote_id": remote_id,
             "confirmation_evidence": {"verified_id": remote_id, "video": video}}
