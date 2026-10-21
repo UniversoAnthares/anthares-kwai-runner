@@ -17,7 +17,7 @@ ALL_PLATFORMS=SHORT_PLATFORMS|LONG_PLATFORMS
 DAILY_LIMITS={
     # None = queue all eligible clips from each round; adapter respects live API rate limits.
 
-    "kwai":100,"tiktok":100,"instagram":20,"pinterest":None,"linkedin":20,"threads":100,
+    "kwai":100,"tiktok":100,"instagram":None,"pinterest":None,"linkedin":None,"threads":100,
     "youtube":3,"facebook":10,"x":10,"bilibili":10,"odysee":10,"rumble":10,
     "bluesky":10,"reddit":10,
 }
