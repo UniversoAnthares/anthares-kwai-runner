@@ -6,10 +6,13 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1]
 
 class CodebergMirrorPolicyTests(unittest.TestCase):
-    def test_ci_never_selects_quota_blocked_gitlab(self):
+    def test_gitlab_stays_available_as_quota_gated_standby(self):
         conf=json.loads((ROOT/"ci-hub/executor-routing.json").read_text(encoding="utf-8"))
-        self.assertNotIn("gitlab_ci",conf["ci_execution"]["priority"])
+        self.assertIn("gitlab_ci",conf["ci_execution"]["priority"])
+        self.assertGreater(conf["ci_execution"]["priority"].index("gitlab_ci"),conf["ci_execution"]["priority"].index("codeberg_actions"))
+        self.assertTrue(conf["providers"]["gitlab_ci"]["active"])
         self.assertFalse(conf["providers"]["gitlab_ci"]["ci_eligible"])
+        self.assertEqual(conf["providers"]["gitlab_ci"]["status"],"STANDBY_BLOCKED_QUOTA_AUTO_RECHECK")
         self.assertFalse(conf["providers"]["codeberg_actions"]["ci_eligible"])
         self.assertFalse(conf["git_redundancy"]["codeberg"]["eligible_for_promotion"])
         self.assertEqual(conf["git_redundancy"]["recovery_order"][0],"codeberg")
