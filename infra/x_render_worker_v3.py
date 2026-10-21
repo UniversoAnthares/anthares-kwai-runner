@@ -288,6 +288,17 @@ def health():
     return jsonify(ok=True, vault_ready=vault, state_configured=bool(os.getenv("X_STORAGE_STATE", "") or os.path.exists(STATE_PATH)))
 
 
+@app.get("/post-status")
+def post_status():
+    if not _auth_ok(request):
+        return jsonify(ok=False, error="unauthorized"), 401
+    try:
+        from x_durable_ledger import readback
+        return jsonify(ok=True, **readback(request.args.get("idempotency_key", "")))
+    except Exception as exc:
+        return jsonify(ok=False, error=type(exc).__name__), 503
+
+
 @app.get("/verify")
 def verify():
     if not _auth_ok(request):
