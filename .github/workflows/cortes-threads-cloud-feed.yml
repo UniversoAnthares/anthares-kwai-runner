@@ -4,7 +4,9 @@ on:
     branches: [feature/threads-cloud-primary-20261021]
     paths:
       - tools/cortes_threads_cloud_feed.mjs
+      - tools/cortes_threads_cloud_captions.mjs
       - tests/cortes_threads_cloud_feed.test.mjs
+      - tests/cortes_threads_cloud_captions.test.mjs
       - .github/workflows/cortes-threads-cloud-feed.yml
   workflow_dispatch:
 permissions:
@@ -16,11 +18,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate feed parser without local PC
-        run: node --test tests/cortes_threads_cloud_feed.test.mjs
+        run: node --test tests/cortes_threads_cloud_feed.test.mjs tests/cortes_threads_cloud_captions.test.mjs
       - name: Read published media from Anthares WordPress
         run: node tools/cortes_threads_cloud_feed.mjs /tmp/threads-cloud-feed.json
+      - name: Prepare Unicode captions without AI token costs
+        run: node tools/cortes_threads_cloud_captions.mjs /tmp/threads-cloud-feed.json /tmp/threads-cloud-captions.json
       - uses: actions/upload-artifact@v4
         with:
           name: threads-cloud-feed-probe
-          path: /tmp/threads-cloud-feed.json
+          path: |
+            /tmp/threads-cloud-feed.json
+            /tmp/threads-cloud-captions.json
           retention-days: 1
