@@ -67,6 +67,12 @@ class PinterestBrowserContract(unittest.TestCase):
         self.assertIn('PIN_DESCRIPTION_NOT_VERIFIED',ui)
         self.assertIn('[aria-label="Descreva seu Pin"]',ui)
 
+    def test_board_already_selected_must_match_exact_destination(self):
+        ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
+        self.assertIn("if(already)return",ui)
+        self.assertIn("storyboard-drafts-sidebar",ui)
+        self.assertIn("norm(x.textContent)===expected",ui)
+
     def test_browser_uses_no_pinterest_api_or_login_bypass(self):
         ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
         for forbidden in ("api.pinterest.com","PINTEREST_ACCESS_TOKEN","captcha_solver","stealth_plugin"):
