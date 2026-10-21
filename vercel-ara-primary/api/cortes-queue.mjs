@@ -87,56 +87,62 @@ function validOidcProducerPayload(body){
 
 const BUFFER_WORKER_REPO='UniversoAnthares/anthares-kwai-runner';
 const BUFFER_WORKER_WORKFLOWS=new Set(['cortes-buffer-linkedin-cloud.yml']);
-const BUFFER_LINKEDIN_TARGET='linkedin:primary';
+const BUFFER_TARGETS={linkedin:'linkedin:primary',pinterest:'pinterest:lucasyahn'};
 async function bufferWorkerAuth(req){
- return githubOidcEnqueueAuth(req,BUFFER_WORKER_REPO,BUFFER_WORKER_WORKFLOWS);
+ if(await githubOidcEnqueueAuth(req,BUFFER_WORKER_REPO,BUFFER_WORKER_WORKFLOWS))return 'linkedin';
+ return await githubOidcEnqueueAuth(req,BUFFER_WORKER_REPO,new Set(['cortes-buffer-pinterest-cloud.yml'])) ? 'pinterest' : null;
 }
-async function bufferWorkerAction(action,body){
+async function bufferWorkerAction(action,body,platform){
+ const target=BUFFER_TARGETS[platform];
+ if(!target)return{ok:false,error:'buffer_platform_not_allowed'};
  if(action==='lease'){
-  if(body.target_key!==BUFFER_LINKEDIN_TARGET)return{ok:false,error:'buffer_wrong_target'};
+  if(body.target_key!==target)return{ok:false,error:'buffer_wrong_target'};
   // Stay below the Buffer Free ten-pending-post limit. Reconcile first.
   const pending=await pool.query(`SELECT count(*)::int AS n FROM cortes_publications
    WHERE target_key=$1 AND status='uncertain'
-   AND confirmation_evidence->>'kind'='buffer_scheduled'`,[BUFFER_LINKEDIN_TARGET]);
+   AND confirmation_evidence->>'kind'='buffer_scheduled'`,[target]);
   if(Number(pending.rows[0]?.n||0)>=8)return{ok:true,job:null,buffer_pending_limit:true};
-  return lease({target_key:BUFFER_LINKEDIN_TARGET,owner:String(body.owner||''),lease_seconds:180});
+  return lease({target_key:target,owner:String(body.owner||''),lease_seconds:180});
  }
- if(action==='start')return transition(body,'start');
- if(action==='fail')return transition(body,'fail');
+ if(action==='start'||action==='fail'){
+  const entry=await pool.query('SELECT target_key FROM cortes_publications WHERE id=$1',[String(body.id||'')]);
+  if(entry.rows[0]?.target_key!==target)return{ok:false,error:'buffer_wrong_job_target'};
+  return transition(body,action);
+ }
  if(action==='scheduled'){
   const id=String(body.id||''),owner=String(body.owner||''),gen=Number(body.lease_generation),
     bufferId=String(body.buffer_post_id||'');
-  if(!id||!owner.startsWith('buffer-linkedin:')||!Number.isInteger(gen)||gen<1||
+  if(!id||!owner.startsWith('buffer-'+platform+':')||!Number.isInteger(gen)||gen<1||
      !/^[A-Za-z0-9_:-]{1,160}$/.test(bufferId))return{ok:false,error:'invalid_buffer_scheduled_payload'};
-  const evidence={kind:'buffer_scheduled',buffer_post_id:bufferId,confirmed_on_linkedin:false};
+  const evidence={kind:'buffer_scheduled',buffer_post_id:bufferId,platform,confirmed_on_network:false};
   const r=await pool.query(`UPDATE cortes_publications SET status='uncertain',
    remote_id=$4,confirmation_evidence=$5::jsonb,lease_until=NULL,lease_owner=NULL,updated_at=now()
    WHERE id=$1 AND status='started' AND lease_owner=$2 AND lease_generation=$3
      AND target_key=$6 RETURNING id,target_key,status,remote_id`,
-   [id,owner,gen,bufferId,JSON.stringify(evidence),BUFFER_LINKEDIN_TARGET]);
+   [id,owner,gen,bufferId,JSON.stringify(evidence),target]);
   return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'invalid_buffer_schedule_fence'};
  }
  if(action==='pending'){
   const r=await pool.query(`SELECT id,remote_id,confirmation_evidence FROM cortes_publications
    WHERE target_key=$1 AND status='uncertain'
    AND confirmation_evidence->>'kind'='buffer_scheduled'
-   ORDER BY updated_at ASC LIMIT 2`,[BUFFER_LINKEDIN_TARGET]);
+   ORDER BY updated_at ASC LIMIT 2`,[target]);
   return{ok:true,jobs:r.rows};
  }
  if(action==='reconcile'){
   const id=String(body.id||''),remote=String(body.remote_id||''),
     link=String(body.external_link||'');
-  let u;try{u=new URL(link)}catch{return{ok:false,error:'invalid_linkedin_evidence_url'};}
+  let u;try{u=new URL(link)}catch{return{ok:false,error:'invalid_network_evidence_url'};}
   if(u.protocol!=='https:'||!['linkedin.com','www.linkedin.com'].includes(u.hostname)||
      !(u.pathname.startsWith('/feed/update/')||u.pathname.startsWith('/posts/')||
        u.pathname.startsWith('/company/')))return{ok:false,error:'invalid_linkedin_evidence_url'};
-  const evidence={kind:'buffer_linkedin_sent_verified',buffer_post_id:remote,external_link:link,
-    confirmed_on_linkedin:true};
+  const evidence={kind:'buffer_'+platform+'_sent_verified',buffer_post_id:remote,external_link:link,
+    confirmed_on_network:true};
   const r=await pool.query(`UPDATE cortes_publications SET status='confirmed',
     confirmation_evidence=$3::jsonb,lease_until=NULL,updated_at=now()
     WHERE id=$1 AND target_key=$4 AND status='uncertain' AND remote_id=$2
       AND confirmation_evidence->>'kind'='buffer_scheduled'
-    RETURNING id,status,remote_id`,[id,remote,JSON.stringify(evidence),BUFFER_LINKEDIN_TARGET]);
+    RETURNING id,status,remote_id`,[id,remote,JSON.stringify(evidence),target]);
   return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'not_scheduled_or_id_mismatch'};
  }
  return{ok:false,error:'unsupported_buffer_action'};
