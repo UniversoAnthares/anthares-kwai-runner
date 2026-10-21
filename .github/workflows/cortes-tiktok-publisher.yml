@@ -169,8 +169,8 @@ jobs:
 
   # Event-driven P0 QA. The ordinary 12-hour QA cadence is unchanged.
   qa_tiktok_p0:
-    needs: [tiktok]
-    if: ${{ always() && needs.tiktok.result == 'failure' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    needs: [tiktok, relay, followup]
+    if: ${{ always() && (needs.tiktok.result == 'failure' || needs.relay.result == 'failure' || needs.followup.result == 'failure') && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     permissions:
