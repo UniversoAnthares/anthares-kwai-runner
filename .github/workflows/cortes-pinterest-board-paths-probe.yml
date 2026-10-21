@@ -6,6 +6,10 @@ on:
       - tools/cortes_pinterest_board_paths_probe.py
       - .github/workflows/cortes-pinterest-board-paths-probe.yml
   workflow_dispatch: {}
+  # Independent read-only heartbeat; success also activates the canonical
+  # OIDC-authorized publisher through workflow_run.
+  schedule:
+    - cron: '11,26,41,56 * * * *'
 permissions:
   contents: read
 jobs:
