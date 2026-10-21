@@ -35,18 +35,8 @@ def per_platform_jobs(jobs, platform):
     return result
 
 def enqueue(job):
-    req=urllib.request.Request(linked.NEON+"?action=enqueue",
-        data=json.dumps(job,separators=(",",":"),ensure_ascii=False).encode("utf-8"),
-        method="POST",
-        headers={"Authorization":"Bearer "+linked.oidc(),"Content-Type":"application/json",
-                 "User-Agent":"CortesBufferThreeChannelFanout/1.0"})
-    try:
-        with urllib.request.urlopen(req,timeout=25) as response:
-            body=json.load(response)
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError("CORTES_BUFFER_FANOUT_HTTP_"+str(exc.code)) from None
-    except (urllib.error.URLError,OSError,ValueError):
-        raise RuntimeError("CORTES_BUFFER_FANOUT_UNKNOWN_RESPONSE") from None
+    from tools.cortes_queue_ha import post
+    body=post("enqueue",job,linked.oidc)
     row=body.get("job") or {}
     if not body.get("ok") or row.get("id")!=job["id"] or row.get("target_key")!=job["target_key"]:
         raise RuntimeError("CORTES_BUFFER_FANOUT_ACKNOWLEDGEMENT_INVALID")
@@ -61,22 +51,31 @@ def main():
     # A fixed 20 per source is a reservation, not 20 simultaneous scheduled posts.
     # Incremental daily reruns safely reuse the same identities.
     counts={}
+    errors=[]
     for platform in NETWORKS:
-        all_jobs=per_platform_jobs(selected,platform)
-        budget=50
-        windows=max(1,(len(all_jobs)+budget-1)//budget)
-        cursor=(int(time.time())//600)%windows
-        subset=all_jobs[cursor*budget:(cursor+1)*budget]
-        created=known=0
-        for job in subset:
-            if enqueue(job):known+=1
-            else:created+=1
-        counts[platform]={"priority_candidates":len(all_jobs),"visited":len(subset),
-                          "enqueued":created,"known":known}
-        print("CORTES_BUFFER_PRIORITY network="+platform+" created="+str(created)+
-              " known="+str(known)+" selected="+str(len(all_jobs)),flush=True)
-    print(json.dumps({"ok":True,"priority_per_source":BUFFER_LIMIT_PER_SOURCE,
-                     "distribution":counts},separators=(",",":")))
+        # Independent destinations: failure of one account never prevents
+        # attempts for the other two. Shared Neon ledger prevents duplicates.
+        try:
+            all_jobs=per_platform_jobs(selected,platform)
+            budget=50
+            windows=max(1,(len(all_jobs)+budget-1)//budget)
+            cursor=(int(time.time())//600)%windows
+            subset=all_jobs[cursor*budget:(cursor+1)*budget]
+            created=known=0
+            for job in subset:
+                if enqueue(job):known+=1
+                else:created+=1
+            counts[platform]={"eligible":len(all_jobs),"visited":len(subset),
+                              "enqueued":created,"known":known,"status":"ok"}
+        except Exception as exc:
+            errors.append(platform)
+            counts[platform]={"status":"blocked","error_class":type(exc).__name__}
+        print("CORTES_FANOUT_DESTINATION="+platform+" STATUS="+counts[platform]["status"],flush=True)
+    print(json.dumps({"ok":not errors,"independent_destinations":True,
+                      "buffer_priority_per_source":BUFFER_LIMIT_PER_SOURCE,
+                      "distribution":counts},separators=(",",":")),flush=True)
+    if errors:
+        raise RuntimeError("CORTES_FANOUT_ISOLATED_DESTINATIONS_FAILED_"+",".join(errors))
 
 if __name__=="__main__":
     try:main()
