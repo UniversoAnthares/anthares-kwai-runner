@@ -113,23 +113,12 @@ def oidc():
 
 
 def enqueue(job):
-    req=urllib.request.Request(NEON+"?action=enqueue",
-       data=json.dumps(job,ensure_ascii=False,separators=(",",":")).encode("utf-8"),
-       method="POST",
-       headers={"Authorization":"Bearer "+oidc(),"Content-Type":"application/json",
-                "User-Agent":"AntharesLinkedInCloudFanout/1.0"},
-    )
-    try:
-        with urllib.request.urlopen(req,timeout=25) as response:
-            result=json.load(response)
-    except urllib.error.HTTPError as e:
-        raise RuntimeError("LINKEDIN_NEON_ENQUEUE_HTTP_"+str(e.code)) from None
-    except (OSError,ValueError):
-        raise RuntimeError("LINKEDIN_NEON_ENQUEUE_UNKNOWN_RESULT") from None
+    from tools.cortes_queue_ha import post
+    result=post("enqueue",job,oidc)
     row=result.get("job") or {}
-    if not result.get("ok") or row.get("id")!=job["id"]:
+    if not result.get("ok") or row.get("id")!=job["id"] or row.get("target_key")!=TARGET:
         raise RuntimeError("LINKEDIN_NEON_ENQUEUE_NOT_ACKNOWLEDGED")
-    if result.get("deduped") and (result.get("reason")!="identity" or row.get("target_key")!=TARGET):
+    if result.get("deduped") and result.get("reason")!="identity":
         raise RuntimeError("LINKEDIN_NEON_WRONG_DEDUPE")
     return bool(result.get("deduped"))
 
