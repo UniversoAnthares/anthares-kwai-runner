@@ -261,6 +261,19 @@ def prepare(payload: dict) -> dict:
             "pin_title": branded_title(title, limit=100)}
 
 
+def trusted_instagram_one_time_runner() -> bool:
+    """Narrow, temporary, owner-authorized emergency route for today's Buffer posts."""
+    return (os.getenv("CORTES_INSTAGRAM_ONETIME_SELFHOSTED") == "1"
+            and os.getenv("GITHUB_ACTIONS") == "true"
+            and os.getenv("RUNNER_ENVIRONMENT") == "self-hosted"
+            and os.getenv("RUNNER_OS") == "Windows"
+            and os.getenv("RUNNER_NAME") == "anthares-instagram-once-20261021"
+            and os.getenv("GITHUB_REPOSITORY") == "UniversoAnthares/anthares-kwai-runner"
+            and os.getenv("GITHUB_REF") == "refs/heads/main"
+            and os.getenv("GITHUB_WORKFLOW_REF", "").endswith(
+                "/.github/workflows/cortes-buffer-instagram-cloud.yml@refs/heads/main"))
+
+
 def schedule(payload: dict, *, token: str | None = None) -> dict:
     post = prepare(payload)
     if os.getenv("ANTHARES_SOCIAL_COMMIT", "") != "1":
@@ -269,7 +282,7 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
     # owner's PC, Anthares Remote, or a self-hosted GitHub runner.
     if (os.getenv("GITHUB_ACTIONS") != "true"
             or os.getenv("RUNNER_ENVIRONMENT") != "github-hosted"
-            or os.getenv("RUNNER_OS") != "Linux"):
+            or os.getenv("RUNNER_OS") != "Linux") and not trusted_instagram_one_time_runner():
         raise BufferBlocked("BUFFER_CLOUD_HOSTED_RUNNER_REQUIRED")
     platform = post["platform"]
     channel_id = str(os.getenv("BUFFER_" + platform.upper() + "_CHANNEL_ID") or "").strip()
@@ -279,7 +292,7 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
     # shareNow is an official Buffer mode: no queue slot and no spill into tomorrow.
     # This does not increase LinkedIn's real account/API posting allowance.
     if payload.get("same_day") is True:
-        if platform != "linkedin":
+        if platform != "linkedin" and not (platform == "instagram" and trusted_instagram_one_time_runner()):
             raise BufferBlocked("SAME_DAY_IMMEDIATE_LINKEDIN_ONLY")
         mode = "shareNow"
     else:
