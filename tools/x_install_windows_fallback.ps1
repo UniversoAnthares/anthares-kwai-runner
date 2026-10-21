@@ -18,12 +18,29 @@ if (!(Get-ScheduledTask -TaskName 'Anthares X Window Invisible Guard' -ErrorActi
   throw 'X_INVISIBLE_WINDOW_GUARD_MISSING'
 }
 if (!(Get-Command gh -ErrorAction SilentlyContinue)) { throw 'X_GITHUB_CLI_MISSING' }
+# Recovery agent may register the task while the interactive user's process
+# environment is unavailable. It can pass the token in a machine-scoped DPAPI
+# ciphertext file ACL-restricted to SYSTEM and Lucas. Immediately rewrap it
+# under Lucas' user-scoped DPAPI identity and discard the recovery ciphertext.
+$machineRecovery = Join-Path $root 'x_northflank_recovery.machine.dpapi'
+if ([string]::IsNullOrWhiteSpace($env:NORTHFLANK_API_TOKEN) -and (Test-Path $machineRecovery)) {
+  Add-Type -AssemblyName System.Security
+  [byte[]]$blob = [IO.File]::ReadAllBytes($machineRecovery)
+  [byte[]]$plain = [Security.Cryptography.ProtectedData]::Unprotect(
+    $blob, $null, [Security.Cryptography.DataProtectionScope]::LocalMachine
+  )
+  $env:NORTHFLANK_API_TOKEN = [Text.Encoding]::UTF8.GetString($plain)
+  [Array]::Clear($plain, 0, $plain.Length)
+}
 if (-not [string]::IsNullOrWhiteSpace($env:NORTHFLANK_API_TOKEN)) {
   $secure = ConvertTo-SecureString $env:NORTHFLANK_API_TOKEN -AsPlainText -Force
   $secure | ConvertFrom-SecureString | Set-Content -Path $secret -Encoding Ascii
   & icacls $secret /inheritance:r /grant:r ("{0}:(R)" -f $env:USERNAME) 'SYSTEM:(R)' | Out-Null
 }
 if (!(Test-Path $secret)) { throw 'X_ENCRYPTED_NORTHFLANK_TOKEN_MISSING' }
+if ((Test-Path $machineRecovery) -and (Test-Path $secret)) {
+  Remove-Item -LiteralPath $machineRecovery -Force
+}
 @'
 $ErrorActionPreference='Stop'
 $root='D:\AntharsWork\x-reliability-qa-20261021'
