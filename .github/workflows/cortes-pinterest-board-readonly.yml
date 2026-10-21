@@ -1,0 +1,54 @@
+name: CORTES Pinterest - identify Buffer board safely
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-pinterest-board-readonly.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  find-board:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
+      - name: Verify Pinterest board identity without posting
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from social_adapters.buffer_three_channels import (
+              pinterest_boards, historical_pinterest_boards, PINNED_CHANNELS,
+              select_pinterest_board, BufferBlocked,
+          )
+          boards=[]
+          for fn in (pinterest_boards, historical_pinterest_boards):
+              try:
+                  boards=fn()
+                  if boards:break
+              except BufferBlocked as exc:
+                  print('PINTEREST_BOARD_QUERY_ERROR='+str(exc))
+          print('PINTEREST_CHANNEL_ID='+PINNED_CHANNELS['pinterest'][0])
+          for b in boards:
+              print('PINTEREST_BOARD '+json.dumps(
+                  {'serviceId':b.get('serviceId'),'name':b.get('name'),'url':b.get('url')},
+                  ensure_ascii=False))
+          print('PINTEREST_BOARD_COUNT='+str(len(boards)))
+          try:
+              selected=select_pinterest_board(boards)
+              print('PINTEREST_BOARD_SELECTED='+selected)
+              print('PINTEREST_BOARD_PRECHECK=PASS')
+          except BufferBlocked as exc:
+              print('PINTEREST_BOARD_PRECHECK=BLOCKED '+str(exc))
+              raise SystemExit(2)
+          PY
