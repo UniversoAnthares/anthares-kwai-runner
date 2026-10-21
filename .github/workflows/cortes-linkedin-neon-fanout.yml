@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   enqueue:
-    if: ${{ vars.CORTES_LINKEDIN_FANOUT_PAUSED != 'true' }}
+    if: ${{ vars.CORTES_LINKEDIN_PUBLIC_FANOUT_READY == 'true' && vars.CORTES_LINKEDIN_FANOUT_PAUSED != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 7
     env:
