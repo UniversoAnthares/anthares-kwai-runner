@@ -217,8 +217,6 @@ def resolve_pinterest_board(channel_id: str, *, token: str | None = None) -> str
     boards = metadata.get("boards") or []
     if not isinstance(boards, list):
         raise BufferBlocked("PINTEREST_BOARD_LIST_INVALID")
-    if len(boards) == 0:
-        return verified_public_pinterest_board()
     pinned = os.getenv("BUFFER_PINTEREST_BOARD_ID", "").strip() or PINTEREST_PUBLIC_BOARD_ID
     if pinned != PINTEREST_PUBLIC_BOARD_ID:
         raise BufferBlocked("PINTEREST_BOARD_ENV_MISMATCH")
@@ -250,7 +248,11 @@ def prepare(payload: dict) -> dict:
             raise BufferBlocked("DURATION_INVALID")
         if not 30 <= duration <= 90:
             raise BufferBlocked("DURATION_OUT_OF_SHORT_RANGE")
-    text = add_site_to_keywords(branded_title(title) + "\n" + str(payload.get("description") or "").strip())
+    if platform == "linkedin":
+        from anthares_publisher.linkedin_editorial import linkedin_caption
+        text = linkedin_caption(title, str(payload.get("description") or ""))
+    else:
+        text = add_site_to_keywords(branded_title(title) + "\n" + str(payload.get("description") or "").strip())
     if len(text) > 2200:
         raise BufferBlocked("CAPTION_TOO_LONG_REQUIRES_EDITORIAL_TRUNCATION")
     return {"platform": platform, "media_url": uri.geturl(), "caption": text,
@@ -308,16 +310,6 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
                .replace("METADATA", metadata)
                .replace("SHARE_MODE", mode))
     result = api(mutation, token).get("createPost") or {}
-    if not result.get("post") and isinstance(result.get("message"), str):
-        msg = result["message"].lower()
-        label = next((key for key, indicators in {
-            "BOARD": ("board", "pasta"),
-            "MEDIA": ("video", "media", "asset", "thumbnail"),
-            "PERMISSION": ("permission", "access", "authorize", "scope", "connect"),
-            "QUOTA": ("quota", "limit", "queue", "plan"),
-            "METADATA": ("metadata", "pinterest", "title", "invalid"),
-        }.items() if any(term in msg for term in indicators)), "UNCLASSIFIED")
-        raise BufferBlocked("BUFFER_MUTATION_REJECTED_" + label)
     identifier = str((result.get("post") or {}).get("id") or "")
     if not identifier:
         raise BufferBlocked("BUFFER_SCHEDULE_REJECTED_OR_UNCERTAIN")
