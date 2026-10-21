@@ -1,0 +1,15 @@
+{
+  "schema": "anthares.threads.auth-reference.v1",
+  "account": "universoanthares",
+  "credential_kind": "oauth_access_token",
+  "token_storage": "bitwarden_secrets_manager",
+  "github_secret_id": "4ef756b1-f948-4780-af26-b4ea014637bf",
+  "cloud_environment_variable": "THREADS_ACCESS_TOKEN",
+  "cloud_executor": "CORTES Threads Cloud Handoff (fenced)",
+  "coordination": "neon:cortesthreadspub",
+  "copy_browser_cookies": false,
+  "copy_access_token_to_folder": false,
+  "requires_live_identity_check": true,
+  "requires_neon_fencing": true,
+  "warning": "Reference only: this document never contains credentials or proves that they remain valid."
+}
