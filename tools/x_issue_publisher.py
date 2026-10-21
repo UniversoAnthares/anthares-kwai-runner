@@ -72,9 +72,10 @@ def fingerprint(payload):
     if not source or start is None or end is None:
         raise ValueError("X_SEGMENT_IDENTITY_REQUIRED")
     start, end = float(start), float(end)
-    if start < 0 or end - start < 300 or end - start > 840:
+    scan = float(payload.get("scan_start") or 0)
+    if start < 0 or scan < 0 or end - start < 300 or end - start > 840:
         raise ValueError("X_SEGMENT_DURATION_INVALID")
-    raw = "x|lucasyahn|" + source + "|" + format(start, ".3f") + "|" + format(end, ".3f")
+    raw = "x|lucasyahn|" + source + "|" + format(start + scan, ".3f") + "|" + format(end + scan, ".3f")
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
