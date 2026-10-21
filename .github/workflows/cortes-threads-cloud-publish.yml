@@ -1,0 +1,38 @@
+name: CORTES Threads Cloud Publish
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Explicitly publish one reconciled clip'
+        type: boolean
+        default: false
+        required: true
+  push:
+    branches: [feature/threads-cloud-primary-20261021]
+    paths:
+      - tools/cortes_threads_cloud_publish.mjs
+      - .github/workflows/cortes-threads-cloud-publish.yml
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: cortes-threads-cloud-single-writer
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      THREADS_ALLOW_PUBLISH: ${{ inputs.publish && '1' || '0' }}
+      THREADS_LOCAL_PAUSED_AND_RECONCILED: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read Threads token from Bitwarden Anthares Automation
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            4ef756b1-f948-4780-af26-b4ea014637bf > THREADS_ACCESS_TOKEN
+      - name: Prepare cloud Threads publication safely
+        run: node tools/cortes_threads_cloud_publish.mjs
