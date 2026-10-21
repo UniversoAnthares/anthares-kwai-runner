@@ -92,7 +92,9 @@ def publish_one(skipped=0):
             queue("media-missing", fence)
             return publish_one(skipped + 1) if skipped < 10 else {"linkedin_personal": "SOURCE_MEDIA_MISSING_FOR_REPAIR"}
     except Exception:
-        queue("fail", fence)
+        # Nested media-404 skips may have already closed this lease.
+        try: queue("fail", fence)
+        except Exception: pass
         raise
     queue("start", fence)
     try:
