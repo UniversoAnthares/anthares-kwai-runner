@@ -21,6 +21,12 @@ Após validar conta/chave/canal, a API Buffer recebe `createPost` com `assets.vi
 ## Limites e agenda
 LinkedIn: teto artificial de 20/dia revogado. Meta: **todos os curtos também destinados ao Kwai no próprio dia**. Limite real informado pelo Buffer: **50 publicações LinkedIn por 24h**, inclusive com rota alternativa. No plano Buffer Free, máximo de dez posts **na fila por canal de uma vez**; a reposição deve ser feita após vagas liberadas, respeitando horários, API rate limits e políticas contra spam. A conta Buffer Free permite 10 posts pendentes por canal a qualquer instante, não 10 publicações por dia. Preencher slots liberados até o fim da rodada, sem agendar silenciosamente para amanhã.
 
+## Teto operacional confirmado: 100 por rede / dia local (2026-10-21)
+
+O **CORTES limita a no máximo 100 tentativas de publicação iniciadas por rede social e por dia**, no fuso `America/Campo_Grande`. A reserva é **atômica no ledger Neon** e compartilhada entre Buffer e publicadores alternativos pela migração `db/migrations/20261021_cortes_daily_publication_limit_100.sql`. Os destinos são contados isoladamente: Kwai, LinkedIn, Instagram e Pinterest têm contadores próprios; uma rede com quota esgotada ou erro não interrompe as demais. A fila de entregas é preservada integralmente, inclusive para masters excedentes; **100 não é um limite de geração, de enfileiramento, de chamadas ao Vercel ou de publicações Buffer**.
+
+A prioridade do Buffer continua sendo uma reserva de até 20 vídeos por fonte nas três contas conectadas, sujeita à capacidade efetiva do serviço. O restante deve seguir por rotas alternativas oficiais e já autorizadas, sempre utilizando a mesma identidade de master/destino, o mesmo contador de 100 e deduplicação. Se um provedor permitir menos que 100, vale o **menor limite aplicável àquela rota**; jamais contornar quotas legais ou restrições da rede por alternância de ferramentas. O teto operacional de 100, portanto, não é garantia de atingir 100 publicações confirmadas. Nenhum item pode ser marcado como publicado sem evidência da rede social.
+
 ## Obrigação de conclusão no próprio dia — 2026-10-21
 
 Todos os cortes curtos elegíveis da rodada do Kwai devem ser destinados ao LinkedIn com SLA de publicação efetiva até 23:59:59, no fuso America/Campo_Grande, **no próprio dia da rodada**. A primeira publicação confirmada define o marco inicial para calcular os intervalos dos posts restantes do mesmo dia. Replanejar slots disponíveis durante a rodada.
