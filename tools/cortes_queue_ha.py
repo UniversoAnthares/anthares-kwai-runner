@@ -44,7 +44,7 @@ def is_healthy(provider: str, timeout: int = 8) -> bool:
         return False
 
 
-def post(action: str, payload: dict, get_oidc, *, timeout: int = 16) -> dict:
+def post(action: str, payload: dict, get_oidc, *, timeout: int = 16, primary: str = "vercel") -> dict:
     if action not in ACTIONS:
         raise ValueError("CORTES_QUEUE_ACTION_NOT_ALLOWED")
     token = get_oidc()
@@ -53,7 +53,12 @@ def post(action: str, payload: dict, get_oidc, *, timeout: int = 16) -> dict:
     data = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     if len(data) > 65536:
         raise ValueError("CORTES_QUEUE_PAYLOAD_TOO_LARGE")
-    for provider in PROVIDERS:
+    if primary not in ("vercel", "neon"):
+        raise ValueError("CORTES_QUEUE_INVALID_PRIMARY")
+    candidates = PROVIDERS if primary == "vercel" else (
+        PROVIDERS[1], PROVIDERS[2], PROVIDERS[3],
+    )
+    for provider in candidates:
         if not is_healthy(provider):
             continue
         target = provider.rstrip("/") + "?" + urllib.parse.urlencode({"action": action})
