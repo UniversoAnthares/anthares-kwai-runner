@@ -34,6 +34,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           python -m pip install --disable-pip-version-check 'yt-dlp[default]' yt-dlp-ejs faster-whisper
+      - name: Restore authenticated YouTube fallback
+        env:
+          YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+        run: python tools/x_restore_youtube_cookies.py
       - name: Extract real source, select strategic long cut, render 16:9
         run: python -u x_real_fullflow_once.py
       - name: Publish temporary public media branch
