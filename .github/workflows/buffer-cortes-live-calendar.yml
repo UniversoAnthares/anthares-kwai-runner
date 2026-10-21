@@ -1,0 +1,36 @@
+name: Buffer CORTES live calendar and posting slots
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/buffer-cortes-live-calendar.yml
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-buffer-calendar-audit
+  cancel-in-progress: false
+jobs:
+  read:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load Buffer API key from existing Bitwarden Secrets Manager
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
+      - name: Query actual schedules and already booked posts without publishing
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/cortes_buffer_live_calendar.py
+          python3 -u tools/cortes_buffer_live_calendar.py
+      - name: Preserve verified time slots in short-lived artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cortes-buffer-calendar
+          path: buffer-calendar-observation.json
+          retention-days: 3
