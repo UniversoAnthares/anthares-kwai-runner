@@ -26,7 +26,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: anthares-browser-cloud-login-${{ github.sha }}
+  group: anthares-browser-cloud-login-session
   cancel-in-progress: true
 
 jobs:
@@ -133,10 +133,24 @@ jobs:
             url="$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log | tail -1 || true)"
             if [ -n "$url" ]; then
               echo "NOVNC_URL=${url}/vnc.html?autoconnect=true&resize=scale"
+              printf '%s\n' "${url}/vnc.html?autoconnect=true&resize=scale" > /tmp/threads-novnc-url.txt
               break
             fi
             sleep 1
           done
+          test -s /tmp/threads-novnc-url.txt
+
+      - name: Share temporary login URL as run artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: threads-cloud-login-url
+          path: /tmp/threads-novnc-url.txt
+          retention-days: 1
+
+      - name: Keep remote login session open
+        env:
+          KEEP: ${{ inputs.keep_minutes || '35' }}
+        run: |
           minutes="$KEEP"; [ "$minutes" -gt 45 ] && minutes=45; [ "$minutes" -lt 1 ] && minutes=1
           sleep "$((minutes*60))"
 
