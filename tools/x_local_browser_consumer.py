@@ -99,7 +99,11 @@ def service(token,path,body=None):
     return data
 
 def cloud_owns_queue():
+    # A healthy browser alone is not an armed queue consumer. Do not let it
+    # starve local standby when the GitHub cloud publisher is disarmed.
     try:
+        settings=github("/actions/variables/ANTHARES_X_AUTOPUBLISH")
+        if str(settings.get("value") or "").lower() not in ("1","true"):return False
         r=requests.get(BASE+"/health",timeout=8)
         j=r.json()
         return r.status_code==200 and j.get("browser_ready") is True and j.get("vault_ready") is True
@@ -127,6 +131,21 @@ def path_for(issue,data):
     if length<100000:raise RuntimeError("MEDIA_EMPTY")
     tmp.replace(target)
     return target
+
+def media_preflight(path):
+    import shutil
+    ffprobe=shutil.which("ffprobe")
+    if not ffprobe:raise RuntimeError("FFPROBE_NOT_FOUND")
+    run=subprocess.run([ffprobe,"-v","error","-show_entries",
+                        "stream=width,height:format=duration","-of","json",str(path)],
+                       capture_output=True,text=True,timeout=35)
+    if run.returncode:raise RuntimeError("VIDEO_PROBE_FAILED")
+    data=json.loads(run.stdout)
+    video=next((r for r in data.get("streams",[]) if r.get("width")),{})
+    w=int(video.get("width") or 0);h=int(video.get("height") or 0)
+    seconds=float(data.get("format",{}).get("duration") or 0)
+    if not (w>h>0 and abs(w/h-16/9)<0.05 and 300<=seconds<=840):
+        raise RuntimeError("X_VIDEO_OUTSIDE_LONG_16_BY_9_LIMITS")
 
 def account(page):
     tab=page.locator('[data-testid="SideNav_AccountSwitcher_Button"]')
@@ -181,6 +200,7 @@ def one(issue,data,token):
         "X_SUBMISSION_UNCERTAIN_V1","X_LOCAL_SUBMISSION_STARTED_V1")) for c in comments):
         raise RuntimeError("PREVIOUS_GITHUB_SUBMISSION")
     media=path_for(issue,data)
+    media_preflight(media)
     attempts=int(readstate(n).get("attempts") or 0)+1
     state(n,"PREPARING",attempts=attempts)
     with sync_playwright() as playwright:
