@@ -237,7 +237,7 @@ async function handler(req,res){
    const q=await pool.query('SELECT status,count(*)::int AS count FROM cortes_tiktok_publications GROUP BY status');
    const daily=await pool.query("SELECT count(*) FILTER(WHERE publication_started_at IS NOT NULL AND (publication_started_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS started_today,count(*) FILTER(WHERE confirmed_at IS NOT NULL AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS confirmed_today FROM cortes_tiktok_publications");
    const counts=daily.rows[0];
-   return reply(res,200,{ok:true,count:Object.fromEntries(q.rows.map(x=>[x.status,x.count])),daily:{started_today:counts.started_today,confirmed_today:counts.confirmed_today,remaining_today:Math.max(0,100-counts.started_today)}});
+   return reply(res,200,{ok:true,count:Object.fromEntries(q.rows.map(x=>[x.status,Number(x.count)])),daily:{started_today:counts.started_today,confirmed_today:counts.confirmed_today,remaining_today:Math.max(0,100-counts.started_today)}});
   }
   if(role==='consumer'){
    let result;
