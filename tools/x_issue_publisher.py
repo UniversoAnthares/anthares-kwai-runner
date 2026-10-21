@@ -104,7 +104,8 @@ def eligible(issue):
 def markers(rows):
     return [
         c.get("body", "") for c in rows
-        if any(m in str(c.get("body", "")) for m in (START_MARKER, PROOF_MARKER, UNCERTAIN_MARKER))
+        if (c.get("user") or {}).get("login") == "github-actions[bot]"
+        and any(m in str(c.get("body", "")) for m in (START_MARKER, PROOF_MARKER, UNCERTAIN_MARKER))
     ]
 
 
@@ -166,8 +167,10 @@ def run():
                 identity = fingerprint(p)
             except (ValueError, TypeError):
                 identity = None
-            if identity and any(START_MARKER in str(x.get("body") or "")
-                                for x in all_comments.get(n, [])):
+            if identity and any(
+                    START_MARKER in str(x.get("body") or "")
+                    and (x.get("user") or {}).get("login") == "github-actions[bot]"
+                    for x in all_comments.get(n, [])):
                 seen_fingerprints.add(identity)
             if eligible(item) and not markers(all_comments.get(n, [])):
                 candidates.append((item, p, identity))
