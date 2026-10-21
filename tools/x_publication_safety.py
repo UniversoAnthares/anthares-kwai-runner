@@ -47,11 +47,19 @@ def confirmed_today(issue, comments, local_day, tz):
     result = set()
     for c in comments:
         body = str(c.get("body") or "")
-        if not re.search(r"\bCONFIRMED\b", body, re.I):
+        if ((c.get("user") or {}).get("login") != "github-actions[bot]"
+                or "X_VIDEO_CONFIRMED_V1" not in body):
             continue
-        if not re.search(r"\bvideo\b", body, re.I):
+        try:
+            line = next(line for line in body.splitlines() if line.startswith("{"))
+            proof = json.loads(line)
+        except (StopIteration, ValueError):
             continue
-        url = verified_post_url(body)
+        if (proof.get("kind") != "X_VIDEO_CONFIRMED_V1"
+                or proof.get("account") != ACCOUNT
+                or proof.get("video_verified") is not True):
+            continue
+        url = verified_post_url(str(proof.get("post_url") or ""))
         if not url:
             continue
         ts = c.get("created_at")
