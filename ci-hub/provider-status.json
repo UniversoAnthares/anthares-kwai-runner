@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-21-codeberg-source-gate-and-ci-capacity-audit",
+  "revision": "2026-10-21-gitlab-retained-standby-codeberg-audit",
   "checked_at_utc": "2026-10-21T21:20:00Z",
   "rules": {
     "regression_check_required_each_round": true,
@@ -128,11 +128,12 @@
       "eligible": false
     },
     "gitlab_ci": {
-      "status": "BLOCKED_QUOTA_EXCLUDED_FROM_ROUTING",
+      "status": "STANDBY_TEMPORARILY_BLOCKED_QUOTA",
       "evidence_class": "VERIFIED",
       "verified_at_utc": "2026-10-14T18:12:41Z",
-      "evidence": "GitLab latest project pipeline 2973638637 jobs failed before start with ci_quota_exceeded; repo and GitLab issue recovery transport remain independently accessible.",
-      "eligible": false
+      "evidence": "Most recent pipeline jobs report ci_quota_exceeded, while repository/API and the separate Issues transport remain available. GitLab CI stays registered and is automatically reconsidered after a fresh successful executor probe.",
+      "eligible": false,
+      "reopen_condition": "A fresh pipeline starts a hosted runner and a real execution succeeds, with no ci_quota_exceeded"
     },
     "cloudflare_workers_runtime": {
       "status": "READY_RUNTIME_ONLY_NOT_ARA_PRIMARY",

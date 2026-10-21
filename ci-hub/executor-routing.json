@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-21-codeberg-mirror-verified-failover-r20",
+  "revision": "2026-10-21-gitlab-standby-restored-codeberg-source-gate-r21",
   "provider_status_source": "ci-hub/provider-status.json",
   "continuity_policy": "ci-hub/CONTINUITY.md",
   "regression_check_required_each_round": true,
@@ -87,15 +87,16 @@
       "floot",
       "cloudflare_workers_builds",
       "github_actions_private",
-      "codeberg_actions"
+      "codeberg_actions",
+      "gitlab_ci"
     ],
-    "selection_rule": "Only providers with fresh execution evidence and a runnable job may execute. GitLab CI is blocked by quota and excluded. Codeberg Actions remains ineligible until repository Actions is enabled, a hosted/self-hosted runner and licenses are verified, and a real successful job is observed. A repository mirror is NOT a CI executor.",
+    "selection_rule": "All providers remain candidates in the ordered routing list. Select only a provider with a fresh successful execution probe and credentials. Quota-blocked GitLab CI is skipped temporarily and automatically eligible when a new hosted pipeline runs successfully. Codeberg is preferred as a verified Git source; Codeberg Actions requires enabling the repository unit, a runner and proven secret/queue authentication before executing LinkedIn publications.",
     "quota_policy": "BLOCKED_QUOTA providers are ineligible until fresh successful proof",
     "runner_allocation_health": {
       "github_actions_public": "DEGRADED_CURRENT_REPO_BACKLOG_20261021",
       "appveyor": "DEGRADED_CURRENT_QUEUE_20261021",
       "codeberg_actions": "NOT_CONFIGURED_REPOSITORY_ACTIONS_DISABLED",
-      "gitlab_ci": "BLOCKED_QUOTA_EXCLUDED"
+      "gitlab_ci": "BLOCKED_QUOTA_TEMPORARY_AUTOMATIC_RECHECK"
     }
   },
   "retired": {
@@ -239,9 +240,11 @@
       "ci_eligible": false
     },
     "gitlab_ci": {
-      "active": false,
-      "status": "BLOCKED_QUOTA_EXCLUDED_FROM_EXECUTOR_SELECTION",
-      "ci_eligible": false
+      "active": true,
+      "status": "STANDBY_BLOCKED_QUOTA_AUTO_RECHECK",
+      "ci_eligible": false,
+      "role": "ci_fallback_after_codeberg",
+      "reopen_condition": "new pipeline job assigned runner, no ci_quota_exceeded, real execution success"
     },
     "cloudflare_workers_builds": {
       "active": false,
@@ -326,7 +329,7 @@
     "canonical": "github",
     "recovery_order": [
       "codeberg",
-      "gitlab_emergency_only"
+      "gitlab"
     ],
     "codeberg": {
       "repository": "https://codeberg.org/UniversoAnthares/anthares-kwai-runner",
@@ -337,8 +340,10 @@
       "requires": "head parity verified after authenticated mirror"
     },
     "gitlab": {
-      "role": "EMERGENCY_SOURCE_ONLY_NO_CI",
-      "ci_eligible": false
+      "role": "FALLBACK_SOURCE_AND_CI_WHEN_HEALTHY",
+      "ci_eligible": false,
+      "temporary_block": "ci_quota_exceeded",
+      "reopen_condition": "fresh pipeline proof"
     },
     "fail_closed_on_divergence": true,
     "no_force_push": true
