@@ -113,7 +113,9 @@ def path_for(issue,data):
     name=Path(urlparse(data["media_url"]).path).name
     if not re.fullmatch(r"[a-zA-Z0-9_.-]+[.]mp4",name):raise RuntimeError("UNSAFE_VIDEO_NAME")
     local=Path(r"D:\AntharsWork\cortes-facebook-long-20261020\final")/name
-    if local.exists() and local.stat().st_size>100000:return local
+    if (data.get("source_id")=="cortes-facebook-long-20261020"
+            and local.exists() and local.stat().st_size>100000):
+        return local
     directory=ROOT/"x-longform-cache";directory.mkdir(parents=True,exist_ok=True)
     target=directory/(str(issue["number"])+"-"+name)
     if target.exists() and target.stat().st_size>100000:return target
@@ -212,14 +214,25 @@ def one(issue,data,token):
         page=tabs[0];account(page)
         if evidence(ctx,data["caption"]):
             raise RuntimeError("ALREADY_POSTED_RECONCILE")
-        if page.url!="https://x.com/compose/post":
-            page.goto("https://x.com/compose/post",wait_until="domcontentloaded",timeout=45000)
-        writer=page.locator('[role="dialog"] [data-testid="tweetTextarea_0"]').first
-        writer.wait_for(state="visible",timeout=25000)
-        writer.fill(data["caption"])
         dialog=page.locator('[role="dialog"]')
-        state(n,"UPLOADING")
-        dialog.locator('input[type="file"]').last.set_input_files(str(media),timeout=180000)
+        text_now="\\n".join(dialog.all_inner_texts()) if page.url.endswith("/compose/post") else ""
+        resume_ready=(page.url=="https://x.com/compose/post"
+                      and data["caption"] in text_now
+                      and media.name+": Pronto" in text_now
+                      and dialog.locator("video").count()>0)
+        if not resume_ready:
+            if page.url=="https://x.com/compose/post" and dialog.locator("video").count():
+                raise RuntimeError("X_EXISTING_OTHER_MEDIA_DRAFT_REFUSE_TO_OVERWRITE")
+            if page.url!="https://x.com/compose/post":
+                page.goto("https://x.com/compose/post",wait_until="domcontentloaded",timeout=45000)
+            dialog=page.locator('[role="dialog"]')
+            writer=dialog.locator('[data-testid="tweetTextarea_0"]').first
+            writer.wait_for(state="visible",timeout=25000)
+            writer.fill(data["caption"])
+            if dialog.locator("video").count():
+                raise RuntimeError("X_DRAFT_ALREADY_HAS_MEDIA")
+            state(n,"UPLOADING")
+            dialog.locator('input[type="file"]').last.set_input_files(str(media),timeout=180000)
         button=dialog.locator('[data-testid="tweetButton"]').first
         end=time.monotonic()+1800
         while time.monotonic()<end:
