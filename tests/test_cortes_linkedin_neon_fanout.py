@@ -10,12 +10,13 @@ def state(n):
 
 
 class CloudLinkedinFanoutTests(unittest.TestCase):
-    def test_creates_100_linkedin_jobs_from_100_valid_masters(self):
+    def test_reserves_first_20_linkedin_jobs_from_100_valid_masters(self):
         jobs=worker.candidate_jobs(state(100))
-        self.assertEqual(len(jobs),100)
+        self.assertEqual(len(jobs),20)
         self.assertEqual({x["platform"] for x in jobs},{"linkedin"})
         self.assertEqual({x["target_key"] for x in jobs},{"linkedin:primary"})
-        self.assertEqual(len({x["id"] for x in jobs}),100)
+        self.assertEqual(len({x["id"] for x in jobs}),20)
+        self.assertEqual([x["source_start"] for x in jobs],list(range(0,20000,1000)))
 
     def test_dedupe_idempotent_and_hash_matches(self):
         a=worker.candidate_jobs(state(1))[0]
