@@ -5,6 +5,8 @@ on:
     paths:
       - .github/workflows/buffer-cortes-live-calendar.yml
       - tools/cortes_buffer_live_calendar.py
+      - social_adapters/buffer_three_channels.py
+      - tools/cortes_buffer_live_calendar.py
   workflow_dispatch: {}
 permissions:
   contents: read
