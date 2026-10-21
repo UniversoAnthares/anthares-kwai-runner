@@ -1,5 +1,10 @@
 # Shared test-hub protocol
 
+## Mandatory closure of agent-owned windows (owner rule, 2026-10-21)
+
+Every Anthares agent, including Claude/Claude Code, Codex, Kilo, Cline, Copilot and delegated agents, MUST close **every temporary window, browser tab, console and dialog it opened immediately after finishing its use**, in success, error, timeout or cancellation paths. Record process/window/tab ownership at creation; close in `finally`; repair verified orphaned resources after crashes. Background browser/service processes may persist only while needed for active operations and must remain invisible and muted; close each temporary tab after use. Never bulk-kill processes, terminate personal Chrome tabs, user documents, active virtual machines or windows used by other agents. Shared resources require ownership/reference tracking. New launchers require verified lifecycle cleanup and audit logging. Canonical cross-repository instructions: https://github.com/UniversoAnthares/home/blob/main/AGENTS.md. Local Windows guard: `D:\AntharsWork\agent-window-policy\window_guard.py`. Delegate this policy to every agent and new session.
+
+
 
 ## Mandatory Windows-control priority (owner rule, 2026-10-21)
 
