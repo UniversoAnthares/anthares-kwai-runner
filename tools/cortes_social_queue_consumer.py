@@ -34,14 +34,26 @@ def prerequisites(platform, account):
         raise ConfigRequired("ANTHARES_SOCIAL_COMMIT=1 required")
     if not os.getenv("ANTHARES_DEVICE_TOKEN", "").strip():
         raise ConfigRequired("ANTHARES_DEVICE_TOKEN")
-    required = {
-        "pinterest": ("PINTEREST_ACCESS_TOKEN", "PINTEREST_BOARD_ID",
-                      "PINTEREST_COVER_IMAGE_URL"),
-        "linkedin": ("LINKEDIN_ACCESS_TOKEN", "LINKEDIN_AUTHOR_URN"),
-    }[platform]
+    if platform == "linkedin":
+        if account == "primary":
+            required = ("LINKEDIN_ACCESS_TOKEN", "LINKEDIN_AUTHOR_URN")
+        elif account == "personal":
+            required = ("LINKEDIN_PERSONAL_ACCESS_TOKEN", "LINKEDIN_PERSONAL_AUTHOR_URN")
+        else:
+            raise ValueError("linkedin_account_unverified")
+    else:
+        required = ("PINTEREST_ACCESS_TOKEN", "PINTEREST_BOARD_ID",
+                    "PINTEREST_COVER_IMAGE_URL")
     for name in required:
         if not os.getenv(name, "").strip():
             raise ConfigRequired(name)
+    if platform == "linkedin":
+        author = os.getenv(required[1], "").strip()
+        if account == "primary" and author != "urn:li:organization:145345334":
+            raise ConfigRequired("LINKEDIN_COMPANY_AUTHOR_URN_UNVERIFIED")
+        if account == "personal" and (not author.startswith("urn:li:person:") or
+                                      len(author) <= len("urn:li:person:")):
+            raise ConfigRequired("LINKEDIN_PERSONAL_AUTHOR_URN")
 
 
 def _safe_job(row, platform, account):
@@ -52,6 +64,8 @@ def _safe_job(row, platform, account):
         raise ValueError("queue_payload_missing")
     if row.get("duration_class") != "short":
         raise ValueError("queue_duration_class_mismatch")
+    if payload.get("platform") not in (None, platform) or payload.get("account_id") not in (None, account):
+        raise ValueError("queue_payload_account_mismatch")
     url = str(payload.get("media_url") or payload.get("video_url") or "").strip()
     parsed = urlparse(url)
     if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_ORIGINS or parsed.username or parsed.password:
