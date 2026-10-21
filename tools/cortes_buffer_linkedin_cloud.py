@@ -50,23 +50,11 @@ def oidc():
 
 
 def queue(action,payload=None):
-    req=urllib.request.Request(BASE+"?action=buffer-"+action,
-        data=json.dumps(payload or {},separators=(",",":")).encode("utf-8"),
-        method="POST",headers={
-            "Authorization":"Bearer "+oidc(),
-            "Content-Type":"application/json",
-            "User-Agent":"AntharesCortesLinkedInCloud/1.0",
-        })
-    try:
-        with urllib.request.urlopen(req,timeout=30) as r:
-            body=json.load(r)
-    except urllib.error.HTTPError as e:
-        raise RuntimeError("NEON_BUFFER_HTTP_"+str(e.code)) from None
-    except (OSError,ValueError):
-        raise RuntimeError("NEON_BUFFER_RESPONSE_UNCERTAIN") from None
-    if not body.get("ok"):
+    from tools.cortes_queue_ha import post
+    result=post("buffer-"+action,payload or {},oidc)
+    if not result.get("ok"):
         raise RuntimeError("NEON_BUFFER_ACTION_REJECTED_"+action)
-    return body
+    return result
 
 
 def verify_sent_post(remote_id):
