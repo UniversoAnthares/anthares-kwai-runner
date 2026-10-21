@@ -1,0 +1,224 @@
+#!/usr/bin/env python3
+"""Pinterest local web-UI consumer: Neon fenced lease -> Chrome CDP -> verified Pin.
+
+The direct Pinterest API and Buffer tokens are not used.  A two-phase child
+process obtains editorial/board/video readiness BEFORE Neon status='started'.
+Only a confirmed public Pin URL receives status='confirmed'; ambiguous results
+remain 'uncertain' and never get blindly retried.
+"""
+from __future__ import annotations
+import argparse
+import json
+import os
+from pathlib import Path
+import queue as threading_queue
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT))
+from cortes_neon_queue_client import call
+from anthares_publisher.editorial import prepare_publication_metadata
+
+ACCOUNT = "lucasyahn"
+TARGET = "pinterest:" + ACCOUNT
+OWNER = "pinterest-browser:" + (os.getenv("ANTHARES_DEVICE_ID") or "DESKTOP-FTDK0HP")
+CDP = ROOT / "tools" / "cortes_pinterest_browser_ui.mjs"
+EVENTS = Path(os.getenv("CORTES_PINTEREST_LOCAL_EVENTS", str(ROOT / "pinterest-browser-events.log")))
+NODE = os.getenv("CORTES_NODE_EXE", "node")
+
+
+def log(action: str, **info):
+    event = {"when": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "action": action, **info}
+    try:
+        EVENTS.parent.mkdir(parents=True, exist_ok=True)
+        with EVENTS.open("a", encoding="utf-8") as h:
+            h.write(json.dumps(event, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+    print(json.dumps(event, ensure_ascii=False), flush=True)
+
+
+def qa_incident(reason: str):
+    """Write a sanitized QA P0 incident, without secret/caption/video content."""
+    base = Path(os.getenv("CORTES_PINTEREST_QA_DIR",
+                          r"D:\AntharsWork\cortes-social-browser-20261020\qa-incidents"))
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        data = {"priority": "P0", "network": "pinterest",
+                "category": "BROWSER_PUBLICATION_BLOCKED",
+                "reason": reason[:125], "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        tmp = base / "pinterest-browser-p0.tmp"
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, base / "pinterest-browser-p0.json")
+    except OSError:
+        pass
+
+
+def node_run(*args, timeout=50):
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    p = subprocess.run([NODE, str(CDP), *args], stdout=subprocess.PIPE,
+                       stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                       errors="replace", timeout=timeout, cwd=str(ROOT),
+                       creationflags=flags)
+    lines = [json.loads(x) for x in p.stdout.splitlines() if x.strip().startswith("{")]
+    return lines[-1] if lines else {"status": "BLOCKED", "reason": "BROWSER_NO_RESPONSE"}
+
+
+def validate_job(row):
+    if not isinstance(row, dict) or row.get("target_key") != TARGET:
+        raise ValueError("PINTEREST_WRONG_TARGET")
+    if row.get("duration_class") != "short":
+        raise ValueError("PINTEREST_NOT_SHORT")
+    data = row.get("payload") or {}
+    if isinstance(data, str):
+        data = json.loads(data)
+    if not isinstance(data, dict) or data.get("account_id") != ACCOUNT or data.get("platform") != "pinterest":
+        raise ValueError("PINTEREST_WRONG_ACCOUNT")
+    meta = prepare_publication_metadata(data, title_limit=100)
+    url = str(data.get("media_url") or data.get("video_url") or "")
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname not in {"anthares.us", "www.anthares.us"} or \
+            parsed.username or parsed.password or not parsed.path.lower().endswith(".mp4"):
+        raise ValueError("PINTEREST_UNTRUSTED_MEDIA")
+    seconds = float(data.get("duration_seconds") or 0)
+    if not 30 <= seconds <= 90:
+        raise ValueError("PINTEREST_DURATION_INVALID")
+    return {"platform": "pinterest", "account_id": ACCOUNT, "media_url": url,
+            "title": meta["title"], "description": meta["description"][:500]}
+
+
+def child_protocol(jobfile: Path, fence: dict):
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    proc = subprocess.Popen([NODE, str(CDP), "--publish", str(jobfile)],
+                            cwd=str(ROOT), text=True, encoding="utf-8",
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, bufsize=1, creationflags=flags)
+    messages: threading_queue.Queue = threading_queue.Queue()
+    def reader():
+        try:
+            for line in proc.stdout:
+                try: messages.put(json.loads(line))
+                except ValueError: continue
+        finally:
+            messages.put({"phase": "_CHILD_EXIT"})
+    th = threading.Thread(target=reader, daemon=True)
+    th.start()
+    started = False
+    submitted = False
+    try:
+        deadline = time.monotonic() + 540
+        while time.monotonic() < deadline:
+            try: msg = messages.get(timeout=min(8, max(0.1, deadline - time.monotonic())))
+            except threading_queue.Empty:
+                if proc.poll() is not None:
+                    break
+                continue
+            if msg.get("phase") == "PREPARED":
+                result = call("start", fence)
+                if not result.get("ok"):
+                    log("PINTEREST_START_REJECTED")
+                    try: proc.stdin.write("STOP\n"); proc.stdin.flush()
+                    except OSError: pass
+                    return False, False, None
+                started = True
+                proc.stdin.write("GO\n")
+                proc.stdin.flush()
+            elif msg.get("phase") == "SUBMIT_CLICKED":
+                submitted = True
+                log("PINTEREST_SUBMIT_CLICKED", job_id=fence["id"])
+            elif msg.get("status") == "CONFIRMED":
+                return started, True, msg
+            elif msg.get("status") == "BLOCKED_OR_UNCERTAIN":
+                log("PINTEREST_UI_BLOCKED", reason=msg.get("reason", "unknown"))
+                qa_incident(str(msg.get("reason", "unknown")))
+                return started, False, None
+            elif msg.get("phase") == "_CHILD_EXIT":
+                break
+        qa_incident("PINTEREST_UI_TIMEOUT_OR_NO_FINAL_EVIDENCE")
+        return started, False, None
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        try: proc.communicate(timeout=8)
+        except (subprocess.TimeoutExpired, OSError): pass
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--preflight", action="store_true")
+    args = parser.parse_args()
+    if os.getenv("CORTES_PINTEREST_LOCAL_ENABLED") != "1":
+        log("DISABLED")
+        return 0
+    if os.getenv("ANTHARES_SOCIAL_COMMIT") != "1":
+        log("DISARMED")
+        return 0
+    if not os.getenv("ANTHARES_DEVICE_TOKEN", "").strip():
+        log("AUTH_REQUIRED_NEON_DEVICE")
+        return 3
+    try:
+        status = node_run("--preflight", timeout=48)
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        status = {"status": "BLOCKED", "reason": "CDP_PREFLIGHT_FAILURE"}
+    if status.get("status") != "READY":
+        reason = str(status.get("reason") or "PINTEREST_BROWSER_LOGIN_REQUIRED")
+        log("BROWSER_NOT_READY", reason=reason)
+        qa_incident(reason)
+        return 3
+    if args.preflight:
+        log("PINTEREST_BROWSER_READY", account=ACCOUNT)
+        return 0
+    leased = call("lease", {"target_key": TARGET, "owner": OWNER, "lease_seconds": 900})
+    if not leased.get("ok"):
+        log("QUEUE_LEASE_REJECTED")
+        return 4
+    row = leased.get("job")
+    if not row:
+        log("IDLE_NO_BROWSER_LANE_CUTS")
+        return 0
+    fence = {"id": row["id"], "owner": OWNER, "lease_generation": row["lease_generation"]}
+    if leased.get("delivery_route") != "browser":
+        # An outdated queue backend MUST NOT hand arbitrary jobs to this worker.
+        try: call("fail", fence)
+        except Exception: pass
+        log("QUEUE_BROWSER_ROUTE_NOT_ACKNOWLEDGED")
+        qa_incident("QUEUE_BROWSER_ROUTE_NOT_ACKNOWLEDGED")
+        return 4
+    try:
+        job = validate_job(row)
+        with tempfile.TemporaryDirectory(prefix="cortes-pin-") as folder:
+            filename = Path(folder) / "job.json"
+            filename.write_text(json.dumps(job, ensure_ascii=False), encoding="utf-8")
+            started, success, result = child_protocol(filename, fence)
+        if success and result and started:
+            remote_id = str(result.get("remote_id") or "")
+            permalink = str(result.get("permalink") or "")
+            if remote_id.isdecimal() and permalink == "https://br.pinterest.com/pin/" + remote_id + "/":
+                confirmed = call("confirm", {**fence, "remote_id": remote_id,
+                    "confirmation_evidence": {"kind": "pinterest_browser_verified_pin",
+                       "verified_id": remote_id, "permalink": permalink, "route": "browser"}})
+                if confirmed.get("ok"):
+                    log("PIN_CONFIRMED", pin=permalink, job_id=fence["id"])
+                    return 0
+            qa_incident("PINTEREST_NEON_CONFIRMATION_UNCERTAIN")
+    except Exception as exc:
+        log("PINTEREST_WORKER_ERROR", error=type(exc).__name__)
+        qa_incident(type(exc).__name__)
+    # For started jobs, fail() preserves UNCERTAIN, never auto-retries.
+    try: call("fail", fence)
+    except Exception: pass
+    return 5
+
+
+if __name__ == "__main__":
+    try: sys.exit(main())
+    except Exception as exc:
+        log("PINTEREST_WORKER_FAILED", error=type(exc).__name__)
+        qa_incident(type(exc).__name__)
+        sys.exit(5)
