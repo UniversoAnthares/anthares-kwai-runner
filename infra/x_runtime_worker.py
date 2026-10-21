@@ -147,6 +147,56 @@ def post_status():
         return jsonify(ok=False, error=type(exc).__name__), 503
 
 
+@app.post("/claim-local")
+def claim_local():
+    """Atomically fence a standalone Windows fallback before its first X click.
+
+    PostgreSQL is private to Northflank. The authenticated local executor must
+    reserve its attempt via this lightweight API, not by publishing through
+    the cloud Chromium or connecting to the database from the internet.
+    """
+    if not _auth_ok():
+        return jsonify(ok=False, error="unauthorized"), 401
+    data = request.get_json(silent=True) or {}
+    key = str(data.get("idempotency_key") or "")
+    if (data.get("account") != EXPECTED
+            or not re.fullmatch(r"[A-Za-z0-9_.:-]{12,160}", key)):
+        return jsonify(ok=False, error="invalid_claim"), 400
+    try:
+        from x_durable_ledger import AlreadyStarted, DailyLimitReached
+        durable_begin(key)
+        return jsonify(ok=True, claimed=True, account=EXPECTED)
+    except AlreadyStarted:
+        return jsonify(ok=False, error="already_started_reconcile"), 409
+    except DailyLimitReached:
+        return jsonify(ok=False, error="daily_limit_10"), 429
+    except Exception as exc:
+        return jsonify(ok=False, error=type(exc).__name__), 503
+
+
+@app.post("/confirm-local")
+def confirm_local():
+    """Persist independently verified local video proof into the shared ledger."""
+    if not _auth_ok():
+        return jsonify(ok=False, error="unauthorized"), 401
+    data = request.get_json(silent=True) or {}
+    key = str(data.get("idempotency_key") or "")
+    url = str(data.get("post_url") or "")
+    if (data.get("account") != EXPECTED
+            or data.get("video_verified") is not True
+            or data.get("caption_verified") is not True
+            or not re.fullmatch(r"[A-Za-z0-9_.:-]{12,160}", key)
+            or verified_post_url(url) != url):
+        return jsonify(ok=False, error="invalid_evidence"), 400
+    try:
+        from x_durable_ledger import identity
+        durable_confirm(identity(key), url)
+        return jsonify(ok=True, account=EXPECTED, post_url=url, confirmed=True,
+                       video_verified=True)
+    except Exception as exc:
+        return jsonify(ok=False, error=type(exc).__name__), 503
+
+
 @app.get("/verify")
 def verify_route():
     if not _auth_ok():
