@@ -35,6 +35,16 @@ jobs:
               for service,(channel_id,_,_) in PINNED_CHANNELS.items():
                   validate_channel(service,channel_id,live)
                   print("BUFFER_CHANNEL_VERIFIED="+service+" "+channel_id)
+              from social_adapters.buffer_three_channels import pinterest_boards, select_pinterest_board
+              boards=pinterest_boards()
+              print("BUFFER_PINTEREST_BOARDS_COUNT="+str(len(boards)))
+              for board in boards:
+                  print("BUFFER_PINTEREST_BOARD name="+board["name"][:90]+" serviceId="+board["serviceId"])
+              try:
+                  selected=select_pinterest_board(boards)
+                  print("BUFFER_PINTEREST_BOARD_SELECTED="+selected)
+              except BufferBlocked as exc:
+                  print("BUFFER_PINTEREST_BOARD_DECISION="+str(exc))
               print("BUFFER_CLOUD_IDENTITY_AUDIT=PASS")
           except BufferBlocked as exc:
               print("::error::BUFFER_CHANNEL_AUDIT_FAILED "+str(exc))

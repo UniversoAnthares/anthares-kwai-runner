@@ -54,6 +54,39 @@ class BufferPinnedTests(unittest.TestCase):
             self.assertTrue(caption.splitlines()[0].endswith(" ● Universo Anthares"))
             self.assertIn("www.anthares.us",caption)
 
+    def test_select_single_board_or_explicit_board(self):
+        choices=[{"serviceId":"1234","name":"Arte"},
+                 {"serviceId":"5678","name":"Literatura"}]
+        with self.assertRaisesRegex(b.BufferBlocked,"SELECTION_REQUIRED"):
+            b.select_pinterest_board(choices)
+        self.assertEqual(b.select_pinterest_board(choices,"5678"),"5678")
+        with self.assertRaisesRegex(b.BufferBlocked,"NOT_OWNED"):
+            b.select_pinterest_board(choices,"9876")
+        self.assertEqual(b.select_pinterest_board(choices[:1]),"1234")
+
+    def test_pinterest_video_mutation_includes_board_and_thumbnail(self):
+        platform="pinterest"
+        c=channel(platform)
+        seen=[]
+        def fake(query, token=None):
+            seen.append(query)
+            return {"createPost":{"post":{"id":"buffer-pin-123"}}}
+        with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"1",
+                                     "BUFFER_PINTEREST_CHANNEL_ID":c["id"],
+                                     "BUFFER_PINTEREST_BOARD_SERVICE_ID":"5678",
+                                     "GITHUB_ACTIONS":"true",
+                                     "RUNNER_ENVIRONMENT":"github-hosted",
+                                     "RUNNER_OS":"Linux"}), \
+             patch.object(b,"channels",return_value=[c]), \
+             patch.object(b,"resolve_pinterest_board",return_value="5678"), \
+             patch.object(b,"api",side_effect=fake):
+            result=b.schedule(master(platform))
+        self.assertEqual(result["status"],"SCHEDULED_IN_BUFFER")
+        self.assertFalse(result["confirmed_on_social_network"])
+        self.assertIn("boardServiceId",seen[0])
+        self.assertIn("5678",seen[0])
+        self.assertIn("thumbnailOffset: 2000",seen[0])
+
     def test_dry_run_no_network(self):
         with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"0"}),patch.object(b,"api",side_effect=AssertionError("NETWORK")):
             self.assertEqual(b.schedule(master())["status"],"DRY_RUN")
