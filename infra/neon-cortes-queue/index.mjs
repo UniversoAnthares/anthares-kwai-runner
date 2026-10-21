@@ -230,7 +230,7 @@ async function personalAction(action,body){
  const id=String(body.id||'');
  const fence=Number(body.lease_generation);
  if(action==='pending'){
-  const jobs=await query(`SELECT id,remote_id,confirmation_evidence FROM cortes_publications
+  const jobs=await query(`SELECT id,remote_id,lease_generation,lease_owner,confirmation_evidence FROM cortes_publications
     WHERE target_key=$1 AND status='uncertain'
     AND confirmation_evidence->>'kind'='personal_linkedin_post_uncertain'
     ORDER BY updated_at LIMIT 4`,[dest]);
