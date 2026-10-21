@@ -1,0 +1,35 @@
+name: CORTES Instagram - automatic Buffer cloud publisher
+on:
+  schedule:
+    - cron: '8,38 * * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: cortes-instagram-buffer-cloud-producer
+  cancel-in-progress: false
+jobs:
+  publish-and-reconcile:
+    # Remain disabled until the Instagram board has been confirmed by Buffer.
+    if: ${{ vars.CORTES_INSTAGRAM_BUFFER_ENABLED == 'true' && vars.CORTES_INSTAGRAM_BUFFER_PAUSED != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read Buffer key from Anthares Secrets without logging it
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
+      - name: Publish one verified Instagram cut and reconcile queued Pins
+        env:
+          ANTHARES_SOCIAL_COMMIT: '1'
+        run: |
+          set -euo pipefail
+          python -u tools/cortes_buffer_instagram_cloud.py
