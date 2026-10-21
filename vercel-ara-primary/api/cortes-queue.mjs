@@ -87,10 +87,11 @@ function validOidcProducerPayload(body){
 
 const BUFFER_WORKER_REPO='UniversoAnthares/anthares-kwai-runner';
 const BUFFER_WORKER_WORKFLOWS=new Set(['cortes-buffer-linkedin-cloud.yml']);
-const BUFFER_TARGETS={linkedin:'linkedin:primary',pinterest:'pinterest:lucasyahn'};
+const BUFFER_TARGETS={linkedin:'linkedin:primary',pinterest:'pinterest:lucasyahn',instagram:'instagram:universoanthares'};
 async function bufferWorkerAuth(req){
  if(await githubOidcEnqueueAuth(req,BUFFER_WORKER_REPO,BUFFER_WORKER_WORKFLOWS))return 'linkedin';
- return await githubOidcEnqueueAuth(req,BUFFER_WORKER_REPO,new Set(['cortes-buffer-pinterest-cloud.yml'])) ? 'pinterest' : null;
+ if(await githubOidcEnqueueAuth(req,BUFFER_WORKER_REPO,new Set(['cortes-buffer-pinterest-cloud.yml'])))return 'pinterest';
+ return await githubOidcEnqueueAuth(req,BUFFER_WORKER_REPO,new Set(['cortes-buffer-instagram-cloud.yml'])) ? 'instagram' : null;
 }
 async function bufferWorkerAction(action,body,platform){
  const target=BUFFER_TARGETS[platform];
@@ -133,9 +134,11 @@ async function bufferWorkerAction(action,body,platform){
   const id=String(body.id||''),remote=String(body.remote_id||''),
     link=String(body.external_link||'');
   let u;try{u=new URL(link)}catch{return{ok:false,error:'invalid_network_evidence_url'};}
-  if(u.protocol!=='https:'||!['linkedin.com','www.linkedin.com'].includes(u.hostname)||
-     !(u.pathname.startsWith('/feed/update/')||u.pathname.startsWith('/posts/')||
-       u.pathname.startsWith('/company/')))return{ok:false,error:'invalid_linkedin_evidence_url'};
+  const valid=platform==='linkedin'?(['linkedin.com','www.linkedin.com'].includes(u.hostname)&&
+    (u.pathname.startsWith('/feed/update/')||u.pathname.startsWith('/posts/')||u.pathname.startsWith('/company/'))):
+  platform==='pinterest'?(['pinterest.com','www.pinterest.com'].includes(u.hostname)&&/^\/pin\/[0-9]+\/?$/.test(u.pathname)):
+   (['instagram.com','www.instagram.com'].includes(u.hostname)&&/^\/(reel|p)\/[A-Za-z0-9_-]+\/?$/.test(u.pathname));
+  if(u.protocol!=='https:'||!valid)return{ok:false,error:'invalid_network_evidence_url'};
   const evidence={kind:'buffer_'+platform+'_sent_verified',buffer_post_id:remote,external_link:link,
     confirmed_on_network:true};
   const r=await pool.query(`UPDATE cortes_publications SET status='confirmed',
@@ -231,9 +234,10 @@ export default async function handler(req,res){try{const url=new URL(req.url,'ht
  const permitted=new Set(['lease','start','fail','scheduled','pending','reconcile']);
  const verb=action.slice('buffer-'.length);
  if(!permitted.has(verb))return reply(res,404,{ok:false,error:'buffer_action_not_found'});
- if(!await bufferWorkerAuth(req))return reply(res,401,{ok:false,error:'unauthorized_buffer_worker'});
+ const platform=await bufferWorkerAuth(req);
+ if(!platform)return reply(res,401,{ok:false,error:'unauthorized_buffer_worker'});
  const body=jsonBody(req);
- const out=await bufferWorkerAction(verb,body);
+ const out=await bufferWorkerAction(verb,body,platform);
  return reply(res,out.ok?200:409,out);
  }
  const isProducer=req.method==='POST'&&action==='enqueue';const auth=isProducer&&await githubOidcEnqueueAuth(req)?{ok:true,device:'github-oidc-dispatch'}:
