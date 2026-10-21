@@ -207,7 +207,11 @@ def run():
     # Reserve a daily budget before any irreversible request.
     if status["confirmed"] >= 10:
         return
-    candidates.sort(key=lambda x: (x[0].get("created_at") or "", x[0]["number"]))
+    # Previously unused reserve masters remain first-priority across days.
+    # Ordinary daily-round issues remain scoped to their creation day.
+    candidates.sort(key=lambda x: (
+        0 if x[1].get("reserve_from") else 1,
+        x[0].get("created_at") or "", x[0]["number"]))
     for issue, payload, fp in candidates:
         number = issue["number"]
         if not fp or fp in seen_fingerprints:
@@ -219,7 +223,7 @@ def run():
             posted_at = datetime.fromisoformat(issue["created_at"].replace("Z", "+00:00")).astimezone(TZ)
         except (ValueError, KeyError):
             continue
-        if posted_at.date() != now.date():
+        if posted_at.date() != now.date() and not payload.get("reserve_from"):
             continue
         status_code, identity = remote("/verify", timeout=90)
         if status_code != 200 or identity.get("ok") is not True or identity.get("handle") != "lucasyahn":
