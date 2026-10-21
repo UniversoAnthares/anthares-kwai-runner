@@ -17,12 +17,12 @@ concurrency:
 jobs:
   fullflow:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       X_SOURCE_CHANNEL: 'https://www.youtube.com/@UniversoAnthares/streams'
       X_SCAN_START: '600'
-      X_SCAN_SECONDS: '300'
-      X_MIN_SOURCE_SECONDS: '1200'
+      X_SCAN_SECONDS: '780'
+      X_MIN_SOURCE_SECONDS: '1800'
       X_WHISPER_MODEL: 'base'
       PYTHONUTF8: '1'
     steps:
@@ -40,6 +40,7 @@ jobs:
         id: media
         run: |
           set -e
+          test "$(stat -c%s x-cloud-output.mp4)" -lt 99000000 || { echo 'X_MEDIA_GITHUB_FILE_LIMIT'; exit 1; }
           cp x-cloud-output.mp4 /tmp/x-cloud-output.mp4
           cp x-render-result.json /tmp/x-render-result.json
           git config user.name 'Anthares X Real Full Flow'
@@ -70,7 +71,7 @@ jobs:
           import json,os,urllib.request
           result=json.load(open('/tmp/x-render-result.json',encoding='utf-8'))
           body={
-            'platform':'x','account':'lucasyahn','caption':result['caption'],'media_url':os.environ['MEDIA_URL'],
+            'platform':'x','account':'lucasyahn','duration_class':'long','caption':result['caption'],'media_url':os.environ['MEDIA_URL'],
             'source_id':result['source']['video_id'],'source_url':result['source']['source_url'],
             'source_route':result['source_route'],'segment_start':result['segment_start'],'segment_end':result['segment_end'],
             'microedit':result['microedit'],'output_video':result['output_video'],'real_fullflow_test':True
