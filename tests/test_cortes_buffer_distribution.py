@@ -49,12 +49,12 @@ class BufferDistributionTests(unittest.TestCase):
         self.assertEqual(len(partition_source([candidate(0)])[0]),1)
 
     def test_block_overlapping_buffer_slot_even_if_queue_empty(self):
-        now=datetime(2026,10,21,11,35,tzinfo=TZ)
-        c=calendar(now)
-        with patch("anthares_publisher.buffer_distribution.datetime") as dt:
-            dt.now.return_value=now
-            self.assertFalse(alternative_time_allowed(c,"pinterest",now))
-            self.assertTrue(alternative_time_allowed(c,"pinterest",now.replace(hour=12,minute=10)))
+        current=datetime.now(TZ)
+        days=(2-current.weekday())%7
+        wednesday=(current+timedelta(days=days)).replace(hour=11,minute=35,second=0,microsecond=0)
+        c=calendar(current)
+        self.assertFalse(alternative_time_allowed(c,"pinterest",wednesday))
+        self.assertTrue(alternative_time_allowed(c,"pinterest",wednesday.replace(hour=12,minute=10)))
 
     def test_block_stale_calendar_fail_closed(self):
         now=datetime.now(TZ)
