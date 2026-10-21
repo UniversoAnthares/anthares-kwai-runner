@@ -1,0 +1,43 @@
+name: CORTES LinkedIn personal - fenced video cloud publisher
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-linkedin-personal-cloud.yml'
+      - 'tools/cortes_linkedin_personal_cloud.py'
+  schedule:
+    - cron: '4,14,24,34,44,54 * * * *'
+  workflow_dispatch: {}
+  workflow_run:
+    workflows: ["CORTES 3 independent networks - all shorts cloud fanout"]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: cortes-linkedin-personal-cloud
+  cancel-in-progress: false
+jobs:
+  publish-one:
+    if: ${{ vars.CORTES_LINKEDIN_PERSONAL_PAUSED != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read personal member token from Bitwarden Secrets Manager
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            bd261e5e-11bf-49fb-9baf-b4ea014ec5b7 > LINKEDIN_PERSONAL_ACCESS_TOKEN
+      - name: Execute exactly one personal video publication, fenced and quota-scoped
+        env:
+          ANTHARES_SOCIAL_COMMIT: '1'
+        run: |
+          set -euo pipefail
+          python -u -m tools.cortes_linkedin_personal_cloud
