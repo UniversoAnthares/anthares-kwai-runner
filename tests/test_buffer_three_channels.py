@@ -65,7 +65,7 @@ class BufferPinnedTests(unittest.TestCase):
                 "metadata":{"board":{"serviceId":"123456","name":"Universo Anthares",
                                       "url":"https://pinterest.com/lucasyahn/anthares/"}}}}]}}
         with patch.dict(os.environ,{"BUFFER_PINTEREST_BOARD_ID":""}), patch.object(b,"api",side_effect=fake):
-            self.assertEqual(b.resolve_pinterest_board(ch),"123456")
+            self.assertEqual(b.resolve_pinterest_board(ch),b.PINTEREST_PUBLIC_BOARD_ID)
 
     def test_board_history_never_accepts_another_channel(self):
         ch=b.PINNED_CHANNELS["pinterest"][0]
@@ -77,7 +77,7 @@ class BufferPinnedTests(unittest.TestCase):
             return {"posts":{"edges":[{"node":{"channelId":"attacker-other",
                 "metadata":{"board":{"serviceId":"123456"}}}}]}}
         with patch.object(b,"api",side_effect=fake):
-            with self.assertRaisesRegex(b.BufferBlocked,"BOARD_SELECTION_REQUIRED"):
+            with self.assertRaisesRegex(b.BufferBlocked,"PUBLIC_BOARD_UNAVAILABLE"):
                 b.resolve_pinterest_board(ch)
 
     def test_select_single_board_or_explicit_board(self):
@@ -183,7 +183,7 @@ class BufferPinnedTests(unittest.TestCase):
             {"serviceId":"board-b","url":"https://www.pinterest.com/lucasyahn/b"}]}}}
         with patch.dict(os.environ,{"BUFFER_PINTEREST_BOARD_ID":""}):
             with patch.object(b,"api",return_value=details):
-                with self.assertRaisesRegex(b.BufferBlocked,"PINTEREST_BOARD_NOT_VERIFIED"):
+                with self.assertRaisesRegex(b.BufferBlocked,"PINTEREST_BOARD_ENV_MISMATCH"):
                     b.resolve_pinterest_board(b.PINNED_CHANNELS["pinterest"][0])
 
     def test_pinterest_verified_board_emitted_in_mutation(self):
@@ -192,15 +192,15 @@ class BufferPinnedTests(unittest.TestCase):
         def mock_api(query,token=None):
             captured.append(query)
             if "channel(input:" in query:
-                return {"channel":{"metadata":{"boards":[{"serviceId":"board-31","url":"https://pinterest.com/lucasyahn/anthares"}]}}}
+                return {"channel":{"metadata":{"boards":[{"serviceId":b.PINTEREST_PUBLIC_BOARD_ID,"url":"https://pinterest.com/lucasyahn/anthares"}]}}}
             return {"createPost":{"post":{"id":"pin-1"}}}
         with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"1","BUFFER_PINTEREST_CHANNEL_ID":profile["id"],
-                                 "BUFFER_PINTEREST_BOARD_ID":"board-31",
+                                 "BUFFER_PINTEREST_BOARD_ID":b.PINTEREST_PUBLIC_BOARD_ID,
                                  "GITHUB_ACTIONS":"true","RUNNER_ENVIRONMENT":"github-hosted","RUNNER_OS":"Linux"}):
             with patch.object(b,"channels",return_value=[profile]),patch.object(b,"api",side_effect=mock_api):
                 result=b.schedule(master("pinterest"))
         self.assertEqual(result["status"],"SCHEDULED_IN_BUFFER")
-        self.assertIn("boardServiceId: \"board-31\"",captured[-1])
+        self.assertIn(b.PINTEREST_PUBLIC_BOARD_ID,captured[-1])
         self.assertIn("https://www.anthares.us",captured[-1])
 
     def test_pinterest_wrong_board_id_is_blocked(self):
