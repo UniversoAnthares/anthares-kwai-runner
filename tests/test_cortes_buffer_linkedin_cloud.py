@@ -77,6 +77,38 @@ class LinkedInCloudContracts(unittest.TestCase):
                         "schedulingType":"automatic","externalLink":"https://www.linkedin.com/feed/update/urn:li:activity:123"}}):
             self.assertIn("linkedin.com",publisher.verify_sent_post("buffer123"))
 
+    def test_buffer_tracking_query_removed_from_verified_permalink(self):
+        raw="https://www.linkedin.com/feed/update/urn:li:ugcPost:123?trk=share#details"
+        with patch.object(publisher,"api",return_value={"post":{
+                "id":"buffer123","status":"sent","channelId":publisher.LINKEDIN_ID,
+                "schedulingType":"automatic","externalLink":raw}}):
+            self.assertEqual(publisher.verify_sent_post("buffer123"),
+                             "https://www.linkedin.com/feed/update/urn:li:ugcPost:123")
+
+    def test_wrong_company_permalinks_rejected(self):
+        with patch.object(publisher,"api",return_value={"post":{
+                "id":"buffer123","status":"sent","channelId":publisher.LINKEDIN_ID,
+                "schedulingType":"automatic",
+                "externalLink":"https://www.linkedin.com/company/99999/posts/unknown"}}):
+            with self.assertRaisesRegex(RuntimeError,"POST_LINK_INVALID"):
+                publisher.verify_sent_post("buffer123")
+
+    def test_no_credentialed_permalink(self):
+        with patch.object(publisher,"api",return_value={"post":{
+                "id":"buffer123","status":"sent","channelId":publisher.LINKEDIN_ID,
+                "schedulingType":"automatic",
+                "externalLink":"https://user:pass@www.linkedin.com/feed/update/urn:li:ugcPost:123"}}):
+            with self.assertRaisesRegex(RuntimeError,"POST_LINK_INVALID"):
+                publisher.verify_sent_post("buffer123")
+
+    def test_cloud_workflow_secondary_wakeup(self):
+        from pathlib import Path
+        workflow=(Path(publisher.__file__).resolve().parents[1]/
+                  ".github/workflows/cortes-buffer-linkedin-cloud.yml").read_text()
+        self.assertIn("workflow_run:",workflow)
+        self.assertIn("CORTES 3 independent networks - all shorts cloud fanout",workflow)
+        self.assertIn("cancel-in-progress: false",workflow)
+
     def test_scheduled_post_never_confirmed(self):
         with patch.object(publisher,"api",return_value={"post":{"id":"buffer123","status":"scheduled","channelId":publisher.LINKEDIN_ID,
                         "schedulingType":"automatic","externalLink":None}}):
