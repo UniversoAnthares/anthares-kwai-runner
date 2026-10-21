@@ -72,6 +72,15 @@ class XConsumerTests(unittest.TestCase):
         self.assertEqual(len(identity("x_" + ("a" * 64))), 64)
 
     @patch("x_durable_ledger._connection")
+    def test_daily_hardcap_blocks_tenth_plus_one(self, factory):
+        from x_durable_ledger import DailyLimitReached
+        conn = factory.return_value.__enter__.return_value
+        cur = conn.cursor.return_value.__enter__.return_value
+        cur.fetchone.return_value = (10,)
+        with self.assertRaises(DailyLimitReached):
+            begin("x_" + ("c" * 64))
+
+    @patch("x_durable_ledger._connection")
     def test_existing_db_claim_is_never_reused(self, factory):
         conn = factory.return_value.__enter__.return_value
         cur = conn.cursor.return_value.__enter__.return_value
