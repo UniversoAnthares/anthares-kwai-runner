@@ -78,6 +78,51 @@ class BufferPinnedTests(unittest.TestCase):
                 with self.assertRaisesRegex(b.BufferBlocked,"CLOUD_HOSTED_RUNNER_REQUIRED"):
                     b.schedule(master())
 
+    def test_instagram_mutation_forces_reel(self):
+        profile=channel("instagram")
+        captured=[]
+        def mock_api(query, token=None):
+            captured.append(query)
+            return {"createPost":{"post":{"id":"ig-reel-1"}}}
+        with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"1","BUFFER_INSTAGRAM_CHANNEL_ID":profile["id"],
+                                 "GITHUB_ACTIONS":"true","RUNNER_ENVIRONMENT":"github-hosted","RUNNER_OS":"Linux"}):
+            with patch.object(b,"channels",return_value=[profile]),patch.object(b,"api",side_effect=mock_api):
+                result=b.schedule(master("instagram"))
+        self.assertEqual(result["status"],"SCHEDULED_IN_BUFFER")
+        self.assertIn("metadata: { instagram: { type: reel, shouldShareToFeed: true } }",captured[0])
+
+    def test_pinterest_board_required_on_ambiguous_account(self):
+        details={"channel":{"metadata":{"boards":[
+            {"serviceId":"board-a","url":"https://www.pinterest.com/lucasyahn/a"},
+            {"serviceId":"board-b","url":"https://www.pinterest.com/lucasyahn/b"}]}}}
+        with patch.dict(os.environ,{"BUFFER_PINTEREST_BOARD_ID":""}):
+            with patch.object(b,"api",return_value=details):
+                with self.assertRaisesRegex(b.BufferBlocked,"PINTEREST_BOARD_NOT_VERIFIED"):
+                    b.resolve_pinterest_board(b.PINNED_CHANNELS["pinterest"][0])
+
+    def test_pinterest_verified_board_emitted_in_mutation(self):
+        profile=channel("pinterest")
+        captured=[]
+        def mock_api(query,token=None):
+            captured.append(query)
+            if "channel(input:" in query:
+                return {"channel":{"metadata":{"boards":[{"serviceId":"board-31","url":"https://pinterest.com/lucasyahn/anthares"}]}}}
+            return {"createPost":{"post":{"id":"pin-1"}}}
+        with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"1","BUFFER_PINTEREST_CHANNEL_ID":profile["id"],
+                                 "BUFFER_PINTEREST_BOARD_ID":"board-31",
+                                 "GITHUB_ACTIONS":"true","RUNNER_ENVIRONMENT":"github-hosted","RUNNER_OS":"Linux"}):
+            with patch.object(b,"channels",return_value=[profile]),patch.object(b,"api",side_effect=mock_api):
+                result=b.schedule(master("pinterest"))
+        self.assertEqual(result["status"],"SCHEDULED_IN_BUFFER")
+        self.assertIn("boardServiceId: \"board-31\"",captured[-1])
+        self.assertIn("https://www.anthares.us",captured[-1])
+
+    def test_pinterest_wrong_board_id_is_blocked(self):
+        data={"channel":{"metadata":{"boards":[{"serviceId":"good","url":"https://pinterest.com/lucasyahn/a"}]}}}
+        with patch.dict(os.environ,{"BUFFER_PINTEREST_BOARD_ID":"other"}),patch.object(b,"api",return_value=data):
+            with self.assertRaisesRegex(b.BufferBlocked,"PINTEREST_BOARD_NOT_VERIFIED"):
+                b.resolve_pinterest_board(b.PINNED_CHANNELS["pinterest"][0])
+
     def test_external_master_blocked(self):
         with self.assertRaisesRegex(b.BufferBlocked,"MASTER_MP4_URL_INVALID"):
             b.prepare({**master(),"media_url":"https://example.com/clip.mp4"})
