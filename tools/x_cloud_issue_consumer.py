@@ -131,7 +131,7 @@ def _process(issue):
                 return "RECOVERED_CONFIRMED " + url
         except Exception as exc:
             print("X_RECONCILE_PROBE_FAILED=" + type(exc).__name__, flush=True)
-        return "UNCERTAIN_NEEDS_MANUAL_RECONCILIATION"
+        return "UNCERTAIN_PREEXISTING_RECONCILE"
 
     # Read-only preflight BEFORE writing irrevocable BEGIN evidence.
     verify = _worker("/verify", timeout=60)
@@ -152,7 +152,7 @@ def _process(issue):
         print("X_QA_P0_UNCERTAIN_POST issue=" + str(number)
               + " error=" + type(exc).__name__, flush=True)
         # BEGIN remains as durable fence. Never send a second POST.
-        return "UNCERTAIN_NEEDS_MANUAL_RECONCILIATION"
+        return "UNCERTAIN_NEW_SUBMISSION"
     return "CONFIRMED " + _complete(issue, body, result)
 
 
@@ -171,7 +171,7 @@ def main():
             print("X_QA_P0_ITEM_BLOCKED issue=" + str(issue["number"])
                   + " error=" + type(exc).__name__, flush=True)
             uncertain.append(issue["number"])
-            continue
+            break
         if result in {"SKIP_UNQUALIFIED_ISSUE", "SKIP_UNSAFE_MEDIA_URL", "SKIP_INVALID_CAPTION"}:
             continue
         print(json.dumps({"issue": issue["number"], "status": result}), flush=True)
@@ -179,7 +179,9 @@ def main():
             return 0
         uncertain.append(issue["number"])
         # A previous uncertain item must never prevent a distinct X clip from proceeding.
-        # Only one new irreversible publish will be attempted in each run.
+        # A newly attempted publish ends this invocation even on uncertain outcome.
+        if result != "UNCERTAIN_PREEXISTING_RECONCILE":
+            break
     if uncertain:
         print("X_QA_P0_UNCERTAIN_ISSUES=" + ",".join(map(str, uncertain)), flush=True)
         return 3
