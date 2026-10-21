@@ -2,6 +2,7 @@ const X_KEY = "x:web:session:lucasyahn:opaque:v1";
 const BROWSER_KEY = "anthares:browser:legacy:opaque:v1";
 const BROWSER_RUNTIME_KEY = "anthares:browser:runtime:opaque:v2";
 const BROWSER_CONTROL_KEY = "anthares:browser:control:opaque:v1";
+const BROWSER_TIKTOK_LUCAROSALEM_KEY = "anthares:browser:tiktok:lucarosalem:opaque:v1";
 const BROWSER_CONTROL_JWK_KEY = "anthares:browser:signing:control-jwk:v1";
 const BROWSER_RUNTIME_JWK_KEY = "anthares:browser:signing:runtime-jwk:v1";
 const MAX_BODY = 500000;
@@ -66,6 +67,7 @@ function validEnvelope(x){return !!x&&x.schema==="anthares.encrypted-browser-sta
 function browserStateKey(pathname){
   if(pathname==="/browser-state/runtime")return BROWSER_RUNTIME_KEY;
   if(pathname==="/browser-state/control")return BROWSER_CONTROL_KEY;
+  if(pathname==="/browser-state/tiktok/lucarosalem")return BROWSER_TIKTOK_LUCAROSALEM_KEY;
   if(pathname==="/browser-state")return BROWSER_KEY;
   return null;
 }
@@ -75,7 +77,7 @@ export default {
     const url=new URL(request.url);
     if(url.pathname==="/health"){
       const keys=env.ANTHARES_STATE?await browserKeyStatus(env):{runtime:false,control:false};
-      return json({ok:true,service:"anthares-x-vault",version:"x-vault-v9-render-independent-keys",persistent_state:!!env.ANTHARES_STATE,browser_state_slot:true,browser_state_slots:["legacy","runtime","control"],browser_identity:"registered-public-keys",render_independent:true,browser_keys:keys});
+      return json({ok:true,service:"anthares-x-vault",version:"x-vault-v9-render-independent-keys",persistent_state:!!env.ANTHARES_STATE,browser_state_slot:true,browser_state_slots:["legacy","runtime","control","tiktok-lucarosalem"],browser_identity:"registered-public-keys",render_independent:true,browser_keys:keys});
     }
     if(url.pathname==="/browser-key/status"){
       if(!env.ANTHARES_STATE)return json({ok:false,error:"persistent_state_unavailable"},503);

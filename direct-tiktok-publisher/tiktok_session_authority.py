@@ -19,7 +19,7 @@ VAULT_URL = os.getenv(
     "ANTHARES_TIKTOK_SESSION_VAULT_URL",
     "https://anthares-x-vault.anthares1.workers.dev/browser-state/runtime",
 ).strip()
-EXPECTED_USERNAME = "universo.anthares"
+EXPECTED_USERNAME = os.getenv("EXPECTED_TIKTOK_USERNAME", "universo.anthares").strip().lstrip("@").lower()
 P256_ORDER = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
 AAD = b"anthares-browser-runtime-state-v1"
 SCHEMA = "anthares.encrypted-browser-state.v1"
@@ -99,8 +99,15 @@ def _headers(body: bytes = b"") -> dict[str, str]:
 
 
 def _assert_runtime_url() -> None:
-    if not VAULT_URL.endswith("/browser-state/runtime"):
-        raise SessionAuthorityError("canonical_session_authority_must_be_runtime")
+    if EXPECTED_USERNAME == "lucarosalem":
+        if VAULT_URL != "https://anthares-x-vault.anthares1.workers.dev/browser-state/tiktok/lucarosalem":
+            raise SessionAuthorityError("tiktok_secondary_vault_isolation_required")
+    elif EXPECTED_USERNAME == "universo.anthares":
+        # Preserve the primary's existing endpoint/failover configuration.
+        if not VAULT_URL.endswith("/browser-state/runtime"):
+            raise SessionAuthorityError("tiktok_primary_vault_isolation_required")
+    else:
+        raise SessionAuthorityError("tiktok_account_not_allowlisted")
 
 
 def load_canonical_state() -> tuple[dict, dict]:

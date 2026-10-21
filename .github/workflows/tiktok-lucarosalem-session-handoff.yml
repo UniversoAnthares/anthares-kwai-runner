@@ -1,0 +1,35 @@
+name: TikTok lucarosalem isolated session handoff
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-lucarosalem-session-handoff
+  cancel-in-progress: false
+jobs:
+  save_session:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Windows]
+    timeout-minutes: 9
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      EXPECTED_TIKTOK_USERNAME: lucarosalem
+      ANTHARES_TIKTOK_SESSION_VAULT_URL: https://anthares-x-vault.anthares1.workers.dev/browser-state/tiktok/lucarosalem
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify strict secondary account identity tests
+        shell: pwsh
+        run: python -m unittest discover -s tests -p test_tiktok_lucarosalem_capture.py -v
+      - name: Install local browser transport and encrypted vault libraries
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check -q playwright cryptography requests
+      - name: Confirm authenticated secondary identity and save encrypted session
+        shell: pwsh
+        run: |
+          if (-not $env:ARA_SHARED) { throw 'SECONDARY_SESSION_SECRET_NOT_BOUND' }
+          python -u tools/tiktok_lucarosalem_session_capture.py
+          if ($LASTEXITCODE -ne 0) { throw 'SECONDARY_SESSION_CAPTURE_NOT_VERIFIED' }
