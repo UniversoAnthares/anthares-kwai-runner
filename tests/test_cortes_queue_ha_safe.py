@@ -21,7 +21,7 @@ class SafeFailover(unittest.TestCase):
         self.token=lambda: "oidc_"+("A"*90)
         self.available=(ha.PROVIDERS[0],ha.PROVIDERS[1])
 
-    def test_neon_is_used_when_vercel_health_fails(self):
+    def test_secondary_is_used_when_primary_health_fails(self):
         sent=[]
         def open_(request,timeout):
             sent.append(request.full_url)
