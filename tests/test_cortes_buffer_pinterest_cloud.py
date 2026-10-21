@@ -37,12 +37,47 @@ class PinterestCloudTests(unittest.TestCase):
         with patch.object(p,"api",side_effect=pending):
             self.assertIsNone(p.verify_sent_post("123"))
 
-    def test_missing_buffer_board_blocks_leasing_but_keeps_reconciliation(self):
+    def test_missing_buffer_board_fails_ci_without_leasing(self):
         with patch.object(p,"cloud_only"), patch.object(p,"reconcile",return_value=0), \
              patch("social_adapters.buffer_three_channels.pinterest_boards",
                    return_value=[]), patch.object(p,"publish_once") as publish:
-            self.assertEqual(p.main(),0)
+            with self.assertRaisesRegex(p.BufferBlocked,"BOARD_NOT_SYNCED"):
+                p.main()
             publish.assert_not_called()
+
+    def test_buffer_500_is_visible_incident_without_leasing(self):
+        with patch.object(p,"cloud_only"), patch.object(p,"reconcile",return_value=0), \
+             patch("social_adapters.buffer_three_channels.pinterest_boards",
+                   side_effect=p.BufferBlocked("BUFFER_HTTP_500")), \
+             patch.object(p,"publish_once") as publish:
+            with self.assertRaisesRegex(p.BufferBlocked,"BOARD_READ_FAILED"):
+                p.main()
+            publish.assert_not_called()
+
+    def test_board_ready_can_resume_without_operator(self):
+        from social_adapters.buffer_three_channels import PINTEREST_PUBLIC_BOARD_ID
+        with patch.object(p,"cloud_only"), patch.object(p,"reconcile",return_value=0), \
+             patch("social_adapters.buffer_three_channels.pinterest_boards",
+                   return_value=[{"serviceId":PINTEREST_PUBLIC_BOARD_ID}]), \
+             patch.object(p,"publish_once",return_value="SCHEDULED_IN_BUFFER") as publish:
+            self.assertEqual(p.main(),0)
+            publish.assert_called_once()
+
+    def test_bad_readback_does_not_prevent_other_pins_reconciling(self):
+        jobs=[{"id":"a","remote_id":"bad"},{"id":"b","remote_id":"good"},
+              {"id":"c","remote_id":""}]
+        def queue(action,payload=None):
+            if action=="pending":return {"jobs":jobs}
+            if action=="reconcile":return {"ok":True}
+            raise AssertionError(action)
+        def verify(remote_id):
+            if remote_id=="bad":
+                raise p.BufferBlocked("BUFFER_HTTP_500")
+            return "https://www.pinterest.com/pin/123456/"
+        with patch.object(p,"queue",side_effect=queue) as q, \
+             patch.object(p,"verify_sent_post",side_effect=verify):
+            self.assertEqual(p.reconcile(),1)
+            self.assertEqual(q.call_count,2)
 
     def test_no_cloud_credentials_fails_without_queue_call(self):
         with patch.dict(p.os.environ,{"GITHUB_ACTIONS":"false","BUFFER_API_KEY":""}):
