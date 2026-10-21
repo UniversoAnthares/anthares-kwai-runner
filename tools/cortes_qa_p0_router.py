@@ -39,8 +39,21 @@ def network_for(value):
 
 def workflow_incidents():
     output=[]
+    unavailable=0
     for repo in REPOS:
-        data=http("https://api.github.com/repos/"+repo+"/actions/runs?per_page=75")
+        try:
+            data=http("https://api.github.com/repos/"+repo+"/actions/runs?per_page=75")
+        except (urllib.error.HTTPError, urllib.error.URLError, ValueError, TypeError) as exc:
+            # Repository-scoped GITHUB_TOKEN may read this repo's Actions but
+            # lack rights to a second repo. Keep routing local publishers.
+            unavailable+=1
+            kind="HTTP_"+str(exc.code) if isinstance(exc,urllib.error.HTTPError) else type(exc).__name__
+            print("::warning::CORTES_QA_GITHUB_REPO_UNAVAILABLE repo="+repo+" reason="+kind)
+            output.append({"id":marker("github-partial-visibility",repo,NOW.date().isoformat()),
+                           "network":"cortes-general","stage":"qa_visibility_lost_github_repo",
+                           "evidence":"https://github.com/"+repo+"/actions",
+                           "description":"Missing Action run visibility for "+repo})
+            continue
         for run in data.get("workflow_runs",[]):
             name=str(run.get("name") or "")
             if not re.search(r"cortes|tiktok|kwai|pinterest|threads|instagram|facebook|linkedin|youtube|publish|buffer",name,re.I):
@@ -66,6 +79,8 @@ def workflow_incidents():
                            "stage":"github_actions_"+run["conclusion"],
                            "evidence":"https://github.com/"+repo+"/actions/runs/"+rid,
                            "description":name[:100]})
+    if unavailable==len(REPOS):
+        raise RuntimeError("CORTES_QA_GITHUB_ALL_REPOS_INACCESSIBLE")
     return output
 
 def wp_incidents():
