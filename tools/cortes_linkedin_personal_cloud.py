@@ -24,8 +24,8 @@ DEST = "linkedin:personal"
 
 
 def oidc():
-    from tools.cortes_linkedin_neon_fanout import oidc_token
-    return oidc_token()
+    from tools.cortes_linkedin_neon_fanout import oidc as fresh_oidc
+    return fresh_oidc()
 
 
 def queue(action, payload=None):
