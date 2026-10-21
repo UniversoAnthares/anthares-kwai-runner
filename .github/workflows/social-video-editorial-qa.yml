@@ -20,6 +20,7 @@ on:
       - 'tools/cortes_linkedin_neon_fanout.py'
       - 'tools/cortes_queue_ha.py'
       - 'tests/test_cortes_queue_ha.py'
+      - 'tests/test_cortes_queue_ha_safe.py'
       - 'infra/neon-cortes-linkedin/**'
       - 'cloudflare-cortes-queue-ha/**'
       - 'tests/test_cortes_linkedin_neon_fanout.py'
@@ -51,6 +52,7 @@ jobs:
           python -m unittest discover -s tests -p test_cortes_linkedin_neon_fanout.py -v
           python -m unittest discover -s tests -p test_media_model.py -v
           python -m unittest discover -s tests -p test_cortes_queue_ha.py -v
+          python -m unittest discover -s tests -p test_cortes_queue_ha_safe.py -v
           node --check infra/neon-cortes-linkedin/index.mjs
           node --check cloudflare-cortes-queue-ha/src/index.mjs
           python tests/test_direct_social_adapters.py
