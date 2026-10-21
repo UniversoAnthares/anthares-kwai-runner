@@ -9,6 +9,8 @@ test('Neon TikTok supports unauthenticated health and shares canonical fenced le
  const calls=[];
  globalThis.fetch=async (url,init)=>{
   calls.push([url,String(init?.body||'').slice(0,120)]);
+  if(String(init?.body||'').includes('SELECT count(*)::int AS total FROM public.cortes_tiktok_publications'))
+   return Response.json({rows:[{total:'158'}],rowCount:1});
   return Response.json({rows:[],rowCount:0});
  };
  try{
