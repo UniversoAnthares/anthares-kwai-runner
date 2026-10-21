@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {shouldAttemptPreSubmit} from '../tools/threads_queue_policy.mjs';
+const now=Date.parse('2026-10-21T15:00:00Z');
+test('new cuts are publishable',()=>assert.equal(shouldAttemptPreSubmit(undefined,now),true));
+test('a submitted uncertain cut is never re-published',()=>assert.equal(shouldAttemptPreSubmit({status:'submitting_uncertain'},now),false));
+test('confirmed and preparing cuts are never retried',()=>{assert.equal(shouldAttemptPreSubmit({status:'published'},now),false);assert.equal(shouldAttemptPreSubmit({status:'preparing'},now),false)});
+test('pre-submit failure is throttled',()=>assert.equal(shouldAttemptPreSubmit({status:'failed_pre_submit',attempts:1,failed_at:'2026-10-21T14:58:00Z'},now),false));
+test('pre-submit failure recovers after cooldown',()=>assert.equal(shouldAttemptPreSubmit({status:'failed_pre_submit',attempts:1,failed_at:'2026-10-21T14:45:00Z'},now),true));
+test('repeated pre-submit failure is delayed, but never permanently stranded',()=>{assert.equal(shouldAttemptPreSubmit({status:'failed_pre_submit',attempts:50,failed_at:'2026-10-21T14:30:00Z'},now),false);assert.equal(shouldAttemptPreSubmit({status:'failed_pre_submit',attempts:50,failed_at:'2026-10-21T13:30:00Z'},now),true)});
+test('corrupt failure timestamp fails closed',()=>assert.equal(shouldAttemptPreSubmit({status:'failed_pre_submit',attempts:1,failed_at:'invalid'},now),false));
