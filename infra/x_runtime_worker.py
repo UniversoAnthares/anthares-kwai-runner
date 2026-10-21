@@ -165,6 +165,27 @@ def verify_route():
         return jsonify(ok=False, error=str(exc)[:500]), 503
 
 
+
+
+@app.get("/post-status")
+def post_status():
+    if not _auth_ok():
+        return jsonify(ok=False, error="unauthorized"), 401
+    try:
+        key = request.args.get("idempotency_key", "")
+        filename = _attempt_path(key)
+        if not filename.exists():
+            return jsonify(ok=True, status="UNKNOWN_UNCERTAIN"), 200
+        with filename.open("r", encoding="utf-8") as f:
+            data=json.load(f)
+        return jsonify(ok=True, status=data.get("status","UNKNOWN_UNCERTAIN"),
+                       post_url=data.get("post_url","")), 200
+    except ValueError:
+        return jsonify(ok=False, error="invalid_idempotency_key"), 400
+    except Exception:
+        return jsonify(ok=False, error="ledger_unavailable"), 503
+
+
 @app.post("/post")
 def post_route():
     if not _auth_ok():
