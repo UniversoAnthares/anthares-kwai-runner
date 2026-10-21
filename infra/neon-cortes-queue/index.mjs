@@ -161,8 +161,27 @@ async function bufferAction(verb,b,platform){
   const used=await query(`SELECT count(*)::int n FROM cortes_publications WHERE target_key=$1
    AND status IN ('confirmed','leased','started','uncertain') AND updated_at>now()-interval '24 hours'`,[dest]);
   if(Number(used[0]?.n||0)>=LIMITS[platform])return{ok:true,job:null,platform_daily_limit:true,limit:LIMITS[platform]};
-  // Lease only current-day jobs; never silently roll yesterday's daily round forward.
-  const row=await query(`WITH picked AS(
+  // Same stable daily rank as the Vercel route: at most 100 Buffer
+  // allocations per week; remaining Pinterest clips belong to browser lane.
+  const pinterest=platform==='pinterest';
+  const row=await query(pinterest?`WITH ranked AS (
+    SELECT id,row_number() OVER (
+       PARTITION BY (created_at AT TIME ZONE 'America/Campo_Grande')::date
+       ORDER BY created_at,id) ordinal,
+       extract(isodow FROM created_at AT TIME ZONE 'America/Campo_Grande')::int weekday
+    FROM cortes_publications WHERE target_key=$1
+   ), picked AS (
+     SELECT p.id FROM cortes_publications p JOIN ranked r ON r.id=p.id
+      WHERE p.target_key=$1 AND p.status='queued'
+       AND (p.created_at AT TIME ZONE 'America/Campo_Grande')::date =
+           (now() AT TIME ZONE 'America/Campo_Grande')::date
+       AND r.ordinal <= CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END
+      ORDER BY p.created_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
+   ) UPDATE cortes_publications p SET status='leased',lease_owner=$2,
+    lease_generation=p.lease_generation+1,lease_until=now()+interval '180 seconds',
+    updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued'
+    RETURNING p.id,p.target_key,p.payload,p.lease_generation,p.duration_class`:
+   `WITH picked AS(
      SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued'
        AND created_at >= (date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande')
                           AT TIME ZONE 'America/Campo_Grande')
@@ -171,7 +190,7 @@ async function bufferAction(verb,b,platform){
        lease_generation=p.lease_generation+1,lease_until=now()+interval '180 seconds',updated_at=now()
    FROM picked WHERE p.id=picked.id AND p.status='queued'
    RETURNING p.id,p.target_key,p.payload,p.lease_generation,p.duration_class`,[dest,String(b.owner)]);
-  return{ok:true,job:row[0]||null};
+  return{ok:true,job:row[0]||null,delivery_route:pinterest?'buffer':undefined};
  }
  const id=String(b.id||''),fence=Number(b.lease_generation),who=String(b.owner||'');
  // Reconciliation is OIDC-authenticated and CAS-protected by id, remote_id,
