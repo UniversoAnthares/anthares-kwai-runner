@@ -141,7 +141,11 @@ async function stage(p,file,data){
  const node=await p.rpc('DOM.querySelector',{nodeId:doc.root.nodeId,selector:'input[type=file]'});
  if(!node.nodeId)throw Error('PIN_VIDEO_INPUT_UNRESOLVED');
  await p.rpc('DOM.setFileInputFiles',{nodeId:node.nodeId,files:[file]});
- const media=await until(()=>p.js('(()=>{const f=document.querySelector("input[type=file]");return !!(f?.files?.length===1&&(document.querySelector("video")||document.body?.innerText.match(/video|vídeo|carregando/i)))})()'),75,1000);
+ // Pinterest React replaces the upload input after accepting a file.
+ // Never require f.files.length after DOM.setFileInputFiles: it becomes 0/null
+ // even when the video preview is valid and a draft was saved.
+ // Ignore videos inside the drafts sidebar to avoid false positives.
+ const media=await until(()=>p.js('(()=>{const videos=[...document.querySelectorAll("video")].filter(v=>!v.closest(\'[data-test-id="storyboard-drafts-sidebar"]\'));const ready=[...document.querySelectorAll("button,[role=button]")].some(e=>/^(publicar|publish)$/i.test((e.innerText||"").trim()));return videos.length>0&&ready})()'),90,1000);
  if(!media)throw Error('PIN_VIDEO_PREVIEW_TIMEOUT');
  await setField(p,'title',data.title);
  await setField(p,'description',data.description);

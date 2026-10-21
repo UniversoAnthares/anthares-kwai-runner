@@ -55,6 +55,12 @@ class PinterestBrowserContract(unittest.TestCase):
         self.assertIn("CORTES_CHROME_CDP_PORT||9226",ui)
         self.assertIn("pruneOwnedPinterestTabs",ui)
         self.assertIn("PINTEREST_BROWSER_ACCOUNT_NOT_VERIFIED",ui)
+    def test_react_upload_input_remount_cannot_hide_ready_video_preview(self):
+        ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
+        self.assertNotIn("f?.files?.length===1",ui)
+        self.assertIn('videos.length>0&&ready',ui)
+        self.assertIn('storyboard-drafts-sidebar',ui)
+
     def test_browser_uses_no_pinterest_api_or_login_bypass(self):
         ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
         for forbidden in ("api.pinterest.com","PINTEREST_ACCESS_TOKEN","captcha_solver","stealth_plugin"):
