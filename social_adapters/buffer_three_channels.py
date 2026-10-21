@@ -29,6 +29,11 @@ PINNED_CHANNELS = {
     "linkedin": ("6ad8a372778b240e2f799c72", "linkedin.com", "/company/" + LINKEDIN_COMPANY),
 }
 
+# Identified from the actual public Pinterest board created by the account owner.
+# Board resource is authoritative even when Buffer's metadata GraphQL returns 500.
+PINTEREST_PUBLIC_BOARD_ID = "819514532133906920"
+PINTEREST_PUBLIC_BOARD_URL = "https://br.pinterest.com/lucasyahn/universo-anthares-v%C3%ADdeos/"
+
 
 class BufferBlocked(RuntimeError):
     pass
@@ -165,6 +170,31 @@ def validate_channel(platform: str, channel_id: str, available: list[dict]) -> d
     return entry
 
 
+def verified_public_pinterest_board() -> str:
+    """Read-only confirmation that the exact owned board ID is still public.
+
+    Pinterest's URL slug is not an API board identifier. Require the numeric
+    ID to appear on the exact public board page; never infer an arbitrary ID.
+    """
+    request = urllib.request.Request(
+        PINTEREST_PUBLIC_BOARD_URL,
+        headers={"User-Agent": "Mozilla/5.0 AntharesPinterestBoardVerifier/1.0",
+                 "Accept": "text/html"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=18) as response:
+            if response.status != 200:
+                raise BufferBlocked("PINTEREST_PUBLIC_BOARD_UNAVAILABLE")
+            page = response.read(2_000_000).decode("utf-8", errors="replace")
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, TimeoutError) as exc:
+        raise BufferBlocked("PINTEREST_PUBLIC_BOARD_UNAVAILABLE") from None
+    if (PINTEREST_PUBLIC_BOARD_ID not in page
+            or "universo-anthares-v" not in page.lower()
+            or "lucasyahn" not in page.lower()):
+        raise BufferBlocked("PINTEREST_PUBLIC_BOARD_OWNERSHIP_UNVERIFIED")
+    return PINTEREST_PUBLIC_BOARD_ID
+
+
 def resolve_pinterest_board(channel_id: str, *, token: str | None = None) -> str:
     """Select only a Pinterest board returned by the connected account."""
     if channel_id != PINNED_CHANNELS["pinterest"][0]:
@@ -177,23 +207,25 @@ def resolve_pinterest_board(channel_id: str, *, token: str | None = None) -> str
         if str(exc) not in ("BUFFER_HTTP_500","BUFFER_GRAPHQL_OR_DATA_ERROR"):
             raise
         # Read-only fallback: posts previously sent by the same pinned channel.
-        boards = historical_pinterest_boards(token)
-        selected = select_pinterest_board(boards, os.getenv("BUFFER_PINTEREST_BOARD_ID","").strip())
-        return selected
+        # Newly created boards have no sent Pins yet. Validate the actual
+        # public owned board, whose stable ID was recovered from Pinterest.
+        explicit = os.getenv("BUFFER_PINTEREST_BOARD_ID", "").strip()
+        if explicit and explicit != PINTEREST_PUBLIC_BOARD_ID:
+            raise BufferBlocked("PINTEREST_BOARD_ENV_MISMATCH")
+        return verified_public_pinterest_board()
     metadata = details.get("metadata") or {}
     boards = metadata.get("boards") or []
     if not isinstance(boards, list):
         raise BufferBlocked("PINTEREST_BOARD_LIST_INVALID")
-    pinned = os.getenv("BUFFER_PINTEREST_BOARD_ID", "").strip()
-    if pinned:
-        matches = [board for board in boards if str(board.get("serviceId") or "") == pinned]
-    else:
-        # No arbitrary board choice: only a single available board can be selected.
-        matches = boards if len(boards) == 1 else []
+    pinned = os.getenv("BUFFER_PINTEREST_BOARD_ID", "").strip() or PINTEREST_PUBLIC_BOARD_ID
+    if pinned != PINTEREST_PUBLIC_BOARD_ID:
+        raise BufferBlocked("PINTEREST_BOARD_ENV_MISMATCH")
+    matches = [board for board in boards
+               if str(board.get("serviceId") or "") == pinned]
     if len(matches) != 1 or not str(matches[0].get("serviceId") or "").strip():
         raise BufferBlocked("PINTEREST_BOARD_NOT_VERIFIED")
     link = urllib.parse.urlparse(str(matches[0].get("url") or ""))
-    if link.scheme != "https" or (link.hostname or "").lower().removeprefix("www.") != "pinterest.com":
+    if link.scheme != "https" or (link.hostname or "").lower().removeprefix("www.") not in ("pinterest.com", "br.pinterest.com"):
         raise BufferBlocked("PINTEREST_BOARD_URL_UNVERIFIED")
     return str(matches[0]["serviceId"])
 
