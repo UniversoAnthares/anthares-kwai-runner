@@ -16,8 +16,8 @@ from urllib.parse import urlparse
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"direct-tiktok-publisher"))
 
-EXPECTED="lucarosalem"
-VAULT="https://anthares-x-vault.anthares1.workers.dev/browser-state/tiktok/lucarosalem"
+EXPECTED="lucasrosalem4"
+VAULT="https://anthares-x-vault.anthares1.workers.dev/browser-state/tiktok/lucasrosalem4"
 
 
 def verified_identity(url, hydration):
