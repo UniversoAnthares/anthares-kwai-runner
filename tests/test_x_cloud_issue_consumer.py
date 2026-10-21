@@ -18,7 +18,7 @@ class XCloudConsumerTests(unittest.TestCase):
     def test_unique_idempotency_per_source_segment(self):
         first = consumer._idempotency(self.payload())
         self.assertEqual(first, consumer._idempotency(self.payload()))
-        second = consumer._idempotency(self.payload(segment_start=1380))
+        second = consumer._idempotency(self.payload(segment_start=1380, segment_end=2020))
         self.assertNotEqual(first, second)
         self.assertGreaterEqual(len(first), 12)
 
@@ -26,7 +26,7 @@ class XCloudConsumerTests(unittest.TestCase):
         issue = {"number": 123}
         with patch.object(consumer, "_payload", return_value=self.payload()), \
              patch.object(consumer, "_comments", return_value=[
-                 {"body": "X_POST_SUBMISSION_STARTED_V1"}]), \
+                 {"body": "X_POST_SUBMISSION_STARTED_V1", "user": {"login": "github-actions[bot]"}}]), \
              patch.object(consumer, "_worker", return_value={"status": "UNKNOWN_UNCERTAIN"}) as worker:
             result = consumer._process(issue)
         self.assertEqual(result, "UNCERTAIN_PREEXISTING_RECONCILE")
