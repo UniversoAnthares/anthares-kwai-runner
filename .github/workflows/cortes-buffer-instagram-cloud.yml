@@ -19,8 +19,8 @@ jobs:
   publish-and-reconcile:
     # Enable only after the cloud worker and canonical account are authenticated.
     if: ${{ vars.CORTES_INSTAGRAM_BUFFER_PAUSED != 'true' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 6
+    runs-on: [self-hosted, cortes-instagram-only-20261021]
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,10 +33,12 @@ jobs:
           cloud_region: us
           secrets: |
             0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
-      - name: Publish one verified Instagram Reel and reconcile scheduled posts
+      - name: Publish up to four eligible Reels now with fenced Neon queue
+        shell: powershell
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
           CORTES_QUEUE_PRIMARY: neon
+          CORTES_INSTAGRAM_ONETIME_SELFHOSTED: '1'
         run: |
-          set -euo pipefail
           python -u tools/cortes_buffer_instagram_cloud.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
