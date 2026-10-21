@@ -30,7 +30,7 @@ class HaTests(unittest.TestCase):
         def open_req(req,timeout):
             requested.append(req.full_url)
             if len(requested)==1:raise urllib.error.HTTPError(req.full_url,503,"unavailable",{},io.BytesIO())
-            self.assertIn("anthares-cortes-queue-ha",req.full_url)
+            self.assertIn("anthares-cortes-linkedin-ha",req.full_url)
             self.assertTrue(req.get_header("Authorization").startswith("Bearer "))
             return Resp({"ok":True,"jobs":[]})
         with patch.object(ha.urllib.request,"urlopen",side_effect=open_req):
