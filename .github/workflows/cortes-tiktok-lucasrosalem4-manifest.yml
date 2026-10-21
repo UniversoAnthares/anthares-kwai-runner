@@ -31,6 +31,7 @@ jobs:
         shell: pwsh
         run: |
           python -m py_compile tools/cortes_tiktok_lucasrosalem4_manifest.py
+          python -m unittest discover -s tests -p test_cortes_tiktok_lucasrosalem4_manifest.py -v
           if ($LASTEXITCODE -ne 0) { throw 'SECONDARY_MANIFEST_PY_COMPILE_FAILED' }
       - name: Refresh isolated second-account queue manifest
         shell: pwsh
