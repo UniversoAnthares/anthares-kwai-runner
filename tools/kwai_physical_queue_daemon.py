@@ -24,6 +24,42 @@ LAST_QUEUE_EMPTY=False
 LAST_NETWORK_BAD=False
 WP_PENDING=LOGDIR/'cortes-wp-callback-pending.json'
 
+# Persistent preflight circuit breaker prevents leasing the same job every 20s
+# while authentication or a verified executor is unavailable.
+RETRY_GATE=LOGDIR/'kwai-preflight-retry-not-before.json'
+LAST_RETRY_NOTICE=''
+def retry_gate_active():
+ global LAST_RETRY_NOTICE
+ try: d=json.loads(RETRY_GATE.read_text(encoding='utf-8'))
+ except FileNotFoundError:return False
+ except (OSError,ValueError):
+  log('KWAI_PREFLIGHT_RETRY_GATE_INVALID priority=P0 no_lease=1')
+  return True
+ if d.get('schema')!='cortes.kwai.preflight.backoff.v1':
+  log('KWAI_PREFLIGHT_RETRY_GATE_BAD_SCHEMA priority=P0 no_lease=1')
+  return True
+ try: left=int(d['not_before_epoch'])-int(time.time())
+ except (KeyError,TypeError,ValueError):
+  log('KWAI_PREFLIGHT_RETRY_GATE_BAD_TIME priority=P0 no_lease=1')
+  return True
+ if left<=0:return False
+ token=str(d['not_before_epoch'])
+ if LAST_RETRY_NOTICE!=token:
+  log('KWAI_PREFLIGHT_BACKOFF no_lease=1 remaining_seconds='+str(left)+' reason='+str(d.get('reason','unknown'))[:55])
+  LAST_RETRY_NOTICE=token
+ return True
+def arm_preflight_backoff(code):
+ seconds=1800 if int(code)==81 else 900
+ until=int(time.time())+seconds
+ payload={'schema':'cortes.kwai.preflight.backoff.v1','not_before_epoch':until,
+          'reason':'worker_exit_'+str(code),'created_epoch':int(time.time())}
+ RETRY_GATE.parent.mkdir(parents=True,exist_ok=True)
+ tmp=RETRY_GATE.with_suffix('.tmp')
+ tmp.write_text(json.dumps(payload),encoding='utf-8')
+ tmp.replace(RETRY_GATE)
+ log('KWAI_PREFLIGHT_BACKOFF_ARMED no_lease=1 retry_seconds='+str(seconds)+' priority=P0 rc='+str(code))
+
+
 # Real platform counts attested by the owner when the queue's confirmed ledger lags.
 # Each local day has an independent floor, so an old report never blocks a new day.
 DAILY_OWNER_FLOOR=LOGDIR/'kwai-daily-cap-owner-confirmed.json'
@@ -263,6 +299,7 @@ def process(job,serial):
  try:qpost('fail',{'id':jid,'lease_generation':gen,'error_class':'uncertain' if possible else 'physical_android','error_message':(p.stdout or '')[-450:],'published_possible':possible})
  except Exception as e:log('QUEUE_FAIL_CALLBACK_ERROR '+jid+' '+str(e)[-200:])
  log(f'JOB_FAILED {jid} rc={p.returncode} possible={possible}')
+ if not possible and p.returncode in (75,81):arm_preflight_backoff(p.returncode)
 def memu_identity_proven():
  """Read-only Kwai account check. Never infer login from app installation."""
  env=os.environ.copy()
@@ -290,6 +327,7 @@ def once():
  global LAST_QUEUE_EMPTY,LAST_NETWORK_BAD
  repair_pending(); repair_wp_callbacks()
  if owner_cap_reached():return 0
+ if retry_gate_active():return 0
  if MAINTENANCE.exists():
   log('QUEUE_PAUSED_MAINTENANCE no_lease=1')
   return 0
