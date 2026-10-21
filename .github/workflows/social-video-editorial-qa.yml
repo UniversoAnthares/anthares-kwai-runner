@@ -32,10 +32,11 @@ jobs:
           python-version: '3.12'
       - name: Compile changed publishers without running them
         run: |
-          python -m py_compile anthares_publisher/editorial.py anthares_publisher/media_model.py social_adapters/direct_social.py social_adapters/video_social.py scripts/instagram_autopublish.py tools/kwai_physical_queue_daemon.py tools/cortes_social_queue_consumer.py direct-tiktok-publisher/tiktok_cloud_publish.py
+          python -m py_compile social_adapters/buffer_three_channels.py anthares_publisher/editorial.py anthares_publisher/media_model.py social_adapters/direct_social.py social_adapters/video_social.py scripts/instagram_autopublish.py tools/kwai_physical_queue_daemon.py tools/cortes_social_queue_consumer.py direct-tiktok-publisher/tiktok_cloud_publish.py
       - name: Run idempotence, account and quota contracts without network calls
         run: |
           python -m unittest discover -s tests -p test_social_video_editorial.py -v
+          python -m unittest discover -s tests -p test_buffer_three_channels.py -v
           python -m unittest discover -s tests -p test_media_model.py -v
           python tests/test_direct_social_adapters.py
       - name: Validate Cloudflare queue patch in disposable checkout only
