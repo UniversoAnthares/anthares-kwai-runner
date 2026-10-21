@@ -17,6 +17,9 @@ on:
       - 'tools/cortes_social_queue_consumer.py'
       - 'tools/cortes_buffer_linkedin_cloud.py'
       - 'tests/test_cortes_buffer_linkedin_cloud.py'
+      - 'tools/cortes_linkedin_neon_fanout.py'
+      - 'tests/test_cortes_linkedin_neon_fanout.py'
+      - '.github/workflows/cortes-linkedin-neon-fanout.yml'
       - '.github/workflows/cortes-buffer-linkedin-cloud.yml'
       - 'tests/test_cortes_oidc_social_fanout.mjs'
       - '.github/workflows/social-video-editorial-qa.yml'
@@ -41,6 +44,7 @@ jobs:
           python -m unittest discover -s tests -p test_social_video_editorial.py -v
           python -m unittest discover -s tests -p test_buffer_three_channels.py -v
           python -m unittest discover -s tests -p test_cortes_buffer_linkedin_cloud.py -v
+          python -m unittest discover -s tests -p test_cortes_linkedin_neon_fanout.py -v
           python -m unittest discover -s tests -p test_media_model.py -v
           python tests/test_direct_social_adapters.py
       - name: Validate Cloudflare queue patch in disposable checkout only
