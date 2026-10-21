@@ -59,3 +59,12 @@ test('unknown cloud submissions retain a durable reconciliation block',()=>{
  assert.match(src,/cloud_inflight/);
  assert.match(src,/local_pause_until=NULL/);
 });
+
+test('dry-run must verify signed GitHub OIDC without publishing',()=>{
+ const src=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
+ const backendSource=fs.readFileSync('infra/neon-cortes-threads-execution/index.mjs','utf8');
+ assert.match(src,/await verifyCloudOidc\(jwt\)/);
+ assert.match(backendSource,/op==='preflight'/);
+ assert.match(backendSource,/allowPush&&claims\.event_name==='push'/);
+ assert.match(backendSource,/mutations_allowed:false/);
+});
