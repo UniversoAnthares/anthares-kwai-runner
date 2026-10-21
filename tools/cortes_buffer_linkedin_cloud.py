@@ -84,10 +84,19 @@ def reconcile():
         remote_id=str(item.get("remote_id") or "")
         if not remote_id:
             continue
-        link=verify_sent_post(remote_id)
+        try:
+            link=verify_sent_post(remote_id)
+        except (BufferBlocked, RuntimeError):
+            # A single Buffer readback failure must not freeze the next shorts.
+            # The uncertain post is retained for later reconciliation.
+            print("CORTES_LINKEDIN_READBACK_PENDING=1",flush=True)
+            continue
         if link:
-            queue("reconcile",{"id":item["id"],"remote_id":remote_id,"external_link":link})
-            total+=1
+            try:
+                queue("reconcile",{"id":item["id"],"remote_id":remote_id,"external_link":link})
+                total+=1
+            except RuntimeError:
+                print("CORTES_LINKEDIN_RECONCILE_PENDING=1",flush=True)
     return total
 
 
@@ -130,6 +139,15 @@ def publish_once():
         if result.get("status")!="SCHEDULED_IN_BUFFER" or not result.get("remote_id"):
             raise RuntimeError("BUFFER_NOT_SCHEDULED")
         queue("scheduled",{**fence,"buffer_post_id":result["remote_id"]})
+        try:
+            link=verify_sent_post(result["remote_id"])
+            if link:
+                queue("reconcile",{"id":row["id"],"remote_id":result["remote_id"],
+                                   "external_link":link})
+                return "CONFIRMED_ON_LINKEDIN"
+        except (BufferBlocked, RuntimeError):
+            # Buffer may still be processing shareNow. Do not repost a video.
+            print("CORTES_LINKEDIN_READBACK_PENDING=1",flush=True)
         return "SCHEDULED_IN_BUFFER"
     except Exception:
         # The Buffer request may already have created a post. Never retry it
