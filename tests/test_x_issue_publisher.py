@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "infra"))
 
-from tools.x_issue_publisher import eligible, fingerprint, markers
+from tools.x_issue_publisher import eligible, fingerprint, markers, queue_day_allowed
 from x_durable_ledger import identity, begin, AlreadyStarted
 
 
@@ -29,6 +29,19 @@ class XConsumerTests(unittest.TestCase):
                 "state": "open",
                 "body": "```json\n" + json.dumps(payload) + "\n```",
                 "created_at": "2026-10-21T12:00:00Z"}
+
+    def test_unpublished_previous_day_carries_forward(self):
+        now = datetime(2026, 10, 22, 14, 0, tzinfo=timezone.utc)
+        issue = self.issue(self.payload())
+        issue["created_at"] = "2026-10-21T12:00:00Z"
+        self.assertTrue(queue_day_allowed(issue, self.payload(), now))
+        issue["created_at"] = "2026-10-23T12:00:00Z"
+        self.assertFalse(queue_day_allowed(issue, self.payload(), now))
+
+    def test_reserve_queue_payload_keeps_long_form(self):
+        p = self.payload()
+        p["reserve_from"] = "cortes-facebook-long-20261020"
+        self.assertIsNotNone(eligible(self.issue(p)))
 
     def test_longform_issue_is_accepted(self):
         self.assertIsNotNone(eligible(self.issue(self.payload())))
