@@ -59,7 +59,7 @@ async function githubRole(req) {
  if(!['schedule','push','workflow_dispatch'].includes(claims.event_name))return'';
  let role='', wf='';
  if(claims.repository===CLIPPER){role='producer';wf=CLIPPER+'/.github/workflows/'+SOURCE_WF+'@refs/heads/main';}
- if(claims.repository===RUNNER){role='consumer';wf=[CONSUMER_WF,'tiktok-central-session-read.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main');}
+ if(claims.repository===RUNNER){role='consumer';wf=[CONSUMER_WF,'tiktok-central-session-read.yml','cortes-tiktok-lucasrosalem4-manifest.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main');}
  if(!role||!(Array.isArray(wf)?wf:[wf]).includes(String(claims.job_workflow_ref||claims.workflow_ref||'')))return'';
  try{
    if(!jwks||Date.now()>jwksUntil){
@@ -232,6 +232,16 @@ async function handler(req,res){
   if(!role)return reply(res,401,{ok:false,error:'unauthorized_oidc'});
   const b=body(req);
   if(req.method==='POST'&&action==='enqueue'&&role==='producer')return reply(res,200,await enqueue(b));
+  if(req.method==='GET'&&action==='source-manifest'&&role==='consumer'){
+   await schema();
+   const rows=await pool.query(
+    "SELECT segment_id,source_id,media_url,title,duration_seconds FROM cortes_tiktok_publications "+
+    "WHERE status='confirmed' AND confirmed_at IS NOT NULL "+
+    "AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date "+
+    "ORDER BY confirmed_at ASC,id ASC LIMIT 100");
+   const day=await pool.query("SELECT to_char(now() AT TIME ZONE 'America/Campo_Grande','YYYY-MM-DD') AS local_day");
+   return reply(res,200,{ok:true,account:'lucasrosalem4',date:day.rows[0].local_day,clip_count:rows.rows.length,clips:rows.rows});
+  }
   if(req.method==='GET'&&action==='status'){
    await schema();
    const q=await pool.query('SELECT status,count(*)::int AS count FROM cortes_tiktok_publications GROUP BY status');
