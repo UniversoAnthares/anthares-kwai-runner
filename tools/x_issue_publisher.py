@@ -116,7 +116,10 @@ def queue_day_allowed(issue, payload, now):
         created = datetime.fromisoformat(issue["created_at"].replace("Z", "+00:00")).astimezone(TZ)
     except (ValueError, KeyError):
         return False
-    return created.date() == now.date() or bool(payload.get("reserve_from"))
+    # Carry every unpublished queued item forward. Later items are not
+    # eligible until their local creation day; durable START/UNCERTAIN
+    # markers and database idempotency always prevent accidental reposts.
+    return created.date() <= now.date()
 
 
 def remote(path, method="GET", payload=None, timeout=110):
@@ -216,7 +219,7 @@ def run():
     if status["confirmed"] >= 10:
         return
     # Previously unused reserve masters remain first-priority across days.
-    # Ordinary daily-round issues remain scoped to their creation day.
+    # All unposted jobs remain eligible across days, reserve jobs first.
     candidates.sort(key=lambda x: (
         0 if x[1].get("reserve_from") else 1,
         x[0].get("created_at") or "", x[0]["number"]))
@@ -225,8 +228,7 @@ def run():
         if not fp or fp in seen_fingerprints:
             print("X_DUPLICATE_SOURCE_SEGMENT_SKIPPED=" + str(number), flush=True)
             continue
-        # Current-day queue only. Yesterday's items enter the manually
-        # reconcilable reserve queue instead of being silently posted today.
+        # Carry forward jobs missed by this destination in previous rounds.
         if not queue_day_allowed(issue, payload, now):
             continue
         status_code, identity = remote("/verify", timeout=90)
