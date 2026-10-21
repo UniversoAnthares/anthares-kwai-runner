@@ -15,6 +15,11 @@ class Resp:
 def jwt():return "a"*90
 
 class HaTests(unittest.TestCase):
+    def setUp(self):
+        healthy=patch.object(ha,'is_healthy',return_value=True)
+        healthy.start()
+        self.addCleanup(healthy.stop)
+
     def test_primary_success_never_switches(self):
         requested=[]
         def open_req(req,timeout):
@@ -25,12 +30,12 @@ class HaTests(unittest.TestCase):
         self.assertEqual(value["status"],"primary")
         self.assertEqual(len(requested),1)
 
-    def test_primary_503_fails_over_to_cloudflare(self):
+    def test_primary_503_fails_over_to_neon_for_safe_read(self):
         requested=[]
         def open_req(req,timeout):
             requested.append(req.full_url)
             if len(requested)==1:raise urllib.error.HTTPError(req.full_url,503,"unavailable",{},io.BytesIO())
-            self.assertIn("anthares-cortes-queue-ha",req.full_url)
+            self.assertIn("cortesqueue.compute",req.full_url)
             self.assertTrue(req.get_header("Authorization").startswith("Bearer "))
             return Resp({"ok":True,"jobs":[]})
         with patch.object(ha.urllib.request,"urlopen",side_effect=open_req):
