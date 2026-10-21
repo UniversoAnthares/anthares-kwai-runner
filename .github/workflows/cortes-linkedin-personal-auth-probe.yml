@@ -1,0 +1,36 @@
+name: CORTES LinkedIn personal - private OAuth read-only probe
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-linkedin-personal-auth-probe.yml'
+      - 'tools/cortes_linkedin_personal_auth_probe.py'
+      - 'tests/test_cortes_linkedin_personal_auth_probe.py'
+permissions:
+  contents: read
+concurrency:
+  group: cortes-linkedin-personal-auth-probe
+  cancel-in-progress: false
+jobs:
+  personal-token-verification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify read-only OAuth probe contract
+        run: python -m unittest tests/test_cortes_linkedin_personal_auth_probe.py -v
+      - name: Read LinkedIn personal token from existing Bitwarden Secrets Manager
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            bd261e5e-11bf-49fb-9baf-b4ea014ec5b7 > LINKEDIN_PERSONAL_ACCESS_TOKEN
+      - name: Check consented LinkedIn member without exposing identifiers
+        run: python -m tools.cortes_linkedin_personal_auth_probe
+      - name: Confirm no publisher was armed
+        run: echo "LINKEDIN_PERSONAL_PUBLISH_DISABLED_READ_ONLY=PASS"
