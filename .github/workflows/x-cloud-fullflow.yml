@@ -93,8 +93,75 @@ jobs:
       - name: Prepare timestamped transcript request
         if: steps.gate.outputs.due == 'true'
         run: python -u x_cloud_prepare.py
-      - name: Create microcut planning issue
+      - name: Select editorial long-form segment automatically
+        id: auto_plan
         if: steps.gate.outputs.due == 'true'
+        continue-on-error: true
+        run: python tools/x_auto_plan.py
+      - name: Render autonomous long-form clip 16:9
+        id: auto_render
+        if: steps.auto_plan.outcome == 'success'
+        run: python -u x_cloud_render.py
+      - name: Persist autonomous MP4 to public media branch
+        id: auto_media
+        if: steps.auto_render.outcome == 'success'
+        env:
+          ISSUE_NUMBER: ${{ github.run_id }}
+        run: |
+          set -e
+          test "$(stat -c%s x-cloud-output.mp4)" -lt 99000000 || { echo 'X_MEDIA_GITHUB_FILE_LIMIT'; exit 1; }
+          cp x-cloud-output.mp4 /tmp/x-cloud-output.mp4
+          cp x-render-result.json /tmp/x-render-result.json
+          git config user.name 'Anthares X Auto'
+          git config user.email '81930373+UniversoAnthares@users.noreply.github.com'
+          if git ls-remote --exit-code --heads origin x-media >/dev/null 2>&1; then
+            git fetch origin x-media
+            git checkout -B x-media origin/x-media
+          else
+            git checkout --orphan x-media
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+          mkdir -p public/x
+          name="auto-${GITHUB_RUN_ID}.mp4"
+          cp /tmp/x-cloud-output.mp4 "public/x/$name"
+          cp /tmp/x-render-result.json "public/x/${name%.mp4}.json"
+          git add public/x
+          git commit -m "X long-form auto media ${GITHUB_RUN_ID} [skip ci]"
+          git push origin HEAD:x-media
+          echo "media_url=https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/x-media/public/x/$name" >> "$GITHUB_OUTPUT"
+      - name: Enqueue autonomous X long-form video
+        if: steps.auto_media.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MEDIA_URL: ${{ steps.auto_media.outputs.media_url }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          result=json.load(open('/tmp/x-render-result.json',encoding='utf-8'))
+          source=result['source']
+          body_obj={
+             'platform':'x','account':'lucasyahn','duration_class':'long',
+             'caption':result['caption'],'media_url':os.environ['MEDIA_URL'],
+             'source_id':source['video_id'],'source_url':source['source_url'],
+             'scan_start':int(result['scan_start']),
+             'segment_start':result['segment_start'],
+             'segment_end':result['segment_end'],
+             'microedit':result['microedit'],
+             'auto_plan':True
+          }
+          fence=chr(96)*3
+          raw=fence+'json\n'+json.dumps(body_obj,ensure_ascii=False,indent=2)+'\n'+fence
+          repo=os.environ['GITHUB_REPOSITORY']
+          payload=json.dumps({'title':'[X-PUBLISH] auto-'+source['video_id']+'-'+os.environ['GITHUB_RUN_ID'],'body':raw},ensure_ascii=False).encode()
+          req=urllib.request.Request('https://api.github.com/repos/'+repo+'/issues',
+              data=payload,method='POST',headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],
+              'Accept':'application/vnd.github+json','Content-Type':'application/json','User-Agent':'anthares-x-auto'})
+          with urllib.request.urlopen(req,timeout=30) as r:
+              issue=json.load(r)
+          print('X_AUTO_PUBLISH_ISSUE='+issue['html_url'])
+          PY
+      - name: Create microcut planning issue
+        if: steps.auto_plan.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
