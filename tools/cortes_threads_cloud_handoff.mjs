@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import {fetchCloudManifest} from './cortes_threads_cloud_feed.mjs';
 import {captionForClip,cleanTitle} from './cortes_threads_cloud_captions.mjs';
 const GRAPH='https://graph.threads.net/v1.0';
@@ -90,7 +91,17 @@ async function publishVideo(item,token,id){
  requireOk(confirm.id===posted.id&&/^https:\/\/(www\.)?threads\.com\/@universoanthares\/post\/[A-Za-z0-9_-]+\/?$/.test(confirm.permalink||''),'WRONG_PUBLICATION_ID_OR_URL');
  return{post_id:posted.id,url:confirm.permalink};
 }
+function verifyAuthReference(){
+ const c=JSON.parse(fs.readFileSync(new URL('../config/threads-cloud-auth-reference.json',import.meta.url),'utf8'));
+ requireOk(c.schema==='anthares.threads.auth-reference.v1'&&c.account==='universoanthares'&&
+  c.credential_kind==='oauth_access_token'&&c.token_storage==='bitwarden_secrets_manager'&&
+  c.cloud_environment_variable==='THREADS_ACCESS_TOKEN'&&c.copy_browser_cookies===false&&
+  c.copy_access_token_to_folder===false&&c.requires_live_identity_check===true&&
+  c.requires_neon_fencing===true,'UNSAFE_THREADS_CREDENTIAL_REFERENCE');
+ return c;
+}
 export async function run(){
+ verifyAuthReference();
  const token=String(process.env.THREADS_ACCESS_TOKEN||'').trim();
  requireOk(token.length>20,'BITWARDEN_THREADS_TOKEN_NOT_LOADED');
  const me=await graph('/me?fields=id,username',token);
