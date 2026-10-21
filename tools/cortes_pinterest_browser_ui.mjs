@@ -143,6 +143,11 @@ async function selectBoard(p){
  // an exact visible leaf label in the active editor (excluding saved drafts).
  const already=await p.js('(()=>{const side=document.querySelector(\'[data-test-id="storyboard-drafts-sidebar"]\');const norm=s=>String(s||"").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").replace(/[—–]/g,"-").replace(/\\s+/g," ").trim().toLowerCase();const expected=norm('+JSON.stringify(board)+');const nodes=[...document.querySelectorAll("button,[role=button],span")];return nodes.some(x=>!side?.contains(x)&&norm(x.textContent)===expected&&x.getBoundingClientRect().width>0&&x.getBoundingClientRect().height>0)})()');
  if(already)return;
+ // In the current storyboard UI the selected board text is rendered in a
+ // non-interactive div, not an option/button/span. Verify only the LAST
+ // 'Pasta' control region of the active editor, never draft-sidebar content.
+ const selectedInEditor=await p.js('(()=>{const side=document.querySelector(\\'[data-test-id="storyboard-drafts-sidebar"]\\');const norm=s=>String(s||"").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").replace(/[—–]/g,"-").replace(/\\s+/g," ").trim().toLowerCase();const all=document.body?.innerText||"";const tail=all.slice(-900);const m=[...tail.matchAll(/\\bPasta\\b/g)].at(-1);if(!m)return false;const section=tail.slice(m.index,m.index+170);return norm(section).includes(norm('+JSON.stringify(board)+'))&&!norm(section).includes("escolha uma pasta")})()');
+ if(selectedInEditor)return;
  const opened=await p.js('(()=>{const list=[...document.querySelectorAll("button,[role=button]")].filter(x=>/selecionar pasta|select board|escolher pasta|choose board|pasta/i.test((x.innerText||"")+" "+(x.getAttribute("aria-label")||"")));const x=list.find(e=>/selecionar|select|pasta|board/i.test(e.innerText||e.getAttribute("aria-label")||""));if(!x)return false;x.click();return true})()');
  if(!opened)throw Error('PIN_BOARD_DROPDOWN_MISSING');
  await pause(650);
