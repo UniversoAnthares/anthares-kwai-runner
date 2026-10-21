@@ -1,7 +1,7 @@
 // Cloudflare independent ingress to Neon Functions: no Vercel calls, no secrets.
 const BACKENDS=[
- "https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/",
- "https://br-crimson-unit-b89nau08-cortesbackup.compute.c-14.us-east-1.aws.neon.tech/"
+ "https://br-crimson-unit-b89nau08-corteslinka.compute.c-14.us-east-1.aws.neon.tech/",
+ "https://br-crimson-unit-b89nau08-corteslinkb.compute.c-14.us-east-1.aws.neon.tech/"
 ];
 const ACTIONS=new Set(["enqueue","buffer-lease","buffer-start","buffer-fail","buffer-scheduled","buffer-pending","buffer-reconcile"]);
 function respond(code,error){return Response.json({ok:false,error},{status:code,headers:{"Cache-Control":"no-store"}});}
