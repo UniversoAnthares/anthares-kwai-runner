@@ -77,3 +77,22 @@ def confirm(row_id, url):
             )
             if not cur.fetchone():
                 raise RuntimeError("X_DURABLE_LEDGER_CONFIRMATION_CONFLICT")
+
+
+def readback(key):
+    """Read-only cross-worker proof. Never transitions uncertain to queued."""
+    row_id = identity(key)
+    with _connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(DDL)
+            cur.execute(
+                "SELECT status, post_url FROM anthares_x_submission_ledger "
+                "WHERE idempotency_sha256=%s AND account='lucasyahn'",
+                (row_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        return {"status": "NOT_FOUND"}
+    if row[0] == "confirmed" and row[1]:
+        return {"status": "CONFIRMED", "post_url": str(row[1])}
+    return {"status": "UNCERTAIN", "post_url": None}
