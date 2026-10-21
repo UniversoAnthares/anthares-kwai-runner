@@ -38,6 +38,8 @@ jobs:
           node --check tools/cortes_threads_cloud_feed.mjs
           node --check tools/cortes_threads_cloud_captions.mjs
           node --check infra/neon-cortes-threads-execution/index.mjs
+      - name: Run cloud and local fencing contract tests
+        run: node --test tests/threads_cloud_handoff.test.mjs
       - name: Read account token directly from existing Bitwarden Secrets Manager
         uses: bitwarden/sm-action@v2
         with:
