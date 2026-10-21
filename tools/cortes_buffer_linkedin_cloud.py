@@ -9,6 +9,8 @@ exact main-branch workflow. A Buffer schedule is not a LinkedIn confirmation.
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 import os
 import sys
 import urllib.error
@@ -104,6 +106,22 @@ def safe_payload(row):
     if row.get("target_key")!=TARGET or row.get("duration_class")!="short":
         raise RuntimeError("NEON_LINKEDIN_TARGET_INVALID")
     payload=row.get("payload") or {}
+    try:
+        created=str(row.get("created_at") or "").replace("Z","+00:00")
+        created_at=datetime.fromisoformat(created)
+        if created_at.tzinfo is None:
+            raise ValueError("date must have timezone")
+        expected_day=created_at.astimezone(ZoneInfo("America/Campo_Grande")).date()
+        local_today=datetime.now(ZoneInfo("America/Campo_Grande")).date()
+        round_day=payload.get("round_date")
+        if round_day and str(round_day)!=expected_day.isoformat():
+            raise ValueError("round date mismatch")
+        if expected_day != local_today:
+            raise RuntimeError("CORTES_SAME_DAY_EXPIRED_NO_ROLLOVER")
+    except RuntimeError:
+        raise
+    except (TypeError, ValueError):
+        raise RuntimeError("CORTES_SAME_DAY_DATE_UNVERIFIED") from None
     if payload.get("platform")!="linkedin" or payload.get("account_id")!="primary":
         raise RuntimeError("NEON_LINKEDIN_ACCOUNT_INVALID")
     result={
