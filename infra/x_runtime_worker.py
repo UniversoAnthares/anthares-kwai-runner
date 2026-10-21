@@ -29,7 +29,9 @@ CLIENT_TOKEN = os.getenv("X_WORKER_TOKEN") or os.getenv("ARA_SHARED", "")
 
 
 def _auth_ok() -> bool:
-    return bool(CLIENT_TOKEN) and request.headers.get("Authorization", "") == "Bearer " + CLIENT_TOKEN
+    bearer = request.headers.get("Authorization", "")
+    allowed = {t for t in (CLIENT_TOKEN, os.getenv("ARA_SHARED", "")) if t}
+    return bool(allowed) and bearer in {"Bearer " + t for t in allowed}
 
 
 def _identity(page) -> str:
