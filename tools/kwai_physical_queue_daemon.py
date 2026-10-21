@@ -219,7 +219,12 @@ def process(job,serial):
    notify_completed(job,evidence(jid)['remote_id'])
    log('JOB_ACK_REPAIRED '+jid);return
   except Exception as e:log('JOB_ACK_PENDING '+jid+' '+str(e)[-200:]);return
- possible=p.returncode==90 or 'UNCERTAIN' in (p.stdout or '')
+ # A crashed wrapper may omit its UNCERTAIN marker even after POST.
+ # The durable Android state is stronger evidence than the worker exit code.
+ native_state=pubstate(jid)
+ possible=(p.returncode==90 or 'UNCERTAIN' in (p.stdout or '')
+           or bool(native_state.get('publication_attempted'))
+           or native_state.get('state') in ('publication_attempted','uncertain'))
  try:qpost('fail',{'id':jid,'lease_generation':gen,'error_class':'uncertain' if possible else 'physical_android','error_message':(p.stdout or '')[-450:],'published_possible':possible})
  except Exception as e:log('QUEUE_FAIL_CALLBACK_ERROR '+jid+' '+str(e)[-200:])
  log(f'JOB_FAILED {jid} rc={p.returncode} possible={possible}')
