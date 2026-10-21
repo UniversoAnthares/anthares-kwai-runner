@@ -27,7 +27,7 @@ permissions:
 
 concurrency:
   group: anthares-browser-cloud-fallback-cloud-login
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   browser:
