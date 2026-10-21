@@ -35,7 +35,7 @@ async function deviceAuth(request){
  }
  return crypto.timingSafeEqual(Buffer.from(crypto.createHash('sha256').update(token).digest('hex'),'hex'),Buffer.from(deviceHash,'hex'));
 }
-async function githubAuth(request){
+async function githubAuth(request,allowPush=false){
  const token=bearer(request),parts=token.split('.');
  if(token.length<60||token.length>16000||parts.length!==3)return null;
  let header,claims;
@@ -43,7 +43,7 @@ async function githubAuth(request){
  const now=Math.floor(Date.now()/1000);
  if(header.alg!=='RS256'||typeof header.kid!=='string'||header.kid.length>200||
     claims.iss!=='https://token.actions.githubusercontent.com'||
-    claims.repository!==REPO||!ALLOWED_REFS.has(claims.ref)||claims.event_name!=='workflow_dispatch'||
+    claims.repository!==REPO||!ALLOWED_REFS.has(claims.ref)||!(claims.event_name==='workflow_dispatch'||(allowPush&&claims.event_name==='push'))||
     claims.exp<=now||claims.iat>now+60||claims.nbf>now+60)return null;
  const reference=REPO+'/.github/workflows/'+WORKFLOW+'@'+claims.ref;
  if((claims.job_workflow_ref||claims.workflow_ref)!==reference)return null;
@@ -133,6 +133,10 @@ export default {async fetch(request){
  }
  if(request.method==='GET'&&op==='gate'){
   try{return json(await stats())}catch{return json({ok:false,error:'BACKEND_UNAVAILABLE'},503)}
+ }
+ if(request.method==='POST'&&op==='preflight'){
+  const claims=await githubAuth(request,true);
+  return claims?json({ok:true,repository:REPO,ref:claims.ref,workflow:WORKFLOW,event:claims.event_name,mutations_allowed:false}):json({ok:false,error:'OIDC_IDENTITY_REJECTED'},401);
  }
  if(request.method!=='POST'||op!=='control')return json({ok:false,error:'NOT_FOUND'},404);
  let body;try{const raw=await request.text();if(raw.length>8000)return json({ok:false,error:'BODY_TOO_LARGE'},413);body=JSON.parse(raw)}catch{return json({ok:false,error:'INVALID_BODY'},400)}
