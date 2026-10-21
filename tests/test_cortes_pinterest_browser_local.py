@@ -1,9 +1,10 @@
 """Contract tests: Pinterest local web lane, editorial gates and no unsafe API fallback."""
 import unittest
 from pathlib import Path
-from tools.cortes_pinterest_browser_local import validate_job
-
+import sys
 ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT))
+from tools.cortes_pinterest_browser_local import validate_job
 
 def job(payload=None):
     body={"platform":"pinterest","account_id":"lucasyahn",
