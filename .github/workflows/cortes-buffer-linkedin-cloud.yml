@@ -1,5 +1,8 @@
 name: CORTES LinkedIn - automatic Buffer cloud publisher
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cortes-buffer-linkedin-cloud.yml']
   schedule:
     - cron: '11,41 * * * *'
   workflow_dispatch: {}
