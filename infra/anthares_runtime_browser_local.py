@@ -184,8 +184,12 @@ def _ensure_browser():
             _RESTORE_STATUS = "restored" if restored else "empty"
         except Exception:
             _RESTORE_STATUS = "vault_unavailable"
+        # Explicit limit ensures a Chromium startup failure returns 503 to
+        # the authenticated /verify caller instead of starving the ARA
+        # controller's sole synchronous Gunicorn worker for four minutes.
         _BROWSER = _PLAYWRIGHT.chromium.launch(
             headless=True,
+            timeout=25000,
             args=[
                 "--disable-dev-shm-usage",
                 "--no-sandbox",
@@ -208,35 +212,27 @@ def _ensure_browser():
 
 
 def health() -> dict[str, Any]:
-    try:
-        _, page = _ensure_browser()
-        return {
-            "configured": True,
-            "healthy": True,
-            "backend": "local_playwright_vault",
-            "isolated": True,
-            "headless": True,
-            "chromium_running": True,
-            "host_desktop_fallback": False,
-            "vault_enabled": bool(_secret()),
-            "restore_status": _RESTORE_STATUS,
-            "last_persist_ok": _LAST_PERSIST_OK,
-            "url": page.url,
-        }
-    except Exception as exc:
-        return {
-            "configured": True,
-            "healthy": False,
-            "backend": "local_playwright_vault",
-            "isolated": True,
-            "headless": True,
-            "chromium_running": False,
-            "host_desktop_fallback": False,
-            "vault_enabled": bool(_secret()),
-            "restore_status": _RESTORE_STATUS,
-            "error": type(exc).__name__,
-            "error_detail": str(exc)[:1000],
-        }
+    """Non-blocking liveness: never start Chromium during a health probe.
+
+    Browser auth/readiness is checked by /x/verify instead. In an undersized
+    deployment Playwright's launch can exceed the Gunicorn worker deadline:
+    doing that from /health causes *all* endpoints to time out repeatedly.
+    """
+    configured = bool(_secret())
+    running = _CONTEXT is not None and _BROWSER is not None
+    return {
+        "configured": configured,
+        "healthy": configured,
+        "backend": "local_playwright_vault",
+        "isolated": True,
+        "headless": True,
+        "chromium_running": running,
+        "host_desktop_fallback": False,
+        "vault_enabled": configured,
+        "restore_status": _RESTORE_STATUS,
+        "last_persist_ok": _LAST_PERSIST_OK,
+        "browser_preflight_required": not running,
+    }
 
 
 def browser_request(method: str, path: str, payload: dict[str, Any] | None = None):

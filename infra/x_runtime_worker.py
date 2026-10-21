@@ -110,6 +110,8 @@ def health_route():
         backend=h.get("backend"),
         browser_vault=True,
         vault_ready=bool(h.get("vault_enabled")),
+        browser_ready=bool(h.get("chromium_running")),
+        browser_preflight_required=bool(h.get("browser_preflight_required")),
         restore_status=h.get("restore_status"),
         render_dependency=False,
     ), (200 if h.get("healthy") else 503)
