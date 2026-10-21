@@ -1,0 +1,43 @@
+name: CORTES Instagram Buffer redundant post audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-instagram-buffer-audit.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  audit-existing-post:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Load Buffer API credential securely from Bitwarden
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
+      - name: Read existing Instagram Buffer post without changing it
+        run: |
+          python - <<'PY'
+          import json,sys
+          from social_adapters.buffer_three_channels import api,PINNED_CHANNELS
+          post_id='6ad8f66d014cfc9c40d0ea8c'
+          query='query { post(input: { id: '+json.dumps(post_id)+' }) { id status externalLink channelId schedulingType dueAt } }'
+          post=api(query).get('post') or {}
+          if post.get('id')!=post_id or post.get('channelId')!=PINNED_CHANNELS['instagram'][0]:
+              print('INSTAGRAM_BUFFER_AUDIT=IDENTITY_MISMATCH');sys.exit(3)
+          status=str(post.get('status') or '').lower()
+          if status not in ('scheduled','sent','error','draft','sending','needs_approval'):
+              print('INSTAGRAM_BUFFER_AUDIT=UNKNOWN_STATUS');sys.exit(4)
+          url=str(post.get('externalLink') or '')
+          if url and not url.startswith(('https://www.instagram.com/','https://instagram.com/')):
+              print('INSTAGRAM_BUFFER_AUDIT=EXTERNAL_LINK_INVALID');sys.exit(5)
+          print(json.dumps({'INSTAGRAM_BUFFER_AUDIT':'VERIFIED','status':status,'automatic':str(post.get('schedulingType')).lower()=='automatic','url':url or None,'due_at':post.get('dueAt')},separators=(',',':')))
+          PY
