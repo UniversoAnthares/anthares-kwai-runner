@@ -77,7 +77,6 @@ jobs:
 
       - name: Build Anthares-browser
         run: |
-          sed -i 's|127.0.0.1:6080 127.0.0.1:5900|0.0.0.0:6080 127.0.0.1:5900|' anthares-brouser/start.sh
           docker build -t anthares-browser ./anthares-brouser
 
       - name: Start isolated Anthares-browser
@@ -97,7 +96,6 @@ jobs:
             -e NOVNC_COOKIE_SECURE=1 \
             -v "$PROFILE_DIR:/data" \
             -p 127.0.0.1:18080:8080 \
-            -p 127.0.0.1:16080:6080 \
             anthares-browser
           for i in $(seq 1 150); do
             curl -fsS http://127.0.0.1:18080/ready | grep -q '"cdp_ready":true' && exit 0
