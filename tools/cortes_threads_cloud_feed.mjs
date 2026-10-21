@@ -30,5 +30,5 @@ if(process.argv[1]?.replaceAll('\\','/').endsWith('/cortes_threads_cloud_feed.mj
  try{const data=await fetchCloudManifest({day:process.env.CORTES_DAY||localDay()}),dest=process.argv[2];
  if(dest){await fs.mkdir(path.dirname(dest),{recursive:true});await fs.writeFile(dest,JSON.stringify(data,null,2)+'\n','utf8');}
  console.log(JSON.stringify({ok:true,day:data.day,total:data.total,pages:data.pages,pc_independent:true}));}
- catch(e){console.error('CLOUD_FEED_ERROR='+e.message);process.exitCode=1;}
+ catch(e){const detail=[e.message,e.cause?.code,e.cause?.message].filter(Boolean).join(' | ').slice(0,250);console.error('::error title=Threads Cloud Feed::'+detail);process.exitCode=1;}
 }
