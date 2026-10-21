@@ -15,7 +15,7 @@ class PlatformCapContract(unittest.TestCase):
             "cortes_tiktok_publications",
             "cortes_publications",
             "AT TIME ZONE 'America/Campo_Grande'",
-            "DATE '2026-10-21',100",
+
             "ON CONFLICT",
             "OLD.publication_started_at IS NULL",
             "GREATEST(public.cortes_daily_publication_budget.reserved",
@@ -23,7 +23,7 @@ class PlatformCapContract(unittest.TestCase):
             self.assertIn(token,source)
     def test_non_destructive(self):
         source = MIGRATION.read_text(encoding="utf-8").upper()
-        for forbidden in ("DROP TABLE","DELETE FROM","TRUNCATE","DROP TRIGGER","ALTER TABLE"):
+        for forbidden in ("DROP TABLE","DELETE FROM","TRUNCATE","DROP TRIGGER","ALTER TABLE","VALUES ('platform:kwai',DATE '2026-10-21',100"):
             self.assertNotIn(forbidden,source)
 
 if __name__ == "__main__":
