@@ -91,12 +91,18 @@ def download_verified(job,path):
     u=urlparse(url)
     if u.scheme!="https" or u.hostname not in ("anthares.us","www.anthares.us") or u.username or u.password:
         raise q.SafeStop("TIKTOK_MEDIA_ORIGIN_DENIED")
-    request=urllib.request.Request(url,headers={
-        "Accept":"video/mp4,application/octet-stream",
-        "User-Agent":"Mozilla/5.0 (compatible; AntharesCortes/1.0)",
-    })
+    # Same owned WordPress asset on the alternate official hostname.
+    # Choose it only after transient failures on the canonical hostname.
+    fallback_url=u._replace(netloc="www.anthares.us").geturl() if u.hostname=="anthares.us" else url
     retryable={408,425,429,500,502,503,504}
     for attempt in range(1,4):
+        address=fallback_url if attempt==3 else url
+        if address!=url:
+            print("CORTES_TIKTOK_MEDIA_OFFICIAL_HOST_FALLBACK=www",flush=True)
+        request=urllib.request.Request(address,headers={
+            "Accept":"video/mp4,application/octet-stream",
+            "User-Agent":"Mozilla/5.0 (compatible; AntharesCortes/1.0)",
+        })
         total=0
         start=time.monotonic()
         try:
