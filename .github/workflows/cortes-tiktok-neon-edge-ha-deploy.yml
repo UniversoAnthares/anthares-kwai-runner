@@ -1,0 +1,46 @@
+name: CORTES TikTok independent Neon/Cloudflare HA deploy
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'infra/cloudflare-cortes-tiktok-ha/**'
+      - '.github/workflows/cortes-tiktok-neon-edge-ha-deploy.yml'
+permissions:
+  contents: read
+concurrency:
+  group: cortes-tiktok-independent-edge-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate independent Cloudflare edge and Neon source
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          node --check infra/cloudflare-cortes-tiktok-ha/src/index.js
+          node --check infra/neon-cortes-tiktok/index.mjs
+          ! grep -q 'vercel.app' infra/cloudflare-cortes-tiktok-ha/src/index.js
+          grep -q 'cortestiktok.compute' infra/cloudflare-cortes-tiktok-ha/src/index.js
+      - name: Deploy TikTok-only Cloudflare Worker
+        run: npx --yes wrangler@4.43.0 deploy --config infra/cloudflare-cortes-tiktok-ha/wrangler.toml
+      - name: Verify backend and denied unauthenticated mutation
+        run: |
+          set -euo pipefail
+          url=https://anthares-cortes-tiktok-ha.anthares1.workers.dev
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 15 "$url/?action=health" -o /tmp/tiktok-ha-health.json; then
+              if node -e 'let d=require("/tmp/tiktok-ha-health.json");process.exit(d.ok&&d.service==="cortes-tiktok-neon"?0:1)'; then break; fi
+            fi
+            sleep 5
+          done
+          node -e 'let d=require("/tmp/tiktok-ha-health.json");if(!d.ok||!d.fencing)process.exit(1);console.log("TIKTOK_INDEPENDENT_EDGE_HEALTH=PASS")'
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$url/?action=start")
+          test "$status" = 401
+          echo CORTES_TIKTOK_ANONYMOUS_MUTATION_DENIED=PASS
