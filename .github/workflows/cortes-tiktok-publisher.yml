@@ -129,3 +129,28 @@ jobs:
           set -euo pipefail
           gh api -X POST "repos/${{ github.repository }}/actions/workflows/cortes-tiktok-publisher.yml/dispatches" -f ref=main
           echo CORTES_TIKTOK_CANONICAL_DISPATCH_ACK=1
+
+
+  # Event-driven P0 QA. The ordinary 12-hour QA cadence is unchanged.
+  qa_tiktok_p0:
+    needs: [tiktok]
+    if: ${{ always() && needs.tiktok.result == 'failure' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Alert central QA immediately, once per failed run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          marker="CORTES_QA_P0_TIKTOK_RUN_$GITHUB_RUN_ID"
+          if gh api "repos/$GITHUB_REPOSITORY/issues/283/comments?per_page=100" --paginate --jq '.[].body' | grep -Fq "$marker"; then
+            echo CORTES_QA_P0_DUPLICATE_SKIPPED=1
+            exit 0
+          fi
+          body="$(printf '**[QA P0][TikTok] Publicador CORTES falhou — analisar e corrigir imediatamente.**\\n\\nEvidencia: https://github.com/%s/actions/runs/%s\\nMarcador deduplicado: %s\\n\\nVerificar especialmente download MP4, acesso WordPress, Playwright e lease Neon. Falhas antes do primeiro ato irreversivel permitem retry controlado; apos STARTED, apenas reconciliar com prova remota. Limite 100 por dia e descarte dos excedentes.\\n' "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$marker")"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/283/comments" -f "body=$body" >/dev/null
+          echo CORTES_QA_P0_NOTIFIED=1
