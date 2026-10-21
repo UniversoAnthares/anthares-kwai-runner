@@ -116,6 +116,20 @@ async function getVideo(data){
  fs.writeFileSync(file,buf,{flag:'wx'});return file;
 }
 async function setField(p,kind,val){
+ // Pinterest uses DraftJS for video descriptions. It is NOT an input/textarea
+ // and must be ready (contenteditable=true) before typing. Keep strict
+ // identity and exact readback; never type into an ambiguous field.
+ if(kind==='description'){
+  const sel='[aria-label="Descreva seu Pin"][contenteditable="true"],[aria-label="Describe your Pin"][contenteditable="true"]';
+  const ready=await until(()=>p.js('(()=>document.querySelectorAll('+JSON.stringify(sel)+').length===1)()'),90,1000);
+  if(!ready)throw Error('PIN_DESCRIPTION_EDITOR_NOT_READY');
+  const focus=await p.js('(()=>{const x=document.querySelector('+JSON.stringify(sel)+');if(!x)return false;x.focus();return document.activeElement===x})()');
+  if(!focus)throw Error('PIN_DESCRIPTION_EDITOR_NOT_FOCUSED');
+  await p.rpc('Input.insertText',{text:val});
+  const verified=await until(()=>p.js('(()=>{const x=document.querySelector('+JSON.stringify(sel)+');return x?.innerText?.trim()})()').then(x=>x===val),14,450);
+  if(!verified)throw Error('PIN_DESCRIPTION_NOT_VERIFIED');
+  return;
+ }
  const sel=await p.js('(()=>{const kind='+JSON.stringify(kind)+';const inputs=[...document.querySelectorAll("input:not([type=file]),textarea,[contenteditable=true]")];const matches=inputs.filter(x=>{const s=[x.getAttribute("placeholder"),x.getAttribute("aria-label"),x.getAttribute("data-test-id"),x.getAttribute("name"),x.getAttribute("id")].filter(Boolean).join(" ").toLowerCase();return kind==="title"?/t.tulo|title/.test(s):kind==="description"?/descri|description/.test(s):/link|destino|destination/.test(s)});return matches.length===1?inputs.indexOf(matches[0]):-1})()');
  if(sel<0)throw Error('PIN_'+kind.toUpperCase()+'_AMBIGUOUS');
  const focused=await p.js('(()=>{const x=[...document.querySelectorAll("input:not([type=file]),textarea,[contenteditable=true]")]['+sel+'];if(!x)return false;x.focus();if("value" in x){const setter=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(x),"value")?.set;setter?.call(x,"");x.dispatchEvent(new Event("input",{bubbles:true}))}else{document.getSelection()?.selectAllChildren(x);document.getSelection()?.deleteFromDocument()}return true})()');
