@@ -163,12 +163,26 @@ def main():
         raise RuntimeError("X_CLOUD_ONLY_GUARD")
     if not os.getenv("GH_TOKEN") or not os.getenv("X_WORKER_CLIENT_TOKEN"):
         raise RuntimeError("X_CLOUD_CREDENTIAL_MISSING")
+    uncertain = []
     for issue in _list_open_x():
-        result = _process(issue)
+        try:
+            result = _process(issue)
+        except Exception as exc:
+            print("X_QA_P0_ITEM_BLOCKED issue=" + str(issue["number"])
+                  + " error=" + type(exc).__name__, flush=True)
+            uncertain.append(issue["number"])
+            continue
         if result in {"SKIP_UNQUALIFIED_ISSUE", "SKIP_UNSAFE_MEDIA_URL", "SKIP_INVALID_CAPTION"}:
             continue
         print(json.dumps({"issue": issue["number"], "status": result}), flush=True)
-        return 0 if result.startswith(("CONFIRMED", "RECOVERED_CONFIRMED")) else 3
+        if result.startswith(("CONFIRMED", "RECOVERED_CONFIRMED")):
+            return 0
+        uncertain.append(issue["number"])
+        # A previous uncertain item must never prevent a distinct X clip from proceeding.
+        # Only one new irreversible publish will be attempted in each run.
+    if uncertain:
+        print("X_QA_P0_UNCERTAIN_ISSUES=" + ",".join(map(str, uncertain)), flush=True)
+        return 3
     print('{"status":"IDLE_NO_ELIGIBLE_X_ISSUES"}', flush=True)
     return 0
 
