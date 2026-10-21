@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -159,23 +160,64 @@ def publish_once():
         raise
 
 
-def board_gate():
-    """Require Buffer to acknowledge the EXACT owned board before any lease.
+def alternate_pinterest_boards():
+    """Recover Buffer's *authenticated* Pinterest boards through channels query.
 
-    The public Pinterest URL alone cannot authorize a Buffer createPost:
-    previous mutations rejected it. A missing/500 board is an operational
-    incident, never a successful idle workflow.
+    This is a read-only, independent GraphQL resolver proven to return the
+    pinned board when the direct 'channel' resolver intermittently returns 500.
+    The channel identity and service are checked before any board is trusted.
+    """
+    result=api("query CortesPinterestAccountOrganizations { account { organizations { id } } }")
+    organizations=(result.get("account") or {}).get("organizations") or []
+    for org in organizations[:6]:
+        oid=str(org.get("id") or "")
+        if not oid:
+            continue
+        q=('query CortesPinterestAlternativeBoards { channels(input: { organizationId: '
+           +json.dumps(oid)
+           +' }) { id service metadata { ... on PinterestMetadata { boards { serviceId } } } } }')
+        rows=api(q).get("channels") or []
+        selected=[item for item in rows if str(item.get("id") or "")==PINTEREST_ID
+                  and str(item.get("service") or "").lower()=="pinterest"]
+        if len(selected)!=1:
+            continue
+        boards=(selected[0].get("metadata") or {}).get("boards") or []
+        if not isinstance(boards,list):
+            raise BufferBlocked("BUFFER_PINTEREST_BOARD_RESPONSE_INVALID")
+        return boards
+    return []
+
+
+def board_gate():
+    """Require the EXACT Buffer-authorized board before leasing a Pin.
+
+    Both resolvers are read only. Retry on transient GraphQL errors, while
+    enforcing the same pinned board and preserving fail-closed mutations.
+    Never retry a createPost call after an uncertain response.
     """
     from social_adapters.buffer_three_channels import pinterest_boards, PINTEREST_PUBLIC_BOARD_ID
-    try:
-        indexed=pinterest_boards()
-    except BufferBlocked as exc:
-        print("::error::CORTES_PINTEREST_BUFFER_BOARD_READ_FAILED",flush=True)
-        raise BufferBlocked("PINTEREST_BUFFER_BOARD_READ_FAILED") from exc
-    if not any(str(b.get("serviceId") or "")==PINTEREST_PUBLIC_BOARD_ID for b in indexed):
+    had_read=False
+    for attempt in range(3):
+        for source,reader in (("DIRECT",pinterest_boards),
+                              ("CHANNELS",alternate_pinterest_boards)):
+            try:
+                rows=reader()
+                had_read=True
+                if any(str(x.get("serviceId") or "")==PINTEREST_PUBLIC_BOARD_ID
+                       for x in rows):
+                    print("CORTES_PINTEREST_BOARD_AUTHORIZED_VIA="+source,flush=True)
+                    return PINTEREST_PUBLIC_BOARD_ID
+            except (BufferBlocked,ValueError,TypeError):
+                # Read-only route unavailable. The alternate resolver and
+                # next pass are independent, with no mutation side effects.
+                print("::warning::CORTES_PINTEREST_BOARD_READ_TRANSIENT_"+source,flush=True)
+        if attempt<2:
+            time.sleep((1,3)[attempt])
+    if had_read:
         print("::error::CORTES_PINTEREST_AWAITING_BUFFER_BOARD_SYNC",flush=True)
         raise BufferBlocked("PINTEREST_BUFFER_BOARD_NOT_SYNCED")
-    return PINTEREST_PUBLIC_BOARD_ID
+    print("::error::CORTES_PINTEREST_BUFFER_BOARD_READ_FAILED",flush=True)
+    raise BufferBlocked("PINTEREST_BUFFER_BOARD_READ_FAILED")
 
 
 def main():
