@@ -51,7 +51,7 @@ def oidc():
 
 def queue(action,payload=None):
     from tools.cortes_queue_ha import post
-    result=post("buffer-"+action,payload or {},oidc)
+    result=post("buffer-"+action,payload or {},oidc,primary="neon")
     if not result.get("ok"):
         raise RuntimeError("NEON_BUFFER_ACTION_REJECTED_"+action)
     return result
