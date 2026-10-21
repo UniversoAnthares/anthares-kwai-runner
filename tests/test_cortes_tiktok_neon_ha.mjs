@@ -55,3 +55,10 @@ test('Cloudflare edge routes only to fixed Neon TikTok backend',async()=>{
   assert(!last.includes('vercel.'));
  }finally{globalThis.fetch=old;}
 });
+
+test('Neon SQL string counts are normalized before client status processing',async()=>{
+  const {readFileSync}=await import('node:fs');
+  const text=readFileSync(new URL('../infra/neon-cortes-tiktok/index.mjs',import.meta.url),'utf8');
+  assert(text.includes('Number(x.count)'));
+  assert(text.includes('db_ledger_total'));
+});
