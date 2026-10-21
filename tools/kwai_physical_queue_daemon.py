@@ -21,6 +21,7 @@ WORKER=ROOT/'tools'/'kwai_device_failover_worker.py'; ACK=ROOT/'.state'/'android
 LOGDIR=ROOT/'.state'; LOG=LOGDIR/'kwai-physical-queue.log'; LOCK=LOGDIR/'kwai-physical-queue.lock'; MAINTENANCE=LOGDIR/'cortes-publisher-maintenance.pause'
 TTL=3600; POLL=20; EMPTY_POLL=180
 LAST_QUEUE_EMPTY=False
+LAST_NETWORK_BAD=False
 WP_PENDING=LOGDIR/'cortes-wp-callback-pending.json'
 _key=None
 
@@ -85,6 +86,13 @@ def preflight():
   touch=adb('-s',s,'shell','test','-x','/data/local/tmp/anthares-hid-tap.sh').returncode==0
   return bool(state=='device' and model==MODEL and 'package:' in pkg and native and touch),s
  except Exception:return False,''
+def network_ready(serial):
+ # Read-only DNS/HTTPS check before any irrevocable Kwai action.
+ try:
+  p=adb('-s',serial,'shell','timeout','11','curl','-sS','-I','--connect-timeout','4','--max-time','8','https://www.kwai.com',timeout=16,check=False)
+  return p.returncode==0 and bool(re.search(r'HTTP/[^ ]+ (?:200|301|302|303|307|308)',p.stdout or ''))
+ except (OSError,subprocess.SubprocessError,ValueError):return False
+
 def heartbeat(healthy,serial='',error=''):
  if os.getenv('CORTES_QUEUE_BACKEND','cloudflare').strip().lower()=='neon':
   return 202,{'ok':True,'backend':'vercel-neon','cloudflare_heartbeat_skipped':True}
@@ -252,7 +260,7 @@ def memu_identity_proven():
 
 
 def once():
- global LAST_QUEUE_EMPTY
+ global LAST_QUEUE_EMPTY,LAST_NETWORK_BAD
  if MAINTENANCE.exists():
   log('QUEUE_PAUSED_MAINTENANCE no_lease=1')
   return 0
@@ -337,6 +345,13 @@ def once():
  except Exception as exc:
   log('PUBLICATION_PACING_SAFE_RETRY error='+type(exc).__name__+' no_lease=1')
   return 0
+ if healthy and serial:
+  if not network_ready(serial):
+   if not LAST_NETWORK_BAD:log('KWAI_ANDROID_DNS_PREFLIGHT_BLOCKED no_lease=1 priority=P0')
+   LAST_NETWORK_BAD=True
+   return 0
+  if LAST_NETWORK_BAD:log('KWAI_ANDROID_DNS_PREFLIGHT_RECOVERED no_lease=1')
+  LAST_NETWORK_BAD=False
  code,d=signed_post('/job/lease',{'executor':EXECUTOR,'platform':'kwai','ttl_seconds':TTL})
  if code//100!=2 or not d.get('ok'):queue_failure('lease',code,d)
  job=d.get('job')
