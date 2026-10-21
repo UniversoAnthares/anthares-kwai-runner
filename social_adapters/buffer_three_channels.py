@@ -77,7 +77,7 @@ def pinterest_boards(token: str | None = None) -> list[dict]:
     query = ("query CortesPinterestBoards { channel(input: { id: " +
              json.dumps(channel_id) +
              " }) { id metadata { ... on PinterestMetadata { boards "
-             "{ serviceId name url } } } }")
+             "{ serviceId } } } }")
     entry = api(query, token).get("channel") or {}
     if entry.get("id") != channel_id:
         raise BufferBlocked("BUFFER_PINTEREST_CHANNEL_MISMATCH")
@@ -88,9 +88,8 @@ def pinterest_boards(token: str | None = None) -> list[dict]:
     clean = []
     for row in rows:
         sid = str(row.get("serviceId") or "").strip()
-        name = str(row.get("name") or "").strip()
-        if sid and name and sid.isdigit():
-            clean.append({"serviceId": sid, "name": name,
+        if sid:
+            clean.append({"serviceId": sid, "name": str(row.get("name") or ""),
                           "url": str(row.get("url") or "")})
     return clean
 
