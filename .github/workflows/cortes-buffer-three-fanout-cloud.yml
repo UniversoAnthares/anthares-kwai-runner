@@ -1,4 +1,4 @@
-name: CORTES Buffer 3 destinations - first 20 shorts per source
+name: CORTES 3 independent networks - all shorts cloud fanout
 on:
   schedule:
     - cron: '3,13,23,33,43,53 * * * *'
@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   enqueue:
-    # Enable only after backend OIDC support has been deployed and proven.
-    if: ${{ vars.CORTES_BUFFER_THREE_BACKEND_READY == 'true' && vars.CORTES_BUFFER_FANOUT_PAUSED != 'true' }}
+    # Production Neon Functions and Vercel share one durable destination ledger.
+    if: ${{ vars.CORTES_BUFFER_FANOUT_PAUSED != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 9
     env:
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Buffer priority 20 per live for Instagram Pinterest LinkedIn
+      - name: Enqueue all eligible short masters independently for Instagram Pinterest LinkedIn
         run: |
           set -euo pipefail
           python -m py_compile tools/cortes_buffer_three_fanout.py anthares_publisher/buffer_distribution.py
