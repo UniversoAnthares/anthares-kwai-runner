@@ -117,7 +117,7 @@ async function action(body,role,claims){
  }
  if(body.action==='uncertain'){
   if(!idValid(id))return{ok:false,error:'INVALID_MEDIA_ID'};
-  const rows=await database("UPDATE cortes_publications SET status='uncertain',lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status IN ('leased','started') AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",[id,TARGET,'github-threads:'+run,Number(body.generation)]);
+  const rows=await database("UPDATE cortes_publications SET status='uncertain',confirmation_evidence=jsonb_build_object('kind','threads_cloud_unknown','marked_at',now()),lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status IN ('leased','started') AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",[id,TARGET,'github-threads:'+run,Number(body.generation)]);
   return rows[0]?{ok:true,job:rows[0]}:{ok:false,error:'UNCERTAIN_FENCE_REJECTED'};
  }
  if(body.action==='release'){
