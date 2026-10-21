@@ -14,6 +14,7 @@ on:
   workflow_run:
     workflows: ["CORTES 3 independent networks - all shorts cloud fanout"]
     types: [completed]
+    branches: [main]
 permissions:
   contents: read
   id-token: write
