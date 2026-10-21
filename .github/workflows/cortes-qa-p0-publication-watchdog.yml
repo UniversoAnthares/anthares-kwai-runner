@@ -6,6 +6,12 @@ on:
       - tools/cortes_qa_p0_router.py
       - tests/test_cortes_qa_p0_router.py
       - .github/workflows/cortes-qa-p0-publication-watchdog.yml
+  push:
+    branches: [main]
+    paths:
+      - tools/cortes_qa_p0_router.py
+      - tests/test_cortes_qa_p0_router.py
+      - .github/workflows/cortes-qa-p0-publication-watchdog.yml
   schedule:
     - cron: "*/5 * * * *"
   workflow_run:
