@@ -29,7 +29,7 @@ class FirstPinProof(unittest.TestCase):
             api.assert_not_called()
 
     def test_share_now_is_only_one_mutation(self):
-        states=[row(),row("sent",link="https://www.pinterest.com/pin/123456789/")]
+        states=[row("scheduled"),row("sent",link="https://www.pinterest.com/pin/123456789/")]
         def returned(query):
             self.assertIn("editPost",query)
             self.assertIn("mode: shareNow",query)
