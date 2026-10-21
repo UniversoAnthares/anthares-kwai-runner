@@ -60,7 +60,7 @@ def channels(token: str | None = None) -> list[dict]:
         if not org_id:
             continue
         query = ("query { channels(input: { organizationId: " + json.dumps(org_id) +
-                 " }) { id name displayName service isQueuePaused } }")
+                 " }) { id name displayName service externalLink type isDisconnected isLocked isQueuePaused } }")
         output.extend(api(query, token).get("channels") or [])
     return output
 
@@ -77,13 +77,20 @@ def validate_channel(platform: str, channel_id: str, available: list[dict]) -> d
     service = str(entry.get("service") or "").lower()
     if service != platform:
         raise BufferBlocked("BUFFER_SERVICE_MISMATCH")
-    if entry.get("isQueuePaused"):
-        raise BufferBlocked("BUFFER_CHANNEL_PAUSED")
+    if entry.get("isQueuePaused") or entry.get("isLocked") or entry.get("isDisconnected"):
+        raise BufferBlocked("BUFFER_CHANNEL_UNAVAILABLE")
     name = " ".join(str(entry.get("displayName") or entry.get("name") or "").casefold().split())
     # Names must be verified with the connected social account. Do not match
     # a personal LinkedIn profile when the page is the required target.
-    if platform == "linkedin" and name != LABEL.casefold():
-        raise BufferBlocked("LINKEDIN_PAGE_NAME_MISMATCH")
+    if platform == "linkedin":
+        if name != LABEL.casefold():
+            raise BufferBlocked("LINKEDIN_PAGE_NAME_MISMATCH")
+        link = str(entry.get("externalLink") or "").strip()
+        uri = urllib.parse.urlparse(link if "://" in link else "https://" + link)
+        if (uri.hostname or "").lower() not in ("linkedin.com", "www.linkedin.com") or uri.path.rstrip("/") not in ("/company/" + LINKEDIN_COMPANY, "/company/universo-anthares"):
+            raise BufferBlocked("LINKEDIN_PAGE_URL_UNVERIFIED")
+        if str(entry.get("type") or "").lower() not in ("page", "company"):
+            raise BufferBlocked("LINKEDIN_CHANNEL_NOT_PAGE")
     if platform == "instagram" and "universoanthares" not in name.replace(" ", ""):
         raise BufferBlocked("INSTAGRAM_IDENTITY_UNVERIFIED")
     if platform == "pinterest" and "anthares" not in name.replace(" ", ""):
@@ -153,7 +160,7 @@ def main() -> int:
         mode = sys.argv[1] if len(sys.argv) > 1 else "dry-run"
         if mode == "list":
             data = channels()
-            print(json.dumps([{k: c.get(k) for k in ("id","name","service","displayName","isQueuePaused")} for c in data], ensure_ascii=False))
+            print(json.dumps([{k: c.get(k) for k in ("id","name","service","displayName","isQueuePaused","externalLink","type","isDisconnected","isLocked")} for c in data], ensure_ascii=False))
             return 0
         if mode not in ("dry-run", "schedule"):
             raise BufferBlocked("INVALID_MODE")
