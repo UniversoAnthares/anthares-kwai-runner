@@ -1,84 +1,57 @@
-name: Mirror to Codeberg
-
+name: Mirror GitHub main to Codeberg (verified fast-forward)
 on:
   push:
-    branches:
-      - main
-    tags:
-      - '**'
-  workflow_dispatch:
+    branches: [main]
   schedule:
     - cron: '17,47 * * * *'
-
+  workflow_dispatch: {}
 permissions:
   contents: read
 
-# Every invocation mirrors the complete ref set. Serializing globally prevents
-# two runners from racing on the same Codeberg ref and producing stale-lock
-# rejections such as "incorrect old value provided".
+# Coalesce push storms: only the newest queued main-branch snapshot should
+# consume a hosted runner. Older pending mirrors must not starve publication.
 concurrency:
-  group: codeberg-complete-repository-mirror
-  cancel-in-progress: false
+  group: codeberg-main-verified-mirror
+  cancel-in-progress: true
 
 jobs:
   mirror:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 7
     steps:
-      - name: Checkout complete repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Push branches and tags safely to Codeberg
+          persist-credentials: false
+      - name: Verify target and enforce no-force, fast-forward-only update
+        shell: bash
         env:
           CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
-        shell: bash
         run: |
           set -euo pipefail
+          export GIT_TERMINAL_PROMPT=0
           if [ -z "${CODEBERG_PUSH_URL:-}" ]; then
-            echo "CODEBERG_PUSH_CREDENTIAL_MISSING"
+            echo "::error::CODEBERG_MIRROR_AUTH_REQUIRED"
+            exit 78
+          fi
+          public="https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git"
+          git fetch --no-tags origin 'refs/heads/main:refs/remotes/origin/main'
+          latest="$(git rev-parse refs/remotes/origin/main)"
+          current="$(git ls-remote "$public" 'refs/heads/main' | cut -f1)"
+          if [ -z "$current" ]; then
+            echo "::error::CODEBERG_MAIN_NOT_FOUND"
             exit 2
           fi
-          git remote remove codeberg 2>/dev/null || true
-          git remote add codeberg "$CODEBERG_PUSH_URL"
-          git fetch origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
-
-          for attempt in 1 2 3; do
-            if git push codeberg '+refs/remotes/origin/*:refs/heads/*' '+refs/tags/*:refs/tags/*'; then
-              break
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "Codeberg mirror failed after 3 serialized attempts." >&2
-              exit 1
-            fi
-            echo "Transient mirror collision detected; refreshing refs before retry $((attempt + 1))."
-            sleep "$attempt"
-            git fetch origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
-          done
-
-      - name: Reconcile Codeberg repository settings when authorized
-        env:
-          CODEBERG_API_TOKEN: ${{ secrets.CODEBERG_API_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "${CODEBERG_API_TOKEN:-}" ]; then
-            echo "CODEBERG_REPOSITORY_ADMIN_TOKEN_MISSING"
-            exit 0
+          git fetch --no-tags "$public" 'refs/heads/main:refs/remotes/codeberg-audit/main'
+          if ! git merge-base --is-ancestor "$current" "$latest"; then
+            echo "::error::CODEBERG_DIVERGED_NO_PUSH"
+            exit 3
           fi
-          curl --fail --silent --show-error \
-            --request PATCH \
-            --header "Authorization: token ${CODEBERG_API_TOKEN}" \
-            --header 'Content-Type: application/json' \
-            --data '{"default_branch":"main","has_actions":true}' \
-            'https://codeberg.org/api/v1/repos/UniversoAnthares/anthares-kwai-runner' \
-            >/dev/null
-          echo "CODEBERG_ADMIN_PATCH_APPLIED"
-
-      - name: Verify actual mirror SHA and repository settings
-        shell: bash
-        run: |
-          set -euo pipefail
-          expected="$(git rev-parse refs/remotes/origin/main)"
-          EXPECTED_GITHUB_MAIN_SHA="$expected" python3 tools/codeberg_mirror_health.py
+          git -c core.askPass= push --quiet "$CODEBERG_PUSH_URL" "$latest:refs/heads/main"
+          mirrored="$(git ls-remote "$public" 'refs/heads/main' | cut -f1)"
+          if [ "$latest" != "$mirrored" ]; then
+            echo "::error::CODEBERG_POST_PUSH_SHA_MISMATCH"
+            exit 4
+          fi
+          echo "CODEBERG_MAIN_FAST_FORWARD_VERIFIED=PASS"
+          echo "CODEBERG_MAIN_SHA=$mirrored"

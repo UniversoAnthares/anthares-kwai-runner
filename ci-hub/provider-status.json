@@ -1,6 +1,6 @@
 {
-  "revision": "2026-10-18-resilience-dual-queue-live-proof",
-  "checked_at_utc": "2026-10-18T12:39:20.560Z",
+  "revision": "2026-10-21-codeberg-source-gate-and-ci-capacity-audit",
+  "checked_at_utc": "2026-10-21T21:20:00Z",
   "rules": {
     "regression_check_required_each_round": true,
     "only_remote_control_surface": "anthares_remote",
@@ -106,18 +106,20 @@
       "quota_remaining": "PENDING_VERIFICATION"
     },
     "github_actions_public": {
-      "status": "READY",
-      "evidence_class": "VERIFIED",
-      "verified_at_utc": "2026-10-16T02:35:31Z",
-      "evidence": "hosted Ubuntu runner executed Anthares Browser canonical runtime proof successfully",
-      "eligible": true
+      "status": "DEGRADED_CURRENT_REPO_QUEUE",
+      "evidence_class": "VERIFIED_LIVE_QUEUE",
+      "verified_at_utc": "2026-10-21T21:20:00Z",
+      "evidence": "CORTES publishing, OAuth probe and Codeberg mirror workflows backed up on public Github repository with no fresh runner allocation at sample. Existing success evidence is historical.",
+      "eligible": false,
+      "reopen_condition": "A recent scheduled CORTES or mirror job is assigned a runner and its required success evidence appears"
     },
     "appveyor": {
-      "status": "READY_WITH_BROWSER_LINUX_PROOF",
-      "evidence_class": "VERIFIED",
-      "verified_at_utc": "2026-10-16T03:44:34Z",
-      "evidence": "AppVeyor Linux job successfully executed shared Anthares Browser runtime proof; checkout race fixed by clone_depth 50",
-      "eligible": true
+      "status": "DEGRADED_QUEUE_20261021",
+      "evidence_class": "VERIFIED_LIVE_QUEUE",
+      "verified_at_utc": "2026-10-21T21:20:00Z",
+      "evidence": "AppVeyor public projects anthares-kwai-runner and anthares-kwai-runner-1w7dq report newest builds 54927735/54927736 queued since 2026-10-19; historic 2026-10-16 proof does not imply new runner availability.",
+      "eligible": false,
+      "reopen_condition": "A new AppVeyor hosted job starts and completes successfully"
     },
     "github_actions_private": {
       "status": "BLOCKED_QUOTA",
@@ -126,10 +128,10 @@
       "eligible": false
     },
     "gitlab_ci": {
-      "status": "BLOCKED_QUOTA",
+      "status": "BLOCKED_QUOTA_EXCLUDED_FROM_ROUTING",
       "evidence_class": "VERIFIED",
       "verified_at_utc": "2026-10-14T18:12:41Z",
-      "evidence": "pipeline 2947796926 failed before start with failure_reason=ci_quota_exceeded; this does not affect the GitLab Issues API control queue",
+      "evidence": "GitLab latest project pipeline 2973638637 jobs failed before start with ci_quota_exceeded; repo and GitLab issue recovery transport remain independently accessible.",
       "eligible": false
     },
     "cloudflare_workers_runtime": {
@@ -218,6 +220,24 @@
       "verified_at_utc": "2026-10-18T12:39:20.560Z",
       "eligible": false,
       "evidence": "Neon table cortes_publications exists with prior confirmed real Kwai job and phase4 self-test; live 2026-10-18 Cloudflare CORTES backlog cannot be inferred or safely moved from this table alone."
+    },
+    "codeberg_repo": {
+      "status": "REACHABLE_STALE",
+      "evidence_class": "VERIFIED_LIVE",
+      "verified_at_utc": "2026-10-21T21:20:00Z",
+      "evidence": "Codeberg public main 1c2f7dc3 is 20 commits behind GitHub 2884ff77 at sampled point; merge-base verified ancestor, no divergence. Codeberg repo has Actions disabled, default branch is not main; Github main later advanced further. Authorized Github mirror workflow last proved Codeberg push at run 39665507700.",
+      "eligible": false,
+      "scope": "git recovery only, never publish from stale checkout",
+      "reopen_condition": "authenticated Codeberg mirror finishes, public main equals fresh GitHub main and SHA readback succeeds"
+    },
+    "codeberg_actions": {
+      "status": "BLOCKED_NOT_ENABLED",
+      "evidence_class": "VERIFIED_LIVE",
+      "verified_at_utc": "2026-10-21T21:20:00Z",
+      "evidence": "Forgejo API reports has_actions=false; hosted CI eligibility/license/runner not validated.",
+      "eligible": false,
+      "scope": "candidate CI (not yet an active fallback)",
+      "reopen_condition": "Actions enabled, qualified runner available, real job success and publisher OIDC/secret access proven"
     }
   }
 }
