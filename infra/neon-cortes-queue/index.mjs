@@ -78,6 +78,7 @@ async function identity(request){
   else if(RUNNER_PRODUCERS.has(wf))role='producer';
   else if(PROBE_WORKFLOWS.has(wf))role='probe';
   else if(wf==='cortes-neon-ha-oidc-proof.yml'){role='probe';platform='linkedin';}
+  else if(wf==='cortes-linkedin-personal-cloud.yml'){role='personal';platform='linkedin';}
  }else if(repo===CLIPPER&&CLIPPER_PRODUCERS.has(wf))role='producer';
  if(!role)return null;
  try{
@@ -333,12 +334,46 @@ async function pinterestBrowserAction(verb,b){
    RETURNING id,status,remote_id`,[id,target,who,gen,pin,JSON.stringify(evidence)]);
  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'BROWSER_CONFIRM_REJECTED'};
 }
+// Personal member publishing is exclusively authorized by the signed main-branch
+// GitHub workflow. Company Buffer workflows cannot operate on this queue.
+const P_TARGET='linkedin:personal',P_OWNER='linkedin-personal:github-cloud-v1',P_LIMIT=50;
+async function personalAction(verb,b){
+ const id=String(b.id||''),owner=String(b.owner||'');
+ if(verb==='lease'){
+  if(b.target_key!==P_TARGET||owner!==P_OWNER)return{ok:false,error:'PERSONAL_TARGET_OWNER_INVALID'};
+  const unsettled=await query("SELECT count(*)::int n FROM cortes_publications WHERE target_key=$1 AND status='uncertain'",[P_TARGET]);
+  if(Number(unsettled[0]?.n||0)>0)return{ok:true,job:null,unresolved_publication:true};
+  const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+  const used=await query(`SELECT count(*)::int n FROM cortes_publications WHERE target_key=$1 AND status IN ('confirmed','leased','started','uncertain') AND updated_at >= ${day}`,[P_TARGET]);
+  if(Number(used[0]?.n||0)>=P_LIMIT)return{ok:true,job:null,daily_limit_reached:true,limit:P_LIMIT};
+  const rows=await query(`WITH picked AS (SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued' AND created_at >= ${day} ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE cortes_publications p SET status='leased',lease_owner=$2,lease_generation=p.lease_generation+1,lease_until=now()+interval '30 minutes',updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued' RETURNING p.*`,[P_TARGET,P_OWNER]);
+  return{ok:true,job:rows[0]||null,limit:P_LIMIT};
+ }
+ if(!['start','fail','accepted','confirmed'].includes(verb))return{ok:false,error:'PERSONAL_ACTION_DENIED'};
+ const generation=Number(b.lease_generation);
+ if(!id||owner!==P_OWNER||!Number.isInteger(generation)||generation<1)return{ok:false,error:'PERSONAL_INVALID_FENCE'};
+ if(verb==='start'){
+  const r=await query("UPDATE cortes_publications SET status='started',publication_started_at=COALESCE(publication_started_at,now()),updated_at=now() WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 AND lease_generation=$4 AND lease_until>now() RETURNING id,status",[id,P_TARGET,owner,generation]);
+  return r.length?{ok:true,job:r[0]}:{ok:false,error:'PERSONAL_STALE_FENCE'};
+ }
+ if(verb==='fail'){
+  const r=await query("UPDATE cortes_publications SET status=CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain' END,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status IN ('leased','started') AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",[id,P_TARGET,owner,generation]);
+  return r.length?{ok:true,job:r[0]}:{ok:false,error:'PERSONAL_STALE_FENCE'};
+ }
+ const remote=String(b.remote_id||'');
+ if(!/^urn:li:(share|ugcPost):[0-9]{8,25}$/.test(remote))return{ok:false,error:'PERSONAL_REMOTE_INVALID'};
+ if(verb==='confirmed'&&(b.confirmation_evidence?.kind!=='linkedin_author_readback_verified'||b.confirmation_evidence?.verified_id!==remote||b.confirmation_evidence?.author_verified!==true))return{ok:false,error:'PERSONAL_READBACK_REQUIRED'};
+ const evidence=verb==='confirmed'?b.confirmation_evidence:{kind:'linkedin_api_201_unverified',verified_id:remote,account:'personal'};
+ const status=verb==='confirmed'?'confirmed':'uncertain';
+ const r=await query("UPDATE cortes_publications SET status=$5,remote_id=$6,confirmation_evidence=$7::jsonb,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status='started' AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status,remote_id",[id,P_TARGET,owner,generation,status,remote,JSON.stringify(evidence)]);
+ return r.length?{ok:true,job:r[0]}:{ok:false,error:'PERSONAL_STALE_FENCE'};
+}
 export default {async fetch(request){
  const url=new URL(request.url),action=url.searchParams.get('action')||'';
  if(request.method==='GET'&&action==='health'){
   try{
    const r=await query(`SELECT target_key,status,count(*)::int n FROM cortes_publications
-    WHERE target_key IN ('linkedin:primary','instagram:universoanthares','pinterest:lucasyahn')
+    WHERE target_key IN ('linkedin:primary','linkedin:personal','instagram:universoanthares','pinterest:lucasyahn')
     GROUP BY target_key,status`);
    return answer({ok:true,backend:'neon-functions-cortes',database_ok:true,
      network_isolation:true,counts:r},200);
@@ -364,6 +399,11 @@ export default {async fetch(request){
   if(action==='probe'){
    if(actor.role!=='probe')return answer({ok:false,error:'PROBE_WORKFLOW_ONLY'},403);
    const out=await writeProbe(body);
+   return answer(out,out.ok?200:409);
+  }
+  if(action.startsWith('personal-')){
+   if(actor.role!=='personal')return answer({ok:false,error:'PERSONAL_WORKFLOW_ONLY'},403);
+   const out=await personalAction(action.slice('personal-'.length),body);
    return answer(out,out.ok?200:409);
   }
   if(action==='enqueue'){
