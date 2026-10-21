@@ -37,6 +37,13 @@ class PinterestCloudTests(unittest.TestCase):
         with patch.object(p,"api",side_effect=pending):
             self.assertIsNone(p.verify_sent_post("123"))
 
+    def test_missing_buffer_board_blocks_leasing_but_keeps_reconciliation(self):
+        with patch.object(p,"cloud_only"), patch.object(p,"reconcile",return_value=0), \
+             patch("social_adapters.buffer_three_channels.pinterest_boards",
+                   return_value=[]), patch.object(p,"publish_once") as publish:
+            self.assertEqual(p.main(),0)
+            publish.assert_not_called()
+
     def test_no_cloud_credentials_fails_without_queue_call(self):
         with patch.dict(p.os.environ,{"GITHUB_ACTIONS":"false","BUFFER_API_KEY":""}):
             with self.assertRaisesRegex(RuntimeError,"CLOUD_ONLY"):
