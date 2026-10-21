@@ -104,6 +104,12 @@ def safe_payload(row):
     if row.get("target_key")!=TARGET or row.get("duration_class")!="short":
         raise RuntimeError("NEON_LINKEDIN_TARGET_INVALID")
     payload=row.get("payload") or {}
+    if isinstance(payload,str):
+        try: payload=json.loads(payload)
+        except (ValueError,TypeError):
+            raise RuntimeError("CORTES_BUFFER_NEON_PAYLOAD_INVALID_JSON") from None
+    if not isinstance(payload,dict):
+        raise RuntimeError("CORTES_BUFFER_NEON_PAYLOAD_NOT_OBJECT")
     if payload.get("platform")!="linkedin" or payload.get("account_id")!="primary":
         raise RuntimeError("NEON_LINKEDIN_ACCOUNT_INVALID")
     result={
