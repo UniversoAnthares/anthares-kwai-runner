@@ -54,9 +54,8 @@ def _payload(issue):
 
 
 def _idempotency(body):
-    identity = "|".join(str(body.get(k) or "") for k in (
-        "account", "source_id", "segment_start", "segment_end", "media_url"))
-    return "x-long-v1-" + hashlib.sha256(identity.encode()).hexdigest()[:48]
+    from tools.x_issue_publisher import fingerprint
+    return "x_" + fingerprint(body)
 
 
 def _comments(issue_number):
@@ -67,7 +66,12 @@ def _comments(issue_number):
 
 
 def _sent_marker(comments):
-    return any("X_POST_SUBMISSION_STARTED_V1" in str(c.get("body") or "") for c in comments)
+    return any(
+        (c.get("user") or {}).get("login") == "github-actions[bot]"
+        and ("X_POST_SUBMISSION_STARTED_V1" in str(c.get("body") or "")
+             or "X_SUBMISSION_STARTED_V1" in str(c.get("body") or ""))
+        for c in comments
+    )
 
 
 def _verified(url):
@@ -83,10 +87,13 @@ def _complete(issue, payload, info):
         raise RuntimeError("X_POST_CONFIRMATION_EVIDENCE_INVALID")
     # The confirming comment must be durable BEFORE closing the issue.
     _github(f"/issues/{issue['number']}/comments", method="POST", payload={
-        "body": "CONFIRMED\n\nVideo verified on X, account @lucasyahn.\n"
-                "Post: " + url + "\n"
-                "X_VERIFIED_LONGFORM_V1\n"
-                "Idempotency: " + _idempotency(payload)
+        "body": "CONFIRMED video\n" + json.dumps({
+            "kind": "X_VIDEO_CONFIRMED_V1",
+            "account": "lucasyahn",
+            "video_verified": True,
+            "post_url": url,
+            "idempotency_key": _idempotency(payload)
+        })
     })
     _github(f"/issues/{issue['number']}", method="PATCH", payload={"state": "closed"})
     return url
