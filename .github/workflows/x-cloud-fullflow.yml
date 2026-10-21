@@ -85,6 +85,11 @@ jobs:
       - name: Install transcript dependencies
         if: steps.gate.outputs.due == 'true'
         run: python -m pip install --disable-pip-version-check 'yt-dlp[default]' yt-dlp-ejs faster-whisper
+      - name: Restore authenticated YouTube fallback
+        if: steps.gate.outputs.due == 'true'
+        env:
+          YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+        run: python tools/x_restore_youtube_cookies.py
       - name: Prepare timestamped transcript request
         if: steps.gate.outputs.due == 'true'
         run: python -u x_cloud_prepare.py
@@ -152,6 +157,10 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Install render dependencies
         run: python -m pip install --disable-pip-version-check 'yt-dlp[default]' yt-dlp-ejs
+      - name: Restore authenticated YouTube fallback
+        env:
+          YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+        run: python tools/x_restore_youtube_cookies.py
       - name: Render AI-directed semantic microcut
         env:
           X_ISSUE_NUMBER: ${{ github.event.issue.number }}
