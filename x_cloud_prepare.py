@@ -157,6 +157,8 @@ def download_scan(source_url: str, out: Path) -> None:
         out.unlink(missing_ok=True)
         mirror = os.getenv("X_SOURCE_MIRROR_URL", "").strip()
         if mirror:
+            if os.getenv("X_SOURCE_MIRROR_VIDEO_ID", "").strip() != _video_id(source_url):
+                raise RuntimeError("X_SOURCE_MIRROR_ID_MISMATCH")
             parsed = urllib.parse.urlparse(mirror)
             if parsed.scheme != "https" or parsed.hostname not in {
                     "anthares.us", "www.anthares.us", "raw.githubusercontent.com",
