@@ -241,11 +241,24 @@ def linkedin(payload, publish=False):
     remote_id = next((v for k,v in post_headers.items() if k.lower() == "x-restli-id"), "")
     if not remote_id:
         raise PublishUncertain("linkedin_post_id_missing")
-    verified, _ = _request(base + "/posts/" + urllib.parse.quote(remote_id, safe=""), token=token, headers=headers)
+    # A self-serve w_member_social token often lacks restricted r_member_social.
+    # Creation 201 is not proof that the post is publicly visible. Preserve its
+    # remote ID as UNCERTAIN, never blind-retry an already accepted upload.
+    try:
+        verified, _ = _request(base + "/posts/" + urllib.parse.quote(remote_id, safe=""), token=token, headers=headers)
+    except PublishUncertain:
+        if account != "personal":
+            raise
+        return {"status": "ACCEPTED_UNVERIFIED", "destination_key": key, "remote_id": remote_id,
+                "confirmation_evidence": {"kind": "linkedin_api_201_unverified", "verified_id": remote_id}}
     if str(verified.get("id") or "") != remote_id or str(verified.get("author") or "") != owner:
-        raise PublishUncertain("linkedin_post_readback_unverified")
+        if account != "personal":
+            raise PublishUncertain("linkedin_post_readback_unverified")
+        return {"status": "ACCEPTED_UNVERIFIED", "destination_key": key, "remote_id": remote_id,
+                "confirmation_evidence": {"kind": "linkedin_api_201_unverified", "verified_id": remote_id}}
     return {"status": "CONFIRMED", "destination_key": key, "remote_id": remote_id,
-            "confirmation_evidence": {"verified_id": remote_id, "video": video}}
+            "confirmation_evidence": {"kind": "linkedin_author_readback_verified",
+                                      "author_verified": True, "verified_id": remote_id, "video": video}}
 
 
 def main():
