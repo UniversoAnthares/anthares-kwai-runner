@@ -12,6 +12,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+# Absolute CORTES business cap PER REAL SOCIAL NETWORK, not per Buffer
+# transport, API call or deployment. Atomic enforcement is in Neon migration
+# 20261021_cortes_daily_publication_limit_100.sql, on the first started state.
+# Other authorized publishing routes share this same database and quota.
+CORTES_DAILY_PUBLICATION_LIMIT = 100
+
 BUFFER_LIMIT_PER_SOURCE = 20
 CAPACITY_SOFT_LIMIT = 8
 COLLISION_PADDING_MINUTES = 15
