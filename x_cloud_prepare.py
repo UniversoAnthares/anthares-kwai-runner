@@ -28,6 +28,9 @@ ITAG_HEIGHT = {160:144, 278:144, 133:240, 242:240, 134:360, 243:360, 135:480, 24
 def discover_source() -> dict:
     import yt_dlp
     opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "playlistend": 60, "skip_download": True}
+    cookie_path = os.getenv("X_YT_COOKIE_FILE", "").strip()
+    if cookie_path and os.path.isfile(cookie_path):
+        opts["cookiefile"] = cookie_path
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(CHANNEL_URL, download=False)
     entries = list((info or {}).get("entries") or [])
@@ -149,6 +152,9 @@ def download_scan(source_url: str, out: Path) -> None:
     out.unlink(missing_ok=True)
     end = SCAN_START + SCAN_SECONDS
     cmd = [sys.executable, "-m", "yt_dlp", "--no-warnings", "--no-progress", "--download-sections", f"*{SCAN_START}-{end}", "--force-keyframes-at-cuts", "--merge-output-format", "mp4", "-f", "bv*[height<=720]+ba/b[height<=720]/b", "-o", str(out), source_url]
+    cookie_path = os.getenv("X_YT_COOKIE_FILE", "").strip()
+    if cookie_path and os.path.isfile(cookie_path):
+        cmd[3:3] = ["--cookies", cookie_path]
     try:
         subprocess.run(cmd, check=True, timeout=900)
         print("X_SOURCE_ROUTE=YTDLP_DIRECT", flush=True)
