@@ -12,6 +12,9 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from anthares_publisher.editorial import branded_title, add_site_to_keywords
+
 from instagram_publish import InstagramAPIError, client_from_env
 
 WP_MEDIA_ENDPOINT = os.getenv(
@@ -102,9 +105,9 @@ def clean_caption(row: dict[str, Any]) -> str:
     text = re.sub(r"\s+", " ", text).strip(" .")
     if text:
         text = text[0].upper() + text[1:]
-    suffix = " #literatura #escrita #UniversoAnthares"
-    room = max(0, 2200 - len(suffix))
-    return text[:room].rstrip() + suffix
+    hashtags = " #literatura #escrita #UniversoAnthares"
+    title = branded_title(text, limit=2200-len(hashtags)-len(" www.anthares.us"))
+    return add_site_to_keywords(title + hashtags)
 
 
 def publish_next(*, allow_legacy: bool = False, dry_run: bool = False) -> dict[str, Any]:
