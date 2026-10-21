@@ -115,6 +115,11 @@ jobs:
           ! docker port anthares-browser | grep -q 9222
           echo HOST_DESKTOP_FALLBACK=FALSE
 
+      - name: Read-only proof of restored Threads account in cloud browser
+        env:
+          CONTROL: ${{ steps.creds.outputs.control }}
+        run: python3 tools/threads_cloud_owner_probe.py
+
       - name: Open temporary noVNC tunnel for legitimate manual login
         if: ${{ inputs.mode == 'login' || github.ref == 'refs/heads/feature/threads-cloud-primary-20261021' }}
         env:
@@ -153,6 +158,11 @@ jobs:
         run: |
           minutes="$KEEP"; [ "$minutes" -gt 45 ] && minutes=45; [ "$minutes" -lt 1 ] && minutes=1
           sleep "$((minutes*60))"
+
+      - name: Recheck Threads identity before persisting encrypted profile
+        env:
+          CONTROL: ${{ steps.creds.outputs.control }}
+        run: python3 tools/threads_cloud_owner_probe.py
 
       - name: Seal profile snapshot
         if: ${{ always() && env.STATE_KEY != '' }}
