@@ -174,7 +174,12 @@ async function bufferAction(verb,b,platform){
   return{ok:true,job:row[0]||null};
  }
  const id=String(b.id||''),fence=Number(b.lease_generation),who=String(b.owner||'');
- if(!id||!who.startsWith(owner)||!Number.isInteger(fence)||fence<1)return{ok:false,error:'INVALID_FENCE'};
+ // Reconciliation is OIDC-authenticated and CAS-protected by id, remote_id,
+// target and buffer_scheduled evidence. It has no active lease by design:
+// buffer-scheduled explicitly clears lease_owner and lease_until.
+if(!id)return{ok:false,error:'INVALID_ID'};
+if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<1))
+  return{ok:false,error:'INVALID_FENCE'};
  if(verb==='start'){
   const rows=await query(`UPDATE cortes_publications SET status='started',publication_started_at=COALESCE(publication_started_at,now()),updated_at=now()
     WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 AND lease_generation=$4
