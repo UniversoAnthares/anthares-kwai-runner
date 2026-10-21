@@ -94,3 +94,10 @@ jobs:
           path: |
             x-render-result.json
             x-cloud-output.mp4
+
+      - name: Alert QA on X publication failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          X_QA_PHASE: x-real-fullflow-once
+        run: python tools/x_notify_qa.py
