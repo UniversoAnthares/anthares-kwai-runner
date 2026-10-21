@@ -5,12 +5,12 @@ const WRITE=new Set(['enqueue','buffer-lease','buffer-start','buffer-fail','buff
  'buffer-pending','buffer-reconcile','buffer-stats','buffer-retention']);
 export default {async fetch(request){
  const u=new URL(request.url),method=request.method,act=u.searchParams.get('action')||'';
- if(method==='GET'&&(u.pathname==='/healthz'||u.pathname==='/api/cortes-queue')){
+ if(method==='GET'&&(u.pathname==='/healthz'||u.pathname==='/'||u.pathname==='/api/cortes-queue')){
    if(u.pathname==='/api/cortes-queue'&&act!=='health')
       return Response.json({ok:false,error:'NOT_FOUND'},{status:404});
    return relay(request,'health');
  }
- if(u.pathname!=='/api/cortes-queue'||method!=='POST'||!WRITE.has(act))
+ if(!['/','/api/cortes-queue'].includes(u.pathname)||method!=='POST'||!WRITE.has(act))
     return Response.json({ok:false,error:'NOT_FOUND'},{status:404});
  if(Number(request.headers.get('content-length')||0)>65536)
     return Response.json({ok:false,error:'TOO_LARGE'},{status:413});
