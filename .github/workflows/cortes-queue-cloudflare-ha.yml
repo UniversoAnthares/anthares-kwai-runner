@@ -1,0 +1,60 @@
+name: CORTES queue Cloudflare edge HA deploy
+on:
+  push:
+    branches: [main]
+    paths:
+      - infra/cloudflare-cortes-queue-ha/**
+      - .github/workflows/cortes-queue-cloudflare-ha.yml
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-queue-cloudflare-edge-ha-deploy
+  cancel-in-progress: false
+jobs:
+  deploy-and-verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate independent Cloudflare edge ingress
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          node --check infra/cloudflare-cortes-queue-ha/src/index.js
+          grep -Fq 'br-crimson-unit-b89nau08-cortesqueue' infra/cloudflare-cortes-queue-ha/src/index.js
+      - name: Deploy dedicated queue HA edge, not the primary Remote worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.43.0 deploy --config infra/cloudflare-cortes-queue-ha/wrangler.toml
+      - name: Verify health and deny anonymous queue mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://anthares-cortes-neon-edge-ha.anthares1.workers.dev'
+          for attempt in $(seq 1 12); do
+            if curl -fsS --max-time 12 "$BASE/healthz" -o /tmp/queue-ha-health.json &&
+               python3 - <<'PY'
+          import json
+          data=json.load(open('/tmp/queue-ha-health.json'))
+          assert data.get('ok') is True
+          assert data.get('database_ok') is True
+          assert data.get('network_isolation') is True
+          PY
+            then break; fi
+            sleep 5
+          done
+          python3 - <<'PY'
+          import json
+          data=json.load(open('/tmp/queue-ha-health.json'))
+          assert data.get('ok') is True and data.get('database_ok') is True
+          print('CORTES_CLOUDFLARE_NEON_HEALTH=PASS')
+          PY
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 12 -X POST             -H 'Content-Type: application/json' -d '{"target_key":"linkedin:primary"}'             "$BASE/?action=buffer-lease")"
+          test "$code" = 401
+          echo 'CORTES_CLOUDFLARE_UNAUTHORIZED_POST=DENIED'
