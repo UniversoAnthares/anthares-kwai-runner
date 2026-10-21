@@ -60,11 +60,23 @@ class BufferPinnedTests(unittest.TestCase):
 
     def test_schedule_is_not_publication_confirmation(self):
         platform="linkedin";c=channel(platform)
-        with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"1","BUFFER_LINKEDIN_CHANNEL_ID":c["id"]}):
+        with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"1","BUFFER_LINKEDIN_CHANNEL_ID":c["id"],"GITHUB_ACTIONS":"true","RUNNER_ENVIRONMENT":"github-hosted","RUNNER_OS":"Linux"}):
             with patch.object(b,"channels",return_value=[c]), patch.object(b,"api",return_value={"createPost":{"post":{"id":"buffer123"}}}):
                 output=b.schedule(master(platform))
         self.assertEqual(output["status"],"SCHEDULED_IN_BUFFER")
         self.assertFalse(output["confirmed_on_social_network"])
+
+    def test_local_pc_cannot_publish(self):
+        with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"1","GITHUB_ACTIONS":"false","RUNNER_ENVIRONMENT":"","RUNNER_OS":"Windows"}):
+            with patch.object(b,"api",side_effect=AssertionError("NETWORK")):
+                with self.assertRaisesRegex(b.BufferBlocked,"CLOUD_HOSTED_RUNNER_REQUIRED"):
+                    b.schedule(master())
+
+    def test_self_hosted_actions_cannot_publish(self):
+        with patch.dict(os.environ,{"ANTHARES_SOCIAL_COMMIT":"1","GITHUB_ACTIONS":"true","RUNNER_ENVIRONMENT":"self-hosted","RUNNER_OS":"Windows"}):
+            with patch.object(b,"api",side_effect=AssertionError("NETWORK")):
+                with self.assertRaisesRegex(b.BufferBlocked,"CLOUD_HOSTED_RUNNER_REQUIRED"):
+                    b.schedule(master())
 
     def test_external_master_blocked(self):
         with self.assertRaisesRegex(b.BufferBlocked,"MASTER_MP4_URL_INVALID"):
