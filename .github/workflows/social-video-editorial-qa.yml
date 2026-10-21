@@ -13,6 +13,8 @@ on:
       - 'tests/test_social_video_editorial.py'
       - 'tests/test_media_model.py'
       - 'cloudflare-worker/patches/apply-publisher-target-v17.py'
+      - 'vercel-ara-primary/api/cortes-queue.mjs'
+      - 'tools/cortes_social_queue_consumer.py'
       - '.github/workflows/social-video-editorial-qa.yml'
 
 permissions:
@@ -29,7 +31,7 @@ jobs:
           python-version: '3.12'
       - name: Compile changed publishers without running them
         run: |
-          python -m py_compile anthares_publisher/editorial.py anthares_publisher/media_model.py social_adapters/direct_social.py social_adapters/video_social.py scripts/instagram_autopublish.py tools/kwai_physical_queue_daemon.py direct-tiktok-publisher/tiktok_cloud_publish.py
+          python -m py_compile anthares_publisher/editorial.py anthares_publisher/media_model.py social_adapters/direct_social.py social_adapters/video_social.py scripts/instagram_autopublish.py tools/kwai_physical_queue_daemon.py tools/cortes_social_queue_consumer.py direct-tiktok-publisher/tiktok_cloud_publish.py
       - name: Run idempotence, account and quota contracts without network calls
         run: |
           python -m unittest discover -s tests -p test_social_video_editorial.py -v
@@ -41,3 +43,9 @@ jobs:
           node --experimental-default-type=module --check cloudflare-worker/src/index.js
           grep -q 'pinterest:Number.MAX_SAFE_INTEGER,linkedin:20' cloudflare-worker/src/index.js
           echo 'PINTEREST_ROUND_QUOTA_UNCAPPED=PASS'
+      - name: Validate production Neon LinkedIn daily quota guard
+        run: |
+          node --check vercel-ara-primary/api/cortes-queue.mjs
+          grep -q 'cortes:linkedin-daily:' vercel-ara-primary/api/cortes-queue.mjs
+          grep -q 'used>=20' vercel-ara-primary/api/cortes-queue.mjs
+          echo 'NEON_LINKEDIN_DAILY_LIMIT_GUARDED=PASS'
