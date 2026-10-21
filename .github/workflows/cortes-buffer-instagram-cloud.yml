@@ -1,7 +1,11 @@
 name: CORTES Instagram - automatic Buffer cloud publisher
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-buffer-instagram-cloud.yml'
   schedule:
-    - cron: '8,38 * * * *'
+    - cron: '8,23,38,53 * * * *'
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -12,7 +16,7 @@ concurrency:
 jobs:
   publish-and-reconcile:
     # Enable only after the cloud worker and canonical account are authenticated.
-    if: ${{ vars.CORTES_INSTAGRAM_BUFFER_ENABLED == 'true' && vars.CORTES_INSTAGRAM_BUFFER_PAUSED != 'true' }}
+    if: ${{ vars.CORTES_INSTAGRAM_BUFFER_PAUSED != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
@@ -27,7 +31,7 @@ jobs:
           cloud_region: us
           secrets: |
             0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
-      - name: Publish one verified Instagram cut and reconcile queued Pins
+      - name: Publish one verified Instagram Reel and reconcile scheduled posts
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
         run: |
