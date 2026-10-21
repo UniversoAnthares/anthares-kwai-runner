@@ -217,6 +217,8 @@ def resolve_pinterest_board(channel_id: str, *, token: str | None = None) -> str
     boards = metadata.get("boards") or []
     if not isinstance(boards, list):
         raise BufferBlocked("PINTEREST_BOARD_LIST_INVALID")
+    if len(boards) == 0:
+        return verified_public_pinterest_board()
     pinned = os.getenv("BUFFER_PINTEREST_BOARD_ID", "").strip() or PINTEREST_PUBLIC_BOARD_ID
     if pinned != PINTEREST_PUBLIC_BOARD_ID:
         raise BufferBlocked("PINTEREST_BOARD_ENV_MISMATCH")
@@ -310,6 +312,16 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
                .replace("METADATA", metadata)
                .replace("SHARE_MODE", mode))
     result = api(mutation, token).get("createPost") or {}
+    if not result.get("post") and isinstance(result.get("message"), str):
+        msg = result["message"].lower()
+        label = next((key for key, indicators in {
+            "BOARD": ("board", "pasta"),
+            "MEDIA": ("video", "media", "asset", "thumbnail"),
+            "PERMISSION": ("permission", "access", "authorize", "scope", "connect"),
+            "QUOTA": ("quota", "limit", "queue", "plan"),
+            "METADATA": ("metadata", "pinterest", "title", "invalid"),
+        }.items() if any(term in msg for term in indicators)), "UNCLASSIFIED")
+        raise BufferBlocked("BUFFER_MUTATION_REJECTED_" + label)
     identifier = str((result.get("post") or {}).get("id") or "")
     if not identifier:
         raise BufferBlocked("BUFFER_SCHEDULE_REJECTED_OR_UNCERTAIN")
