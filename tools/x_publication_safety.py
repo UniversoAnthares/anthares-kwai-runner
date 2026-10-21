@@ -70,7 +70,7 @@ def gate(issues, comments_by_number, now, target=10, max_inflight=2):
     confirmed = set()
     recent_pending = []
     stale = []
-    used_sources = set()
+    windows_by_source = {}
     for issue in issues:
         if issue.get("pull_request"):
             continue
@@ -82,8 +82,13 @@ def gate(issues, comments_by_number, now, target=10, max_inflight=2):
         if payload.get("test_fixture"):
             continue
         source = payload.get("source_id") or (payload.get("source") or {}).get("video_id")
-        if source:
-            used_sources.add(str(source))
+        if source and title.startswith("[X-MICROCUT]"):
+            try:
+                start = int(payload.get("scan_start"))
+                if start >= 0:
+                    windows_by_source.setdefault(str(source), set()).add(start)
+            except (ValueError, TypeError):
+                pass
         confirmed |= confirmed_today(issue, comments_by_number.get(number, []), local_day, now.tzinfo)
         if issue.get("state") != "open":
             continue
@@ -101,7 +106,7 @@ def gate(issues, comments_by_number, now, target=10, max_inflight=2):
         "confirmed": len(confirmed),
         "inflight": len(recent_pending),
         "stale_issue_numbers": stale,
-        "used_source_ids": sorted(used_sources),
+        "source_windows": {source: sorted(windows) for source, windows in windows_by_source.items()},
         "due": capacity > 0 and len(recent_pending) < max_inflight,
         "capacity": max(0, capacity),
     }
