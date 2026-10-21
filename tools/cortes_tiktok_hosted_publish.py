@@ -208,6 +208,15 @@ def main():
     health=q.qcall("health",control)
     if not health.get("ok") or health.get("service")!="cortes-tiktok-neon":
         raise q.SafeStop("TIKTOK_NEON_QUEUE_UNAVAILABLE")
+    # Print authoritative Neon queue counts for operational reconciliation.
+    status=q.qcall("status",control)
+    if not status.get("ok"):
+        raise q.SafeStop("TIKTOK_NEON_STATUS_UNAVAILABLE")
+    counters=status.get("count") or {}
+    safe_keys=("queued","leased","started","uncertain","confirmed","confirmed_today","total","pending")
+    print("CORTES_TIKTOK_NEON_COUNTS="+json.dumps(
+        {k:int(counters[k]) for k in safe_keys if isinstance(counters.get(k),int)},
+        separators=(",",":")),flush=True)
     before=inventory(state)
     claim=q.qcall("claim",control,{})
     if not claim.get("ok"):
