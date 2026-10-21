@@ -224,17 +224,11 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
         mode: addToQueue
         METADATA
         assets: [{ video: { url: MEDIA, metadata: { thumbnailOffset: 2000 } } }]
-        PINTEREST_METADATA
       }) {
         ... on PostActionSuccess { post { id } }
         ... on MutationError { message }
       }
     }"""
-    meta = ("metadata: { pinterest: { boardServiceId: " + json.dumps(pinterest_board) +
-            ", title: " + json.dumps(post["pin_title"], ensure_ascii=False) +
-            ", url: " + json.dumps("https://www.anthares.us") + " } }"
-            if platform == "pinterest" else "")
-    mutation = mutation.replace("PINTEREST_METADATA", meta)
     mutation = (mutation.replace("CAPTION", json.dumps(post["caption"], ensure_ascii=False))
                .replace("CHANNEL", json.dumps(channel_id))
                .replace("MEDIA", json.dumps(post["media_url"]))
