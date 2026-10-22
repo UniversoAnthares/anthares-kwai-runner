@@ -31,11 +31,18 @@ class PinterestAutonomousQA(unittest.TestCase):
                                   {"active": False})
         self.assertEqual((state, remaining), ("BUFFER_BACKPRESSURE", 2))
 
-    def test_only_fully_reconciled_extra_confirmed_post_passes(self):
-        state, remaining = assess(self.pass_evidence,
-                                  {"confirmed": 8, "queued": 0, "uncertain": 0},
+    def test_real_new_pin_proof_closes_429_even_with_live_queue(self):
+        proof = {"worker_conclusion": "success", "result": "PINS_RECONCILED",
+                 "new_public_pin_count": 1}
+        state, remaining = assess(proof, {"confirmed": 8, "queued": 42, "uncertain": 15},
                                   {"active": False})
-        self.assertEqual((state, remaining), ("PASS", 0))
+        self.assertEqual((state, remaining), ("PASS", 57))
+
+    def test_never_close_on_old_pin_or_buffer_draft(self):
+        state, remaining = assess(self.pass_evidence,
+                                  {"confirmed": 8, "queued": 42, "uncertain": 15},
+                                  {"active": False})
+        self.assertEqual((state, remaining), ("RETRY_UNTIL_CONFIRMED", 57))
 
     def test_no_neon_proof_no_pass(self):
         state, _ = assess(self.pass_evidence, None, None)
