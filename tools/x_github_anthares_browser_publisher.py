@@ -1,0 +1,301 @@
+#!/usr/bin/env python3
+"""Independent Anthares Browser publisher on GitHub-hosted Linux, no Northflank Chromium.
+
+Reads the encrypted Cloudflare browser-state vault, runs isolated headless
+Chromium, and reserves each irreversible action in Northflank PostgreSQL.
+Fail closed unless signed-in @lucasyahn is proven before touching the ledger.
+"""
+from __future__ import annotations
+import json
+import os
+import re
+import sys
+import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from urllib.parse import urlparse, quote
+
+import requests
+from playwright.sync_api import sync_playwright
+
+from tools.x_issue_publisher import fingerprint
+from tools.x_publication_safety import _issue_payload, validate_video, verified_post_url
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "infra"))
+import anthares_runtime_browser_local as vault
+
+REPO = "UniversoAnthares/anthares-kwai-runner"
+GH = "https://api.github.com/repos/" + REPO
+LEDGER = "https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x"
+ACCOUNT = "lucasyahn"
+TRUSTED_MEDIA_HOSTS = {"github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"}
+
+
+def github(path, method="GET", payload=None):
+    token = os.environ["GH_TOKEN"]
+    r = requests.request(method, GH + path, json=payload, timeout=32, headers={
+        "Authorization": "Bearer " + token,
+        "Accept": "application/vnd.github+json",
+    })
+    r.raise_for_status()
+    return r.json() if r.content else {}
+
+
+def durable(path, payload=None):
+    shared = os.environ["ARA_SHARED"]
+    r = requests.request("POST" if payload is not None else "GET", LEDGER + path,
+                         json=payload, timeout=32,
+                         headers={"Authorization": "Bearer " + shared})
+    if r.status_code == 409:
+        raise RuntimeError("X_PREVIOUS_SUBMISSION_RECONCILE")
+    if r.status_code == 429:
+        raise RuntimeError("X_DAILY_10_LIMIT")
+    if r.status_code != 200:
+        raise RuntimeError("X_DURABLE_SERVICE_HTTP_" + str(r.status_code))
+    value = r.json()
+    if value.get("ok") is not True:
+        raise RuntimeError("X_DURABLE_LEDGER_DENIED")
+    return value
+
+
+def eligible(issue):
+    if issue.get("state") != "open" or not str(issue.get("title") or "").startswith("[X-PUBLISH]"):
+        return None
+    p = _issue_payload(issue.get("body") or "")
+    if (p.get("platform") != "x" or p.get("account") != ACCOUNT
+            or p.get("duration_class") != "long" or p.get("test_fixture")):
+        return None
+    caption = str(p.get("caption") or "").strip()
+    media = urlparse(str(p.get("media_url") or ""))
+    if (not 0 < len(caption) <= 280 or media.scheme != "https"
+            or media.hostname != "github.com" or media.username or media.password
+            or not media.path.startswith("/UniversoAnthares/anthares-kwai-runner/releases/download/")
+            or not media.path.endswith(".mp4")
+            or not 300 <= float((p.get("microedit") or {}).get("final_duration") or 0) <= 840):
+        return None
+    return p
+
+
+def first_item():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo("America/Campo_Grande")
+    all_items = []
+    for page in range(1, 8):
+        batch = github(f"/issues?state=open&sort=created&direction=asc&per_page=100&page={page}")
+        all_items.extend(batch)
+        if len(batch) < 100:
+            break
+    else:
+        raise RuntimeError("X_GITHUB_OPEN_QUEUE_PAGINATION")
+    ready = []
+    for item in all_items:
+        if item.get("pull_request"):
+            continue
+        try:
+            p = eligible(item)
+            if not p:
+                continue
+            stamp = datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
+            if stamp.astimezone(tz).date() > datetime.now(tz).date():
+                continue
+            ready.append((item, p))
+        except (ValueError, TypeError, KeyError):
+            continue
+    ready.sort(key=lambda pair: (
+        0 if pair[1].get("reserve_from") else 1, pair[0]["created_at"], pair[0]["number"]
+    ))
+    return ready[0] if ready else (None, None)
+
+
+def account(page):
+    if any(s in page.url for s in ("/login", "/i/flow/login", "/i/jf/onboarding")):
+        raise RuntimeError("X_CLOUD_SESSION_LOGIN_REQUIRED")
+    link = page.locator('a[data-testid="AppTabBar_Profile_Link"]')
+    if link.count() and (link.first.get_attribute("href") or "") == "/lucasyahn":
+        return
+    switcher = page.locator('[data-testid="SideNav_AccountSwitcher_Button"]')
+    if switcher.count() != 1:
+        raise RuntimeError("X_CLOUD_IDENTITY_NOT_PROVEN")
+    matches = re.findall(r"(?<![A-Za-z0-9_])@([A-Za-z0-9_]{1,15})(?![A-Za-z0-9_])",
+                         switcher.first.inner_text(timeout=9000))
+    if matches != [ACCOUNT]:
+        raise RuntimeError("X_CLOUD_WRONG_ACCOUNT")
+
+
+def proof(context, caption, attempts=1):
+    page = context.new_page()
+    try:
+        for trial in range(attempts):
+            page.goto("https://x.com/lucasyahn", wait_until="domcontentloaded", timeout=50000)
+            page.wait_for_timeout(2600)
+            account(page)
+            for post in page.locator("article").all()[:24]:
+                try:
+                    if caption not in post.inner_text(timeout=2200):
+                        continue
+                    for a in post.locator("a").all():
+                        url = a.get_attribute("href") or ""
+                        match = re.fullmatch(r"/lucasyahn/status/([0-9]+)/?", url)
+                        if not match:
+                            continue
+                        uri = "https://x.com/lucasyahn/status/" + match.group(1)
+                        page.goto(uri, wait_until="domcontentloaded", timeout=45000)
+                        page.wait_for_timeout(2000)
+                        text = " ".join(page.locator('[data-testid="tweetText"]').all_text_contents())
+                        if caption in text and page.locator("video").count() > 0:
+                            return uri
+                except Exception:
+                    continue
+            if trial < attempts - 1:
+                page.wait_for_timeout(7500)
+        return None
+    finally:
+        page.close()
+
+
+def download(url, dest):
+    with requests.get(url, stream=True, allow_redirects=True, timeout=(18, 160)) as r:
+        r.raise_for_status()
+        parsed = urlparse(r.url)
+        if parsed.scheme != "https" or parsed.hostname not in TRUSTED_MEDIA_HOSTS:
+            raise RuntimeError("X_UNTRUSTED_MEDIA_REDIRECT")
+        count = 0
+        with open(dest, "wb") as f:
+            for block in r.iter_content(262144):
+                count += len(block)
+                if count > 99_000_000:
+                    raise RuntimeError("X_MEDIA_EXCEEDS_LIMIT")
+                f.write(block)
+        if count < 100_000:
+            raise RuntimeError("X_MEDIA_EMPTY")
+
+
+def open_authenticated(context):
+    page = context.new_page()
+    page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=55000)
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        try:
+            account(page)
+            return page
+        except RuntimeError as exc:
+            if "WRONG_ACCOUNT" in str(exc) or "LOGIN_REQUIRED" in str(exc):
+                raise
+        page.wait_for_timeout(1250)
+    raise RuntimeError("X_CLOUD_ACCOUNT_NOT_PROVEN")
+
+
+def publish(issue, p, shared_state):
+    number = issue["number"]
+    key = "x_" + fingerprint(p)
+    caption = str(p["caption"]).strip()
+    r = durable("/post-status?idempotency_key=" + quote(key, safe=""))
+    if r.get("status") != "NOT_FOUND":
+        print("X_GH_CLOUD_SKIPPED_PREVIOUS_LEDGER_STATE issue=" + str(number), flush=True)
+        return
+    comments = github("/issues/" + str(number) + "/comments?per_page=100")
+    if len(comments) >= 100:
+        raise RuntimeError("X_GH_CLOUD_COMMENTS_PAGINATION")
+    if any(any(x in str(c.get("body") or "") for x in
+               ("X_SUBMISSION_STARTED_V1", "X_POST_SUBMISSION_STARTED_V1",
+                "X_SUBMISSION_UNCERTAIN_V1", "X_LOCAL_SUBMISSION_STARTED_V1"))
+           for c in comments):
+        raise RuntimeError("X_GH_CLOUD_PREVIOUS_SUBMISSION")
+    with TemporaryDirectory(prefix="anthares-x-cloud-") as folder:
+        media = Path(folder) / "source.mp4"
+        download(p["media_url"], media)
+        validate_video(str(media))
+        with sync_playwright() as engine:
+            browser = engine.chromium.launch(headless=True, timeout=45000, args=[
+                "--no-sandbox", "--disable-dev-shm-usage",
+                "--disable-background-networking", "--mute-audio",
+            ])
+            try:
+                context = browser.new_context(storage_state=shared_state, locale="pt-BR",
+                                              viewport={"width":1365,"height":768})
+                page = open_authenticated(context)
+                if proof(context, caption):
+                    raise RuntimeError("X_GH_CLOUD_EXISTING_POST_RECONCILE")
+                page.goto("https://x.com/compose/post", wait_until="domcontentloaded", timeout=50000)
+                account(page)
+                dialog = page.locator('[role="dialog"]')
+                editor = dialog.locator('[data-testid="tweetTextarea_0"]').first
+                editor.wait_for(state="visible", timeout=25000)
+                editor.fill(caption)
+                dialog.locator('input[type="file"]').last.set_input_files(str(media),timeout=240000)
+                button = dialog.locator('[data-testid="tweetButton"]').first
+                deadline = time.monotonic() + 1700
+                while time.monotonic() < deadline:
+                    account(page)
+                    text = "\n".join(dialog.all_inner_texts())
+                    if (button.count() == 1 and button.is_enabled()
+                            and dialog.locator("video").count() > 0
+                            and ("source.mp4: Pronto" in text or "source.mp4: Ready" in text)):
+                        break
+                    if any(word in text.lower() for word in
+                           ("upload failed", "video too long", "vídeo muito longo", "falha no carregamento")):
+                        raise RuntimeError("X_GH_CLOUD_UPLOAD_REJECTED")
+                    page.wait_for_timeout(5000)
+                else:
+                    raise RuntimeError("X_GH_CLOUD_MEDIA_TIMEOUT")
+                if github("/issues/" + str(number)).get("state") != "open":
+                    raise RuntimeError("X_GH_CLOUD_ISSUE_CLOSED")
+                account(page)
+                durable("/claim-local", {"account": ACCOUNT, "idempotency_key": key})
+                github("/issues/" + str(number) + "/comments", "POST",
+                       {"body": "X_SUBMISSION_STARTED_V1\nidempotency_key=" + key})
+                # Exact same overlay-safe path proven on Windows X videos.
+                # PostgreSQL globally fences concurrent local/cloud attempts.
+                button.evaluate("""(element, key) => {
+                    const sent = window.__antharesCloudSubmissions ||
+                                 (window.__antharesCloudSubmissions = new Set());
+                    if (sent.has(key)) throw new Error("X_DOUBLE_CLICK_DENIED");
+                    if (!element.isConnected || element.getAttribute("aria-disabled")==="true" ||
+                        element.disabled) throw new Error("X_POST_BUTTON_NOT_READY");
+                    sent.add(key);
+                    element.click();
+                }""", key, timeout=12000)
+                uri = proof(context, caption, attempts=16)
+                if not uri or verified_post_url(uri) != uri:
+                    raise RuntimeError("X_GH_CLOUD_SUBMISSION_UNCERTAIN")
+                durable("/confirm-local", {
+                    "account": ACCOUNT, "idempotency_key": key,
+                    "post_url": uri, "video_verified": True,
+                    "caption_verified": True,
+                })
+                result = {"kind": "X_VIDEO_CONFIRMED_V1", "account": ACCOUNT,
+                          "idempotency_key": key, "post_url": uri, "video_verified": True}
+                github("/issues/" + str(number) + "/comments", "POST",
+                       {"body": "X_VIDEO_CONFIRMED_V1\n" + json.dumps(result, ensure_ascii=False)})
+                github("/issues/" + str(number), "PATCH", {"state": "closed"})
+                print("X_GH_CLOUD_VIDEO_CONFIRMED=" + uri, flush=True)
+            finally:
+                browser.close()
+
+
+def run():
+    if (os.getenv("GITHUB_ACTIONS") != "true" or
+            os.getenv("RUNNER_ENVIRONMENT") != "github-hosted" or
+            sys.platform != "linux" or
+            os.getenv("X_CLOUD_ARM") != "1"):
+        raise RuntimeError("X_GH_CLOUD_NOT_ARMED")
+    if not os.getenv("GH_TOKEN") or not os.getenv("ARA_SHARED"):
+        raise RuntimeError("X_GH_CLOUD_CREDENTIAL_MISSING")
+    issue, data = first_item()
+    if not issue:
+        print("X_GH_CLOUD_IDLE_NO_ELIGIBLE_ISSUE", flush=True)
+        return
+    state = vault._vault_pull()
+    if not state or not isinstance(state.get("cookies"), list):
+        raise RuntimeError("X_GH_CLOUD_VAULT_EMPTY")
+    print("X_GH_CLOUD_ISSUE_PREFLIGHT=" + str(issue["number"]), flush=True)
+    publish(issue, data, state)
+
+
+if __name__ == "__main__":
+    try:
+        run()
+    except Exception as exc:
+        print("X_GH_CLOUD_FAILED=" + type(exc).__name__, flush=True)
+        raise SystemExit(2)
