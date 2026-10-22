@@ -40,8 +40,8 @@ try {
 $issues=@($issues|Where-Object{$_}|Sort-Object -Unique)
 if($issues.Count -eq 0){exit 0}
 $joined=$issues -join '|'
-$sha=[Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($joined))
-$fingerprint=[Convert]::ToHexString($sha).Substring(0,24)
+$sha=[Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($joined))
+$fingerprint=([BitConverter]::ToString($sha) -replace '-','').ToLowerInvariant().Substring(0,24)
 $last=if(Test-Path $notified){try{Get-Content $notified -Raw -Encoding UTF8|ConvertFrom-Json}catch{$null}}else{$null}
 if($last -and $last.fingerprint -eq $fingerprint -and
     ($now-[DateTime]::Parse($last.sent_at).ToUniversalTime()).TotalMinutes -lt 45){exit 0}
