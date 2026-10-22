@@ -95,7 +95,9 @@ def reconcile():
             continue
         try:
             link=verify_sent_post(remote_id)
-        except (BufferBlocked, RuntimeError):
+        except (BufferBlocked, RuntimeError) as exc:
+            if isinstance(exc,BufferBlocked) and str(exc)=="BUFFER_HTTP_429":
+                raise
             # Transient Buffer readback or invalid remote identity: quarantine
             # this one post. Keep reconciling independent verified IDs.
             print("::warning::CORTES_PINTEREST_READBACK_UNVERIFIED",flush=True)
@@ -271,6 +273,8 @@ def board_gate():
                     print("CORTES_PINTEREST_BOARD_AUTHORIZED_VIA="+source,flush=True)
                     return PINTEREST_PUBLIC_BOARD_ID
             except (BufferBlocked,ValueError,TypeError) as exc:
+                if isinstance(exc,BufferBlocked) and str(exc)=="BUFFER_HTTP_429":
+                    raise
                 # Only controlled BufferBlocked codes are safe in public CI
                 # logs. Never print arbitrary API response bodies/tokens.
                 reason=str(exc) if isinstance(exc,BufferBlocked) else type(exc).__name__
@@ -286,15 +290,61 @@ def board_gate():
     raise BufferBlocked("PINTEREST_BUFFER_BOARD_READ_FAILED")
 
 
+def notify_rate_limit_p0():
+    # Safe, fingerprinted incident once per UTC day.
+    from datetime import datetime, timezone
+    marker="buffer-pinterest-http429-"+datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    fingerprint=hashlib.sha256(marker.encode()).hexdigest()[:24]
+    env=os.environ.copy()
+    env["GH_TOKEN"]=env.get("GH_TOKEN") or env.get("GITHUB_TOKEN","")
+    if not env["GH_TOKEN"]:
+        return
+    repo="UniversoAnthares/anthares-kwai-runner"
+    try:
+        checked=subprocess.run(["gh","issue","list","--repo",repo,"--state","all",
+            "--search",fingerprint,"--json","number","--limit","6"],capture_output=True,
+            text=True,timeout=15,env=env)
+        if checked.returncode==0 and not json.loads(checked.stdout):
+            body=("QA-P0-FINGERPRINT:"+fingerprint+"\\n\\n"
+                  "Buffer API retorna HTTP 429 para consultas autenticadas. "
+                  "Cooldown compartilhado Neon de 30 minutos instalado. "
+                  "Não criar posts ou reenviar incertos durante o bloqueio; "
+                  "investigar volume agregado de calls e renovação da cota.\\n")
+            subprocess.run(["gh","issue","create","--repo",repo,"--title",
+                "[QA P0][pinterest] Buffer HTTP 429, publicador nuvem em cooldown",
+                "--body",body,"--label","QA-P0","--label","publication-failure"],
+                capture_output=True,text=True,timeout=20,env=env)
+    except (ValueError,OSError,subprocess.TimeoutExpired):
+        print("::warning::PINTEREST_RATE_LIMIT_QA_ISSUE_UNAVAILABLE",flush=True)
+
+
 def main():
     cloud_only()
-    # Readback comes first; never lose remote evidence on board outages.
-    confirmed=reconcile()
-    board_gate()
-    status=publish_once()
-    print(json.dumps({"pinterest_cloud":"PASS","scheduled_action":status,
-                      "posts_confirmed_this_run":confirmed},separators=(",",":")))
-    return 0
+    state=queue("cooldown-status")
+    if state.get("active"):
+        print(json.dumps({"pinterest_cloud":"COOLDOWN_HTTP_429",
+                          "until":state.get("cooldown_until"),
+                          "published":0},separators=(",",":")),flush=True)
+        return 0
+    try:
+        # Readback comes first; never lose remote evidence on board outages.
+        confirmed=reconcile()
+        board_gate()
+        status=publish_once()
+        print(json.dumps({"pinterest_cloud":"PASS","scheduled_action":status,
+                          "posts_confirmed_this_run":confirmed},separators=(",",":")))
+        return 0
+    except BufferBlocked as exc:
+        if str(exc)=="BUFFER_HTTP_429":
+            recorded=queue("cooldown",{"seconds":1800})
+            if not recorded.get("ok"):
+                raise RuntimeError("PINTEREST_BUFFER_COOLDOWN_NOT_PERSISTED")
+            notify_rate_limit_p0()
+            print(json.dumps({"pinterest_cloud":"COOLDOWN_HTTP_429",
+                 "until":recorded.get("cooldown_until"),
+                 "published":0},separators=(",",":")),flush=True)
+            return 0
+        raise
 
 
 if __name__=="__main__":
