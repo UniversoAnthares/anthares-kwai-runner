@@ -10,6 +10,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 CHANNEL_URL = os.getenv("X_SOURCE_CHANNEL", "https://www.youtube.com/@UniversoAnthares/streams")
 SCAN_START = int(os.getenv("X_SCAN_START", "600"))
 SCAN_SECONDS = int(os.getenv("X_SCAN_SECONDS", "780"))
@@ -137,7 +139,7 @@ def _download_scan_invidious(source_url: str, out: Path) -> None:
             ]
             print(f"X_SOURCE_ATTEMPT base={base} local={local} vitag={vitag} aitag={aitag} height={height}", flush=True)
             try:
-                subprocess.run(cmd, check=True, timeout=900)
+                subprocess.run(cmd, check=True, timeout=900, creationflags=CREATE_NO_WINDOW)
                 if out.exists() and out.stat().st_size >= 100_000:
                     print(f"X_SOURCE_ROUTE=INVIDIOUS_LATEST base={base} local={local} vitag={vitag} aitag={aitag} height={height}", flush=True)
                     return
@@ -156,7 +158,7 @@ def download_scan(source_url: str, out: Path) -> None:
     if cookie_path and os.path.isfile(cookie_path):
         cmd[3:3] = ["--cookies", cookie_path]
     try:
-        subprocess.run(cmd, check=True, timeout=900)
+        subprocess.run(cmd, check=True, timeout=900, creationflags=CREATE_NO_WINDOW)
         print("X_SOURCE_ROUTE=YTDLP_DIRECT", flush=True)
     except Exception as exc:
         print(f"X_SOURCE_DIRECT_FAILED={type(exc).__name__}; trying safe master mirror", flush=True)
@@ -177,7 +179,7 @@ def download_scan(source_url: str, out: Path) -> None:
                     "-map", "0:v:0", "-map", "0:a:0?",
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
                     "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(out)
-                ], check=True, timeout=1200)
+                ], check=True, timeout=1200, creationflags=CREATE_NO_WINDOW)
                 if out.exists() and out.stat().st_size >= 100_000:
                     print("X_SOURCE_ROUTE=HOSTED_MASTER_MIRROR", flush=True)
                     return
@@ -191,7 +193,7 @@ def download_scan(source_url: str, out: Path) -> None:
 
 
 def probe_video(path: Path) -> dict:
-    p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", str(path)], capture_output=True, text=True, check=True, timeout=30)
+    p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", str(path)], capture_output=True, text=True, check=True, timeout=30, creationflags=CREATE_NO_WINDOW)
     streams = (json.loads(p.stdout or "{}").get("streams") or [])
     if not streams:
         raise RuntimeError("Origem sem stream de vídeo.")
@@ -227,6 +229,17 @@ def main() -> int:
     SCAN_START = int(source.pop("scan_start"))
     download_scan(source["source_url"], scan)
     source["video"] = probe_video(scan)
+    # Bind a reused local scan to this exact YouTube source/window. The render
+    # worker may reuse this authenticated download only if the bytes still
+    # match the checksum, avoiding a second 13-minute conversion.
+    import hashlib
+    with scan.open("rb") as existing_scan:
+        digest = hashlib.file_digest(existing_scan, "sha256").hexdigest()
+    (WORK / "scan.identity.json").write_text(json.dumps({
+        "source_url": source["source_url"], "scan_start": SCAN_START,
+        "scan_seconds": SCAN_SECONDS, "bytes": scan.stat().st_size,
+        "sha256": digest,
+    }, separators=(",", ":")), encoding="utf-8")
     words = transcribe_words(scan)
     payload = {
         "kind": "X_MICROCUT_REQUEST_V1", "account": "lucasyahn", "source": source,
