@@ -16,7 +16,7 @@ class CodebergP0Tests(unittest.TestCase):
         def fake(url,*args,**kwargs):
             if "api.github.com" in url:
                 return {"workflow_runs":[{"id":123,"status":"queued","created_at":created,"conclusion":None}]}
-            return {"ok":True,"service":"cortes-tiktok-lucas4-neon" if "lucas4" in url else "cortes-tiktok-neon","fencing":True}
+            return {"ok":True,"service":"cortes-tiktok-lucas4-neon" if ("cortestiktok4" in url or "lucas4-ha" in url) else "cortes-tiktok-neon","fencing":True}
         with patch.object(m,"fetch",side_effect=fake):
             result=list(m.inspect())
         self.assertEqual(len(result),2)
@@ -25,7 +25,7 @@ class CodebergP0Tests(unittest.TestCase):
     def test_healthy_queue_does_not_escalate_before_timeout(self):
         def fake(url,*args,**kwargs):
             if "api.github.com" in url:return {"workflow_runs":[]}
-            return {"ok":True,"service":"cortes-tiktok-lucas4-neon" if "lucas4" in url else "cortes-tiktok-neon","fencing":True}
+            return {"ok":True,"service":"cortes-tiktok-lucas4-neon" if ("cortestiktok4" in url or "lucas4-ha" in url) else "cortes-tiktok-neon","fencing":True}
         with patch.object(m,"fetch",side_effect=fake):
             self.assertEqual(list(m.inspect()),[])
 
