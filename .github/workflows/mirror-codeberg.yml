@@ -31,8 +31,16 @@ jobs:
           $ErrorActionPreference='Stop'
           $env:GIT_TERMINAL_PROMPT='0'
           if (-not $env:CODEBERG_PUSH_URL) { throw 'CODEBERG_PUSH_URL_MISSING' }
-          git remote add codeberg $env:CODEBERG_PUSH_URL
-          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_REMOTE_ADD_FAILED' }
+          # A self-hosted Windows runner may reuse a checkout with this remote.
+          # Never fail or reuse stale credentials because a remote already exists.
+          git remote get-url codeberg 1>$null 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            git remote set-url codeberg $env:CODEBERG_PUSH_URL
+            if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_REMOTE_UPDATE_FAILED' }
+          } else {
+            git remote add codeberg $env:CODEBERG_PUSH_URL
+            if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_REMOTE_ADD_FAILED' }
+          }
           git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main'
           if ($LASTEXITCODE -ne 0) { throw 'GITHUB_MAIN_FETCH_FAILED' }
           $expected=(git rev-parse refs/remotes/origin/main).Trim()
@@ -58,8 +66,9 @@ jobs:
           CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
           CODEBERG_API_TOKEN: ${{ secrets.CODEBERG_API_TOKEN }}
         run: |
-          set -euo pipefail
+          $ErrorActionPreference='Stop'
           & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/codeberg_admin_reconcile.py
+          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_ADMIN_REPAIR_PENDING' }
 
       - name: Prove repository settings and exact commit parity
         shell: powershell
