@@ -82,7 +82,11 @@ async function identity(request){
   else if(RUNNER_PRODUCERS.has(wf))role='producer';
   else if(PROBE_WORKFLOWS.has(wf))role='probe';
   else if(wf==='cortes-neon-ha-oidc-proof.yml'){role='probe';platform='linkedin';}
-  else if(wf==='cortes-linkedin-personal-cloud.yml'){role='personal';platform='linkedin';}
+  else if(wf==='cortes-linkedin-personal-cloud.yml'||wf==='cortes-linkedin-personal-fallback-cloud.yml'){
+   // Two separate hosted execution paths share one Neon ledger, identity,
+   // owner lease and quota. Neither path can replay an uncertain delivery.
+   role='personal';platform='linkedin';
+  }
  }else if(repo===CLIPPER&&CLIPPER_PRODUCERS.has(wf))role='producer';
  if(!role)return null;
  try{
