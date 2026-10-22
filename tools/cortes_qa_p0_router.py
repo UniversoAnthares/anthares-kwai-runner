@@ -83,10 +83,10 @@ def workflow_incidents():
             # while the live run URL remains available in Actions.
             if is_queued:
                 fingerprint=marker("gha-stale",repo,name,created.date().isoformat())
-            elif network_for(name)=="pinterest":
-                fingerprint=marker("gha",repo,name,conclusion,created.date().isoformat())
             else:
-                fingerprint=marker("gha",repo,rid)
+                # One incident per failing workflow/status/day, not per run:
+                # retries must not flood the QA dispatcher or Actions queues.
+                fingerprint=marker("gha",repo,name,conclusion,created.date().isoformat())
             output.append({"id":fingerprint,"network":network_for(name),
                            "stage":"github_actions_"+("queued_stale" if is_queued else conclusion),
                            "evidence":"https://github.com/"+repo+"/actions/runs/"+rid,
@@ -186,16 +186,19 @@ def create_issue(item):
                 {"title":title,"body":body,
                  "labels":["QA-P0","publication-failure"]})
 
-def dispatch_controller(issue_number):
-    """Explicit workflow_dispatch: GITHUB_TOKEN-created issues suppress issues events."""
-    number=int(issue_number)
-    if number<1:raise RuntimeError("QA_P0_INVALID_ISSUE_NUMBER")
+def dispatch_controller(issue_number=None):
+    """One batch dispatch for a scan; scheduled polling recovers missed events."""
+    inputs={}
+    if issue_number is not None:
+        number=int(issue_number)
+        if number<1:raise RuntimeError("QA_P0_INVALID_ISSUE_NUMBER")
+        inputs={"issue_number":str(number)}
     result=http("https://api.github.com/repos/"+HUB+
                 "/actions/workflows/cortes-qa-p0-controller.yml/dispatches",
-                "POST",{"ref":"main","inputs":{"issue_number":str(number)}})
+                "POST",{"ref":"main","inputs":inputs})
     if not result.get("ok"):
         raise RuntimeError("QA_P0_CONTROLLER_DISPATCH_NOT_ACKNOWLEDGED")
-    print("CORTES_QA_P0_CONTROLLER_DISPATCHED issue="+str(number))
+    print("CORTES_QA_P0_CONTROLLER_BATCH_DISPATCHED")
     return True
 
 
@@ -227,8 +230,9 @@ def main():
         if not created.get("number"):raise RuntimeError("P0_ISSUE_UNCONFIRMED")
         posted+=1
         seen.add(item["id"])
-        dispatch_controller(created["number"])
         print("CORTES_QA_P0_CREATED network="+item["network"]+" issue="+str(created["number"]))
+    if posted:
+        dispatch_controller()
     print("CORTES_QA_ROUTER_OK observations="+str(len(items))+" opened="+str(posted)+" sources_failed="+str(len(bad)))
     return 0
 
