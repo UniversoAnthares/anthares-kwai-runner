@@ -18,9 +18,12 @@ from typing import Callable, Optional
 def ensure_memu_transport(adb, serial, run=subprocess.run):
     """Recover the canonical MEmu4 standby only before publication STARTED."""
     def command(args, timeout=20):
-        return run(args, capture_output=True, text=True, timeout=timeout, check=False)
-    command([adb, 'connect', serial])
-    state = command([adb, '-s', serial, 'get-state'])
+        env=os.environ.copy()
+        env['ADB_SERVER_PORT']='5037'
+        env['ADB_SERVER_SOCKET']='tcp:127.0.0.1:5037'
+        return run(args, capture_output=True, text=True, timeout=timeout, check=False, env=env)
+    command([adb, '-P', '5037', 'connect', serial])
+    state = command([adb, '-P', '5037', '-s', serial, 'get-state'])
     if state.returncode == 0 and state.stdout.strip() == 'device':
         return True
     runtime = Path(__file__).resolve().parents[1] / 'windows' / 'android-runtime' / 'anthares-android-runtime.ps1'
@@ -29,8 +32,8 @@ def ensure_memu_transport(adb, serial, run=subprocess.run):
     command(['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
              '-File', str(runtime), '-Command', 'recover', '-Target', 'memu',
              '-PublicationState', 'LEASED', '-AllowBackendStart'], timeout=150)
-    command([adb, 'connect', serial])
-    state = command([adb, '-s', serial, 'get-state'])
+    command([adb, '-P', '5037', 'connect', serial])
+    state = command([adb, '-P', '5037', '-s', serial, 'get-state'])
     return state.returncode == 0 and state.stdout.strip() == 'device'
 
 
@@ -50,6 +53,7 @@ class ExecutorStatus:
     boot_completed: bool = False
     package_installed: bool = False
     detail: str = ""
+    ui_awake: bool | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -66,8 +70,8 @@ class AdbDeviceAdapter:
         self._run = run
 
     def _adb(self, *args: str, timeout: int = 15) -> subprocess.CompletedProcess:
-        port = "5038" if self.executor_id == "physical_android" else "5037"
-        cmd = [self.adb, "-P", port]
+        port = os.getenv('ANTHARES_PHYSICAL_ADB_PORT','5038') if self.executor_id == 'physical_android' else '5037'
+        cmd = [self.adb, '-P', port]
         if self.serial:
             cmd.extend(["-s", self.serial])
         cmd.extend(args)
@@ -144,6 +148,23 @@ class AdbDeviceAdapter:
                 detail=f"{self.package} not installed",
             )
 
+        # An ADB-connected phone may be physically asleep. It cannot serve
+        # UI automation; signal the router to use an authenticated standby.
+        if self.executor_id == 'physical_android':
+            try:
+                power = self._adb('shell','dumpsys','power',timeout=15)
+                if 'mWakefulness=Asleep' in (power.stdout or ''):
+                    return ExecutorStatus(
+                        executor_id=self.executor_id,online=True,healthy=False,
+                        ready=False,authenticated=False,adb_serial=self.serial,
+                        boot_completed=True,package_installed=True,ui_awake=False,
+                        last_failure_class='ui',detail='physical Android screen asleep')
+            except (OSError,subprocess.SubprocessError):
+                return ExecutorStatus(
+                    executor_id=self.executor_id,online=True,healthy=False,
+                    ready=False,authenticated=False,adb_serial=self.serial,
+                    boot_completed=True,package_installed=True,ui_awake=None,
+                    last_failure_class='transport',detail='power-state probe unavailable')
         auth_env = os.environ.get(self.auth_env_name(), "").strip().lower()
         authenticated = auth_env in {"1", "true", "yes", "ready"}
         return ExecutorStatus(

@@ -96,11 +96,22 @@ def queue_failure(op,code,data):
   raise QueueStorageBlocked('queue_storage_quota_exhausted')
  raise RuntimeError(f'queue-{op}:{code}:{data}')
 
+_LAST_QA_DISPATCH=-99999999.0
 def log(msg):
  LOGDIR.mkdir(parents=True,exist_ok=True); line=time.strftime('%Y-%m-%dT%H:%M:%S')+' '+msg; print(line,flush=True)
  try:
   with LOG.open('a',encoding='utf-8') as f:f.write(line+'\n')
  except OSError:pass
+ # Fast path to QA; scheduled watchdog is the independent fallback.
+ if re.search(r'JOB_FAILED|LOOP_ERROR|QUEUE_BLOCKED|PREFLIGHT_FAILED|QUEUE_FAIL_CALLBACK_ERROR|KWAI_ANDROID_DNS_PREFLIGHT_BLOCKED|JOB_ACK_PENDING|ACK_RECONCILE_PENDING|KWAI_PROOF_RECOVERY_FAILED|KWAI_PHYSICAL_SLEEP_BLOCKED',msg):
+  global _LAST_QA_DISPATCH
+  now=time.monotonic()
+  if now-_LAST_QA_DISPATCH>=90:
+   _LAST_QA_DISPATCH=now
+   script=pathlib.Path(r'D:\AntharsWork\AntharesRemote\cortes-kwai-qa-p0-watchdog.ps1')
+   if script.exists():
+    try:subprocess.Popen(['powershell.exe','-NoProfile','-NonInteractive','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',str(script)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+    except OSError:pass
 
 def compact(d):return json.dumps(d,separators=(',',':'),ensure_ascii=False)
 def key():
@@ -127,9 +138,22 @@ def qpost(op,payload):
  if code//100!=2 or not d.get('ok'):queue_failure(op,code,d)
  return d
 
+_PORT_CACHE={'port':'5038','until':0}
+def physical_adb_port():
+ # USB may belong to the shared ADB server on 5037 or dedicated 5038.
+ if time.time()<_PORT_CACHE['until']:return _PORT_CACHE['port']
+ env=os.environ.copy();env['ADB_VENDOR_KEYS']=ADB_KEYS
+ for port in ('5038','5037'):
+  try:
+   p=subprocess.run([ADB,'-P',port,'devices','-l'],capture_output=True,text=True,timeout=8,env=env,check=False)
+   if p.returncode==0 and any(x.get('model')==MODEL for x in online_devices(p.stdout or '')):
+    _PORT_CACHE.update(port=port,until=time.time()+60);return port
+  except (OSError,subprocess.SubprocessError):pass
+ _PORT_CACHE.update(port='5038',until=time.time()+12)
+ return '5038'
 def adb(*a,timeout=25,check=False):
  env=os.environ.copy(); env['ADB_VENDOR_KEYS']=ADB_KEYS
- return subprocess.run([ADB,'-P','5038',*a],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=check,env=env)
+ return subprocess.run([ADB,'-P',physical_adb_port(),*a],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout,check=check,env=env)
 def devices():
  p=adb('devices','-l')
  return online_devices(p.stdout) if p.returncode==0 else []
@@ -145,6 +169,13 @@ def resolve_serial():
 def preflight():
  try:
   s=resolve_serial(); state=adb('-s',s,'get-state').stdout.strip(); model=adb('-s',s,'shell','getprop','ro.product.model').stdout.strip(); pkg=adb('-s',s,'shell','pm','path','kwai.lite.video').stdout
+  power=adb('-s',s,'shell','dumpsys','power',timeout=15).stdout or ''
+  if 'mWakefulness=Asleep' in power:
+   adb('-s',s,'shell','input','keyevent','224',timeout=12)
+   time.sleep(2)
+   if 'mWakefulness=Asleep' in (adb('-s',s,'shell','dumpsys','power',timeout=15).stdout or ''):
+    log('KWAI_PHYSICAL_SLEEP_BLOCKED no_lease=1 priority=P0')
+    return False,s
   native=adb('-s',s,'shell','test','-x','/data/local/tmp/anthares-kwai-native.sh').returncode==0
   touch=adb('-s',s,'shell','test','-x','/data/local/tmp/anthares-hid-tap.sh').returncode==0
   return bool(state=='device' and model==MODEL and 'package:' in pkg and native and touch),s
@@ -167,7 +198,7 @@ def jobenv(job,serial):
  if missing:raise RuntimeError('lease-missing:'+','.join(missing))
  account=str(job.get('expected_account') or job.get('account_id') or EXPECTED_ACCOUNT).lstrip('@').lower()
  if account!=EXPECTED_ACCOUNT:raise RuntimeError('unsupported-account:'+account)
- env=os.environ.copy(); env.update({'ADB_VENDOR_KEYS':ADB_KEYS,'ANTHARES_ADB':ADB,'ANTHARES_PHYSICAL_ADB_SERIAL':serial,'KWAI_QUEUE_JOB_ID':str(job['id']),'KWAI_LEASE_OWNER':str(job.get('lease_owner') or ''),'KWAI_LEASE_GENERATION':str(job['lease_generation']),'KWAI_SOURCE_ID':str(job['source_id']),'KWAI_SOURCE_START':str(job['source_start']),'KWAI_SOURCE_END':str(job['source_end']),'KWAI_VIDEO_URL':str(job['video_url']),'KWAI_VIDEO_TITLE':branded_title(add_site_to_keywords(branded_title(str(job.get('video_title') or ''))[:-len(' ● Universo Anthares')]),limit=140),'KWAI_EXPECTED_ACCOUNT':account})
+ env=os.environ.copy(); port=physical_adb_port(); env['ANTHARES_PHYSICAL_ADB_PORT']=port; env['ADB_SERVER_PORT']=port; env['ADB_SERVER_SOCKET']='tcp:127.0.0.1:'+port; env.update({'ADB_VENDOR_KEYS':ADB_KEYS,'ANTHARES_ADB':ADB,'ANTHARES_PHYSICAL_ADB_SERIAL':serial,'KWAI_QUEUE_JOB_ID':str(job['id']),'KWAI_LEASE_OWNER':str(job.get('lease_owner') or ''),'KWAI_LEASE_GENERATION':str(job['lease_generation']),'KWAI_SOURCE_ID':str(job['source_id']),'KWAI_SOURCE_START':str(job['source_start']),'KWAI_SOURCE_END':str(job['source_end']),'KWAI_VIDEO_URL':str(job['video_url']),'KWAI_VIDEO_TITLE':branded_title(add_site_to_keywords(branded_title(str(job.get('video_title') or ''))[:-len(' ● Universo Anthares')]),limit=140),'KWAI_EXPECTED_ACCOUNT':account})
 
  # Mark the primary as transport-ready, but identity verification remains in
  # kwai_up_safe.prepare() before STARTED. Never infer MEmu login readiness.
@@ -196,7 +227,7 @@ def evidence(jobid):
  url=str(proof.get('public_url') or '')
  if proof.get('ok') is not True or proof.get('expected_account')!=EXPECTED_ACCOUNT or not re.fullmatch(r'https://(?:k\.kwai\.com/p/[A-Za-z0-9_-]+|www\.kwai\.com/@[A-Za-z0-9_.-]+/photo/[0-9]+)',url):
   raise RuntimeError('public-link-proof-invalid')
- return {'remote_id':url,'confirmation_evidence':proof}
+ return {'remote_id':url,'confirmation_evidence':{'kind':'kwai_verified_public_link',**proof}}
 def callback(op):
  jid=os.environ['KWAI_QUEUE_JOB_ID']; gen=int(os.environ['KWAI_LEASE_GENERATION'])
  if op=='started':qpost('started',{'id':jid,'lease_generation':gen});return 0
@@ -265,6 +296,25 @@ def repair_pending():
   if not isinstance(row,dict) or row.get('state')!='published_pending_ack':continue
   st=pubstate(jid)
   if st.get('state')!='verified':continue
+  proofdir=ROOT/'.state'/'kwai-memu-evidence'/re.sub(r'[^A-Za-z0-9._-]+','_',jid)[-100:]
+  if not (proofdir/'public-link-proof.json').is_file():
+   stamp=proofdir/'proof-recovery-last-attempt.txt'
+   now=int(time.time())
+   try:prior=int(stamp.read_text(encoding='utf-8'))
+   except (OSError,ValueError):prior=0
+   if now-prior>=600:
+    proofdir.mkdir(parents=True,exist_ok=True)
+    stamp.write_text(str(now),encoding='utf-8')
+    env=os.environ.copy()
+    env['ANTHARES_PHYSICAL_ADB_PORT']=physical_adb_port()
+    env['ANTHARES_ADB']=ADB
+    helper=ROOT/'tools'/'kwai_physical_public_proof.py'
+    log('KWAI_PROOF_RECOVERY_START '+jid)
+    try:
+     r=subprocess.run([PYTHON,str(helper),jid],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=220,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+     log('KWAI_PROOF_RECOVERY_'+('OK' if r.returncode==0 else 'FAILED priority=P0')+' '+jid+' '+(r.stdout or '').splitlines()[-1][:150])
+    except (OSError,subprocess.TimeoutExpired) as exc:log('KWAI_PROOF_RECOVERY_FAILED priority=P0 '+type(exc).__name__+' '+jid)
+   if not (proofdir/'public-link-proof.json').is_file():continue
   gen=int(row.get('lease_generation') or 0)
   try:
    if gen:qpost('complete',{'id':jid,'lease_generation':gen,'confirmed':True,**evidence(jid)})
@@ -315,7 +365,8 @@ def memu_identity_proven():
    p=subprocess.run([PYTHON,str(script),'auth'],env=env,stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,text=True,timeout=95,check=False)
    ok=p.returncode==0 and 'KWAI_UP_STATE=AUTHENTICATED_IDENTITY' in (p.stdout or '') and EXPECTED_ACCOUNT in (p.stdout or '').lower()
-   log('MEMU_AUTH_'+('VERIFIED' if ok else 'NOT_VERIFIED')+' attempt='+str(attempt)+' rc='+str(p.returncode))
+   reason=re.search(r'KWAI_UP_STATE=FAILED_SAFE REASON=([A-Za-z0-9_-]+)',p.stdout or '')
+   log('MEMU_AUTH_'+('VERIFIED' if ok else 'NOT_VERIFIED')+' attempt='+str(attempt)+' rc='+str(p.returncode)+' reason='+(reason.group(1) if reason else 'none'))
    if ok:return True
   except Exception as e:
    log('MEMU_AUTH_PROBE_ERROR '+type(e).__name__+' attempt='+str(attempt))
@@ -444,8 +495,12 @@ def lock():
 def daemon():
  fd=lock()
  log('DAEMON_STARTED pid='+str(os.getpid()))
+ last_tick=0
  try:
   while True:
+   if time.monotonic()-last_tick>=120:
+    log('DAEMON_TICK pid='+str(os.getpid()))
+    last_tick=time.monotonic()
    delay=POLL
    try:
     once()

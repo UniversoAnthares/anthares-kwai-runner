@@ -287,6 +287,25 @@ class Publisher:
         time.sleep(2)
 
     def dismiss_known_overlays(self, nodes: list[dict[str, str]], stage: str) -> list[dict[str, str]]:
+        # Close only positively identified promotional overlays, preserving auth.
+        ids={(n.get('resource-id') or '') for n in nodes}
+        if ('com.kwai.video:id/close_button' in ids and
+            'com.kwai.video:id/colored_button_bg' in ids and
+            'com.kwai.video.basis:id/view_content' in ids):
+            close=next(n for n in nodes if n.get('resource-id')=='com.kwai.video:id/close_button')
+            self.tap_node(close,1)
+            time.sleep(1)
+            return self.dump(stage+'-promo-dismissed')
+        texts=[(n.get('text') or '').casefold() for n in nodes]
+        if any('recomendação de amigos' in t or 'recomendacao de amigos' in t or
+               'friend recommendations' in t for t in texts):
+            self.adb.run('shell','input','keyevent','4',check=False)
+            time.sleep(1)
+            return self.dump(stage+'-recommendation-dismissed')
+        if any('ande para ganhar kwai golds' in t for t in texts):
+            self.adb.run('shell','input','keyevent','4',check=False)
+            time.sleep(1)
+            return self.dump(stage+'-golds-dismissed')
         for rid in (NOTIFICATION_CLOSE_ID, CREATOR_GUIDE_CLOSE_ID):
             node = find_id(nodes, rid)
             if node:

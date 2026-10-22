@@ -20,6 +20,8 @@ def good_run(cmd, **kwargs):
         return Result(0, "1\n")
     if cmd[-1] == "get-state":
         return Result(0, "device\n")
+    if cmd[-2:] == ["getprop", "sys.boot_completed"]:
+        return Result(0, "1\n")
     if "pm" in cmd and "path" in cmd:
         return Result(0, "package:/data/app/com.kwai.video/base.apk\n")
     return Result(0, "")
