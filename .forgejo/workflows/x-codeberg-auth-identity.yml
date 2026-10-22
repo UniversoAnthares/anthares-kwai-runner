@@ -12,7 +12,9 @@ concurrency:
 
 jobs:
   authenticated-identity:
-    runs-on: codeberg-tiny
+    # Codeberg tiny stops at 2 min; Chromium dependencies + X login exceed it.
+    # Codeberg medium permits up to 10 min for read-only identity preflight.
+    runs-on: codeberg-medium
     timeout-minutes: 9
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
