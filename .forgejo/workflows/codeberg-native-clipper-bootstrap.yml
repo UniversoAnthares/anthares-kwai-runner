@@ -1,0 +1,57 @@
+name: Codeberg native - bootstrap clipper repository (identity fenced)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/codeberg-native-clipper-bootstrap.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  codeberg-bootstrap:
+    runs-on: codeberg-tiny
+    timeout-minutes: 3
+    env:
+      FORGEJO_TOKEN: ${{ forgejo.token }}
+    steps:
+      - name: Create exactly one missing public repository with verified owner identity
+        shell: bash
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          url='https://codeberg.org/api/v1'
+          token=os.environ.get('FORGEJO_TOKEN','')
+          if not token:
+              raise SystemExit('CORTES_QA_P0_CODEBERG_NATIVE_TOKEN_MISSING')
+          def api(path,method='GET',payload=None,auth=True):
+              headers={'Accept':'application/json','User-Agent':'CORTES-Codeberg-Clipper-FencedBootstrap'}
+              if auth: headers['Authorization']='token '+token
+              data=json.dumps(payload).encode() if payload is not None else None
+              if data is not None: headers['Content-Type']='application/json'
+              r=urllib.request.Request(url+path,data=data,method=method,headers=headers)
+              try:
+                  with urllib.request.urlopen(r,timeout=22) as v:
+                      return v.status,json.loads(v.read(200000) or '{}')
+              except urllib.error.HTTPError as e:
+                  return e.code,{}
+          status,actor=api('/user')
+          if status!=200 or str(actor.get('login','')).lower()!='universoanthares':
+              print('CORTES_QA_P0_CODEBERG_NATIVE_ADMIN_IDENTITY_UNAVAILABLE')
+              raise SystemExit(0)
+          status,_=api('/repos/UniversoAnthares/anthares-clipper',auth=False)
+          if status==200:
+              print('CODEBERG_CLIPPER_REPO_ALREADY_EXISTS=PASS')
+              raise SystemExit(0)
+          if status!=404:
+              raise SystemExit('CORTES_QA_P0_CODEBERG_CLIPPER_PUBLIC_READ_ERROR')
+          made,_=api('/user/repos','POST',{'name':'anthares-clipper',
+                 'private':False,'auto_init':False,'default_branch':'main'})
+          if made not in (200,201):
+              print('CORTES_QA_P0_CODEBERG_NATIVE_CREATE_REJECTED_HTTP_'+str(made))
+              raise SystemExit(0)
+          final,_=api('/repos/UniversoAnthares/anthares-clipper',auth=False)
+          if final!=200:
+              raise SystemExit('CORTES_QA_P0_CODEBERG_CLIPPER_CREATE_NOT_VERIFIED')
+          print('CODEBERG_CLIPPER_CREATED_WITH_OWNER_IDENTITY=PASS')
+          PY
