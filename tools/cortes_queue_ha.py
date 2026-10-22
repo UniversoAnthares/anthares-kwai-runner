@@ -76,7 +76,7 @@ def post(action: str, payload: dict, get_oidc, *, timeout: int = 16) -> dict:
         # Cooldown actions were introduced in the Neon canonical backend.
         # Never fall back to an older Vercel/edge function returning HTTP 409
         # UNKNOWN_BUFFER_ACTION, which could suppress all publishing.
-        if action in {"buffer-cooldown", "buffer-cooldown-status"}:
+        if action.startswith("buffer-"):
             providers = (next(p for p in PROVIDERS if 'cortesqueue.compute.' in p),)
         else:
             providers = tuple(sorted(PROVIDERS, key=lambda url: 0 if 'cortesqueue.compute.' in url else 1))
