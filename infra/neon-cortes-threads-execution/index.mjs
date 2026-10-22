@@ -162,7 +162,7 @@ export default {async fetch(request){
  let body;try{const raw=await request.text();if(raw.length>8000)return json({ok:false,error:'BODY_TOO_LARGE'},413);body=JSON.parse(raw)}catch{return json({ok:false,error:'INVALID_BODY'},400)}
  try{
   let role=null,claims=null;
-  if(body.action==='ack-pause'&&await deviceAuth(request))role='device';
+  if(['ack-pause','activate-primary','deactivate-primary'].includes(body.action)&&await deviceAuth(request))role='device';
   else{claims=await githubAuth(request);if(claims)role='github'}
   if(!role)return json({ok:false,error:'AUTH_REQUIRED'},401);
   const result=await action(body,role,claims);
