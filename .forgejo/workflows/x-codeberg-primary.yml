@@ -29,7 +29,7 @@ jobs:
           set -eu
           python3 -m venv /tmp/anthares-x-smoke-venv
           /tmp/anthares-x-smoke-venv/bin/python -m pip install --disable-pip-version-check playwright
-          /tmp/anthares-x-smoke-venv/bin/python -m playwright install chromium
+          /tmp/anthares-x-smoke-venv/bin/python -m playwright install --with-deps chromium
           /tmp/anthares-x-smoke-venv/bin/python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"]); t=b.new_page(); t.goto("https://x.com",wait_until="domcontentloaded",timeout=40000); print("CODEBERG_ANTHARES_BROWSER_EXECUTABLE=TRUE");b.close();p.stop()'
   publish:
     if: ${{ vars.X_CODEBERG_PRIMARY_ARM == '1' && (forgejo.event_name == 'schedule' || !inputs.smoke) }}
@@ -50,7 +50,7 @@ jobs:
           set -eu
           python3 -m venv /tmp/anthares-x-publisher-venv
           /tmp/anthares-x-publisher-venv/bin/python -m pip install --disable-pip-version-check playwright requests cryptography
-          /tmp/anthares-x-publisher-venv/bin/python -m playwright install chromium
+          /tmp/anthares-x-publisher-venv/bin/python -m playwright install --with-deps chromium
           command -v ffprobe || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
       - name: Globally fenced cloud X video publisher
         run: /tmp/anthares-x-publisher-venv/bin/python -u -m tools.x_github_anthares_browser_publisher
