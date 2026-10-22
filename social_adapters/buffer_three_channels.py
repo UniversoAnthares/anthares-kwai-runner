@@ -252,6 +252,27 @@ def resolve_pinterest_board(channel_id: str, *, token: str | None = None) -> str
     return str(matches[0]["serviceId"])
 
 
+def pinterest_caption(title: str, description: str, hashtags) -> str:
+    """Pinterest limits text to 500 characters; preserve context and keywords."""
+    heading=branded_title(title, limit=100)
+    # Description is transcript-derived, while metadata.pinterest.title carries
+    # the full strategic heading. Never use the live's generic title as a fallback.
+    excerpt=" ".join(str(description or "").replace("www.anthares.us","").split())
+    tags=list(dict.fromkeys(str(x).strip() for x in (hashtags or [])
+                            if isinstance(x,str) and x.strip().startswith("#")))[:4]
+    # Always retain the user's destination, even if excerpt must be shortened.
+    tail="\nwww.anthares.us"+("\n"+" ".join(tags) if tags else "")
+    room=500-len(heading)-1-len(tail)
+    if room<50:
+        raise BufferBlocked("PINTEREST_CAPTION_BUDGET_EXHAUSTED")
+    if len(excerpt)>room:
+        excerpt=excerpt[:room].rsplit(" ",1)[0].rstrip(" ,.;:")
+    caption=heading+"\n"+excerpt+tail
+    if len(caption)>500 or len(caption)<40 or "www.anthares.us" not in caption:
+        raise BufferBlocked("PINTEREST_CAPTION_LENGTH_INVALID")
+    return caption
+
+
 def prepare(payload: dict) -> dict:
     platform = str(payload.get("platform") or "").lower()
     if platform not in SERVICES:
@@ -274,6 +295,9 @@ def prepare(payload: dict) -> dict:
     if platform == "linkedin":
         from anthares_publisher.linkedin_editorial import linkedin_caption
         text = linkedin_caption(title, str(payload.get("description") or ""))
+    elif platform == "pinterest":
+        text = pinterest_caption(title,str(payload.get("description") or ""),
+                                 payload.get("hashtags") or [])
     else:
         hashtags = " ".join(dict.fromkeys(str(x).strip() for x in (payload.get("hashtags") or [])
                                              if str(x).startswith("#")))
