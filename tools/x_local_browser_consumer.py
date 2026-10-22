@@ -252,7 +252,12 @@ def one(issue,data,token):
         state(n,"READY")
         service(token,"/claim-local",{"account":"lucasyahn","idempotency_key":key})
         state(n,"SUBMISSION_STARTED",idempotency_key=key)
-        button.click(timeout=55000)
+        # X's compose backdrop can cover the visible/enabled Post button.
+        # Playwright's coordinate-based click then hangs until its timeout
+        # without dispatching. Directly activate the verified DOM button;
+        # this exact path published video #385 (post 2113103163859313089).
+        # One irreversible click only, fenced by the PostgreSQL claim.
+        button.evaluate("(element) => element.click()", timeout=12500)
         url=evidence(ctx,data["caption"],attempts=18)
         if not url:
             state(n,"UNCERTAIN")
