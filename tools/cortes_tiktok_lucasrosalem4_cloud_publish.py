@@ -106,6 +106,13 @@ def call(action,token,payload=None):
             try:
                 with urllib.request.urlopen(secondary,timeout=26) as resp:
                     out=read_json(resp)
+                if not out.get("ok"):
+                    raise SafeStop("SECONDARY_QUEUE_ALTERNATE_UNACKNOWLEDGED_"+action)
+                print("CODEBERG_TIKTOK_PRESTART_NETWORK_FAILOVER="+action,flush=True)
+                return out
+            except (TimeoutError,urllib.error.URLError) as alt:
+                raise SafeStop("SECONDARY_BOTH_INGRESS_UNAVAILABLE_"+action) from alt
+        raise SafeStop("SECONDARY_NEON_NETWORK_"+type(exc).__name__+"_ACTION_"+action) from exc
     if not out.get("ok"):
         raise SafeStop("NEON_ACTION_NOT_ACKNOWLEDGED_"+action)
     return out
