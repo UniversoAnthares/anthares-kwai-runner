@@ -45,6 +45,17 @@ jobs:
       X_CLOUD_PROOF_ATTEMPTS: '5'
     steps:
       - uses: actions/checkout@v4
+      - name: Fail closed without Codeberg cloud publishing credentials
+        run: |
+          set -eu
+          if [ -z "${ARA_SHARED:-}" ]; then
+            echo "X_CODEBERG_REQUIRED_SECRET_MISSING=ARA_SHARED"
+            exit 2
+          fi
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "X_CODEBERG_REQUIRED_SECRET_MISSING=GH_TOKEN"
+            exit 2
+          fi
       - name: Install Anthares Browser video preflight
         run: |
           set -eu
