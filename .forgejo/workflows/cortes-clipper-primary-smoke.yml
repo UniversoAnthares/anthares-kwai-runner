@@ -1,0 +1,35 @@
+name: CORTES clipper - Codeberg source and executor smoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/cortes-clipper-primary-smoke.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: codeberg-clipper-primary-smoke
+  cancel-in-progress: false
+jobs:
+  validate-codeberg-source:
+    runs-on: codeberg-tiny
+    timeout-minutes: 3
+    steps:
+      - name: Verify source mirror and compile producer without publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          CB='https://codeberg.org/UniversoAnthares/anthares-clipper.git'
+          GH='https://github.com/UniversoAnthares/anthares-clipper.git'
+          cb_sha="$(git ls-remote "$CB" refs/heads/main | cut -f1)"
+          gh_sha="$(git ls-remote "$GH" refs/heads/main | cut -f1)"
+          test -n "$cb_sha"
+          test "$cb_sha" = "$gh_sha"
+          git clone --quiet --depth 1 --branch main "$CB" clipper
+          cd clipper
+          test "$(git rev-parse HEAD)" = "$cb_sha"
+          python3 -m py_compile cortes_source_adapter.py cortes_short_batch.py cortes_duo_layout.py cortes_editorial_titles.py
+          test -s .forgejo/workflows/codeberg-clipper-capability.yml
+          echo "CODEBERG_CLIPPER_SOURCE_SHA=$cb_sha"
+          echo 'CODEBERG_CLIPPER_EXECUTOR_CODE_CHECK=PASS'
+          echo 'SOCIAL_POST_MUTATIONS=DISABLED'
