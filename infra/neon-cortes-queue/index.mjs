@@ -140,7 +140,7 @@ async function bufferAction(verb,b,platform){
  const allowed=new Set(['lease','start','fail','media-missing','scheduled','pending','reconcile','stats','retention','cooldown','cooldown-status','policy']);
  if(!allowed.has(verb))return{ok:false,error:'UNKNOWN_BUFFER_ACTION'};
  if(verb==='cooldown'||verb==='cooldown-status'){
-  if(platform!=='pinterest')return{ok:false,error:'PINTEREST_COOLDOWN_SCOPE_ONLY'};
+  if(!['pinterest','instagram'].includes(platform))return{ok:false,error:'BUFFER_COOLDOWN_SCOPE_ONLY'};
   // Persist provider rate limits across ephemeral GitHub runners. This table
   // contains no credentials, media, or personal user data.
   await query(`CREATE TABLE IF NOT EXISTS cortes_buffer_provider_cooldowns(
@@ -151,13 +151,13 @@ async function bufferAction(verb,b,platform){
     if(!Number.isSafeInteger(seconds)||seconds<300||seconds>3600)
        return{ok:false,error:'INVALID_COOLDOWN'};
     await query(`INSERT INTO cortes_buffer_provider_cooldowns(provider,cooldown_until,updated_at)
-       VALUES('pinterest',now()+($1::int * interval '1 second'),now())
+       VALUES($1,now()+($2::int * interval '1 second'),now())
        ON CONFLICT(provider) DO UPDATE SET
         cooldown_until=GREATEST(cortes_buffer_provider_cooldowns.cooldown_until,
-                         EXCLUDED.cooldown_until),updated_at=now()`,[seconds]);
+                         EXCLUDED.cooldown_until),updated_at=now()`,[platform,seconds]);
   }
   const v=await query(`SELECT cooldown_until,cooldown_until>now() AS active
-      FROM cortes_buffer_provider_cooldowns WHERE provider='pinterest'`);
+      FROM cortes_buffer_provider_cooldowns WHERE provider=$1`,[platform]);
   return{ok:true,active:Boolean(v[0]?.active),
     cooldown_until:v[0]?.cooldown_until||null};
  }
