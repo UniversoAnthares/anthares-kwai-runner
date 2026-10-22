@@ -23,5 +23,5 @@ jobs:
         run: |
           python3 -m venv /tmp/tiktok-probe
           /tmp/tiktok-probe/bin/pip install -q playwright
-          /tmp/tiktok-probe/bin/python -m playwright install chromium
+          /tmp/tiktok-probe/bin/python -m playwright install --with-deps chromium
           /tmp/tiktok-probe/bin/python -u tools/tiktok_codeberg_oidc_probe.py --browser
