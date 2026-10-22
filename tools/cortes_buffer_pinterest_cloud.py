@@ -427,12 +427,14 @@ def main():
     # The Buffer quota governs NEW posts only. Existing scheduled posts
     # must still be reconciled even on disabled days or after the quota fills.
     state=queue("cooldown-status")
-    if state.get("active"):
-        print(json.dumps({"pinterest_cloud":"COOLDOWN_HTTP_429",
-                          "until":state.get("cooldown_until"),
-                          "published":0},separators=(",",":")),flush=True)
-        return 0
     try:
+        # A provider cooldown protects API requests. Never mark scheduled
+        # posts as delivered or retry uncertain posts during the cooldown.
+        if state.get("active"):
+            print(json.dumps({"pinterest_cloud":"COOLDOWN_HTTP_429",
+                              "until":state.get("cooldown_until"),
+                              "published":0},separators=(",",":")),flush=True)
+            return 0
         # Readback comes first; never lose remote evidence on board outages.
         confirmed=reconcile()
         # Eight unresolved Buffer reservations exhaust the producer lane.
