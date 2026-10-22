@@ -168,6 +168,8 @@ async function stage(p,file,data){
  const doc=await p.rpc('DOM.getDocument',{depth:-1,pierce:true});
  const node=await p.rpc('DOM.querySelector',{nodeId:doc.root.nodeId,selector:'input[type=file]'});
  if(!node.nodeId)throw Error('PIN_VIDEO_INPUT_UNRESOLVED');
+ // Record upload intention in the parent before Pinterest can autosave a draft.
+ emit({phase:'UPLOAD_ATTEMPTED'});
  await p.rpc('DOM.setFileInputFiles',{nodeId:node.nodeId,files:[file]});
  // Pinterest React replaces the upload input after accepting a file.
  // Never require f.files.length after DOM.setFileInputFiles: it becomes 0/null

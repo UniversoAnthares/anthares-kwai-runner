@@ -63,6 +63,52 @@ OWNER = "pinterest-browser:" + (os.getenv("ANTHARES_DEVICE_ID") or "DESKTOP-FTDK
 CDP = ROOT / "tools" / "cortes_pinterest_browser_ui.mjs"
 EVENTS = Path(os.getenv("CORTES_PINTEREST_LOCAL_EVENTS", str(ROOT / "pinterest-browser-events.log")))
 NODE = os.getenv("CORTES_NODE_EXE", "node")
+DRAFT_GUARD = Path(os.getenv("CORTES_PINTEREST_DRAFT_GUARD",
+    str(ROOT / ".pinterest-unreconciled-upload.json")))
+
+
+def draft_guard_mark(drafts_before: int, job_id: str) -> None:
+    """Persist a pre-submit risk before invoking a browser that may save a draft."""
+    value = {
+        "kind": "PINTEREST_DRAFT_RECONCILIATION_REQUIRED",
+        "baseline": int(drafts_before),
+        "job_hash": hashlib.sha256(job_id.encode("utf-8")).hexdigest(),
+        "created_at": int(time.time())
+    }
+    DRAFT_GUARD.parent.mkdir(parents=True, exist_ok=True)
+    with DRAFT_GUARD.open("x", encoding="utf-8") as output:
+        json.dump(value, output, separators=(",", ":"))
+
+
+def draft_guard_clear_after_confirmation(job_id: str) -> None:
+    """Clear only the guard for the exact job after verified publication."""
+    value = json.loads(DRAFT_GUARD.read_text(encoding="utf-8"))
+    if value.get("job_hash") != hashlib.sha256(job_id.encode("utf-8")).hexdigest():
+        raise RuntimeError("PINTEREST_DRAFT_GUARD_JOB_MISMATCH")
+    DRAFT_GUARD.unlink()
+
+
+def draft_guard_blocked(drafts: int) -> bool:
+    """Keep a potentially saved draft fenced until explicitly reconciled by QA."""
+    if not DRAFT_GUARD.exists():
+        return False
+    try:
+        value = json.loads(DRAFT_GUARD.read_text(encoding="utf-8"))
+        if (value.get("kind") != "PINTEREST_DRAFT_RECONCILIATION_REQUIRED"
+                or not 0 <= int(value.get("baseline", -1)) <= 50
+                or not isinstance(value.get("job_hash"), str)
+                or len(value["job_hash"]) != 64):
+            raise ValueError("invalid_guard")
+    except (ValueError, KeyError, TypeError, OSError):
+        qa_incident("PINTEREST_DRAFT_GUARD_INVALID")
+        return True
+    # A recorded upload can create a draft even if Publish never becomes ready.
+    # Count changes alone cannot identify it. Only a positive reconciliation
+    # of the exact job may clear this file; never clear on a timer or restart.
+    log("PINTEREST_DRAFT_GUARD_ACTIVE", count=int(drafts), baseline=value["baseline"])
+    qa_incident("PINTEREST_UNRECONCILED_DRAFT")
+    return True
+
 
 
 def log(action: str, **info):
@@ -225,6 +271,7 @@ def child_protocol(jobfile: Path, fence: dict):
     th.start()
     started = False
     submitted = False
+    upload_attempted = False
     try:
         deadline = time.monotonic() + 540
         while time.monotonic() < deadline:
@@ -243,6 +290,8 @@ def child_protocol(jobfile: Path, fence: dict):
                 started = True
                 proc.stdin.write("GO\n")
                 proc.stdin.flush()
+            elif msg.get("phase") == "UPLOAD_ATTEMPTED":
+                upload_attempted = True
             elif msg.get("phase") == "PREPARE_DIAGNOSTIC":
                 # The browser emits only button-state and count metadata, never
                 # account content, video, cookies, or captions.
@@ -260,6 +309,12 @@ def child_protocol(jobfile: Path, fence: dict):
                 return started, True, msg
             elif msg.get("status") == "BLOCKED_OR_UNCERTAIN":
                 log("PINTEREST_UI_BLOCKED", reason=msg.get("reason", "unknown"))
+                if not upload_attempted:
+                    # The child explicitly failed before file input; no draft created.
+                    try:
+                        draft_guard_clear_after_confirmation(fence["id"])
+                    except (OSError, KeyError, ValueError, RuntimeError):
+                        qa_incident("PINTEREST_DRAFT_GUARD_REQUIRES_QA")
                 qa_incident(str(msg.get("reason", "unknown")))
                 return started, False, None
             elif msg.get("phase") == "_CHILD_EXIT":
@@ -301,10 +356,12 @@ def main():
         # orphan upload. QA must reconcile existing unpublished drafts first.
         log("PINTEREST_DRAFT_CAPACITY_PAUSED", count=drafts)
         qa_incident("PINTEREST_DRAFT_CAPACITY_EXHAUSTED")
-        return 0
+        return 6
     if args.preflight:
         log("PINTEREST_BROWSER_READY", account=ACCOUNT, draft_count=drafts)
         return 0
+    if draft_guard_blocked(drafts):
+        return 6
     leased = call("lease", {"target_key": TARGET, "owner": OWNER, "lease_seconds": 900})
     if not leased.get("ok"):
         log("QUEUE_LEASE_REJECTED")
@@ -332,6 +389,9 @@ def main():
                 qa_media_incident(fence["id"], job["media_url"])
                 return 0
             raise RuntimeError("PINTEREST_MEDIA_QUARANTINE_REJECTED")
+        # A browser may autosave an upload before any submit. Persist a latch
+        # before opening the editor, so a crash cannot silently cause repeats.
+        draft_guard_mark(drafts, fence["id"])
         with tempfile.TemporaryDirectory(prefix="cortes-pin-") as folder:
             filename = Path(folder) / "job.json"
             filename.write_text(json.dumps(job, ensure_ascii=False), encoding="utf-8")
@@ -344,6 +404,10 @@ def main():
                     "confirmation_evidence": {"kind": "pinterest_browser_verified_pin",
                        "verified_id": remote_id, "permalink": permalink, "route": "browser"}})
                 if confirmed.get("ok"):
+                    try:
+                        draft_guard_clear_after_confirmation(fence["id"])
+                    except (OSError, KeyError, ValueError, RuntimeError):
+                        qa_incident("PINTEREST_DRAFT_GUARD_REQUIRES_QA")
                     log("PIN_CONFIRMED", pin=permalink, job_id=fence["id"])
                     return 0
             qa_incident("PINTEREST_NEON_CONFIRMATION_UNCERTAIN")
