@@ -1,0 +1,34 @@
+name: Codeberg native TikTok smoke launcher
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/tiktok-codeberg-smoke-launcher.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: write
+jobs:
+  launch:
+    runs-on: codeberg-tiny
+    timeout-minutes: 2
+    env:
+      FORGEJO_TOKEN: ${{ forgejo.token }}
+    steps:
+      - name: Launch two protected read-only identity and Neon proof workflows
+        run: |
+          set -eu
+          test -n "$FORGEJO_TOKEN"
+          for wf in cortes-tiktok-lucas4-codeberg.yml cortes-tiktok-universo-codeberg.yml; do
+            status=$(curl -sS -o /tmp/codeberg-dispatch-response -w '%{http_code}' \
+              --max-time 18 --request POST \
+              -H "Authorization: token $FORGEJO_TOKEN" \
+              -H 'Content-Type: application/json' \
+              --data '{"ref":"main","inputs":{"smoke":"true","publish":"false"}}' \
+              "https://codeberg.org/api/v1/repos/UniversoAnthares/anthares-kwai-runner/actions/workflows/$wf/dispatches")
+            if [ "$status" != "204" ] && [ "$status" != "200" ] && [ "$status" != "201" ]; then
+              echo "::error::CODEBERG_SMOKE_DISPATCH_FAILED workflow=$wf http=$status"
+              exit 2
+            fi
+            echo "CODEBERG_SMOKE_DISPATCHED=$wf"
+          done
