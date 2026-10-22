@@ -1,0 +1,28 @@
+name: TikTok Codeberg hosted browser capability
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/tiktok-codeberg-browser-smoke.yml'
+      - 'tools/cortes_codeberg_tiktok_bootstrap.py'
+permissions:
+  contents: read
+concurrency:
+  group: cortes-tiktok-codeberg-browser-smoke
+  cancel-in-progress: true
+jobs:
+  browser-smoke:
+    runs-on: codeberg-tiny
+    timeout-minutes: 8
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - name: Verify isolated headless Chromium and TikTok access without authentication
+        shell: bash
+        run: |
+          set -eu
+          python3 -m venv /tmp/cortes-tiktok-codeberg-browser
+          /tmp/cortes-tiktok-codeberg-browser/bin/python -m pip install --disable-pip-version-check -q playwright
+          /tmp/cortes-tiktok-codeberg-browser/bin/python -m playwright install chromium
+          /tmp/cortes-tiktok-codeberg-browser/bin/python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"]); page=b.new_page(); page.goto("https://www.tiktok.com/",wait_until="domcontentloaded",timeout=50000); print("CODEBERG_TIKTOK_HEADLESS_BROWSER_HEALTH=1 url_host="+page.url.split("/")[2]); b.close(); p.stop()'
+          python3 -m py_compile tools/cortes_codeberg_tiktok_bootstrap.py
