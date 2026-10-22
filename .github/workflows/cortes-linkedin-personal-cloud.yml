@@ -9,7 +9,7 @@ on:
     - cron: '4,9,14,19,24,29,34,39,44,49,54,59 * * * *'
   workflow_dispatch: {}
   workflow_run:
-    workflows: ["CORTES 3 independent networks - all shorts cloud fanout"]
+    workflows: ["CORTES 3 independent networks - all shorts cloud fanout", "CORTES LinkedIn - automatic Buffer cloud publisher"]
     types: [completed]
     branches: [main]
 permissions:
