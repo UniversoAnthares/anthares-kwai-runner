@@ -75,24 +75,29 @@ jobs:
           print('PUBLIC_DNS='+public['dns'])
           open('/tmp/public-base','w').write('https://'+public['dns'])
           PY
-      - name: Wait for recovered browser and durable state
+      - name: Prove real authenticated Chromium and durable X session
         shell: bash
         run: |
           set -euo pipefail
           base="$(cat /tmp/public-base)"
+          # /x/v1/runtime/browser/persistence-status is not implemented.
+          # Health deliberately does NOT start Chromium; authenticate /x/verify.
           ok=0
-          for i in $(seq 1 45); do
-            if curl -fsS --max-time 12 "$base/healthz" -o /tmp/ara.json \
-              && curl -fsS --max-time 20 "$base/x/v1/runtime/browser/persistence-status" -o /tmp/browser.txt; then
-              if grep -q '^healthy=True$' /tmp/browser.txt \
-                && grep -q '^vault_enabled=True$' /tmp/browser.txt \
-                && grep -q '^restore_status=restored$' /tmp/browser.txt \
-                && grep -q '^host_desktop_fallback=False$' /tmp/browser.txt; then ok=1; break; fi
-            fi
+          for i in $(seq 1 18); do
+            http="$(curl -sS -o /tmp/ara-x-verify.json -w '%{http_code}' --max-time 45 \
+              -H "Authorization: Bearer $ARA_SHARED" "$base/x/verify" || true)"
+            if [ "$http" = 200 ] && python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/ara-x-verify.json'))
+          assert d.get('ok') is True
+          assert d.get('handle') == 'lucasyahn'
+          assert d.get('durable') is True
+          PY
+            then ok=1; break; fi
+            # Never echo browser diagnostic responses: they can contain
+            # authenticated account or runtime details.
             sleep 10
           done
-          cat /tmp/ara.json 2>/dev/null || true
-          cat /tmp/browser.txt 2>/dev/null || true
-          test "$ok" = 1 || { echo ANTHARES_BROWSER_RECOVERY_NOT_PROVEN; exit 41; }
-          echo ANTHARES_BROWSER_NORTHFLANK_RECOVERED=1
+          test "$ok" = 1 || { echo NORTHFLANK_X_BROWSER_VERIFICATION_FAILED; exit 41; }
+          echo NORTHFLANK_X_CHROMIUM_AUTHENTICATED_AND_DURABLE=PASS
           echo RENDER_DEPENDENCY=false
