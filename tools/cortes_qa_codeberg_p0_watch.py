@@ -83,6 +83,65 @@ def inspect():
             alerts.append(incident(account,"all_queue_ingress_down",INGRESS[account][0]))
     return {x["fingerprint"]:x for x in alerts}.values()
 
+def inspect_x():
+    """Independent Codeberg-side X publisher QA; no GitHub-hosted runner needed."""
+    alerts=[]
+    codeberg=CODEBERG_API+"/repos/"+REPO+"/actions/runs?limit=40"
+    try:
+        data=fetch(codeberg)
+        runs=[r for r in (data.get("workflow_runs") or [])
+              if r.get("workflow_id")=="x-codeberg-primary.yml"]
+        if not runs:
+            alerts.append(incident("x/lucasyahn","codeberg_cloud_publisher_missing",
+                                   "https://codeberg.org/"+REPO+"/actions"))
+        for run in runs[:15]:
+            status=str(run.get("status") or "")
+            run_id=str(run.get("id") or "")
+            evidence="https://codeberg.org/"+REPO+"/actions"
+            if status in ("failure","error") and run.get("event")!="push":
+                alerts.append(incident("x/lucasyahn","codeberg_cloud_publisher_failed",
+                                       evidence+" (run "+run_id+")"))
+                break
+            if status in ("waiting","queued","pending"):
+                raw=run.get("created") or run.get("started")
+                try:
+                    timestamp=dt.datetime.fromisoformat(str(raw).replace("Z","+00:00"))
+                    age=NOW-timestamp
+                    if timestamp.year>2020 and dt.timedelta(minutes=12)<age<dt.timedelta(days=1):
+                        alerts.append(incident("x/lucasyahn","codeberg_cloud_runner_stalled",
+                                               evidence+" (run "+run_id+")"))
+                        break
+                except (ValueError,TypeError,OverflowError):
+                    pass
+    except (ValueError,TypeError,KeyError,OSError,urllib.error.URLError):
+        alerts.append(incident("x/lucasyahn","codeberg_cloud_control_unreachable",
+                               "https://codeberg.org/"+REPO+"/actions"))
+    try:
+        data=fetch(GH_API+"/repos/"+REPO+
+                   "/actions/workflows/x-anthares-browser-cloud-publisher.yml/runs?per_page=12")
+        gh=[row for row in (data.get("workflow_runs") or [])
+            if row.get("conclusion") in ("failure","timed_out")]
+        if gh:
+            alerts.append(incident("x/lucasyahn","github_cloud_publisher_failed",
+                                   "https://github.com/"+REPO+"/actions/runs/"+
+                                   str(gh[0].get("id") or "")))
+    except (ValueError,TypeError,KeyError,OSError,urllib.error.URLError):
+        alerts.append(incident("x/lucasyahn","github_cloud_visibility_lost",
+                               "https://github.com/"+REPO+"/actions"))
+    try:
+        state=fetch("https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x/health")
+        if state.get("ok") is not True:
+            alerts.append(incident("x/lucasyahn","northflank_x_health_invalid",
+                                   "https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x/health"))
+        if state.get("vault_ready") is False:
+            alerts.append(incident("x/lucasyahn","x_encrypted_vault_unavailable",
+                                   "https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x/health"))
+    except (ValueError,TypeError,OSError,urllib.error.URLError):
+        alerts.append(incident("x/lucasyahn","northflank_x_health_unreachable",
+                               "https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x/health"))
+    return {x["fingerprint"]:x for x in alerts}.values()
+
+
 def report(alerts):
     token=os.environ.get("FORGEJO_TOKEN","")
     if not token:raise RuntimeError("FORGEJO_DEFAULT_TOKEN_MISSING")
@@ -96,11 +155,18 @@ def report(alerts):
         if alert["fingerprint"] in " ".join(titles):
             continue
         title="[QA P0]["+alert["account"]+"]["+alert["fingerprint"]+"] "+alert["stage"]
+        is_x=alert["account"]=="x/lucasyahn"
+        instructions=("Ação P0 X: inspecionar Codeberg, GitHub, vault e ledger global PostgreSQL;"
+                      " recuperar caminhos determinísticos e preservar Windows como contingência;"
+                      " registrar diagnóstico na Central QA GitHub #380."
+                      " Nunca repetir POST X iniciado/incerto sem conciliação do post real."
+                      if is_x else
+                      "Ação P0 TikTok: verificar Codeberg, Neon e publicador,"
+                      " recuperar com fencing/idempotência e escalar à Central QA GitHub #283."
+                      " Nunca repostar corte STARTED/UNCERTAIN sem conciliação TikTok Studio.")
         body=("Monitor primário no Codeberg (independente dos runners do GitHub).\n\n"
              "Falha: "+alert["stage"]+"\nConta: "+alert["account"]+
-             "\nEvidência: "+alert["url"]+"\n\nAção prioritária: verificar Codeberg, Neon e publicador,"
-             " executar recuperação com fencing/idempotência e escalonar à Central QA GitHub #283."
-             " Nunca republicar um corte STARTED/UNCERTAIN sem conciliação TikTok Studio."
+             "\nEvidência: "+alert["url"]+"\n\n"+instructions+
              "\nNão expor segredos de autenticação.")
         created=fetch(url,token=token,method="POST",payload={"title":title,"body":body})
         if not created.get("number"):raise RuntimeError("CODEBERG_P0_NOT_ACKNOWLEDGED")
@@ -109,7 +175,7 @@ def report(alerts):
     return opened
 
 def main():
-    alerts=list(inspect())
+    alerts=list(inspect())+list(inspect_x())
     opened=report(alerts)
     print("CODEBERG_P0_WATCH_OK alerts="+str(len(alerts))+" new="+str(opened),flush=True)
     return 0
