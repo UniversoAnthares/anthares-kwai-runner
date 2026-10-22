@@ -7,6 +7,7 @@ the Windows desktop. No tokens/cookies/page HTML are printed.
 from __future__ import annotations
 import os
 import re
+import json
 import sys
 import time
 
@@ -39,7 +40,7 @@ def run():
                                           viewport={"width":1365,"height":768})
             page = context.new_page()
             page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=50000)
-            deadline = time.monotonic() + 25
+            deadline = time.monotonic() + 45
             handle = ""
             while time.monotonic() < deadline:
                 if any(text in page.url for text in ("/login", "/i/jf/onboarding", "/i/flow/login")):
@@ -61,6 +62,17 @@ def run():
                         raise RuntimeError("X_CLOUD_ACCOUNT_MISMATCH")
                 page.wait_for_timeout(1600)
             if handle != "lucasyahn":
+                # Sanitized machine-readable browser diagnostics: booleans and
+                # coarse page category only, never HTML/cookies/challenge text.
+                state = page.evaluate("""() => ({
+                    route: location.pathname === '/home' ? 'home'
+                           : (location.pathname.includes('login') ? 'login' : 'other'),
+                    switcherPresent: !!document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]'),
+                    profilePresent: !!document.querySelector('a[data-testid="AppTabBar_Profile_Link"]'),
+                    composerPresent: !!document.querySelector('[data-testid="SideNav_NewTweet_Button"]'),
+                    loginPrompt: !!document.querySelector('input[autocomplete="username"]')
+                })""")
+                print("X_CLOUD_BROWSER_DOM_DIAG=" + json.dumps(state, sort_keys=True), flush=True)
                 raise RuntimeError("X_CLOUD_ACCOUNT_NOT_PROVEN")
             print("X_CLOUD_BROWSER_IDENTITY_OK=lucasyahn", flush=True)
             print("X_CLOUD_BROWSER_PUBLICATION_PREFLIGHT_READY=True", flush=True)
