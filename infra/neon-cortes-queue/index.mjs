@@ -462,7 +462,8 @@ async function pinterestBrowserAction(verb,b){
        AND payload->>'segment_id' IS NOT NULL
        AND COALESCE(payload->>'editorial_policy','') <> 'anthares_editorial_transcript_v2'
        AND COALESCE(confirmation_evidence->>'kind','') <> 'source_media_invalid'
-     ORDER BY created_at,id LIMIT 4`,[target]);
+       AND ($2::text='' OR id>$2)
+     ORDER BY id LIMIT 4`,[target,String(b.after_id||'')]);
   return{ok:true,jobs:rows};
  }
  if(verb==='metadata-enrich'){
