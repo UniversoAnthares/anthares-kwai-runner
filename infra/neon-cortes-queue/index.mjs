@@ -319,6 +319,28 @@ async function pinterestBrowserAction(verb,b){
  if(b.target_key&&b.target_key!==target)return{ok:false,error:'WRONG_TARGET'};
  if(String(b.owner||'')!==who)return{ok:false,error:'WRONG_BROWSER_OWNER'};
  if(verb==='lease'){
+  // Recover leases abandoned by crashed local workers. Never retry a video
+  // after publication started: it must remain UNCERTAIN for independent QA.
+  await query(`UPDATE cortes_publications SET
+     status=CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain' END,
+     lease_owner=NULL,lease_until=NULL,updated_at=now(),
+     confirmation_evidence=CASE WHEN publication_started_at IS NULL THEN confirmation_evidence
+       ELSE jsonb_build_object('kind','pinterest_expired_after_start',
+                              'confirmed_on_network',false) END
+     WHERE target_key=$1 AND status IN ('leased','started')
+       AND lease_until < now()`,[target]);
+  // Repair only prematurely discarded 404 items from the previous deployment:
+  // they still have an entire next calendar day to recover their source media.
+  await query(`UPDATE cortes_publications SET status='queued',lease_owner=NULL,
+     lease_until=NULL,updated_at=now(),confirmation_evidence=jsonb_build_object(
+       'kind','source_media_invalid','http_status',404,
+       'confirmed_on_network',false,
+       'retry_after_at',to_char(now()+interval '90 minutes','YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+     WHERE target_key=$1 AND status='failed' AND remote_id IS NULL
+       AND publication_started_at IS NULL
+       AND confirmation_evidence->>'kind'='source_media_expired_next_day'
+       AND (created_at AT TIME ZONE 'America/Campo_Grande')::date =
+          (now() AT TIME ZONE 'America/Campo_Grande')::date - 1`,[target]);
   const cap=await query("SELECT reserved FROM cortes_daily_publication_budget WHERE target_key=$1 AND local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date",[target]);
   if(Number(cap[0]?.reserved||0)>=100)return{ok:true,job:null,daily_limit_reached:true,delivery_route:'browser'};
   // A daily queue can carry work through the following local calendar day only.
@@ -347,8 +369,9 @@ async function pinterestBrowserAction(verb,b){
            OR r.ordinal > CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END
            OR extract(hour FROM now() AT TIME ZONE 'America/Campo_Grande') >= 21 )
      AND ( COALESCE(p.confirmation_evidence->>'kind','') <> 'source_media_invalid'
-           OR (p.confirmation_evidence->>'retry_after_date')::date <=
-                (now() AT TIME ZONE 'America/Campo_Grande')::date )
+           OR COALESCE((p.confirmation_evidence->>'retry_after_at')::timestamptz,
+               (p.confirmation_evidence->>'retry_after_date')::date AT TIME ZONE 'America/Campo_Grande',
+               now()) <= now() )
    ORDER BY p.created_at,p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
   ) UPDATE cortes_publications p SET status='leased',lease_owner=$2,
      lease_generation=p.lease_generation+1,lease_until=now()+interval '15 minutes',updated_at=now()
@@ -368,20 +391,20 @@ async function pinterestBrowserAction(verb,b){
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'BROWSER_FENCE_EXPIRED'};
  }
  if(verb==='media-invalid'){
-  // The request is permitted ONLY before the publishing phase. This fence
-  // guarantees that a missing file cannot create a duplicate submission.
-  const today="(now() AT TIME ZONE 'America/Campo_Grande')::date";
-  const evidence={kind:'source_media_invalid',http_status:404,confirmed_on_network:false,
-    retry_after_date:null};
-  const rows=await query(`UPDATE cortes_publications
-     SET status=CASE WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date < ${today}
-                       THEN 'failed' ELSE 'queued' END,
-         confirmation_evidence=jsonb_build_object(
-           'kind',CASE WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date < ${today}
-                        THEN 'source_media_expired_next_day' ELSE 'source_media_invalid' END,
-           'http_status',404,'confirmed_on_network',false,
-           'retry_after_date',to_char(${today} + 1,'YYYY-MM-DD')),
-         lease_owner=NULL,lease_until=NULL,updated_at=now()
+  // Isolate a verified 404 only if the upload has NEVER been started.
+  // Recovery is allowed throughout the whole following local calendar day.
+  const rows=await query(`UPDATE cortes_publications SET status='queued',
+     confirmation_evidence=jsonb_build_object(
+       'kind','source_media_invalid','http_status',404,
+       'confirmed_on_network',false,
+       'retry_after_at',to_char(
+          CASE WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date <
+                         (now() AT TIME ZONE 'America/Campo_Grande')::date
+            THEN now()+interval '90 minutes'
+            ELSE ((now() AT TIME ZONE 'America/Campo_Grande')::date + 1)
+                       AT TIME ZONE 'America/Campo_Grande' END,
+          'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+     lease_owner=NULL,lease_until=NULL,updated_at=now()
      WHERE id=$1 AND target_key=$2 AND status='leased'
        AND publication_started_at IS NULL AND lease_owner=$3
        AND lease_generation=$4 AND lease_until>now()
