@@ -268,23 +268,49 @@ def marker_from_caption(value):
 
 
 def dismiss_cookie_banner(page):
-    """Use TikTok's own consent controls before posting; never hide UI by CSS."""
+    """Interact with TikTok's native consent controls, including shadow DOM."""
+    selectors=(
+        "tiktok-cookie-banner button",
+        "tiktok-cookie-banner [role=button]",
+        "tiktok-cookie-banner >> shadow=button",
+        "button[data-e2e*=cookie]",
+    )
+    phrases=("Reject optional", "Reject all", "Recusar", "Rejeitar", "Only necessary",
+             "Somente", "Accept all", "Aceitar", "Accept", "Confirm", "Confirmar")
     banner=page.locator("tiktok-cookie-banner")
     try:
-        if banner.count()==0 or not banner.first.is_visible(timeout=1500):
+        if banner.count()==0:
             return False
-        for name in ("Reject optional cookies","Reject all","Recusar cookies opcionais",
-                     "Rejeitar tudo","Only necessary","Somente necessários",
-                     "Accept all","Aceitar todos","Accept","Aceitar"):
-            buttons=banner.locator("button").filter(has_text=re.compile(re.escape(name),re.I))
-            if buttons.count()>0:
-                try:
-                    buttons.first.click(timeout=4000)
-                    page.wait_for_timeout(500)
+        for css in selectors:
+            try:
+                candidates=page.locator(css)
+                for k in range(min(12,candidates.count())):
+                    el=candidates.nth(k)
+                    label=((el.inner_text(timeout=1400) or "")+" "+
+                           (el.get_attribute("aria-label") or "")).strip()
+                    if not any(x.casefold() in label.casefold() for x in phrases):
+                        continue
+                    if not el.is_visible(timeout=1600):
+                        continue
+                    el.click(timeout=5000)
+                    page.wait_for_timeout(750)
                     print("SECONDARY_PRESTART_COOKIE_CONSENT_HANDLED=1",flush=True)
                     return True
-                except Exception:
-                    continue
+            except Exception:
+                continue
+        # No guessing and no forced clicks. Report only tag/type counts,
+        # never the personal session text or consent policy.
+        try:
+            detail=banner.first.evaluate("""el=>({
+              attached:!!el.isConnected,
+              visible:!!el.getClientRects().length,
+              light_buttons:el.querySelectorAll('button').length,
+              shadow:!!el.shadowRoot,
+              shadow_buttons:el.shadowRoot?.querySelectorAll('button').length||0
+            })""")
+            print("SECONDARY_PRESTART_COOKIE_DIAGNOSTIC="+json.dumps(detail),flush=True)
+        except Exception:
+            pass
         print("::warning::SECONDARY_PRESTART_COOKIE_CONSENT_CONTROL_NOT_FOUND",flush=True)
     except Exception:
         print("::warning::SECONDARY_PRESTART_COOKIE_CONSENT_NOT_READY",flush=True)
