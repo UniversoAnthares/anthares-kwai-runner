@@ -58,6 +58,29 @@ def gh(path, method="GET", obj=None):
     return json.loads(r.stdout) if r.stdout.strip() else {}
 
 
+def _issue_payload(body):
+    # Standalone producer runs from its own Windows work directory; it must
+    # not import project packages until source synchronization is complete.
+    fence = chr(96) * 3
+    text = str(body or "")
+    a = text.find(fence)
+    b = text.rfind(fence)
+    if a < 0 or b <= a:
+        return {}
+    content = text[a + 3:b].strip()
+    if content.lower().startswith("json"):
+        content = content[4:].strip()
+    try:
+        result = json.loads(content)
+        return result if isinstance(result, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def _verified_post_url(url):
+    return url if re.fullmatch(r"https://x[.]com/lucasyahn/status/[0-9]+", str(url or "")) else None
+
+
 def queue_inventory():
     items = []
     for page in range(1, 11):
@@ -70,7 +93,6 @@ def queue_inventory():
     xitems = [x for x in items if str(x.get("title") or "").startswith("[X-PUBLISH]")]
     # Invalid or uncertain issues are isolated: they never block generation
     # of unrelated source windows. Their own fingerprints still stay reserved.
-    from tools.x_publication_safety import _issue_payload
     open_queue = []
     for item in xitems:
         if item.get("state") != "open":
@@ -91,8 +113,7 @@ def queue_inventory():
         open_queue.append(item)
     windows = {}
     for issue in xitems:
-        from tools.x_publication_safety import _issue_payload
-        p = _issue_payload(issue.get("body") or "")
+            p = _issue_payload(issue.get("body") or "")
         if p.get("account") != "lucasyahn" or p.get("test_fixture"):
             continue
         source = p.get("source_id")
@@ -121,8 +142,7 @@ def queue_inventory():
                     continue
                 body = comment["body"]
                 proof = json.loads(body[body.index("{"):])
-                from tools.x_publication_safety import verified_post_url
-                url = verified_post_url(str(proof.get("post_url") or ""))
+                url = _verified_post_url(str(proof.get("post_url") or ""))
                 if proof.get("video_verified") and url:
                     confirmed_today.add(url)
             except (ValueError, TypeError, KeyError):
@@ -233,7 +253,6 @@ def enqueue(result, video, info, existing):
     scan = int(result["scan_start"])
     lo, hi = float(result["segment_start"]), float(result["segment_end"])
     # Crash-safe: previous issue, including closed one, makes this a no-op.
-    from tools.x_publication_safety import _issue_payload
     for issue in existing:
         row = _issue_payload(issue.get("body") or "")
         if (row.get("source_id") == vid
