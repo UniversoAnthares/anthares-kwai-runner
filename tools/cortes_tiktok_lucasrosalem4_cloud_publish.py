@@ -93,7 +93,19 @@ def call(action,token,payload=None):
                           " primary_http="+str(exc.code)+" backup="+type(alt_error).__name__,flush=True)
         raise SafeStop("SECONDARY_NEON_HTTP_"+str(exc.code)+"_ACTION_"+action) from exc
     except (TimeoutError,urllib.error.URLError) as exc:
-        raise SafeStop("SECONDARY_NEON_NETWORK_"+type(exc).__name__+"_ACTION_"+action) from exc
+        # No irreversible action has occurred for mirror/claim.
+        # On an ambiguous claim response the shared Neon lease fence rejects
+        # any competing claim; the same database serves both ingress routes.
+        if action in ("mirror","claim"):
+            other=BACKUP_QUEUE if QUEUE!=BACKUP_QUEUE else (
+                "https://br-crimson-unit-b89nau08-cortestiktok4.compute.c-14.us-east-1.aws.neon.tech/")
+            secondary=urllib.request.Request(
+                other+"?"+urllib.parse.urlencode({"action":action}),
+                data=request.data,headers=headers,
+                method="POST" if payload is not None else "GET")
+            try:
+                with urllib.request.urlopen(secondary,timeout=26) as resp:
+                    out=read_json(resp)
     if not out.get("ok"):
         raise SafeStop("NEON_ACTION_NOT_ACKNOWLEDGED_"+action)
     return out
@@ -437,7 +449,8 @@ def handle_claim(claimed,token,state):
 def select_queue():
     """Only choose a healthy shared Neon ledger before any mutating request."""
     global QUEUE
-    for address in (QUEUE,BACKUP_QUEUE):
+    candidates=(BACKUP_QUEUE,QUEUE) if os.getenv("FORGEJO_REPOSITORY")=="UniversoAnthares/anthares-kwai-runner" else (QUEUE,BACKUP_QUEUE)
+    for address in candidates:
         try:
             with urllib.request.urlopen(address+"?action=health",timeout=18) as resp:
                 response=read_json(resp)
