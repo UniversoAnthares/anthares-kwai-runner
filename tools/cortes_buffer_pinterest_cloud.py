@@ -425,13 +425,8 @@ def notify_rate_limit_p0():
 
 def main():
     cloud_only()
-    policy=queue("policy")
-    if not policy.get("enabled") or int(policy.get("remaining",0))<=0:
-        print(json.dumps({"pinterest_cloud":"BUFFER_BUDGET_HANDOFF_OWN",
-                          "buffer_used_today":policy.get("used"),
-                          "buffer_daily_limit":20,
-                          "buffer_weekday_enabled":bool(policy.get("enabled"))}),flush=True)
-        return 0
+    # The Buffer quota governs NEW posts only. Existing scheduled posts
+    # must still be reconciled even on disabled days or after the quota fills.
     state=queue("cooldown-status")
     if state.get("active"):
         print(json.dumps({"pinterest_cloud":"COOLDOWN_HTTP_429",
@@ -441,6 +436,15 @@ def main():
     try:
         # Readback comes first; never lose remote evidence on board outages.
         confirmed=reconcile()
+        policy=queue("policy")
+        if not policy.get("enabled") or int(policy.get("remaining",0))<=0:
+            print(json.dumps({"pinterest_cloud":"PASS",
+                              "scheduled_action":"BUFFER_BUDGET_HANDOFF_OWN",
+                              "posts_confirmed_this_run":confirmed,
+                              "buffer_used_today":policy.get("used"),
+                              "buffer_weekday_enabled":bool(policy.get("enabled"))},
+                             separators=(",",":")),flush=True)
+            return 0
         board_gate()
         status=publish_once()
         print(json.dumps({"pinterest_cloud":"PASS","scheduled_action":status,
