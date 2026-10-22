@@ -70,6 +70,15 @@ class SecondaryCloudTests(unittest.TestCase):
             self.assertEqual(q.call("claim","fake-token",{}).get("mode"),"idle")
         self.assertGreaterEqual(request.call_args.kwargs["timeout"],100)
 
+    def test_editor_clickability_retry_is_prestart_only(self):
+        source=(ROOT/"tools"/"cortes_tiktok_lucasrosalem4_cloud_publish.py").read_text(encoding="utf8")
+        self.assertIn("SECONDARY_CLOUD_PRESTART_STAGE=clickability",source)
+        self.assertIn("SECONDARY_PRESTART_CLICKABILITY_UNVERIFIED",source)
+        retry=source.index("SECONDARY_PRESTART_CLICKABILITY_RETRY")
+        fence=source.index('result=call("start",token,{"id":job_id')
+        self.assertLess(retry,fence)
+        self.assertNotIn("force=True",source[retry:fence])
+
     def test_irreversible_start_never_retries_after_http_error(self):
         from urllib.error import HTTPError
         failure=HTTPError(q.QUEUE,503,"unknown completion",{},None)
