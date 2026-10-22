@@ -17,6 +17,8 @@ on:
   workflow_run:
     workflows:
       - "Anthares Publisher QA"
+      - "CORTES Threads Cloud Handoff (fenced)"
+      - "CORTES strategic editorial metadata regression"
       - "CORTES TikTok Publisher"
       - "Kwai queue publisher"
       - "Social direct adapters contract"
