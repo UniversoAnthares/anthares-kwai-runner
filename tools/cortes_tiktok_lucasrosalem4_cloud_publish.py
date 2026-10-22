@@ -322,6 +322,83 @@ def publish_one(job,token,state):
                 browser.close()
 
 
+def reconcile_exact_studio_match(job, token, records):
+    """Read-only comparison first. Only an exact existing post may be confirmed.
+
+    This function never calls the irreversible `start` transition, and never
+    opens the upload editor for an uncertain/started record.
+    """
+    sid=str(job.get("segment_id") or "")
+    generation=int(job.get("lease_generation") or 0)
+    job_id=str(job.get("id") or "")
+    if (str(job.get("status") or "") not in ("uncertain","started")
+            or not SEGMENT.fullmatch(sid) or not generation or not job_id):
+        raise SafeStop("SECONDARY_RECONCILIATION_FENCE_INVALID")
+    target=marker(sid).casefold()
+    found={str(remote_id) for remote_id,label in (records or {}).items()
+           if VID.fullmatch(str(remote_id)) and target in str(label).casefold()}
+    if len(found)>1:
+        raise SafeStop("SECONDARY_RECONCILE_MULTIPLE_STUDIO_MATCHES")
+    if not found:
+        print("::warning::SECONDARY_QA_P0_UNCERTAIN_REQUIRES_STUDIO_REVIEW",flush=True)
+        return False
+    remote=next(iter(found))
+    result=call("confirm",token,
+                {"id":job_id,"lease_generation":generation,"remote_id":remote})
+    if str((result.get("job") or {}).get("remote_id") or "")!=remote:
+        raise SafeStop("SECONDARY_RECONCILE_CONFIRM_NOT_ACKNOWLEDGED")
+    print("SECONDARY_CLOUD_RECONCILED_EXISTING="+
+          "https://www.tiktok.com/@"+ACCOUNT+"/video/"+remote,flush=True)
+    return True
+
+
+def reconcile_uncertain(job,token,state):
+    """No media upload, no POST click and no new irreversible STARTED marker."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser=p.chromium.launch(headless=True,args=["--no-sandbox",
+                                                      "--disable-dev-shm-usage","--disable-gpu"])
+        try:
+            ctx=browser.new_context(storage_state=state,locale="pt-BR")
+            try:
+                page=ctx.new_page()
+                try:
+                    existing=studio(page)
+                finally:
+                    page.close()
+            finally:
+                ctx.close()
+        finally:
+            browser.close()
+    return reconcile_exact_studio_match(job,token,existing)
+
+
+def handle_claim(claimed,token,state):
+    """Dispatch by Neon mode; uncertain receipts never enter publish_one."""
+    mode=str(claimed.get("mode") or "")
+    job=claimed.get("job")
+    if mode in ("busy","idle","cap","paced") or job is None:
+        print("SECONDARY_CLOUD_QUEUE_"+(mode or "IDLE").upper(),flush=True)
+        return False
+    if mode=="reconcile":
+        return reconcile_uncertain(job,token,state)
+    if mode!="publish" or str(job.get("status") or "")!="leased":
+        raise SafeStop("SECONDARY_QUEUE_MODE_OR_LEASE_INVALID")
+    try:
+        publish_one(job,token,state)
+    except Exception:
+        # Pre-STARTED lease is returned to queued with bounded cooldown.
+        # STARTED remains uncertain until proven remotely.
+        try:
+            call("fail",token,{"id":job["id"],
+                "lease_generation":int(job["lease_generation"]),
+                "error":"secondary_cloud_requires_reconciliation"})
+        except Exception:
+            pass
+        raise
+    return True
+
+
 def select_queue():
     """Only choose a healthy shared Neon ledger before any mutating request."""
     global QUEUE
@@ -360,21 +437,7 @@ def main():
     sync=call("mirror",token,{})
     print("SECONDARY_CLOUD_QUEUE_MIRRORED="+str(sync.get("mirrored")),flush=True)
     claimed=call("claim",token,{})
-    job=claimed.get("job")
-    if not job:
-        print("SECONDARY_CLOUD_QUEUE_IDLE",flush=True)
-        return 0
-    try:
-        publish_one(job,token,state)
-    except Exception:
-        # Lease may have reached STARTED; never automatically requeue
-        # after a possible published post. Neon fail action distinguishes.
-        try:
-            call("fail",token,{"id":job["id"],"lease_generation":int(job["lease_generation"]),
-                                "error":"secondary_cloud_requires_reconciliation"})
-        except Exception:
-            pass
-        raise
+    handle_claim(claimed,token,state)
     return 0
 
 

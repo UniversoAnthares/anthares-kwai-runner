@@ -8,6 +8,7 @@ on:
     paths:
       - '.forgejo/workflows/anthares-tests-codeberg.yml'
       - 'tests/**'
+      - 'tools/cortes_tiktok_lucasrosalem4_cloud_publish.py'
       - 'anthares_publisher/**'
       - 'tools/cortes_qa_*.py'
       - 'tools/cortes_pinterest_*.py'
@@ -42,6 +43,12 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_cortes_qa_p0_router.py' -v
           python3 -m unittest discover -s tests -p 'test_cortes_qa_daily_round.py' -v
           python3 -m unittest discover -s tests -p 'test_cortes_qa_codeberg_p0_watch.py' -v
+      - name: TikTok queue reconciliation contract on Codeberg
+        shell: bash
+        run: |
+          set -eu
+          python3 -m py_compile tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
+          python3 -m unittest discover -s tests -p 'test_cortes_tiktok_lucas4_cloud.py' -v
       - name: Pinterest publication safety and editorial QA
         shell: bash
         run: |
