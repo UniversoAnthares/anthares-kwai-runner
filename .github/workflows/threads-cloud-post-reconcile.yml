@@ -1,0 +1,47 @@
+name: CORTES Threads read-only cloud post reconciliation
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/threads-cloud-post-reconcile.yml']
+permissions:
+  contents: read
+jobs:
+  verify_recent:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            4ef756b1-f948-4780-af26-b4ea014637bf > THREADS_ACCESS_TOKEN
+      - name: Find remotely published post using official Threads API
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const token=process.env.THREADS_ACCESS_TOKEN||'';
+          if(token.length<20)throw Error('BITWARDEN_TOKEN_UNAVAILABLE');
+          const host='https://graph.threads.net/v1.0';
+          async function get(path){
+            const r=await fetch(host+path,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(20000)});
+            const data=await r.json().catch(()=>({}));
+            if(!r.ok)throw Error('GRAPH_'+r.status+'_'+String(data?.error?.code||''));
+            return data;
+          }
+          const me=await get('/me?fields=id,username');
+          if(me.username!=='universoanthares'||!me.id)throw Error('OWNER_IDENTITY_FAILED');
+          const posts=await get('/'+encodeURIComponent(me.id)+'/threads?fields=id,permalink,timestamp,text,media_type&limit=50');
+          const cutoff=Date.parse('2026-10-22T02:48:30Z');
+          const recent=(posts.data||[]).filter(p=>Number.isFinite(Date.parse(p.timestamp))&&Date.parse(p.timestamp)>=cutoff);
+          console.log('GRAPH_OWNER_VERIFIED='+me.username);
+          console.log('GRAPH_RECENT_POST_COUNT='+recent.length);
+          for(const p of recent){
+            const u=String(p.permalink||'');
+            if(!/^https:\/\/(www\.)?threads\.com\/@universoanthares\/post\/[A-Za-z0-9_-]+\/?$/.test(u))continue;
+            console.log('GRAPH_RECENT_PROVEN='+JSON.stringify({id:p.id,permalink:u,timestamp:p.timestamp,media_type:p.media_type,text_prefix:String(p.text||'').slice(0,115)}));
+          }
+          NODE
+        env:
+          THREADS_ACCESS_TOKEN: ${{ env.THREADS_ACCESS_TOKEN }}
