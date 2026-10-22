@@ -20,7 +20,8 @@ def github(path, method="GET", body=None):
     cmd=["gh","api","repos/"+REPO+path]
     if method!="GET":cmd+=["-X",method,"--input","-"]
     result=subprocess.run(cmd,input=json.dumps(body) if body is not None else None,
-                          capture_output=True,text=True,timeout=35)
+                          capture_output=True,text=True,encoding="utf-8",
+                          errors="strict",timeout=35)
     if result.returncode:raise RuntimeError("GITHUB_UNAVAILABLE")
     return json.loads(result.stdout) if result.stdout.strip() else {}
 
@@ -99,15 +100,28 @@ def service(token,path,body=None):
     return data
 
 def cloud_owns_queue():
-    # A healthy browser alone is not an armed queue consumer. Do not let it
-    # starve local standby when the GitHub cloud publisher is disarmed.
+    """Defer to independent cloud only while a recent authenticated GH run is healthy.
+
+    A successful GH run requires current @lucasyahn verification, including
+    idle runs. Failed or delayed cloud runs release priority to Windows within
+    22 minutes. PostgreSQL atomically prevents duplicates during handover.
+    """
     try:
+        from datetime import timezone
         settings=github("/actions/variables/ANTHARES_X_AUTOPUBLISH")
-        if str(settings.get("value") or "").lower() not in ("1","true"):return False
-        r=requests.get(BASE+"/health",timeout=8)
-        j=r.json()
-        return r.status_code==200 and j.get("browser_ready") is True and j.get("vault_ready") is True
-    except Exception:return False
+        if str(settings.get("value") or "").lower() not in ("1","true"):
+            return False
+        data=github("/actions/workflows/x-anthares-browser-cloud-publisher.yml/runs?per_page=8")
+        runs=data.get("workflow_runs") or []
+        recent=next((row for row in runs if row.get("status")=="completed"),None)
+        if not recent or recent.get("conclusion")!="success":
+            return False
+        stamped=datetime.fromisoformat(str(recent.get("updated_at") or "").replace("Z","+00:00"))
+        now=datetime.now(timezone.utc)
+        age=(now-stamped).total_seconds()
+        return 0<=age<=22*60
+    except Exception:
+        return False
 
 def path_for(issue,data):
     name=Path(urlparse(data["media_url"]).path).name
