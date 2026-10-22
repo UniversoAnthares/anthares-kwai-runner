@@ -23,12 +23,20 @@ function Audit([string]$provider,[string]$state,[string]$detail) {
     Write-Output $encoded
 }
 function Invoke-ProviderGit([string[]]$gitArgs) {
-    $output=(& git.exe -C $Checkout @gitArgs 2>&1|Out-String).Trim()
-    if($LASTEXITCODE -ne 0){throw 'GIT_STEP_FAILED'}
+    # PowerShell 5.1 + ErrorActionPreference=Stop incorrectly treats git's
+    # ordinary stderr fetch progress as a terminating RemoteException.
+    # Use git exit code, never its stderr text, as the success contract.
+    $previous=$ErrorActionPreference
+    try {
+        $ErrorActionPreference='Continue'
+        $output=(& git.exe -c "safe.directory=$Checkout" -C $Checkout @gitArgs 2>$null|Out-String).Trim()
+        $exit=$LASTEXITCODE
+    } finally { $ErrorActionPreference=$previous }
+    if($exit -ne 0){throw ('GIT_STEP_FAILED_'+[string]$gitArgs[0])}
     return $output
 }
 function Descendant([string]$ancestor,[string]$descendant) {
-    & git.exe -C $Checkout merge-base --is-ancestor $ancestor $descendant 2>$null
+    & git.exe -c "safe.directory=$Checkout" -C $Checkout merge-base --is-ancestor $ancestor $descendant 2>$null
     return $LASTEXITCODE -eq 0
 }
 try {
@@ -64,15 +72,15 @@ try {
                 # GitLab mirror may contain safe sync merge commits. Merge in a
                 # disposable workspace; abort on any conflict, never force.
                 Invoke-ProviderGit @('checkout','-f','-B','anthares-gitlab-mirror-sync','refs/remotes/origin/main')|Out-Null
-                $merge=(& git.exe -C $Checkout -c user.name='Anthares Git Mirror' -c user.email='sync@anthares.invalid' merge --no-edit --no-ff 'refs/remotes/gitlab/main' -m 'sync: reconcile GitLab mirror with GitHub main' 2>&1|Out-String)
+                $merge=(& git.exe -c "safe.directory=$Checkout" -C $Checkout -c user.name='Anthares Git Mirror' -c user.email='sync@anthares.invalid' merge --no-edit --no-ff 'refs/remotes/gitlab/main' -m 'sync: reconcile GitLab mirror with GitHub main' 2>&1|Out-String)
                 if($LASTEXITCODE -ne 0) {
-                    & git.exe -C $Checkout merge --abort 2>$null|Out-Null
+                    & git.exe -c "safe.directory=$Checkout" -C $Checkout merge --abort 2>$null|Out-Null
                     throw 'GITLAB_MERGE_CONFLICT'
                 }
                 Invoke-ProviderGit @('push','gitlab','HEAD:refs/heads/main')|Out-Null
             }else{throw 'CODEBERG_DIVERGED_NO_FORCE_PUSH'}
             # An acknowledged push is not sufficient without SHA readback.
-            $remote=(& git.exe -C $Checkout ls-remote $provider refs/heads/main 2>$null|Out-String).Trim()
+            $remote=(& git.exe -c "safe.directory=$Checkout" -C $Checkout ls-remote $provider refs/heads/main 2>$null|Out-String).Trim()
             if($LASTEXITCODE -ne 0){throw 'READBACK_FAILED'}
             $actual=($remote -split '\s+')[0]
             $expected=if($provider -eq 'gitlab' -and ((Invoke-ProviderGit @('branch','--show-current')) -eq 'anthares-gitlab-mirror-sync')) {(Invoke-ProviderGit @('rev-parse','HEAD'))}else{$source}
@@ -80,11 +88,11 @@ try {
             Audit $provider 'PROVEN' $actual
         }catch{
             $reason=if($provider -eq 'codeberg'){'CODEBERG_AUTH_OR_DIVERGENCE_REQUIRES_REVIEW'}else{'GITLAB_SYNC_REQUIRES_REVIEW'}
-            Audit $provider 'BLOCKED' $reason
+            Audit $provider 'BLOCKED' ($reason+'_LINE_'+[string]$_.InvocationInfo.ScriptLineNumber+'_'+$_.Exception.GetType().Name)
         }
     }
 }catch{
-    Audit 'all' 'BLOCKED' 'SOURCE_OR_LOCAL_WORKTREE_UNAVAILABLE'
+    Audit 'all' 'BLOCKED' ('SOURCE_OR_LOCAL_WORKTREE_UNAVAILABLE_LINE_'+[string]$_.InvocationInfo.ScriptLineNumber+'_'+$_.Exception.GetType().Name)
 }finally{
     $mutex.ReleaseMutex()
     $mutex.Dispose()
