@@ -28,23 +28,9 @@ jobs:
           if ($env:TARGET_ACCOUNT -notin @('lucas4', 'universo')) { throw 'ACCOUNT_NOT_ALLOWLISTED' }
           $matched = $false
           for ($attempt = 1; $attempt -le 18; $attempt++) {
-            $github = ((git ls-remote "https://github.com/$repo.git" refs/heads/main) -split '\s+')[0]
-            $codeberg = ((git ls-remote "https://codeberg.org/$repo.git" refs/heads/main) -split '\s+')[0]
-            if ($github -match '^[0-9a-f]{40}
-          $u = [uri]$env:CODEBERG_PUSH_URL
-          if ($u.Scheme -ne 'https' -or $u.Host -ne 'codeberg.org') { throw 'CODEBERG_SECRET_ORIGIN_INVALID' }
-          $pair = $u.UserInfo.Split(':', 2)
-          if ($pair.Count -ne 2 -or !$pair[0] -or !$pair[1]) { throw 'CODEBERG_SECRET_CREDENTIALS_MISSING' }
-          $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(([uri]::UnescapeDataString($pair[0]))+':'+([uri]::UnescapeDataString($pair[1]))))
-          $headers = @{ Authorization = 'Basic '+$basic; Accept = 'application/json' }
-          $name = if ($env:TARGET_ACCOUNT -eq 'lucas4') { 'cortes-tiktok-lucas4-codeberg.yml' } else { 'cortes-tiktok-universo-codeberg.yml' }
-          $url = "https://codeberg.org/api/v1/repos/$repo/actions/workflows/$name/dispatches"
-          $body = '{"ref":"main","inputs":{"smoke":"false","publish":"true"}}'
-          $response = Invoke-WebRequest -Uri $url -Method Post -Headers $headers -Body $body -ContentType 'application/json' -TimeoutSec 40 -UseBasicParsing
-          if ([int]$response.StatusCode -notin @(200,201,202,204)) { throw 'CODEBERG_FENCED_DISPATCH_UNACKNOWLEDGED' }
-          Write-Output "CODEBERG_FENCED_DISPATCH_ACK=1 account=$env:TARGET_ACCOUNT sha=$codeberg"
-          # Authoritative publication evidence must be read from the Codeberg job and Neon ledger.
- -and $github -eq $codeberg) {
+            $github = (git ls-remote "https://github.com/$repo.git" refs/heads/main).Split()[0]
+            $codeberg = (git ls-remote "https://codeberg.org/$repo.git" refs/heads/main).Split()[0]
+            if ($github -match '^[0-9a-f]{40}$' -and $github -eq $codeberg) {
               $matched = $true
               break
             }
@@ -64,4 +50,4 @@ jobs:
           $response = Invoke-WebRequest -Uri $url -Method Post -Headers $headers -Body $body -ContentType 'application/json' -TimeoutSec 40 -UseBasicParsing
           if ([int]$response.StatusCode -notin @(200,201,202,204)) { throw 'CODEBERG_FENCED_DISPATCH_UNACKNOWLEDGED' }
           Write-Output "CODEBERG_FENCED_DISPATCH_ACK=1 account=$env:TARGET_ACCOUNT sha=$codeberg"
-          # Authoritative publication evidence must be read from the Codeberg job and Neon ledger.
+          # Final proof is a remote TikTok ID confirmed by the Neon ledger.
