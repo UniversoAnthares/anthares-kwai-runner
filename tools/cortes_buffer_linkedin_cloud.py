@@ -195,8 +195,8 @@ def main():
         results.append(status)
         if status in ("IDLE_NO_CUTS","IDLE_BUFFER_CAPACITY","SOURCE_MEDIA_MISSING_FOR_REPAIR"):
             break
-    print(json.dumps({"linkedin_cloud":"PASS","scheduled_actions":results,
-                      "posts_confirmed_this_run":confirmed},separators=(",",":")))
+    print(json.dumps({"linkedin_cloud":"PASS","scheduled_action":results[-1] if results else "IDLE_NO_CUTS",
+                      "scheduled_actions":results,"posts_confirmed_this_run":confirmed},separators=(",",":")))
     return 0
 
 
