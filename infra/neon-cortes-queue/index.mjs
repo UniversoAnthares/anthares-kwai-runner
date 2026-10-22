@@ -346,7 +346,50 @@ async function authorizePinterestBrowser(request){
 }
 async function pinterestBrowserAction(verb,b){
  const target='pinterest:lucasyahn',who='pinterest-browser:DESKTOP-FTDK0HP';
- if(!['lease','start','fail','confirm','stats','media-invalid'].includes(verb))return{ok:false,error:'BROWSER_ACTION_DENIED'};
+ if(!['lease','start','fail','confirm','stats','media-invalid','reconcile-buffer'].includes(verb))return{ok:false,error:'BROWSER_ACTION_DENIED'};
+ if(verb==='reconcile-buffer'){
+  // Device-scoped recovery when Buffer GraphQL readback is rate-limited.
+  // This never creates another Pin. Positive ownership, exact public URL,
+  // verified video duration and original scheduled job are all mandatory.
+  const id=String(b.id||''),remote=String(b.buffer_post_id||'');
+  const pin=String(b.pin_id||''),url=String(b.public_url||'');
+  const src=String(b.source_media_url||'');
+  const ms=Number(b.source_duration_ms),publicMs=Number(b.public_duration_ms);
+  if(!/^cortes-fanout-pinterest-[a-f0-9]{32}$/.test(id)||
+     !/^[a-f0-9]{24}$/.test(remote)||!/^[0-9]{10,25}$/.test(pin)||
+     url!=='https://br.pinterest.com/pin/'+pin+'/'||
+     b.board_id!=='819514532133906920'||
+     b.verified_account!=='lucasyahn'||
+     b.verified_public_board!==true||
+     !/^https:\/\/anthares\.us\/wp-content\/uploads\/anthares-clips\/[^?#]+\.mp4$/.test(src)||
+     !Number.isInteger(ms)||!Number.isInteger(publicMs)||
+     ms<10000||ms>90000||Math.abs(ms-publicMs)>120)
+     return{ok:false,error:'BUFFER_PUBLIC_PROOF_INVALID'};
+  const evidence={kind:'pinterest_public_pin_video_verified',
+      buffer_post_id:remote,external_link:url,verified_id:pin,
+      board_id:'819514532133906920',account:'lucasyahn',
+      source_duration_ms:ms,public_duration_ms:publicMs,
+      source_url_hash:sha(src),route:'device_public_readback',
+      confirmed_on_network:true};
+  // No recrossing into the publisher queue: CAS changes only a previously
+  // Buffer-scheduled UNCERTAIN row. Reject duplicate public Pin identifiers.
+  const rows=await query(`UPDATE cortes_publications p
+    SET status='confirmed',confirmation_evidence=$6::jsonb,
+        lease_owner=NULL,lease_until=NULL,updated_at=now()
+    WHERE p.id=$1 AND p.target_key=$2 AND p.remote_id=$3
+      AND p.status='uncertain'
+      AND p.confirmation_evidence->>'kind'='buffer_scheduled'
+      AND p.payload->>'media_url'=$4
+      AND NOT EXISTS (
+        SELECT 1 FROM cortes_publications other WHERE other.target_key=$2
+        AND other.id<>$1 AND other.status='confirmed'
+        AND (other.confirmation_evidence->>'verified_id'=$5 OR
+             other.confirmation_evidence->>'external_link'=$7 OR
+             other.confirmation_evidence->>'permalink'=$7))
+    RETURNING p.id,p.status,p.remote_id`,
+    [id,target,remote,src,pin,JSON.stringify(evidence),url]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'BUFFER_PUBLIC_PROOF_CAS_REJECTED'};
+ }
  if(verb==='stats'){
   const rows=await query('SELECT status,count(*)::int n FROM cortes_publications WHERE target_key=$1 GROUP BY status',[target]);
   return{ok:true,target_key:target,counts:Object.fromEntries(rows.map(x=>[x.status,Number(x.n)]))};
