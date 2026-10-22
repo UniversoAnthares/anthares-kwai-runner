@@ -1,0 +1,51 @@
+name: CORTES TikTok Codeberg lucas4 cloud primary
+on:
+  workflow_dispatch:
+    inputs:
+      smoke:
+        type: boolean
+        default: true
+        description: "Validate exact account identity and signed OIDC without posting"
+      publish:
+        type: boolean
+        default: false
+        description: "Allow one authoritative fenced queue operation"
+  schedule:
+    - cron: '*/4 * * * *'
+enable-openid-connect: true
+permissions:
+  contents: read
+concurrency:
+  group: cortes-tiktok-codeberg-lucas4
+  cancel-in-progress: false
+jobs:
+  publisher:
+    if: ${{ (forgejo.event_name == 'schedule' && vars.TIKTOK_CODEBERG_PRIMARY == 'true') || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
+    runs-on: codeberg-medium
+    timeout-minutes: 18
+    enable-openid-connect: true
+    env:
+      PYTHONUTF8: '1'
+      PYTHONUNBUFFERED: '1'
+      FORGEJO_REPOSITORY: ${{ forgejo.repository }}
+      GITHUB_REF: ${{ forgejo.ref }}
+      GITHUB_EVENT_NAME: ${{ forgejo.event_name }}
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+      TIKTOK_CODEBERG_PREFLIGHT_ONLY: ${{ forgejo.event_name == 'workflow_dispatch' && inputs.smoke && !inputs.publish && '1' || '0' }}
+      TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: 'true'
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare isolated Chromium
+        shell: bash
+        run: |
+          set -eu
+          python3 -m venv /tmp/anthares-tiktok-lucas4
+          /tmp/anthares-tiktok-lucas4/bin/python -m pip install -q --disable-pip-version-check playwright requests cryptography
+          /tmp/anthares-tiktok-lucas4/bin/python -m playwright install --with-deps chromium
+      - name: Validate identity, obtain OIDC and execute a fenced queue step
+        shell: bash
+        run: |
+          set -eu
+          /tmp/anthares-tiktok-lucas4/bin/python -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
