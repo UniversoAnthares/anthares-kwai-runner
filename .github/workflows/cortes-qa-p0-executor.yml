@@ -1,5 +1,5 @@
 name: CORTES QA P0 executor - incident diagnostics
-run-name: QA-P0 #${{ inputs.issue_number }}
+run-name: 'QA-P0 #${{ inputs.issue_number }}'
 on:
   workflow_dispatch:
     inputs:
