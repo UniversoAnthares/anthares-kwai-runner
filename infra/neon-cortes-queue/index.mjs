@@ -442,13 +442,63 @@ async function authorizePinterestBrowser(request){
 }
 async function pinterestBrowserAction(verb,b){
  const target='pinterest:lucasyahn',who='pinterest-browser:DESKTOP-FTDK0HP';
- if(!['lease','start','fail','confirm','stats','media-invalid'].includes(verb))return{ok:false,error:'BROWSER_ACTION_DENIED'};
+ if(!['lease','start','fail','confirm','stats','media-invalid','metadata-pending','metadata-enrich'].includes(verb))return{ok:false,error:'BROWSER_ACTION_DENIED'};
  if(verb==='stats'){
   const rows=await query('SELECT status,count(*)::int n FROM cortes_publications WHERE target_key=$1 GROUP BY status',[target]);
   return{ok:true,target_key:target,counts:Object.fromEntries(rows.map(x=>[x.status,Number(x.n)]))};
  }
  if(b.target_key&&b.target_key!==target)return{ok:false,error:'WRONG_TARGET'};
  if(String(b.owner||'')!==who)return{ok:false,error:'WRONG_BROWSER_OWNER'};
+ if(verb==='metadata-pending'){
+  // Read-only source titles and segment locators. No client can lease/publish.
+  const rows=await query(`SELECT id,payload->>'media_url' AS media_url,
+     payload->>'title' AS source_title,payload->>'segment_id' AS segment_id,
+     payload->>'source_start' AS source_start,
+     payload->>'duration_seconds' AS duration_seconds,
+     payload->>'editorial_policy' AS editorial_policy
+     FROM cortes_publications
+     WHERE target_key=$1 AND status='queued'
+       AND publication_started_at IS NULL AND remote_id IS NULL
+       AND payload->>'segment_id' IS NOT NULL
+       AND COALESCE(payload->>'editorial_policy','') <> 'anthares_editorial_transcript_v2'
+       AND COALESCE(confirmation_evidence->>'kind','') <> 'source_media_invalid'
+     ORDER BY created_at,id LIMIT 4`,[target]);
+  return{ok:true,jobs:rows};
+ }
+ if(verb==='metadata-enrich'){
+  const id=String(b.id||''),title=String(b.title||'').trim();
+  const description=String(b.description||'').trim();
+  const keywords=b.keywords,hashtags=b.hashtags;
+  const fingerprint=String(b.transcript_hash||'');
+  const segment=String(b.segment_id||''),sourceTitle=String(b.original_title||'');
+  if(!/^cortes-fanout-pinterest-[a-f0-9]{32}$/.test(id)||
+     !/^[a-f0-9]{64}$/.test(fingerprint)||
+     !/^g[0-9]+:[A-Za-z0-9_-]+:[0-9]+:[0-9]+$/.test(segment)||
+     !title.endsWith(' ● Universo Anthares')||title.length<40||title.length>100||
+     title===sourceTitle+' ● Universo Anthares'||
+     description.length<70||description.length>500||
+     !description.includes('www.anthares.us')||
+     !Array.isArray(keywords)||keywords.length<3||keywords.length>12||
+     !keywords.every(x=>typeof x==='string'&&x.trim().length>=3&&x.length<=65)||
+     !Array.isArray(hashtags)||hashtags.length<2||hashtags.length>12||
+     !hashtags.every(x=>typeof x==='string'&&/^#[\\p{L}0-9_]{2,40}$/u.test(x))||
+     !sourceTitle||sourceTitle.length>190)
+       return{ok:false,error:'PINTEREST_STRATEGIC_TITLE_PROOF_INVALID'};
+  const patch={title,video_title:title,description,text:description,
+       keywords,hashtags,editorial_policy:'anthares_editorial_transcript_v2',
+       editorial_transcript_hash:fingerprint,editorial_provenance:'whisper_local_ollama'};
+  const row=await query(`UPDATE cortes_publications p
+      SET payload=p.payload || $5::jsonb,updated_at=now()
+      WHERE id=$1 AND target_key=$2 AND status='queued'
+        AND publication_started_at IS NULL AND remote_id IS NULL
+        AND p.payload->>'segment_id'=$3
+        AND p.payload->>'title'=$4
+        AND COALESCE(p.payload->>'editorial_policy','') <> 'anthares_editorial_transcript_v2'
+      RETURNING id,status,payload->>'title' AS title`,
+      [id,target,segment,sourceTitle,JSON.stringify(patch)]);
+  return row.length?{ok:true,job:row[0]}:{ok:false,error:'PINTEREST_STRATEGIC_METADATA_CAS_REJECTED'};
+ }
+
  if(verb==='lease'){
   // Recover leases abandoned by crashed local workers. Never retry a video
   // after publication started: it must remain UNCERTAIN for independent QA.
