@@ -203,14 +203,19 @@ def main():
                           "until":cooldown.get("cooldown_until")}),flush=True)
         return 0
     try:
+        # Readback of existing Buffer posts is independent of today's NEW-post quota.
+        confirmed=reconcile()
+        if os.getenv("CORTES_RECONCILE_ONLY")=="1":
+            print(json.dumps({"instagram_cloud":"RECONCILE_ONLY",
+                              "posts_confirmed_this_run":confirmed,"new_posts":0}),flush=True)
+            return 0
         policy=queue("policy")
         if not policy.get("enabled") or int(policy.get("remaining",0))<=0:
             print(json.dumps({"instagram_cloud":"BUFFER_BUDGET_HANDOFF_OWN",
                               "buffer_used_today":policy.get("used"),
                               "buffer_daily_limit":20,
-                              "buffer_weekday_enabled":bool(policy.get("enabled"))}),flush=True)
+                              "buffer_weekday_enabled":bool(policy.get("enabled")),\n                              "posts_confirmed_this_run":confirmed}),flush=True)
             return 0
-        confirmed=reconcile()
         batch=6 if os.getenv("CORTES_IG_IMMEDIATE_UNTIL_UTC")=="2026-10-22T09:00:00Z" else 1
         outcomes=[]
         for attempt in range(batch):
