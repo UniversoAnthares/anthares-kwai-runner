@@ -1,0 +1,51 @@
+name: CORTES TikTok lucas4 Codeberg independent runner
+on:
+  workflow_dispatch:
+    inputs:
+      smoke:
+        type: boolean
+        default: true
+        description: "Read-only account/OIDC verification"
+      publish:
+        type: boolean
+        default: false
+        description: "Attempt at most one Neon-fenced publication"
+  schedule:
+    - cron: '2,14,26,38,50 * * * *'
+enable-openid-connect: true
+permissions:
+  contents: read
+concurrency:
+  group: cortes-tiktok-codeberg-lucas4-independent
+  cancel-in-progress: false
+jobs:
+  publisher:
+    if: ${{ (forgejo.event_name == 'schedule' && vars.TIKTOK_CODEBERG_PRIMARY == 'true' && vars.TIKTOK_CODEBERG_SELFHOSTED_ENABLED == 'true') || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
+    runs-on: anthares-codeberg-linux
+    timeout-minutes: 12
+    enable-openid-connect: true
+    env:
+      PYTHONUTF8: '1'
+      PYTHONUNBUFFERED: '1'
+      FORGEJO_REPOSITORY: ${{ forgejo.repository }}
+      GITHUB_REF: ${{ forgejo.ref }}
+      GITHUB_EVENT_NAME: ${{ forgejo.event_name }}
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+      TIKTOK_CODEBERG_PREFLIGHT_ONLY: ${{ forgejo.event_name == 'workflow_dispatch' && inputs.smoke && !inputs.publish && '1' || '0' }}
+      TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: 'true'
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare isolated Linux browser
+        shell: bash
+        run: |
+          set -eu
+          python3 -m venv /tmp/anthares-independent-tiktok
+          /tmp/anthares-independent-tiktok/bin/python -m pip install -q --disable-pip-version-check playwright requests cryptography
+          /tmp/anthares-independent-tiktok/bin/python -m playwright install --with-deps chromium
+      - name: Verify account/OIDC and run one safe Neon-fenced step
+        shell: bash
+        run: |
+          set -eu
+          /tmp/anthares-independent-tiktok/bin/python -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
