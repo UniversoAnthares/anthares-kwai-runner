@@ -17,7 +17,11 @@ permissions:
 # Exactly the same lock as primary; no two hosted publishers operate the
 # same personal account concurrently. Neon lease+generation remains authority.
 concurrency:
-  group: cortes-linkedin-personal-cloud
+  # GitHub Actions retains at most one PENDING execution in each group;
+  # sharing the primary group canceled every backup run before it had a job.
+  # The Neon owner+lease_generation CAS and publication-start marker prevent
+  # two active runners from publishing the same cut.
+  group: cortes-linkedin-personal-fallback-cloud
   cancel-in-progress: false
 jobs:
   recover-personal:
