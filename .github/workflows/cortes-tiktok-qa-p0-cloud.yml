@@ -7,6 +7,8 @@ on:
       - CORTES TikTok @lucasrosalem4 cloud publisher
       - CORTES TikTok hosted canonical Neon publisher
     types: [completed]
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       account:
@@ -60,6 +62,25 @@ jobs:
               if(r.name==='CORTES TikTok @lucasrosalem4 cloud publisher') targets=['lucas4'];
               else if(r.name==='CORTES TikTok hosted canonical Neon publisher') targets=['universo'];
               else return;
+            } else if(context.eventName==='schedule') {
+              // GITHUB_TOKEN-created incidents do not always emit a recursive issues event.
+              // Time-limited polling repairs that event-delivery gap.
+              const {data:all}=await github.rest.issues.listForRepo({
+                owner,repo,state:'open',labels:'QA-P0',sort:'updated',
+                direction:'desc',per_page:50
+              });
+              const recent=all.filter(x=>!x.pull_request &&
+                /^\\[QA[ -]P0\\]\\[tiktok\\]/i.test(x.title||'') &&
+                now-Date.parse(x.updated_at)<10*60*1000);
+              if(recent.length===0){core.notice('TIKTOK_QA_P0_NO_RECENT_INCIDENT');return;}
+              const accounts=new Set();
+              for(const candidate of recent) {
+                const body=String(candidate.body||'');
+                if(/lucasrosalem4|lucas4/i.test(body))accounts.add('lucas4');
+                else if(/universo[.]anthares/i.test(body))accounts.add('universo');
+                else {accounts.add('lucas4');accounts.add('universo');}
+              }
+              targets=[...accounts];
             } else {
               const choice=String(process.env.QA_REQUESTED_ACCOUNT||'both');
               if(!['lucas4','universo','both'].includes(choice)) throw Error('ACCOUNT_NOT_ALLOWLISTED');
@@ -97,7 +118,7 @@ jobs:
             if(issue) {
               await github.rest.issues.createComment({
                 owner,repo,issue_number:issue.number,
-                body:'[QA-P0-TIKTOK-CLOUD] Controller executed: '+context.serverUrl+'/'+owner+'/'+repo+
+                body:'[QA-P0-TIKTOK-CLOUD] Controller executed: '+'https://github.com/'+owner+'/'+repo+
                   '/actions/runs/'+context.runId+'. Fenced recovery dispatches accepted='+
                   accepted+', rate-limited='+suppressed+
                   '. Success requires TikTok remote ID and Neon confirmation. '+
