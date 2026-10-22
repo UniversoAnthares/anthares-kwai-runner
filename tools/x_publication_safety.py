@@ -37,6 +37,19 @@ def _issue_payload(body):
         return {}
 
 
+def verified_post_timestamp(url: str):
+    """Timestamp from an immutable X snowflake id; independent of delayed QA."""
+    from datetime import timezone
+    match = POST_RE.search(str(url or ""))
+    if not match:
+        return None
+    millis = (int(match.group(1)) >> 22) + 1288834974657
+    try:
+        return datetime.fromtimestamp(millis / 1000, tz=timezone.utc)
+    except (OverflowError, ValueError, OSError):
+        return None
+
+
 def confirmed_today(issue, comments, local_day, tz):
     """Require account-bound video proof in a confirmation comment from today."""
     if not str(issue.get("title", "")).startswith("[X-PUBLISH]"):
@@ -62,12 +75,10 @@ def confirmed_today(issue, comments, local_day, tz):
         url = verified_post_url(str(proof.get("post_url") or ""))
         if not url:
             continue
-        ts = c.get("created_at")
-        try:
-            stamped = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(tz)
-        except (ValueError, AttributeError):
-            continue
-        if stamped.date() == local_day:
+        # GH Actions can be delayed by many hours (and even past midnight).
+        # Count the real post date, never the later proof-comment timestamp.
+        stamped = verified_post_timestamp(url)
+        if stamped is not None and stamped.astimezone(tz).date() == local_day:
             result.add(url)
     return result
 
