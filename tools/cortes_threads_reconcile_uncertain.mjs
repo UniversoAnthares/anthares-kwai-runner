@@ -72,5 +72,5 @@ try{
  }
  fs.writeFileSync(outFile,JSON.stringify(report,null,2),'utf8');
  console.log(JSON.stringify({ok:true,...report}));
-}catch(e){report.error=String(e?.message||e);console.log(JSON.stringify({ok:false,...report}));process.exitCode=2}
+}catch(e){report.error=String(e?.message||e);try{fs.writeFileSync(outFile,JSON.stringify(report,null,2),'utf8')}catch{};console.log(JSON.stringify({ok:false,...report}));process.exitCode=2}
 finally{try{ws?.close()}catch{};if(tab)await releaseTab(port,tab);if(lockHandle){try{fs.closeSync(lockHandle);fs.unlinkSync(lockFile)}catch{}}}
