@@ -13,7 +13,8 @@ permissions:
 # Latest main SHA supersedes older requests. No ref is ever force-pushed.
 concurrency:
   group: codeberg-safe-main-mirror
-  cancel-in-progress: true
+  # Keep the running SHA sync alive; replace only the pending run on new commits.
+  cancel-in-progress: false
 
 jobs:
   mirror:
