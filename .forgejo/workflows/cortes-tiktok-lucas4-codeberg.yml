@@ -11,7 +11,7 @@ on:
         default: false
         description: "Allow one authoritative fenced queue operation"
   schedule:
-    - cron: '*/4 * * * *'
+    - cron: '*/12 * * * *'
 enable-openid-connect: true
 permissions:
   contents: read
@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publisher:
-    if: ${{ forgejo.event_name == 'schedule' || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
+    if: ${{ (forgejo.event_name == 'schedule' && vars.TIKTOK_CODEBERG_PRIMARY == 'true') || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
     runs-on: codeberg-medium
     timeout-minutes: 18
     enable-openid-connect: true
