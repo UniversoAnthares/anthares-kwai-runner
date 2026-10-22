@@ -1,0 +1,63 @@
+# Kwai safety and startup diagnostic contracts executed on Codeberg, no Android device.
+name: Kwai static safety contracts - Codeberg
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/kwai-static-safety-codeberg.yml'
+      - 'kwai_native_email_smoke.sh'
+      - 'kwai_auth_probe.py'
+      - 'tools/kwai_android_causal_probe.py'
+      - 'tools/kwai_android_startup_fingerprint.py'
+      - 'tools/kwai_ui_safe_diagnose.py'
+      - 'tests/test_kwai_android_causal_probe.py'
+      - 'tests/test_kwai_android_startup_fingerprint.py'
+      - 'tests/test_kwai_ui_safe_diagnose.py'
+      - 'tests/test_kwai_semantic_profile.py'
+      - '.github/workflows/kwai-interactive-remote-login.yml'
+  schedule:
+    - cron: '53 5 * * *'
+permissions:
+  contents: read
+jobs:
+  offline-safety:
+    runs-on: codeberg-tiny
+    timeout-minutes: 7
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - name: Verify offline Kwai diagnostics
+        shell: bash
+        run: |
+          set -eu
+          test "${FORGEJO_REPOSITORY:-}" = "UniversoAnthares/anthares-kwai-runner"
+          bash -n kwai_native_email_smoke.sh
+          python3 -m py_compile kwai_auth_probe.py tools/kwai_android_causal_probe.py tools/kwai_android_startup_fingerprint.py tools/kwai_ui_safe_diagnose.py
+          for pattern in test_kwai_android_startup_fingerprint.py test_kwai_ui_safe_diagnose.py test_kwai_android_causal_probe.py test_kwai_semantic_profile.py; do
+            python3 -m unittest discover -s tests -p "$pattern" -v
+          done
+      - name: Enforce fail-closed login identity and diagnostic privacy
+        shell: bash
+        run: |
+          set -eu
+          python3 - <<'PY'
+          from pathlib import Path
+          wf=Path('.github/workflows/kwai-interactive-remote-login.yml').read_text(encoding='utf8')
+          probe=Path('kwai_auth_probe.py').read_text(encoding='utf8')
+          shell=Path('kwai_native_email_smoke.sh').read_text(encoding='utf8')
+          for term in ("KWAI_EXPECTED_ACCOUNT: 'lucasrosalem'",
+                       'KWAI_AUTH_STATE=AUTHENTICATED_UI',
+                       'KWAI_POST_RELAUNCH_IDENTITY_VERIFIED=lucasrosalem'):
+              assert term in wf, 'KWAI_IDENTITY_CONTRACT_NOT_PROVEN'
+          assert 'strong_identity' in probe and 'KWAI_AUTH_STATE=AUTHENTICATED_UI' in probe
+          for term in ('KWAI_RECOVERY_WIDGET_IDS=*','KWAI_RECOVERY_STATE_LOOP=*',
+                       'done < /tmp/kwai-safe-recovery.log','signal "$recovery_line"'):
+              assert term in shell, 'KWAI_RECOVERY_DIAGNOSTIC_CONTRACT_INVALID'
+          print('KWAI_CODEBERG_IDENTITY_PRIVACY_CONTRACT=PASS')
+          PY
+      - name: Provenance
+        shell: bash
+        run: |
+          set -eu
+          echo KWAI_CODEBERG_STATIC_QA=PASS
+          git rev-parse HEAD
