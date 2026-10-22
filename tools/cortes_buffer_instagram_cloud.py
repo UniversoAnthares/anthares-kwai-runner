@@ -225,7 +225,10 @@ if __name__=="__main__":
     except Exception as e:
         # Only normalized queue error identifiers; no tokens, keys or JWTs.
         from tools.cortes_queue_ha import BackendUnavailable
-        reason=(str(e) if isinstance(e,BackendUnavailable) and
-                str(e).startswith("CORTES_QUEUE_") else type(e).__name__)
+        import re
+        normalized = str(e)
+        reason=(normalized if isinstance(e,(BackendUnavailable,BufferBlocked)) and
+                re.fullmatch(r"[A-Z][A-Z0-9_]{4,95}",normalized)
+                else type(e).__name__)
         print(json.dumps({"instagram_cloud":"BLOCKED","reason":reason}))
         sys.exit(2)
