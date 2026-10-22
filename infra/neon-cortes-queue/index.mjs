@@ -209,8 +209,9 @@ async function bufferAction(verb,b,platform){
            AND (now() AT TIME ZONE 'America/Campo_Grande')::date
        AND r.ordinal <= CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END
        AND (COALESCE(p.confirmation_evidence->>'kind','') <> 'source_media_invalid'
-         OR (p.confirmation_evidence->>'retry_after_date')::date <=
-              (now() AT TIME ZONE 'America/Campo_Grande')::date)
+         OR COALESCE((p.confirmation_evidence->>'retry_after_at')::timestamptz,
+          (p.confirmation_evidence->>'retry_after_date')::date AT TIME ZONE 'America/Campo_Grande',
+          now()) <= now())
       ORDER BY p.created_at,p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
    ) UPDATE cortes_publications p SET status='leased',lease_owner=$2,
     lease_generation=p.lease_generation+1,lease_until=now()+interval '180 seconds',
