@@ -73,11 +73,12 @@ class XLocalLongformSourceTests(unittest.TestCase):
             {"number":2,"title":"[X-PUBLISH] reserve-b","state":"open",
              "body":body,"comments":0}
         ]
+        snowflake = (int(localday.timestamp() * 1000) - 1288834974657) << 22
         comments=[{"user":{"login":"github-actions[bot]"},
                    "created_at":iso,
                    "body":"X_VIDEO_CONFIRMED_V1\n"+json.dumps({
                        "kind":"X_VIDEO_CONFIRMED_V1","account":"lucasyahn",
-                       "video_verified":True,"post_url":"https://x.com/lucasyahn/status/2113103163859313089"
+                       "video_verified":True,"post_url":"https://x.com/lucasyahn/status/"+str(snowflake)
                    })}]
         def fakegh(path,method="GET",obj=None):
             if path.startswith("/issues?"):return items
