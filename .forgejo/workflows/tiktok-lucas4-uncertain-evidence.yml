@@ -1,0 +1,29 @@
+name: TikTok Lucas4 uncertain evidence audit no-upload
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/tiktok-lucas4-uncertain-evidence.yml'
+      - 'tools/tiktok_lucas4_uncertain_evidence.py'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: codeberg-medium
+    timeout-minutes: 14
+    env:
+      PYTHONUNBUFFERED: '1'
+      PYTHONUTF8: '1'
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read-only authenticated Studio evidence
+        shell: bash
+        run: |
+          set -eu
+          python3 -m venv /tmp/anthares-evidence
+          /tmp/anthares-evidence/bin/python -m pip install -q playwright
+          /tmp/anthares-evidence/bin/python -m playwright install --with-deps chromium
+          /tmp/anthares-evidence/bin/python -u tools/tiktok_lucas4_uncertain_evidence.py
