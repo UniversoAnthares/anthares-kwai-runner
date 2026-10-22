@@ -67,7 +67,27 @@ def queue_inventory():
     else:
         raise RuntimeError("X_ISSUE_HISTORY_PAGINATION_INCOMPLETE")
     xitems = [x for x in items if str(x.get("title") or "").startswith("[X-PUBLISH]")]
-    open_queue = [x for x in xitems if x.get("state") == "open"]
+    # Invalid or uncertain issues are isolated: they never block generation
+    # of unrelated source windows. Their own fingerprints still stay reserved.
+    from tools.x_publication_safety import _issue_payload
+    open_queue = []
+    for item in xitems:
+        if item.get("state") != "open":
+            continue
+        parsed = _issue_payload(item.get("body"))
+        if parsed.get("platform") != "x" or parsed.get("account") != "lucasyahn":
+            continue
+        if item.get("comments"):
+            rows = gh("/issues/" + str(item["number"]) + "/comments?per_page=100")
+            if len(rows) == 100:
+                raise RuntimeError("X_OPEN_COMMENT_PAGINATION_INCOMPLETE")
+            if any(any(marker in str(c.get("body") or "") for marker in
+                       ("X_SUBMISSION_STARTED_V1", "X_POST_SUBMISSION_STARTED_V1",
+                        "X_SUBMISSION_UNCERTAIN_V1"))
+                   and (c.get("user") or {}).get("login") == "github-actions[bot]"
+                   for c in rows):
+                continue
+        open_queue.append(item)
     windows = {}
     for issue in xitems:
         from tools.x_publication_safety import _issue_payload
@@ -293,7 +313,19 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        checkpoint("FAILED",error_type=type(exc).__name__,
+        today = datetime.now(TZ).date().isoformat()
+        previous = json.loads(STATE.read_text(encoding="utf8")) if STATE.exists() else {}
+        checkpoint("FAILED", error_type=type(exc).__name__,
                    error_code=str(exc)[:120])
+        # One QA P0 notification per calendar day, never block other sources.
+        if previous.get("qa_alert_day") != today:
+            try:
+                gh("/issues/380/comments", "POST", {"body":
+                    "X_LOCAL_SOURCE_P0 day=" + today + " phase=" +
+                    str(previous.get("phase") or "unknown")[:60] +
+                    " error_type=" + type(exc).__name__})
+                checkpoint("FAILED", qa_alert_day=today)
+            except Exception:
+                pass
         print("X_LOCAL_SOURCE_FAILED=" + type(exc).__name__, flush=True)
         raise SystemExit(2)
