@@ -65,8 +65,10 @@ class SecondaryCloudTests(unittest.TestCase):
         result=Mock()
         result.__enter__=Mock(return_value=result)
         result.__exit__=Mock(return_value=False)
-        with patch.object(q.urllib.request,"urlopen",side_effect=[TimeoutError(),result]) as calls, \\
-             patch.object(q,"read_json",return_value={"ok":True,"job":None}):
+        with (
+            patch.object(q.urllib.request,"urlopen",side_effect=[TimeoutError(),result]) as calls,
+            patch.object(q,"read_json",return_value={"ok":True,"job":None}),
+        ):
             self.assertTrue(q.call("claim","fake-token",{})["ok"])
             self.assertEqual(calls.call_count,2)
             self.assertIn("lucas4-ha",calls.call_args.args[0].full_url)
