@@ -9,6 +9,11 @@ on:
         required: true
         type: boolean
         default: false
+      batch:
+        description: 'Authorized 22 Oct overnight cloud queue pump; ends before 05:00 MS'
+        required: false
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -27,10 +32,11 @@ concurrency:
 jobs:
   cloud:
     runs-on: ubuntu-24.04
-    timeout-minutes: 18
+    timeout-minutes: 350
     env:
       THREADS_ALLOW_PUBLISH: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish)) && '1' || '0' }}
       GITHUB_TOKEN: ${{ github.token }}
+      THREADS_BATCH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && inputs.batch && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,6 +45,7 @@ jobs:
       - name: Verify scripts and fail-closed fencing without side effects
         run: |
           node --check tools/cortes_threads_cloud_handoff.mjs
+          node --check tools/threads_cloud_batch_pump.mjs
           node --check tools/cortes_threads_cloud_feed.mjs
           node --check tools/cortes_threads_cloud_captions.mjs
           node --check infra/neon-cortes-threads-execution/index.mjs
@@ -52,4 +59,8 @@ jobs:
           secrets: |
             4ef756b1-f948-4780-af26-b4ea014637bf > THREADS_ACCESS_TOKEN
       - name: Verify Threads account and execute dry run or authorized single publish
+        if: env.THREADS_BATCH != '1'
         run: node tools/cortes_threads_cloud_handoff.mjs
+      - name: One-off overnight cloud queue publisher with Neon fencing
+        if: env.THREADS_BATCH == '1'
+        run: node tools/threads_cloud_batch_pump.mjs
