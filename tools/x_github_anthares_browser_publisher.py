@@ -46,7 +46,7 @@ def _neon_durable(path, payload=None):
     from urllib.parse import parse_qs
     if os.getenv("X_LEDGER_MIGRATION_VERIFIED") != "1":
         raise RuntimeError("X_NEON_LEDGER_MIGRATION_NOT_VERIFIED")
-    from tools import x_durable_ledger as ledger
+    from infra import x_durable_ledger as ledger
     parsed = urlparse(path)
     if parsed.path == "/post-status" and payload is None:
         key = (parse_qs(parsed.query).get("idempotency_key") or [""])[0]

@@ -52,7 +52,7 @@ class TestCodebergLedgerSafety(unittest.TestCase):
                     "caption_verified": True, "post_url": "https://x.com/lucasyahn/status/12345"})
 
     def test_neon_claim_delegates_to_atomic_database_ledger(self):
-        from tools import x_durable_ledger as ledger
+        from infra import x_durable_ledger as ledger
         env = {"X_LEDGER_BACKEND": "neon", "X_LEDGER_DATABASE_URL": "postgresql://a@db.neon.tech/d",
                "X_LEDGER_MIGRATION_VERIFIED": "1"}
         with patch.dict(os.environ, env, clear=True), patch.object(ledger, "begin") as begin:
@@ -62,7 +62,7 @@ class TestCodebergLedgerSafety(unittest.TestCase):
             begin.assert_called_once_with(self.key)
 
     def test_duplicate_claim_refused_without_retry(self):
-        from tools import x_durable_ledger as ledger
+        from infra import x_durable_ledger as ledger
         env = {"X_LEDGER_BACKEND": "neon", "X_LEDGER_DATABASE_URL": "postgresql://a@db.neon.tech/d",
                "X_LEDGER_MIGRATION_VERIFIED": "1"}
         with patch.dict(os.environ, env, clear=True), patch.object(
