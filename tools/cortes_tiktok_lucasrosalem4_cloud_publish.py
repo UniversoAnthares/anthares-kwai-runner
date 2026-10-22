@@ -140,11 +140,11 @@ def studio(page):
             if "/login" in page.url.lower() or page.locator('input[type=password]').count()>0:
                 raise SafeStop("SECONDARY_STUDIO_LOGIN_REQUIRED")
             links=page.locator('a[href*="/@"]').evaluate_all(
-                "(xs)=>xs.filter(x=>/\\/video\\/[0-9]+/.test(x.href)).map(x=>({href:x.href,text:(x.innerText||x.getAttribute('aria-label')||'').slice(0,700)})).slice(0,100)")
+                "(xs)=>xs.filter(x=>/\/video\/[0-9]+/.test(x.href)).map(x=>({href:x.href,text:(x.innerText||x.getAttribute('aria-label')||'').slice(0,700)})).slice(0,100)")
             authors=set()
             records={}
             for item in links:
-                match=re.search(r"/@([^/]+)/video/(\\d{12,25})",str(item.get("href") or ""))
+                match=re.search(r"/@([^/]+)/video/(\d{12,25})",str(item.get("href") or ""))
                 if match:
                     authors.add(match.group(1).casefold())
                     if item.get("text"):
