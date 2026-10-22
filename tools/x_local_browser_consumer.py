@@ -2,7 +2,7 @@
 One queued long video per invocation; Northflank cloud remains primary.
 """
 import hashlib, json, os, re, subprocess, time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -14,7 +14,7 @@ BASE="https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x"
 ROOT=Path(r"D:\AntharsWork\x-reliability-qa-20261021")
 QUEUE=ROOT/"x-local-ledger"
 TZ=ZoneInfo("America/Campo_Grande")
-STOP={"SUBMISSION_STARTED","UNCERTAIN","CONFIRMED"}
+STOP={"SUBMISSION_STARTED","UNCERTAIN","CONFIRMED","DISCARDED"}
 
 def github(path, method="GET", body=None):
     cmd=["gh","api","repos/"+REPO+path]
@@ -305,14 +305,53 @@ def main():
                 except Exception:pass
             continue
         if prior.get("phase") in STOP or int(prior.get("attempts") or 0)>=3:continue
-        try:one(issue,data,token)
-        except Exception as e:
+        try:
+            one(issue,data,token)
+            return "ONE_ITEM_VISITED"
+        except requests.exceptions.HTTPError as exc:
+            status=getattr(getattr(exc,"response",None),"status_code",0)
+            if status in (404,410):
+                old=readstate(n)
+                began=old.get("quarantine_started") or datetime.now(timezone.utc).isoformat()
+                try:
+                    elapsed=(datetime.now(timezone.utc) -
+                             datetime.fromisoformat(began.replace("Z","+00:00"))).total_seconds()
+                except (ValueError,TypeError):
+                    elapsed=0
+                if elapsed >= 86400:
+                    try:
+                        github("/issues/"+str(n)+"/comments","POST",{"body":
+                            "X_MEDIA_DISCARDED_AFTER_24H media_http="+str(status)+
+                            " first_seen="+began})
+                        github("/issues/"+str(n),"PATCH",{"state":"closed"})
+                        state(n,"DISCARDED",quarantine_started=began,media_http=status)
+                    except Exception:
+                        state(n,"QUARANTINED_MEDIA",quarantine_started=began,media_http=status)
+                    continue
+                state(n,"QUARANTINED_MEDIA",quarantine_started=began,media_http=status)
+                if old.get("phase")!="QUARANTINED_MEDIA":
+                    try:github("/issues/380/comments","POST",{"body":
+                        "X_LOCAL_P0_MEDIA_QUARANTINE issue="+str(n)+
+                        " media_http="+str(status)+" deadline_24h="+began})
+                    except Exception:pass
+                # Crucial: 404 must not consume a publication slot or hold
+                # another healthy issue until the next 10-minute scheduler run.
+                continue
+            state(n,"PREFLIGHT_FAILED",error_type=type(exc).__name__)
+            continue
+        except Exception as exc:
             phase=readstate(n).get("phase")
-            if phase=="SUBMISSION_STARTED":state(n,"UNCERTAIN",error_type=type(e).__name__)
-            elif phase not in STOP:state(n,"PREFLIGHT_FAILED",error_type=type(e).__name__)
-            try:github("/issues/380/comments","POST",{"body":"X_LOCAL_P0 issue="+str(n)+" error="+type(e).__name__})
+            if phase=="SUBMISSION_STARTED":
+                state(n,"UNCERTAIN",error_type=type(exc).__name__)
+            elif phase not in STOP:
+                state(n,"PREFLIGHT_FAILED",error_type=type(exc).__name__)
+            try:github("/issues/380/comments","POST",{"body":
+                "X_LOCAL_P0 issue="+str(n)+" error="+type(exc).__name__})
             except Exception:pass
-        return "ONE_ITEM_VISITED"
+            if phase=="SUBMISSION_STARTED":
+                return "UNCERTAIN_FENCED_NEXT_SCHEDULE"
+            # Preflight failed safely before a POST; try the next distinct issue.
+            continue
     return "QUEUE_EMPTY_OR_FENCED"
 
 if __name__=="__main__":
