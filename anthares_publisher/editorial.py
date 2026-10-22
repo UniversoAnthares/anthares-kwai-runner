@@ -74,7 +74,7 @@ def require_strategic_master(payload: dict) -> None:
         raise ValueError("CORTES_HASHTAGS_NOT_CONTEXTUAL")
 
 
-def prepare_publication_metadata(payload: dict, *, title_limit: int | None = None) -> dict:
+def prepare_publication_metadata(payload: dict, *, title_limit: int | None = None, include_inline_hashtags: bool = True) -> dict:
     """Decorate a destination payload without altering its identity or media URL.
 
     title is the editorial headline; text/description remain supplementary copy.
@@ -100,7 +100,7 @@ def prepare_publication_metadata(payload: dict, *, title_limit: int | None = Non
     for tag in unique:
         existing = re.sub(r"(?i)(?<!\w)"+re.escape(tag)+r"\b", "", existing).strip()
     body = data["title"] + ("\n" + existing if existing else "")
-    if unique:
+    if unique and include_inline_hashtags:
         body += "\n" + " ".join(unique)
     data["text"] = add_site_to_keywords(body)
     data["description"] = data["text"]
