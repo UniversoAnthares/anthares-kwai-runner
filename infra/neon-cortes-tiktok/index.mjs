@@ -56,10 +56,10 @@ async function githubRole(req) {
  if(claims.iss!=='https://token.actions.githubusercontent.com'||!aud.includes(AUDIENCE)||claims.ref!=='refs/heads/main')return'';
  if(!Number.isFinite(claims.exp)||claims.exp<=now||!Number.isFinite(claims.iat)||claims.iat>now+60)return'';
  if(claims.nbf!==undefined&&Number(claims.nbf)>now+60)return'';
- if(!['schedule','push','workflow_dispatch'].includes(claims.event_name))return'';
+ if(!['schedule','push','workflow_dispatch','workflow_run'].includes(claims.event_name))return'';
  let role='', wf='';
  if(claims.repository===CLIPPER){role='producer';wf=CLIPPER+'/.github/workflows/'+SOURCE_WF+'@refs/heads/main';}
- if(claims.repository===RUNNER){role='consumer';wf=[CONSUMER_WF,'tiktok-central-session-read.yml','cortes-tiktok-lucasrosalem4-manifest.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main');}
+ if(claims.repository===RUNNER){role='consumer';wf=[CONSUMER_WF,'tiktok-central-session-read.yml','cortes-tiktok-lucasrosalem4-manifest.yml','cortes-tiktok-primary-windows-fallback.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main');}
  if(!role||!(Array.isArray(wf)?wf:[wf]).includes(String(claims.job_workflow_ref||claims.workflow_ref||'')))return'';
  try{
    if(!jwks||Date.now()>jwksUntil){
