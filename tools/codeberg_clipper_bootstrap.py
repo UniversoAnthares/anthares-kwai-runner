@@ -5,6 +5,7 @@ Never reveal the Codeberg credential. No rewrite/force push. No CI publishing.
 Uses CODEBERG_PUSH_URL already stored as a GitHub protected secret.
 """
 import json
+import base64
 import os
 import subprocess
 import sys
@@ -33,7 +34,7 @@ def git(*args, cwd=None):
 def call(endpoint, token="", method="GET", payload=None):
     auth={"Accept":"application/json","User-Agent":"AntharesCodebergClipperBootstrap/1.0"}
     if token:
-        auth["Authorization"]="token "+token
+        auth["Authorization"]=token if token.startswith("Basic ") else "token "+token
     data=json.dumps(payload).encode() if payload is not None else None
     if data is not None:
         auth["Content-Type"]="application/json"
@@ -53,14 +54,24 @@ def main():
         raise RuntimeError("CODEBERG_PROTECTED_AUTH_UNAVAILABLE")
     token=unquote(url.password)
     status,actor=call("/user",token)
+    authenticated=token
     if status!=200 or str(actor.get("login") or "").lower()!=OWNER.lower():
-        raise RuntimeError("CODEBERG_OWNER_ADMIN_AUTH_REQUIRED")
+        # The same pre-existing Git push credential may use HTTP Basic
+        # rather than a Codeberg API token; never print either value.
+        username=unquote(url.username or "")
+        encoded=base64.b64encode((username+":"+token).encode()).decode()
+        candidate="Basic "+encoded
+        status,actor=call("/user",candidate)
+        if status==200 and str(actor.get("login") or "").lower()==OWNER.lower():
+            authenticated=candidate
+        else:
+            raise RuntimeError("CODEBERG_OWNER_ADMIN_AUTH_REQUIRED")
     expected=git("ls-remote",SOURCE,"refs/heads/main").split()[0]
     if len(expected)!=40:
         raise RuntimeError("GITHUB_SOURCE_SHA_INVALID")
     status,current=call(f"/repos/{OWNER}/{NAME}")
     if status==404:
-        created, _ =call("/user/repos", token, "POST", {"name":NAME,
+        created, _ =call("/user/repos", authenticated, "POST", {"name":NAME,
               "private":False,"auto_init":False,"default_branch":"main"})
         if created not in (200,201):
             raise RuntimeError("CODEBERG_CLIPPER_CREATE_HTTP_"+str(created))
@@ -94,7 +105,7 @@ def main():
     if status!=200:
         raise RuntimeError("CODEBERG_CLIPPER_SETTINGS_READBACK_FAILED")
     if not details.get("has_actions"):
-        changed,_=call(f"/repos/{OWNER}/{NAME}", token, "PATCH",
+        changed,_=call(f"/repos/{OWNER}/{NAME}", authenticated, "PATCH",
                        {"has_actions":True,"default_branch":"main"})
         if changed not in (200,201):
             raise RuntimeError("CODEBERG_CLIPPER_ACTIONS_ENABLE_HTTP_"+str(changed))
