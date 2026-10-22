@@ -13,7 +13,8 @@ class PersonalFailover(unittest.TestCase):
         self.assertIn("group: cortes-linkedin-personal-primary-hosted",wf)
         self.assertNotIn("group: cortes-linkedin-personal-standby-hosted",wf)
         self.assertIn("group: cortes-linkedin-personal-standby-hosted",primary)
-        self.assertIn("workflow_run:",wf)
+        self.assertNotIn("workflow_run:",wf)
+        self.assertIn("workflow_run:",primary)
         self.assertIn("schedule:",wf)
         self.assertNotIn("self-hosted",wf)
     def test_oidc_authorizes_backup_with_same_personal_fence(self):
