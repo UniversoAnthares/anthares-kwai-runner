@@ -43,7 +43,7 @@ async function githubAuth(request,allowPush=false){
  const now=Math.floor(Date.now()/1000);
  if(header.alg!=='RS256'||typeof header.kid!=='string'||header.kid.length>200||
     claims.iss!=='https://token.actions.githubusercontent.com'||
-    claims.repository!==REPO||!ALLOWED_REFS.has(claims.ref)||!(claims.event_name==='workflow_dispatch'||(allowPush&&claims.event_name==='push'))||
+    claims.repository!==REPO||!ALLOWED_REFS.has(claims.ref)||!(['workflow_dispatch','schedule'].includes(claims.event_name)||(allowPush&&claims.event_name==='push'))||
     claims.exp<=now||claims.iat>now+60||claims.nbf>now+60)return null;
  const reference=REPO+'/.github/workflows/'+WORKFLOW+'@'+claims.ref;
  if((claims.job_workflow_ref||claims.workflow_ref)!==reference)return null;
@@ -69,16 +69,18 @@ const goodUrl=u=>{
  try{const p=new URL(u);return p.protocol==='https:'&&['threads.com','www.threads.com'].includes(p.hostname)&&/^\/@universoanthares\/post\/[A-Za-z0-9_-]+\/?$/.test(p.pathname)&&!p.search&&!p.hash&&!p.username&&!p.password}catch{return false}
 };
 async function control(){
- const rows=await database("SELECT owner,epoch,lease_until,local_paused_at,local_pause_until,remote_confirmed_url FROM cortes_threads_executor_handoff WHERE target_key=$1",[TARGET]);
+ const rows=await database("SELECT owner,epoch,lease_until,local_paused_at,local_pause_until,remote_confirmed_url,cloud_primary_enabled,cloud_heartbeat_at,cloud_last_success_at FROM cortes_threads_executor_handoff WHERE target_key=$1",[TARGET]);
  return rows[0]||{};
 }
 const daySQL="(now() AT TIME ZONE 'America/Campo_Grande')::date";
 async function stats(){
+ await database("UPDATE cortes_publications p SET status='failed',updated_at=now() FROM cortes_threads_quarantine q WHERE p.id=q.id AND p.target_key=$1 AND p.status='queued' AND q.status='isolated' AND q.expires_at<=now()",[TARGET]);
+ await database("UPDATE cortes_threads_quarantine SET status='expired',updated_at=now() WHERE target_key=$1 AND status='isolated' AND expires_at<=now()",[TARGET]);
  const [controlState,counts,confirmed,queued,inflight]=await Promise.all([
   control(),database('SELECT status,count(*)::int as n FROM cortes_publications WHERE target_key=$1 GROUP BY status',[TARGET]),
-  database("SELECT id,remote_id FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND confirmation_evidence->>'kind'='threads_cloud_verified' ORDER BY updated_at DESC LIMIT 100",[TARGET]),database("SELECT id,payload->>'source_day' AS source_day FROM cortes_publications WHERE target_key=$1 AND status='queued' ORDER BY created_at ASC LIMIT 200",[TARGET]),database("SELECT count(*)::int AS n FROM cortes_publications WHERE target_key=$1 AND status IN ('started','uncertain','leased') AND (lease_owner LIKE 'github-threads:%' OR (confirmation_evidence->>'kind')='threads_cloud_unknown')",[TARGET])]);
+  database("SELECT id,remote_id FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND confirmation_evidence->>'kind'='threads_cloud_verified' ORDER BY updated_at DESC LIMIT 100",[TARGET]),database("SELECT p.id,p.payload->>'source_day' AS source_day FROM cortes_publications p WHERE p.target_key=$1 AND p.status='queued' AND NOT EXISTS (SELECT 1 FROM cortes_threads_quarantine q WHERE q.id=p.id AND q.status='isolated' AND q.expires_at>now()) ORDER BY p.created_at ASC LIMIT 200",[TARGET]),database("SELECT count(*)::int AS n FROM cortes_publications WHERE target_key=$1 AND status IN ('started','leased') AND lease_owner LIKE 'github-threads:%'",[TARGET])]);
  return{ok:true,owner:controlState.owner||'local',epoch:Number(controlState.epoch||0),
-  lease_until:controlState.lease_until||null,cloud_inflight:Number(inflight[0]?.n||0),queued_ids:queued.map(z=>z.id),queued_rows:queued.map(z=>({id:z.id,source_day:z.source_day})),confirmed:confirmed.map(z=>({id:z.id,url:z.remote_id})),
+  lease_until:controlState.lease_until||null,cloud_primary_enabled:controlState.cloud_primary_enabled===true||controlState.cloud_primary_enabled==='t',cloud_heartbeat_at:controlState.cloud_heartbeat_at||null,cloud_last_success_at:controlState.cloud_last_success_at||null,cloud_inflight:Number(inflight[0]?.n||0),queued_ids:queued.map(z=>z.id),queued_rows:queued.map(z=>({id:z.id,source_day:z.source_day})),confirmed:confirmed.map(z=>({id:z.id,url:z.remote_id})),
   counts:Object.fromEntries(counts.map(z=>[z.status,Number(z.n)]))};
 }
 async function action(body,role,claims){
@@ -87,9 +89,27 @@ async function action(body,role,claims){
   const rows=await database("UPDATE cortes_threads_executor_handoff SET local_paused_at=now(),local_pause_until=now()+interval '8 minutes',updated_at=now() WHERE target_key=$1 AND (owner='local' OR lease_until<now()) RETURNING epoch,owner,local_pause_until",[TARGET]);
   return rows[0]?{ok:true,ack:rows[0]}:{ok:false,error:'CLOUD_OWNER_ALREADY_ACTIVE'};
  }
+
+ if(role==='device'&&body.action==='activate-primary'){
+  const rows=await database("UPDATE cortes_threads_executor_handoff SET cloud_primary_enabled=true,cloud_heartbeat_at=now(),updated_at=now() WHERE target_key=$1 AND owner='local' AND local_paused_at>now()-interval '6 minutes' AND local_pause_until>now() RETURNING epoch,cloud_primary_enabled",[TARGET]);
+  return rows[0]?{ok:true,primary:rows[0]}:{ok:false,error:'PAUSE_ACK_REQUIRED'};
+ }
+ if(role==='device'&&body.action==='deactivate-primary'){
+  const rows=await database("UPDATE cortes_threads_executor_handoff SET cloud_primary_enabled=false,local_pause_until=NULL,updated_at=now() WHERE target_key=$1 AND owner='local' AND (cloud_heartbeat_at IS NULL OR cloud_heartbeat_at<now()-interval '18 minutes') AND NOT EXISTS (SELECT 1 FROM cortes_publications p WHERE p.target_key=$1 AND p.status IN ('leased','started') AND p.lease_owner LIKE 'github-threads:%') RETURNING cloud_primary_enabled",[TARGET]);
+  return rows[0]?{ok:true,standby:rows[0]}:{ok:false,error:'CLOUD_STILL_HEALTHY_OR_ACTIVE'};
+ }
  if(role!=='github')return{ok:false,error:'CLOUD_OIDC_REQUIRED'};
+ if(body.action==='heartbeat'){
+  const rows=await database("UPDATE cortes_threads_executor_handoff SET cloud_heartbeat_at=now(),updated_at=now() WHERE target_key=$1 AND cloud_primary_enabled=true RETURNING epoch,cloud_primary_enabled",[TARGET]);
+  return rows[0]?{ok:true,heartbeat:rows[0]}:{ok:false,error:'CLOUD_PRIMARY_DISABLED'};
+ }
+ if(body.action==='quarantine'){
+  if(!idValid(id)||!['MEDIA_HTTP_404','MEDIA_HTTP_410','MEDIA_HTTP_403','MEDIA_HTTP_5XX','MEDIA_FETCH_ERROR','MEDIA_INVALID','CAPTION_FETCH_ERROR'].includes(String(body.reason||'')))return{ok:false,error:'INVALID_QUARANTINE'};
+  const rows=await database("INSERT INTO cortes_threads_quarantine(id,target_key,reason_code) SELECT id,target_key,$3 FROM cortes_publications WHERE id=$1 AND target_key=$2 AND status='queued' ON CONFLICT(id) DO UPDATE SET error_count=cortes_threads_quarantine.error_count+1,last_checked_at=now(),updated_at=now() WHERE cortes_threads_quarantine.status='isolated' RETURNING id,reason_code,detected_at,expires_at,error_count",[id,TARGET,body.reason]);
+  return rows[0]?{ok:true,quarantine:rows[0],first_notice:Number(rows[0].error_count)===1}:{ok:false,error:'CANNOT_QUARANTINE_NONQUEUED'};
+ }
  if(body.action==='claim'){
-  const rows=await database("UPDATE cortes_threads_executor_handoff SET owner='cloud',epoch=epoch+1,lease_until=now()+interval '10 minutes',local_pause_until=NULL,updated_at=now() WHERE target_key=$1 AND local_paused_at>now()-interval '8 minutes' AND local_pause_until>now() AND (owner='local' OR lease_until<now()) RETURNING epoch,owner,lease_until",[TARGET]);
+  const rows=await database("UPDATE cortes_threads_executor_handoff SET owner='cloud',epoch=epoch+1,lease_until=now()+interval '10 minutes',local_pause_until=NULL,updated_at=now() WHERE target_key=$1 AND ((cloud_primary_enabled=true AND (cloud_last_success_at IS NULL OR cloud_last_success_at<now()-interval '6 minutes')) OR (local_paused_at>now()-interval '8 minutes' AND local_pause_until>now() AND $2='workflow_dispatch')) AND (owner='local' OR lease_until<now()) RETURNING epoch,owner,lease_until",[TARGET,claims?.event_name||'']);
   return rows[0]?{ok:true,lease:rows[0]}:{ok:false,error:'NO_FRESH_LOCAL_PAUSE_ACK'};
  }
  if(!Number.isSafeInteger(epoch)||epoch<1)return{ok:false,error:'INVALID_FENCE_EPOCH'};
@@ -112,7 +132,7 @@ async function action(body,role,claims){
   if(!idValid(id)||!goodUrl(String(body.url||'')))return{ok:false,error:'INVALID_VERIFICATION_URL'};
   const generation=Number(body.generation);
   const rows=await database("UPDATE cortes_publications SET status='confirmed',remote_id=$5,confirmation_evidence=jsonb_build_object('kind','threads_cloud_verified','permalink',$5,'verified_at',now(),'run_id',$6),lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND lease_generation=$4 AND ((status='started' AND lease_owner=$3) OR (status='confirmed' AND remote_id=$5 AND confirmation_evidence->>'run_id'=$6)) RETURNING id,status,remote_id",[id,TARGET,'github-threads:'+run,generation,body.url,run]);
-  if(rows[0])await database("UPDATE cortes_threads_executor_handoff SET remote_confirmed_url=$2,updated_at=now() WHERE target_key=$1 AND epoch=$3",[TARGET,body.url,epoch]).catch(()=>null);
+  if(rows[0])await database("UPDATE cortes_threads_executor_handoff SET remote_confirmed_url=$2,cloud_last_success_at=now(),cloud_heartbeat_at=now(),updated_at=now() WHERE target_key=$1 AND epoch=$3",[TARGET,body.url,epoch]).catch(()=>null);
   return rows[0]?{ok:true,job:rows[0]}:{ok:false,error:'CONFIRM_FENCED'};
  }
  if(body.action==='uncertain'){

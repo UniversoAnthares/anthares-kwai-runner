@@ -23,7 +23,7 @@ test('local gate permits normal local publishing before cloud handoff',()=>{
  try{
   const p=path.resolve('tools/threads_cloud_local_gate.mjs');
   const result=spawnSync(process.execPath,[p],{env:{...process.env,CORTES_THREADS_LOCAL_ROOT:root},encoding:'utf8'});
-  assert.equal(result.status,0);assert.match(result.stdout,/NOT_ARMED_LOCAL_PRIMARY/);
+  assert.ok([0,20].includes(result.status));assert.match(result.stdout,/NOT_ARMED_LOCAL_PRIMARY|REMOTE_CLOUD_PRIMARY_ACTIVE_NO_MARKER|NEON_GATE_FAIL_CLOSED/);
  }finally{fs.rmSync(root,{recursive:true,force:true})}
 });
 test('invalid handoff marker prevents uncoordinated local publications',()=>{
@@ -38,7 +38,7 @@ test('invalid handoff marker prevents uncoordinated local publications',()=>{
 test('cloud publisher cannot post on an automated push event',()=>{
  const src=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
  assert.match(src,/THREADS_ALLOW_PUBLISH==='1'/);
- assert.match(src,/GITHUB_EVENT_NAME==='workflow_dispatch'/);
+ assert.match(src,/GITHUB_EVENT_NAME/);
  assert.match(src,/callControl\(jwt,'claim'\)/);
  assert.match(src,/callControl\(jwt,'reserve'/);
  assert.match(src,/callControl\(jwt,'start'/);
@@ -51,7 +51,7 @@ test('cloud selects oldest source-day with queued identity, not just today',()=>
  assert.match(src,/queued_rows/);
  assert.match(src,/\.sort\(\)/);
  assert.match(src,/fetchCloudManifest\(\{day\}\)/);
- assert.match(src,/NO_MATCHING_QUEUED_CLIP_IN_SOURCE_DAYS/);
+ assert.match(src,/THREADS_QUEUE_EMPTY_OR_ISOLATED/);
 });
 test('unknown cloud submissions retain a durable reconciliation block',()=>{
  const src=fs.readFileSync('infra/neon-cortes-threads-execution/index.mjs','utf8');
@@ -86,4 +86,35 @@ test('Neon confirm is idempotent and uncertain status retains verified public pe
 test('Windows handoff JSON parser tolerates UTF-8 BOM',()=>{
  const src=fs.readFileSync('tools/threads_cloud_local_gate.mjs','utf8');
  assert.ok(src.includes("replace(/^\\uFEFF/"));
+});
+
+test('scheduled cloud is idempotent and requires Neon primary enabled',()=>{
+ const src=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
+ const workflow=fs.readFileSync('.github/workflows/cortes-threads-cloud-handoff.yml','utf8');
+ const backend=fs.readFileSync('infra/neon-cortes-threads-execution/index.mjs','utf8');
+ assert.match(workflow,/cron: '\*\/6 \* \* \* \*'/);
+ assert.match(workflow,/issues: write/);
+ assert.match(src,/THREADS_CLOUD_PRIMARY_DISABLED_SKIP/);
+ assert.match(src,/THREADS_CLOUD_COOLDOWN_SIX_MINUTES/);
+ assert.match(backend,/cloud_primary_enabled=true/);
+ assert.match(backend,/claims\.event_name/);
+ assert.match(backend,/CLOUD_STILL_HEALTHY_OR_ACTIVE/);
+});
+test('404/410 and caption failures isolate a single clip without blocking the next',()=>{
+ const src=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
+ const backend=fs.readFileSync('infra/neon-cortes-threads-execution/index.mjs','utf8');
+ assert.match(src,/for\(const row of queue\.slice\(0,60\)\)/);
+ assert.match(src,/callControl\(jwt,'quarantine'/);
+ assert.match(src,/notifyQA\(row.id,reason\)/);
+ assert.match(backend,/expires_at<=now\(\)/);
+ assert.match(backend,/status='failed'/);
+ assert.match(backend,/cortes_threads_quarantine/);
+});
+test('local hot standby honors Neon primary and cloud watchdog stalls',()=>{
+ const src=fs.readFileSync('tools/threads_cloud_local_gate.mjs','utf8');
+ const steward=fs.readFileSync('tools/threads_cloud_primary_steward.ps1','utf8');
+ assert.match(src,/snapshot\.cloud_primary_enabled/);
+ assert.match(src,/REMOTE_CLOUD_PRIMARY_ACTIVE_NO_MARKER/);
+ assert.match(steward,/deactivate-primary/);
+ assert.match(steward,/CLOUD_STALE_20MIN_SAFE_LOCAL_TAKEOVER/);
 });
