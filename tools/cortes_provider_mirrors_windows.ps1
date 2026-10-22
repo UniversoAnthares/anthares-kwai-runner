@@ -22,8 +22,8 @@ function Audit([string]$provider,[string]$state,[string]$detail) {
     $encoded|Add-Content -Encoding UTF8 -Path (Join-Path $folder 'mirror-events.jsonl')
     Write-Output $encoded
 }
-function Invoke-ProviderGit([string[]]$args) {
-    $output=(& git.exe -C $Checkout @args 2>&1|Out-String).Trim()
+function Invoke-ProviderGit([string[]]$gitArgs) {
+    $output=(& git.exe -C $Checkout @gitArgs 2>&1|Out-String).Trim()
     if($LASTEXITCODE -ne 0){throw 'GIT_STEP_FAILED'}
     return $output
 }
