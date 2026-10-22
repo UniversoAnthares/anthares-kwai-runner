@@ -8,7 +8,13 @@ on:
       - 'tools/cortes_queue_ha.py'
   schedule:
     - cron: '8,23,38,53 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      reconcile_only:
+        description: 'Only reconcile previously scheduled posts; never create a new post'
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
   id-token: write
@@ -38,6 +44,7 @@ jobs:
         shell: bash
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
+          CORTES_RECONCILE_ONLY: ${{ inputs.reconcile_only && '1' || '0' }}
           CORTES_QUEUE_PRIMARY: neon
           CORTES_IG_IMMEDIATE_UNTIL_UTC: '2026-10-22T09:00:00Z'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

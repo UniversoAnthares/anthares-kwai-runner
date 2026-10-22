@@ -486,6 +486,11 @@ def main():
     try:
         # Readback comes first; never lose remote evidence on board outages.
         confirmed=reconcile()
+        if os.getenv("CORTES_RECONCILE_ONLY")=="1":
+            print(json.dumps({"pinterest_cloud":"RECONCILE_ONLY",
+                              "posts_confirmed_this_run":confirmed,"new_posts":0},
+                             separators=(",",":")),flush=True)
+            return 0
         # Eight unresolved Buffer reservations exhaust the producer lane.
         # Surface this as backpressure rather than reporting a healthy PASS.
         pending=queue("pending").get("jobs") or []

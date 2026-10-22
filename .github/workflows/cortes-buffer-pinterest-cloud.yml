@@ -13,7 +13,13 @@ on:
       - .github/workflows/cortes-buffer-pinterest-cloud.yml
   schedule:
     - cron: '1,16,31,46 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      reconcile_only:
+        description: 'Only reconcile previously scheduled posts; never create a new post'
+        type: boolean
+        required: false
+        default: false
   # Automatically recover when the independent Buffer probe completes.
   # Both triggers share one concurrency group and the same Neon fencing.
   workflow_run:
@@ -56,6 +62,7 @@ jobs:
         id: publisher
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
+          CORTES_RECONCILE_ONLY: ${{ inputs.reconcile_only && '1' || '0' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CORTES_QUEUE_PRIMARY: neon
           BUFFER_PINTEREST_BOARD_ID: '819514532133906920'
