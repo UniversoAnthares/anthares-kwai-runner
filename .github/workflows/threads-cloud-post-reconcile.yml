@@ -46,7 +46,7 @@ jobs:
             if(oldest<cutoff||!next)break;
             const u=new URL(next);
             if(u.origin!==new URL(host).origin||!u.pathname.startsWith('/v1.0/'))throw Error('PAGINATION_ORIGIN_REJECTED');
-            cursor=u.pathname+u.search;
+            cursor=u.pathname.slice('/v1.0'.length)+u.search;
           }
           console.log('GRAPH_PAGES_CHECKED='+pages);
           console.log('GRAPH_REACHED_TARGET_WINDOW='+(oldest<cutoff));
