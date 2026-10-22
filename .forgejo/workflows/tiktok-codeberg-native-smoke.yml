@@ -1,0 +1,43 @@
+name: TikTok Codeberg native no-upload OIDC proof dispatcher
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/tiktok-codeberg-native-smoke.yml'
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: tiktok-codeberg-native-smoke
+  cancel-in-progress: false
+jobs:
+  dispatch:
+    runs-on: codeberg-tiny
+    timeout-minutes: 3
+    env:
+      FORGEJO_TOKEN: ${{ forgejo.token }}
+    steps:
+      - name: Dispatch account smoke directly through Forgejo action token
+        shell: bash
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          token=os.environ.get("FORGEJO_TOKEN","")
+          if len(token)<12:
+              raise RuntimeError("FORGEJO_ACTION_TOKEN_UNAVAILABLE")
+          root="https://codeberg.org/api/v1/repos/UniversoAnthares/anthares-kwai-runner/actions/workflows/"
+          data=json.dumps({"ref":"main","inputs":{"smoke":True,"publish":False}}).encode()
+          for name in ("cortes-tiktok-universo-codeberg.yml","cortes-tiktok-lucas4-codeberg.yml"):
+              req=urllib.request.Request(root+name,data=data,method="POST",
+                  headers={"Authorization":"token "+token,
+                           "Content-Type":"application/json","Accept":"application/json"})
+              try:
+                  with urllib.request.urlopen(req,timeout=25) as response:
+                      if response.status not in (200,201,204):
+                          raise RuntimeError("DISPATCH_UNACKNOWLEDGED")
+              except urllib.error.HTTPError as e:
+                  print("CODEBERG_NATIVE_DISPATCH_HTTP="+str(e.code)+" workflow="+name,flush=True)
+                  raise
+              print("CODEBERG_NATIVE_OIDC_SMOKE_DISPATCHED="+name,flush=True)
+          PY
