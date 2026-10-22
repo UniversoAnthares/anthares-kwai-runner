@@ -77,7 +77,8 @@ async function identity(request){
  if(repo===REPO){
   platform=Object.keys(BUFFER_WORKFLOWS).find(p=>BUFFER_WORKFLOWS[p]===wf);
   if(wf==='cortes-buffer-instagram-windows-fallback.yml')platform='instagram';
-  if(platform)role='buffer';
+  if(wf==='cortes-instagram-direct-cloud.yml'){role='instagram-direct';platform='instagram';}
+  else if(platform)role='buffer';
   else if(RUNNER_PRODUCERS.has(wf))role='producer';
   else if(PROBE_WORKFLOWS.has(wf))role='probe';
   else if(wf==='cortes-neon-ha-oidc-proof.yml'){role='probe';platform='linkedin';}
@@ -135,6 +136,81 @@ async function writeProbe(body){
  await query('DELETE FROM cortes_queue_ha_probe WHERE nonce=$1',[nonce]);
  return{ok:true,probe:'SIGNED_OIDC_NEON_WRITE_READ_DELETE',database_ok:true};
 }
+async function instagramDirectAction(verb,b){
+ const target='instagram:universoanthares';
+ if(verb==='lease'){
+  if(b.target_key!==target||b.owner!=='instagram-direct:github-cloud-v1')
+    return {ok:false,error:'DIRECT_OWNER_INVALID'};
+  // Provider quota and CORTES hard daily limit are separate; both apply.
+  const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+  const used=await query(`SELECT count(*)::int AS n FROM cortes_publications
+    WHERE target_key=$1 AND (
+      status='confirmed' AND updated_at>=${day}
+      OR publication_started_at>=${day} AND status IN ('started','uncertain','confirmed')
+    )`,[target]);
+  if(Number(used[0]?.n||0)>=100)return {ok:true,job:null,daily_limit_reached:true,limit:100};
+  const row=await query(`WITH candidate AS (
+    SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued'
+    ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1
+   ) UPDATE cortes_publications p SET status='leased',lease_owner=$2,
+    lease_generation=p.lease_generation+1,lease_until=now()+interval '20 minutes',updated_at=now()
+    FROM candidate WHERE p.id=candidate.id AND p.status='queued'
+    RETURNING p.id,p.target_key,p.payload,p.duration_class,p.lease_generation`,
+    [target,b.owner]);
+  return {ok:true,job:row[0]||null};
+ }
+ const id=String(b.id||''),owner=String(b.owner||''),gen=Number(b.lease_generation);
+ if(!id||owner!=='instagram-direct:github-cloud-v1'||!Number.isSafeInteger(gen)||gen<1)
+  return {ok:false,error:'DIRECT_FENCE_INVALID'};
+ if(verb==='start'){
+  const row=await query(`UPDATE cortes_publications SET status='started',
+    publication_started_at=COALESCE(publication_started_at,now()),updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3
+      AND lease_generation=$4 AND lease_until>now() RETURNING id,status`,
+    [id,target,owner,gen]);
+  return row.length?{ok:true,job:row[0]}:{ok:false,error:'DIRECT_FENCE_STALE'};
+ }
+ if(verb==='missing'){
+  const evidence={kind:'source_media_http_404',confirmed_on_network:false,
+    quarantine_at:new Date().toISOString(),discard_policy:'next_local_daily_round'};
+  const rows=await query(`UPDATE cortes_publications SET status='uncertain',
+    confirmation_evidence=$5::jsonb,lease_owner=NULL,lease_until=NULL,updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3
+      AND lease_generation=$4 AND publication_started_at IS NULL RETURNING id,status`,
+    [id,target,owner,gen,JSON.stringify(evidence)]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'DIRECT_FENCE_STALE'};
+ }
+ if(verb==='fail'){
+  const rows=await query(`UPDATE cortes_publications SET
+    status=CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain' END,
+    confirmation_evidence=CASE WHEN publication_started_at IS NULL THEN confirmation_evidence
+      ELSE jsonb_build_object('kind','instagram_direct_submission_unverified',
+         'confirmed_on_network',false,'requires_manual_reconciliation',true) END,
+    lease_owner=NULL,lease_until=NULL,updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status IN ('leased','started')
+      AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status`,
+    [id,target,owner,gen]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'DIRECT_FENCE_STALE'};
+ }
+ if(verb==='confirm'){
+  const link=String(b.permalink||''),remote=String(b.media_id||'');
+  let u;try{u=new URL(link)}catch{return {ok:false,error:'DIRECT_PERMALINK_INVALID'}};
+  if(u.protocol!=='https:'||!['instagram.com','www.instagram.com'].includes(u.hostname)
+       ||!/^\/(reel|p)\/[A-Za-z0-9_-]+\/?$/.test(u.pathname)
+       ||u.search||u.hash||u.username||u.password||!/^\d{6,30}$/.test(remote))
+    return {ok:false,error:'DIRECT_PERMALINK_INVALID'};
+  const evidence={kind:'instagram_graph_reel_permalink_verified',remote_id:remote,
+    permalink:link,confirmed_on_network:true};
+  const rows=await query(`UPDATE cortes_publications SET status='confirmed',
+    remote_id=$5,confirmation_evidence=$6::jsonb,lease_owner=NULL,lease_until=NULL,updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status='started' AND lease_owner=$3
+      AND lease_generation=$4 RETURNING id,status,remote_id`,
+    [id,target,owner,gen,remote,JSON.stringify(evidence)]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'DIRECT_FENCE_STALE'};
+ }
+ return {ok:false,error:'DIRECT_ACTION_INVALID'};
+}
+
 async function bufferAction(verb,b,platform){
  const dest=target(platform),owner='buffer-'+platform+':';
  const allowed=new Set(['lease','start','fail','media-missing','scheduled','pending','reconcile','stats','retention','cooldown','cooldown-status','policy']);
@@ -584,6 +660,11 @@ export default {async fetch(request){
    if(actor.workflow==='cortes-linkedin-neon-fanout.yml'&&body.platform!=='linkedin')
        return answer({ok:false,error:'WORKFLOW_DESTINATION_MISMATCH'},403);
    return answer(await enqueue(body));
+  }
+  if(action.startsWith('instagram-direct-')){
+   if(actor.role!=='instagram-direct')return answer({ok:false,error:'DIRECT_WORKER_ONLY'},403);
+   const out=await instagramDirectAction(action.slice('instagram-direct-'.length),body);
+   return answer(out,out.ok?200:409);
   }
   if(action.startsWith('buffer-')){
    if(actor.role!=='buffer')return answer({ok:false,error:'BUFFER_WORKER_ONLY'},403);
