@@ -30,6 +30,8 @@ def http(url, method="GET", payload=None, headers=None):
     if body:h["Content-Type"]="application/json"
     req=urllib.request.Request(url,method=method,headers=h,data=body)
     with urllib.request.urlopen(req,timeout=35) as response:
+        if response.status==204:
+            return {"ok":True}
         return json.load(response)
 
 def marker(*parts):
@@ -184,6 +186,19 @@ def create_issue(item):
                 {"title":title,"body":body,
                  "labels":["QA-P0","publication-failure"]})
 
+def dispatch_controller(issue_number):
+    """Explicit workflow_dispatch: GITHUB_TOKEN-created issues suppress issues events."""
+    number=int(issue_number)
+    if number<1:raise RuntimeError("QA_P0_INVALID_ISSUE_NUMBER")
+    result=http("https://api.github.com/repos/"+HUB+
+                "/actions/workflows/cortes-qa-p0-controller.yml/dispatches",
+                "POST",{"ref":"main","inputs":{"issue_number":str(number)}})
+    if not result.get("ok"):
+        raise RuntimeError("QA_P0_CONTROLLER_DISPATCH_NOT_ACKNOWLEDGED")
+    print("CORTES_QA_P0_CONTROLLER_DISPATCHED issue="+str(number))
+    return True
+
+
 def main():
     if not TOKEN:raise RuntimeError("GITHUB_TOKEN_REQUIRED")
     items=[]
@@ -212,6 +227,7 @@ def main():
         if not created.get("number"):raise RuntimeError("P0_ISSUE_UNCONFIRMED")
         posted+=1
         seen.add(item["id"])
+        dispatch_controller(created["number"])
         print("CORTES_QA_P0_CREATED network="+item["network"]+" issue="+str(created["number"]))
     print("CORTES_QA_ROUTER_OK observations="+str(len(items))+" opened="+str(posted)+" sources_failed="+str(len(bad)))
     return 0
