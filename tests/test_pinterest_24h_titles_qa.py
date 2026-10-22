@@ -25,7 +25,7 @@ class PinterestQA24hAndTitles(unittest.TestCase):
   self.assertIn("p.status='queued'",self.queue)
   self.assertIn("publication_started_at IS NULL AND remote_id IS NULL",self.queue)
   self.assertIn("editorial_transcript_hash",self.queue)
-  self.assertIn("CORTES_STRATEGIC", (ROOT/'anthares_publisher/editorial.py').read_text())
+  self.assertIn("CORTES_STRATEGIC", (ROOT/'anthares_publisher/editorial.py').read_text(encoding='utf8'))
  def test_editorial_pipeline_uses_local_models_no_fake_titles(self):
   self.assertIn("WhisperModel('small'",self.worker)
   self.assertIn("qwen2.5:3b",self.worker)
