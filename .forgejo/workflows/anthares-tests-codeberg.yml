@@ -21,7 +21,7 @@ on:
       - 'tools/cortes_buffer_pinterest_cloud.py'
       - 'tools/cortes_linkedin_neon_fanout.py'
       - 'tools/x_github_anthares_browser_publisher.py'
-      - 'tools/x_durable_ledger.py'
+      - 'infra/x_durable_ledger.py'
       - '.forgejo/workflows/x-codeberg-primary.yml'
       - 'infra/neon-cortes-queue/**'
       - 'vercel-ara-primary/api/cortes-queue.mjs'
@@ -86,7 +86,7 @@ jobs:
         shell: bash
         run: |
           set -eu
-          python3 -m py_compile tools/x_github_anthares_browser_publisher.py tools/x_durable_ledger.py
+          python3 -m py_compile tools/x_github_anthares_browser_publisher.py infra/x_durable_ledger.py
           python3 -m unittest discover -s tests -p 'test_x_neon_codeberg_safety.py' -v
       - name: Provenance
         shell: bash
