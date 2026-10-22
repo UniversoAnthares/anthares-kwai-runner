@@ -58,11 +58,24 @@ jobs:
           path: ~/.cache/huggingface
           key: instagram-whisper-small-v1
 
-      - name: Install media dependencies
+      - name: Cache compatible ASR dependency wheels
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: instagram-asr-py312-fw121-av171-v1
+
+      - name: Install media dependencies (bounded)
+        shell: bash
+        timeout-minutes: 12
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg >/dev/null
-          python -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==17.1.0' yt-dlp
+          set -euo pipefail
+          # Hosted Ubuntu normally provides ffmpeg. Avoid a full apt index
+          # refresh on every post; missing ffmpeg is an explicit bounded repair.
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            timeout 180s sudo apt-get update -qq
+            timeout 240s sudo apt-get install -y -qq ffmpeg >/dev/null
+          fi
+          timeout 600s python -m pip install --disable-pip-version-check --timeout 30 --retries 2 'faster-whisper==1.2.1' 'av==17.1.0' yt-dlp
           # ABI smoke check before any download, render or publication.
           python - <<'PY'
           import av, io
