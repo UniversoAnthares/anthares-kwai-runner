@@ -47,16 +47,16 @@ class BufferDefiniteRejection(BufferBlocked):
 
 
 def redacted_mutation_diagnostic(message: str) -> str:
-    """Keep human-readable error guidance without dumping secrets or captions."""
+    """Keep useful API error guidance without logging captions, URLs or IDs."""
     import re
     safe = str(message or "")[:500]
-    safe = re.sub(r"https?://[^\\s]+", "[URL]", safe, flags=re.I)
-    safe = re.sub(r"\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b", "[EMAIL]", safe)
-    safe = re.sub(r"(['\\\"])(?:(?!\\1).){1,140}\\1", "[QUOTED_VALUE]", safe)
-    safe = re.sub(r"\\b[A-Za-z0-9_-]{22,}\\b", "[ID]", safe)
-    safe = re.sub(r"[^A-Za-z0-9 .,:;()!?\\[\\]\\-/]+", "?", safe)
+    safe = re.sub(r"https?://[^\s]+", "[URL]", safe, flags=re.I)
+    safe = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL]", safe)
+    safe = re.sub(r'"[^"]{1,140}"', "[QUOTED_VALUE]", safe)
+    safe = re.sub(r"'[^']{1,140}'", "[QUOTED_VALUE]", safe)
+    safe = re.sub(r"\b[A-Za-z0-9_-]{22,}\b", "[ID]", safe)
+    safe = re.sub(r"[^A-Za-z0-9 .,:;()!?\[\]\-/]+", "?", safe)
     return " ".join(safe.split())[:180]
-
 
 
 def api(query: str, token: str | None = None) -> dict:
