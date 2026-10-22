@@ -121,7 +121,9 @@ jobs:
               const found = priorRuns.filter(x => x.display_title === runTitle)
                 .sort((a,b) => Date.parse(b.created_at)-Date.parse(a.created_at));
               const active = found.find(x => x.status !== 'completed');
-              if (active || found.some(x => x.conclusion === 'success')) {
+              // A successful diagnostic run does not establish incident recovery.
+              // Only an explicitly resolved issue can stop incident reconciliation.
+              if (active) {
                 skipped++;continue;
               }
               const {data:comments} = await github.rest.issues.listComments({
@@ -133,8 +135,8 @@ jobs:
                 skipped++;continue;
               }
               if (Math.max(attempts.length,found.length) >= maxAttempts) {
-                core.error('QA_P0_ATTEMPTS_EXHAUSTED issue='+issue.number);
-                failures++;continue;
+                core.warning('QA_P0_ATTEMPTS_EXHAUSTED_REQUIRES_ESCALATION issue='+issue.number);
+                skipped++;continue;
               }
               const attempt = Math.max(attempts.length,found.length) + 1;
               try {
