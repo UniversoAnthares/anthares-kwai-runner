@@ -6,9 +6,10 @@ const workflow=readFileSync(new URL('../.github/workflows/cortes-buffer-linkedin
 test('secondary wakeup is pinned to main branch and trusted upstream workflow',()=>{
   for(const expected of [
     'workflow_run:',
-    'workflows: ["CORTES 3 independent networks - all shorts cloud fanout"]',
+    'workflows: ["CORTES 3 independent networks - all shorts cloud fanout", "CORTES Pinterest - automatic Buffer cloud publisher"]',
     'types: [completed]',
-    'branches: [main]'
+    'branches: [main]',
+    "github.event.workflow_run.conclusion == 'success'",
   ]) assert.ok(workflow.includes(expected),expected);
 });
 
