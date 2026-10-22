@@ -296,7 +296,10 @@ def main():
     QUEUE.mkdir(parents=True,exist_ok=True)
     if cloud_owns_queue():return "CLOUD_PRIMARY_ACTIVE"
     token=auth()
+    from tools.x_long_schedule import eligible_time
     for issue,data in listed():
+        if not eligible_time(data.get("planned_at")):
+            continue
         n=issue["number"];prior=readstate(n)
         if prior.get("phase")=="CONFIRMED":
             url=str(prior.get("post_url") or "")
