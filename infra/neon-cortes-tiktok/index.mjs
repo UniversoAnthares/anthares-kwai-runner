@@ -3,6 +3,7 @@
 // Two Github OIDC roles: Anthares Clipper produces, public kwai-runner consumes.
 // No static credentials travel between repos, and no unverified upload is retried.
 import crypto from 'node:crypto';
+import { codebergConsumerRole } from './codeberg-oidc.mjs';
 
 
 const QUEUE_URL='https://anthares-remote-primary.vercel.app/api/cortes-tiktok';
@@ -229,7 +230,7 @@ async function handler(req,res){
       isolation:'separate_from_kwai',fencing:true,
       db_ledger_total:Number(check.rows[0].total)});
   }
-  const role=await githubRole(req);
+  const role=(await githubRole(req)) || (await codebergConsumerRole(req,AUDIENCE,'cortes-tiktok-universo-codeberg.yml'));
   if(!role)return reply(res,401,{ok:false,error:'unauthorized_oidc'});
   const b=body(req);
   if(req.method==='POST'&&action==='enqueue'&&role==='producer')return reply(res,200,await enqueue(b));
