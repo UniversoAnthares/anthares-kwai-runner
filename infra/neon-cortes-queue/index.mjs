@@ -583,7 +583,9 @@ async function pinterestBrowserAction(verb,b){
        keywords,hashtags,editorial_policy:'anthares_editorial_transcript_v2',
        editorial_transcript_hash:fingerprint,editorial_provenance:'whisper_local_ollama'};
   const row=await query(`UPDATE cortes_publications p
-      SET payload=p.payload || $5::jsonb,updated_at=now()
+      SET payload=p.payload || $5::jsonb,updated_at=now(),
+          confirmation_evidence=CASE WHEN p.confirmation_evidence->>'kind'='editorial_invalid_qa'
+            THEN NULL ELSE p.confirmation_evidence END
       WHERE id=$1 AND target_key=$2 AND status='queued'
         AND publication_started_at IS NULL AND remote_id IS NULL
         AND p.payload->>'segment_id'=$3
