@@ -68,3 +68,22 @@ test('dry-run must verify signed GitHub OIDC without publishing',()=>{
  assert.match(backendSource,/allowPush&&claims\.event_name==='push'/);
  assert.match(backendSource,/mutations_allowed:false/);
 });
+
+test('cloud Graph receipt is logged before Neon confirmation and never retried as a post',()=>{
+ const src=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
+ const g=src.indexOf('THREADS_GRAPH_POSTED='),c=src.indexOf("await callControl(jwt,'confirm'");
+ assert.ok(g>=0&&c>g);
+ assert.match(src,/for\(let attempt=1;attempt<=4;attempt\+\+\)/);
+ assert.match(src,/url:verified\?\.url\|\|null/);
+ assert.equal((src.match(/verified=await publishVideo/g)||[]).length,1);
+});
+test('Neon confirm is idempotent and uncertain status retains verified public permalink',()=>{
+ const src=fs.readFileSync('infra/neon-cortes-threads-execution/index.mjs','utf8');
+ assert.match(src,/status='confirmed' AND remote_id=\$5/);
+ assert.match(src,/submitted_post_url/);
+ assert.match(src,/reason_code:reason/);
+});
+test('Windows handoff JSON parser tolerates UTF-8 BOM',()=>{
+ const src=fs.readFileSync('tools/threads_cloud_local_gate.mjs','utf8');
+ assert.ok(src.includes("replace(/^\\uFEFF/"));
+});
