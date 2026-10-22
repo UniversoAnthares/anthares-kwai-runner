@@ -29,7 +29,7 @@ class PrimaryAndStandby(unittest.TestCase):
         self.assertNotIn("workflow_run:",primary)
         self.assertIn('workflows: ["CORTES LinkedIn personal - primary hosted cloud publisher"]',standby)
         self.assertIn("group: cortes-linkedin-personal-primary-hosted",primary)
-        self.assertIn("group: cortes-linkedin-personal-standby-hosted",standby)
+        self.assertIn("group: cortes-linkedin-personal-standby-${{ github.event_name }}",standby)
         self.assertIn("lease_generation",neon)
         self.assertIn("P_OWNER='linkedin-personal:github-cloud-v1'",neon)
         self.assertIn("if: steps.primary-health.outputs.run == 'true'",standby)
