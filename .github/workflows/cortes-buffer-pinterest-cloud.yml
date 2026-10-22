@@ -9,6 +9,7 @@ on:
       - tests/test_pinterest_editorial_preflight_isolation.py
       - tests/test_pinterest_reconcile_quota.py
       - tests/test_pinterest_backpressure_evidence.py
+      - tests/test_pinterest_batch_receipts.py
       - .github/workflows/cortes-buffer-pinterest-cloud.yml
   schedule:
     - cron: '1,16,31,46 * * * *'
@@ -42,6 +43,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_pinterest_editorial_preflight_isolation.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_reconcile_quota.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_backpressure_evidence.py' -v
+          python -m unittest discover -s tests -p 'test_pinterest_batch_receipts.py' -v
           python -m py_compile tools/cortes_buffer_pinterest_cloud.py anthares_publisher/editorial.py
       - name: Read Buffer key from Anthares Secrets without logging it
         uses: bitwarden/sm-action@v2
