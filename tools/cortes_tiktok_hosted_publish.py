@@ -47,7 +47,20 @@ MIN_SIZE=32*1024
 def preflight_vault():
     from tiktok_session_authority import load_canonical_state
     from playwright.sync_api import sync_playwright
-    state,meta=load_canonical_state()
+    if os.getenv("CORTES_CODEBERG_RUNTIME")=="true":
+        import base64,zlib
+        raw=os.getenv("TIKTOK_UNIVERSO_STORAGE_STATE","")
+        if not 5<len(raw)<55000:raise q.SafeStop("CODEBERG_PRIMARY_SESSION_MISSING")
+        try:
+            decoded=zlib.decompress(base64.b64decode(raw,validate=True))
+            if len(decoded)>600000:raise q.SafeStop("CODEBERG_PRIMARY_SESSION_TOO_LARGE")
+            state=json.loads(decoded)
+        except (ValueError,zlib.error,TypeError) as ex:
+            raise q.SafeStop("CODEBERG_PRIMARY_SESSION_INVALID") from ex
+        if not isinstance(state,dict) or not isinstance(state.get("cookies"),list):
+            raise q.SafeStop("CODEBERG_PRIMARY_COOKIE_FORMAT_INVALID")
+    else:
+        state,meta=load_canonical_state()
     valid=[x for x in state.get("cookies") or [] if
            x.get("name") in {"sessionid","sessionid_ss","sid_tt"} and
            (not x.get("expires") or float(x.get("expires"))>time.time())]
@@ -223,6 +236,9 @@ def main():
     print("CORTES_TIKTOK_NEON_COUNTS="+json.dumps(
         {k:int(counters[k]) for k in safe_keys if isinstance(counters.get(k),int)},
         separators=(",",":")),flush=True)
+    if os.getenv("CORTES_CODEBERG_RUNTIME")=="true" and os.getenv("TIKTOK_CODEBERG_UNIVERSO_ENABLED","").lower()!="true":
+        print("CODEBERG_TIKTOK_UNIVERSO_SIGNED_QUEUE_VERIFIED=1",flush=True)
+        return 0
     before=inventory(state)
     claim=q.qcall("claim",control,{})
     if not claim.get("ok"):
