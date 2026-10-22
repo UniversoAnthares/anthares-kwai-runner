@@ -528,7 +528,7 @@ async function pinterestBrowserAction(verb,b){
      !Array.isArray(keywords)||keywords.length<3||keywords.length>12||
      !keywords.every(x=>typeof x==='string'&&x.trim().length>=3&&x.length<=65)||
      !Array.isArray(hashtags)||hashtags.length<2||hashtags.length>12||
-     !hashtags.every(x=>typeof x==='string'&&/^#[\\p{L}0-9_]{2,40}$/u.test(x))||
+     !hashtags.every(x=>typeof x==='string'&&/^#[\p{L}0-9_]{2,40}$/u.test(x))||
      !sourceTitle||sourceTitle.length>190)
        return{ok:false,error:'PINTEREST_STRATEGIC_TITLE_PROOF_INVALID'};
   const patch={title,video_title:title,description,text:description,
