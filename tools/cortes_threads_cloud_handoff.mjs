@@ -46,33 +46,65 @@ async function gate(){
 async function mediaDigest(uri){
  requireOk(/^https:\/\/anthares\.us\/wp-content\/uploads\/anthares-clips\/\d{4}\/\d{2}\/short_/.test(uri),'UNTRUSTED_MEDIA_ORIGIN');
  const r=await fetch(uri,{signal:AbortSignal.timeout(90000)});
- requireOk(r.ok&&r.body,'MEDIA_NOT_ACCESSIBLE_'+r.status);
+ requireOk(r.ok&&r.body,'MEDIA_HTTP_'+r.status);
  let size=0;const hash=crypto.createHash('sha256');
  for await(const chunk of r.body){size+=chunk.byteLength;requireOk(size<=70000000,'MEDIA_TOO_BIG');hash.update(chunk)}
  requireOk(size>10000,'MEDIA_TOO_SMALL');
  return{sha256:hash.digest('hex'),bytes:size};
 }
-async function choose(){
- const s=await gate();
- const allowed=new Set(s.queued_ids);
- const days=[...new Set((s.queued_rows||[]).map(row=>String(row.source_day||'')))]
+async function notifyQA(id,reason){
+ const token=String(process.env.GITHUB_TOKEN||'').trim();
+ if(!token){console.log('THREADS_QA_NOTIFY_TOKEN_MISSING');return}
+ const body='[QA P1][THREADS][AUTO] Mídia isolada por até 24 horas: '+id+
+  '. Causa: '+reason+'. Investigar origem, corrigir e reabilitar antes do prazo. '+
+  'Outras mídias continuam publicando normalmente; nenhum reenvio incerto permitido.';
+ try{
+  const r=await fetch('https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/issues/283/comments',{
+   method:'POST',headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json'},
+   body:JSON.stringify({body}),signal:AbortSignal.timeout(9000)});
+  console.log('THREADS_QA_NOTIFY_HTTP='+r.status);
+ }catch(e){console.log('THREADS_QA_NOTIFY_FAILED='+e.constructor.name)}
+}
+async function choose(jwt,publish){
+ const snapshot=await gate();
+ const queue=Array.isArray(snapshot.queued_rows)?snapshot.queued_rows:[];
+ if(!queue.length)return null;
+ const days=[...new Set(queue.map(row=>String(row.source_day||'')))]
   .filter(day=>/^20\d\d-\d\d-\d\d$/.test(day)).sort();
- requireOk(days.length>0,'NO_QUEUED_SOURCE_DAY');
- let clip=null,selectedDay=null;
+ const byId=new Map();
  for(const day of days){
   const manifest=await fetchCloudManifest({day});
-  clip=manifest.items.find(item=>allowed.has('threads:'+item.id))||null;
-  if(clip){selectedDay=day;break}
+  for(const item of manifest.items)byId.set('threads:'+item.id,{...item,day});
  }
- requireOk(clip,'NO_MATCHING_QUEUED_CLIP_IN_SOURCE_DAYS');
- let title;
- const url='https://www.youtube.com/oembed?url='+encodeURIComponent('https://www.youtube.com/watch?v='+clip.source)+'&format=json';
- const res=await fetch(url,{signal:AbortSignal.timeout(12000)});
- requireOk(res.ok,'SOURCE_TITLE_HTTP_'+res.status);
- title=cleanTitle((await res.json()).title);
- const tagged=captionForClip(title,clip);
- return{clip:tagged,queued:allowed.size,selectedDay,owner:s.owner,cloud_inflight:s.cloud_inflight||0};
+ let rejected=0;
+ for(const row of queue.slice(0,60)){
+  const candidate=byId.get(row.id);
+  if(!candidate)continue;
+  const {day,...clip}=candidate;
+  let digest,tagged;
+  try{
+   digest=await mediaDigest(clip.url);
+   const url='https://www.youtube.com/oembed?url='+encodeURIComponent('https://www.youtube.com/watch?v='+clip.source)+'&format=json';
+   const res=await fetch(url,{signal:AbortSignal.timeout(12000)});
+   requireOk(res.ok,'CAPTION_HTTP_'+res.status);
+   tagged=captionForClip(cleanTitle((await res.json()).title),clip);
+  }catch(error){
+   const msg=String(error?.message||'');
+   const reason=/MEDIA_HTTP_404/.test(msg)?'MEDIA_HTTP_404':/MEDIA_HTTP_410/.test(msg)?'MEDIA_HTTP_410':/MEDIA_HTTP_403/.test(msg)?'MEDIA_HTTP_403':/MEDIA_HTTP_5\d\d/.test(msg)?'MEDIA_HTTP_5XX':/CAPTION_/.test(msg)?'CAPTION_FETCH_ERROR':/MEDIA_/.test(msg)?'MEDIA_INVALID':'MEDIA_FETCH_ERROR';
+   console.log('THREADS_CLIP_ISOLATED='+JSON.stringify({id:row.id,reason}));
+   if(publish){
+    try{const v=await callControl(jwt,'quarantine',{id:row.id,reason});if(v.first_notice)await notifyQA(row.id,reason)}
+    catch(err){console.log('THREADS_QUARANTINE_WRITE_FAILED='+String(err.message).slice(0,90));throw err}
+   }
+   rejected++;
+   continue;
+  }
+  return{clip:tagged,media:digest,queued:queue.length,selectedDay:day,skipped:rejected};
+ }
+ if(rejected)console.log('THREADS_ALL_CANDIDATES_QUARANTINED='+rejected);
+ return null;
 }
+
 async function publishVideo(item,token,id){
  // Reserve first, then start the quota transaction before issuing any irreversible Graph call.
  const create=await graph('/'+id+'/threads',token,{media_type:'VIDEO',video_url:item.url,text:item.caption});
@@ -106,10 +138,20 @@ export async function run(){
  requireOk(token.length>20,'BITWARDEN_THREADS_TOKEN_NOT_LOADED');
  const me=await graph('/me?fields=id,username',token);
  requireOk(me.id&&me.username?.toLowerCase()==='universoanthares','WRONG_THREADS_ACCOUNT');
- const selected=await choose(),id='threads:'+selected.clip.id;
- const media=await mediaDigest(selected.clip.url);
  const jwt=await oidc();await verifyCloudOidc(jwt);
  const publish=process.env.THREADS_ALLOW_PUBLISH==='1';
+ const before=await gate();
+ if(publish && !before.cloud_primary_enabled && process.env.GITHUB_EVENT_NAME==='schedule'){
+  console.log('THREADS_CLOUD_PRIMARY_DISABLED_SKIP');return;
+ }
+ if(publish && before.cloud_last_success_at &&
+    Date.now()-Date.parse(before.cloud_last_success_at)<6*60*1000){
+  console.log('THREADS_CLOUD_COOLDOWN_SIX_MINUTES');return;
+ }
+ if(publish&&before.cloud_primary_enabled)await callControl(jwt,'heartbeat');
+ const selected=await choose(jwt,publish);
+ if(!selected){console.log('THREADS_QUEUE_EMPTY_OR_ISOLATED');return}
+ const id='threads:'+selected.clip.id,media=selected.media;
  const publicInfo={account:me.username,clip:id,bytes:media.bytes,media_verified:true,queue_candidates:selected.queued,source_day:selected.selectedDay};
  if(!publish){
   console.log(JSON.stringify({ok:true,mode:'dry_run',...publicInfo,published:false}));
