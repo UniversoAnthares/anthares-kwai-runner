@@ -781,7 +781,8 @@ export default {async fetch(request){
       WHERE created_at >= (date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande')
                             AT TIME ZONE 'America/Campo_Grande')
         AND target_key IN ('kwai:lucasrosalem','linkedin:primary','linkedin:personal',
-                           'instagram:universoanthares','pinterest:lucasyahn')
+                           'instagram:universoanthares','pinterest:lucasyahn',
+                           'threads:universoanthares')
       GROUP BY target_key,status`);
    const sourceRows=await query(`SELECT count(*)::int AS total
       FROM cortes_publications
