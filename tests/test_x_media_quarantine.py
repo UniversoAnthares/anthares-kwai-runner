@@ -8,7 +8,7 @@ from tools import x_local_browser_consumer as local
 
 
 def media_404(*args, **kwargs):
-    raise requests.exceptions.HTTPError("not found",
+    return requests.exceptions.HTTPError("not found",
                                         response=SimpleNamespace(status_code=404))
 
 
@@ -54,7 +54,7 @@ class XMediaQuarantineTests(unittest.TestCase):
         with patch.object(local,"cloud_owns_queue",return_value=False), \
              patch.object(local,"auth",return_value="token"), \
              patch.object(local,"listed",return_value=[self.issue(1),self.issue(2)]), \
-             patch.object(local,"readstate",return_value={"phase":"SUBMISSION_STARTED"}), \
+             patch.object(local,"readstate",side_effect=[{},{"phase":"SUBMISSION_STARTED"}]), \
              patch.object(local,"one",side_effect=RuntimeError("UNCERTAIN")) as runner, \
              patch.object(local,"state") as state, \
              patch.object(local,"github",return_value={}):
