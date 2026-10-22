@@ -23,7 +23,7 @@ PROVIDERS = (
     "https://anthares-cortes-queue-ha.anthares1.workers.dev/",
 )
 ACTIONS = frozenset({"enqueue", "buffer-lease", "buffer-start", "buffer-fail",
-                     "buffer-scheduled", "buffer-pending", "buffer-reconcile", "buffer-media-missing",
+                     "buffer-rejected", "buffer-scheduled", "buffer-pending", "buffer-reconcile", "buffer-media-missing",
                      "buffer-cooldown", "buffer-cooldown-status", "buffer-policy",
                      "instagram-direct-lease", "instagram-direct-start", "instagram-direct-confirm",
                      "instagram-direct-fail", "instagram-direct-missing",

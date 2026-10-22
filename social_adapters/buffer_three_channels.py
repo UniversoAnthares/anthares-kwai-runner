@@ -38,6 +38,26 @@ PINTEREST_PUBLIC_BOARD_URL = "https://br.pinterest.com/lucasyahn/universo-anthar
 class BufferBlocked(RuntimeError):
     pass
 
+class BufferDefiniteRejection(BufferBlocked):
+    """Buffer replied with a typed MutationError (not an uncertain transport)."""
+    def __init__(self, classification: str, diagnostic: str):
+        self.classification = classification
+        self.diagnostic = diagnostic
+        super().__init__("BUFFER_MUTATION_REJECTED_" + classification)
+
+
+def redacted_mutation_diagnostic(message: str) -> str:
+    """Keep useful API error guidance without logging captions, URLs or IDs."""
+    import re
+    safe = str(message or "")[:500]
+    safe = re.sub(r"https?://[^\s]+", "[URL]", safe, flags=re.I)
+    safe = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL]", safe)
+    safe = re.sub(r'"[^"]{1,140}"', "[QUOTED_VALUE]", safe)
+    safe = re.sub(r"'[^']{1,140}'", "[QUOTED_VALUE]", safe)
+    safe = re.sub(r"\b[A-Za-z0-9_-]{22,}\b", "[ID]", safe)
+    safe = re.sub(r"[^A-Za-z0-9 .,:;()!?\[\]\-/]+", "?", safe)
+    return " ".join(safe.split())[:180]
+
 
 def api(query: str, token: str | None = None) -> dict:
     secret = (token or os.getenv("BUFFER_API_KEY") or "").strip()
@@ -344,7 +364,7 @@ def schedule(payload: dict, *, token: str | None = None, validated_channels: lis
             "QUOTA": ("quota", "limit", "queue", "plan"),
             "METADATA": ("metadata", "pinterest", "title", "invalid"),
         }.items() if any(term in msg for term in indicators)), "UNCLASSIFIED")
-        raise BufferBlocked("BUFFER_MUTATION_REJECTED_" + label)
+        raise BufferDefiniteRejection(label,redacted_mutation_diagnostic(result["message"]))
     identifier = str((result.get("post") or {}).get("id") or "")
     if not identifier:
         raise BufferBlocked("BUFFER_SCHEDULE_REJECTED_OR_UNCERTAIN")

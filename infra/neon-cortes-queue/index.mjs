@@ -220,7 +220,7 @@ async function instagramDirectAction(verb,b){
 
 async function bufferAction(verb,b,platform){
  const dest=target(platform),owner='buffer-'+platform+':';
- const allowed=new Set(['lease','start','fail','media-missing','scheduled','pending','reconcile','stats','retention','cooldown','cooldown-status','policy']);
+ const allowed=new Set(['lease','start','fail','media-missing','rejected','scheduled','pending','reconcile','stats','retention','cooldown','cooldown-status','policy']);
  if(!allowed.has(verb))return{ok:false,error:'UNKNOWN_BUFFER_ACTION'};
  if(verb==='cooldown'||verb==='cooldown-status'){
   if(!['pinterest','instagram','linkedin'].includes(platform))return{ok:false,error:'BUFFER_COOLDOWN_SCOPE_ONLY'};
@@ -306,6 +306,8 @@ async function bufferAction(verb,b,platform){
   const candidateSql=pinterest?`SELECT p.id FROM cortes_publications p
      WHERE p.target_key=$1 AND p.status='queued'
        AND p.payload->>'editorial_policy'='anthares_editorial_transcript_v2'
+       AND (COALESCE(p.confirmation_evidence->>'kind','') <> 'buffer_typed_rejection'
+         OR COALESCE((p.confirmation_evidence->>'retry_after_at')::timestamptz,now())<=now())
        AND (COALESCE(p.confirmation_evidence->>'kind','') <> 'source_media_invalid'
          OR COALESCE((p.confirmation_evidence->>'retry_after_at')::timestamptz,
                 (p.confirmation_evidence->>'retry_after_date')::date AT TIME ZONE 'America/Campo_Grande',
@@ -348,6 +350,28 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
     WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 AND lease_generation=$4
     AND lease_until>now() RETURNING id,status`,[id,dest,who,fence]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'STALE_FENCE'};
+ }
+ if(verb==='rejected'){
+  // A typed Buffer MutationError is an explicit rejection, not a transport
+  // timeout. The remote action returned NO post. Requeue with backoff while
+  // preserving all evidence and queue CAS protections.
+  const reason=String(b.reason||'');
+  if(platform!=='pinterest'||!['BOARD','MEDIA','METADATA','QUOTA','PERMISSION','UNCLASSIFIED'].includes(reason))
+    return{ok:false,error:'BUFFER_REJECTED_PROOF_INVALID'};
+  const rows=await query(`UPDATE cortes_publications
+    SET status='queued', publication_started_at=NULL,
+      lease_owner=NULL,lease_until=NULL,updated_at=now(),
+      confirmation_evidence=jsonb_build_object(
+        'kind','buffer_typed_rejection','classification',$5::text,
+        'retry_after_at',to_char((now()+interval '120 minutes') AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        'confirmed_on_network',false)
+    WHERE id=$1 AND target_key=$2 AND lease_owner=$3 AND lease_generation=$4
+      AND status='started' AND remote_id IS NULL AND lease_until>now()
+    RETURNING id,status`,[id,dest,who,fence,reason]);
+  if(rows.length)
+    await query("DELETE FROM cortes_buffer_daily_slots WHERE job_id=$1 AND target_key=$2 AND local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date",[id,dest]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'BUFFER_REJECTED_FENCE_REJECTED'};
  }
  if(verb==='fail'){
   const rows=await query(`UPDATE cortes_publications
