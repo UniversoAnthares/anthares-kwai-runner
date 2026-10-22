@@ -1,0 +1,49 @@
+name: Prove one TikTok Codeberg publication after Windows drain
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: tiktok-codeberg-one-shot-proof
+  cancel-in-progress: false
+jobs:
+  dispatch:
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
+    timeout-minutes: 6
+    env:
+      CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify frozen Windows task and exact Codeberg main
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $task=Get-ScheduledTask 'Anthares-CORTES-TikTok-Lucasrosalem4-20261021'
+          if($task.State -ne 'Disabled') { throw 'WINDOWS_LOCAL_DISPATCH_NOT_FROZEN' }
+          $runs=gh run list -R $env:GITHUB_REPOSITORY --workflow cortes-tiktok-lucasrosalem4-windows-fallback.yml --limit 15 --json status,createdAt | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0) { throw 'BACKUP_RUN_CHECK_FAILED' }
+          $busy=@($runs|Where-Object {$_.status -in @('queued','pending','in_progress')})
+          if($busy.Count -gt 0) { throw 'BACKUP_WRITER_NOT_DRAINED' }
+          $g=(git ls-remote https://github.com/UniversoAnthares/anthares-kwai-runner.git refs/heads/main).Split()[0]
+          $c=(git ls-remote https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git refs/heads/main).Split()[0]
+          if($g -ne $c) { throw 'CODEBERG_MIRROR_MISMATCH' }
+          Write-Output 'CODEBERG_ONE_SHOT_PRECONDITIONS_PASSED=1'
+      - name: Request exactly one Codeberg fenced publication
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $u=[uri]$env:CODEBERG_PUSH_URL
+          if($u.Scheme -ne 'https' -or $u.Host -ne 'codeberg.org') { throw 'CODEBERG_AUTH_HOST_INVALID' }
+          $parts=$u.UserInfo.Split(':',2)
+          if($parts.Count -ne 2) { throw 'CODEBERG_AUTH_ABSENT' }
+          $user=[uri]::UnescapeDataString($parts[0])
+          $pass=[uri]::UnescapeDataString($parts[1])
+          if(!$user -or !$pass){throw 'CODEBERG_ACCOUNT_CREDENTIAL_MISSING'}
+          $basic=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($user+':'+$pass))
+          $hdr=@{Authorization='Basic '+$basic;Accept='application/json'}
+          $uri='https://codeberg.org/api/v1/repos/UniversoAnthares/anthares-kwai-runner/actions/workflows/cortes-tiktok-lucas4-codeberg.yml/dispatches'
+          $r=Invoke-WebRequest $uri -Method POST -Headers $hdr -Body '{"ref":"main","inputs":{"smoke":"false","publish":"true"}}' -ContentType 'application/json' -UseBasicParsing -TimeoutSec 26
+          if([int]$r.StatusCode -notin @(200,201,202,204)){throw 'CODEBERG_DISPATCH_NOT_ACKNOWLEDGED'}
+          Write-Output 'CODEBERG_LUCAS4_ONE_SHOT_QUEUED=1'
