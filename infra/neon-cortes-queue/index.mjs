@@ -788,10 +788,24 @@ export default {async fetch(request){
       WHERE target_key='kwai:lucasrosalem'
         AND created_at >= (date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande')
                             AT TIME ZONE 'America/Campo_Grande')`);
+   // This historical 'master' counter measures Kwai enqueue, not WordPress
+   // production. Expose the distinction; do not declare zero source masters
+   // merely because one platform has no new items.
+   const kwaiEnqueued=Number(sourceRows[0]?.total||0);
+   const otherEnqueued=rows.reduce((total,row)=>total+(
+      row.target_key==='kwai:lucasrosalem'?0:Number(row.n||0)),0);
+   const allEnqueued=kwaiEnqueued+otherEnqueued;
+   const producerSignal=allEnqueued>0?'downstream_items_detected':'no_downstream_items';
    return answer({ok:true,backend:'neon-functions-cortes',
-      round_timezone:'America/Campo_Grande',today_master_count:Number(sourceRows[0]?.total||0),
+      round_timezone:'America/Campo_Grande',
+      today_master_count:kwaiEnqueued,
+      today_master_count_scope:'kwai:lucasrosalem enqueue only',
+      today_any_destination_count:allEnqueued,
+      producer_status:'unverified_by_queue',
+      producer_signal:producerSignal,
       today_destinations:rows.map(r=>({target_key:r.target_key,status:r.status,n:Number(r.n)})),
-      stalled_daily_round:Number(sourceRows[0]?.total||0)===0},200);
+      stalled_daily_round:kwaiEnqueued===0,
+      stalled_daily_distribution:allEnqueued===0},200);
   }catch{return answer({ok:false,error:'ROUND_HEALTH_DATABASE_UNAVAILABLE'},503);}
  }
  if(request.method!=='POST')return answer({ok:false,error:'NOT_FOUND'},404);

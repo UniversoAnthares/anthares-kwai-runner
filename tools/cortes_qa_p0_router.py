@@ -159,14 +159,26 @@ def daily_round_incidents():
     if count>0:
         return []
     day=local.date().isoformat()
-    return [{"id":marker("cortes-no-daily-master",day),
+    # A zero Kwai enqueue is not evidence that no clip was produced in WP.
+    # Give downstream-specific recovery precedence when any other target has
+    # received today's items; keep old health payloads fail-safe.
+    downstream=data.get("today_any_destination_count")
+    if downstream is not None and (type(downstream) is not int or downstream<0):
+        raise RuntimeError("CORTES_DAILY_ROUND_HEALTH_INVALID")
+    distributed=bool(downstream)
+    return [{"id":marker("cortes-kwai-distribution-zero" if distributed else
+                           "cortes-no-daily-master",day),
              "network":"cortes-general",
-             "stage":"P0_DAILY_PRODUCER_ZERO_MASTERS",
+             "stage":("P0_DAILY_KWAI_DISTRIBUTION_STALLED" if distributed else
+                      "P0_DAILY_PRODUCER_ZERO_MASTERS"),
              "evidence":"https://github.com/UniversoAnthares/anthares-clipper/actions",
-             "description":"Daily master count is ZERO after 07:00 "+day+
-                " local. Check source lock, AI Hub 502/503/504, Unicode title gate, "
-                "media uploads, producer trigger, cloud runner and Neon enqueue. "
-                "Dispatch only fenced canonical recovery; never manufacture clips."}]
+             "description":("Kwai enqueue count is ZERO, while other Neon targets have new items; "
+                            "investigate WordPress-to-Kwai handoff, schedule and idempotent enqueue. "
+                            if distributed else
+                            "Kwai enqueue count is ZERO; producer status cannot be inferred from this "
+                            "counter. Verify WordPress masters, source lock, AI Hub 502/503/504, "
+                            "Unicode title gate, media uploads and Neon handoff (HTTP 502). ")+
+                            "Dispatch only fenced canonical recovery; never manufacture clips."}]
 
 
 def wp_incidents():
