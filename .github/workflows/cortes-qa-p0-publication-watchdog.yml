@@ -21,6 +21,9 @@ on:
       - "Kwai queue publisher"
       - "Social direct adapters contract"
       - "CORTES Pinterest - automatic Buffer cloud publisher"
+      - "CORTES LinkedIn personal - secondary hosted publisher"
+      - "CORTES LinkedIn personal - fenced video cloud publisher"
+      - "CORTES LinkedIn - automatic Buffer cloud publisher"
     types: [completed]
 permissions:
   contents: read
