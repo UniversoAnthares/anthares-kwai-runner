@@ -1,0 +1,36 @@
+name: CORTES Threads cloud one-shot authorized proof dispatch
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/threads-one-shot-proof-dispatch.yml'
+permissions:
+  actions: write
+  contents: read
+concurrency:
+  group: threads-one-shot-proof-dispatch
+  cancel-in-progress: false
+jobs:
+  dispatch_one_proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Check live Neon publisher health
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            'https://br-crimson-unit-b89nau08-cortesthreadspub.compute.c-14.us-east-1.aws.neon.tech/?action=health' \
+            | python3 -c 'import sys,json; j=json.load(sys.stdin); assert j.get("ok") is True and j.get("database_ok") is True'
+      - name: Trigger exactly one explicit Threads cloud publish test
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const result = await github.rest.actions.createWorkflowDispatch({
+              owner, repo, workflow_id: 'cortes-threads-cloud-handoff.yml',
+              ref: 'main',
+              inputs: { publish: 'true' }
+            });
+            core.info('THREADS_CLOUD_ONE_SHOT_DISPATCH_ACCEPTED=' + result.status);
