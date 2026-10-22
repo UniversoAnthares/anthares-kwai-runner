@@ -1,5 +1,11 @@
 name: CORTES QA P0 immediate event controller
 on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/cortes-qa-p0-controller.yml
+      - .github/workflows/cortes-qa-p0-executor.yml
+      - tools/cortes_qa_p0_router.py
   issues:
     types: [opened, reopened, labeled]
   workflow_dispatch:
