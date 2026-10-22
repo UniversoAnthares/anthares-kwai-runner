@@ -19,6 +19,10 @@ jobs:
     runs-on: qa-p0-independent
     timeout-minutes: 12
     steps:
+      - name: Checkout repository for recovery playbook
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Validate trusted P0 and acknowledge execution
         id: preflight
         uses: actions/github-script@v7
