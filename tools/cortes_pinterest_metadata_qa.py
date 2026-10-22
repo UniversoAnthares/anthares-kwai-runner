@@ -124,6 +124,16 @@ def strategic_metadata(text,source_title,segment_id):
                              and 3<=len(v.strip())<=65))[:9]
     tags=list(dict.fromkeys(str(v).strip() for v in tags if isinstance(v,str)
                             and re.fullmatch(r'#[\wÀ-ÿ]{2,40}',v.strip())))[:9]
+    # Qwen occasionally returns topical tags without # or with spaces.
+    # Deterministic redundancy: derive safe topic-specific tags from the
+    # validated keywords in the actual transcript, never from the live name.
+    if len(tags)<2:
+        for phrase in words:
+            label=''.join(re.findall(r'[\wÀ-ÿ]+',phrase,flags=re.UNICODE))[:38]
+            tag='#'+label
+            if 3<=len(tag)<=40 and tag not in tags:
+                tags.append(tag)
+            if len(tags)>=3:break
     description=('Neste corte, o debate aborda: '+text[:380].strip()+
                  '\nVeja também: www.anthares.us')
     description=description[:500].rstrip()
@@ -171,6 +181,49 @@ def metadata_qa(max_clips=3):
         if len(jobs)<4:break
     return processed
 
+def single_worker_guard():
+    """Cross-process Windows lock; manual runs cannot overlap Scheduled Task."""
+    from contextlib import contextmanager
+    @contextmanager
+    def guard():
+        lock=CACHE.parent/'.pinterest-qa.lock'
+        lock.parent.mkdir(parents=True,exist_ok=True)
+        h=open(lock,'a+b')
+        locked=False
+        try:
+            if os.name=='nt':
+                import msvcrt
+                h.seek(0,os.SEEK_END)
+                if h.tell()==0:
+                    h.write(b'1');h.flush()
+                h.seek(0)
+                try:
+                    msvcrt.locking(h.fileno(),msvcrt.LK_NBLCK,1)
+                    locked=True
+                except OSError:
+                    pass
+            else:
+                import fcntl
+                try:
+                    fcntl.flock(h.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
+                    locked=True
+                except OSError:
+                    pass
+            yield locked
+        finally:
+            if locked:
+                try:
+                    if os.name=='nt':
+                        h.seek(0)
+                        msvcrt.locking(h.fileno(),msvcrt.LK_UNLCK,1)
+                    else:
+                        fcntl.flock(h.fileno(),fcntl.LOCK_UN)
+                except OSError:
+                    pass
+            h.close()
+    return guard()
+
+
 def main():
     if not os.getenv('ANTHARES_DEVICE_TOKEN','').strip():
         raise RuntimeError('PINTEREST_QA_DEVICE_AUTH_MISSING')
@@ -181,8 +234,12 @@ def main():
     p.add_argument('--max-clips',type=int,default=3)
     args=p.parse_args()
     if args.max_clips<1 or args.max_clips>6:raise RuntimeError('QA_BATCH_LIMIT_INVALID')
-    m=0 if args.titles_only else media_qa()
-    t=0 if args.media_only else metadata_qa(args.max_clips)
+    with single_worker_guard() as acquired:
+        if not acquired:
+            print(json.dumps({'qa':'BUSY','reason':'ANOTHER_QA_WORKER_ACTIVE'}),flush=True)
+            return 0
+        m=0 if args.titles_only else media_qa()
+        t=0 if args.media_only else metadata_qa(args.max_clips)
     print(json.dumps({'qa':'DONE','media_checked':m,'titles_repaired':t}),flush=True)
     return 0
 
