@@ -1,0 +1,25 @@
+name: TikTok Codeberg signed OIDC independent account smoke dispatcher
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-codeberg-oidc-smoke-dispatch
+  cancel-in-progress: false
+jobs:
+  proof:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
+    timeout-minutes: 6
+    env:
+      CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Request two non-publishing Codeberg/OIDC browser proofs
+        shell: powershell
+        run: |
+          python -u tools/tiktok_codeberg_smoke_dispatch.py
+          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_TIKTOK_SMOKE_DISPATCH_FAILED' }
