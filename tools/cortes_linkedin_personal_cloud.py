@@ -75,19 +75,26 @@ def account_preflight():
 
 
 def publish_one(skipped=0):
+    print("PERSONAL_STAGE=cloud_preflight", flush=True)
     cloud_only()
+    print("PERSONAL_STAGE=identity_preflight", flush=True)
     account_preflight()
+    print("PERSONAL_STAGE=queue_lease", flush=True)
     out = queue("lease", {"target_key": TARGET, "owner": OWNER})
     row = out.get("job")
     if not row:
         reason = ("UNRESOLVED_POST" if out.get("unresolved_publication")
                   else "DAILY_LIMIT" if out.get("daily_limit_reached") else "NO_NEW_CUT")
         return {"linkedin_personal": "IDLE", "reason": reason}
+    print("PERSONAL_STAGE=job_leased", flush=True)
     fence = {"id": row["id"], "owner": OWNER, "lease_generation": row["lease_generation"]}
     try:
+        print("PERSONAL_STAGE=payload_validation", flush=True)
         payload = _safe_job(row, "linkedin", "personal")
+        print("PERSONAL_STAGE=linkedin_preflight", flush=True)
         if linkedin(payload, publish=False).get("status") != "READY":
             raise ConfigRequired("PERSONAL_PREFLIGHT_FAILED")
+        print("PERSONAL_STAGE=media_readonly", flush=True)
         if not media_available(payload["media_url"]):
             queue("media-missing", fence)
             return publish_one(skipped + 1) if skipped < 10 else {"linkedin_personal": "SOURCE_MEDIA_MISSING_FOR_REPAIR"}
@@ -96,8 +103,10 @@ def publish_one(skipped=0):
         try: queue("fail", fence)
         except Exception: pass
         raise
+    print("PERSONAL_STAGE=queue_start", flush=True)
     queue("start", fence)
     try:
+        print("PERSONAL_STAGE=linkedin_upload", flush=True)
         response = linkedin(payload, publish=True)
         remote = str(response.get("remote_id") or "")
         if response.get("status") == "CONFIRMED" and remote:
