@@ -1,0 +1,44 @@
+name: CORTES LinkedIn personal - secondary hosted publisher
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-linkedin-personal-fallback-cloud.yml'
+  workflow_run:
+    workflows: ["CORTES LinkedIn personal - fenced video cloud publisher"]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  id-token: write
+# Exactly the same lock as primary; no two hosted publishers operate the
+# same personal account concurrently. Neon lease+generation remains authority.
+concurrency:
+  group: cortes-linkedin-personal-cloud
+  cancel-in-progress: false
+jobs:
+  recover-personal:
+    if: ${{ vars.CORTES_LINKEDIN_PERSONAL_PAUSED != 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success') }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch member OAuth credential securely via Bitwarden
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            bd261e5e-11bf-49fb-9baf-b4ea014ec5b7 > LINKEDIN_PERSONAL_ACCESS_TOKEN
+      - name: Retry only distinct Neon jobs; never blindly repost uncertain media
+        env:
+          ANTHARES_SOCIAL_COMMIT: '1'
+        run: |
+          set -euo pipefail
+          python -u -m tools.cortes_linkedin_personal_cloud
