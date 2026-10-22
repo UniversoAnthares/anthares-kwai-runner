@@ -143,5 +143,19 @@ class PinterestCloudTests(unittest.TestCase):
                 p.cloud_only()
 
 
+class PinterestMediaPolicy(unittest.TestCase):
+    def test_invalid_cloud_media_isolated_before_start(self):
+        from pathlib import Path
+        root=Path(__file__).resolve().parents[1]
+        pub=(root/"tools"/"cortes_buffer_pinterest_cloud.py").read_text(encoding="utf8")
+        neon=(root/"infra"/"neon-cortes-queue"/"index.mjs").read_text(encoding="utf8")
+        self.assertIn('is_media_missing(payload["media_url"])',pub)
+        self.assertIn('queue("media-missing",fence)',pub)
+        self.assertIn('notify_media_p0(row["id"]',pub)
+        self.assertIn("PINTEREST_MEDIA_MISSING_FENCE_REJECTED",neon)
+        self.assertIn("retry_after_date",neon)
+        self.assertIn("ORDER BY p.created_at,p.updated_at,p.id",neon)
+
+
 if __name__=="__main__":
     unittest.main()
