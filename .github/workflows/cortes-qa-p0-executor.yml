@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   investigate:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
     timeout-minutes: 12
     steps:
       - name: Validate trusted P0 and acknowledge execution
@@ -51,24 +51,30 @@ jobs:
       - name: Verify routing and control-plane invariants
         id: contracts
         if: steps.preflight.outcome == 'success'
-        shell: bash
+        shell: powershell
         run: |
-          set -euo pipefail
-          python3 -m py_compile tools/cortes_qa_p0_router.py
-          python3 -m unittest discover -s tests -p test_cortes_qa_p0_router.py -v
-          python3 -m unittest discover -s tests -p test_cortes_qa_daily_round.py -v
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m py_compile tools/cortes_qa_p0_router.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m unittest discover -s tests -p test_cortes_qa_p0_router.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m unittest discover -s tests -p test_cortes_qa_daily_round.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Investigate Pinterest media, form and draft-capacity code
         id: pinterest
         if: steps.preflight.outputs.network == 'pinterest'
-        shell: bash
+        shell: powershell
         run: |
-          set -euo pipefail
-          python3 -m py_compile tools/cortes_pinterest_metadata_qa.py tools/cortes_pinterest_browser_local.py
-          python3 -m unittest discover -s tests -p test_cortes_pinterest_browser_local.py -v
-          python3 -m unittest discover -s tests -p test_pinterest_draft_cap_nextday.py -v
-          python3 -m unittest discover -s tests -p test_pinterest_24h_titles_qa.py -v
-          python3 -m unittest discover -s tests -p test_pinterest_qa_jsonb_evidence.py -v
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m py_compile tools/cortes_pinterest_metadata_qa.py tools/cortes_pinterest_browser_local.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m unittest discover -s tests -p test_cortes_pinterest_browser_local.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m unittest discover -s tests -p test_pinterest_draft_cap_nextday.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m unittest discover -s tests -p test_pinterest_24h_titles_qa.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m unittest discover -s tests -p test_pinterest_qa_jsonb_evidence.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Report actual execution and evidence to incident
         if: always() && steps.preflight.outcome == 'success'
