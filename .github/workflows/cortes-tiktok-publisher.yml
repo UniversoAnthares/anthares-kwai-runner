@@ -50,7 +50,7 @@ concurrency:
 
 jobs:
   tiktok:
-    if: github.event_name != 'workflow_run' && (github.event_name != 'schedule' || vars.TIKTOK_CODEBERG_PRIMARY != 'true')
+    if: github.event_name == 'pull_request' || (github.event_name != 'workflow_run' && vars.TIKTOK_CODEBERG_PRIMARY != 'true')
     runs-on: ubuntu-24.04
     outputs:
       queue_followup: ${{ steps.publish.outputs.queue_followup }}
