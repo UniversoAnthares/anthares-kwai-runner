@@ -106,7 +106,7 @@ def pinterest(payload, publish=False):
         raise ConfigRequired("PINTEREST_COVER_IMAGE_URL")
     if not (payload.get("media_path") or payload.get("media_url")):
         raise ConfigRequired("media_path_or_media_url")
-    metadata = prepare_publication_metadata(payload, title_limit=100)
+    metadata = prepare_publication_metadata(payload, title_limit=100, include_inline_hashtags=False)
     if not publish:
         return {"status": "READY", "destination_key": key, "title": metadata["title"]}
     base = "https://api.pinterest.com/v5"
@@ -178,7 +178,7 @@ def linkedin(payload, publish=False):
             raise ConfigRequired("LINKEDIN_COMPANY_AUTHOR_URN_UNVERIFIED")
     if not (payload.get("media_path") or payload.get("media_url")):
         raise ConfigRequired("media_path_or_media_url")
-    metadata = prepare_publication_metadata(payload, title_limit=200)
+    metadata = prepare_publication_metadata(payload, title_limit=200, include_inline_hashtags=False)
     if not publish:
         return {"status": "READY", "destination_key": key, "title": metadata["title"]}
     headers = _linkedin_headers()
