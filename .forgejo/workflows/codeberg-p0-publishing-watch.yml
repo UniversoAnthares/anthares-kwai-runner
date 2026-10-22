@@ -1,0 +1,34 @@
+name: Codeberg autonomous CORTES QA P0 supervisor
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/codeberg-p0-publishing-watch.yml'
+      - 'tools/cortes_qa_codeberg_p0_watch.py'
+      - 'tests/test_cortes_qa_codeberg_p0_watch.py'
+  schedule:
+    - cron: '*/10 * * * *'
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: codeberg-cortes-p0-publishing-watch
+  cancel-in-progress: true
+jobs:
+  watchdog:
+    runs-on: codeberg-tiny
+    timeout-minutes: 3
+    env:
+      FORGEJO_TOKEN: ${{ forgejo.token }}
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - name: Validate independent P0 scanner
+        shell: bash
+        run: |
+          set -eu
+          python3 -m py_compile tools/cortes_qa_codeberg_p0_watch.py
+          python3 -m unittest discover -s tests -p test_cortes_qa_codeberg_p0_watch.py -v
+      - name: Monitor TikTok pipelines and create priority incidents
+        shell: bash
+        run: python3 -u tools/cortes_qa_codeberg_p0_watch.py
