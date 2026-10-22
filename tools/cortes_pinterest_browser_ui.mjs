@@ -175,7 +175,11 @@ async function stage(p,file,data){
  await setField(p,'link','https://www.anthares.us');
  await selectBoard(p);
  const enabled=await until(()=>p.js('(()=>{const x=[...document.querySelectorAll("button,[role=button]")].filter(e=>/^(publicar|publish)$/i.test((e.innerText||"").trim()));return x.length===1&&!x[0].disabled&&x[0].getAttribute("aria-disabled")!=="true"})()'),120,900);
- if(!enabled)throw Error('PIN_PUBLISH_BUTTON_NOT_READY');
+ if(!enabled){
+  const diagnostic=await p.js('(()=>({buttons:[...document.querySelectorAll("button,[role=button]")].filter(x=>/^(publicar|publish)$/i.test((x.innerText||"").trim())).map(x=>({disabled:!!x.disabled,ariaDisabled:x.getAttribute("aria-disabled"),visible:!!(x.getBoundingClientRect().width&&x.getBoundingClientRect().height),role:x.getAttribute("role")})),invalidCount:document.querySelectorAll("[aria-invalid=true]").length,pendingUploads:document.querySelectorAll("[data-test-id*=progress],[aria-busy=true]").length,videoCount:[...document.querySelectorAll("video")].filter(x=>!x.closest(\'[data-test-id="storyboard-drafts-sidebar"]\')).length}))()');
+  emit({phase:'PREPARE_DIAGNOSTIC',state:diagnostic});
+  throw Error('PIN_PUBLISH_BUTTON_NOT_READY');
+ }
 }
 function getGo(){
  return new Promise((resolve,reject)=>{
