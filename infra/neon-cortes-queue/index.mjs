@@ -302,6 +302,7 @@ async function bufferAction(verb,b,platform){
   const cutoffForBuffer="'1970-01-01T00:00:00Z'::timestamptz";
   const candidateSql=pinterest?`SELECT p.id FROM cortes_publications p
      WHERE p.target_key=$1 AND p.status='queued'
+       AND p.payload->>'editorial_policy'='anthares_editorial_transcript_v2'
        AND (COALESCE(p.confirmation_evidence->>'kind','') <> 'source_media_invalid'
          OR COALESCE((p.confirmation_evidence->>'retry_after_at')::timestamptz,
                 (p.confirmation_evidence->>'retry_after_date')::date AT TIME ZONE 'America/Campo_Grande',
@@ -442,13 +443,57 @@ async function authorizePinterestBrowser(request){
 }
 async function pinterestBrowserAction(verb,b){
  const target='pinterest:lucasyahn',who='pinterest-browser:DESKTOP-FTDK0HP';
- if(!['lease','start','fail','confirm','stats','media-invalid','metadata-pending','metadata-enrich'].includes(verb))return{ok:false,error:'BROWSER_ACTION_DENIED'};
+ if(!['lease','start','fail','confirm','stats','media-invalid','metadata-pending','metadata-enrich','qa-media-pending','qa-media-result'].includes(verb))return{ok:false,error:'BROWSER_ACTION_DENIED'};
  if(verb==='stats'){
   const rows=await query('SELECT status,count(*)::int n FROM cortes_publications WHERE target_key=$1 GROUP BY status',[target]);
   return{ok:true,target_key:target,counts:Object.fromEntries(rows.map(x=>[x.status,Number(x.n)]))};
  }
  if(b.target_key&&b.target_key!==target)return{ok:false,error:'WRONG_TARGET'};
  if(String(b.owner||'')!==who)return{ok:false,error:'WRONG_BROWSER_OWNER'};
+ if(verb==='qa-media-pending'){
+   const rows=await query(`SELECT id,payload->>'media_url' AS media_url,
+      confirmation_evidence->>'first_detected_at' AS first_detected_at,
+      confirmation_evidence->>'expires_at' AS expires_at
+      FROM cortes_publications WHERE target_key=$1 AND status='queued'
+        AND confirmation_evidence->>'kind'='source_media_invalid'
+        AND publication_started_at IS NULL AND remote_id IS NULL
+        AND COALESCE((confirmation_evidence->>'retry_after_at')::timestamptz,now())<=now()
+      ORDER BY updated_at,id LIMIT 20`,[target]);
+   return{ok:true,jobs:rows};
+ }
+ if(verb==='qa-media-result'){
+   // The trusted QA device HEAD-checked the exact permitted media URL.
+   const id=String(b.id||''),src=String(b.media_url||'');
+   const code=Number(b.http_status);
+   if(!/^cortes-fanout-pinterest-[a-f0-9]{32}$/.test(id)||
+      !/^https:\/\/anthares\.us\/wp-content\/uploads\/anthares-clips\/[^?#]+\.mp4$/.test(src)||
+      ![200,404].includes(code))
+       return{ok:false,error:'PINTEREST_QA_MEDIA_PROOF_INVALID'};
+   const first="COALESCE((confirmation_evidence->>'first_detected_at')::timestamptz,now())";
+   const rows=await query(`UPDATE cortes_publications
+       SET status=CASE WHEN $3::int=404 AND now()>=${first}+interval '24 hours'
+                          THEN 'failed' ELSE 'queued' END,
+       confirmation_evidence=CASE WHEN $3::int=200
+           THEN jsonb_build_object('kind','source_media_recovered',
+                                   'confirmed_on_network',false)
+           ELSE jsonb_build_object(
+             'kind',CASE WHEN now()>=${first}+interval '24 hours'
+                  THEN 'source_media_expired_24h' ELSE 'source_media_invalid' END,
+             'http_status',404,'confirmed_on_network',false,
+             'first_detected_at',to_char((${first}) AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+             'expires_at',to_char((${first}+interval '24 hours') AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+             'retry_after_at',to_char((LEAST(now()+interval '90 minutes',
+                                    ${first}+interval '24 hours')) AT TIME ZONE 'UTC',
+                                    'YYYY-MM-DD"T"HH24:MI:SS"Z"')) END,
+       updated_at=now()
+       WHERE id=$1 AND target_key=$2 AND status='queued'
+         AND publication_started_at IS NULL AND remote_id IS NULL
+         AND payload->>'media_url'=$4
+         AND confirmation_evidence->>'kind'='source_media_invalid'
+       RETURNING id,status,confirmation_evidence`,[id,target,code,src]);
+   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PINTEREST_QA_MEDIA_CAS_REJECTED'};
+ }
+
  if(verb==='metadata-pending'){
   // Read-only source titles and segment locators. No client can lease/publish.
   const rows=await query(`SELECT id,payload->>'media_url' AS media_url,
@@ -544,6 +589,7 @@ async function pinterestBrowserAction(verb,b){
   ), picked AS (
    SELECT p.id FROM cortes_publications p JOIN ranked r ON r.id=p.id
    WHERE p.target_key=$1 AND p.status='queued'
+     AND p.payload->>'editorial_policy'='anthares_editorial_transcript_v2'
      AND ((p.created_at AT TIME ZONE 'America/Campo_Grande')::date
        BETWEEN (now() AT TIME ZONE 'America/Campo_Grande')::date - 1
          AND (now() AT TIME ZONE 'America/Campo_Grande')::date
