@@ -26,17 +26,30 @@ class XPublicationSafetyTests(unittest.TestCase):
         c = {"body": "CONFIRMED video\n" + json.dumps({
                 "kind": "X_VIDEO_CONFIRMED_V1", "account": "lucasyahn",
                 "video_verified": True,
-                "post_url": "https://x.com/lucasyahn/status/2109698725161631921",
+                "post_url": "https://x.com/lucasyahn/status/2112876551992246272",
              }), "user": {"login": "github-actions[bot]"},
              "created_at": "2026-10-21T12:00:00Z"}
         self.assertEqual(len(confirmed_today(i, [c], self.DAY.date(), timezone.utc)), 1)
         self.assertEqual(gate([i], {1: [c]}, self.DAY)["confirmed"], 1)
-        self.assertFalse(confirmed_today(i, [{**c, "created_at": "2026-10-20T12:00:00Z"}], self.DAY.date(), timezone.utc))
+        # Even a delayed/late GitHub comment cannot shift the actual X date.
+        self.assertEqual(len(confirmed_today(i, [{**c, "created_at": "2026-10-22T05:00:00Z"}], self.DAY.date(), timezone.utc)), 1)
+        self.assertFalse(confirmed_today(i, [c], datetime(2026,10,22,tzinfo=timezone.utc).date(), timezone.utc))
         self.assertFalse(confirmed_today(i, [{**c, "user": {"login": "untrusted-user"}}], self.DAY.date(), timezone.utc))
 
+    def test_real_x_snowflake_previous_day_not_counted_as_today(self):
+        from tools.x_publication_safety import verified_post_timestamp
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("America/Campo_Grande")
+        post = "https://x.com/lucasyahn/status/2113116481709822040"
+        self.assertEqual(verified_post_timestamp(post).astimezone(tz).date().isoformat(),
+                         "2026-10-21")
+        self.assertEqual(verified_post_timestamp(
+            "https://x.com/lucasyahn/status/2113125035657642171"
+        ).astimezone(tz).date().isoformat(), "2026-10-22")
+
     def test_reject_wrong_account_and_missing_video(self):
-        self.assertIsNone(verified_post_url("https://x.com/other/status/2109698725161631921"))
-        c = {"body": "CONFIRMED https://x.com/lucasyahn/status/2109698725161631921",
+        self.assertIsNone(verified_post_url("https://x.com/other/status/2112876551992246272"))
+        c = {"body": "CONFIRMED https://x.com/lucasyahn/status/2112876551992246272",
              "created_at": "2026-10-21T12:00:00Z"}
         self.assertEqual(confirmed_today(self.issue(1), [c], self.DAY.date(), timezone.utc), set())
 

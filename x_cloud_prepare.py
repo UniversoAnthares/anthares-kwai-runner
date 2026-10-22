@@ -29,7 +29,7 @@ ITAG_HEIGHT = {160:144, 278:144, 133:240, 242:240, 134:360, 243:360, 135:480, 24
 
 def discover_source() -> dict:
     import yt_dlp
-    opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "playlistend": 60, "skip_download": True}
+    opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "playlistend": 300, "skip_download": True}
     cookie_path = os.getenv("X_YT_COOKIE_FILE", "").strip()
     if cookie_path and os.path.isfile(cookie_path):
         opts["cookiefile"] = cookie_path
@@ -40,7 +40,11 @@ def discover_source() -> dict:
     windows = json.loads(os.getenv("X_SOURCE_WINDOWS_JSON", "{}"))
     if not isinstance(windows, dict):
         raise RuntimeError("X_SOURCE_WINDOWS_INVALID")
-    for e in entries:
+    # YouTube /streams returns newest-to-oldest. The CORTES editorial order
+    # is the opposite: exhaust the oldest eligible live/window first, then
+    # advance chronologically; previously used windows remain reserved.
+    # Stable ties preserve original playlist order (latest index first).
+    for e in reversed(entries):
         if not isinstance(e, dict):
             continue
         vid = str(e.get("id") or "").strip()

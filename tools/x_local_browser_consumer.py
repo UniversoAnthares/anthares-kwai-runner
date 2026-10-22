@@ -257,7 +257,18 @@ def one(issue,data,token):
         # without dispatching. Directly activate the verified DOM button;
         # this exact path published video #385 (post 2113103163859313089).
         # One irreversible click only, fenced by the PostgreSQL claim.
-        button.evaluate("(element) => element.click()", timeout=12500)
+        button.evaluate("""(element, key) => {
+            // Atomic browser-side fence: do not dispatch two POST actions even
+            // if another callback invokes this code against the same draft.
+            const sent = window.__antharesXSubmissionKeys ||
+                         (window.__antharesXSubmissionKeys = new Set());
+            if (sent.has(key)) throw new Error("X_DUPLICATE_CLICK_BLOCKED");
+            if (!element.isConnected ||
+                element.getAttribute("aria-disabled") === "true" ||
+                element.disabled) throw new Error("X_POST_BUTTON_NOT_READY");
+            sent.add(key);
+            element.click();
+        }""", key, timeout=12500)
         url=evidence(ctx,data["caption"],attempts=18)
         if not url:
             state(n,"UNCERTAIN")
