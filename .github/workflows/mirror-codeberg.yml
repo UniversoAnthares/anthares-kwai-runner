@@ -26,7 +26,7 @@ jobs:
       - name: Verify and mirror primary branch and tags without force
         env:
           CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
-        shell: bash
+        shell: 'C:\Program Files\Git\bin\bash.exe --noprofile --norc -e -o pipefail {0}'
         run: |
           set -euo pipefail
           if [ -z "${CODEBERG_PUSH_URL:-}" ]; then
@@ -56,17 +56,17 @@ jobs:
         # Missing repository-admin API scope must not invalidate a proven Git mirror.
         # Keep the independent Actions capability alarm in the readback report.
         continue-on-error: true
-        shell: bash
+        shell: powershell
         env:
           CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
           CODEBERG_API_TOKEN: ${{ secrets.CODEBERG_API_TOKEN }}
         run: |
           set -euo pipefail
-          python3 tools/codeberg_admin_reconcile.py
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/codeberg_admin_reconcile.py
 
       - name: Prove repository settings and exact commit parity
-        shell: bash
+        shell: powershell
         run: |
-          set -euo pipefail
-          git fetch --quiet origin refs/heads/main:refs/remotes/origin/main
-          EXPECTED_GITHUB_MAIN_SHA="$(git rev-parse refs/remotes/origin/main)" python3 tools/codeberg_mirror_health.py
+          $env:EXPECTED_GITHUB_MAIN_SHA = (git rev-parse refs/remotes/origin/main)
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/codeberg_mirror_health.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
