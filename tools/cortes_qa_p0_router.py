@@ -62,11 +62,20 @@ def workflow_incidents():
             name=str(run.get("name") or "")
             if not re.search(r"cortes|tiktok|kwai|pinterest|threads|instagram|facebook|linkedin|youtube|publish|buffer",name,re.I):
                 continue
-            if "P0 publication incident" in name: continue
+            # The QA dispatcher and superseded mirror runs are internal
+            # orchestration, not social-publication failures. Do not create an
+            # incident from ordinary concurrency cancellation: it could
+            # recursively saturate the QA controller every five minutes.
+            lower=name.lower()
+            if ("p0 publication incident" in lower or
+                ("qa" in lower and any(t in lower for t in
+                     ("controller","executor","watchdog","immediate","incident"))) or
+                ("mirror" in lower and "codeberg" in lower)):
+                continue
             status=str(run.get("status") or "")
             conclusion=str(run.get("conclusion") or "")
             is_queued=status in ("queued","pending","waiting","requested")
-            if not (is_queued or conclusion in ("failure","timed_out","cancelled")):
+            if not (is_queued or conclusion in ("failure","timed_out")):
                 continue
             try:
                 created=dt.datetime.fromisoformat(run["created_at"].replace("Z","+00:00"))
@@ -91,6 +100,9 @@ def workflow_incidents():
                            "stage":"github_actions_"+("queued_stale" if is_queued else conclusion),
                            "evidence":"https://github.com/"+repo+"/actions/runs/"+rid,
                            "description":name[:100]})
+    # De-duplicate by fingerprint within the same scan, independent of
+    # backend pagination or repeated failure observations.
+    output=list({item["id"]:item for item in output}.values())
     if unavailable==len(REPOS):
         raise RuntimeError("CORTES_QA_GITHUB_ALL_REPOS_INACCESSIBLE")
     return output
