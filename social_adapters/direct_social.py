@@ -37,7 +37,7 @@ def instagram(payload, publish=False):
     media=payload.get("media_url",""); text=payload.get("text","")
     if not media: raise AdapterError("instagram_media_required")
     if not publish: return {"status":"READY","destination_key":dest}
-    payload=prepare_publication_metadata(payload)
+    payload=prepare_publication_metadata(payload, include_inline_hashtags=False)
     text=payload["text"]
     base=os.getenv("META_GRAPH_BASE","https://graph.instagram.com"); ver=os.getenv("META_GRAPH_VERSION","v24.0")
     is_video=payload.get("media_type","").lower()=="video"
@@ -60,7 +60,7 @@ def threads(payload, publish=False):
     text=payload.get("text",""); media=payload.get("media_url","")
     if not text and not media: raise AdapterError("threads_content_required")
     if not publish: return {"status":"READY","destination_key":dest}
-    payload=prepare_publication_metadata(payload)
+    payload=prepare_publication_metadata(payload, include_inline_hashtags=False)
     text=payload["text"]
     base=os.getenv("THREADS_GRAPH_BASE","https://graph.threads.net"); ver=os.getenv("THREADS_GRAPH_VERSION","v1.0")
     data={"access_token":token,"text":text}
@@ -82,7 +82,7 @@ def x(payload, publish=False):
     token=need("X_USER_ACCESS_TOKEN"); text=payload.get("text","")
     if not text: raise AdapterError("x_text_required")
     if not publish: return {"status":"READY","destination_key":dest}
-    payload=prepare_publication_metadata(payload, title_limit=240)
+    payload=prepare_publication_metadata(payload, title_limit=240, include_inline_hashtags=False)
     text=payload["text"]
     if len(text)>280: raise AdapterError("x_post_exceeds_280_characters")
     raw=json.dumps({"text":text}).encode()
