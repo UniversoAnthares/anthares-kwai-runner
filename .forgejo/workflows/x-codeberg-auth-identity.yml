@@ -1,0 +1,29 @@
+name: X Codeberg Authenticated Browser Proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-x-codeberg-identity-proof
+  cancel-in-progress: false
+
+jobs:
+  authenticated-identity:
+    runs-on: codeberg-tiny
+    timeout-minutes: 9
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install read-only headless browser without modifying system Python
+        run: |
+          set -eu
+          python3 -m venv /tmp/anthares-x-auth-venv
+          /tmp/anthares-x-auth-venv/bin/python -m pip install --disable-pip-version-check playwright requests cryptography
+          /tmp/anthares-x-auth-venv/bin/python -m playwright install chromium
+      - name: Verify encrypted vault and authenticated account without publishing
+        run: /tmp/anthares-x-auth-venv/bin/python -u tools/x_cloud_browser_identity_probe.py
