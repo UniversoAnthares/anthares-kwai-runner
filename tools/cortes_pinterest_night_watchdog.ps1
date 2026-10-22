@@ -24,6 +24,41 @@ try{
     $status.lastRun=$info.LastRunTime.ToString('o')
     $status.lastResult=$info.LastTaskResult
     $status.nextRun=$info.NextRunTime.ToString('o')
+    # A healthy scheduler is NOT evidence of a published Pin. Record separate
+    # indicators from the publisher's own sanitized events and Neon ledger.
+    $eventsPath='D:\AntharsWork\cortes-pinterest-local\pinterest-browser-events.log'
+    if(Test-Path $eventsPath){
+        $events=@(Get-Content $eventsPath -Tail 250 -ErrorAction SilentlyContinue|
+            ForEach-Object {try{$_|ConvertFrom-Json}catch{}})
+        $lastEvent=$events|Select-Object -Last 1
+        if($lastEvent){
+            $status.lastEvent=[string]$lastEvent.action
+            $status.lastEventTime=[string]$lastEvent.when
+            if($lastEvent.action -eq 'PINTEREST_DRAFT_CAPACITY_PAUSED'){
+                $status.publisher='BLOCKED_DRAFT_CAPACITY'
+                $status.qa='PINTEREST_DRAFT_CAPACITY_EXHAUSTED'
+            }elseif($lastEvent.action -eq 'PINTEREST_UI_BLOCKED'){
+                $status.publisher='DEGRADED_UI'
+                $status.qa='PINTEREST_UI_PUBLICATION_BLOCKED'
+            }
+        }
+        $latestPin=@($events|Where-Object {$_.action -eq 'PIN_CONFIRMED'}|
+            Select-Object -Last 1)
+        if($latestPin.Count -gt 0){$status.lastConfirmedAt=[string]$latestPin[0].when}
+    }
+    try{
+        $health=Invoke-RestMethod 'https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/?action=health' -TimeoutSec 7
+        $rows=@($health.counts|Where-Object {$_.target_key -eq 'pinterest:lucasyahn'})
+        $queued=@($rows|Where-Object {$_.status -eq 'queued'})
+        $confirmed=@($rows|Where-Object {$_.status -eq 'confirmed'})
+        $status.queued=if($queued.Count){[int]$queued[0].n}else{0}
+        $status.confirmed=if($confirmed.Count){[int]$confirmed[0].n}else{0}
+        if($status.publisher -eq 'SCHEDULED' -and $status.queued -gt 0 -and
+            $info.LastTaskResult -ne 0){
+            $status.publisher='DEGRADED_SCHEDULED_NOT_PUBLISHING'
+            $status.qa='PINTEREST_QUEUE_STALLED'
+        }
+    }catch{$status.queueStatus='LEDGER_HEALTH_UNAVAILABLE'}
     try{
         $version=Invoke-RestMethod 'http://127.0.0.1:9226/json/version' -TimeoutSec 4
         if($version.Browser -match '^Chrome/'){$status.chrome='HEADLESS_PROFILE_UP'}
