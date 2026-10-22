@@ -197,28 +197,42 @@ def publish_once():
 
 def main():
     cloud_only()
-    policy=queue("policy")
-    if not policy.get("enabled") or int(policy.get("remaining",0))<=0:
-        print(json.dumps({"instagram_cloud":"BUFFER_BUDGET_HANDOFF_OWN",
-                          "buffer_used_today":policy.get("used"),
-                          "buffer_daily_limit":20,
-                          "buffer_weekday_enabled":bool(policy.get("enabled"))}),flush=True)
+    cooldown=queue("cooldown-status")
+    if cooldown.get("active"):
+        print(json.dumps({"instagram_cloud":"IDLE_BUFFER_HTTP429_COOLDOWN",
+                          "until":cooldown.get("cooldown_until")}),flush=True)
         return 0
-    confirmed=reconcile()
-    batch=6 if os.getenv("CORTES_IG_IMMEDIATE_UNTIL_UTC")=="2026-10-22T09:00:00Z" else 1
-    outcomes=[]
-    for attempt in range(batch):
-        status=publish_once()
-        outcomes.append(status)
-        print(json.dumps({"instagram":"BUFFER_QUEUE_ITEM_RESULT","attempt":attempt+1,
-                          "status":status}),flush=True)
-        if status.startswith("IDLE"): break
-        if attempt+1<batch: time.sleep(3)
-    confirmed+=reconcile()
-    print(json.dumps({"instagram_cloud":"PASS","scheduled":outcomes.count("SCHEDULED_IN_BUFFER"),
-                      "isolated_404":outcomes.count("QUARANTINED_HTTP_404"),
-                      "confirmed":confirmed}),flush=True)
-    return 0
+    try:
+        policy=queue("policy")
+        if not policy.get("enabled") or int(policy.get("remaining",0))<=0:
+            print(json.dumps({"instagram_cloud":"BUFFER_BUDGET_HANDOFF_OWN",
+                              "buffer_used_today":policy.get("used"),
+                              "buffer_daily_limit":20,
+                              "buffer_weekday_enabled":bool(policy.get("enabled"))}),flush=True)
+            return 0
+        confirmed=reconcile()
+        batch=6 if os.getenv("CORTES_IG_IMMEDIATE_UNTIL_UTC")=="2026-10-22T09:00:00Z" else 1
+        outcomes=[]
+        for attempt in range(batch):
+            status=publish_once()
+            outcomes.append(status)
+            print(json.dumps({"instagram":"BUFFER_QUEUE_ITEM_RESULT","attempt":attempt+1,
+                              "status":status}),flush=True)
+            if status.startswith("IDLE"): break
+            if attempt+1<batch: time.sleep(3)
+        confirmed+=reconcile()
+        print(json.dumps({"instagram_cloud":"PASS","scheduled":outcomes.count("SCHEDULED_IN_BUFFER"),
+                          "isolated_404":outcomes.count("QUARANTINED_HTTP_404"),
+                          "confirmed":confirmed}),flush=True)
+        return 0
+    except BufferBlocked as exc:
+        if str(exc)!="BUFFER_HTTP_429":
+            raise
+        queue("cooldown",{"seconds":900})
+        print(json.dumps({"instagram_cloud":"IDLE_BUFFER_HTTP429_COOLDOWN",
+                          "cooldown_seconds":900,"queue_mutated":False}),flush=True)
+        return 0
+
 
 if __name__=="__main__":
     try: sys.exit(main())
