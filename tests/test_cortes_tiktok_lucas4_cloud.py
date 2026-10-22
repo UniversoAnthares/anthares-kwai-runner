@@ -135,6 +135,51 @@ class SecondaryCloudTests(unittest.TestCase):
             {"id":"tt-test","lease_generation":3,
              "error":"secondary_cloud_requires_reconciliation"})
 
+    def test_studio_retries_empty_html_until_exact_account(self):
+        from unittest.mock import Mock
+        page=Mock()
+        page.url="https://www.tiktok.com/tiktokstudio/content"
+        page.goto.return_value=Mock(status=200)
+        password=Mock()
+        password.count.return_value=0
+        listing=Mock()
+        listing.evaluate_all.side_effect=[[],[
+            {"href":"https://www.tiktok.com/@lucasrosalem4/video/7699234172166081810",
+             "text":"existing video"}]]
+        page.locator.side_effect=lambda selector: password if "password" in selector else listing
+        self.assertEqual(len(q.studio(page)),1)
+        self.assertEqual(page.goto.call_count,2)
+
+    def test_studio_rejects_foreign_identity_without_post(self):
+        from unittest.mock import Mock
+        page=Mock()
+        page.url="https://www.tiktok.com/tiktokstudio/content"
+        page.goto.return_value=Mock(status=200)
+        password=Mock()
+        password.count.return_value=0
+        listing=Mock()
+        listing.evaluate_all.return_value=[
+            {"href":"https://www.tiktok.com/@foreign/video/7699234172166081810",
+             "text":"foreign video"}]
+        page.locator.side_effect=lambda selector: password if "password" in selector else listing
+        with self.assertRaisesRegex(q.SafeStop,"IDENTITY_NOT_EXACT"):
+            q.studio(page)
+        self.assertEqual(page.goto.call_count,1)
+
+    def test_studio_empty_after_three_attempts_is_safe_stop(self):
+        from unittest.mock import Mock
+        page=Mock()
+        page.url="https://www.tiktok.com/tiktokstudio/content"
+        page.goto.return_value=Mock(status=200)
+        password=Mock()
+        password.count.return_value=0
+        listing=Mock()
+        listing.evaluate_all.return_value=[]
+        page.locator.side_effect=lambda selector: password if "password" in selector else listing
+        with self.assertRaisesRegex(q.SafeStop,"NO_OWNED_LINKS"):
+            q.studio(page)
+        self.assertEqual(page.goto.call_count,3)
+
     def test_cloud_starts_are_budgeted_by_second_account(self):
         source=(ROOT/"infra"/"neon-cortes-lucasrosalem4"/"index.mjs").read_text(encoding="utf-8")
         self.assertIn("const TARGET='tiktok:lucasrosalem4'",source)
