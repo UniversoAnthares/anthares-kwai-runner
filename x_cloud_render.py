@@ -9,6 +9,8 @@ import sys
 import unicodedata
 from pathlib import Path
 
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 import x_cloud_prepare as prep
 
 REQ = Path(os.getenv("X_REQUEST_JSON", "x-microcut-request.json"))
@@ -126,19 +128,19 @@ def render_microcut(scan: Path, lo: float, hi: float, removals: list[dict], edit
         inputs.append(f"[v{i}][a{i}]")
     filters.append("".join(inputs)+f"concat=n={len(keep)}:v=1:a=1[v][a]")
     cmd=["ffmpeg","-y","-hide_banner","-loglevel","error","-i",str(scan),"-filter_complex",";".join(filters),"-map","[v]","-map","[a]","-c:v","libx264","-preset","veryfast","-crf","20","-c:a","aac","-b:a","160k","-movflags","+faststart",str(edited)]
-    subprocess.run(cmd,check=True,timeout=600)
+    subprocess.run(cmd,check=True,timeout=600,creationflags=CREATE_NO_WINDOW)
 
 
 def horizontalize(edited: Path, out: Path) -> None:
     vf="scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1"
     cmd=["ffmpeg","-y","-hide_banner","-loglevel","error","-i",str(edited),"-vf",vf,"-map","0:v:0","-map","0:a:0","-c:v","libx264","-preset","veryfast","-crf","23","-maxrate","800k","-bufsize","1600k","-c:a","aac","-b:a","160k","-movflags","+faststart",str(out)]
-    subprocess.run(cmd,check=True,timeout=900)
+    subprocess.run(cmd,check=True,timeout=900,creationflags=CREATE_NO_WINDOW)
     if not out.exists() or out.stat().st_size < 200_000:
         raise RuntimeError("Arquivo final inválido.")
 
 
 def media_meta(path: Path) -> dict:
-    p=subprocess.run(["ffprobe","-v","error","-select_streams","v:0","-show_entries","stream=width,height:format=duration","-of","json",str(path)],capture_output=True,text=True,check=True)
+    p=subprocess.run(["ffprobe","-v","error","-select_streams","v:0","-show_entries","stream=width,height:format=duration","-of","json",str(path)],capture_output=True,text=True,check=True,creationflags=CREATE_NO_WINDOW)
     data=json.loads(p.stdout or "{}")
     streams=data.get("streams") or []
     if not streams: raise RuntimeError("Saída sem vídeo.")
