@@ -20,7 +20,9 @@ permissions:
   id-token: write
   issues: write
 concurrency:
-  group: cortes-instagram-buffer-cloud-producer
+  # Readback-only can safely run while the publisher queue is busy; Neon CAS
+  # keeps confirmation idempotent. Frequent schedules must not cancel QA proof.
+  group: ${{ github.event_name == 'workflow_dispatch' && inputs.reconcile_only && 'cortes-instagram-buffer-readback-only' || 'cortes-instagram-buffer-cloud-producer' }}
   cancel-in-progress: false
 jobs:
   publish-and-reconcile:
