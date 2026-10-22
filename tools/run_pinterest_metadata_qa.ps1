@@ -5,7 +5,7 @@ trap {
   $log=Join-Path (Split-Path -Parent $PSScriptRoot) 'qa-health\pinterest-qa-exit.log'
   $dir=Split-Path -Parent $log
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
-  $row=@{at=(Get-Date).ToUniversalTime().ToString('o');component='pinterest-metadata-qa';exit_code=1;stage='bootstrap';failure=$_.Exception.GetType().Name}
+  $row=@{at=(Get-Date).ToUniversalTime().ToString('o');component='pinterest-metadata-qa';exit_code=1;stage='bootstrap';failure=$_.Exception.GetType().Name;line=$_.InvocationInfo.ScriptLineNumber}
   Add-Content -LiteralPath $log -Value ($row|ConvertTo-Json -Compress) -Encoding UTF8
   exit 1
 }
