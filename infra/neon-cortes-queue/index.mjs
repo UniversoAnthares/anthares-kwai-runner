@@ -179,7 +179,7 @@ async function instagramDirectAction(verb,b){
  }
  if(verb==='missing'){
   const evidence={kind:'source_media_http_404',confirmed_on_network:false,
-    quarantine_at:new Date().toISOString(),discard_policy:'next_local_daily_round'};
+    quarantine_at:new Date().toISOString(),discard_policy:'qa_24h_then_qa_exhaustion_required'};
   const rows=await query(`UPDATE cortes_publications SET status='uncertain',
     confirmation_evidence=$5::jsonb,lease_owner=NULL,lease_until=NULL,updated_at=now()
     WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3
@@ -290,8 +290,9 @@ async function bufferAction(verb,b,platform){
   await query(`UPDATE cortes_publications SET status='failed',lease_owner=NULL,lease_until=NULL,updated_at=now()
     WHERE target_key=$1 AND status='uncertain'
       AND confirmation_evidence->>'kind'='source_media_http_404'
-      AND (updated_at AT TIME ZONE 'America/Campo_Grande')::date
-          < (now() AT TIME ZONE 'America/Campo_Grande')::date`,[dest]);
+      AND COALESCE(NULLIF(confirmation_evidence->>'quarantine_at','')::timestamptz,updated_at)
+          <= now()-interval '24 hours'
+      AND confirmation_evidence @> '{"qa_recovery_exhausted":true}'::jsonb`,[dest]);
   const held=await query(`SELECT count(*)::int n FROM cortes_publications
    WHERE target_key=$1 AND status='uncertain'
    AND confirmation_evidence->>'kind'='buffer_scheduled'`,[dest]);
@@ -426,7 +427,7 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
       await query("DELETE FROM cortes_buffer_daily_slots WHERE job_id=$1 AND target_key=$2 AND local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date",[id,dest]);
     return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PINTEREST_MEDIA_MISSING_FENCE_REJECTED'};
   }
-  const evidence={kind:'source_media_http_404',account:dest,confirmed_on_network:false,quarantine_at:new Date().toISOString(),discard_policy:'next_local_daily_round'};
+  const evidence={kind:'source_media_http_404',account:dest,confirmed_on_network:false,quarantine_at:new Date().toISOString(),discard_policy:'qa_24h_then_qa_exhaustion_required'};
   const rows=await query(`UPDATE cortes_publications SET status='uncertain',
       confirmation_evidence=$5::jsonb,lease_until=NULL,lease_owner=NULL,updated_at=now()
       WHERE id=$1 AND target_key=$2 AND status='leased'
@@ -741,8 +742,9 @@ async function personalAction(verb,b){
   await query(`UPDATE cortes_publications SET status='failed',lease_owner=NULL,lease_until=NULL,updated_at=now()
     WHERE target_key=$1 AND status='uncertain'
       AND confirmation_evidence->>'kind'='source_media_http_404'
-      AND (updated_at AT TIME ZONE 'America/Campo_Grande')::date
-          < (now() AT TIME ZONE 'America/Campo_Grande')::date`,[P_TARGET]);
+      AND COALESCE(NULLIF(confirmation_evidence->>'quarantine_at','')::timestamptz,updated_at)
+          <= now()-interval '24 hours'
+      AND confirmation_evidence @> '{"qa_recovery_exhausted":true}'::jsonb`,[P_TARGET]);
   // A read-only permission can be unavailable to self-serve member apps.
   // Keep accepted-but-unverified items UNCERTAIN and never retry their IDs;
   // other distinct queued shorts must continue under the shared daily budget.
@@ -775,7 +777,7 @@ async function personalAction(verb,b){
   return r.length?{ok:true,job:r[0]}:{ok:false,error:'PERSONAL_STALE_FENCE'};
  }
  if(verb==='media-missing'){
-  const evidence={kind:'source_media_http_404',account:'personal',confirmed_on_network:false,quarantine_at:new Date().toISOString(),discard_policy:'next_local_daily_round'};
+  const evidence={kind:'source_media_http_404',account:'personal',confirmed_on_network:false,quarantine_at:new Date().toISOString(),discard_policy:'qa_24h_then_qa_exhaustion_required'};
   const rows=await query("UPDATE cortes_publications SET status='uncertain',confirmation_evidence=$5::jsonb,lease_until=NULL,lease_owner=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",[id,P_TARGET,owner,generation,JSON.stringify(evidence)]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PERSONAL_STALE_FENCE'};
  }
