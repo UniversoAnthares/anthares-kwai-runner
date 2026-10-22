@@ -24,6 +24,16 @@ class XLocalLongformSourceTests(unittest.TestCase):
         self.assertIn("New-TimeSpan -Hours 2",sh)
         self.assertIn("pythonw.exe",sh)
 
+    def test_github_cli_reads_unicode_without_windows_cp1252(self):
+        source = SCRIPT.read_text(encoding="utf8")
+        self.assertIn('encoding="utf-8", errors="strict"', source)
+        self.assertIn("creationflags=subprocess.CREATE_NO_WINDOW", source)
+        import subprocess
+        with patch.object(producer.subprocess, "run", return_value=subprocess.CompletedProcess(
+                args=["gh"], returncode=0, stdout='{"title":"O Homem do Elevador: aparências e compaixão"}',
+                stderr="")):
+            self.assertEqual(producer.gh("/issues/497")["title"].split(":")[0], "O Homem do Elevador")
+
     def test_authenticated_producer_no_tinyfish_or_personal_chrome(self):
         source=SCRIPT.read_text(encoding="utf8")
         self.assertIn("X_YT_COOKIE_FILE",source)
