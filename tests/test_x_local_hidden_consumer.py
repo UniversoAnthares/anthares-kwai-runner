@@ -41,9 +41,11 @@ class XLocalConsumerTests(unittest.TestCase):
 
     def test_atomic_claim_must_precede_single_post_click(self):
         source=FILE.read_text(encoding="utf8")
-        self.assertEqual(source.count('button.evaluate("(element) => element.click()"'),1)
-        self.assertLess(source.index('service(token,"/claim-local"'),source.index('button.evaluate("(element) => element.click()"'))
-        self.assertLess(source.index('state(n,"SUBMISSION_STARTED"'),source.index('button.evaluate("(element) => element.click()"'))
+        self.assertEqual(source.count('button.evaluate("""(element, key)'),1)
+        self.assertIn('if (sent.has(key)) throw new Error("X_DUPLICATE_CLICK_BLOCKED")',source)
+        self.assertIn('sent.add(key);',source)
+        self.assertLess(source.index('service(token,"/claim-local"'),source.index('button.evaluate("""(element, key)'))
+        self.assertLess(source.index('state(n,"SUBMISSION_STARTED"'),source.index('button.evaluate("""(element, key)'))
         self.assertIn('service(token,"/confirm-local"',source)
         self.assertIn('if old.get("status")!="NOT_FOUND"',source)
 
