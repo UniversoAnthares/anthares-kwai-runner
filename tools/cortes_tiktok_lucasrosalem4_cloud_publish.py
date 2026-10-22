@@ -320,18 +320,42 @@ def publish_one(job,token,state):
                     import tiktok_worker as tw
                     tw.STORAGE_RAW=os.environ["TIKTOK_STORAGE_STATE"]
                     tw.EXPECTED_USERNAME=ACCOUNT
+                    print("SECONDARY_CLOUD_PRESTART_STAGE=open_upload",flush=True)
                     upload=t.open_upload(page,ctx)
                     upload.set_input_files(str(media))
+                    print("SECONDARY_CLOUD_PRESTART_STAGE=upload_ready",flush=True)
                     button=t.wait_upload_ready(page,timeout_seconds=260)
                     close_editor_modals(page)
+                    print("SECONDARY_CLOUD_PRESTART_STAGE=caption",flush=True)
                     fill_caption(page,caption_for(job))
+                    print("SECONDARY_CLOUD_PRESTART_STAGE=visibility",flush=True)
                     if t.set_public_visibility(page) is not True:
                         raise SafeStop("SECONDARY_VISIBILITY_NOT_PUBLIC")
                     button=t.enabled_post_button(page)
                     if button is None or not button.is_enabled():
                         raise SafeStop("SECONDARY_POST_BUTTON_NOT_READY")
-                    button.scroll_into_view_if_needed(timeout=15000)
-                    button.click(trial=True,timeout=13000)
+                    print("SECONDARY_CLOUD_PRESTART_STAGE=clickability",flush=True)
+                    from playwright.sync_api import TimeoutError as PlaywrightTimeout
+                    try:
+                        button.scroll_into_view_if_needed(timeout=15000)
+                        button.click(trial=True,timeout=13000)
+                    except PlaywrightTimeout:
+                        # TikTok Studio can present a late automatic-check overlay.
+                        # Only recheck clickability BEFORE the Neon STARTED checkpoint;
+                        # never force-click or repeat the actual post operation.
+                        print("::warning::SECONDARY_PRESTART_CLICKABILITY_RETRY",flush=True)
+                        close_editor_modals(page)
+                        if t.set_public_visibility(page) is not True:
+                            raise SafeStop("SECONDARY_VISIBILITY_NOT_PUBLIC_AFTER_OVERLAY")
+                        button=t.enabled_post_button(page)
+                        if button is None or not button.is_enabled():
+                            raise SafeStop("SECONDARY_POST_BUTTON_NOT_READY_AFTER_OVERLAY")
+                        try:
+                            button.scroll_into_view_if_needed(timeout=12000)
+                            button.click(trial=True,timeout=15000)
+                        except PlaywrightTimeout as exc:
+                            raise SafeStop("SECONDARY_PRESTART_CLICKABILITY_UNVERIFIED") from exc
+                    print("SECONDARY_CLOUD_PRESTART_STAGE=verified",flush=True)
                     before_url=page.url
                     # The irreversible checkpoint is persisted by the Neon
                     # server with account-specific daily budget trigger.
