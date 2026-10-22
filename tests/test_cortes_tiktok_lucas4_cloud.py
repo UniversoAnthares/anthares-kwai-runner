@@ -60,6 +60,23 @@ class SecondaryCloudTests(unittest.TestCase):
         self.assertEqual(mocked.call_count,2)
         self.assertIn("lucas4-ha",mocked.call_args.args[0].full_url)
 
+    def test_codeberg_network_timeout_retries_only_prestart_claim(self):
+        from unittest.mock import Mock
+        result=Mock()
+        result.__enter__=Mock(return_value=result)
+        result.__exit__=Mock(return_value=False)
+        with patch.object(q.urllib.request,"urlopen",side_effect=[TimeoutError(),result]) as calls, \\
+             patch.object(q,"read_json",return_value={"ok":True,"job":None}):
+            self.assertTrue(q.call("claim","fake-token",{})["ok"])
+            self.assertEqual(calls.call_count,2)
+            self.assertIn("lucas4-ha",calls.call_args.args[0].full_url)
+
+    def test_codeberg_network_timeout_never_retries_start(self):
+        with patch.object(q.urllib.request,"urlopen",side_effect=TimeoutError()) as calls:
+            with self.assertRaisesRegex(q.SafeStop,"NETWORK_TimeoutError_ACTION_start"):
+                q.call("start","fake-token",{"id":"fenced"})
+            self.assertEqual(calls.call_count,1)
+
     def test_irreversible_start_never_retries_after_http_error(self):
         from urllib.error import HTTPError
         failure=HTTPError(q.QUEUE,503,"unknown completion",{},None)
