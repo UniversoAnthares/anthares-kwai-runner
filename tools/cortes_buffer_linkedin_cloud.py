@@ -191,17 +191,31 @@ def exception_active():
 
 def main():
     cloud_only()
+    # An exhausted NEW-post budget cannot suppress readback of already
+    # scheduled posts. Never create a new post in reconcile-only mode.
+    try:
+        confirmed=reconcile()
+    except BufferBlocked as error:
+        if str(error)!="BUFFER_HTTP_429":
+            raise
+        queue("cooldown",{"seconds":1800})
+        print(json.dumps({"linkedin_cloud":"BACKOFF_BUFFER_HTTP_429",
+                          "new_posts":0}),flush=True)
+        return 0
+    if os.getenv("CORTES_RECONCILE_ONLY")=="1":
+        print(json.dumps({"linkedin_cloud":"RECONCILE_ONLY",
+                          "posts_confirmed_this_run":confirmed,"new_posts":0}),flush=True)
+        return 0
     policy=queue("policy")
     if not policy.get("enabled") or int(policy.get("remaining",0))<=0:
         print(json.dumps({"linkedin_cloud":"BUFFER_BUDGET_HANDOFF_OWN",
                           "buffer_used_today":policy.get("used"),
                           "buffer_daily_limit":20,
                           "buffer_weekday_enabled":bool(policy.get("enabled")),
-                          "requires_direct_company_publisher":True}),flush=True)
+                          "requires_direct_company_publisher":True,\n                          "posts_confirmed_this_run":confirmed}),flush=True)
         return 0
     # Reconciliation before scheduling also frees up a Buffer queue slot.
     try:
-        confirmed=reconcile()
         # Read-only identity and rate-limit preflight before leasing/starting
         # another cut. A 429 leaves the Neon ledger unchanged.
         verified=channels()
