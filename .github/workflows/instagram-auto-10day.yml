@@ -62,7 +62,20 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
-          python -m pip install --disable-pip-version-check faster-whisper yt-dlp
+          python -m pip install --disable-pip-version-check 'faster-whisper==1.2.1' 'av==17.1.0' yt-dlp
+          # ABI smoke check before any download, render or publication.
+          python - <<'PY'
+          import av, io
+          from faster_whisper import WhisperModel
+          assert av.__version__ == '17.1.0', 'INSTAGRAM_PYAV_ABI_MISMATCH'
+          try:
+              av.open(io.BytesIO(b'x'), mode='r', metadata_errors='ignore')
+          except TypeError as exc:
+              raise RuntimeError('INSTAGRAM_PYAV_METADATA_ERRORS_UNSUPPORTED') from exc
+          except Exception:
+              pass  # Invalid probe bytes are expected after signature validation.
+          print('INSTAGRAM_ASR_ABI_OK')
+          PY
 
       - name: Unit and syntax tests
         run: |
