@@ -1,4 +1,4 @@
-name: CORTES LinkedIn personal - fenced video cloud publisher
+name: CORTES LinkedIn personal - standby hosted publisher
 on:
   push:
     branches: [main]
@@ -6,21 +6,22 @@ on:
       - '.github/workflows/cortes-linkedin-personal-cloud.yml'
       - 'tools/cortes_linkedin_personal_cloud.py'
   schedule:
-    - cron: '4,9,14,19,24,29,34,39,44,49,54,59 * * * *'
+    - cron: '4,19,34,49 * * * *'
   workflow_dispatch: {}
   workflow_run:
-    workflows: ["CORTES 3 independent networks - all shorts cloud fanout", "CORTES LinkedIn - automatic Buffer cloud publisher"]
+    workflows: ["CORTES LinkedIn personal - primary hosted cloud publisher"]
     types: [completed]
     branches: [main]
 permissions:
   contents: read
   id-token: write
+  actions: read
 concurrency:
-  group: cortes-linkedin-personal-cloud
+  group: cortes-linkedin-personal-standby-hosted
   cancel-in-progress: false
 jobs:
   publish-one:
-    if: ${{ vars.CORTES_LINKEDIN_PERSONAL_PAUSED != 'true' }}
+    if: ${{ vars.CORTES_LINKEDIN_PERSONAL_PAUSED != 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 14
     steps:
@@ -28,7 +29,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Decide whether primary cloud publisher is healthy
+        id: primary-health
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CORTES_STANDBY_EVENT: ${{ github.event_name }}
+        run: |
+          python -u -m tools.cortes_linkedin_fallback_gate
       - name: Read personal member token from Bitwarden Secrets Manager
+        if: steps.primary-health.outputs.run == 'true'
         uses: bitwarden/sm-action@v2
         with:
           access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
@@ -36,6 +45,7 @@ jobs:
           secrets: |
             bd261e5e-11bf-49fb-9baf-b4ea014ec5b7 > LINKEDIN_PERSONAL_ACCESS_TOKEN
       - name: Execute exactly one personal video publication, fenced and quota-scoped
+        if: steps.primary-health.outputs.run == 'true'
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
         run: |
