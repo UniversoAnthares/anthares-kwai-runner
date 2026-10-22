@@ -1,0 +1,109 @@
+# Five additional offline suites formerly on GitHub Actions.
+name: Anthares mobile and adapter QA - Codeberg
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/anthares-mobile-adapter-codeberg.yml'
+      - 'anthares_mobile/session_proof.py'
+      - 'independent_session/**'
+      - '.devcontainer/kwai-existing-session-publisher.py'
+      - 'direct-tiktok-publisher/tiktok_publish_adapter.py'
+      - 'direct-tiktok-publisher/tiktok_adapter_execute.py'
+      - 'tools/cortes_threads_*.mjs'
+      - 'tools/threads_*.mjs'
+      - 'infra/neon-threads-sync/**'
+      - 'tests/test_anthares_mobile_session_proof.py'
+      - 'tests/test_kwai_existing_session_publisher.py'
+      - 'tests/test_tiktok_publish_adapter.py'
+      - 'tests/threads_*.test.mjs'
+  schedule:
+    - cron: '23 7 * * *'
+permissions:
+  contents: read
+jobs:
+  offline-contracts:
+    runs-on: codeberg-tiny
+    timeout-minutes: 9
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - name: Mobile evidence and independent console tests
+        shell: bash
+        run: |
+          set -eu
+          test "${FORGEJO_REPOSITORY:-}" = "UniversoAnthares/anthares-kwai-runner"
+          python3 -m py_compile anthares_mobile/session_proof.py independent_session/remote_android_bridge.py independent_session/test_remote_android_bridge.py
+          python3 -m unittest discover -s tests -p 'test_anthares_mobile_session_proof.py' -v
+          python3 -m unittest independent_session.test_remote_android_bridge -v
+          python3 -m unittest tests.test_kwai_existing_session_publisher -v
+      - name: Threads continuity and Neon sync contracts
+        shell: bash
+        run: |
+          set -eu
+          for name in tools/cortes_threads_local_publisher.mjs tools/cortes_threads_continuity_guard.mjs tools/cortes_threads_reconcile_uncertain.mjs tools/cortes_threads_neon_sync.mjs tools/threads_primary_gate.mjs infra/neon-threads-sync/index.mjs; do
+            node --check "$name"
+          done
+          node --test tests/threads_primary_gate.test.mjs tests/threads_queue_policy.test.mjs tests/threads_neon_sync_contract.test.mjs
+      - name: TikTok adapter execution boundaries and synthetic planning
+        shell: bash
+        run: |
+          set -eu
+          python3 -m py_compile direct-tiktok-publisher/tiktok_publish_adapter.py direct-tiktok-publisher/tiktok_adapter_execute.py
+          python3 -m unittest tests.test_tiktok_publish_adapter -v
+          DB="$(mktemp -d)"
+          trap 'rm -rf "$DB"' EXIT
+          cat > "$DB/spec.json" <<'JSON'
+          {
+            "account":"universo.anthares",
+            "source_id":"9CIk-I_3VhM",
+            "source_start":8,
+            "source_end":98,
+            "media_sha256":"5A43C90508464C016E3F26F4CF17C04CA9BFA3E9EC9AFB7BD160E7A740B395E9",
+            "media_path":"/tmp/tiktok_9CIk-I_3VhM_8_98.mp4",
+            "destination":"tiktok",
+            "source_url":"https://www.youtube.com/watch?v=9CIk-I_3VhM",
+            "source_title":"A Poetica de Aristoteles - Parte 2 (LIVE)",
+            "title":"A Poetica de Aristoteles — trecho",
+            "summary":"Trecho sobre a Poetica de Aristoteles.",
+            "logical_id":"tiktok-9CIk-I_3VhM-8-98-real-v1"
+          }
+          JSON
+          python3 direct-tiktok-publisher/tiktok_publish_adapter.py "$DB/spec.json" > "$DB/manifest.json"
+          python3 - "$DB/manifest.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          assert d['job_id']=='tiktok-9CIk-I_3VhM-8-98-real-v1'
+          assert d['segment_id']=='9CIk-I_3VhM:8:98'
+          assert d['spec']['account']=='universo.anthares'
+          assert d['spec']['destination']=='tiktok'
+          assert d['job']['media_sha256']=='5a43c90508464c016e3f26f4cf17c04ca9bfa3e9ec9afb7bd160e7a740b395e9'
+          PY
+          printf 'synthetic-adapter-media' > "$DB/media.mp4"
+          SHA="$(sha256sum "$DB/media.mp4" | awk '{print $1}')"
+          cat > "$DB/generic-spec.json" <<JSON
+          {
+            "account":"universo.anthares",
+            "source_id":"arbitrary-source-2",
+            "source_start":101.5,
+            "source_end":147.25,
+            "media_sha256":"$SHA",
+            "media_path":"$DB/media.mp4",
+            "destination":"tiktok",
+            "source_url":"https://example.invalid/source",
+            "source_title":"Fonte arbitraria",
+            "title":"Trecho parametrizado",
+            "summary":"Metadados parametrizados"
+          }
+          JSON
+          python3 direct-tiktok-publisher/tiktok_adapter_execute.py "$DB/generic-spec.json" --plan "$DB/generic-plan.json" --prepare-only
+          python3 - "$DB/generic-plan.json" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1]))
+          assert p['source_id']=='arbitrary-source-2'
+          assert p['source_start']==101.5 and p['source_end']==147.25
+          assert p['account']=='universo.anthares'
+          assert p['destination']=='tiktok'
+          assert p['dedupe_key'].startswith('universo.anthares::tiktok::arbitrary-source-2:101.5:147.25::')
+          PY
+          echo 'CODEBERG_MOBILE_AND_ADAPTER_CONTRACTS=PASS'
