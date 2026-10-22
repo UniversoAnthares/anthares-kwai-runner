@@ -123,25 +123,47 @@ def state_from_secret():
 
 
 def studio(page):
-    response=page.goto("https://www.tiktok.com/tiktokstudio/content",wait_until="domcontentloaded",timeout=50000)
-    page.wait_for_timeout(3000)
-    if response is None or response.status>=400 or urlparse(page.url).hostname not in ("www.tiktok.com","tiktok.com"):
-        raise SafeStop("SECONDARY_STUDIO_HTTP_BLOCKED")
-    if "/login" in page.url.lower() or page.locator('input[type=password]').count()>0:
-        raise SafeStop("SECONDARY_STUDIO_LOGIN_REQUIRED")
-    links=page.locator('a[href*="/@"]').evaluate_all(
-        "(xs)=>xs.filter(x=>/\/video\/[0-9]+/.test(x.href)).map(x=>({href:x.href,text:(x.innerText||x.getAttribute('aria-label')||'').slice(0,700)})).slice(0,100)")
-    author=set()
-    records={}
-    for item in links:
-        match=re.search(r"/@([^/]+)/video/(\d{12,25})",str(item.get("href") or ""))
-        if match:
-            author.add(match.group(1).casefold())
-            if item.get("text"):
-                records[match.group(2)]=str(item["text"])
-    if author!={ACCOUNT}:
-        raise SafeStop("SECONDARY_STUDIO_IDENTITY_NOT_EXACT")
-    return records
+    """Verify exact account ownership, with bounded retries for empty hydration.
+
+    TikTok Studio may temporarily return no video anchors after navigation.
+    Missing anchors are distinct from evidence of a different account. Neither
+    condition authorizes posting without the exact owner check.
+    """
+    for attempt in range(3):
+        try:
+            response=page.goto("https://www.tiktok.com/tiktokstudio/content",
+                               wait_until="domcontentloaded",timeout=50000)
+            page.wait_for_timeout(1800+attempt*1600)
+            if (response is None or response.status>=400
+                    or urlparse(page.url).hostname not in ("www.tiktok.com","tiktok.com")):
+                raise SafeStop("SECONDARY_STUDIO_HTTP_BLOCKED")
+            if "/login" in page.url.lower() or page.locator('input[type=password]').count()>0:
+                raise SafeStop("SECONDARY_STUDIO_LOGIN_REQUIRED")
+            links=page.locator('a[href*="/@"]').evaluate_all(
+                "(xs)=>xs.filter(x=>/\\/video\\/[0-9]+/.test(x.href)).map(x=>({href:x.href,text:(x.innerText||x.getAttribute('aria-label')||'').slice(0,700)})).slice(0,100)")
+            authors=set()
+            records={}
+            for item in links:
+                match=re.search(r"/@([^/]+)/video/(\\d{12,25})",str(item.get("href") or ""))
+                if match:
+                    authors.add(match.group(1).casefold())
+                    if item.get("text"):
+                        records[match.group(2)]=str(item["text"])
+            if authors=={ACCOUNT}:
+                return records
+            if authors:
+                raise SafeStop("SECONDARY_STUDIO_IDENTITY_NOT_EXACT")
+            if attempt<2:
+                print("SECONDARY_STUDIO_HYDRATION_RETRY="+str(attempt+1),flush=True)
+                continue
+            raise SafeStop("SECONDARY_STUDIO_NO_OWNED_LINKS")
+        except SafeStop as exc:
+            if str(exc) not in ("SECONDARY_STUDIO_HTTP_BLOCKED",):
+                raise
+            if attempt==2:
+                raise
+            print("SECONDARY_STUDIO_HTTP_RETRY="+str(attempt+1),flush=True)
+    raise SafeStop("SECONDARY_STUDIO_IDENTITY_UNVERIFIED")
 
 
 def marker(sid):
