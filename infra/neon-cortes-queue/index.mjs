@@ -173,7 +173,7 @@ async function bufferAction(verb,b,platform){
   const rows=await query(`SELECT id,remote_id,confirmation_evidence FROM cortes_publications
    WHERE target_key=$1 AND status='uncertain'
    AND confirmation_evidence->>'kind'='buffer_scheduled'
-   ORDER BY updated_at ASC LIMIT 2`,[dest]);
+   ORDER BY updated_at ASC LIMIT 25`,[dest]);
   return{ok:true,jobs:rows};
  }
  if(verb==='lease'){
@@ -248,6 +248,24 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'STALE_FENCE'};
  }
  if(verb==='media-missing'){
+  if(platform==='pinterest'){
+    const rows=await query(`UPDATE cortes_publications SET status='queued',
+      confirmation_evidence=jsonb_build_object('kind','source_media_invalid',
+       'http_status',404,'confirmed_on_network',false,
+       'retry_after_at',to_char((CASE
+         WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date <
+                    (now() AT TIME ZONE 'America/Campo_Grande')::date
+           THEN now()+interval '90 minutes'
+         ELSE ((now() AT TIME ZONE 'America/Campo_Grande')::date + 1)
+                  AT TIME ZONE 'America/Campo_Grande' END) AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+      lease_until=NULL,lease_owner=NULL,updated_at=now()
+      WHERE id=$1 AND target_key=$2 AND status='leased'
+        AND publication_started_at IS NULL AND lease_owner=$3
+        AND lease_generation=$4 AND lease_until>now()
+      RETURNING id,status`,[id,dest,who,fence]);
+    return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PINTEREST_MEDIA_MISSING_FENCE_REJECTED'};
+  }
   const evidence={kind:'source_media_http_404',account:dest,confirmed_on_network:false,quarantine_at:new Date().toISOString(),discard_policy:'next_local_daily_round'};
   const rows=await query(`UPDATE cortes_publications SET status='uncertain',
       confirmation_evidence=$5::jsonb,lease_until=NULL,lease_owner=NULL,updated_at=now()
