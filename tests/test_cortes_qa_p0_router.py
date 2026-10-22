@@ -115,5 +115,26 @@ class P0RouterTests(unittest.TestCase):
         self.assertIn("QA-P0-FINGERPRINT",events[0]["body"])
 
 
+    def test_direct_dispatch_requires_confirmed_controller_ack(self):
+        with patch.object(router,"http",return_value={"ok":True}) as api:
+            self.assertTrue(router.dispatch_controller(528))
+        url,method,body=api.call_args.args
+        self.assertIn("cortes-qa-p0-controller.yml/dispatches",url)
+        self.assertEqual(method,"POST")
+        self.assertEqual(body["inputs"]["issue_number"],"528")
+
+    def test_direct_dispatch_fails_closed_without_ack(self):
+        with patch.object(router,"http",return_value={}):
+            with self.assertRaisesRegex(RuntimeError,"NOT_ACKNOWLEDGED"):
+                router.dispatch_controller(528)
+
+    def test_issue_204_api_reply_is_success(self):
+        from unittest.mock import MagicMock
+        context=MagicMock()
+        context.__enter__.return_value.status=204
+        with patch.object(router.urllib.request,"urlopen",return_value=context):
+            self.assertEqual(router.http("https://api.github.com/example","POST",{}),{"ok":True})
+
+
 if __name__=="__main__":
     unittest.main()

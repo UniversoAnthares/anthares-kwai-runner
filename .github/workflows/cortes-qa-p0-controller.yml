@@ -1,0 +1,144 @@
+name: CORTES QA P0 immediate event controller
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/cortes-qa-p0-controller.yml
+      - .github/workflows/cortes-qa-p0-executor.yml
+      - tools/cortes_qa_p0_router.py
+  issues:
+    types: [opened, reopened, labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Specific existing P0 incident; empty means scan open incidents'
+        required: false
+        type: string
+  schedule:
+    - cron: '*/5 * * * *'
+  pull_request:
+    paths:
+      - .github/workflows/cortes-qa-p0-controller.yml
+      - .github/workflows/cortes-qa-p0-executor.yml
+      - .github/workflows/cortes-qa-p0-publication-watchdog.yml
+      - tools/cortes_qa_p0_router.py
+permissions:
+  contents: read
+  actions: write
+  issues: write
+concurrency:
+  group: cortes-qa-p0-event-controller
+  cancel-in-progress: false
+jobs:
+  route-p0:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Dispatch bounded P0 executor with cross-run reconciliation
+        if: github.event_name != 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          QA_ISSUE_NUMBER: ${{ inputs.issue_number || '' }}
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const executor = 'cortes-qa-p0-executor.yml';
+            const maxDispatchPerRun = 8, maxAttempts = 3;
+            const cooldownMs = 5*60*1000, maxAgeMs = 72*60*60*1000;
+            const now = Date.now();
+            const marker = '[QA-P0-CONTROLLER] DISPATCH_ATTEMPT=';
+            function eligible(issue) {
+              return issue && issue.state === 'open' && !issue.pull_request &&
+                issue.labels?.some(x => (typeof x === 'string' ? x : x.name) === 'QA-P0') &&
+                /^\[QA[ -]P0\]/i.test(issue.title || '');
+            }
+            async function issueByNumber(number) {
+              const {data} = await github.rest.issues.get({owner,repo,issue_number:number});
+              return data;
+            }
+            async function candidates() {
+              const raw = String(process.env.QA_ISSUE_NUMBER || '').trim();
+              if (raw) {
+                if (!/^\d{1,8}$/.test(raw)) throw Error('INVALID_QA_ISSUE_NUMBER');
+                return [await issueByNumber(Number(raw))];
+              }
+              if (context.eventName === 'issues') {
+                const obj = context.payload.issue;
+                return obj ? [await issueByNumber(obj.number)] : [];
+              }
+              const all = [];
+              for (let page = 1; page <= 8; page++) {
+                const {data} = await github.rest.issues.listForRepo({
+                  owner,repo,state:'open',labels:'QA-P0',
+                  sort:'created',direction:'desc',per_page:100,page
+                });
+                all.push(...data.filter(x => eligible(x) &&
+                  now-Date.parse(x.created_at) <= maxAgeMs));
+                if (data.length < 100) break;
+              }
+              return all.sort((a,b) => Date.parse(a.created_at)-Date.parse(b.created_at));
+            }
+            const priorRuns = [];
+            for (let page = 1; page <= 4; page++) {
+              const {data} = await github.rest.actions.listWorkflowRuns({
+                owner,repo,workflow_id:executor,event:'workflow_dispatch',per_page:100,page
+              });
+              priorRuns.push(...data.workflow_runs);
+              if (data.workflow_runs.length < 100) break;
+            }
+            const events = await candidates();
+            let dispatched = 0, skipped = 0, failures = 0;
+            for (const issue of events) {
+              if (!eligible(issue)) {skipped++;continue;}
+              if (dispatched >= maxDispatchPerRun) {
+                core.warning('QA_P0_BACKLOG_INCOMPLETE: rerun scheduled in five minutes');
+                break;
+              }
+              const runTitle = 'QA-P0 #' + issue.number;
+              const found = priorRuns.filter(x => x.display_title === runTitle)
+                .sort((a,b) => Date.parse(b.created_at)-Date.parse(a.created_at));
+              const active = found.find(x => x.status !== 'completed');
+              if (active || found.some(x => x.conclusion === 'success')) {
+                skipped++;continue;
+              }
+              const {data:comments} = await github.rest.issues.listComments({
+                owner,repo,issue_number:issue.number,per_page:100
+              });
+              const attempts = comments.filter(x => (x.body || '').includes(marker));
+              const latest = attempts.at(-1);
+              if (latest && now - Date.parse(latest.created_at) < cooldownMs) {
+                skipped++;continue;
+              }
+              if (Math.max(attempts.length,found.length) >= maxAttempts) {
+                core.error('QA_P0_ATTEMPTS_EXHAUSTED issue='+issue.number);
+                failures++;continue;
+              }
+              const attempt = Math.max(attempts.length,found.length) + 1;
+              try {
+                await github.rest.actions.createWorkflowDispatch({
+                  owner,repo,workflow_id:executor,ref:'main',
+                  inputs:{issue_number:String(issue.number)}
+                });
+                await github.rest.issues.createComment({
+                  owner,repo,issue_number:issue.number,
+                  body:marker+attempt+' accepted at '+new Date().toISOString()+
+                    '. Executor: https://github.com/'+owner+'/'+repo+
+                    '/actions/workflows/'+executor+
+                    '. Dispatch acknowledgement is not execution proof.'
+                });
+                dispatched++;
+                core.notice('QA_P0_EXECUTOR_DISPATCH_ACCEPTED issue='+issue.number+' attempt='+attempt);
+              } catch (e) {
+                failures++;
+                core.error('QA_P0_DISPATCH_FAILED issue='+issue.number+' code='+e.status);
+              }
+            }
+            core.summary.addHeading('CORTES QA P0 event controller')
+              .addRaw('Candidates='+events.length+', dispatches='+dispatched+
+                ', skipped='+skipped+', failures='+failures+'.',true);
+            await core.summary.write();
+            if (failures) core.setFailed('QA_P0_CONTROLLER_DISPATCH_FAILURES='+failures);
+      - name: Validate control-plane YAML on pull requests
+        if: github.event_name == 'pull_request'
+        run: |
+          echo QA_P0_CONTROLLER_PR_VALIDATION=EVENT_REGISTERED

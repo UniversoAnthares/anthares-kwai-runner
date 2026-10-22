@@ -1,0 +1,100 @@
+name: CORTES QA P0 executor - incident diagnostics
+run-name: 'QA-P0 #${{ inputs.issue_number }}'
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Number of an existing labeled QA-P0 issue'
+        required: true
+        type: string
+permissions:
+  contents: read
+  issues: write
+  actions: read
+concurrency:
+  group: cortes-qa-p0-executor-${{ inputs.issue_number }}
+  cancel-in-progress: false
+jobs:
+  investigate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Validate trusted P0 and acknowledge execution
+        id: preflight
+        uses: actions/github-script@v7
+        env:
+          QA_ISSUE_NUMBER: ${{ inputs.issue_number }}
+        with:
+          script: |
+            const issue_number = Number(process.env.QA_ISSUE_NUMBER);
+            if (!Number.isSafeInteger(issue_number) || issue_number < 1) {
+              core.setFailed('INVALID_QA_ISSUE_NUMBER'); return;
+            }
+            const {owner,repo} = context.repo;
+            const {data: issue} = await github.rest.issues.get({owner,repo,issue_number});
+            const labels = issue.labels.map(x => typeof x === 'string' ? x : x.name);
+            if (issue.state !== 'open' || !labels.includes('QA-P0') || !/^\[QA[ -]P0\]/i.test(issue.title) || issue.pull_request) {
+              core.setFailed('NOT_AN_AUTHORIZED_OPEN_P0_INCIDENT'); return;
+            }
+            const m = issue.title.match(/^\[QA[ -]P0\]\[([a-z-]+)\]/i);
+            const network = m && /^(pinterest|threads|tiktok|kwai|linkedin|facebook|youtube|instagram|x|cortes-general)$/.test(m[1].toLowerCase()) ? m[1].toLowerCase() : 'cortes-general';
+            core.setOutput('network',network);
+            await github.rest.issues.createComment({
+              owner,repo,issue_number,
+              body:'[QA-P0-EXECUTOR] STARTED run=https://github.com/'+owner+'/'+repo+'/actions/runs/'+context.runId+' network='+network+'; checking code and regression contracts.'
+            });
+            core.notice('QA_P0_STARTED issue='+issue_number+' network='+network);
+
+      - uses: actions/checkout@v4
+        if: steps.preflight.outcome == 'success'
+
+      - name: Verify routing and control-plane invariants
+        id: contracts
+        if: steps.preflight.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/cortes_qa_p0_router.py
+          python3 -m unittest discover -s tests -p test_cortes_qa_p0_router.py -v
+          python3 -m unittest discover -s tests -p test_cortes_qa_daily_round.py -v
+
+      - name: Investigate Pinterest media, form and draft-capacity code
+        id: pinterest
+        if: steps.preflight.outputs.network == 'pinterest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/cortes_pinterest_metadata_qa.py tools/cortes_pinterest_browser_local.py
+          python3 -m unittest discover -s tests -p test_cortes_pinterest_browser_local.py -v
+          python3 -m unittest discover -s tests -p test_pinterest_draft_cap_nextday.py -v
+          python3 -m unittest discover -s tests -p test_pinterest_24h_titles_qa.py -v
+          python3 -m unittest discover -s tests -p test_pinterest_qa_jsonb_evidence.py -v
+
+      - name: Report actual execution and evidence to incident
+        if: always() && steps.preflight.outcome == 'success'
+        uses: actions/github-script@v7
+        env:
+          QA_ISSUE_NUMBER: ${{ inputs.issue_number }}
+          QA_NETWORK: ${{ steps.preflight.outputs.network }}
+          QA_CONTRACTS: ${{ steps.contracts.outcome }}
+          QA_PINTEREST: ${{ steps.pinterest.outcome }}
+        with:
+          script: |
+            const {owner,repo} = context.repo;
+            const issue_number = Number(process.env.QA_ISSUE_NUMBER);
+            const testsOk = process.env.QA_CONTRACTS === 'success' &&
+              (process.env.QA_NETWORK !== 'pinterest' || process.env.QA_PINTEREST === 'success');
+            const outcome = testsOk ? 'DIAGNOSTICS_PASSED_REPAIR_UNCONFIRMED' : 'DIAGNOSTICS_FAILED_REPAIR_REQUIRED';
+            const run = 'https://github.com/'+owner+'/'+repo+'/actions/runs/'+context.runId;
+            const next = process.env.QA_NETWORK === 'pinterest'
+              ? 'Investigate 404 media origin, disabled Publish button and draft-capacity state in the authenticated publisher. Reconcile Neon started/uncertain jobs before any retry. Never retransmit an unconfirmed upload.'
+              : 'Inspect the failing publisher logs, reproduce with bounded tests and reconcile uncertain publication receipts.';
+            await github.rest.issues.createComment({
+              owner,repo,issue_number,
+              body:'[QA-P0-EXECUTOR] '+outcome+'\nRun: '+run+
+                '\nContract tests: '+process.env.QA_CONTRACTS+
+                '\nPlatform tests: '+process.env.QA_PINTEREST+
+                '\n'+next+
+                '\nIssue remains open pending code repair and verified remote publication. A successful diagnostic run alone does not certify repair.'
+            });
+            if (!testsOk) core.setFailed('QA_P0_REGRESSION_CONTRACT_FAILURE');
