@@ -88,10 +88,10 @@ def prepare_publication_metadata(payload: dict, *, title_limit: int | None = Non
                 if isinstance(x, str) and x.startswith("#")]
     unique = list(dict.fromkeys(relevant))
     for tag in unique:
-        existing = re.sub(r"(?i)(?<!\\w)"+re.escape(tag)+r"\\b", "", existing).strip()
-    body = data["title"] + ("\\n" + existing if existing else "")
+        existing = re.sub(r"(?i)(?<!\w)"+re.escape(tag)+r"\b", "", existing).strip()
+    body = data["title"] + ("\n" + existing if existing else "")
     if unique:
-        body += "\\n" + " ".join(unique)
+        body += "\n" + " ".join(unique)
     data["text"] = add_site_to_keywords(body)
     data["description"] = data["text"]
     if "keywords" in data:
