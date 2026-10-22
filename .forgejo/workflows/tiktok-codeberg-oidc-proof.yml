@@ -1,0 +1,27 @@
+name: TikTok Codeberg OIDC and browser proof
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/tiktok-codeberg-oidc-proof.yml'
+enable-openid-connect: true
+jobs:
+  oidc:
+    runs-on: codeberg-medium
+    timeout-minutes: 9
+    enable-openid-connect: true
+    env:
+      PYTHONUTF8: '1'
+      TIKTOK_ACCOUNT: lucasrosalem4
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed main-branch Forgejo identity
+        run: python3 -u tools/tiktok_codeberg_oidc_probe.py
+      - name: Read-only TikTok browser probe
+        run: |
+          python3 -m venv /tmp/tiktok-probe
+          /tmp/tiktok-probe/bin/pip install -q playwright
+          /tmp/tiktok-probe/bin/python -m playwright install chromium
+          /tmp/tiktok-probe/bin/python -u tools/tiktok_codeberg_oidc_probe.py --browser
