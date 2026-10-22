@@ -53,7 +53,7 @@ def codeberg_incidents():
         raise RuntimeError("CODEBERG_P0_ISSUES_INVALID")
     output=[]
     pattern=re.compile(
-        r"^\\[QA P0\\]\\[([a-zA-Z0-9._/-]{1,64})\\]\\[([a-f0-9]{16})\\] ([a-z0-9_]{3,80})$")
+        r"^\[QA P0\]\[([a-zA-Z0-9._/-]{1,64})\]\[([a-f0-9]{16})\] ([a-z0-9_]{3,80})$")
     for item in entries[:100]:
         if not isinstance(item,dict) or item.get("state")!="open":
             continue
