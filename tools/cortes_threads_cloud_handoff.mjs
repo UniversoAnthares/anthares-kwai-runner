@@ -55,8 +55,9 @@ async function mediaDigest(uri){
 async function notifyQA(id,reason){
  const token=String(process.env.GITHUB_TOKEN||'').trim();
  if(!token){console.log('THREADS_QA_NOTIFY_TOKEN_MISSING');return}
- const body='[QA P1][THREADS][AUTO] Mídia isolada por até 24 horas: '+id+
-  '. Causa: '+reason+'. Investigar origem, corrigir e reabilitar antes do prazo. '+
+ const holding=reason==='EDITORIAL_MISSING'?'Aguardar enriquecimento editorial; NÃO descartar em 24h.':'Mídia isolada por até 24 horas.';
+ const body='[QA P1][THREADS][AUTO] '+holding+' ID: '+id+
+  '. Causa: '+reason+'. Investigar origem, corrigir e reabilitar com prova antes de publicar. '+
   'Outras mídias continuam publicando normalmente; nenhum reenvio incerto permitido.';
  try{
   const r=await fetch('https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/issues/283/comments',{
