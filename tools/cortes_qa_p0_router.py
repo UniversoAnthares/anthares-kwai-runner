@@ -177,7 +177,7 @@ def daily_round_incidents():
                             if distributed else
                             "Kwai enqueue count is ZERO; producer status cannot be inferred from this "
                             "counter. Verify WordPress masters, source lock, AI Hub 502/503/504, "
-                            "Unicode title gate, media uploads and Neon handoff. ")+
+                            "Unicode title gate, media uploads and Neon handoff (HTTP 502). ")+
                             "Dispatch only fenced canonical recovery; never manufacture clips."}]
 
 
