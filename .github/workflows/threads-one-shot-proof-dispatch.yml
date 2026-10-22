@@ -1,4 +1,5 @@
 name: CORTES Threads cloud one-shot authorized proof dispatch
+# Acceptance invocation 2026-10-22: one fenced publication only.
 on:
   push:
     branches: [main]
