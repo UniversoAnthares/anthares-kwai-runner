@@ -81,7 +81,7 @@ def reconcile(issue, comments, readback):
     proof = local_proof(comments)
     if proof is None:
         return None
-    key = fingerprint(payload)
+    key = "x_" + fingerprint(payload)
     if proof.get("idempotency_key") != key:
         return None
     status = readback(key)

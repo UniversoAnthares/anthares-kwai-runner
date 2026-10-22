@@ -34,7 +34,7 @@ class XReconcileLocalProofsTests(unittest.TestCase):
                 "account": "lucasyahn",
                 "video_verified": video,
                 "post_url": url,
-                "idempotency_key": fingerprint(BODY),
+                "idempotency_key": "x_" + fingerprint(BODY),
             })
         }]
 
