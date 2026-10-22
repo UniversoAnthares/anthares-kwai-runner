@@ -22,20 +22,48 @@ try{
  const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq,timer=setTimeout(()=>{requests.delete(id);reject(Error('CDP_TIMEOUT_'+method))},18000);requests.set(id,{resolve,reject,timer});ws.send(JSON.stringify({id,method,params}))});
  const evalIn=async exp=>{const r=await send('Runtime.evaluate',{expression:exp,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error('RUNTIME_EVALUATE_FAILED');return r.result?.value};
  await sleep(4500);
+ // Only accept a unique same-account post with the original clip time and source title.
+ // A page-level or mojibake-dependent substring is not a reliable identity proof.
+ const probes=candidates.map(([key,value])=>{
+  const times=/:([0-9]+):([0-9]+)$/.exec(String(value.clip_id||''));
+  const startSeconds=times?Number(times[1]):-1;
+  const marker=startSeconds>=0?'Trecho '+String(Math.floor(startSeconds/60)).padStart(2,'0')+':'+String(startSeconds%60).padStart(2,'0'):null;
+  const sourceHint=String(value.title||'').split(' - ')[0].trim();
+  return{key,marker,sourceHint};
+ });
  for(let p=0;p<55;p++){
-  const check=await evalIn('(()=>{const titles='+JSON.stringify(candidates.map(([_,v])=>v.title))+';return titles.map(wanted=>{const anchors=[...document.querySelectorAll("a[href*=\\"/post/\\"]")];for(const a of anchors){let n=a;for(let i=0;i<12&&n;i++,n=n.parentElement){if(n.innerText?.includes(wanted)&&a.href.includes("/@universoanthares/post/"))return {wanted,url:a.href};}}return null}).filter(Boolean)})()');
-  for(const match of check)if(!report.matches.some(x=>x.wanted===match.wanted))report.matches.push(match);
+  const expression=`(()=>{
+   const probes=${JSON.stringify(probes)};
+   const norm=s=>String(s||'').normalize('NFD').split('').filter(ch=>ch.charCodeAt(0)<768||ch.charCodeAt(0)>879).join('').toLowerCase();
+   const anchors=[...document.querySelectorAll('a[href*="/post/"]')];
+   return probes.map(probe=>{
+    if(!probe.marker||!probe.sourceHint)return null;
+    const found=new Set();
+    for(const a of anchors){
+     if(!/^https:\\/\\/www\\.threads\\.com\\/@universoanthares\\/post\\/[A-Za-z0-9_-]+\\/?$/.test(a.href))continue;
+     let card=a;
+     for(let depth=0;depth<7&&card;depth++,card=card.parentElement){
+      const content=card.innerText||'';
+      if(content.length>1500)break;
+      if(norm(content).includes(norm(probe.marker))&&norm(content).includes(norm(probe.sourceHint))){found.add(a.href);break}
+     }
+    }
+    return found.size===1?{key:probe.key,url:[...found][0]}:null;
+   }).filter(Boolean);
+  })()`;
+  const check=await evalIn(expression);
+  for(const match of check)if(!report.matches.some(x=>x.key===match.key))report.matches.push(match);
   if(report.matches.length===candidates.length)break;
   await evalIn('(()=>{window.scrollTo(0,document.body.scrollHeight);const el=document.scrollingElement;if(el)el.scrollTop=el.scrollHeight;return true})()');
   await sleep(750);
  }
- const allMatch=new Map(report.matches.map(v=>[v.wanted,v.url]));
+ const allMatch=new Map(report.matches.map(v=>[v.key,v.url]));
  const current=JSON.parse(fs.readFileSync(ledgerFile,'utf8'));
  for(const [key,value] of candidates){
   if(current.items[key]?.status!=='submitting_uncertain')continue;
-  const publicUrl=allMatch.get(value.title);
+  const publicUrl=allMatch.get(key);
   if(publicUrl){
-   current.items[key]={...current.items[key],status:'published',url:publicUrl,published_at:value.submitAt||report.checked_at,reconciled_at:report.checked_at,confirmation_method:'exact_public_profile_match'};
+   current.items[key]={...current.items[key],status:'published',url:publicUrl,published_at:value.submitAt||report.checked_at,reconciled_at:report.checked_at,confirmation_method:'unique_source_and_clip_marker_profile_match'};
   }else report.unresolved.push(key);
  }
  if(report.matches.length){
