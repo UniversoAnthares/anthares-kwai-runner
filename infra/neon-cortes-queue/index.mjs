@@ -74,6 +74,7 @@ async function identity(request){
  let role=null,platform=null;
  if(repo===REPO){
   platform=Object.keys(BUFFER_WORKFLOWS).find(p=>BUFFER_WORKFLOWS[p]===wf);
+  if(wf==='cortes-buffer-instagram-windows-fallback.yml')platform='instagram';
   if(platform)role='buffer';
   else if(RUNNER_PRODUCERS.has(wf))role='producer';
   else if(PROBE_WORKFLOWS.has(wf))role='probe';

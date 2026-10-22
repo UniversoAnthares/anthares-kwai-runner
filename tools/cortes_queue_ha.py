@@ -66,7 +66,9 @@ def post(action: str, payload: dict, get_oidc, *, timeout: int = 16) -> dict:
         if not (os.environ.get("GITHUB_ACTIONS") == "true" and
                 os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted" and
                 os.environ.get("RUNNER_OS") == "Linux"):
-            raise BackendUnavailable("CORTES_QUEUE_NEON_REQUIRES_CLOUD")
+            from social_adapters.buffer_three_channels import trusted_instagram_one_time_runner
+            if not (action.startswith("buffer-") and trusted_instagram_one_time_runner()):
+                raise BackendUnavailable("CORTES_QUEUE_NEON_REQUIRES_CLOUD")
         providers = tuple(sorted(PROVIDERS, key=lambda url: 0 if 'cortesqueue.compute.' in url else 1))
     else:
         providers = PROVIDERS
