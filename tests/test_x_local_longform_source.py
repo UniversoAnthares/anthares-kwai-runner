@@ -29,7 +29,10 @@ class XLocalLongformSourceTests(unittest.TestCase):
         self.assertIn('encoding="utf-8", errors="strict"', source)
         self.assertIn("creationflags=subprocess.CREATE_NO_WINDOW", source)
         import subprocess
-        with patch.object(producer.subprocess, "run", return_value=subprocess.CompletedProcess(
+        # Mock Windows-only subprocess flag when running this Windows utility's
+        # contract on the Linux Codeberg test runner.
+        with patch.object(subprocess, "CREATE_NO_WINDOW", 0, create=True), patch.object(
+                producer.subprocess, "run", return_value=subprocess.CompletedProcess(
                 args=["gh"], returncode=0, stdout='{"title":"O Homem do Elevador: aparências e compaixão"}',
                 stderr="")):
             self.assertEqual(producer.gh("/issues/497")["title"].split(":")[0], "O Homem do Elevador")
