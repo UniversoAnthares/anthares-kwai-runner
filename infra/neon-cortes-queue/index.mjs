@@ -552,6 +552,25 @@ export default {async fetch(request){
      network_isolation:true,counts:r},200);
   }catch{return answer({ok:false,backend:'neon-functions-cortes',database_ok:false},503);}
  }
+ if(request.method==='GET'&&action==='round-health'){
+  try{
+   const rows=await query(`SELECT target_key,status,count(*)::int AS n FROM cortes_publications
+      WHERE created_at >= (date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande')
+                            AT TIME ZONE 'America/Campo_Grande')
+        AND target_key IN ('kwai:lucasrosalem','linkedin:primary','linkedin:personal',
+                           'instagram:universoanthares','pinterest:lucasyahn')
+      GROUP BY target_key,status`);
+   const sourceRows=await query(`SELECT count(*)::int AS total
+      FROM cortes_publications
+      WHERE target_key='kwai:lucasrosalem'
+        AND created_at >= (date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande')
+                            AT TIME ZONE 'America/Campo_Grande')`);
+   return answer({ok:true,backend:'neon-functions-cortes',
+      round_timezone:'America/Campo_Grande',today_master_count:Number(sourceRows[0]?.total||0),
+      today_destinations:rows.map(r=>({target_key:r.target_key,status:r.status,n:Number(r.n)})),
+      stalled_daily_round:Number(sourceRows[0]?.total||0)===0},200);
+  }catch{return answer({ok:false,error:'ROUND_HEALTH_DATABASE_UNAVAILABLE'},503);}
+ }
  if(request.method!=='POST')return answer({ok:false,error:'NOT_FOUND'},404);
  if(Number(request.headers.get('content-length')||0)>65536)return answer({ok:false,error:'TOO_LARGE'},413);
  const actor=action.startsWith('browser-')?
