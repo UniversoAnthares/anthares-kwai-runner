@@ -274,7 +274,7 @@ def trusted_instagram_one_time_runner() -> bool:
                 "/.github/workflows/cortes-buffer-instagram-cloud.yml@refs/heads/main"))
 
 
-def schedule(payload: dict, *, token: str | None = None) -> dict:
+def schedule(payload: dict, *, token: str | None = None, validated_channels: list[dict] | None = None) -> dict:
     post = prepare(payload)
     if os.getenv("ANTHARES_SOCIAL_COMMIT", "") != "1":
         return {"status": "DRY_RUN", **post}
@@ -286,7 +286,9 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
         raise BufferBlocked("BUFFER_CLOUD_HOSTED_RUNNER_REQUIRED")
     platform = post["platform"]
     channel_id = str(os.getenv("BUFFER_" + platform.upper() + "_CHANNEL_ID") or "").strip()
-    validate_channel(platform, channel_id, channels(token))
+    # An authenticated read-only channel preflight may be reused by a fenced
+    # publisher; avoid doubling Buffer API reads under HTTP 429 pressure.
+    validate_channel(platform, channel_id, channels(token) if validated_channels is None else validated_channels)
     # Explicit Reel and Pinterest board metadata are mandatory. Never fall back
     # to a generic Instagram post or an arbitrary Pinterest board.
     # shareNow is an official Buffer mode: no queue slot and no spill into tomorrow.
