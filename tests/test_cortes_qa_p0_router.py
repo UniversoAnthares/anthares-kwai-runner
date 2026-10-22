@@ -149,7 +149,7 @@ class P0RouterTests(unittest.TestCase):
         ]}
         with patch.object(router,"http",return_value=data):
             issues=router.workflow_incidents()
-        self.assertEqual(len(issues),4)
+        self.assertEqual(len(issues),2)
         self.assertEqual(len({i["id"] for i in issues}),2)
 
 if __name__=="__main__":
