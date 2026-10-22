@@ -50,7 +50,8 @@ def gh(path, method="GET", obj=None):
     if method != "GET":
         args += ["-X", method, "--input", "-"]
         data = json.dumps(obj)
-    r = subprocess.run(args, input=data, capture_output=True, text=True, timeout=55,
+    r = subprocess.run(args, input=data, capture_output=True, text=True,
+                       encoding="utf-8", errors="strict", timeout=55,
                        creationflags=subprocess.CREATE_NO_WINDOW)
     if r.returncode:
         raise RuntimeError("GITHUB_API_" + str(r.returncode))
@@ -249,19 +250,19 @@ def enqueue(result, video, info, existing):
         raise RuntimeError("X_STAGED_MEDIA_MISMATCH")
     release = subprocess.run(["gh", "release", "view", tag, "-R", REPO, "--json", "assets",
                               "--jq", ".assets[].name"],
-                             capture_output=True, text=True, timeout=55,
+                             capture_output=True, text=True, encoding="utf-8", errors="strict", timeout=55,
                              creationflags=subprocess.CREATE_NO_WINDOW)
     if release.returncode:
         new = subprocess.run(["gh", "release", "create", tag, "-R", REPO,
                               "--target", "main", "--title", "Anthares X longform " + tag,
                               "--notes", "Automatically validated horizontal longform reserves."],
-                             capture_output=True, text=True, timeout=80,
+                             capture_output=True, text=True, encoding="utf-8", errors="strict", timeout=80,
                              creationflags=subprocess.CREATE_NO_WINDOW)
         if new.returncode:
             raise RuntimeError("X_RELEASE_CREATION_FAILED")
     if name not in release.stdout.splitlines():
         up = subprocess.run(["gh", "release", "upload", tag, str(staging), "-R", REPO],
-                            capture_output=True, text=True, timeout=300,
+                            capture_output=True, text=True, encoding="utf-8", errors="strict", timeout=300,
                             creationflags=subprocess.CREATE_NO_WINDOW)
         if up.returncode and "already exists" not in up.stderr.lower():
             raise RuntimeError("X_RELEASE_UPLOAD_FAILED")
