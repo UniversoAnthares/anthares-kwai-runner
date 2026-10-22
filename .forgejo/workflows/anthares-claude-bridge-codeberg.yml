@@ -1,0 +1,49 @@
+name: Anthares Claude MCP bridge contracts - Codeberg
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/anthares-claude-bridge-codeberg.yml'
+      - 'cloudflare-ara-mcp/**'
+      - 'tools/test_anthares_free_claude.js'
+      - '.github/workflows/anthares-free-claude.yml'
+      - '.github/workflows/anthares-claude-code-mcp-deploy.yml'
+      - '.github/workflows/ara-mcp-stateless-bootstrap.yml'
+      - '.github/workflows/ara-mcp-email-otp-deploy.yml'
+permissions:
+  contents: read
+jobs:
+  security-contracts:
+    runs-on: codeberg-tiny
+    timeout-minutes: 9
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - name: OAuth, deploy fencing and Claude MCP contracts
+        shell: bash
+        run: |
+          set -eu
+          test "${FORGEJO_REPOSITORY:-}" = "UniversoAnthares/anthares-kwai-runner"
+          node --check cloudflare-ara-mcp/src/claude-code-bridge.mjs
+          node --check cloudflare-ara-mcp/src/github-bridge.mjs
+          node --check cloudflare-ara-mcp/src/index.js
+          grep -Fq 'mcp_delegation_tools: githubTools.filter' cloudflare-ara-mcp/src/index.js
+          grep -Fq 'serverInfo: { name: "Anthares Remote", version: "1.1.0" }' cloudflare-ara-mcp/src/index.js
+          ! grep -A10 '^on:' .github/workflows/ara-mcp-stateless-bootstrap.yml | grep -q '^  push:'
+          ! grep -A10 '^on:' .github/workflows/ara-mcp-email-otp-deploy.yml | grep -q '^  push:'
+          grep -Fq 'ANTHARES_CLAUDE_DEPLOY_VERSION_NOT_VISIBLE' .github/workflows/anthares-claude-code-mcp-deploy.yml
+          grep -Fq 'mcp_server_version == "1.1.0"' .github/workflows/anthares-claude-code-mcp-deploy.yml
+          grep -Fq 'for i in $(seq 1 12)' .github/workflows/anthares-claude-code-mcp-deploy.yml
+          node --test cloudflare-ara-mcp/src/claude-code-bridge.test.mjs cloudflare-ara-mcp/src/github-bridge.test.mjs cloudflare-ara-mcp/src/claude-client-policy.test.mjs
+          node --test tools/test_anthares_free_claude.js
+          grep -Fq 'run-name: Anthares Claude Code' .github/workflows/anthares-free-claude.yml
+          grep -Fq 'compression-level: 0' .github/workflows/anthares-free-claude.yml
+          echo ANTHARES_CLAUDE_MCP_CODEBERG_CONTRACT=PASS
+      - name: Worker dry-run, no deploy or secret use
+        shell: bash
+        run: |
+          set -eu
+          cd cloudflare-ara-mcp
+          npx --yes wrangler@4.43.0 deploy --dry-run --outdir /tmp/anthares-claude-worker-build
+          grep -Flq 'run_claude_code' /tmp/anthares-claude-worker-build/worker.js || grep -FRq 'run_claude_code' /tmp/anthares-claude-worker-build
+          echo ANTHARES_CLAUDE_MCP_WORKER_BUNDLE=PASS
