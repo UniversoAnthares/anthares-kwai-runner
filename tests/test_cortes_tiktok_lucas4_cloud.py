@@ -68,6 +68,73 @@ class SecondaryCloudTests(unittest.TestCase):
                 q.call("start","fake-token",{"id":"anything"})
         self.assertEqual(mocked.call_count,1)
 
+    def test_uncertain_mode_never_reenters_upload_editor(self):
+        job={"id":"tt-test","status":"uncertain",
+             "segment_id":"g1:9CIk-I_3VhM:7216:7273","lease_generation":3}
+        with patch.object(q,"reconcile_uncertain",return_value=False) as inspect, \
+             patch.object(q,"publish_one") as publish:
+            self.assertFalse(q.handle_claim({"mode":"reconcile","job":job},"token",{}))
+        inspect.assert_called_once_with(job,"token",{})
+        publish.assert_not_called()
+
+    def test_uncertain_without_remote_marker_never_mutates_queue(self):
+        job={"id":"tt-test","status":"uncertain",
+             "segment_id":"g1:9CIk-I_3VhM:7216:7273","lease_generation":3}
+        with patch.object(q,"call") as api:
+            self.assertFalse(q.reconcile_exact_studio_match(
+                job,"token",{"7699234172166081810":"other caption"}))
+        api.assert_not_called()
+
+    def test_existing_uncertain_marker_confirms_without_new_start(self):
+        job={"id":"tt-test","status":"uncertain",
+             "segment_id":"g1:9CIk-I_3VhM:7216:7273","lease_generation":3}
+        rid="7699234172166081810"
+        with patch.object(q,"call",return_value={"ok":True,
+             "job":{"remote_id":rid,"status":"confirmed"}}) as api:
+            self.assertTrue(q.reconcile_exact_studio_match(
+                job,"token",{rid:"existing post "+q.marker(job["segment_id"])}))
+        api.assert_called_once_with("confirm","token",
+            {"id":"tt-test","lease_generation":3,"remote_id":rid})
+
+    def test_ambiguous_marker_stops_without_creating_post(self):
+        job={"id":"tt-test","status":"uncertain",
+             "segment_id":"g1:9CIk-I_3VhM:7216:7273","lease_generation":3}
+        content=q.marker(job["segment_id"])
+        with patch.object(q,"call") as api:
+            with self.assertRaisesRegex(q.SafeStop,"MULTIPLE_STUDIO_MATCHES"):
+                q.reconcile_exact_studio_match(job,"token",
+                   {"7699234172166081810":content,
+                    "7699234172166081811":content})
+        api.assert_not_called()
+
+    def test_uncertain_reconciliation_rejects_leased_state(self):
+        job={"id":"tt-test","status":"leased",
+             "segment_id":"g1:9CIk-I_3VhM:7216:7273","lease_generation":3}
+        with patch.object(q,"call") as api:
+            with self.assertRaisesRegex(q.SafeStop,"FENCE_INVALID"):
+                q.reconcile_exact_studio_match(job,"token",{})
+        api.assert_not_called()
+
+    def test_only_publish_mode_and_leased_job_can_upload(self):
+        job={"id":"tt-test","status":"leased","lease_generation":1}
+        with patch.object(q,"publish_one") as publish:
+            self.assertTrue(q.handle_claim({"mode":"publish","job":job},"token",{}))
+            with self.assertRaisesRegex(q.SafeStop,"MODE_OR_LEASE_INVALID"):
+                q.handle_claim({"mode":"publish",
+                                 "job":dict(job,status="uncertain")},"token",{})
+        publish.assert_called_once_with(job,"token",{})
+
+    def test_prestart_publish_failure_sends_fenced_cooldown(self):
+        job={"id":"tt-test","status":"leased","lease_generation":3}
+        with patch.object(q,"publish_one",side_effect=q.SafeStop("preflight")) as publish, \
+             patch.object(q,"call",return_value={"ok":True}) as api:
+            with self.assertRaisesRegex(q.SafeStop,"preflight"):
+                q.handle_claim({"mode":"publish","job":job},"token",{})
+        publish.assert_called_once()
+        api.assert_called_once_with("fail","token",
+            {"id":"tt-test","lease_generation":3,
+             "error":"secondary_cloud_requires_reconciliation"})
+
     def test_cloud_starts_are_budgeted_by_second_account(self):
         source=(ROOT/"infra"/"neon-cortes-lucasrosalem4"/"index.mjs").read_text(encoding="utf-8")
         self.assertIn("const TARGET='tiktok:lucasrosalem4'",source)
