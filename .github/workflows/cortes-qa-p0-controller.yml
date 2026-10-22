@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   route-p0:
-    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
+    runs-on: [self-hosted, Windows, qa-p0-independent]
     timeout-minutes: 8
     steps:
       - name: Dispatch bounded P0 executor with cross-run reconciliation
