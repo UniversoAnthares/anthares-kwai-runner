@@ -118,10 +118,36 @@ def strategic_metadata(text,source_title,segment_id):
         raise RuntimeError('PINTEREST_CONTEXTUAL_TITLE_INVALID')
     words=answer.get('keywords')
     tags=answer.get('hashtags')
-    if not isinstance(words,list) or not isinstance(tags,list):
-        raise RuntimeError('PINTEREST_CONTEXTUAL_KEYWORDS_INVALID')
+    # Some local Qwen responses serialize lists as one string. The canonical
+    # source remains the actual transcript, never the live/long-video title.
+    if isinstance(words,str):
+        words=re.split(r'[,;\n]+',words)
+    if isinstance(tags,str):
+        tags=re.split(r'[,;\n]+',tags)
+    if not isinstance(words,list):words=[]
+    if not isinstance(tags,list):tags=[]
     words=list(dict.fromkeys(str(v).strip() for v in words if isinstance(v,str)
                              and 3<=len(v.strip())<=65))[:9]
+    if len(words)<3:
+        # Bounded, extractive fallback: adjacent meaningful terms must
+        # literally occur in the transcript; do not hallucinate subjects.
+        stops={'porque','também','ninguém','aquilo','disse','gente','então',
+               'agora','muito','outra','outras','coisa','coisas','estão',
+               'ainda','alguma','sobre','dessa','desse','aquela','aquele',
+               'você','vocês','assim','sendo','entre','quando','todos'}
+        tokens=re.findall(r'(?u)\b[\wÀ-ÿ]+\b',text.casefold())
+        terms=[]
+        for i in range(len(tokens)-1):
+            x,y=tokens[i],tokens[i+1]
+            if len(x)>=4 and len(y)>=4 and x not in stops and y not in stops:
+                terms.append(x+' '+y)
+        terms.extend(x for x in tokens if len(x)>=6 and x not in stops)
+        for term in terms:
+            if term not in words and len(term)<=65:
+                words.append(term)
+            if len(words)>=4:break
+    if len(words)<3:
+        raise RuntimeError('PINTEREST_TRANSCRIPT_KEYWORDS_INSUFFICIENT')
     tags=list(dict.fromkeys(str(v).strip() for v in tags if isinstance(v,str)
                             and re.fullmatch(r'#[\wÀ-ÿ]{2,40}',v.strip())))[:9]
     # Qwen occasionally returns topical tags without # or with spaces.
