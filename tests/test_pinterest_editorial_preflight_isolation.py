@@ -55,6 +55,26 @@ class PreflightIsolatedNotBlocking(unittest.TestCase):
         self.assertEqual(acts.count("editorial-invalid"),3)
         schedule.assert_not_called()
 
+    def test_404_quarantine_continues_to_next_eligible_clip(self):
+        jobs=[{"id":"missing","lease_generation":1},{"id":"valid","lease_generation":2}]
+        actions=[]
+        def queued(action,payload=None):
+            actions.append(action)
+            if action=="lease":
+                return {"job":jobs.pop(0),"delivery_route":"buffer"}
+            return {"ok":True}
+        payload={"platform":"pinterest","media_url":"https://anthares.us/wp-content/uploads/anthares-clips/a.mp4"}
+        with patch.object(p,"queue",side_effect=queued),\
+             patch.object(p,"safe_payload",return_value=payload),\
+             patch("social_adapters.buffer_three_channels.prepare"),\
+             patch.object(p,"is_media_missing",side_effect=[True,False]),\
+             patch.object(p,"notify_media_p0") as qa,\
+             patch.object(p,"schedule",return_value={"status":"SCHEDULED_IN_BUFFER","remote_id":"0123456789abcdef01234567"}) as publish:
+            self.assertEqual(p.publish_once(),"SCHEDULED_IN_BUFFER")
+        self.assertEqual(actions,["lease","media-missing","lease","start","scheduled"])
+        qa.assert_called_once()
+        publish.assert_called_once()
+
     def test_neon_quarantine_requires_live_lease_with_no_upload(self):
         root=Path(__file__).resolve().parents[1]
         neon=(root/"infra/neon-cortes-queue/index.mjs").read_text(encoding="utf8")
