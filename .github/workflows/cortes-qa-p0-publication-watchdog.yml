@@ -43,6 +43,10 @@ jobs:
           python3 -m py_compile tools/cortes_qa_p0_router.py
           python3 -m unittest discover -s tests -p "test_cortes_qa_p0_router.py" -v
   route:
+    permissions:
+      contents: read
+      issues: write
+      actions: write
     needs: test
     if: github.event_name != 'pull_request' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success')
     runs-on: ubuntu-24.04
