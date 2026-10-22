@@ -1,0 +1,35 @@
+name: CORTES TikTok Universo Codeberg primary
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '3-59/7 * * * *'
+enable-openid-connect: true
+concurrency:
+  group: cortes-tiktok-universo-codeberg-only
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: ${{ forgejo.event_name == 'workflow_dispatch' || vars.TIKTOK_CODEBERG_UNIVERSO_ENABLED == 'true' }}
+    runs-on: codeberg-medium
+    timeout-minutes: 9
+    enable-openid-connect: true
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: 'utf-8'
+      CORTES_CODEBERG_RUNTIME: 'true'
+      TIKTOK_CODEBERG_UNIVERSO_ENABLED: ${{ vars.TIKTOK_CODEBERG_UNIVERSO_ENABLED }}
+      TIKTOK_UNIVERSO_STORAGE_STATE: ${{ secrets.TIKTOK_UNIVERSO_STORAGE_STATE }}
+      EXPECTED_TIKTOK_USERNAME: universo.anthares
+      TIKTOK_PUBLISH_NOT_BEFORE_UTC: '2026-10-20T10:00:00Z'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated Chromium browser with system dependencies
+        run: |
+          set -eu
+          python3 -m venv /tmp/cortes-universo
+          /tmp/cortes-universo/bin/python -m pip install -q playwright requests cryptography
+          /tmp/cortes-universo/bin/python -m playwright install --with-deps chromium
+      - name: Owner, signed Neon proof and single fenced publication when enabled
+        run: /tmp/cortes-universo/bin/python -u tools/cortes_tiktok_hosted_publish.py
