@@ -1,0 +1,113 @@
+# Read-only standalone QA migrated from GitHub Actions.
+# All tests run on Codeberg's existing runner; publishers are untouched.
+name: Anthares standalone safety tests - Codeberg
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/anthares-standalone-safety-codeberg.yml'
+      - 'anthares_core/**'
+      - 'anthares_mobile/**'
+      - 'anthares_native/**'
+      - 'anthares_publisher/media_model.py'
+      - 'tools/kwai_login_ui_locator.py'
+      - 'tools/cortes_buffer_three_fanout.py'
+      - 'tools/cortes_linkedin_neon_fanout.py'
+      - 'tools/cortes_threads_cloud_*.mjs'
+      - 'infra/neon-cortes-threads-execution/**'
+      - 'email_queue.py'
+      - 'infra/x_*.py'
+      - 'tools/x_*.py'
+      - 'social_adapters/buffer_linkedin.py'
+      - 'cloudflare-worker/patches/apply-publisher-target-v17.py'
+      - 'tests/test_anthares_core_*.py'
+      - 'tests/test_anthares_mobile_ui_state.py'
+      - 'tests/test_kwai_login_ui_locator_semantic.py'
+      - 'tests/test_anthares_native_*.py'
+      - 'tests/test_email_queue.py'
+      - 'tests/test_x_*.py'
+      - 'tests/test_buffer_linkedin.py'
+      - 'tests/test_cortes_buffer_distribution.py'
+      - 'tests/test_strategic_publication_metadata.py'
+      - 'tests/threads_strategic_editorial.test.mjs'
+  schedule:
+    - cron: '41 4 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-standalone-safety-codeberg
+  cancel-in-progress: false
+jobs:
+  contracts:
+    runs-on: codeberg-tiny
+    timeout-minutes: 14
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - name: Validate Codeberg source identity
+        shell: bash
+        run: |
+          set -eu
+          test "${FORGEJO_REPOSITORY:-}" = "UniversoAnthares/anthares-kwai-runner"
+          echo "CODEBERG_STANDALONE_QA_SOURCE=$(git rev-parse HEAD)"
+      - name: Durable core and mobile state machines
+        shell: bash
+        run: |
+          set -eu
+          python3 -m unittest discover -s tests -p 'test_anthares_core_*.py' -v
+          python3 -m unittest discover -s tests -p 'test_anthares_mobile_ui_state.py' -v
+          python3 -m unittest discover -s tests -p 'test_kwai_login_ui_locator_semantic.py' -v
+          DB_DIR="$(mktemp -d)"
+          trap 'rm -rf "$DB_DIR"' EXIT
+          python3 anthares_core/queue.py --db "$DB_DIR/a.sqlite3" enqueue probe '{"durable":true}' --id durable-check
+          python3 anthares_core/state_store.py export --db "$DB_DIR/a.sqlite3" --out "$DB_DIR/state.json"
+          rm -f "$DB_DIR/a.sqlite3"
+          python3 anthares_core/state_store.py import --state "$DB_DIR/state.json" --db "$DB_DIR/b.sqlite3"
+          DB_PATH="$DB_DIR/b.sqlite3" python3 - <<'PY'
+          import os
+          from anthares_core.queue import connect, claim
+          claimed=claim(connect(os.environ['DB_PATH']), 'codeberg-qa')
+          assert claimed and claimed['id']=='durable-check', 'CORE_STATE_RESTORE_INVALID'
+          print('CORE_STATE_RESTORE=PASS')
+          PY
+      - name: Native controller and zero-send e-mail safety
+        shell: bash
+        run: |
+          set -eu
+          python3 -m unittest discover -s tests -p 'test_anthares_native_*.py' -v
+          python3 -m compileall -q anthares_native
+          printf '{}\n' > /tmp/anthares-codeberg-native-evidence.json
+          python3 -m anthares_native.controller --evidence /tmp/anthares-codeberg-native-evidence.json --output /tmp/anthares-codeberg-native-state.json
+          python3 -c 'import json; assert json.load(open("/tmp/anthares-codeberg-native-state.json"))["stage"] == "needs_auth"'
+          python3 -m unittest discover -s tests -p 'test_email_queue.py' -v
+      - name: X and Buffer distribution safety
+        shell: bash
+        run: |
+          set -eu
+          python3 -m compileall -q tools tests x_cloud_prepare.py x_cloud_render.py x_real_fullflow_once.py infra/x_runtime_worker.py infra/x_render_worker_v3.py infra/x_durable_ledger.py
+          python3 -m unittest discover -s tests -p 'test_x_*.py' -v
+          python3 -m py_compile social_adapters/buffer_linkedin.py tests/test_buffer_linkedin.py
+          python3 -m unittest discover -s tests -p 'test_buffer_linkedin.py' -v
+          python3 -m unittest discover -s tests -p 'test_media_model.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_buffer_distribution.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_buffer_pinterest_cloud.py' -v
+          node --check vercel-ara-primary/api/cortes-queue.mjs
+          python3 -m py_compile anthares_publisher/buffer_distribution.py tools/cortes_buffer_three_fanout.py tools/cortes_buffer_instagram_cloud.py tools/cortes_buffer_pinterest_cloud.py
+      - name: Strategic titles and producer static invariants
+        shell: bash
+        run: |
+          set -eu
+          python3 -m py_compile anthares_publisher/editorial.py social_adapters/buffer_three_channels.py
+          for file in tools/cortes_threads_cloud_captions.mjs tools/cortes_threads_cloud_feed.mjs tools/cortes_threads_cloud_handoff.mjs infra/neon-cortes-threads-execution/index.mjs; do node --check "$file"; done
+          PYTHONPATH=. python3 tests/test_strategic_publication_metadata.py
+          node --test tests/threads_strategic_editorial.test.mjs
+          python3 -m py_compile anthares_publisher/media_model.py cloudflare-worker/patches/apply-publisher-target-v17.py
+          python3 cloudflare-worker/patches/apply-publisher-target-v17.py
+          node --check cloudflare-worker/src/index.js
+          grep -q '2026-10-15-publisher-target-v17' cloudflare-worker/src/index.js
+          grep -q 'idx_jobs_target_status_created' cloudflare-worker/src/index.js
+          grep -Fq 'account_id=? AND dedupe_key=?' cloudflare-worker/src/index.js
+          grep -Fq 'account_id=? AND status' cloudflare-worker/src/index.js
+          grep -Fq 'a.account_id=q.account_id' cloudflare-worker/src/index.js
+          grep -q 'status=.uncertain.*publication_started=1' cloudflare-worker/src/index.js
+          echo 'CODEBERG_STANDALONE_SAFETY_TESTS=PASS'
