@@ -41,6 +41,43 @@ def network_for(value):
     value=str(value or "").lower()
     return next((n for n in NETWORKS if n in value),"cortes-general")
 
+def codeberg_incidents():
+    """Bridge priority Forgejo incidents to the operational GitHub QA executor.
+
+    Read public issue metadata only; never import arbitrary body text, code or
+    URLs into the executable controller. Stable IDs prevent alert storms.
+    """
+    endpoint="https://codeberg.org/api/v1/repos/"+HUB+"/issues?state=open&limit=100"
+    entries=http(endpoint,headers={"Accept":"application/json"})
+    if not isinstance(entries,list):
+        raise RuntimeError("CODEBERG_P0_ISSUES_INVALID")
+    output=[]
+    pattern=re.compile(
+        r"^\\[QA P0\\]\\[([a-zA-Z0-9._/-]{1,64})\\]\\[([a-f0-9]{16})\\] ([a-z0-9_]{3,80})$")
+    for item in entries[:100]:
+        if not isinstance(item,dict) or item.get("state")!="open":
+            continue
+        match=pattern.fullmatch(str(item.get("title") or ""))
+        if not match:
+            continue
+        issue_number=item.get("number")
+        if not isinstance(issue_number,int) or not 1<=issue_number<=100000000:
+            continue
+        account,fingerprint,stage=match.groups()
+        account=account.lower()
+        network=("tiktok" if account in ("lucasrosalem4","universo.anthares")
+                 else network_for(account))
+        output.append({
+            "id":marker("codeberg-qa-p0",issue_number,fingerprint),
+            "network":network,
+            "stage":"codeberg_"+stage,
+            "evidence":"https://codeberg.org/"+HUB+"/issues/"+str(issue_number),
+            "description":"Independent Codeberg QA report #"+str(issue_number)+
+                          " account="+account+" status="+stage
+        })
+    return output
+
+
 def workflow_incidents():
     output=[]
     unavailable=0
@@ -218,7 +255,7 @@ def main():
     if not TOKEN:raise RuntimeError("GITHUB_TOKEN_REQUIRED")
     items=[]
     bad=[]
-    for label,fn in (("github",workflow_incidents),("daily-round",daily_round_incidents),("wordpress",wp_incidents)):
+    for label,fn in (("github",workflow_incidents),("codeberg",codeberg_incidents),("daily-round",daily_round_incidents),("wordpress",wp_incidents)):
         try:
             result=fn()
             items.extend(result)
@@ -227,7 +264,8 @@ def main():
             bad.append(label)
             items.append({"id":marker("source-failure",label,NOW.date().isoformat()),
                           "network":"cortes-general", "stage":"qa_visibility_lost_"+label,
-                          "evidence":"https://github.com/"+HUB+"/actions",
+                          "evidence":("https://codeberg.org/"+HUB+"/issues" if label=="codeberg" else
+                                      "https://github.com/"+HUB+"/actions"),
                           "description":"P0 audit source inaccessible; investigate credentials or network"})
             print("::error::CORTES_QA_SCAN_FAILED source="+label+" type="+type(exc).__name__)
     labels()
