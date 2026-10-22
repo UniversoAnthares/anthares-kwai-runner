@@ -71,7 +71,7 @@ def media_qa():
             except (ValueError,TypeError):ev={}
         if not isinstance(ev,dict):ev={}
         print(json.dumps({'qa':'MEDIA_24H_CHECK','status':st,
-                          'kind':ev.get('kind'),'id':j['id']},ensure_ascii=False),flush=True)
+                          'kind':ev.get('kind'),'id':j['id']},ensure_ascii=True),flush=True)
         count+=1
     return count
 
@@ -144,14 +144,26 @@ def strategic_metadata(text,source_title,segment_id):
 
 def metadata_qa(max_clips=3):
     processed=0
-    after=''
-    while processed < max_clips:
+    attempted=0
+    cursor_file=CACHE.parent/'.pinterest-qa-title-cursor'
+    cursor_file.parent.mkdir(parents=True,exist_ok=True)
+    after=cursor_file.read_text(encoding='utf8').strip() if cursor_file.exists() else ''
+    if not re.fullmatch(r'cortes-fanout-pinterest-[a-f0-9]{32}',after):
+        after=''
+    # Hard cap on ATTEMPTS (not only successes): a broken LLM or media must
+    # never make this worker scan/transcribe all 43 clips in one invocation.
+    while attempted < max_clips:
         out=call('metadata-pending',{'target_key':TARGET,'owner':OWNER,'after_id':after})
         if not out.get('ok'):raise RuntimeError('PINTEREST_QA_METADATA_READ_FAILED')
         jobs=out.get('jobs') or []
-        if not jobs:break
+        if not jobs:
+            cursor_file.write_text('',encoding='utf8')
+            break
         for row in jobs:
+            if attempted>=max_clips:break
             after=row['id']
+            cursor_file.write_text(after,encoding='utf8')
+            attempted+=1
             if not approved_media(row.get('media_url')):
                 qa_incident('PINTEREST_QA_UNTRUSTED_MEDIA')
                 continue
@@ -172,13 +184,15 @@ def metadata_qa(max_clips=3):
                     raise RuntimeError('PINTEREST_QA_METADATA_CAS_REJECTED')
                 processed+=1
                 print(json.dumps({'qa':'METADATA_REPAIRED','id':row['id'],
-                     'title':d['title']},ensure_ascii=False),flush=True)
+                     'title':d['title']},ensure_ascii=True),flush=True)
             except (RuntimeError,ValueError,KeyError,urllib.error.URLError,OSError) as e:
                 qa_incident('PINTEREST_METADATA_'+type(e).__name__.upper())
                 print(json.dumps({'qa':'METADATA_BLOCKED','id':row['id'],
                        'kind':type(e).__name__}),flush=True)
-            if processed>=max_clips:break
-        if len(jobs)<4:break
+            if attempted>=max_clips:break
+        if len(jobs)<4:
+            cursor_file.write_text('',encoding='utf8')
+            break
     return processed
 
 def single_worker_guard():
