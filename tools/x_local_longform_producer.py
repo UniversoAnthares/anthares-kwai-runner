@@ -113,7 +113,7 @@ def queue_inventory():
         open_queue.append(item)
     windows = {}
     for issue in xitems:
-            p = _issue_payload(issue.get("body") or "")
+        p = _issue_payload(issue.get("body") or "")
         if p.get("account") != "lucasyahn" or p.get("test_fixture"):
             continue
         source = p.get("source_id")
