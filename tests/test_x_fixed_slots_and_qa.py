@@ -90,9 +90,9 @@ class XFixedLongSlotsAndQaTests(unittest.TestCase):
                  {"workflow_id":"x-codeberg-primary.yml","status":"failure",
                   "id":123,"event":"schedule"}]}):
                 qa.check_codeberg()
-            self.assertEqual(len(list(Path(td).glob("*.json"))),1)
-            self.assertIn("X_CODEBERG_PUBLISHER_FAILED",
-                          list(Path(td).glob("*.json"))[0].read_text())
+            codes={json.loads(p.read_text())["code"] for p in Path(td).glob("*.json")}
+            self.assertIn("X_CODEBERG_PUBLISHER_FAILED",codes)
+            self.assertIn("X_CODEBERG_AUTH_NOT_PROVEN",codes)
 
 if __name__=="__main__":
     unittest.main()
