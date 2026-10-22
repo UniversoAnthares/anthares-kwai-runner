@@ -1,0 +1,47 @@
+name: X Anthares Browser Cloud Primary
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/10 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - tools/x_github_anthares_browser_publisher.py
+      - .github/workflows/x-anthares-browser-cloud-publisher.yml
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: anthares-x-account-publish-serial
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ vars.ANTHARES_X_AUTOPUBLISH == '1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 44
+    env:
+      GITHUB_ACTIONS: 'true'
+      RUNNER_ENVIRONMENT: github-hosted
+      X_CLOUD_ARM: ${{ vars.ANTHARES_X_AUTOPUBLISH }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated Anthares Browser and video tools
+        run: |
+          python -m pip install --disable-pip-version-check requests cryptography playwright
+          python -m playwright install --with-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+      - name: Verify current X account and publish one globally fenced video
+        run: python -u -m tools.x_github_anthares_browser_publisher
+      - name: Notify QA when cloud publishing is unavailable
+        if: failure()
+        env:
+          X_QA_PHASE: x-independent-cloud-browser
+        run: python tools/x_notify_qa.py
