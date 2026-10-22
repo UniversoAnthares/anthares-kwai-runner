@@ -34,6 +34,18 @@ class XLocalLongformSourceTests(unittest.TestCase):
                 stderr="")):
             self.assertEqual(producer.gh("/issues/497")["title"].split(":")[0], "O Homem do Elevador")
 
+    def test_source_queue_bootstraps_without_project_tools_package(self):
+        source = SCRIPT.read_text(encoding="utf8")
+        self.assertIn("def _issue_payload(", source)
+        self.assertIn("def _verified_post_url(", source)
+        self.assertNotIn("from tools.x_publication_safety import", source)
+
+    def test_hidden_scheduler_waits_for_full_python_producer(self):
+        shell = INSTALL.read_text(encoding="utf8")
+        self.assertIn("$exe='C:\\Users\\Lucas\\AppData\\Local\\Programs\\Python\\Python311\\python.exe'", shell)
+        self.assertIn("& $exe -u $target *>> $log", shell)
+        self.assertIn("if($LASTEXITCODE -ne 0)", shell)
+
     def test_authenticated_producer_no_tinyfish_or_personal_chrome(self):
         source=SCRIPT.read_text(encoding="utf8")
         self.assertIn("X_YT_COOKIE_FILE",source)
