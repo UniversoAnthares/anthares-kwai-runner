@@ -237,6 +237,12 @@ def main():
 if __name__=="__main__":
     try: sys.exit(main())
     except Exception as e:
+        if isinstance(e,BufferBlocked) and str(e)=="BUFFER_HTTP_429":
+            try:
+                queue("cooldown",{"seconds":1800})
+                print("::warning::CORTES_BUFFER_ALL_CHANNELS_BACKOFF=1",flush=True)
+            except Exception:
+                print("::error::CORTES_BUFFER_SHARED_BACKOFF_PERSISTENCE_FAILED",flush=True)
         # Only normalized queue error identifiers; no tokens, keys or JWTs.
         from tools.cortes_queue_ha import BackendUnavailable
         import re

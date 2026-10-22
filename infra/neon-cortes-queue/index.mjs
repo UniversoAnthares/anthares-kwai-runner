@@ -220,7 +220,7 @@ async function bufferAction(verb,b,platform){
  const allowed=new Set(['lease','start','fail','media-missing','scheduled','pending','reconcile','stats','retention','cooldown','cooldown-status','policy']);
  if(!allowed.has(verb))return{ok:false,error:'UNKNOWN_BUFFER_ACTION'};
  if(verb==='cooldown'||verb==='cooldown-status'){
-  if(!['pinterest','instagram'].includes(platform))return{ok:false,error:'BUFFER_COOLDOWN_SCOPE_ONLY'};
+  if(!['pinterest','instagram','linkedin'].includes(platform))return{ok:false,error:'BUFFER_COOLDOWN_SCOPE_ONLY'};
   // Persist provider rate limits across ephemeral GitHub runners. This table
   // contains no credentials, media, or personal user data.
   await query(`CREATE TABLE IF NOT EXISTS cortes_buffer_provider_cooldowns(
@@ -231,22 +231,33 @@ async function bufferAction(verb,b,platform){
     if(!Number.isSafeInteger(seconds)||seconds<300||seconds>3600)
        return{ok:false,error:'INVALID_COOLDOWN'};
     await query(`INSERT INTO cortes_buffer_provider_cooldowns(provider,cooldown_until,updated_at)
-       VALUES($1,now()+($2::int * interval '1 second'),now())
+       VALUES($1,now()+($2::int * interval '1 second'),now()),
+        ('buffer_shared',
+          CASE WHEN extract(hour FROM now() AT TIME ZONE 'America/Campo_Grande')>=20
+            THEN ((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande')
+                 + interval '1 day') AT TIME ZONE 'America/Campo_Grande')
+            ELSE now()+($2::int * interval '1 second') END,now())
        ON CONFLICT(provider) DO UPDATE SET
         cooldown_until=GREATEST(cortes_buffer_provider_cooldowns.cooldown_until,
                          EXCLUDED.cooldown_until),updated_at=now()`,[platform,seconds]);
   }
   const v=await query(`SELECT cooldown_until,cooldown_until>now() AS active
-      FROM cortes_buffer_provider_cooldowns WHERE provider=$1`,[platform]);
+      FROM cortes_buffer_provider_cooldowns WHERE provider IN ($1,'buffer_shared')
+      ORDER BY cooldown_until DESC LIMIT 1`,[platform]);
   return{ok:true,active:Boolean(v[0]?.active),
-    cooldown_until:v[0]?.cooldown_until||null};
+    cooldown_until:v[0]?.cooldown_until||null,shared_provider:true};
  }
  if(verb==='policy'){
   const rows=await query(`SELECT extract(isodow FROM now() AT TIME ZONE 'America/Campo_Grande')::int AS weekday,
-    (SELECT count(*)::int FROM cortes_buffer_daily_slots WHERE local_day=${BUFFER_LOCAL_DAY}) AS used`);
+    (SELECT count(*)::int FROM cortes_buffer_daily_slots WHERE local_day=${BUFFER_LOCAL_DAY}) AS used,
+    EXISTS(SELECT 1 FROM cortes_buffer_provider_cooldowns
+      WHERE provider='buffer_shared' AND cooldown_until>now()) AS provider_blocked`);
   const weekday=Number(rows[0]?.weekday||0),used=Number(rows[0]?.used||0);
-  return{ok:true,enabled:weekday>=1&&weekday<=5,limit:BUFFER_GLOBAL_DAILY,used,
-    remaining:Math.max(0,BUFFER_GLOBAL_DAILY-used),shared_across_channels:true};
+  const blocked=Boolean(rows[0]?.provider_blocked);
+  return{ok:true,enabled:weekday>=1&&weekday<=5&&!blocked,
+    provider_unavailable:blocked,route_decision:blocked?'own_publisher':'buffer_if_available',
+    limit:BUFFER_GLOBAL_DAILY,used,remaining:Math.max(0,BUFFER_GLOBAL_DAILY-used),
+    shared_across_channels:true};
  }
  if(verb==='stats'){
   const rows=await query(`SELECT status,count(*)::int n FROM cortes_publications
@@ -270,6 +281,8 @@ async function bufferAction(verb,b,platform){
   if(platform==='linkedin')await recoverExpiredLinkedin(dest);
   const weekday=await query("SELECT extract(isodow FROM now() AT TIME ZONE 'America/Campo_Grande')::int AS n");
   if(Number(weekday[0]?.n||0)>5)return{ok:true,job:null,buffer_off_day:true};
+  const activeBlock=await query("SELECT EXISTS(SELECT 1 FROM cortes_buffer_provider_cooldowns WHERE provider='buffer_shared' AND cooldown_until>now()) AS blocked");
+  if(Boolean(activeBlock[0]?.blocked))return{ok:true,job:null,provider_unavailable:true,delivery_route:'own'};
   await query("DELETE FROM cortes_buffer_daily_slots s USING cortes_publications p WHERE s.job_id=p.id AND s.local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date AND p.status='queued' AND p.publication_started_at IS NULL");
   await query(`UPDATE cortes_publications SET status='failed',lease_owner=NULL,lease_until=NULL,updated_at=now()
     WHERE target_key=$1 AND status='uncertain'
