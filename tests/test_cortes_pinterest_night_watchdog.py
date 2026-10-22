@@ -13,6 +13,15 @@ class NightlyWatchdog(unittest.TestCase):
         self.assertNotIn("Stop-Process",script)
         self.assertNotIn("chrome://",script)
         self.assertNotIn("PIN_PUBLISH_BUTTON_NOT_READY",script)
+    def test_watchdog_reports_actual_publish_health(self):
+        script=(ROOT/"tools"/"cortes_pinterest_night_watchdog.ps1").read_text()
+        self.assertIn("BLOCKED_DRAFT_CAPACITY",script)
+        self.assertIn("DEGRADED_SCHEDULED_NOT_PUBLISHING",script)
+        self.assertIn("PINTEREST_QUEUE_STALLED",script)
+        self.assertIn("PINTEREST_DRAFT_CAPACITY_EXHAUSTED",script)
+        self.assertIn("lastConfirmedAt",script)
+        self.assertIn("br-crimson-unit-b89nau08-cortesqueue.compute.",script)
+
     def test_existing_publisher_is_source_of_truth(self):
         script=(ROOT/"tools"/"cortes_pinterest_night_watchdog.ps1").read_text()
         self.assertIn("CORTES-Pinterest-Local",script)
