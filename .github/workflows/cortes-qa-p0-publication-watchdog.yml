@@ -35,14 +35,17 @@ concurrency:
 jobs:
   test:
     if: github.event_name == 'pull_request' || github.event_name == 'push'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Verify incident routing contracts
+        shell: powershell
         run: |
-          python3 -m py_compile tools/cortes_qa_p0_router.py
-          python3 -m unittest discover -s tests -p "test_cortes_qa_p0_router.py" -v
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m py_compile tools/cortes_qa_p0_router.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m unittest discover -s tests -p test_cortes_qa_p0_router.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   route:
     permissions:
       contents: read
@@ -61,8 +64,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Compile P0 incident router
-        run: python3 -m py_compile tools/cortes_qa_p0_router.py
+        shell: powershell
+        run: |
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m py_compile tools/cortes_qa_p0_router.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify P0 incident contracts
-        run: python3 -m unittest discover -s tests -p "test_cortes_qa_p0_router.py" -v
+        shell: powershell
+        run: |
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m unittest discover -s tests -p test_cortes_qa_p0_router.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Detect publisher failures and open immediate-priority QA issues
-        run: python3 -u tools/cortes_qa_p0_router.py
+        shell: powershell
+        run: |
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/cortes_qa_p0_router.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
