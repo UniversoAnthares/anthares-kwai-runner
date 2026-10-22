@@ -10,7 +10,9 @@ class PersonalFailover(unittest.TestCase):
         self.assertIn("id-token: write",wf)
         self.assertIn("bitwarden/sm-action@v2",wf)
         self.assertIn("python -u -m tools.cortes_linkedin_personal_cloud",wf)
-        self.assertIn("group: cortes-linkedin-personal-cloud",wf)
+        self.assertIn("group: cortes-linkedin-personal-fallback-cloud",wf)
+        self.assertNotIn("group: cortes-linkedin-personal-cloud\
+",wf)
         self.assertIn("group: cortes-linkedin-personal-cloud",primary)
         self.assertIn("workflow_run:",wf)
         self.assertIn("schedule:",wf)
