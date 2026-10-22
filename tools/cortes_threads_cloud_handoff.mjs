@@ -157,7 +157,7 @@ export async function run(){
   console.log(JSON.stringify({ok:true,mode:'dry_run',...publicInfo,published:false}));
   return;
  }
- requireOk(process.env.GITHUB_EVENT_NAME==='workflow_dispatch','LIVE_EVENT_NOT_DISPATCH');
+ requireOk(['workflow_dispatch','schedule'].includes(process.env.GITHUB_EVENT_NAME),'LIVE_EVENT_NOT_AUTHORIZED');
  const claim=await callControl(jwt,'claim');const epoch=Number(claim.lease.epoch);
  const ident={id,epoch};
  let leased=null,started=false,verified=null;
