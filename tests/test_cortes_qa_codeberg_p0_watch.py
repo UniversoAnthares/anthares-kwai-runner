@@ -44,6 +44,23 @@ class CodebergP0Tests(unittest.TestCase):
         self.assertEqual(alerts[0]["account"],"x/lucasyahn")
         self.assertEqual(alerts[0]["stage"],"codeberg_cloud_publisher_failed")
 
+    def test_codeberg_identity_failures_and_stalls_alert_p0(self):
+        waiting=(m.NOW-dt.timedelta(minutes=28)).isoformat()
+        events=[
+            {"workflow_id":"x-codeberg-auth-identity.yml","id":112,
+             "status":"cancelled","created":m.NOW.isoformat()},
+            {"workflow_id":"x-codeberg-auth-identity.yml","id":111,
+             "status":"waiting","created":waiting},
+            {"workflow_id":"x-codeberg-primary.yml","id":110,"status":"skipped","event":"push"}
+        ]
+        def fake(url,*args,**kwargs):
+            if "codeberg.org" in url:return {"workflow_runs":events}
+            if "/x/health" in url:return {"ok":True,"vault_ready":True}
+            return {"workflow_runs":[]}
+        with patch.object(m,"fetch",side_effect=fake):
+            codes={item["stage"] for item in m.inspect_x()}
+        self.assertIn("codeberg_x_identity_preflight_failed",codes)
+
     def test_x_runner_stall_cannot_be_hidden_by_newer_skipped_push(self):
         t=(m.NOW-dt.timedelta(minutes=34)).isoformat()
         def fake(url,*args,**kwargs):
