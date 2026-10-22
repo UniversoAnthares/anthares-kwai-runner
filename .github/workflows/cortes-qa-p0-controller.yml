@@ -27,9 +27,9 @@ permissions:
   actions: write
   issues: write
 concurrency:
-  # GitHub retains only one pending run in a shared group. A burst of
-  # issues would otherwise cancel every previous pending QA controller.
-  group: cortes-qa-p0-controller-${{ github.event_name == 'issues' && github.event.issue.number || github.run_id }}
+  # One active and one pending controller even under incident storms.
+  # The periodic scanner enumerates every open P0 for eventual delivery.
+  group: cortes-qa-p0-controller-global
   cancel-in-progress: false
 jobs:
   route-p0:
@@ -45,8 +45,9 @@ jobs:
           script: |
             const {owner, repo} = context.repo;
             const executor = 'cortes-qa-p0-executor.yml';
-            const maxDispatchPerRun = 2, maxAttempts = 3;
-            const cooldownMs = 5*60*1000, maxAgeMs = 72*60*60*1000;
+            const maxDispatchPerRun = 2, maxAttemptsPerWindow = 3;
+            const cooldownMs = 5*60*1000, attemptsWindowMs = 6*60*60*1000;
+            const maxAgeMs = 72*60*60*1000;
             const now = Date.now();
             const marker = '[QA-P0-CONTROLLER] DISPATCH_ATTEMPT=';
             function eligible(issue) {
@@ -121,22 +122,28 @@ jobs:
               const found = priorRuns.filter(x => x.display_title === runTitle)
                 .sort((a,b) => Date.parse(b.created_at)-Date.parse(a.created_at));
               const active = found.find(x => x.status !== 'completed');
-              if (active || found.some(x => x.conclusion === 'success')) {
+              // Successful diagnostics do not prove the P0 has been fixed.
+              // Open issues remain eligible for bounded further reconciliation.
+              if (active) {
                 skipped++;continue;
               }
               const {data:comments} = await github.rest.issues.listComments({
                 owner,repo,issue_number:issue.number,per_page:100
               });
-              const attempts = comments.filter(x => (x.body || '').includes(marker));
+              const attempts = comments.filter(x =>
+                (x.body || '').includes(marker) &&
+                now-Date.parse(x.created_at) < attemptsWindowMs);
               const latest = attempts.at(-1);
               if (latest && now - Date.parse(latest.created_at) < cooldownMs) {
                 skipped++;continue;
               }
-              if (Math.max(attempts.length,found.length) >= maxAttempts) {
-                core.error('QA_P0_ATTEMPTS_EXHAUSTED issue='+issue.number);
-                failures++;continue;
+              const recentRuns=found.filter(x => now-Date.parse(x.created_at) < attemptsWindowMs);
+              if (Math.max(attempts.length,recentRuns.length) >= maxAttemptsPerWindow) {
+                core.warning('QA_P0_BOUNDED_COOLDOWN issue='+issue.number+
+                  ' max_attempts_per_window='+maxAttemptsPerWindow+'; incident remains open.');
+                skipped++;continue;
               }
-              const attempt = Math.max(attempts.length,found.length) + 1;
+              const attempt = Math.max(attempts.length,recentRuns.length) + 1;
               try {
                 await github.rest.actions.createWorkflowDispatch({
                   owner,repo,workflow_id:executor,ref:'main',
