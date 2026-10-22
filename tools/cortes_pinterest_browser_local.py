@@ -30,7 +30,7 @@ from urllib.parse import urlparse
 NEON_BROWSER_QUEUE = "https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/"
 def call(action: str, payload: dict):
     """Neon direct, device-scoped Pinterest actions; never silently falls back to Vercel."""
-    if action not in {"lease", "start", "fail", "confirm", "stats", "media-invalid"}:
+    if action not in {"lease", "start", "fail", "confirm", "stats", "media-invalid", "metadata-pending", "metadata-enrich", "qa-media-pending", "qa-media-result"}:
         raise ValueError("PINTEREST_NEON_ACTION_NOT_ALLOWED")
     url = os.getenv("CORTES_PINTEREST_NEON_URL", NEON_BROWSER_QUEUE).rstrip("/") + "/"
     parsed = urlparse(url)
