@@ -80,6 +80,27 @@ class PinterestBrowserContract(unittest.TestCase):
         self.assertIn("ORDER BY p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1",browser)
         self.assertIn("CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain'",browser)
 
+    def test_invalid_media_is_quarantined_without_blocking_queue(self):
+        worker=(ROOT/"tools"/"cortes_pinterest_browser_local.py").read_text(encoding="utf-8")
+        neon=(ROOT/"infra"/"neon-cortes-queue"/"index.mjs").read_text(encoding="utf-8")
+        self.assertIn('media_missing(job["media_url"])', worker)
+        self.assertIn('call("media-invalid", fence)', worker)
+        self.assertIn('qa_media_incident(fence["id"]', worker)
+        self.assertIn("status='leased'", neon)
+        self.assertIn("publication_started_at IS NULL AND lease_owner=$3",neon)
+        self.assertIn("source_media_invalid",neon)
+        self.assertIn("pinterest_expired_after_next_day",neon)
+
+    def test_next_day_retry_and_day_three_discard(self):
+        neon=(ROOT/"infra"/"neon-cortes-queue"/"index.mjs").read_text(encoding="utf-8")
+        beginning=neon.index("async function pinterestBrowserAction")
+        end=neon.index("// Personal member publishing",beginning)
+        browser=neon[beginning:end]
+        self.assertIn("BETWEEN (now() AT TIME ZONE 'America/Campo_Grande')::date - 1",browser)
+        self.assertIn("retry_after_date",browser)
+        self.assertIn("status='failed'",browser)
+        self.assertIn("ORDER BY p.created_at,p.updated_at,p.id",browser)
+
     def test_browser_uses_no_pinterest_api_or_login_bypass(self):
         ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
         for forbidden in ("api.pinterest.com","PINTEREST_ACCESS_TOKEN","captcha_solver","stealth_plugin"):
