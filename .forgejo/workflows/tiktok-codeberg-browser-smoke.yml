@@ -10,7 +10,7 @@ permissions:
   contents: read
 concurrency:
   group: cortes-tiktok-codeberg-browser-smoke
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   browser-smoke:
     runs-on: codeberg-tiny
