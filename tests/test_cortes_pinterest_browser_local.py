@@ -77,7 +77,7 @@ class PinterestBrowserContract(unittest.TestCase):
         neon=(ROOT/"infra"/"neon-cortes-queue"/"index.mjs").read_text(encoding="utf-8")
         start=neon.index("async function pinterestBrowserAction")
         browser=neon[start:]
-        self.assertIn("ORDER BY p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1",browser)
+        self.assertIn("ORDER BY p.created_at,p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1",browser)
         self.assertIn("CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain'",browser)
 
     def test_invalid_media_is_quarantined_without_blocking_queue(self):
