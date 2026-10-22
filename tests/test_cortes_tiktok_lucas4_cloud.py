@@ -68,6 +68,18 @@ class SecondaryCloudTests(unittest.TestCase):
                 q.call("start","fake-token",{"id":"anything"})
         self.assertEqual(mocked.call_count,1)
 
+    def test_reconciliation_timeout_preserves_uncertain(self):
+        from unittest.mock import MagicMock
+        runtime=MagicMock()
+        runner=MagicMock()
+        runner.__enter__.return_value=runtime
+        with patch("playwright.sync_api.sync_playwright",return_value=runner):
+            with patch.object(q,"studio",side_effect=TimeoutError()):
+                with patch.object(q,"call") as api:
+                    self.assertFalse(q.reconcile_uncertain(
+                        {"status":"uncertain"},"token",{}))
+                api.assert_not_called()
+
     def test_uncertain_mode_never_reenters_upload_editor(self):
         job={"id":"tt-test","status":"uncertain",
              "segment_id":"g1:9CIk-I_3VhM:7216:7273","lease_generation":3}
