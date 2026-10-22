@@ -1,16 +1,13 @@
-name: CORTES LinkedIn personal - secondary hosted publisher
+name: CORTES LinkedIn personal - primary hosted cloud publisher
 on:
   schedule:
-    - cron: '7,22,37,52 * * * *'
+    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
   workflow_dispatch: {}
   push:
     branches: [main]
     paths:
       - '.github/workflows/cortes-linkedin-personal-fallback-cloud.yml'
-  workflow_run:
-    workflows: ["CORTES LinkedIn personal - fenced video cloud publisher"]
-    types: [completed]
-    branches: [main]
+      - 'tools/cortes_linkedin_personal_cloud.py'
 permissions:
   contents: read
   id-token: write
@@ -21,11 +18,11 @@ concurrency:
   # sharing the primary group canceled every backup run before it had a job.
   # The Neon owner+lease_generation CAS and publication-start marker prevent
   # two active runners from publishing the same cut.
-  group: cortes-linkedin-personal-fallback-cloud
+  group: cortes-linkedin-personal-primary-hosted
   cancel-in-progress: false
 jobs:
   recover-personal:
-    if: ${{ vars.CORTES_LINKEDIN_PERSONAL_PAUSED != 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success') }}
+    if: ${{ vars.CORTES_LINKEDIN_PERSONAL_PAUSED != 'true' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 14
     steps:
