@@ -43,5 +43,3 @@ jobs:
             console.log('GRAPH_RECENT_PROVEN='+JSON.stringify({id:p.id,permalink:u,timestamp:p.timestamp,media_type:p.media_type,text_prefix:String(p.text||'').slice(0,115)}));
           }
           NODE
-        env:
-          THREADS_ACCESS_TOKEN: ${{ env.THREADS_ACCESS_TOKEN }}
