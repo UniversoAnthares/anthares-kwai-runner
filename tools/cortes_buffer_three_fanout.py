@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CORTES: prioritize first 20 shorts/source in each of 3 Buffer accounts.
+"""CORTES: enqueue all clips on independent networks, Buffer eligibility at lease.
 
 The source WordPress master is immutable. Neon is the idempotent queue authority.
 Buffer workers refill at most 8 pending slots and later reconcile real posts.
@@ -48,7 +48,8 @@ def main():
     linked.require_cloud()
     source=linked.wp_state()
     selected=linked.candidate_jobs(source)
-    # A fixed 20 per source is a reservation, not 20 simultaneous scheduled posts.
+    # Source-level editorial candidates do not reserve Buffer quota. The
+    # only Buffer capacity authority is the shared Neon 20/day Mon-Fri ledger.
     # Incremental daily reruns safely reuse the same identities.
     counts={}
     errors=[]
@@ -72,7 +73,8 @@ def main():
             counts[platform]={"status":"blocked","error_class":type(exc).__name__}
         print("CORTES_FANOUT_DESTINATION="+platform+" STATUS="+counts[platform]["status"],flush=True)
     print(json.dumps({"ok":not errors,"independent_destinations":True,
-                      "buffer_priority_per_source":BUFFER_LIMIT_PER_SOURCE,
+                      "buffer_editorial_candidate_window":BUFFER_LIMIT_PER_SOURCE,
+                      "buffer_quota_global_per_weekday":20,
                       "distribution":counts},separators=(",",":")),flush=True)
     if errors:
         raise RuntimeError("CORTES_FANOUT_ISOLATED_DESTINATIONS_FAILED_"+",".join(errors))
