@@ -20,9 +20,13 @@ jobs:
     timeout-minutes: 13
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Verify preinstalled Python without touching Windows Registry
+        shell: powershell
+        run: |
+          $py='C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe'
+          if (-not (Test-Path $py)) { throw 'INSTAGRAM_WINDOWS_PYTHON_MISSING' }
+          & $py --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Read Buffer key from Bitwarden without logging credentials
         uses: bitwarden/sm-action@v2
         with:
@@ -39,5 +43,5 @@ jobs:
           CORTES_IG_IMMEDIATE_UNTIL_UTC: '2026-10-22T09:00:00Z'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python -u tools/cortes_buffer_instagram_cloud.py
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/cortes_buffer_instagram_cloud.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
