@@ -227,7 +227,19 @@ def caption_for(job):
     title=" ".join(str(job.get("title") or "").split()).replace("● Universo Anthares","").strip()[:125]
     if len(title)<8:
         raise SafeStop("SECONDARY_TITLE_NOT_VALID")
-    return title+" #BookTokBrasil #Literatura #UniversoAnthares "+marker(job["segment_id"])
+    # Preserve segment-specific tags supplied by the canonical editorial pipeline.
+    # Never fabricate a topical hashtag from a title: it could misrepresent
+    # the actual speech. Legacy records lacking tags retain only identity tags.
+    supplied=job.get("hashtags")
+    tags=[]
+    if isinstance(supplied,list):
+        for item in supplied:
+            if isinstance(item,str) and re.fullmatch(r"#[^\\W_][\\w]*",item,re.UNICODE):
+                if item.casefold() not in {x.casefold() for x in tags}:
+                    tags.append(item)
+    if not tags:
+        print("::warning::SECONDARY_QA_EDITORIAL_CONTEXTUAL_TAGS_MISSING",flush=True)
+    return title+" "+ " ".join(tags[:5]+["#UniversoAnthares",marker(job["segment_id"])])
 
 
 def fill_caption(page,caption):

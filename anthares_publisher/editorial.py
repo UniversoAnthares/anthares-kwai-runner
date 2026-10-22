@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import re
 
+_GENERIC_TAGS = {"#literatura", "#booktokbrasil", "#universoanthares", "#fyp", "#viral", "#paravoce", "#shorts"}
+_GENERIC_HEADLINES = ("resumo da obra", "expectativa de live", "testando formato", "trecho da live", "assista agora")
+
 from .unicode_gate import clean_publication_text, clean_metadata
 
 SUFFIX = " ● Universo Anthares"
@@ -54,14 +57,21 @@ def require_strategic_master(payload: dict) -> None:
     if (not title.endswith(SUFFIX) or len(title) < 40 or
             title.casefold().startswith(("trecho ", "corte ", "live ", "vídeo "))):
         raise ValueError("CORTES_TITLE_NOT_CONTEXTUAL")
+    core = title[:-len(SUFFIX)].strip().casefold()
+    if any(term in core for term in _GENERIC_HEADLINES):
+        raise ValueError("CORTES_TITLE_GENERIC_NOT_STRATEGIC")
     if len(description) < 70:
         raise ValueError("CORTES_DESCRIPTION_NOT_CONTEXTUAL")
     if (not isinstance(keywords, list) or len(keywords) < 3 or
             not all(isinstance(x, str) and len(x.strip()) >= 3 for x in keywords)):
         raise ValueError("CORTES_KEYWORDS_MISSING")
-    if (not isinstance(hashtags, list) or len(hashtags) < 2 or
-            not all(isinstance(x, str) and x.startswith("#") for x in hashtags)):
+    if (not isinstance(hashtags, list) or not 2 <= len(hashtags) <= 5 or
+            not all(isinstance(x, str) and re.fullmatch(r"#[^\\W_][\\w]*", x, re.UNICODE) for x in hashtags)):
         raise ValueError("CORTES_HASHTAGS_MISSING")
+    if len({x.casefold() for x in hashtags}) != len(hashtags):
+        raise ValueError("CORTES_HASHTAGS_DUPLICATE")
+    if not any(x.casefold() not in _GENERIC_TAGS for x in hashtags):
+        raise ValueError("CORTES_HASHTAGS_NOT_CONTEXTUAL")
 
 
 def prepare_publication_metadata(payload: dict, *, title_limit: int | None = None) -> dict:
