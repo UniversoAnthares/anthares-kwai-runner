@@ -6,6 +6,7 @@ on:
     paths:
       - social_adapters/buffer_three_channels.py
       - tools/cortes_buffer_pinterest_cloud.py
+      - tests/test_pinterest_editorial_preflight_isolation.py
       - .github/workflows/cortes-buffer-pinterest-cloud.yml
   schedule:
     - cron: '1,16,31,46 * * * *'
