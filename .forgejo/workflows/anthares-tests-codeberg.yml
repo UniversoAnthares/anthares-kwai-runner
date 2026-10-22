@@ -1,0 +1,67 @@
+# Tests execute on Codeberg's Forgejo runner, not GitHub Actions.
+# All commands are read-only offline contract tests; no network publishing.
+name: Anthares tests - Codeberg primary
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/anthares-tests-codeberg.yml'
+      - 'tests/**'
+      - 'anthares_publisher/**'
+      - 'tools/cortes_qa_*.py'
+      - 'tools/cortes_pinterest_*.py'
+      - 'tools/cortes_buffer_pinterest_cloud.py'
+      - 'tools/cortes_linkedin_neon_fanout.py'
+      - 'infra/neon-cortes-queue/**'
+      - 'vercel-ara-primary/api/cortes-queue.mjs'
+  schedule:
+    - cron: '17 0,12 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-codeberg-contract-tests
+  cancel-in-progress: false
+jobs:
+  unit-and-contracts:
+    runs-on: codeberg-tiny
+    timeout-minutes: 10
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - name: Verify source identity
+        shell: bash
+        run: |
+          set -eu
+          test "${FORGEJO_REPOSITORY:-}" = "UniversoAnthares/anthares-kwai-runner"
+          echo "CODEBERG_TESTS_RUNNER=ACTIVE"
+      - name: QA incident routing and 12-hour safeguards
+        shell: bash
+        run: |
+          set -eu
+          python3 -m py_compile tools/cortes_qa_p0_router.py tools/cortes_qa_codeberg_p0_watch.py
+          python3 -m unittest discover -s tests -p 'test_cortes_qa_p0_router.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_qa_daily_round.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_qa_codeberg_p0_watch.py' -v
+      - name: Pinterest publication safety and editorial QA
+        shell: bash
+        run: |
+          set -eu
+          python3 -m py_compile tools/cortes_pinterest_metadata_qa.py tools/cortes_pinterest_browser_local.py
+          python3 -m unittest discover -s tests -p 'test_cortes_pinterest_browser_local.py' -v
+          python3 -m unittest discover -s tests -p 'test_pinterest_draft_cap_nextday.py' -v
+          python3 -m unittest discover -s tests -p 'test_pinterest_24h_titles_qa.py' -v
+          python3 -m unittest discover -s tests -p 'test_pinterest_qa_jsonb_evidence.py' -v
+      - name: Editorial and media safety contracts
+        shell: bash
+        run: |
+          set -eu
+          python3 -m unittest discover -s tests -p 'test_social_video_editorial.py' -v
+          python3 -m unittest discover -s tests -p 'test_media_model.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_daily_publication_policy.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_daily_confirmation_guard.py' -v
+      - name: Provenance
+        shell: bash
+        run: |
+          set -eu
+          echo "CODEBERG_TESTS=PASS"
+          git rev-parse HEAD
