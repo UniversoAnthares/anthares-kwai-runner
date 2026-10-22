@@ -47,6 +47,33 @@ class XChronologyAndContinuityTests(unittest.TestCase):
         self.assertEqual(selected["video_id"],"oldest00001")
         self.assertEqual(selected["scan_start"],1380)
 
+    def test_strict_daily_lock_no_second_live(self):
+        entries=[{"id":"newest00001","duration":4000,"live_status":"not_live"},
+                 {"id":"oldest00001","duration":4000,"live_status":"not_live"}]
+        class FakeYDL:
+            def __init__(self,options):pass
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def extract_info(self,*args,**kwargs):return {"entries":entries}
+        with patch.dict(sys.modules,{"yt_dlp":types.SimpleNamespace(YoutubeDL=FakeYDL)}),patch.dict(
+             os.environ,{"X_SOURCE_WINDOWS_JSON":"{}","X_DAILY_LIVE_LOCK":"newest00001"},clear=False):
+            selected=prepare.discover_source()
+        self.assertEqual(selected["video_id"],"newest00001")
+
+    def test_after_cursor_advances_exactly_one_live(self):
+        entries=[{"id":"newest00001","duration":4000,"live_status":"not_live"},
+                 {"id":"middle00001","duration":4000,"live_status":"not_live"},
+                 {"id":"oldest00001","duration":4000,"live_status":"not_live"}]
+        class FakeYDL:
+            def __init__(self,options):pass
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def extract_info(self,*args,**kwargs):return {"entries":entries}
+        with patch.dict(sys.modules,{"yt_dlp":types.SimpleNamespace(YoutubeDL=FakeYDL)}),patch.dict(
+             os.environ,{"X_SOURCE_WINDOWS_JSON":"{}","X_LIVE_CURSOR_AFTER":"oldest00001"},clear=False):
+            selected=prepare.discover_source()
+        self.assertEqual(selected["video_id"],"middle00001")
+
     def test_self_healing_watchdog_is_hidden_and_serialized(self):
         script=(ROOT/"tools/x_windows_publication_watchdog.ps1").read_text(encoding="utf8")
         install=(ROOT/"tools/x_install_continuity_watchdog.ps1").read_text(encoding="utf8")
