@@ -9,6 +9,11 @@ class MirrorContracts(unittest.TestCase):
     def setUpClass(cls):
         cls.code=SCRIPT.read_text(encoding="utf8")
         cls.install=INSTALLER.read_text(encoding="utf8")
+    def test_git_wrapper_does_not_shadow_reserved_args(self):
+        self.assertIn("function Invoke-ProviderGit([string[]]$gitArgs)",self.code)
+        self.assertIn("& git.exe -C $Checkout @gitArgs",self.code)
+        self.assertNotIn("function Invoke-ProviderGit([string[]]$args)",self.code)
+
     def test_no_force_push_and_git_terminal_prompt_disabled(self):
         self.assertIn("$env:GIT_TERMINAL_PROMPT = '0'",self.code)
         self.assertNotIn("'--force'",self.code)
