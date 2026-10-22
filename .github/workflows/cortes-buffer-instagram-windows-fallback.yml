@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish-with-fenced-neon:
-    runs-on: [cortes-instagram-fallback-20261021]
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
     timeout-minutes: 13
     steps:
       - uses: actions/checkout@v4
