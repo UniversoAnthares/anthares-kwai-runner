@@ -11,8 +11,17 @@ class MirrorContracts(unittest.TestCase):
         cls.install=INSTALLER.read_text(encoding="utf8")
     def test_git_wrapper_does_not_shadow_reserved_args(self):
         self.assertIn("function Invoke-ProviderGit([string[]]$gitArgs)",self.code)
-        self.assertIn("& git.exe -C $Checkout @gitArgs",self.code)
+        self.assertIn("& git.exe -c \"safe.directory=$Checkout\" -C $Checkout @gitArgs",self.code)
         self.assertNotIn("function Invoke-ProviderGit([string[]]$args)",self.code)
+
+    def test_windows_git_progress_is_not_a_fatal_remote_exception(self):
+        self.assertIn("$previous=$ErrorActionPreference",self.code)
+        self.assertIn("$ErrorActionPreference='Continue'",self.code)
+        self.assertIn("$exit=$LASTEXITCODE",self.code)
+        self.assertIn("finally { $ErrorActionPreference=$previous }",self.code)
+        self.assertNotIn("@gitArgs 2>&1",self.code)
+        self.assertIn("GIT_STEP_FAILED_",self.code)
+        self.assertIn("ScriptLineNumber",self.code)
 
     def test_no_force_push_and_git_terminal_prompt_disabled(self):
         self.assertIn("$env:GIT_TERMINAL_PROMPT = '0'",self.code)
