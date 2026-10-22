@@ -1,0 +1,21 @@
+name: Codeberg independent Forgejo runner smoke
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prove:
+    if: forgejo.ref == 'refs/heads/main'
+    runs-on: anthares-codeberg-linux
+    timeout-minutes: 5
+    steps:
+      - name: Prove independent Linux container runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test -n "$FORGEJO_REPOSITORY"
+          test "$FORGEJO_REPOSITORY" = "UniversoAnthares/anthares-kwai-runner"
+          python3 --version
+          git --version
+          echo "CODEBERG_INDEPENDENT_RUNNER_SMOKE=PASS"
