@@ -99,6 +99,10 @@ async function action(body,role,claims){
   return rows[0]?{ok:true,standby:rows[0]}:{ok:false,error:'CLOUD_STILL_HEALTHY_OR_ACTIVE'};
  }
  if(role!=='github')return{ok:false,error:'CLOUD_OIDC_REQUIRED'};
+ if(body.action==='yield-primary'){
+  const rows=await database("UPDATE cortes_threads_executor_handoff SET cloud_primary_enabled=false,updated_at=now() WHERE target_key=$1 AND owner='local' AND (cloud_last_success_at IS NULL OR cloud_last_success_at<now()-interval '16 minutes') AND NOT EXISTS (SELECT 1 FROM cortes_publications p WHERE p.target_key=$1 AND p.status IN ('leased','started') AND p.lease_owner LIKE 'github-threads:%') RETURNING cloud_primary_enabled",[TARGET]);
+  return rows[0]?{ok:true,yielded:true}:{ok:false,error:'CLOUD_LEASE_ACTIVE_OR_RECENT_PROGRESS'};
+ }
  if(body.action==='heartbeat'){
   const rows=await database("UPDATE cortes_threads_executor_handoff SET cloud_heartbeat_at=now(),updated_at=now() WHERE target_key=$1 AND cloud_primary_enabled=true RETURNING epoch,cloud_primary_enabled",[TARGET]);
   return rows[0]?{ok:true,heartbeat:rows[0]}:{ok:false,error:'CLOUD_PRIMARY_DISABLED'};

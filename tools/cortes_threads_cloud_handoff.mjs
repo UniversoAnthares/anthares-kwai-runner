@@ -79,7 +79,13 @@ async function choose(jwt,publish){
  let rejected=0;
  for(const row of queue.slice(0,60)){
   const candidate=byId.get(row.id);
-  if(!candidate)continue;
+  if(!candidate){
+   if(publish){
+    const v=await callControl(jwt,'quarantine',{id:row.id,reason:'MEDIA_INVALID'});
+    if(v.first_notice)await notifyQA(row.id,'MEDIA_INVALID');
+   }
+   rejected++;continue;
+  }
   const {day,...clip}=candidate;
   let digest,tagged;
   try{
