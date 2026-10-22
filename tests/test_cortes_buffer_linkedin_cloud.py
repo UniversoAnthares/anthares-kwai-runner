@@ -86,9 +86,15 @@ class LinkedInCloudContracts(unittest.TestCase):
         schedule.assert_not_called()
 
     def test_http_429_preflight_never_claims_a_job(self):
-        with patch.object(publisher,"cloud_only"), patch.object(publisher,"reconcile",return_value=0), patch.object(publisher,"channels",side_effect=publisher.BufferBlocked("BUFFER_HTTP_429")), patch.object(publisher,"queue") as mutate:
+        calls=[]
+        def guarded_queue(action,payload=None):
+            calls.append(action)
+            if action=="policy":return {"enabled":True,"remaining":20}
+            if action=="cooldown":return {"ok":True,"cooldown_until":"2026-10-22T13:00:00Z"}
+            raise AssertionError("Unexpected lease or mutation: "+action)
+        with patch.object(publisher,"cloud_only"), patch.object(publisher,"reconcile",return_value=0), patch.object(publisher,"channels",side_effect=publisher.BufferBlocked("BUFFER_HTTP_429")), patch.object(publisher,"queue",side_effect=guarded_queue):
             self.assertEqual(publisher.main(),0)
-        mutate.assert_not_called()
+        self.assertEqual(calls,["policy","cooldown"])
 
     def test_429_on_readback_interrupts_without_buffer_mutation(self):
         item=[{"id":"one","remote_id":"buffer-id"}]
