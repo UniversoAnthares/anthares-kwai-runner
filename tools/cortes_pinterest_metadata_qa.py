@@ -65,6 +65,11 @@ def media_qa():
             continue
         st=(result.get('job') or {}).get('status')
         ev=(result.get('job') or {}).get('confirmation_evidence') or {}
+        # Neon PostgreSQL JSONB can be serialized as either text or a dict.
+        if isinstance(ev,str):
+            try:ev=json.loads(ev)
+            except (ValueError,TypeError):ev={}
+        if not isinstance(ev,dict):ev={}
         print(json.dumps({'qa':'MEDIA_24H_CHECK','status':st,
                           'kind':ev.get('kind'),'id':j['id']},ensure_ascii=False),flush=True)
         count+=1
