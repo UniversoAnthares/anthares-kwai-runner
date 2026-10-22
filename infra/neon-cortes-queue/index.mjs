@@ -440,6 +440,17 @@ async function personalAction(verb,b){
   const rows=await query(`WITH picked AS (SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued' AND created_at >= ${LINKEDIN_EXCEPTION_START} ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE cortes_publications p SET status='leased',lease_owner=$2,lease_generation=p.lease_generation+1,lease_until=now()+interval '30 minutes',updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued' RETURNING p.*`,[P_TARGET,P_OWNER]);
   return{ok:true,job:rows[0]||null,limit:P_LIMIT};
  }
+ if(verb==='pending'){
+  const rows=await query("SELECT id,remote_id,confirmation_evidence FROM cortes_publications WHERE target_key=$1 AND status='uncertain' AND confirmation_evidence->>'kind'='linkedin_api_201_unverified' AND remote_id IS NOT NULL ORDER BY updated_at,id LIMIT 5",[P_TARGET]);
+  return{ok:true,jobs:rows};
+ }
+ if(verb==='reconcile-public'){
+  const remote=String(b.remote_id||'');
+  if(!id||!/^urn:li:(ugcPost|share):[0-9]{8,25}$/.test(remote)||b.public_status!==200||b.control_status!==404||b.proof_kind!=='linkedin_public_embed_head')return{ok:false,error:'PERSONAL_PUBLIC_PROOF_INVALID'};
+  const evidence={kind:'linkedin_public_embed_http200',verified_id:remote,oauth_author_at_creation:true,public_embed_status:200,control_embed_status:404,permalink:'https://www.linkedin.com/embed/feed/update/'+remote};
+  const rows=await query("UPDATE cortes_publications SET status='confirmed',confirmation_evidence=$4::jsonb,updated_at=now() WHERE id=$1 AND target_key=$2 AND status='uncertain' AND remote_id=$3 AND confirmation_evidence->>'kind'='linkedin_api_201_unverified' RETURNING id,status,remote_id",[id,P_TARGET,remote,JSON.stringify(evidence)]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PERSONAL_PUBLIC_RECONCILE_STALE'};
+ }
  if(!['start','fail','media-missing','accepted','confirmed'].includes(verb))return{ok:false,error:'PERSONAL_ACTION_DENIED'};
  const generation=Number(b.lease_generation);
  if(!id||owner!==P_OWNER||!Number.isInteger(generation)||generation<1)return{ok:false,error:'PERSONAL_INVALID_FENCE'};
