@@ -73,6 +73,17 @@ if __name__ == "__main__":
         run()
     except Exception as exc:
         print("X_CLOUD_PREFLIGHT_ERROR_TYPE=" + type(exc).__name__, flush=True)
-        if isinstance(exc, RuntimeError) and str(exc).startswith("X_CLOUD"):
-            print("X_CLOUD_PREFLIGHT_ERROR_CODE=" + str(exc)[:80], flush=True)
+        # Emit only fixed diagnostic identifiers; never print browser cookies,
+        # challenge pages, tokens, URLs with parameters or exception messages.
+        SAFE_CODES = {
+            "X_SHARED_SECRET_NOT_CONFIGURED",
+            "X_ENCRYPTED_VAULT_EMPTY",
+            "X_VAULT_MISSING_AUTHENTICATED_COOKIES",
+            "X_CLOUD_LOGIN_REQUIRED",
+            "X_CLOUD_ACCOUNT_MISMATCH",
+            "X_CLOUD_ACCOUNT_NOT_PROVEN",
+        }
+        code = str(exc)
+        if isinstance(exc, RuntimeError) and code in SAFE_CODES:
+            print("X_CLOUD_PREFLIGHT_ERROR_CODE=" + code, flush=True)
         raise SystemExit(2)
