@@ -88,7 +88,8 @@ async function session(p){
  if(!url.hostname.endsWith('.pinterest.com'))throw Error('PIN_WRONG_ORIGIN');
  if(r.login||!url.pathname.includes('pin-creation-tool'))throw Error('PINTEREST_BROWSER_LOGIN_REQUIRED');
  if(!r.profile)throw Error('PINTEREST_BROWSER_ACCOUNT_NOT_VERIFIED');
- return r;
+ const draftCount=await p.js('document.querySelectorAll(\'[data-test-id^="pinDraft-"]\').length');
+ return {...r,draftCount:Number(draftCount)||0};
 }
 async function inspect(p){
  return p.js('(()=>({url:location.href,fields:[...document.querySelectorAll("input,textarea,[contenteditable=true]")].map(x=>({tag:x.tagName,type:x.type,placeholder:x.getAttribute("placeholder"),name:x.getAttribute("name"),testid:x.getAttribute("data-test-id")})).slice(0,20),buttons:[...document.querySelectorAll("button,[role=button]")].map(x=>(x.innerText||x.getAttribute("aria-label")||"").trim()).filter(Boolean).slice(0,25)}))()');
@@ -158,6 +159,10 @@ async function selectBoard(p){
  if(!verified)throw Error('PIN_BOARD_NOT_CONFIRMED_IN_EDITOR');
 }
 async function stage(p,file,data){
+ // Pinterest desktop draft limit is 50. Never upload an extra video after
+ // the limit is reached or create a new unwanted draft on repeat attempts.
+ const drafts=await p.js('document.querySelectorAll(\'[data-test-id^="pinDraft-"]\').length');
+ if(Number(drafts)>=49)throw Error('PIN_DRAFT_CAPACITY_EXHAUSTED');
  const input=await until(()=>p.js('!!document.querySelector("input[type=file]")'),30,550);
  if(!input)throw Error('PIN_VIDEO_UPLOAD_INPUT_MISSING');
  const doc=await p.rpc('DOM.getDocument',{depth:-1,pierce:true});
@@ -209,10 +214,11 @@ try{
  await pruneOwnedPinterestTabs();
  const p=await page(editor);
  const auth=await session(p);
- if(mode==='--preflight'){emit({status:'READY',account_id:account,editor_url:auth.href,details:await inspect(p)})}
+ if(mode==='--preflight'){emit({status:'READY',account_id:account,editor_url:auth.href,draft_count:auth.draftCount,details:await inspect(p)})}
  else if(mode==='--publish'){
   const job=JSON.parse(fs.readFileSync(process.argv[3],'utf8'));
   const data=validate(job);
+  if(auth.draftCount>=49)throw Error('PIN_DRAFT_CAPACITY_EXHAUSTED');
   mediaFile=await getVideo(data);
   await stage(p,mediaFile,data);
   emit({phase:'PREPARED',account_id:account,board});
