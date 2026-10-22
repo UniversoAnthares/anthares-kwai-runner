@@ -32,22 +32,23 @@ if(!ledger.items[seed]){
  ledger.items[seed]={status:'published',url:'https://www.threads.com/@universoanthares/post/DewUdWroPT2',published_at:'2026-10-21T11:40:00Z',caption:'A Poética de Aristóteles - Parte 2 | Trecho 40:26 ● Universo Anthares'};
  saveJson(ledgerPath,ledger);
 }
-const sourceTitles={
- "fOmihuHUT1M":"A Metamorfose [Kafka] - AN\u00c1LISE",
- "9CIk-I_3VhM":"A Po\u00e9tica de Arist\u00f3teles - Parte 2",
- "-CSeY1OpvwA":"A Morte de Ivan Ilitch [Tolst\u00f3i] - AN\u00c1LISE"
-};
+// Canonical editorial metadata must originate from the segment, never the live title.
+const GENERIC=/^(?:trecho|corte|live|vídeo|resumo da obra|testando formato)\\b/i;
 function normalizeEntry(entry){
- const basis=sourceTitles[entry.source]||String(entry.title||'').split(' | Trecho ')[0].normalize('NFC').trim();
- if(!basis||basis.length>150||basis.includes("\uFFFD"))throw Error("UNKNOWN_SOURCE_METADATA_BLOCKED_"+entry.source);
- const match=String(entry.clip_id||"").match(/:(\d+):\d+$/);
- if(!match)throw Error("INVALID_SEGMENT_ID");
- const start=Number(match[1]);
- const title=basis+" | Trecho "+String(Math.floor(start/60)).padStart(2,"0")+":"+String(start%60).padStart(2,"0")+" \u25cf Universo Anthares";
- const tags=entry.source==="fOmihuHUT1M"?"#Literatura #Livros #Leitura #Kafka #AMetamorfose #UniversoAnthares":
-   entry.source==="9CIk-I_3VhM"?"#Literatura #Livros #Aristoteles #Poetica #Filosofia #UniversoAnthares":
-   entry.source==="-CSeY1OpvwA"?"#Literatura #Livros #Tolstoi #IvanIlitch #LiteraturaRussa #UniversoAnthares":"#Literatura #Livros #Leitura #UniversoAnthares";
- return {...entry,title,caption:title+"\n\nwww.anthares.us\n\n"+tags};
+ const clip=String(entry.clip_id||'');
+ if(!/^g\\d+:[A-Za-z0-9_-]{6,60}:\\d+:\\d+$/.test(clip))throw Error('INVALID_SEGMENT_ID');
+ if(entry.editorial_policy!=='anthares_editorial_transcript_v2')throw Error('EDITORIAL_MISSING_POLICY');
+ const title=String(entry.title||'').normalize('NFC').trim();
+ if(!title.endsWith(' ● Universo Anthares')||title.length<40||GENERIC.test(title))throw Error('EDITORIAL_TITLE_NOT_CONTEXTUAL');
+ const description=String(entry.description||entry.caption||'').normalize('NFC').trim();
+ if(description.length<70||description.includes('\\uFFFD'))throw Error('EDITORIAL_DESCRIPTION_MISSING');
+ if(!Array.isArray(entry.keywords)||entry.keywords.length<3)throw Error('EDITORIAL_KEYWORDS_MISSING');
+ const hashtags=entry.hashtags;
+ if(!Array.isArray(hashtags)||hashtags.length<2||hashtags.length>5||!hashtags.some(t=>typeof t==='string'&&!['#literatura','#booktokbrasil','#universoanthares','#viral'].includes(t.toLowerCase())))throw Error('EDITORIAL_CONTEXTUAL_TAGS_MISSING');
+ // Threads composer has no separate hashtag input: do not insert hashtags.
+ const clean=description.replace(/(^|\\s)#[\\p{L}\\p{N}_]+/gu,' ').replace(/\\s+/g,' ').trim();
+ const caption=title+'\\n\\n'+clean+(clean.includes('www.anthares.us')?'':'\\nwww.anthares.us');
+ return {...entry,title,caption};
 }
 const list=(readJson(manifestPath,{items:[]}).items||[]).flatMap(x=>{try{return [normalizeEntry(x)]}catch(e){log({action:"ERROR",id:x.id||x.clip_id,message:"SOURCE_METADATA_BLOCKED_"+e.message});return []}});
 if(list.length===0)throw Error('MANIFEST_EMPTY');
