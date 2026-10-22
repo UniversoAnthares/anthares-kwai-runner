@@ -122,5 +122,12 @@ class SafeFailover(unittest.TestCase):
         self.assertEqual(seen,["instagram","pinterest","linkedin"])
 
 
+class PinterestCooldownActions(unittest.TestCase):
+    def test_new_429_cooldown_actions_authorized_only_from_cloud(self):
+        self.assertIn("buffer-cooldown",ha.ACTIONS)
+        self.assertIn("buffer-cooldown-status",ha.ACTIONS)
+        self.assertNotIn("buffer-cooldown",ha.RETRYABLE)
+
+
 if __name__=="__main__":
     unittest.main()
