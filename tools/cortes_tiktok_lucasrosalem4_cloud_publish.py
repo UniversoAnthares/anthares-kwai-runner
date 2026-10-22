@@ -9,7 +9,6 @@ The separate Windows scheduler must be disabled before enabling cloud writes.
 from __future__ import annotations
 import base64,hashlib,json,os,re,sys,tempfile,time,urllib.error,urllib.parse,urllib.request,zlib
 from pathlib import Path
-from playwright.sync_api import sync_playwright
 from urllib.parse import urlparse
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -196,6 +195,7 @@ def publish_one(job,token,state):
     job_id=str(job.get("id") or "")
     if not generation or not job_id:
         raise SafeStop("SECONDARY_LEASE_FENCE_MISSING")
+    from playwright.sync_api import sync_playwright
     with tempfile.TemporaryDirectory(prefix="cortes-tiktok-lucas4-") as tmp:
         media=preflight_media(job,Path(tmp))
         # The local session and the cloud secret must never be used concurrently
@@ -301,6 +301,7 @@ def main():
     token=oidc()
     select_queue()
     print("SECONDARY_CLOUD_QUEUE_READY=1",flush=True)
+    from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser=p.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage","--disable-gpu"])
         try:
