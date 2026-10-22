@@ -15,7 +15,7 @@ on:
         required: false
         type: string
   schedule:
-    - cron: '18,48 * * * *'
+    - cron: '*/5 * * * *'
   pull_request:
     paths:
       - .github/workflows/cortes-qa-p0-controller.yml
@@ -27,9 +27,9 @@ permissions:
   actions: write
   issues: write
 concurrency:
-  # One active and one pending controller even under incident storms.
-  # The periodic scanner enumerates every open P0 for eventual delivery.
-  group: cortes-qa-p0-controller-global
+  # Distinct incident events must not cancel queued controllers.
+  # Scheduled scans share a single group to prevent overlap.
+  group: cortes-qa-p0-controller-${{ github.event_name == 'issues' && github.event.issue.number || github.event_name == 'schedule' && 'scan' || github.run_id }}
   cancel-in-progress: false
 jobs:
   route-p0:
@@ -47,7 +47,6 @@ jobs:
             const executor = 'cortes-qa-p0-executor.yml';
             const maxDispatchPerRun = 2, maxAttemptsPerWindow = 3;
             const cooldownMs = 5*60*1000, attemptsWindowMs = 6*60*60*1000;
-            const maxAgeMs = 72*60*60*1000;
             const now = Date.now();
             const marker = '[QA-P0-CONTROLLER] DISPATCH_ATTEMPT=';
             function eligible(issue) {
@@ -75,8 +74,7 @@ jobs:
                   owner,repo,state:'open',labels:'QA-P0',
                   sort:'created',direction:'desc',per_page:100,page
                 });
-                all.push(...data.filter(x => eligible(x) &&
-                  now-Date.parse(x.created_at) <= maxAgeMs));
+                all.push(...data.filter(x => eligible(x)));
                 if (data.length < 100) break;
               }
               // One-time recovery of the three documented P0 incidents from the
