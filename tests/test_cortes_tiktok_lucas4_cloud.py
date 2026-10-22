@@ -47,6 +47,27 @@ class SecondaryCloudTests(unittest.TestCase):
         self.assertIn("'mirror'",edge)
         self.assertNotIn("vercel.app",edge)
 
+    def test_prestart_claim_recovers_via_same_neon_ledger_cloudflare(self):
+        from urllib.error import HTTPError
+        from unittest.mock import Mock
+        failure=HTTPError(q.QUEUE,503,"Backend temporarily unavailable",{},None)
+        backup=Mock()
+        backup.__enter__=Mock(return_value=backup)
+        backup.__exit__=Mock(return_value=False)
+        with patch.object(q.urllib.request,"urlopen",side_effect=[failure,backup]) as mocked, \
+             patch.object(q,"read_json",return_value={"ok":True,"job":None}):
+            self.assertTrue(q.call("claim","fake-token",{})["ok"])
+        self.assertEqual(mocked.call_count,2)
+        self.assertIn("lucas4-ha",mocked.call_args.args[0].full_url)
+
+    def test_irreversible_start_never_retries_after_http_error(self):
+        from urllib.error import HTTPError
+        failure=HTTPError(q.QUEUE,503,"unknown completion",{},None)
+        with patch.object(q.urllib.request,"urlopen",side_effect=failure) as mocked:
+            with self.assertRaisesRegex(q.SafeStop,"HTTP_503_ACTION_start"):
+                q.call("start","fake-token",{"id":"anything"})
+        self.assertEqual(mocked.call_count,1)
+
     def test_cloud_starts_are_budgeted_by_second_account(self):
         source=(ROOT/"infra"/"neon-cortes-lucasrosalem4"/"index.mjs").read_text(encoding="utf-8")
         self.assertIn("const TARGET='tiktok:lucasrosalem4'",source)

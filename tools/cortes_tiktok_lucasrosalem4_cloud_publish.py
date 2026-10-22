@@ -67,8 +67,33 @@ def call(action,token,payload=None):
     request=urllib.request.Request(url,
         data=json.dumps(payload,separators=(",",":")).encode() if payload is not None else None,
         headers=headers,method="POST" if payload is not None else "GET")
-    with urllib.request.urlopen(request,timeout=35) as resp:
-        out=read_json(resp)
+    try:
+        with urllib.request.urlopen(request,timeout=35) as resp:
+            out=read_json(resp)
+    except urllib.error.HTTPError as exc:
+        # Preserve the action and HTTP code, never the private token or URL.
+        # Mirror/claim are safe to retry on the shared Neon ledger:
+        # mirror is ON CONFLICT DO NOTHING, claim checks active leases.
+        if exc.code in (408,429,500,502,503,504) and action in ("mirror","claim"):
+            alternate=BACKUP_QUEUE if QUEUE!=BACKUP_QUEUE else None
+            if alternate:
+                backup=urllib.request.Request(
+                    alternate+"?"+urllib.parse.urlencode({"action":action}),
+                    data=request.data,headers=headers,
+                    method="POST" if payload is not None else "GET")
+                try:
+                    with urllib.request.urlopen(backup,timeout=35) as resp:
+                        out=read_json(resp)
+                    if not out.get("ok"):
+                        raise SafeStop("TIKTOK_SECONDARY_BACKUP_UNACKNOWLEDGED_"+action)
+                    print("SECONDARY_CLOUD_NEON_API_FAILOVER action="+action,flush=True)
+                    return out
+                except (urllib.error.URLError,TimeoutError,OSError) as alt_error:
+                    print("::error::CORTES_TIKTOK_LUCAS4_BOTH_INGRESS_FAILED action="+action+
+                          " primary_http="+str(exc.code)+" backup="+type(alt_error).__name__,flush=True)
+        raise SafeStop("SECONDARY_NEON_HTTP_"+str(exc.code)+"_ACTION_"+action) from exc
+    except (TimeoutError,urllib.error.URLError) as exc:
+        raise SafeStop("SECONDARY_NEON_NETWORK_"+type(exc).__name__+"_ACTION_"+action) from exc
     if not out.get("ok"):
         raise SafeStop("NEON_ACTION_NOT_ACKNOWLEDGED_"+action)
     return out
