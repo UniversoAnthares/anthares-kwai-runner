@@ -9,6 +9,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from zoneinfo import ZoneInfo
 
 HUB="UniversoAnthares/anthares-kwai-runner"
 REPOS=(HUB,"UniversoAnthares/anthares-clipper")
@@ -17,6 +18,7 @@ NETWORKS=("pinterest","linkedin","instagram","threads","tiktok","kwai","facebook
 FAILED={"failed","error","uncertain","publish_uncertain","container_failed","create_uncertain"}
 TOKEN=os.environ.get("GITHUB_TOKEN","")
 NOW=dt.datetime.now(dt.timezone.utc)
+CORTES_NEON_HEALTH="https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/?action=round-health"
 
 def http(url, method="GET", payload=None, headers=None):
     h={"Accept":"application/vnd.github+json","User-Agent":"CORTES-QA-P0/1"}
@@ -82,6 +84,31 @@ def workflow_incidents():
     if unavailable==len(REPOS):
         raise RuntimeError("CORTES_QA_GITHUB_ALL_REPOS_INACCESSIBLE")
     return output
+
+def daily_round_incidents():
+    """Independent producer alarm even when AI 502 is checkpointed as success."""
+    local=NOW.astimezone(ZoneInfo("America/Campo_Grande"))
+    # The canonical six-AM producer gets a full hour before first P0.
+    if local.hour<7 or local.hour>=21:
+        return []
+    data=http(CORTES_NEON_HEALTH,headers={"Accept":"application/json"})
+    if (data.get("ok") is not True or
+            data.get("round_timezone")!="America/Campo_Grande" or
+            not isinstance(data.get("today_master_count"),int)):
+        raise RuntimeError("CORTES_DAILY_ROUND_HEALTH_INVALID")
+    count=data["today_master_count"]
+    if count>0:
+        return []
+    day=local.date().isoformat()
+    return [{"id":marker("cortes-no-daily-master",day),
+             "network":"cortes-general",
+             "stage":"P0_DAILY_PRODUCER_ZERO_MASTERS",
+             "evidence":"https://github.com/UniversoAnthares/anthares-clipper/actions",
+             "description":"Daily master count is ZERO after 07:00 "+day+
+                " local. Check source lock, AI Hub 502/503/504, Unicode title gate, "
+                "media uploads, producer trigger, cloud runner and Neon enqueue. "
+                "Dispatch only fenced canonical recovery; never manufacture clips."}]
+
 
 def wp_incidents():
     site=os.getenv("WP_SITE_URL","").strip().rstrip("/")
@@ -153,7 +180,7 @@ def main():
     if not TOKEN:raise RuntimeError("GITHUB_TOKEN_REQUIRED")
     items=[]
     bad=[]
-    for label,fn in (("github",workflow_incidents),("wordpress",wp_incidents)):
+    for label,fn in (("github",workflow_incidents),("daily-round",daily_round_incidents),("wordpress",wp_incidents)):
         try:
             result=fn()
             items.extend(result)
