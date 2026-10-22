@@ -15,7 +15,7 @@ on:
         required: false
         type: string
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '18,48 * * * *'
   pull_request:
     paths:
       - .github/workflows/cortes-qa-p0-controller.yml

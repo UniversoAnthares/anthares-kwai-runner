@@ -8,7 +8,7 @@ on:
       - tests/test_cortes_qa_p0_router.py
       - .github/workflows/cortes-qa-p0-publication-watchdog.yml
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "13,43 * * * *"
   workflow_run:
     workflows:
       - "Anthares Publisher QA"
