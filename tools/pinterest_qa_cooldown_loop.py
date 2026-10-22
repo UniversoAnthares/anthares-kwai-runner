@@ -33,9 +33,12 @@ def assess(evidence, counts, cooldown):
         return "EXECUTION_FAILED", unresolved
     if cooldown.get("active") is True or evidence.get("result") == "RATE_LIMIT_ISOLATED":
         return "COOLDOWN_HTTP_429", unresolved
-    if (unresolved == 0 and confirmed > BASELINE_CONFIRMED and
-            evidence.get("result") in VALID_RESULTS):
-        return "PASS", 0
+    # The existing #507 is the rate-limit incident, not the entire backlog.
+    # Require a NEW sent Pin link verified by Buffer and Neon CAS, not merely
+    # a healthy workflow or a schedule/draft. Other queued clips may remain.
+    if (confirmed > BASELINE_CONFIRMED and evidence.get("result") == "PINS_RECONCILED"
+            and int(evidence.get("new_public_pin_count") or 0) >= 1):
+        return "PASS", unresolved
     if evidence.get("result") == "WAITING_BUFFER_DELIVERY":
         return "BUFFER_BACKPRESSURE", unresolved
     if evidence.get("result") == "UNVERIFIED_OR_FAILED":
@@ -109,7 +112,7 @@ def main():
     if should_report(prior, state, expiry, unresolved, now) or state == "PASS":
         comment = (MARKER + " " + json.dumps(result, separators=(",", ":")) + "\n\n"
                    + "QA automático Pinterest: observação autenticada do Neon e prova do publicador. "
-                   + ("Aprovado: fila sem pendências, confirmação adicional por CAS Buffer/Pinterest; encerrar incidente."
+                   + ("Aprovado: novo Pin público confirmado por Buffer e CAS Neon, sem cooldown. O restante da fila segue supervisionado pelo publicador; encerrar somente o incidente HTTP 429."
                       if state == "PASS" else
                       "Ainda não comprovado. O publicador cloud repetirá a verificação após o cooldown "
                       "na próxima janela agendada; QA-P0 permanece aberto e é reavaliado pelo controlador. "
