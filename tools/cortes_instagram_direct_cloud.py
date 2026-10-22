@@ -61,14 +61,33 @@ def require_cloud() -> InstagramClient:
     uid = os.getenv("INSTAGRAM_USER_ID") or ""
     if not token or not re.fullmatch(r"[0-9]{6,30}", uid):
         raise RuntimeError("INSTAGRAM_DIRECT_CREDENTIAL_NOT_CONFIGURED")
-    client = InstagramClient(user_id=uid, access_token=token,
-        api_version=os.getenv("INSTAGRAM_API_VERSION") or "v26.0",
-        graph_host=os.getenv("INSTAGRAM_GRAPH_HOST") or "graph.instagram.com")
-    # Read-only identity validation before leasing a clip.
-    profile = client._request("GET", uid, query={"fields": "id,username"})
-    if str(profile.get("id")) != uid or str(profile.get("username", "")).lower() != "universoanthares":
-        raise RuntimeError("INSTAGRAM_DIRECT_ACCOUNT_IDENTITY_MISMATCH")
-    return client
+    preferred = os.getenv("INSTAGRAM_GRAPH_HOST") or "graph.instagram.com"
+    allowed = ("graph.instagram.com", "graph.facebook.com")
+    if preferred not in allowed:
+        raise RuntimeError("INSTAGRAM_DIRECT_UNTRUSTED_GRAPH_HOST")
+    # Both Meta login products are supported. Probe each using GET only;
+    # no Neon lease or video submission occurs before exact account matching.
+    rejected = []
+    for host in (preferred, *(name for name in allowed if name != preferred)):
+        client = InstagramClient(user_id=uid, access_token=token,
+            api_version=os.getenv("INSTAGRAM_API_VERSION") or "v26.0",
+            graph_host=host)
+        try:
+            profile = client._request("GET", uid, query={"fields": "id,username"})
+        except Exception as exc:
+            # Never print Meta's raw error text (which may include identifiers).
+            marker = re.search(r"HTTP\\s+(\\d{3})", str(exc))
+            rejected.append(host + ":" + (marker.group(1) if marker else type(exc).__name__))
+            continue
+        if (str(profile.get("id")) == uid and
+                str(profile.get("username", "")).lower() == "universoanthares"):
+            print(json.dumps({"direct_cloud":"GRAPH_IDENTITY_VERIFIED",
+                              "graph_host":host}), flush=True)
+            return client
+        rejected.append(host + ":IDENTITY_MISMATCH")
+    print(json.dumps({"direct_cloud":"GRAPH_PREFLIGHT_REJECTED",
+                      "attempts":rejected}), flush=True)
+    raise RuntimeError("INSTAGRAM_DIRECT_ACCOUNT_IDENTITY_UNVERIFIED")
 
 
 def missing_media(url: str) -> bool:
