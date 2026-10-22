@@ -85,6 +85,20 @@ class LinkedInCloudContracts(unittest.TestCase):
         self.assertEqual(calls,["lease","media-missing"])
         schedule.assert_not_called()
 
+    def test_http_429_preflight_never_claims_a_job(self):
+        with patch.object(publisher,"cloud_only"), patch.object(publisher,"reconcile",return_value=0), patch.object(publisher,"channels",side_effect=publisher.BufferBlocked("BUFFER_HTTP_429")), patch.object(publisher,"queue") as mutate:
+            self.assertEqual(publisher.main(),0)
+        mutate.assert_not_called()
+
+    def test_429_on_readback_interrupts_without_buffer_mutation(self):
+        item=[{"id":"one","remote_id":"buffer-id"}]
+        def call(action,payload=None):
+            if action=="pending":return {"ok":True,"jobs":item}
+            raise AssertionError(action)
+        with patch.object(publisher,"queue",side_effect=call),patch.object(publisher,"verify_sent_post",side_effect=publisher.BufferBlocked("BUFFER_HTTP_429")):
+            with self.assertRaises(publisher.BufferBlocked):
+                publisher.reconcile()
+
     def test_sent_post_validates_channel(self):
         with patch.object(publisher,"api",return_value={"post":{"id":"buffer123","status":"sent","channelId":publisher.LINKEDIN_ID,
                         "schedulingType":"automatic","externalLink":"https://www.linkedin.com/feed/update/urn:li:activity:123"}}):
