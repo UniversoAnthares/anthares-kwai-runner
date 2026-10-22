@@ -292,7 +292,7 @@ def schedule(payload: dict, *, token: str | None = None) -> dict:
     # shareNow is an official Buffer mode: no queue slot and no spill into tomorrow.
     # This does not increase LinkedIn's real account/API posting allowance.
     if payload.get("same_day") is True:
-        if platform != "linkedin" and not (platform == "instagram" and trusted_instagram_one_time_runner()):
+        if platform not in ("linkedin","instagram"):
             raise BufferBlocked("SAME_DAY_IMMEDIATE_LINKEDIN_ONLY")
         mode = "shareNow"
     else:

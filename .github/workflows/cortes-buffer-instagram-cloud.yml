@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  issues: write
 concurrency:
   group: cortes-instagram-buffer-cloud-producer
   cancel-in-progress: false
@@ -38,6 +39,8 @@ jobs:
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
           CORTES_QUEUE_PRIMARY: neon
+          CORTES_IG_IMMEDIATE_UNTIL_UTC: '2026-10-22T09:00:00Z'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python -u tools/cortes_buffer_instagram_cloud.py
           test $? -eq 0

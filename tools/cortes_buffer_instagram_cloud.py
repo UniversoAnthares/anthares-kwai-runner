@@ -12,6 +12,8 @@ import json
 import os
 import sys
 import urllib.error
+import datetime
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -109,11 +111,55 @@ def safe_payload(row):
         "duration_seconds":payload.get("duration_seconds"),
         "title":payload.get("title") or payload.get("video_title"),
         "description":payload.get("description") or "",
-        "same_day": trusted_instagram_one_time_runner(),
+        "same_day": (trusted_instagram_one_time_runner() or
+                     (os.getenv("CORTES_IG_IMMEDIATE_UNTIL_UTC")=="2026-10-22T09:00:00Z"
+                      and datetime.datetime.now(datetime.timezone.utc)
+                          < datetime.datetime(2026,10,22,9,0,tzinfo=datetime.timezone.utc))),
     }
     if result["duration_seconds"] is None:
         raise RuntimeError("NEON_INSTAGRAM_DURATION_MISSING")
     return result
+
+
+def source_media_is_404(url: str) -> bool:
+    """Check before Buffer mutation; confirm HEAD 404 using a ranged GET."""
+    if not isinstance(url,str) or not url.startswith(("https://anthares.us/","https://www.anthares.us/")):
+        raise RuntimeError("SOURCE_URL_NOT_TRUSTED")
+    for method in ("HEAD","GET"):
+        headers={"User-Agent":"AntharesCORTES-MediaPreflight/2"}
+        if method=="GET": headers["Range"]="bytes=0-31"
+        request=urllib.request.Request(url,method=method,headers=headers)
+        try:
+            with urllib.request.urlopen(request,timeout=14) as response:
+                if response.status in (200,206): return False
+                raise RuntimeError("MEDIA_HTTP_UNEXPECTED_"+str(response.status))
+        except urllib.error.HTTPError as exc:
+            if exc.code==404:
+                if method=="GET": return True
+                continue
+            if method=="HEAD" and exc.code in (403,405): continue
+            raise
+    return False
+
+
+def alert_qa_404(item: dict, url: str) -> None:
+    print(json.dumps({"priority":"P0","network":"instagram","error":"SOURCE_MEDIA_HTTP_404",
+                      "clip":item["id"],"next_round":"discard_if_unrepaired"}),flush=True)
+    token=os.getenv("GITHUB_TOKEN","")
+    if not token: return
+    note=("[CORTES QA P0] Instagram: mídia 404 isolada sem bloquear a fila; "
+          f"clip `{item['id']}`; URL {url}. Investigar e corrigir nesta rodada; "
+          "descartar somente na próxima rodada diária se continuar indisponível.")
+    request=urllib.request.Request(
+        "https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/issues/283/comments",
+        data=json.dumps({"body":note}).encode(),method="POST",
+        headers={"Accept":"application/vnd.github+json","Authorization":"Bearer "+token,
+                 "Content-Type":"application/json","User-Agent":"AntharesCORTES-QA"})
+    try:
+        with urllib.request.urlopen(request,timeout=18) as response:
+            print("QA_ALERT_HTTP_"+str(response.status),flush=True)
+    except Exception as exc:
+        print("QA_ALERT_FAILED_"+type(exc).__name__,flush=True)
 
 
 def publish_once():
@@ -127,6 +173,10 @@ def publish_once():
         # Editorial and destination validation before any irreversible queue write.
         from social_adapters.buffer_three_channels import prepare
         prepare(payload)
+        if source_media_is_404(payload["media_url"]):
+            queue("media-missing",fence)
+            alert_qa_404(row,payload["media_url"])
+            return "QUARANTINED_HTTP_404"
     except Exception:
         queue("fail",fence)
         raise
@@ -147,32 +197,21 @@ def publish_once():
 
 def main():
     cloud_only()
-    # Reconciliation frees queue slots; Buffer automatic mode uses native schedule.
     confirmed=reconcile()
-    if trusted_instagram_one_time_runner():
-        import time
-        old_id="6ad8f66d014cfc9c40d0ea8c"
-        old=api("query { post(input: { id: "+json.dumps(old_id)+" }) { id status channelId externalLink schedulingType } }").get("post") or {}
-        if old.get("id")==old_id and old.get("channelId")==INSTAGRAM_ID:
-            print(json.dumps({"buffer_duplicate_audit":"identity_verified","status":old.get("status"),"public_url":old.get("externalLink") or None}),flush=True)
-        else:
-            print(json.dumps({"buffer_duplicate_audit":"identity_unverified_no_mutation"}),flush=True)
-        outcomes=[]
-        for step in range(4):
-            status=publish_once()
-            outcomes.append(status)
-            print(json.dumps({"instagram_emergency":"BUFFER_REQUEST_DONE","number":step+1,"status":status}),flush=True)
-            if status.startswith("IDLE"):
-                break
-            time.sleep(40)
-            confirmed+=reconcile()
-        print(json.dumps({"instagram_cloud":"PASS","emergency_posts":len([x for x in outcomes if x=="SCHEDULED_IN_BUFFER"]),"reconciled":confirmed}),flush=True)
-        return 0
-    status=publish_once()
-    print(json.dumps({"instagram_cloud":"PASS","scheduled_action":status,
-                      "posts_confirmed_this_run":confirmed},separators=(",",":")))
+    batch=6 if os.getenv("CORTES_IG_IMMEDIATE_UNTIL_UTC")=="2026-10-22T09:00:00Z" else 1
+    outcomes=[]
+    for attempt in range(batch):
+        status=publish_once()
+        outcomes.append(status)
+        print(json.dumps({"instagram":"BUFFER_QUEUE_ITEM_RESULT","attempt":attempt+1,
+                          "status":status}),flush=True)
+        if status.startswith("IDLE"): break
+        if attempt+1<batch: time.sleep(3)
+    confirmed+=reconcile()
+    print(json.dumps({"instagram_cloud":"PASS","scheduled":outcomes.count("SCHEDULED_IN_BUFFER"),
+                      "isolated_404":outcomes.count("QUARANTINED_HTTP_404"),
+                      "confirmed":confirmed}),flush=True)
     return 0
-
 
 if __name__=="__main__":
     try: sys.exit(main())
