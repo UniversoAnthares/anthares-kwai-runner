@@ -157,5 +157,19 @@ class PinterestMediaPolicy(unittest.TestCase):
         self.assertIn("ORDER BY p.created_at,p.updated_at,p.id",neon)
 
 
+class PinterestRateLimitCooldown(unittest.TestCase):
+    def test_fenced_neon_429_shared_backoff(self):
+        from pathlib import Path
+        root=Path(__file__).resolve().parents[1]
+        py=(root/"tools"/"cortes_buffer_pinterest_cloud.py").read_text(encoding="utf8")
+        neon=(root/"infra"/"neon-cortes-queue"/"index.mjs").read_text(encoding="utf8")
+        self.assertIn('queue("cooldown-status")',py)
+        self.assertIn('queue("cooldown",{"seconds":1800})',py)
+        self.assertIn('if str(exc)=="BUFFER_HTTP_429"',py)
+        self.assertIn("cortes_buffer_provider_cooldowns",neon)
+        self.assertIn("cooldown_until>now()",neon)
+        self.assertIn("PINTEREST_COOLDOWN_SCOPE_ONLY",neon)
+
+
 if __name__=="__main__":
     unittest.main()
