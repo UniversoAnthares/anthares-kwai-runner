@@ -1,0 +1,33 @@
+name: CORTES TikTok Lucas4 Codeberg primary
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '*/7 * * * *'
+enable-openid-connect: true
+concurrency:
+  group: cortes-tiktok-lucas4-codeberg-only
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: ${{ forgejo.event_name == 'workflow_dispatch' || vars.TIKTOK_CODEBERG_LUCAS4_ENABLED == 'true' }}
+    runs-on: codeberg-medium
+    timeout-minutes: 9
+    enable-openid-connect: true
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: 'utf-8'
+      CODEBERG_NEON_AUTH_PROBE: '1'
+      TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: ${{ vars.TIKTOK_CODEBERG_LUCAS4_ENABLED }}
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated Chromium browser with system dependencies
+        run: |
+          set -eu
+          python3 -m venv /tmp/cortes-lucas4
+          /tmp/cortes-lucas4/bin/python -m pip install -q playwright requests
+          /tmp/cortes-lucas4/bin/python -m playwright install --with-deps chromium
+      - name: Account, signed Neon proof and single fenced publication when enabled
+        run: /tmp/cortes-lucas4/bin/python -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
