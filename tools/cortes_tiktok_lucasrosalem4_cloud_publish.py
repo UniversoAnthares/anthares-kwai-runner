@@ -124,21 +124,37 @@ def marker(sid):
 
 
 def preflight_media(job,directory):
+    """Retry only before STARTED; use the same owned official CDN fallback."""
     address=str(job.get("media_url") or "")
     url=urlparse(address)
     if url.scheme!="https" or url.hostname not in ("anthares.us","www.anthares.us") or url.username or url.password:
         raise SafeStop("SECONDARY_MEDIA_ORIGIN_INVALID")
-    request=urllib.request.Request(address,headers={"Accept":"video/mp4"})
-    with urllib.request.urlopen(request,timeout=45) as response:
-        if response.status!=200 or "video" not in response.headers.get("Content-Type",""):
-            raise SafeStop("SECONDARY_MEDIA_HTTP_NOT_VIDEO")
-        size_limit=150*1024*1024
-        data=response.read(size_limit+1)
-    if not 32768<=len(data)<=size_limit:
-        raise SafeStop("SECONDARY_MEDIA_SIZE_INVALID")
-    path=directory/"short.mp4"
-    path.write_bytes(data)
-    return path
+    alt=url._replace(netloc="www.anthares.us").geturl() if url.hostname=="anthares.us" else address
+    for attempt in range(3):
+        current=alt if attempt==2 else address
+        request=urllib.request.Request(current,headers={
+            "Accept":"video/mp4,application/octet-stream",
+            "User-Agent":"Mozilla/5.0 (compatible; AntharesCortes/1.0)",
+        })
+        try:
+            with urllib.request.urlopen(request,timeout=40) as response:
+                if response.status!=200:
+                    raise SafeStop("SECONDARY_MEDIA_HTTP_NOT_OK")
+                data=response.read(150*1024*1024+1)
+            if not 32768<=len(data)<=150*1024*1024:
+                raise SafeStop("SECONDARY_MEDIA_SIZE_INVALID")
+            path=directory/"short.mp4"
+            path.write_bytes(data)
+            return path
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (408,425,429,500,502,503,504) or attempt==2:
+                raise SafeStop("SECONDARY_MEDIA_ORIGIN_HTTP_"+str(exc.code)) from exc
+        except (urllib.error.URLError,OSError,TimeoutError) as exc:
+            if attempt==2:
+                raise SafeStop("SECONDARY_MEDIA_NETWORK_PRESTART") from exc
+        print("SECONDARY_CLOUD_PREFLIGHT_RETRY attempt="+str(attempt+1),flush=True)
+        time.sleep((3,8)[attempt])
+    raise SafeStop("SECONDARY_MEDIA_PREFLIGHT_EXHAUSTED")
 
 
 def caption_for(job):
