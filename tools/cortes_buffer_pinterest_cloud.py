@@ -70,17 +70,10 @@ def _verified_pin_from_buffer_row(remote_id, row):
         raise RuntimeError("BUFFER_PINTEREST_REQUIRES_MANUAL_PUBLICATION")
     status=str(row.get("status") or "").lower()
     if status!="sent":
-        due="UNKNOWN"
-        try:
-            stamp=datetime.fromisoformat(str(row.get("dueAt") or "").replace("Z","+00:00"))
-            if stamp.tzinfo is not None:
-                due="FUTURE" if stamp>datetime.now(timezone.utc) else "PAST"
-        except (TypeError,ValueError):
-            pass
         safe=status.upper() if status in ("scheduled","buffer","draft","failed","sending","pending") else "OTHER"
         print("CORTES_PINTEREST_BUFFER_RECEIPT="+json.dumps({
             "id_hash":hashlib.sha256(str(remote_id).encode()).hexdigest()[:12],
-            "state":safe,"due":due},separators=(",",":")),flush=True)
+            "state":safe},separators=(",",":")),flush=True)
         return None
     link=str(row.get("externalLink") or "")
     uri=urllib.parse.urlparse(link)
@@ -93,7 +86,7 @@ def _verified_pin_from_buffer_row(remote_id, row):
 
 def verify_sent_post(remote_id):
     query=('query { post(input: { id: '+json.dumps(str(remote_id))+
-           ' }) { id status externalLink channelId schedulingType dueAt } }')
+           ' }) { id status externalLink channelId schedulingType } }')
     return _verified_pin_from_buffer_row(remote_id,api(query).get("post") or {})
 
 
@@ -108,7 +101,7 @@ def verify_sent_posts_batch(jobs):
     ids=[str(item.get("remote_id") or "") for item in jobs]
     if len(set(ids))!=len(ids) or any(not __import__("re").fullmatch(r"[A-Za-z0-9_:-]{1,160}",v) for v in ids):
         raise RuntimeError("BUFFER_PINTEREST_BATCH_IDS_INVALID")
-    fields=" id status externalLink channelId schedulingType dueAt "
+    fields=" id status externalLink channelId schedulingType "
     queries=[("p"+str(i)+": post(input: { id: "+json.dumps(remote)+" }) {"+fields+"}")
              for i,remote in enumerate(ids)]
     answer=api("query CortesPinterestReceiptBatch { "+" ".join(queries)+" }")
