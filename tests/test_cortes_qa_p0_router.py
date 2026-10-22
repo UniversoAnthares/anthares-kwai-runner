@@ -37,7 +37,7 @@ class P0RouterTests(unittest.TestCase):
         ]}
         with patch.object(router,"http",return_value=runs):
             incidents=router.workflow_incidents()
-        self.assertEqual(len(incidents),4)  # both repos scanned
+        self.assertEqual(len(incidents),2)  # one fingerprint per repository/day
         self.assertEqual(len({x["id"] for x in incidents}),2)
         self.assertTrue(all(x["network"]=="pinterest" for x in incidents))
 
