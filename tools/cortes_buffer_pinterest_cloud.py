@@ -256,12 +256,14 @@ def publish_once():
     # Keep advancing the lane when a particular pre-start cut needs repair.
     # A bounded loop avoids infinite QA retries and respects one successful
     # Buffer createPost per run. Every candidate uses a fresh Neon lease.
-    for _ in range(3):
+    for _ in range(6):
         result=publish_one_candidate()
-        if result=="EDITORIAL_ISOLATED_QA_P0":
+        if result in ("EDITORIAL_ISOLATED_QA_P0", "MEDIA_ISOLATED_QA_P0"):
+            # Quarantined media must not block other eligible clips.
+            # Neon isolates this lease before the next candidate is claimed.
             continue
         return result
-    return "EDITORIAL_QUARANTINE_BATCH_LIMIT"
+    return "PINTEREST_QUARANTINE_BATCH_LIMIT"
 
 
 def publish_one_candidate():
