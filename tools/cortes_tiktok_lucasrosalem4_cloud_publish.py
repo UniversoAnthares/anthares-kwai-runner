@@ -267,6 +267,30 @@ def marker_from_caption(value):
     return found.group(0).casefold()
 
 
+def dismiss_cookie_banner(page):
+    """Use TikTok's own consent controls before posting; never hide UI by CSS."""
+    banner=page.locator("tiktok-cookie-banner")
+    try:
+        if banner.count()==0 or not banner.first.is_visible(timeout=1500):
+            return False
+        for name in ("Reject optional cookies","Reject all","Recusar cookies opcionais",
+                     "Rejeitar tudo","Only necessary","Somente necessários",
+                     "Accept all","Aceitar todos","Accept","Aceitar"):
+            buttons=banner.locator("button").filter(has_text=re.compile(re.escape(name),re.I))
+            if buttons.count()>0:
+                try:
+                    buttons.first.click(timeout=4000)
+                    page.wait_for_timeout(500)
+                    print("SECONDARY_PRESTART_COOKIE_CONSENT_HANDLED=1",flush=True)
+                    return True
+                except Exception:
+                    continue
+        print("::warning::SECONDARY_PRESTART_COOKIE_CONSENT_CONTROL_NOT_FOUND",flush=True)
+    except Exception:
+        print("::warning::SECONDARY_PRESTART_COOKIE_CONSENT_NOT_READY",flush=True)
+    return False
+
+
 def close_editor_modals(page):
     t.handle_auto_checks_modal(page)
     for label in ("Entendi","Got it"):
@@ -334,6 +358,7 @@ def publish_one(job,token,state):
                     button=t.enabled_post_button(page)
                     if button is None or not button.is_enabled():
                         raise SafeStop("SECONDARY_POST_BUTTON_NOT_READY")
+                    dismiss_cookie_banner(page)
                     print("SECONDARY_CLOUD_PRESTART_STAGE=clickability",flush=True)
                     from playwright.sync_api import TimeoutError as PlaywrightTimeout
                     try:
@@ -345,6 +370,7 @@ def publish_one(job,token,state):
                         # never force-click or repeat the actual post operation.
                         print("::warning::SECONDARY_PRESTART_CLICKABILITY_RETRY",flush=True)
                         close_editor_modals(page)
+                        dismiss_cookie_banner(page)
                         if t.set_public_visibility(page) is not True:
                             raise SafeStop("SECONDARY_VISIBILITY_NOT_PUBLIC_AFTER_OVERLAY")
                         button=t.enabled_post_button(page)
