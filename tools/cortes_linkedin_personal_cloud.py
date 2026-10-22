@@ -15,6 +15,7 @@ import re
 import sys
 import urllib.parse
 import urllib.request
+import urllib.error
 
 from tools.cortes_queue_ha import post
 from tools.cortes_social_queue_consumer import _safe_job
@@ -75,6 +76,52 @@ def account_preflight():
     if configured and configured != author:
         raise ConfigRequired("PERSONAL_ACCOUNT_SWITCH_REJECTED")
     os.environ["LINKEDIN_PERSONAL_AUTHOR_URN"] = author
+
+
+_PUBLIC_EMBED_CONTROL = "urn:li:ugcPost:0000000000000000000"
+
+
+def public_embed_status(remote_id: str, *, opener=urllib.request.urlopen) -> int:
+    """Read-only unauthenticated HEAD: 200 for existing post, 404 for invalid."""
+    if not re.fullmatch(r"urn:li:(?:ugcPost|share):[0-9]{8,25}", str(remote_id)):
+        return 0
+    uri = "https://www.linkedin.com/embed/feed/update/" + remote_id
+    req = urllib.request.Request(uri, method="HEAD", headers={
+        "Accept": "text/html", "User-Agent": "Mozilla/5.0 (AntharesLinkedInPublicVerification)"})
+    try:
+        with opener(req, timeout=18) as response:
+            if response.geturl() != uri:
+                return 0
+            return 200 if response.status == 200 else 0
+    except urllib.error.HTTPError as error:
+        return 404 if error.code == 404 else 0
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return 0
+
+
+def reconcile_personal():
+    cloud_only()
+    account_preflight()
+    rows = (queue("pending", {}).get("jobs") or [])
+    if not rows:
+        return 0
+    if public_embed_status(_PUBLIC_EMBED_CONTROL) != 404:
+        print("PERSONAL_PUBLIC_CONTROL_UNAVAILABLE=1", flush=True)
+        return 0
+    total = 0
+    for row in rows:
+        remote = str(row.get("remote_id") or "")
+        if public_embed_status(remote) != 200:
+            print("PERSONAL_PUBLIC_POST_READBACK_PENDING=1", flush=True)
+            continue
+        try:
+            queue("reconcile-public", {"id": row["id"], "remote_id": remote,
+                  "public_status": 200, "control_status": 404,
+                  "proof_kind": "linkedin_public_embed_head"})
+            total += 1
+        except RuntimeError:
+            print("PERSONAL_PUBLIC_CAS_PENDING=1", flush=True)
+    return total
 
 
 def publish_one(skipped=0):
@@ -159,6 +206,12 @@ def exception_active():
 
 def main():
     try:
+        try:
+            confirmed_public = reconcile_personal()
+            print("PERSONAL_PUBLIC_READBACK_CONFIRMED=" + str(confirmed_public), flush=True)
+        except Exception as error:
+            # Temporary public lookup failures must not stop independent cuts.
+            print("PERSONAL_PUBLIC_READBACK_DEFERRED=" + type(error).__name__, flush=True)
         batch_size = 2 if exception_active() else 1
         for attempt in range(batch_size):
             result = publish_one()
