@@ -88,11 +88,20 @@ def reconcile():
     jobs=queue("pending").get("jobs") or []
     total=0
     unknown=0
+    known=[]
     for item in jobs:
-        remote_id=str(item.get("remote_id") or "")
-        if not remote_id:
+        if str(item.get("remote_id") or ""):
+            known.append(item)
+        else:
             unknown+=1
-            continue
+    # Bound Buffer readback requests and rotate the page between scheduled
+    # runs. This avoids retry storms while eventually visiting every receipt.
+    known.sort(key=lambda item:str(item.get("id") or ""))
+    page_size=2
+    page_count=max(1,(len(known)+page_size-1)//page_size)
+    page=int(time.time()//900)%page_count
+    for item in known[page*page_size:(page+1)*page_size]:
+        remote_id=str(item.get("remote_id") or "")
         try:
             link=verify_sent_post(remote_id)
         except (BufferBlocked, RuntimeError) as exc:
