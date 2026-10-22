@@ -34,7 +34,7 @@ def run(a,timeout=60,check=True,text=True):
  p=subprocess.run(a,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout,check=False,text=text)
  if check and p.returncode: raise E(f'cmd-failed:{p.returncode}:{str(p.stderr)[-500:]}')
  return p
-def acmd(serial,*a): return [ADB,'-P','5038']+(['-s',serial] if serial else [])+list(a)
+def acmd(serial,*a): return [ADB,'-P',os.getenv('ANTHARES_PHYSICAL_ADB_PORT','5038')]+(['-s',serial] if serial else [])+list(a)
 def adb(serial,*a,timeout=60,check=True,text=True): return run(acmd(serial,*a),timeout,check,text)
 def devices():
  p=adb(None,'devices','-l',check=False)
@@ -61,7 +61,19 @@ def dump(s,name):
  adb(s,'shell','uiautomator','dump',remote,timeout=35,check=False); adb(s,'pull',remote,str(local),timeout=30)
  try: return ET.fromstring(local.read_bytes()),local
  except ET.ParseError as e: raise E(f'xml:{e}')
-def rid(root,r): return [n for n in root.iter('node') if n.attrib.get('resource-id')==r]
+def rid(root,r):
+ # Exact whitelisted UI variants; package installation name differs from view ids.
+ known={
+  RID_PROFILE:('kwai.lite.video.basis:id/id_home_bottom_tab_me',),
+  RID_NEXT:('kwai.lite.video.product:id/edit_post_next_step_button',),
+  RID_USER:('kwai.lite.video.basis:id/tv_user_id','com.kwai.video.basis:id/tv_user_id'),
+  RID_THUMB:('kwai.lite.video.basis:id/thumb','com.kwai.video.basis:id/thumb'),
+  RID_NAME:('kwai.lite.video.basis:id/tv_slide_play_user_name',),
+  RID_CAP:('kwai.lite.video.basis:id/slide_play_tv_user_info_desc',),
+  RID_TIME:('kwai.lite.video.basis:id/tv_slide_play_post_time',),
+ }
+ variants=(r,)+known.get(r,())
+ return [n for n in root.iter('node') if n.attrib.get('resource-id') in variants]
 def center(b):
  m=re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',b or '')
  if not m:return None
@@ -75,14 +87,21 @@ def wait(s,r,name,seconds=30):
  while time.monotonic()<end:
   root,path=dump(s,name); xs=rid(root,r)
   if xs:return root,xs[0],path
+  if r==RID_PROFILE and any(n.attrib.get('resource-id','').endswith(('/edit_post_next_step_button','/post_button_normal')) for n in root.iter('node')):
+   raise E('ui-surface-unexpected:editor-screen-active:preserve-draft')
   time.sleep(1)
  raise E('missing:'+r)
 def shot(s,name):
  EVID.mkdir(parents=True,exist_ok=True); p=run(acmd(s,'exec-out','screencap','-p'),25,True,False); f=EVID/(name+'.png'); f.write_bytes(p.stdout); return f
 def home(s,preserve_upload=False):
- # After Publish, force-stop can interrupt a still-uploading video.
- if not preserve_upload: adb(s,'shell','am','force-stop',PKG,check=False)
- adb(s,'shell','monkey','-p',PKG,'-c','android.intent.category.LAUNCHER','1',check=False,timeout=25)
+ # Validated on Kwai Lite 2026-10-22. Explicit HomeActivity retains the upload
+ # task, unlike am force-stop or a launcher intent that resumes EditorActivity.
+ out('KWAI_NATIVE_PRESERVE_UPLOAD=1')
+ activity=PKG+'/com.yxcorp.gifshow.homepage.HomeActivity'
+ p=adb(s,'shell','am','start','--activity-clear-top','-n',activity,check=False,timeout=25)
+ if p.returncode or 'Error' in (p.stdout or ''):
+  out('KWAI_NATIVE_HOME_INTENT_UNAVAILABLE')
+  adb(s,'shell','monkey','-p',PKG,'-c','android.intent.category.LAUNCHER','1',check=False,timeout=25)
  time.sleep(3)
 def latest(s,prefix,preserve_upload=False):
  home(s,preserve_upload=preserve_upload); _,tab,_=wait(s,RID_PROFILE,prefix+'-home',25); tap(s,tab); time.sleep(4)

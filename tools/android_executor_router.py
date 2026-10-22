@@ -55,6 +55,9 @@ def _primary_allows_memufailover(manifest, state):
     if not isinstance(primary, dict):
         return True
 
+    # Fail over immediately on confirmed screen sleep; ADB connection is insufficient.
+    if primary.get("ui_awake") is False:
+        return True
     failure_class = str(primary.get("last_failure_class", "")).strip().lower()
     if failure_class in NON_DEVICE_FAILURES:
         return False

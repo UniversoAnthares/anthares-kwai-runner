@@ -38,7 +38,7 @@ PHYSICAL_SAFE = ROOT / "tools" / "kwai_native_cortes.py"
 MEMU_SAFE = ROOT / "tools" / "kwai_memu_queue_safe.py"
 
 DEVICE_PATTERNS = re.compile(
-    r"(?:\badb\b|device offline|no devices?|transport|uiautomator|profile-tab-missing|"
+    r"(?:\badb\b|device offline|no devices?|transport|uiautomator|profile-tab-missing|editor-screen-active|ui-surface-unexpected|"
     r"activity.*missing|control.*missing|not installed|package.*missing|timeout|timed out|"
     r"connection.*closed|broken pipe)", re.I
 )
@@ -152,6 +152,9 @@ def source_ms(name: str) -> int:
 
 def physical_env(media: pathlib.Path) -> dict:
     env = os.environ.copy()
+    port=os.getenv("ANTHARES_PHYSICAL_ADB_PORT","5038")
+    env["ADB_SERVER_SOCKET"] = "tcp:127.0.0.1:"+port
+    env["ADB_SERVER_PORT"] = port
     serial = required("ANTHARES_PHYSICAL_ADB_SERIAL")
     env.update({
         "KWAI_UP_JOB_ID": required("KWAI_QUEUE_JOB_ID"),
