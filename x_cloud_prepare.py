@@ -40,11 +40,36 @@ def discover_source() -> dict:
     windows = json.loads(os.getenv("X_SOURCE_WINDOWS_JSON", "{}"))
     if not isinstance(windows, dict):
         raise RuntimeError("X_SOURCE_WINDOWS_INVALID")
+    # Canonical daily lock + persistent cursor are supplied from confirmed
+    # GitHub issue history (same ledger used by all X publisher routes).
+    # It is strictly forbidden to silently reset to the oldest live if the
+    # prior selected source has left the 300-item discovery window.
+    same_day = os.getenv("X_DAILY_LIVE_LOCK", "").strip()
+    previous_day = os.getenv("X_LIVE_CURSOR_AFTER", "").strip()
+    if same_day and previous_day:
+        raise RuntimeError("X_SOURCE_DAILY_LOCK_CONFLICT")
+    if same_day and not re.fullmatch(r"[A-Za-z0-9_-]{11}", same_day):
+        raise RuntimeError("X_SOURCE_LOCK_ID_INVALID")
+    if previous_day and not re.fullmatch(r"[A-Za-z0-9_-]{11}", previous_day):
+        raise RuntimeError("X_SOURCE_CURSOR_INVALID")
+    ordered = [entry for entry in reversed(entries) if isinstance(entry, dict)
+               and re.fullmatch(r"[A-Za-z0-9_-]{11}", str(entry.get("id") or ""))]
+    ids = [str(row["id"]) for row in ordered]
+    if len(ids) != len(set(ids)):
+        raise RuntimeError("X_SOURCE_DUPLICATE_LIVES")
+    if same_day:
+        if same_day not in ids:
+            raise RuntimeError("X_SOURCE_DAILY_LOCK_NOT_IN_INVENTORY")
+        ordered = [ordered[ids.index(same_day)]]
+    elif previous_day:
+        if previous_day not in ids:
+            raise RuntimeError("X_SOURCE_CURSOR_NOT_IN_INVENTORY")
+        ordered = ordered[ids.index(previous_day)+1:]
     # YouTube /streams returns newest-to-oldest. The CORTES editorial order
     # is the opposite: exhaust the oldest eligible live/window first, then
     # advance chronologically; previously used windows remain reserved.
     # Stable ties preserve original playlist order (latest index first).
-    for e in reversed(entries):
+    for e in ordered:
         if not isinstance(e, dict):
             continue
         vid = str(e.get("id") or "").strip()

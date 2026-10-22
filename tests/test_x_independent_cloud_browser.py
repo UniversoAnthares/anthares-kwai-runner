@@ -16,7 +16,8 @@ class XIndependentCloudPrimaryTests(unittest.TestCase):
              "media_url":"https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/x-longform-auto-20261022/proven.mp4",
              "caption":"Um trecho de literatura. #Literatura",
              "microedit":{"final_duration":520},
-             "source_id":"source-1","segment_start":600,"segment_end":1120}
+             "source_id":"source-1","segment_start":600,"segment_end":1120,
+             "planned_at":(datetime.now(timezone.utc)-timedelta(hours=1)).isoformat()}
         row.update(changes)
         fence=chr(96)*3
         return {"number":1,"state":"open","title":"[X-PUBLISH] source-1",
@@ -53,6 +54,21 @@ class XIndependentCloudPrimaryTests(unittest.TestCase):
                 with patch.object(local,"github",side_effect=repo):
                     self.assertFalse(local.cloud_owns_queue())
 
+    def test_codeberg_smoke_must_never_steal_windows_queue(self):
+        timestamp=datetime.now(timezone.utc).isoformat()
+        def gh(path):
+            if path.endswith("ANTHARES_X_CODEBERG_VERIFIED"):return {"value":"1"}
+            if path.endswith("ANTHARES_X_AUTOPUBLISH"):return {"value":"0"}
+            raise AssertionError(path)
+        runs={"workflow_runs":[{"workflow_id":"x-codeberg-primary.yml",
+                                 "status":"success","event":"workflow_dispatch",
+                                 "stopped":timestamp}]}
+        from unittest.mock import MagicMock
+        with patch.object(local,"github",side_effect=gh),patch.object(local.requests,"get") as req:
+            req.return_value.raise_for_status.return_value=None
+            req.return_value.json.return_value=runs
+            self.assertFalse(local.cloud_owns_queue())
+
     def test_cloud_claim_before_one_irreversible_post(self):
         source=(ROOT/"tools/x_github_anthares_browser_publisher.py").read_text(encoding="utf8")
         ast.parse(source)
@@ -61,7 +77,7 @@ class XIndependentCloudPrimaryTests(unittest.TestCase):
         self.assertIn("X_DOUBLE_CLICK_DENIED",source)
         self.assertIn('X_VIDEO_CONFIRMED_V1',source)
         self.assertIn('verified_post_url(uri)',source)
-        self.assertIn("X_GH_CLOUD_NOT_ARMED",source)
+        self.assertIn("X_CLOUD_RUNNER_IDENTITY_GUARD",source)
 
     def test_cloud_does_not_starve_windows_when_idle_unauthenticated(self):
         source=(ROOT/"tools/x_github_anthares_browser_publisher.py").read_text(encoding="utf8")

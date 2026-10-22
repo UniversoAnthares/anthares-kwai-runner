@@ -59,11 +59,14 @@ def durable(path, payload=None):
 
 
 def eligible(issue):
+    from tools.x_long_schedule import eligible_time
     if issue.get("state") != "open" or not str(issue.get("title") or "").startswith("[X-PUBLISH]"):
         return None
     p = _issue_payload(issue.get("body") or "")
     if (p.get("platform") != "x" or p.get("account") != ACCOUNT
             or p.get("duration_class") != "long" or p.get("test_fixture")):
+        return None
+    if not eligible_time(p.get("planned_at")):
         return None
     caption = str(p.get("caption") or "").strip()
     media = urlparse(str(p.get("media_url") or ""))
@@ -225,7 +228,7 @@ def publish(issue, p, shared_state):
                 editor.fill(caption)
                 dialog.locator('input[type="file"]').last.set_input_files(str(media),timeout=240000)
                 button = dialog.locator('[data-testid="tweetButton"]').first
-                deadline = time.monotonic() + 1700
+                deadline = time.monotonic() + int(os.getenv("X_CLOUD_MEDIA_WAIT_SECONDS","1700"))
                 while time.monotonic() < deadline:
                     account(page)
                     text = "\n".join(dialog.all_inner_texts())
@@ -256,7 +259,7 @@ def publish(issue, p, shared_state):
                     sent.add(key);
                     element.click();
                 }""", key, timeout=12000)
-                uri = proof(context, caption, attempts=16)
+                uri = proof(context, caption, attempts=int(os.getenv("X_CLOUD_PROOF_ATTEMPTS","16")))
                 if not uri or verified_post_url(uri) != uri:
                     raise RuntimeError("X_GH_CLOUD_SUBMISSION_UNCERTAIN")
                 durable("/confirm-local", {
@@ -275,11 +278,15 @@ def publish(issue, p, shared_state):
 
 
 def run():
-    if (os.getenv("GITHUB_ACTIONS") != "true" or
-            os.getenv("RUNNER_ENVIRONMENT") != "github-hosted" or
-            sys.platform != "linux" or
-            os.getenv("X_CLOUD_ARM") != "1"):
-        raise RuntimeError("X_GH_CLOUD_NOT_ARMED")
+    codeberg = os.getenv("X_CLOUD_PROVIDER") == "codeberg"
+    github_runner = (os.getenv("GITHUB_ACTIONS") == "true" and
+                     os.getenv("RUNNER_ENVIRONMENT") == "github-hosted")
+    forgejo_runner = (os.getenv("FORGEJO_REPOSITORY") == REPO and
+                      os.getenv("FORGEJO_REF") == "refs/heads/main" and
+                      os.getenv("FORGEJO_SERVER_URL") == "https://codeberg.org")
+    if (sys.platform != "linux" or os.getenv("X_CLOUD_ARM") != "1" or
+            (not forgejo_runner if codeberg else not github_runner)):
+        raise RuntimeError("X_CLOUD_RUNNER_IDENTITY_GUARD")
     if not os.getenv("GH_TOKEN") or not os.getenv("ARA_SHARED"):
         raise RuntimeError("X_GH_CLOUD_CREDENTIAL_MISSING")
     # Every successful cloud run, including idle, must PROVE authenticated

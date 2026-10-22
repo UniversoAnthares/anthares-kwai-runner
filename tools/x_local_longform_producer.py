@@ -31,7 +31,7 @@ STATE = ROOT / "producer-status.json"
 LOG = ROOT / "producer.log"
 COOKIE = Path(r"D:\AntharsWork\anthares-clipper\runner-media\work\youtube-cookies.txt")
 TZ = ZoneInfo("America/Campo_Grande")
-CAP = 10
+CAP = 4
 MAX_OPEN = 2
 
 
@@ -166,7 +166,7 @@ def queue_inventory():
 def sync_source():
     ROOT.mkdir(parents=True, exist_ok=True)
     for target in ("x_cloud_prepare.py", "x_cloud_render.py", "tools/x_auto_plan.py",
-                   "tools/x_publication_safety.py"):
+                   "tools/x_publication_safety.py", "tools/x_long_schedule.py"):
         path = ROOT / target
         path.parent.mkdir(parents=True, exist_ok=True)
         info = gh("/contents/" + target + "?ref=main")
@@ -210,7 +210,44 @@ def preflight_video(path):
     return {"width": width, "height": height, "seconds": round(seconds, 3)}
 
 
-def run_pipeline(windows):
+def source_cursor(issues, today=None):
+    """Use immutable GH issue history as a secondary durable daily source lock.
+
+    On a day with an already selected live, only that live is eligible.
+    Next day advance strictly after last selected live in channel chronology.
+    Never silently restart to oldest when the cursor is unknown.
+    """
+    today = today or datetime.now(TZ).date()
+    history = []
+    for issue in issues:
+        p = _issue_payload(issue.get("body") or "")
+        vid = str(p.get("source_id") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{11}", vid):
+            continue
+        try:
+            ts = datetime.fromisoformat(str(issue.get("created_at") or "").replace("Z","+00:00"))
+            if ts.tzinfo is None: continue
+        except (ValueError,TypeError):
+            continue
+        history.append((ts, int(issue.get("number") or 0), vid))
+    if not history:
+        return {}, None
+    history.sort()
+    last = history[-1]
+    day = last[0].astimezone(TZ).date()
+    if day > today:
+        raise RuntimeError("X_SOURCE_HISTORY_FUTURE_DATED")
+    if day == today:
+        todays = {x[2] for x in history if x[0].astimezone(TZ).date()==today}
+        if len(todays) > 1:
+            # Historical cases may have selected two lives before the fix.
+            # Anchor the last selection, and never select a third live today.
+            print("X_QA_CHRONOLOGY_P0_PRIOR_MULTI_LIVE_DAY",flush=True)
+        return {"X_DAILY_LIVE_LOCK":last[2]}, last[2]
+    return {"X_LIVE_CURSOR_AFTER":last[2]}, None
+
+
+def run_pipeline(windows, existing):
     if not COOKIE.is_file() or COOKIE.stat().st_size < 100:
         raise RuntimeError("X_RESIDENTIAL_YOUTUBE_COOKIES_NOT_AVAILABLE")
     sync_source()
@@ -218,6 +255,10 @@ def run_pipeline(windows):
     if (WORK / "x-cloud-output.mp4").exists():
         (WORK / "x-cloud-output.mp4").unlink()
     env = os.environ.copy()
+    locks, _ = source_cursor(existing)
+    env.pop("X_DAILY_LIVE_LOCK", None)
+    env.pop("X_LIVE_CURSOR_AFTER", None)
+    env.update(locks)
     env.update({
         "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1",
         "X_SOURCE_CHANNEL": "https://www.youtube.com/@UniversoAnthares/streams",
@@ -258,7 +299,16 @@ def run_pipeline(windows):
     return result, video, info
 
 
-def enqueue(result, video, info, existing):
+def enqueue(result, video, info, existing, ordinal=None):
+    from tools.x_long_schedule import planned_for, MAX_LONG_MASTERS
+    if ordinal is None:
+        pending, confirmed, _, _ = queue_inventory()
+        ordinal = pending + confirmed
+    if not 0 <= ordinal < MAX_LONG_MASTERS:
+        raise RuntimeError("X_LONGFORM_DAILY_SLOTS_FULL")
+    cursor, held = source_cursor(existing)
+    if held and result.get("source",{}).get("video_id") != held:
+        raise RuntimeError("X_SOURCE_DAILY_LOCK_MISMATCH")
     source = result["source"]
     vid = source["video_id"]
     scan = int(result["scan_start"])
@@ -305,7 +355,9 @@ def enqueue(result, video, info, existing):
         "source_title": source.get("title"), "scan_start": scan,
         "segment_start": lo, "segment_end": hi,
         "microedit": {**microedit, "final_duration": info["seconds"]},
-        "media_verified": info, "local_source_fallback": True
+        "media_verified": info, "local_source_fallback": True,
+        "planned_at": planned_for(datetime.now(TZ).date(), ordinal).isoformat(),
+        "daily_long_ordinal": ordinal + 1
     }
     fence = chr(96) * 3
     title = f"[X-PUBLISH] local-origin-{vid}-{scan}-{int(lo)}"
@@ -334,10 +386,10 @@ def main():
         if file.exists() and data.exists():
             result = json.loads(data.read_text(encoding="utf8"))
             info = preflight_video(file)
-            enqueue(result, file, info, all_x)
+            enqueue(result, file, info, all_x, queued + confirmed)
             return
-    result, file, info = run_pipeline(windows)
-    enqueue(result, file, info, all_x)
+    result, file, info = run_pipeline(windows, all_x)
+    enqueue(result, file, info, all_x, queued + confirmed)
 
 
 if __name__ == "__main__":

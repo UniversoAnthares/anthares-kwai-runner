@@ -1,0 +1,53 @@
+name: Anthares X - Codeberg Cloud Primary
+
+on:
+  workflow_dispatch:
+    inputs:
+      smoke:
+        type: boolean
+        default: true
+        description: "Test isolated Chromium without account credentials or publishing"
+  schedule:
+    - cron: '*/10 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-x-codeberg-primary
+  cancel-in-progress: false
+
+jobs:
+  browser-smoke:
+    if: ${{ forgejo.event_name == 'workflow_dispatch' && inputs.smoke }}
+    runs-on: codeberg-medium
+    timeout-minutes: 8
+    steps:
+      - name: Prove isolated cloud Chromium is executable
+        run: |
+          set -eu
+          python -m pip install --disable-pip-version-check playwright
+          python -m playwright install chromium
+          python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"]); t=b.new_page(); t.goto("https://x.com",wait_until="domcontentloaded",timeout=40000); print("CODEBERG_ANTHARES_BROWSER_EXECUTABLE=TRUE");b.close();p.stop()'
+  publish:
+    if: ${{ vars.X_CODEBERG_PRIMARY_ARM == '1' && (forgejo.event_name == 'schedule' || !inputs.smoke) }}
+    runs-on: codeberg-medium
+    timeout-minutes: 9
+    env:
+      X_CLOUD_PROVIDER: codeberg
+      X_CLOUD_ARM: ${{ vars.X_CODEBERG_PRIMARY_ARM }}
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      PYTHONUTF8: '1'
+      X_CLOUD_MEDIA_WAIT_SECONDS: '300'
+      X_CLOUD_PROOF_ATTEMPTS: '5'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Anthares Browser video preflight
+        run: |
+          set -eu
+          python -m pip install --disable-pip-version-check playwright requests cryptography
+          python -m playwright install chromium
+          command -v ffprobe || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+      - name: Globally fenced cloud X video publisher
+        run: python -u -m tools.x_github_anthares_browser_publisher
