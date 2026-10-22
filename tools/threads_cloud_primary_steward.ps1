@@ -27,7 +27,7 @@ try{
   if((Get-ScheduledTask -TaskName $task).State -eq 'Disabled'){Enable-ScheduledTask -TaskName $task|Out-Null}
   $heartbeat=if($gate.cloud_heartbeat_at){[DateTime]::Parse($gate.cloud_heartbeat_at).ToUniversalTime()}else{[DateTime]::MinValue}
   $age=([DateTime]::UtcNow-$heartbeat).TotalMinutes
-  if($age -ge 20 -and $gate.owner -eq 'local' -and [int]$gate.cloud_inflight -eq 0){
+  if($age -ge 20 -and @($gate.queued_ids).Count -gt 0 -and $gate.owner -eq 'local' -and [int]$gate.cloud_inflight -eq 0){
    $off=DevicePost 'deactivate-primary'
    if($off.ok){Log 'CLOUD_STALE_20MIN_SAFE_LOCAL_TAKEOVER'; & $node (Join-Path $root 'threads_cloud_local_gate.mjs')|Out-Null}
    else{Log 'TAKEOVER_DENIED_CLOUD_ACTIVE'}
