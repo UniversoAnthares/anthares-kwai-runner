@@ -23,34 +23,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Verify and mirror primary branch and tags without force
+      - name: Verify and mirror main without force
+        shell: powershell
         env:
           CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
-        shell: 'C:\Program Files\Git\bin\bash.exe --noprofile --norc -e -o pipefail {0}'
         run: |
-          set -euo pipefail
-          if [ -z "${CODEBERG_PUSH_URL:-}" ]; then
-            echo "::error::CODEBERG_PUSH_URL_MISSING"
-            exit 2
-          fi
-          git remote add codeberg "$CODEBERG_PUSH_URL"
-          git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main' '+refs/tags/*:refs/tags/*'
-          source_sha="$(git rev-parse refs/remotes/origin/main)"
-          git fetch --quiet codeberg refs/heads/main:refs/remotes/codeberg/main || true
-          if git rev-parse -q --verify refs/remotes/codeberg/main >/dev/null; then
-            if ! git merge-base --is-ancestor refs/remotes/codeberg/main refs/remotes/origin/main; then
-              echo "::error::CODEBERG_DIVERGED_NON_FAST_FORWARD_STOP"
-              exit 3
-            fi
-          fi
-          git push codeberg refs/remotes/origin/main:refs/heads/main
-          git push codeberg 'refs/tags/*:refs/tags/*'
-          destination_sha="$(git ls-remote codeberg refs/heads/main | awk '{print $1}')"
-          if [ "$source_sha" != "$destination_sha" ]; then
-            echo "::error::CODEBERG_MAIN_SHA_MISMATCH"
-            exit 4
-          fi
-          echo "CODEBERG_MAIN_SYNC_PROVEN=$source_sha"
+          $ErrorActionPreference='Stop'
+          $env:GIT_TERMINAL_PROMPT='0'
+          if (-not $env:CODEBERG_PUSH_URL) { throw 'CODEBERG_PUSH_URL_MISSING' }
+          git remote add codeberg $env:CODEBERG_PUSH_URL
+          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_REMOTE_ADD_FAILED' }
+          git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main'
+          if ($LASTEXITCODE -ne 0) { throw 'GITHUB_MAIN_FETCH_FAILED' }
+          $expected=(git rev-parse refs/remotes/origin/main).Trim()
+          if ($expected -notmatch '^[a-f0-9]{40}$') { throw 'GITHUB_SHA_INVALID' }
+          git fetch --quiet codeberg '+refs/heads/main:refs/remotes/codeberg/main'
+          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_MAIN_FETCH_FAILED' }
+          git merge-base --is-ancestor refs/remotes/codeberg/main refs/remotes/origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_DIVERGED_NON_FAST_FORWARD_STOP' }
+          git -c credential.interactive=never push --quiet codeberg refs/remotes/origin/main:refs/heads/main
+          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_PUSH_FAILED' }
+          $actualLine=(git ls-remote https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git refs/heads/main)
+          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_PUBLIC_READBACK_FAILED' }
+          $actual=($actualLine -split '\\s+')[0]
+          if ($actual -ne $expected) { throw 'CODEBERG_MAIN_SHA_MISMATCH' }
+          Write-Output "CODEBERG_MAIN_SYNC_PROVEN=$expected"
 
       - name: Repair Codeberg default branch and enable Actions
         # Missing repository-admin API scope must not invalidate a proven Git mirror.
