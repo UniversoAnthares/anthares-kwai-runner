@@ -5,6 +5,10 @@
 name: Codeberg capability - isolated read-only runner
 on:
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/codeberg-capability-smoke.yml'
 permissions:
   contents: read
 jobs:
