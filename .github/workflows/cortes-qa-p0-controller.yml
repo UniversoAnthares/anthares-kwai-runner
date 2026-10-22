@@ -27,7 +27,9 @@ permissions:
   actions: write
   issues: write
 concurrency:
-  group: cortes-qa-p0-event-controller
+  # GitHub retains only one pending run in a shared group. A burst of
+  # issues would otherwise cancel every previous pending QA controller.
+  group: cortes-qa-p0-controller-${{ github.event_name == 'issues' && github.event.issue.number || github.run_id }}
   cancel-in-progress: false
 jobs:
   route-p0:
