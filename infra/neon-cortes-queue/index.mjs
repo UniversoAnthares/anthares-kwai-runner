@@ -166,6 +166,7 @@ async function bufferAction(verb,b,platform){
   // Same stable daily rank as the Vercel route: at most 100 Buffer
   // allocations per week; remaining Pinterest clips belong to browser lane.
   const pinterest=platform==='pinterest';
+  const cutoffForBuffer=platform==='linkedin'?LINKEDIN_EXCEPTION_START: "(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
   const row=await query(pinterest?`WITH ranked AS (
     SELECT id,row_number() OVER (
        PARTITION BY (created_at AT TIME ZONE 'America/Campo_Grande')::date
@@ -189,8 +190,7 @@ async function bufferAction(verb,b,platform){
     RETURNING p.id,p.target_key,p.payload,p.lease_generation,p.duration_class`:
    `WITH picked AS(
      SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued'
-       AND created_at >= (date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande')
-                          AT TIME ZONE 'America/Campo_Grande')
+       AND created_at >= ${cutoffForBuffer}
      ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
    UPDATE cortes_publications p SET status='leased',lease_owner=$2,
        lease_generation=p.lease_generation+1,lease_until=now()+interval '180 seconds',updated_at=now()
@@ -418,6 +418,7 @@ async function recoverExpiredLinkedin(targetKey){
      AND lease_until IS NOT NULL AND lease_until<now() RETURNING id,status`,
    [targetKey,JSON.stringify(evidence)]);
 }
+const LINKEDIN_EXCEPTION_START="(CASE WHEN (now() AT TIME ZONE 'America/Campo_Grande') >= TIMESTAMP '2026-10-21 22:45:00' AND (now() AT TIME ZONE 'America/Campo_Grande') < TIMESTAMP '2026-10-22 05:00:00' THEN (TIMESTAMP '2026-10-21 00:00:00' AT TIME ZONE 'America/Campo_Grande') ELSE (date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande') END)";
 async function personalAction(verb,b){
  const id=String(b.id||''),owner=String(b.owner||'');
  if(verb==='lease'){
@@ -429,7 +430,7 @@ async function personalAction(verb,b){
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
   const used=await query(`SELECT count(*)::int n FROM cortes_publications WHERE target_key=$1 AND status IN ('confirmed','leased','started','uncertain') AND updated_at >= ${day}`,[P_TARGET]);
   if(Number(used[0]?.n||0)>=P_LIMIT)return{ok:true,job:null,daily_limit_reached:true,limit:P_LIMIT};
-  const rows=await query(`WITH picked AS (SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued' AND created_at >= ${day} ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE cortes_publications p SET status='leased',lease_owner=$2,lease_generation=p.lease_generation+1,lease_until=now()+interval '30 minutes',updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued' RETURNING p.*`,[P_TARGET,P_OWNER]);
+  const rows=await query(`WITH picked AS (SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued' AND created_at >= ${LINKEDIN_EXCEPTION_START} ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE cortes_publications p SET status='leased',lease_owner=$2,lease_generation=p.lease_generation+1,lease_until=now()+interval '30 minutes',updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued' RETURNING p.*`,[P_TARGET,P_OWNER]);
   return{ok:true,job:rows[0]||null,limit:P_LIMIT};
  }
  if(!['start','fail','media-missing','accepted','confirmed'].includes(verb))return{ok:false,error:'PERSONAL_ACTION_DENIED'};

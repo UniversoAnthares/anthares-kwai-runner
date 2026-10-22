@@ -7,7 +7,7 @@ on:
       - 'tools/cortes_buffer_linkedin_cloud.py'
       - 'tests/test_cortes_buffer_linkedin_cloud.py'
   schedule:
-    - cron: '3,13,23,33,43,53 * * * *'
+    - cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'
   workflow_dispatch: {}
   # Independent wake-up when the upstream CORTES fanout completes.
   # GitHub scheduled events can be delayed or dropped under load.

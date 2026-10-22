@@ -6,6 +6,9 @@ token, identity, media URLs, or API response bodies. Runs only on GitHub cloud.
 """
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import json
 import os
 import re
@@ -147,10 +150,21 @@ def publish_one(skipped=0):
         raise
 
 
+def exception_active():
+    local = datetime.now(ZoneInfo("America/Campo_Grande"))
+    return (datetime(2026, 10, 21, 22, 45, tzinfo=local.tzinfo)
+            <= local <
+            datetime(2026, 10, 22, 5, 0, tzinfo=local.tzinfo))
+
+
 def main():
     try:
-        result = publish_one()
-        print(json.dumps(result, separators=(",", ":")))
+        batch_size = 2 if exception_active() else 1
+        for attempt in range(batch_size):
+            result = publish_one()
+            print(json.dumps({**result, "batch_ordinal": attempt + 1}, separators=(",", ":")), flush=True)
+            if result.get("linkedin_personal") != "CONFIRMED_BY_AUTHOR_READBACK" and result.get("linkedin_personal") != "LINKEDIN_ACCEPTED_PENDING_PUBLIC_PROOF":
+                break
         return 0
     except (ConfigRequired, PlatformLimit) as exc:
         print(json.dumps({"linkedin_personal": "BLOCKED",

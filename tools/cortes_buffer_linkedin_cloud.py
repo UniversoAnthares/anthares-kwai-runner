@@ -8,6 +8,9 @@ exact main-branch workflow. A Buffer schedule is not a LinkedIn confirmation.
 """
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import json
 import os
 import sys
@@ -175,13 +178,25 @@ def publish_once(skipped=0):
         raise
 
 
+def exception_active():
+    local=datetime.now(ZoneInfo("America/Campo_Grande"))
+    return (datetime(2026,10,21,22,45,tzinfo=local.tzinfo)
+            <= local < datetime(2026,10,22,5,0,tzinfo=local.tzinfo))
+
+
 def main():
     cloud_only()
     # Reconciliation before scheduling also frees up a Buffer queue slot.
     confirmed=reconcile()
-    status=publish_once()
-    print(json.dumps({"linkedin_cloud":"PASS","scheduled_action":status,
-                      "posts_confirmed_this_run":confirmed},separators=(",",":")))
+    batch_size=2 if exception_active() else 1
+    results=[]
+    for _ in range(batch_size):
+        status=publish_once()
+        results.append(status)
+        if status in ("IDLE_NO_CUTS","IDLE_BUFFER_CAPACITY","SOURCE_MEDIA_MISSING_FOR_REPAIR"):
+            break
+    print(json.dumps({"linkedin_cloud":"PASS","scheduled_action":results[-1] if results else "IDLE_NO_CUTS",
+                      "scheduled_actions":results,"posts_confirmed_this_run":confirmed},separators=(",",":")))
     return 0
 
 
