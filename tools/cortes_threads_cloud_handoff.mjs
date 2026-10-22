@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import {fetchCloudManifest} from './cortes_threads_cloud_feed.mjs';
-import {captionForClip,cleanTitle} from './cortes_threads_cloud_captions.mjs';
+import {captionForClip} from './cortes_threads_cloud_captions.mjs';
 const GRAPH='https://graph.threads.net/v1.0';
 const CONTROL='https://br-crimson-unit-b89nau08-cortesthreadspub.compute.c-14.us-east-1.aws.neon.tech/';
 const TARGET='threads:universoanthares';
@@ -55,8 +55,9 @@ async function mediaDigest(uri){
 async function notifyQA(id,reason){
  const token=String(process.env.GITHUB_TOKEN||'').trim();
  if(!token){console.log('THREADS_QA_NOTIFY_TOKEN_MISSING');return}
- const body='[QA P1][THREADS][AUTO] Mídia isolada por até 24 horas: '+id+
-  '. Causa: '+reason+'. Investigar origem, corrigir e reabilitar antes do prazo. '+
+ const holding=reason==='EDITORIAL_MISSING'?'Aguardar enriquecimento editorial; NÃO descartar em 24h.':'Mídia isolada por até 24 horas.';
+ const body='[QA P1][THREADS][AUTO] '+holding+' ID: '+id+
+  '. Causa: '+reason+'. Investigar origem, corrigir e reabilitar com prova antes de publicar. '+
   'Outras mídias continuam publicando normalmente; nenhum reenvio incerto permitido.';
  try{
   const r=await fetch('https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/issues/283/comments',{
@@ -90,13 +91,10 @@ async function choose(jwt,publish){
   let digest,tagged;
   try{
    digest=await mediaDigest(clip.url);
-   const url='https://www.youtube.com/oembed?url='+encodeURIComponent('https://www.youtube.com/watch?v='+clip.source)+'&format=json';
-   const res=await fetch(url,{signal:AbortSignal.timeout(12000)});
-   requireOk(res.ok,'CAPTION_HTTP_'+res.status);
-   tagged=captionForClip(cleanTitle((await res.json()).title),clip);
+   tagged=captionForClip(clip.editorial,clip);
   }catch(error){
    const msg=String(error?.message||'');
-   const reason=/MEDIA_HTTP_404/.test(msg)?'MEDIA_HTTP_404':/MEDIA_HTTP_410/.test(msg)?'MEDIA_HTTP_410':/MEDIA_HTTP_403/.test(msg)?'MEDIA_HTTP_403':/MEDIA_HTTP_5\d\d/.test(msg)?'MEDIA_HTTP_5XX':/CAPTION_/.test(msg)?'CAPTION_FETCH_ERROR':/MEDIA_/.test(msg)?'MEDIA_INVALID':'MEDIA_FETCH_ERROR';
+   const reason=/EDITORIAL_/.test(msg)?'EDITORIAL_MISSING':/MEDIA_HTTP_404/.test(msg)?'MEDIA_HTTP_404':/MEDIA_HTTP_410/.test(msg)?'MEDIA_HTTP_410':/MEDIA_HTTP_403/.test(msg)?'MEDIA_HTTP_403':/MEDIA_HTTP_5\d\d/.test(msg)?'MEDIA_HTTP_5XX':/CAPTION_/.test(msg)?'CAPTION_FETCH_ERROR':/MEDIA_/.test(msg)?'MEDIA_INVALID':'MEDIA_FETCH_ERROR';
    console.log('THREADS_CLIP_ISOLATED='+JSON.stringify({id:row.id,reason}));
    if(publish){
     try{const v=await callControl(jwt,'quarantine',{id:row.id,reason});if(v.first_notice)await notifyQA(row.id,reason)}

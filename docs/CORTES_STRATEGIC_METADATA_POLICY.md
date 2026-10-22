@@ -1,0 +1,9 @@
+# CORTES — títulos SEO contextualizados em TODAS as redes (permanente desde 22/10/2026)
+
+Qualquer vídeo novo curto ou longo deve receber metadados canônicos criados a partir da transcrição do próprio trecho: título específico, estratégico e fiel, 3–7 termos de busca relacionados ao conteúdo, descrição útil e 2–5 hashtags específicas. O título do master termina literalmente com ` ● Universo Anthares`. Em descrição/SEO, inserir `www.anthares.us` quando o serviço admitir.
+
+Nenhum publicador pode voltar ao título da live, primeiros 12 termos da fala, posição temporal, `Trecho 00:00`, hashtag genérica sem assunto ou clickbait. Os nomes de autores, obras e conceitos devem constar da fala real; exigir evidência editorial e checksum da transcrição. A identidade de master e bytes do vídeo não mudam. Conteúdo sem metadados aprovados fica isolado para QA sem impedir a próxima mídia; **não descartar cortes válidos por falta de título**, diferentemente de erros de mídia 404/410 cuja quarentena de 24h permanece.
+
+As rotas Buffer, diretas e browser devem validar `editorial_policy=anthares_editorial_transcript_v2` e preservar `title`, `description`, `keywords`, `hashtags`. Os metadados canônicos ficam no WordPress: `title.rendered`, `description.rendered`, `caption.rendered` e `alt_text`. O publicador Threads usa estes campos diretamente do manifesto de anexos, não mais o oEmbed/título da live. A API de quarentena Neon recebe `EDITORIAL_MISSING`, abre aviso QA e não aplica o descarte em 24h. Reprocessar editorial antigo antes de publicar, sem reenviar posts já confirmados.
+
+Fonte de verdade de geração e política: `UniversoAnthares/anthares-clipper/docs/CORTES_STRATEGIC_METADATA_POLICY.md`. O controle diário de até 100 por rede/conta, deduplicação Neon e a redundância nuvem/Windows continuam obrigatórios.

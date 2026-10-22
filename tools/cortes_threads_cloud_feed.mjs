@@ -9,7 +9,8 @@ export function clipFromMedia(m,day){
  const [,source,round,a,b]=z,start=Number(a),end=Number(b);
  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||end-start<5||end-start>180)return null;
  const clip_id='g'+round+':'+source+':'+start+':'+end;
- return{id:source+'|'+clip_id,clip_id,source,date:day,attachment_id:m.id,duration:end-start,url,stored_at:m.date_gmt||m.date};
+ return{id:source+'|'+clip_id,clip_id,source,date:day,attachment_id:m.id,duration:end-start,url,stored_at:m.date_gmt||m.date,
+  editorial:{title:m.title?.rendered||'',description:m.description?.rendered||'',caption:m.caption?.rendered||'',alt_text:m.alt_text||''}};
 }
 export async function fetchCloudManifest({fetcher=fetch,day=localDay(),maxPages=12}={}){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw Error('INVALID_DATE');
