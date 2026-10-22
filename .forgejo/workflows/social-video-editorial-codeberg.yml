@@ -48,7 +48,7 @@ jobs:
           node --check infra/neon-cortes-linkedin/index.mjs
           node --check cloudflare-cortes-queue-ha/src/index.mjs
           python3 cloudflare-worker/patches/apply-publisher-target-v17.py
-          node --experimental-default-type=module --check cloudflare-worker/src/index.js
+          node --check cloudflare-worker/src/index.js
           grep -q 'instagram:Number.MAX_SAFE_INTEGER,pinterest:Number.MAX_SAFE_INTEGER,linkedin:Number.MAX_SAFE_INTEGER' cloudflare-worker/src/index.js
           node --check vercel-ara-primary/api/cortes-queue.mjs
           node tests/test_cortes_oidc_social_fanout.mjs
