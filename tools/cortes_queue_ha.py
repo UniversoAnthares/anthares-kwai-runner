@@ -24,7 +24,7 @@ PROVIDERS = (
 )
 ACTIONS = frozenset({"enqueue", "buffer-lease", "buffer-start", "buffer-fail",
                      "buffer-editorial-invalid", "buffer-rejected", "buffer-scheduled", "buffer-pending", "buffer-reconcile", "buffer-media-missing",
-                     "buffer-cooldown", "buffer-cooldown-status", "buffer-policy",
+                     "buffer-cooldown", "buffer-cooldown-status", "buffer-policy", "buffer-stats",
                      "instagram-direct-lease", "instagram-direct-start", "instagram-direct-confirm",
                      "instagram-direct-fail", "instagram-direct-missing",
                      "personal-lease", "personal-start", "personal-fail",
