@@ -43,7 +43,7 @@ class XLocalConsumerTests(unittest.TestCase):
         source=FILE.read_text(encoding="utf8")
         self.assertEqual(source.count('button.evaluate("(element) => element.click()"'),1)
         self.assertLess(source.index('service(token,"/claim-local"'),source.index('button.evaluate("(element) => element.click()"'))
-        self.assertLess(source.index('state(n,"SUBMISSION_STARTED"'),source.index("button.click("))
+        self.assertLess(source.index('state(n,"SUBMISSION_STARTED"'),source.index('button.evaluate("(element) => element.click()"'))
         self.assertIn('service(token,"/confirm-local"',source)
         self.assertIn('if old.get("status")!="NOT_FOUND"',source)
 
