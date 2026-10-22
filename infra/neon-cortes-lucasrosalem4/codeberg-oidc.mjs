@@ -8,7 +8,7 @@ const REPOSITORY='UniversoAnthares/anthares-kwai-runner';
 let jwks=null,validUntil=0;
 
 export async function codebergConsumerRole(req,audience,workflowName) {
-  const m=/^Bearer\\s+(.+)$/i.exec(String(req.headers?.authorization||''));
+  const m=/^Bearer\s+(.+)$/i.exec(String(req.headers?.authorization||''));
   const jwt=m?m[1]:'';
   if(jwt.length<200||jwt.length>16000)return '';
   const parts=jwt.split('.');
