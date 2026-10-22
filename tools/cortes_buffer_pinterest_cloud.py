@@ -225,7 +225,46 @@ def notify_buffer_rejection_p0(job_id,classification,diagnostic):
         print("::warning::PINTEREST_BUFFER_QA_ISSUE_UNAVAILABLE",flush=True)
 
 
+def notify_editorial_p0(job_id,code):
+    """Report a safe classification, never captions, secrets or media URLs."""
+    from datetime import datetime, timezone
+    env=os.environ.copy()
+    env["GH_TOKEN"]=env.get("GH_TOKEN") or env.get("GITHUB_TOKEN","")
+    if not env["GH_TOKEN"]:return
+    fingerprint=hashlib.sha256(("pinterest-editorial|"+code+"|"+
+        datetime.now(timezone.utc).strftime("%Y-%m-%d")).encode()).hexdigest()[:24]
+    repo="UniversoAnthares/anthares-kwai-runner"
+    try:
+        existing=subprocess.run(["gh","issue","list","--repo",repo,
+            "--state","all","--search",fingerprint,"--json","number",
+            "--limit","5"],capture_output=True,text=True,timeout=14,env=env)
+        if existing.returncode!=0 or json.loads(existing.stdout):return
+        message=("QA-P0-FINGERPRINT:"+fingerprint+"\\n"+
+                 "Preflight editorial failed before createPost, with safe code "+
+                 code+". Work item "+job_id+" was atomically returned to "+
+                 "transcript metadata QA without a network submission. "+
+                 "Repair that metadata; do not retry uncertain jobs.")
+        subprocess.run(["gh","issue","create","--repo",repo,
+            "--title","[QA P0][Pinterest] Editorial validation blocks clip",
+            "--body",message,"--label","QA-P0","--label","publication-failure"],
+            capture_output=True,text=True,timeout=20,env=env)
+    except (OSError,ValueError,subprocess.TimeoutExpired):
+        print("::warning::PINTEREST_EDITORIAL_QA_CENTRAL_UNAVAILABLE",flush=True)
+
+
 def publish_once():
+    # Keep advancing the lane when a particular pre-start cut needs repair.
+    # A bounded loop avoids infinite QA retries and respects one successful
+    # Buffer createPost per run. Every candidate uses a fresh Neon lease.
+    for _ in range(3):
+        result=publish_one_candidate()
+        if result=="EDITORIAL_ISOLATED_QA_P0":
+            continue
+        return result
+    return "EDITORIAL_QUARANTINE_BATCH_LIMIT"
+
+
+def publish_one_candidate():
     lease=queue("lease",{"target_key":TARGET,"owner":OWNER})
     row=lease.get("job")
     if not row:
@@ -240,7 +279,20 @@ def publish_once():
         payload=safe_payload(row)
         # Editorial and destination validation before any irreversible queue write.
         from social_adapters.buffer_three_channels import prepare
-        prepare(payload)
+        try:
+            prepare(payload)
+        except ValueError as exc:
+            # No createPost call has happened. Move only this exact lease
+            # back to transcript QA; do not re-lease the invalid cut.
+            import re
+            msg=str(exc)
+            code=msg if re.fullmatch(r"CORTES_[A-Z0-9_]{5,75}",msg) else "CORTES_EDITORIAL_VALIDATION_FAILED"
+            marked=queue("editorial-invalid",{**fence,"reason":code})
+            if not marked.get("ok"):
+                raise RuntimeError("PINTEREST_EDITORIAL_INVALID_FENCE_FAILED")
+            notify_editorial_p0(row["id"],code)
+            print("::warning::PINTEREST_EDITORIAL_ISOLATED_QA_P0="+code,flush=True)
+            return "EDITORIAL_ISOLATED_QA_P0"
         if is_media_missing(payload["media_url"]):
             marked=queue("media-missing",fence)
             if not marked.get("ok"):
