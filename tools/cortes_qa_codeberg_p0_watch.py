@@ -113,6 +113,28 @@ def inspect_x():
                         break
                 except (ValueError,TypeError,OverflowError):
                     pass
+        # A cloud publisher must never be promoted from Chromium smoke alone.
+        # Escalate failed/stalled read-only account verification separately.
+        auth_runs=[r for r in (data.get("workflow_runs") or [])
+                   if r.get("workflow_id")=="x-codeberg-auth-identity.yml"]
+        for auth_run in auth_runs[:10]:
+            rid=str(auth_run.get("id") or "unknown")
+            status=str(auth_run.get("status") or "")
+            evidence="https://codeberg.org/"+REPO+"/actions (identity run "+rid+")"
+            if status in ("failure","error","cancelled"):
+                alerts.append(incident("x/lucasyahn",
+                    "codeberg_x_identity_preflight_failed",evidence))
+                break
+            if status in ("waiting","queued","pending"):
+                try:
+                    created=dt.datetime.fromisoformat(
+                        str(auth_run.get("created")).replace("Z","+00:00"))
+                    if created.tzinfo is not None and dt.timedelta(minutes=12) < NOW-created < dt.timedelta(days=1):
+                        alerts.append(incident("x/lucasyahn",
+                            "codeberg_x_identity_runner_stalled",evidence))
+                        break
+                except (ValueError,TypeError,OverflowError):
+                    pass
     except (ValueError,TypeError,KeyError,OSError,urllib.error.URLError):
         alerts.append(incident("x/lucasyahn","codeberg_cloud_control_unreachable",
                                "https://codeberg.org/"+REPO+"/actions"))
