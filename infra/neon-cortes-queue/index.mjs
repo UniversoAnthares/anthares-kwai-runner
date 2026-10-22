@@ -220,7 +220,7 @@ async function instagramDirectAction(verb,b){
 
 async function bufferAction(verb,b,platform){
  const dest=target(platform),owner='buffer-'+platform+':';
- const allowed=new Set(['lease','start','fail','media-missing','rejected','scheduled','pending','reconcile','stats','retention','cooldown','cooldown-status','policy']);
+ const allowed=new Set(['lease','start','fail','media-missing','editorial-invalid','rejected','scheduled','pending','reconcile','stats','retention','cooldown','cooldown-status','policy']);
  if(!allowed.has(verb))return{ok:false,error:'UNKNOWN_BUFFER_ACTION'};
  if(verb==='cooldown'||verb==='cooldown-status'){
   if(!['pinterest','instagram','linkedin'].includes(platform))return{ok:false,error:'BUFFER_COOLDOWN_SCOPE_ONLY'};
@@ -350,6 +350,27 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
     WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 AND lease_generation=$4
     AND lease_until>now() RETURNING id,status`,[id,dest,who,fence]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'STALE_FENCE'};
+ }
+ if(verb==='editorial-invalid'){
+  // The Buffer createPost action has NOT begun. Quarantine this one leased
+  // clip for transcript QA instead of returning it to the front of the queue.
+  const reason=String(b.reason||'');
+  if(platform!=='pinterest'||!/^CORTES_[A-Z0-9_]{5,75}$/.test(reason))
+    return{ok:false,error:'EDITORIAL_PROOF_INVALID'};
+  const rows=await query(`UPDATE cortes_publications
+     SET status='queued', lease_owner=NULL,lease_until=NULL,updated_at=now(),
+       payload=jsonb_set(payload,'{editorial_policy}',to_jsonb('requires_transcript_qa'::text),true),
+       confirmation_evidence=jsonb_build_object(
+          'kind','editorial_invalid_qa','reason',$5::text,
+          'confirmed_on_network',false,
+          'detected_at',to_char(now() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+     WHERE id=$1 AND target_key=$2 AND status='leased' AND remote_id IS NULL
+       AND publication_started_at IS NULL AND lease_owner=$3
+       AND lease_generation=$4 AND lease_until>now()
+     RETURNING id,status`,[id,dest,who,fence,reason]);
+  if(rows.length)
+    await query("DELETE FROM cortes_buffer_daily_slots WHERE job_id=$1 AND target_key=$2 AND local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date",[id,dest]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'EDITORIAL_INVALID_FENCE_REJECTED'};
  }
  if(verb==='rejected'){
   // A typed Buffer MutationError is an explicit rejection, not a transport
