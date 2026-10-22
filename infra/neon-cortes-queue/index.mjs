@@ -156,6 +156,12 @@ async function bufferAction(verb,b,platform){
  if(verb==='lease'){
   if(b.target_key!==dest||!String(b.owner||'').startsWith(owner))return{ok:false,error:'WRONG_QUEUE_OWNER'};
   if(platform==='linkedin')await recoverExpiredLinkedin(dest);
+   // Discard only after the next local daily round if the source remains 404.
+   await query(`UPDATE cortes_publications SET status='failed',lease_owner=NULL,lease_until=NULL,updated_at=now()
+     WHERE target_key=$1 AND status='uncertain'
+       AND confirmation_evidence->>'kind'='source_media_http_404'
+       AND (updated_at AT TIME ZONE 'America/Campo_Grande')::date
+          < (now() AT TIME ZONE 'America/Campo_Grande')::date`,[dest]);
   const held=await query(`SELECT count(*)::int n FROM cortes_publications
    WHERE target_key=$1 AND status='uncertain'
    AND confirmation_evidence->>'kind'='buffer_scheduled'`,[dest]);
@@ -189,13 +195,13 @@ async function bufferAction(verb,b,platform){
     RETURNING p.id,p.target_key,p.payload,p.lease_generation,p.duration_class`:
    `WITH picked AS(
      SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued'
-       AND created_at >= (date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande')
-                          AT TIME ZONE 'America/Campo_Grande')
+       AND ($3::text='instagram' OR created_at >= (date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande')
+                          AT TIME ZONE 'America/Campo_Grande'))
      ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
    UPDATE cortes_publications p SET status='leased',lease_owner=$2,
        lease_generation=p.lease_generation+1,lease_until=now()+interval '180 seconds',updated_at=now()
    FROM picked WHERE p.id=picked.id AND p.status='queued'
-   RETURNING p.id,p.target_key,p.payload,p.lease_generation,p.duration_class`,[dest,String(b.owner)]);
+   RETURNING p.id,p.target_key,p.payload,p.lease_generation,p.duration_class`,[dest,String(b.owner),platform]);
   return{ok:true,job:row[0]||null,delivery_route:pinterest?'buffer':undefined};
  }
  const id=String(b.id||''),fence=Number(b.lease_generation),who=String(b.owner||'');
@@ -239,8 +245,8 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
      RETURNING id,status`,[id,dest,who,fence]);
    return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PINTEREST_MEDIA_MISSING_FENCE_REJECTED'};
   }
-  const evidence={kind:'source_media_http_404',account:dest,confirmed_on_network:false};
-  const rows=await query(`UPDATE cortes_publications SET status='failed',
+  const evidence={kind:'source_media_http_404',account:dest,confirmed_on_network:false,quarantine_at:new Date().toISOString(),discard_policy:'next_local_daily_round'};
+  const rows=await query(`UPDATE cortes_publications SET status='uncertain',
       confirmation_evidence=$5::jsonb,lease_until=NULL,lease_owner=NULL,updated_at=now()
       WHERE id=$1 AND target_key=$2 AND status='leased'
         AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status`,
