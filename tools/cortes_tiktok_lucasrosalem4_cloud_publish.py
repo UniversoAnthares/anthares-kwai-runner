@@ -386,6 +386,11 @@ def reconcile_uncertain(job,token,state):
                 page=ctx.new_page()
                 try:
                     existing=studio(page)
+                except SafeStop as exc:
+                    if str(exc)!="SECONDARY_STUDIO_NO_OWNED_LINKS":
+                        raise
+                    print("::warning::SECONDARY_QA_P0_STUDIO_HYDRATION_UNVERIFIED",flush=True)
+                    return False
                 finally:
                     page.close()
             finally:
