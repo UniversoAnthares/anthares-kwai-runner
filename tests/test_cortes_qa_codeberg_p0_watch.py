@@ -29,6 +29,29 @@ class CodebergP0Tests(unittest.TestCase):
         with patch.object(m,"fetch",side_effect=fake):
             self.assertEqual(list(m.inspect()),[])
 
+    def test_tiktok_codeberg_medium_queue_stall_alerts(self):
+        created=(m.NOW-dt.timedelta(minutes=34)).isoformat()
+        def fake(url,*args,**kwargs):
+            return {"workflow_runs":[
+                {"workflow_id":"cortes-tiktok-lucas4-codeberg.yml","id":7932911,
+                 "status":"waiting","created":created},
+                {"workflow_id":"cortes-tiktok-universo-codeberg.yml","id":7932512,
+                 "status":"success","created":created},
+            ]}
+        with patch.object(m,"fetch",side_effect=fake):
+            items=list(m.inspect_codeberg_tiktok())
+        self.assertEqual(len(items),1)
+        self.assertEqual(items[0]["account"],"lucasrosalem4")
+        self.assertEqual(items[0]["stage"],"codeberg_tiktok_runner_waiting_over_20m")
+
+    def test_tiktok_codeberg_recent_wait_does_not_alert(self):
+        def fake(url,*args,**kwargs):
+            return {"workflow_runs":[
+                {"workflow_id":"cortes-tiktok-lucas4-codeberg.yml","id":123,
+                 "status":"waiting","created":m.NOW.isoformat()}]}
+        with patch.object(m,"fetch",side_effect=fake):
+            self.assertEqual(list(m.inspect_codeberg_tiktok()),[])
+
     def test_x_cloud_failed_codeberg_run_reported_independently(self):
         def fake(url,*args,**kwargs):
             if "codeberg.org" in url:
