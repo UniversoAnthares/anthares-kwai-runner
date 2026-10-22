@@ -13,7 +13,6 @@ from urllib.parse import urlparse
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"direct-tiktok-publisher"))
-import tiktok_web_publish as t
 
 ACCOUNT="lucasrosalem4"
 QUEUE="https://br-crimson-unit-b89nau08-cortestiktok4.compute.c-14.us-east-1.aws.neon.tech/"
@@ -188,6 +187,8 @@ def close_editor_modals(page):
 
 
 def publish_one(job,token,state):
+    global t
+    import tiktok_web_publish as t
     sid=str(job.get("segment_id") or "")
     if not SEGMENT.fullmatch(sid):
         raise SafeStop("SECONDARY_SEGMENT_ID_INVALID")
