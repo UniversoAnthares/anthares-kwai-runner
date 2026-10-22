@@ -52,7 +52,9 @@ jobs:
       issues: write
       actions: write
     if: github.event_name != 'pull_request' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success')
-    runs-on: ubuntu-22.04
+    # This route invokes Windows PowerShell and Python311 installed on the local runner.
+    # Self-hosted execution also remains available when hosted minutes are exhausted.
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
     timeout-minutes: 8
     env:
       GITHUB_TOKEN: ${{ github.token }}
