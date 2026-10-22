@@ -105,7 +105,7 @@ def strategic_metadata(text,source_title,segment_id):
              data=data,headers={'Content-Type':'application/json'},method='POST')
     with urllib.request.urlopen(req,timeout=90) as rsp:
         answer=json.loads(json.load(rsp).get('response','{}'))
-    headline=' '.join(str(answer.get('title') or '').split()).strip(' "'.,;:')
+    headline=' '.join(str(answer.get('title') or '').split()).strip().strip('"').strip('.,;:')
     if headline.endswith(SUFFIX):
         headline=headline[:-len(SUFFIX)].strip()
     title=headline[:100-len(SUFFIX)].rstrip(' ,.;:')+SUFFIX
