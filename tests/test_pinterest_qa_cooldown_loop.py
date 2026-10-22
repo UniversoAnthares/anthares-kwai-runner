@@ -7,6 +7,11 @@ class PinterestAutonomousQA(unittest.TestCase):
     def setUp(self):
         self.pass_evidence = {"worker_conclusion": "success", "result": "PASS_NO_NEW_PIN"}
 
+    def test_neon_stats_are_read_only_and_permitted(self):
+        from tools.cortes_queue_ha import ACTIONS, RETRYABLE
+        self.assertIn('buffer-stats', ACTIONS)
+        self.assertNotIn('buffer-stats', RETRYABLE)
+
     def test_429_keeps_qa_open(self):
         state, remaining = assess({"worker_conclusion": "success", "result": "RATE_LIMIT_ISOLATED"},
                                   {"confirmed": 7, "queued": 42, "uncertain": 15},
