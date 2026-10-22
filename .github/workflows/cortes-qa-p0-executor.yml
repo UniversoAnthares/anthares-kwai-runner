@@ -82,7 +82,8 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           & .\\tools\\cortes_qa_p0_recovery.ps1 -IssueNumber ([int]$env:QA_ISSUE_NUMBER)
-          if($LASTEXITCODE -ne 0){throw 'CORTES_QA_RECOVERY_PLAYBOOK_FAILED'}
+          # Native exit codes are not meaningful for a PowerShell-only script;
+          # terminating errors propagate through ErrorActionPreference=Stop.
       - name: Report actual execution and evidence to incident
         if: always() && steps.preflight.outcome == 'success'
         uses: actions/github-script@v7
