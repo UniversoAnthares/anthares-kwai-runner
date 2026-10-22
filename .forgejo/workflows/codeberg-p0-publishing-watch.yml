@@ -32,3 +32,9 @@ jobs:
       - name: Monitor TikTok pipelines and create priority incidents
         shell: bash
         run: python3 -u tools/cortes_qa_codeberg_p0_watch.py
+      - name: Independently detect missing CORTES daily masters and stalled LinkedIn publishers
+        shell: bash
+        run: |
+          set -eu
+          python3 -m unittest discover -s tests -p test_cortes_codeberg_round_qa.py -q
+          python3 -u -m tools.cortes_codeberg_round_qa
