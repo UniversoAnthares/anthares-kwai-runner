@@ -95,6 +95,16 @@ def post(action: str, payload: dict, get_oidc, *, timeout: int = 16) -> dict:
                 raise BackendUnavailable("CORTES_QUEUE_MUTATION_RESULT_UNCERTAIN") from None
             # Authorization, quota, CAS/lease and rate limits MUST be honored
             # for the destination even when another ingress is healthy.
+            # Backend-only error codes are strict uppercase identifiers, never
+            # remote text/headers/secrets. Reveal controlled 409 reasons to QA.
+            if error.code == 409:
+                try:
+                    reason=json.loads(error.read(512).decode("utf-8")).get("error","")
+                except (ValueError, UnicodeError, OSError):
+                    reason=""
+                import re
+                safe=reason if isinstance(reason,str) and re.fullmatch(r"[A-Z][A-Z0-9_]{4,80}",reason) else "UNKNOWN"
+                raise BackendUnavailable("CORTES_QUEUE_REJECTED_409_"+safe) from None
             raise BackendUnavailable("CORTES_QUEUE_REJECTED_" + str(error.code)) from None
         except (TimeoutError, urllib.error.URLError, OSError, ValueError, BackendUnavailable):
             if action in RETRYABLE:
