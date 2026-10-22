@@ -347,6 +347,12 @@ async function authorizePinterestBrowser(request){
 async function pinterestBrowserAction(verb,b){
  const target='pinterest:lucasyahn',who='pinterest-browser:DESKTOP-FTDK0HP';
  if(!['lease','start','fail','confirm','stats','media-invalid','reconcile-buffer'].includes(verb))return{ok:false,error:'BROWSER_ACTION_DENIED'};
+ if(verb==='stats'){
+  const rows=await query('SELECT status,count(*)::int n FROM cortes_publications WHERE target_key=$1 GROUP BY status',[target]);
+  return{ok:true,target_key:target,counts:Object.fromEntries(rows.map(x=>[x.status,Number(x.n)]))};
+ }
+ if(b.target_key&&b.target_key!==target)return{ok:false,error:'WRONG_TARGET'};
+ if(String(b.owner||'')!==who)return{ok:false,error:'WRONG_BROWSER_OWNER'};
  if(verb==='reconcile-buffer'){
   // Device-scoped recovery when Buffer GraphQL readback is rate-limited.
   // This never creates another Pin. Positive ownership, exact public URL,
@@ -390,12 +396,7 @@ async function pinterestBrowserAction(verb,b){
     [id,target,remote,src,pin,JSON.stringify(evidence),url]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'BUFFER_PUBLIC_PROOF_CAS_REJECTED'};
  }
- if(verb==='stats'){
-  const rows=await query('SELECT status,count(*)::int n FROM cortes_publications WHERE target_key=$1 GROUP BY status',[target]);
-  return{ok:true,target_key:target,counts:Object.fromEntries(rows.map(x=>[x.status,Number(x.n)]))};
- }
- if(b.target_key&&b.target_key!==target)return{ok:false,error:'WRONG_TARGET'};
- if(String(b.owner||'')!==who)return{ok:false,error:'WRONG_BROWSER_OWNER'};
+
  if(verb==='lease'){
   // Recover leases abandoned by crashed local workers. Never retry a video
   // after publication started: it must remain UNCERTAIN for independent QA.
