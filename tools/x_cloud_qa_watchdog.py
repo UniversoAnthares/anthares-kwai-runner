@@ -90,26 +90,37 @@ def flush():
 def check_codeberg():
     try:
         rows=http(CODEBERG+"/actions/runs?limit=40").get("workflow_runs") or []
-        match=next((row for row in rows
-                if row.get("workflow_id")==PRIMARY),None)
-        if not match:
+        runs=[r for r in rows if r.get("workflow_id")==PRIMARY]
+        if not runs:
             persist("X_CODEBERG_PUBLISHER_NOT_STARTED","codeberg","no_production_run")
             return
-        status=str(match.get("status") or "")
-        rid=str(match.get("id") or "unknown")
-        if status in ("failure","cancelled","error"):
-            persist("X_CODEBERG_PUBLISHER_FAILED","codeberg",rid)
-        elif status=="success":
-            # A successful smoke-test run never proves X authenticated.
-            if str(match.get("event") or "")!="schedule":
-                persist("X_CODEBERG_AUTHENTICATED_SCHEDULE_NOT_PROVEN",
-                        "codeberg",rid)
-        elif status in ("waiting","queued","pending"):
-            stamp=match.get("created") or match.get("started")
-            if stamp:
-                age=(datetime.now(timezone.utc)-
-                     datetime.fromisoformat(str(stamp).replace("Z","+00:00"))).total_seconds()
-                if age>30*60: persist("X_CODEBERG_RUN_STALE","codeberg",rid)
+        verified=False
+        for run in runs[:20]:
+            status=str(run.get("status") or "")
+            rid=str(run.get("id") or "unknown")
+            kind=str(run.get("event") or "")
+            if status in ("failure","error"):
+                persist("X_CODEBERG_PUBLISHER_FAILED","codeberg",rid)
+            if status=="success" and kind=="schedule":
+                verified=True
+            if status in ("waiting","queued","pending"):
+                stamp=run.get("created") or run.get("started")
+                if stamp:
+                    try:
+                        when=datetime.fromisoformat(str(stamp).replace("Z","+00:00"))
+                        if when.tzinfo is None:
+                            raise ValueError("UNPROVEN_CLOUDFLOW_TIMESTAMP")
+                        age=(datetime.now(timezone.utc)-when).total_seconds()
+                        # Detect each stranded job even when a newer push
+                        # generated a skipped workflow record.
+                        if age > 12*60:
+                            persist("X_CODEBERG_RUN_STALE","codeberg",rid)
+                    except (ValueError,TypeError,OverflowError):
+                        persist("X_CODEBERG_RUN_CLOCK_UNKNOWN","codeberg",rid)
+        if not verified:
+            # Every new run remains safely disarmed until *scheduled*
+            # production login has succeeded. Smoke cannot promote.
+            persist("X_CODEBERG_AUTH_NOT_PROVEN","codeberg","production_identity")
     except Exception as exc:
         persist("X_CODEBERG_CONTROL_UNREACHABLE","codeberg",type(exc).__name__)
 
