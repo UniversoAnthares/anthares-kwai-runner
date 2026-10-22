@@ -335,7 +335,7 @@ async function pinterestBrowserAction(verb,b){
      lease_until=NULL,updated_at=now(),confirmation_evidence=jsonb_build_object(
        'kind','source_media_invalid','http_status',404,
        'confirmed_on_network',false,
-       'retry_after_at',to_char(now()+interval '90 minutes','YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+       'retry_after_at',to_char((now()+interval '90 minutes') AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'))
      WHERE target_key=$1 AND status='failed' AND remote_id IS NULL
        AND publication_started_at IS NULL
        AND confirmation_evidence->>'kind'='source_media_expired_next_day'
@@ -398,11 +398,11 @@ async function pinterestBrowserAction(verb,b){
        'kind','source_media_invalid','http_status',404,
        'confirmed_on_network',false,
        'retry_after_at',to_char(
-          CASE WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date <
+          (CASE WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date <
                          (now() AT TIME ZONE 'America/Campo_Grande')::date
             THEN now()+interval '90 minutes'
             ELSE ((now() AT TIME ZONE 'America/Campo_Grande')::date + 1)
-                       AT TIME ZONE 'America/Campo_Grande' END,
+                       AT TIME ZONE 'America/Campo_Grande' END) AT TIME ZONE 'UTC',
           'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
      lease_owner=NULL,lease_until=NULL,updated_at=now()
      WHERE id=$1 AND target_key=$2 AND status='leased'
