@@ -8,8 +8,10 @@ exact main-branch workflow. A Buffer schedule is not a Pinterest confirmation.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.error
@@ -134,6 +136,52 @@ def safe_payload(row):
     return result
 
 
+def is_media_missing(url):
+    from urllib.parse import urlparse
+    parsed=urlparse(str(url or ""))
+    if parsed.scheme!="https" or parsed.hostname not in ("anthares.us","www.anthares.us") or not parsed.path.endswith(".mp4"):
+        return False
+    req=urllib.request.Request(url,method="HEAD",headers={"User-Agent":"CortesPinterestMediaPreflight/1.0"})
+    try:
+        with urllib.request.urlopen(req,timeout=15):
+            return False
+    except urllib.error.HTTPError as exc:
+        return exc.code==404
+
+
+def notify_media_p0(job_id,media_url):
+    fingerprint=hashlib.sha256(job_id.encode()).hexdigest()[:24]
+    title="[QA P0][pinterest] Mídia inexistente no WordPress"
+    body=("QA-P0-FINGERPRINT:"+fingerprint+"\\n\\n"
+          "P0: corrigir URL de mídia 404 e validar entrega HTTP 200; "
+          "registro isolado, sem impedir outros vídeos.\\nJob: "+job_id+
+          "\\nMedia URL SHA256: "+hashlib.sha256(media_url.encode()).hexdigest()+
+          "\\nRetry previsto somente no dia seguinte, descarte se continuar inválido.\\n")
+    env=os.environ.copy()
+    if not env.get("GH_TOKEN") and env.get("GITHUB_TOKEN"):
+        env["GH_TOKEN"]=env["GITHUB_TOKEN"]
+    if not env.get("GH_TOKEN"):
+        print("::warning::PINTEREST_QA_CENTRAL_TOKEN_UNAVAILABLE",flush=True)
+        return
+    repo="UniversoAnthares/anthares-kwai-runner"
+    try:
+        check=subprocess.run(["gh","issue","list","--repo",repo,"--state","all",
+            "--search",fingerprint,"--json","number","--limit","5"],
+            capture_output=True,text=True,timeout=15,env=env)
+        if check.returncode!=0:
+            raise RuntimeError("QA_QUERY_UNAVAILABLE")
+        if json.loads(check.stdout):
+            return
+        created=subprocess.run(["gh","issue","create","--repo",repo,"--title",title,
+            "--body",body,"--label","QA-P0","--label","publication-failure"],
+            capture_output=True,text=True,timeout=20,env=env)
+        if created.returncode!=0:
+            raise RuntimeError("QA_ISSUE_CREATE_UNAVAILABLE")
+        print("CORTES_PINTEREST_MEDIA_QA_P0_REPORTED",flush=True)
+    except (ValueError,OSError,RuntimeError,subprocess.TimeoutExpired):
+        print("::warning::PINTEREST_QA_CENTRAL_UNAVAILABLE",flush=True)
+
+
 def publish_once():
     lease=queue("lease",{"target_key":TARGET,"owner":OWNER})
     row=lease.get("job")
@@ -150,6 +198,13 @@ def publish_once():
         # Editorial and destination validation before any irreversible queue write.
         from social_adapters.buffer_three_channels import prepare
         prepare(payload)
+        if is_media_missing(payload["media_url"]):
+            marked=queue("media-missing",fence)
+            if not marked.get("ok"):
+                raise RuntimeError("PINTEREST_MEDIA_ISOLATION_FAILED")
+            notify_media_p0(row["id"],payload["media_url"])
+            print("::warning::CORTES_PINTEREST_MEDIA_404_ISOLATED",flush=True)
+            return "MEDIA_ISOLATED_QA_P0"
     except Exception:
         queue("fail",fence)
         raise
