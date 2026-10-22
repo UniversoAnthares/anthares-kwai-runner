@@ -8,6 +8,7 @@ remain 'uncertain' and never get blindly retried.
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -29,7 +30,7 @@ from urllib.parse import urlparse
 NEON_BROWSER_QUEUE = "https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/"
 def call(action: str, payload: dict):
     """Neon direct, device-scoped Pinterest actions; never silently falls back to Vercel."""
-    if action not in {"lease", "start", "fail", "confirm", "stats"}:
+    if action not in {"lease", "start", "fail", "confirm", "stats", "media-invalid"}:
         raise ValueError("PINTEREST_NEON_ACTION_NOT_ALLOWED")
     url = os.getenv("CORTES_PINTEREST_NEON_URL", NEON_BROWSER_QUEUE).rstrip("/") + "/"
     parsed = urlparse(url)
@@ -89,6 +90,52 @@ def qa_incident(reason: str):
         os.replace(tmp, base / "pinterest-browser-p0.json")
     except OSError:
         pass
+
+
+def media_missing(url: str) -> bool:
+    """Identify an actual 404, not a transient upload or connection failure."""
+    req = urllib.request.Request(url, method="HEAD", headers={
+        "User-Agent": "AntharesPinterestMediaPreflight/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=16) as response:
+            return False
+    except urllib.error.HTTPError as exc:
+        return exc.code == 404
+
+
+def qa_media_incident(job_id: str, media_url: str):
+    """Push sanitized incident to central QA, without any secret or media body."""
+    fingerprint = hashlib.sha256(job_id.encode("utf-8")).hexdigest()[:24]
+    qa_incident("PINTEREST_MEDIA_404_" + fingerprint)
+    safe_id = job_id[:125]
+    title = "[QA P0][pinterest] Mídia 404 — corrigir origem e validar republicação"
+    body = ("QA-P0-FINGERPRINT:" + fingerprint + "\\n\\n"
+            "PRIORIDADE P0: origem de vídeo HTTP 404, bloqueio individual, "
+            "não bloquear a fila dos demais vídeos.\\n\\n"
+            "Job: " + safe_id + "\\n"
+            "SHA-256 da URL: " + hashlib.sha256(media_url.encode()).hexdigest() + "\\n"
+            "AÇÃO: corrigir mídia no WordPress, verificar HTTP 200, "
+            "reprocessar apenas se o ledger autorizar, nunca publicar duplicado. "
+            "Se não for reparada no dia seguinte, descartar.\\n")
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        check = subprocess.run(["gh", "issue", "list", "--repo",
+            "UniversoAnthares/anthares-kwai-runner", "--state", "all",
+            "--search", fingerprint, "--json", "number", "--limit", "5"],
+            capture_output=True, text=True, timeout=18, creationflags=flags)
+        if check.returncode == 0 and json.loads(check.stdout):
+            return
+        if check.returncode != 0:
+            log("PINTEREST_QA_CENTRAL_UNAVAILABLE", job_id=job_id)
+            return
+        created = subprocess.run(["gh", "issue", "create", "--repo",
+            "UniversoAnthares/anthares-kwai-runner", "--title", title,
+            "--body", body, "--label", "QA-P0", "--label", "publication-failure"],
+            capture_output=True, text=True, timeout=25, creationflags=flags)
+        log("PINTEREST_QA_CENTRAL_SENT" if created.returncode == 0
+            else "PINTEREST_QA_CENTRAL_UNAVAILABLE", job_id=job_id)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        log("PINTEREST_QA_CENTRAL_UNAVAILABLE", job_id=job_id)
 
 
 def node_run(*args, timeout=50):
@@ -224,6 +271,15 @@ def main():
         return 4
     try:
         job = validate_job(row)
+        if media_missing(job["media_url"]):
+            # No upload or submit occurred: notify QA, quarantine only this ID.
+            reported = call("media-invalid", fence)
+            if reported.get("ok"):
+                log("PINTEREST_MEDIA_ISOLATED", job_id=fence["id"],
+                    status=reported.get("job", {}).get("status"))
+                qa_media_incident(fence["id"], job["media_url"])
+                return 0
+            raise RuntimeError("PINTEREST_MEDIA_QUARANTINE_REJECTED")
         with tempfile.TemporaryDirectory(prefix="cortes-pin-") as folder:
             filename = Path(folder) / "job.json"
             filename.write_text(json.dumps(job, ensure_ascii=False), encoding="utf-8")
