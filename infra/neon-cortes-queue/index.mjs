@@ -457,7 +457,8 @@ async function pinterestBrowserAction(verb,b){
       FROM cortes_publications WHERE target_key=$1 AND status='queued'
         AND confirmation_evidence->>'kind'='source_media_invalid'
         AND publication_started_at IS NULL AND remote_id IS NULL
-        AND COALESCE((confirmation_evidence->>'retry_after_at')::timestamptz,now())<=now()
+        AND (confirmation_evidence->>'first_detected_at' IS NULL OR
+             COALESCE((confirmation_evidence->>'retry_after_at')::timestamptz,now())<=now())
       ORDER BY updated_at,id LIMIT 20`,[target]);
    return{ok:true,jobs:rows};
  }
