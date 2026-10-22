@@ -279,7 +279,7 @@ async function authorizePinterestBrowser(request){
 }
 async function pinterestBrowserAction(verb,b){
  const target='pinterest:lucasyahn',who='pinterest-browser:DESKTOP-FTDK0HP';
- if(!['lease','start','fail','confirm','stats'].includes(verb))return{ok:false,error:'BROWSER_ACTION_DENIED'};
+ if(!['lease','start','fail','confirm','stats','media-invalid'].includes(verb))return{ok:false,error:'BROWSER_ACTION_DENIED'};
  if(verb==='stats'){
   const rows=await query('SELECT status,count(*)::int n FROM cortes_publications WHERE target_key=$1 GROUP BY status',[target]);
   return{ok:true,target_key:target,counts:Object.fromEntries(rows.map(x=>[x.status,Number(x.n)]))};
@@ -289,6 +289,15 @@ async function pinterestBrowserAction(verb,b){
  if(verb==='lease'){
   const cap=await query("SELECT reserved FROM cortes_daily_publication_budget WHERE target_key=$1 AND local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date",[target]);
   if(Number(cap[0]?.reserved||0)>=100)return{ok:true,job:null,daily_limit_reached:true,delivery_route:'browser'};
+  // A daily queue can carry work through the following local calendar day only.
+  // On day 3, unposted queued items are logically discarded, never sent.
+  const localDay="(now() AT TIME ZONE 'America/Campo_Grande')::date";
+  const expired={kind:'pinterest_expired_after_next_day',confirmed_on_network:false};
+  await query(`UPDATE cortes_publications SET status='failed',
+     confirmation_evidence=$2::jsonb,lease_owner=NULL,lease_until=NULL,updated_at=now()
+     WHERE target_key=$1 AND status='queued'
+       AND (created_at AT TIME ZONE 'America/Campo_Grande')::date < ${localDay} - 1`,
+    [target,JSON.stringify(expired)]);
   const sql=`WITH ranked AS (
    SELECT id,row_number() OVER (
       PARTITION BY (created_at AT TIME ZONE 'America/Campo_Grande')::date
@@ -298,10 +307,16 @@ async function pinterestBrowserAction(verb,b){
   ), picked AS (
    SELECT p.id FROM cortes_publications p JOIN ranked r ON r.id=p.id
    WHERE p.target_key=$1 AND p.status='queued'
-     AND (p.created_at AT TIME ZONE 'America/Campo_Grande')::date =
-         (now() AT TIME ZONE 'America/Campo_Grande')::date
-     AND r.ordinal > CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END
-   ORDER BY p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
+     AND (p.created_at AT TIME ZONE 'America/Campo_Grande')::date
+       BETWEEN (now() AT TIME ZONE 'America/Campo_Grande')::date - 1
+         AND (now() AT TIME ZONE 'America/Campo_Grande')::date
+     AND ( (p.created_at AT TIME ZONE 'America/Campo_Grande')::date <
+              (now() AT TIME ZONE 'America/Campo_Grande')::date
+           OR r.ordinal > CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END )
+     AND ( COALESCE(p.confirmation_evidence->>'kind','') <> 'source_media_invalid'
+           OR (p.confirmation_evidence->>'retry_after_date')::date <=
+                (now() AT TIME ZONE 'America/Campo_Grande')::date )
+   ORDER BY p.created_at,p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
   ) UPDATE cortes_publications p SET status='leased',lease_owner=$2,
      lease_generation=p.lease_generation+1,lease_until=now()+interval '15 minutes',updated_at=now()
     FROM picked WHERE p.id=picked.id AND p.status='queued'
@@ -318,6 +333,27 @@ async function pinterestBrowserAction(verb,b){
     WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 AND lease_generation=$4
       AND lease_until>now() RETURNING id,status`,[id,target,who,gen]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'BROWSER_FENCE_EXPIRED'};
+ }
+ if(verb==='media-invalid'){
+  // The request is permitted ONLY before the publishing phase. This fence
+  // guarantees that a missing file cannot create a duplicate submission.
+  const today="(now() AT TIME ZONE 'America/Campo_Grande')::date";
+  const evidence={kind:'source_media_invalid',http_status:404,confirmed_on_network:false,
+    retry_after_date:null};
+  const rows=await query(`UPDATE cortes_publications
+     SET status=CASE WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date < ${today}
+                       THEN 'failed' ELSE 'queued' END,
+         confirmation_evidence=jsonb_build_object(
+           'kind',CASE WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date < ${today}
+                        THEN 'source_media_expired_next_day' ELSE 'source_media_invalid' END,
+           'http_status',404,'confirmed_on_network',false,
+           'retry_after_date',to_char(${today} + 1,'YYYY-MM-DD')),
+         lease_owner=NULL,lease_until=NULL,updated_at=now()
+     WHERE id=$1 AND target_key=$2 AND status='leased'
+       AND publication_started_at IS NULL AND lease_owner=$3
+       AND lease_generation=$4 AND lease_until>now()
+     RETURNING id,status`,[id,target,who,gen]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'MEDIA_INVALID_FENCE_REJECTED'};
  }
  if(verb==='fail'){
   const rows=await query(`UPDATE cortes_publications
