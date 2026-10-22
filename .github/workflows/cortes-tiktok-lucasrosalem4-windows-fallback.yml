@@ -1,0 +1,32 @@
+name: CORTES TikTok lucasrosalem4 Windows last-resort
+on:
+  workflow_dispatch:
+    inputs:
+      diagnostic_only:
+        type: boolean
+        default: true
+  workflow_run:
+    workflows: ['CORTES TikTok @lucasrosalem4 cloud publisher']
+    types: [completed]
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: cortes-tiktok-lucas4-windows-last-resort
+  cancel-in-progress: false
+jobs:
+  windows_backup:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
+    timeout-minutes: 18
+    env:
+      PYTHONUTF8: '1'
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+      TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: ${{ github.event_name == 'workflow_run' && vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'true' && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: |
+          python -m pip install -q playwright requests
+          python -m playwright install chromium
+          python -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
