@@ -27,6 +27,7 @@ def inspect(raw: str, *, event: str, run_id: str, conclusion: str) -> dict:
     reconciled=unique if accepted and consistent else []
     if reconciled:result="PINS_RECONCILED"
     elif accepted and scheduled and consistent:result="SCHEDULED_NOT_PUBLISHED"
+    elif recent.get("pinterest_cloud")=="BACKPRESSURE_BUFFER":result="WAITING_BUFFER_DELIVERY"
     elif recent.get("pinterest_cloud")=="COOLDOWN_HTTP_429":result="RATE_LIMIT_ISOLATED"
     elif accepted and consistent:result="PASS_NO_NEW_PIN"
     else:result="UNVERIFIED_OR_FAILED"
@@ -39,6 +40,7 @@ def inspect(raw: str, *, event: str, run_id: str, conclusion: str) -> dict:
         "new_public_pins_verified_by_buffer_and_neon_cas":reconciled,
         "new_public_pin_count":len(reconciled),
         "buffer_schedule_accepted":scheduled,
+        "buffer_pending_count":recent.get("buffer_pending_count") if type(recent.get("buffer_pending_count")) is int else None,
         "schedule_is_not_publication":True,
         "sent_count_matches_evidence":consistent,
         "board_500_fallback_recovered":("BUFFER_HTTP_500" in raw and accepted),
@@ -53,6 +55,7 @@ def markdown(state:dict) -> str:
         "PINS_RECONCILED":"PUBLICAÇÃO RECONCILIADA",
         "SCHEDULED_NOT_PUBLISHED":"SOMENTE AGENDAMENTO",
         "RATE_LIMIT_ISOLATED":"LIMITE DE API ISOLADO",
+      "WAITING_BUFFER_DELIVERY":"AGENDAMENTOS BUFFER AGUARDANDO ENTREGA",
         "PASS_NO_NEW_PIN":"SEM NOVA PUBLICAÇÃO",
         "UNVERIFIED_OR_FAILED":"SEM EVIDÊNCIA SUFICIENTE"
     }
