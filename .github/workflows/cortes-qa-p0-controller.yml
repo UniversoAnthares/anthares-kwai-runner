@@ -45,7 +45,7 @@ jobs:
           script: |
             const {owner, repo} = context.repo;
             const executor = 'cortes-qa-p0-executor.yml';
-            const maxDispatchPerRun = 8, maxAttempts = 3;
+            const maxDispatchPerRun = 2, maxAttempts = 3;
             const cooldownMs = 5*60*1000, maxAgeMs = 72*60*60*1000;
             const now = Date.now();
             const marker = '[QA-P0-CONTROLLER] DISPATCH_ATTEMPT=';
@@ -93,6 +93,12 @@ jobs:
               });
               priorRuns.push(...data.workflow_runs);
               if (data.workflow_runs.length < 100) break;
+            }
+            const activeCount = priorRuns.filter(x => x.status !== 'completed').length;
+            if (activeCount >= 3) {
+              core.warning('QA_P0_EXECUTOR_BACKPRESSURE active='+activeCount+
+                '; outstanding incidents remain open and will be retried next scan.');
+              return;
             }
             const events = await candidates();
             let dispatched = 0, skipped = 0, failures = 0;
