@@ -301,7 +301,7 @@ def main():
         # orphan upload. QA must reconcile existing unpublished drafts first.
         log("PINTEREST_DRAFT_CAPACITY_PAUSED", count=drafts)
         qa_incident("PINTEREST_DRAFT_CAPACITY_EXHAUSTED")
-        return 0
+        return 6
     if args.preflight:
         log("PINTEREST_BROWSER_READY", account=ACCOUNT, draft_count=drafts)
         return 0
