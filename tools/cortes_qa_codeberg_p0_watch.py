@@ -83,6 +83,39 @@ def inspect():
             alerts.append(incident(account,"all_queue_ingress_down",INGRESS[account][0]))
     return {x["fingerprint"]:x for x in alerts}.values()
 
+def inspect_codeberg_tiktok():
+    """Escalate Codeberg browser starvation, which GitHub-run monitoring misses."""
+    alerts=[]
+    try:
+        runs=fetch(CODEBERG_API+"/repos/"+REPO+"/actions/runs?limit=100").get("workflow_runs") or []
+        accounts={
+            "cortes-tiktok-universo-codeberg.yml":"universo.anthares",
+            "cortes-tiktok-lucas4-codeberg.yml":"lucasrosalem4",
+        }
+        for workflow,account in accounts.items():
+            matched=[r for r in runs if r.get("workflow_id")==workflow]
+            for run in matched[:25]:
+                status=str(run.get("status") or "")
+                if status not in ("waiting","queued","pending","failure","error"):
+                    continue
+                evidence="https://codeberg.org/"+REPO+"/actions (run "+str(run.get("id"))+")"
+                if status in ("failure","error"):
+                    alerts.append(incident(account,"codeberg_tiktok_publisher_failed",evidence))
+                    break
+                raw=run.get("created") or run.get("created_at") or run.get("started")
+                try:
+                    created=dt.datetime.fromisoformat(str(raw).replace("Z","+00:00"))
+                    if created.tzinfo is not None and dt.timedelta(minutes=20)<NOW-created<dt.timedelta(hours=8):
+                        alerts.append(incident(account,"codeberg_tiktok_runner_waiting_over_20m",evidence))
+                        break
+                except (ValueError,TypeError,OverflowError):
+                    pass
+    except (ValueError,TypeError,KeyError,OSError,urllib.error.URLError):
+        alerts.append(incident("lucasrosalem4","codeberg_tiktok_actions_unreachable",
+                                "https://codeberg.org/"+REPO+"/actions"))
+    return {x["fingerprint"]:x for x in alerts}.values()
+
+
 def inspect_x():
     """Independent Codeberg-side X publisher QA; no GitHub-hosted runner needed."""
     alerts=[]
@@ -197,7 +230,7 @@ def report(alerts):
     return opened
 
 def main():
-    alerts=list(inspect())+list(inspect_x())
+    alerts=list(inspect())+list(inspect_x())+list(inspect_codeberg_tiktok())
     opened=report(alerts)
     print("CODEBERG_P0_WATCH_OK alerts="+str(len(alerts))+" new="+str(opened),flush=True)
     return 0
