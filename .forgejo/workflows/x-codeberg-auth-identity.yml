@@ -24,6 +24,6 @@ jobs:
           set -eu
           python3 -m venv /tmp/anthares-x-auth-venv
           /tmp/anthares-x-auth-venv/bin/python -m pip install --disable-pip-version-check playwright requests cryptography
-          /tmp/anthares-x-auth-venv/bin/python -m playwright install chromium
+          /tmp/anthares-x-auth-venv/bin/python -m playwright install --with-deps chromium
       - name: Verify encrypted vault and authenticated account without publishing
         run: /tmp/anthares-x-auth-venv/bin/python -u tools/x_cloud_browser_identity_probe.py
