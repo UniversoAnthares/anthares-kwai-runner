@@ -8,6 +8,9 @@ on:
     paths:
       - '.forgejo/workflows/anthares-tests-codeberg.yml'
       - 'tests/**'
+      - 'infra/neon-cortes-tiktok/**'
+      - 'infra/neon-cortes-lucasrosalem4/**'
+      - '.forgejo/workflows/tiktok-codeberg-primary.yml'
       - 'tools/cortes_tiktok_lucasrosalem4_cloud_publish.py'
       - 'anthares_publisher/**'
       - 'tools/cortes_qa_*.py'
@@ -49,6 +52,13 @@ jobs:
           set -eu
           python3 -m py_compile tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok_lucas4_cloud.py' -v
+      - name: Validate cryptographic Codeberg TikTok trust and fenced workflows
+        shell: bash
+        run: |
+          set -eu
+          node --check infra/neon-cortes-tiktok/index.mjs
+          node --check infra/neon-cortes-lucasrosalem4/index.mjs
+          node --test tests/test_tiktok_codeberg_oidc.mjs
       - name: Pinterest publication safety and editorial QA
         shell: bash
         run: |
