@@ -111,13 +111,13 @@ async function action(body,role,claims){
  if(body.action==='confirm'){
   if(!idValid(id)||!goodUrl(String(body.url||'')))return{ok:false,error:'INVALID_VERIFICATION_URL'};
   const generation=Number(body.generation);
-  const rows=await database("UPDATE cortes_publications SET status='confirmed',remote_id=$5,confirmation_evidence=jsonb_build_object('kind','threads_cloud_verified','permalink',$5,'verified_at',now(),'run_id',$6),lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status='started' AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status,remote_id",[id,TARGET,'github-threads:'+run,generation,body.url,run]);
-  if(rows[0])await database("UPDATE cortes_threads_executor_handoff SET remote_confirmed_url=$2,updated_at=now() WHERE target_key=$1 AND epoch=$3",[TARGET,body.url,epoch]);
+  const rows=await database("UPDATE cortes_publications SET status='confirmed',remote_id=$5,confirmation_evidence=jsonb_build_object('kind','threads_cloud_verified','permalink',$5,'verified_at',now(),'run_id',$6),lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND lease_generation=$4 AND ((status='started' AND lease_owner=$3) OR (status='confirmed' AND remote_id=$5 AND confirmation_evidence->>'run_id'=$6)) RETURNING id,status,remote_id",[id,TARGET,'github-threads:'+run,generation,body.url,run]);
+  if(rows[0])await database("UPDATE cortes_threads_executor_handoff SET remote_confirmed_url=$2,updated_at=now() WHERE target_key=$1 AND epoch=$3",[TARGET,body.url,epoch]).catch(()=>null);
   return rows[0]?{ok:true,job:rows[0]}:{ok:false,error:'CONFIRM_FENCED'};
  }
  if(body.action==='uncertain'){
   if(!idValid(id))return{ok:false,error:'INVALID_MEDIA_ID'};
-  const rows=await database("UPDATE cortes_publications SET status='uncertain',confirmation_evidence=jsonb_build_object('kind','threads_cloud_unknown','marked_at',now()),lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status IN ('leased','started') AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",[id,TARGET,'github-threads:'+run,Number(body.generation)]);
+  const rows=await database("UPDATE cortes_publications SET status='uncertain',confirmation_evidence=jsonb_build_object('kind','threads_cloud_unknown','marked_at',now(),'submitted_post_url',$5,'graph_post_id',$6),lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status IN ('leased','started') AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",[id,TARGET,'github-threads:'+run,Number(body.generation),goodUrl(String(body.url||''))?String(body.url):null,/^\d{8,24}$/.test(String(body.post_id||''))?String(body.post_id):null]);
   return rows[0]?{ok:true,job:rows[0]}:{ok:false,error:'UNCERTAIN_FENCE_REJECTED'};
  }
  if(body.action==='release'){
@@ -147,5 +147,5 @@ export default {async fetch(request){
   if(!role)return json({ok:false,error:'AUTH_REQUIRED'},401);
   const result=await action(body,role,claims);
   return json(result,result.ok?200:409);
- }catch(e){return json({ok:false,error:'CLOUD_CONTROL_FAILED',error_class:e?.name||'Error'},503)}
+ }catch(e){const reason=String(e?.message||'').match(/^(NEON_QUERY_HTTP_[0-9]{3}|NEON_QUERY_BAD_RESPONSE|NEON_DATABASE_URL_MISSING)$/)?.[0]||'INTERNAL_BACKEND_ERROR';return json({ok:false,error:'CLOUD_CONTROL_FAILED',error_class:e?.name||'Error',reason_code:reason},503)}
 }};
