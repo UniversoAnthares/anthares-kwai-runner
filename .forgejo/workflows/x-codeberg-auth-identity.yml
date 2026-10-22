@@ -18,9 +18,20 @@ jobs:
     timeout-minutes: 9
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
+      - name: Validate cloud secret prerequisites without exposing values
+        run: |
+          set -eu
+          if [ -z "${ARA_SHARED:-}" ]; then
+            echo "X_CODEBERG_REQUIRED_SECRET_MISSING=ARA_SHARED"
+            exit 2
+          fi
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "X_CODEBERG_PUBLICATION_SECRET_MISSING=GH_TOKEN"
+          fi
       - name: Install read-only headless browser without modifying system Python
         run: |
           set -eu
