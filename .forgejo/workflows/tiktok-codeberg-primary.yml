@@ -1,0 +1,86 @@
+name: TikTok Codeberg autonomous cloud publisher
+on:
+  workflow_dispatch:
+    inputs:
+      smoke:
+        type: boolean
+        default: true
+        description: "Identity and OIDC-only proof for both accounts, zero posting"
+      publish:
+        type: boolean
+        default: false
+        description: "Allow a single fenced queue attempt on each account"
+  schedule:
+    - cron: '*/4 * * * *'
+
+# Forgejo issues short-lived OIDC tokens; Neon validates exact repo ID,
+# issuer, audience, main ref, workflow file and digital signature.
+enable-openid-connect: true
+permissions:
+  contents: read
+concurrency:
+  group: cortes-tiktok-codeberg-production
+  cancel-in-progress: false
+
+jobs:
+  universo:
+    if: ${{ (forgejo.event_name == 'schedule' && vars.TIKTOK_CODEBERG_PRIMARY == 'true') || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
+    runs-on: codeberg-tiny
+    timeout-minutes: 15
+    env:
+      PYTHONUNBUFFERED: '1'
+      PYTHONUTF8: '1'
+      FORGEJO_REPOSITORY: ${{ forgejo.repository }}
+      GITHUB_REF: ${{ forgejo.ref }}
+      GITHUB_EVENT_NAME: ${{ forgejo.event_name }}
+      TIKTOK_UNIVERSO_STORAGE_STATE: ${{ secrets.TIKTOK_UNIVERSO_STORAGE_STATE }}
+      TIKTOK_CODEBERG_PREFLIGHT_ONLY: ${{ forgejo.event_name == 'workflow_dispatch' && inputs.smoke && !inputs.publish && '1' || '0' }}
+      TIKTOK_PUBLISH_NOT_BEFORE_UTC: '2026-10-20T10:00:00Z'
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated browser runtime
+        shell: bash
+        run: |
+          set -eu
+          python3 -m venv /tmp/anthares-tiktok-universo
+          /tmp/anthares-tiktok-universo/bin/python -m pip install -q --disable-pip-version-check playwright requests cryptography
+          /tmp/anthares-tiktok-universo/bin/python -m playwright install chromium
+          /tmp/anthares-tiktok-universo/bin/python -m playwright install-deps chromium
+      - name: Prove identity and OIDC, then reconcile or post one fenced video
+        shell: bash
+        run: |
+          set -eu
+          /tmp/anthares-tiktok-universo/bin/python -u tools/cortes_tiktok_hosted_publish.py
+
+  lucas4:
+    if: ${{ (forgejo.event_name == 'schedule' && vars.TIKTOK_CODEBERG_PRIMARY == 'true') || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
+    runs-on: codeberg-tiny
+    timeout-minutes: 15
+    env:
+      PYTHONUNBUFFERED: '1'
+      PYTHONUTF8: '1'
+      FORGEJO_REPOSITORY: ${{ forgejo.repository }}
+      GITHUB_REF: ${{ forgejo.ref }}
+      GITHUB_EVENT_NAME: ${{ forgejo.event_name }}
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+      TIKTOK_CODEBERG_PREFLIGHT_ONLY: ${{ forgejo.event_name == 'workflow_dispatch' && inputs.smoke && !inputs.publish && '1' || '0' }}
+      TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: 'true'
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated browser runtime
+        shell: bash
+        run: |
+          set -eu
+          python3 -m venv /tmp/anthares-tiktok-lucas4
+          /tmp/anthares-tiktok-lucas4/bin/python -m pip install -q --disable-pip-version-check playwright requests cryptography
+          /tmp/anthares-tiktok-lucas4/bin/python -m playwright install chromium
+          /tmp/anthares-tiktok-lucas4/bin/python -m playwright install-deps chromium
+      - name: Prove identity and OIDC, then reconcile or post one fenced video
+        shell: bash
+        run: |
+          set -eu
+          /tmp/anthares-tiktok-lucas4/bin/python -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
