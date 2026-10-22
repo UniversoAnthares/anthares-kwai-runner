@@ -193,8 +193,8 @@ def single_worker_guard():
         try:
             if os.name=='nt':
                 import msvcrt
-                h.seek(0)
-                if h.read(1)==b'':
+                h.seek(0,os.SEEK_END)
+                if h.tell()==0:
                     h.write(b'1');h.flush()
                 h.seek(0)
                 try:
