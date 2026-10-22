@@ -90,7 +90,23 @@ def publish_one(skipped=0):
     fence = {"id": row["id"], "owner": OWNER, "lease_generation": row["lease_generation"]}
     try:
         print("PERSONAL_STAGE=payload_validation", flush=True)
-        payload = _safe_job(row, "linkedin", "personal")
+        # Neon/function transports may encode JSONB as an object or serialized
+        # JSON. Normalize before validating account, duration, origin and title.
+        row_payload = row.get("payload")
+        if isinstance(row_payload, str):
+            row = {**row, "payload": json.loads(row_payload)}
+        try:
+            payload = _safe_job(row, "linkedin", "personal")
+        except ValueError as error:
+            safe_codes = {
+                "queue_target_mismatch","queue_payload_missing",
+                "queue_duration_class_mismatch","queue_payload_account_mismatch",
+                "queue_media_origin_invalid","queue_rendered_duration_invalid",
+                "queue_duration_invalid","queue_title_missing",
+            }
+            key = str(error)
+            print("PERSONAL_PAYLOAD_REJECTION=" + (key if key in safe_codes else "UNEXPECTED_VALUE"), flush=True)
+            raise
         print("PERSONAL_STAGE=linkedin_preflight", flush=True)
         if linkedin(payload, publish=False).get("status") != "READY":
             raise ConfigRequired("PERSONAL_PREFLIGHT_FAILED")
