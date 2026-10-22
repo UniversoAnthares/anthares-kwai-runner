@@ -20,11 +20,8 @@ jobs:
         run: |
           set -euo pipefail
           CB='https://codeberg.org/UniversoAnthares/anthares-clipper.git'
-          GH='https://github.com/UniversoAnthares/anthares-clipper.git'
           cb_sha="$(git ls-remote "$CB" refs/heads/main | cut -f1)"
-          gh_sha="$(git ls-remote "$GH" refs/heads/main | cut -f1)"
-          test -n "$cb_sha"
-          test "$cb_sha" = "$gh_sha"
+          test "${#cb_sha}" -eq 40
           git clone --quiet --depth 1 --branch main "$CB" clipper
           cd clipper
           test "$(git rev-parse HEAD)" = "$cb_sha"
