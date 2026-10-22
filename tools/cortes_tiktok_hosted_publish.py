@@ -45,9 +45,27 @@ MIN_SIZE=32*1024
 
 
 def preflight_vault():
-    from tiktok_session_authority import load_canonical_state
     from playwright.sync_api import sync_playwright
-    state,meta=load_canonical_state()
+    # Codeberg receives only dedicated, minimized account cookies via Forgejo
+    # encrypted secrets. GitHub retains its original canonical vault.
+    raw=os.getenv("TIKTOK_UNIVERSO_STORAGE_STATE","")
+    codeberg=os.getenv("FORGEJO_REPOSITORY","")=="UniversoAnthares/anthares-kwai-runner"
+    if codeberg:
+        import base64,zlib
+        if not raw or len(raw)>55000:
+            raise q.SafeStop("CODEBERG_PRIMARY_SESSION_SECRET_MISSING")
+        try:
+            decoded=zlib.decompress(base64.b64decode(raw,validate=True))
+            if len(decoded)>600000:raise ValueError("state_too_large")
+            state=json.loads(decoded)
+            if not isinstance(state,dict) or not isinstance(state.get("cookies"),list):
+                raise ValueError("bad_state")
+            meta={"source":"codeberg-dedicated-session"}
+        except (ValueError,TypeError,zlib.error):
+            raise q.SafeStop("CODEBERG_PRIMARY_SESSION_STATE_INVALID")
+    else:
+        from tiktok_session_authority import load_canonical_state
+        state,meta=load_canonical_state()
     valid=[x for x in state.get("cookies") or [] if
            x.get("name") in {"sessionid","sessionid_ss","sid_tt"} and
            (not x.get("expires") or float(x.get("expires"))>time.time())]
@@ -211,6 +229,12 @@ def main():
 
     state=preflight_vault()
     control=q.oidc()
+    if os.getenv("TIKTOK_CODEBERG_PREFLIGHT_ONLY")=="1":
+        checked=q.qcall("status",control)
+        if not checked.get("ok"):
+            raise q.SafeStop("CODEBERG_OIDC_STATUS_UNVERIFIED")
+        print("CODEBERG_PRIMARY_IDENTITY_AND_OIDC_VERIFIED=1",flush=True)
+        return 0
     health=q.qcall("health",control)
     if not health.get("ok") or health.get("service")!="cortes-tiktok-neon":
         raise q.SafeStop("TIKTOK_NEON_QUEUE_UNAVAILABLE")
