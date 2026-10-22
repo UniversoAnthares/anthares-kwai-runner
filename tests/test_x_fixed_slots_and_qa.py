@@ -57,6 +57,17 @@ class XFixedLongSlotsAndQaTests(unittest.TestCase):
             self.assertTrue(json.loads(first.read_text())["reconciled"])
             self.assertGreaterEqual(remote.call_count,1)
 
+    def test_northflank_health_missing_ledger_field_is_not_db_failure(self):
+        with tempfile.TemporaryDirectory() as td,patch.object(qa,"OUTBOX",Path(td)):
+            with patch.object(qa,"http",return_value={
+                "ok":True,"backend":"local_playwright_vault",
+                "browser_ready":False,"vault_ready":True}):
+                qa.check_cloud_service()
+            files=list(Path(td).glob("*.json"))
+            self.assertEqual(len(files),1)
+            self.assertEqual(json.loads(files[0].read_text())["code"],
+                             "X_NORTHFLANK_BROWSER_NOT_READY")
+
     def test_codeberg_and_github_failure_reports_to_outbox(self):
         with tempfile.TemporaryDirectory() as td,patch.object(qa,"OUTBOX",Path(td)):
             with patch.object(qa,"http",return_value={"workflow_runs":[
