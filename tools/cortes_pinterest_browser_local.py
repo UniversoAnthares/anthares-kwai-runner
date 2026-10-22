@@ -88,6 +88,7 @@ def qa_incident(reason: str):
         tmp = base / "pinterest-browser-p0.tmp"
         tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         os.replace(tmp, base / "pinterest-browser-p0.json")
+        qa_central_incident(reason[:90], base)
     except OSError:
         pass
 
@@ -136,6 +137,40 @@ def qa_media_incident(job_id: str, media_url: str):
             else "PINTEREST_QA_CENTRAL_UNAVAILABLE", job_id=job_id)
     except (OSError, ValueError, subprocess.TimeoutExpired):
         log("PINTEREST_QA_CENTRAL_UNAVAILABLE", job_id=job_id)
+
+
+def qa_central_incident(reason: str, base: Path):
+    """Deduplicated GitHub QA ticket; never include cookies, captions or secrets."""
+    from datetime import datetime
+    local_day = datetime.now().strftime("%Y-%m-%d")
+    fingerprint = hashlib.sha256(("pinterest|" + reason + "|" + local_day).encode()).hexdigest()[:24]
+    marker = base / ("pinterest-p0-" + fingerprint + ".sent")
+    if marker.exists():
+        return
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    gh = ["gh", "issue"]
+    repo = "UniversoAnthares/anthares-kwai-runner"
+    try:
+        listed = subprocess.run(gh + ["list", "--repo", repo, "--state", "all", "--search",
+            fingerprint, "--json", "number", "--limit", "5"], capture_output=True,
+            text=True, timeout=18, creationflags=flags)
+        if listed.returncode != 0:
+            return
+        if not json.loads(listed.stdout):
+            body = ("QA-P0-FINGERPRINT:" + fingerprint + "\\n\\n"
+                    "Publicador Pinterest interrompido antes da fase de envio. "
+                    "Razão sanitizada: " + reason + "\\n"
+                    "Investigar imediatamente e corrigir o código sem duplicar posts. "
+                    "Os demais vídeos não devem ser bloqueados.\\n")
+            created = subprocess.run(gh + ["create", "--repo", repo, "--title",
+                "[QA P0][pinterest] Falha operacional " + reason,
+                "--body", body, "--label", "QA-P0", "--label", "publication-failure"],
+                capture_output=True, text=True, timeout=22, creationflags=flags)
+            if created.returncode != 0:
+                return
+        marker.write_text(local_day, encoding="utf8")
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
 
 
 def node_run(*args, timeout=50):
@@ -260,8 +295,15 @@ def main():
         log("BROWSER_NOT_READY", reason=reason)
         qa_incident(reason)
         return 3
+    drafts = int(status.get("draft_count") or 0)
+    if drafts >= 49:
+        # Prevent Pinterest's documented 50-draft limit from causing another
+        # orphan upload. QA must reconcile existing unpublished drafts first.
+        log("PINTEREST_DRAFT_CAPACITY_PAUSED", count=drafts)
+        qa_incident("PINTEREST_DRAFT_CAPACITY_EXHAUSTED")
+        return 0
     if args.preflight:
-        log("PINTEREST_BROWSER_READY", account=ACCOUNT)
+        log("PINTEREST_BROWSER_READY", account=ACCOUNT, draft_count=drafts)
         return 0
     leased = call("lease", {"target_key": TARGET, "owner": OWNER, "lease_seconds": 900})
     if not leased.get("ok"):
