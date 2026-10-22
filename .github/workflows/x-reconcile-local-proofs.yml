@@ -1,0 +1,32 @@
+name: X Reconcile Proven Anthares Browser Posts
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - tools/x_reconcile_local_proofs.py
+      - .github/workflows/x-reconcile-local-proofs.yml
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: anthares-x-local-proof-reconcile
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconcile local post evidence against durable PostgreSQL
+        run: python -m tools.x_reconcile_local_proofs
