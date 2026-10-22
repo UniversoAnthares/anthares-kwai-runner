@@ -1,0 +1,57 @@
+# Read-only editorial and adapter tests migrated from GitHub Actions.
+name: Social editorial QA - Codeberg
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/social-video-editorial-codeberg.yml'
+      - 'anthares_publisher/**'
+      - 'social_adapters/**'
+      - 'scripts/instagram_autopublish.py'
+      - 'tools/kwai_physical_queue_daemon.py'
+      - 'tools/cortes_social_queue_consumer.py'
+      - 'tools/cortes_buffer_linkedin_cloud.py'
+      - 'tools/cortes_linkedin_neon_fanout.py'
+      - 'tools/cortes_queue_ha.py'
+      - 'direct-tiktok-publisher/**'
+      - 'cloudflare-worker/patches/apply-publisher-target-v17.py'
+      - 'db/migrations/**'
+      - 'tests/**'
+  schedule:
+    - cron: '39 3 * * *'
+permissions:
+  contents: read
+jobs:
+  editorial-contracts:
+    runs-on: codeberg-tiny
+    timeout-minutes: 12
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - name: Verify safe Python source
+        shell: bash
+        run: |
+          set -eu
+          python3 -m py_compile social_adapters/buffer_three_channels.py anthares_publisher/editorial.py anthares_publisher/media_model.py social_adapters/direct_social.py social_adapters/video_social.py scripts/instagram_autopublish.py tools/kwai_physical_queue_daemon.py tools/cortes_social_queue_consumer.py direct-tiktok-publisher/tiktok_cloud_publish.py
+      - name: Editorial idempotency, account, quota and buffer contracts
+        shell: bash
+        run: |
+          set -eu
+          for suite in test_social_video_editorial.py test_linkedin_editorial.py test_buffer_three_channels.py test_cortes_buffer_linkedin_cloud.py test_cortes_linkedin_neon_fanout.py test_media_model.py test_cortes_queue_ha.py test_cortes_queue_ha_safe.py test_cortes_daily_publication_policy.py test_cortes_daily_confirmation_guard.py test_cortes_buffer_jsonb_payload.py; do
+            python3 -m unittest discover -s tests -p "$suite" -v
+          done
+          python3 tests/test_direct_social_adapters.py
+      - name: Validate detached JS contracts and Cloudflare patch
+        shell: bash
+        run: |
+          set -eu
+          node --check infra/neon-cortes-linkedin/index.mjs
+          node --check cloudflare-cortes-queue-ha/src/index.mjs
+          python3 cloudflare-worker/patches/apply-publisher-target-v17.py
+          node --experimental-default-type=module --check cloudflare-worker/src/index.js
+          grep -q 'instagram:Number.MAX_SAFE_INTEGER,pinterest:Number.MAX_SAFE_INTEGER,linkedin:Number.MAX_SAFE_INTEGER' cloudflare-worker/src/index.js
+          node --check vercel-ara-primary/api/cortes-queue.mjs
+          node tests/test_cortes_oidc_social_fanout.mjs
+          grep -q 'cortes:linkedin-daily:' vercel-ara-primary/api/cortes-queue.mjs
+          grep -q 'used>=50' vercel-ara-primary/api/cortes-queue.mjs
+          echo 'SOCIAL_EDITORIAL_CODEBERG_CONTRACTS=PASS'
