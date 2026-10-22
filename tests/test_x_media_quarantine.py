@@ -15,7 +15,8 @@ def media_404(*args, **kwargs):
 class XMediaQuarantineTests(unittest.TestCase):
     def issue(self, num):
         return ({"number":num,"title":"[X-PUBLISH] testing","state":"open"},
-                {"platform":"x","account":"lucasyahn"})
+                {"platform":"x","account":"lucasyahn",
+                 "planned_at":(datetime.now(timezone.utc)-timedelta(days=1)).isoformat()})
 
     def test_404_isolated_and_next_video_attempted_in_same_run(self):
         seen=[]
