@@ -93,7 +93,7 @@ def _verified_pin_from_buffer_row(remote_id, row):
 
 def verify_sent_post(remote_id):
     query=('query { post(input: { id: '+json.dumps(str(remote_id))+
-           ' }) { id status dueAt externalLink channelId schedulingType } }')
+           ' }) { id status externalLink channelId schedulingType dueAt } }')
     return _verified_pin_from_buffer_row(remote_id,api(query).get("post") or {})
 
 
@@ -108,7 +108,7 @@ def verify_sent_posts_batch(jobs):
     ids=[str(item.get("remote_id") or "") for item in jobs]
     if len(set(ids))!=len(ids) or any(not __import__("re").fullmatch(r"[A-Za-z0-9_:-]{1,160}",v) for v in ids):
         raise RuntimeError("BUFFER_PINTEREST_BATCH_IDS_INVALID")
-    fields=" id status dueAt externalLink channelId schedulingType "
+    fields=" id status externalLink channelId schedulingType dueAt "
     queries=[("p"+str(i)+": post(input: { id: "+json.dumps(remote)+" }) {"+fields+"}")
              for i,remote in enumerate(ids)]
     answer=api("query CortesPinterestReceiptBatch { "+" ".join(queries)+" }")
