@@ -87,3 +87,25 @@ $dest=Join-Path $dir 'x-watchdog-state.json'
 [IO.File]::WriteAllText($tmp,($report|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
 Move-Item -Force $tmp $dest
 foreach($problem in $report.incidents){AlertQa $problem}
+
+# Independent cloud QA path. The script is cached locally and refreshed
+# every watchdog tick; lack of GitHub access never prevents local recovery.
+$qaSource=Join-Path $root 'tools\x_cloud_qa_watchdog.py'
+try {
+  New-Item -ItemType Directory -Path (Split-Path $qaSource) -Force|Out-Null
+  $base64=& gh api 'repos/UniversoAnthares/anthares-kwai-runner/contents/tools/x_cloud_qa_watchdog.py?ref=main' --jq '.content'
+  if($LASTEXITCODE -ne 0){throw 'X_CLOUD_QA_SYNC_UNAVAILABLE'}
+  $binary=[Convert]::FromBase64String(($base64 -join '' -replace '\s',''))
+  [IO.File]::WriteAllBytes(($qaSource+'.new'),$binary)
+  & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m py_compile ($qaSource+'.new') 1>$null 2>$null
+  if($LASTEXITCODE -ne 0){throw 'X_CLOUD_QA_SOURCE_INVALID'}
+  Move-Item -Force ($qaSource+'.new') $qaSource
+}catch{}
+if(Test-Path $qaSource){
+ try {
+  & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' $qaSource 1>$null 2>$null
+ }catch {
+  AlertQa 'X_CLOUD_QA_LOCAL_EXEC_FAILED'
+ }
+}
+
