@@ -28,8 +28,12 @@ try {
   Move-Item -LiteralPath $tmp -Destination $target -Force
   $env:PYTHONUTF8='1'
   $env:PYTHONDONTWRITEBYTECODE='1'
-  $exe='C:\Users\Lucas\AppData\Local\Programs\Python\Python311\pythonw.exe'
-  & $exe $target
+  # wscript already hides PowerShell. Use console python inside that hidden
+  # process so PowerShell WAITS until completion and task single-instance
+  # fencing spans the entire transcription/rendering/upload operation.
+  $exe='C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe'
+  & $exe -u $target *>> $log
+  if($LASTEXITCODE -ne 0){ throw 'X_ORIGIN_PRODUCER_FAILED' }
   Add-Content -Path $log -Value ('['+(Get-Date -Format o)+'] X_ORIGIN_RUN_COMPLETED')
 } catch {
   Add-Content -Path $log -Value ('['+(Get-Date -Format o)+'] X_ORIGIN_RUN_FAILED '+$_.Exception.GetType().Name)
