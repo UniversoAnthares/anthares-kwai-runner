@@ -88,6 +88,25 @@ def main():
                 context.close()
         finally:
             browser.close()
+    # Verify the exact second TikTok owner, not merely the presence of auth cookies.
+    from playwright.sync_api import sync_playwright
+    from cortes_tiktok_lucasrosalem4_cloud_publish import studio
+    with sync_playwright() as p:
+        browser=p.chromium.launch(headless=True,args=[
+            "--no-sandbox","--disable-dev-shm-usage","--disable-gpu"])
+        try:
+            ctx=browser.new_context(storage_state=second,locale="pt-BR")
+            try:
+                page=ctx.new_page()
+                try:
+                    studio(page)
+                finally:
+                    page.close()
+            finally:
+                ctx.close()
+        finally:
+            browser.close()
+    print("CODEBERG_SECONDARY_IDENTITY_VERIFIED=lucasrosalem4",flush=True)
     payloads={
         "TIKTOK_UNIVERSO_STORAGE_STATE":compact(primary),
         "TIKTOK_LUCASROSALEM4_STORAGE_STATE":compact(second),
