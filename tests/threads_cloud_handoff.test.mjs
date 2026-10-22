@@ -118,3 +118,14 @@ test('local hot standby honors Neon primary and cloud watchdog stalls',()=>{
  assert.match(steward,/deactivate-primary/);
  assert.match(steward,/CLOUD_STALE_20MIN_SAFE_LOCAL_TAKEOVER/);
 });
+
+test('night batch remains dispatch-only, within approved deadline, with signed backend fallback',()=>{
+ const src=fs.readFileSync('tools/threads_cloud_batch_pump.mjs','utf8');
+ const workflow=fs.readFileSync('.github/workflows/cortes-threads-cloud-handoff.yml','utf8');
+ assert.match(src,/2026-10-22T08:40:00Z/);
+ assert.match(src,/GITHUB_EVENT_NAME!=='workflow_dispatch'/);
+ assert.match(src,/await sleep\(6\*60\*1000\)/);
+ assert.match(src,/await yieldToWindows\(\)/);
+ assert.match(workflow,/THREADS_BATCH/);
+ assert.match(workflow,/timeout-minutes: 350/);
+});
