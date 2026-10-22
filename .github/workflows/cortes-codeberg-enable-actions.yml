@@ -1,0 +1,23 @@
+name: CORTES Codeberg actions enable and proof
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-codeberg-enable-actions.yml'
+      - 'tools/cortes_codeberg_enable_actions.py'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  configure-codeberg:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify Codeberg repository admin and enable Actions safely
+        env:
+          CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
+        run: python -m tools.cortes_codeberg_enable_actions
