@@ -1,0 +1,44 @@
+name: Dispatch Codeberg TikTok authenticated read-only probes
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-tiktok-codeberg-readonly-probes
+  cancel-in-progress: false
+jobs:
+  dispatch:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
+    timeout-minutes: 6
+    env:
+      CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify mirror exact parity and request two read-only Codeberg workflows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $url=[uri]$env:CODEBERG_PUSH_URL
+          if($url.Scheme -ne 'https' -or $url.Host -ne 'codeberg.org') { throw 'CODEBERG_AUTH_HOST_MISMATCH' }
+          $pair=$url.UserInfo.Split(':',2)
+          if($pair.Count -ne 2) { throw 'CODEBERG_USERINFO_MISSING' }
+          $user=[uri]::UnescapeDataString($pair[0])
+          $password=[uri]::UnescapeDataString($pair[1])
+          if(!$user -or !$password) { throw 'CODEBERG_MIRROR_AUTH_MISSING' }
+          $basic=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($user+':'+$password))
+          $headers=@{Authorization='Basic '+$basic;Accept='application/json'}
+          $github=(git ls-remote https://github.com/UniversoAnthares/anthares-kwai-runner.git refs/heads/main).Split()[0]
+          $codeberg=(git ls-remote https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git refs/heads/main).Split()[0]
+          if($github -ne $codeberg) { throw 'CODEBERG_MIRROR_HEAD_NOT_RECONCILED' }
+          foreach($wf in @('cortes-tiktok-lucas4-codeberg.yml','cortes-tiktok-universo-codeberg.yml')) {
+            $uri='https://codeberg.org/api/v1/repos/UniversoAnthares/anthares-kwai-runner/actions/workflows/'+$wf+'/dispatches'
+            try {
+              $r=Invoke-WebRequest -Uri $uri -Headers $headers -Method Post -Body '{"ref":"main"}' -ContentType 'application/json' -UseBasicParsing -TimeoutSec 23
+              if([int]$r.StatusCode -notin @(200,201,202,204)){throw 'CODEBERG_DISPATCH_NOT_ACKNOWLEDGED'}
+              Write-Output ('CODEBERG_READONLY_DISPATCH_ACK='+$wf)
+            }catch {
+              Write-Output ('::error::CODEBERG_DISPATCH_FAIL workflow='+$wf+' type='+$_.Exception.GetType().Name)
+              throw 'CODEBERG_DISPATCH_FAILED'
+            }
+          }
