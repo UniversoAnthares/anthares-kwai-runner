@@ -227,6 +227,17 @@ def main() -> int:
     SCAN_START = int(source.pop("scan_start"))
     download_scan(source["source_url"], scan)
     source["video"] = probe_video(scan)
+    # Bind a reused local scan to this exact YouTube source/window. The render
+    # worker may reuse this authenticated download only if the bytes still
+    # match the checksum, avoiding a second 13-minute conversion.
+    import hashlib
+    with scan.open("rb") as existing_scan:
+        digest = hashlib.file_digest(existing_scan, "sha256").hexdigest()
+    (WORK / "scan.identity.json").write_text(json.dumps({
+        "source_url": source["source_url"], "scan_start": SCAN_START,
+        "scan_seconds": SCAN_SECONDS, "bytes": scan.stat().st_size,
+        "sha256": digest,
+    }, separators=(",", ":")), encoding="utf-8")
     words = transcribe_words(scan)
     payload = {
         "kind": "X_MICROCUT_REQUEST_V1", "account": "lucasyahn", "source": source,
