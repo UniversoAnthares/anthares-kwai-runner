@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -132,20 +132,31 @@ def queue_inventory():
         if len(comments) == 100:
             raise RuntimeError("X_PROOF_COMMENT_PAGINATION")
         for comment in comments:
-            if (comment.get("user") or {}).get("login") != "github-actions[bot]":
+            author = (comment.get("user") or {}).get("login")
+            body = str(comment.get("body") or "")
+            if author == "github-actions[bot]":
+                marker = "X_VIDEO_CONFIRMED_V1"
+            elif author == "UniversoAnthares":
+                marker = "X_LOCAL_VIDEO_CONFIRMED_V1"
+            else:
                 continue
-            if "X_VIDEO_CONFIRMED_V1" not in str(comment.get("body") or ""):
+            if not body.startswith(marker):
                 continue
             try:
-                stamp = datetime.fromisoformat(comment["created_at"].replace("Z", "+00:00"))
-                if stamp.astimezone(TZ).date() != datetime.now(TZ).date():
-                    continue
-                body = comment["body"]
                 proof = json.loads(body[body.index("{"):])
                 url = _verified_post_url(str(proof.get("post_url") or ""))
-                if proof.get("video_verified") and url:
+                if not (proof.get("video_verified") is True
+                        and proof.get("account") == "lucasyahn"
+                        and proof.get("kind") == "X_VIDEO_CONFIRMED_V1" and url):
+                    continue
+                # Count the original X publish day, even when GH reconciles
+                # after midnight. Local owner proof counts provisionally until
+                # trusted bot attestation; PostgreSQL is the hard quota fence.
+                millis = (int(url.rsplit("/", 1)[1]) >> 22) + 1288834974657
+                stamp = datetime.fromtimestamp(millis / 1000, tz=timezone.utc)
+                if stamp.astimezone(TZ).date() == datetime.now(TZ).date():
                     confirmed_today.add(url)
-            except (ValueError, TypeError, KeyError):
+            except (ValueError, TypeError, KeyError, OverflowError, OSError):
                 continue
     return len(open_queue), len(confirmed_today), {
         source: sorted(v) for source, v in windows.items()
