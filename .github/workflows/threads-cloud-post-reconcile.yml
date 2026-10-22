@@ -32,14 +32,29 @@ jobs:
           }
           const me=await get('/me?fields=id,username');
           if(me.username!=='universoanthares'||!me.id)throw Error('OWNER_IDENTITY_FAILED');
-          const posts=await get('/'+encodeURIComponent(me.id)+'/threads?fields=id,permalink,timestamp,text,media_type&limit=50');
-          const cutoff=Date.parse('2026-10-22T02:48:30Z');
-          const recent=(posts.data||[]).filter(p=>Number.isFinite(Date.parse(p.timestamp))&&Date.parse(p.timestamp)>=cutoff);
+          const cutoff=Date.parse('2026-10-21T12:45:00Z');
+          const end=Date.parse('2026-10-21T13:10:00Z');
+          let cursor='/'+encodeURIComponent(me.id)+'/threads?fields=id,permalink,timestamp,text,media_type&limit=100';
+          const recent=[];let pages=0,oldest=Infinity;
+          while(cursor&&pages<30){
+            const page=await get(cursor);pages++;
+            for(const p of page.data||[]){
+              const stamp=Date.parse(p.timestamp);
+              if(Number.isFinite(stamp)){oldest=Math.min(oldest,stamp);if(stamp>=cutoff&&stamp<=end)recent.push(p)}
+            }
+            const next=page.paging?.next||'';
+            if(oldest<cutoff||!next)break;
+            const u=new URL(next);
+            if(u.origin!==host||!u.pathname.startsWith('/v1.0/'))throw Error('PAGINATION_ORIGIN_REJECTED');
+            cursor=u.pathname+u.search;
+          }
+          console.log('GRAPH_PAGES_CHECKED='+pages);
+          console.log('GRAPH_REACHED_TARGET_WINDOW='+(oldest<cutoff));
           console.log('GRAPH_OWNER_VERIFIED='+me.username);
           console.log('GRAPH_RECENT_POST_COUNT='+recent.length);
           for(const p of recent){
             const u=String(p.permalink||'');
             if(!/^https:\/\/(www\.)?threads\.com\/@universoanthares\/post\/[A-Za-z0-9_-]+\/?$/.test(u))continue;
-            console.log('GRAPH_RECENT_PROVEN='+JSON.stringify({id:p.id,permalink:u,timestamp:p.timestamp,media_type:p.media_type,text_prefix:String(p.text||'').slice(0,115)}));
+            console.log('GRAPH_WINDOW_POST='+JSON.stringify({id:p.id,permalink:u,timestamp:p.timestamp,media_type:p.media_type,text_prefix:String(p.text||'').slice(0,160),candidate:/160:00|160\\s*[:h]\\s*00/i.test(String(p.text||''))}));
           }
           NODE
