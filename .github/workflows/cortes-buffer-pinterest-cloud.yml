@@ -37,6 +37,7 @@ jobs:
       - name: Verify Pinterest editorial isolation and safe queue continuation
         run: |
           python -m unittest discover -s tests -p 'test_pinterest_editorial_preflight_isolation.py' -v
+          python -m unittest discover -s tests -p 'test_pinterest_reconcile_quota.py' -v
           python -m py_compile tools/cortes_buffer_pinterest_cloud.py anthares_publisher/editorial.py
       - name: Read Buffer key from Anthares Secrets without logging it
         uses: bitwarden/sm-action@v2
