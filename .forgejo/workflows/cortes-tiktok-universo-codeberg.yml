@@ -21,8 +21,8 @@ concurrency:
 jobs:
   publisher:
     if: ${{ (forgejo.event_name == 'schedule' && vars.TIKTOK_CODEBERG_PRIMARY == 'true') || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
-    runs-on: codeberg-tiny
-    timeout-minutes: 18
+    runs-on: codeberg-medium
+    timeout-minutes: 9
     enable-openid-connect: true
     env:
       PYTHONUTF8: '1'
