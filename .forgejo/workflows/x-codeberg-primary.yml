@@ -20,7 +20,8 @@ concurrency:
 jobs:
   browser-smoke:
     if: ${{ forgejo.event_name == 'workflow_dispatch' && inputs.smoke }}
-    runs-on: codeberg-medium
+    # Proven Codeberg tiny runner is enough for isolated Chromium smoke.
+    runs-on: codeberg-tiny
     timeout-minutes: 8
     steps:
       - name: Prove isolated cloud Chromium is executable

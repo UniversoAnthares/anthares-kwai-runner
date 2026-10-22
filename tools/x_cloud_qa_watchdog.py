@@ -129,8 +129,14 @@ def check_github():
 def check_cloud_service():
     try:
         state=http(NORTHFLANK+"/x/health")
-        if state.get("ok") is not True or state.get("durable") is not True:
-            persist("X_NORTHFLANK_DURABLE_HEALTH_FAILED","northflank","current")
+        # /x/health exposes browser_vault, vault_ready and browser_ready,
+        # not a durable-ledger field. Never invent a Postgres outage.
+        if state.get("ok") is not True:
+            persist("X_NORTHFLANK_HEALTH_FAILED","northflank","current")
+        elif state.get("browser_ready") is False:
+            persist("X_NORTHFLANK_BROWSER_NOT_READY","northflank","current")
+        if state.get("vault_ready") is False:
+            persist("X_NORTHFLANK_SESSION_VAULT_NOT_READY","northflank","current")
     except Exception as exc:
         persist("X_NORTHFLANK_SERVICE_UNREACHABLE","northflank",type(exc).__name__)
 
