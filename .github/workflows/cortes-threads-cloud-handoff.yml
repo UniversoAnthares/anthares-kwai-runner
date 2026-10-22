@@ -8,7 +8,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [fix/threads-cloud-handoff-20261021]
+    branches: [main]
     paths:
       - 'tools/cortes_threads_cloud_handoff.mjs'
       - 'tools/cortes_threads_cloud_feed.mjs'
