@@ -5,6 +5,10 @@ on:
       diagnostic_only:
         type: boolean
         default: true
+      proof_publish_one:
+        description: Publish exactly one on Windows ONLY when cloud cron is disabled
+        type: boolean
+        default: false
   workflow_run:
     workflows: ['CORTES TikTok @lucasrosalem4 cloud publisher']
     types: [completed]
@@ -22,7 +26,7 @@ jobs:
     env:
       PYTHONUTF8: '1'
       TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
-      TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: ${{ github.event_name == 'workflow_run' && vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'true' && 'true' || 'false' }}
+      TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: ${{ ((github.event_name == 'workflow_run' && vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.proof_publish_one == true && vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'false')) && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
       - shell: pwsh
