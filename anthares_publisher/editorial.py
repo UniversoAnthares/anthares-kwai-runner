@@ -39,12 +39,38 @@ def add_site_to_keywords(value: str) -> str:
     return (existing + " " if existing else "") + WEBSITE
 
 
+STRATEGIC_POLICY = "anthares_editorial_transcript_v2"
+
+def require_strategic_master(payload: dict) -> None:
+    """Publication gate: a canonical clip must carry its own editorial metadata."""
+    if not (payload.get("segment_id") or payload.get("cortes_clip_id")):
+        return
+    if payload.get("editorial_policy") != STRATEGIC_POLICY:
+        raise ValueError("CORTES_STRATEGIC_METADATA_REQUIRED")
+    title = str(payload.get("title") or payload.get("video_title") or "").strip()
+    description = str(payload.get("description") or "").strip()
+    keywords = payload.get("keywords")
+    hashtags = payload.get("hashtags")
+    if (not title.endswith(SUFFIX) or len(title) < 40 or
+            title.casefold().startswith(("trecho ", "corte ", "live ", "vídeo "))):
+        raise ValueError("CORTES_TITLE_NOT_CONTEXTUAL")
+    if len(description) < 70:
+        raise ValueError("CORTES_DESCRIPTION_NOT_CONTEXTUAL")
+    if (not isinstance(keywords, list) or len(keywords) < 3 or
+            not all(isinstance(x, str) and len(x.strip()) >= 3 for x in keywords)):
+        raise ValueError("CORTES_KEYWORDS_MISSING")
+    if (not isinstance(hashtags, list) or len(hashtags) < 2 or
+            not all(isinstance(x, str) and x.startswith("#") for x in hashtags)):
+        raise ValueError("CORTES_HASHTAGS_MISSING")
+
+
 def prepare_publication_metadata(payload: dict, *, title_limit: int | None = None) -> dict:
     """Decorate a destination payload without altering its identity or media URL.
 
     title is the editorial headline; text/description remain supplementary copy.
     For old text-only payloads the first nonempty line becomes the headline.
     """
+    require_strategic_master(payload)
     data = clean_metadata(payload)
     headline = str(data.get("title") or "").strip()
     text = str(data.get("text") or data.get("description") or "").strip()
@@ -58,7 +84,15 @@ def prepare_publication_metadata(payload: dict, *, title_limit: int | None = Non
     existing = text
     if existing.startswith(headline):
         existing = existing[len(headline):].strip()
-    data["text"] = add_site_to_keywords(data["title"] + ("\n" + existing if existing else ""))
+    relevant = [str(x).strip() for x in data.get("hashtags", [])
+                if isinstance(x, str) and x.startswith("#")]
+    unique = list(dict.fromkeys(relevant))
+    for tag in unique:
+        existing = re.sub(r"(?i)(?<!\\w)"+re.escape(tag)+r"\\b", "", existing).strip()
+    body = data["title"] + ("\\n" + existing if existing else "")
+    if unique:
+        body += "\\n" + " ".join(unique)
+    data["text"] = add_site_to_keywords(body)
     data["description"] = data["text"]
     if "keywords" in data:
         data["keywords"] = add_site_to_keywords(data["keywords"])
