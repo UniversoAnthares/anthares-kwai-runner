@@ -25,6 +25,7 @@ class PinterestBatchReceipts(unittest.TestCase):
 
         def api(query):
             self.assertEqual(query.count(": post(input:"), 8)
+            self.assertNotIn("dueAt", query)
             return {
                 "p"+str(i): {
                     "id": "bufferid"+str(i),
