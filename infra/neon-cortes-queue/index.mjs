@@ -30,6 +30,9 @@ async function query(sql,params=[]){
  if(!result||!Array.isArray(result.rows))throw Error('DATABASE_RESPONSE_INVALID');
  return result.rows;
 }
+// Neon HTTP SQL raw text output serializes PostgreSQL booleans as strings.
+// Boolean('f') === true in JavaScript; never use truthiness for DB booleans.
+const dbTrue=v=>v===true||v===1||v==='t'||v==='true'||v==='1';
 function target(platform){return TARGETS[platform]||null;}
 function shaPayload(b){
  const src=String(b.source_id||''),seg=String(b.segment_id||''),url=String(b.media_url||'');
@@ -244,7 +247,7 @@ async function bufferAction(verb,b,platform){
   const v=await query(`SELECT cooldown_until,cooldown_until>now() AS active
       FROM cortes_buffer_provider_cooldowns WHERE provider IN ($1,'buffer_shared')
       ORDER BY cooldown_until DESC LIMIT 1`,[platform]);
-  return{ok:true,active:Boolean(v[0]?.active),
+  return{ok:true,active:dbTrue(v[0]?.active),
     cooldown_until:v[0]?.cooldown_until||null,shared_provider:true};
  }
  if(verb==='policy'){
@@ -253,7 +256,7 @@ async function bufferAction(verb,b,platform){
     EXISTS(SELECT 1 FROM cortes_buffer_provider_cooldowns
       WHERE provider='buffer_shared' AND cooldown_until>now()) AS provider_blocked`);
   const weekday=Number(rows[0]?.weekday||0),used=Number(rows[0]?.used||0);
-  const blocked=Boolean(rows[0]?.provider_blocked);
+  const blocked=dbTrue(rows[0]?.provider_blocked);
   return{ok:true,enabled:weekday>=1&&weekday<=5&&!blocked,
     provider_unavailable:blocked,route_decision:blocked?'own_publisher':'buffer_if_available',
     limit:BUFFER_GLOBAL_DAILY,used,remaining:Math.max(0,BUFFER_GLOBAL_DAILY-used),
@@ -282,7 +285,7 @@ async function bufferAction(verb,b,platform){
   const weekday=await query("SELECT extract(isodow FROM now() AT TIME ZONE 'America/Campo_Grande')::int AS n");
   if(Number(weekday[0]?.n||0)>5)return{ok:true,job:null,buffer_off_day:true};
   const activeBlock=await query("SELECT EXISTS(SELECT 1 FROM cortes_buffer_provider_cooldowns WHERE provider='buffer_shared' AND cooldown_until>now()) AS blocked");
-  if(Boolean(activeBlock[0]?.blocked))return{ok:true,job:null,provider_unavailable:true,delivery_route:'own'};
+  if(dbTrue(activeBlock[0]?.blocked))return{ok:true,job:null,provider_unavailable:true,delivery_route:'own'};
   await query("DELETE FROM cortes_buffer_daily_slots s USING cortes_publications p WHERE s.job_id=p.id AND s.local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date AND p.status='queued' AND p.publication_started_at IS NULL");
   await query(`UPDATE cortes_publications SET status='failed',lease_owner=NULL,lease_until=NULL,updated_at=now()
     WHERE target_key=$1 AND status='uncertain'
