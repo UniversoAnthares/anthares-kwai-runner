@@ -6,6 +6,10 @@ on:
         description: Read-only browser/session probe; never post
         type: boolean
         default: true
+      proof_publish_one:
+        description: Allow one fenced Windows recovery only on confirmed Codeberg outage
+        type: boolean
+        default: false
   workflow_run:
     workflows: ['CORTES TikTok hosted canonical Neon publisher']
     types: [completed]
@@ -41,7 +45,7 @@ jobs:
           python -c "import sys; sys.path.insert(0,'tools');sys.path.insert(0,'direct-tiktok-publisher'); from cortes_tiktok_hosted_publish import preflight_vault; preflight_vault()"
           if ($LASTEXITCODE -ne 0) { throw 'PRIMARY_WINDOWS_OWNER_SESSION_UNVERIFIED' }
       - name: Publish one fenced short only after hosted failure
-        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' }}
+        if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure') || (github.event_name == 'workflow_dispatch' && inputs.proof_publish_one == true) }}
         shell: pwsh
         run: |
           python -u tools/cortes_tiktok_hosted_publish.py
