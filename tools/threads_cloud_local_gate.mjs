@@ -9,7 +9,7 @@ const atomic=(file,data)=>{const tmp=file+'.tmp-'+process.pid;fs.writeFileSync(t
 function report(result){atomic(stateFile,{at:new Date().toISOString(),...result});console.log('THREADS_CLOUD_LOCAL_GATE='+JSON.stringify(result))}
 async function main(){
  if(!fs.existsSync(marker)){console.log('THREADS_CLOUD_LOCAL_GATE=NOT_ARMED_LOCAL_PRIMARY');return}
- const armed=JSON.parse(fs.readFileSync(marker,'utf8'));
+ const armed=JSON.parse(fs.readFileSync(marker,'utf8').replace(/^\uFEFF/,''));
  if(!armed||armed.enabled!==true||!Number.isSafeInteger(Number(armed.epoch_at_arm))){
   report({allow:false,reason:'INVALID_LOCAL_ARM_MARKER'});process.exitCode=20;return
  }
@@ -24,7 +24,7 @@ async function main(){
  }catch(e){report({allow:false,reason:'NEON_GATE_UNREACHABLE',error:String(e.message).slice(0,90)});process.exitCode=20;return}
  // Reconciling cloud-confirmed public URLs precedes every possible local resumption.
  let ledger;
- try{ledger=JSON.parse(fs.readFileSync(ledgerFile,'utf8'));if(!ledger.items)throw Error('NO_LEDGER_ITEMS')}
+ try{ledger=JSON.parse(fs.readFileSync(ledgerFile,'utf8').replace(/^\uFEFF/,''));if(!ledger.items)throw Error('NO_LEDGER_ITEMS')}
  catch{report({allow:false,reason:'LOCAL_LEDGER_UNAVAILABLE'});process.exitCode=20;return}
  let changed=0;
  for(const record of snapshot.confirmed){
