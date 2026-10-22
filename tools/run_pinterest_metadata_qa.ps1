@@ -1,6 +1,14 @@
 # Autonomous Pinterest media 24h + transcript metadata QA on existing Windows user.
 # Device secrets remain in the private agent-env loader. Does not publish.
 $ErrorActionPreference='Stop'
+trap {
+  $log=Join-Path (Split-Path -Parent $PSScriptRoot) 'qa-health\pinterest-qa-exit.log'
+  $dir=Split-Path -Parent $log
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $row=@{at=(Get-Date).ToUniversalTime().ToString('o');component='pinterest-metadata-qa';exit_code=1;stage='bootstrap';failure=$_.Exception.GetType().Name}
+  Add-Content -LiteralPath $log -Value ($row|ConvertTo-Json -Compress) -Encoding UTF8
+  exit 1
+}
 $root=Split-Path -Parent $PSScriptRoot
 $loader='C:\ProgramData\AntharesRemoteAgent\agent-env.ps1'
 if(-not(Test-Path $loader)){throw 'PINTEREST_QA_AGENT_AUTH_MISSING'}
