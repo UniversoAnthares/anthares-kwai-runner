@@ -121,9 +121,9 @@ def strategic_metadata(text,source_title,segment_id):
     # Some local Qwen responses serialize lists as one string. The canonical
     # source remains the actual transcript, never the live/long-video title.
     if isinstance(words,str):
-        words=re.split(r'[,;\\n]+',words)
+        words=re.split(r'[,;\n]+',words)
     if isinstance(tags,str):
-        tags=re.split(r'[,;\\n]+',tags)
+        tags=re.split(r'[,;\n]+',tags)
     if not isinstance(words,list):words=[]
     if not isinstance(tags,list):tags=[]
     words=list(dict.fromkeys(str(v).strip() for v in words if isinstance(v,str)
@@ -135,7 +135,7 @@ def strategic_metadata(text,source_title,segment_id):
                'agora','muito','outra','outras','coisa','coisas','estão',
                'ainda','alguma','sobre','dessa','desse','aquela','aquele',
                'você','vocês','assim','sendo','entre','quando','todos'}
-        tokens=re.findall(r'(?u)\\b[\\wÀ-ÿ]+\\b',text.casefold())
+        tokens=re.findall(r'(?u)\b[\wÀ-ÿ]+\b',text.casefold())
         terms=[]
         for i in range(len(tokens)-1):
             x,y=tokens[i],tokens[i+1]
