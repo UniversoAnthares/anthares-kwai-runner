@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from social_adapters.buffer_three_channels import api, schedule, BufferBlocked, PINNED_CHANNELS
+from social_adapters.buffer_three_channels import api, schedule, BufferBlocked, PINNED_CHANNELS, channels, validate_channel
 from tools.cortes_social_media_probe import available as media_available
 
 BASE="https://anthares-remote-primary.vercel.app/api/cortes-queue"
@@ -95,7 +95,12 @@ def reconcile():
             continue
         try:
             link=verify_sent_post(remote_id)
-        except (BufferBlocked, RuntimeError):
+        except BufferBlocked as error:
+            if str(error)=='BUFFER_HTTP_429':
+                raise
+            print('CORTES_LINKEDIN_READBACK_PENDING=1',flush=True)
+            continue
+        except RuntimeError:
             # A single Buffer readback failure must not freeze the next shorts.
             # The uncertain post is retained for later reconciliation.
             print("CORTES_LINKEDIN_READBACK_PENDING=1",flush=True)
@@ -134,7 +139,7 @@ def safe_payload(row):
     return result
 
 
-def publish_once(skipped=0):
+def publish_once(skipped=0,verified_channels=None):
     lease=queue("lease",{"target_key":TARGET,"owner":OWNER})
     row=lease.get("job")
     if not row:
@@ -147,7 +152,7 @@ def publish_once(skipped=0):
         prepare(payload)
         if not media_available(payload['media_url']):
             queue('media-missing', fence)
-            return publish_once(skipped + 1) if skipped < 10 else 'SOURCE_MEDIA_MISSING_FOR_REPAIR'
+            return publish_once(skipped + 1,verified_channels=verified_channels) if skipped < 10 else 'SOURCE_MEDIA_MISSING_FOR_REPAIR'
     except Exception:
         # Any nested skip may already have ended the previous lease. Never
         # obscure the original error with a stale-fence cleanup failure.
@@ -156,7 +161,7 @@ def publish_once(skipped=0):
         raise
     queue("start",fence)
     try:
-        result=schedule(payload)
+        result=schedule(payload,validated_channels=verified_channels) if verified_channels is not None else schedule(payload)
         if result.get("status")!="SCHEDULED_IN_BUFFER" or not result.get("remote_id"):
             raise RuntimeError("BUFFER_NOT_SCHEDULED")
         queue("scheduled",{**fence,"buffer_post_id":result["remote_id"]})
@@ -187,11 +192,21 @@ def exception_active():
 def main():
     cloud_only()
     # Reconciliation before scheduling also frees up a Buffer queue slot.
-    confirmed=reconcile()
+    try:
+        confirmed=reconcile()
+        # Read-only identity and rate-limit preflight before leasing/starting
+        # another cut. A 429 leaves the Neon ledger unchanged.
+        verified=channels()
+        validate_channel('linkedin',LINKEDIN_ID,verified)
+    except BufferBlocked as error:
+        if str(error)=='BUFFER_HTTP_429':
+            print('{"linkedin_cloud":"BACKOFF_BUFFER_HTTP_429","queue_untouched":true}',flush=True)
+            return 0
+        raise
     batch_size=2 if exception_active() else 1
     results=[]
     for _ in range(batch_size):
-        status=publish_once()
+        status=publish_once(verified_channels=verified)
         results.append(status)
         if status in ("IDLE_NO_CUTS","IDLE_BUFFER_CAPACITY","SOURCE_MEDIA_MISSING_FOR_REPAIR"):
             break
