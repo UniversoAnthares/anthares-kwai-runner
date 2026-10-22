@@ -226,7 +226,7 @@ def metadata_qa(max_clips=3):
                 processed+=1
                 print(json.dumps({'qa':'METADATA_REPAIRED','id':row['id'],
                      'title':d['title']},ensure_ascii=True),flush=True)
-            except (RuntimeError,ValueError,KeyError,urllib.error.URLError,OSError) as e:
+            except (RuntimeError,ValueError,KeyError,ImportError,urllib.error.URLError,OSError) as e:
                 qa_incident('PINTEREST_METADATA_'+type(e).__name__.upper())
                 print(json.dumps({'qa':'METADATA_BLOCKED','id':row['id'],
                        'kind':type(e).__name__}),flush=True)
