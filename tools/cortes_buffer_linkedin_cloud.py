@@ -212,7 +212,8 @@ def main():
                           "buffer_used_today":policy.get("used"),
                           "buffer_daily_limit":20,
                           "buffer_weekday_enabled":bool(policy.get("enabled")),
-                          "requires_direct_company_publisher":True,\n                          "posts_confirmed_this_run":confirmed}),flush=True)
+                          "requires_direct_company_publisher":True,
+                          "posts_confirmed_this_run":confirmed}),flush=True)
         return 0
     # Reconciliation before scheduling also frees up a Buffer queue slot.
     try:
