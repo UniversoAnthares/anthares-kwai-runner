@@ -125,12 +125,21 @@ export async function run(){
   await callControl(jwt,'start',{...ident,generation:Number(leased.lease_generation)});
   started=true;
   verified=await publishVideo(selected.clip,token,me.id);
-  await callControl(jwt,'confirm',{...ident,generation:Number(leased.lease_generation),url:verified.url});
+  // Public proof precedes any possibly failing metadata confirmation.
+  console.log('THREADS_GRAPH_POSTED='+JSON.stringify({clip:id,post_id:verified.post_id,permalink:verified.url,run_id:process.env.GITHUB_RUN_ID||''}));
+  let confirmed=false,lastError=null;
+  for(let attempt=1;attempt<=4;attempt++){
+   try{
+    await callControl(jwt,'confirm',{...ident,generation:Number(leased.lease_generation),url:verified.url});
+    confirmed=true;break;
+   }catch(error){lastError=error;if(attempt<4)await sleep(1200*attempt)}
+  }
+  if(!confirmed)throw Error('GRAPH_PUBLISHED_NEON_CONFIRM_PENDING_'+String(lastError?.message||'unknown').slice(0,80));
   console.log(JSON.stringify({ok:true,mode:'cloud_verified',...publicInfo,remote_url:verified.url,post_id:verified.post_id}));
  }catch(e){
   if(leased){
    // Fail closed even when failure happens before the publish API call.
-   await callControl(jwt,'uncertain',{...ident,generation:Number(leased.lease_generation)}).catch(()=>{});
+   await callControl(jwt,'uncertain',{...ident,generation:Number(leased.lease_generation),url:verified?.url||null,post_id:verified?.post_id||null}).catch(()=>{});
   }
   throw e;
  }finally{
