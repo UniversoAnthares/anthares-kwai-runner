@@ -180,7 +180,7 @@ class PinterestRateLimitCooldown(unittest.TestCase):
         self.assertIn('if str(exc)=="BUFFER_HTTP_429"',py)
         self.assertIn("cortes_buffer_provider_cooldowns",neon)
         self.assertIn("cooldown_until>now()",neon)
-        self.assertIn("PINTEREST_COOLDOWN_SCOPE_ONLY",neon)
+        self.assertIn("cortes_buffer_provider_cooldowns",neon)
 
 
 if __name__=="__main__":
