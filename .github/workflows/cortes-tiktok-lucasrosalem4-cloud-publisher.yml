@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publisher:
-    if: github.ref == 'refs/heads/main' && (github.event_name != 'schedule' || vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'true')
+    if: github.ref == 'refs/heads/main' && vars.TIKTOK_CODEBERG_PRIMARY != 'true' && (github.event_name != 'schedule' || vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 14
     env:
