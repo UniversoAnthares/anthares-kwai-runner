@@ -160,6 +160,7 @@ def metadata_qa(max_clips=3):
             cursor_file.write_text('',encoding='utf8')
             break
         for row in jobs:
+            if attempted>=max_clips:break
             after=row['id']
             cursor_file.write_text(after,encoding='utf8')
             attempted+=1
