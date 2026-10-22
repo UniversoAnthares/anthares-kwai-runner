@@ -17,7 +17,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-from anthares_publisher.editorial import branded_title, add_site_to_keywords
+from anthares_publisher.editorial import branded_title, add_site_to_keywords, require_strategic_master
 
 ENDPOINT = "https://api.buffer.com"
 SERVICES = ("instagram", "pinterest", "linkedin")
@@ -240,6 +240,7 @@ def prepare(payload: dict) -> dict:
     if (uri.scheme != "https" or uri.hostname not in ("anthares.us", "www.anthares.us")
             or uri.username or uri.password or not uri.path.lower().endswith(".mp4")):
         raise BufferBlocked("MASTER_MP4_URL_INVALID")
+    require_strategic_master(payload)
     title = str(payload.get("title") or payload.get("video_title") or "").strip()
     if not title:
         raise BufferBlocked("TITLE_MISSING")
@@ -254,7 +255,11 @@ def prepare(payload: dict) -> dict:
         from anthares_publisher.linkedin_editorial import linkedin_caption
         text = linkedin_caption(title, str(payload.get("description") or ""))
     else:
-        text = add_site_to_keywords(branded_title(title) + "\n" + str(payload.get("description") or "").strip())
+        hashtags = " ".join(dict.fromkeys(str(x).strip() for x in (payload.get("hashtags") or [])
+                                             if str(x).startswith("#")))
+        text = add_site_to_keywords(branded_title(title) + "\n" +
+              str(payload.get("description") or "").strip() +
+              ("\n" + hashtags if hashtags else ""))
     if len(text) > 2200:
         raise BufferBlocked("CAPTION_TOO_LONG_REQUIRES_EDITORIAL_TRUNCATION")
     return {"platform": platform, "media_url": uri.geturl(), "caption": text,
