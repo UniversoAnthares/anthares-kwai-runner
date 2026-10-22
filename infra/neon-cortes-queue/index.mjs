@@ -135,8 +135,30 @@ async function writeProbe(body){
 }
 async function bufferAction(verb,b,platform){
  const dest=target(platform),owner='buffer-'+platform+':';
- const allowed=new Set(['lease','start','fail','media-missing','scheduled','pending','reconcile','stats','retention']);
+ const allowed=new Set(['lease','start','fail','media-missing','scheduled','pending','reconcile','stats','retention','cooldown','cooldown-status']);
  if(!allowed.has(verb))return{ok:false,error:'UNKNOWN_BUFFER_ACTION'};
+ if(verb==='cooldown'||verb==='cooldown-status'){
+  if(platform!=='pinterest')return{ok:false,error:'PINTEREST_COOLDOWN_SCOPE_ONLY'};
+  // Persist provider rate limits across ephemeral GitHub runners. This table
+  // contains no credentials, media, or personal user data.
+  await query(`CREATE TABLE IF NOT EXISTS cortes_buffer_provider_cooldowns(
+     provider text PRIMARY KEY, cooldown_until timestamptz NOT NULL,
+     updated_at timestamptz NOT NULL DEFAULT now())`);
+  if(verb==='cooldown'){
+    const seconds=Number(b.seconds);
+    if(!Number.isSafeInteger(seconds)||seconds<300||seconds>3600)
+       return{ok:false,error:'INVALID_COOLDOWN'};
+    await query(`INSERT INTO cortes_buffer_provider_cooldowns(provider,cooldown_until,updated_at)
+       VALUES('pinterest',now()+($1::int * interval '1 second'),now())
+       ON CONFLICT(provider) DO UPDATE SET
+        cooldown_until=GREATEST(cortes_buffer_provider_cooldowns.cooldown_until,
+                         EXCLUDED.cooldown_until),updated_at=now()`,[seconds]);
+  }
+  const v=await query(`SELECT cooldown_until,cooldown_until>now() AS active
+      FROM cortes_buffer_provider_cooldowns WHERE provider='pinterest'`);
+  return{ok:true,active:Boolean(v[0]?.active),
+    cooldown_until:v[0]?.cooldown_until||null};
+ }
  if(verb==='stats'){
   const rows=await query(`SELECT status,count(*)::int n FROM cortes_publications
    WHERE target_key=$1 GROUP BY status`,[dest]);
