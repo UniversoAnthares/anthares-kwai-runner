@@ -38,7 +38,7 @@ class PinterestCloudTests(unittest.TestCase):
             self.assertIsNone(p.verify_sent_post("123"))
 
     def test_missing_buffer_board_fails_ci_without_leasing(self):
-        with patch.object(p,"cloud_only"), patch.object(p,"reconcile",return_value=0), \
+        with patch.object(p,"cloud_only"), patch.object(p,"queue",return_value={"active":False}), patch.object(p,"reconcile",return_value=0), \
              patch("social_adapters.buffer_three_channels.pinterest_boards",
                    return_value=[]), patch.object(p,"alternate_pinterest_boards",
                    return_value=[]), patch.object(p.time,"sleep"), \
@@ -48,7 +48,7 @@ class PinterestCloudTests(unittest.TestCase):
             publish.assert_not_called()
 
     def test_buffer_500_is_visible_incident_without_leasing(self):
-        with patch.object(p,"cloud_only"), patch.object(p,"reconcile",return_value=0), \
+        with patch.object(p,"cloud_only"), patch.object(p,"queue",return_value={"active":False}), patch.object(p,"reconcile",return_value=0), \
              patch("social_adapters.buffer_three_channels.pinterest_boards",
                    side_effect=p.BufferBlocked("BUFFER_HTTP_500")), \
              patch.object(p,"alternate_pinterest_boards",
@@ -95,7 +95,7 @@ class PinterestCloudTests(unittest.TestCase):
 
     def test_board_ready_can_resume_without_operator(self):
         from social_adapters.buffer_three_channels import PINTEREST_PUBLIC_BOARD_ID
-        with patch.object(p,"cloud_only"), patch.object(p,"reconcile",return_value=0), \
+        with patch.object(p,"cloud_only"), patch.object(p,"queue",return_value={"active":False}), patch.object(p,"reconcile",return_value=0), \
              patch("social_adapters.buffer_three_channels.pinterest_boards",
                    return_value=[{"serviceId":PINTEREST_PUBLIC_BOARD_ID}]), \
              patch.object(p,"publish_once",return_value="SCHEDULED_IN_BUFFER") as publish:
@@ -155,6 +155,18 @@ class PinterestMediaPolicy(unittest.TestCase):
         self.assertIn("PINTEREST_MEDIA_MISSING_FENCE_REJECTED",neon)
         self.assertIn("retry_after_date",neon)
         self.assertIn("ORDER BY p.created_at,p.updated_at,p.id",neon)
+
+
+class PinterestCooldownGate(unittest.TestCase):
+    def test_cooldown_skips_buffer_api_completely(self):
+        with patch.object(p,"cloud_only"), \
+             patch.object(p,"queue",return_value={"active":True,"cooldown_until":"2026-10-22T05:00:00Z"}), \
+             patch.object(p,"reconcile") as rec, patch.object(p,"board_gate") as board, \
+             patch.object(p,"publish_once") as pub:
+            self.assertEqual(p.main(),0)
+            rec.assert_not_called()
+            board.assert_not_called()
+            pub.assert_not_called()
 
 
 class PinterestRateLimitCooldown(unittest.TestCase):
