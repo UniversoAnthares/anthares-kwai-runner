@@ -172,7 +172,10 @@ def run_pipeline(windows):
         "X_YT_COOKIE_FILE": str(COOKIE),
         "X_SCAN_START": "600", "X_SCAN_SECONDS": "780",
         "X_MIN_SOURCE_SECONDS": "1800",
-        "X_WHISPER_MODEL": "base",
+        # The existing authorized Windows origin has a complete small model
+        # in its local HuggingFace cache; the uncached base download stalled.
+        "X_WHISPER_MODEL": "small",
+        "HF_HUB_DISABLE_SYMLINKS_WARNING": "1",
         "X_SOURCE_WINDOWS_JSON": json.dumps(windows, separators=(",", ":")),
     })
     checkpoint("PREPARING")
