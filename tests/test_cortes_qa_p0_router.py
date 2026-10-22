@@ -136,5 +136,21 @@ class P0RouterTests(unittest.TestCase):
             self.assertEqual(router.http("https://api.github.com/example","POST",{}),{"ok":True})
 
 
+    def test_batch_controller_dispatch_is_single_and_has_no_issue_filter(self):
+        with patch.object(router,"http",return_value={"ok":True}) as api:
+            self.assertTrue(router.dispatch_controller())
+        self.assertEqual(api.call_args.args[2],{"ref":"main","inputs":{}})
+
+    def test_same_failing_workflow_produces_one_daily_fingerprint(self):
+        now=router.NOW.isoformat()
+        data={"workflow_runs":[
+            {"name":"Kwai queue publisher","conclusion":"failure","created_at":now,"id":100},
+            {"name":"Kwai queue publisher","conclusion":"failure","created_at":now,"id":101}
+        ]}
+        with patch.object(router,"http",return_value=data):
+            issues=router.workflow_incidents()
+        self.assertEqual(len(issues),4)
+        self.assertEqual(len({i["id"] for i in issues}),2)
+
 if __name__=="__main__":
     unittest.main()
