@@ -71,7 +71,13 @@ def post(action: str, payload: dict, get_oidc, *, timeout: int = 16) -> dict:
             from social_adapters.buffer_three_channels import trusted_instagram_one_time_runner
             if not (action.startswith("buffer-") and trusted_instagram_one_time_runner()):
                 raise BackendUnavailable("CORTES_QUEUE_NEON_REQUIRES_CLOUD")
-        providers = tuple(sorted(PROVIDERS, key=lambda url: 0 if 'cortesqueue.compute.' in url else 1))
+        # Cooldown actions were introduced in the Neon canonical backend.
+        # Never fall back to an older Vercel/edge function returning HTTP 409
+        # UNKNOWN_BUFFER_ACTION, which could suppress all publishing.
+        if action in {"buffer-cooldown", "buffer-cooldown-status"}:
+            providers = (next(p for p in PROVIDERS if 'cortesqueue.compute.' in p),)
+        else:
+            providers = tuple(sorted(PROVIDERS, key=lambda url: 0 if 'cortesqueue.compute.' in url else 1))
     else:
         providers = PROVIDERS
     for provider in providers:
