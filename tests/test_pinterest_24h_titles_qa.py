@@ -32,6 +32,12 @@ class PinterestQA24hAndTitles(unittest.TestCase):
   self.assertIn("require_strategic_master(data)",self.worker)
   self.assertIn("PINTEREST_CONTEXTUAL_TITLE_INVALID",self.worker)
   self.assertIn("'after_id':after",self.worker)
+ def test_source_fanout_preserves_clip_editorial_provenance(self):
+  src=(ROOT/'tools/cortes_linkedin_neon_fanout.py').read_text(encoding='utf8')
+  self.assertIn('"editorial_policy":clip["editorial_policy"]',src)
+  self.assertIn('"keywords":clip["keywords"]',src)
+  self.assertIn('"hashtags":clip["hashtags"]',src)
+  self.assertIn('"requires_transcript_qa"',src)
  def test_cloud_strategy_validation_not_bypassed(self):
   self.assertIn('"editorial_policy":payload.get("editorial_policy")',self.buffer)
   self.assertIn('"keywords":payload.get("keywords")',self.buffer)
