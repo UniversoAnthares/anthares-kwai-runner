@@ -270,10 +270,13 @@ def board_gate():
                        for x in rows):
                     print("CORTES_PINTEREST_BOARD_AUTHORIZED_VIA="+source,flush=True)
                     return PINTEREST_PUBLIC_BOARD_ID
-            except (BufferBlocked,ValueError,TypeError):
-                # Read-only route unavailable. The alternate resolver and
-                # next pass are independent, with no mutation side effects.
-                print("::warning::CORTES_PINTEREST_BOARD_READ_TRANSIENT_"+source,flush=True)
+            except (BufferBlocked,ValueError,TypeError) as exc:
+                # Only controlled BufferBlocked codes are safe in public CI
+                # logs. Never print arbitrary API response bodies/tokens.
+                reason=str(exc) if isinstance(exc,BufferBlocked) else type(exc).__name__
+                safe=reason if reason.startswith(("BUFFER_HTTP_","BUFFER_GRAPHQL_","BUFFER_RESPONSE_",
+                    "BUFFER_PINTEREST_")) else "BOARD_READ_EXCEPTION"
+                print("::warning::CORTES_PINTEREST_BOARD_READ_TRANSIENT_"+source+"_"+safe,flush=True)
         if attempt<2:
             time.sleep((1,3)[attempt])
     if had_read:
