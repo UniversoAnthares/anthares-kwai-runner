@@ -391,6 +391,14 @@ def reconcile_uncertain(job,token,state):
                         raise
                     print("::warning::SECONDARY_QA_P0_STUDIO_HYDRATION_UNVERIFIED",flush=True)
                     return False
+                except Exception as exc:
+                    # Studio may time out during a read-only reconciliation.
+                    # Leave the uncertain receipt untouched, notify priority QA,
+                    # and allow subsequent fenced queued publications to proceed.
+                    if type(exc).__name__ not in ("TimeoutError","PlaywrightTimeoutError"):
+                        raise
+                    print("::warning::SECONDARY_QA_P0_RECONCILIATION_TIMEOUT_PENDING",flush=True)
+                    return False
                 finally:
                     page.close()
             finally:
