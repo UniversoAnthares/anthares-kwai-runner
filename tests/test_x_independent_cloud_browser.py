@@ -67,7 +67,7 @@ class XIndependentCloudPrimaryTests(unittest.TestCase):
         source=(ROOT/"tools/x_github_anthares_browser_publisher.py").read_text(encoding="utf8")
         self.assertIn('page = open_authenticated(context)',source)
         self.assertIn('X_GH_CLOUD_AUTHENTICATED_IDLE',source)
-        self.assertIn("X_GH_CLOUD_ACCOUNT_NOT_PROVEN",source)
+        self.assertIn("X_CLOUD_IDENTITY_NOT_PROVEN",source)
 
     def test_legacy_northflank_runner_requires_separate_explicit_arm(self):
         legacy=(ROOT/".github/workflows/x-durable-consumer.yml").read_text(encoding="utf8")
