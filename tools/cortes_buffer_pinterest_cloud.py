@@ -413,5 +413,18 @@ if __name__=="__main__":
         code=(safe if (isinstance(e,BufferBlocked) and safe.startswith(("BUFFER_","PINTEREST_","MASTER_","TITLE_","DURATION_","CAPTION_")))
               or (isinstance(e,BackendUnavailable) and safe.startswith("CORTES_QUEUE_"))
               else type(e).__name__)
-        print(json.dumps({"pinterest_cloud":"BLOCKED","reason":code}))
+        # A type alone hides otherwise straightforward operator fixes.
+        # Do not log exception messages/arguments: they may contain API
+        # responses, titles, tokens or media URLs. Return only basename/line.
+        import traceback
+        site="UNKNOWN"
+        entries=traceback.extract_tb(e.__traceback__)
+        local=[x for x in entries if str(x.filename).startswith(str(ROOT))]
+        if local:
+            end=local[-1]
+            site=Path(end.filename).name+":"+str(end.lineno)
+        if isinstance(e,ValueError) and safe.startswith("CORTES_QUEUE_"):
+            code=safe
+        print(json.dumps({"pinterest_cloud":"BLOCKED","reason":code,
+                          "failure_site":site},separators=(",",":")))
         sys.exit(2)
