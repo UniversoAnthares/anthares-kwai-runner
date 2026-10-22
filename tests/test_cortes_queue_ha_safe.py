@@ -123,6 +123,12 @@ class SafeFailover(unittest.TestCase):
 
 
 class PinterestCooldownActions(unittest.TestCase):
+    def test_cooldown_pinned_to_canonical_neon_not_legacy_fallback(self):
+        from pathlib import Path
+        script=(Path(__file__).resolve().parents[1]/"tools"/"cortes_queue_ha.py").read_text()
+        self.assertIn('if action in {"buffer-cooldown", "buffer-cooldown-status"}',script)
+        self.assertIn("providers = (next(p for p in PROVIDERS if 'cortesqueue.compute.' in p),)",script)
+
     def test_new_429_cooldown_actions_authorized_only_from_cloud(self):
         self.assertIn("buffer-cooldown",ha.ACTIONS)
         self.assertIn("buffer-cooldown-status",ha.ACTIONS)
