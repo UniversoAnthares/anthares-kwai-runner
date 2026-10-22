@@ -10,7 +10,7 @@ on:
 permissions:
   contents: read
   issues: write
-  actions: read
+  actions: write
 concurrency:
   group: cortes-qa-p0-executor-${{ inputs.issue_number }}
   cancel-in-progress: false
@@ -72,6 +72,17 @@ jobs:
             core.setOutput('state',state);
             core.setOutput('url',link);
             core.notice('QA_P0_CODEBERG_TEST_RESULT='+state);
+      - name: Execute approved P0 recovery playbook
+        id: recovery
+        if: steps.preflight.outcome == 'success'
+        shell: powershell
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          QA_ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          $ErrorActionPreference='Stop'
+          & .\\tools\\cortes_qa_p0_recovery.ps1 -IssueNumber ([int]$env:QA_ISSUE_NUMBER)
+          if($LASTEXITCODE -ne 0){throw 'CORTES_QA_RECOVERY_PLAYBOOK_FAILED'}
       - name: Report actual execution and evidence to incident
         if: always() && steps.preflight.outcome == 'success'
         uses: actions/github-script@v7
@@ -80,6 +91,7 @@ jobs:
           QA_NETWORK: ${{ steps.preflight.outputs.network }}
           QA_CODEBERG: ${{ steps.codeberg.outputs.state }}
           QA_CODEBERG_URL: ${{ steps.codeberg.outputs.url }}
+          QA_AUTOHEAL: ${{ steps.recovery.outputs.action }}
         with:
           script: |
             const {owner,repo} = context.repo;
@@ -97,7 +109,7 @@ jobs:
               body:'[QA-P0-EXECUTOR] '+outcome+'\nControl run: '+run+
                 '\nCodeberg test result: '+state+
                 '\nCodeberg evidence: '+(process.env.QA_CODEBERG_URL || 'unavailable')+
-                '\n'+next+
+                '\nRecovery action (ACK only): '+String(process.env.QA_AUTOHEAL || 'NO_REPAIR_ACTION')+'\n'+next+
                 '\nNo unit tests run in GitHub Actions. QA remains open until verified source fix and remote publication.'
             });
             if (state !== 'PASS_CURRENT_COMMIT') core.setFailed('CODEBERG_TESTS_CURRENT_COMMIT_UNVERIFIED');
