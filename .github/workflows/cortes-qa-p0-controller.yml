@@ -76,7 +76,13 @@ jobs:
                   now-Date.parse(x.created_at) <= maxAgeMs));
                 if (data.length < 100) break;
               }
-              return all.sort((a,b) => Date.parse(a.created_at)-Date.parse(b.created_at));
+              // One-time recovery of the three documented P0 incidents from the
+              // outage investigation. Idempotent run checks still apply.
+              const urgent = new Set([460,492,528]);
+              return all.sort((a,b) => {
+                const ap=urgent.has(a.number)?0:1, bp=urgent.has(b.number)?0:1;
+                return ap-bp || Date.parse(a.created_at)-Date.parse(b.created_at);
+              });
             }
             const priorRuns = [];
             for (let page = 1; page <= 4; page++) {
