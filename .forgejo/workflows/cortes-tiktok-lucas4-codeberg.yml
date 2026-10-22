@@ -22,7 +22,7 @@ jobs:
   publisher:
     if: ${{ forgejo.event_name == 'schedule' || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
     runs-on: codeberg-medium
-    timeout-minutes: 18
+    timeout-minutes: 9
     enable-openid-connect: true
     env:
       PYTHONUTF8: '1'
