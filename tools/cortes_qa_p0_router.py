@@ -58,13 +58,23 @@ def workflow_incidents():
             name=str(run.get("name") or "")
             if not re.search(r"cortes|tiktok|kwai|pinterest|threads|instagram|facebook|linkedin|youtube|publish|buffer",name,re.I):
                 continue
-            if "P0 publication incident" in name or run.get("conclusion") not in ("failure","timed_out"):
+            if "P0 publication incident" in name:
+                continue
+            conclusion=run.get("conclusion")
+            state=str(run.get("status") or "")
+            if conclusion not in ("failure","timed_out") and state not in ("queued","pending","waiting"):
                 continue
             try:
                 created=dt.datetime.fromisoformat(run["created_at"].replace("Z","+00:00"))
             except (KeyError, ValueError):
                 continue
             if created < NOW-dt.timedelta(hours=2):
+                continue
+            # A runner waiting for more than 12 minutes is an operational
+            # outage even without a formal failed job result.
+            stalled=state in ("queued","pending","waiting") and (
+                NOW-created>dt.timedelta(minutes=12))
+            if conclusion not in ("failure","timed_out") and not stalled:
                 continue
             rid=str(run.get("id") or "")
             if not rid.isdigit():continue
@@ -76,12 +86,35 @@ def workflow_incidents():
             else:
                 fingerprint=marker("gha",repo,rid)
             output.append({"id":fingerprint,"network":network_for(name),
-                           "stage":"github_actions_"+run["conclusion"],
+                           "stage":"github_actions_"+(conclusion or "runner_dispatch_stalled"),
                            "evidence":"https://github.com/"+repo+"/actions/runs/"+rid,
                            "description":name[:100]})
     if unavailable==len(REPOS):
         raise RuntimeError("CORTES_QA_GITHUB_ALL_REPOS_INACCESSIBLE")
     return output
+
+def threads_control_incidents():
+    """Independent read-only Neon controller probe; no cloud credentials."""
+    url=("https://br-crimson-unit-b89nau08-cortesthreadspub.compute."
+         "c-14.us-east-1.aws.neon.tech/?action=gate")
+    data=http(url)
+    if not isinstance(data,dict) or data.get("ok") is not True:
+        raise RuntimeError("THREADS_CONTROL_HEALTH_INVALID")
+    queued=len(data.get("queued_ids") or [])
+    issues=[]
+    if queued and data.get("cloud_primary_enabled") is not True:
+        issues.append(("cloud_primary_disabled_with_backlog",
+                       "Neon queued="+str(queued)+", Windows fallback should remain active"))
+    age=NOW-dt.datetime.fromisoformat(str(
+        data.get("cloud_heartbeat_at") or "2000-01-01T00:00:00Z").replace("Z","+00:00"))
+    if queued and data.get("cloud_primary_enabled") is True and age>dt.timedelta(minutes=16):
+        issues.append(("cloud_primary_heartbeat_stale",
+                       "Neon heartbeat age="+str(int(age.total_seconds()/60))+" minutes"))
+    return [{"id":marker("threads-control",kind,NOW.date().isoformat()),
+             "network":"threads","stage":kind,
+             "evidence":"https://github.com/"+HUB+"/actions/workflows/cortes-threads-cloud-handoff.yml",
+             "description":description} for kind,description in issues]
+
 
 def wp_incidents():
     site=os.getenv("WP_SITE_URL","").strip().rstrip("/")
@@ -153,7 +186,7 @@ def main():
     if not TOKEN:raise RuntimeError("GITHUB_TOKEN_REQUIRED")
     items=[]
     bad=[]
-    for label,fn in (("github",workflow_incidents),("wordpress",wp_incidents)):
+    for label,fn in (("github",workflow_incidents),("wordpress",wp_incidents),("threads-control",threads_control_incidents)):
         try:
             result=fn()
             items.extend(result)
