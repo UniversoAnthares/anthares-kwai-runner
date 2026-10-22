@@ -211,13 +211,13 @@ def metadata_qa(max_clips=3):
             after=row['id']
             cursor_file.write_text(after,encoding='utf8')
             attempted+=1
-            if not approved_media(row.get('media_url')):
-                qa_incident('PINTEREST_QA_UNTRUSTED_MEDIA')
-                continue
-            if media_status(row['media_url'])!=200:
-                qa_incident('PINTEREST_QA_TRANSCRIPT_MEDIA_UNAVAILABLE')
-                continue
             try:
+                # Isolate even unexpected media/ASR/library errors per clip:
+                # a broken asset must not stop QA for the remaining 42 clips.
+                if not approved_media(row.get('media_url')):
+                    raise ValueError('PINTEREST_QA_UNTRUSTED_MEDIA')
+                if media_status(row['media_url'])!=200:
+                    raise RuntimeError('PINTEREST_QA_TRANSCRIPT_MEDIA_UNAVAILABLE')
                 text=transcript(row['media_url'])
                 d=strategic_metadata(text,str(row.get('source_title') or ''),
                                      str(row.get('segment_id') or ''))
@@ -232,7 +232,9 @@ def metadata_qa(max_clips=3):
                 processed+=1
                 print(json.dumps({'qa':'METADATA_REPAIRED','id':row['id'],
                      'title':d['title']},ensure_ascii=True),flush=True)
-            except (RuntimeError,ValueError,KeyError,ImportError,urllib.error.URLError,OSError) as e:
+            except Exception as e:
+                # The incident is durable/deduplicated in central QA. Log only
+                # exception category and job ID, never media or credentials.
                 qa_incident('PINTEREST_METADATA_'+type(e).__name__.upper())
                 print(json.dumps({'qa':'METADATA_BLOCKED','id':row['id'],
                        'kind':type(e).__name__}),flush=True)
