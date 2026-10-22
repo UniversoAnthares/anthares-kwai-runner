@@ -354,6 +354,30 @@ def publish_one(job,token,state):
                             button.scroll_into_view_if_needed(timeout=12000)
                             button.click(trial=True,timeout=15000)
                         except PlaywrightTimeout as exc:
+                            # Read-only DOM diagnostics; never reveal page text,
+                            # cookies, video content, headers or selector payloads.
+                            try:
+                                box=button.bounding_box(timeout=2500)
+                                center={"x":box["x"]+box["width"]/2,
+                                        "y":box["y"]+box["height"]/2} if box else None
+                                detail=page.evaluate("""(p) => {
+                                  const el=p?document.elementFromPoint(p.x,p.y):null;
+                                  return {
+                                    hit_tag:el?.tagName||'none',
+                                    hit_role:el?.getAttribute('role')||'',
+                                    hit_data_e2e:el?.getAttribute('data-e2e')||'',
+                                    modal_count:document.querySelectorAll('[role="dialog"],[aria-modal="true"]').length,
+                                    captcha_present:!!document.querySelector('iframe[src*="captcha"],[id*="captcha"],[data-e2e*="captcha"]')
+                                  };
+                                }""",center)
+                                print("SECONDARY_PRESTART_UI_BLOCKER="+
+                                      json.dumps(detail,ensure_ascii=True),flush=True)
+                                if detail.get("captcha_present"):
+                                    raise SafeStop("SECONDARY_PLATFORM_SECURITY_CHALLENGE")
+                            except SafeStop:
+                                raise
+                            except Exception:
+                                print("::warning::SECONDARY_PRESTART_UI_DIAGNOSTIC_UNAVAILABLE",flush=True)
                             raise SafeStop("SECONDARY_PRESTART_CLICKABILITY_UNVERIFIED") from exc
                     print("SECONDARY_CLOUD_PRESTART_STAGE=verified",flush=True)
                     before_url=page.url
