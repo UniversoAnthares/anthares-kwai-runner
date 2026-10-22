@@ -45,7 +45,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_PUSH_FAILED' }
           $actualLine=(git ls-remote https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git refs/heads/main)
           if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_PUBLIC_READBACK_FAILED' }
-          $actual=($actualLine -split '\\s+')[0]
+          $actual=([string]$actualLine -split '\s+')[0]
           if ($actual -ne $expected) { throw 'CODEBERG_MAIN_SHA_MISMATCH' }
           Write-Output "CODEBERG_MAIN_SYNC_PROVEN=$expected"
 
