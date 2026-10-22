@@ -60,6 +60,22 @@ class P0RouterTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"ALL_REPOS_INACCESSIBLE"):
                 router.workflow_incidents()
 
+    def test_queued_older_than_twenty_minutes_is_urgent(self):
+        created=(router.NOW-dt.timedelta(minutes=30)).isoformat()
+        response={"workflow_runs":[{"name":"CORTES TikTok hosted canonical Neon publisher",
+            "status":"queued","conclusion":None,"created_at":created,"id":123456789}]}
+        with patch.object(router,"http",return_value=response):
+            items=router.workflow_incidents()
+        self.assertEqual(len(items),2)
+        self.assertTrue(all(x["stage"]=="github_actions_queued_stale" for x in items))
+
+    def test_queue_waiting_under_twenty_minutes_is_not_a_failure(self):
+        response={"workflow_runs":[{"name":"CORTES TikTok hosted canonical Neon publisher",
+            "status":"queued","conclusion":None,
+            "created_at":router.NOW.isoformat(),"id":123456789}]}
+        with patch.object(router,"http",return_value=response):
+            self.assertEqual(router.workflow_incidents(),[])
+
     def test_action_success_never_creates_ticket(self):
         run={"workflow_runs":[{
             "name":"CORTES TikTok Neon Producer","conclusion":"success",

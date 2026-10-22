@@ -60,25 +60,33 @@ def workflow_incidents():
             name=str(run.get("name") or "")
             if not re.search(r"cortes|tiktok|kwai|pinterest|threads|instagram|facebook|linkedin|youtube|publish|buffer",name,re.I):
                 continue
-            if "P0 publication incident" in name or run.get("conclusion") not in ("failure","timed_out","cancelled"):
+            if "P0 publication incident" in name: continue
+            status=str(run.get("status") or "")
+            conclusion=str(run.get("conclusion") or "")
+            is_queued=status in ("queued","pending","waiting","requested")
+            if not (is_queued or conclusion in ("failure","timed_out","cancelled")):
                 continue
             try:
                 created=dt.datetime.fromisoformat(run["created_at"].replace("Z","+00:00"))
             except (KeyError, ValueError):
                 continue
-            if created < NOW-dt.timedelta(hours=2):
+            if is_queued and not (NOW-dt.timedelta(hours=8) <= created < NOW-dt.timedelta(minutes=20)):
+                continue
+            if not is_queued and created < NOW-dt.timedelta(hours=2):
                 continue
             rid=str(run.get("id") or "")
             if not rid.isdigit():continue
             # The Pinterest board outage can recur every 15 minutes.
             # One stable P0 fingerprint per workflow/day avoids issue floods
             # while the live run URL remains available in Actions.
-            if network_for(name)=="pinterest":
-                fingerprint=marker("gha",repo,name,run["conclusion"],created.date().isoformat())
+            if is_queued:
+                fingerprint=marker("gha-stale",repo,name,created.date().isoformat())
+            elif network_for(name)=="pinterest":
+                fingerprint=marker("gha",repo,name,conclusion,created.date().isoformat())
             else:
                 fingerprint=marker("gha",repo,rid)
             output.append({"id":fingerprint,"network":network_for(name),
-                           "stage":"github_actions_"+run["conclusion"],
+                           "stage":"github_actions_"+("queued_stale" if is_queued else conclusion),
                            "evidence":"https://github.com/"+repo+"/actions/runs/"+rid,
                            "description":name[:100]})
     if unavailable==len(REPOS):
