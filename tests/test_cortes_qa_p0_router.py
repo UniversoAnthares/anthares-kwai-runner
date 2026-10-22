@@ -60,6 +60,34 @@ class P0RouterTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"ALL_REPOS_INACCESSIBLE"):
                 router.workflow_incidents()
 
+    def test_cloud_queued_runner_over_12min_generates_p0(self):
+        stalled=(router.NOW-dt.timedelta(minutes=20)).isoformat()
+        data={"workflow_runs":[{"id":1234567,"name":"CORTES Threads Cloud Handoff (fenced)",
+                                "status":"queued","conclusion":None,"created_at":stalled}]}
+        with patch.object(router,"http",return_value=data):
+            rows=router.workflow_incidents()
+        self.assertEqual(len(rows),2)
+        self.assertTrue(all(row["stage"]=="github_actions_runner_dispatch_stalled"
+                            for row in rows))
+
+    def test_cloud_controller_disabled_with_backlog_triggers_p0(self):
+        gate={"ok":True,"queued_ids":["first","second"],
+              "cloud_primary_enabled":False}
+        with patch.object(router,"http",return_value=gate):
+            rows=router.threads_control_incidents()
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]["network"],"threads")
+        self.assertIn("cloud_primary_disabled",rows[0]["stage"])
+
+    def test_no_alarm_when_cloud_healthy_or_queue_empty(self):
+        for gate in [
+            {"ok":True,"queued_ids":[],"cloud_primary_enabled":False},
+            {"ok":True,"queued_ids":["a"],"cloud_primary_enabled":True,
+             "cloud_heartbeat_at":router.NOW.isoformat()},
+        ]:
+            with patch.object(router,"http",return_value=gate):
+                self.assertEqual(router.threads_control_incidents(),[])
+
     def test_action_success_never_creates_ticket(self):
         run={"workflow_runs":[{
             "name":"CORTES TikTok Neon Producer","conclusion":"success",
