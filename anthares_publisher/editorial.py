@@ -66,7 +66,7 @@ def require_strategic_master(payload: dict) -> None:
             not all(isinstance(x, str) and len(x.strip()) >= 3 for x in keywords)):
         raise ValueError("CORTES_KEYWORDS_MISSING")
     if (not isinstance(hashtags, list) or not 2 <= len(hashtags) <= 5 or
-            not all(isinstance(x, str) and re.fullmatch(r"#[^\\W_][\\w]*", x, re.UNICODE) for x in hashtags)):
+            not all(isinstance(x, str) and re.fullmatch(r"#[^\W_]\w*", x, re.UNICODE) for x in hashtags)):
         raise ValueError("CORTES_HASHTAGS_MISSING")
     if len({x.casefold() for x in hashtags}) != len(hashtags):
         raise ValueError("CORTES_HASHTAGS_DUPLICATE")
