@@ -42,6 +42,7 @@ jobs:
           secrets: |
             0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
       - name: Publish one verified Pinterest cut and reconcile queued Pins
+        id: publisher
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -49,4 +50,17 @@ jobs:
           BUFFER_PINTEREST_BOARD_ID: '819514532133906920'
         run: |
           set -euo pipefail
-          python -u tools/cortes_buffer_pinterest_cloud.py
+          python -u tools/cortes_buffer_pinterest_cloud.py | tee /tmp/pinterest-run.log
+      - name: Produce strict machine-readable publication evidence
+        if: always()
+        env:
+          CORTES_WORKER_CONCLUSION: ${{ steps.publisher.outcome }}
+        run: |
+          python tools/pinterest_operational_evidence.py /tmp/pinterest-run.log
+      - name: Archive publication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinterest-evidence-${{ github.run_id }}
+          path: /tmp/pinterest-evidence/
+          retention-days: 7
