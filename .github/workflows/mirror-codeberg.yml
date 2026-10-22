@@ -51,3 +51,19 @@ jobs:
             exit 4
           fi
           echo "CODEBERG_MAIN_SYNC_PROVEN=$source_sha"
+
+      - name: Repair Codeberg default branch and enable Actions
+        shell: bash
+        env:
+          CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
+          CODEBERG_API_TOKEN: ${{ secrets.CODEBERG_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 tools/codeberg_admin_reconcile.py
+
+      - name: Prove repository settings and exact commit parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin refs/heads/main:refs/remotes/origin/main
+          EXPECTED_GITHUB_MAIN_SHA="$(git rev-parse refs/remotes/origin/main)" python3 tools/codeberg_mirror_health.py
