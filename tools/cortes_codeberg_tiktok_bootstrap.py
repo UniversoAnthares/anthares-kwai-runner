@@ -12,6 +12,8 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"tools"))
 sys.path.insert(0,str(ROOT/"direct-tiktok-publisher"))
 from cortes_tiktok_hosted_publish import preflight_vault
+from cortes_tiktok_lucasrosalem4_cloud_publish import studio
+from playwright.sync_api import sync_playwright
 
 DEST="https://codeberg.org/api/v1/repos/UniversoAnthares/anthares-kwai-runner/actions/secrets/"
 SUFFIXES={
@@ -70,19 +72,28 @@ def main():
         second=json.loads(zlib.decompress(base64.b64decode(second_encoded,validate=True)))
     except (ValueError,zlib.error) as exc:
         raise RuntimeError("SECONDARY_STUDIO_SECRET_INVALID") from exc
+    # Second account must be independently verified before any cookie is
+    # stored. Never assume a cookie file belongs to lucasrosalem4.
+    with sync_playwright() as playwright:
+        browser=playwright.chromium.launch(headless=True,args=[
+            "--no-sandbox","--disable-dev-shm-usage","--disable-gpu"])
+        try:
+            context=browser.new_context(storage_state=auth_cookies(second),locale="pt-BR")
+            page=context.new_page()
+            try:
+                posts=studio(page)
+                print("CODEBERG_BOOTSTRAP_SECONDARY_OWNER_VERIFIED=1 posts="+
+                      str(len(posts)),flush=True)
+            finally:
+                context.close()
+        finally:
+            browser.close()
     payloads={
         "TIKTOK_UNIVERSO_STORAGE_STATE":compact(primary),
-        "TIKTOK_LUCASROSALEM4_STORAGE_STATE":compact(second)
+        "TIKTOK_LUCASROSALEM4_STORAGE_STATE":compact(second),
     }
-    # Independent keys prevent one compromised account/route affecting another.
-    keys={account:base64.urlsafe_b64encode(secrets.token_bytes(48)).decode()
-          for account in SUFFIXES}
     for name,value in payloads.items():
         store(name,value,headers)
-    for account,suffix in SUFFIXES.items():
-        store("CORTES_CODEBERG_TIKTOK_"+suffix+"_KEY",keys[account],headers)
-        print("CODEBERG_SERVICE_KEY_HASH account="+account+
-              " sha256="+hashlib.sha256(keys[account].encode()).hexdigest(),flush=True)
     print("CODEBERG_TIKTOK_CREDENTIALS_BOOTSTRAPPED=1",flush=True)
 
 if __name__=="__main__":
