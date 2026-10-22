@@ -33,6 +33,33 @@ class DirectInstagramTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"HOSTED_WORKFLOW_ONLY"):
                 direct.require_cloud()
 
+    def test_official_meta_host_fallback_is_readonly_and_identity_fenced(self):
+        class FakeClient:
+            def __init__(self, user_id, access_token, api_version, graph_host):
+                self.graph_host=graph_host
+            def _request(self, method, path, query=None):
+                self.assertions=(method,path,query)
+                if self.graph_host=="graph.instagram.com":
+                    raise RuntimeError("Instagram API HTTP 400: login type differs")
+                return {"id":"123456789","username":"universoanthares"}
+        env={
+            "GITHUB_ACTIONS":"true", "RUNNER_ENVIRONMENT":"github-hosted",
+            "RUNNER_OS":"Linux", "GITHUB_REPOSITORY":"UniversoAnthares/anthares-kwai-runner",
+            "GITHUB_REF":"refs/heads/main",
+            "GITHUB_WORKFLOW_REF":"UniversoAnthares/anthares-kwai-runner/.github/workflows/cortes-instagram-direct-cloud.yml@refs/heads/main",
+            "ANTHARES_SOCIAL_COMMIT":"1",
+            "ACTIONS_ID_TOKEN_REQUEST_URL":"https://example.invalid/oidc",
+            "ACTIONS_ID_TOKEN_REQUEST_TOKEN":"test-oidc-token",
+            "INSTAGRAM_USER_ID":"123456789","INSTAGRAM_ACCESS_TOKEN":"test-token",
+            "INSTAGRAM_GRAPH_HOST":"graph.instagram.com",
+        }
+        with patch.dict(os.environ,env,clear=True), \
+             patch.object(direct,"InstagramClient",FakeClient), \
+             patch.object(direct,"neon") as queue:
+            actual=direct.require_cloud()
+            self.assertEqual(actual.graph_host,"graph.facebook.com")
+            queue.assert_not_called()
+
     def test_queue_authority_is_not_called_before_cloud_identity(self):
         with patch.object(direct,"require_cloud",side_effect=RuntimeError("AUTH_UNAVAILABLE")):
             with patch.object(direct,"neon") as q:
