@@ -156,6 +156,11 @@ async function bufferAction(verb,b,platform){
  if(verb==='lease'){
   if(b.target_key!==dest||!String(b.owner||'').startsWith(owner))return{ok:false,error:'WRONG_QUEUE_OWNER'};
   if(platform==='linkedin')await recoverExpiredLinkedin(dest);
+  await query(`UPDATE cortes_publications SET status='failed',lease_owner=NULL,lease_until=NULL,updated_at=now()
+    WHERE target_key=$1 AND status='uncertain'
+      AND confirmation_evidence->>'kind'='source_media_http_404'
+      AND (updated_at AT TIME ZONE 'America/Campo_Grande')::date
+          < (now() AT TIME ZONE 'America/Campo_Grande')::date`,[dest]);
   const held=await query(`SELECT count(*)::int n FROM cortes_publications
    WHERE target_key=$1 AND status='uncertain'
    AND confirmation_evidence->>'kind'='buffer_scheduled'`,[dest]);
@@ -166,7 +171,7 @@ async function bufferAction(verb,b,platform){
   // Same stable daily rank as the Vercel route: at most 100 Buffer
   // allocations per week; remaining Pinterest clips belong to browser lane.
   const pinterest=platform==='pinterest';
-  const cutoffForBuffer=platform==='linkedin'?LINKEDIN_EXCEPTION_START: "(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+  const cutoffForBuffer=platform==='instagram'?"'1970-01-01T00:00:00Z'::timestamptz":platform==='linkedin'?LINKEDIN_EXCEPTION_START: "(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
   const row=await query(pinterest?`WITH ranked AS (
     SELECT id,row_number() OVER (
        PARTITION BY (created_at AT TIME ZONE 'America/Campo_Grande')::date
@@ -239,8 +244,8 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
      RETURNING id,status`,[id,dest,who,fence]);
    return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PINTEREST_MEDIA_MISSING_FENCE_REJECTED'};
   }
-  const evidence={kind:'source_media_http_404',account:dest,confirmed_on_network:false};
-  const rows=await query(`UPDATE cortes_publications SET status='failed',
+  const evidence={kind:'source_media_http_404',account:dest,confirmed_on_network:false,quarantine_at:new Date().toISOString(),discard_policy:'next_local_daily_round'};
+  const rows=await query(`UPDATE cortes_publications SET status='uncertain',
       confirmation_evidence=$5::jsonb,lease_until=NULL,lease_owner=NULL,updated_at=now()
       WHERE id=$1 AND target_key=$2 AND status='leased'
         AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status`,
