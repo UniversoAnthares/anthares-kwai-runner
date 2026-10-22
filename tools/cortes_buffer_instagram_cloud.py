@@ -197,6 +197,13 @@ def publish_once():
 
 def main():
     cloud_only()
+    policy=queue("policy")
+    if not policy.get("enabled") or int(policy.get("remaining",0))<=0:
+        print(json.dumps({"instagram_cloud":"BUFFER_BUDGET_HANDOFF_OWN",
+                          "buffer_used_today":policy.get("used"),
+                          "buffer_daily_limit":20,
+                          "buffer_weekday_enabled":bool(policy.get("enabled"))}),flush=True)
+        return 0
     confirmed=reconcile()
     batch=6 if os.getenv("CORTES_IG_IMMEDIATE_UNTIL_UTC")=="2026-10-22T09:00:00Z" else 1
     outcomes=[]
