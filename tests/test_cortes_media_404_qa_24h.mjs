@@ -4,7 +4,7 @@ import {test} from 'node:test';
 const source=readFileSync(new URL('../infra/neon-cortes-queue/index.mjs',import.meta.url),'utf8');
 test('all 404 actions preserve the 24h-and-QA recovery contract',()=>{
   assert.equal((source.match(/discard_policy:'qa_24h_then_qa_exhaustion_required'/g)||[]).length,3);
-  assert.equal((source.match(/now\(\)-interval '24 hours'/g)||[]).length,2);
+  assert.equal((source.match(/COALESCE\(NULLIF\(confirmation_evidence->>'quarantine_at',''\)::timestamptz,updated_at\)\s*<= now\(\)-interval '24 hours'/g)||[]).length,2);
   assert.equal((source.match(/confirmation_evidence @> '\{"qa_recovery_exhausted":true\}'::jsonb/g)||[]).length,2);
   assert.doesNotMatch(source,/discard_policy:'next_local_daily_round'/);
   assert.doesNotMatch(source,/\(updated_at AT TIME ZONE 'America\/Campo_Grande'\)::date\s*<\s*\(now\(\) AT TIME ZONE 'America\/Campo_Grande'\)::date/);
