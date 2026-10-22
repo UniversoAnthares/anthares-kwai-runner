@@ -60,6 +60,16 @@ class SecondaryCloudTests(unittest.TestCase):
         self.assertEqual(mocked.call_count,2)
         self.assertIn("lucas4-ha",mocked.call_args.args[0].full_url)
 
+    def test_claim_wait_budget_is_longer_than_neon_multistep_response(self):
+        from unittest.mock import Mock
+        response=Mock()
+        response.__enter__=Mock(return_value=response)
+        response.__exit__=Mock(return_value=False)
+        with (patch.object(q.urllib.request,"urlopen",return_value=response) as request,
+              patch.object(q,"read_json",return_value={"ok":True,"mode":"idle","job":None})):
+            self.assertEqual(q.call("claim","fake-token",{}).get("mode"),"idle")
+        self.assertGreaterEqual(request.call_args.kwargs["timeout"],100)
+
     def test_irreversible_start_never_retries_after_http_error(self):
         from urllib.error import HTTPError
         failure=HTTPError(q.QUEUE,503,"unknown completion",{},None)
