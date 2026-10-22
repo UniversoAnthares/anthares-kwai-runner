@@ -73,12 +73,21 @@ class SecondaryCloudTests(unittest.TestCase):
         runtime=MagicMock()
         runner=MagicMock()
         runner.__enter__.return_value=runtime
-        with patch("playwright.sync_api.sync_playwright",return_value=runner):
-            with patch.object(q,"studio",side_effect=TimeoutError()):
-                with patch.object(q,"call") as api:
-                    self.assertFalse(q.reconcile_uncertain(
-                        {"status":"uncertain"},"token",{}))
-                api.assert_not_called()
+        # Isolate the browser dependency: unit tests on Codeberg tiny run
+        # without installing Playwright or launching any interactive Chromium.
+        import sys
+        import types
+        shim=types.ModuleType("playwright")
+        sync=types.ModuleType("playwright.sync_api")
+        sync.sync_playwright=MagicMock()
+        shim.sync_api=sync
+        with patch.dict(sys.modules,{"playwright":shim,"playwright.sync_api":sync}):
+            with patch("playwright.sync_api.sync_playwright",return_value=runner):
+                with patch.object(q,"studio",side_effect=TimeoutError()):
+                    with patch.object(q,"call") as api:
+                        self.assertFalse(q.reconcile_uncertain(
+                            {"status":"uncertain"},"token",{}))
+                    api.assert_not_called()
 
     def test_uncertain_mode_never_reenters_upload_editor(self):
         job={"id":"tt-test","status":"uncertain",
