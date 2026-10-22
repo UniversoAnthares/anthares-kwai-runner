@@ -31,8 +31,13 @@ jobs:
           $ErrorActionPreference='Stop'
           $env:GIT_TERMINAL_PROMPT='0'
           if (-not $env:CODEBERG_PUSH_URL) { throw 'CODEBERG_PUSH_URL_MISSING' }
-          git remote add codeberg $env:CODEBERG_PUSH_URL
-          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_REMOTE_ADD_FAILED' }
+          $existing=@(git remote)
+          if ($existing -contains 'codeberg') {
+            git remote set-url codeberg $env:CODEBERG_PUSH_URL
+          } else {
+            git remote add codeberg $env:CODEBERG_PUSH_URL
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_REMOTE_CONFIG_FAILED' }
           git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main'
           if ($LASTEXITCODE -ne 0) { throw 'GITHUB_MAIN_FETCH_FAILED' }
           $expected=(git rev-parse refs/remotes/origin/main).Trim()
