@@ -1,0 +1,27 @@
+name: CORTES bootstrap separate Codeberg clipper mirror
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-codeberg-clipper-bootstrap.yml'
+      - 'tools/codeberg_clipper_bootstrap.py'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-codeberg-clipper-mirror-bootstrap
+  cancel-in-progress: false
+jobs:
+  create-and-mirror:
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create missing Codeberg clipper and confirm exact main SHA
+        shell: powershell
+        env:
+          CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
+        run: |
+          $ErrorActionPreference='Stop'
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/codeberg_clipper_bootstrap.py
+          if ($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
