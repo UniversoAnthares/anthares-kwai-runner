@@ -1,10 +1,5 @@
 name: CORTES LinkedIn personal - standby hosted publisher
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/cortes-linkedin-personal-cloud.yml'
-      - 'tools/cortes_linkedin_personal_cloud.py'
   schedule:
     - cron: '4,19,34,49 * * * *'
   workflow_dispatch: {}
@@ -17,7 +12,9 @@ permissions:
   id-token: write
   actions: read
 concurrency:
-  group: cortes-linkedin-personal-standby-hosted
+  # Isolate manual, scheduled and workflow_run pending queues. A successful
+  # primary completion cannot cancel an authorized manual redundancy test.
+  group: cortes-linkedin-personal-standby-${{ github.event_name }}
   cancel-in-progress: false
 jobs:
   publish-one:
