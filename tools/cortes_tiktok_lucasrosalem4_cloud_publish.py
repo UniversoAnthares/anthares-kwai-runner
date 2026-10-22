@@ -68,7 +68,7 @@ def call(action,token,payload=None):
         data=json.dumps(payload,separators=(",",":")).encode() if payload is not None else None,
         headers=headers,method="POST" if payload is not None else "GET")
     try:
-        with urllib.request.urlopen(request,timeout=35) as resp:
+        with urllib.request.urlopen(request,timeout=105 if action=="claim" else 35) as resp:
             out=read_json(resp)
     except urllib.error.HTTPError as exc:
         # Preserve the action and HTTP code, never the private token or URL.
@@ -82,7 +82,7 @@ def call(action,token,payload=None):
                     data=request.data,headers=headers,
                     method="POST" if payload is not None else "GET")
                 try:
-                    with urllib.request.urlopen(backup,timeout=35) as resp:
+                    with urllib.request.urlopen(backup,timeout=75 if action=="claim" else 35) as resp:
                         out=read_json(resp)
                     if not out.get("ok"):
                         raise SafeStop("TIKTOK_SECONDARY_BACKUP_UNACKNOWLEDGED_"+action)
@@ -104,7 +104,7 @@ def call(action,token,payload=None):
                 data=request.data,headers=headers,
                 method="POST" if payload is not None else "GET")
             try:
-                with urllib.request.urlopen(secondary,timeout=26) as resp:
+                with urllib.request.urlopen(secondary,timeout=75 if action=="claim" else 26) as resp:
                     out=read_json(resp)
                 if not out.get("ok"):
                     raise SafeStop("SECONDARY_QUEUE_ALTERNATE_UNACKNOWLEDGED_"+action)
