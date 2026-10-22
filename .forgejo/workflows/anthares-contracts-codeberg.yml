@@ -1,0 +1,65 @@
+# Offline contract coverage migrated from standalone GitHub Actions.
+name: Anthares contracts - Codeberg
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/anthares-contracts-codeberg.yml'
+      - 'ai-runners/**'
+      - 'anthares_publisher/**'
+      - 'social_adapters/**'
+      - 'tools/cortes_buffer_pinterest_cloud.py'
+      - 'infra/neon-cortes-queue/**'
+      - 'infra/cloudflare-cortes-queue-ha/**'
+      - 'tools/cortes_threads_continuity_guard.mjs'
+      - 'tools/threads_primary_gate.mjs'
+      - 'infra/neon-cortes-threads-sync/**'
+      - 'tests/**'
+  schedule:
+    - cron: '27 2 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-codeberg-contract-migration
+  cancel-in-progress: false
+jobs:
+  contracts:
+    runs-on: codeberg-tiny
+    timeout-minutes: 12
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - name: Check runner requirements
+        shell: bash
+        run: |
+          set -eu
+          test "${FORGEJO_REPOSITORY:-}" = "UniversoAnthares/anthares-kwai-runner"
+          python3 --version
+          node --version
+      - name: Python runner and publisher contracts
+        shell: bash
+        run: |
+          set -eu
+          python3 -m py_compile ai-runners/anthares_ai.py ai-runners/hidden_chat_runner.py ai-runners/claude_hidden_runner.py
+          (cd ai-runners && python3 -m unittest -v test_anthares_ai.py)
+          bash -n kwai_queue_state.sh
+          python3 -m unittest discover -s tests -p 'test_anthares_publisher_*.py' -v
+          python3 -m py_compile tools/cortes_buffer_pinterest_cloud.py
+          python3 -m unittest discover -s tests -p 'test_cortes_buffer_pinterest_cloud.py' -v
+      - name: Node queue and Threads safety contracts
+        shell: bash
+        run: |
+          set -eu
+          node --check vercel-ara-primary/api/cortes-queue.mjs
+          node --check infra/neon-cortes-queue/index.mjs
+          node --check infra/cloudflare-cortes-queue-ha/src/index.js
+          node --test tests/test_cortes_queue_ha.mjs
+          node --check tools/cortes_threads_continuity_guard.mjs
+          node --check infra/neon-cortes-threads-sync/index.mjs
+          node --test tests/threads_primary_gate.test.mjs tests/threads_continuity_guard.test.mjs tests/threads_neon_sync.test.mjs tests/threads_daily_budget.test.mjs tests/threads_queue_policy.test.mjs
+      - name: Proof of completed Codeberg tests
+        shell: bash
+        run: |
+          set -eu
+          echo "ANTHARES_CONTRACTS_CODEBERG=PASS"
+          git rev-parse HEAD
