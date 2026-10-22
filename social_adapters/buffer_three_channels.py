@@ -272,7 +272,7 @@ def trusted_instagram_one_time_runner() -> bool:
             and ((os.getenv("RUNNER_NAME") == "anthares-instagram-once-20261021"
                   and os.getenv("GITHUB_WORKFLOW_REF", "").endswith(
                       "/.github/workflows/cortes-buffer-instagram-cloud.yml@refs/heads/main"))
-                 or (os.getenv("RUNNER_NAME") == "anthares-instagram-fallback-20261021"
+                 or (os.getenv("RUNNER_NAME") in ("anthares-instagram-fallback-20261021", "Anthares-TikTok-Lucas4-Windows-HA")
                      and os.getenv("GITHUB_WORKFLOW_REF", "").endswith(
                          "/.github/workflows/cortes-buffer-instagram-windows-fallback.yml@refs/heads/main"))))
 
