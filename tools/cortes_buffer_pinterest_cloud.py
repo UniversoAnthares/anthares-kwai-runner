@@ -190,6 +190,41 @@ def notify_media_p0(job_id,media_url):
         print("::warning::PINTEREST_QA_CENTRAL_UNAVAILABLE",flush=True)
 
 
+def notify_buffer_rejection_p0(job_id,classification,diagnostic):
+    """Deduplicated P0 QA ticket with sanitized Buffer API diagnostic."""
+    from datetime import datetime, timezone
+    env=os.environ.copy()
+    env["GH_TOKEN"]=env.get("GH_TOKEN") or env.get("GITHUB_TOKEN","")
+    if not env["GH_TOKEN"]:
+        print("::warning::PINTEREST_BUFFER_QA_AUTH_UNAVAILABLE",flush=True)
+        return
+    day=datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    fingerprint=hashlib.sha256(("pinterest-buffer|"+classification+"|"+day).encode()).hexdigest()[:24]
+    repo="UniversoAnthares/anthares-kwai-runner"
+    try:
+        checked=subprocess.run(["gh","issue","list","--repo",repo,"--state","all",
+            "--search",fingerprint,"--json","number","--limit","5"],
+            capture_output=True,text=True,timeout=18,env=env)
+        if checked.returncode!=0 or json.loads(checked.stdout):
+            return
+        body=("QA-P0-FINGERPRINT:"+fingerprint+"\\n\\n"+
+              "P0: Buffer createPost returned typed MutationError, with no post ID. "
+              "No blind retry: the Neon ledger isolates this job for 120 minutes.\\n"+
+              "Classification: "+classification+"\\n"+
+              "Sanitized diagnostic: "+diagnostic+"\\n"+
+              "Job: "+job_id+"\\n"+
+              "ACTION: correct cause, test against board/channel/media metadata, "
+              "preserve 100-post network cap, avoid duplicate submissions.\\n")
+        created=subprocess.run(["gh","issue","create","--repo",repo,
+            "--title","[QA P0][Pinterest] Buffer definite "+classification+" rejection",
+            "--body",body,"--label","QA-P0","--label","publication-failure"],
+            capture_output=True,text=True,timeout=23,env=env)
+        if created.returncode!=0:
+            print("::warning::PINTEREST_BUFFER_QA_ISSUE_UNAVAILABLE",flush=True)
+    except (OSError,ValueError,subprocess.TimeoutExpired):
+        print("::warning::PINTEREST_BUFFER_QA_ISSUE_UNAVAILABLE",flush=True)
+
+
 def publish_once():
     lease=queue("lease",{"target_key":TARGET,"owner":OWNER})
     row=lease.get("job")
@@ -217,12 +252,22 @@ def publish_once():
         queue("fail",fence)
         raise
     queue("start",fence)
+    from social_adapters.buffer_three_channels import BufferDefiniteRejection
     try:
         result=schedule(payload)
         if result.get("status")!="SCHEDULED_IN_BUFFER" or not result.get("remote_id"):
             raise RuntimeError("BUFFER_NOT_SCHEDULED")
         queue("scheduled",{**fence,"buffer_post_id":result["remote_id"]})
         return "SCHEDULED_IN_BUFFER"
+    except BufferDefiniteRejection as exc:
+        # Buffer explicitly returned MutationError, not a transport timeout.
+        # The backend CAS checks started+owner+generation+no remote ID.
+        rejected=queue("rejected",{**fence,"reason":exc.classification})
+        if not rejected.get("ok"):
+            raise RuntimeError("BUFFER_REJECTION_RECOVERY_FENCE_FAILED")
+        print("::warning::PINTEREST_BUFFER_MUTATION_DIAGNOSTIC="+exc.diagnostic,flush=True)
+        notify_buffer_rejection_p0(row["id"],exc.classification,exc.diagnostic)
+        return "DEFINITIVE_REJECTION_QUARANTINED"
     except Exception:
         # The Buffer request may already have created a post. Never retry it
         # automatically: started job becomes uncertain, pending reconciliation.
