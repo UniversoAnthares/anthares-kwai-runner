@@ -86,8 +86,23 @@ def transcript(url):
     if WHISPER is None:
         # Local model cache only: QA must not silently download new models.
         WHISPER=WhisperModel('small',device='cpu',compute_type='int8',local_files_only=True)
-    lines,meta=WHISPER.transcribe(url,language='pt',beam_size=3,vad_filter=True)
-    text=' '.join(' '.join(x.text.strip().split()) for x in lines).strip()
+    # Bound remote media access before the CPU-only transcription starts.
+    import subprocess
+    from tempfile import TemporaryDirectory
+    with TemporaryDirectory(prefix='pinterest-qa-audio-') as folder:
+        wav=str(Path(folder)/'clip.wav')
+        try:
+            completed=subprocess.run(['ffmpeg','-nostdin','-loglevel','error',
+                '-rw_timeout','12000000','-i',url,'-t','95','-vn',
+                '-ac','1','-ar','16000','-y',wav],
+                stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                timeout=100,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+        except subprocess.TimeoutExpired:
+            raise RuntimeError('PINTEREST_ASR_SOURCE_TIMEOUT') from None
+        if completed.returncode or not Path(wav).is_file():
+            raise RuntimeError('PINTEREST_ASR_SOURCE_UNAVAILABLE')
+        lines,meta=WHISPER.transcribe(wav,language='pt',beam_size=3,vad_filter=True)
+        text=' '.join(' '.join(x.text.strip().split()) for x in lines).strip()
     if len(text)<95 or len(text)>14000:
         raise RuntimeError('PINTEREST_ASR_NOT_USEFUL')
     filepath.write_text(text,encoding='utf8')
