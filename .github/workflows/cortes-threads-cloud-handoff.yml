@@ -26,6 +26,7 @@ permissions:
   contents: read
   id-token: write
   issues: write
+  actions: write
 concurrency:
   group: cortes-threads-cloud-single-writer
   cancel-in-progress: false
@@ -64,3 +65,7 @@ jobs:
       - name: One-off overnight cloud queue publisher with Neon fencing
         if: env.THREADS_BATCH == '1'
         run: node tools/threads_cloud_batch_pump.mjs
+      - name: Independent P0 QA alert and recovery dispatch on any failed step
+        if: failure()
+        continue-on-error: false
+        run: node tools/cortes_threads_failure_reporter.mjs
