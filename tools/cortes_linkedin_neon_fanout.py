@@ -79,6 +79,13 @@ def candidate_jobs(state):
                 raise RuntimeError("LINKEDIN_FANOUT_MASTER_IDENTITY_COLLISION")
             digest=hashlib.sha256((sid+"|"+segment+"|"+TARGET).encode()).hexdigest()[:32]
             jobid="cortes-fanout-linkedin-"+digest
+            # Preserve transcription-derived editorial fields from the
+            # upstream clip. Missing metadata remains explicit for the QA
+            # enrichment queue instead of silently inheriting a live title.
+            if clip.get("editorial_policy") == "anthares_editorial_transcript_v2":
+                if not all(k in clip for k in ("description","keywords","hashtags","title")):
+                    raise RuntimeError("CORTES_SOURCE_STRATEGIC_METADATA_INCOMPLETE")
+                title=str(clip["title"]).strip()
             output[key]={
                 "id":jobid,"dedupe_key":jobid,"executor":"social_video",
                 "platform":"linkedin","target_key":TARGET,"account_id":"primary",
@@ -91,6 +98,12 @@ def candidate_jobs(state):
                 "cortes_attachment_id":attachment,
                 "planned_at":str(clip.get("planned_at") or ""),
             }
+            if clip.get("editorial_policy") == "anthares_editorial_transcript_v2":
+                output[key].update({"editorial_policy":clip["editorial_policy"],
+                   "description":str(clip["description"]),
+                   "keywords":clip["keywords"],"hashtags":clip["hashtags"]})
+            else:
+                output[key]["editorial_provenance"]="requires_transcript_qa"
     selected=[]
     by_source={}
     for job in output.values():
