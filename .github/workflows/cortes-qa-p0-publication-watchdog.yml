@@ -30,10 +30,11 @@ permissions:
   actions: read
   issues: write
 concurrency:
-  group: cortes-p0-publication-errors-watchdog
+  group: cortes-p0-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.workflow_run.name || 'routine' }}
   cancel-in-progress: false
 jobs:
   test:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -47,9 +48,8 @@ jobs:
       contents: read
       issues: write
       actions: write
-    needs: test
     if: github.event_name != 'pull_request' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 8
     env:
       GITHUB_TOKEN: ${{ github.token }}
