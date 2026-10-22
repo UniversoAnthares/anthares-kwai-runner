@@ -24,5 +24,11 @@ $env:PYTHONPATH=$qaDeps+[IO.Path]::PathSeparator+$env:PYTHONPATH
 if($LASTEXITCODE -ne 0){ throw 'PINTEREST_QA_PYAV_ABI_MISMATCH' }
 $worker=Join-Path $root 'tools\cortes_pinterest_metadata_qa.py'
 if(-not(Test-Path $worker)){throw 'PINTEREST_QA_WORKER_MISSING'}
+$diagDir=Join-Path $root 'qa-health'
+New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
+$diagFile=Join-Path $diagDir 'pinterest-qa-exit.log'
 & py -3 $worker --max-clips 3
-exit $LASTEXITCODE
+$qaExit=$LASTEXITCODE
+$event=@{at=(Get-Date).ToUniversalTime().ToString('o');component='pinterest-metadata-qa';exit_code=$qaExit}
+Add-Content -LiteralPath $diagFile -Value ($event | ConvertTo-Json -Compress) -Encoding UTF8
+exit $qaExit
