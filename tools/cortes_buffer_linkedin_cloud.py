@@ -191,6 +191,14 @@ def exception_active():
 
 def main():
     cloud_only()
+    policy=queue("policy")
+    if not policy.get("enabled") or int(policy.get("remaining",0))<=0:
+        print(json.dumps({"linkedin_cloud":"BUFFER_BUDGET_HANDOFF_OWN",
+                          "buffer_used_today":policy.get("used"),
+                          "buffer_daily_limit":20,
+                          "buffer_weekday_enabled":bool(policy.get("enabled")),
+                          "requires_direct_company_publisher":True}),flush=True)
+        return 0
     # Reconciliation before scheduling also frees up a Buffer queue slot.
     try:
         confirmed=reconcile()
