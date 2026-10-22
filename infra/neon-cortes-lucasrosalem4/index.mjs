@@ -78,6 +78,55 @@ async function githubRole(req) {
  }catch{return'';}
 }
 
+const FORGEJO_ISSUER='https://codeberg.org/api/actions';
+const FORGEJO_KEYS='https://codeberg.org/api/actions/.well-known/keys';
+const FORGEJO_WORKFLOW=RUNNER+'/.forgejo/workflows/tiktok-codeberg-primary.yml@refs/heads/main';
+let forgejoKeys=null,forgejoKeysUntil=0;
+
+async function codebergRole(req) {
+  const jwt=token(req);
+  if(jwt.length<200||jwt.length>16000)return '';
+  const parts=jwt.split('.');
+  if(parts.length!==3)return '';
+  let header,claims;
+  try {
+    header=JSON.parse(Buffer.from(parts[0],'base64url').toString('utf8'));
+    claims=JSON.parse(Buffer.from(parts[1],'base64url').toString('utf8'));
+  } catch {return '';}
+  if(header.alg!=='RS256'||!/^[A-Za-z0-9_.-]{1,200}$/.test(header.kid||''))return '';
+  const now=Math.floor(Date.now()/1000);
+  const audiences=Array.isArray(claims.aud)?claims.aud:[claims.aud];
+  const subjects=[
+    'repo:'+RUNNER+':ref:refs/heads/main',
+    'repo:UniversoAnthares-1543245/anthares-kwai-runner-2708613:ref:refs/heads/main'
+  ];
+  if(claims.iss!==FORGEJO_ISSUER||!audiences.includes(AUDIENCE)||
+     claims.repository!==RUNNER||Number(claims.repository_id)!==2708613||
+     claims.ref!=='refs/heads/main'||claims.workflow_ref!==FORGEJO_WORKFLOW||
+     !subjects.includes(claims.sub)||
+     !['schedule','workflow_dispatch'].includes(claims.event_name)||
+     !Number.isFinite(claims.exp)||claims.exp<=now||
+     !Number.isFinite(claims.iat)||claims.iat>now+60||now-claims.iat>3600||
+     (claims.nbf!==undefined&&Number(claims.nbf)>now+60))return '';
+  try {
+    if(!forgejoKeys||Date.now()>forgejoKeysUntil){
+      const cfg=await fetch(FORGEJO_ISSUER+'/.well-known/openid-configuration',{signal:AbortSignal.timeout(7500)});
+      if(!cfg.ok)return '';
+      const meta=await cfg.json();
+      if(meta.issuer!==FORGEJO_ISSUER||meta.jwks_uri!==FORGEJO_KEYS)return '';
+      const response=await fetch(FORGEJO_KEYS,{signal:AbortSignal.timeout(7500)});
+      if(!response.ok)return '';
+      forgejoKeys=await response.json();
+      forgejoKeysUntil=Date.now()+300000;
+    }
+    const jwk=(forgejoKeys.keys||[]).find(x=>x.kid===header.kid&&x.kty==='RSA'&&(!x.alg||x.alg==='RS256'));
+    if(!jwk)return '';
+    const key=crypto.createPublicKey({key:jwk,format:'jwk'});
+    return crypto.verify('RSA-SHA256',Buffer.from(parts[0]+'.'+parts[1]),key,
+                         Buffer.from(parts[2],'base64url'))?'consumer':'';
+  } catch {return '';}
+}
+
 async function schema(){
  if(ready)return;
  await pool.query(
@@ -246,7 +295,7 @@ async function handler(req,res){
       isolation:'separate_from_kwai',fencing:true,
       db_ledger_total:Number(check.rows[0].total)});
   }
-  const role=await githubRole(req);
+  const role=(await githubRole(req))||(await codebergRole(req));
   if(!role)return reply(res,401,{ok:false,error:'unauthorized_oidc'});
   const b=body(req);
   if(req.method==='POST'&&action==='enqueue'&&role==='producer')return reply(res,200,await enqueue(b));
