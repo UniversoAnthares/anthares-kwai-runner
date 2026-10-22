@@ -203,5 +203,8 @@ def main():
 if __name__=="__main__":
     try: sys.exit(main())
     except Exception as e:
-        print(json.dumps({"linkedin_cloud":"BLOCKED","reason":type(e).__name__}))
+        # BufferBlocked values are fixed, sanitized reason labels from the
+        # adapter. Never log provider responses, token, video payload or URN.
+        reason=str(e) if isinstance(e,BufferBlocked) and str(e).startswith("BUFFER_") else type(e).__name__
+        print(json.dumps({"linkedin_cloud":"BLOCKED","reason":reason}))
         sys.exit(2)
