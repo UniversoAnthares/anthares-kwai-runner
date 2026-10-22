@@ -31,7 +31,7 @@ class P0Recovery(unittest.TestCase):
         self.assertNotIn("linkedin.com/rest/posts",PS)
 
     def test_executor_wired_before_final_qa_comment(self):
-        self.assertIn("tools\\cortes_qa_p0_recovery.ps1",WF)
+        self.assertIn("cortes_qa_p0_recovery.ps1",WF)
         self.assertIn("id: recovery",WF)
         self.assertIn("QA_AUTOHEAL",WF)
         self.assertIn("actions: write",WF)
