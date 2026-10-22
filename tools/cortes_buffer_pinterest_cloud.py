@@ -350,8 +350,10 @@ def main():
 if __name__=="__main__":
     try: sys.exit(main())
     except Exception as e:
-        code=(str(e) if isinstance(e,BufferBlocked) and
-              str(e).startswith(("BUFFER_","PINTEREST_","MASTER_","TITLE_","DURATION_","CAPTION_","PINTEREST_"))
+        from tools.cortes_queue_ha import BackendUnavailable
+        safe=str(e)
+        code=(safe if (isinstance(e,BufferBlocked) and safe.startswith(("BUFFER_","PINTEREST_","MASTER_","TITLE_","DURATION_","CAPTION_")))
+              or (isinstance(e,BackendUnavailable) and safe.startswith("CORTES_QUEUE_"))
               else type(e).__name__)
         print(json.dumps({"pinterest_cloud":"BLOCKED","reason":code}))
         sys.exit(2)
