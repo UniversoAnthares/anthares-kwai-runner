@@ -60,6 +60,22 @@ class P0RouterTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"ALL_REPOS_INACCESSIBLE"):
                 router.workflow_incidents()
 
+    def test_stale_queued_actions_raise_p0_before_timeout(self):
+        then=(router.NOW-dt.timedelta(minutes=31)).isoformat()
+        data={"workflow_runs":[{"name":"CORTES TikTok @lucasrosalem4 cloud publisher",
+            "status":"queued","conclusion":None,"created_at":then,"id":39765974007}]}
+        with patch.object(router,"http",return_value=data):
+            incidents=router.workflow_incidents()
+        self.assertEqual(len(incidents),2)
+        self.assertTrue(all(x["stage"]=="github_actions_queued_stale" for x in incidents))
+        self.assertEqual(len({x["id"] for x in incidents}),2)
+
+    def test_recent_queued_workflow_is_not_false_alarm(self):
+        data={"workflow_runs":[{"name":"CORTES TikTok hosted canonical Neon publisher",
+            "status":"queued","conclusion":None,"created_at":router.NOW.isoformat(),"id":39765991286}]}
+        with patch.object(router,"http",return_value=data):
+            self.assertEqual(router.workflow_incidents(),[])
+
     def test_action_success_never_creates_ticket(self):
         run={"workflow_runs":[{
             "name":"CORTES TikTok Neon Producer","conclusion":"success",
