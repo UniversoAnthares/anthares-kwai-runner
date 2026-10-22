@@ -58,7 +58,7 @@ def workflow_incidents():
             name=str(run.get("name") or "")
             if not re.search(r"cortes|tiktok|kwai|pinterest|threads|instagram|facebook|linkedin|youtube|publish|buffer",name,re.I):
                 continue
-            if "P0 publication incident" in name or run.get("conclusion") not in ("failure","timed_out"):
+            if "P0 publication incident" in name or run.get("conclusion") not in ("failure","timed_out","cancelled"):
                 continue
             try:
                 created=dt.datetime.fromisoformat(run["created_at"].replace("Z","+00:00"))
