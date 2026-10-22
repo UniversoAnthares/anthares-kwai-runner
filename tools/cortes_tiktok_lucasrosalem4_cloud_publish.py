@@ -458,6 +458,12 @@ def main():
                 print("SECONDARY_CLOUD_IDENTITY_VERIFIED account="+ACCOUNT+" existing="+str(len(posts)),flush=True)
             finally:page.close();ctx.close()
         finally:browser.close()
+    if os.environ.get("TIKTOK_CODEBERG_PREFLIGHT_ONLY")=="1":
+        status=call("status",token)
+        if not status.get("ok"):
+            raise SafeStop("SECONDARY_CODEBERG_OIDC_STATUS_UNVERIFIED")
+        print("CODEBERG_LUCAS4_IDENTITY_AND_OIDC_VERIFIED=1",flush=True)
+        return 0
     if os.environ.get("TIKTOK_LUCASROSALEM4_CLOUD_ENABLED","").lower()!="true":
         print("SECONDARY_CLOUD_STANDBY_NO_PUBLICATION=1",flush=True)
         return 0
