@@ -57,6 +57,22 @@ class XFixedLongSlotsAndQaTests(unittest.TestCase):
             self.assertTrue(json.loads(first.read_text())["reconciled"])
             self.assertGreaterEqual(remote.call_count,1)
 
+    def test_codeberg_overdue_smoke_still_alerts_after_newer_skipped_run(self):
+        past=(datetime.now(timezone.utc)-timedelta(minutes=20)).isoformat()
+        recent=datetime.now(timezone.utc).isoformat()
+        records={"workflow_runs":[
+            {"workflow_id":"x-codeberg-primary.yml","status":"skipped",
+             "event":"push","id":120,"created":recent},
+            {"workflow_id":"x-codeberg-primary.yml","status":"waiting",
+             "event":"workflow_dispatch","id":119,"created":past}
+        ]}
+        with tempfile.TemporaryDirectory() as td,patch.object(qa,"OUTBOX",Path(td)):
+            with patch.object(qa,"http",return_value=records):
+                qa.check_codeberg()
+            codes={json.loads(p.read_text())["code"] for p in Path(td).glob("*.json")}
+            self.assertIn("X_CODEBERG_RUN_STALE",codes)
+            self.assertIn("X_CODEBERG_AUTH_NOT_PROVEN",codes)
+
     def test_northflank_health_missing_ledger_field_is_not_db_failure(self):
         with tempfile.TemporaryDirectory() as td,patch.object(qa,"OUTBOX",Path(td)):
             with patch.object(qa,"http",return_value={
