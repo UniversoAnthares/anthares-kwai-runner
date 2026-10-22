@@ -164,7 +164,24 @@ def main() -> int:
     scan=WORK/"scan.mp4"; edited=WORK/"edited.mp4"
     source_url=str((req.get("source") or {}).get("source_url") or "")
     prep.SCAN_START=int(req.get("scan_start") or 0); prep.SCAN_SECONDS=int(req.get("scan_seconds") or 300)
-    prep.download_scan(source_url,scan)
+    reuse=False
+    marker=WORK/"scan.identity.json"
+    if scan.is_file() and marker.is_file():
+        try:
+            import hashlib
+            record=json.loads(marker.read_text(encoding="utf-8"))
+            if (record.get("source_url")==source_url
+                    and record.get("scan_start")==prep.SCAN_START
+                    and record.get("scan_seconds")==prep.SCAN_SECONDS
+                    and record.get("bytes")==scan.stat().st_size):
+                with scan.open("rb") as previous:
+                    reuse=record.get("sha256")==hashlib.file_digest(previous,"sha256").hexdigest()
+        except (OSError,ValueError,TypeError):
+            reuse=False
+    if not reuse:
+        prep.download_scan(source_url,scan)
+    else:
+        print("X_SOURCE_SCAN_REUSED_VERIFIED_SHA256",flush=True)
     prep.probe_video(scan)
     render_microcut(scan,lo,hi,removals,edited)
     horizontalize(edited,OUT)
