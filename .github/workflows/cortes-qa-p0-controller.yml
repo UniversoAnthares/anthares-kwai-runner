@@ -94,8 +94,17 @@ jobs:
               priorRuns.push(...data.workflow_runs);
               if (data.workflow_runs.length < 100) break;
             }
-            const activeCount = priorRuns.filter(x => x.status !== 'completed').length;
-            if (activeCount >= 3) {
+            // Prior queued runs belong to a superseded publishing runner. They must
+            // not deadlock the new dedicated QA runner. In-progress jobs still
+            // consume capacity; pending jobs count only within the recent window.
+            const currentPending = priorRuns.filter(x =>
+              x.status === 'in_progress' ||
+              (x.status !== 'completed' && now-Date.parse(x.created_at) < 10*60*1000));
+            const activeCount = currentPending.length;
+            const explicitUrgent = /^\d{1,8}$/.test(String(process.env.QA_ISSUE_NUMBER || '').trim());
+            // Explicitly requested P0 issues may bypass global backpressure,
+            // while existing same-issue dedupe and three-attempt checks remain.
+            if (activeCount >= 3 && !explicitUrgent) {
               core.warning('QA_P0_EXECUTOR_BACKPRESSURE active='+activeCount+
                 '; outstanding incidents remain open and will be retried next scan.');
               return;
