@@ -11,7 +11,7 @@ class PersonalFailover(unittest.TestCase):
         self.assertIn("bitwarden/sm-action@v2",wf)
         self.assertIn("python -u -m tools.cortes_linkedin_personal_cloud",wf)
         self.assertIn("group: cortes-linkedin-personal-primary-hosted",wf)
-        self.assertNotIn("group: cortes-linkedin-personal-standby-hosted",wf)
+        self.assertNotIn("group: cortes-linkedin-personal-standby-${{ github.event_name }}",wf)
         self.assertIn("group: cortes-linkedin-personal-standby-hosted",primary)
         self.assertNotIn("workflow_run:",wf)
         self.assertIn("workflow_run:",primary)
