@@ -21,6 +21,9 @@ concurrency:
 
 jobs:
   publish:
+    # The independent GH Anthares Browser is primary when armed. Do not run
+    # this legacy Northflank Chromium path concurrently by accident.
+    if: ${{ vars.ANTHARES_X_LEGACY_FALLBACK_ARM == '1' && vars.ANTHARES_X_AUTOPUBLISH == '1' }}
     runs-on: ubuntu-latest
     timeout-minutes: 9
     env:
