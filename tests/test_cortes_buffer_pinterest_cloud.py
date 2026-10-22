@@ -38,7 +38,7 @@ class PinterestCloudTests(unittest.TestCase):
             self.assertIsNone(p.verify_sent_post("123"))
 
     def test_missing_buffer_board_fails_ci_without_leasing(self):
-        with patch.object(p,"cloud_only"), patch.object(p,"queue",return_value={"active":False}), patch.object(p,"reconcile",return_value=0), \
+        with patch.object(p,"cloud_only"), patch.object(p,"queue",side_effect=lambda action,*args: {"enabled":True,"remaining":10} if action=="policy" else {"active":False}), patch.object(p,"reconcile",return_value=0), \
              patch("social_adapters.buffer_three_channels.pinterest_boards",
                    return_value=[]), patch.object(p,"alternate_pinterest_boards",
                    return_value=[]), patch.object(p.time,"sleep"), \
@@ -48,7 +48,7 @@ class PinterestCloudTests(unittest.TestCase):
             publish.assert_not_called()
 
     def test_buffer_500_is_visible_incident_without_leasing(self):
-        with patch.object(p,"cloud_only"), patch.object(p,"queue",return_value={"active":False}), patch.object(p,"reconcile",return_value=0), \
+        with patch.object(p,"cloud_only"), patch.object(p,"queue",side_effect=lambda action,*args: {"enabled":True,"remaining":10} if action=="policy" else {"active":False}), patch.object(p,"reconcile",return_value=0), \
              patch("social_adapters.buffer_three_channels.pinterest_boards",
                    side_effect=p.BufferBlocked("BUFFER_HTTP_500")), \
              patch.object(p,"alternate_pinterest_boards",
@@ -95,7 +95,7 @@ class PinterestCloudTests(unittest.TestCase):
 
     def test_board_ready_can_resume_without_operator(self):
         from social_adapters.buffer_three_channels import PINTEREST_PUBLIC_BOARD_ID
-        with patch.object(p,"cloud_only"), patch.object(p,"queue",return_value={"active":False}), patch.object(p,"reconcile",return_value=0), \
+        with patch.object(p,"cloud_only"), patch.object(p,"queue",side_effect=lambda action,*args: {"enabled":True,"remaining":10} if action=="policy" else {"active":False}), patch.object(p,"reconcile",return_value=0), \
              patch("social_adapters.buffer_three_channels.pinterest_boards",
                    return_value=[{"serviceId":PINTEREST_PUBLIC_BOARD_ID}]), \
              patch.object(p,"publish_once",return_value="SCHEDULED_IN_BUFFER") as publish:
