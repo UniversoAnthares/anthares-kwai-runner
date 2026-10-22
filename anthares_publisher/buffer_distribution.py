@@ -1,11 +1,10 @@
-"""CORTES distribution contract: first 20 short masters of each daily source
-are reserved independently for Buffer Instagram, Pinterest, and LinkedIn.
+"""CORTES source fanout candidates, not Buffer quota reservations.
 
-Buffer Free may only hold 10 scheduled posts/channel at a time. The 20 are
-a rolling reservation (refill after sends), not 20 simultaneous API posts.
-Overflow stays eligible for alternate publishers, only after checking
-channel-local occupied Buffer slots. Buffer and other paths share the same
-(source, segment, destination) identity.
+Every short is retained for every eligible destination, including independent
+publishers. The Buffer-only global budget is 20 accepted allocations per
+America/Campo_Grande weekday (Mon-Fri), 0 on weekends, across ALL channels,
+enforced atomically by Neon cortes_buffer_daily_slots. Source-level lists
+are editorial candidates only and cannot claim daily Buffer capacity.
 """
 from __future__ import annotations
 
@@ -17,7 +16,12 @@ from zoneinfo import ZoneInfo
 # 20261021_cortes_daily_publication_limit_100.sql, on the first started state.
 # Other authorized publishing routes share this same database and quota.
 CORTES_DAILY_PUBLICATION_LIMIT = 100
+# A combined Buffer transport cap, NOT a 20-per-network or 20-per-source quota.
+BUFFER_GLOBAL_DAILY_LIMIT = 20
+BUFFER_ACTIVE_WEEKDAYS = frozenset(range(5))  # Monday–Friday, local time
+BUFFER_GLOBAL_WEEKLY_LIMIT = 100
 
+# Editorial candidate-window size per source; does not reserve provider capacity.
 BUFFER_LIMIT_PER_SOURCE = 20
 CAPACITY_SOFT_LIMIT = 8
 COLLISION_PADDING_MINUTES = 15
@@ -57,6 +61,10 @@ def partition_source(clips: list[dict], max_buffer: int = BUFFER_LIMIT_PER_SOURC
 def distribution_per_source(source_id: str, clips: list[dict]):
     preferred, overflow = partition_source(clips)
     return {"source_id": source_id,
+            "provider_allocation_authority": "neon:cortes_buffer_daily_slots",
+            "global_buffer_daily_max": BUFFER_GLOBAL_DAILY_LIMIT,
+            "global_buffer_active_weekdays": ["mon","tue","wed","thu","fri"],
+            "buffer_preference_only": True,
             "buffer": {network: [stable_segment(c)[2] for c in preferred]
                        for network in NETWORKS},
             "alternate": {network: [stable_segment(c)[2] for c in overflow]
