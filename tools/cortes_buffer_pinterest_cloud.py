@@ -435,6 +435,16 @@ def main():
     try:
         # Readback comes first; never lose remote evidence on board outages.
         confirmed=reconcile()
+        # Eight unresolved Buffer reservations exhaust the producer lane.
+        # Surface this as backpressure rather than reporting a healthy PASS.
+        pending=queue("pending").get("jobs") or []
+        if len(pending)>=8:
+            print(json.dumps({"pinterest_cloud":"BACKPRESSURE_BUFFER",
+                              "scheduled_action":"AWAIT_REMOTE_DELIVERY",
+                              "buffer_pending_count":len(pending),
+                              "posts_confirmed_this_run":confirmed},
+                             separators=(",",":")),flush=True)
+            return 0
         policy=queue("policy")
         if not policy.get("enabled") or int(policy.get("remaining",0))<=0:
             print(json.dumps({"pinterest_cloud":"PASS",
