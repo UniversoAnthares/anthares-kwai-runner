@@ -101,6 +101,20 @@ class PinterestBrowserContract(unittest.TestCase):
         self.assertIn("status='failed'",browser)
         self.assertIn("ORDER BY p.created_at,p.updated_at,p.id",browser)
 
+    def test_evening_fallback_maintains_atomic_neon_claim(self):
+        neon=(ROOT/"infra"/"neon-cortes-queue"/"index.mjs").read_text(encoding="utf-8")
+        chunk=neon[neon.index("async function pinterestBrowserAction"):]
+        self.assertIn("extract(hour FROM now() AT TIME ZONE 'America/Campo_Grande') >= 21",chunk)
+        self.assertIn("FOR UPDATE OF p SKIP LOCKED LIMIT 1",chunk)
+
+    def test_pinterest_editor_diagnostic_never_copies_caption(self):
+        ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
+        worker=(ROOT/"tools"/"cortes_pinterest_browser_local.py").read_text(encoding="utf-8")
+        self.assertIn("PREPARE_DIAGNOSTIC",ui)
+        self.assertIn('PINTEREST_EDITOR_DIAGNOSTIC',worker)
+        self.assertIn('invalidCount',ui)
+        self.assertNotIn("caption:data",ui)
+
     def test_browser_uses_no_pinterest_api_or_login_bypass(self):
         ui=(ROOT/"tools"/"cortes_pinterest_browser_ui.mjs").read_text(encoding="utf-8")
         for forbidden in ("api.pinterest.com","PINTEREST_ACCESS_TOKEN","captcha_solver","stealth_plugin"):

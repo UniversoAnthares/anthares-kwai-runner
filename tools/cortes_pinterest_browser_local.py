@@ -208,6 +208,16 @@ def child_protocol(jobfile: Path, fence: dict):
                 started = True
                 proc.stdin.write("GO\n")
                 proc.stdin.flush()
+            elif msg.get("phase") == "PREPARE_DIAGNOSTIC":
+                # The browser emits only button-state and count metadata, never
+                # account content, video, cookies, or captions.
+                info = msg.get("state") or {}
+                if isinstance(info, dict):
+                    log("PINTEREST_EDITOR_DIAGNOSTIC",
+                        buttons=(info.get("buttons") or [])[:5],
+                        invalidCount=info.get("invalidCount"),
+                        pendingUploads=info.get("pendingUploads"),
+                        videoCount=info.get("videoCount"))
             elif msg.get("phase") == "SUBMIT_CLICKED":
                 submitted = True
                 log("PINTEREST_SUBMIT_CLICKED", job_id=fence["id"])

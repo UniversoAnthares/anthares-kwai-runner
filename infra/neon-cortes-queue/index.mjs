@@ -335,7 +335,8 @@ async function pinterestBrowserAction(verb,b){
          AND (now() AT TIME ZONE 'America/Campo_Grande')::date
      AND ( (p.created_at AT TIME ZONE 'America/Campo_Grande')::date <
               (now() AT TIME ZONE 'America/Campo_Grande')::date
-           OR r.ordinal > CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END )
+           OR r.ordinal > CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END
+           OR extract(hour FROM now() AT TIME ZONE 'America/Campo_Grande') >= 21 )
      AND ( COALESCE(p.confirmation_evidence->>'kind','') <> 'source_media_invalid'
            OR (p.confirmation_evidence->>'retry_after_date')::date <=
                 (now() AT TIME ZONE 'America/Campo_Grande')::date )
