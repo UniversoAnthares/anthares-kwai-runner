@@ -271,6 +271,7 @@ def child_protocol(jobfile: Path, fence: dict):
     th.start()
     started = False
     submitted = False
+    upload_attempted = False
     try:
         deadline = time.monotonic() + 540
         while time.monotonic() < deadline:
@@ -289,6 +290,8 @@ def child_protocol(jobfile: Path, fence: dict):
                 started = True
                 proc.stdin.write("GO\n")
                 proc.stdin.flush()
+            elif msg.get("phase") == "UPLOAD_ATTEMPTED":
+                upload_attempted = True
             elif msg.get("phase") == "PREPARE_DIAGNOSTIC":
                 # The browser emits only button-state and count metadata, never
                 # account content, video, cookies, or captions.
@@ -306,6 +309,12 @@ def child_protocol(jobfile: Path, fence: dict):
                 return started, True, msg
             elif msg.get("status") == "BLOCKED_OR_UNCERTAIN":
                 log("PINTEREST_UI_BLOCKED", reason=msg.get("reason", "unknown"))
+                if not upload_attempted:
+                    # The child explicitly failed before file input; no draft created.
+                    try:
+                        draft_guard_clear_after_confirmation(fence["id"])
+                    except (OSError, KeyError, ValueError, RuntimeError):
+                        qa_incident("PINTEREST_DRAFT_GUARD_REQUIRES_QA")
                 qa_incident(str(msg.get("reason", "unknown")))
                 return started, False, None
             elif msg.get("phase") == "_CHILD_EXIT":
