@@ -10,9 +10,12 @@ on:
       - tests/test_pinterest_reconcile_quota.py
       - tests/test_pinterest_backpressure_evidence.py
       - tests/test_pinterest_batch_receipts.py
+      - tools/pinterest_qa_cooldown_loop.py
+      - tests/test_pinterest_qa_cooldown_loop.py
       - .github/workflows/cortes-buffer-pinterest-cloud.yml
   schedule:
-    - cron: '1,16,31,46 * * * *'
+    # Best effort: first 5-minute run after the Neon cooldown expires.
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       reconcile_only:
@@ -50,6 +53,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_pinterest_reconcile_quota.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_backpressure_evidence.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_batch_receipts.py' -v
+          python -m unittest discover -s tests -p 'test_pinterest_qa_cooldown_loop.py' -v
           python -m py_compile tools/cortes_buffer_pinterest_cloud.py anthares_publisher/editorial.py
       - name: Read Buffer key from Anthares Secrets without logging it
         uses: bitwarden/sm-action@v2
@@ -82,3 +86,9 @@ jobs:
           name: pinterest-evidence-${{ github.run_id }}
           path: /tmp/pinterest-evidence/
           retention-days: 7
+      - name: Verify cooldown recovery and update existing Pinterest QA P0
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python -u tools/pinterest_qa_cooldown_loop.py
