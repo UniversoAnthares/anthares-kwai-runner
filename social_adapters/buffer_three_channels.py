@@ -267,11 +267,14 @@ def trusted_instagram_one_time_runner() -> bool:
             and os.getenv("GITHUB_ACTIONS") == "true"
             and os.getenv("RUNNER_ENVIRONMENT") == "self-hosted"
             and os.getenv("RUNNER_OS") == "Windows"
-            and os.getenv("RUNNER_NAME") == "anthares-instagram-once-20261021"
             and os.getenv("GITHUB_REPOSITORY") == "UniversoAnthares/anthares-kwai-runner"
             and os.getenv("GITHUB_REF") == "refs/heads/main"
-            and os.getenv("GITHUB_WORKFLOW_REF", "").endswith(
-                "/.github/workflows/cortes-buffer-instagram-cloud.yml@refs/heads/main"))
+            and ((os.getenv("RUNNER_NAME") == "anthares-instagram-once-20261021"
+                  and os.getenv("GITHUB_WORKFLOW_REF", "").endswith(
+                      "/.github/workflows/cortes-buffer-instagram-cloud.yml@refs/heads/main"))
+                 or (os.getenv("RUNNER_NAME") == "anthares-instagram-fallback-20261021"
+                     and os.getenv("GITHUB_WORKFLOW_REF", "").endswith(
+                         "/.github/workflows/cortes-buffer-instagram-windows-fallback.yml@refs/heads/main"))))
 
 
 def schedule(payload: dict, *, token: str | None = None, validated_channels: list[dict] | None = None) -> dict:
