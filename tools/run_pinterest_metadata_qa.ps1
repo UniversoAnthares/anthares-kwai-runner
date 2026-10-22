@@ -29,11 +29,8 @@ $pythonCandidates=@(
 $python=$pythonCandidates|Where-Object {Test-Path $_}|Select-Object -First 1
 if(-not $python){ throw 'PINTEREST_QA_PYTHON312_UNAVAILABLE' }
 $qaDeps=Join-Path $root '.pinterest-qa-deps-v2'
-foreach($part in @('faster_whisper\__init__.py','av\__init__.py','imageio_ffmpeg\__init__.py')){
-  if(-not(Test-Path (Join-Path $qaDeps $part))){
-    throw 'PINTEREST_QA_PINNED_ASR_DEPENDENCIES_MISSING'
-  }
-}
+# The task account may be denied filesystem metadata probes even while Python can import packages.
+# Validate by importing the pinned modules under the actual task account instead.
 $env:PYTHONPATH=$qaDeps+[IO.Path]::PathSeparator+$env:PYTHONPATH
 & $python -c "import av,faster_whisper,imageio_ffmpeg; assert av.__version__ == '17.1.0'"
 if($LASTEXITCODE -ne 0){ throw 'PINTEREST_QA_PYAV_ABI_MISMATCH' }
