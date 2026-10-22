@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Dispatch only non-publishing Codeberg account/OIDC health checks."""
-import base64,json,os,sys,urllib.parse,urllib.request
+import base64,json,os,sys,urllib.parse,urllib.request,urllib.error
 
 DEST="https://codeberg.org/api/v1/repos/UniversoAnthares/anthares-kwai-runner/actions/workflows/"
 WORKFLOWS=("cortes-tiktok-universo-codeberg.yml","cortes-tiktok-lucas4-codeberg.yml")
@@ -21,9 +21,16 @@ def main():
     for workflow in WORKFLOWS:
         request=urllib.request.Request(DEST+workflow,data=body,
                                         headers=credentials,method="POST")
-        with urllib.request.urlopen(request,timeout=35) as response:
-            if response.status not in (200,201,204):
-                raise RuntimeError("CODEBERG_SMOKE_DISPATCH_UNACKNOWLEDGED")
+        try:
+            with urllib.request.urlopen(request,timeout=35) as response:
+                if response.status not in (200,201,204):
+                    raise RuntimeError("CODEBERG_SMOKE_DISPATCH_UNACKNOWLEDGED")
+        except urllib.error.HTTPError as exc:
+            # HTTP status is safe diagnostic evidence; never log response body,
+            # URL credentials, authorization header or browser cookies.
+            print("CODEBERG_TIKTOK_SMOKE_HTTP_"+str(exc.code)+" workflow="+workflow,
+                  file=sys.stderr,flush=True)
+            raise
         print("CODEBERG_TIKTOK_ACCOUNT_SMOKE_DISPATCHED="+workflow,flush=True)
     print("CODEBERG_TIKTOK_SMOKE_REQUESTS_ACKNOWLEDGED=2",flush=True)
 
