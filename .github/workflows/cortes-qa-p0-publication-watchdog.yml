@@ -36,7 +36,7 @@ jobs:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'
     # This route invokes Windows PowerShell and Python311 installed on the local runner.
     # Self-hosted execution also remains available when hosted minutes are exhausted.
-    runs-on: [self-hosted, Windows, qa-p0-independent]
+    runs-on: qa-p0-independent
     timeout-minutes: 8
     env:
       GITHUB_TOKEN: ${{ github.token }}
