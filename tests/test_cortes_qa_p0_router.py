@@ -12,6 +12,39 @@ SPEC.loader.exec_module(router)
 
 
 class P0RouterTests(unittest.TestCase):
+    def test_codeberg_priority_incidents_bridge_to_tiktok_with_stable_ids(self):
+        rows=[
+          {"number":13,"title":"[QA P0][lucasrosalem4][500ffd1fc0c93187] github_visibility_lost","state":"open"},
+          {"number":12,"title":"[QA P0][universo.anthares][ed1d110d6c4a1a6c] github_visibility_lost","state":"open"},
+          {"number":11,"title":"[QA P0][linkedin/personal-primary][f66cff08b1ca52a0] hosted_runner_stalled_over_23min","state":"open"},
+        ]
+        with patch.object(router,"http",return_value=rows) as api:
+            items=router.codeberg_incidents()
+        self.assertEqual(len(items),3)
+        self.assertEqual([i["network"] for i in items],["tiktok","tiktok","linkedin"])
+        self.assertTrue(items[0]["evidence"].endswith("/issues/13"))
+        self.assertEqual(items[0]["id"],router.marker("codeberg-qa-p0",13,"500ffd1fc0c93187"))
+        self.assertIn("state=open",api.call_args.args[0])
+
+    def test_codeberg_bridge_rejects_untrusted_titles_and_closed_items(self):
+        rows=[
+          {"number":2,"title":"[QA P0][lucasrosalem4][0000000000000000] github_visibility_lost","state":"closed"},
+          {"number":3,"title":"[QA P0][lucasrosalem4][BAD] python_exploit","state":"open"},
+          {"number":"4","title":"[QA P0][lucasrosalem4][1111111111111111] github_visibility_lost","state":"open"},
+          {"number":5,"title":"unrelated user content","state":"open"},
+          {"number":6,"title":"[QA P0][lucasrosalem4][1111111111111111] github_visibility_lost","state":"open"},
+        ]
+        with patch.object(router,"http",return_value=rows):
+            items=router.codeberg_incidents()
+        self.assertEqual(len(items),1)
+        self.assertEqual(items[0]["network"],"tiktok")
+        self.assertTrue(items[0]["evidence"].endswith("/issues/6"))
+
+    def test_codeberg_bridge_fails_closed_on_invalid_api_body(self):
+        with patch.object(router,"http",return_value={"issues":"invalid"}):
+            with self.assertRaisesRegex(RuntimeError,"CODEBERG_P0_ISSUES_INVALID"):
+                router.codeberg_incidents()
+
     def test_same_event_has_same_dedupe_key(self):
         self.assertEqual(router.marker("gha","clipper","123"),router.marker("gha","clipper","123"))
         self.assertNotEqual(router.marker("gha","clipper","123"),router.marker("gha","clipper","124"))
