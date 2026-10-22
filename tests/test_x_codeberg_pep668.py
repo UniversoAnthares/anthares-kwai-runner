@@ -13,7 +13,12 @@ class XCodebergPep668Regression(unittest.TestCase):
             venv=f"/tmp/anthares-x-{p}-venv"
             self.assertIn(f"python3 -m venv {venv}",text)
             self.assertIn(f"{venv}/bin/python -m pip install",text)
-            self.assertIn(f"{venv}/bin/python -m playwright install chromium",text)
+            # Either standard installation or explicit OS dependency installation
+            # is valid, provided both use the isolated virtual environment.
+            self.assertTrue(
+                f"{venv}/bin/python -m playwright install chromium" in text or
+                f"{venv}/bin/python -m playwright install --with-deps chromium" in text
+            )
         self.assertIn("run: /tmp/anthares-x-publisher-venv/bin/python",text)
         self.assertIn('runs-on: codeberg-tiny',text)
         self.assertIn('runs-on: codeberg-medium',text)
