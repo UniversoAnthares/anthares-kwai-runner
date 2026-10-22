@@ -82,7 +82,10 @@ def transcript(url):
     filepath=CACHE/(hashlib.sha256(url.encode()).hexdigest()+'.txt')
     if filepath.exists():
         return filepath.read_text(encoding='utf8')
-    from faster_whisper import WhisperModel
+    try:
+        from faster_whisper import WhisperModel
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("PINTEREST_ASR_ENGINE_MISSING") from exc
     if WHISPER is None:
         # Local model cache only: QA must not silently download new models.
         WHISPER=WhisperModel('small',device='cpu',compute_type='int8',local_files_only=True)
@@ -92,7 +95,10 @@ def transcript(url):
     with TemporaryDirectory(prefix='pinterest-qa-audio-') as folder:
         wav=str(Path(folder)/'clip.wav')
         try:
-            completed=subprocess.run(['ffmpeg','-nostdin','-loglevel','error',
+            import shutil
+            import imageio_ffmpeg
+            ffmpeg_bin=shutil.which("ffmpeg") or imageio_ffmpeg.get_ffmpeg_exe()
+            completed=subprocess.run([ffmpeg_bin,'-nostdin','-loglevel','error',
                 '-rw_timeout','12000000','-i',url,'-t','95','-vn',
                 '-ac','1','-ar','16000','-y',wav],
                 stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
