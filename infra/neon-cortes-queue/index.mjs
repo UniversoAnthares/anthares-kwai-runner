@@ -357,21 +357,24 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
  }
  if(verb==='media-missing'){
   if(platform==='pinterest'){
-    const rows=await query(`UPDATE cortes_publications SET status='queued',
-      confirmation_evidence=jsonb_build_object('kind','source_media_invalid',
-       'http_status',404,'confirmed_on_network',false,
-       'retry_after_at',to_char((CASE
-         WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date <
-                    (now() AT TIME ZONE 'America/Campo_Grande')::date
-           THEN now()+interval '90 minutes'
-         ELSE ((now() AT TIME ZONE 'America/Campo_Grande')::date + 1)
-                  AT TIME ZONE 'America/Campo_Grande' END) AT TIME ZONE 'UTC',
-          'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-      lease_until=NULL,lease_owner=NULL,updated_at=now()
+    const first="COALESCE((confirmation_evidence->>'first_detected_at')::timestamptz,now())";
+    const rows=await query(`UPDATE cortes_publications
+      SET status=CASE WHEN now() >= ${first} + interval '24 hours'
+                THEN 'failed' ELSE 'queued' END,
+        confirmation_evidence=jsonb_build_object(
+          'kind',CASE WHEN now() >= ${first} + interval '24 hours'
+               THEN 'source_media_expired_24h' ELSE 'source_media_invalid' END,
+          'http_status',404,'confirmed_on_network',false,
+          'first_detected_at',to_char((${first}) AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+          'expires_at',to_char((${first} + interval '24 hours') AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+          'retry_after_at',to_char((now()+interval '90 minutes') AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+        lease_until=NULL,lease_owner=NULL,updated_at=now()
       WHERE id=$1 AND target_key=$2 AND status='leased'
         AND publication_started_at IS NULL AND lease_owner=$3
         AND lease_generation=$4 AND lease_until>now()
-      RETURNING id,status`,[id,dest,who,fence]);
+      RETURNING id,status,confirmation_evidence`,[id,dest,who,fence]);
+    if(rows.length)
+      await query("DELETE FROM cortes_buffer_daily_slots WHERE job_id=$1 AND target_key=$2 AND local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date",[id,dest]);
     return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PINTEREST_MEDIA_MISSING_FENCE_REJECTED'};
   }
   const evidence={kind:'source_media_http_404',account:dest,confirmed_on_network:false,quarantine_at:new Date().toISOString(),discard_policy:'next_local_daily_round'};
@@ -478,7 +481,8 @@ async function pinterestBrowserAction(verb,b){
   await query(`UPDATE cortes_publications SET status='failed',
      confirmation_evidence=$2::jsonb,lease_owner=NULL,lease_until=NULL,updated_at=now()
      WHERE target_key=$1 AND status='queued'
-       AND (created_at AT TIME ZONE 'America/Campo_Grande')::date < ${localDay} - 1`,
+       AND (created_at AT TIME ZONE 'America/Campo_Grande')::date < ${localDay} - 1
+       AND COALESCE(confirmation_evidence->>'kind','') <> 'source_media_invalid'`,
     [target,JSON.stringify(expired)]);
   const sql=`WITH ranked AS (
    SELECT id,row_number() OVER (
@@ -489,9 +493,10 @@ async function pinterestBrowserAction(verb,b){
   ), picked AS (
    SELECT p.id FROM cortes_publications p JOIN ranked r ON r.id=p.id
    WHERE p.target_key=$1 AND p.status='queued'
-     AND (p.created_at AT TIME ZONE 'America/Campo_Grande')::date
+     AND ((p.created_at AT TIME ZONE 'America/Campo_Grande')::date
        BETWEEN (now() AT TIME ZONE 'America/Campo_Grande')::date - 1
          AND (now() AT TIME ZONE 'America/Campo_Grande')::date
+       OR p.confirmation_evidence->>'kind'='source_media_invalid')
      AND ( (p.created_at AT TIME ZONE 'America/Campo_Grande')::date <
               (now() AT TIME ZONE 'America/Campo_Grande')::date
            OR r.ordinal > CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END
@@ -519,24 +524,24 @@ async function pinterestBrowserAction(verb,b){
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'BROWSER_FENCE_EXPIRED'};
  }
  if(verb==='media-invalid'){
-  // Isolate a verified 404 only if the upload has NEVER been started.
-  // Recovery is allowed throughout the whole following local calendar day.
-  const rows=await query(`UPDATE cortes_publications SET status='queued',
-     confirmation_evidence=jsonb_build_object(
-       'kind','source_media_invalid','http_status',404,
-       'confirmed_on_network',false,
-       'retry_after_at',to_char(
-          (CASE WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date <
-                         (now() AT TIME ZONE 'America/Campo_Grande')::date
-            THEN now()+interval '90 minutes'
-            ELSE ((now() AT TIME ZONE 'America/Campo_Grande')::date + 1)
-                       AT TIME ZONE 'America/Campo_Grande' END) AT TIME ZONE 'UTC',
-          'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-     lease_owner=NULL,lease_until=NULL,updated_at=now()
-     WHERE id=$1 AND target_key=$2 AND status='leased'
-       AND publication_started_at IS NULL AND lease_owner=$3
-       AND lease_generation=$4 AND lease_until>now()
-     RETURNING id,status`,[id,target,who,gen]);
+  // Count exactly 24 consecutive hours from the FIRST observed HTTP 404,
+  // never from local midnight, created_at or the most recent retry.
+  const first="COALESCE((confirmation_evidence->>'first_detected_at')::timestamptz,now())";
+  const rows=await query(`UPDATE cortes_publications
+    SET status=CASE WHEN now() >= ${first} + interval '24 hours'
+             THEN 'failed' ELSE 'queued' END,
+      confirmation_evidence=jsonb_build_object(
+       'kind',CASE WHEN now() >= ${first} + interval '24 hours'
+                     THEN 'source_media_expired_24h' ELSE 'source_media_invalid' END,
+       'http_status',404,'confirmed_on_network',false,
+       'first_detected_at',to_char((${first}) AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+       'expires_at',to_char((${first} + interval '24 hours') AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+       'retry_after_at',to_char((now()+interval '90 minutes') AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+      lease_owner=NULL,lease_until=NULL,updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status='leased'
+      AND publication_started_at IS NULL AND lease_owner=$3
+      AND lease_generation=$4 AND lease_until>now()
+    RETURNING id,status,confirmation_evidence`,[id,target,who,gen]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'MEDIA_INVALID_FENCE_REJECTED'};
  }
  if(verb==='fail'){
