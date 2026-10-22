@@ -12,7 +12,7 @@ class PersonalFailover(unittest.TestCase):
         self.assertIn("python -u -m tools.cortes_linkedin_personal_cloud",wf)
         self.assertIn("group: cortes-linkedin-personal-primary-hosted",wf)
         self.assertNotIn("group: cortes-linkedin-personal-standby-${{ github.event_name }}",wf)
-        self.assertIn("group: cortes-linkedin-personal-standby-hosted",primary)
+        self.assertIn("group: cortes-linkedin-personal-standby-${{ github.event_name }}",primary)
         self.assertNotIn("workflow_run:",wf)
         self.assertIn("workflow_run:",primary)
         self.assertIn("schedule:",wf)
