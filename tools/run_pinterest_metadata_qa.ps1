@@ -21,6 +21,13 @@ if(Test-Path (Join-Path $cache 'hub\models--Systran--faster-whisper-small')){ $e
 # Dedicated, pinned ASR runtime: PyAV 19 broke faster-whisper 1.2.1
 # (av.open no longer accepts metadata_errors). Dependency install belongs
 # to the installer, not to each scheduled worker invocation.
+$pythonCandidates=@(
+  'D:\AntharsWork\cortes-instagram-selfhosted-20261021\bin\_work\_tool\Python\3.12.10\x64\python.exe',
+  'C:\Users\Lucas\AppData\Local\Programs\Python\Python312\python.exe',
+  'C:\Program Files\Python312\python.exe'
+)
+$python=$pythonCandidates|Where-Object {Test-Path $_}|Select-Object -First 1
+if(-not $python){ throw 'PINTEREST_QA_PYTHON312_UNAVAILABLE' }
 $qaDeps=Join-Path $root '.pinterest-qa-deps-v2'
 foreach($part in @('faster_whisper\__init__.py','av\__init__.py','imageio_ffmpeg\__init__.py')){
   if(-not(Test-Path (Join-Path $qaDeps $part))){
@@ -28,14 +35,14 @@ foreach($part in @('faster_whisper\__init__.py','av\__init__.py','imageio_ffmpeg
   }
 }
 $env:PYTHONPATH=$qaDeps+[IO.Path]::PathSeparator+$env:PYTHONPATH
-& py -3 -c "import av,faster_whisper,imageio_ffmpeg; assert av.__version__ == '17.1.0'"
+& $python -c "import av,faster_whisper,imageio_ffmpeg; assert av.__version__ == '17.1.0'"
 if($LASTEXITCODE -ne 0){ throw 'PINTEREST_QA_PYAV_ABI_MISMATCH' }
 $worker=Join-Path $root 'tools\cortes_pinterest_metadata_qa.py'
 if(-not(Test-Path $worker)){throw 'PINTEREST_QA_WORKER_MISSING'}
 $diagDir=Join-Path $root 'qa-health'
 New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
 $diagFile=Join-Path $diagDir 'pinterest-qa-exit.log'
-& py -3 $worker --max-clips 3
+& $python -u $worker --max-clips 3
 $qaExit=$LASTEXITCODE
 $event=@{at=(Get-Date).ToUniversalTime().ToString('o');component='pinterest-metadata-qa';exit_code=$qaExit}
 Add-Content -LiteralPath $diagFile -Value ($event | ConvertTo-Json -Compress) -Encoding UTF8
