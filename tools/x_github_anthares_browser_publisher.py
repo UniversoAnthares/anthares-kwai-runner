@@ -59,11 +59,14 @@ def durable(path, payload=None):
 
 
 def eligible(issue):
+    from tools.x_long_schedule import eligible_time
     if issue.get("state") != "open" or not str(issue.get("title") or "").startswith("[X-PUBLISH]"):
         return None
     p = _issue_payload(issue.get("body") or "")
     if (p.get("platform") != "x" or p.get("account") != ACCOUNT
             or p.get("duration_class") != "long" or p.get("test_fixture")):
+        return None
+    if not eligible_time(p.get("planned_at")):
         return None
     caption = str(p.get("caption") or "").strip()
     media = urlparse(str(p.get("media_url") or ""))
