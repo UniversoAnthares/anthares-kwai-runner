@@ -1,7 +1,7 @@
 name: CORTES Threads Cloud Handoff (fenced)
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/6 * * * *'
   workflow_dispatch:
     inputs:
       publish:
