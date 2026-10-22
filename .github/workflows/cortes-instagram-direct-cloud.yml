@@ -1,0 +1,41 @@
+name: CORTES Instagram - direct Graph primary cloud publisher
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-instagram-direct-cloud.yml'
+      - 'tools/cortes_instagram_direct_cloud.py'
+  workflow_dispatch: {}
+  schedule:
+    - cron: '2,17,32,47 * * * *'
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+concurrency:
+  group: cortes-instagram-direct-neon-primary
+  cancel-in-progress: false
+jobs:
+  publish-direct-reel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    if: ${{ vars.CORTES_INSTAGRAM_DIRECT_PAUSED != 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify direct publisher syntax and source
+        run: |
+          python -m py_compile tools/cortes_instagram_direct_cloud.py scripts/instagram_publish.py tools/cortes_queue_ha.py
+      - name: Publish exactly one eligible Reel through official Instagram Graph
+        env:
+          ANTHARES_SOCIAL_COMMIT: '1'
+          CORTES_QUEUE_PRIMARY: neon
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
+          INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST || 'graph.instagram.com' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -u tools/cortes_instagram_direct_cloud.py
