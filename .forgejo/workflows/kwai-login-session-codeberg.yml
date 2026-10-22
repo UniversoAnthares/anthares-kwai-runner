@@ -1,0 +1,47 @@
+# Kwai login selector and encrypted-browser-session contract tests.
+# No emulator, publishing, remote login or social credentials are permitted.
+name: Kwai login and session contracts - Codeberg
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/kwai-login-session-codeberg.yml'
+      - 'tools/kwai_login_ui_locator.py'
+      - 'tools/kwai_ui_safe_diagnose.py'
+      - 'kwai_chrome_session_probe.py'
+      - 'kwai_remote_android_login.sh'
+      - 'kwai_remote_android_login_with_restore.sh'
+      - 'kwai_native_email_smoke.sh'
+      - 'tests/test_kwai_login_ui_locator.py'
+      - 'tests/test_kwai_semantic_profile.py'
+      - 'tests/test_kwai_chrome_session_security.py'
+      - 'tests/test_kwai_ui_safe_diagnose.py'
+  schedule:
+    - cron: '11 6 * * *'
+permissions:
+  contents: read
+jobs:
+  selectors-and-session-security:
+    runs-on: codeberg-tiny
+    timeout-minutes: 11
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - name: Isolated Python dependency environment
+        shell: bash
+        run: |
+          set -eu
+          test "${FORGEJO_REPOSITORY:-}" = "UniversoAnthares/anthares-kwai-runner"
+          python3 -m venv /tmp/anthares-codeberg-kwai-security-venv
+          /tmp/anthares-codeberg-kwai-security-venv/bin/python -m pip install --quiet cryptography playwright
+      - name: Verify native login selector and UI security without Android
+        shell: bash
+        run: |
+          set -eu
+          . /tmp/anthares-codeberg-kwai-security-venv/bin/activate
+          bash -n kwai_remote_android_login.sh kwai_remote_android_login_with_restore.sh kwai_native_email_smoke.sh
+          python3 -m py_compile tools/kwai_login_ui_locator.py
+          for suite in test_kwai_login_ui_locator.py test_kwai_semantic_profile.py test_kwai_ui_safe_diagnose.py test_kwai_chrome_session_security.py; do
+            PYTHONPATH=. python3 -m unittest discover -s tests -p "$suite" -v
+          done
+          echo 'KWAI_CODEBERG_LOGIN_SESSION_CONTRACTS=PASS'
