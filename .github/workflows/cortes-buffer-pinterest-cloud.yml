@@ -19,6 +19,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  issues: write
 concurrency:
   group: cortes-pinterest-buffer-cloud-producer
   cancel-in-progress: false
@@ -43,6 +44,7 @@ jobs:
       - name: Publish one verified Pinterest cut and reconcile queued Pins
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CORTES_QUEUE_PRIMARY: neon
           BUFFER_PINTEREST_BOARD_ID: '819514532133906920'
         run: |

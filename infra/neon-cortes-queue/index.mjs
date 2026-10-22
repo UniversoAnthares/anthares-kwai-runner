@@ -175,10 +175,14 @@ async function bufferAction(verb,b,platform){
    ), picked AS (
      SELECT p.id FROM cortes_publications p JOIN ranked r ON r.id=p.id
       WHERE p.target_key=$1 AND p.status='queued'
-       AND (p.created_at AT TIME ZONE 'America/Campo_Grande')::date =
-           (now() AT TIME ZONE 'America/Campo_Grande')::date
+       AND (p.created_at AT TIME ZONE 'America/Campo_Grande')::date BETWEEN
+         (now() AT TIME ZONE 'America/Campo_Grande')::date - 1
+           AND (now() AT TIME ZONE 'America/Campo_Grande')::date
        AND r.ordinal <= CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END
-      ORDER BY p.created_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
+       AND (COALESCE(p.confirmation_evidence->>'kind','') <> 'source_media_invalid'
+         OR (p.confirmation_evidence->>'retry_after_date')::date <=
+              (now() AT TIME ZONE 'America/Campo_Grande')::date)
+      ORDER BY p.created_at,p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
    ) UPDATE cortes_publications p SET status='leased',lease_owner=$2,
     lease_generation=p.lease_generation+1,lease_until=now()+interval '180 seconds',
     updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued'
@@ -216,6 +220,25 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'STALE_FENCE'};
  }
  if(verb==='media-missing'){
+  if(platform==='pinterest'){
+   // Buffer 404 is known before any network mutation; quarantine only this
+   // video until tomorrow. If still missing tomorrow, logically discard.
+   const today="(now() AT TIME ZONE 'America/Campo_Grande')::date";
+   const rows=await query(`UPDATE cortes_publications
+     SET status=CASE WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date < ${today}
+                        THEN 'failed' ELSE 'queued' END,
+     confirmation_evidence=jsonb_build_object('kind',
+       CASE WHEN (created_at AT TIME ZONE 'America/Campo_Grande')::date < ${today}
+            THEN 'source_media_expired_next_day' ELSE 'source_media_invalid' END,
+       'http_status',404,'confirmed_on_network',false,
+       'retry_after_date',to_char(${today} + 1,'YYYY-MM-DD')),
+     lease_until=NULL,lease_owner=NULL,updated_at=now()
+     WHERE id=$1 AND target_key=$2 AND status='leased'
+       AND publication_started_at IS NULL
+       AND lease_owner=$3 AND lease_generation=$4 AND lease_until>now()
+     RETURNING id,status`,[id,dest,who,fence]);
+   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'PINTEREST_MEDIA_MISSING_FENCE_REJECTED'};
+  }
   const evidence={kind:'source_media_http_404',account:dest,confirmed_on_network:false};
   const rows=await query(`UPDATE cortes_publications SET status='failed',
       confirmation_evidence=$5::jsonb,lease_until=NULL,lease_owner=NULL,updated_at=now()
