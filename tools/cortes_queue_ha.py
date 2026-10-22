@@ -24,7 +24,7 @@ PROVIDERS = (
 )
 ACTIONS = frozenset({"enqueue", "buffer-lease", "buffer-start", "buffer-fail",
                      "buffer-scheduled", "buffer-pending", "buffer-reconcile", "buffer-media-missing",
-                     "buffer-cooldown", "buffer-cooldown-status",
+                     "buffer-cooldown", "buffer-cooldown-status", "buffer-policy",
                      "personal-lease", "personal-start", "personal-fail",
                      "personal-accepted", "personal-confirmed", "personal-media-missing",
                      "personal-pending", "personal-reconcile-public"})

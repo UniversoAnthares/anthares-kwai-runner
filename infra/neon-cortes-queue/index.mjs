@@ -8,6 +8,8 @@ const CLIPPER_PRODUCERS=new Set(['cortes-buffer-fanout-cloud.yml','cortes-neon-s
 const RUNNER_PRODUCERS=new Set(['cortes-linkedin-neon-fanout.yml','cortes-buffer-three-fanout-cloud.yml']);
 const PROBE_WORKFLOWS=new Set(['cortes-queue-ha-acceptance.yml','cortes-queue-cloudflare-ha.yml']);
 const LIMITS={linkedin:50,instagram:50,pinterest:25};
+const BUFFER_GLOBAL_DAILY=20;
+const BUFFER_LOCAL_DAY="(now() AT TIME ZONE 'America/Campo_Grande')::date";
 const REPO='UniversoAnthares/anthares-kwai-runner';
 const CLIPPER='UniversoAnthares/anthares-clipper';
 let keys=null,keyExpires=0;
@@ -135,7 +137,7 @@ async function writeProbe(body){
 }
 async function bufferAction(verb,b,platform){
  const dest=target(platform),owner='buffer-'+platform+':';
- const allowed=new Set(['lease','start','fail','media-missing','scheduled','pending','reconcile','stats','retention','cooldown','cooldown-status']);
+ const allowed=new Set(['lease','start','fail','media-missing','scheduled','pending','reconcile','stats','retention','cooldown','cooldown-status','policy']);
  if(!allowed.has(verb))return{ok:false,error:'UNKNOWN_BUFFER_ACTION'};
  if(verb==='cooldown'||verb==='cooldown-status'){
   if(platform!=='pinterest')return{ok:false,error:'PINTEREST_COOLDOWN_SCOPE_ONLY'};
@@ -159,6 +161,13 @@ async function bufferAction(verb,b,platform){
   return{ok:true,active:Boolean(v[0]?.active),
     cooldown_until:v[0]?.cooldown_until||null};
  }
+ if(verb==='policy'){
+  const rows=await query(`SELECT extract(isodow FROM now() AT TIME ZONE 'America/Campo_Grande')::int AS weekday,
+    (SELECT count(*)::int FROM cortes_buffer_daily_slots WHERE local_day=${BUFFER_LOCAL_DAY}) AS used`);
+  const weekday=Number(rows[0]?.weekday||0),used=Number(rows[0]?.used||0);
+  return{ok:true,enabled:weekday>=1&&weekday<=5,limit:BUFFER_GLOBAL_DAILY,used,
+    remaining:Math.max(0,BUFFER_GLOBAL_DAILY-used),shared_across_channels:true};
+ }
  if(verb==='stats'){
   const rows=await query(`SELECT status,count(*)::int n FROM cortes_publications
    WHERE target_key=$1 GROUP BY status`,[dest]);
@@ -179,6 +188,9 @@ async function bufferAction(verb,b,platform){
  if(verb==='lease'){
   if(b.target_key!==dest||!String(b.owner||'').startsWith(owner))return{ok:false,error:'WRONG_QUEUE_OWNER'};
   if(platform==='linkedin')await recoverExpiredLinkedin(dest);
+  const weekday=await query("SELECT extract(isodow FROM now() AT TIME ZONE 'America/Campo_Grande')::int AS n");
+  if(Number(weekday[0]?.n||0)>5)return{ok:true,job:null,buffer_off_day:true};
+  await query("DELETE FROM cortes_buffer_daily_slots s USING cortes_publications p WHERE s.job_id=p.id AND s.local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date AND p.status='queued' AND p.publication_started_at IS NULL");
   await query(`UPDATE cortes_publications SET status='failed',lease_owner=NULL,lease_until=NULL,updated_at=now()
     WHERE target_key=$1 AND status='uncertain'
       AND confirmation_evidence->>'kind'='source_media_http_404'
@@ -194,37 +206,37 @@ async function bufferAction(verb,b,platform){
   // Same stable daily rank as the Vercel route: at most 100 Buffer
   // allocations per week; remaining Pinterest clips belong to browser lane.
   const pinterest=platform==='pinterest';
-  const cutoffForBuffer=platform==='instagram'?"'1970-01-01T00:00:00Z'::timestamptz":platform==='linkedin'?LINKEDIN_EXCEPTION_START: "(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
-  const row=await query(pinterest?`WITH ranked AS (
-    SELECT id,row_number() OVER (
-       PARTITION BY (created_at AT TIME ZONE 'America/Campo_Grande')::date
-       ORDER BY created_at,id) ordinal,
-       extract(isodow FROM created_at AT TIME ZONE 'America/Campo_Grande')::int weekday
-    FROM cortes_publications WHERE target_key=$1
-   ), picked AS (
-     SELECT p.id FROM cortes_publications p JOIN ranked r ON r.id=p.id
-      WHERE p.target_key=$1 AND p.status='queued'
-       AND (p.created_at AT TIME ZONE 'America/Campo_Grande')::date BETWEEN
-         (now() AT TIME ZONE 'America/Campo_Grande')::date - 1
-           AND (now() AT TIME ZONE 'America/Campo_Grande')::date
-       AND r.ordinal <= CASE WHEN r.weekday IN (1,2) THEN 15 ELSE 14 END
+  const cutoffForBuffer="'1970-01-01T00:00:00Z'::timestamptz";
+  const candidateSql=pinterest?`SELECT p.id FROM cortes_publications p
+     WHERE p.target_key=$1 AND p.status='queued'
        AND (COALESCE(p.confirmation_evidence->>'kind','') <> 'source_media_invalid'
          OR (p.confirmation_evidence->>'retry_after_date')::date <=
-              (now() AT TIME ZONE 'America/Campo_Grande')::date)
-      ORDER BY p.created_at,p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
-   ) UPDATE cortes_publications p SET status='leased',lease_owner=$2,
-    lease_generation=p.lease_generation+1,lease_until=now()+interval '180 seconds',
-    updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued'
-    RETURNING p.id,p.target_key,p.payload,p.lease_generation,p.duration_class`:
-   `WITH picked AS(
-     SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued'
+            (now() AT TIME ZONE 'America/Campo_Grande')::date)
+     ORDER BY p.created_at,p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1`:
+     `SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued'
        AND created_at >= ${cutoffForBuffer}
-     ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
-   UPDATE cortes_publications p SET status='leased',lease_owner=$2,
-       lease_generation=p.lease_generation+1,lease_until=now()+interval '180 seconds',updated_at=now()
-   FROM picked WHERE p.id=picked.id AND p.status='queued'
-   RETURNING p.id,p.target_key,p.payload,p.lease_generation,p.duration_class`,[dest,String(b.owner)]);
-  return{ok:true,job:row[0]||null,delivery_route:pinterest?'buffer':undefined};
+       ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1`;
+  // The reservation and lease share one statement; unique (local_day,slot)
+  // prevents concurrent channels reserving more than 20 global daily slots.
+  const rows=await query(`WITH picked AS (${candidateSql}),
+    free_slot AS (
+      SELECT n::int slot FROM generate_series(1,20) AS n
+      WHERE NOT EXISTS(SELECT 1 FROM cortes_buffer_daily_slots s
+        WHERE s.local_day=${BUFFER_LOCAL_DAY} AND s.slot=n)
+      ORDER BY n LIMIT 1
+    ),
+    reserved AS (
+      INSERT INTO cortes_buffer_daily_slots(local_day,slot,target_key,job_id)
+      SELECT ${BUFFER_LOCAL_DAY},f.slot,$1,p.id FROM picked p CROSS JOIN free_slot f
+      ON CONFLICT DO NOTHING RETURNING job_id
+    )
+    UPDATE cortes_publications p SET status='leased',lease_owner=$2,
+      lease_generation=p.lease_generation+1,lease_until=now()+interval '180 seconds',
+      updated_at=now()
+    FROM reserved r WHERE p.id=r.job_id AND p.target_key=$1 AND p.status='queued'
+    RETURNING p.id,p.target_key,p.payload,p.lease_generation,p.duration_class`,
+    [dest,String(b.owner)]);
+    return{ok:true,job:rows[0]||null,delivery_route:rows[0]?'buffer':undefined,buffer_global_limit:BUFFER_GLOBAL_DAILY};
  }
  const id=String(b.id||''),fence=Number(b.lease_generation),who=String(b.owner||'');
  // Reconciliation is OIDC-authenticated and CAS-protected by id, remote_id,
@@ -245,6 +257,8 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
       lease_until=NULL,updated_at=now(),lease_owner=CASE WHEN publication_started_at IS NULL THEN NULL ELSE lease_owner END
     WHERE id=$1 AND target_key=$2 AND lease_owner=$3 AND lease_generation=$4 AND status IN ('leased','started')
     RETURNING id,status`,[id,dest,who,fence]);
+  if(rows[0]?.status==='queued')
+    await query("DELETE FROM cortes_buffer_daily_slots WHERE job_id=$1 AND target_key=$2 AND local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date",[id,dest]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'STALE_FENCE'};
  }
  if(verb==='media-missing'){
@@ -254,6 +268,8 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
       WHERE id=$1 AND target_key=$2 AND status='leased'
         AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status`,
       [id,dest,who,fence,JSON.stringify(evidence)]);
+  if(rows.length)
+    await query("DELETE FROM cortes_buffer_daily_slots WHERE job_id=$1 AND target_key=$2 AND local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date",[id,dest]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'STALE_FENCE'};
  }
  if(verb==='scheduled'){
@@ -445,7 +461,7 @@ async function personalAction(verb,b){
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
   const used=await query(`SELECT count(*)::int n FROM cortes_publications WHERE target_key=$1 AND status IN ('confirmed','leased','started','uncertain') AND updated_at >= ${day}`,[P_TARGET]);
   if(Number(used[0]?.n||0)>=P_LIMIT)return{ok:true,job:null,daily_limit_reached:true,limit:P_LIMIT};
-  const rows=await query(`WITH picked AS (SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued' AND created_at >= ${LINKEDIN_EXCEPTION_START} ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE cortes_publications p SET status='leased',lease_owner=$2,lease_generation=p.lease_generation+1,lease_until=now()+interval '30 minutes',updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued' RETURNING p.*`,[P_TARGET,P_OWNER]);
+  const rows=await query(`WITH picked AS (SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued' ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE cortes_publications p SET status='leased',lease_owner=$2,lease_generation=p.lease_generation+1,lease_until=now()+interval '30 minutes',updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued' RETURNING p.*`,[P_TARGET,P_OWNER]);
   return{ok:true,job:rows[0]||null,limit:P_LIMIT};
  }
  if(verb==='pending'){
