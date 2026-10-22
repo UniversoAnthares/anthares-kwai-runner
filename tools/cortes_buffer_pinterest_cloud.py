@@ -60,66 +60,115 @@ def queue(action,payload=None):
     return result
 
 
-def verify_sent_post(remote_id):
-    query=('query { post(input: { id: '+json.dumps(str(remote_id))+
-           ' }) { id status externalLink channelId schedulingType } }')
-    row=api(query).get("post") or {}
-    if str(row.get("id") or "")!=str(remote_id) or str(row.get("channelId") or "")!=PINTEREST_ID:
+def _verified_pin_from_buffer_row(remote_id, row):
+    """Read one exact Buffer receipt. Queue acceptance is never publication."""
+    from datetime import datetime, timezone
+    if (str(row.get("id") or "")!=str(remote_id)
+            or str(row.get("channelId") or "")!=PINTEREST_ID):
         raise RuntimeError("BUFFER_PINTEREST_POST_IDENTITY_UNVERIFIED")
     if str(row.get("schedulingType") or "").lower()!="automatic":
         raise RuntimeError("BUFFER_PINTEREST_REQUIRES_MANUAL_PUBLICATION")
-    if str(row.get("status") or "").lower()!="sent":
+    status=str(row.get("status") or "").lower()
+    if status!="sent":
+        due="UNKNOWN"
+        try:
+            stamp=datetime.fromisoformat(str(row.get("dueAt") or "").replace("Z","+00:00"))
+            if stamp.tzinfo is not None:
+                due="FUTURE" if stamp>datetime.now(timezone.utc) else "PAST"
+        except (TypeError,ValueError):
+            pass
+        safe=status.upper() if status in ("scheduled","buffer","draft","failed","sending","pending") else "OTHER"
+        print("CORTES_PINTEREST_BUFFER_RECEIPT="+json.dumps({
+            "id_hash":hashlib.sha256(str(remote_id).encode()).hexdigest()[:12],
+            "state":safe,"due":due},separators=(",",":")),flush=True)
         return None
     link=str(row.get("externalLink") or "")
     uri=urllib.parse.urlparse(link)
-    if uri.scheme!="https" or uri.hostname not in ("pinterest.com","www.pinterest.com"):
-        raise RuntimeError("BUFFER_PINTEREST_SENT_WITHOUT_PUBLIC_LINK")
-    if not __import__("re").fullmatch(r"/pin/[0-9]+/?",uri.path):
-        raise RuntimeError("BUFFER_PINTEREST_EXTERNAL_PIN_LINK_INVALID")
+    if (uri.scheme!="https" or uri.hostname not in ("pinterest.com","www.pinterest.com")
+            or uri.username or uri.password or uri.query or uri.fragment
+            or not __import__("re").fullmatch(r"/pin/[0-9]+/?",uri.path)):
+        raise RuntimeError("BUFFER_PINTEREST_SENT_WITHOUT_VALID_PUBLIC_LINK")
     return link
 
 
-def reconcile():
-    """Read back scheduled Pinterest IDs without letting one bad item stop others.
+def verify_sent_post(remote_id):
+    query=('query { post(input: { id: '+json.dumps(str(remote_id))+
+           ' }) { id status dueAt externalLink channelId schedulingType } }')
+    return _verified_pin_from_buffer_row(remote_id,api(query).get("post") or {})
 
-    Unidentified uncertain creates are NEVER retried or marked confirmed.
-    Reconciliation writes retain the backend's fencing and idempotence.
+
+def verify_sent_posts_batch(jobs):
+    """One authenticated read for up to eight existing Buffer receipts.
+
+    GraphQL aliases are read-only. Every result is independently checked
+    against the pinned Pinterest channel before any Neon CAS confirmation.
+    """
+    if not 1<=len(jobs)<=8:
+        raise RuntimeError("BUFFER_PINTEREST_BATCH_SIZE_INVALID")
+    ids=[str(item.get("remote_id") or "") for item in jobs]
+    if len(set(ids))!=len(ids) or any(not __import__("re").fullmatch(r"[A-Za-z0-9_:-]{1,160}",v) for v in ids):
+        raise RuntimeError("BUFFER_PINTEREST_BATCH_IDS_INVALID")
+    fields=" id status dueAt externalLink channelId schedulingType "
+    queries=[("p"+str(i)+": post(input: { id: "+json.dumps(remote)+" }) {"+fields+"}")
+             for i,remote in enumerate(ids)]
+    answer=api("query CortesPinterestReceiptBatch { "+" ".join(queries)+" }")
+    if not isinstance(answer,dict) or any("p"+str(i) not in answer for i in range(len(ids))):
+        raise RuntimeError("BUFFER_PINTEREST_BATCH_INCOMPLETE")
+    result={}
+    for i,remote in enumerate(ids):
+        try:
+            result[remote]=_verified_pin_from_buffer_row(remote,answer.get("p"+str(i)) or {})
+        except RuntimeError:
+            print("::warning::CORTES_PINTEREST_RECEIPT_INVALID="+
+                  hashlib.sha256(remote.encode()).hexdigest()[:12],flush=True)
+            result[remote]=None
+    return result
+
+
+def reconcile():
+    """Reconcile up to eight Buffer receipts per run with one API read.
+
+    An incomplete/rejected batch falls back to the existing 2-item rotation.
+    Never retry a createPost or change an unidentified uncertain record.
     """
     jobs=queue("pending").get("jobs") or []
-    total=0
-    unknown=0
-    known=[]
-    for item in jobs:
-        if str(item.get("remote_id") or ""):
-            known.append(item)
-        else:
-            unknown+=1
-    # Bound Buffer readback requests and rotate the page between scheduled
-    # runs. This avoids retry storms while eventually visiting every receipt.
-    known.sort(key=lambda item:str(item.get("id") or ""))
-    page_size=2
-    page_count=max(1,(len(known)+page_size-1)//page_size)
-    page=int(time.time()//900)%page_count
-    for item in known[page*page_size:(page+1)*page_size]:
+    known=sorted((item for item in jobs if str(item.get("remote_id") or "")),
+                 key=lambda item:str(item.get("id") or ""))[:8]
+    unknown=sum(not str(item.get("remote_id") or "") for item in jobs)
+    links=None
+    if known:
+        try:
+            links=verify_sent_posts_batch(known)
+        except BufferBlocked as exc:
+            if str(exc)=="BUFFER_HTTP_429":
+                raise
+            print("::warning::CORTES_PINTEREST_BATCH_READ_UNAVAILABLE",flush=True)
+        except RuntimeError:
+            print("::warning::CORTES_PINTEREST_BATCH_READ_UNVERIFIED",flush=True)
+    if links is None and known:
+        # Preserve the last proven, rate-limited read path if aliases fail.
+        page_size=2
+        page_count=max(1,(len(known)+page_size-1)//page_size)
+        page=int(time.time()//900)%page_count
+        known=known[page*page_size:(page+1)*page_size]
+    confirmed=0
+    for item in known:
         remote_id=str(item.get("remote_id") or "")
         try:
-            link=verify_sent_post(remote_id)
-        except (BufferBlocked, RuntimeError) as exc:
+            link=links.get(remote_id) if links is not None else verify_sent_post(remote_id)
+        except (BufferBlocked,RuntimeError) as exc:
             if isinstance(exc,BufferBlocked) and str(exc)=="BUFFER_HTTP_429":
                 raise
-            # Transient Buffer readback or invalid remote identity: quarantine
-            # this one post. Keep reconciling independent verified IDs.
             print("::warning::CORTES_PINTEREST_READBACK_UNVERIFIED",flush=True)
             continue
         if link:
-            # Backend checks HTTPS Pinterest permalink, exact remote id and
-            # prior buffer_scheduled evidence atomically before marking sent.
+            # CAS verifies exact remote ID, prior scheduled evidence and URL.
             queue("reconcile",{"id":item["id"],"remote_id":remote_id,"external_link":link})
             print("CORTES_PINTEREST_CONFIRMED_URL="+link,flush=True)
-            total+=1
+            confirmed+=1
     if unknown:
         print("::warning::CORTES_PINTEREST_UNCERTAIN_WITHOUT_REMOTE_ID="+str(unknown),flush=True)
-    return total
+    return confirmed
 
 
 def safe_payload(row):
