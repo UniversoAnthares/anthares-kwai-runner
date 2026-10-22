@@ -30,7 +30,10 @@ def run():
     print("X_CLOUD_VAULT_DECRYPTED=True", flush=True)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
-            headless=True, timeout=35000, args=[
+            # A virtual Linux display remains completely invisible to the user.
+            # Test headed Chromium like the proven offscreen Windows browser.
+            headless=os.getenv("ANTHARES_X_VIRTUAL_DISPLAY") != "1",
+            timeout=35000, args=[
                 "--no-sandbox", "--disable-dev-shm-usage",
                 "--disable-background-networking", "--mute-audio",
             ]
