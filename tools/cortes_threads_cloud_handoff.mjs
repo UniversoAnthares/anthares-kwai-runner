@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import {fetchCloudManifest} from './cortes_threads_cloud_feed.mjs';
-import {captionForClip,cleanTitle} from './cortes_threads_cloud_captions.mjs';
+import {captionForClip} from './cortes_threads_cloud_captions.mjs';
 const GRAPH='https://graph.threads.net/v1.0';
 const CONTROL='https://br-crimson-unit-b89nau08-cortesthreadspub.compute.c-14.us-east-1.aws.neon.tech/';
 const TARGET='threads:universoanthares';
@@ -90,13 +90,10 @@ async function choose(jwt,publish){
   let digest,tagged;
   try{
    digest=await mediaDigest(clip.url);
-   const url='https://www.youtube.com/oembed?url='+encodeURIComponent('https://www.youtube.com/watch?v='+clip.source)+'&format=json';
-   const res=await fetch(url,{signal:AbortSignal.timeout(12000)});
-   requireOk(res.ok,'CAPTION_HTTP_'+res.status);
-   tagged=captionForClip(cleanTitle((await res.json()).title),clip);
+   tagged=captionForClip(clip.editorial,clip);
   }catch(error){
    const msg=String(error?.message||'');
-   const reason=/MEDIA_HTTP_404/.test(msg)?'MEDIA_HTTP_404':/MEDIA_HTTP_410/.test(msg)?'MEDIA_HTTP_410':/MEDIA_HTTP_403/.test(msg)?'MEDIA_HTTP_403':/MEDIA_HTTP_5\d\d/.test(msg)?'MEDIA_HTTP_5XX':/CAPTION_/.test(msg)?'CAPTION_FETCH_ERROR':/MEDIA_/.test(msg)?'MEDIA_INVALID':'MEDIA_FETCH_ERROR';
+   const reason=/EDITORIAL_/.test(msg)?'EDITORIAL_MISSING':/MEDIA_HTTP_404/.test(msg)?'MEDIA_HTTP_404':/MEDIA_HTTP_410/.test(msg)?'MEDIA_HTTP_410':/MEDIA_HTTP_403/.test(msg)?'MEDIA_HTTP_403':/MEDIA_HTTP_5\d\d/.test(msg)?'MEDIA_HTTP_5XX':/CAPTION_/.test(msg)?'CAPTION_FETCH_ERROR':/MEDIA_/.test(msg)?'MEDIA_INVALID':'MEDIA_FETCH_ERROR';
    console.log('THREADS_CLIP_ISOLATED='+JSON.stringify({id:row.id,reason}));
    if(publish){
     try{const v=await callControl(jwt,'quarantine',{id:row.id,reason});if(v.first_notice)await notifyQA(row.id,reason)}
