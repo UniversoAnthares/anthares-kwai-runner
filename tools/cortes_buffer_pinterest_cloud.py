@@ -132,6 +132,12 @@ def safe_payload(row):
         "duration_seconds":payload.get("duration_seconds"),
         "title":payload.get("title") or payload.get("video_title"),
         "description":payload.get("description") or "",
+        # Preserve editorial provenance: the adapter's strategic gate must
+        # see it before ANY Buffer createPost side effect.
+        "segment_id":payload.get("segment_id"),
+        "editorial_policy":payload.get("editorial_policy"),
+        "keywords":payload.get("keywords"),
+        "hashtags":payload.get("hashtags"),
     }
     if result["duration_seconds"] is None:
         raise RuntimeError("NEON_PINTEREST_DURATION_MISSING")
