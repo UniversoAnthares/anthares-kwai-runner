@@ -41,7 +41,46 @@ def github(path, method="GET", payload=None):
     return r.json() if r.content else {}
 
 
+def _neon_durable(path, payload=None):
+    """Cross-runner atomic ledger. Never switch from the old store without reconciliation."""
+    from urllib.parse import parse_qs
+    if os.getenv("X_LEDGER_MIGRATION_VERIFIED") != "1":
+        raise RuntimeError("X_NEON_LEDGER_MIGRATION_NOT_VERIFIED")
+    from tools import x_durable_ledger as ledger
+    parsed = urlparse(path)
+    if parsed.path == "/post-status" and payload is None:
+        key = (parse_qs(parsed.query).get("idempotency_key") or [""])[0]
+        return {"ok": True, **ledger.readback(key)}
+    if parsed.path == "/claim-local" and payload is not None:
+        if payload.get("account") != ACCOUNT:
+            raise RuntimeError("X_NEON_ACCOUNT_MISMATCH")
+        try:
+            ledger.begin(payload["idempotency_key"])
+        except ledger.AlreadyStarted as exc:
+            raise RuntimeError("X_PREVIOUS_SUBMISSION_RECONCILE") from exc
+        except ledger.DailyLimitReached as exc:
+            raise RuntimeError("X_DAILY_10_LIMIT") from exc
+        return {"ok": True, "claimed": True, "account": ACCOUNT}
+    if parsed.path == "/confirm-local" and payload is not None:
+        if (payload.get("account") != ACCOUNT or
+                payload.get("video_verified") is not True or
+                payload.get("caption_verified") is not True):
+            raise RuntimeError("X_NEON_CONFIRM_EVIDENCE_REQUIRED")
+        key = payload["idempotency_key"]
+        ledger.confirm(ledger.identity(key), payload["post_url"])
+        return {"ok": True, "confirmed": True, "account": ACCOUNT}
+    raise RuntimeError("X_NEON_LEDGER_UNSUPPORTED_OPERATION")
+
+
 def durable(path, payload=None):
+    if os.getenv("X_LEDGER_BACKEND") == "neon":
+        dsn = os.getenv("X_LEDGER_DATABASE_URL", "")
+        host = urlparse(dsn).hostname or ""
+        if not host.endswith(".neon.tech"):
+            raise RuntimeError("X_NEON_DATABASE_URL_REQUIRED")
+        return _neon_durable(path, payload)
+    if os.getenv("X_CLOUD_PROVIDER") == "codeberg":
+        raise RuntimeError("X_CODEBERG_NORTHFLANK_LEDGER_FORBIDDEN")
     shared = os.environ["ARA_SHARED"]
     r = requests.request("POST" if payload is not None else "GET", LEDGER + path,
                          json=payload, timeout=32,
