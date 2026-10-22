@@ -8,7 +8,16 @@ const remote='https://br-crimson-unit-b89nau08-cortesthreadspub.compute.c-14.us-
 const atomic=(file,data)=>{const tmp=file+'.tmp-'+process.pid;fs.writeFileSync(tmp,JSON.stringify(data,null,2)+'\n','utf8');fs.renameSync(tmp,file)};
 function report(result){atomic(stateFile,{at:new Date().toISOString(),...result});console.log('THREADS_CLOUD_LOCAL_GATE='+JSON.stringify(result))}
 async function main(){
- if(!fs.existsSync(marker)){console.log('THREADS_CLOUD_LOCAL_GATE=NOT_ARMED_LOCAL_PRIMARY');return}
+ if(!fs.existsSync(marker)){
+  try{
+   const response=await fetch(remote,{signal:AbortSignal.timeout(10000)});
+   if(!response.ok)throw Error('NEON_HTTP_'+response.status);
+   const value=await response.json();
+   if(!value.ok||typeof value.cloud_primary_enabled!=='boolean')throw Error('NEON_GATE_UNVERIFIED');
+   if(value.cloud_primary_enabled){report({allow:false,reason:'REMOTE_CLOUD_PRIMARY_ACTIVE_NO_MARKER'});process.exitCode=20;return}
+   console.log('THREADS_CLOUD_LOCAL_GATE=NOT_ARMED_LOCAL_PRIMARY');return;
+  }catch(e){report({allow:false,reason:'NEON_GATE_FAIL_CLOSED',error:String(e.message).slice(0,80)});process.exitCode=20;return}
+ }
  const armed=JSON.parse(fs.readFileSync(marker,'utf8').replace(/^\uFEFF/,''));
  if(!armed||armed.enabled!==true||!Number.isSafeInteger(Number(armed.epoch_at_arm))){
   report({allow:false,reason:'INVALID_LOCAL_ARM_MARKER'});process.exitCode=20;return
@@ -45,13 +54,13 @@ async function main(){
  const unknown=Number(snapshot.cloud_inflight)>0;
  const previouslyClaimed=Number(snapshot.epoch)>Number(armed.epoch_at_arm);
  const ackExpired=Date.now()>Date.parse(armed.expires_at);
- const mayResume=!cloudActive&&!unknown&&(previouslyClaimed||ackExpired);
+ const mayResume=!snapshot.cloud_primary_enabled&&!cloudActive&&!unknown&&(previouslyClaimed||ackExpired);
  if(mayResume){
   fs.unlinkSync(marker);
   report({allow:true,reason:previouslyClaimed?'CLOUD_RELEASED_AND_RECONCILED':'HANDOFF_ACK_EXPIRED_WITHOUT_CLAIM',reconciled:changed,epoch:snapshot.epoch});
   return;
  }
- report({allow:false,reason:cloudActive?'CLOUD_LEASE_ACTIVE':unknown?'CLOUD_SUBMISSION_UNRESOLVED':'HANDOFF_WINDOW_ACTIVE',reconciled:changed,epoch:snapshot.epoch});
+ report({allow:false,reason:snapshot.cloud_primary_enabled?'CLOUD_PRIMARY_PRIORITY':cloudActive?'CLOUD_LEASE_ACTIVE':unknown?'CLOUD_SUBMISSION_UNRESOLVED':'HANDOFF_WINDOW_ACTIVE',reconciled:changed,epoch:snapshot.epoch});
  process.exitCode=20;
 }
 main().catch(e=>{report({allow:false,reason:'GATE_UNHANDLED',error:String(e.message).slice(0,120)});process.exitCode=20});
