@@ -199,7 +199,26 @@ def proof(context, caption, attempts=1, verified_page=None):
         for trial in range(attempts):
             page.goto("https://x.com/lucasyahn", wait_until="domcontentloaded", timeout=50000)
             page.wait_for_timeout(2600)
-            account(verified_page)
+            # X may unmount the authenticated sidebar after opening an
+            # independent timeline tab. Re-prove the identity on /home;
+            # never infer it from cookies or the viewed profile's URL.
+            try:
+                account(verified_page)
+            except RuntimeError as exc:
+                if str(exc) != "X_CLOUD_IDENTITY_NOT_PROVEN":
+                    raise
+                verified_page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=45000)
+                deadline = time.monotonic() + 18
+                while True:
+                    try:
+                        account(verified_page)
+                        break
+                    except RuntimeError as retry:
+                        if str(retry) != "X_CLOUD_IDENTITY_NOT_PROVEN":
+                            raise
+                        if time.monotonic() >= deadline:
+                            raise RuntimeError("X_CLOUD_IDENTITY_NOT_PROVEN_AFTER_HOME_REFRESH") from None
+                        verified_page.wait_for_timeout(1000)
             if urlparse(page.url).hostname not in ("x.com", "www.x.com") or urlparse(page.url).path.rstrip("/") != "/lucasyahn":
                 raise RuntimeError("X_CLOUD_TIMELINE_PROFILE_MISMATCH")
             for post in page.locator("article").all()[:24]:
