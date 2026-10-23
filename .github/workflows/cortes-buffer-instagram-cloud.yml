@@ -7,7 +7,7 @@ on:
       - 'tools/cortes_buffer_instagram_cloud.py'
       - 'tools/cortes_queue_ha.py'
   schedule:
-    - cron: '8,23,38,53 * * * *'
+    - cron: '8 */3 * * *'
   workflow_dispatch:
     inputs:
       reconcile_only:
