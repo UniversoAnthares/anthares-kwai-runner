@@ -371,7 +371,7 @@ def main():
                 # Crucial: 404 must not consume a publication slot or hold
                 # another healthy issue until the next 10-minute scheduler run.
                 continue
-            state(n,"PREFLIGHT_FAILED",error_type=type(exc).__name__,error_code=safe_code)
+            state(n,"PREFLIGHT_FAILED",error_type=type(exc).__name__,error_code="MEDIA_HTTP_"+str(status) if status else "HTTP_PREFLIGHT_FAILED")
             continue
         except Exception as exc:
             # Log only a fixed-shape diagnostic code; never disclose browser
@@ -382,7 +382,7 @@ def main():
             if phase=="SUBMISSION_STARTED":
                 state(n,"UNCERTAIN",error_type=type(exc).__name__)
             elif phase not in STOP:
-                state(n,"PREFLIGHT_FAILED",error_type=type(exc).__name__)
+                state(n,"PREFLIGHT_FAILED",error_type=type(exc).__name__,error_code=safe_code)
             try:github("/issues/380/comments","POST",{"body":
                 "X_LOCAL_P0 issue="+str(n)+" error="+type(exc).__name__})
             except Exception:pass
