@@ -73,6 +73,29 @@ def _neon_durable(path, payload=None):
 
 
 def durable(path, payload=None):
+    if os.getenv("X_LEDGER_BACKEND") == "neon-api":
+        if os.getenv("X_LEDGER_MIGRATION_VERIFIED") != "1":
+            raise RuntimeError("X_NEON_LEDGER_NOT_RECONCILED")
+        base = os.getenv("X_LEDGER_API", "")
+        if base != "https://br-crimson-unit-b89nau08-xledger.compute.c-14.us-east-1.aws.neon.tech/":
+            raise RuntimeError("X_NEON_LEDGER_ENDPOINT_MISMATCH")
+        operation, mark, query = path.lstrip("/").partition("?")
+        if operation not in ("post-status", "claim-local", "confirm-local"):
+            raise RuntimeError("X_NEON_LEDGER_INVALID_OPERATION")
+        url = base + "?action=" + operation + ("&" + query if mark else "")
+        response = requests.request("POST" if payload is not None else "GET", url,
+            json=payload, timeout=35,
+            headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"]})
+        if response.status_code == 409:
+            raise RuntimeError("X_PREVIOUS_SUBMISSION_RECONCILE")
+        if response.status_code == 429:
+            raise RuntimeError("X_DAILY_10_LIMIT")
+        if response.status_code != 200:
+            raise RuntimeError("X_NEON_LEDGER_HTTP_" + str(response.status_code))
+        value = response.json()
+        if value.get("ok") is not True:
+            raise RuntimeError("X_NEON_LEDGER_REJECTED")
+        return value
     if os.getenv("X_LEDGER_BACKEND") == "neon":
         dsn = os.getenv("X_LEDGER_DATABASE_URL", "")
         host = urlparse(dsn).hostname or ""
