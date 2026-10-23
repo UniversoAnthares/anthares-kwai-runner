@@ -1,0 +1,62 @@
+name: X Neon Ledger Acceptance (readback and duplicate denial)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/x-neon-ledger-acceptance.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  neon-ledger-acceptance:
+    runs-on: codeberg-tiny
+    timeout-minutes: 4
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    steps:
+      - name: Prove authenticated ledger and no replay of a confirmed post
+        shell: bash
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error
+          url='https://br-crimson-unit-b89nau08-xledger.compute.c-14.us-east-1.aws.neon.tech/'
+          token=os.getenv('GH_TOKEN','')
+          if not token:raise SystemExit('X_LEDGER_GITHUB_TOKEN_MISSING')
+          def request(action,key='',payload=None,authenticated=True):
+              uri=url+'?action='+action
+              if key:uri+='&idempotency_key='+key
+              headers={'User-Agent':'Anthares-X-Neon-Ledger-QA'}
+              if authenticated:headers['Authorization']='Bearer '+token
+              data=None
+              if payload is not None:
+                  data=json.dumps(payload).encode()
+                  headers['Content-Type']='application/json'
+              req=urllib.request.Request(uri,data=data,headers=headers)
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as res:
+                      return res.status,json.load(res)
+              except urllib.error.HTTPError as exc:
+                  return exc.code,json.load(exc)
+          code,data=request('health')
+          assert code==200 and data.get('ok') is True and data.get('confirmed')==9,(code,data)
+          print('X_NEON_HEALTH_AND_NINE_MIGRATED=PASS')
+          confirmed='x_199bf622fbe55de4346eea196314647c17339efbe4dc1a8c2d6d02c65b567912'
+          code,_=request('post-status',confirmed,authenticated=False)
+          assert code==401,code
+          print('X_NEON_UNAUTHENTICATED_DENIED=PASS')
+          code,data=request('post-status',confirmed)
+          assert code==200 and data.get('status')=='CONFIRMED' and data.get('post_url')=='https://x.com/lucasyahn/status/2113103163859313089',(code,data)
+          print('X_NEON_CONFIRMED_OLD_POST_PRESERVED=PASS')
+          code,data=request('claim-local',payload={'account':'lucasyahn','idempotency_key':confirmed})
+          assert code==409 and data.get('error')=='already_started_reconcile',(code,data)
+          print('X_NEON_CONFIRMED_CANNOT_BE_RECLAIMED=PASS')
+          code,data=request('confirm-local',payload={'account':'lucasyahn','idempotency_key':confirmed,
+              'post_url':'https://x.com/lucasyahn/status/2113103163859313089',
+              'video_verified':False,'caption_verified':True})
+          assert code==400,(code,data)
+          print('X_NEON_CONFIRMATION_REQUIRES_VIDEO_PROOF=PASS')
+          code,data=request('post-status',confirmed)
+          assert code==200 and data.get('status')=='CONFIRMED' and data.get('post_url')=='https://x.com/lucasyahn/status/2113103163859313089',(code,data)
+          print('X_NEON_REPLAY_ATTEMPTS_DID_NOT_MUTATE_CONFIRMED=PASS')
+          PY
