@@ -1,0 +1,38 @@
+name: Kwai Android Clipboard Read-only Inspector
+on:
+  push:
+    paths:
+      - 'android-agent/kwai-share-proof/ClipReadKwai.java'
+      - '.github/workflows/kwai-clip-reader-build.yml'
+  pull_request:
+    paths:
+      - 'android-agent/kwai-share-proof/ClipReadKwai.java'
+      - '.github/workflows/kwai-clip-reader-build.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  jar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and package read-only app_process
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          PLATFORM="$SDK/platforms/android-35/android.jar"
+          TOOLS="$(find "$SDK/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          test -f "$PLATFORM"
+          mkdir -p android-agent/kwai-share-proof/build/clip-java android-agent/kwai-share-proof/build/clip-reader
+          javac -encoding UTF-8 -source 8 -target 8 -cp "$PLATFORM" -d android-agent/kwai-share-proof/build/clip-java android-agent/kwai-share-proof/ClipReadKwai.java
+          "$TOOLS/d8" --min-api 23 --lib "$PLATFORM" --output android-agent/kwai-share-proof/build/clip-reader android-agent/kwai-share-proof/build/clip-java/ClipReadKwai.class
+          test -s android-agent/kwai-share-proof/build/clip-reader/classes.dex
+          echo KWAI_CLIP_READER_BUILD=PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kwai-clip-reader
+          path: android-agent/kwai-share-proof/build/clip-reader/classes.dex
+          if-no-files-found: error
+          retention-days: 3
