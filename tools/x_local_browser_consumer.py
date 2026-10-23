@@ -189,6 +189,84 @@ def account(page):
                      tab.first.inner_text(timeout=9000))
     if names!=["lucasyahn"]:raise RuntimeError("WRONG_X_ACCOUNT")
 
+def _restore_only_dedicated_x_context(playwright, context, page, shared):
+    """Restore signed-in X cookies only after an isolated account proof.
+
+    Never touch personal Chrome sessions; require the dedicated CDP profile.
+    No login is performed and no POST is made during this preflight.
+    """
+    import hashlib
+    import subprocess
+    import tempfile
+    import importlib.util
+    from pathlib import Path
+    command = ("Get-CimInstance Win32_Process -Filter \"name='chrome.exe'\" | "
+               "ForEach-Object { $_.CommandLine }")
+    proc = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle",
+         "Hidden", "-Command", command],
+        capture_output=True, text=True, timeout=20,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    rows = proc.stdout.lower().splitlines()
+    if proc.returncode or not any(
+        "--remote-debugging-port=9224" in row and "antharesxbridge" in row
+        and "--user-data-dir" in row for row in rows
+    ):
+        raise RuntimeError("X_DEDICATED_CDP_PROFILE_UNVERIFIED")
+
+    # Immutable, Git-blob-hash checked application module; fail closed if its
+    # source differs from the reviewed version. Avoid mutable remote code.
+    url = ("https://raw.githubusercontent.com/UniversoAnthares/"
+           "anthares-kwai-runner/b935013c7aa1e53ff5ad5076327fbdf09f1f68bc/"
+           "infra/anthares_runtime_browser_local.py")
+    response = requests.get(url, timeout=22)
+    response.raise_for_status()
+    payload = response.content
+    blob = hashlib.sha1(
+        b"blob " + str(len(payload)).encode() + b"\x00" + payload).hexdigest()
+    if blob != "696d1fcd875c253b4c6d5bb923082f00978bd565":
+        raise RuntimeError("X_VAULT_MODULE_INTEGRITY_FAILED")
+
+    with tempfile.TemporaryDirectory(prefix="anthares-x-vault-") as folder:
+        module_path = Path(folder) / "anthares_runtime_browser_local.py"
+        module_path.write_bytes(payload)
+        spec = importlib.util.spec_from_file_location(
+            "anthares_x_signed_vault_snapshot", str(module_path))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        old_shared = os.environ.get("ARA_SHARED")
+        try:
+            os.environ["ARA_SHARED"] = shared
+            state_data = module._vault_pull()
+        finally:
+            if old_shared is None:
+                os.environ.pop("ARA_SHARED", None)
+            else:
+                os.environ["ARA_SHARED"] = old_shared
+
+    if not isinstance(state_data, dict) or not state_data.get("cookies"):
+        raise RuntimeError("X_SIGNED_VAULT_EMPTY")
+    # Prove the account *before* changing any cookies in the CDP profile.
+    isolated = playwright.chromium.launch(
+        channel="chrome", headless=True, timeout=45000,
+        args=["--no-sandbox", "--disable-dev-shm-usage", "--mute-audio"])
+    try:
+        proof_context = isolated.new_context(storage_state=state_data, locale="pt-BR")
+        proof_page = proof_context.new_page()
+        proof_page.goto("https://x.com/home", wait_until="domcontentloaded",
+                        timeout=45000)
+        proof_page.wait_for_timeout(1500)
+        account(proof_page)
+    finally:
+        isolated.close()
+
+    context.clear_cookies()
+    context.add_cookies(state_data["cookies"])
+    page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(2000)
+    account(page)
+
+
 def evidence(ctx,caption,attempts=1):
     page=ctx.new_page()
     try:
@@ -244,7 +322,14 @@ def one(issue,data,token):
         ctx=browser.contexts[0]
         tabs=[p for p in ctx.pages if p.url.startswith("https://x.com/")]
         if len(tabs)!=1:raise RuntimeError("CHROME_X_TAB_NOT_UNIQUE")
-        page=tabs[0];account(page)
+        page=tabs[0]
+        try:
+            account(page)
+        except RuntimeError as exc:
+            if str(exc) not in ("WRONG_X_ACCOUNT", "ACCOUNT_UNCONFIRMED"):
+                raise
+            _restore_only_dedicated_x_context(playwright, ctx, page, token)
+            account(page)
         if evidence(ctx,data["caption"]):
             raise RuntimeError("ALREADY_POSTED_RECONCILE")
         dialog=page.locator('[role="dialog"]')
