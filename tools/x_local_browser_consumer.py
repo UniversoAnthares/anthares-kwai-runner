@@ -163,16 +163,45 @@ def path_for(issue,data):
     target=directory/(str(issue["number"])+"-"+name)
     if target.exists() and target.stat().st_size>100000:return target
     tmp=target.with_suffix(".part")
-    with requests.get(data["media_url"],stream=True,timeout=(20,180)) as response:
-        response.raise_for_status()
-        if urlparse(response.url).hostname not in {"github.com","release-assets.githubusercontent.com","objects.githubusercontent.com"}:
-            raise RuntimeError("UNTRUSTED_MEDIA_REDIRECT")
-        length=0
-        with tmp.open("wb") as dest:
-            for chunk in response.iter_content(262144):
-                length+=len(chunk)
-                if length>99000000:raise RuntimeError("MEDIA_EXCEEDS_GITHUB_LIMIT")
-                dest.write(chunk)
+    try:
+        with requests.get(data["media_url"],stream=True,timeout=(20,180)) as response:
+            response.raise_for_status()
+            if urlparse(response.url).hostname not in {"github.com","release-assets.githubusercontent.com","objects.githubusercontent.com"}:
+                raise RuntimeError("UNTRUSTED_MEDIA_REDIRECT")
+            length=0
+            with tmp.open("wb") as dest:
+                for chunk in response.iter_content(262144):
+                    length+=len(chunk)
+                    if length>99000000:raise RuntimeError("MEDIA_EXCEEDS_GITHUB_LIMIT")
+                    dest.write(chunk)
+    except requests.exceptions.HTTPError as exc:
+        if getattr(exc.response,"status_code",0) not in (401,403):
+            raise
+        # GitHub sometimes denies anonymous release-asset redirects in the
+        # dedicated Windows session. Use the already authenticated GH CLI's
+        # scoped Contents access. Never retrieve tokens or use a shell.
+        from tempfile import TemporaryDirectory
+        media_url=urlparse(str(data["media_url"]))
+        match=re.fullmatch(
+            r"/UniversoAnthares/anthares-kwai-runner/releases/download/([A-Za-z0-9_.-]{1,100})/([A-Za-z0-9_.-]+[.]mp4)",
+            media_url.path)
+        if media_url.scheme!="https" or media_url.hostname!="github.com" or not match or match.group(2)!=name:
+            raise RuntimeError("X_AUTHENTICATED_MEDIA_PATH_DENIED")
+        tmp.unlink(missing_ok=True)
+        with TemporaryDirectory(prefix="x-auth-media-",dir=str(directory)) as folder:
+            import shutil
+            cmd=["gh","release","download",match.group(1),"--repo",REPO,"--pattern",name,
+                 "--dir",folder]
+            env={**os.environ,"GH_PROMPT_DISABLED":"1","GIT_TERMINAL_PROMPT":"0"}
+            result=subprocess.run(cmd,capture_output=True,text=True,timeout=210,
+                                  env=env,creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
+            asset=Path(folder)/name
+            if result.returncode or not asset.is_file():
+                raise RuntimeError("X_AUTHENTICATED_MEDIA_FALLBACK_FAILED")
+            length=asset.stat().st_size
+            if length>99000000:raise RuntimeError("MEDIA_EXCEEDS_GITHUB_LIMIT")
+            if length<100000:raise RuntimeError("MEDIA_EMPTY")
+            shutil.copyfile(asset,tmp)
     if length<100000:raise RuntimeError("MEDIA_EMPTY")
     tmp.replace(target)
     return target
