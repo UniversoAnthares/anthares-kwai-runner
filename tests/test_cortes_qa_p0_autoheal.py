@@ -27,7 +27,8 @@ class P0Recovery(unittest.TestCase):
 
     def test_linkedin_only_personal_dispatch_no_unguarded_reposts(self):
         self.assertIn("CORTES LinkedIn personal",POLICY)
-        self.assertIn("cortes-linkedin-personal-fallback-cloud.yml/dispatches",PS)
+        self.assertIn("cortes-linkedin-personal-fallback-cloud.yml",PS)
+        self.assertIn("+'/dispatches'",PS)
         self.assertIn("LINKEDIN_PERSONAL_PRIMARY_DISPATCH_ACCEPTED",PS)
         self.assertNotIn("linkedin.com/v2/ugcPosts",PS)
         self.assertNotIn("linkedin.com/rest/posts",PS)
