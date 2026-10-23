@@ -82,7 +82,10 @@ def probe_public_page(
     if allowed and host not in allowed:
         raise ValueError("host_not_allowlisted")
     fragments = tuple(str(f) for f in fragments if f)
-    from tinyfish_windows_secret import read_current_user_key
+    try:
+        from tinyfish_windows_secret import read_current_user_key
+    except ModuleNotFoundError:
+        from tools.tinyfish_windows_secret import read_current_user_key
     key = (os.environ["TINYFISH_API_KEY"] if "TINYFISH_API_KEY" in os.environ
            else read_current_user_key()).strip()
     failure = "tinyfish_key_unconfigured"
