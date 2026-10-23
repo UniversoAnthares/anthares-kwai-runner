@@ -179,8 +179,19 @@ def main() -> int:
         if str(proof.get("id") or "") != media_id:
             raise RuntimeError("DIRECT_INSTAGRAM_MEDIA_ID_UNVERIFIED")
         neon("confirm", {**fence, "media_id": media_id, "permalink": permalink})
+        public_read = {"provider": "public_read", "ok": False, "reason": "no_public_permalink"}
+        if permalink:
+            try:
+                from tinyfish_public_probe import supplementary_public_observation
+                public_read = supplementary_public_observation(
+                    permalink, (str(payload.get("title") or ""),),
+                    allowed_hosts=("www.instagram.com", "instagram.com"))
+            except Exception:
+                public_read = {"provider": "public_read", "ok": False,
+                               "reason": "supplementary_read_unavailable"}
         print(json.dumps({"direct_cloud": "INSTAGRAM_REEL_CONFIRMED",
-                          "id": job["id"], "permalink": permalink}), flush=True)
+                          "id": job["id"], "permalink": permalink,
+                          "public_read": public_read}), flush=True)
         return 0
     except Exception as exc:
         try:
