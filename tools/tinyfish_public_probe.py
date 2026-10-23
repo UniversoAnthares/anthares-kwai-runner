@@ -38,6 +38,17 @@ def _host(url: str) -> str:
     return hostname
 
 
+def _safe_url(url: str) -> str:
+    """Keep only scheme, host and path in logs; strip tracking and tokens."""
+    split = urllib.parse.urlsplit(url)
+    return urllib.parse.urlunsplit((split.scheme, split.netloc, split.path, "", ""))
+
+
+def _allowed_redirect(start_host: str, final_url: str, allowed_hosts: Iterable[str]) -> bool:
+    target = _host(final_url)
+    return target in (set(allowed_hosts) or {start_host})
+
+
 def _normalize(value: str) -> str:
     value = html.unescape(re.sub(r"<[^>]+>", " ", str(value or "")))
     value = unicodedata.normalize("NFKD", value).casefold()
@@ -51,7 +62,7 @@ def _result(url: str, provider: str, ok: bool, reason: str, text: str = "",
     normalized = _normalize(text)
     checked = {frag: (_normalize(frag) in normalized) for frag in fragments if frag}
     return {
-        "url": url, "provider": provider, "ok": bool(ok),
+        "url": _safe_url(url), "provider": provider, "ok": bool(ok),
         "reason": reason, "length": len(text),
         "markers_matched": checked,
     }
@@ -93,7 +104,7 @@ def probe_public_page(
             if rows and not doc.get("errors") and isinstance(rows[0], dict):
                 row = rows[0]
                 final_url = row.get("final_url") or row.get("url") or url
-                if _host(final_url) != host:
+                if not _allowed_redirect(host, final_url, allowed):
                     raise ValueError("tinyfish_redirect_host_mismatch")
                 content = row.get("text") or ""
                 if isinstance(content, str) and len(_normalize(content)) >= 60:
@@ -110,7 +121,7 @@ def probe_public_page(
     try:
         with urllib.request.urlopen(request, timeout=timeout) as reply:
             final_url = reply.geturl()
-            if _host(final_url) != host:
+            if not _allowed_redirect(host, final_url, allowed):
                 raise ValueError("fallback_redirect_host_mismatch")
             data = reply.read(1024 * 1024 + 1)
             if len(data) > 1024 * 1024:

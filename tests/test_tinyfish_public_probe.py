@@ -63,6 +63,25 @@ class PublicReadContract(unittest.TestCase):
         self.assertNotIn("test-placeholder", json.dumps(report))
 
     @mock.patch.dict(os.environ, {"TINYFISH_API_KEY": "test-placeholder"})
+    def test_allow_kwai_public_shortlink_redirect(self):
+        short = "https://k.kwai.com/p/WCAQrpD2"
+        destination = "https://www.kwai.com/@lucasrosalem/video/5213066680620194154?token=SECRET"
+        doc = {"results":[{"final_url":destination,"text":"<html>Lucas Rosalem publicou um video e o perfil contem os cortes publicados com titulo correto.</html>"}],"errors":[]}
+        with mock.patch.object(probe.urllib.request,"urlopen",return_value=Response(json.dumps(doc).encode())):
+            result = probe.probe_public_page(short,("Lucas Rosalem",),allowed_hosts=("k.kwai.com","www.kwai.com"))
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["provider"],"tinyfish_fetch")
+        self.assertNotIn("SECRET",json.dumps(result))
+
+    @mock.patch.dict(os.environ, {"TINYFISH_API_KEY": "test-placeholder"})
+    def test_reject_public_redirect_outside_allowlist(self):
+        short = "https://k.kwai.com/p/WCAQrpD2"
+        doc = {"results":[{"final_url":"https://private.example.com/x","text":"<html>Lucas Rosalem publicou um video, com texto adequado e varias informacoes.</html>"}],"errors":[]}
+        with mock.patch.object(probe.urllib.request,"urlopen",return_value=Response(json.dumps(doc).encode())):
+            result = probe.probe_public_page(short,allowed_hosts=("k.kwai.com","www.kwai.com"))
+        self.assertFalse(result["ok"])
+
+    @mock.patch.dict(os.environ, {"TINYFISH_API_KEY": "test-placeholder"})
     def test_no_false_success_when_results_empty(self):
         payload = json.dumps({"results": [], "errors": [{"code": "bot_blocked"}]}).encode()
         with mock.patch.object(probe.urllib.request, "urlopen",
