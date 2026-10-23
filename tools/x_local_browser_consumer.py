@@ -371,9 +371,13 @@ def main():
                 # Crucial: 404 must not consume a publication slot or hold
                 # another healthy issue until the next 10-minute scheduler run.
                 continue
-            state(n,"PREFLIGHT_FAILED",error_type=type(exc).__name__)
+            state(n,"PREFLIGHT_FAILED",error_type=type(exc).__name__,error_code=safe_code)
             continue
         except Exception as exc:
+            # Log only a fixed-shape diagnostic code; never disclose browser
+            # tokens, URLs or exception payloads from external services.
+            msg=str(exc)
+            safe_code=msg if re.fullmatch(r"[A-Z][A-Z0-9_]{2,100}", msg) else type(exc).__name__
             phase=readstate(n).get("phase")
             if phase=="SUBMISSION_STARTED":
                 state(n,"UNCERTAIN",error_type=type(exc).__name__)
