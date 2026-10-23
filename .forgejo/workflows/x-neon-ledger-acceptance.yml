@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - '.forgejo/workflows/x-neon-ledger-acceptance.yml'
+      - 'infra/x-neon-ledger/index.mjs'
+      - 'tools/x_github_anthares_browser_publisher.py'
+      - '.forgejo/workflows/x-codeberg-primary.yml'
   workflow_dispatch: {}
 permissions:
   contents: read
