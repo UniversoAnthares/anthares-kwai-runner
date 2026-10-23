@@ -1,0 +1,68 @@
+name: X Neon Ledger Atomicity QA (isolated database branch)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/x-neon-ledger-atomicity-qa.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: codeberg-tiny
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    steps:
+      - name: Test concurrent claims, uncertain retention and ten-per-day cap on QA branch only
+        shell: bash
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import concurrent.futures,json,os,secrets,urllib.request,urllib.error
+          api='https://br-green-king-b8g7ovxf-xledger.compute.c-14.us-east-1.aws.neon.tech/'
+          token=os.environ['GH_TOKEN']
+          def call(action,key=None,body=None):
+              u=api+'?action='+action
+              if key:u+='&idempotency_key='+key
+              headers={'Authorization':'Bearer '+token,'User-Agent':'Anthares-X-QA-Atomicity'}
+              data=None
+              if body is not None:
+                  data=json.dumps(body).encode()
+                  headers['Content-Type']='application/json'
+              req=urllib.request.Request(u,data=data,headers=headers)
+              try:
+                  with urllib.request.urlopen(req,timeout=25) as r:
+                      return r.status,json.load(r)
+              except urllib.error.HTTPError as e:
+                  return e.code,json.load(e)
+          code,h=call('health')
+          assert code==200 and h.get('confirmed')==9,(code,h)
+          key='x_qa_race_'+secrets.token_hex(14)
+          body={'account':'lucasyahn','idempotency_key':key}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+              requests=[pool.submit(call,'claim-local',None,body) for i in range(2)]
+              results=[f.result(timeout=40) for f in requests]
+          statuses=sorted([x[0] for x in results])
+          assert statuses==[200,409],statuses
+          print('X_QA_TWO_CONCURRENT_CLAIMS_ONE_WINNER=PASS')
+          code,s=call('post-status',key)
+          assert code==200 and s.get('status')=='UNCERTAIN',(code,s)
+          print('X_QA_STARTED_RETAINS_UNCERTAIN_FENCE=PASS')
+          code,r=call('confirm-local',body={'account':'lucasyahn','idempotency_key':key,
+              'video_verified':False,'caption_verified':True,
+              'post_url':'https://x.com/lucasyahn/status/1234567890123456789'})
+          assert code==400,(code,r)
+          code,s=call('post-status',key)
+          assert code==200 and s.get('status')=='UNCERTAIN',(code,s)
+          print('X_QA_UNVERIFIED_CONFIRM_CANNOT_REOPEN_STARTED=PASS')
+          for i in range(9):
+              k='x_qa_quota_'+secrets.token_hex(12)
+              code,data=call('claim-local',body={'account':'lucasyahn','idempotency_key':k})
+              assert code==200,(i,code,data)
+          print('X_QA_TEN_SAFE_CLAIMS=PASS')
+          code,data=call('claim-local',body={'account':'lucasyahn',
+              'idempotency_key':'x_qa_over_'+secrets.token_hex(12)})
+          assert code==429,(code,data)
+          print('X_QA_ELEVENTH_CLAIM_DENIED_DAILY_LIMIT=PASS')
+          PY
