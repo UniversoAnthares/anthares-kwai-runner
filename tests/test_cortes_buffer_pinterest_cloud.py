@@ -176,7 +176,7 @@ class PinterestRateLimitCooldown(unittest.TestCase):
         py=(root/"tools"/"cortes_buffer_pinterest_cloud.py").read_text(encoding="utf8")
         neon=(root/"infra"/"neon-cortes-queue"/"index.mjs").read_text(encoding="utf8")
         self.assertIn('queue("cooldown-status")',py)
-        self.assertIn('queue("cooldown",{"seconds":1800})',py)
+        self.assertIn('buffer_cooldown_seconds(exc,1800)',py)
         self.assertIn('if str(exc)=="BUFFER_HTTP_429"',py)
         self.assertIn("cortes_buffer_provider_cooldowns",neon)
         self.assertIn("cooldown_until>now()",neon)
