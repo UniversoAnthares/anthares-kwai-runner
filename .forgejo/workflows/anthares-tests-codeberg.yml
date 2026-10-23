@@ -51,6 +51,7 @@ jobs:
           python3 -m py_compile tools/cortes_qa_p0_router.py tools/cortes_qa_codeberg_p0_watch.py
           python3 -m unittest discover -s tests -p 'test_cortes_qa_p0_router.py' -v
           python3 -m unittest discover -s tests -p 'test_cortes_qa_daily_round.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_qa_p0_autoheal.py' -v
           python3 -m unittest discover -s tests -p 'test_cortes_qa_codeberg_p0_watch.py' -v
       - name: TikTok queue reconciliation contract on Codeberg
         shell: bash
