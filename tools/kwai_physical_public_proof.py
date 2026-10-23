@@ -53,6 +53,19 @@ def clip_url(serial,jobid):
         k.adb(serial,'shell','am','start','--activity-clear-top','-n',
               k.PKG+'/com.yxcorp.gifshow.homepage.HomeActivity',check=False,timeout=20)
 
+def _supplementary_public_read(link, expected_account):
+    """TinyFish first, public HTTPS backup. Never changes the physical ACK gate."""
+    try:
+        from tinyfish_public_probe import probe_public_page
+        return probe_public_page(
+            link, (expected_account,), fallback=True, timeout=6,
+            allowed_hosts=("k.kwai.com", "www.kwai.com"),
+        )
+    except Exception:
+        return {"provider": "tinyfish_fetch", "ok": False,
+                "reason": "supplementary_read_unavailable"}
+
+
 def recover(jid):
     clean=re.sub(r'[^A-Za-z0-9._-]+','_',jid)[-100:]
     ps=k.STATE/(clean+'.json')
@@ -102,6 +115,7 @@ def recover(jid):
         'published_post_time':expected_time,'verified_native_state':'verified',
         'verification_evidence':state.get('verification_evidence'),
         'method':'physical_profile_exact_account_timestamp_and_share_ui',
+        'tinyfish_public_observation':_supplementary_public_read(link,expected_account),
         'checked_at':int(time.time())
     }
     directory=EVID/clean
