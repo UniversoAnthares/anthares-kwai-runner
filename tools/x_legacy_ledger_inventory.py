@@ -58,7 +58,8 @@ def main():
         if not str(item.get("title", "")).startswith("[X-PUBLISH]"):
             continue
         row = parsed(item.get("body") or "")
-        if row.get("platform") != "x" or row.get("account") != "lucasyahn" or row.get("test_fixture"):
+        if (row.get("platform") != "x" or row.get("account") != "lucasyahn"
+                or row.get("test_fixture") or row.get("duration_class") != "long"):
             continue
         key = fingerprint(row)
         ref = hashlib.sha256(("x:lucasyahn:" + key).encode()).hexdigest()
