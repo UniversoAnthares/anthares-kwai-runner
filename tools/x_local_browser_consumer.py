@@ -78,26 +78,35 @@ def state(issue,phase,**data):
     tmp.write_text(json.dumps(value,ensure_ascii=True),encoding="utf8");os.replace(tmp,p)
 
 def auth():
-    key=os.getenv("NORTHFLANK_API_TOKEN")
-    if not key:raise RuntimeError("NORTHFLANK_TOKEN_UNAVAILABLE")
-    response=requests.get("https://api.northflank.com/v1/projects/default/services/anthares-ara-northflank/runtime-environment",
-                          headers={"Authorization":"Bearer "+key},timeout=20)
-    response.raise_for_status()
-    token=response.json()["data"]["runtimeEnvironment"]["ARA_SHARED"]
-    if not token:raise RuntimeError("ARA_SHARED_UNAVAILABLE")
+    """Use the existing authenticated Windows GitHub CLI; never print token."""
+    result = subprocess.run(["gh", "auth", "token"], capture_output=True,
+                            text=True, timeout=20)
+    token = result.stdout.strip()
+    if result.returncode or len(token) < 25:
+        raise RuntimeError("X_GITHUB_TOKEN_NOT_AVAILABLE")
     return token
 
-def service(token,path,body=None):
+def service(token, path, body=None):
+    """Shared Neon database fence for Windows, Codeberg and cloud runners."""
+    op, mark, tail = path.lstrip("/").partition("?")
+    if op not in ("post-status", "claim-local", "confirm-local"):
+        raise RuntimeError("X_NEON_LEDGER_BAD_OPERATION")
+    url = "https://br-crimson-unit-b89nau08-xledger.compute.c-14.us-east-1.aws.neon.tech/?action=" + op + ("&" + tail if mark else "")
     try:
-        r=requests.request("POST" if body is not None else "GET",BASE+path,
-          json=body,headers={"Authorization":"Bearer "+token},timeout=35)
-    except requests.RequestException:raise RuntimeError("CLOUD_LEDGER_UNREACHABLE") from None
-    if r.status_code==409:raise RuntimeError("POST_ALREADY_CLAIMED")
-    if r.status_code==429:raise RuntimeError("DAILY_MAX_10")
-    if r.status_code!=200:raise RuntimeError("CLOUD_LEDGER_HTTP_"+str(r.status_code))
-    data=r.json()
-    if not data.get("ok"):raise RuntimeError("CLOUD_LEDGER_NEGATIVE")
-    return data
+        r = requests.request("POST" if body is not None else "GET", url,
+            json=body, headers={"Authorization":"Bearer " + token}, timeout=35)
+    except requests.RequestException:
+        raise RuntimeError("X_NEON_LEDGER_UNREACHABLE") from None
+    if r.status_code == 409:
+        raise RuntimeError("POST_ALREADY_CLAIMED")
+    if r.status_code == 429:
+        raise RuntimeError("DAILY_MAX_10")
+    if r.status_code != 200:
+        raise RuntimeError("X_NEON_LEDGER_HTTP_" + str(r.status_code))
+    result = r.json()
+    if result.get("ok") is not True:
+        raise RuntimeError("X_NEON_LEDGER_NEGATIVE")
+    return result
 
 def cloud_owns_queue():
     """Defer to independent cloud only while a recent authenticated GH run is healthy.
