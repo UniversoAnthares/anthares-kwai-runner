@@ -81,6 +81,31 @@ class PublicReadContract(unittest.TestCase):
         self.assertEqual(report["provider"], "https_fallback")
         self.assertEqual(call.call_count, 2)
 
+    @mock.patch.dict(os.environ, {"TINYFISH_API_KEY": "test-placeholder"})
+    def test_allowlisted_short_link_redirects_and_redacts_query(self):
+        url = "https://k.kwai.com/p/ABC123?tracking=private-marker"
+        doc = {"results": [{"final_url": "https://www.kwai.com/@lucasrosalem/photo/123",
+                            "text": "<html>Lucas Rosalem shared a public video and an overview of this video on the profile.</html>"}],
+               "errors": []}
+        with mock.patch.object(probe.urllib.request, "urlopen",
+                               return_value=Response(json.dumps(doc).encode())):
+            report = probe.probe_public_page(url, allowed_hosts=("k.kwai.com", "www.kwai.com"))
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["url"], "https://k.kwai.com/p/ABC123")
+        self.assertNotIn("private-marker", json.dumps(report))
+
+    @mock.patch.dict(os.environ, {"TINYFISH_API_KEY": "test-placeholder"})
+    def test_reject_redirect_to_other_domain(self):
+        doc = {"results": [{"final_url": "https://evil.example/posts/1",
+                            "text": "A sufficiently long body of content so that a redirect must still be rejected."}],
+               "errors": []}
+        with mock.patch.object(probe.urllib.request, "urlopen",
+                               return_value=Response(json.dumps(doc).encode())):
+            report = probe.probe_public_page("https://k.kwai.com/p/ABC123",
+                                            allowed_hosts=("k.kwai.com", "www.kwai.com"))
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["reason"], "valueerror")
+
 
 if __name__ == "__main__":
     unittest.main()
