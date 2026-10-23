@@ -33,7 +33,7 @@ async function transaction(queries) {
     'Content-Type':'application/json','Neon-Connection-String':d.conn,
     'Neon-Raw-Text-Output':'true','Neon-Batch-Isolation-Level':'ReadCommitted',
   },body:JSON.stringify({queries}),signal:AbortSignal.timeout(12000)});
-  if(!r.ok)throw Error('NEON_TRANSACTION_FAILED');
+  if(!r.ok)throw Error('NEON_TRANSACTION_HTTP_'+r.status);
   const data=await r.json();
   if(!Array.isArray(data)||data.length!==queries.length||
      data.some(x=>!Array.isArray(x.rows)))throw Error('NEON_TRANSACTION_BAD_RESPONSE');
@@ -115,7 +115,9 @@ export default {async fetch(request){
       return out(200,{ok:true,confirmed:true,account:ACCOUNT,post_url:payload.post_url,video_verified:true});
     }
     return out(404,{ok:false,error:'unknown_action'});
-  }catch{
-    return out(503,{ok:false,error:'LEDGER_UNAVAILABLE'});
+  }catch(e){
+    const message=String(e?.message||'');
+    const safe=/^NEON_(?:TRANSACTION|QUERY|BAD_ROWS|DATABASE)[A-Z0-9_]*$/.test(message)?message:'LEDGER_UNAVAILABLE';
+    return out(503,{ok:false,error:safe});
   }
 }};
