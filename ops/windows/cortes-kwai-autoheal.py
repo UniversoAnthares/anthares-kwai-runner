@@ -1,4 +1,4 @@
-[task:9335175b923e] from __future__ import annotations
+from __future__ import annotations
 import datetime as dt, json, os, pathlib, re, subprocess, sys, time
 ROOT=pathlib.Path(r'D:\AntharsWork\quota-write-20261017')
 BASE=pathlib.Path(r'D:\AntharsWork\AntharesRemote')
