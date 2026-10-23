@@ -189,61 +189,47 @@ def account(page):
 
 
 def proof(context, caption, attempts=1, verified_page=None):
-    # X's profile timeline can hide or re-render the account switcher.
-    # Do NOT waive identity checks: revalidate an independently authenticated
-    # page from this *same* isolated browser context on every readback.
+    # Prove the *signed-in* account on its original tab BEFORE creating any
+    # read-only timeline tab. X unmounts the authenticated sidebar while an
+    # independent page is opening; rechecking after opening falsely fails.
+    # Only an exact /lucasyahn/status post with matching caption AND video
+    # may count as public readback. Never click a Post button here.
     if verified_page is None or verified_page.context is not context:
         raise RuntimeError("X_CLOUD_INDEPENDENT_IDENTITY_REQUIRED")
-    page = context.new_page()
-    try:
-        for trial in range(attempts):
+    for trial in range(attempts):
+        # Wrong-account and login errors always fail closed. Do not infer
+        # ownership from a profile URL, existing cookie, or post metadata.
+        account(verified_page)
+        page = context.new_page()
+        try:
             page.goto("https://x.com/lucasyahn", wait_until="domcontentloaded", timeout=50000)
             page.wait_for_timeout(2600)
-            # X may unmount the authenticated sidebar after opening an
-            # independent timeline tab. Re-prove the identity on /home;
-            # never infer it from cookies or the viewed profile's URL.
-            try:
-                account(verified_page)
-            except RuntimeError as exc:
-                if str(exc) != "X_CLOUD_IDENTITY_NOT_PROVEN":
-                    raise
-                verified_page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=45000)
-                deadline = time.monotonic() + 18
-                while True:
-                    try:
-                        account(verified_page)
-                        break
-                    except RuntimeError as retry:
-                        if str(retry) != "X_CLOUD_IDENTITY_NOT_PROVEN":
-                            raise
-                        if time.monotonic() >= deadline:
-                            raise RuntimeError("X_CLOUD_IDENTITY_NOT_PROVEN_AFTER_HOME_REFRESH") from None
-                        verified_page.wait_for_timeout(1000)
-            if urlparse(page.url).hostname not in ("x.com", "www.x.com") or urlparse(page.url).path.rstrip("/") != "/lucasyahn":
+            destination = urlparse(page.url)
+            if (destination.hostname not in ("x.com", "www.x.com")
+                    or destination.path.rstrip("/") != "/lucasyahn"):
                 raise RuntimeError("X_CLOUD_TIMELINE_PROFILE_MISMATCH")
             for post in page.locator("article").all()[:24]:
                 try:
                     if caption not in post.inner_text(timeout=2200):
                         continue
                     for a in post.locator("a").all():
-                        url = a.get_attribute("href") or ""
-                        match = re.fullmatch(r"/lucasyahn/status/([0-9]+)/?", url)
+                        href = a.get_attribute("href") or ""
+                        match = re.fullmatch(r"/lucasyahn/status/([0-9]+)/?", href)
                         if not match:
                             continue
                         uri = "https://x.com/lucasyahn/status/" + match.group(1)
                         page.goto(uri, wait_until="domcontentloaded", timeout=45000)
                         page.wait_for_timeout(2000)
-                        text = " ".join(page.locator('[data-testid="tweetText"]').all_text_contents())
-                        if caption in text and page.locator("video").count() > 0:
+                        rendered = " ".join(page.locator('[data-testid="tweetText"]').all_text_contents())
+                        if caption in rendered and page.locator("video").count() > 0:
                             return uri
                 except Exception:
                     continue
-            if trial < attempts - 1:
-                page.wait_for_timeout(7500)
-        return None
-    finally:
-        page.close()
-
+        finally:
+            page.close()
+        if trial < attempts - 1:
+            verified_page.wait_for_timeout(7500)
+    return None
 
 def download(url, dest):
     with requests.get(url, stream=True, allow_redirects=True, timeout=(18, 160)) as r:
