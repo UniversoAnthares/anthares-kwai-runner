@@ -120,7 +120,9 @@ def key():
   _key=serialization.load_pem_private_key(PRIVATE_KEY.read_bytes(),password=None)
  return _key
 def signed_post(path,payload,timeout=30):
- if os.getenv('CORTES_QUEUE_BACKEND','cloudflare').strip().lower()=='neon' and path.startswith('/job/'):
+ # All Kwai queue operations use the canonical Neon fenced ledger.
+ # Never switch to the legacy Cloudflare queue on missing environment variables.
+ if path.startswith('/job/'):
   return signed_legacy_queue_call(path,payload)
  raw=compact(payload).encode('utf-8'); ts=str(int(time.time())); message=(ts+'\nPOST\n'+path+'\n').encode()+raw
  sig=base64.b64encode(key().sign(message,padding.PKCS1v15(),hashes.SHA256())).decode('ascii')
@@ -188,7 +190,9 @@ def network_ready(serial):
  except (OSError,subprocess.SubprocessError,ValueError):return False
 
 def heartbeat(healthy,serial='',error=''):
- if os.getenv('CORTES_QUEUE_BACKEND','cloudflare').strip().lower()=='neon':
+ # The canonical Neon queue does not expose a Cloudflare executor heartbeat.
+ # A local health check cannot prove successful publication or replace a lease.
+ if True:
   return 202,{'ok':True,'backend':'vercel-neon','cloudflare_heartbeat_skipped':True}
  payload={'executor':EXECUTOR,'healthy':bool(healthy),'failures':0 if healthy else 1,'host':socket.gethostname(),'platform':'android','model':MODEL,'adb_serial':serial,'capabilities':['kwai'],'daily_limit':100,'expected_accounts':[EXPECTED_ACCOUNT]}
  if error:payload['last_error']=error[-300:]
@@ -494,7 +498,7 @@ def lock():
   LOCK.unlink(missing_ok=True);return lock()
 def daemon():
  fd=lock()
- log('DAEMON_STARTED pid='+str(os.getpid()))
+ log('DAEMON_STARTED pid='+str(os.getpid())+' queue_backend=neon_authoritative')
  last_tick=0
  try:
   while True:
