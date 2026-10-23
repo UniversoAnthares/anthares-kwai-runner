@@ -58,6 +58,18 @@ def center(bounds:str):
 def verify(url:str,expected_title:str,expected_handle:str,author_display:str):
     if not URL_RE.fullmatch(url):raise RuntimeError("invalid_public_share_url")
     if normal(expected_handle)!="lucasrosalem":raise RuntimeError("unexpected_target_account")
+    # TinyFish-first public URL read is supplementary. ADB evidence below remains
+    # mandatory even when TinyFish succeeds or a public page is accessible.
+    try:
+        from tinyfish_public_probe import probe_public_page
+        tinyfish_public_observation = probe_public_page(
+            url, (expected_title, author_display), fallback=False, timeout=8,
+            allowed_hosts=("k.kwai.com", "www.kwai.com"),
+        )
+    except Exception:  # public preflight must never block physical proof
+        tinyfish_public_observation = {"provider": "tinyfish_fetch", "ok": False,
+                                       "reason": "preflight_unavailable"}
+
     adb("shell","am","start","-a","android.intent.action.VIEW","-d",url)
     time.sleep(4)
     nodes=snapshot()
@@ -84,6 +96,7 @@ def verify(url:str,expected_title:str,expected_handle:str,author_display:str):
     return {"ok":True,"public_url":url,"author_display":author_display,
             "expected_account":expected_handle,"title_match":True,
             "checked_at":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),
+            "tinyfish_public_observation":tinyfish_public_observation,
             "method":"kwai_public_deeplink_title_and_author_profile_handle"}
 
 def main():

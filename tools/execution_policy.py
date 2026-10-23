@@ -29,6 +29,8 @@ RETIRED = {
     "codespaces",
     "github_codespaces",
 }
+PUBLIC_READ_PROVIDERS = {"tinyfish_fetch", "tinyfish_search", "https_fallback", "anthares_browser"}
+
 ANTHARES_COMPONENTS = {
     "anthares_remote",
     "anthares_browser",

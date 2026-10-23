@@ -4,7 +4,8 @@
 Operational invariants:
 - Anthares Remote is the only remote-control surface.
 - Anthares Browser is the only browser-automation surface.
-- Browserless, TinyFish, Render and CircleCI are never operational fallbacks.
+- Browserless, TinyFish paid Agent/Browser, Render and CircleCI are never browser fallbacks.
+- TinyFish Search/Fetch are allowed only for public, read-only pages.
 - External infrastructure may support Anthares internals only when its own health and quota are eligible.
 
 When ANTHARES_RESILIENCE_REPORT_ONLY=1, missing external runtime evidence is reported
@@ -98,6 +99,8 @@ def main() -> int:
             "other_remote_allowed": False,
             "browserless_allowed": False,
             "tinyfish_allowed": False,
+            "tinyfish_public_fetch_allowed": bool(os.getenv("TINYFISH_API_KEY")),
+            "tinyfish_public_search_allowed": bool(os.getenv("TINYFISH_API_KEY")),
             "render_allowed": False,
             "circleci_allowed": False,
             "paid_services_allowed_without_owner_decision": False,
