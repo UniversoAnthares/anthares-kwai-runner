@@ -9,7 +9,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BASE=(os.getenv('CORTES_QUEUE_URL') or (os.getenv('ANTHARES_CONTROL_URL','https://anthares-remote-primary.vercel.app').rstrip('/')+'/api/cortes-queue')).strip()
+# Neon is the canonical publication queue. ANTHARES_CONTROL_URL is a separate,
+# legacy Cloudflare control endpoint and must never select the queue backend.
+BASE=(os.getenv('CORTES_QUEUE_URL') or 'https://anthares-remote-primary.vercel.app/api/cortes-queue').strip().rstrip('/')
 TOKEN=os.getenv('ANTHARES_DEVICE_TOKEN','').strip()
 DEVICE=os.getenv('ANTHARES_DEVICE_ID','DESKTOP-FTDK0HP').strip()
 
