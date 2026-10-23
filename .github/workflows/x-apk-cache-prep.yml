@@ -1,0 +1,40 @@
+name: X APK verified cache prep
+
+on:
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths:
+      - .github/workflows/x-apk-cache-prep.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-cache:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Acquire and cryptographically verify X APK bundle
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence
+          X_APK_OUT=/tmp/xout X_APK_EVIDENCE=evidence/apk bash scripts/x_acquire_official_apk.sh
+
+      - name: Save verified X APK cache
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/xout
+          key: x-official-apk-auth-v1
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-apk-cache-prep-${{ github.run_id }}
+          path: evidence/
+          retention-days: 3
+          if-no-files-found: warn

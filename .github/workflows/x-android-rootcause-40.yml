@@ -1,0 +1,261 @@
+name: Android boot root-cause matrix 40
+on:
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths: [.github/workflows/x-android-rootcause-40.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        include:
+          - variant: 1
+            api: 30
+            target: google_apis
+            accel: auto
+            gpu: swiftshader_indirect
+          - variant: 2
+            api: 30
+            target: google_apis
+            accel: auto
+            gpu: off
+          - variant: 3
+            api: 30
+            target: google_apis
+            accel: true
+            gpu: swiftshader_indirect
+          - variant: 4
+            api: 30
+            target: google_apis
+            accel: true
+            gpu: off
+          - variant: 5
+            api: 30
+            target: default
+            accel: auto
+            gpu: swiftshader_indirect
+          - variant: 6
+            api: 30
+            target: default
+            accel: auto
+            gpu: off
+          - variant: 7
+            api: 30
+            target: default
+            accel: true
+            gpu: swiftshader_indirect
+          - variant: 8
+            api: 30
+            target: default
+            accel: true
+            gpu: off
+          - variant: 9
+            api: 31
+            target: google_apis
+            accel: auto
+            gpu: swiftshader_indirect
+          - variant: 10
+            api: 31
+            target: google_apis
+            accel: auto
+            gpu: off
+          - variant: 11
+            api: 31
+            target: google_apis
+            accel: true
+            gpu: swiftshader_indirect
+          - variant: 12
+            api: 31
+            target: google_apis
+            accel: true
+            gpu: off
+          - variant: 13
+            api: 31
+            target: default
+            accel: auto
+            gpu: swiftshader_indirect
+          - variant: 14
+            api: 31
+            target: default
+            accel: auto
+            gpu: off
+          - variant: 15
+            api: 31
+            target: default
+            accel: true
+            gpu: swiftshader_indirect
+          - variant: 16
+            api: 31
+            target: default
+            accel: true
+            gpu: off
+          - variant: 17
+            api: 32
+            target: google_apis
+            accel: auto
+            gpu: swiftshader_indirect
+          - variant: 18
+            api: 32
+            target: google_apis
+            accel: auto
+            gpu: off
+          - variant: 19
+            api: 32
+            target: google_apis
+            accel: true
+            gpu: swiftshader_indirect
+          - variant: 20
+            api: 32
+            target: google_apis
+            accel: true
+            gpu: off
+          - variant: 21
+            api: 32
+            target: default
+            accel: auto
+            gpu: swiftshader_indirect
+          - variant: 22
+            api: 32
+            target: default
+            accel: auto
+            gpu: off
+          - variant: 23
+            api: 32
+            target: default
+            accel: true
+            gpu: swiftshader_indirect
+          - variant: 24
+            api: 32
+            target: default
+            accel: true
+            gpu: off
+          - variant: 25
+            api: 33
+            target: google_apis
+            accel: auto
+            gpu: swiftshader_indirect
+          - variant: 26
+            api: 33
+            target: google_apis
+            accel: auto
+            gpu: off
+          - variant: 27
+            api: 33
+            target: google_apis
+            accel: true
+            gpu: swiftshader_indirect
+          - variant: 28
+            api: 33
+            target: google_apis
+            accel: true
+            gpu: off
+          - variant: 29
+            api: 33
+            target: default
+            accel: auto
+            gpu: swiftshader_indirect
+          - variant: 30
+            api: 33
+            target: default
+            accel: auto
+            gpu: off
+          - variant: 31
+            api: 33
+            target: default
+            accel: true
+            gpu: swiftshader_indirect
+          - variant: 32
+            api: 33
+            target: default
+            accel: true
+            gpu: off
+          - variant: 33
+            api: 34
+            target: google_apis
+            accel: auto
+            gpu: swiftshader_indirect
+          - variant: 34
+            api: 34
+            target: google_apis
+            accel: auto
+            gpu: off
+          - variant: 35
+            api: 34
+            target: google_apis
+            accel: true
+            gpu: swiftshader_indirect
+          - variant: 36
+            api: 34
+            target: google_apis
+            accel: true
+            gpu: off
+          - variant: 37
+            api: 34
+            target: default
+            accel: auto
+            gpu: swiftshader_indirect
+          - variant: 38
+            api: 34
+            target: default
+            accel: auto
+            gpu: off
+          - variant: 39
+            api: 34
+            target: default
+            accel: true
+            gpu: swiftshader_indirect
+          - variant: 40
+            api: 34
+            target: default
+            accel: true
+            gpu: off
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture host KVM and SDK prerequisites
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence
+          uname -a | tee evidence/host.txt
+          ls -l /dev/kvm 2>&1 | tee -a evidence/host.txt || true
+          df -h . | tee -a evidence/host.txt
+          free -h | tee -a evidence/host.txt
+      - name: Enable KVM for GitHub hosted runner
+        if: matrix.accel == 'auto'
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Boot Android and prove adb readiness
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: x86_64
+          profile: pixel_5
+          disable-linux-hw-accel: ${{ matrix.accel }}
+          emulator-boot-timeout: 360
+          emulator-options: -no-window -gpu ${{ matrix.gpu }} -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            set -Eeuo pipefail
+            adb wait-for-device
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+            adb shell getprop ro.product.cpu.abi | grep -q 'x86_64'
+            adb shell pm path com.android.settings
+            adb shell input keyevent KEYCODE_HOME
+            echo ANDROID_BOOT_VERIFIED
+      - name: Save failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-rootcause-${{ matrix.variant }}-${{ github.run_id }}
+          path: evidence/
+          retention-days: 2
+          if-no-files-found: ignore
