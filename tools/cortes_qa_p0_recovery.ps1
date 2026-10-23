@@ -19,12 +19,13 @@ if($issue.state -ne 'open' -or $labels -notcontains 'QA-P0' -or
 }
 $action='DIAGNOSTIC_ONLY_NO_APPROVED_REPAIR'
 $body=([string]$issue.body)
+. (Join-Path $PSScriptRoot 'cortes_qa_p0_policy.ps1')
+$diagnostic='NO_AUTOMATED_REPAIR_CONTRACT'
 $title=([string]$issue.title)
 $local=[TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow,'Central Brazilian Standard Time')
 $isDaily=($title -match '(?i)cortes|daily|produtor' -and
           $body -match '(?i)zero masters|sem masters|P0_DAILY_PRODUCER_ZERO_MASTERS|HTTP 502')
-$isPersonal=($title -match '(?i)linkedin' -and
-             $body -match '(?i)CORTES LinkedIn personal')
+$isPersonal=Test-QaLinkedinPersonalIncident -Title $title -Body $body
 if($isDaily){
     $url='https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/?action=round-health'
     $health=Invoke-RestMethod -Uri $url -TimeoutSec 20
@@ -39,12 +40,31 @@ if($isDaily){
         $action='DAILY_PRODUCER_WATCHDOG_WAKEUP_ACCEPTED'
     }else{$action='DAILY_NEON_PRESENT_OR_OUTSIDE_WINDOW'}
 }elseif($isPersonal){
-    $endpoint=$root+'/actions/workflows/cortes-linkedin-personal-fallback-cloud.yml/dispatches'
-    $data=ConvertTo-Json -Compress @{ref='main'}
-    Invoke-RestMethod -Uri $endpoint -Method Post -Headers $headers -Body $data -ContentType 'application/json' -TimeoutSec 22|Out-Null
-    $action='LINKEDIN_PERSONAL_PRIMARY_DISPATCH_ACCEPTED'
+    # The publisher is protected by its own Neon lease/started/uncertain CAS.
+    # This QA path only dispatches the approved existing workflow; it never
+    # constructs, retries or marks any individual media item as published.
+    $workflow='cortes-linkedin-personal-fallback-cloud.yml'
+    $endpoint=$root+'/actions/workflows/'+$workflow
+    $runs=Invoke-RestMethod -Uri ($endpoint+'/runs?per_page=30&branch=main') -Headers $headers -TimeoutSec 22
+    if($null -eq $runs -or $null -eq $runs.workflow_runs) {
+        throw 'QA_LINKEDIN_WORKFLOW_READBACK_INVALID'
+    }
+    $decision=Get-QaLinkedinPersonalDecision -Runs @($runs.workflow_runs) -NowUtc ([datetime]::UtcNow)
+    $latest=@($runs.workflow_runs | Sort-Object created_at -Descending | Select-Object -First 1)
+    $lastId=if($latest.Count -gt 0){[string]$latest[0].id}else{'none'}
+    $diagnostic='workflow='+$workflow+';latest_run_id='+$lastId+';decision='+$decision
+    if($decision -eq 'LINKEDIN_PERSONAL_PRIMARY_DISPATCH_ALLOWED'){
+        $data=ConvertTo-Json -Compress @{ref='main'}
+        Invoke-RestMethod -Uri ($endpoint+'/dispatches') -Method Post -Headers $headers -Body $data -ContentType 'application/json' -TimeoutSec 22|Out-Null
+        $action='LINKEDIN_PERSONAL_PRIMARY_DISPATCH_ACCEPTED'
+        $diagnostic+=';dispatch_ack_only=true;publication_verified=false'
+    }else{
+        $action=$decision
+    }
 }
 if($env:GITHUB_OUTPUT){
     Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value ('action='+$action) -Encoding UTF8
+    Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value ('diagnostic='+$diagnostic) -Encoding UTF8
 }
 Write-Output ('CORTES_QA_P0_AUTOHEAL_ACTION='+$action)
+Write-Output ('CORTES_QA_P0_DIAGNOSTIC='+$diagnostic)
