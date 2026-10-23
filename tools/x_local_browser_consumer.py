@@ -130,7 +130,7 @@ def cloud_owns_queue():
             runs=resp.json().get("workflow_runs") or []
             recent=next((run for run in runs
                 if run.get("workflow_id")=="x-codeberg-primary.yml"
-                and run.get("event")=="schedule"),None)
+                and (run.get("trigger_event") or run.get("event"))=="schedule"),None)
             if recent and recent.get("status")=="success":
                 stamp=datetime.fromisoformat(str(recent.get("stopped")).replace("Z","+00:00"))
                 if stamp.tzinfo and 0 <= (datetime.now(timezone.utc)-stamp).total_seconds() <= 22*60:
