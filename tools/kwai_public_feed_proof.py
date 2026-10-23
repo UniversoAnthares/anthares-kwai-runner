@@ -174,8 +174,8 @@ def compare_media(source: pathlib.Path, public: pathlib.Path) -> dict:
     length_source, a = sampled_features(source)
     length_public, b = sampled_features(public)
     best = [max(feature_inliers(x, y) for y in b) for x in a]
-    qualifying = sum(score >= 60 for score in best)
-    if qualifying < 3:
+    qualifying = sum(score >= 240 for score in best)
+    if qualifying < 4:
         raise ProofError("public_video_content_does_not_match_source")
     return {
         "kind": "sift_source_to_public_cdn_v1",
