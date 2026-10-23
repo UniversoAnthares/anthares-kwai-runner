@@ -9,6 +9,13 @@ class ExecutionPolicyTests(unittest.TestCase):
         for provider in ("render", "tinyfish", "circleci", "browserless", "github_actions"):
             self.assertFalse(validate_surface("remote_control", provider))
 
+    def test_free_tinyfish_only_on_read_surfaces(self):
+        self.assertTrue(validate_surface("public_url_read", "tinyfish_fetch"))
+        self.assertTrue(validate_surface("public_research", "tinyfish_search"))
+        self.assertTrue(validate_surface("public_url_read", "https_fallback"))
+        self.assertFalse(validate_surface("remote_control", "tinyfish_fetch"))
+        self.assertFalse(validate_surface("browser", "tinyfish_fetch"))
+        self.assertFalse(validate_surface("public_url_read", "tinyfish"))
     def test_browser_surface_is_exclusive(self):
         self.assertTrue(validate_surface("browser", "anthares_browser"))
         for provider in ("browserless", "tinyfish", "render", "cloudflare_browser_rendering"):

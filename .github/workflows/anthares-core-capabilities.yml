@@ -19,7 +19,10 @@ jobs:
           python3 - <<'PY'
           import json
           data=json.load(open('capabilities.json'))
-          assert data['schema']=='anthares.core.capabilities.v1'
+          assert data['schema']=='anthares.core.capabilities.v2'
+          assert data['providers']['tinyfish_fetch']['role']=='public_url_read'
+          assert data['providers']['tinyfish_search']['role']=='public_research'
+          assert data['providers']['tinyfish']['retired'] is True
           assert data['providers']['github_actions']['available'] is True
           print('GITHUB_REMOTE_EXECUTOR_CONFIRMED=true')
           PY

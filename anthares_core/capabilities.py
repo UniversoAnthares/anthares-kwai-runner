@@ -53,6 +53,16 @@ def inventory():
             "available": None,
             "note": "Internal infrastructure health is evaluated separately from browser product identity.",
         },
+        "tinyfish_fetch": {
+            "available": bool(os.getenv("TINYFISH_API_KEY")),
+            "role": "public_url_read", "billable_execution": False,
+            "note": "Free recurring daily quota; never a publication or browser-proof authority.",
+        },
+        "tinyfish_search": {
+            "available": bool(os.getenv("TINYFISH_API_KEY")),
+            "role": "public_research", "billable_execution": False,
+            "note": "Free recurring quota; discovery must honor source curation.",
+        },
         "github_actions": _github_actions(),
         "gitlab_ci": _gitlab_ci(),
         "cloudflare_workers": {
