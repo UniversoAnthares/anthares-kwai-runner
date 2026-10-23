@@ -189,44 +189,65 @@ def account(page):
 
 
 def proof(context, caption, attempts=1, verified_page=None):
-    # Prove the *signed-in* account on its original tab BEFORE creating any
-    # read-only timeline tab. X unmounts the authenticated sidebar while an
-    # independent page is opening; rechecking after opening falsely fails.
-    # Only an exact /lucasyahn/status post with matching caption AND video
-    # may count as public readback. Never click a Post button here.
+    """Read back X posts on the SAME authenticated tab, never a second tab.
+
+    The full account proof is required before leaving /home and again after
+    returning. Failure before submission blocks claim; failure after a click
+    leaves started/uncertain fenced in Neon. No pages are created or leaked.
+    """
     if verified_page is None or verified_page.context is not context:
         raise RuntimeError("X_CLOUD_INDEPENDENT_IDENTITY_REQUIRED")
     for trial in range(attempts):
-        # Wrong-account and login errors always fail closed. Do not infer
-        # ownership from a profile URL, existing cookie, or post metadata.
         account(verified_page)
-        page = context.new_page()
+        found = None
         try:
-            page.goto("https://x.com/lucasyahn", wait_until="domcontentloaded", timeout=50000)
-            page.wait_for_timeout(2600)
-            destination = urlparse(page.url)
-            if (destination.hostname not in ("x.com", "www.x.com")
-                    or destination.path.rstrip("/") != "/lucasyahn"):
+            verified_page.goto("https://x.com/lucasyahn",
+                               wait_until="domcontentloaded", timeout=50000)
+            verified_page.wait_for_timeout(2200)
+            dest = urlparse(verified_page.url)
+            if (dest.hostname not in ("x.com", "www.x.com")
+                    or dest.path.rstrip("/") != "/lucasyahn"):
                 raise RuntimeError("X_CLOUD_TIMELINE_PROFILE_MISMATCH")
-            for post in page.locator("article").all()[:24]:
+            for post in verified_page.locator("article").all()[:24]:
                 try:
                     if caption not in post.inner_text(timeout=2200):
                         continue
-                    for a in post.locator("a").all():
-                        href = a.get_attribute("href") or ""
+                    for link in post.locator("a").all():
+                        href = link.get_attribute("href") or ""
                         match = re.fullmatch(r"/lucasyahn/status/([0-9]+)/?", href)
                         if not match:
                             continue
-                        uri = "https://x.com/lucasyahn/status/" + match.group(1)
-                        page.goto(uri, wait_until="domcontentloaded", timeout=45000)
-                        page.wait_for_timeout(2000)
-                        rendered = " ".join(page.locator('[data-testid="tweetText"]').all_text_contents())
-                        if caption in rendered and page.locator("video").count() > 0:
-                            return uri
+                        candidate = "https://x.com/lucasyahn/status/" + match.group(1)
+                        verified_page.goto(candidate, wait_until="domcontentloaded",
+                                           timeout=45000)
+                        verified_page.wait_for_timeout(2000)
+                        text = " ".join(verified_page.locator(
+                            '[data-testid="tweetText"]').all_text_contents())
+                        if caption in text and verified_page.locator("video").count() > 0:
+                            found = candidate
+                        break
+                    if found:
+                        break
                 except Exception:
                     continue
         finally:
-            page.close()
+            # Restore the same authenticated X tab even when a matching post
+            # is absent or a network error interrupted the readback.
+            verified_page.goto("https://x.com/home",
+                               wait_until="domcontentloaded", timeout=50000)
+            deadline = time.monotonic() + 30
+            while True:
+                try:
+                    account(verified_page)
+                    break
+                except RuntimeError as exc:
+                    if str(exc) != "X_CLOUD_IDENTITY_NOT_PROVEN":
+                        raise
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("X_CLOUD_HOME_IDENTITY_NOT_RESTORED") from None
+                    verified_page.wait_for_timeout(1250)
+        if found:
+            return found
         if trial < attempts - 1:
             verified_page.wait_for_timeout(7500)
     return None
