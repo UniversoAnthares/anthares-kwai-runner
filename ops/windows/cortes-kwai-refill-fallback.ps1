@@ -1,4 +1,4 @@
-[task:1e3c008720eb] $ErrorActionPreference='Stop'
+$ErrorActionPreference='Stop'
 $log='D:\AntharsWork\AntharesRemote\cortes-kwai-refill-fallback.log'
 try {
   # Guard: no queue-refill while physical Kwai publisher is paused for reconciliation.
