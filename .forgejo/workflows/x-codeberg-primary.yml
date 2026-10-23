@@ -37,8 +37,8 @@ jobs:
     timeout-minutes: 9
     env:
       X_CLOUD_PROVIDER: codeberg
-      X_LEDGER_BACKEND: neon
-      X_LEDGER_DATABASE_URL: ${{ secrets.X_LEDGER_DATABASE_URL }}
+      X_LEDGER_BACKEND: neon-api
+      X_LEDGER_API: https://br-crimson-unit-b89nau08-xledger.compute.c-14.us-east-1.aws.neon.tech/
       X_LEDGER_MIGRATION_VERIFIED: ${{ vars.X_LEDGER_MIGRATION_VERIFIED }}
       X_CLOUD_ARM: ${{ vars.X_CODEBERG_PRIMARY_ARM }}
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -55,7 +55,7 @@ jobs:
             echo "X_CODEBERG_REQUIRED_SECRET_MISSING=ARA_SHARED"
             exit 2
           fi
-          if [ -z "${X_LEDGER_DATABASE_URL:-}" ] || [ "${X_LEDGER_MIGRATION_VERIFIED:-}" != 1 ]; then
+          if [ "${X_LEDGER_MIGRATION_VERIFIED:-}" != 1 ]; then
             echo "X_CODEBERG_NEON_MIGRATION_NOT_READY"
             exit 2
           fi
@@ -67,7 +67,7 @@ jobs:
         run: |
           set -eu
           python3 -m venv /tmp/anthares-x-publisher-venv
-          /tmp/anthares-x-publisher-venv/bin/python -m pip install --disable-pip-version-check playwright requests cryptography 'psycopg[binary]'
+          /tmp/anthares-x-publisher-venv/bin/python -m pip install --disable-pip-version-check playwright requests cryptography
           /tmp/anthares-x-publisher-venv/bin/python -m playwright install --with-deps chromium
           command -v ffprobe || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
       - name: Globally fenced cloud X video publisher
