@@ -1,5 +1,5 @@
 # Lease: WordPress native privacy exporter for own PIX tables
-STATUS: ACTIVE
+STATUS: CLOSED
 DATE: 2026-10-23 02:28 America/Campo_Grande
 OWNER: GPT6 WordPress/security/privacy only
 SCOPE: UniversoAnthares/anthares-wordpress main, modify only anthares-pix-sales/anthares-pix-sales.php (blob 27f6e7647579d5fc9f2b5bd6b81ffb49b414b3ae), create includes/96-privacy-export.php and tests/security-pix-privacy-export.php, append CI gate in .github/workflows/wordpress-security-gate.yml (blob 585d7c1b697704f3935bf1608f1cbc6930a3f6ec). Peer GitLab main 954e62c786e9abd1f31a457795b0b777aaa4bfde, target contents same as GitHub at acquisition.
@@ -9,3 +9,5 @@ GOAL: single WP native exporter (no eraser); prepared paginated read-only SELECT
 GUARDS: Two fictional identities and guest samples, conflict and pagination adversarial test, 0 live financial actions. Read HEAD/target fresh before write and optimistic concurrency. Isolated PHP tests, lint, PR review, mirror GitLab only after source/check; verify live code hash before status claim; rollback retained.
 PROOF: WP hook callback registered in fixture; positive registered/guest email cases and conflict exclusion, 2-page pagination with no duplicates, no private fields; site smoke. Do not certify legal completeness.
 STOP: 2026-10-23 06:00 America/Campo_Grande.
+
+RESULT: Exporter implemented and live on Hostinger PIX Sales 1.0.98, two synthetic accounts and pagination tests PASS, GitHub PR 76 and GitLab 688b3c1 synchronized. Evidence `test-hub/findings/20261023-wp-pix-privacy-native-export-production-proven.md`. No other owner or CORTES code touched. Browser authenticated export and guest ownership remain open boundaries; no live user data exported or erased.
