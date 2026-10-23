@@ -222,96 +222,89 @@ def media_preflight(path):
         raise RuntimeError("X_VIDEO_OUTSIDE_LONG_16_BY_9_LIMITS")
 
 def account(page):
+    # Check identity from the currently authenticated X UI, never from a
+    # cookie file or the *viewed* profile URL.
+    if any(path in page.url for path in (
+            "/login", "/i/flow/login", "/i/jf/onboarding")):
+        raise RuntimeError("X_BROWSER_HUB_LOGIN_REQUIRED")
+    link=page.locator('a[data-testid="AppTabBar_Profile_Link"]')
+    if link.count():
+        destination=(link.first.get_attribute("href") or "").rstrip("/")
+        if destination=="/lucasyahn":
+            return
+        if re.fullmatch(r"/[A-Za-z0-9_]{1,15}",destination):
+            raise RuntimeError("WRONG_X_ACCOUNT")
     tab=page.locator('[data-testid="SideNav_AccountSwitcher_Button"]')
-    if tab.count()!=1:raise RuntimeError("ACCOUNT_UNCONFIRMED")
+    if tab.count()!=1:
+        raise RuntimeError("ACCOUNT_UNCONFIRMED")
     names=re.findall(r"(?<![A-Za-z0-9_])@([A-Za-z0-9_]{1,15})(?![A-Za-z0-9_])",
                      tab.first.inner_text(timeout=9000))
-    if names!=["lucasyahn"]:raise RuntimeError("WRONG_X_ACCOUNT")
+    if names!=["lucasyahn"]:
+        raise RuntimeError("WRONG_X_ACCOUNT")
 
-def _restore_only_dedicated_x_context(playwright, context, page, shared):
-    """Restore signed-in X cookies only after an isolated account proof.
 
-    Never touch personal Chrome sessions; require the dedicated CDP profile.
-    No login is performed and no POST is made during this preflight.
+def _assert_browser_hub_x_profile():
+    """Fail closed unless CDP :9224 belongs to the dedicated Hub X profile.
+
+    Inspection only: never spawn Chrome, copy browser data, or restore cookies
+    from the independent cloud vault into a persistent Hub profile.
     """
-    import hashlib
-    import subprocess
-    import tempfile
-    import importlib.util
-    from pathlib import Path
-    command = ("Get-CimInstance Win32_Process -Filter \"name='chrome.exe'\" | "
-               "ForEach-Object { $_.CommandLine }")
-    proc = subprocess.run(
+    expected=Path(r"D:\AntharsWork\browser-profiles\AntharesXBridge")
+    if not expected.is_dir():
+        raise RuntimeError("X_BROWSER_HUB_PROFILE_MISSING")
+    query=(
+        "Get-CimInstance Win32_Process -Filter \"name='chrome.exe'\" | "
+        "ForEach-Object { $_.CommandLine }")
+    result=subprocess.run(
         ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle",
-         "Hidden", "-Command", command],
-        capture_output=True, text=True, timeout=20,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    rows = proc.stdout.lower().splitlines()
-    if proc.returncode or not any(
-        "--remote-debugging-port=9224" in row and "antharesxbridge" in row
-        and "--user-data-dir" in row for row in rows
-    ):
-        raise RuntimeError("X_DEDICATED_CDP_PROFILE_UNVERIFIED")
+         "Hidden", "-Command", query],
+        capture_output=True,text=True,timeout=20,
+        creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
+    if result.returncode:
+        raise RuntimeError("X_BROWSER_HUB_PROCESS_UNVERIFIED")
+    matches=[row.lower() for row in result.stdout.splitlines()
+             if "--remote-debugging-port=9224" in row.lower()]
+    if len(matches)!=1 or not all(marker in matches[0] for marker in (
+            "--user-data-dir", "browser-profiles", "antharesxbridge")):
+        raise RuntimeError("X_BROWSER_HUB_PROFILE_NOT_ISOLATED")
 
-    # Immutable, Git-blob-hash checked application module; fail closed if its
-    # source differs from the reviewed version. Avoid mutable remote code.
-    url = ("https://raw.githubusercontent.com/UniversoAnthares/"
-           "anthares-kwai-runner/b935013c7aa1e53ff5ad5076327fbdf09f1f68bc/"
-           "infra/anthares_runtime_browser_local.py")
-    response = requests.get(url, timeout=22)
-    response.raise_for_status()
-    payload = response.content
-    blob = hashlib.sha1(
-        b"blob " + str(len(payload)).encode() + b"\x00" + payload).hexdigest()
-    if blob != "696d1fcd875c253b4c6d5bb923082f00978bd565":
-        raise RuntimeError("X_VAULT_MODULE_INTEGRITY_FAILED")
 
-    with tempfile.TemporaryDirectory(prefix="anthares-x-vault-") as folder:
-        module_path = Path(folder) / "anthares_runtime_browser_local.py"
-        module_path.write_bytes(payload)
-        spec = importlib.util.spec_from_file_location(
-            "anthares_x_signed_vault_snapshot", str(module_path))
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        old_shared = os.environ.get("ARA_SHARED")
-        try:
-            os.environ["ARA_SHARED"] = shared
-            state_data = module._vault_pull()
-        finally:
-            if old_shared is None:
-                os.environ.pop("ARA_SHARED", None)
-            else:
-                os.environ["ARA_SHARED"] = old_shared
-
-    if not isinstance(state_data, dict) or not state_data.get("cookies"):
-        raise RuntimeError("X_SIGNED_VAULT_EMPTY")
-    # Prove the account *before* changing any cookies in the CDP profile.
-    isolated = playwright.chromium.launch(
-        channel="chrome", headless=True, timeout=45000,
-        args=["--no-sandbox", "--disable-dev-shm-usage", "--mute-audio"])
+def _verify_existing_browser_hub_session(page):
+    """Reuse Hub-owned X authentication, fail closed if it is not valid."""
     try:
-        proof_context = isolated.new_context(storage_state=state_data, locale="pt-BR")
-        proof_page = proof_context.new_page()
-        proof_page.goto("https://x.com/home", wait_until="domcontentloaded",
-                        timeout=45000)
-        proof_page.wait_for_timeout(1500)
-        account(proof_page)
-    finally:
-        isolated.close()
+        account(page)
+        return
+    except RuntimeError as exc:
+        if str(exc) in ("WRONG_X_ACCOUNT","X_BROWSER_HUB_LOGIN_REQUIRED"):
+            raise
+    # React rendering can briefly hide both selectors. Retry the *same* page,
+    # without loading a new route or altering the persisted browser cookies.
+    deadline=time.monotonic()+15
+    while time.monotonic()<deadline:
+        page.wait_for_timeout(1000)
+        try:
+            account(page)
+            return
+        except RuntimeError as exc:
+            if str(exc) in ("WRONG_X_ACCOUNT","X_BROWSER_HUB_LOGIN_REQUIRED"):
+                raise
+    raise RuntimeError("X_BROWSER_HUB_IDENTITY_UNVERIFIED")
 
-    context.clear_cookies()
-    context.add_cookies(state_data["cookies"])
-    page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=45000)
-    page.wait_for_timeout(2000)
-    account(page)
 
-
-def evidence(ctx,caption,attempts=1):
+def evidence(ctx,caption,attempts=1,verified_page=None):
+    if verified_page is None or verified_page.context is not ctx:
+        raise RuntimeError("X_BROWSER_HUB_VERIFIED_CONTEXT_REQUIRED")
+    # Prove ownership on the Hub's signed-in tab BEFORE opening the separate
+    # read-only timeline tab. Never infer identity from a viewed profile page.
+    account(verified_page)
     page=ctx.new_page()
     try:
         for attempt in range(attempts):
             page.goto("https://x.com/lucasyahn",wait_until="domcontentloaded",timeout=45000)
-            page.wait_for_timeout(2700);account(page)
+            page.wait_for_timeout(2700)
+            target=urlparse(page.url)
+            if target.hostname not in ('x.com','www.x.com') or target.path.rstrip('/')!='/lucasyahn':
+                raise RuntimeError('X_BROWSER_HUB_TIMELINE_PROFILE_MISMATCH')
             for post in page.locator("article").all()[:25]:
                 try:
                     if caption not in post.inner_text(timeout=3000):continue
@@ -355,6 +348,7 @@ def one(issue,data,token):
     media_preflight(media)
     attempts=int(readstate(n).get("attempts") or 0)+1
     state(n,"PREPARING",attempts=attempts)
+    _assert_browser_hub_x_profile()
     with sync_playwright() as playwright:
         browser=playwright.chromium.connect_over_cdp("http://127.0.0.1:9224",timeout=18000)
         if len(browser.contexts)!=1:raise RuntimeError("CHROME_CONTEXT_NOT_ISOLATED")
@@ -362,14 +356,8 @@ def one(issue,data,token):
         tabs=[p for p in ctx.pages if p.url.startswith("https://x.com/")]
         if len(tabs)!=1:raise RuntimeError("CHROME_X_TAB_NOT_UNIQUE")
         page=tabs[0]
-        try:
-            account(page)
-        except RuntimeError as exc:
-            if str(exc) not in ("WRONG_X_ACCOUNT", "ACCOUNT_UNCONFIRMED"):
-                raise
-            _restore_only_dedicated_x_context(playwright, ctx, page, token)
-            account(page)
-        if evidence(ctx,data["caption"]):
+        _verify_existing_browser_hub_session(page)
+        if evidence(ctx,data["caption"],verified_page=page):
             raise RuntimeError("ALREADY_POSTED_RECONCILE")
         dialog=page.locator('[role="dialog"]')
         text_now="\\n".join(dialog.all_inner_texts()) if page.url.endswith("/compose/post") else ""
@@ -426,7 +414,7 @@ def one(issue,data,token):
             sent.add(key);
             element.click();
         }""", key, timeout=12500)
-        url=evidence(ctx,data["caption"],attempts=18)
+        url=evidence(ctx,data["caption"],attempts=18,verified_page=page)
         if not url:
             state(n,"UNCERTAIN")
             raise RuntimeError("SUBMITTED_BUT_NOT_CONFIRMED")
