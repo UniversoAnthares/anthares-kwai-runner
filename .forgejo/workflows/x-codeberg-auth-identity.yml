@@ -2,6 +2,10 @@ name: X Codeberg Authenticated Browser Proof
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/x-codeberg-auth-identity.yml'
 
 permissions:
   contents: read
