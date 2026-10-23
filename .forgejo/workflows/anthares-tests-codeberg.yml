@@ -75,6 +75,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pinterest_draft_cap_nextday.py' -v
           python3 -m unittest discover -s tests -p 'test_pinterest_24h_titles_qa.py' -v
           python3 -m unittest discover -s tests -p 'test_pinterest_qa_jsonb_evidence.py' -v
+          python3 -m unittest discover -s tests -p 'test_pinterest_media_head_transient.py' -v
       - name: Editorial and media safety contracts
         shell: bash
         run: |
