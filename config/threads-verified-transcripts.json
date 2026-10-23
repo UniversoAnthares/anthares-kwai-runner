@@ -1,0 +1,71 @@
+{
+  "schema": "anthares.threads.clip-evidence-registry.v1",
+  "items": {
+    "fOmihuHUT1M|g1:fOmihuHUT1M:92:132": {
+      "title": "Kafka e Rilke: quem importa na literatura austríaca ● Universo Anthares",
+      "description": "Ao comentar A Metamorfose, Kafka e Rilke aparecem como nomes centrais da literatura austríaca. A conversa também aborda a prosa austríaca, a leitura de Kafka e a importância de Rilke. www.anthares.us",
+      "hashtags": [
+        "#Kafka",
+        "#Rilke",
+        "#Metamorfose",
+        "#Literatura"
+      ],
+      "keywords": [
+        "Kafka",
+        "Rilke",
+        "metamorfose",
+        "literatura austríaca"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:92:132",
+        "attachment_id": 16939,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 92,
+        "source_end_s": 132,
+        "media_sha256": "115642c80a6b53bcc28d9049a3efc6a891900caf8d308810d33eb0f520c1cad6",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 7.44,
+            "text": "Hoje a gente vai falar sobre esse livrinho aqui, ó, a metamorfose, de um tal de Franz Kafka,"
+          },
+          {
+            "start": 7.44,
+            "end": 11.6,
+            "text": "não sei se vocês conhecem, um tal aí de Franz Kafka, entendeu, que esse na literatura"
+          },
+          {
+            "start": 11.6,
+            "end": 16.04,
+            "text": "austríaca tem dois caras que importam, o Rilke e o Kafka, é só isso, fala, pois"
+          },
+          {
+            "start": 16.04,
+            "end": 17.04,
+            "text": "é austríaca, cadê?"
+          },
+          {
+            "start": 17.04,
+            "end": 20.32,
+            "text": "Ah, botei lá atrás, enfim, Rilke, tá lá atrás, nós estamos atindo, vou conseguir"
+          },
+          {
+            "start": 20.32,
+            "end": 28.04,
+            "text": "pegar, deu um Rilke, fala, prosa austríaca, Kafka, só isso, todo o resto é dispensável,"
+          },
+          {
+            "start": 28.04,
+            "end": 32.8,
+            "text": "tudo mentira, é mentira, mas enfim, não sou vídeo da linguagem, pô, vê."
+          }
+        ],
+        "excerpt": "Hoje a gente vai falar sobre esse livrinho aqui, ó, a metamorfose, de um tal de Franz Kafka, não sei se vocês conhecem, um tal aí de Franz Kafka, entendeu, que esse na literatura austríaca tem dois caras que importam, o Rilke e o Kafka, é só isso, fala, pois é austríaca, cadê? Ah, botei lá atrás, enfim, Rilke, tá lá atrás, nós estamos atindo, vou conseguir pegar, deu um Rilke, fala, prosa austríaca, Kafka, só isso, todo o resto é dispensável, tudo mentira, é mentira, mas enfim, não sou vídeo da linguagem, pô, vê.",
+        "verified": true
+      }
+    }
+  }
+}
