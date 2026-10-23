@@ -6,10 +6,10 @@ on:
       - tools/cortes_pinterest_board_paths_probe.py
       - .github/workflows/cortes-pinterest-board-paths-probe.yml
   workflow_dispatch: {}
-  # Independent read-only heartbeat; success also activates the canonical
-  # OIDC-authorized publisher through workflow_run.
-  schedule:
-    - cron: '11,26,41,56 * * * *'
+  # Read-only board diagnostics are manually callable. The actual Pinterest
+  # publisher maintains its separate five-minute schedule; repetitive probes
+  # were doing six Buffer GraphQL requests every fifteen minutes, including
+  # during shared HTTP 429 cooldown, without ever publishing a Pin.
 permissions:
   contents: read
 jobs:
