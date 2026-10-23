@@ -61,7 +61,8 @@ def main():
         if (row.get("platform") != "x" or row.get("account") != "lucasyahn"
                 or row.get("test_fixture") or row.get("duration_class") != "long"):
             continue
-        key = fingerprint(row)
+        # Both Windows and Linux publishers use x_ + fingerprint(raw).
+        key = "x_" + fingerprint(row)
         ref = hashlib.sha256(("x:lucasyahn:" + key).encode()).hexdigest()
         old = load(LEDGER + "/post-status?idempotency_key=" + key, secret)
         status = str(old.get("status") or "")
