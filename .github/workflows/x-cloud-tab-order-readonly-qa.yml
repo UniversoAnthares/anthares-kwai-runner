@@ -20,4 +20,4 @@ jobs:
           python -m pip install --disable-pip-version-check requests cryptography playwright
           python -m playwright install --with-deps chromium
       - name: Prove read-only X identity before opening timeline and cleanup
-        run: python -u tools/x_cloud_tab_order_readonly_qa.py
+        run: python -u -m tools.x_cloud_tab_order_readonly_qa
