@@ -1,0 +1,98 @@
+name: X Codeberg Neon primary promotion after verified QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/x-codeberg-neon-promote.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: anthares-x-codeberg-neon-primary-promotion
+  cancel-in-progress: false
+jobs:
+  promote:
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
+    timeout-minutes: 8
+    env:
+      CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
+      PYTHONUTF8: '1'
+      GIT_TERMINAL_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify 4 proofs, mirror equality and Neon before arming
+        shell: pwsh
+        run: |
+          @'
+          import base64,json,os,subprocess,time,urllib.parse,urllib.request,urllib.error
+          u=urllib.parse.urlsplit(os.getenv("CODEBERG_PUSH_URL",""))
+          if u.scheme!="https" or u.hostname!="codeberg.org" or not u.username or not u.password:
+              raise SystemExit("X_CODEBERG_ADMIN_AUTH_NOT_AVAILABLE")
+          basic=base64.b64encode((urllib.parse.unquote(u.username)+":"+
+                  urllib.parse.unquote(u.password)).encode()).decode()
+          root="https://codeberg.org/api/v1/repos/UniversoAnthares/anthares-kwai-runner"
+          headers={"Authorization":"Basic "+basic,"Accept":"application/json",
+                   "User-Agent":"Anthares-X-Verified-Primary-Promotion"}
+          def cb(method,path,body=None):
+              data=json.dumps(body).encode() if body is not None else None
+              h=dict(headers)
+              if data:h["Content-Type"]="application/json"
+              req=urllib.request.Request(root+path,headers=h,data=data,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=25) as rsp:
+                      content=rsp.read()
+                      return rsp.status,json.loads(content) if content else {}
+              except urllib.error.HTTPError as e:
+                  if e.code==404:return 404,{}
+                  print("X_PROMOTION_CODEBERG_HTTP_"+str(e.code))
+                  raise SystemExit(3)
+          proofs={"identity":7946579,"gh_issues_write":7947095,
+                  "neon_confirmed_replay_guard":7949042,
+                  "neon_qa_concurrency_and_quota":7949192}
+          for label,run_id in proofs.items():
+              status,payload=cb("GET","/actions/runs/"+str(run_id))
+              if status!=200 or payload.get("status")!="success":
+                  raise SystemExit("X_PROOF_NOT_GREEN_"+label)
+              print("X_PREPROMOTION_"+label.upper()+"=PASS")
+          def sha(url):
+              p=subprocess.run(["git","ls-remote",url,"refs/heads/main"],
+                    capture_output=True,text=True,timeout=28)
+              if p.returncode or not p.stdout.strip():raise RuntimeError("MIRROR_REF_UNAVAILABLE")
+              return p.stdout.split()[0]
+          for n in range(4):
+              original=sha("https://github.com/UniversoAnthares/anthares-kwai-runner.git")
+              mirror=sha("https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git")
+              if original==mirror:break
+              time.sleep(10)
+          if original!=mirror:raise SystemExit("X_CODEBERG_MIRROR_NOT_AT_GITHUB_MAIN")
+          print("X_CODEBERG_MIRROR_SYNCED=PASS")
+          health=urllib.request.urlopen(
+             "https://br-crimson-unit-b89nau08-xledger.compute.c-14.us-east-1.aws.neon.tech/?action=health",
+             timeout=18)
+          result=json.load(health)
+          if health.status!=200 or result.get("ok") is not True or result.get("confirmed")!=9:
+              raise SystemExit("X_NEON_PRODUCTION_READBACK_CHANGED")
+          print("X_NEON_NINE_HISTORICAL_CONFIRMATIONS=PASS")
+          for name in ("X_LEDGER_MIGRATION_VERIFIED","X_CODEBERG_PRIMARY_ARM"):
+              path="/actions/variables/"+name
+              current,data=cb("GET",path)
+              if current not in (200,404):raise SystemExit("X_VARIABLE_READ_DENIED_"+name)
+              if current==200 and data.get("data")=="1":
+                  print("X_CODEBERG_VAR_ALREADY_ARMED="+name)
+                  continue
+              method="PUT" if current==200 else "POST"
+              status,_=cb(method,path,{"value":"1"})
+              if status not in (200,201,204):raise SystemExit("X_VARIABLE_WRITE_FAILED_"+name)
+              status,data=cb("GET",path)
+              if status!=200 or str(data.get("data") or "")!="1":
+                  raise SystemExit("X_VARIABLE_READBACK_FAILED_"+name)
+              print("X_CODEBERG_VAR_SET="+name)
+          # A single, globally fenced real publication. Concurrency group prevents
+          # overlap with the upcoming ten-minute scheduler.
+          status,_=cb("POST","/actions/workflows/x-codeberg-primary.yml/dispatches",
+                    {"ref":"main","inputs":{"smoke":"false"}})
+          if status not in (200,201,202,204):
+              raise SystemExit("X_CODEBERG_PUBLICATION_DISPATCH_FAILED")
+          print("X_CODEBERG_REAL_PUBLICATION_DISPATCHED=PASS")
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'X_CODEBERG_PROMOTION_NOT_VALIDATED' }
