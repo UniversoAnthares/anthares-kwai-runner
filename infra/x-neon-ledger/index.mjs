@@ -35,9 +35,13 @@ async function transaction(queries) {
   },body:JSON.stringify({queries}),signal:AbortSignal.timeout(12000)});
   if(!r.ok)throw Error('NEON_TRANSACTION_HTTP_'+r.status);
   const data=await r.json();
-  if(!Array.isArray(data)||data.length!==queries.length||
-     data.some(x=>!Array.isArray(x.rows)))throw Error('NEON_TRANSACTION_BAD_RESPONSE');
-  return data.map(x=>x.rows);
+  const batch=Array.isArray(data)?data:Array.isArray(data?.results)?data.results:null;
+  if(!batch||batch.length!==queries.length||batch.some(x=>!Array.isArray(x?.rows))){
+    const kind=Array.isArray(data)?'array':typeof data;
+    const keys=data&&typeof data==='object'&&!Array.isArray(data)?Object.keys(data).filter(x=>/^[A-Za-z_]{1,20}$/.test(x)).slice(0,4).join('_'):'none';
+    throw Error('NEON_TRANSACTION_SHAPE_'+kind+'_'+keys);
+  }
+  return batch.map(x=>x.rows);
 }
 async function authorized(request) {
   const m=/^Bearer\s+([^\s]+)$/i.exec(request.headers.get('authorization')||'');
@@ -117,7 +121,7 @@ export default {async fetch(request){
     return out(404,{ok:false,error:'unknown_action'});
   }catch(e){
     const message=String(e?.message||'');
-    const safe=/^NEON_(?:TRANSACTION|QUERY|BAD_ROWS|DATABASE)[A-Z0-9_]*$/.test(message)?message:'LEDGER_UNAVAILABLE';
+    const safe=/^NEON_(?:TRANSACTION|QUERY|BAD_ROWS|DATABASE)[A-Za-z0-9_]*$/.test(message)?message:'LEDGER_UNAVAILABLE';
     return out(503,{ok:false,error:safe});
   }
 }};
