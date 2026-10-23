@@ -1,0 +1,23 @@
+name: X Live Readonly Tab Ordering QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/x-cloud-tab-order-readonly-qa.yml'
+permissions:
+  contents: read
+jobs:
+  readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated headless browser
+        run: |
+          python -m pip install --disable-pip-version-check requests cryptography playwright
+          python -m playwright install --with-deps chromium
+      - name: Prove read-only X identity before opening timeline and cleanup
+        run: python -u tools/x_cloud_tab_order_readonly_qa.py
