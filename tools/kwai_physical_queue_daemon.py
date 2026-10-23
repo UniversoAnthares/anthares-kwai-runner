@@ -190,13 +190,9 @@ def network_ready(serial):
  except (OSError,subprocess.SubprocessError,ValueError):return False
 
 def heartbeat(healthy,serial='',error=''):
- # The canonical Neon queue does not expose a Cloudflare executor heartbeat.
- # A local health check cannot prove successful publication or replace a lease.
- if True:
-  return 202,{'ok':True,'backend':'vercel-neon','cloudflare_heartbeat_skipped':True}
- payload={'executor':EXECUTOR,'healthy':bool(healthy),'failures':0 if healthy else 1,'host':socket.gethostname(),'platform':'android','model':MODEL,'adb_serial':serial,'capabilities':['kwai'],'daily_limit':100,'expected_accounts':[EXPECTED_ACCOUNT]}
- if error:payload['last_error']=error[-300:]
- return signed_post('/heartbeat',payload)
+ # Queue authority is Neon. Legacy Cloudflare heartbeat is irrelevant to the
+ # canonical device consumer and must not turn queue acquisition into an outage.
+ return 202,{'ok':True,'backend':'vercel-neon','cloudflare_heartbeat_skipped':True}
 def jobenv(job,serial):
  required=('id','lease_generation','source_id','source_start','source_end','video_url'); missing=[k for k in required if job.get(k) in (None,'')]
  if missing:raise RuntimeError('lease-missing:'+','.join(missing))
