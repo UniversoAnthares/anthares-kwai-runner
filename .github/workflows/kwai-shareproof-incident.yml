@@ -1,0 +1,42 @@
+name: Kwai Clipboard-Free Share Proof Build
+on:
+  push:
+    branches: [fix/kwai-incident-20261022]
+    paths:
+      - 'android-agent/**'
+      - '.github/workflows/kwai-shareproof-incident.yml'
+permissions: {contents: write}
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.9'}
+      - name: Build standalone share receiver APK
+        working-directory: android-agent
+        run: gradle --no-daemon :shareproof:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anthares-kwai-shareproof-debug
+          path: android-agent/shareproof/build/outputs/apk/debug/shareproof-debug.apk
+      - name: Publish to unique immutable distribution ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=android-agent/shareproof/build/outputs/apk/debug/shareproof-debug.apk
+          test -s "$apk"
+          cp "$apk" /tmp/anthares-kwai-shareproof.apk
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch --orphan kwai-shareproof-dist-20261022
+          git rm -rf . >/dev/null 2>&1 || true
+          mkdir -p dist
+          cp /tmp/anthares-kwai-shareproof.apk dist/anthares-kwai-shareproof.apk
+          sha256sum dist/anthares-kwai-shareproof.apk > dist/anthares-kwai-shareproof.sha256
+          git add dist
+          git commit -m 'build(kwai): isolated clipboard-free ACTION_SEND receiver'
+          git push origin HEAD:refs/heads/kwai-shareproof-dist-20261022
