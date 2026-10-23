@@ -10,3 +10,5 @@ OBJECTIVES: authenticated-capability ACF reversible write/read for all five fiel
 STOP: date deadline 2026-10-23 06:00 America/Campo_Grande or tool hard blocker.
 GUARDS: do not touch real user posts/fields, production money or live publisher; no secrets in logs or commits; no broad lockouts; cleanup all owned temporary files/windows.
 SUCCESS_PROOF: WP CLI security context + read/write results and cleanup, IP proxy raw relation or UNCERTAIN, plugin tests + real HTTP 200/401, unique video IDs with evidence, hash verified commits.
+
+FILE OWNERSHIP FOR THIS ITERATION (2026-10-23 01h): GPT6 WordPress-security owns only `anthares-pix-sales/includes/38-youtube-importer.php` XSS-safe admin display, new `tests/security-lesson10-xss.js`, and append-only testing lines in `.github/workflows/wordpress-security-gate.yml`. No editing other parts of PIX, CORTES, queues, automation or shared agents. Re-read target hashes before mutation. If another owner modifies these targets first, abort/reconcile instead of overwriting.
