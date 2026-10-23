@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/x-legacy-ledger-inventory.yml'
+      - 'tools/x_legacy_ledger_inventory.py'
   workflow_dispatch: {}
 permissions:
   contents: read
