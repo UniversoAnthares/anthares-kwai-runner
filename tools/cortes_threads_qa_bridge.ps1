@@ -40,7 +40,93 @@ try {
 $issues=@($issues|Where-Object{$_}|Sort-Object -Unique)
 if($issues.Count -eq 0){exit 0}
 $joined=$issues -join '|'
-$sha=[Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($joined))
+# Transient primary/standby heartbeat changes are one publisher-continuity incident.
+# Keep original details in the comment; hash the stable operational family.
+$families=@($issues|ForEach-Object{
+ if($_ -match '^(CLOUD_PRIMARY_DISABLED_WITH_QUEUE|CLOUD_PRIMARY_HEARTBEAT_STALE|PUBLICATION_PROGRESS_STALLED|RECURRENT_PUBLICATION_ERRORS|SCHEDULER_NO_HEARTBEAT|CLOUD_GITHUB_RUNNER_QUEUED_OVER_12MIN)
+$fingerprint=([BitConverter]::ToString($sha) -replace '-','').ToLowerInvariant().Substring(0,24)
+$last=if(Test-Path $notified){try{Get-Content $notified -Raw -Encoding UTF8|ConvertFrom-Json}catch{$null}}else{$null}
+if($last -and $last.fingerprint -eq $fingerprint -and
+    ($now-[DateTime]::Parse($last.sent_at).ToUniversalTime()).TotalMinutes -lt 45){exit 0}
+$body='[QA P0][Threads][CORTES] DIAGNOSTICO IMEDIATO. Falhas='+($issues -join ', ')+
+ '. Fila pendente Neon='+$queued+'. Data UTC='+$now.ToString('o')+
+ '. CONTINUIDADE: acionar/validar redundancia Windows pelo Neon; sem reenvio de cortes incertos.'+
+ ' Investigar raiz, corrigir codigo e teste regressivo, reconfirmar publicacao cloud.'+
+ ' Automacao de QA independendente do publicador; nao expor cookies ou tokens.'
+if($DryRun){
+ Write-Output ('THREADS_QA_P0_DRY_RUN problems='+$joined+' queued='+$queued)
+ exit 0
+}
+try {
+ . 'C:\ProgramData\AntharesRemoteAgent\load-issue-queue-auth.ps1'
+ $token=[string]$env:ANTHARES_GITHUB_QUEUE_TOKEN
+ if(!$token){throw 'QA_ISSUE_AUTH_UNAVAILABLE'}
+ $headers=@{Authorization='Bearer '+$token;Accept='application/vnd.github+json';
+  'X-GitHub-Api-Version'='2022-11-28';'User-Agent'='Anthares-Threads-QA-Watchdog'}
+ $payload=@{body=$body}|ConvertTo-Json -Compress
+ $result=Invoke-RestMethod -Uri 'https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/issues/283/comments' -Headers $headers -Method POST -ContentType 'application/json' -Body ([Text.Encoding]::UTF8.GetBytes($payload)) -TimeoutSec 25
+ if(!$result.id){throw 'QA_COMMENT_NOT_CONFIRMED'}
+ $new=@{sent_at=$now.ToString('o');fingerprint=$fingerprint;severity='P0'}
+ [IO.File]::WriteAllText($notified,($new|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
+ [IO.File]::AppendAllText($audit,($now.ToString('o')+' NOTIFIED P0 '+$joined+[Environment]::NewLine))
+}catch{
+ [IO.File]::AppendAllText($audit,($now.ToString('o')+' ERROR '+$_.Exception.GetType().Name+[Environment]::NewLine))
+ # Keep the incident durable when GitHub is down: independent P0 Incident Delivery
+ # can retry later, and this task will keep retrying until the comment is acknowledged.
+ $dir=Join-Path $root 'qa-incidents';New-Item -ItemType Directory -Path $dir -Force|Out-Null
+ $file=Join-Path $dir ('threads-cloud-p0-'+$fingerprint+'.json')
+ $case=@{priority='P0';project='CORTES';network='threads';fingerprint=$fingerprint;
+  kind='CLOUD_CONTROLLER_OR_PUBLISHER_FAILURE';created_at=$now.ToString('o');
+  problems=$issues;queued_count=$queued;requires_reconciliation=$true;automatic_republish_of_uncertain=$false}
+ [IO.File]::WriteAllText($file,($case|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
+ exit 2
+}
+){
+  'PUBLISHER_PROGRESS_IMPAIRED'
+ }elseif($_ -match '^(GITHUB_CLOUD_RUNNER_STATUS_UNAVAILABLE|NEON_GATE_UNAVAILABLE|LOCAL_CONTINUITY_STATE_UNREADABLE)
+$fingerprint=([BitConverter]::ToString($sha) -replace '-','').ToLowerInvariant().Substring(0,24)
+$last=if(Test-Path $notified){try{Get-Content $notified -Raw -Encoding UTF8|ConvertFrom-Json}catch{$null}}else{$null}
+if($last -and $last.fingerprint -eq $fingerprint -and
+    ($now-[DateTime]::Parse($last.sent_at).ToUniversalTime()).TotalMinutes -lt 45){exit 0}
+$body='[QA P0][Threads][CORTES] DIAGNOSTICO IMEDIATO. Falhas='+($issues -join ', ')+
+ '. Fila pendente Neon='+$queued+'. Data UTC='+$now.ToString('o')+
+ '. CONTINUIDADE: acionar/validar redundancia Windows pelo Neon; sem reenvio de cortes incertos.'+
+ ' Investigar raiz, corrigir codigo e teste regressivo, reconfirmar publicacao cloud.'+
+ ' Automacao de QA independendente do publicador; nao expor cookies ou tokens.'
+if($DryRun){
+ Write-Output ('THREADS_QA_P0_DRY_RUN problems='+$joined+' queued='+$queued)
+ exit 0
+}
+try {
+ . 'C:\ProgramData\AntharesRemoteAgent\load-issue-queue-auth.ps1'
+ $token=[string]$env:ANTHARES_GITHUB_QUEUE_TOKEN
+ if(!$token){throw 'QA_ISSUE_AUTH_UNAVAILABLE'}
+ $headers=@{Authorization='Bearer '+$token;Accept='application/vnd.github+json';
+  'X-GitHub-Api-Version'='2022-11-28';'User-Agent'='Anthares-Threads-QA-Watchdog'}
+ $payload=@{body=$body}|ConvertTo-Json -Compress
+ $result=Invoke-RestMethod -Uri 'https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/issues/283/comments' -Headers $headers -Method POST -ContentType 'application/json' -Body ([Text.Encoding]::UTF8.GetBytes($payload)) -TimeoutSec 25
+ if(!$result.id){throw 'QA_COMMENT_NOT_CONFIRMED'}
+ $new=@{sent_at=$now.ToString('o');fingerprint=$fingerprint;severity='P0'}
+ [IO.File]::WriteAllText($notified,($new|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
+ [IO.File]::AppendAllText($audit,($now.ToString('o')+' NOTIFIED P0 '+$joined+[Environment]::NewLine))
+}catch{
+ [IO.File]::AppendAllText($audit,($now.ToString('o')+' ERROR '+$_.Exception.GetType().Name+[Environment]::NewLine))
+ # Keep the incident durable when GitHub is down: independent P0 Incident Delivery
+ # can retry later, and this task will keep retrying until the comment is acknowledged.
+ $dir=Join-Path $root 'qa-incidents';New-Item -ItemType Directory -Path $dir -Force|Out-Null
+ $file=Join-Path $dir ('threads-cloud-p0-'+$fingerprint+'.json')
+ $case=@{priority='P0';project='CORTES';network='threads';fingerprint=$fingerprint;
+  kind='CLOUD_CONTROLLER_OR_PUBLISHER_FAILURE';created_at=$now.ToString('o');
+  problems=$issues;queued_count=$queued;requires_reconciliation=$true;automatic_republish_of_uncertain=$false}
+ [IO.File]::WriteAllText($file,($case|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
+ exit 2
+}
+){
+  'CONTROL_PLANE_VISIBILITY_LOST'
+ }else{$_}
+}|Sort-Object -Unique)
+$familyKey=$families -join '|'
+$sha=[Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($familyKey))
 $fingerprint=([BitConverter]::ToString($sha) -replace '-','').ToLowerInvariant().Substring(0,24)
 $last=if(Test-Path $notified){try{Get-Content $notified -Raw -Encoding UTF8|ConvertFrom-Json}catch{$null}}else{$null}
 if($last -and $last.fingerprint -eq $fingerprint -and
