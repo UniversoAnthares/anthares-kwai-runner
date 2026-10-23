@@ -2,7 +2,12 @@ name: CORTES LinkedIn personal - standby hosted publisher
 on:
   schedule:
     - cron: '4,19,34,49 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      reconcile_only:
+        description: "Reconcile existing personal posts by public URL only; never upload"
+        type: boolean
+        default: false
   workflow_run:
     workflows: ["CORTES LinkedIn personal - primary hosted cloud publisher"]
     types: [completed]
@@ -34,15 +39,22 @@ jobs:
         run: |
           python -u -m tools.cortes_linkedin_fallback_gate
       - name: Read personal member token from Bitwarden Secrets Manager
-        if: steps.primary-health.outputs.run == 'true'
+        if: steps.primary-health.outputs.run == 'true' || (github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true)
         uses: bitwarden/sm-action@v2
         with:
           access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
           cloud_region: us
           secrets: |
             bd261e5e-11bf-49fb-9baf-b4ea014ec5b7 > LINKEDIN_PERSONAL_ACCESS_TOKEN
+      - name: Reconcile accepted personal post by authenticated public readback only
+        if: github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true
+        env:
+          ANTHARES_SOCIAL_COMMIT: '1'
+        run: |
+          set -euo pipefail
+          python -u -c 'from tools.cortes_linkedin_personal_cloud import reconcile_personal; n = reconcile_personal(); print("PERSONAL_READBACK_ONLY_RECONCILED="+str(n), flush=True); assert n > 0, "PERSONAL_READBACK_PENDING"'
       - name: Execute exactly one personal video publication, fenced and quota-scoped
-        if: steps.primary-health.outputs.run == 'true'
+        if: steps.primary-health.outputs.run == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true)
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
         run: |
