@@ -1,0 +1,28 @@
+name: X Legacy Readonly Ledger Inventory
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/x-legacy-ledger-inventory.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  issues: read
+concurrency:
+  group: anthares-x-ledger-inventory-readonly
+  cancel-in-progress: false
+jobs:
+  inventory:
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
+    timeout-minutes: 7
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inventory all historical X jobs without posting or mutating data
+        shell: pwsh
+        run: |
+          python tools/x_legacy_ledger_inventory.py
+          if ($LASTEXITCODE -ne 0) { throw 'X_LEDGER_INVENTORY_FAILED' }
