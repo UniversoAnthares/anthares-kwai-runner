@@ -1,6 +1,6 @@
-"""Contract tests for X-only pre/post submission timeline readback order.
+"""X account ownership and public video readback on one authenticated tab.
 
-No browser, account, tokens, network, or submission is exercised.
+No credentials, X network, media upload, browser launch or ledger mutation.
 """
 import ast
 import re
@@ -12,139 +12,165 @@ from urllib.parse import urlparse
 SOURCE = Path(__file__).resolve().parents[1] / "tools/x_github_anthares_browser_publisher.py"
 
 
-class FakeLocator:
-    def __init__(self, values=None):
-        self.values = values or []
+class FakeTime:
+    def __init__(self):
+        self.count = 0
+
+    def monotonic(self):
+        self.count += 31
+        return self.count
+
+
+class Locator:
+    def __init__(self, items):
+        self.items = items
 
     def all(self):
-        return self.values
+        return self.items
 
     def all_text_contents(self):
-        return self.values
+        return self.items
 
     def count(self):
-        return len(self.values)
+        return len(self.items)
 
 
-class FakeLink:
-    def __init__(self, href):
-        self.href = href
-
-    def get_attribute(self, key):
-        assert key == "href"
-        return self.href
+class Anchor:
+    def get_attribute(self, name):
+        assert name == "href"
+        return "/lucasyahn/status/123456789"
 
 
-class FakePost:
-    def __init__(self, text="caption", href="/lucasyahn/status/123456789"):
+class Article:
+    def __init__(self, text):
         self.text = text
-        self.href = href
 
-    def inner_text(self, timeout=None):
+    def inner_text(self, **kwargs):
         return self.text
 
     def locator(self, selector):
         assert selector == "a"
-        return FakeLocator([FakeLink(self.href)])
+        return Locator([Anchor()])
+
+
+class FakeContext:
+    def __init__(self):
+        self.new_pages = 0
+
+    def new_page(self):
+        self.new_pages += 1
+        raise AssertionError("second browser tab forbidden")
 
 
 class FakePage:
-    def __init__(self, context, events, redirected=False, found=False):
+    def __init__(self, context, redirect=False, has_post=False):
         self.context = context
-        self.events = events
-        self.redirected = redirected
-        self.found = found
         self.url = "https://x.com/home"
+        self.events = []
+        self.redirect = redirect
+        self.has_post = has_post
 
-    def goto(self, target, **_):
-        self.events.append("goto")
-        self.url = ("https://x.com/otheraccount" if self.redirected and target.endswith("/lucasyahn")
-                    else target)
+    def goto(self, url, **kwargs):
+        self.events.append(("goto", url))
+        if self.redirect and url == "https://x.com/lucasyahn":
+            self.url = "https://x.com/otheraccount"
+        else:
+            self.url = url
 
     def wait_for_timeout(self, _):
         pass
 
-    def locator(self, selector):
-        if selector == "article":
-            return FakeLocator([FakePost()] if self.found else [])
-        if selector == '[data-testid="tweetText"]':
-            return FakeLocator(["caption"])
-        if selector == "video":
-            return FakeLocator([object()])
-        raise AssertionError("unexpected locator " + selector)
-
-    def close(self):
-        self.events.append("close")
+    def locator(self, query):
+        if query == "article":
+            return Locator([Article("caption")] if self.has_post else [])
+        if query == '[data-testid="tweetText"]':
+            return Locator(["caption"])
+        if query == "video":
+            return Locator([object()])
+        raise AssertionError("unexpected locator " + query)
 
 
-class FakeContext:
-    def __init__(self, redirected=False, found=False):
-        self.events = []
-        self.redirected = redirected
-        self.found = found
-
-    def new_page(self):
-        self.events.append("new_page")
-        return FakePage(self, self.events, self.redirected, self.found)
-
-
-def load_proof(identity_ok=True):
+def build_proof(mode="valid"):
     tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
-    fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
-              and node.name == "proof")
+    func = next(x for x in tree.body if isinstance(x, ast.FunctionDef) and x.name == "proof")
     def account(page):
-        page.events.append("account")
-        if not identity_ok:
+        page.events.append(("account", page.url))
+        if mode == "wrong_initial":
             raise RuntimeError("X_CLOUD_WRONG_ACCOUNT")
-    namespace = {"account": account, "re": re, "urlparse": urlparse,
-                 "RuntimeError": RuntimeError}
-    exec(compile(ast.Module(body=[fn], type_ignores=[]), "<x-proof>", "exec"),
-         namespace)
+        if mode == "wrong_on_restore" and page.url == "https://x.com/home" and len(
+                [v for v in page.events if v[0] == "goto"]) > 0:
+            raise RuntimeError("X_CLOUD_WRONG_ACCOUNT")
+        if mode == "missing_on_restore" and len(
+                [v for v in page.events if v[0] == "goto"]) > 0:
+            raise RuntimeError("X_CLOUD_IDENTITY_NOT_PROVEN")
+    namespace = {"account": account, "urlparse": urlparse, "re": re,
+                 "time": FakeTime()}
+    exec(compile(ast.Module(body=[func],type_ignores=[]),"<proof>","exec"),namespace)
     return namespace["proof"]
 
 
-class TestXCloudProof(unittest.TestCase):
-    def test_missing_verified_session_does_not_open_tab(self):
+class SingleTabProof(unittest.TestCase):
+    def test_requires_verified_page_same_context(self):
         context = FakeContext()
-        with self.assertRaisesRegex(RuntimeError, "INDEPENDENT_IDENTITY_REQUIRED"):
-            load_proof()(context, "caption", verified_page=None)
-        self.assertEqual(context.events, [])
+        with self.assertRaisesRegex(RuntimeError,"INDEPENDENT_IDENTITY_REQUIRED"):
+            build_proof()(context,"caption")
+        other = FakePage(FakeContext())
+        with self.assertRaisesRegex(RuntimeError,"INDEPENDENT_IDENTITY_REQUIRED"):
+            build_proof()(context,"caption",verified_page=other)
 
-    def test_wrong_account_fails_before_opening_timeline(self):
-        context = FakeContext()
-        posting = FakePage(context, context.events)
-        with self.assertRaisesRegex(RuntimeError, "WRONG_ACCOUNT"):
-            load_proof(False)(context, "caption", verified_page=posting)
-        self.assertEqual(context.events, ["account"])
+    def test_wrong_account_denied_before_timeline(self):
+        context=FakeContext()
+        page=FakePage(context)
+        with self.assertRaisesRegex(RuntimeError,"WRONG_ACCOUNT"):
+            build_proof("wrong_initial")(context,"caption",verified_page=page)
+        self.assertEqual(context.new_pages,0)
+        self.assertEqual(page.events,[("account","https://x.com/home")])
 
-    def test_empty_timeline_closes_tab(self):
-        context = FakeContext()
-        posting = FakePage(context, context.events)
-        self.assertIsNone(load_proof()(context, "caption", verified_page=posting))
-        self.assertEqual(context.events, ["account", "new_page", "goto", "close"])
+    def test_no_match_restores_home_without_second_tab(self):
+        context=FakeContext()
+        page=FakePage(context)
+        self.assertIsNone(build_proof()(context,"caption",verified_page=page))
+        self.assertEqual(page.url,"https://x.com/home")
+        self.assertEqual(context.new_pages,0)
+        self.assertEqual([e[0] for e in page.events],
+                         ["account","goto","goto","account"])
 
-    def test_exact_owner_caption_video_and_uri_succeed(self):
-        context = FakeContext(found=True)
-        posting = FakePage(context, context.events)
-        url = load_proof()(context, "caption", verified_page=posting)
-        self.assertEqual(url, "https://x.com/lucasyahn/status/123456789")
-        self.assertEqual(context.events[0:2], ["account", "new_page"])
-        self.assertEqual(context.events[-1], "close")
+    def test_exact_owner_caption_and_video_confirm(self):
+        context=FakeContext()
+        page=FakePage(context,has_post=True)
+        uri=build_proof()(context,"caption",verified_page=page)
+        self.assertEqual(uri,"https://x.com/lucasyahn/status/123456789")
+        self.assertEqual(page.url,"https://x.com/home")
+        self.assertEqual(context.new_pages,0)
 
-    def test_redirected_profile_rejected_without_bypassing_identity(self):
-        context = FakeContext(redirected=True)
-        posting = FakePage(context, context.events)
-        with self.assertRaisesRegex(RuntimeError, "TIMELINE_PROFILE_MISMATCH"):
-            load_proof()(context, "caption", verified_page=posting)
-        self.assertEqual(context.events, ["account", "new_page", "goto", "close"])
+    def test_wrong_profile_redirect_denied_and_home_restored(self):
+        context=FakeContext()
+        page=FakePage(context,redirect=True)
+        with self.assertRaisesRegex(RuntimeError,"TIMELINE_PROFILE_MISMATCH"):
+            build_proof()(context,"caption",verified_page=page)
+        self.assertEqual(page.url,"https://x.com/home")
+        self.assertEqual(context.new_pages,0)
 
-    def test_identity_proven_per_attempt(self):
-        context = FakeContext()
-        posting = FakePage(context, context.events)
-        self.assertIsNone(load_proof()(context, "caption", attempts=2,
-                                     verified_page=posting))
-        self.assertEqual(context.events, ["account", "new_page", "goto", "close",
-                                          "account", "new_page", "goto", "close"])
+    def test_wrong_account_on_return_remains_blocked(self):
+        context=FakeContext()
+        page=FakePage(context)
+        with self.assertRaisesRegex(RuntimeError,"WRONG_ACCOUNT"):
+            build_proof("wrong_on_restore")(context,"caption",verified_page=page)
+        self.assertEqual(page.url,"https://x.com/home")
+
+    def test_missing_identity_on_return_never_ignored(self):
+        context=FakeContext()
+        page=FakePage(context)
+        with self.assertRaisesRegex(RuntimeError,"HOME_IDENTITY_NOT_RESTORED"):
+            build_proof("missing_on_restore")(context,"caption",verified_page=page)
+        self.assertEqual(page.url,"https://x.com/home")
+
+    def test_repeated_trials_prove_account_each_time(self):
+        context=FakeContext()
+        page=FakePage(context)
+        self.assertIsNone(build_proof()(context,"caption",attempts=2,verified_page=page))
+        self.assertEqual(len([v for v in page.events if v[0]=="account"]),4)
+        self.assertEqual(context.new_pages,0)
 
 
 if __name__ == "__main__":
