@@ -131,6 +131,16 @@ def probe_public_page(
         return _result(url, "https_fallback", False, type(exc).__name__.lower(), fragments=fragments)
 
 
+def supplementary_public_observation(url: str, fragments: Iterable[str] = (), *, allowed_hosts: Iterable[str]) -> dict:
+    """Best-effort public read, never authoritative publication evidence."""
+    try:
+        return probe_public_page(url, fragments, fallback=True, timeout=5,
+                                 allowed_hosts=tuple(allowed_hosts))
+    except Exception:
+        return {"provider": "public_read", "ok": False,
+                "reason": "supplementary_read_unavailable"}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", required=True)
