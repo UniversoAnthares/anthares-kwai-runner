@@ -91,7 +91,7 @@ async function choose(jwt,publish){
   let digest,tagged;
   try{
    digest=await mediaDigest(clip.url);
-   tagged=captionForClip(clip.editorial,clip);
+   tagged=captionForClip(clip.editorial,{...clip,sha256:digest.sha256});
   }catch(error){
    const msg=String(error?.message||'');
    const reason=/EDITORIAL_/.test(msg)?'EDITORIAL_MISSING':/MEDIA_HTTP_404/.test(msg)?'MEDIA_HTTP_404':/MEDIA_HTTP_410/.test(msg)?'MEDIA_HTTP_410':/MEDIA_HTTP_403/.test(msg)?'MEDIA_HTTP_403':/MEDIA_HTTP_5\d\d/.test(msg)?'MEDIA_HTTP_5XX':/CAPTION_/.test(msg)?'CAPTION_FETCH_ERROR':/MEDIA_/.test(msg)?'MEDIA_INVALID':'MEDIA_FETCH_ERROR';

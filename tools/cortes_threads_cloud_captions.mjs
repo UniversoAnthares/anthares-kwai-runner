@@ -24,6 +24,13 @@ export function validateEditorial(meta,clip){
  if(!attested||attested.schema!=='anthares.clip-transcript-attestation.v1'||
     attested.clip_id!==clip?.clip_id||
     attested.attachment_id!==clip?.attachment_id||
+    attested.media_sha256!==clip?.sha256||
+    !/^[a-f0-9]{64}$/.test(attested.media_sha256||'')||
+    attested.method!=='faster-whisper-small-from-media'||
+    !Array.isArray(attested.cues)||attested.cues.length===0||
+    attested.cues.some(c=>typeof c.text!=='string'||typeof c.start!=='number'||
+      typeof c.end!=='number'||c.start<0||c.end>clip.duration+5||c.end<=c.start)||
+    attested.cues.map(c=>c.text).join(' ')!==attested.excerpt||
     attested.verified!==true||
     typeof attested.excerpt!=='string'||attested.excerpt.length<60)
   throw Error('EDITORIAL_TRANSCRIPT_ATTESTATION_REQUIRED');
