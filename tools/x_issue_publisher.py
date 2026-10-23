@@ -251,6 +251,15 @@ def run():
             proof = {"kind": PROOF_MARKER, "source_fingerprint": fp,
                      "post_url": proof_url, "account": "lucasyahn",
                      "video_verified": True, "confirmed_at": datetime.now(TZ).isoformat()}
+            # Web reading remains supplementary to remote account/video verification.
+            try:
+                from tinyfish_public_probe import supplementary_public_observation
+                proof["public_read"] = supplementary_public_observation(
+                    proof_url, (payload.get("caption") or "",),
+                    allowed_hosts=("x.com", "www.x.com", "twitter.com", "www.twitter.com"))
+            except Exception:
+                proof["public_read"] = {"provider": "public_read", "ok": False,
+                                        "reason": "supplementary_read_unavailable"}
             issue_comment(number, "CONFIRMED video\n" + json.dumps(proof, ensure_ascii=False))
             github("issues/" + str(number), "PATCH", {"state": "closed"})
             print("X_VIDEO_CONFIRMED_URL=" + proof_url, flush=True)
