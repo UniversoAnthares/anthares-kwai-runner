@@ -201,11 +201,27 @@ def is_media_missing(url):
     if parsed.scheme!="https" or parsed.hostname not in ("anthares.us","www.anthares.us") or not parsed.path.endswith(".mp4"):
         return False
     req=urllib.request.Request(url,method="HEAD",headers={"User-Agent":"CortesPinterestMediaPreflight/1.0"})
-    try:
-        with urllib.request.urlopen(req,timeout=15):
-            return False
-    except urllib.error.HTTPError as exc:
-        return exc.code==404
+    # Only a validated response may pass before an irreversible Buffer call.
+    # A transient origin/TLS failure is NOT equivalent to media existence.
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req,timeout=15) as response:
+                if response.status in (200,204,206):
+                    return False
+                raise RuntimeError("PINTEREST_MEDIA_HEAD_UNVERIFIED_STATUS")
+        except urllib.error.HTTPError as exc:
+            if exc.code==404:
+                return True
+            if exc.code in (408,429,500,502,503,504) and attempt<2:
+                time.sleep(1+attempt)
+                continue
+            raise RuntimeError("PINTEREST_MEDIA_HEAD_HTTP_UNVERIFIED") from None
+        except (urllib.error.URLError,TimeoutError,OSError):
+            if attempt<2:
+                time.sleep(1+attempt)
+                continue
+            raise RuntimeError("PINTEREST_MEDIA_HEAD_TRANSPORT_UNAVAILABLE") from None
+    raise RuntimeError("PINTEREST_MEDIA_HEAD_UNVERIFIED")
 
 
 def notify_media_p0(job_id,media_url):
