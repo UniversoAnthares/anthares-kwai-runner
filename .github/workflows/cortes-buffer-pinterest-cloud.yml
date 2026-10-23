@@ -15,7 +15,7 @@ on:
       - .github/workflows/cortes-buffer-pinterest-cloud.yml
   schedule:
     # Best effort: first 5-minute run after the Neon cooldown expires.
-    - cron: '*/5 * * * *'
+    - cron: '38 */3 * * *'
   workflow_dispatch:
     inputs:
       reconcile_only:
