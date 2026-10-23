@@ -1,0 +1,31 @@
+name: X Codeberg Single Tab Readonly Live Acceptance
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.forgejo/workflows/x-codeberg-single-tab-readonly.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: anthares-x-single-tab-readonly-qa
+  cancel-in-progress: false
+jobs:
+  readonly:
+    runs-on: codeberg-medium
+    timeout-minutes: 9
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - name: Install read-only headless browser
+        run: |
+          set -eu
+          python3 -m venv /tmp/anthares-x-single-tab-venv
+          /tmp/anthares-x-single-tab-venv/bin/python -m pip install --disable-pip-version-check playwright requests cryptography
+          /tmp/anthares-x-single-tab-venv/bin/python -m playwright install --with-deps chromium
+      - name: Prove same-tab browser account without uploading or publishing
+        run: |
+          set -eu
+          /tmp/anthares-x-single-tab-venv/bin/python -u -m tools.x_cloud_tab_order_readonly_qa
