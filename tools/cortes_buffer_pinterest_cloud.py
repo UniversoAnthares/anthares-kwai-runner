@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from social_adapters.buffer_three_channels import api, schedule, BufferBlocked, PINNED_CHANNELS
+from social_adapters.buffer_three_channels import api, schedule, BufferBlocked, buffer_cooldown_seconds, PINNED_CHANNELS
 
 BASE="https://anthares-remote-primary.vercel.app/api/cortes-queue"
 PINTEREST_ID=PINNED_CHANNELS["pinterest"][0]
@@ -517,7 +517,7 @@ def main():
         return 0
     except BufferBlocked as exc:
         if str(exc)=="BUFFER_HTTP_429":
-            recorded=queue("cooldown",{"seconds":1800})
+            recorded=queue("cooldown",{"seconds":buffer_cooldown_seconds(exc,1800)})
             if not recorded.get("ok"):
                 raise RuntimeError("PINTEREST_BUFFER_COOLDOWN_NOT_PERSISTED")
             notify_rate_limit_p0()
