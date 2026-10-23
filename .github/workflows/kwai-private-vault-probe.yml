@@ -1,7 +1,7 @@
 name: Kwai private Cloudflare vault OIDC proof
 on:
   push:
-    branches: [main]
+    branches: [main, anthares-fixed-three-vault-proof-20261010]
     paths:
       - .github/workflows/kwai-private-vault-probe.yml
       - tools/kwai_session_vault_client.py
