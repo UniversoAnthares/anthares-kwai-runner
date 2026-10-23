@@ -1,0 +1,41 @@
+name: Kwai Dispatch Continuity Static Contract
+on:
+  pull_request:
+    paths:
+      - 'tools/cortes_neon_queue_client.py'
+      - 'tools/kwai_physical_queue_daemon.py'
+      - 'ops/windows/cortes-kwai-*.ps1'
+      - 'ops/windows/cortes-kwai-*.py'
+      - 'ops/windows/install-cortes-kwai-continuity-watchdog.ps1'
+      - 'tests/test_kwai_dispatch_continuity.py'
+      - '.github/workflows/kwai-dispatch-continuity-static.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  static_contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python static tests (no publisher invocation)
+        run: python3 tests/test_kwai_dispatch_continuity.py -v
+      - name: Compile recovery Python scripts
+        run: python3 -m py_compile tools/cortes_neon_queue_client.py tools/kwai_physical_queue_daemon.py ops/windows/cortes-kwai-autoheal.py
+      - name: Parse PowerShell files without executing them
+        shell: pwsh
+        run: |
+          $files=@(
+            'ops/windows/cortes-kwai-refill-fallback.ps1',
+            'ops/windows/cortes-kwai-qa-p0-watchdog.ps1',
+            'ops/windows/cortes-kwai-continuity-watchdog.ps1',
+            'ops/windows/install-cortes-kwai-continuity-watchdog.ps1'
+          )
+          foreach($file in $files) {
+            $tokens=$null; $errors=$null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path,[ref]$tokens,[ref]$errors)
+            if($errors.Count -gt 0){throw ('POWERSHELL_PARSE_FAILED '+$file+': '+($errors -join '; '))}
+          }
+          Write-Output 'KWAI_CONTINUITY_POWERSHELL_STATIC_PASS'

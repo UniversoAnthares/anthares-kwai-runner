@@ -1,4 +1,4 @@
-[task:da5fb2173f2c] $ErrorActionPreference='Stop'
+$ErrorActionPreference='Stop'
 $root='D:\AntharsWork\AntharesRemote'
 $log='D:\AntharsWork\quota-write-20261017\.state\kwai-physical-queue.log'
 $ledger=Join-Path $root 'cortes-kwai-qa-alert-ledger.json'
