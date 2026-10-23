@@ -1,0 +1,17 @@
+name: Kwai Android startup fingerprint QA
+on:
+  push:
+    paths:
+      - "tools/kwai_android_startup_fingerprint.py"
+      - "tests/test_kwai_android_startup_fingerprint.py"
+      - ".github/workflows/kwai-startup-fingerprint-qa.yml"
+permissions:
+  contents: read
+jobs:
+  privacy-and-logic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest discover -s tests -p test_kwai_android_startup_fingerprint.py -v
+      - run: bash -n kwai_native_email_smoke.sh
