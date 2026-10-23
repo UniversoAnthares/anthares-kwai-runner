@@ -38,7 +38,7 @@ class KwaiDispatchContinuityTests(unittest.TestCase):
         for path in paths:
             with self.subTest(path=path):
                 src = read(path)
-                self.assertIsNone(re.search(r"(?m)^\\[task:[a-f0-9]+\\]", src))
+                self.assertIsNone(re.search(r"(?m)^\[task:[a-f0-9]+\]", src))
                 if path.endswith(".py"):
                     ast.parse(src)
                 else:
