@@ -59,6 +59,50 @@ def redacted_mutation_diagnostic(message: str) -> str:
     return " ".join(safe.split())[:180]
 
 
+def _429_retry_seconds(headers) -> int | None:
+    """Use only a numeric Retry-After or an RFC 7231 HTTP-date; no tokens."""
+    import datetime
+    import email.utils
+    raw = str(headers.get("Retry-After", "") if headers else "").strip()
+    if raw.isascii() and raw.isdigit() and len(raw) <= 8:
+        return max(0, int(raw))
+    if not raw or len(raw) > 90:
+        return None
+    try:
+        until = email.utils.parsedate_to_datetime(raw)
+        if until.tzinfo is None:
+            return None
+        return max(0, int((until - datetime.datetime.now(datetime.timezone.utc)).total_seconds() + 0.999))
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def buffer_cooldown_seconds(error: Exception, default: int) -> int:
+    """Honor provider Retry-After within canonical Neon 300..3600s contract."""
+    provider = getattr(error, "retry_after_seconds", None)
+    if provider is None:
+        return max(300, min(3600, default))
+    # Neon currently accepts max 3600. A longer header remains visible in
+    # diagnostic telemetry and demands a widened backend contract.
+    return max(300, min(3600, max(default, int(provider))))
+
+
+def _safe_rate_header(headers, name: str) -> int | None:
+    raw = str(headers.get(name, "") if headers else "").strip()
+    return int(raw) if raw.isascii() and raw.isdigit() and len(raw) <= 10 else None
+
+
+def _operation_class(query: str) -> str:
+    # No captions, media URLs, remote IDs or user data in diagnostics.
+    for name in ("createPost", "posts(", "post(", "channels(", "channel(", "account"):
+        if name in query:
+            return {"createPost": "mutation",
+                    "posts(": "posts", "post(": "post",
+                    "channels(": "channels", "channel(": "channel",
+                    "account": "account"}[name]
+    return "other"
+
+
 def api(query: str, token: str | None = None) -> dict:
     secret = (token or os.getenv("BUFFER_API_KEY") or "").strip()
     if not secret:
@@ -74,6 +118,22 @@ def api(query: str, token: str | None = None) -> dict:
         with urllib.request.urlopen(request, timeout=35) as response:
             result = json.load(response)
     except urllib.error.HTTPError as exc:
+        if exc.code == 429:
+            retry = _429_retry_seconds(exc.headers)
+            telemetry = {
+                "event": "BUFFER_RATE_LIMIT_HEADERS",
+                "operation": _operation_class(query),
+                "retry_after_seconds": retry,
+                "rate_limit_limit": _safe_rate_header(exc.headers, "RateLimit-Limit"),
+                "rate_limit_remaining": _safe_rate_header(exc.headers, "RateLimit-Remaining"),
+                "x_rate_limit_limit": _safe_rate_header(exc.headers, "X-RateLimit-Limit"),
+                "x_rate_limit_remaining": _safe_rate_header(exc.headers, "X-RateLimit-Remaining"),
+                "backend_cooldown_ceiling_seconds": 3600,
+            }
+            print(json.dumps(telemetry, separators=(",", ":")), flush=True)
+            blocked = BufferBlocked("BUFFER_HTTP_429")
+            blocked.retry_after_seconds = retry
+            raise blocked from None
         raise BufferBlocked("BUFFER_HTTP_" + str(exc.code)) from None
     except (urllib.error.URLError, TimeoutError, OSError, ValueError):
         raise BufferBlocked("BUFFER_RESPONSE_UNCERTAIN") from None

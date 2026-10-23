@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from social_adapters.buffer_three_channels import api, schedule, BufferBlocked, PINNED_CHANNELS, trusted_instagram_one_time_runner
+from social_adapters.buffer_three_channels import api, schedule, BufferBlocked, buffer_cooldown_seconds, PINNED_CHANNELS, trusted_instagram_one_time_runner
 
 BASE="https://anthares-remote-primary.vercel.app/api/cortes-queue"
 INSTAGRAM_ID=PINNED_CHANNELS["instagram"][0]
@@ -234,9 +234,9 @@ def main():
     except BufferBlocked as exc:
         if str(exc)!="BUFFER_HTTP_429":
             raise
-        queue("cooldown",{"seconds":900})
+        queue("cooldown",{"seconds":buffer_cooldown_seconds(exc,900)})
         print(json.dumps({"instagram_cloud":"IDLE_BUFFER_HTTP429_COOLDOWN",
-                          "cooldown_seconds":900,"queue_mutated":False}),flush=True)
+                          "cooldown_seconds":buffer_cooldown_seconds(exc,900),"queue_mutated":False}),flush=True)
         return 0
 
 
@@ -245,7 +245,7 @@ if __name__=="__main__":
     except Exception as e:
         if isinstance(e,BufferBlocked) and str(e)=="BUFFER_HTTP_429":
             try:
-                queue("cooldown",{"seconds":1800})
+                queue("cooldown",{"seconds":buffer_cooldown_seconds(e,1800)})
                 print("::warning::CORTES_BUFFER_ALL_CHANNELS_BACKOFF=1",flush=True)
             except Exception:
                 print("::error::CORTES_BUFFER_SHARED_BACKOFF_PERSISTENCE_FAILED",flush=True)
