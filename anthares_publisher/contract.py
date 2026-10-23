@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Safety contract joining Anthares Mobile identity proof to Publisher execution."""
+"""Safety contract joining Anthares identity proof to publisher execution."""
 from dataclasses import dataclass
-from urllib.parse import urlsplit, unquote
+from urllib.parse import unquote, urlsplit
+
 
 @dataclass(frozen=True)
 class IdentityProof:
@@ -11,6 +12,7 @@ class IdentityProof:
     verified: bool
     session_fingerprint: str
 
+
 @dataclass(frozen=True)
 class PublicationEvidence:
     platform: str
@@ -19,43 +21,141 @@ class PublicationEvidence:
     public_url: str
 
 
+PLATFORM_DOMAINS = {
+    "kwai": {"kwai.com", "www.kwai.com", "s.kwai.app", "www.kwai.app"},
+    "tiktok": {"tiktok.com", "www.tiktok.com", "vm.tiktok.com"},
+    "x": {"x.com", "www.x.com", "twitter.com", "www.twitter.com"},
+    "instagram": {"instagram.com", "www.instagram.com"},
+    "facebook": {"facebook.com", "www.facebook.com", "m.facebook.com"},
+    "threads": {"threads.com", "www.threads.com", "threads.net", "www.threads.net"},
+    "bilibili": {"www.bilibili.com", "bilibili.com"},
+    "pinterest": {"pinterest.com", "www.pinterest.com"},
+    "discord": {"discord.com", "www.discord.com"},
+    "linkedin": {"linkedin.com", "www.linkedin.com"},
+    "medium": {"medium.com", "www.medium.com"},
+    "rumble": {"rumble.com", "www.rumble.com"},
+    "odysee": {"odysee.com", "www.odysee.com"},
+}
+
+
+def normalize_account(value: str) -> str:
+    return value.strip().lstrip("@").casefold()
+
+
 def authorize(identity: IdentityProof, platform: str, account: str) -> None:
     if not identity.verified:
         raise PermissionError("identity proof is not verified")
-    if identity.platform.casefold()!=platform.casefold():
+    if identity.platform.casefold() != platform.casefold():
         raise PermissionError("identity platform mismatch")
-    expected=account.strip().lstrip('@').casefold()
-    if identity.expected_account.strip().lstrip('@').casefold()!=expected:
+    expected = normalize_account(account)
+    if normalize_account(identity.expected_account) != expected:
         raise PermissionError("expected account mismatch")
-    if identity.observed_account.strip().lstrip('@').casefold()!=expected:
+    if normalize_account(identity.observed_account) != expected:
         raise PermissionError("observed account mismatch")
     if not identity.session_fingerprint:
         raise PermissionError("session fingerprint missing")
 
 
+def _require_path_part(path_parts, value, message):
+    if value not in path_parts:
+        raise ValueError(message)
+
+
 def validate_evidence(evidence: PublicationEvidence, platform: str, account: str) -> None:
-    if evidence.platform.casefold()!=platform.casefold():
+    platform = platform.casefold()
+    if evidence.platform.casefold() != platform:
         raise ValueError("publication platform mismatch")
-    expected=account.strip().lstrip('@').casefold()
-    if evidence.account.strip().lstrip('@').casefold()!=expected:
+    expected = normalize_account(account)
+    if normalize_account(evidence.account) != expected:
         raise ValueError("publication account mismatch")
-    if not evidence.external_id.strip():
+    external_id = evidence.external_id.strip()
+    if not external_id:
         raise ValueError("external publication id missing")
     try:
-        parsed=urlsplit(evidence.public_url)
-        host=(parsed.hostname or "").lower()
-        port=parsed.port
+        parsed = urlsplit(evidence.public_url)
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
     except ValueError as exc:
         raise ValueError("invalid publication URL") from exc
-    domains={"kwai":{"kwai.com","www.kwai.com","s.kwai.app","www.kwai.app"},
-             "tiktok":{"tiktok.com","www.tiktok.com","vm.tiktok.com"}}
-    if (parsed.scheme!="https" or parsed.username or parsed.password or
-            port not in (None,443) or host not in domains.get(platform.casefold(),set())):
+    if (
+        parsed.scheme != "https"
+        or parsed.username
+        or parsed.password
+        or port not in (None, 443)
+        or host not in PLATFORM_DOMAINS.get(platform, set())
+    ):
         raise ValueError("publication URL must use the target platform's HTTPS domain")
-    # A homepage or arbitrary platform link cannot establish publication.
-    # For direct post URLs the observed external ID must occur in the path.
-    path=unquote(parsed.path or "")
-    if (not path or path=="/" or
-            evidence.external_id.strip() not in path.split("/")):
-        raise ValueError("publication URL must identify the observed post")
 
+    decoded_path = unquote(parsed.path or "")
+    path_parts = [part for part in decoded_path.split("/") if part]
+
+    if platform == "x":
+        _require_path_part(path_parts, external_id, "publication URL must identify the observed post")
+        if "status" not in path_parts:
+            raise ValueError("X publication URL must be a status URL")
+        return
+
+    if platform == "instagram":
+        _require_path_part(path_parts, external_id, "publication URL must identify the observed post")
+        if not ({"reel", "p"} & set(path_parts)):
+            raise ValueError("Instagram publication URL must identify a reel or post")
+        return
+
+    if platform == "facebook":
+        _require_path_part(path_parts, external_id, "publication URL must identify the observed post")
+        if "reel" not in path_parts:
+            raise ValueError("Facebook publication URL must identify a reel")
+        return
+
+    if platform == "threads":
+        _require_path_part(path_parts, external_id, "Threads URL must identify the observed post")
+        if len(path_parts) < 3 or not path_parts[0].startswith("@") or path_parts[1] != "post":
+            raise ValueError("Threads publication URL must identify a personal post")
+        if normalize_account(path_parts[0]) != expected:
+            raise ValueError("Threads publication URL must belong to the expected account")
+        return
+
+    if platform == "bilibili":
+        if len(path_parts) != 2 or path_parts[0] != "video" or path_parts[1] != external_id or not external_id.startswith("BV") or not external_id[2:].isalnum():
+            raise ValueError("Bilibili publication URL must identify a BV video")
+        return
+
+    if platform == "pinterest":
+        _require_path_part(path_parts, external_id, "Pinterest URL must identify the observed Pin")
+        if len(path_parts) < 2 or path_parts[0] != "pin" or not external_id.isdigit():
+            raise ValueError("Pinterest publication URL must identify a numeric Pin ID")
+        return
+
+    if platform == "discord":
+        _require_path_part(path_parts, external_id, "Discord URL must identify the observed message")
+        if len(path_parts) < 4 or path_parts[0] != "channels":
+            raise ValueError("Discord publication URL must identify a channel message")
+        return
+
+    if platform == "linkedin":
+        markers = (f"urn:li:activity:{external_id}", f"activity-{external_id}")
+        if external_id not in path_parts and not any(marker in decoded_path for marker in markers):
+            raise ValueError("LinkedIn URL must identify the observed post")
+        if "/feed/update/" not in decoded_path and "/posts/" not in decoded_path:
+            raise ValueError("LinkedIn publication URL must identify a feed update or post")
+        return
+
+    if platform == "medium":
+        _require_path_part(path_parts, external_id, "Medium URL must identify the observed story")
+        if not path_parts or not path_parts[0].startswith("@"):
+            raise ValueError("Medium publication URL must identify a personal story")
+        return
+
+    if platform == "rumble":
+        _require_path_part(path_parts, external_id, "Rumble URL must identify the observed video")
+        if not external_id.startswith("v") or not external_id.endswith(".html"):
+            raise ValueError("Rumble publication URL must identify a video page")
+        return
+
+    if platform == "odysee":
+        _require_path_part(path_parts, external_id, "Odysee URL must identify the observed publication")
+        if not any(part.startswith("@") for part in path_parts):
+            raise ValueError("Odysee publication URL must identify a channel publication")
+        return
+
+    _require_path_part(path_parts, external_id, "publication URL must identify the observed post")
