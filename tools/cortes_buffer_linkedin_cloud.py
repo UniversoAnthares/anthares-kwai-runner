@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from social_adapters.buffer_three_channels import api, schedule, BufferBlocked, PINNED_CHANNELS, channels, validate_channel
+from social_adapters.buffer_three_channels import api, schedule, BufferBlocked, buffer_cooldown_seconds, PINNED_CHANNELS, channels, validate_channel
 from tools.cortes_social_media_probe import available as media_available
 
 BASE="https://anthares-remote-primary.vercel.app/api/cortes-queue"
@@ -198,7 +198,7 @@ def main():
     except BufferBlocked as error:
         if str(error)!="BUFFER_HTTP_429":
             raise
-        queue("cooldown",{"seconds":1800})
+        queue("cooldown",{"seconds":buffer_cooldown_seconds(error,1800)})
         print(json.dumps({"linkedin_cloud":"BACKOFF_BUFFER_HTTP_429",
                           "new_posts":0}),flush=True)
         return 0
@@ -223,7 +223,7 @@ def main():
         validate_channel('linkedin',LINKEDIN_ID,verified)
     except BufferBlocked as error:
         if str(error)=='BUFFER_HTTP_429':
-            recorded=queue("cooldown",{"seconds":1800})
+            recorded=queue("cooldown",{"seconds":buffer_cooldown_seconds(error,1800)})
             print(json.dumps({"linkedin_cloud":"BACKOFF_BUFFER_HTTP_429",
                 "queue_untouched":True,"shared_buffer_blocked":True,
                 "until":recorded.get("cooldown_until")},separators=(",",":")),flush=True)
@@ -246,7 +246,7 @@ if __name__=="__main__":
     except Exception as e:
         if isinstance(e,BufferBlocked) and str(e)=="BUFFER_HTTP_429":
             try:
-                queue("cooldown",{"seconds":1800})
+                queue("cooldown",{"seconds":buffer_cooldown_seconds(e,1800)})
             except Exception:
                 print("::error::CORTES_SHARED_BUFFER_BACKOFF_PERSISTENCE_FAILED",flush=True)
         # BufferBlocked values are fixed, sanitized reason labels from the
