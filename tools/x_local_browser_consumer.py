@@ -326,7 +326,19 @@ def main():
                 try:finish(issue,data,url)
                 except Exception:pass
             continue
-        if prior.get("phase") in STOP or int(prior.get("attempts") or 0)>=3:continue
+        if prior.get("phase") in STOP:
+            continue
+        if int(prior.get("attempts") or 0) >= 3:
+            # Only a pre-click preflight failure may be retried periodically.
+            # started/uncertain/confirmed remain permanently fenced.
+            if prior.get("phase") != "PREFLIGHT_FAILED":
+                continue
+            try:
+                last = datetime.fromisoformat(str(prior["updated"]).replace("Z", "+00:00"))
+                if last.tzinfo is None or (datetime.now(TZ) - last).total_seconds() < 5400:
+                    continue
+            except (ValueError, KeyError, TypeError):
+                continue
         try:
             one(issue,data,token)
             return "ONE_ITEM_VISITED"
