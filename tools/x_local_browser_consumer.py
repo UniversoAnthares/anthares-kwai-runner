@@ -120,20 +120,21 @@ def cloud_owns_queue():
         # Prefer Codeberg only after an explicit authenticated-production
         # promotion. Smoke tests must never steal the Windows queue.
         try:
-            promotion=github("/actions/variables/ANTHARES_X_CODEBERG_VERIFIED")
-            if str(promotion.get("value") or "")=="1":
-                resp=requests.get("https://codeberg.org/api/v1/repos/"
-                    "UniversoAnthares/anthares-kwai-runner/actions/runs?limit=25",
-                    timeout=11)
-                resp.raise_for_status()
-                runs=resp.json().get("workflow_runs") or []
-                recent=next((run for run in runs
-                    if run.get("workflow_id")=="x-codeberg-primary.yml"
-                    and run.get("event")=="schedule"),None)
-                if recent and recent.get("status")=="success":
-                    stamp=datetime.fromisoformat(str(recent.get("stopped")).replace("Z","+00:00"))
-                    if stamp.tzinfo and 0 <= (datetime.now(timezone.utc)-stamp).total_seconds() <= 22*60:
-                        return True
+            # A SUCCESSFUL scheduled Codeberg publisher run proves the
+            # arm gate, account, and global ledger path; skipped jobs do not.
+            # Do not depend on a second GitHub configuration variable.
+            resp=requests.get("https://codeberg.org/api/v1/repos/"
+                "UniversoAnthares/anthares-kwai-runner/actions/runs?limit=25",
+                timeout=11)
+            resp.raise_for_status()
+            runs=resp.json().get("workflow_runs") or []
+            recent=next((run for run in runs
+                if run.get("workflow_id")=="x-codeberg-primary.yml"
+                and run.get("event")=="schedule"),None)
+            if recent and recent.get("status")=="success":
+                stamp=datetime.fromisoformat(str(recent.get("stopped")).replace("Z","+00:00"))
+                if stamp.tzinfo and 0 <= (datetime.now(timezone.utc)-stamp).total_seconds() <= 22*60:
+                    return True
         except Exception:
             pass
         settings=github("/actions/variables/ANTHARES_X_AUTOPUBLISH")
