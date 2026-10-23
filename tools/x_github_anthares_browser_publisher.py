@@ -270,7 +270,9 @@ def publish(issue, p, shared_state):
     with TemporaryDirectory(prefix="anthares-x-cloud-") as folder:
         media = Path(folder) / "source.mp4"
         download(p["media_url"], media)
+        print("X_GH_CLOUD_PREFLIGHT_MEDIA_DOWNLOADED=PASS", flush=True)
         validate_video(str(media))
+        print("X_GH_CLOUD_PREFLIGHT_MEDIA_VERIFIED=PASS", flush=True)
         with sync_playwright() as engine:
             browser = engine.chromium.launch(headless=True, timeout=45000, args=[
                 "--no-sandbox", "--disable-dev-shm-usage",
@@ -280,6 +282,7 @@ def publish(issue, p, shared_state):
                 context = browser.new_context(storage_state=shared_state, locale="pt-BR",
                                               viewport={"width":1365,"height":768})
                 page = open_authenticated(context)
+                print("X_GH_CLOUD_PREFLIGHT_ACCOUNT_PROVEN=PASS", flush=True)
                 if proof(context, caption):
                     raise RuntimeError("X_GH_CLOUD_EXISTING_POST_RECONCILE")
                 page.goto("https://x.com/compose/post", wait_until="domcontentloaded", timeout=50000)
@@ -378,5 +381,9 @@ if __name__ == "__main__":
     try:
         run()
     except Exception as exc:
+        # The Codeberg runner must report specific pre-click safety rejections
+        # without printing exception objects, URLs, account cookies or tokens.
+        if isinstance(exc, RuntimeError) and re.fullmatch(r"X_[A-Z0-9_]{3,90}", str(exc)):
+            print("X_GH_CLOUD_FAILURE_CODE=" + str(exc), flush=True)
         print("X_GH_CLOUD_FAILED=" + type(exc).__name__, flush=True)
         raise SystemExit(2)
