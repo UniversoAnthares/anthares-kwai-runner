@@ -132,8 +132,22 @@ def once(platform, account):
         })
         if not confirmed.get("ok"):
             raise PublishUncertain("neon_confirmation_failed")
+        # Platform readback and Neon ACK are already complete. This cannot
+        # change the publication state or trigger a retry.
+        link = str(evidence.get("permalink") or "")
+        public_read = {"provider": "public_read", "ok": False, "reason": "no_public_permalink"}
+        if link:
+            try:
+                from tinyfish_public_probe import supplementary_public_observation
+                public_read = supplementary_public_observation(
+                    link, (payload["title"],),
+                    allowed_hosts=("www.pinterest.com", "pinterest.com",
+                                   "www.linkedin.com", "linkedin.com"))
+            except Exception:
+                public_read = {"provider": "public_read", "ok": False,
+                               "reason": "supplementary_read_unavailable"}
         return {"status": "CONFIRMED", "target_key": target,
-                "remote_id": outcome["remote_id"]}
+                "remote_id": outcome["remote_id"], "public_read": public_read}
     except Exception:
         # A call might already have created a public post. Mark UNCERTAIN and
         # reconcile independently; NEVER allow blind retry or alternate executor.
