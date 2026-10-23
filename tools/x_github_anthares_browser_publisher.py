@@ -188,13 +188,20 @@ def account(page):
         raise RuntimeError("X_CLOUD_WRONG_ACCOUNT")
 
 
-def proof(context, caption, attempts=1):
+def proof(context, caption, attempts=1, verified_page=None):
+    # X's profile timeline can hide or re-render the account switcher.
+    # Do NOT waive identity checks: revalidate an independently authenticated
+    # page from this *same* isolated browser context on every readback.
+    if verified_page is None or verified_page.context is not context:
+        raise RuntimeError("X_CLOUD_INDEPENDENT_IDENTITY_REQUIRED")
     page = context.new_page()
     try:
         for trial in range(attempts):
             page.goto("https://x.com/lucasyahn", wait_until="domcontentloaded", timeout=50000)
             page.wait_for_timeout(2600)
-            account(page)
+            account(verified_page)
+            if urlparse(page.url).hostname not in ("x.com", "www.x.com") or urlparse(page.url).path.rstrip("/") != "/lucasyahn":
+                raise RuntimeError("X_CLOUD_TIMELINE_PROFILE_MISMATCH")
             for post in page.locator("article").all()[:24]:
                 try:
                     if caption not in post.inner_text(timeout=2200):
@@ -283,7 +290,7 @@ def publish(issue, p, shared_state):
                                               viewport={"width":1365,"height":768})
                 page = open_authenticated(context)
                 print("X_GH_CLOUD_PREFLIGHT_ACCOUNT_PROVEN=PASS", flush=True)
-                if proof(context, caption):
+                if proof(context, caption, verified_page=page):
                     raise RuntimeError("X_GH_CLOUD_EXISTING_POST_RECONCILE")
                 page.goto("https://x.com/compose/post", wait_until="domcontentloaded", timeout=50000)
                 account(page)
@@ -324,7 +331,7 @@ def publish(issue, p, shared_state):
                     sent.add(key);
                     element.click();
                 }""", key, timeout=12000)
-                uri = proof(context, caption, attempts=int(os.getenv("X_CLOUD_PROOF_ATTEMPTS","16")))
+                uri = proof(context, caption, attempts=int(os.getenv("X_CLOUD_PROOF_ATTEMPTS","16")), verified_page=page)
                 if not uri or verified_post_url(uri) != uri:
                     raise RuntimeError("X_GH_CLOUD_SUBMISSION_UNCERTAIN")
                 durable("/confirm-local", {
