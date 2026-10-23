@@ -5,6 +5,8 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1]
 PS=(ROOT/"tools/cortes_qa_p0_recovery.ps1").read_text(encoding="utf8")
 WF=(ROOT/".github/workflows/cortes-qa-p0-executor.yml").read_text(encoding="utf8")
+POLICY=(ROOT/"tools/cortes_qa_p0_policy.ps1").read_text(encoding="utf8")
+POLICY_TEST=(ROOT/"tests/test_cortes_qa_p0_policy.ps1").read_text(encoding="utf8")
 
 class P0Recovery(unittest.TestCase):
     def test_incident_preflight_is_mandatory(self):
@@ -24,11 +26,21 @@ class P0Recovery(unittest.TestCase):
         self.assertNotIn("Stop-ScheduledTask",PS)
 
     def test_linkedin_only_personal_dispatch_no_unguarded_reposts(self):
-        self.assertIn("CORTES LinkedIn personal",PS)
+        self.assertIn("CORTES LinkedIn personal",POLICY)
         self.assertIn("cortes-linkedin-personal-fallback-cloud.yml/dispatches",PS)
         self.assertIn("LINKEDIN_PERSONAL_PRIMARY_DISPATCH_ACCEPTED",PS)
         self.assertNotIn("linkedin.com/v2/ugcPosts",PS)
         self.assertNotIn("linkedin.com/rest/posts",PS)
+
+    def test_codeberg_personal_p0_incident_classification_and_safety(self):
+        self.assertIn("linkedin/personal-primary",POLICY)
+        self.assertIn("github_workflow_visibility_lost",POLICY)
+        self.assertIn("WORKFLOW_ACTIVE_OR_QUEUED_NO_DISPATCH",POLICY)
+        self.assertIn("WORKFLOW_VISIBILITY_UNKNOWN_NO_DISPATCH",POLICY)
+        self.assertIn("RECENT_WORKFLOW_NO_DISPATCH_PUBLICATION_UNVERIFIED",POLICY)
+        self.assertIn("QA_LINKEDIN_WORKFLOW_READBACK_INVALID",PS)
+        self.assertIn("test_cortes_qa_p0_policy.ps1",WF)
+        self.assertIn("QA_P0_POLICY_SELFTEST=PASS",POLICY_TEST)
 
     def test_executor_wired_before_final_qa_comment(self):
         self.assertIn("cortes_qa_p0_recovery.ps1",WF)
