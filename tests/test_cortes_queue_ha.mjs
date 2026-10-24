@@ -19,7 +19,9 @@ test('Neon queue exposes only read-only health without authentication', async()=
   const b=await r.json();
   assert.equal(r.status,200);
   assert.equal(b.ok,true);
-  assert.equal(b.network_isolation,true);
+  assert.equal(b.network_isolation,false);
+  assert.equal(b.rls_attested,false);
+  assert.equal(b.isolation_status,'UNPROVEN_SQL_ROLE_AND_RLS_SCOPE');
   assert.equal(b.counts[0].target_key,'linkedin:primary');
  }finally{globalThis.fetch=originalFetch;process.env.DATABASE_URL=oldEnv;}
 });
@@ -44,7 +46,8 @@ test('Cloudflare edge forwards only fixed Neon health checks', async()=>{
   assert.equal(String(url),neonURL+'?action=health');
   assert.equal(opts.method,'GET');
   return Response.json({ok:true,backend:'neon-functions-cortes',database_ok:true,
-                        network_isolation:true,counts:[]});
+                        network_isolation:false,rls_attested:false,
+                        isolation_status:'UNPROVEN_SQL_ROLE_AND_RLS_SCOPE',counts:[]});
  };
  try{
   const r=await edge.fetch(new Request('https://example.workers.dev/healthz'));
