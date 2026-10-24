@@ -797,7 +797,10 @@ export default {async fetch(request){
     WHERE target_key IN ('linkedin:primary','linkedin:personal','instagram:universoanthares','pinterest:lucasyahn')
     GROUP BY target_key,status`);
    return answer({ok:true,backend:'neon-functions-cortes',database_ok:true,
-     network_isolation:true,counts:r},200);
+     // Queue availability/OIDC fences do not certify SQL role isolation.
+     // Real Neon catalog audit (2026-10-24): RLS disabled and runtime roles bypass it.
+     network_isolation:false,rls_attested:false,
+     isolation_status:'UNPROVEN_SQL_ROLE_AND_RLS_SCOPE',counts:r},200);
   }catch{return answer({ok:false,backend:'neon-functions-cortes',database_ok:false},503);}
  }
  if(request.method==='GET'&&action==='round-health'){

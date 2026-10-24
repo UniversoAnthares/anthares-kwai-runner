@@ -3,8 +3,9 @@ on:
   push:
     branches: [main]
     paths:
+      # Changing this YAML is not an authorization to redeploy HA.
+      # workflow_dispatch remains available for a separately reviewed deploy.
       - infra/cloudflare-cortes-queue-ha/**
-      - .github/workflows/cortes-queue-cloudflare-ha.yml
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -45,7 +46,7 @@ jobs:
           data=json.load(open('/tmp/queue-ha-health.json'))
           assert data.get('ok') is True
           assert data.get('database_ok') is True
-          assert data.get('network_isolation') is True
+          # HA health checks connectivity, never attests SQL RLS or per-network roles.
           PY
             then break; fi
             sleep 5
@@ -54,7 +55,7 @@ jobs:
           import json
           data=json.load(open('/tmp/queue-ha-health.json'))
           assert data.get('ok') is True and data.get('database_ok') is True
-          print('CORTES_CLOUDFLARE_NEON_HEALTH=PASS')
+          print('CORTES_CLOUDFLARE_NEON_HEALTH=PASS_CONNECTIVITY_ONLY')
           PY
           code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 12 -X POST             -H 'Content-Type: application/json' -d '{"target_key":"linkedin:primary"}'             "$BASE/?action=buffer-lease")"
           test "$code" = 401
@@ -104,5 +105,5 @@ jobs:
               denied,_=call('enqueue',{'platform':'linkedin'})
               assert denied==403,(name,denied)
               print('CORTES_'+name+'_OIDC_WRITE_READ_DELETE=PASS')
-              print('CORTES_'+name+'_ROLE_ISOLATION=PASS')
+              print('CORTES_'+name+'_ROLE_ISOLATION=UNVERIFIED_SQL_RLS')
           PY
