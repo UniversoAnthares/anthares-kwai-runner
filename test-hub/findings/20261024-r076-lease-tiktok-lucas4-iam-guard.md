@@ -1,5 +1,5 @@
 # Lease — R07.6: TikTok lucasrosalem4 scoped state + IAM contract
-STATUS: RUNNING
+STATUS: PARTIAL
 AREA: architecture / account-security
 DATE: 2026-10-24
 RUN: none
@@ -17,3 +17,9 @@ FAILED_AVOIDED: old write_receipt had no network verification; merely adding a w
 SUCCESS_SIGNAL: original API rejects missing scope, kwai-to-tiktok and tiktok-to-kwai, traversal and mismatched receipt; both owned writes succeed; 10+ tests pass; branch and draft PR readback show only intended files; no deploy or production changes.
 FAILURE_SIGNAL: any cross-network write succeeds or existing tests fail; branch changed concurrently; secret values logged; any pipeline attempts publication.
 TEST_VALIDITY: Python real filesystem in disposable directory, no credentials, OIDC or production. It proves path controls only, NOT real provider IAM or mandatory branch gate. Live credential and deployment acceptance remain independent.
+
+## Checkpoint de encerramento
+- LEASE_STATUS: COMPLETE; atualizações feitas somente na branch segregada da PR #1332, sem deploy.
+- Run 40140618358 e 40140995938: SUCCESS; testes 10 writer + 11 IAM PASS; verificação negativa de rede cross 6/6 no guard canônico; 23/23 testes da base do clipper PASS.
+- Evidência final: test-hub/findings/20261024-r076-tiktok-lucas4-iam-cross-network-qa-partial.md.
+- Encerramento: itens 05/07/08 permanecem parciais até provisão/admin IAM e promoção independente; não deixar lease ativo para impedir trabalho de outros agentes.
