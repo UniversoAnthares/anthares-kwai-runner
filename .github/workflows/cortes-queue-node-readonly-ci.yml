@@ -1,0 +1,37 @@
+name: CORTES queue Node contracts (read-only)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-queue-node-readonly-ci.yml'
+      - 'infra/neon-cortes-queue/index.mjs'
+      - 'infra/cloudflare-cortes-queue-ha/src/index.js'
+      - 'tests/test_cortes_queue_ha.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cortes-queue-node-test-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse queue source and Cloudflare edge (no remote calls)
+        run: |
+          node --check infra/neon-cortes-queue/index.mjs
+          node --check infra/cloudflare-cortes-queue-ha/src/index.js
+          node --check tests/test_cortes_queue_ha.mjs
+      - name: Run isolated queue Node test suite
+        run: node --test tests/test_cortes_queue_ha.mjs
