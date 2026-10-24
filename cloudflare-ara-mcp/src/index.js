@@ -4,6 +4,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 // src/index.js
 import { DurableObject } from "cloudflare:workers";
 import { isClaudeClient, isClaudeCallbackPair, permittedClaudeScopes } from "./claude-client-policy.mjs";
+import { isKiloClient, isKiloCallbackPair, isKiloResource } from "./kilo-client-policy.mjs";
 import { githubTools, callGithubTool, recordApprovedRegression } from "./github-bridge.mjs";
 import { approvedTestTool, runApprovedTests } from "./approved-tests.mjs";
 import { ownerGithubConfigured, startOwnerGithub, finishOwnerGithub } from "./owner-github-auth.mjs";
@@ -417,10 +418,11 @@ async function callTool(env, name, a = {}) {
 }
 __name(callTool, "callTool");
 function validClient(v) {
-  return isClaudeClient(v) || v === "https://chatgpt.com/oauth/client.json" || /^https:\/\/chatgpt\.com\/oauth\/[A-Za-z0-9_-]{8,}\/client\.json$/.test(v || "");
+  return isKiloClient(v) || isClaudeClient(v) || v === "https://chatgpt.com/oauth/client.json" || /^https:\/\/chatgpt\.com\/oauth\/[A-Za-z0-9_-]{8,}\/client\.json$/.test(v || "");
 }
 __name(validClient, "validClient");
 function validRedirect(v, clientId) {
+  if (isKiloClient(clientId)) return isKiloCallbackPair(clientId, v);
   if (isClaudeClient(clientId)) return isClaudeCallbackPair(clientId, v);
   return v === "https://chatgpt.com/connector_platform_oauth_redirect" || /^https:\/\/chatgpt\.com\/connector\/oauth\/[A-Za-z0-9_-]+$/.test(v || "");
 }
@@ -447,6 +449,7 @@ async function issueTokens(env, cid, scopes) {
 __name(issueTokens, "issueTokens");
 async function clientAllowed(env, cid) {
   if (!validClient(cid)) return false;
+  if (isKiloClient(cid)) return true;
   // Claude Free is an independently authorized read-only client. Do not overwrite the ChatGPT client pin.
   if (isClaudeClient(cid)) return true;
   const pinned = await st(env).pinnedClient();
@@ -480,7 +483,7 @@ async function completeOwner(env, tx) {
   const p = await pendingOwner(env, tx);
   if (!p) return json({error:"authorization_expired"},400);
   if (!await st(env).consume("oauth_pending", p.jti, p.exp)) return json({error:"authorization_replayed"},400);
-  if (!await st(env).pinClient(p.clientId)) return json({error:"invalid_client"},400);
+  if (!isKiloClient(p.clientId) && !await st(env).pinClient(p.clientId)) return json({error:"invalid_client"},400);
       const code = await st(env).signToken({ typ: "oauth_code", iss: ORIGIN, aud: ORIGIN, exp: Math.floor(Date.now() / 1e3) + 300, jti: rand(16), clientId: p.clientId, redirectUri: p.redirectUri, challenge: p.challenge, scopes: p.scopes, scp: p.scopes });
       const target = new URL(p.redirectUri);
       target.searchParams.set("code", code);
@@ -510,7 +513,7 @@ var index_default = { async fetch(req, env) {
     if (req.method === "GET" && (u.pathname === "/.well-known/oauth-authorization-server" || u.pathname === "/.well-known/openid-configuration")) return json({ issuer: ORIGIN, authorization_endpoint: `${ORIGIN}/oauth/authorize`, token_endpoint: `${ORIGIN}/oauth/token`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], token_endpoint_auth_methods_supported: ["none"], scopes_supported: [...SCOPES], client_id_metadata_document_supported: true, authorization_response_iss_parameter_supported: true });
     if (req.method === "GET" && u.pathname === "/oauth/authorize") {
       const cid = u.searchParams.get("client_id") || "", red = u.searchParams.get("redirect_uri") || "", challenge = u.searchParams.get("code_challenge") || "", method = u.searchParams.get("code_challenge_method") || "", resource = u.searchParams.get("resource") || ORIGIN, scopes = parseScopes(u.searchParams.get("scope"), cid);
-      if (!await clientAllowed(env, cid) || !validRedirect(red, cid) || u.searchParams.get("response_type") !== "code" || method !== "S256" || challenge.length < 43 || !(resource === ORIGIN || (isClaudeClient(cid) && resource === ORIGIN + "/mcp")) || !scopes) return json({ error: "invalid_request" }, 400);
+      if (!await clientAllowed(env, cid) || !validRedirect(red, cid) || u.searchParams.get("response_type") !== "code" || method !== "S256" || challenge.length < 43 || !(resource === ORIGIN || isKiloResource(cid, resource, ORIGIN) || (isClaudeClient(cid) && resource === ORIGIN + "/mcp")) || !scopes) return json({ error: "invalid_request" }, 400);
       const tx = await st(env).signToken({ typ: "oauth_pending", iss: ORIGIN, aud: ORIGIN, exp: Math.floor(Date.now() / 1e3) + 600, jti: rand(16), clientId: cid, redirectUri: red, challenge, scopes, scp: scopes, state: u.searchParams.get("state") || "" });
       if (ownerGithubConfigured(env)) return html(`<!doctype html><html><head><meta charset="utf-8"><title>Autorizar Anthares</title></head><body><main><h1>Autorizar Anthares</h1><p>Confirme a identidade da conta proprietaria UniversoAnthares pelo GitHub.</p><p>Permissoes solicitadas: ${esc(scopes.join(", "))}</p><form method="post" action="/oauth/owner/github"><input type="hidden" name="tx" value="${esc(tx)}"><button type="submit">Autorizar com GitHub</button></form></main></body></html>`);
       const bs = await bootstrapOtpStatus(env);

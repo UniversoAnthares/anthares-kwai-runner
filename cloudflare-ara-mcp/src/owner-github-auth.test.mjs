@@ -98,6 +98,30 @@ test('existing pinned ChatGPT authorization and access-token contract remain val
  assert.equal(r.status,200);assert((await r.json()).result.tools.some(x=>x.name==='remote_exec'));
  const p=await pending(client,callback,'ara.read ara.write');assert.equal(p.r.status,200);
 });
+
+test('Kilo owner enrollment preserves ChatGPT pin, PKCE, scopes and replay protection',async()=>{
+ const kilo='https://kilo.ai/docs/oauth/kilo/client.json',cb='http://127.0.0.1:19876/mcp/oauth/callback';
+ const previous=env.ARA_PINNED_CLIENT;env.ARA_PINNED_CLIENT='https://chatgpt.com/oauth/client.json';
+ try {
+  const url=new URL(origin+'/oauth/authorize');url.search=new URLSearchParams({client_id:kilo,redirect_uri:cb,response_type:'code',code_challenge:challenge,code_challenge_method:'S256',scope:'ara.read ara.write github.read github.write',resource:origin+'/',state:'kilo-test-state'});
+  let r=await worker.fetch(new Request(url),env);assert.equal(r.status,200);
+  const tx=(await r.text()).match(/name="tx" value="([^"]+)"/)?.[1];assert(tx);
+  const a=await begin(tx),result=await callback(a);assert.equal(result.status,302);
+  const red=new URL(result.headers.get('location'));assert.equal(red.origin+red.pathname,cb);assert.equal(red.searchParams.get('state'),'kilo-test-state');
+  assert.equal(env.ARA_PINNED_CLIENT,'https://chatgpt.com/oauth/client.json');
+  const code=red.searchParams.get('code');
+  r=await worker.fetch(form('/oauth/token',{grant_type:'authorization_code',client_id:kilo,redirect_uri:cb,code,code_verifier:'X'.repeat(64)}),env);assert.equal(r.status,400);
+  r=await worker.fetch(form('/oauth/token',{grant_type:'authorization_code',client_id:kilo,redirect_uri:cb,code,code_verifier:verifier}),env);assert.equal(r.status,200);
+  const tokens=await r.json();assert.equal(tokens.scope,'ara.read ara.write github.read github.write');
+  assert.equal((await worker.fetch(form('/oauth/token',{grant_type:'authorization_code',client_id:kilo,redirect_uri:cb,code,code_verifier:verifier}),env)).status,400);
+  assert.equal((await callback(a)).status,409);
+  r=await worker.fetch(form('/oauth/token',{grant_type:'refresh_token',client_id:kilo,refresh_token:tokens.refresh_token}),env);assert.equal(r.status,200);
+  assert.equal((await worker.fetch(form('/oauth/token',{grant_type:'refresh_token',client_id:kilo,refresh_token:tokens.refresh_token}),env)).status,400);
+  for (const [key,value] of [['redirect_uri','http://127.0.0.1:19877/mcp/oauth/callback'],['client_id',kilo+'/evil'],['resource',origin+'/mcp'],['scope','admin'],['code_challenge_method','plain']]) {
+   const bad=new URL(url);bad.searchParams.set(key,value);assert.equal((await worker.fetch(new Request(bad),env)).status,400);
+  }
+ } finally { if(previous===undefined)delete env.ARA_PINNED_CLIENT;else env.ARA_PINNED_CLIENT=previous; }
+});
 test.after(()=>{globalThis.fetch=oldFetch});
 
 test('fixed test runner requires github.write and does not grant unrestricted remote shell',async()=>{
