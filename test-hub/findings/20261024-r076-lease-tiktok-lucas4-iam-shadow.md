@@ -1,5 +1,5 @@
 # Lease — TikTok lucas4 IAM/CI shadow admission
-STATUS: RUNNING
+STATUS: PARTIAL
 AREA: account-identity-secret-deploy
 DATE: 2026-10-24
 JOB: r076-tiktok-lucas4-iam-shadow-20261024
@@ -13,3 +13,9 @@ FAILED_AVOIDED: static workflow scan cannot certify provider-level IAM; never in
 SUCCESS_SIGNAL: shadow workflow checker refuses secret references for Kwai or generic deploy tokens, wrong account/repository/workflow, missing environment and permissive CI; synthetic named env passes contract but deploy_authorized remains false; package CI runs no secrets.
 FAILURE_SIGNAL: foreign secret passes, unverified manifest enables deployment, production workflow changed or external IAM authority claimed.
 TEST_VALIDITY: standard-library unit tests plus static contract only; production IAM requires independent source data and real two-principal test.
+
+## Checkpoint de encerramento
+- LEASE_STATUS: COMPLETE; atualizações feitas somente na branch segregada da PR #1332, sem deploy.
+- Run 40140618358 e 40140995938: SUCCESS; testes 10 writer + 11 IAM PASS; verificação negativa de rede cross 6/6 no guard canônico; 23/23 testes da base do clipper PASS.
+- Evidência final: test-hub/findings/20261024-r076-tiktok-lucas4-iam-cross-network-qa-partial.md.
+- Encerramento: itens 05/07/08 permanecem parciais até provisão/admin IAM e promoção independente; não deixar lease ativo para impedir trabalho de outros agentes.
