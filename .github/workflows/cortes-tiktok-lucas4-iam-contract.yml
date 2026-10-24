@@ -1,0 +1,36 @@
+name: CORTES TikTok lucas4 IAM contract — read only
+on:
+  pull_request:
+    paths:
+      - 'ci-hub/cortes_account_iam_audit.py'
+      - 'ci-hub/cortes_tiktok_lucas4_ownership.json'
+      - 'control_plane/persistent_publisher.py'
+      - 'control_plane/test_persistent_publisher.py'
+      - 'tests/test_cortes_account_iam_audit.py'
+      - '.github/workflows/cortes-tiktok-lucas4-iam-contract.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-tiktok-lucas4-iam-contract-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  audit-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Regression tests — no secrets, no identity impersonation
+        run: |
+          python3 -m unittest discover -s control_plane -p test_persistent_publisher.py -v
+          python3 -m unittest discover -s tests -p test_cortes_account_iam_audit.py -v
+      - name: Require fail-closed result until independent IAM evidence
+        run: |
+          python3 ci-hub/cortes_account_iam_audit.py \
+            --root . \
+            --manifest ci-hub/cortes_tiktok_lucas4_ownership.json \
+            --expect-blocked
+      # No publication, database connection, deployment, secret references,
+      # environment credentials, OIDC token or persistent artifact is granted.
