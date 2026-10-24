@@ -46,7 +46,6 @@ jobs:
           assert data.get('ok') is True
           assert data.get('database_ok') is True
           # HA health checks connectivity, never attests SQL RLS or per-network roles.
-          assert data.get('database_ok') is True
           PY
             then break; fi
             sleep 5
