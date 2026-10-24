@@ -3,8 +3,9 @@ on:
   push:
     branches: [main]
     paths:
+      # Changing this YAML is not an authorization to redeploy HA.
+      # workflow_dispatch remains available for a separately reviewed deploy.
       - infra/cloudflare-cortes-queue-ha/**
-      - .github/workflows/cortes-queue-cloudflare-ha.yml
   workflow_dispatch: {}
 permissions:
   contents: read
