@@ -44,12 +44,20 @@ def _provider_result_or_raise(raw: dict) -> dict:
     if status in TIMEOUT_STATES:
         raise TimeoutError("upstream_timeout")
     numeric = raw.get("http_status")
+    retry_after = raw.get("retry_after")
+    # Only a nonnegative bounded number from the actual upstream is accepted.
+    try:
+        retry_after = int(retry_after) if retry_after is not None else None
+    except (TypeError, ValueError, OverflowError):
+        retry_after = None
+    if retry_after is not None and not (0 <= retry_after <= 86400):
+        retry_after = None
     if isinstance(numeric, int) and 400 <= numeric <= 599:
-        raise UpstreamOutcomeError(numeric)
+        raise UpstreamOutcomeError(numeric, retry_after=retry_after)
     if status in STATUS_HTTP:
-        raise UpstreamOutcomeError(STATUS_HTTP[status])
+        raise UpstreamOutcomeError(STATUS_HTTP[status], retry_after=retry_after)
     if status.startswith("HTTP_") and status[5:].isdigit():
-        raise UpstreamOutcomeError(int(status[5:]))
+        raise UpstreamOutcomeError(int(status[5:]), retry_after=retry_after)
     # A failed/empty response is never a success and may not be retried blindly.
     raise UpstreamOutcomeError(502)
 
