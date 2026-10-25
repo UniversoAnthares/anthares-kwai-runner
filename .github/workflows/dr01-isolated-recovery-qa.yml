@@ -1,0 +1,23 @@
+name: DR-01 CORTES isolated real process failover QA
+on:
+  pull_request:
+    paths:
+      - 'control_plane/test_dr01_real_process_recovery.py'
+      - 'control_plane/qa_iso03_fenced_queue.py'
+      - '.github/workflows/dr01-isolated-recovery-qa.yml'
+permissions:
+  contents: read
+jobs:
+  real-kill-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Real SIGKILL, restart, independent QA receipt, RTO and RPO checks
+        run: |
+          python3 -m unittest discover -s control_plane -p test_dr01_real_process_recovery.py -v
+      - name: Confirm no external provider is permitted by this job
+        run: |
+          test -f control_plane/test_dr01_real_process_recovery.py
+          test -f control_plane/qa_iso03_fenced_queue.py
+# QA-only: no secrets, no network service, no publication, no Neon, no deploy.
