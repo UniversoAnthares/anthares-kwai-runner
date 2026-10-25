@@ -56,6 +56,8 @@ jobs:
             const project=result(await client.projects().get(entry.projectId));
             if(project.id!==entry.projectId)throw Error('PROJECT_SCOPE_INCONSISTENT');
             if(project.organizationId && project.organizationId!==entry.organizationId)throw Error('ORG_SCOPE_INCONSISTENT');
+            if(project.name!=='Anthares Automation')throw Error('THREADS_PROJECT_NAME_MISMATCH');
+            console.log('SEC01_THREADS_PROJECT_NAME=Anthares_Automation_VERIFIED');
             console.log('SEC01_THREADS_PROJECT_METADATA=PASS');
             console.log('SEC01_METADATA_AUDIT_SCOPED=PASS');
             console.log('SEC01_MACHINE_ACCOUNT_NAME=UNVERIFIED_ADMIN');
