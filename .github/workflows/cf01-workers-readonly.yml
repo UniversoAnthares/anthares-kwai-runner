@@ -1,0 +1,21 @@
+name: CF-01 Workers Account Read-only Inventory
+on:
+  pull_request:
+    paths:
+      - 'tools/cf01_workers_readonly_inventory.py'
+      - '.github/workflows/cf01-workers-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check; no package installation
+        run: python3 -m py_compile tools/cf01_workers_readonly_inventory.py
+      - name: Authenticated Cloudflare Worker metadata (GET only, sanitized)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: python3 tools/cf01_workers_readonly_inventory.py
+# No deploy permissions, OAuth OIDC, payloads, secrets in logs or billing mutations.
