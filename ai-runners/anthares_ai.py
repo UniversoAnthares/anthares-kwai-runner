@@ -234,12 +234,25 @@ def run_with_retry(provider: str, prompt: str, timeout: int, response_timeout: i
 def execute(prompt: str, provider: str = "auto", order: list[str] | None = None,
             exclude: set[str] | None = None, simulate_failures: set[str] | None = None,
             retries: int = 0, timeout: int = 90, response_timeout: int = 60,
-            envelope: bool = True, log_path: Path | None = None) -> dict:
+            envelope: bool = True, log_path: Path | None = None,
+            eligibility_policies=None, eligibility_breaker=None) -> dict:
     started = time.time()
     order = list(order or DEFAULT_ORDER)
     exclude = set(exclude or ())
     simulate_failures = set(simulate_failures or ())
     log_path = log_path or default_log_path()
+    if eligibility_policies is not None:
+        # Opt-in QA/diagnostic integration. Legacy and production paths are unchanged.
+        # Caller must supply externally attested task, quota, credential, budget
+        # and operator-authorized policy. No self-provisioning or paid fallback.
+        from ai04_consumer import execute_eligible_text
+        return execute_eligible_text(
+            prompt=prompt, provider=provider, order=order, exclude=exclude,
+            policies=eligibility_policies, breaker=eligibility_breaker,
+            timeout=timeout, response_timeout=response_timeout,
+            envelope=envelope, run_once=run_once, log_path=log_path,
+            append_log=append_log, prompt_hash=prompt_hash,
+        )
 
     candidates = [provider] if provider != "auto" else [p for p in order if p not in exclude]
     if provider != "auto" and provider in exclude:
