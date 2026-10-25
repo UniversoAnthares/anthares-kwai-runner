@@ -41,6 +41,8 @@ class LocalHttpFixture(BaseHTTPRequestHandler):
         try:
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
+            if "retry_after" in row:
+                self.send_header("Retry-After", str(row["retry_after"]))
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -88,7 +90,8 @@ class ActualLocalConsumerTests(unittest.TestCase):
                         "response": data["response"]}
         except HTTPError as e:
             return {"provider": name, "ok": False, "status": f"HTTP_{e.code}",
-                    "http_status": e.code, "response": ""}
+                    "http_status": e.code, "retry_after": e.headers.get("Retry-After"),
+                    "response": ""}
         except (TimeoutError, socket.timeout, URLError):
             return {"provider": name, "ok": False, "status": "RESPONSE_TIMEOUT",
                     "response": ""}
@@ -119,6 +122,25 @@ class ActualLocalConsumerTests(unittest.TestCase):
         self.assertEqual([x["provider"] for x in result["attempts"]], ["claude","grok"])
         self.assertEqual((self.count("claude"), self.count("grok")), (1,1))
         self.assertTrue(self.breaker.status("claude")["open"])
+
+    def test_real_http_retry_after_blocks_until_provider_reset(self):
+        self.behavior(claude={"status": 429, "retry_after": 1800}, grok={"status": 200})
+        res=self.run_with([cfg("claude"),cfg("grok")])
+        self.assertTrue(res["ok"])
+        self.assertFalse(self.breaker.allowed("claude"))
+        self.now[0] += 1799
+        self.assertFalse(self.breaker.allowed("claude"))
+        self.now[0] += 2
+        self.assertTrue(self.breaker.allowed("claude"))
+        self.assertEqual(self.count("claude"),1)
+
+    def test_simulated_failure_flags_fail_closed_on_verified_policy(self):
+        with self.assertRaisesRegex(ValueError, "simulated_failures_forbidden"):
+            anthares_ai.execute(
+                "QA_SAFE_PROMPT", order=["claude"], simulate_failures={"claude"},
+                eligibility_policies=[cfg("claude")], eligibility_breaker=self.breaker,
+                log_path=self.log)
+        self.assertEqual(self.count("claude"),0)
 
     def test_second_request_does_not_retry_real_429_provider(self):
         self.behavior(claude={"status": 429}, grok={"status": 200})
