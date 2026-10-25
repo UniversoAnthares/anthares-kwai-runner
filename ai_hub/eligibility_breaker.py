@@ -18,8 +18,10 @@ class ProvidersTemporarilyUnavailable(RuntimeError):
 
 
 class UpstreamOutcomeError(RuntimeError):
-    def __init__(self, status: int, message: str = "upstream response"):
+    def __init__(self, status: int, message: str = "upstream response",
+                 retry_after: int | None = None):
         self.status = int(status)
+        self.retry_after = retry_after if isinstance(retry_after, int) and retry_after >= 0 else None
         super().__init__(f"upstream_http_{self.status}")
 
 
@@ -112,7 +114,8 @@ def dispatch(task: str, policies: Iterable[ProviderPolicy], breaker: CircuitBrea
         try:
             result = call(candidate.name)
         except UpstreamOutcomeError as exc:
-            reason = breaker.record_failure(candidate.name, http_status=exc.status)
+            reason = breaker.record_failure(candidate.name, http_status=exc.status,
+                                            retry_after=exc.retry_after)
             if reason in ("auth_denied", "non_retryable"):
                 raise
         except TimeoutError:
