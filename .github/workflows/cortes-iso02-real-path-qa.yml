@@ -1,0 +1,22 @@
+name: CORTES ISO-02 actual scoped path writes QA
+on:
+  pull_request:
+    paths:
+      - 'tests/test_iso02_real_network_path_gate.py'
+      - '.github/workflows/cortes-iso02-real-path-qa.yml'
+      - 'control_plane/persistent_publisher.py'
+permissions:
+  contents: read
+jobs:
+  path-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Real disposable write/rename/symlink/cross-network negative tests
+        run: python3 -m unittest -v tests/test_iso02_real_network_path_gate.py
+      - name: Confirm no external credential or deployment workflow was required
+        run: |
+          test -f control_plane/persistent_publisher.py
+          test -f tests/test_iso02_real_network_path_gate.py
+# No IAM, social network auth, publication, Neon, Cloudflare or production writes.
