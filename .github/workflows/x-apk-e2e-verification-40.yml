@@ -1,0 +1,79 @@
+name: X Android APK end-to-end verification 40
+on:
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths: [.github/workflows/x-apk-e2e-verification-40.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        variant: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source and download strategies
+        shell: bash
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence
+          source_index=$(( (VARIANT-1)%8 ))
+          strategy=$(( (VARIANT-1)/8 ))
+          urls=(
+            'https://www.apkmirror.com/apk/x-corp/twitter/x-12-19-1-release-0-release/'
+            'https://www.apkmirror.com/apk/x-corp/twitter/'
+            'https://www.apkmirror.com/apk/x-corp/twitter/x-12-19-1-release-0-release/x-12-19-1-release-0-android-apk-download/'
+            'https://play.google.com/store/apps/details?id=com.twitter.android'
+            'https://www.apkmirror.com/?post_type=app_release&searchtype=apk&s=twitter'
+            'https://www.apkmirror.com/apk/x-corp/twitter/x-12-19-1-release-0-release/'
+            'https://play.google.com/store/apps/details?id=com.twitter.android'
+            'https://www.apkmirror.com/apk/x-corp/twitter/'
+          )
+          url="${urls[$source_index]}"
+          echo "VARIANT=$VARIANT STRATEGY=$strategy SOURCE=$url" | tee evidence/summary.txt
+          case "$strategy" in
+            0) curl --fail --location --retry 2 --max-time 45 -A 'Mozilla/5.0' "$url" -o evidence/source.html ;;
+            1) curl --fail --location --compressed --max-time 45 -H 'Accept-Language: en-US,en;q=0.9' "$url" -o evidence/source.html ;;
+            2) python3 - "$url" <<'PY'
+          import sys,urllib.request
+          u=sys.argv[1]
+          req=urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0','Accept':'text/html'})
+          with urllib.request.urlopen(req,timeout=45) as r:
+              assert r.status==200
+              open('evidence/source.html','wb').write(r.read(3000000))
+          PY
+            ;;
+            3) curl --fail --location --max-time 45 -H 'Accept: text/html' -H 'Cache-Control: no-cache' "$url" -o evidence/source.html ;;
+            4) curl --fail --location --retry 3 --retry-all-errors --retry-delay 2 --max-time 60 "$url" -o evidence/source.html ;;
+          esac
+          test -s evidence/source.html
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin,urlparse
+          class Links(HTMLParser):
+              def __init__(self): super().__init__(); self.links=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=='a':
+                      d=dict(attrs); href=d.get('href','')
+                      if any(s in href.lower() for s in ('download','apk','variant')): self.links.append(href)
+          p=Links(); p.feed(open('evidence/source.html',errors='replace').read())
+          open('evidence/candidate-links.txt','w').write('\n'.join(p.links[:100]))
+          print('candidate_links',len(p.links))
+          assert p.links, 'No download candidates; page access alone is not success'
+          PY
+          echo 'SOURCE_DISCOVERY_PASS=true' | tee -a evidence/summary.txt
+      - name: Preserve diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-apk-e2e-probe-${{ matrix.variant }}-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: ignore
+          retention-days: 2
