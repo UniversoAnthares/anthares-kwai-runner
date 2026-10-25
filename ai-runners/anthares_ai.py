@@ -242,6 +242,9 @@ def execute(prompt: str, provider: str = "auto", order: list[str] | None = None,
     simulate_failures = set(simulate_failures or ())
     log_path = log_path or default_log_path()
     if eligibility_policies is not None:
+        if simulate_failures:
+            # Do not silently ignore testing flags and issue real provider calls.
+            raise ValueError("simulated_failures_forbidden_with_verified_policy")
         # Opt-in QA/diagnostic integration. Legacy and production paths are unchanged.
         # Caller must supply externally attested task, quota, credential, budget
         # and operator-authorized policy. No self-provisioning or paid fallback.
