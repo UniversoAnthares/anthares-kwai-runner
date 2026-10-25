@@ -225,6 +225,18 @@ def evidence(jobid):
   raise RuntimeError('public-link-proof-missing')
  proof=json.loads(proof_file.read_text(encoding='utf-8'))
  url=str(proof.get('public_url') or '')
+ native=pubstate(jobid)
+ cross=proof.get('cross_device_proof') or {}
+ if (proof.get('kind')!='kwai_independent_cross_device_media_bound_v1'
+     or proof.get('verified_publication_job_id')!=jobid
+     or proof.get('caption')!=native.get('caption')
+     or not native.get('media_sha256')
+     or proof.get('media_sha256')!=native.get('media_sha256')
+     or cross.get('ok') is not True
+     or cross.get('public_url')!=proof.get('public_url')
+     or cross.get('title_match') is not True
+     or cross.get('expected_account')!=EXPECTED_ACCOUNT):
+  raise RuntimeError('kwai_cross_device_media_bound_evidence_required')
  if proof.get('ok') is not True or proof.get('expected_account')!=EXPECTED_ACCOUNT or not re.fullmatch(r'https://(?:k\.kwai\.com/p/[A-Za-z0-9_-]+|www\.kwai\.com/@[A-Za-z0-9_.-]+/photo/[0-9]+)',url):
   raise RuntimeError('public-link-proof-invalid')
  return {'remote_id':url,'confirmation_evidence':{'kind':'kwai_verified_public_link',**proof}}

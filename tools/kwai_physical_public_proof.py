@@ -4,7 +4,7 @@ This NEVER calls the publish path. An exact account and timestamp match is
 mandatory before a share button can be opened. No URL means no ACK.
 """
 from __future__ import annotations
-import json, os, pathlib, re, sys, time, urllib.request, xml.etree.ElementTree as ET
+import json, subprocess, os, pathlib, re, sys, time, urllib.request, xml.etree.ElementTree as ET
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tools'))
@@ -110,8 +110,37 @@ def recover(jid):
     k.tap(serial,copy[0])
     link=clip_url(serial,clean)
     if not URL_RE.fullmatch(link):raise RuntimeError('kwai_public_link_invalid')
+    title=str(state.get('caption') or '').strip()
+    digest=str(state.get('media_sha256') or '').lower()
+    if len(title)<12 or not re.fullmatch(r'[a-f0-9]{64}',digest):
+        raise RuntimeError('kwai_job_caption_or_media_digest_missing')
+    # Android physically publishes; isolated MEmu verifies the resulting public
+    # URL on Kwai by matching the target caption and author profile handle.
+    env=os.environ.copy()
+    env['KWAI_UP_ADB_SERIAL']=os.getenv('ANTHARES_MEMU_ADB_SERIAL','127.0.0.1:21543')
+    env['ANTHARES_ADB']=str(k.ADB)
+    verifier=ROOT/'tools'/'kwai_verify_public_post.py'
+    p=subprocess.run([sys.executable,str(verifier),'--url',link,'--title',title,
+        '--account',expected_account,'--display-name','Lucas Rosalem'],
+        cwd=str(ROOT),env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+        text=True,timeout=145,check=False,
+        creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+    matching=[line.split('KWAI_PUBLIC_LINK_VERIFIED=',1)[1]
+              for line in (p.stdout or '').splitlines()
+              if line.startswith('KWAI_PUBLIC_LINK_VERIFIED=')]
+    if p.returncode!=0 or len(matching)!=1:
+        raise RuntimeError('kwai_cross_device_public_identity_verification_failed')
+    cross=json.loads(matching[0])
+    if not (cross.get('ok') is True and cross.get('public_url')==link
+            and cross.get('title_match') is True
+            and cross.get('expected_account')==expected_account
+            and cross.get('method')=='kwai_public_deeplink_title_and_author_profile_handle'):
+        raise RuntimeError('kwai_cross_device_public_identity_mismatch')
     proof={
         'ok':True,'public_url':link,'expected_account':expected_account,
+        'kind':'kwai_independent_cross_device_media_bound_v1',
+        'verified_publication_job_id':jid,'caption':title,'media_sha256':digest,
+        'cross_device_proof':cross,
         'published_post_time':expected_time,'verified_native_state':'verified',
         'verification_evidence':state.get('verification_evidence'),
         'method':'physical_profile_exact_account_timestamp_and_share_ui',
