@@ -28,3 +28,9 @@ Windows task `Anthares CORTES F1 Google Drive Replica 30min` last ran 25/10/2026
 - Items 26 only is promoted to COMPLETE based on above receipt and the narrow official R07.6 acceptance. All other IDs retain prior evidence/status.
 
 **Rollback:** No production change to roll back; the two controlled QA messages are retained as delivery receipts. This is an evidence-only draft; human review before merge. **Canonical checklist:** https://docs.google.com/document/d/1SkjpRPJYLe9n_9SDOA4s-RibN8Pb_hm6-ukS6pbV7aQ/edit.
+
+## Item 10 — ISO-03 QA: real concurrency and two OS principals (accepted in QA only)
+
+Original QA PR [#1338](https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1338) had run [40148921013](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40148921013) failing only the distinct-POSIX-UID test because unprivileged subprocesses could not import the QA module from the runner home directory. An isolated stacked delta [PR #1369](https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1369), commit `d9cabd4bc46add4f38e850ee06e45054b3c90ce8`, stages **only** the credential-free QA module into a temporary public-readable fixture and preserves the OS denial checks.
+
+**Real hosted CI success:** run [40193822126](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40193822126), job `121170273674`, `Ran 7 tests ... OK`. The seven include simultaneous contenders producing a single confirmed/effect, two genuinely distinct POSIX UIDs with ALLOWED own and DENIED foreign network filesystem, forged token and generation DENIED, UNCERTAIN no-replay, network claim isolation and shadow-only Kwai fanout. The QA job holds no provider credentials and triggers no publishing. This satisfies ISO-03's explicit **QA cell** proof, not production IAM nor actual cloud social-account isolation. Branch source remains draft and must be reviewed before integration. No auto-merge.
