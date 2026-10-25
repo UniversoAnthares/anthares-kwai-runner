@@ -1,0 +1,74 @@
+name: SEC01 Threads Bitwarden metadata QA (read-only)
+on:
+  push:
+    branches:
+      - chatgpt/sec01-threads-bws-metadata-qa-20261025
+    paths:
+      - .github/workflows/sec01-threads-bws-metadata-qa.yml
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: sec01-threads-bws-metadata-qa-20261025
+  cancel-in-progress: false
+jobs:
+  scoped-read:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+    steps:
+      - name: Install SDK matching successful Gemini authenticator
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/anthares-sec01-bws-sdk" --no-audit --no-fund --silent @bitwarden/sdk-napi@1.0.0
+      - name: Verify only Threads secret metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${BWS_ACCESS_TOKEN:-}" ]; then echo 'SEC01_ERROR_STAGE=BOOTSTRAP_MISSING'; exit 1; fi
+          node <<'NODE'
+          'use strict';
+          const os=require('os'),path=require('path'),fs=require('fs');
+          const sdk=require(path.join(process.env.RUNNER_TEMP,'anthares-sec01-bws-sdk','node_modules','@bitwarden','sdk-napi'));
+          const id='4ef756b1-f948-4780-af26-b4ea014637bf';
+          let root,phase='INIT';
+          function result(x){if(!x||x.success===false)throw Error('BWS_OPERATION_FAILED');return x.data||x;}
+          (async()=>{
+            root=fs.mkdtempSync(path.join(os.tmpdir(),'sec01-bws-'));
+            fs.chmodSync(root,0o700);
+            phase='AUTH';
+            const client=new sdk.BitwardenClient({apiUrl:'https://api.bitwarden.com',identityUrl:'https://identity.bitwarden.com',userAgent:'anthares-sec01-threads-metadata-qa',deviceType:sdk.DeviceType.SDK});
+            const auth=await client.auth().loginAccessToken(process.env.BWS_ACCESS_TOKEN.trim(),path.join(root,'state'));
+            if(auth?.success===false)throw Error('AUTH_FAILED');
+            console.log('SEC01_AUTH=PASS');
+            phase='THREADS_METADATA';
+            const entry=result(await client.secrets().get(id));
+            if(entry.id!==id)throw Error('THREADS_REFERENCE_MISMATCH');
+            if(!entry.organizationId||!entry.projectId)throw Error('THREADS_SCOPE_MISSING');
+            console.log('SEC01_THREADS_SECRET_METADATA=PASS');
+            console.log('SEC01_SCOPE_PRESENT=PASS');
+            // Safe metadata-only organization listing. Values and names are never logged.
+            phase='AUTHORIZED_SCOPE_LIST';
+            const list=result(await client.secrets().list(entry.organizationId));
+            const items=Array.isArray(list.data)?list.data:Array.isArray(list)?list:[];
+            const matching=items.filter(x=>x.id===id);
+            if(matching.length!==1)throw Error('THREADS_NOT_VISIBLE_IN_LIST');
+            if(matching[0].projectId!==entry.projectId)throw Error('THREADS_SCOPE_INCONSISTENT');
+            console.log('SEC01_LIST_SCOPE=PASS');
+            console.log('SEC01_METADATA_AUDIT=PASS');
+          })().catch(err=>{
+            console.error('SEC01_ERROR_STAGE='+phase);
+            console.error('SEC01_ERROR_CLASS='+String(err?.name||'Unknown').replace(/[^A-Za-z]/g,''));
+            process.exitCode=1;
+          }).finally(()=>{
+            if(root)try{fs.rmSync(root,{recursive:true,force:true});}catch{}
+          });
+          NODE
+      - name: Delete ephemeral SDK and state
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/anthares-sec01-bws-sdk"
+          echo 'SEC01_EPHEMERAL_CLEANUP=PASS'
