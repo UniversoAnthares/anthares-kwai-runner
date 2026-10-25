@@ -49,15 +49,17 @@ jobs:
             if(!entry.organizationId||!entry.projectId)throw Error('THREADS_SCOPE_MISSING');
             console.log('SEC01_THREADS_SECRET_METADATA=PASS');
             console.log('SEC01_SCOPE_PRESENT=PASS');
-            // Safe metadata-only organization listing. Values and names are never logged.
-            phase='AUTHORIZED_SCOPE_LIST';
-            const list=result(await client.secrets().list(entry.organizationId));
-            const items=Array.isArray(list.data)?list.data:Array.isArray(list)?list:[];
-            const matching=items.filter(x=>x.id===id);
-            if(matching.length!==1)throw Error('THREADS_NOT_VISIBLE_IN_LIST');
-            if(matching[0].projectId!==entry.projectId)throw Error('THREADS_SCOPE_INCONSISTENT');
-            console.log('SEC01_LIST_SCOPE=PASS');
-            console.log('SEC01_METADATA_AUDIT=PASS');
+            // The previous organization-wide list was not authorized/available.
+            // Query ONLY the project bound to this already-readable secret.
+            console.log('SEC01_ORGANIZATION_LIST=UNVERIFIED_PREVIOUS_RUN');
+            phase='ASSIGNED_PROJECT_METADATA';
+            const project=result(await client.projects().get(entry.projectId));
+            if(project.id!==entry.projectId)throw Error('PROJECT_SCOPE_INCONSISTENT');
+            if(project.organizationId && project.organizationId!==entry.organizationId)throw Error('ORG_SCOPE_INCONSISTENT');
+            console.log('SEC01_THREADS_PROJECT_METADATA=PASS');
+            console.log('SEC01_METADATA_AUDIT_SCOPED=PASS');
+            console.log('SEC01_MACHINE_ACCOUNT_NAME=UNVERIFIED_ADMIN');
+            console.log('SEC01_SUBSCRIPTION_QUOTA=UNVERIFIED_ADMIN');
           })().catch(err=>{
             console.error('SEC01_ERROR_STAGE='+phase);
             console.error('SEC01_ERROR_CLASS='+String(err?.name||'Unknown').replace(/[^A-Za-z]/g,''));
