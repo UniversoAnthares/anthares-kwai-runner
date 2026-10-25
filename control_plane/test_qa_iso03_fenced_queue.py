@@ -104,6 +104,12 @@ class Iso03QA(unittest.TestCase):
         # No users or tokens are created on any production machine.
         self.root.chmod(0o755)
         (self.root / ".cortes-iso03-qa-only").chmod(0o644)
+        # Hosted runner checkout may sit under /home/runner (mode 0700).
+        # A process switched to an independent UID cannot import from there.
+        # Stage only the credential-free QA broker inside disposable QA root.
+        qa_module = self.root / "qa_iso03_fenced_queue.py"
+        qa_module.write_bytes(Path(__file__).with_name("qa_iso03_fenced_queue.py").read_bytes())
+        qa_module.chmod(0o644)
         owned = (("kwai", 61071), ("tiktok", 61072))
         for network, uid in owned:
             directory = self.root / network
@@ -128,7 +134,7 @@ except (PermissionError,OSError) as e:
             def run(target):
                 return subprocess.run(
                     [sys.executable, "-c", child_code,
-                     str(Path(__file__).resolve().parent), str(self.root), target,
+                     str(self.root), str(self.root), target,
                      "lucasrosalem" if target == "kwai" else "lucasrosalem4"],
                     text=True, capture_output=True, timeout=15,
                     preexec_fn=lambda: os.setuid(uid))
