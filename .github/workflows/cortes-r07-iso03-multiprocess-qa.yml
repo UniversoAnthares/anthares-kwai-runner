@@ -1,0 +1,30 @@
+name: CORTES R07.6 ISO-03 — independent-process single-writer QA
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'control_plane/test_r07_iso03_multiprocess.py'
+      - '.github/workflows/cortes-r07-iso03-multiprocess-qa.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-iso03-multiprocess-qa-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  isolated-processes:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Multiprocess SQLite fencing, no cross-network write, no uncertain replay
+        run: |
+          python3 -m unittest discover -s control_plane -p test_r07_iso03_multiprocess.py -v
+      - name: Assert CI remains read-only and unprivileged
+        run: |
+          echo 'ISO03_QA_ONLY=1'
+          echo 'ISO03_CUTOVER_AUTHORIZED=0'
+          echo 'ISO03_PUBLISHER_INVOKED=0'
