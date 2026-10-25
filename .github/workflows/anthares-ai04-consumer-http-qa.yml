@@ -1,0 +1,30 @@
+name: Anthares AI-04 consumer — live loopback HTTP QA
+on:
+  pull_request:
+    paths:
+      - 'ai_hub/eligibility_breaker.py'
+      - 'ai-runners/anthares_ai.py'
+      - 'ai-runners/ai04_consumer.py'
+      - 'tests/test_ai04_local_consumer_http.py'
+      - '.github/workflows/anthares-ai04-consumer-http-qa.yml'
+permissions:
+  contents: read
+jobs:
+  live-http-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile actual AI local consumer and policy implementation
+        run: |
+          python3 -m py_compile ai-runners/anthares_ai.py ai-runners/ai04_consumer.py ai_hub/eligibility_breaker.py
+      - name: Run consumer with real loopback 402/429/403/503/timeouts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_ai04_local_consumer_http.py' -v
+      - name: Existing breaker unit contract
+        run: |
+          python3 -m unittest discover -s tests -p 'test_ai_eligibility_breaker.py' -v
+      - name: No external network, deploy, payments or secrets
+        run: echo 'AI04_LOCAL_CONSUMER_QA_ONLY=1 AI04_PRODUCTION_CUTOVER_AUTHORIZED=0'
