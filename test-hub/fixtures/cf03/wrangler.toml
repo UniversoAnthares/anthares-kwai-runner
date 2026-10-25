@@ -1,0 +1,33 @@
+name = "anthares-cf03-qa-r0725"
+main = "worker.mjs"
+account_id = "5c24be052e5144391f73a8e03491e88e"
+compatibility_date = "2026-10-04"
+workers_dev = true
+send_metrics = false
+
+[[durable_objects.bindings]]
+name = "CF03_LEDGER"
+class_name = "Cf03Ledger"
+
+[[migrations]]
+tag = "cf03-v1-sqlite-r0725"
+new_sqlite_classes = ["Cf03Ledger"]
+
+[[queues.producers]]
+binding = "CF03_QUEUE"
+queue = "cf03-qa-main-r0725"
+
+[[queues.consumers]]
+queue = "cf03-qa-main-r0725"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 1
+max_concurrency = 1
+dead_letter_queue = "cf03-qa-dlq-r0725"
+
+[[queues.consumers]]
+queue = "cf03-qa-dlq-r0725"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 1
+max_concurrency = 1
