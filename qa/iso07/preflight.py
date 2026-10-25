@@ -101,7 +101,7 @@ def inspect(cloud: str, fallback: str, ownership: dict | None,
 def _json(path: str | None) -> dict:
     if not path:
         return {}
-    with open(path, "r", encoding="utf-8") as reader:
+    with open(path, "r", encoding="utf-8-sig") as reader:
         data = json.load(reader)
     if not isinstance(data, dict):
         raise ValueError("Evidence root must be a JSON object")
