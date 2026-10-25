@@ -6,13 +6,13 @@ CLOUD = """jobs:
   publisher:
     environment: cortes-tiktok-lucas4
     env:
-      STATE: \${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+      STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
 """
 FALLBACK = """jobs:
   windows_backup:
     environment: cortes-tiktok-lucas4
     env:
-      STATE: \${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+      STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
 """
 
 
