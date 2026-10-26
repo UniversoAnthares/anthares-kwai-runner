@@ -1,0 +1,85 @@
+name: ARA Authentication Continuity Monitor
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/10 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ara-auth-continuity-monitor.yml'
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: ara-auth-continuity-monitor
+  cancel-in-progress: false
+jobs:
+  endpoints:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check independently routed public control endpoints
+        id: probe
+        env:
+          GH_OUTPUT: ${{ github.output }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error,time
+          urls={
+            'mcp':'https://anthares-ara-mcp.anthares1.workers.dev/',
+            'reserve_canonical':'https://anthares-ara-vercel-reserve.vercel.app/healthz',
+            'reserve_standby':'https://anthares-ara-vercel-reserve-lucasyahn-6808.vercel.app/healthz',
+            'primary':'https://anthares-remote-primary.vercel.app/health',
+            'secondary':'https://anthares-remote-secondary.vercel.app/health',
+          }
+          outcome={};failures=[]
+          for name,url in urls.items():
+            try:
+              req=urllib.request.Request(url,headers={'User-Agent':'Anthares-ARA-Continuity-Monitor/1.0','Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=14) as r:
+                code=r.status;obj=json.loads(r.read(8192))
+              ok=code==200 and obj.get('ok') is True
+              if name=='mcp':ok=ok and obj.get('control_ready') is True and obj.get('oauth') is True and obj.get('mcp') is True and obj.get('device_connected') is True
+              if name.startswith('reserve_'):ok=ok and obj.get('database')=='neon'
+              outcome[name]={'http':code,'ok':ok}
+            except urllib.error.HTTPError as e:outcome[name]={'http':e.code,'ok':False}
+            except Exception as e:outcome[name]={'http':0,'ok':False,'error':type(e).__name__}
+            if not outcome[name]['ok']:failures.append(name)
+          healthy=len(failures)==0
+          with open('ara-continuity-report.md','w',encoding='utf8') as f:
+            f.write('## ARA control-plane health\n\n')
+            f.write('Checked (UTC): '+time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())+'\n\n')
+            f.write('| Endpoint | HTTP | Healthy |\n|---|---:|---|\n')
+            for k,v in outcome.items():f.write(f"| {k} | {v['http']} | {'yes' if v['ok'] else 'NO'} |\n")
+            if failures:f.write('\nFailures: '+', '.join(failures)+'\n')
+            f.write('\nNo OAuth code, device secret or database credential was read.\n')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+            out.write(f"healthy={'true' if healthy else 'false'}\n")
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:out.write(open('ara-continuity-report.md',encoding='utf8').read())
+          print(json.dumps({'healthy':healthy,'checks':outcome}))
+          PY
+      - name: Open or resolve incident independently of Vercel and Neon
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEALTHY: ${{ steps.probe.outputs.healthy }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='[ARA CONTINUITY] OAuth e controle remoto indisponíveis'
+          current="$(gh issue list -R "$REPO" --state open --limit 100 --json number,title --jq '.[] | select(.title=="[ARA CONTINUITY] OAuth e controle remoto indisponíveis") | .number' | head -n 1)"
+          if [[ "$HEALTHY" == 'true' ]]; then
+            if [[ -n "$current" ]]; then
+              gh issue comment "$current" -R "$REPO" --body "Recuperação confirmada pelo monitor externo. Execução: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+              gh issue close "$current" -R "$REPO" --reason completed
+            fi
+          elif [[ -n "$current" ]]; then
+            echo "Incident already open: #$current"
+          else
+            gh issue create -R "$REPO" --title "$title" --body-file ara-continuity-report.md
+          fi
+      - name: Fail job on unhealthy control plane
+        if: steps.probe.outputs.healthy != 'true'
+        run: exit 1
