@@ -31,8 +31,8 @@ jobs:
 
           REPO="UniversoAnthares/anthares-kwai-runner"
           BRANCH="evidence/cf02-real-provider-cas-qa-20261026"
-          QA_PATH="test-hub/fixtures/cf02/live-cas-qa-receipt.json"
-          EVIDENCE="test-hub/fixtures/cf02/live-cas-qa-evidence.json"
+          QA_PATH="test-hub/fixtures/cf02/live-cas-qa-receipt-v2.json"
+          EVIDENCE="test-hub/fixtures/cf02/live-cas-qa-evidence-v2.json"
           assert os.environ.get("GITHUB_REPOSITORY")==REPO
           assert os.environ.get("CF02_QA_REF")==BRANCH
           assert os.environ.get("GITHUB_REF")=="refs/heads/"+BRANCH
@@ -79,6 +79,11 @@ jobs:
                       return real_open(req,*args,**kwargs)
                   except urllib.error.HTTPError as exc:
                       if exc.code==409: state["http409"]+=1
+                      if exc.code==422:
+                          # Diagnostic only, sanitized GitHub validation metadata; no token.
+                          data=json.loads(exc.read(4096).decode())
+                          print("CF02_PROVIDER_422_MESSAGE="+str(data.get("message",""))[:260])
+                          print("CF02_PROVIDER_422_ERRORS="+str(data.get("errors",""))[:450])
                       raise
               return real_open(req,*args,**kwargs)
 
