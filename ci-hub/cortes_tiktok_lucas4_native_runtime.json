@@ -21,5 +21,11 @@
   "escrow_entry_verified": false,
   "production_migration_status": "prepared_not_deployed",
   "deployment_authorized": false,
-  "notes": "The native secret must exist only in the protected account environment. No shared BWS or repository credential fallback. Names and source checks are not evidence of provider IAM."
+  "notes": "The native secret must exist only in the protected account environment. No shared BWS or repository credential fallback. Names and source checks are not evidence of provider IAM.",
+  "administration": {
+    "external_collaborators_authorized": false,
+    "independent_human_reviewer_available": false,
+    "owner_review_required": true,
+    "distinct_runtime_principals_still_required": true
+  }
 }
