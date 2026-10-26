@@ -1,0 +1,54 @@
+name: CF02 Verified Production Receipt Recovery — no redeploy
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/cf02-recover-receipt.yml'
+      - 'tools/cf02_recover_receipt.py'
+      - 'tests/test_cf02_recover_receipt.py'
+  push:
+    branches:
+      - main
+      - fix/cf02-prod-receipt-recovery-20261026
+    paths:
+      - '.github/workflows/cf02-recover-receipt.yml'
+      - 'tools/cf02_recover_receipt.py'
+      - 'tests/test_cf02_recover_receipt.py'
+concurrency:
+  group: anthares-cloudflare-controller-deploy
+  cancel-in-progress: false
+permissions:
+  contents: read
+  actions: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate pinned provenance and read-only release safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/cf02_recover_receipt.py tests/test_cf02_recover_receipt.py
+          python3 -m unittest discover -s tests -p 'test_cf02_recover_receipt.py' -v
+          echo 'CF02_HISTORICAL_RECEIPT_QA_OK=1'
+
+  recover_main_receipt:
+    needs: validate
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover real original production deployment receipt (no Cloudflare actions)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 tools/cf02_recover_receipt.py
+          echo 'CF02_NO_WORKER_DEPLOY_OR_QUEUE_MUTATION=1'
