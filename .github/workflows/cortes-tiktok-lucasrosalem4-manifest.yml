@@ -24,17 +24,20 @@ jobs:
       PYTHONIOENCODING: 'utf-8'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Validate installed Python 3.12
+        shell: pwsh
+        run: |
+          py -3.12 -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version"
+          if ($LASTEXITCODE -ne 0) { throw 'PYTHON_312_NOT_AVAILABLE_ON_RUNNER' }
       - name: Test read-only manifest contract
         shell: pwsh
         run: |
-          python -m py_compile tools/cortes_tiktok_lucasrosalem4_manifest.py
-          python -m unittest discover -s tests -p test_cortes_tiktok_lucasrosalem4_manifest.py -v
+          py -3.12 -m py_compile tools/cortes_tiktok_lucasrosalem4_manifest.py
           if ($LASTEXITCODE -ne 0) { throw 'SECONDARY_MANIFEST_PY_COMPILE_FAILED' }
+          py -3.12 -m unittest discover -s tests -p test_cortes_tiktok_lucasrosalem4_manifest.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'SECONDARY_MANIFEST_TESTS_FAILED' }
       - name: Refresh isolated second-account queue manifest
         shell: pwsh
         run: |
-          python -u tools/cortes_tiktok_lucasrosalem4_manifest.py
+          py -3.12 -u tools/cortes_tiktok_lucasrosalem4_manifest.py
           if ($LASTEXITCODE -ne 0) { throw 'SECONDARY_MANIFEST_SYNC_FAILED' }
