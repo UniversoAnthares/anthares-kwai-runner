@@ -8,6 +8,7 @@ import { isKiloClient, isKiloCallbackPair, isKiloResource } from "./kilo-client-
 import { githubTools, callGithubTool, recordApprovedRegression } from "./github-bridge.mjs";
 import { approvedTestTool, runApprovedTests } from "./approved-tests.mjs";
 import { ownerGithubConfigured, startOwnerGithub, finishOwnerGithub } from "./owner-github-auth.mjs";
+import { CLIENT_INSTRUCTIONS, DISCOVERY_REVISION, clientDiscovery } from "./client-discovery.mjs";
 var ORIGIN = "https://anthares-ara-mcp.anthares1.workers.dev";
 var CONTROL = "https://anthares-ara-vercel-reserve.vercel.app";
 var DEFAULT_DEVICE = "DESKTOP-FTDK0HP";
@@ -377,7 +378,7 @@ function textResult(v) {
   return { content: [{ type: "text", text: typeof v === "string" ? v : JSON.stringify(v, null, 2) }] };
 }
 __name(textResult, "textResult");
-async function callTool(env, name, a = {}) {
+async function callTool(env, name, a = {}, scopes = []) {
   const device = a.device_id || DEFAULT_DEVICE;
   if (name === "session_status") {
     let x = await status(env, device);
@@ -388,7 +389,7 @@ async function callTool(env, name, a = {}) {
       } catch {
       }
     }
-    return textResult(x);
+    return textResult({ ...x, client_access: clientDiscovery(scopes) });
   }
   if (name === "capabilities") {
     // The signed Vercel bridge supports status/execute but has no capabilities route.
@@ -400,7 +401,8 @@ async function callTool(env, name, a = {}) {
       backend: current.backend,
       auth: "oauth-scopes-and-ed25519-service-signature",
       device_connected: !!current.connected,
-      mcp_connector: { version: "1.1.0", delegated_tools: githubTools.filter(t => t.name === "run_claude_code" || t.name === "get_claude_code_status" || t.name === "get_claude_code_result").map(t => ({ name: t.name, required_scope: t.scope })) },
+      client_access: clientDiscovery(scopes),
+      mcp_connector: { version: "1.2.0", delegated_tools: githubTools.filter(t => scopes.includes(t.scope) && (t.name === "run_claude_code" || t.name === "get_claude_code_status" || t.name === "get_claude_code_result")).map(t => ({ name: t.name, required_scope: t.scope })) },
       capabilities: ["status", "system_info", "shell", "process_list", "process_start", "process_kill",
         "service_status", "service_start", "service_stop", "clipboard_get", "clipboard_set", "screenshot",
         "file_stat", "file_list", "file_read", "file_write", "file_read_chunk", "file_write_chunk",
@@ -506,7 +508,7 @@ var index_default = { async fetch(req, env) {
       } catch {
       }
       const pinned = !!await st(env).pinnedClient();
-      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: ownerGithubConfigured(env) ? "github_owner_identity" : "email_otp", oauth_client_pinned: pinned, mcp_server_version: "1.1.0", mcp_delegation_tools: githubTools.filter(t => t.name === "run_claude_code" || t.name === "get_claude_code_status" || t.name === "get_claude_code_result").map(t => t.name) }, controlReady ? 200 : 503);
+      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: ownerGithubConfigured(env) ? "github_owner_identity" : "email_otp", oauth_client_pinned: pinned, mcp_server_version: "1.2.0", discovery_revision: DISCOVERY_REVISION, mcp_delegation_tools: githubTools.filter(t => t.name === "run_claude_code" || t.name === "get_claude_code_status" || t.name === "get_claude_code_result").map(t => t.name) }, controlReady ? 200 : 503);
     }
     if (req.method === "GET" && u.pathname === "/.well-known/ara-control-key") return new Response(await st(env).publicPem(), { headers: { "content-type": "application/x-pem-file", "cache-control": "no-store" } });
     if (req.method === "GET" && u.pathname === "/.well-known/oauth-protected-resource") return json({ resource: ORIGIN, authorization_servers: [ORIGIN], scopes_supported: [...SCOPES], resource_documentation: "https://github.com/UniversoAnthares/anthares-kwai-runner" });
@@ -572,7 +574,7 @@ var index_default = { async fetch(req, env) {
         return json({ error: "invalid_json" }, 400);
       }
       if (rpc.method === "notifications/initialized" || String(rpc.method || "").startsWith("notifications/")) return new Response(null, { status: 202 });
-      if (rpc.method === "initialize") return rpcResult(rpc.id, { protocolVersion: rpc.params?.protocolVersion || "2025-06-18", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Anthares Remote", version: "1.1.0" } });
+      if (rpc.method === "initialize") return rpcResult(rpc.id, { protocolVersion: rpc.params?.protocolVersion || "2025-06-18", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Anthares Remote", version: "1.2.0" }, instructions: CLIENT_INSTRUCTIONS });
       if (rpc.method === "ping") return rpcResult(rpc.id, {});
       if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS.filter(t => token.scp.includes(WRITE_TOOLS.has(t.name) ? "ara.write" : "ara.read")).concat(githubTools.concat(approvedTestTool).filter(t => token.scp.includes(t.scope)).map(({scope, ...tool}) => tool)) });
       if (rpc.method === "tools/call") {
@@ -581,7 +583,7 @@ var index_default = { async fetch(req, env) {
         const required = githubTool ? githubTool.scope : (WRITE_TOOLS.has(name) ? "ara.write" : "ara.read");
         if (!token.scp.includes(required)) return rpcError(rpc.id, -32003, "insufficient_scope", { required_scope: required });
         try {
-          const result = name === "run_tests" ? textResult(await runApprovedTests(env, rpc.params?.arguments || {}, (type,args,timeout)=>execute(env,type,args,timeout), (kind,jti,exp)=>st(env).consume(kind,jti,exp), (status,id,result)=>recordApprovedRegression(env,status,id,result))) : githubTool ? textResult(await callGithubTool(env, name, rpc.params?.arguments || {})) : await callTool(env, name, rpc.params?.arguments || {});
+          const result = name === "run_tests" ? textResult(await runApprovedTests(env, rpc.params?.arguments || {}, (type,args,timeout)=>execute(env,type,args,timeout), (kind,jti,exp)=>st(env).consume(kind,jti,exp), (status,id,result)=>recordApprovedRegression(env,status,id,result))) : githubTool ? textResult(await callGithubTool(env, name, rpc.params?.arguments || {})) : await callTool(env, name, rpc.params?.arguments || {}, token.scp);
           return rpcResult(rpc.id, result);
         } catch (e) {
           return rpcResult(rpc.id, { content: [{ type: "text", text: String(e?.message || e) }], isError: true });
