@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "network": "tiktok",
+  "account": "lucasrosalem4",
+  "custody": {
+    "administrative": "Bitwarden Secrets Manager",
+    "runtime": "GitHub Actions environment",
+    "runtime_has_bws_token": false
+  },
+  "environment": "cortes-tiktok-lucas4",
+  "native_secret_name": "CORTES_TIKTOK_LUCAS4_STORAGE_STATE",
+  "runtime_variable": "TIKTOK_LUCASROSALEM4_STORAGE_STATE",
+  "consumer_workflows": [
+    ".github/workflows/cortes-tiktok-lucasrosalem4-cloud-publisher.yml",
+    ".github/workflows/cortes-tiktok-lucasrosalem4-windows-fallback.yml"
+  ],
+  "provider_metadata_verified": false,
+  "environment_provisioned_verified": false,
+  "repository_or_organization_alias_absence_verified": false,
+  "distinct_principals_positive_negative_verified": false,
+  "escrow_entry_verified": false,
+  "production_migration_status": "prepared_not_deployed",
+  "deployment_authorized": false,
+  "notes": "The native secret must exist only in the protected account environment. No shared BWS or repository credential fallback. Names and source checks are not evidence of provider IAM."
+}
