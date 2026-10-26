@@ -8,6 +8,8 @@ on:
       - 'cloudflare-ara-mcp/src/github-bridge.mjs'
       - 'cloudflare-ara-mcp/src/index.js'
       - 'cloudflare-ara-mcp/src/github-bridge.test.mjs'
+      - 'cloudflare-ara-mcp/src/client-discovery.mjs'
+      - 'cloudflare-ara-mcp/capabilities.test.mjs'
       - '.github/workflows/anthares-claude-code-mcp-deploy.yml'
   workflow_dispatch: {}
 permissions:
@@ -38,6 +40,7 @@ jobs:
           node --check cloudflare-ara-mcp/src/index.js
           node --check cloudflare-ara-mcp/src/claude-code-bridge.mjs
           node --test cloudflare-ara-mcp/src/claude-code-bridge.test.mjs cloudflare-ara-mcp/src/github-bridge.test.mjs cloudflare-ara-mcp/src/claude-client-policy.test.mjs cloudflare-ara-mcp/src/owner-github-auth.test.mjs
+          node cloudflare-ara-mcp/capabilities.test.mjs
           echo ANTHARES_CLAUDE_BRIDGE_REVIEWED_TESTS=PASS
       - name: Verify Cloudflare account and existing auth secrets
         working-directory: cloudflare-ara-mcp
@@ -69,7 +72,7 @@ jobs:
           set -euo pipefail
           # Cloudflare may briefly serve the previous Worker after deploy.
           # Do not treat old-but-healthy OAuth as the new version being ready.
-          expected='.ok == true and .oauth == true and .mcp == true and .oauth_owner_code_mode == "github_owner_identity" and .control_ready == true and .mcp_server_version == "1.1.0" and (.mcp_delegation_tools | type == "array") and ([.mcp_delegation_tools[]] | sort) == (["run_claude_code","get_claude_code_status","get_claude_code_result"] | sort)'
+          expected='.ok == true and .oauth == true and .mcp == true and .oauth_owner_code_mode == "github_owner_identity" and .control_ready == true and .mcp_server_version == "1.2.0" and .discovery_revision == "2026-10-26.1" and (.mcp_delegation_tools | type == "array") and ([.mcp_delegation_tools[]] | sort) == (["run_claude_code","get_claude_code_status","get_claude_code_result"] | sort)'
           confirmed=0
           for i in $(seq 1 12); do
             if curl --fail --silent --show-error --max-time 10 'https://anthares-ara-mcp.anthares1.workers.dev/health' -o "$RUNNER_TEMP/mcp-after.json" && jq -e "$expected" "$RUNNER_TEMP/mcp-after.json" >/dev/null 2>&1; then
