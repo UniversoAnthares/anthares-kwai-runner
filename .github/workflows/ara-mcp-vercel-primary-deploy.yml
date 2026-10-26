@@ -14,7 +14,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: anthares-ara-mcp-oauth-continuity
+  group: anthares-ara-mcp-reviewed-claude-delegation
   cancel-in-progress: false
 jobs:
   validate:
@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           cd cloudflare-ara-mcp
-          npx --yes wrangler@4.43.0 deploy
+          npx --yes wrangler@4.43.0 deploy --keep-vars
       - name: Confirm production OAuth control health
         shell: bash
         run: |
