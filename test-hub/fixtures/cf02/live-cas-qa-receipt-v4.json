@@ -1,1 +1,7 @@
-{"competing_writer": "cf02-provider-qa-only"}
+{
+  "checked_at_utc": "2026-10-26T12:03:10.027524+00:00",
+  "deploy_outcome": "success",
+  "control_version": "cf02-cas-live-qa-synthetic",
+  "control_healthy": true,
+  "cleanup_outcome": "${{ steps.cleanup_legacy.outcome }}"
+}
