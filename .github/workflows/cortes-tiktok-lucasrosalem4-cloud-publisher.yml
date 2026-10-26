@@ -21,13 +21,24 @@ jobs:
     if: github.ref == 'refs/heads/main' && vars.TIKTOK_CODEBERG_PRIMARY != 'true' && (github.event_name != 'schedule' || vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 14
+    environment: cortes-tiktok-lucas4
     env:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: 'utf-8'
       TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: ${{ vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED }}
-      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
     steps:
+      - name: Require dedicated account credential
+        env:
+          TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.CORTES_TIKTOK_LUCAS4_STORAGE_STATE }}
+        run: |
+          python3 - <<'PY'
+          import os
+          if not os.environ.get("TIKTOK_LUCASROSALEM4_STORAGE_STATE", "").strip():
+              raise SystemExit("ACCOUNT_NATIVE_CREDENTIAL_MISSING")
+          PY
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Install isolated cloud browser
         run: |
           python3 -m pip install -q --disable-pip-version-check playwright requests
@@ -46,5 +57,7 @@ jobs:
           node --check infra/neon-cortes-lucasrosalem4/index.mjs
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok_lucas4_cloud.py' -v
       - name: Probe cloud session or publish at most one fenced short
+        env:
+          TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.CORTES_TIKTOK_LUCAS4_STORAGE_STATE }}
         run: |
           python3 -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
