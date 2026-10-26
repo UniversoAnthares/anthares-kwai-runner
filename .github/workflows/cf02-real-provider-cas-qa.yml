@@ -1,0 +1,126 @@
+name: CF02 real GitHub CAS QA (branch only)
+on:
+  push:
+    branches:
+      - evidence/cf02-real-provider-cas-qa-20261026
+    paths:
+      - .github/workflows/cf02-real-provider-cas-qa.yml
+permissions:
+  contents: write
+concurrency:
+  group: anthares-cf02-real-cas-qa
+  cancel-in-progress: false
+jobs:
+  live-cas-qa:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && github.ref_name == 'evidence/cf02-real-provider-cas-qa-20261026'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      CF02_QA_REF: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Force a REAL provider HTTP409 and prove original CAS receipt retry
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, contextlib, io, json, os, pathlib, re, sys, textwrap, urllib.error, urllib.parse, urllib.request
+          from unittest import mock
+
+          REPO="UniversoAnthares/anthares-kwai-runner"
+          BRANCH="evidence/cf02-real-provider-cas-qa-20261026"
+          QA_PATH="test-hub/fixtures/cf02/live-cas-qa-receipt-v4.json"
+          EVIDENCE="test-hub/fixtures/cf02/live-cas-qa-evidence-v4.json"
+          assert os.environ.get("GITHUB_REPOSITORY")==REPO
+          assert os.environ.get("CF02_QA_REF")==BRANCH
+          assert os.environ.get("GITHUB_REF")=="refs/heads/"+BRANCH
+          token=os.environ["GH_TOKEN"]
+          api="https://api.github.com/repos/"+REPO+"/contents/"
+          headers={"Authorization":"Bearer "+token,"Accept":"application/vnd.github+json","User-Agent":"AntharesCF02SafeProviderQA","X-GitHub-Api-Version":"2022-11-28"}
+          real_open=urllib.request.urlopen
+
+          def get(path):
+              req=urllib.request.Request(api+path+"?ref="+urllib.parse.quote(BRANCH,safe=""),headers=headers)
+              with real_open(req,timeout=15) as resp:
+                  return json.load(resp)
+
+          def put(path,data,sha=None):
+              payload={"message":"CF02 provider CAS QA: synthetic receipt only","branch":BRANCH,
+                       "content":base64.b64encode((json.dumps(data,sort_keys=True)+"\n").encode()).decode()}
+              if sha is not None: payload["sha"]=sha
+              req=urllib.request.Request(api+path,data=json.dumps(payload).encode(),headers={**headers,"Content-Type":"application/json"},method="PUT")
+              with real_open(req,timeout=20) as resp:
+                  return json.load(resp)
+
+          # Create a branch-only fixture. Never touch the true .github receipt or main.
+          put(QA_PATH,{"baseline":"cf02-cas-qa-only"})
+          text=pathlib.Path(".github/workflows/cloudflare-central-deploy.yml").read_text(encoding="utf-8")
+          match=re.search(r"(?m)^          python3 - \"\$status\" \"\$health\" <<'PY'\n(.*?)^          PY$",text,re.S|re.M)
+          assert match, "PRODUCTION_RECEIPT_SOURCE_MISSING"
+          code=textwrap.dedent(match.group(1))
+          assert code.count(".github/cloudflare-cortes-status.json")==1, "RECEIPT_PATH_AMBIGUOUS"
+          assert code.count("'branch':'main'")==1, "BRANCH_ANCHOR_AMBIGUOUS"
+          code=code.replace(".github/cloudflare-cortes-status.json",QA_PATH)
+          code=code.replace("'branch':'main'","'branch':os.environ['CF02_QA_REF']")
+          assert code.count("url+'?ref=main'")==1, "QA_SHA_READ_REF_ANCHOR_MISSING"
+          code=code.replace("url+'?ref=main'","url+'?ref='+os.environ['CF02_QA_REF']")
+          assert "for attempt in range(3)" in code, "CAS_FIX_MISSING"
+
+          state={"injected":False,"http409":0,"put_calls":0}
+          def intercept(req,*args,**kwargs):
+              if req.get_method()=="PUT" and req.full_url.startswith(api+QA_PATH):
+                  state["put_calls"]+=1
+                  if not state["injected"]:
+                      state["injected"]=True
+                      original=get(QA_PATH)
+                      # Commit competing content to REAL GitHub immediately after receipt GET.
+                      put(QA_PATH,{"competing_writer":"cf02-provider-qa-only"},sha=original["sha"])
+                  try:
+                      return real_open(req,*args,**kwargs)
+                  except urllib.error.HTTPError as exc:
+                      if exc.code==409: state["http409"]+=1
+                      if exc.code==422:
+                          # Diagnostic only, sanitized GitHub validation metadata; no token.
+                          data=json.loads(exc.read(4096).decode())
+                          print("CF02_PROVIDER_422_MESSAGE="+str(data.get("message",""))[:260],file=sys.stderr)
+                          print("CF02_PROVIDER_422_ERRORS="+str(data.get("errors",""))[:450],file=sys.stderr)
+                      raise
+              return real_open(req,*args,**kwargs)
+
+          output=io.StringIO()
+          with mock.patch.object(urllib.request,"urlopen",side_effect=intercept), \
+               mock.patch.object(sys,"argv",["qa-receipt","success",'{"ok":true,"version":"cf02-cas-live-qa-synthetic"}']), \
+               contextlib.redirect_stdout(output):
+              exec(compile(code,"<original-workflow-receipt>","exec"),{"__name__":"__main__"})
+
+          saved=get(QA_PATH)
+          saved_data=json.loads(base64.b64decode(saved["content"]))
+          assert state["http409"]==1, "REAL_HTTP409_NOT_OBSERVED"
+          assert state["put_calls"]==2, "RETRY_COUNT_WRONG"
+          assert "DEPLOYMENT_RECEIPT_SAVED=20" in output.getvalue(), "RECEIPT_NOT_SAVED"
+          assert saved_data["control_version"]=="cf02-cas-live-qa-synthetic"
+          assert saved_data["deploy_outcome"]=="success"
+          assert saved_data["control_healthy"] is True
+
+          proof={
+              "area":"cf02-github-provider-live-cas-qa",
+              "scope":"isolated-branch-not-production",
+              "branch":BRANCH,
+              "original_workflow_source_sha":os.environ.get("GITHUB_SHA"),
+              "provider_http409_observed":True,
+              "retried_with_fresh_sha":True,
+              "total_original_receipt_put_attempts":state["put_calls"],
+              "original_script_saved":True,
+              "qa_receipt_git_blob_sha":saved["sha"],
+              "cloudflare_deploy":False,
+              "production_receipt_touched":False,
+              "publisher_mutation":False,
+          }
+          put(EVIDENCE,proof)
+          print("CF02_PROVIDER_REAL_HTTP409=1")
+          print("CF02_CAS_RETRY_SAVED=1")
+          print("CF02_QA_BRANCH_ONLY=1")
+          print("CF02_DEPLOY_PERFORMED=0")
+          PY
