@@ -175,7 +175,7 @@ jobs:
           status='${{ steps.deploy_cloudflare.outcome }}'
           health="$(curl -fsS --max-time 12 https://anthares-control.anthares1.workers.dev/health || true)"
           python3 - "$status" "$health" <<'PY'
-          import base64,json,sys,datetime,pathlib,os,urllib.request,urllib.error
+          import base64,json,sys,datetime,pathlib,os,urllib.request,urllib.error,time
           try: h=json.loads(sys.argv[2])
           except Exception: h={}
           d={"checked_at_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),"deploy_outcome":sys.argv[1],"control_version":h.get("version"),"control_healthy":h.get("ok") is True}
@@ -188,10 +188,30 @@ jobs:
           url='https://api.github.com/repos/'+os.environ['GITHUB_REPOSITORY']+'/contents/.github/cloudflare-cortes-status.json'
           headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','User-Agent':'AntharesDeploymentReceipt'}
           body={'message':'Record Cloudflare deployment and actual queue readiness','branch':'main','content':base64.b64encode((json.dumps(d,indent=2)+'\n').encode()).decode()}
-          try:
-            with urllib.request.urlopen(urllib.request.Request(url+'?ref=main',headers=headers)) as r:body['sha']=json.load(r)['sha']
-          except urllib.error.HTTPError as e:
-            if e.code!=404:raise
-          req=urllib.request.Request(url,data=json.dumps(body).encode(),headers={**headers,'Content-Type':'application/json'},method='PUT')
-          with urllib.request.urlopen(req) as r:print('DEPLOYMENT_RECEIPT_SAVED='+str(r.status))
+          # Preserve optimistic concurrency; a parallel agent may update main after GET.
+          # Never assume a 409 is a successful receipt; retry only after fresh readback.
+          receipt_bytes=base64.b64decode(body['content'])
+          saved=False
+          for attempt in range(3):
+            body.pop('sha',None)
+            try:
+              with urllib.request.urlopen(urllib.request.Request(url+'?ref=main',headers=headers),timeout=15) as r:
+                current=json.load(r)
+              body['sha']=current['sha']
+              current_encoded=current.get('content','')
+              if current_encoded and base64.b64decode(current_encoded)==receipt_bytes:
+                print('DEPLOYMENT_RECEIPT_ALREADY_SAVED=1')
+                saved=True
+                break
+            except urllib.error.HTTPError as e:
+              if e.code!=404:raise
+            req=urllib.request.Request(url,data=json.dumps(body).encode(),headers={**headers,'Content-Type':'application/json'},method='PUT')
+            try:
+              with urllib.request.urlopen(req,timeout=20) as r:print('DEPLOYMENT_RECEIPT_SAVED='+str(r.status))
+              saved=True
+              break
+            except urllib.error.HTTPError as e:
+              if e.code!=409 or attempt==2:raise
+              time.sleep(0.5*(attempt+1))
+          if not saved:raise RuntimeError('DEPLOYMENT_RECEIPT_CAS_RETRIES_EXHAUSTED')
           PY
