@@ -1,0 +1,31 @@
+# TikTok lucasrosalem4 — native runtime credential migration
+
+Status: prepared, not deployed. User decision: keep zero cost, use Bitwarden for administrative custody and provider-native credentials for runtime. This changes the former requirement for a Bitwarden machine account per network.
+
+## Source change
+The existing cloud and Windows fallback jobs target `cortes-tiktok-lucas4`. Their existing process variable `TIKTOK_LUCASROSALEM4_STORAGE_STATE` reads only `secrets.CORTES_TIKTOK_LUCAS4_STORAGE_STATE`. The different secret name prevents accidental reuse of the known legacy repository alias when the new credential is absent.
+The source does not prove that the new name is absent at repository/organization scope: an authorized metadata audit must establish that fact. GitHub resolves names across scopes.
+Session material reaches only the credential presence check and publisher step. Checkout, dependency installation and offline tests receive no session variable. Checkout does not persist the Git credential. Triggers, main-branch guards, fencing, concurrency groups and existing OIDC permissions are preserved.
+
+## Required before merge
+1. Authorized administration verifies/provisions the account Environment, restricts deployments to reviewed main, and establishes the required independent approval/identity boundary. An empty automatically created Environment is not acceptable.
+2. The new secret name exists only in that protected Environment, with no repository/organization alias. The account-specific credential is placed in Bitwarden administrative custody under the existing approved project, with issuer, account, consumers and recovery metadata. No BWS token is given to runtime jobs.
+3. Provider identity is confirmed for TikTok lucasrosalem4. Distinct authorized and unauthorized principals prove allowed own-resource and denied cross-network access for secrets, queue, database and deploy. A workflow claiming another environment name is not a negative proof by itself.
+4. Reconcile the native secret name with the unmerged ownership/audit proposal in PR1332. Its legacy credential-name contract must not be treated as production evidence for this new source.
+5. Confirm active runs, writer/leases and uncertain outcomes; no second publisher or test publication is started. A signed/approved release decision must authorize the exact reviewed commit before integration.
+The prior explicit refusals on administrative CLI, credential provisioning, Windows ACL/profile and Neon browser access remain binding. This draft does not retry them or authorize a fallback around them.
+
+## Progressive rollout and rollback
+Read-only provider proof comes first. Integrate only after the requirements above are verified; merging the cloud workflow path can itself trigger the existing main push job. No merge or workflow dispatch was performed for this draft.
+At cutover, change the existing single publishing chain; do not add a parallel schedule. Preserve legacy credentials in controlled recovery custody until the replacement and rollback are validated. Retire old global references only after all consumers and in-flight work are reconciled. No automatic fallback to legacy repository/BWS credentials is allowed.
+Rollback is a reviewed Git revert of the two workflow changes with the previous account credential restored by authorized administration, after checking active jobs and STARTED/UNCERTAIN state. Do not replay a publication to test rollback. Any restored broad credential temporarily reopens the old boundary and requires explicit incident classification.
+
+## Remaining networks
+TikTok must pass the pilot before propagating runtime changes.
+Threads, Instagram, X, Pinterest, LinkedIn, YouTube, Facebook, Kwai and Telegram require their own account/provider inventory, native identity, queue/deploy scope and positive/negative proof; this list is a scope checklist, not proof all are active.
+The existing Buffer API key reaches the account's channels; copies under different names or vault projects do not create channel isolation. Keep existing Buffer services while assessing a provider-supported restricted principal or the already authorized account-specific route. Do not label an account-wide key isolated.
+Bitwarden administrative custody remains separate from runtime identity. Its Free slot limit is not used as a reason to share runtime credentials, create extra free organizations or buy a plan.
+
+## Verification
+Local verification: existing account IAM regression suite 11/11 passed. Both modified YAML files parse; event, permission, concurrency, branch guards, executor labels and timeouts match the baseline. Eight added foreign-reference cases are denied by the existing inspection function, both missing-environment variants remain blocked, and empty/whitespace/synthetic credential-gate cases behave as expected. These are offline checks, not provider IAM proof.
+No new audit workflow, credential access, environment mutation, publishing run, merge, deployment, service shutdown or charge was performed.
