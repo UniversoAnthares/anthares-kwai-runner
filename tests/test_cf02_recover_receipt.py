@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+import urllib.request
 
 SCRIPT = Path(__file__).resolve().parents[1] / "tools" / "cf02_recover_receipt.py"
 spec = importlib.util.spec_from_file_location("cf02_receipt_recovery", SCRIPT)
@@ -75,6 +76,24 @@ class RecoveryEvidenceTests(unittest.TestCase):
         already = {"checked_at_utc": "2026-10-26T09:12:00+00:00",
                    "source_workflow_run_id": cf02.SOURCE_RUN_ID}
         self.assertEqual(cf02.safe_prior_receipt(json.dumps(already), source), "same_source")
+
+    def test_github_token_never_forwards_to_signed_redirect_host(self):
+        req = urllib.request.Request(
+            "https://api.github.com/repos/org/repo/actions/jobs/123/logs",
+            headers={"Authorization": "Bearer TEMP-TEST-TOKEN",
+                     "X-GitHub-Api-Version": "2022-11-28"},
+        )
+        cross = cf02.SafeRedirect().redirect_request(
+            req, None, 302, "Found", {},
+            "https://log-storage.example.net/container/log.txt?sig=SIGNED")
+        self.assertIsNotNone(cross)
+        self.assertIsNone(cross.get_header("Authorization"))
+        self.assertIsNone(cross.get_header("X-GitHub-Api-Version"))
+        self.assertNotIn("TEMP-TEST-TOKEN", repr(cross.headers))
+        same = cf02.SafeRedirect().redirect_request(
+            req, None, 302, "Found", {},
+            "https://api.github.com/repos/org/repo/actions/jobs/123/logs-next")
+        self.assertEqual(same.get_header("Authorization"), "Bearer TEMP-TEST-TOKEN")
 
     def test_receipt_run_is_pinned_and_contains_no_live_queue_mutation(self):
         text = SCRIPT.read_text("utf8")
