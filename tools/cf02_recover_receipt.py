@@ -36,6 +36,23 @@ def require(condition, message):
         raise RuntimeError("CF02_FAIL_CLOSED: " + message)
 
 
+class SafeRedirect(urllib.request.HTTPRedirectHandler):
+    """Never forward the short-lived GitHub bearer token to a log-blob host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None:
+            old_origin = urllib.parse.urlsplit(req.full_url).netloc.lower()
+            new_origin = urllib.parse.urlsplit(newurl).netloc.lower()
+            if new_origin != old_origin:
+                for name in ("Authorization", "X-GitHub-Api-Version"):
+                    redirected.remove_header(name)
+        return redirected
+
+
+HTTP_OPENER = urllib.request.build_opener(SafeRedirect())
+
+
 def request(url, token=None, method="GET", payload=None, timeout=20):
     headers = {"User-Agent": "AntharesCF02HistoricalReceiptRecovery",
                "Accept": "application/vnd.github+json"}
@@ -46,7 +63,7 @@ def request(url, token=None, method="GET", payload=None, timeout=20):
     if payload is not None:
         data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         headers["Content-Type"] = "application/json"
-    return urllib.request.urlopen(
+    return HTTP_OPENER.open(
         urllib.request.Request(url, headers=headers, data=data, method=method),
         timeout=timeout,
     )
@@ -170,16 +187,21 @@ def main():
     require(bool(token), "github_token_missing")
     base = "https://api.github.com/repos/" + REPOSITORY
     run = api_json(base + "/actions/runs/" + str(SOURCE_RUN_ID), token)
+    print("CF02_ORIGINAL_RUN_API_READ_OK=1", flush=True)
     jobs = api_json(base + "/actions/runs/" + str(SOURCE_RUN_ID) +
                     "/jobs?per_page=100", token).get("jobs", [])
+    print("CF02_ORIGINAL_JOBS_API_READ_OK=1", flush=True)
     job = next((j for j in jobs if j.get("name") == "deploy"), None)
     require(job is not None and isinstance(job.get("id"), int), "original_job_id_missing")
     with request(base + "/actions/jobs/" + str(job["id"]) + "/logs", token,
                  timeout=25) as response:
         log_text = response.read().decode("utf-8", errors="replace")
+    print("CF02_ORIGINAL_LOGS_FETCHED_OK=1", flush=True)
     evidence = verify_original(run, jobs, log_text)
+    print("CF02_ORIGINAL_DEPLOY_EVIDENCE_OK=1", flush=True)
     with request(HEALTH_URL, timeout=15) as response:
         health = verify_live_health(json.load(response))
+    print("CF02_CURRENT_PRODUCTION_HEALTH_OK=1", flush=True)
     receipt = {
         "checked_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
         "deploy_outcome": "success",
