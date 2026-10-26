@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-21-gitlab-standby-restored-codeberg-source-gate-r21",
+  "revision": "2026-10-26-bitrise-staged-appveyor-penultimate-failclosed",
   "provider_status_source": "ci-hub/provider-status.json",
   "continuity_policy": "ci-hub/CONTINUITY.md",
   "regression_check_required_each_round": true,
@@ -71,7 +71,7 @@
     "canonical_session_authority": "https://anthares-x-vault.anthares1.workers.dev/browser-state/runtime",
     "notes": {
       "github_actions_public_chromium": "READY PRIMARY: run 38841592885 passed the shared runtime proof with health/readiness, control auth, CDP loopback, interaction, screenshot, noVNC and persistent profile restart",
-      "appveyor_linux_chromium": "READY SECONDARY: build 54907970 job bw7eb3k0ts0d94c3 passed the same shared proof; duplicate AppVeyor project independently reproduced it but is not counted as a distinct provider",
+      "appveyor_linux_chromium": "Historic shared proof 54907970 remains valid as history; fresh attempts on 2026-10-26 returned HTTP 500 before build creation. This backend is not currently eligible; preserve it for future recovery.",
       "anthares_browser_persistent_runtime": "DEGRADED on Northflank: generic service/Postgres/vault health is live but browser Chromium persistence/readiness remains unproven and is therefore third priority/ineligible until fresh proof",
       "cloudflare_browser_rendering": "BLOCKED_QUOTA and not selectable",
       "browserless": "RETIRED and superseded by Anthares Browser",
@@ -82,21 +82,29 @@
   "ci_execution": {
     "priority": [
       "github_actions_public",
-      "appveyor",
       "harness",
       "floot",
       "cloudflare_workers_builds",
       "github_actions_private",
       "codeberg_actions",
+      "bitrise",
+      "appveyor",
       "gitlab_ci"
     ],
-    "selection_rule": "All providers remain candidates in the ordered routing list. Select only a provider with a fresh successful execution probe and credentials. Quota-blocked GitLab CI is skipped temporarily and automatically eligible when a new hosted pipeline runs successfully. Codeberg is preferred as a verified Git source; Codeberg Actions requires enabling the repository unit, a runner and proven secret/queue authentication before executing LinkedIn publications.",
+    "selection_rule": "All providers remain candidates in the ordered routing list; only fresh authenticated successful execution proof and current capability can mark them eligible. Skip blocked, quota-exceeded, or HTTP 500 providers and continue to the next candidate before any side effects. Never retry a request with uncertain effects or re-dispatch a job after publication started; reconcile durable job ID and fencing first.",
     "quota_policy": "BLOCKED_QUOTA providers are ineligible until fresh successful proof",
     "runner_allocation_health": {
       "github_actions_public": "DEGRADED_CURRENT_REPO_BACKLOG_20261021",
-      "appveyor": "DEGRADED_CURRENT_QUEUE_20261021",
+      "appveyor": "BLOCKED_HTTP500_BUILD_CREATION_20261026",
       "codeberg_actions": "NOT_CONFIGURED_REPOSITORY_ACTIONS_DISABLED",
-      "gitlab_ci": "BLOCKED_QUOTA_TEMPORARY_AUTOMATIC_RECHECK"
+      "gitlab_ci": "BLOCKED_QUOTA_TEMPORARY_AUTOMATIC_RECHECK",
+      "bitrise": "UNVERIFIED_AUTH_SOURCE_AND_FREE_QUOTA_20261026"
+    },
+    "appveyor_routing_policy": {
+      "rank": "penultimate",
+      "on_confirmed_http_500": "skip_to_next_eligible_provider",
+      "on_ambiguous_dispatch": "reconcile_before_retry",
+      "preserve_project": true
     }
   },
   "retired": {
@@ -215,8 +223,8 @@
     },
     "appveyor_linux_chromium": {
       "active": true,
-      "browser_backend_eligible": true,
-      "status": "READY_SECONDARY_build_54907970_job_bw7eb3k0ts0d94c3"
+      "browser_backend_eligible": false,
+      "status": "HISTORIC_PROOF_CURRENT_BUILD_CREATION_HTTP500_20261026"
     },
     "anthares_browser_persistent_runtime": {
       "active": false,
@@ -231,8 +239,9 @@
     },
     "appveyor": {
       "active": true,
-      "status": "READY_WITH_LINUX_BROWSER_PROOF",
-      "ci_eligible": true
+      "status": "STANDBY_BLOCKED_HTTP500_NEW_BUILD_20261026",
+      "ci_eligible": false,
+      "reopen_condition": "New authenticated AppVeyor build creation and hosted job succeeds"
     },
     "github_actions_private": {
       "active": false,
@@ -323,6 +332,15 @@
       "status": "READABLE_STALE_MAIN_20_COMMITS_AT_AUDIT",
       "source_eligible": false,
       "role": "git_recovery_after_sha_parity"
+    },
+    "bitrise": {
+      "active": false,
+      "status": "STANDBY_PENDING_AUTH_REPO_CONFIG_AND_LIVE_FREE_PROOF",
+      "ci_eligible": false,
+      "role": "hosted_ci_candidate",
+      "config": "bitrise.yml",
+      "smoke_workflow": "anthares_ci_smoke",
+      "reopen_condition": "Bitrise API authenticated; repo bitrise.yml is the effective source; Hobby free credits available without billing; a new smoke workflow run completes with matching SOURCE_SHA"
     }
   },
   "git_redundancy": {
