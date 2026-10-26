@@ -3,7 +3,7 @@ STATUS: PARTIAL
 AREA: wordpress
 DATE: 2026-10-26
 RUN: https://github.com/UniversoAnthares/anthares-wordpress/actions/runs/40321864247
-JOB: 121568536168 (manifest) / 121568536096 (home22, consultar o run para job canônico)
+JOB: 121568534169 (Home22) / 121568536168 (manifest)
 COMMIT: 518e7595f2b2f39873f274fbb3855969f9424622
 SUPERSEDES: test-hub/findings/20261026-0801-lease-wordpress-home22-genre-editor.md
 
