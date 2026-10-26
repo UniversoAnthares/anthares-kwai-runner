@@ -1,9 +1,26 @@
 {
-  "checked_at_utc": "2026-10-19T23:45:51.943051+00:00",
+  "checked_at_utc": "2026-10-26T13:23:51.5719939Z",
   "deploy_outcome": "success",
   "control_version": "2026-10-17-physical-android-v18",
   "control_healthy": true,
   "cleanup_outcome": "success",
   "queue_error": null,
-  "removed_count": 0
+  "removed_count": 0,
+  "receipt_mode": "verified_historical_recovery",
+  "source_workflow_run_id": 40283336472,
+  "source_workflow_run_url": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40283336472",
+  "source_job_id": 121441273566,
+  "source_head_sha": "26ae1bdb3ba1095ab8b0230893134053804b4709",
+  "source_run_conclusion": "failure_only_in_receipt_step",
+  "source_receipt_error": "HTTP409_conflict",
+  "protected_count_at_source": 6,
+  "live_health_observed_at": "2026-10-26T13:23:51.244Z",
+  "live_health_persistent_state": true,
+  "live_health_queue_bound": true,
+  "live_health_pc_fallback": false,
+  "evidence_reverified_in_github_action_run_id": 40329764097,
+  "receipt_recorded_via": "reviewed_github_pull_request",
+  "cloudflare_deploy_in_recovery": false,
+  "queue_mutation_in_recovery": false,
+  "current_queue_states_verified": false
 }
