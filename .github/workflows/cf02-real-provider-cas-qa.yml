@@ -31,8 +31,8 @@ jobs:
 
           REPO="UniversoAnthares/anthares-kwai-runner"
           BRANCH="evidence/cf02-real-provider-cas-qa-20261026"
-          QA_PATH="test-hub/fixtures/cf02/live-cas-qa-receipt-v2.json"
-          EVIDENCE="test-hub/fixtures/cf02/live-cas-qa-evidence-v2.json"
+          QA_PATH="test-hub/fixtures/cf02/live-cas-qa-receipt-v3.json"
+          EVIDENCE="test-hub/fixtures/cf02/live-cas-qa-evidence-v3.json"
           assert os.environ.get("GITHUB_REPOSITORY")==REPO
           assert os.environ.get("CF02_QA_REF")==BRANCH
           assert os.environ.get("GITHUB_REF")=="refs/heads/"+BRANCH
@@ -82,8 +82,8 @@ jobs:
                       if exc.code==422:
                           # Diagnostic only, sanitized GitHub validation metadata; no token.
                           data=json.loads(exc.read(4096).decode())
-                          print("CF02_PROVIDER_422_MESSAGE="+str(data.get("message",""))[:260])
-                          print("CF02_PROVIDER_422_ERRORS="+str(data.get("errors",""))[:450])
+                          print("CF02_PROVIDER_422_MESSAGE="+str(data.get("message",""))[:260],file=sys.stderr)
+                          print("CF02_PROVIDER_422_ERRORS="+str(data.get("errors",""))[:450],file=sys.stderr)
                       raise
               return real_open(req,*args,**kwargs)
 
