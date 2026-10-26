@@ -54,7 +54,11 @@ export async function finishOwnerGithub(req,env,h) {
   if(!p || !u.searchParams.get('state') || u.searchParams.get('state')!==p.nonce)return fail('owner_state_invalid',403);
   if(!await h.pending(env,p.tx))return fail('authorization_expired');
   if(u.searchParams.has('error') || !u.searchParams.get('code'))return fail('owner_authorization_denied',403);
-  if(!await h.state(env).consume('oauth_owner_callback',p.nonce,Math.floor(p.exp/1000)))return fail('owner_callback_replayed',409);
+  // A replay is a confirmed duplicate; a failed replay-store request remains retryable.
+  let callbackConsumed;
+  try { callbackConsumed=await h.state(env).consume('oauth_owner_callback',p.nonce,Math.floor(p.exp/1000)); }
+  catch { return fail('owner_control_unavailable',503); }
+  if(!callbackConsumed)return fail('owner_callback_replayed',409);
   let access='',stage='provider_token';
   try {
     const r=await githubFetch('https://github.com/login/oauth/access_token',{method:'POST',

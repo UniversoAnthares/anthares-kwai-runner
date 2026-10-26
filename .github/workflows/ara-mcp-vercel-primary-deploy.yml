@@ -1,34 +1,51 @@
-name: ARA MCP Vercel Primary Deploy
+name: ARA MCP OAuth Continuity Deploy
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'cloudflare-ara-mcp/src/**'
+      - '.github/workflows/ara-mcp-vercel-primary-deploy.yml'
   push:
     branches: [main]
     paths:
-      - 'cloudflare-ara-mcp/patch_vercel_primary.py'
+      - 'cloudflare-ara-mcp/src/**'
+      - 'cloudflare-ara-mcp/wrangler.toml'
       - '.github/workflows/ara-mcp-vercel-primary-deploy.yml'
 permissions:
   contents: read
 concurrency:
-  group: anthares-ara-mcp-vercel-primary
-  cancel-in-progress: true
+  group: anthares-ara-mcp-oauth-continuity
+  cancel-in-progress: false
 jobs:
-  deploy:
+  validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Patch MCP ingress to Vercel/Neon primary
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate OAuth, replay protection and control failover
         shell: bash
         run: |
           set -euo pipefail
-          python3 cloudflare-ara-mcp/patch_vercel_primary.py
           node --check cloudflare-ara-mcp/src/index.js
-          grep -q "const CONTROL='https://anthares-ara-vercel-reserve.vercel.app'" cloudflare-ara-mcp/src/index.js
-          grep -q "consumeViaControl(env,'authorization_code'" cloudflare-ara-mcp/src/index.js
-          grep -q "consumeViaControl(env,'refresh_token'" cloudflare-ara-mcp/src/index.js
-          ! grep -q "st(env).consume('refresh_token'" cloudflare-ara-mcp/src/index.js
-          echo 'ARA_MCP_PATCH_VALID=1'
-      - name: Deploy compatibility ingress without replacing Durable Object identity
+          node --check cloudflare-ara-mcp/src/owner-github-auth.mjs
+          node --test --test-concurrency=1 cloudflare-ara-mcp/src/owner-github-auth.test.mjs
+          grep -q 'CONTROL_STANDBY' cloudflare-ara-mcp/src/index.js
+          grep -q 'owner_control_unavailable' cloudflare-ara-mcp/src/owner-github-auth.mjs
+          echo 'ARA_OAUTH_CONTINUITY_TESTS_PASSED=1'
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Deploy tested Cloudflare Worker
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -38,14 +55,11 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           cd cloudflare-ara-mcp
           npx --yes wrangler@4.43.0 deploy
-          echo 'ARA_MCP_DEPLOY_OK=1'
-      - name: Verify ingress and Vercel control target
+      - name: Confirm production OAuth control health
         shell: bash
         run: |
           set -euo pipefail
-          sleep 2
-          code="$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 20 https://anthares-ara-mcp.anthares1.workers.dev/health || true)"
-          cat /tmp/health.json || true
-          test "$code" = "200" || test "$code" = "503"
-          grep -q 'anthares-ara-vercel-reserve.vercel.app' /tmp/health.json
-          echo 'ARA_MCP_INGRESS_REACHABLE=1'
+          curl --fail --silent --show-error --max-time 20 --retry 3 --retry-delay 2 \
+            https://anthares-ara-mcp.anthares1.workers.dev/ -o /tmp/ara-health.json
+          node -e 'const h=require("/tmp/ara-health.json");if(!h.ok||!h.control_ready||!h.oauth||!h.mcp)process.exit(1);'
+          echo 'ARA_MCP_OAUTH_PRODUCTION_READY=1'

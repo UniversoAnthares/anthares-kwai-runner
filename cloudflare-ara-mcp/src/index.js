@@ -11,6 +11,7 @@ import { ownerGithubConfigured, startOwnerGithub, finishOwnerGithub } from "./ow
 import { CLIENT_INSTRUCTIONS, DISCOVERY_REVISION, clientDiscovery } from "./client-discovery.mjs";
 var ORIGIN = "https://anthares-ara-mcp.anthares1.workers.dev";
 var CONTROL = "https://anthares-ara-vercel-reserve.vercel.app";
+var CONTROL_STANDBY = "https://anthares-ara-vercel-reserve-lucasyahn-6808.vercel.app";
 var DEFAULT_DEVICE = "DESKTOP-FTDK0HP";
 var FALLBACK_DEVICE = "DESKTOP-FTDK0HP-SYSTEM";
 var SCOPES = /* @__PURE__ */ new Set(["ara.read", "ara.write", "github.read", "github.write"]);
@@ -267,14 +268,35 @@ ${raw}`;
 };
 async function control(env, path, { method = "GET", body, timeoutMs = 3e4 } = {}) {
   const raw = body === void 0 ? "" : JSON.stringify(body);
-  const sig = await st(env).signControl(method, path, raw);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(CONTROL + path, { method, headers: { "content-type": "application/json", "x-ara-timestamp": sig.timestamp, "x-ara-signature": sig.signature, "x-ara-signer": "anthares-remote-mcp" }, body: body === void 0 ? void 0 : raw, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
+  const origins = [CONTROL, CONTROL_STANDBY];
+  let lastError;
+  for (let i = 0; i < origins.length; i++) {
+    const sig = await st(env).signControl(method, path, raw);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.max(4000, Math.min(timeoutMs, 15000)));
+    try {
+      const response = await fetch(origins[i] + path, {
+        method,
+        headers: { "content-type": "application/json", "x-ara-timestamp": sig.timestamp, "x-ara-signature": sig.signature, "x-ara-signer": "anthares-remote-mcp" },
+        body: body === void 0 ? void 0 : raw,
+        signal: controller.signal
+      });
+      const retryable = response.status === 404 || response.status === 429 || response.status >= 500;
+      if (i === 0 && retryable) {
+        lastError = new Error("primary_control_http_" + response.status);
+        try { await response.body?.cancel(); } catch {}
+        continue;
+      }
+      if (i === 1) console.info("ara_control_standby_used route=" + path.split("?")[0]);
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (i + 1 === origins.length) throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw lastError || new Error("control_unavailable");
 }
 __name(control, "control");
 async function controlJson(env, path, opts) {
@@ -292,9 +314,12 @@ async function controlJson(env, path, opts) {
 __name(controlJson, "controlJson");
 async function consumeViaControl(env, kind, jti, exp) {
   try {
-    await controlJson(env, "/v1/mcp/oauth/consume", { method: "POST", body: { kind, issuer: ORIGIN, jti, exp } });
+    const r = await control(env, "/v1/mcp/oauth/consume", { method: "POST", body: { kind, issuer: ORIGIN, jti, exp } });
+    if (r.status === 409) return false;
+    if (!r.ok) throw new Error("replay_backend_http_" + r.status);
     return true;
   } catch {
+    if (kind === "oauth_owner_callback") throw new Error("owner_replay_store_unavailable");
     return false;
   }
 }
