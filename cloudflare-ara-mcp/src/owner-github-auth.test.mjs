@@ -18,10 +18,12 @@ function sign(p){const b=Buffer.from(JSON.stringify(p)).toString('base64url');re
 function form(path,values,headers={}){return new Request(origin+path,{method:'POST',headers:{origin,'content-type':'application/x-www-form-urlencoded',...headers},body:new URLSearchParams(values)});}
 const verifier='V'.repeat(64),challenge=createHash('sha256').update(verifier).digest('base64url');
 let used=new Set(),owner='81930373',ghChallenge='',ghVerifier='',providerCalls=0;
+let simulateControlFailures=0;
 const oldFetch=globalThis.fetch;
 globalThis.fetch=async(url,init={})=>{
  const u=new URL(url);
  if(u.pathname==='/v1/mcp/oauth/consume'){
+  if(simulateControlFailures>0){simulateControlFailures--;return Response.json({error:'database_unavailable'},{status:503});}
   const p=JSON.parse(init.body),key=p.kind+':'+p.jti;
   if(used.has(key))return Response.json({error:'replay'},{status:409});
   used.add(key);return Response.json({ok:true});
@@ -129,4 +131,23 @@ test('fixed test runner requires github.write and does not grant unrestricted re
  const access=sign({typ:'access',iss:origin,aud:origin,exp:now+600,cid,sub:'anthares-owner',scp:['ara.read']});
  const r=await worker.fetch(new Request(origin+'/mcp',{method:'POST',headers:{authorization:'Bearer '+access},body:JSON.stringify({jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'run_tests',arguments:{suite:'mcp-regression',request_id:'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'}}})}),env);
  assert.equal((await r.json()).error.message,'insufficient_scope');
+});
+
+
+test('OAuth owner callback transparently uses standby control alias on primary 503',async()=>{
+ const p=await pending(),a=await begin(p.tx);
+ simulateControlFailures=1;
+ const r=await callback(a);assert.equal(r.status,302);
+ assert.equal((await callback(a)).status,409);
+});
+
+test('two unavailable controllers return 503 and allow safe OAuth retry',async()=>{
+ const p=await pending(),a=await begin(p.tx);
+ const providerBefore=providerCalls;
+ simulateControlFailures=2;
+ const r=await callback(a);assert.equal(r.status,503);
+ assert.equal((await r.json()).error,'owner_control_unavailable');
+ assert.equal(providerCalls,providerBefore);
+ const recovered=await callback(a);assert.equal(recovered.status,302);
+ assert.equal((await callback(a)).status,409);
 });
