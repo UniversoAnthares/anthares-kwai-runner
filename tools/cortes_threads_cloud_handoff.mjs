@@ -81,10 +81,10 @@ async function choose(jwt,publish){
  for(const row of queue.slice(0,60)){
   const candidate=byId.get(row.id);
   if(!candidate){
-   if(publish){
-    const v=await callControl(jwt,'quarantine',{id:row.id,reason:'MEDIA_INVALID'});
-    if(v.first_notice)await notifyQA(row.id,'MEDIA_INVALID');
-   }
+   // The WordPress media index is paginated and capped by fetchCloudManifest.
+   // Absence from this index does not prove that the media URL is invalid.
+   // Never quarantine or discard a valid Neon identity solely on a page miss.
+   console.log('THREADS_CLIP_NOT_IN_PAGED_MANIFEST='+JSON.stringify({id:row.id,source_day:row.source_day}));
    rejected++;continue;
   }
   const {day,...clip}=candidate;
