@@ -11,7 +11,7 @@ $QuotaCodes=@('ci_quota_exceeded','quota_exceeded','quota_exhausted',
  'insufficient_quota','resource_exhausted','billing_hard_limit_reached',
  'credits_exhausted','usage_limit_reached','monthly_quota_exceeded','daily_quota_exceeded')
 $Status=[ordered]@{ observed_utc=(Get-Date).ToUniversalTime().ToString('o')
-    machine=$env:COMPUTERNAME; auth='UNKNOWN'; controller='UNKNOWN'; appveyor='NOT_CONFIGURED'
+    machine=$env:COMPUTERNAME; auth='UNKNOWN'; controller='UNKNOWN'; credential_import='NOT_ATTEMPTED'; appveyor='NOT_CONFIGURED'
     bitrise='NOT_CONFIGURED'; events_claimed=0; remote_cancellations_confirmed=0; remote_terminal_confirmed=0
     uncertain=0; fallback_dispatched=$false }
 $mutex=New-Object System.Threading.Mutex($false,'Global\AntharesCiQuotaCancelStandby')
@@ -70,7 +70,7 @@ function Recent($obj){
         return $seconds -ge 0 -and $seconds -le 5400
     }catch{return $false}
 }
-function SignedLedger($body,[string]$key) {
+function SignedLedger($body,[string]$key,[string]$Endpoint=$Controller) {
     $fields=@('phase','provider','target','sha','code','owner_token','outcome')
     $stamp=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
     $parts=@($stamp)
@@ -89,8 +89,52 @@ function SignedLedger($body,[string]$key) {
     }finally{$rsa.Dispose()}
     $headers=@{'X-Anthares-Device'='DESKTOP-FTDK0HP'
         'X-Anthares-Timestamp'=$stamp;'X-Anthares-Signature'=$signature}
-    Invoke-RestMethod -Uri $Controller -Method Post -Headers $headers -TimeoutSec 18 `
+    Invoke-RestMethod -Uri $Endpoint -Method Post -Headers $headers -TimeoutSec 18 `
       -ContentType 'application/json' -Body ($body|ConvertTo-Json -Compress -Depth 5)
+}
+function ImportSealedAppVeyor([string]$privateKey) {
+    $file=Join-Path $SecretDir 'ci-quota-appveyor-token.dpapi'
+    if(Test-Path -LiteralPath $file){return 'ALREADY_PROVISIONED'}
+    $endpoint='https://anthares-ci-quota-controller.vercel.app/api/credential-bridge'
+    try {
+        $wrapped=SignedLedger @{phase='consume';provider='appveyor'} $privateKey $endpoint
+    }catch{
+        if($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404){
+            return 'NO_PENDING_TRANSFER'
+        }
+        return 'BRIDGE_UNAVAILABLE'
+    }
+    if((Property $wrapped 'code') -ne 'SEALED_CONSUMED'){return 'INVALID_TRANSFER_RECEIPT'}
+    $bytes=$null
+    $plain=$null
+    $rsa=New-Object System.Security.Cryptography.RSACryptoServiceProvider
+    try{
+        $rsa.PersistKeyInCsp=$false
+        $rsa.FromXmlString($privateKey)
+        $sealed=[Convert]::FromBase64String([string](Property $wrapped 'sealed'))
+        if($sealed.Length -ne 384){throw 'INVALID_ENVELOPE_LENGTH'}
+        $bytes=$rsa.Decrypt($sealed,$true)
+        $plain=[Text.Encoding]::UTF8.GetString($bytes)
+        if($plain.Length -lt 12 -or $plain.Length -gt 340 -or
+           $plain -match '[\r\n]'){throw 'INVALID_SECRET_SHAPE'}
+        $doc=CallProvider 'https://ci.appveyor.com/api/projects/UniversoAnthares/anthares-kwai-runner' $plain 'appveyor'
+        $project=Property $doc 'project'
+        if((Property $project 'slug') -ne 'anthares-kwai-runner' -or
+           (Property $project 'accountName') -ne 'UniversoAnthares' -or
+           (Property $project 'repositoryName') -ne $Repo){throw 'SOURCE_NOT_OWNED'}
+        $enc=($plain|ConvertTo-SecureString -AsPlainText -Force|ConvertFrom-SecureString)
+        $enc|Set-Content -LiteralPath $file -Encoding ASCII
+        & icacls.exe $file /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' |Out-Null
+        if($LASTEXITCODE -ne 0){throw 'ACL_UNVERIFIED'}
+        return 'IMPORT_VERIFIED_AND_DPAPI_PROTECTED'
+    }catch{
+        if(Test-Path $file){Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue}
+        return 'IMPORT_FAILED_AFTER_CONSUME'
+    }finally{
+        if($null -ne $bytes){[Array]::Clear($bytes,0,$bytes.Length)}
+        $plain=$null
+        $rsa.Dispose()
+    }
 }
 function Terminal($e,$obj) {
     if($e.provider -eq 'appveyor'){
@@ -250,6 +294,7 @@ try {
         $Status.controller='AUTH_OR_LEDGER_UNAVAILABLE'
         return
     }
+    $Status.credential_import=ImportSealedAppVeyor $privateKey
     try{$Status.appveyor=AppVeyor $config (Secret 'ci-quota-appveyor-token.dpapi') $privateKey}
     catch{$Status.appveyor='SOURCE_UNAVAILABLE'}
     try{$Status.bitrise=Bitrise $config (Secret 'ci-quota-bitrise-token.dpapi') $privateKey}
