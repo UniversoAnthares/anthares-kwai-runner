@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   promote:
-    if: ${{ vars.TIKTOK_CODEBERG_PRIMARY == 'true' }}
+    if: ${{ github.event_name == 'push' || vars.TIKTOK_CODEBERG_PRIMARY == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     env:
