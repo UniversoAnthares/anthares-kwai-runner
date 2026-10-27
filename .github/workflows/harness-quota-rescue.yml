@@ -1,0 +1,88 @@
+name: Harness quota — fenced GitHub CI reserve
+run-name: harness-quota-rescue-${{ inputs.source_sha }}-${{ inputs.harness_execution_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact Git commit of the quota-terminated Harness CI pipeline
+        required: true
+        type: string
+      harness_execution_id:
+        description: Exact owned Harness execution (fenced in Neon before dispatch)
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: harness-quota-rescue-${{ inputs.harness_execution_id }}
+  cancel-in-progress: false
+jobs:
+  build-and-test-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Validate immutable identity inputs
+        env:
+          SHA: ${{ inputs.source_sha }}
+          EXEC: ${{ inputs.harness_execution_id }}
+        shell: bash
+        run: |
+          [[ "$SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          [[ "$EXEC" =~ ^[A-Za-z0-9_-]{16,64}$ ]] || exit 2
+      - name: Checkout reviewed OIDC receipt client
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout exact source revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: source
+          persist-credentials: false
+      - name: Verify checked-out SHA and side-effect-free Harness source
+        env:
+          SHA: ${{ inputs.source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "$SHA"
+          test "$(git hash-object source/.harness/orgs/default/projects/default_project/pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d.yaml)" = "bdbbd74b693d2f9fdd6c08b94cc03d8921ebce18"
+          echo "HARNESS_FALLBACK_PINNED_READONLY_CI=PASS"
+      - name: Acquire exclusively fenced CI successor slot
+        env:
+          SHA: ${{ inputs.source_sha }}
+          EXEC: ${{ inputs.harness_execution_id }}
+        shell: bash
+        run: python3 tools/harness_fallback_receipt.py start "$SHA" "$EXEC"
+      - name: Harness equivalent Python syntax and quota tests
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q tests
+          python3 -m unittest -v \
+            tests.test_ci_quota_cancel_first \
+            tests.test_ci_quota_neon_ledger \
+            tests.test_ci_quota_provider_adapters \
+            tests.test_ci_quota_harness_fenced_integration \
+            tests.test_ci_quota_harness_watcher
+          node tests/test_ci_quota_harness_controller.mjs
+      - name: Harness equivalent publisher contract tests (mocked; no publishing)
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          for case in happy renew-then-publish stale-start stale-renew stale-complete \
+            crash-before-start uncertain-no-republish confirmed-idempotent \
+            generation-rotates duplicate-publisher-boundary
+          do
+            python3 tests/test_control_publisher_integration_final.py "$case"
+          done
+          echo "HARNESS_FALLBACK_EQUIVALENT_CI=PASS"
+      - name: Record exclusive success receipt
+        env:
+          SHA: ${{ inputs.source_sha }}
+          EXEC: ${{ inputs.harness_execution_id }}
+        shell: bash
+        run: python3 tools/harness_fallback_receipt.py finish "$SHA" "$EXEC"

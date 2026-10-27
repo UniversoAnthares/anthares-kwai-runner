@@ -127,7 +127,7 @@ def structured_quota(detail, execution_id):
 
 
 def check_and_cancel(execution_id, sha, api, oidc, *, controller=ledger,
-                     sleep=time.sleep):
+                     sleep=time.sleep, on_terminal=None):
     """Only an exact owned, active execution with a structured quota signal.
 
     The claim precedes PUT AbortAll. On any uncertain status, do not retry
@@ -170,7 +170,88 @@ def check_and_cancel(execution_id, sha, api, oidc, *, controller=ledger,
             "owner_token": claimed["owner_token"], "outcome": result})
     except (HTTPError, URLError, OSError, ValueError):
         return "NEON_REPORT_UNCERTAIN"
-    return result if report.get("code") == "RECORDED" else "NEON_REPORT_UNCERTAIN"
+    if report.get("code") != "RECORDED":
+        return "NEON_REPORT_UNCERTAIN"
+    if result == "CANCELLED_NO_INDEPENDENT_RESERVE" and on_terminal:
+        try:
+            return on_terminal(oidc, base, claimed["owner_token"])
+        except (HTTPError, URLError, OSError, ValueError):
+            return "FALLBACK_UNCERTAIN"
+    return result
+
+
+# This is an exact source-code allowlist, not a generic CI-to-publisher route.
+# This Harness stage only compiles/tests and never publishes or deploys.
+PINNED_PIPELINE_BLOB = "bdbbd74b693d2f9fdd6c08b94cc03d8921ebce18"
+PINNED_PIPELINE_PATH = (".harness/orgs/default/projects/default_project/"
+    "pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d.yaml")
+FALLBACK_WORKFLOW = "harness-quota-rescue.yml"
+
+
+def read_only_pipeline_verified(sha: str, github_token: str, reader=get_json) -> bool:
+    """Prove source revision carries the reviewed no-publication Harness stage."""
+    if not SHA.fullmatch(sha) or not github_token:
+        return False
+    url = ("https://api.github.com/repos/" + REPO + "/contents/" +
+           PINNED_PIPELINE_PATH + "?ref=" + quote(sha, safe=""))
+    try:
+        doc = reader(url, github_token)
+        return (isinstance(doc, dict) and doc.get("type") == "file" and
+                doc.get("sha") == PINNED_PIPELINE_BLOB)
+    except (HTTPError, URLError, OSError, ValueError):
+        return False
+
+
+def dispatch_one_pinned_ci(sha: str, execution_id: str, github_token: str,
+                           *, request=None) -> bool:
+    """Single GitHub dispatch attempt; an ambiguous response is never retried."""
+    if not (SHA.fullmatch(sha) and re.fullmatch(r"[A-Za-z0-9_-]{16,64}", execution_id)
+            and github_token):
+        return False
+    from urllib.request import Request, urlopen
+    url = ("https://api.github.com/repos/" + REPO + "/actions/workflows/" +
+           FALLBACK_WORKFLOW + "/dispatches")
+    payload = json.dumps({"ref": "main", "inputs": {
+        "source_sha": sha, "harness_execution_id": execution_id}}).encode()
+    headers = {"Authorization": "Bearer " + github_token,
+               "Accept": "application/vnd.github+json",
+               "X-GitHub-Api-Version": "2022-11-28",
+               "Content-Type": "application/json"}
+    if request:
+        return request(url, payload, headers) == 204
+    with urlopen(Request(url, data=payload, headers=headers, method="POST"),
+                 timeout=12) as response:
+        return response.status == 204
+
+
+def fenced_harness_fallback(oidc, event, owner_token, github_token, *,
+                            controller=ledger, reader=get_json,
+                            dispatch=dispatch_one_pinned_ci):
+    """Reserve BEFORE one dispatch, acknowledge AFTER HTTP 204, never retry."""
+    execution_id, sha = event["target"], event["sha"]
+    if not read_only_pipeline_verified(sha, github_token, reader):
+        return "CANCELLED_NO_INDEPENDENT_RESERVE"
+    fields = {**event, "owner_token": owner_token,
+              "pipeline_blob": PINNED_PIPELINE_BLOB}
+    try:
+        reserved = controller(oidc, {"phase": "reserve", **fields})
+    except (HTTPError, URLError, OSError, ValueError):
+        return "FALLBACK_RESERVE_UNCERTAIN"
+    if reserved.get("code") != "FALLBACK_RESERVED":
+        return "FALLBACK_RESERVE_REJECTED"
+    try:
+        accepted = dispatch(sha, execution_id, github_token)
+    except (HTTPError, URLError, OSError, ValueError):
+        return "FALLBACK_SUBMISSION_UNCERTAIN"
+    if not accepted:
+        return "FALLBACK_SUBMISSION_UNCERTAIN"
+    try:
+        receipt = controller(oidc, {"phase": "ack", **fields,
+                                    "dispatch_status": "204"})
+    except (HTTPError, URLError, OSError, ValueError):
+        return "FALLBACK_ACK_UNCERTAIN"
+    return ("FALLBACK_SUBMITTED" if receipt.get("code") == "FALLBACK_SUBMITTED"
+            else "FALLBACK_ACK_UNCERTAIN")
 
 
 def readonly_auth_probe(token: str, request=None) -> str:
@@ -231,14 +312,20 @@ def main():
                 print("HARNESS_QUOTA=OIDC_UNAVAILABLE")
                 return 2
         try:
-            status = check_and_cancel(execution_id, sha, api, oidc)
+            on_terminal = None
+            if os.getenv("HARNESS_QUOTA_FALLBACK_ENABLED") == "true":
+                on_terminal = lambda jwt, event, owner: fenced_harness_fallback(
+                    jwt, event, owner, os.getenv("GH_TOKEN", ""))
+            status = check_and_cancel(
+                execution_id, sha, api, oidc, on_terminal=on_terminal)
         except (HTTPError, URLError, OSError, ValueError):
             status = "SOURCE_UNAVAILABLE"
         # Never print provider payloads, token, controller owner-token or URLs.
         print("HARNESS_QUOTA_RUN="+execution_id+" RESULT="+status)
         if status not in ("NO_STRUCTURED_QUOTA",
                           "NOT_ACTIVE_OR_IDENTITY_UNKNOWN",
-                          "CANCELLED_NO_INDEPENDENT_RESERVE"):
+                          "CANCELLED_NO_INDEPENDENT_RESERVE",
+                          "FALLBACK_SUBMITTED"):
             trouble = True
     return 2 if trouble else 0
 

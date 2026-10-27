@@ -126,6 +126,109 @@ class HarnessWatcherTests(unittest.TestCase):
         self.assertEqual("NO_STRUCTURED_QUOTA", value)
         self.assertEqual(["GET"], actions)
 
+    def test_readonly_ci_source_blob_fail_closed(self):
+        records = []
+        def reader(url, token):
+            records.append((url, token))
+            return {"type": "file", "sha": watcher.PINNED_PIPELINE_BLOB}
+        self.assertTrue(watcher.read_only_pipeline_verified(SHA, "token", reader))
+        self.assertEqual(len(records), 1)
+        self.assertIn("?ref=" + SHA, records[0][0])
+        self.assertFalse(watcher.read_only_pipeline_verified(SHA, "", reader))
+        self.assertFalse(watcher.read_only_pipeline_verified("invalid", "token", reader))
+        self.assertFalse(watcher.read_only_pipeline_verified(
+            SHA, "token", lambda *_: {"sha": "deadbeef", "type": "file"}))
+        self.assertFalse(watcher.read_only_pipeline_verified(
+            SHA, "token", lambda *_: {"sha": watcher.PINNED_PIPELINE_BLOB,
+                                     "type": "dir"}))
+        self.assertEqual(len(records), 1)
+
+    def test_fenced_fallback_dispatch_only_after_readonly_reservation(self):
+        actions = []
+        event = {"provider": "harness", "target": EXEC, "sha": SHA,
+                 "code": "quota_exceeded"}
+        def reader(*_):
+            actions.append("SOURCE_BLOB")
+            return {"type": "file", "sha": watcher.PINNED_PIPELINE_BLOB}
+        def controller(oidc, payload):
+            actions.append(payload["phase"].upper())
+            self.assertEqual(payload["owner_token"], "owned")
+            self.assertEqual(payload["pipeline_blob"], watcher.PINNED_PIPELINE_BLOB)
+            self.assertEqual(payload["target"], EXEC)
+            return {"code": {"reserve": "FALLBACK_RESERVED",
+                             "ack": "FALLBACK_SUBMITTED"}[payload["phase"]]}
+        def dispatch(sha, execution, token):
+            actions.append("DISPATCH")
+            self.assertEqual((sha, execution, token), (SHA, EXEC, "github"))
+            return True
+        result = watcher.fenced_harness_fallback(
+            "oidc", event, "owned", "github", controller=controller,
+            reader=reader, dispatch=dispatch)
+        self.assertEqual(result, "FALLBACK_SUBMITTED")
+        self.assertEqual(actions, ["SOURCE_BLOB", "RESERVE", "DISPATCH", "ACK"])
+
+    def test_uncertain_submission_no_retry_or_ack(self):
+        actions = []
+        event = {"provider": "harness", "target": EXEC, "sha": SHA,
+                 "code": "quota_exceeded"}
+        def controller(_jwt, payload):
+            actions.append(payload["phase"])
+            return {"code": "FALLBACK_RESERVED"}
+        def dispatch(*_):
+            actions.append("dispatch")
+            raise OSError("submission outcome uncertain")
+        result = watcher.fenced_harness_fallback(
+            "oidc", event, "owned", "github", controller=controller,
+            reader=lambda *_: {"type": "file",
+                               "sha": watcher.PINNED_PIPELINE_BLOB},
+            dispatch=dispatch)
+        self.assertEqual(result, "FALLBACK_SUBMISSION_UNCERTAIN")
+        self.assertEqual(actions, ["reserve", "dispatch"])
+
+    def test_foreign_stage_or_failed_reservation_never_dispatches(self):
+        event = {"provider": "harness", "target": EXEC, "sha": SHA,
+                 "code": "quota_exceeded"}
+        def forbidden(*_):
+            raise AssertionError("DISPATCH_FORBIDDEN")
+        value = watcher.fenced_harness_fallback(
+            "oidc", event, "owned", "github", reader=lambda *_: {
+                "type": "file", "sha": "not-reviewed"}, dispatch=forbidden)
+        self.assertEqual(value, "CANCELLED_NO_INDEPENDENT_RESERVE")
+        value = watcher.fenced_harness_fallback(
+            "oidc", event, "owned", "github",
+            reader=lambda *_: {"type": "file",
+                               "sha": watcher.PINNED_PIPELINE_BLOB},
+            controller=lambda *_: {"code": "ALREADY_CLAIMED"},
+            dispatch=forbidden)
+        self.assertEqual(value, "FALLBACK_RESERVE_REJECTED")
+
+    def test_terminal_callback_runs_after_fenced_report_only(self):
+        actions = []
+        status = {"v": "Running"}
+        def request(method, *_):
+            actions.append(method)
+            if method == "PUT":
+                status["v"] = "Aborted"
+                return 200, {"status": "SUCCESS"}
+            return 200, detail(status["v"])
+        def controller(_, payload):
+            actions.append(payload["phase"])
+            if payload["phase"] == "claim":
+                return {"code": "CLAIMED", "owner_token": "owned"}
+            return {"code": "RECORDED"}
+        def terminal(jwt, event, owner):
+            actions.append("fallback")
+            self.assertEqual(event["sha"], SHA)
+            self.assertEqual(owner, "owned")
+            return "FALLBACK_SUBMITTED"
+        api = HarnessPipelineRun(watcher.ACCOUNT, watcher.ORG,
+            watcher.PROJECT, watcher.PIPELINE, EXEC, "fixture", request)
+        self.assertEqual(watcher.check_and_cancel(
+            EXEC, SHA, api, "oidc", controller=controller, sleep=lambda _: None,
+            on_terminal=terminal), "FALLBACK_SUBMITTED")
+        self.assertEqual(actions, ["GET", "GET", "claim", "GET",
+                                   "PUT", "GET", "report", "fallback"])
+
     def test_readonly_auth_probe_requires_exact_completed_owned_execution(self):
         self.assertEqual("NOT_CONFIGURED", watcher.readonly_auth_probe(""))
         statuses=[]

@@ -66,4 +66,33 @@ const expired=await invoke({...event,phase:"report",owner_token:randomUUID(),
 assert.equal(expired.statusCode,409);
 assert.equal(expired.response.code,"FENCING_REJECTED");
 assert.equal(requests.length,3);
-console.log("HARNESS_NEON_CONTROLLER_CONTRACT=PASS CASES=6 MOCKED_IO=true EXPIRED_LEASE=REJECTED");
+// An explicit reserve is allowed only after the report on the exact owner
+// token and source SHA. Mocked Neon validates lease and CAS predicate text.
+simulatedLeaseExpired = false;
+const reviewedBlob="bdbbd74b693d2f9fdd6c08b94cc03d8921ebce18";
+const fallbackEvent={...event,owner_token:randomUUID(),
+                     pipeline_blob:reviewedBlob};
+const foreignSource=await invoke({...fallbackEvent,phase:"reserve",
+                                    pipeline_blob:"f".repeat(40)});
+assert.equal(foreignSource.statusCode,409);
+assert.equal(foreignSource.response.code,"SIDE_EFFECT_FREE_PIPELINE_NOT_PROVEN");
+const reserve=await invoke({...fallbackEvent,phase:"reserve"});
+assert.equal(reserve.statusCode,200);
+assert.equal(reserve.response.code,"FALLBACK_RESERVED");
+const reserveQuery=requests.at(-1);
+assert.ok(reserveQuery.includes("harness:"+event.target));
+const reserveRejected=await invoke({...fallbackEvent,phase:"ack",
+                                     dispatch_status:"200"});
+assert.equal(reserveRejected.statusCode,400);
+const ack=await invoke({...fallbackEvent,phase:"ack",dispatch_status:"204"});
+assert.equal(ack.statusCode,200);
+assert.equal(ack.response.code,"FALLBACK_SUBMITTED");
+simulatedLeaseExpired = true;
+const stale=await invoke({...fallbackEvent,phase:"reserve"});
+assert.equal(stale.statusCode,409);
+assert.equal(stale.response.code,"FALLBACK_RESERVATION_REJECTED");
+assert.ok(source.includes("provider_terminal_reported"));
+assert.ok(source.includes("data->>'owner_run'"));
+assert.ok(source.includes("lease_generation=2"));
+assert.ok(source.includes("lease_generation=3"));
+console.log("HARNESS_NEON_CONTROLLER_CONTRACT=PASS CASES=11 MOCKED_IO=true EXPIRED_LEASE=REJECTED");

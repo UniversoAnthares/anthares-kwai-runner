@@ -83,3 +83,43 @@ A primeira implementação PR #1652 foi executada no GitHub Actions run 40568912
 **Prova corrigida:** workflow run https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40569858409, job 122420867978, conclusão SUCCESS; o log registrou `HARNESS_API_AUTH_READONLY=NOT_CONFIGURED` sem traceback. O observador de quota permaneceu SKIPPED porque o flag de ativação é falso/ausente. Portanto, é fato confirmado que **nesta execução** a sonda não recebeu `HARNESS_API_KEY`; não é comprovação de que uma credencial não exista em nenhum outro serviço. Próximo ato do titular: cadastrar `HARNESS_API_KEY` no cofre de segredo de repositório GitHub Actions e acompanhar a próxima execução do workflow para obter `VERIFIED_OWNED_EXECUTION_908`, nunca publicar chave. A etapa usa GET read-only, nenhuma interrupção.
 
 A implementação da sonda e do watcher permanece pronta em código, com 36 testes Python executados e 6 testes Node do controlador. A publicação do controlador no Vercel e um `AbortAll` real continuam não comprovados; a produção permanece bloqueada por cota Vercel HTTP 402. Não declarar Harness como roteável.
+
+## Harness -> GitHub Actions: one-run, SHA-pinned CI failover (2026-10-27)
+
+The original Harness watcher (scheduled GitHub Actions) is authenticated in real
+production run #40573476128: `HARNESS_API_AUTH_READONLY=VERIFIED_OWNED_EXECUTION_908`;
+12 real Harness status checks returned `NO_STRUCTURED_QUOTA`.
+The new failover path is separately gated by
+`vars.HARNESS_QUOTA_FALLBACK_ENABLED == 'true'`. It is **not enabled by default**.
+
+Only for the known side-effect-free Harness `Build_and_Test` pipeline:
+1. Discover the exact owned Harness execution and commit SHA from verified GitHub status.
+2. Require a structured quota signal, an active verified owned execution,
+   atomic first-winner Neon claim, real AbortAll and terminal readback.
+3. After the claim's signed `report`, verify the source commit contains the
+   reviewed Harness pipeline blob `bdbbd74b693d2f9fdd6c08b94cc03d8921ebce18`.
+4. The owner-run OIDC caller reserves one `FALLBACK_RESERVED` successor by Neon CAS,
+   with matching owner UUID, lease, source SHA, report and owner_run.
+5. Dispatch **once only** `harness-quota-rescue.yml` on independent
+   `github_actions_public`, with checkout pinned to source SHA.
+   No submission retry on timeout/uncertain 204; receipt `FALLBACK_SUBMITTED`
+   requires HTTP 204 first.
+6. The successor must acquire a second one-winner Neon CAS using its own
+   GitHub Actions workflow OIDC and exact SHA/run ID, then run the equivalent
+   no-publishing CI steps. Its success receipt records `FALLBACK_CONFIRMED`.
+   Unknown or failed successor status remains fenced and must be reconciled.
+7. No route ever dispatches Kwai, TikTok, Threads, WordPress publishing,
+   Android devices, or an unrelated workflow.
+
+The source allowlist is intentionally strict: editing the Harness pipeline
+requires a fresh review and allowlist update, not silent automatic promotion.
+The GitHub runner proof is independent of Harness quota; this is a fallback
+for **nonpublishing CI only**, not a universal publishing failover.
+
+**Acceptance:** real GitHub contract run #40576068709 passed 41 Python tests,
+11 mocked Harness Neon contract checks and 8 mocked successor OIDC CAS checks.
+These simulations do not constitute a real Harness-quota event.
+**Activation gate:** deploy exact Vercel source containing both controller APIs,
+verify live OIDC-Neon endpoints and the successor's repository workflow;
+only then enable `HARNESS_QUOTA_FALLBACK_ENABLED`. No synthetic quota or
+destructive live abort should be manufactured for acceptance.

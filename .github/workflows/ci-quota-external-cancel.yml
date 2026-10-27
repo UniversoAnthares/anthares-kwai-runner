@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  actions: write
 concurrency:
   group: anthares-external-quota-cancel
   cancel-in-progress: false
@@ -34,6 +35,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HARNESS_API_KEY: ${{ secrets.HARNESS_API_KEY }}
           HARNESS_QUOTA_WATCH_ENABLED: 'true'
+          HARNESS_QUOTA_FALLBACK_ENABLED: ${{ vars.HARNESS_QUOTA_FALLBACK_ENABLED == 'true' }}
         shell: bash
         run: |
           python3 -m tools.ci_quota_harness_watcher
