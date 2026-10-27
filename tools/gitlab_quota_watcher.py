@@ -9,6 +9,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from ci_quota_provider_adapters import GitLabPipeline, ProviderUncertain
+
 GITHUB_REPO = "UniversoAnthares/anthares-kwai-runner"
 PROJECTS = (
     ("cortes", "87307248", "gitlab-quota-fallback.yml"),
@@ -71,6 +73,27 @@ def recent_qualifying_failure(project_id):
     return None
 
 
+def confirmed_terminal_before_reserve(project_id, event):
+    """Cancel only the exact owned GitLab quota pipeline if still active.
+
+    Existing FAILED/CANCELLED already are terminal; no active job is available
+    to cancel after GitLab's own ci_quota_exceeded rejection. Never dispatch
+    while an exact pipeline is still RUNNING, SUCCEEDED or UNKNOWN.
+    """
+    if not GL_AUTH or not str(event.get("id","")).isdigit():
+        return False
+    pipeline=GitLabPipeline(project_id,event["id"],GL_AUTH)
+    state=pipeline.status(str(event["id"]))
+    if state in ("FAILED","CANCELLED"):
+        return True
+    if state!="RUNNING":
+        return False
+    # Confirmed quota event from recent_qualifying_failure; cancel before handoff.
+    if not pipeline.cancel(str(event["id"])):
+        return False
+    return pipeline.status(str(event["id"])) in ("FAILED","CANCELLED")
+
+
 def latest_runs(workflow):
     url = (f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/" +
            urllib.parse.quote(workflow) + "/runs?per_page=70")
@@ -121,13 +144,19 @@ def main():
             if not event:
                 print(f"{component}=NO_RECENT_MAIN_QUOTA_FAILURE")
                 continue
+            # Exact GitLab pipeline must be remotely terminal before any
+            # independent QA dispatch. Missing/uncertain status fails closed.
+            if not confirmed_terminal_before_reserve(project_id, event):
+                print(f"{component}=CANCEL_UNCONFIRMED_NO_FALLBACK")
+                errors += 1
+                continue
             if workflow not in runs_cache:
                 runs_cache[workflow] = latest_runs(workflow)
             if already_handled(component, workflow, event["sha"], runs_cache[workflow]):
                 print(f"{component}=DEDUPED sha={event['sha'][:12]}")
                 continue
             dispatch(component, workflow, event)
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError) as exc:
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, ProviderUncertain) as exc:
             # Never expose request URLs, response bodies, tokens or sensitive metadata.
             print(f"{component}=CONTROL_ERROR type={type(exc).__name__}")
             errors += 1
