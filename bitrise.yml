@@ -7,6 +7,10 @@ app:
   - KWAI_VAULT_URL: https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
   - KWAI_VAULT_SHA256: 96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543
 
+meta:
+  bitrise.io:
+    machine_type_id: standard
+
 workflows:
   primary:
     steps:
@@ -61,6 +65,9 @@ workflows:
         inputs:
         - deploy_path: "$BITRISE_SOURCE_DIR/ci-hub/bitrise/runtime"
   anthares_ci_smoke:
+    meta:
+      bitrise.io:
+        machine_type_id: standard
     steps:
     - git-clone@8: {}
     - script@1:
