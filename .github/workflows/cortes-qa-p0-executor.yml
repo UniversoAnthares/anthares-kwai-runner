@@ -74,6 +74,33 @@ jobs:
             // drafts, mark as published, or bypass Neon CAS from an issue body.
             core.setOutput('gate', gate);
             core.notice('QA_P0_REPAIR_GATE=' + gate);
+      - name: Inventory Pinterest existing drafts without changing browser state
+        if: steps.preflight.outcome == 'success' && inputs.issue_number == '528'
+        id: draft_audit
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $value='AUDIT_UNAVAILABLE_RECONCILIATION_REQUIRED'
+          try {
+            $raw=& node .\tools\cortes_pinterest_draft_audit.mjs
+            if ($LASTEXITCODE -eq 0) {
+              $result=($raw | Select-Object -Last 1 | ConvertFrom-Json -ErrorAction Stop)
+              if ($result.status -eq 'READ_ONLY_RECONCILIATION_REQUIRED' -and
+                  $result.can_autodelete -eq $false -and
+                  $result.can_autopublish -eq $false) {
+                $value='count='+$result.draft_count+
+                  ';titled='+$result.titled_drafts+
+                  ';unique_thumbnails='+$result.unique_thumbnails+
+                  ';matching_display_groups='+$result.matching_display_groups+
+                  ';inventory_sha256='+$result.inventory_sha256+
+                  ';action=READ_ONLY_RECONCILIATION_REQUIRED'
+              }
+            }
+          } catch { Write-Warning 'PINTEREST_DRAFT_AUDIT_UNAVAILABLE' }
+          if ($env:GITHUB_OUTPUT) {
+            Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value ('result='+$value) -Encoding UTF8
+          }
+          Write-Output ('PINTEREST_DRAFT_AUDIT='+$value)
       - name: Read Codeberg QA test evidence (no GitHub tests)
         if: steps.preflight.outcome == 'success'
         id: codeberg
@@ -129,6 +156,7 @@ jobs:
           QA_CODEBERG_URL: ${{ steps.codeberg.outputs.url }}
           QA_REPAIR_GATE: ${{ steps.pinterest_gate.outputs.gate }}
           QA_AUTOHEAL: ${{ steps.recovery.outputs.action }}
+          QA_DRAFT_AUDIT: ${{ steps.draft_audit.outputs.result }}
           QA_DIAGNOSTIC: ${{ steps.recovery.outputs.diagnostic }}
         with:
           script: |
@@ -149,6 +177,7 @@ jobs:
                 '\nCodeberg evidence: '+(process.env.QA_CODEBERG_URL || 'unavailable')+
                 '\nRepair gate: '+String(process.env.QA_REPAIR_GATE || 'UNCLASSIFIED')+
                 '\nRecovery action (ACK only): '+String(process.env.QA_AUTOHEAL || 'NO_REPAIR_ACTION')+
+                '\nDraft audit: '+String(process.env.QA_DRAFT_AUDIT || 'not-applicable').slice(0,300)+
                 '\nRecovery diagnostic: '+String(process.env.QA_DIAGNOSTIC || 'UNAVAILABLE').slice(0,300)+'\n'+next+
                 '\nOffline policy safety test on dedicated QA runner; primary regression suite on Codeberg. QA remains open until verified source fix and remote publication.'
             });
