@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-26-appveyor-500-bitrise-standby-auth-unverified",
+  "revision": "2026-10-26-bitrise-hobby-active-launch-blocked",
   "checked_at_utc": "2026-10-21T21:20:00Z",
   "rules": {
     "regression_check_required_each_round": true,
@@ -242,11 +242,14 @@
       "reopen_condition": "Actions enabled, qualified runner available, real job success and publisher OIDC/secret access proven"
     },
     "bitrise": {
-      "status": "PENDING_AUTH_REPOSITORY_CONFIG_AND_LIVE_PROOF",
+      "status": "BLOCKED_INVALID_DEFAULT_MACHINE_ELITE_ON_HOBBY_20261026",
       "eligible": false,
-      "evidence_class": "CONFIG_ONLY_WITH_HISTORICAL_STORAGE_MISMATCH",
-      "evidence": "Bitrise.yml exists in canonical GitHub; 2026-10-06 Bitrise editor stored an onboarding YAML in Bitrise not repo. No verified Bitrise API session, free account quota, configured source, or new successful smoke run on 2026-10-26.",
-      "reopen_condition": "Auth API access; source switched to repository bitrise.yml; free credits proven; anthares_ci_smoke finishes and SHA matches; then update both runtime state and routing."
+      "evidence_class": "VERIFIED_AUTHENTICATED_UI_AND_REJECTED_DISPATCH",
+      "verified_at_utc": "2026-10-27T00:56:27Z",
+      "evidence": "Authenticated Anthares Browser accessed UniversoAnthares Bitrise workspace. CI Hobby -> Free activated in Plan & Billing, 300 free credits/month plan. Android app ef06f940-ffc7-4e37-b935-93ad06d8faeb uses repository bitrise.yml and offers anthares_ci_smoke; two Start build attempts on main were rejected BEFORE build creation with 'Invalid default machine type elite', even after meta bitrise.io machine_type_id standard merged. Other app 2369c362-dca7-4c74-8487-5c262aeab264 remains Configuration in progress: Hobby private-app limit reached; making it public exposes logs and GitHub-App-managed webhooks cannot be disabled via the setup UI. No new hosted runner, no credits consumed by successful builds, no plan upgrade.",
+      "reopen_condition": "Only promote after a fresh authenticated hosted Standard-machine anthares_ci_smoke build succeeds with matching source SHA, credits, no publication and a durable build ID.",
+      "free_tier_verified": true,
+      "paid_plan_enabled": false
     }
   }
 }

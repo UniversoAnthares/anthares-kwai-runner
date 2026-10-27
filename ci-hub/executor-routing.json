@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-26-bitrise-staged-appveyor-penultimate-failclosed",
+  "revision": "2026-10-26-bitrise-hobby-activated-hosted-build-blocked-free-only",
   "provider_status_source": "ci-hub/provider-status.json",
   "continuity_policy": "ci-hub/CONTINUITY.md",
   "regression_check_required_each_round": true,
@@ -98,7 +98,7 @@
       "appveyor": "BLOCKED_HTTP500_BUILD_CREATION_20261026",
       "codeberg_actions": "NOT_CONFIGURED_REPOSITORY_ACTIONS_DISABLED",
       "gitlab_ci": "BLOCKED_QUOTA_TEMPORARY_AUTOMATIC_RECHECK",
-      "bitrise": "UNVERIFIED_AUTH_SOURCE_AND_FREE_QUOTA_20261026"
+      "bitrise": "BLOCKED_INVALID_DEFAULT_MACHINE_ELITE_ON_HOBBY_20261026"
     },
     "appveyor_routing_policy": {
       "rank": "penultimate",
@@ -335,12 +335,12 @@
     },
     "bitrise": {
       "active": false,
-      "status": "STANDBY_PENDING_AUTH_REPO_CONFIG_AND_LIVE_FREE_PROOF",
+      "status": "HOBBY_FREE_ACTIVE_BUILD_BLOCKED_INVALID_ELITE_20261026",
       "ci_eligible": false,
       "role": "hosted_ci_candidate",
       "config": "bitrise.yml",
       "smoke_workflow": "anthares_ci_smoke",
-      "reopen_condition": "Bitrise API authenticated; repo bitrise.yml is the effective source; Hobby free credits available without billing; a new smoke workflow run completes with matching SOURCE_SHA"
+      "reopen_condition": "One hosted build of anthares_ci_smoke runs on Hobby Standard and finishes with matching SOURCE_SHA; do not enable before that."
     }
   },
   "git_redundancy": {
