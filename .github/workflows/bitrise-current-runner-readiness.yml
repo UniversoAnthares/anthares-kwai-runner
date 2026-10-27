@@ -1,0 +1,42 @@
+name: Bitrise current hosted runner readiness
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/bitrise-current-runner-readiness.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Inspect recent Bitrise hosted builds without triggering a build
+        env:
+          BITRISE_TOKEN: ${{ secrets.BITRISE_API_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error,sys
+          token=os.getenv("BITRISE_TOKEN","").strip()
+          app="ef06f940-ffc7-4e37-b935-93ad06d8faeb"
+          if not token:
+              print("BITRISE_PROBE=NO_TOKEN");sys.exit(1)
+          url=f"https://api.bitrise.io/v0.1/apps/{app}/builds?limit=12"
+          req=urllib.request.Request(url,headers={"Authorization":token,"Accept":"application/json"})
+          try:
+              with urllib.request.urlopen(req,timeout=16) as response: payload=json.load(response)
+              builds=payload.get("data") or []
+              print("BITRISE_PROBE=AUTHENTICATED")
+              print("BITRISE_RECENT_COUNT="+str(len(builds)))
+              for i,b in enumerate(builds[:8]):
+                  print("BITRISE_RECENT_"+str(i)+"_STATUS="+str(b.get("status")))
+                  print("BITRISE_RECENT_"+str(i)+"_SLUG="+str(b.get("slug"))[:80])
+                  print("BITRISE_RECENT_"+str(i)+"_WORKFLOW="+str(b.get("triggered_workflow"))[:45])
+                  print("BITRISE_RECENT_"+str(i)+"_TIME="+str(b.get("triggered_at"))[:40])
+                  print("BITRISE_RECENT_"+str(i)+"_ABORT="+str(b.get("abort_reason"))[:75])
+              if not builds:print("BITRISE_PROBE=NO_BUILD_PROOF")
+          except urllib.error.HTTPError as e:
+              print("BITRISE_PROBE_HTTP="+str(e.code));sys.exit(1)
+          except (ValueError,urllib.error.URLError):
+              print("BITRISE_PROBE=READ_FAILED");sys.exit(1)
+          PY
