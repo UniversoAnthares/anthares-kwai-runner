@@ -40,9 +40,10 @@ jobs:
     timeout-minutes: 8
     env:
       GITHUB_TOKEN: ${{ github.token }}
-      WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
-      WP_USERNAME: ${{ secrets.WP_USERNAME }}
-      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+      # QA uses a least-privilege REST identity. Publishing secrets are untouched.
+      WP_SITE_URL: ${{ secrets.WP_QA_SITE_URL || secrets.WP_SITE_URL }}
+      WP_USERNAME: ${{ secrets.WP_QA_USERNAME || secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_QA_APP_PASSWORD || secrets.WP_APP_PASSWORD }}
       PYTHONIOENCODING: utf-8
       PYTHONUTF8: "1"
     steps:
