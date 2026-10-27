@@ -367,7 +367,13 @@
       "controller_claim_report_tests": "NODE_5_PASS_FAKE_OIDC_FAKE_NEON",
       "controller_claim_report_source_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1625",
       "controller_deploy_block": "VERCEL_HTTP_402_API_DEPLOYMENTS_FREE_PER_DAY_MORE_THAN_100_RETRY_AFTER_86400",
-      "controller_deploy_attempt_date": "2026-10-27"
+      "controller_deploy_attempt_date": "2026-10-27",
+      "last_ci_stage_success_execution": "kbHfz70fTUiuYNoGx-QoBA",
+      "last_ci_stage_success_commit": "66aef1245c04ebd16e0e4e4db593440a2604cc03",
+      "last_ci_stage_success_date": "2026-10-27T18:51:55Z",
+      "last_ci_stage_success_url": "https://app.harness.io/ng/account/xAEBvmMUTjql7g2Exxmp-g/ci/orgs/default/projects/default_project/pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d/executions/kbHfz70fTUiuYNoGx-QoBA/pipeline",
+      "harness_live_ci_stage_result": "SUCCESS_GITHUB_COMMIT_STATUS_HARNESS_REPORTS_BUILD_AND_TEST_SUCCEEDED",
+      "harness_ci_test_steps": "ADDED_TO_GIT_BACKED_PIPELINE_PR_1627_STAGE_SUCCEEDED_IN_LIVE_RUN"
     },
     "floot": {
       "active": true,
