@@ -65,3 +65,13 @@ PR #1627 incluiu etapa real de testes do cancel-first no pipeline Git-backed do 
 4. Somente após essas três comprovações e reconciliação de efeitos, habilitar conscientemente `vars.HARNESS_QUOTA_WATCH_ENABLED='true'` e avaliar separadamente a promoção do roteamento `eligible`/`ci_eligible`. Até lá, ambos permanecem `false`.
 
 Esse estado separa **código implementado e testado**, **descoberta real comprovada**, **ledger Neon real verificado**, **controlador Vercel desatualizado devido à cota**, e **operação real do cancelamento ainda não comprovada**.
+
+## Harness — sonda não destrutiva de autenticação API (PR #1652)
+
+O workflow `.github/workflows/ci-quota-external-cancel.yml` agora inclui verificação READ-ONLY isolada, que não bloqueia AppVeyor/Bitrise se a autenticação Harness falhar. O código `tools/ci_quota_harness_watcher.py` usa somente `HARNESS_API_KEY` provisionado como segredo protegido no GitHub Actions; consulta a execução própria concluída #908 no GET oficial v2 e confirma `planExecutionId`, org, projeto, pipeline e estado `SUCCEEDED`. Saídas permitidas: `VERIFIED_OWNED_EXECUTION_908`, `NOT_CONFIGURED` ou `UNVERIFIED_RESPONSE_OR_CREDENTIAL`. Jamais imprime a chave ou o corpo de resposta, e não executa `AbortAll` nesse modo. Execução de testes sem segredo: 36/36 PASS, Anthares Remote Python 3.12, código carregado em memória, sem arquivos locais.
+
+A sonda **não provou autenticação ao vivo até agora**; o estado do segredo no executor GitHub Actions é desconhecido sem observar o job executado. A credencial DPAPI local continua intocada em virtude da recusa explícita da ferramenta de acesso remoto.
+
+Ação manual mínima quando necessária: abrir https://github.com/UniversoAnthares/anthares-kwai-runner/settings/secrets/actions e configurar o segredo de repositório `HARNESS_API_KEY` por meio da interface do GitHub, usando uma credencial legítima mantida exclusivamente pelo titular. Não copiar token para o chat, arquivos de código ou logs. Não habilitar `HARNESS_QUOTA_WATCH_ENABLED` enquanto o controlador Vercel e o cancelamento real permanecerem não homologados. Quando a sonda for executada, conferir o marcador sanitizado em GitHub Actions para comprovar a API.
+
+O Vercel permanece bloqueado por HTTP 402 `api-deployments-free-per-day` até liberação de cota. Nenhum novo deployment do controlador foi comprovado após PR #1648. Sem implantação e abort real, `eligible=false` e `ci_eligible=false`.
