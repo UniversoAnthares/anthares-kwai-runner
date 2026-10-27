@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-26-bitrise-hobby-activated-hosted-build-blocked-free-only",
+  "revision": "2026-10-27-cancel-first-quota-contract-in-ci",
   "provider_status_source": "ci-hub/provider-status.json",
   "continuity_policy": "ci-hub/CONTINUITY.md",
   "regression_check_required_each_round": true,
@@ -105,6 +105,29 @@
       "on_confirmed_http_500": "skip_to_next_eligible_provider",
       "on_ambiguous_dispatch": "reconcile_before_retry",
       "preserve_project": true
+    },
+    "quota_cancel_first": {
+      "policy_id": "CANCELAR_IMEDIATAMENTE_POR_COTA_V1",
+      "when": "confirmed_provider_usage_or_quota_exhaustion",
+      "immediate_action": "request_cancel_on_the_original_owned_job_or_pipeline",
+      "terminal_confirmation_required": true,
+      "cancel_unconfirmed_action": "block_fallback_and_reconcile_original_run",
+      "side_effect_result_requirement": "NOT_APPLIED_before_successor_dispatch",
+      "successor_action": "create_new_attempt_with_durable_idempotency_key_after_cancel_and_reconcile",
+      "independent_quota_scope_required": true,
+      "circuit_breaker_action": "mark_quota_exhausted_scope_ineligible_until_fresh_verified_readiness",
+      "blocked_without_reserve": "CANCELLED_NO_INDEPENDENT_RESERVE",
+      "forbidden_substitutes": [
+        "blind_retry",
+        "parallel_duplicate",
+        "wait_in_original_job_for_quota_reset",
+        "auto_purchase_plan",
+        "bypass_auth_or_security"
+      ],
+      "reference_implementation": "tools/ci_quota_cancel_first.py",
+      "verification_tests": "tests/test_ci_quota_cancel_first.py",
+      "integration_state": "CORE_TESTED_PROVIDER_CALLBACKS_NOT_YET_WIRED",
+      "operator_warning": "A policy file or tested core does not itself invoke provider APIs; each provider requires a verified cancel/status/dispatch adapter and durable cross-host fencing."
     }
   },
   "retired": {
