@@ -15,17 +15,31 @@
     ".github/workflows/cortes-tiktok-lucasrosalem4-windows-fallback.yml"
   ],
   "provider_metadata_verified": false,
-  "environment_provisioned_verified": false,
+  "environment_provisioned_verified": true,
   "repository_or_organization_alias_absence_verified": false,
   "distinct_principals_positive_negative_verified": false,
   "escrow_entry_verified": false,
   "production_migration_status": "prepared_not_deployed",
   "deployment_authorized": false,
-  "notes": "The native secret must exist only in the protected account environment. No shared BWS or repository credential fallback. Names and source checks are not evidence of provider IAM.",
+  "notes": "Native environment and existing-session save verified in GitHub UI; account identity and fresh-context reuse verified. Bitwarden administrative custody, alias absence and distinct-provider-principal negative/positive proofs remain unverified. No workflow dispatched, production deployment, legacy credential revocation or shared fallback.",
   "administration": {
     "external_collaborators_authorized": false,
     "independent_human_reviewer_available": false,
     "owner_review_required": true,
     "distinct_runtime_principals_still_required": true
+  },
+  "session_identity_verified": true,
+  "session_replay_in_fresh_context_verified": true,
+  "native_environment_evidence": {
+    "observed_date": "2026-10-27",
+    "environment_id": "25347389669",
+    "allowed_branches": [
+      "main"
+    ],
+    "allowed_tags": [],
+    "administrator_bypass": false,
+    "secret_name": "CORTES_TIKTOK_LUCAS4_STORAGE_STATE",
+    "secret_save_verified_from_github_ui": true,
+    "secret_value_read_back": false
   }
 }
