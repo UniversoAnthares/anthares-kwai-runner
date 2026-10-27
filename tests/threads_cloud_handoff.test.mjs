@@ -459,3 +459,10 @@ test('Threads public text never exceeds five words including description and has
  assert.match(src,/caption\.split\(\/\\s\+\/u\)\.length>5/);
  assert.doesNotMatch(src,/const caption=base\+desc/);
 });
+
+test('expired Threads quarantine cannot silently fail queued publications',()=>{
+ const src=fs.readFileSync('infra/neon-cortes-threads-execution/index.mjs','utf8');
+ assert.doesNotMatch(src,/UPDATE cortes_publications p SET status='failed'/);
+ assert.doesNotMatch(src,/UPDATE cortes_threads_quarantine SET status='expired'/);
+ assert.match(src,/q.status='isolated' AND q.expires_at>now\(\)/);
+});
