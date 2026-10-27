@@ -5,6 +5,8 @@ on:
       - qa/wp-state-auth-restoration-20261027-chatgpt
     paths:
       - .github/workflows/cortes-wp-state-authenticated-once.yml
+      - tools/cortes_qa_p0_router.py
+      - tests/test_cortes_qa_p0_router.py
   workflow_dispatch: {}
 permissions:
   contents: read
