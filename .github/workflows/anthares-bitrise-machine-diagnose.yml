@@ -24,7 +24,10 @@ jobs:
           base="https://api.bitrise.io/v0.1/apps/ef06f940-ffc7-4e37-b935-93ad06d8faeb"
           def get(path):
               q=urllib.request.Request(base+path,headers={"Authorization":key,"Accept":"application/json"})
-              with urllib.request.urlopen(q,timeout=18) as response:\n                  raw=response.read(160000).decode('utf-8','replace')\n                  try:return json.loads(raw)\n                  except ValueError:return {'yaml_content':raw}
+              with urllib.request.urlopen(q,timeout=18) as response:
+                  raw=response.read(160000).decode('utf-8','replace')
+                  try:return json.loads(raw)
+                  except ValueError:return {'yaml_content':raw}
           try:
               app=get("")
               data=app.get("data") or {}
@@ -45,6 +48,7 @@ jobs:
               print("BITRISE_APP_MACHINE_FIELD="+str(data.get("machine_type_id") or "NOT_EXPOSED")[:70])
           except urllib.error.HTTPError as e:
               print("BITRISE_MACHINE_DIAG_HTTP="+str(e.code));sys.exit(1)
-          except (ValueError,TypeError,KeyError,urllib.error.URLError) as e:\n              print("BITRISE_DIAG_EXCEPTION_CLASS="+type(e).__name__)
+          except (ValueError,TypeError,KeyError,urllib.error.URLError) as e:
+              print("BITRISE_DIAG_EXCEPTION_CLASS="+type(e).__name__)
               print("BITRISE_MACHINE_DIAG=READ_FAILED");sys.exit(1)
           PY
