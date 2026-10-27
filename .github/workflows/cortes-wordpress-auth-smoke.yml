@@ -1,0 +1,29 @@
+name: CORTES WordPress authenticated QA smoke
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/cortes-wordpress-auth-smoke.yml
+permissions:
+  contents: read
+concurrency:
+  group: cortes-wordpress-auth-smoke
+  cancel-in-progress: false
+jobs:
+  read-only-auth-check:
+    runs-on: qa-p0-independent
+    timeout-minutes: 3
+    env:
+      WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
+      WP_USERNAME: ${{ secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check WordPress API identity and JSON shape without writing
+        shell: powershell
+        run: |
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/cortes_wp_auth_smoke.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
