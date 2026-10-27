@@ -182,7 +182,7 @@
       "eligible": false
     },
     "harness": {
-      "status": "CI_RUN_VERIFIED_ROUTING_GATED",
+      "status": "API_AUTH_VERIFIED_QUOTA_WATCH_ACTIVE_FALLBACK_SOURCE_MERGED_DEPLOY_BLOCKED_402",
       "evidence_class": "AUTHENTICATED_SUCCESSFUL_CI_EXECUTION",
       "verified_at_utc": "2026-10-27",
       "eligible": false,
@@ -195,7 +195,7 @@
       "cancel_first_adapter_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1590",
       "cancel_first_test_status": "36_PASS_0_FAILURES_2026_10_27_HARNESS_AUTH_READONLY_PROBE",
       "live_cancel_proof": false,
-      "api_key_config_verified": false,
+      "api_key_config_verified": true,
       "fenced_adapter": "NEON_CAS_SHARED_CONTRACT_VERIFIED_IN_UNIT_TESTS_LIVE_NEON_TABLE_EXISTS",
       "fenced_adapter_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1619",
       "api_validation_block": "REMOTE_SECRET_ACCESS_SECURITY_REFUSED",
@@ -208,7 +208,7 @@
       "controller_claim_report_live": false,
       "controller_claim_report_tests": "NODE_5_PASS_FAKE_OIDC_FAKE_NEON",
       "controller_claim_report_source_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1625",
-      "controller_deploy_block": "VERCEL_HTTP_402_API_DEPLOYMENTS_FREE_PER_DAY_MORE_THAN_100_RETRY_AFTER_86400",
+      "controller_deploy_block": "VERCEL_402_API_DEPLOYMENTS_FREE_PER_DAY_RETRY_AFTER_86400",
       "controller_deploy_attempt_date": "2026-10-27",
       "last_ci_stage_success_execution": "kbHfz70fTUiuYNoGx-QoBA",
       "last_ci_stage_success_commit": "66aef1245c04ebd16e0e4e4db593440a2604cc03",
@@ -216,7 +216,7 @@
       "last_ci_stage_success_url": "https://app.harness.io/ng/account/xAEBvmMUTjql7g2Exxmp-g/ci/orgs/default/projects/default_project/pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d/executions/kbHfz70fTUiuYNoGx-QoBA/pipeline",
       "harness_live_ci_stage_result": "SUCCESS_GITHUB_COMMIT_STATUS_HARNESS_REPORTS_BUILD_AND_TEST_SUCCEEDED",
       "harness_ci_test_steps": "ADDED_TO_GIT_BACKED_PIPELINE_PR_1627_STAGE_SUCCEEDED_IN_LIVE_RUN",
-      "structured_quota_watcher": "IMPLEMENTED_GATED_DISABLED;STEP_SKIPPED_LIVE_RUN_40569858409",
+      "structured_quota_watcher": "ACTIVE_20261027_12_OWNED_RUNS_NO_STRUCTURED_QUOTA",
       "structured_quota_watcher_config": {
         "enabled_by_default": false,
         "enable_variable": "HARNESS_QUOTA_WATCH_ENABLED",
@@ -234,10 +234,22 @@
       "api_auth_probe": "READ_ONLY_GET_OWNED_EXECUTION_908_ADDED_GITHUB_WORKFLOW",
       "api_auth_probe_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1652",
       "api_auth_probe_requires_secret": "HARNESS_API_KEY",
-      "api_auth_probe_result": "NOT_CONFIGURED_CONFIRMED_RUN_40569858409",
-      "api_auth_probe_workflow": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40569858409",
+      "api_auth_probe_result": "VERIFIED_OWNED_EXECUTION_908_IN_RUN_40573476128",
+      "api_auth_probe_workflow": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40573476128",
       "api_auth_probe_python_import_fix_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1657",
-      "api_auth_probe_run_evidence": "HARNESS_API_AUTH_READONLY=NOT_CONFIGURED; module execution successful; prior traceback resolved"
+      "api_auth_probe_run_evidence": "HARNESS_API_AUTH_READONLY=NOT_CONFIGURED; module execution successful; prior traceback resolved",
+      "harness_github_nonpublishing_fallback": {
+        "source_merged": true,
+        "pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1682",
+        "scope": "SHA_PINNED_CI_BUILD_TEST_ONLY_NO_PUBLICATION",
+        "contract_run": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40576068709",
+        "python_tests_passed": 41,
+        "node_fencing_checks_passed": 19,
+        "controller_deployed": false,
+        "enabled": false,
+        "live_quota_abort_observed": false,
+        "activation_gate": "deploy Vercel provider-cancel.mjs and harness-fallback-verify.mjs; verify live endpoints, then enable HARNESS_QUOTA_FALLBACK_ENABLED"
+      }
     },
     "floot": {
       "status": "PENDING_FRESH_VERIFICATION",
