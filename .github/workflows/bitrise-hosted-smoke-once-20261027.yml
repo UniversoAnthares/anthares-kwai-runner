@@ -40,7 +40,16 @@ jobs:
               print("BITRISE_LIVE_SMOKE=DISPATCH_CONFIRMED")
               print("BITRISE_LIVE_SMOKE_BUILD_SLUG="+slug)
           except urllib.error.HTTPError as e:
-              print("BITRISE_LIVE_SMOKE_HTTP="+str(e.code));sys.exit(1)
+              print("BITRISE_LIVE_SMOKE_HTTP="+str(e.code))
+              try:
+                  detail=json.loads(e.read(14000).decode("utf-8","replace"))
+                  message=" ".join(str(detail.get(k,"")) for k in ("error","message","error_msg","error_description")).lower()
+                  categories=("machine","workflow","plan","quota","credits","subscription","permission","access","stack","config","rate","invalid","trial","billing")
+                  detected=[w.upper() for w in categories if w in message]
+                  print("BITRISE_LIVE_SMOKE_FAILURE_CATEGORIES="+(",".join(detected) if detected else "UNKNOWN"))
+              except (ValueError,TypeError,KeyError):
+                  print("BITRISE_LIVE_SMOKE_FAILURE_CATEGORIES=NONJSON")
+              sys.exit(1)
           except (urllib.error.URLError,ValueError,TypeError):
               print("BITRISE_LIVE_SMOKE=DISPATCH_UNCERTAIN_NO_RETRY");sys.exit(1)
           PY
