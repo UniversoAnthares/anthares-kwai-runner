@@ -200,6 +200,41 @@ class P0RouterTests(unittest.TestCase):
         self.assertIn("CORTES_QA_ROUTER_OK",output.getvalue())
         self.assertIn("sources_failed=0",output.getvalue())
 
+
+    def test_wordpress_error_classes_are_sanitized(self):
+        self.assertEqual(router.source_failure_code("wordpress",RuntimeError("WP_QA_AUTH_UNAVAILABLE")), "AUTH_MISSING")
+        self.assertEqual(router.source_failure_code("wordpress",router.urllib.error.HTTPError(
+            "https://anthares.us/wp-json/anthares/v1/cortes/state",401,"secret-hint",{},None)),"HTTP_401")
+        self.assertEqual(router.source_failure_code("wordpress",router.urllib.error.HTTPError(
+            "https://anthares.us/wp-json/anthares/v1/cortes/state",403,"secret-hint",{},None)),"HTTP_403")
+        self.assertEqual(router.source_failure_code("wordpress",router.urllib.error.HTTPError(
+            "https://anthares.us/wp-json/anthares/v1/cortes/state",404,"secret-hint",{},None)),"HTTP_404")
+        self.assertEqual(router.source_failure_code("wordpress",router.urllib.error.URLError("secret-hint")),"NETWORK_UNAVAILABLE")
+        self.assertEqual(router.source_failure_code("wordpress",ValueError("sensitive")),"INVALID_RESPONSE")
+        self.assertEqual(router.source_failure_code("wordpress",RuntimeError("some password secret-hint")),"SOURCE_RUNTIME_FAILURE")
+
+    def test_wordpress_http_401_emits_safe_reason_and_nonzero_exit(self):
+        import io
+        from contextlib import redirect_stdout
+        failure=router.urllib.error.HTTPError("https://anthares.us/wp-json/anthares/v1/cortes/state",401,
+                                              "do-not-print-secret",{},None)
+        output=io.StringIO()
+        with patch.object(router,"TOKEN","mock"), \
+             patch.object(router,"workflow_incidents",return_value=[]), \
+             patch.object(router,"codeberg_incidents",return_value=[]), \
+             patch.object(router,"daily_round_incidents",return_value=[]), \
+             patch.object(router,"wp_incidents",side_effect=failure), \
+             patch.object(router,"labels"), \
+             patch.object(router,"known_markers",return_value=set()), \
+             patch.object(router,"create_issue",return_value={"number":42}), \
+             patch.object(router,"dispatch_controller"), \
+             redirect_stdout(output):
+            status=router.main()
+        self.assertEqual(status,2)
+        self.assertIn("CORTES_QA_SCAN_FAILED source=wordpress code=HTTP_401",output.getvalue())
+        self.assertNotIn("do-not-print-secret",output.getvalue())
+        self.assertIn("CORTES_QA_ROUTER_PARTIAL",output.getvalue())
+
     def test_direct_dispatch_requires_confirmed_controller_ack(self):
         with patch.object(router,"http",return_value={"ok":True}) as api:
             self.assertTrue(router.dispatch_controller(528))
