@@ -126,6 +126,44 @@ class HarnessWatcherTests(unittest.TestCase):
         self.assertEqual("NO_STRUCTURED_QUOTA", value)
         self.assertEqual(["GET"], actions)
 
+    def test_readonly_auth_probe_requires_exact_completed_owned_execution(self):
+        self.assertEqual("NOT_CONFIGURED", watcher.readonly_auth_probe(""))
+        statuses=[]
+        def fake(method, url, headers):
+            statuses.append(method)
+            self.assertNotIn("fixture", url)
+            self.assertEqual(headers["x-api-key"], "fixture")
+            return 200, {"data": {"pipelineExecutionSummary": {
+                "planExecutionId": "udezZluzS2KC0qbfKcwCng",
+                "pipelineIdentifier": watcher.PIPELINE,
+                "orgIdentifier": watcher.ORG,
+                "projectIdentifier": watcher.PROJECT,
+                "status": "Success"
+            }}}
+        self.assertEqual("VERIFIED_OWNED_EXECUTION_908",
+            watcher.readonly_auth_probe("fixture", fake))
+        self.assertEqual(["GET"], statuses)
+
+    def test_readonly_auth_probe_rejects_wrong_run_or_permissions(self):
+        def foreign(*_):
+            return 200, {"data": {"pipelineExecutionSummary": {
+                "planExecutionId": "foreigntokenrun",
+                "pipelineIdentifier": watcher.PIPELINE,
+                "orgIdentifier": watcher.ORG,
+                "projectIdentifier": watcher.PROJECT,
+                "status": "Success"
+            }}}
+        self.assertEqual("UNVERIFIED_RESPONSE_OR_CREDENTIAL",
+                         watcher.readonly_auth_probe("fixture", foreign))
+        self.assertEqual("UNVERIFIED_RESPONSE_OR_CREDENTIAL",
+                         watcher.readonly_auth_probe("fixture",lambda *_: (401,{})))
+
+    def test_main_probe_does_not_trigger_watch(self):
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": watcher.REPO,
+                                     "HARNESS_QUOTA_WATCH_ENABLED": "true",
+                                     "HARNESS_AUTH_PROBE_ONLY": "true"}, clear=True):
+            self.assertEqual(0, watcher.main())
+
     def test_quota_watch_disabled_does_not_touch_credentials(self):
         with patch.dict(os.environ, {"GITHUB_REPOSITORY": watcher.REPO,
                                      "HARNESS_QUOTA_WATCH_ENABLED": "false"}, clear=True):
