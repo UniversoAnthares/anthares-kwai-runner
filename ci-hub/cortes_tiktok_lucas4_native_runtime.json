@@ -3,9 +3,10 @@
   "network": "tiktok",
   "account": "lucasrosalem4",
   "custody": {
-    "administrative": "Bitwarden Secrets Manager",
+    "administrative": "Proton Drive (holder-approved independent recovery escrow)",
     "runtime": "GitHub Actions environment",
-    "runtime_has_bws_token": false
+    "runtime_has_bws_token": false,
+    "bitwarden_optional": true
   },
   "environment": "cortes-tiktok-lucas4",
   "native_secret_name": "CORTES_TIKTOK_LUCAS4_STORAGE_STATE",
@@ -18,10 +19,10 @@
   "environment_provisioned_verified": true,
   "repository_or_organization_alias_absence_verified": false,
   "distinct_principals_positive_negative_verified": false,
-  "escrow_entry_verified": false,
+  "escrow_entry_verified": true,
   "production_migration_status": "prepared_not_deployed",
   "deployment_authorized": false,
-  "notes": "Native environment and existing-session save verified in GitHub UI; account identity and fresh-context reuse verified. Bitwarden administrative custody, alias absence and distinct-provider-principal negative/positive proofs remain unverified. No workflow dispatched, production deployment, legacy credential revocation or shared fallback.",
+  "notes": "Native environment, account identity, fresh-context session reuse and holder-approved Proton recovery escrow verified. Downloaded package integrity and in-memory decryption passed independently of Windows DPAPI. ZIP contains recovery key and relies on private Proton encrypted custody. Repo/org alias absence and distinct-provider-principal ALLOWED/DENIED remain unverified. No workflow dispatch, production deployment or legacy credential revocation.",
   "administration": {
     "external_collaborators_authorized": false,
     "independent_human_reviewer_available": false,
@@ -41,5 +42,19 @@
     "secret_name": "CORTES_TIKTOK_LUCAS4_STORAGE_STATE",
     "secret_save_verified_from_github_ui": true,
     "secret_value_read_back": false
+  },
+  "independent_recovery_verified": true,
+  "recovery_evidence": {
+    "observed_date": "2026-10-27",
+    "account": "lucasrosalem4",
+    "provider": "Proton Drive",
+    "shared": false,
+    "digital_signature_verified_from_provider_ui": true,
+    "downloaded_package_bytes": 11564,
+    "downloaded_package_sha256": "852caa58796ebd5ea8021850e0ed1fdc1492ef75628f898f59632758c652757b",
+    "restored_cookie_count": 34,
+    "requires_windows_dpapi": false,
+    "uses_original_local_artifact": false,
+    "plaintext_session_written": false
   }
 }
