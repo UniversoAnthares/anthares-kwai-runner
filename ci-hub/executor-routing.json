@@ -392,7 +392,7 @@
       "api_auth_probe": "READ_ONLY_GET_OWNED_EXECUTION_908_ADDED_GITHUB_WORKFLOW",
       "api_auth_probe_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1652",
       "api_auth_probe_requires_secret": "HARNESS_API_KEY",
-      "api_auth_probe_result": "NOT_CONFIGURED_NO_SECRET_SUPPLIED_TO_GITHUB_ACTIONS"
+      "api_auth_probe_result": "PENDING_FIRST_ACTUAL_GITHUB_ACTIONS_RUN_WITH_CREDENTIAL"
     },
     "floot": {
       "active": true,
