@@ -1,0 +1,39 @@
+name: Harness fallback contract gate
+on:
+  push:
+    branches:
+      - 'automation/harness-quota-fenced-failover-*'
+    paths:
+      - 'tools/ci_quota_harness_watcher.py'
+      - 'tools/harness_fallback_receipt.py'
+      - 'deploy/anthares-ci-quota-controller/api/provider-cancel.mjs'
+      - 'deploy/anthares-ci-quota-controller/api/harness-fallback-verify.mjs'
+      - '.github/workflows/harness-quota-rescue.yml'
+      - '.github/workflows/harness-failover-contract-check.yml'
+      - 'tests/test_ci_quota_harness_watcher.py'
+      - 'tests/test_ci_quota_harness_controller.mjs'
+      - 'tests/test_harness_fallback_controller.mjs'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  verify-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python quota safety and source compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q tools/ci_quota_harness_watcher.py tools/harness_fallback_receipt.py
+          python3 -m unittest -v tests.test_ci_quota_harness_watcher tests.test_ci_quota_harness_fenced_integration tests.test_ci_quota_cancel_first tests.test_ci_quota_neon_ledger tests.test_ci_quota_provider_adapters
+      - name: Neon OIDC and Harness fencing contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check deploy/anthares-ci-quota-controller/api/provider-cancel.mjs
+          node --check deploy/anthares-ci-quota-controller/api/harness-fallback-verify.mjs
+          node tests/test_ci_quota_harness_controller.mjs
+          node tests/test_harness_fallback_controller.mjs
+          echo HARNESS_FENCED_FAILOVER_CONTRACTS=PASS
