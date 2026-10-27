@@ -221,7 +221,8 @@ class HarnessCancelAdapter:
             "orgIdentifier": e.org,
             "projectIdentifier": e.project,
         })
-        return self.origin + endpoint + "?" + params
+        separator = "&" if "?" in endpoint else "?"
+        return self.origin + endpoint + separator + params
 
     def _request(self, method: str, path: str) -> dict:
         req = urllib.request.Request(
@@ -272,7 +273,8 @@ class HarnessCancelAdapter:
         }:
             return False
         e = self.execution
-        path = "/pipeline/api/pipeline/execute/interrupt/" + e.plan_execution_id
+        path = ("/pipeline/api/pipeline/execute/interrupt/"
+                + e.plan_execution_id + "?interruptType=AbortAll")
         self._request("PUT", path)
         return True
 
