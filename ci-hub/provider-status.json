@@ -262,10 +262,12 @@
       }
     },
     "floot": {
-      "status": "PENDING_FRESH_VERIFICATION",
-      "evidence_class": "PENDING_VERIFICATION",
-      "verified_at_utc": null,
-      "eligible": false
+      "status": "NOT_CI_ELIGIBLE_EXISTING_PROJECTS_AUDITED_20261027",
+      "evidence_class": "LIVE_FLOOT_PROJECT_LIST_AND_BACKGROUND",
+      "verified_at_utc": "2026-10-27T21:27:00Z",
+      "eligible": false,
+      "evidence": "Floot projects Anthares QA Executor Reserva (107f0320...) and Anthares ARA Reserva Independente (c8a7acd0...) exist, but QA app is unpublished, has no production runtime, and neither has active jobs, schedules, or CI execution proof. ARA reserve is a published application, not a proven independent CI runner. Do not route build/test CI to Floot without separate execution contract.",
+      "reopen_condition": "Explicit CI adapter plus pinned-revision build/test run on Floot and terminal success proof"
     },
     "circleci": {
       "status": "RETIRED_PERMANENT",
