@@ -41,8 +41,21 @@ def inventory_studio(account=ACCOUNT, state=None):
     if str(account).strip().lstrip("@").casefold()!=ACCOUNT:
         raise RuntimeError("TIKTOK_STUDIO_ACCOUNT_MISMATCH")
     if state is None:
-        from tiktok_session_authority import load_canonical_state
-        state,_=load_canonical_state()
+        # Codeberg uses the isolated, verified account session passed from the
+        # hosted controller. Its subprocess has no Anthares Browser vault key.
+        import os
+        codeberg = os.getenv("FORGEJO_REPOSITORY") == "UniversoAnthares/anthares-kwai-runner"
+        if codeberg:
+            expected = os.getenv("EXPECTED_TIKTOK_USERNAME", "").strip().lstrip("@").casefold()
+            if expected != ACCOUNT or not os.getenv("TIKTOK_STORAGE_STATE_FILE"):
+                raise RuntimeError("TIKTOK_CODEBERG_INVENTORY_VERIFIED_STATE_REQUIRED")
+            import tiktok_worker as tw
+            state = tw.storage_state()
+            if not tw.auth_cookie_names(state):
+                raise RuntimeError("TIKTOK_CODEBERG_INVENTORY_AUTH_COOKIES_REQUIRED")
+        else:
+            from tiktok_session_authority import load_canonical_state
+            state,_ = load_canonical_state()
     found={}
     with sync_playwright() as p:
         browser=p.chromium.launch(headless=True,args=[
