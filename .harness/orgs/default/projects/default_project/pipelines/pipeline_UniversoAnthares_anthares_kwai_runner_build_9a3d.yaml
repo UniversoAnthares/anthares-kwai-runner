@@ -56,5 +56,8 @@ pipeline:
     ci:
       codebase:
         connectorRef: connector_Github_ab52
-        build: <+input>
+        build:
+          type: branch
+          spec:
+            branch: main
         repoName: UniversoAnthares/anthares-kwai-runner
