@@ -65,5 +65,29 @@
     "owner_type": "User",
     "organization_scope_applicable": false,
     "metadata_values_read": false
+  },
+  "session_serialization": {
+    "format": "base64(zlib(JSON))",
+    "canonical_encoder": "tools/cortes_codeberg_tiktok_bootstrap.py:compact",
+    "actual_consumer": "tools/cortes_tiktok_lucasrosalem4_cloud_publish.py:state_from_secret",
+    "in_memory_roundtrip_verified": true,
+    "raw_json_rejected": true,
+    "native_secret_format_corrected_on": "2026-10-27",
+    "github_ui_update_time": "09:09 America/Cuiaba",
+    "value_read_back": false
+  },
+  "pre_migration_tests": {
+    "date": "2026-10-27",
+    "passed": 51,
+    "native_workflow_and_codec": 17,
+    "account_iam_contract": 13,
+    "publisher_and_fencing": 21,
+    "provider_calls": 0,
+    "publications": 0,
+    "provider_iam_proven": false
+  },
+  "observed_writer_flags": {
+    "TIKTOK_CODEBERG_PRIMARY": false,
+    "TIKTOK_LUCASROSALEM4_CLOUD_ENABLED": true
   }
 }
