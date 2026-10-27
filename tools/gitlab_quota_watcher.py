@@ -196,6 +196,41 @@ def reserve_quota_handoff(component, project_id, event):
         return "UNAVAILABLE"
 
 
+def acknowledge_quota_dispatch(component, project_id, event):
+    """Record a successful GitHub 204 dispatch without assuming post success."""
+    url=os.environ.get("ANTHARES_CI_QUOTA_LEDGER_URL","")
+    if not url.endswith("/api/gitlab-reserve"):
+        return False
+    destination=url.replace("/api/gitlab-reserve","/api/gitlab-ack")
+    identity_url=os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL","")
+    identity_access=os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN","")
+    watcher_run=os.environ.get("GITHUB_RUN_ID","")
+    if not (identity_url and identity_access and watcher_run.isdecimal()):
+        return False
+    sep="&" if "?" in identity_url else "?"
+    try:
+        audience=identity_url+sep+urllib.parse.urlencode(
+            {"audience":"anthares-ci-quota-controller"})
+        with urllib.request.urlopen(urllib.request.Request(
+            audience, headers={"Authorization":"Bearer "+identity_access}),
+            timeout=10) as resp:
+            identity=json.load(resp).get("value","")
+        if not identity:
+            return False
+        body=json.dumps({"component":component,"project_id":str(project_id),
+            "pipeline_id":str(event["id"]),"sha":str(event["sha"]),
+            "watcher_run_id":watcher_run}).encode()
+        with urllib.request.urlopen(urllib.request.Request(
+            destination,data=body,method="POST",headers={
+                "Authorization":"Bearer "+identity,
+                "Content-Type":"application/json"}),timeout=20) as resp:
+            reply=json.load(resp)
+        return reply.get("ok") is True and reply.get("state")=="FALLBACK_SUBMITTED"
+    except (urllib.error.HTTPError,urllib.error.URLError,OSError,
+            TimeoutError,ValueError,KeyError):
+        return False
+
+
 def dispatch(component, workflow, p):
     inputs = {"gitlab_pipeline_id": str(p["id"]), "gitlab_sha": p["sha"]}
     if workflow == "private-ci-quota-rescue.yml":
@@ -239,6 +274,11 @@ def main():
                     errors += 1
                 continue
             dispatch(component, workflow, event)
+            if not acknowledge_quota_dispatch(component, project_id, event):
+                print(f"{component}=DISPATCH_ACCEPTED_LEDGER_ACK_UNCERTAIN")
+                errors += 1
+            else:
+                print(f"{component}=DISPATCH_ACCEPTED_LEDGER_ACKED")
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, ProviderUncertain) as exc:
             # Never expose request URLs, response bodies, tokens or sensitive metadata.
             print(f"{component}=CONTROL_ERROR type={type(exc).__name__}")
