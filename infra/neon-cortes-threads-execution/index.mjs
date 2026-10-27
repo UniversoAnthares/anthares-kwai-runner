@@ -111,7 +111,7 @@ async function action(body,role,claims){
  }
  if(body.action==='quarantine'){
   if(!idValid(id)||!['MEDIA_HTTP_404','MEDIA_HTTP_410','MEDIA_HTTP_403','MEDIA_HTTP_5XX','MEDIA_FETCH_ERROR','MEDIA_INVALID','CAPTION_FETCH_ERROR','EDITORIAL_MISSING'].includes(String(body.reason||'')))return{ok:false,error:'INVALID_QUARANTINE'};
-  const rows=await database("INSERT INTO cortes_threads_quarantine(id,target_key,reason_code,expires_at) SELECT id,target_key,$3,CASE WHEN $3='EDITORIAL_MISSING' THEN now()+interval '365 days' ELSE now()+interval '24 hours' END FROM cortes_publications WHERE id=$1 AND target_key=$2 AND status='queued' ON CONFLICT(id) DO UPDATE SET error_count=cortes_threads_quarantine.error_count+1,last_checked_at=now(),updated_at=now() WHERE cortes_threads_quarantine.status='isolated' RETURNING id,reason_code,detected_at,expires_at,error_count",[id,TARGET,body.reason]);
+  const rows=await database("INSERT INTO cortes_threads_quarantine(id,target_key,reason_code,expires_at) SELECT id,target_key,$3,CASE WHEN $3='EDITORIAL_MISSING' THEN now()+interval '365 days' ELSE now()+interval '24 hours' END FROM cortes_publications WHERE id=$1 AND target_key=$2 AND status='queued' ON CONFLICT(id) DO UPDATE SET status='isolated',reason_code=EXCLUDED.reason_code,expires_at=EXCLUDED.expires_at,error_count=cortes_threads_quarantine.error_count+1,last_checked_at=now(),updated_at=now() WHERE cortes_threads_quarantine.status IN ('isolated','resolved','expired') RETURNING id,reason_code,detected_at,expires_at,error_count",[id,TARGET,body.reason]);
   return rows[0]?{ok:true,quarantine:rows[0],first_notice:Number(rows[0].error_count)===1}:{ok:false,error:'CANNOT_QUARANTINE_NONQUEUED'};
  }
  if(body.action==='claim'){
