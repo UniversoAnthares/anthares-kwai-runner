@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """QA P0: scan publisher workflows and authenticated WordPress clip failures."""
 import base64
+import csv
 import datetime as dt
 import hashlib
 import json
 import os
 import re
 import shlex
+import socket
 import subprocess
 import sys
 import urllib.error
@@ -183,6 +185,27 @@ def daily_round_incidents():
                             "Dispatch only fenced canonical recovery; never manufacture clips."}]
 
 
+def _authorized_local_system_context():
+    """Allow the existing SYSTEM P0 task only on its already-authorized Windows host.
+
+    Check the OS account SID, never a forgeable RUNNER_NAME/USERNAME variable.
+    SSH still requires its existing pinned host key and own key material.
+    """
+    if sys.platform != "win32" or socket.gethostname().upper() != "DESKTOP-FTDK0HP":
+        return False
+    try:
+        identity = subprocess.run(
+            ["whoami", "/user", "/fo", "csv", "/nh"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=5, check=False)
+        if identity.returncode != 0:
+            return False
+        entries = csv.reader(identity.stdout.decode("utf-8", "ignore").splitlines())
+        return any(row and row[-1].strip() == "S-1-5-18" for row in entries)
+    except (OSError, subprocess.TimeoutExpired, UnicodeError, csv.Error):
+        return False
+
+
 def wp_state_from_authorized_hosting():
     """Read WordPress state via existing hosting SSH when API secrets are absent.
 
@@ -190,7 +213,8 @@ def wp_state_from_authorized_hosting():
     No data or credentials from the response are printed. Never use this
     fallback after an explicit 401/403 with configured credentials.
     """
-    if os.getenv("RUNNER_NAME","") != "Anthares-QA-P0-Windows-Independent":
+    if (os.getenv("RUNNER_NAME","") != "Anthares-QA-P0-Windows-Independent"
+            and not _authorized_local_system_context()):
         raise RuntimeError("WP_QA_AUTH_UNAVAILABLE")
     php = ("echo wp_json_encode(array('items'=>array_values("
            "anthares_cortes_registry_get()),'blocker'=>"
