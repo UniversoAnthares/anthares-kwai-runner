@@ -147,6 +147,7 @@ jobs:
               body:'[QA-P0-EXECUTOR] '+outcome+'\nControl run: '+run+
                 '\nCodeberg test result: '+state+
                 '\nCodeberg evidence: '+(process.env.QA_CODEBERG_URL || 'unavailable')+
+                '\nRepair gate: '+String(process.env.QA_REPAIR_GATE || 'UNCLASSIFIED')+
                 '\nRecovery action (ACK only): '+String(process.env.QA_AUTOHEAL || 'NO_REPAIR_ACTION')+
                 '\nRecovery diagnostic: '+String(process.env.QA_DIAGNOSTIC || 'UNAVAILABLE').slice(0,300)+'\n'+next+
                 '\nOffline policy safety test on dedicated QA runner; primary regression suite on Codeberg. QA remains open until verified source fix and remote publication.'
