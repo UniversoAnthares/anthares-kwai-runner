@@ -7,7 +7,7 @@ const source=readFileSync(new URL(
   import.meta.url),"utf8");
 const transformed=source.replace(/^import .*;\s*$/gm,"")
   .replace("export default async function handler","async function handler");
-let state="FALLBACK_SUBMITTED",runId="123",wrongIdentity=false;
+let state="FALLBACK_SUBMITTED",runId="123",storedRun=null,wrongIdentity=false;
 const queries=[];
 const neon=()=>async (strings,...args)=>{
  const sql=strings.join("?");
@@ -16,10 +16,10 @@ const neon=()=>async (strings,...args)=>{
  assert.ok(sql.includes("data->>'source_sha'"));
  assert.ok(sql.includes("data->>'source_pipeline_blob'"));
  if(state==="FALLBACK_SUBMITTED"&&sql.includes("state='FALLBACK_SUBMITTED'")){
-   state="FALLBACK_EXECUTING";return [{attempt_id:"harness:owned"}];
+   state="FALLBACK_EXECUTING";storedRun=runId;return [{attempt_id:"harness:owned"}];
  }
  if(state==="FALLBACK_EXECUTING"&&sql.includes("state='FALLBACK_EXECUTING'")
-    &&args.some(x=>x===runId)){
+    &&runId===storedRun&&args.some(x=>x===storedRun)){
    state="FALLBACK_CONFIRMED";return [{attempt_id:"harness:owned"}];
  }
  return [];
