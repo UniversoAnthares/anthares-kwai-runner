@@ -98,7 +98,8 @@
       "codeberg_actions": "NOT_CONFIGURED_REPOSITORY_ACTIONS_DISABLED",
       "gitlab_ci": "BLOCKED_QUOTA_TEMPORARY_AUTOMATIC_RECHECK",
       "bitrise": "EXCLUDED_BY_OWNER_20261027_MACHINE_INVALID_HTTP400",
-      "harness": "WATCHER_AUTH_VERIFIED_RUN_40582510426_CONTROLLER_DEPLOYED_NONPUBLISHING_FALLBACK_ENABLED"
+      "harness": "WATCHER_AUTH_VERIFIED_RUN_40582510426_CONTROLLER_DEPLOYED_NONPUBLISHING_FALLBACK_ENABLED",
+      "cloudflare_workers_builds": "SERVICE_ANTHARES_RESERVA_BROWSER_BUILD_SUCCESS_CHECK_122489778798_GENERAL_CI_NOT_HOMOLOGATED"
     },
     "appveyor_routing_policy": {
       "rank": "penultimate",
@@ -345,7 +346,7 @@
     },
     "cloudflare_workers_builds": {
       "active": false,
-      "status": "PENDING_FRESH_QUOTA_VERIFICATION",
+      "status": "SERVICE_LINKED_BUILD_SUCCESS_GENERIC_CI_NOT_HOMOLOGATED",
       "ci_eligible": false
     },
     "cloudflare_browser_rendering": {

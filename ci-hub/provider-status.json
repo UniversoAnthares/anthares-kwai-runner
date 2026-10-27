@@ -162,10 +162,12 @@
       "eligible": false
     },
     "cloudflare_workers_builds": {
-      "status": "PENDING_FRESH_QUOTA_VERIFICATION",
-      "evidence_class": "PENDING_VERIFICATION",
-      "verified_at_utc": null,
-      "eligible": false
+      "status": "WORKERS_BUILDS_CONNECTED_BUILD_SUCCESS_20261027_GENERIC_CI_NOT_PROVEN",
+      "evidence_class": "LIVE_CLOUDFLARE_CHECK_RUN",
+      "verified_at_utc": "2026-10-27",
+      "eligible": false,
+      "evidence": "Cloudflare Workers and Pages GitHub check 'Workers Builds: anthares-reserva-browser' succeeded on commit f25cf957168cfabead97ba438fa286b7b8f4fa54, check 122489778798; build ID 27a01cea-9005-4a9a-8177-29cbd6e35656. Confirms specific service Workers build integration, not an independently dispatched arbitrary CI build/test runner.",
+      "reopen_condition": "Demonstrate independently-dispatched pinned-commit CI build/test with terminal result and approved workload routing; do not repeat credential setup for existing Cloudflare linked service."
     },
     "render": {
       "status": "RETIRED_PERMANENT_ALL_ACCOUNT_RESOURCES_SUSPENDED",
