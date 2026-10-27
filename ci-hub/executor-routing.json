@@ -361,7 +361,13 @@
       "harness_no_key_http_401_verified": true,
       "real_neon_ledger_table_verified": true,
       "real_neon_ledger_project": "purple-flower-35918989",
-      "real_neon_ledger_attempt_count_at_check": 3
+      "real_neon_ledger_attempt_count_at_check": 3,
+      "controller_claim_report_source": "IMPLEMENTED_MERGED_PR_1625",
+      "controller_claim_report_live": false,
+      "controller_claim_report_tests": "NODE_5_PASS_FAKE_OIDC_FAKE_NEON",
+      "controller_claim_report_source_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1625",
+      "controller_deploy_block": "VERCEL_HTTP_402_API_DEPLOYMENTS_FREE_PER_DAY_MORE_THAN_100_RETRY_AFTER_86400",
+      "controller_deploy_attempt_date": "2026-10-27"
     },
     "floot": {
       "active": true,
