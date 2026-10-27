@@ -65,13 +65,13 @@ jobs:
           }catch{
             if([int]$_.Exception.Response.StatusCode -ne 404){throw}
           }
-          if(!$exists -or $old.value -ne 'true'){
+          if(!$exists -or $old.data -ne 'true'){
             $data=@{value='true'} |ConvertTo-Json -Compress
             $method=if($exists){'Put'}else{'Post'}
             Invoke-WebRequest -Uri $url -Headers $h -Method $method -ContentType 'application/json' -Body $data -TimeoutSec 24 -UseBasicParsing |Out-Null
           }
           $verified=Invoke-RestMethod -Uri $url -Headers $h -TimeoutSec 18
-          if($verified.value -ne 'true'){throw 'CODEBERG_PRIMARY_FLAG_NOT_VERIFIED'}
+          if($verified.data -ne 'true'){throw 'CODEBERG_PRIMARY_FLAG_NOT_VERIFIED'}
           Write-Output 'CODEBERG_TIKTOK_PRIMARY_ENABLED_AND_GITHUB_DRAINED=1'
           } catch {
             Write-Output ('CODEBERG_PROMOTION_FAILED=' + $_.Exception.Message)
