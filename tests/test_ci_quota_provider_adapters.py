@@ -1,6 +1,6 @@
 """Mocked provider adapter verification. No real remote cancellation."""
 import unittest
-from tools.ci_quota_provider_adapters import GitHubActionsRun,GitLabPipeline,HarnessPipelineRun
+from tools.ci_quota_provider_adapters import GitHubActionsRun,GitLabPipeline,HarnessPipelineRun,cancel_harness_quota_fenced
 
 class ProvidersTest(unittest.TestCase):
     def test_github_post_cancel_before_status(self):
@@ -82,5 +82,50 @@ class ProvidersTest(unittest.TestCase):
                                "pipe123","owned123","fixture",
                                lambda *_:(200,{"status":"FAILURE"}))
         self.assertFalse(run.cancel("owned123"))
+
+
+    def test_harness_fenced_cancellation_rejects_local_ledger(self):
+        from tools.ci_quota_cancel_first import LocalLedger
+        import tempfile
+        from pathlib import Path
+        run=HarnessPipelineRun("acct123","default","project1",
+                               "pipe123","owned123","fixture",
+                               lambda *_: (_ for _ in ()).throw(
+                                   AssertionError("NETWORK_NOT_ALLOWED")))
+        with tempfile.TemporaryDirectory() as d:
+            ledger=LocalLedger(Path(d)/"local.sqlite")
+            try:
+                with self.assertRaisesRegex(ValueError, "SHARED_NEON_LEDGER_REQUIRED"):
+                    cancel_harness_quota_fenced(
+                        ledger=ledger,api=run,task_id="task1",
+                        attempt_id="owned123",quota_code="quota_exceeded",
+                        owned_execution_proven=True)
+            finally:
+                ledger.close()
+
+    def test_harness_fenced_cancellation_rejects_unowned(self):
+        from tools.ci_quota_neon_ledger import SharedQuotaLedger
+        def forbidden():
+            raise AssertionError("NO_DATABASE_CONNECTION_ALLOWED")
+        ledger=SharedQuotaLedger(forbidden)
+        run=HarnessPipelineRun("acct123","default","project1",
+                               "pipe123","owned123","fixture",
+                               lambda *_: (_ for _ in ()).throw(
+                                   AssertionError("NO_NETWORK_ALLOWED")))
+        with self.assertRaisesRegex(ValueError,"HARNESS_OWNERSHIP_PROOF_REQUIRED"):
+            cancel_harness_quota_fenced(
+                ledger=ledger,api=run,task_id="task1",
+                attempt_id="other123",quota_code="quota_exceeded",
+                owned_execution_proven=True)
+        with self.assertRaisesRegex(ValueError,"HARNESS_OWNERSHIP_PROOF_REQUIRED"):
+            cancel_harness_quota_fenced(
+                ledger=ledger,api=run,task_id="task1",
+                attempt_id="owned123",quota_code="quota_exceeded",
+                owned_execution_proven=False)
+        result=cancel_harness_quota_fenced(
+            ledger=ledger,api=run,task_id="task1",
+            attempt_id="owned123",quota_code="permission_denied",
+            owned_execution_proven=True)
+        self.assertEqual({"state":"NOT_QUOTA"},result)
 
 if __name__=="__main__": unittest.main()
