@@ -258,7 +258,7 @@ class HarnessWatcherTests(unittest.TestCase):
             }}}
         self.assertEqual("EXECUTION_ID_MISMATCH",
                          watcher.readonly_auth_probe("fixture", foreign))
-        self.assertEqual("AUTH_HTTP_401",
+        self.assertEqual("EXECUTION_AUTH_401_ACCOUNT_HTTP_401",
                          watcher.readonly_auth_probe("fixture",lambda *_: (401,{})))
 
     def test_main_probe_does_not_trigger_watch(self):
