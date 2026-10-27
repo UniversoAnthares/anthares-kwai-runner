@@ -289,8 +289,8 @@ class P0RouterTests(unittest.TestCase):
 
     def test_wordpress_local_system_guard_checks_host_and_real_sid(self):
         from types import SimpleNamespace
-        ok=SimpleNamespace(returncode=0,stdout=b'"SYSTEM","S-1-5-18"\\n')
-        other=SimpleNamespace(returncode=0,stdout=b'"USER","S-1-5-21-100"\\n')
+        ok=SimpleNamespace(returncode=0,stdout=b'"SYSTEM","S-1-5-18"')
+        other=SimpleNamespace(returncode=0,stdout=b'"USER","S-1-5-21-100"')
         with patch.object(router.sys,"platform","win32"), \
              patch.object(router.socket,"gethostname",return_value="DESKTOP-FTDK0HP"), \
              patch.object(router.subprocess,"run",return_value=ok) as process:
