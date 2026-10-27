@@ -1,0 +1,53 @@
+name: Verify Codeberg TikTok fenced canary result
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cortes-codeberg-tiktok-confirmation-readback.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    env:
+      CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
+    steps:
+      - name: Read Codeberg Actions final run outcome without extra publishing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $u=[uri]$env:CODEBERG_PUSH_URL
+          if ($u.Scheme -ne 'https' -or $u.Host -ne 'codeberg.org') { throw 'CODEBERG_AUTH_ORIGIN_INVALID' }
+          $pair=$u.UserInfo.Split(':',2)
+          if ($pair.Count -ne 2 -or !$pair[0] -or !$pair[1]) { throw 'CODEBERG_AUTH_MISSING' }
+          $user=[uri]::UnescapeDataString($pair[0])
+          $pass=[uri]::UnescapeDataString($pair[1])
+          $auth=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("$($user):$pass"))
+          $headers=@{ Authorization="Basic $auth"; Accept='application/json' }
+          $url='https://codeberg.org/api/v1/repos/UniversoAnthares/anthares-kwai-runner/actions/runs?limit=80'
+          $cutoff=[datetime]'2026-10-27T19:42:00Z'
+          for($attempt=0; $attempt -lt 21; $attempt++) {
+            $data=Invoke-RestMethod -Method GET -Uri $url -Headers $headers -TimeoutSec 22
+            $runs=@($data.workflow_runs | Where-Object {
+              $_.name -eq 'CORTES TikTok Codeberg universo cloud primary' -and
+              [datetime]$_.created_at -ge $cutoff
+            } | Sort-Object created_at -Descending)
+            if($runs.Count -gt 0) {
+              $target=$runs[0]
+              Write-Output "CODEBERG_TIKTOK_OBSERVED_RUN_ID=$($target.id) STATUS=$($target.status) CONCLUSION=$($target.conclusion)"
+              if($target.status -in @('completed','success','failure','cancelled')) {
+                $detail=Invoke-RestMethod -Method GET -Uri ('https://codeberg.org/api/v1/repos/UniversoAnthares/anthares-kwai-runner/actions/runs/'+$target.id+'/jobs') -Headers $headers -TimeoutSec 22
+                foreach($job in @($detail.jobs)) {
+                  Write-Output "CODEBERG_TIKTOK_JOB_ID=$($job.id) STATUS=$($job.status) CONCLUSION=$($job.conclusion)"
+                }
+                if($target.conclusion -eq 'success' -or $target.status -eq 'success') {
+                  Write-Output 'CODEBERG_TIKTOK_RUN_TERMINAL_SUCCESS_OR_STATUS_ONLY=1'
+                  exit 0
+                }
+                throw "CODEBERG_TIKTOK_RUN_TERMINAL_$($target.conclusion)"
+              }
+            }
+            Start-Sleep -Seconds 20
+          }
+          throw 'CODEBERG_TIKTOK_RUN_TERMINAL_NOT_OBSERVED'
