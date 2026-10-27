@@ -186,6 +186,28 @@ def cancel_harness_quota_fenced(*, ledger, api: HarnessPipelineRun, task_id: str
         raise ValueError("HARNESS_OWNERSHIP_PROOF_REQUIRED")
     if not is_quota(http_status=http_status, code=quota_code, message=error_message):
         return {"state": "NOT_QUOTA"}
+    # Verify identity and pipeline scope by a read-only provider query BEFORE
+    # obtaining a fence or sending a destructive interrupt. A caller-controlled
+    # ownership boolean is not sufficient authentication on its own.
+    try:
+        preflight = api.status(attempt_id)
+    except Exception:
+        preflight = "UNKNOWN"
+    if preflight != "RUNNING":
+        return {"state": "HARNESS_PREFLIGHT_NOT_RUNNING_OR_UNVERIFIED"}
+    def poll_terminal(_):
+        import time
+        last = "UNKNOWN"
+        for index in range(4):
+            try:
+                last = api.status(attempt_id)
+            except Exception:
+                return "UNKNOWN"
+            if last != "RUNNING":
+                return last
+            if index < 3:
+                time.sleep(1)
+        return last
     # Never enqueue a replacement here: cross-provider independent quota,
     # side-effect reconciliation and global fencing need additional proof.
     return cancel_first(
@@ -196,7 +218,7 @@ def cancel_harness_quota_fenced(*, ledger, api: HarnessPipelineRun, task_id: str
         candidates=[], http_status=http_status, provider_code=quota_code,
         error_message=error_message,
         cancel=lambda _id: api.cancel(attempt_id),
-        status=lambda _id: api.status(attempt_id),
+        status=poll_terminal,
         enqueue=lambda *_: (_ for _ in ()).throw(
             AssertionError("HARNESS_FALLBACK_DISPATCH_FORBIDDEN")),
         side_effects_possible=True, reconcile=reconcile)
