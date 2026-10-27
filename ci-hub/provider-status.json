@@ -181,10 +181,14 @@
       "eligible": false
     },
     "harness": {
-      "status": "PENDING_FRESH_VERIFICATION",
-      "evidence_class": "PENDING_VERIFICATION",
-      "verified_at_utc": null,
-      "eligible": false
+      "status": "CI_RUN_VERIFIED_ROUTING_GATED",
+      "evidence_class": "AUTHENTICATED_SUCCESSFUL_CI_EXECUTION",
+      "verified_at_utc": "2026-10-27",
+      "eligible": false,
+      "verification_execution": "#908",
+      "verification_url": "https://app.harness.io/ng/account/xAEBvmMUTjql7g2Exxmp-g/all/orgs/default/projects/default_project/pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d/executions/udezZluzS2KC0qbfKcwCng/pipeline",
+      "verification_result": "SUCCESS_58S_MAIN_CLONE_PYTHON_SYNTAX_CONTROL_PUBLISHER",
+      "routing_gate": "HARNESS_CANCEL_FIRST_PROVIDER_ADAPTER_AND_SHARED_FENCING_NOT_YET_PROVEN"
     },
     "floot": {
       "status": "PENDING_FRESH_VERIFICATION",
