@@ -30,6 +30,26 @@ pipeline:
                       set -euo pipefail
                       python3 -m compileall -q tests
               - step:
+                  identifier: Harness_Neon_quota_contract
+                  name: Harness and Neon quota contract
+                  type: Run
+                  spec:
+                    shell: Bash
+                    command: |-
+                      set -euo pipefail
+                      python3 --version
+                      python3 -m unittest -v \
+                        tests.test_ci_quota_cancel_first \
+                        tests.test_ci_quota_neon_ledger \
+                        tests.test_ci_quota_provider_adapters \
+                        tests.test_ci_quota_harness_fenced_integration
+                      echo HARNESS_NEON_CANCEL_FIRST_TESTS_PASS=24
+                      if command -v node >/dev/null 2>&1; then
+                        node tests/test_ci_quota_harness_controller.mjs
+                      else
+                        echo HARNESS_NEON_CONTROLLER_NODE_TESTS_SKIPPED_RUNTIME_UNAVAILABLE=1
+                      fi
+              - step:
                   identifier: Control_publisher_acceptance
                   name: Control publisher acceptance
                   type: Run
