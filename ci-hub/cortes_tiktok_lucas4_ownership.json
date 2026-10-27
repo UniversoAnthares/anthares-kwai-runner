@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "network": "tiktok",
+  "account": "lucasrosalem4",
+  "operator_repo": "UniversoAnthares",
+  "platform_owner_verified": false,
+  "repository": "UniversoAnthares/anthares-kwai-runner",
+  "producer_repo": "UniversoAnthares/anthares-clipper",
+  "producer_workflow": ".github/workflows/anthares-tiktok-owned-youtube.yml",
+  "consumer_workflows": [
+    ".github/workflows/cortes-tiktok-lucasrosalem4-cloud-publisher.yml",
+    ".github/workflows/cortes-tiktok-lucasrosalem4-windows-fallback.yml"
+  ],
+  "publisher_code": "tools/cortes_tiktok_lucasrosalem4_cloud_publish.py",
+  "queue_code": "infra/neon-cortes-lucasrosalem4/index.mjs",
+  "queue_table": "cortes_tiktok_lucasrosalem4_publications",
+  "environment": "cortes-tiktok-lucas4",
+  "credential_name": "CORTES_TIKTOK_LUCAS4_STORAGE_STATE",
+  "secret_scope_verified": false,
+  "independent_deploy_identity_verified": false,
+  "external_release_approved": false,
+  "deploy_authorized": false,
+  "notes": "Native credential reference, existing process alias. Offline ownership only; real scope, escrow and independent provider IAM remain unverified.",
+  "runtime_variable": "TIKTOK_LUCASROSALEM4_STORAGE_STATE"
+}
