@@ -174,7 +174,12 @@
         "controller_deployment": "dpl_GpybXDXSumX4MBMYAjaV34SanXoc",
         "live_oidc_neon_proof": "GITHUB_RUN_40582510426",
         "real_quota_abort_observed": false,
-        "contract_tests": "41_PYTHON_19_NODE_PASS_GITHUB_RUN_40576068709"
+        "contract_tests": "41_PYTHON_19_NODE_PASS_GITHUB_RUN_40576068709",
+        "implementation_complete": true,
+        "simulation_verified": true,
+        "simulation_run": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40584613663/job/122472658582",
+        "simulation_tests_passed": 63,
+        "verification_scope": "MOCKED_END_TO_END_CONTRACTS; REAL_QUOTA_INCIDENT_NOT_OBSERVED"
       }
     },
     "bitrise_executor_policy": {
