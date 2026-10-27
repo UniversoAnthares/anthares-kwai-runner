@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 // The Codeberg identity is cryptographically independent of GitHub OIDC.
-// This provider only has the consumer role; producer actions remain GitHub-only.
+// Producer authority is restricted to the exact clipper workflow on main.
 const ISSUER='https://codeberg.org/api/actions';
 const KEYS_URL='https://codeberg.org/api/actions/.well-known/keys';
 const REPOSITORY='UniversoAnthares/anthares-kwai-runner';
@@ -27,7 +27,7 @@ export async function codebergRole(req,audience,workflowName) {
   const expectedRepo=producer?PRODUCER_REPOSITORY:REPOSITORY;
   const expectedWorkflow=producer?PRODUCER_WORKFLOW:workflowName;
   const wf=expectedRepo+'/.forgejo/workflows/'+expectedWorkflow+'@refs/heads/main';
-  const allowedEvents=producer?['workflow_dispatch']:['schedule','workflow_dispatch'];
+  const allowedEvents=producer?['workflow_dispatch','push']:['schedule','workflow_dispatch'];
   if(claims.iss!==ISSUER||!aud.includes(audience)||
      claims.repository!==expectedRepo||claims.ref!=='refs/heads/main'||
      claims.workflow_ref!==wf||!allowedEvents.includes(claims.event_name))return '';
