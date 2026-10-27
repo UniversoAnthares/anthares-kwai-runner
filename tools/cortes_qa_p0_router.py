@@ -295,7 +295,13 @@ def main():
         print("CORTES_QA_P0_CREATED network="+item["network"]+" issue="+str(created["number"]))
     if posted:
         dispatch_controller()
-    print("CORTES_QA_ROUTER_OK observations="+str(len(items))+" opened="+str(posted)+" sources_failed="+str(len(bad)))
+    if bad:
+        # A partial scan must never be reported as successful merely because
+        # source-visibility alert issues were created successfully.
+        print("::error::CORTES_QA_ROUTER_PARTIAL sources_failed="+str(len(bad))+
+              " missing="+",".join(sorted(bad)))
+        return 2
+    print("CORTES_QA_ROUTER_OK observations="+str(len(items))+" opened="+str(posted)+" sources_failed=0")
     return 0
 
 if __name__=="__main__":
