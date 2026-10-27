@@ -2626,6 +2626,2726 @@
       ],
       "excerpt": "eu vou usar as opções aqui de administrar ah, que eu dela que fofinha e aí Lívia, Lívia, Lívia linda ali, pô show, beleza, Lívia ele pode ficar, Lívia diz aí, sabe que se ela não responder é porque ela não tá vendo se ela não tá vendo é porque ela já tá braba contigo né sabe que ela já olhou assim já esqueceu e aí foi lá, fechou mas avança um pouco, vamos aos 15 minutos aí que eu quero saber ao dia que fica ruim a live, o vídeo dela Já tá ruim dentro do vídeo, pô. Não, você falou que fica bem ruim, né? Eu tô querendo descobrir. Não, mas é ruim o vídeo todo, cara!",
       "verified": true
+    },
+    "g1:fOmihuHUT1M:6071:6111": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:6071:6111",
+      "attachment_id": 17081,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 6071,
+      "source_end_s": 6111,
+      "media_sha256": "e3d6179c1ffa65b8a30252f272a6cc1a103cb9dd34ba1cb33f249d6874fa75b7",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 0.5,
+          "text": "Entendendo?"
+        },
+        {
+          "start": 0.5,
+          "end": 1.62,
+          "text": "Quem é dirigido?"
+        },
+        {
+          "start": 1.62,
+          "end": 4.1,
+          "text": "Não foi o cara, não tem como não, cara."
+        },
+        {
+          "start": 4.1,
+          "end": 5.38,
+          "text": "Então foi um alívio."
+        },
+        {
+          "start": 5.38,
+          "end": 6.98,
+          "text": "Embora a gente tenha ficado triste."
+        },
+        {
+          "start": 6.98,
+          "end": 10.58,
+          "text": "As filhas dele, minha mãe e as minhas tias, ficaram muito tristes."
+        },
+        {
+          "start": 10.58,
+          "end": 12.28,
+          "text": "Ficavam muito que é o pai delas."
+        },
+        {
+          "start": 12.28,
+          "end": 15.74,
+          "text": "Eu fiquei menos, porque eu tive um contato muito grande, ainda mais sendo adolescente."
+        },
+        {
+          "start": 15.74,
+          "end": 18.42,
+          "text": "Era adolescente, tendo contato com o meu avô numa época."
+        },
+        {
+          "start": 18.42,
+          "end": 23.9,
+          "text": "Eu já tinha contato antes, mas eu tive contato também em uma época em que ele estava insuportável."
+        },
+        {
+          "start": 23.9,
+          "end": 25.34,
+          "text": "Insuportável, pô."
+        },
+        {
+          "start": 25.34,
+          "end": 27.9,
+          "text": "Foi um alívio, não só pra mim, pra todo mundo."
+        },
+        {
+          "start": 27.9,
+          "end": 29.5,
+          "text": "Embora a gente também ficou triste."
+        },
+        {
+          "start": 29.5,
+          "end": 33.1,
+          "text": "Eu menos do que elas, mas, enfim, cada um tem o seu luto."
+        },
+        {
+          "start": 33.1,
+          "end": 34.74,
+          "text": "Mas é um exemplo que o Lucas deu."
+        },
+        {
+          "start": 34.74,
+          "end": 36.54,
+          "text": "Ele falou do vovô, assim, eu falei, exemplo, deu..."
+        }
+      ],
+      "excerpt": "Entendendo? Quem é dirigido? Não foi o cara, não tem como não, cara. Então foi um alívio. Embora a gente tenha ficado triste. As filhas dele, minha mãe e as minhas tias, ficaram muito tristes. Ficavam muito que é o pai delas. Eu fiquei menos, porque eu tive um contato muito grande, ainda mais sendo adolescente. Era adolescente, tendo contato com o meu avô numa época. Eu já tinha contato antes, mas eu tive contato também em uma época em que ele estava insuportável. Insuportável, pô. Foi um alívio, não só pra mim, pra todo mundo. Embora a gente também ficou triste. Eu menos do que elas, mas, enfim, cada um tem o seu luto. Mas é um exemplo que o Lucas deu. Ele falou do vovô, assim, eu falei, exemplo, deu...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:6111:6151": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:6111:6151",
+      "attachment_id": 17082,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 6111,
+      "source_end_s": 6151,
+      "media_sha256": "6e888198ae2be37c06959a3723d50383dcd3b75dbdcb779ed6989bff4014ae89",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3,
+          "text": "Vou, vou, vou, vou aí, pô. Tá fome dele."
+        },
+        {
+          "start": 4,
+          "end": 6,
+          "text": "Agora eu vou ter que sair mesmo."
+        },
+        {
+          "start": 6,
+          "end": 9,
+          "text": "Ah, tchau. Obrigado, Lívia. Tô deixando a imagem melhorinha."
+        },
+        {
+          "start": 9,
+          "end": 12,
+          "text": "As 40 minutos, né? Eu vou continuar aqui."
+        },
+        {
+          "start": 12,
+          "end": 19,
+          "text": "Ah, cupau aí. Acho que você podia explicar, já de cara aí, continuar a explicar um pouquinho melhor aí,"
+        },
+        {
+          "start": 19,
+          "end": 21,
+          "text": "com a diferença, assustintamente, assim, da visão..."
+        },
+        {
+          "start": 21,
+          "end": 23,
+          "text": "Da minha visão para a tua?"
+        },
+        {
+          "start": 23,
+          "end": 27,
+          "text": "Da minha para a sua, ou de repente até da sua para as demais aí, né?"
+        },
+        {
+          "start": 27,
+          "end": 31.86,
+          "text": "A leitura mais simples do livro é a leitura mais fácil."
+        },
+        {
+          "start": 31.86,
+          "end": 32.86,
+          "text": "Cadê a Bora Liu?"
+        },
+        {
+          "start": 32.86,
+          "end": 35.7,
+          "text": "Entrou no livro parecendo que ser um livro de aventura."
+        },
+        {
+          "start": 35.7,
+          "end": 37.2,
+          "text": "É o Kafka, pô."
+        }
+      ],
+      "excerpt": "Vou, vou, vou, vou aí, pô. Tá fome dele. Agora eu vou ter que sair mesmo. Ah, tchau. Obrigado, Lívia. Tô deixando a imagem melhorinha. As 40 minutos, né? Eu vou continuar aqui. Ah, cupau aí. Acho que você podia explicar, já de cara aí, continuar a explicar um pouquinho melhor aí, com a diferença, assustintamente, assim, da visão... Da minha visão para a tua? Da minha para a sua, ou de repente até da sua para as demais aí, né? A leitura mais simples do livro é a leitura mais fácil. Cadê a Bora Liu? Entrou no livro parecendo que ser um livro de aventura. É o Kafka, pô.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:6151:6193": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:6151:6193",
+      "attachment_id": 17083,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 6151,
+      "source_end_s": 6193,
+      "media_sha256": "33674684956071d590a3beed40606f8e3fd234c27bde9b7180a791698cdcdef1",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 6.82,
+          "text": "Aí ela deu o livro, não gostou do plot, e aí leu só por cima, se a família, o banco de escrotos, que não gosta dele,"
+        },
+        {
+          "start": 6.82,
+          "end": 10.98,
+          "text": "então agora parasitaram ele, agora ele tá parasitando, eles não gostaram."
+        },
+        {
+          "start": 10.98,
+          "end": 16.82,
+          "text": "Então ela foi isso que ela entendeu, mas talvez seja isso que muita gente lê mesmo, muita gente que entende, né?"
+        },
+        {
+          "start": 16.82,
+          "end": 26.74,
+          "text": "Não, uma parte, o Nabokov, eu li a crítica do Nabokov, e eu tava de cara, porque ele citava as partes que eu falei pra vocês aqui, ele botou, ele mesmo citou a parte ali inteira,"
+        },
+        {
+          "start": 26.74,
+          "end": 31.72,
+          "text": "E eu olhando assim, caraca, a parte que a mãe fala, que a mãe do Gregor fala,"
+        },
+        {
+          "start": 31.72,
+          "end": 36.18,
+          "text": "pô, vamos deixar as coisas aqui, né, porque para quando ele voltar para nós, ele vir e fala."
+        },
+        {
+          "start": 36.18,
+          "end": 38.68,
+          "text": "Ela é uma mãe mecânica. O que é isso?"
+        }
+      ],
+      "excerpt": "Aí ela deu o livro, não gostou do plot, e aí leu só por cima, se a família, o banco de escrotos, que não gosta dele, então agora parasitaram ele, agora ele tá parasitando, eles não gostaram. Então ela foi isso que ela entendeu, mas talvez seja isso que muita gente lê mesmo, muita gente que entende, né? Não, uma parte, o Nabokov, eu li a crítica do Nabokov, e eu tava de cara, porque ele citava as partes que eu falei pra vocês aqui, ele botou, ele mesmo citou a parte ali inteira, E eu olhando assim, caraca, a parte que a mãe fala, que a mãe do Gregor fala, pô, vamos deixar as coisas aqui, né, porque para quando ele voltar para nós, ele vir e fala. Ela é uma mãe mecânica. O que é isso?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:6193:6234": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:6193:6234",
+      "attachment_id": 17084,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 6193,
+      "source_end_s": 6234,
+      "media_sha256": "208deeec37e7f31cb2f2ffbb47b244b195ab5f96c46f3c572742a31d7f093c1f",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2,
+          "text": "Ela é uma mãe falsa sem o coração."
+        },
+        {
+          "start": 2,
+          "end": 4,
+          "text": "Fiquei, caralho, o que aconteceu?"
+        },
+        {
+          "start": 4,
+          "end": 6,
+          "text": "Comecei a ler."
+        },
+        {
+          "start": 6,
+          "end": 8,
+          "text": "Eu peguei o Google Lens, tira uma foto"
+        },
+        {
+          "start": 8,
+          "end": 10,
+          "text": "para ele traduzir para mim. Eu não sei mais falar francês."
+        },
+        {
+          "start": 10,
+          "end": 12,
+          "text": "Eu comecei a ler francês."
+        },
+        {
+          "start": 12,
+          "end": 14,
+          "text": "Eu peguei a tradução em inglês, porque eu sei que"
+        },
+        {
+          "start": 14,
+          "end": 17,
+          "text": "eles sabem alemão, mas ele gosta mais de ler inglês,"
+        },
+        {
+          "start": 17,
+          "end": 19,
+          "text": "na Bocove. Eu peguei a tradução em inglês e fui ler."
+        },
+        {
+          "start": 19,
+          "end": 21,
+          "text": "Caraca, comecei a ler na Bocove."
+        },
+        {
+          "start": 21,
+          "end": 23,
+          "text": "Maluco, ele é ótimo escritor. Adoro a olhita."
+        },
+        {
+          "start": 23,
+          "end": 26,
+          "text": "E mesmo a sacrifica doida, ele escreve muito bem."
+        },
+        {
+          "start": 26,
+          "end": 28,
+          "text": "É delicioso na Bocove."
+        },
+        {
+          "start": 28,
+          "end": 29.22,
+          "text": "Ele é doido, irmão!"
+        },
+        {
+          "start": 29.22,
+          "end": 31.34,
+          "text": "Ele é doido, dança, carai!"
+        },
+        {
+          "start": 31.34,
+          "end": 33.54,
+          "text": "Ele é um péssimo crítico! É um ótimo escritor!"
+        },
+        {
+          "start": 33.54,
+          "end": 35.62,
+          "text": "Um péssimo, péssimo crítico, cara!"
+        },
+        {
+          "start": 35.62,
+          "end": 36.12,
+          "text": "E ele..."
+        }
+      ],
+      "excerpt": "Ela é uma mãe falsa sem o coração. Fiquei, caralho, o que aconteceu? Comecei a ler. Eu peguei o Google Lens, tira uma foto para ele traduzir para mim. Eu não sei mais falar francês. Eu comecei a ler francês. Eu peguei a tradução em inglês, porque eu sei que eles sabem alemão, mas ele gosta mais de ler inglês, na Bocove. Eu peguei a tradução em inglês e fui ler. Caraca, comecei a ler na Bocove. Maluco, ele é ótimo escritor. Adoro a olhita. E mesmo a sacrifica doida, ele escreve muito bem. É delicioso na Bocove. Ele é doido, irmão! Ele é doido, dança, carai! Ele é um péssimo crítico! É um ótimo escritor! Um péssimo, péssimo crítico, cara! E ele...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:6315:6356": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:6315:6356",
+      "attachment_id": 17085,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 6315,
+      "source_end_s": 6356,
+      "media_sha256": "5343098adae7ed44a5aeeb6b2fa03c67476622a6b0b16c8a9916d9e1a18a32cd",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2,
+          "text": "Daqui a pouquinho, a gente vai chegar nisso aí."
+        },
+        {
+          "start": 2,
+          "end": 4,
+          "text": "Valeu, patrô. Obrigado."
+        },
+        {
+          "start": 4,
+          "end": 6,
+          "text": "E um ha-ha-ha."
+        },
+        {
+          "start": 6,
+          "end": 8,
+          "text": "Valeu, vamos lá."
+        },
+        {
+          "start": 8,
+          "end": 10,
+          "text": "Vamos continuar aqui o vídeo dela."
+        },
+        {
+          "start": 10,
+          "end": 13,
+          "text": "Eu acho que vocês entenderam a divergência entre mim e o Lucas."
+        },
+        {
+          "start": 13,
+          "end": 16,
+          "text": "Eu vou destacar, vou acabar destacando muito mais os pontos"
+        },
+        {
+          "start": 16,
+          "end": 18,
+          "text": "que são tanto para..."
+        },
+        {
+          "start": 18,
+          "end": 20,
+          "text": "Não crueldade, mas tanto para os crimes,"
+        },
+        {
+          "start": 20,
+          "end": 22,
+          "text": "para os erros que eles cometem,"
+        },
+        {
+          "start": 22,
+          "end": 24,
+          "text": "quanto para os momentos de descompaixão,"
+        },
+        {
+          "start": 24,
+          "end": 27,
+          "text": "o Lucas veio isso com muito mais morno."
+        },
+        {
+          "start": 27,
+          "end": 29,
+          "text": "Para ele é muito mais..."
+        },
+        {
+          "start": 29,
+          "end": 32.92,
+          "text": "Mas é mais ou menos a mesma coisa. O que ele diz que tem na obra de Hugo também."
+        },
+        {
+          "start": 32.92,
+          "end": 34.42,
+          "text": "Tanto que as partes que eu falei."
+        }
+      ],
+      "excerpt": "Daqui a pouquinho, a gente vai chegar nisso aí. Valeu, patrô. Obrigado. E um ha-ha-ha. Valeu, vamos lá. Vamos continuar aqui o vídeo dela. Eu acho que vocês entenderam a divergência entre mim e o Lucas. Eu vou destacar, vou acabar destacando muito mais os pontos que são tanto para... Não crueldade, mas tanto para os crimes, para os erros que eles cometem, quanto para os momentos de descompaixão, o Lucas veio isso com muito mais morno. Para ele é muito mais... Mas é mais ou menos a mesma coisa. O que ele diz que tem na obra de Hugo também. Tanto que as partes que eu falei.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:6356:6396": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:6356:6396",
+      "attachment_id": 17086,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 6356,
+      "source_end_s": 6396,
+      "media_sha256": "ba14a15eba62d3953e0d31358a8f2bf13d22bc4adac29290d9a3cb2d9c00f9f3",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2,
+          "text": "Ele sabe o que está escrito. Ele leu, né?"
+        },
+        {
+          "start": 2,
+          "end": 4,
+          "text": "Cara, eu curto. Eu curto sim. Eu gosto sim."
+        },
+        {
+          "start": 4,
+          "end": 10,
+          "text": "Eu tenho novos contos de terror ali na estante. Eu ainda não li, não."
+        },
+        {
+          "start": 10,
+          "end": 15,
+          "text": "Mas eu li algumas coisas. Eu li o Corvo, li o Gato Preto lá."
+        },
+        {
+          "start": 15,
+          "end": 19,
+          "text": "Li um ensaio dele sobre a arte, sobre como que escreve, enfim."
+        },
+        {
+          "start": 19,
+          "end": 22,
+          "text": "Eu gosto bastante. Ele influenciou muita gente que eu gosto."
+        },
+        {
+          "start": 22,
+          "end": 24,
+          "text": "Ele influenciou pra caralho Baudelaire."
+        },
+        {
+          "start": 24,
+          "end": 27.34,
+          "text": "E o Edgar Lampo, gente, só um parênteses aqui, Rabidão."
+        },
+        {
+          "start": 27.34,
+          "end": 32.34,
+          "text": "Ele é o grande cara do romantismo do... como pode dizer..."
+        }
+      ],
+      "excerpt": "Ele sabe o que está escrito. Ele leu, né? Cara, eu curto. Eu curto sim. Eu gosto sim. Eu tenho novos contos de terror ali na estante. Eu ainda não li, não. Mas eu li algumas coisas. Eu li o Corvo, li o Gato Preto lá. Li um ensaio dele sobre a arte, sobre como que escreve, enfim. Eu gosto bastante. Ele influenciou muita gente que eu gosto. Ele influenciou pra caralho Baudelaire. E o Edgar Lampo, gente, só um parênteses aqui, Rabidão. Ele é o grande cara do romantismo do... como pode dizer...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:6396:6436": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:6396:6436",
+      "attachment_id": 17087,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 6396,
+      "source_end_s": 6436,
+      "media_sha256": "1a8cdd0cd3259db786c7edea66f70c6654033876f98ae1dceea48968a29d5ec8",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.8,
+          "text": "do romantismo intelectual, que é o romantismo decadente."
+        },
+        {
+          "start": 4.8,
+          "end": 6.7,
+          "text": "É o romantismo neoclasticista."
+        },
+        {
+          "start": 6.7,
+          "end": 9.5,
+          "text": "Você tem um pré-romantismo que segue as regras,"
+        },
+        {
+          "start": 9.5,
+          "end": 14.2,
+          "text": "porém tem um sonho lá para que lá no futuro distante"
+        },
+        {
+          "start": 14.2,
+          "end": 15.6,
+          "text": "tem um mundo ideal que eu quero."
+        },
+        {
+          "start": 15.6,
+          "end": 18.6,
+          "text": "E aí isso pode ser feliz ou triste, mas assim, tem esse sonho."
+        },
+        {
+          "start": 18.6,
+          "end": 20.7,
+          "text": "E pode acontecer o que é fatal que aconteça."
+        },
+        {
+          "start": 20.7,
+          "end": 24.3,
+          "text": "Aí vem o romantismo que é, caraca, o sonho está chegando."
+        },
+        {
+          "start": 24.3,
+          "end": 27,
+          "text": "O sonho está chegando, que aí é de 1814,"
+        },
+        {
+          "start": 27,
+          "end": 30.36,
+          "text": "porque o pré-romantismo é 1870 até 1814."
+        },
+        {
+          "start": 30.36,
+          "end": 32.5,
+          "text": "Bateu 1814 e começa o romantismo."
+        }
+      ],
+      "excerpt": "do romantismo intelectual, que é o romantismo decadente. É o romantismo neoclasticista. Você tem um pré-romantismo que segue as regras, porém tem um sonho lá para que lá no futuro distante tem um mundo ideal que eu quero. E aí isso pode ser feliz ou triste, mas assim, tem esse sonho. E pode acontecer o que é fatal que aconteça. Aí vem o romantismo que é, caraca, o sonho está chegando. O sonho está chegando, que aí é de 1814, porque o pré-romantismo é 1870 até 1814. Bateu 1814 e começa o romantismo.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:6436:6478": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:6436:6478",
+      "attachment_id": 17088,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 6436,
+      "source_end_s": 6478,
+      "media_sha256": "18da83cc48843db794342e7391cc22a759923b497bc8bec29ab92da7e0ef3f3e",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.6,
+          "text": "Começa o caraca. O sonho está acontecendo, bicho."
+        },
+        {
+          "start": 2.6,
+          "end": 3.6,
+          "text": "O sonho está acontecendo."
+        },
+        {
+          "start": 3.6,
+          "end": 9.72,
+          "text": "A gente é um romantismo muito nacionalista, muito tipo de vamos mudar o mundo, formar nações,"
+        },
+        {
+          "start": 9.72,
+          "end": 15.1,
+          "text": "a identidade francesa, alemã, está se formando mesmo, o cacete, o teatro alemão está se"
+        },
+        {
+          "start": 15.1,
+          "end": 21.12,
+          "text": "formando com o gut e com o chiller e com o fim, pra lá, bata, né, tipo, é um romantismo"
+        },
+        {
+          "start": 21.12,
+          "end": 23.08,
+          "text": "erro, pesado, né?"
+        },
+        {
+          "start": 23.08,
+          "end": 29.12,
+          "text": "Os sonhos que o pré-romantismo destacava o romantismo está aparentemente realizando."
+        },
+        {
+          "start": 29.12,
+          "end": 32.82,
+          "text": "E, em 1848, Berenice do Racine é a..."
+        }
+      ],
+      "excerpt": "Começa o caraca. O sonho está acontecendo, bicho. O sonho está acontecendo. A gente é um romantismo muito nacionalista, muito tipo de vamos mudar o mundo, formar nações, a identidade francesa, alemã, está se formando mesmo, o cacete, o teatro alemão está se formando com o gut e com o chiller e com o fim, pra lá, bata, né, tipo, é um romantismo erro, pesado, né? Os sonhos que o pré-romantismo destacava o romantismo está aparentemente realizando. E, em 1848, Berenice do Racine é a...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:6560:6603": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:6560:6603",
+      "attachment_id": 17089,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 6560,
+      "source_end_s": 6603,
+      "media_sha256": "6f10d869e75c8ebabf374846ca2762a39f5dc76b04bad474332f06b02f9bc439",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.38,
+          "text": "Vamos mudar as formas aqui, vamos mudar as coisas toda."
+        },
+        {
+          "start": 3.38,
+          "end": 5.38,
+          "text": "E porque a gente já era nova, entendeu?"
+        },
+        {
+          "start": 5.38,
+          "end": 10.14,
+          "text": "A forma também é revolucionária, não sentido marxista, tá gente?"
+        },
+        {
+          "start": 10.14,
+          "end": 12.14,
+          "text": "Revolucionário em outro sentido, né?"
+        },
+        {
+          "start": 12.14,
+          "end": 14.14,
+          "text": "A forma revolucionária é..."
+        },
+        {
+          "start": 14.14,
+          "end": 16.14,
+          "text": "Não é revolução, é a revolução tipo..."
+        },
+        {
+          "start": 16.14,
+          "end": 18.14,
+          "text": "Vai, o povo vai vencer, entendeu?"
+        },
+        {
+          "start": 18.14,
+          "end": 20.14,
+          "text": "O povo vai conseguir. Show!"
+        },
+        {
+          "start": 20.14,
+          "end": 22.14,
+          "text": "Entendeu? E beleza."
+        },
+        {
+          "start": 22.14,
+          "end": 24.14,
+          "text": "Quando isso não acontece, entre o Romandismo Decadente."
+        },
+        {
+          "start": 24.14,
+          "end": 26.14,
+          "text": "Na França você tem o Baudelaire"
+        },
+        {
+          "start": 26.14,
+          "end": 29.64,
+          "text": "e o Hugo também participa dele."
+        },
+        {
+          "start": 29.64,
+          "end": 36.14,
+          "text": "O Hugo nem tanto, mas o Hugo não, na verdade não, o Standout é menor, mas o Baudiléreo..."
+        }
+      ],
+      "excerpt": "Vamos mudar as formas aqui, vamos mudar as coisas toda. E porque a gente já era nova, entendeu? A forma também é revolucionária, não sentido marxista, tá gente? Revolucionário em outro sentido, né? A forma revolucionária é... Não é revolução, é a revolução tipo... Vai, o povo vai vencer, entendeu? O povo vai conseguir. Show! Entendeu? E beleza. Quando isso não acontece, entre o Romandismo Decadente. Na França você tem o Baudelaire e o Hugo também participa dele. O Hugo nem tanto, mas o Hugo não, na verdade não, o Standout é menor, mas o Baudiléreo...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:6643:6683": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:6643:6683",
+      "attachment_id": 17090,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 6643,
+      "source_end_s": 6683,
+      "media_sha256": "f89d227a30ca424be80fd7d24a7869bc562c2960ec1d81f3725e0b3730bdee3a",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.72,
+          "text": "Sendo tipo sim, eu sou desses caras, eu faço parte desse grupo, eu penso que nem eles,"
+        },
+        {
+          "start": 4.72,
+          "end": 9.28,
+          "text": "eu converso com eles, eu conheço eles, é um sinal, é quase com um código interno que"
+        },
+        {
+          "start": 9.28,
+          "end": 11.2,
+          "text": "foi criando ali de maneira orgânica, né?"
+        },
+        {
+          "start": 11.2,
+          "end": 16.76,
+          "text": "E o grande sol, o primeiro sol negro da melodia que aparece, e que nem ali um pouco melancólica,"
+        },
+        {
+          "start": 16.76,
+          "end": 20.96,
+          "text": "assim, mas não sei o que vocês estão pensando, é o Adgalampo, então eu admiro muito ele"
+        },
+        {
+          "start": 20.96,
+          "end": 23.92,
+          "text": "pelo peso histórico que ele teve e tem minhas histórias e eles são boas, são boas"
+        },
+        {
+          "start": 23.92,
+          "end": 27.68,
+          "text": "assim, são realmente boas assim, talvez um dia eu faça, se você falou berenice"
+        },
+        {
+          "start": 27.68,
+          "end": 31.68,
+          "text": "Aí vou notar, vou até bater como salvo aqui, e aí eu vou dar uma olhada, beleza?"
+        },
+        {
+          "start": 31.68,
+          "end": 32.68,
+          "text": "Vai ficar tranquilo."
+        }
+      ],
+      "excerpt": "Sendo tipo sim, eu sou desses caras, eu faço parte desse grupo, eu penso que nem eles, eu converso com eles, eu conheço eles, é um sinal, é quase com um código interno que foi criando ali de maneira orgânica, né? E o grande sol, o primeiro sol negro da melodia que aparece, e que nem ali um pouco melancólica, assim, mas não sei o que vocês estão pensando, é o Adgalampo, então eu admiro muito ele pelo peso histórico que ele teve e tem minhas histórias e eles são boas, são boas assim, são realmente boas assim, talvez um dia eu faça, se você falou berenice Aí vou notar, vou até bater como salvo aqui, e aí eu vou dar uma olhada, beleza? Vai ficar tranquilo.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5247:5288": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5247:5288",
+      "attachment_id": 17065,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5247,
+      "source_end_s": 5288,
+      "media_sha256": "21e05575d7fd2232c5f7872021aa1e03c13004a369d884f28fe5ab134ba4b2c1",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.28,
+          "text": "e teve que abrir a janela lá e respirar o ar puro, porque ela estava tendo um ataque de asma."
+        },
+        {
+          "start": 4.28,
+          "end": 8.2,
+          "text": "Essa moça, que é de novo, vê esse monstro, porque é o filho dela."
+        },
+        {
+          "start": 8.2,
+          "end": 13.32,
+          "text": "Mas não liga, não, tá, gente? A Débora disse pra vocês que ninguém liga."
+        },
+        {
+          "start": 13.32,
+          "end": 16.28,
+          "text": "Tudo isso que um narrador falso, um narrador impostor."
+        },
+        {
+          "start": 16.28,
+          "end": 22.64,
+          "text": "O Panda, parece mais que a família não tá assustada com o que aconteceu."
+        },
+        {
+          "start": 22.64,
+          "end": 24.96,
+          "text": "Eles estão tipo, envergonhados, assim, alguma coisa assim, né?"
+        },
+        {
+          "start": 24.96,
+          "end": 27.56,
+          "text": "Eles estão com medo. Olha, tem uma frase."
+        },
+        {
+          "start": 27.56,
+          "end": 32.18,
+          "text": "Eu vou suscitar agora, porque eu tenho que contar um pouquinho, e é o cito já, que é o que clama para."
+        },
+        {
+          "start": 32.18,
+          "end": 34.7,
+          "text": "Tem outra também mais para frente, mas você vai ter que sair antes, né?"
+        }
+      ],
+      "excerpt": "e teve que abrir a janela lá e respirar o ar puro, porque ela estava tendo um ataque de asma. Essa moça, que é de novo, vê esse monstro, porque é o filho dela. Mas não liga, não, tá, gente? A Débora disse pra vocês que ninguém liga. Tudo isso que um narrador falso, um narrador impostor. O Panda, parece mais que a família não tá assustada com o que aconteceu. Eles estão tipo, envergonhados, assim, alguma coisa assim, né? Eles estão com medo. Olha, tem uma frase. Eu vou suscitar agora, porque eu tenho que contar um pouquinho, e é o cito já, que é o que clama para. Tem outra também mais para frente, mas você vai ter que sair antes, né?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5288:5330": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5288:5330",
+      "attachment_id": 17066,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5288,
+      "source_end_s": 5330,
+      "media_sha256": "d9f6b38a84e3d3dd5074d07d6853f47d6d57dc63a40c1aba6ebf821676b6540e",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.68,
+          "text": "Aí tem uma outra mais perfeita, mas acho que eu te contei mais tempo."
+        },
+        {
+          "start": 2.68,
+          "end": 5.32,
+          "text": "Aquela lá mais por final, mas acho que eu te contei."
+        },
+        {
+          "start": 5.32,
+          "end": 8.8,
+          "text": "Eu acho que eu te contei ontem, enfim, vamos continuar aqui."
+        },
+        {
+          "start": 8.8,
+          "end": 11.88,
+          "text": "E aí elas entram no quarto e começam a tirar as coisas, só que aí..."
+        },
+        {
+          "start": 11.88,
+          "end": 15.92,
+          "text": "Ó, o Gregor não pode se comunicar facialmente, corporalmente."
+        },
+        {
+          "start": 15.92,
+          "end": 18.28,
+          "text": "Não pode emitir sons que não sejam..."
+        },
+        {
+          "start": 18.28,
+          "end": 25.8,
+          "text": "Ele não pode chorar, não tem lágrima que cai, o olhar dele é um olho de insetos,"
+        },
+        {
+          "start": 25.8,
+          "end": 28.88,
+          "text": "que a piscar mais é gigante, é isso aqui, entendeu?"
+        },
+        {
+          "start": 28.88,
+          "end": 33.12,
+          "text": "Ele não fala, ele não consegue mais escrever porque ele não tem mais mão, enfim, todo"
+        },
+        {
+          "start": 33.12,
+          "end": 34,
+          "text": "tipo de linguagem."
+        }
+      ],
+      "excerpt": "Aí tem uma outra mais perfeita, mas acho que eu te contei mais tempo. Aquela lá mais por final, mas acho que eu te contei. Eu acho que eu te contei ontem, enfim, vamos continuar aqui. E aí elas entram no quarto e começam a tirar as coisas, só que aí... Ó, o Gregor não pode se comunicar facialmente, corporalmente. Não pode emitir sons que não sejam... Ele não pode chorar, não tem lágrima que cai, o olhar dele é um olho de insetos, que a piscar mais é gigante, é isso aqui, entendeu? Ele não fala, ele não consegue mais escrever porque ele não tem mais mão, enfim, todo tipo de linguagem.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5330:5370": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5330:5370",
+      "attachment_id": 17067,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5330,
+      "source_end_s": 5370,
+      "media_sha256": "12cf897690e30da9441b16c51214d2ff9862ab2954892b98a313bc7fc85c57ad",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.84,
+          "text": "que um ser humano consegue fazer, ele não consegue mais fazer, tá?"
+        },
+        {
+          "start": 3.84,
+          "end": 7.5,
+          "text": "A mãe dele, no quarto, ele estava coberto, ele tinha uma coberta,"
+        },
+        {
+          "start": 7.5,
+          "end": 10.2,
+          "text": "ele mesmo botou em cima dele e conseguiu botar, né?"
+        },
+        {
+          "start": 10.2,
+          "end": 12.8,
+          "text": "Ele aprendeu a fazer isso, ele estava coberto, para a mãe não tem que ver."
+        },
+        {
+          "start": 12.8,
+          "end": 15.5,
+          "text": "Ele ficava no sofazinho e as duas sabem que ele está ali."
+        },
+        {
+          "start": 15.5,
+          "end": 18.2,
+          "text": "Mas, enfim, é só para não assustar."
+        },
+        {
+          "start": 18.2,
+          "end": 22.4,
+          "text": "Ele fica ali de baixo justamente para poder proporcionar algum conforto,"
+        },
+        {
+          "start": 22.4,
+          "end": 26.2,
+          "text": "para a irmã que entra ali para o quarto e alimenta ele,"
+        },
+        {
+          "start": 26.2,
+          "end": 29.6,
+          "text": "que fez aquilo durante dois meses e continua fazendo depois, né?"
+        },
+        {
+          "start": 29.6,
+          "end": 33.28,
+          "text": "E aí a mãe, e isso tudo leva isso aqui em contexto."
+        },
+        {
+          "start": 33.28,
+          "end": 34.28,
+          "text": "Ela pensa, ó..."
+        }
+      ],
+      "excerpt": "que um ser humano consegue fazer, ele não consegue mais fazer, tá? A mãe dele, no quarto, ele estava coberto, ele tinha uma coberta, ele mesmo botou em cima dele e conseguiu botar, né? Ele aprendeu a fazer isso, ele estava coberto, para a mãe não tem que ver. Ele ficava no sofazinho e as duas sabem que ele está ali. Mas, enfim, é só para não assustar. Ele fica ali de baixo justamente para poder proporcionar algum conforto, para a irmã que entra ali para o quarto e alimenta ele, que fez aquilo durante dois meses e continua fazendo depois, né? E aí a mãe, e isso tudo leva isso aqui em contexto. Ela pensa, ó...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5412:5452": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5412:5452",
+      "attachment_id": 17069,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5412,
+      "source_end_s": 5452,
+      "media_sha256": "454006407f8b579c5fb41f91d0eec6b0dd741f7afb808d8223d579e6d4bb1762",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 8.04,
+          "text": "O que vem em seguida, a irmã, falando, a irmã vir e fala assim, ó, insiste, né, o narrador"
+        },
+        {
+          "start": 8.04,
+          "end": 12.96,
+          "text": "fala que é pela idade também, mas enfim, a irmã insiste que é pra elas fazerem isso,"
+        },
+        {
+          "start": 12.96,
+          "end": 17.64,
+          "text": "né, é pra elas tirarem tudo ali, só que o narrador diz por quê, o narrador diz"
+        },
+        {
+          "start": 17.64,
+          "end": 22.2,
+          "text": "que ela tá insistindo nisso, porque ela quer tornar o quarto dele mais macabro pra"
+        },
+        {
+          "start": 22.2,
+          "end": 25.92,
+          "text": "que os pais se lembram do pai, né, como é que foi a reação do pai, a ameaça"
+        },
+        {
+          "start": 25.92,
+          "end": 29.92,
+          "text": "de violência e uso de violência. Como é que foi a erração da mãe quando viu o Gregor?"
+        }
+      ],
+      "excerpt": "O que vem em seguida, a irmã, falando, a irmã vir e fala assim, ó, insiste, né, o narrador fala que é pela idade também, mas enfim, a irmã insiste que é pra elas fazerem isso, né, é pra elas tirarem tudo ali, só que o narrador diz por quê, o narrador diz que ela tá insistindo nisso, porque ela quer tornar o quarto dele mais macabro pra que os pais se lembram do pai, né, como é que foi a reação do pai, a ameaça de violência e uso de violência. Como é que foi a erração da mãe quando viu o Gregor?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5452:5492": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5452:5492",
+      "attachment_id": 17070,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5452,
+      "source_end_s": 5492,
+      "media_sha256": "6a6f1a3cbe8c07b66e8f4198a7dddd0c415f8927e2cf68e1cdfbeff38ee50530",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.7,
+          "text": "o gregão foi transformado no inseto, foi ter um ataque de asma e ter que abrir a janela e quase desmaiar"
+        },
+        {
+          "start": 4.7,
+          "end": 10.7,
+          "text": "ou seja, para evitar que essas duas pessoas entrem no quarto por medo de entrar no quarto vazio só do gregão"
+        },
+        {
+          "start": 10.7,
+          "end": 14.2,
+          "text": "tem nenhum objeto, ele pode estar em qualquer lugar, ele não vai tratar de alguma coisa, ele vai ter qualquer lugar"
+        },
+        {
+          "start": 14.2,
+          "end": 19,
+          "text": "então, dá muito mais medo, né, para que ela fosse a única que pudesse entrar lá"
+        },
+        {
+          "start": 19,
+          "end": 22.9,
+          "text": "porque ela já estava ali entrando no dormez, ela estava acostumada, ela estava se acostumando já"
+        },
+        {
+          "start": 22.9,
+          "end": 27.3,
+          "text": "entendeu, então para que ela fosse a única que entrasse e está escrito isso"
+        },
+        {
+          "start": 27.3,
+          "end": 31.3,
+          "text": "Eu conferi em mais uma tradução para ver, que eu não venho alemão, né, gente?"
+        },
+        {
+          "start": 31.3,
+          "end": 34.3,
+          "text": "Então eu li em quatro línguas... Eu não li o Romance 3..."
+        }
+      ],
+      "excerpt": "o gregão foi transformado no inseto, foi ter um ataque de asma e ter que abrir a janela e quase desmaiar ou seja, para evitar que essas duas pessoas entrem no quarto por medo de entrar no quarto vazio só do gregão tem nenhum objeto, ele pode estar em qualquer lugar, ele não vai tratar de alguma coisa, ele vai ter qualquer lugar então, dá muito mais medo, né, para que ela fosse a única que pudesse entrar lá porque ela já estava ali entrando no dormez, ela estava acostumada, ela estava se acostumando já entendeu, então para que ela fosse a única que entrasse e está escrito isso Eu conferi em mais uma tradução para ver, que eu não venho alemão, né, gente? Então eu li em quatro línguas... Eu não li o Romance 3...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5492:5532": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5492:5532",
+      "attachment_id": 17071,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5492,
+      "source_end_s": 5532,
+      "media_sha256": "5adaa4dc6636da120ed746fc9c262fe3462713102298fa6b7c1bcc2c1296698b",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.76,
+          "text": "de quatro línguas, mas eu li essa de partes em quatro línguas pra conferir. Tá escrito ali,"
+        },
+        {
+          "start": 3.76,
+          "end": 11.04,
+          "text": "ela fez isso pra poder ajudá-lo, ajudá-lo o Gregor ainda mais. Mas gente, lembrem, a Débora disse pra"
+        },
+        {
+          "start": 11.04,
+          "end": 16.08,
+          "text": "vocês que a irmã dele, depois que ele transformou, ela deixou de secão de dele legal. Tudo isso aqui"
+        },
+        {
+          "start": 16.08,
+          "end": 20.4,
+          "text": "é mentira, é um narrador mentira, eu não sei o que que é, porque o narrador que o Káfica usa pra"
+        },
+        {
+          "start": 20.4,
+          "end": 26.96,
+          "text": "todas as suas obras, é o mesmo que o do Fláver, que é o narrador oniciente. É o narrador oniciente,"
+        },
+        {
+          "start": 26.96,
+          "end": 30.68,
+          "text": "que sabe tudo, que descreve bem as coisas, que não é sentimentar o sentimento alóide,"
+        },
+        {
+          "start": 30.68,
+          "end": 32.56,
+          "text": "que descreve as coisas bem rapidinho, entendeu?"
+        }
+      ],
+      "excerpt": "de quatro línguas, mas eu li essa de partes em quatro línguas pra conferir. Tá escrito ali, ela fez isso pra poder ajudá-lo, ajudá-lo o Gregor ainda mais. Mas gente, lembrem, a Débora disse pra vocês que a irmã dele, depois que ele transformou, ela deixou de secão de dele legal. Tudo isso aqui é mentira, é um narrador mentira, eu não sei o que que é, porque o narrador que o Káfica usa pra todas as suas obras, é o mesmo que o do Fláver, que é o narrador oniciente. É o narrador oniciente, que sabe tudo, que descreve bem as coisas, que não é sentimentar o sentimento alóide, que descreve as coisas bem rapidinho, entendeu?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5573:5613": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5573:5613",
+      "attachment_id": 17076,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5573,
+      "source_end_s": 5613,
+      "media_sha256": "af77debc633f23c9fcc010ba934874aea05001a7cdacfb451c7ee9a4026de105",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.48,
+          "text": "isso, porque não tinha nenhuma maneira de saber aquilo, então ela intuiu aquela parada,"
+        },
+        {
+          "start": 4.48,
+          "end": 8.72,
+          "text": "né, do, ah, pode ser que ele fique enxateado, que ele sinta que a gente está reduzindo ele,"
+        },
+        {
+          "start": 8.72,
+          "end": 15.16,
+          "text": "que a gente está tentando chocar, né, como é que é? Enxotar ele para um quartinho,"
+        },
+        {
+          "start": 15.16,
+          "end": 19.56,
+          "text": "né, pode ser que ele entenda que seja isso, vamos manter os móveis aqui. E a irmã por"
+        },
+        {
+          "start": 19.56,
+          "end": 23.6,
+          "text": "outro motivo que o narrador diz para a gente, que é uma boa intenção, ela quer fazer"
+        },
+        {
+          "start": 23.6,
+          "end": 27.16,
+          "text": "o oposto da mãe, que é justamente para os pais não se sentir a vontade de entrar"
+        },
+        {
+          "start": 27.16,
+          "end": 30.84,
+          "text": "ali e acabar acontecendo acidente com o Gregor de novo, né, porque é pra ajudar ele."
+        },
+        {
+          "start": 30.84,
+          "end": 31.84,
+          "text": "É..."
+        },
+        {
+          "start": 31.84,
+          "end": 34.36,
+          "text": "E aí o Gregor, ele ouve esse..."
+        }
+      ],
+      "excerpt": "isso, porque não tinha nenhuma maneira de saber aquilo, então ela intuiu aquela parada, né, do, ah, pode ser que ele fique enxateado, que ele sinta que a gente está reduzindo ele, que a gente está tentando chocar, né, como é que é? Enxotar ele para um quartinho, né, pode ser que ele entenda que seja isso, vamos manter os móveis aqui. E a irmã por outro motivo que o narrador diz para a gente, que é uma boa intenção, ela quer fazer o oposto da mãe, que é justamente para os pais não se sentir a vontade de entrar ali e acabar acontecendo acidente com o Gregor de novo, né, porque é pra ajudar ele. É... E aí o Gregor, ele ouve esse...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5654:5701": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5654:5701",
+      "attachment_id": 17078,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5654,
+      "source_end_s": 5701,
+      "media_sha256": "49bc3a42e57a537c49ff2925542d051107521161a4e42ebf8142b6c95cd21f42",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.76,
+          "text": "Ele confeccionou um quadro de madrícia e gruda pra que ninguém toque."
+        },
+        {
+          "start": 2.76,
+          "end": 7.16,
+          "text": "Só que aí a mãe olha, vê, tem um ataque e aí acontece todas as outras coisas ali."
+        },
+        {
+          "start": 7.16,
+          "end": 11.52,
+          "text": "Que o pai vai lá e o comandara falou ali que ele tá com a maçã, enfim, né."
+        },
+        {
+          "start": 11.52,
+          "end": 13.22,
+          "text": "Acontece mais algumas cenas ali."
+        },
+        {
+          "start": 13.22,
+          "end": 16.68,
+          "text": "Mas o que eu queria destacar pra vocês é isso, tá escrito no texto, pô."
+        },
+        {
+          "start": 16.68,
+          "end": 19.68,
+          "text": "Tá ali, pô. Tá ali, eu não puxei o PDF aqui mais."
+        },
+        {
+          "start": 19.68,
+          "end": 23.56,
+          "text": "Se vocês quisessem, vocês quisessem, vocês baixam o PDF, vão lá, pô."
+        },
+        {
+          "start": 23.56,
+          "end": 28.02,
+          "text": "É o, acho que é, antes pela última página do capítulo 1."
+        },
+        {
+          "start": 28.02,
+          "end": 32.18,
+          "text": "É, do capítulo 1, acho que é isso. O capítulo 1 ou o capítulo 2, um dos dois."
+        },
+        {
+          "start": 32.18,
+          "end": 37.54,
+          "text": "E cara, só assim, tipo, só não encaixa, não encaixa."
+        }
+      ],
+      "excerpt": "Ele confeccionou um quadro de madrícia e gruda pra que ninguém toque. Só que aí a mãe olha, vê, tem um ataque e aí acontece todas as outras coisas ali. Que o pai vai lá e o comandara falou ali que ele tá com a maçã, enfim, né. Acontece mais algumas cenas ali. Mas o que eu queria destacar pra vocês é isso, tá escrito no texto, pô. Tá ali, pô. Tá ali, eu não puxei o PDF aqui mais. Se vocês quisessem, vocês quisessem, vocês baixam o PDF, vão lá, pô. É o, acho que é, antes pela última página do capítulo 1. É, do capítulo 1, acho que é isso. O capítulo 1 ou o capítulo 2, um dos dois. E cara, só assim, tipo, só não encaixa, não encaixa.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5701:5743": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5701:5743",
+      "attachment_id": 17079,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5701,
+      "source_end_s": 5743,
+      "media_sha256": "92cfa7c6d8024c2ffb2eba6bd84cd80e8c488ce6ad98cc726ede5c3a12ece9bd",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4,
+          "text": "é dizer que o narrador está mentindo. E aí beleza, o narrador está mentindo e pode ser qualquer coisa."
+        },
+        {
+          "start": 4,
+          "end": 9,
+          "text": "Então é isso. Tá mentindo por quê? Porque você é incoerente? Não, porque eu quero que ele minda,"
+        },
+        {
+          "start": 9,
+          "end": 14,
+          "text": "porque eu não gostei do plot. Eu não gostei da história, não gostei. Então tem que estar mentindo."
+        },
+        {
+          "start": 14,
+          "end": 15,
+          "text": "Vamos continuar aqui."
+        },
+        {
+          "start": 15,
+          "end": 19,
+          "text": "Peraí, peraí. Já vou ter que sair, eu acho que até deu meu tempo aí já, né?"
+        },
+        {
+          "start": 19,
+          "end": 21,
+          "text": "Deu, passou cinco minutinhos."
+        },
+        {
+          "start": 21,
+          "end": 27,
+          "text": "É o seguinte, deixa eu dar um resumo da minha interpretação disso aí tudo, do nível, né?"
+        },
+        {
+          "start": 27,
+          "end": 32.12,
+          "text": "minha divergência com as interpretações em geral, mais ou menos com a sua, né?"
+        },
+        {
+          "start": 32.12,
+          "end": 34.96,
+          "text": "Eu acho que a sua é como se assim, ó, as interpretações..."
+        }
+      ],
+      "excerpt": "é dizer que o narrador está mentindo. E aí beleza, o narrador está mentindo e pode ser qualquer coisa. Então é isso. Tá mentindo por quê? Porque você é incoerente? Não, porque eu quero que ele minda, porque eu não gostei do plot. Eu não gostei da história, não gostei. Então tem que estar mentindo. Vamos continuar aqui. Peraí, peraí. Já vou ter que sair, eu acho que até deu meu tempo aí já, né? Deu, passou cinco minutinhos. É o seguinte, deixa eu dar um resumo da minha interpretação disso aí tudo, do nível, né? minha divergência com as interpretações em geral, mais ou menos com a sua, né? Eu acho que a sua é como se assim, ó, as interpretações...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5907:5947": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5907:5947",
+      "attachment_id": 17080,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5907,
+      "source_end_s": 5947,
+      "media_sha256": "0804b855378d053f2fa5d1c33614f33d70491f39a6a8f2135587596c26b2c3be",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 8,
+          "text": "A gente compreende o porquê que eles fazem o que eles fazem, a gente até entende que é razoável entender, mas não é justo de fato, não é justo."
+        },
+        {
+          "start": 8,
+          "end": 15,
+          "text": "Só que pinta como se fosse cruel, como se fosse tipo, a gente vai fazer mal pra ele, porque a gente é do mal, a família é do mal."
+        },
+        {
+          "start": 15,
+          "end": 16,
+          "text": "É isso que pinta."
+        },
+        {
+          "start": 16,
+          "end": 17,
+          "text": "Sim, exatamente."
+        },
+        {
+          "start": 17,
+          "end": 23,
+          "text": "Eles chegam num ponto de estresse, né, o estresse vai aumentando e tal, até o momento em que a irmã, acho que a irmã, né, que fala..."
+        },
+        {
+          "start": 23,
+          "end": 25,
+          "text": "É, irmã, a greta que estoura."
+        },
+        {
+          "start": 25,
+          "end": 32.1,
+          "text": "Então aquilo não é mais o Gregor, então a família chega num estresse desse, mas provavelmente"
+        },
+        {
+          "start": 32.1,
+          "end": 35.44,
+          "text": "é aquele estresse que a gente não fala."
+        }
+      ],
+      "excerpt": "A gente compreende o porquê que eles fazem o que eles fazem, a gente até entende que é razoável entender, mas não é justo de fato, não é justo. Só que pinta como se fosse cruel, como se fosse tipo, a gente vai fazer mal pra ele, porque a gente é do mal, a família é do mal. É isso que pinta. Sim, exatamente. Eles chegam num ponto de estresse, né, o estresse vai aumentando e tal, até o momento em que a irmã, acho que a irmã, né, que fala... É, irmã, a greta que estoura. Então aquilo não é mais o Gregor, então a família chega num estresse desse, mas provavelmente é aquele estresse que a gente não fala.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4803:4843": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4803:4843",
+      "attachment_id": 17053,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4803,
+      "source_end_s": 4843,
+      "media_sha256": "d77d51f302236f972a06c6aa2ba0459c6065db156b13dcee5a5955524273df26",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.6,
+          "text": "Gregor, sei que cê me ama, tem gente que ama, aí a mãe, entendeu?"
+        },
+        {
+          "start": 3.6,
+          "end": 8.2,
+          "text": "Aí a irmã fala, vou tocar a música pra você, ele, claro, né, entendeu?"
+        },
+        {
+          "start": 8.2,
+          "end": 9.76,
+          "text": "Isso é as coisas de voltar ao normal."
+        },
+        {
+          "start": 9.76,
+          "end": 14.24,
+          "text": "Só que o que a própria Débora narrou, e eu só adicionei com coisas que tem"
+        },
+        {
+          "start": 14.24,
+          "end": 16.76,
+          "text": "na história pra quem leu aí, pra quem falei, vocês vão ver que..."
+        },
+        {
+          "start": 16.76,
+          "end": 19.12,
+          "text": "Vocês já viram ou vão ver que eu não tô mentindo?"
+        },
+        {
+          "start": 19.12,
+          "end": 20.76,
+          "text": "Tudo mudou, porra."
+        },
+        {
+          "start": 20.76,
+          "end": 22.96,
+          "text": "Tudo, tudo mudou, cara."
+        },
+        {
+          "start": 22.96,
+          "end": 27.68,
+          "text": "Justamente porque um dia, depois de sonhos entranquilos, Gregor,"
+        },
+        {
+          "start": 27.68,
+          "end": 30.88,
+          "text": "Estamos a acordar o transformado no inseto."
+        },
+        {
+          "start": 30.88,
+          "end": 31.58,
+          "text": "Tudo mudou."
+        },
+        {
+          "start": 31.58,
+          "end": 34.48,
+          "text": "E a vir e falar, não, todo mundo levou a vir..."
+        }
+      ],
+      "excerpt": "Gregor, sei que cê me ama, tem gente que ama, aí a mãe, entendeu? Aí a irmã fala, vou tocar a música pra você, ele, claro, né, entendeu? Isso é as coisas de voltar ao normal. Só que o que a própria Débora narrou, e eu só adicionei com coisas que tem na história pra quem leu aí, pra quem falei, vocês vão ver que... Vocês já viram ou vão ver que eu não tô mentindo? Tudo mudou, porra. Tudo, tudo mudou, cara. Justamente porque um dia, depois de sonhos entranquilos, Gregor, Estamos a acordar o transformado no inseto. Tudo mudou. E a vir e falar, não, todo mundo levou a vir...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4883:4924": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4883:4924",
+      "attachment_id": 17054,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4883,
+      "source_end_s": 4924,
+      "media_sha256": "445626319a3f583d58f62ef556711a005335c0554b9b611861705d81dd5cd1eb",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.36,
+          "text": "Vocês estão falando que eu estou falando com raiva, mas enfim, vamos lá, né?"
+        },
+        {
+          "start": 3.36,
+          "end": 5.28,
+          "text": "Beleza, não mudou nada, né?"
+        },
+        {
+          "start": 5.28,
+          "end": 6.88,
+          "text": "Parece sitcom, né?"
+        },
+        {
+          "start": 6.88,
+          "end": 8,
+          "text": "Parece sitcom, né?"
+        },
+        {
+          "start": 8,
+          "end": 10,
+          "text": "Porque eu narrei um sitcom pra ela a mesma coisa."
+        },
+        {
+          "start": 10,
+          "end": 12.24,
+          "text": "Ela é a mesma coisa."
+        },
+        {
+          "start": 12.24,
+          "end": 17,
+          "text": "Ela viu tudo o que aconteceu, ela falou, caraca, você parece, eu não sei, The Office, né?"
+        },
+        {
+          "start": 17,
+          "end": 19,
+          "text": "Um dia aparece o cara do The Office, né?"
+        },
+        {
+          "start": 19,
+          "end": 22.52,
+          "text": "Ele vira um inseto, eu nem que eu falo, ele faz aquele parkour, não consegue, né?"
+        },
+        {
+          "start": 22.52,
+          "end": 23.52,
+          "text": "Ele faz um..."
+        },
+        {
+          "start": 23.52,
+          "end": 25.92,
+          "text": "Ele sai rolando, criou um insetinho, bate na parede e faz..."
+        },
+        {
+          "start": 25.92,
+          "end": 26.8,
+          "text": "Parkour!"
+        },
+        {
+          "start": 26.8,
+          "end": 28.8,
+          "text": "É isso, pô, é isso."
+        },
+        {
+          "start": 28.8,
+          "end": 29.68,
+          "text": "Vamos voltar pro vídeo."
+        },
+        {
+          "start": 29.68,
+          "end": 31.92,
+          "text": "Vou botar, vou botar na tela, ok."
+        }
+      ],
+      "excerpt": "Vocês estão falando que eu estou falando com raiva, mas enfim, vamos lá, né? Beleza, não mudou nada, né? Parece sitcom, né? Parece sitcom, né? Porque eu narrei um sitcom pra ela a mesma coisa. Ela é a mesma coisa. Ela viu tudo o que aconteceu, ela falou, caraca, você parece, eu não sei, The Office, né? Um dia aparece o cara do The Office, né? Ele vira um inseto, eu nem que eu falo, ele faz aquele parkour, não consegue, né? Ele faz um... Ele sai rolando, criou um insetinho, bate na parede e faz... Parkour! É isso, pô, é isso. Vamos voltar pro vídeo. Vou botar, vou botar na tela, ok.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4924:4966": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4924:4966",
+      "attachment_id": 17055,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4924,
+      "source_end_s": 4966,
+      "media_sha256": "b3a1049b4b77b8da96672ae6d2031d6b923568338d5757c0e7a2675d3e31e73b",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 1.04,
+          "text": "Já tá lembrando, né?"
+        },
+        {
+          "start": 1.04,
+          "end": 7.44,
+          "text": "Pessoas independentemente do Gregor ter virado um inseto gigante e a partir daí as pessoas fazem"
+        },
+        {
+          "start": 7.44,
+          "end": 14.12,
+          "text": "vários tipos de interpretação, principalmente porque meio que vão descartando o cara aos poucos."
+        },
+        {
+          "start": 14.12,
+          "end": 22.24,
+          "text": "Então, como ele virou essa coisa bizarra, inogenta, o pai chega a tentar assassiná-lo eventualmente, certo?"
+        },
+        {
+          "start": 22.24,
+          "end": 24.64,
+          "text": "Quando ele assusta a mãe dele e tudo."
+        },
+        {
+          "start": 24.64,
+          "end": 30.04,
+          "text": "e vão jogando ele para um quartinho esquecido, o quartinho vira o quartinho da bagunça."
+        },
+        {
+          "start": 30.04,
+          "end": 34.32,
+          "text": "Aí a irmã, que inicialmente é super atenciosa, passa a não ser mais,"
+        },
+        {
+          "start": 34.32,
+          "end": 40.24,
+          "text": "deixa o cara praticamente morrer de fome e no final ele acaba morrendo."
+        }
+      ],
+      "excerpt": "Já tá lembrando, né? Pessoas independentemente do Gregor ter virado um inseto gigante e a partir daí as pessoas fazem vários tipos de interpretação, principalmente porque meio que vão descartando o cara aos poucos. Então, como ele virou essa coisa bizarra, inogenta, o pai chega a tentar assassiná-lo eventualmente, certo? Quando ele assusta a mãe dele e tudo. e vão jogando ele para um quartinho esquecido, o quartinho vira o quartinho da bagunça. Aí a irmã, que inicialmente é super atenciosa, passa a não ser mais, deixa o cara praticamente morrer de fome e no final ele acaba morrendo.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4966:5006": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4966:5006",
+      "attachment_id": 17056,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4966,
+      "source_end_s": 5006,
+      "media_sha256": "e1675a171fad0a6a93c7d1aa98d6d27593944cc73e123c9ea08332aead4803e9",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.46,
+          "text": "tendo de desgosto, quando ele escuta a família falar que seria melhor se ele morresse,"
+        },
+        {
+          "start": 4.46,
+          "end": 10.28,
+          "text": "porque aquilo ali já não era nem o Gregor mais, já era uma barata mesmo, um inseto,"
+        },
+        {
+          "start": 10.28,
+          "end": 13.58,
+          "text": "a gente nem sabe se aquilo ia ao nosso irmão mesmo e tudo."
+        },
+        {
+          "start": 13.58,
+          "end": 15.08,
+          "text": "Então as pessoas fazem..."
+        },
+        {
+          "start": 15.08,
+          "end": 16.28,
+          "text": "Vamos lá, né? Fiquem lá e falam..."
+        },
+        {
+          "start": 16.28,
+          "end": 19.18,
+          "text": "Ih, não, beleza, o pai dele tentou assassinar ele, né?"
+        },
+        {
+          "start": 19.18,
+          "end": 20.18,
+          "text": "Por quê?"
+        },
+        {
+          "start": 20.18,
+          "end": 24.48,
+          "text": "Até explicou, né? Porque viu a mãe gritando, enfim, beleza."
+        },
+        {
+          "start": 24.48,
+          "end": 29.92,
+          "text": "Tive uma cena ali, né, que eu não vou contar aqui, mas enfim, que a mãe, ela tava gritando,"
+        },
+        {
+          "start": 29.92,
+          "end": 30.92,
+          "text": "Greg..."
+        }
+      ],
+      "excerpt": "tendo de desgosto, quando ele escuta a família falar que seria melhor se ele morresse, porque aquilo ali já não era nem o Gregor mais, já era uma barata mesmo, um inseto, a gente nem sabe se aquilo ia ao nosso irmão mesmo e tudo. Então as pessoas fazem... Vamos lá, né? Fiquem lá e falam... Ih, não, beleza, o pai dele tentou assassinar ele, né? Por quê? Até explicou, né? Porque viu a mãe gritando, enfim, beleza. Tive uma cena ali, né, que eu não vou contar aqui, mas enfim, que a mãe, ela tava gritando, Greg...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5006:5046": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5006:5046",
+      "attachment_id": 17057,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5006,
+      "source_end_s": 5046,
+      "media_sha256": "8fcd08b50589cb709e00753e5fdcf9642b761843cb78558b3a39e359b10ea31f",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.1,
+          "text": "e a filha do pai da família ali, do senhor Samza,"
+        },
+        {
+          "start": 5.1,
+          "end": 10.44,
+          "text": "e a mãe e a senhora Samza estavam no quarto do Gregor com a porta fechada"
+        },
+        {
+          "start": 10.44,
+          "end": 13.6,
+          "text": "e estavam aqui gritando, porque a mãe estava tendo um ataque de asma"
+        },
+        {
+          "start": 13.6,
+          "end": 16.48,
+          "text": "e a filha estava tentando ajudar ela, então você consegue entender,"
+        },
+        {
+          "start": 16.48,
+          "end": 19.44,
+          "text": "tipo, tem gritos, tem pessoas em pânico,"
+        },
+        {
+          "start": 19.44,
+          "end": 23.44,
+          "text": "a porta fechada e quem está lá na porta, o Gregor, baratinha assim, parada assim."
+        },
+        {
+          "start": 23.44,
+          "end": 26.72,
+          "text": "Entendeu? Ele estava assim, calma o cheio assim, assim,"
+        },
+        {
+          "start": 26.72,
+          "end": 28.88,
+          "text": "estava assim, entendeu?"
+        },
+        {
+          "start": 28.88,
+          "end": 32.64,
+          "text": "E aí o pai, acredita, dá a entender que o pai..."
+        }
+      ],
+      "excerpt": "e a filha do pai da família ali, do senhor Samza, e a mãe e a senhora Samza estavam no quarto do Gregor com a porta fechada e estavam aqui gritando, porque a mãe estava tendo um ataque de asma e a filha estava tentando ajudar ela, então você consegue entender, tipo, tem gritos, tem pessoas em pânico, a porta fechada e quem está lá na porta, o Gregor, baratinha assim, parada assim. Entendeu? Ele estava assim, calma o cheio assim, assim, estava assim, entendeu? E aí o pai, acredita, dá a entender que o pai...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5046:5086": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5046:5086",
+      "attachment_id": 17058,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5046,
+      "source_end_s": 5086,
+      "media_sha256": "91b4538618e63b266b5a0690bb2decb7ab6898aa2537ec4cdfeee1840d9c901c",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.24,
+          "text": "entende que ele estava atacando as duas e elas estavam se refugiando"
+        },
+        {
+          "start": 3.24,
+          "end": 5.68,
+          "text": "e ele vai tentar matar o Gregor, né?"
+        },
+        {
+          "start": 5.68,
+          "end": 8.62,
+          "text": "E aí é uma cena que a mãe intercede, né?"
+        },
+        {
+          "start": 8.62,
+          "end": 12.6,
+          "text": "Porque a mãe, ela abre a porta correndo, a mãe que está sofrendo de asma na hora"
+        },
+        {
+          "start": 12.6,
+          "end": 14.6,
+          "text": "que é asmática e não pode fazer esforço"
+        },
+        {
+          "start": 14.6,
+          "end": 18.52,
+          "text": "sai correndo, quase que nua, se tropeça nas próprias roupas que está caindo dela"
+        },
+        {
+          "start": 18.52,
+          "end": 22.52,
+          "text": "abraça o pai e fala, por favor, pelo amor de Deus, não mate, né?"
+        },
+        {
+          "start": 22.52,
+          "end": 25.4,
+          "text": "Mas não, gente, confie, a mãe dele não liga pra ele não, não liga pra ele"
+        },
+        {
+          "start": 25.4,
+          "end": 26.7,
+          "text": "Ela falou da irmã, né?"
+        },
+        {
+          "start": 26.7,
+          "end": 34.7,
+          "text": "Ah, que a irmã que era super doce, gentil, eventualmente, toma um grande desgosto por ele, assim, e vai jogando ele pro quarto."
+        }
+      ],
+      "excerpt": "entende que ele estava atacando as duas e elas estavam se refugiando e ele vai tentar matar o Gregor, né? E aí é uma cena que a mãe intercede, né? Porque a mãe, ela abre a porta correndo, a mãe que está sofrendo de asma na hora que é asmática e não pode fazer esforço sai correndo, quase que nua, se tropeça nas próprias roupas que está caindo dela abraça o pai e fala, por favor, pelo amor de Deus, não mate, né? Mas não, gente, confie, a mãe dele não liga pra ele não, não liga pra ele Ela falou da irmã, né? Ah, que a irmã que era super doce, gentil, eventualmente, toma um grande desgosto por ele, assim, e vai jogando ele pro quarto.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5086:5126": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5086:5126",
+      "attachment_id": 17059,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5086,
+      "source_end_s": 5126,
+      "media_sha256": "d5ff21e1fc3ebcbed289d30fd5e16f2aa852ebcb2c757593b4dd7db23d9e2d31",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.36,
+          "text": "assim, viram quartinho da bagunça. De fato, viram quartinho da bagunça. E ele não é"
+        },
+        {
+          "start": 3.36,
+          "end": 7.28,
+          "text": "quem jogado, é o quarto dele. Então eles manterem quarentena no quarto dele,"
+        },
+        {
+          "start": 7.28,
+          "end": 10.4,
+          "text": "se é verdade. Até porque assim, né? Esse é muito conveniente, você sai com"
+        },
+        {
+          "start": 10.4,
+          "end": 14.64,
+          "text": "insetos gigantes de Medarua. Porque a única pessoa, as duas, né? As duas"
+        },
+        {
+          "start": 14.64,
+          "end": 17.84,
+          "text": "únicas de pessoas que vêm de fora, que são... não só as duas que vêm de fora,"
+        },
+        {
+          "start": 17.84,
+          "end": 22.16,
+          "text": "mas dentre algumas pessoas que vêm de fora, duas delas que são a"
+        },
+        {
+          "start": 22.16,
+          "end": 27.12,
+          "text": "cozinheira de 16 anos e o gerente, né? Eles reagiram super bem, é o Gregor, né?"
+        },
+        {
+          "start": 27.12,
+          "end": 33.52,
+          "text": "super bem vamos passear com o nosso filho irmão inseto na rua normal vamos chegar na na na"
+        }
+      ],
+      "excerpt": "assim, viram quartinho da bagunça. De fato, viram quartinho da bagunça. E ele não é quem jogado, é o quarto dele. Então eles manterem quarentena no quarto dele, se é verdade. Até porque assim, né? Esse é muito conveniente, você sai com insetos gigantes de Medarua. Porque a única pessoa, as duas, né? As duas únicas de pessoas que vêm de fora, que são... não só as duas que vêm de fora, mas dentre algumas pessoas que vêm de fora, duas delas que são a cozinheira de 16 anos e o gerente, né? Eles reagiram super bem, é o Gregor, né? super bem vamos passear com o nosso filho irmão inseto na rua normal vamos chegar na na na",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5126:5166": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5126:5166",
+      "attachment_id": 17060,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5126,
+      "source_end_s": 5166,
+      "media_sha256": "2f80d857871c6b27c03b3f394ee58f4abc4b5ea967940d4c1c8d71e489940882",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.92,
+          "text": "Vamos chegar lá na empresa e bater seu tata, tata, tata, tata, tata, tata."
+        },
+        {
+          "start": 2.92,
+          "end": 5.68,
+          "text": "Escuta, que capacitismo é esse com o meu filho?"
+        },
+        {
+          "start": 5.68,
+          "end": 7.8,
+          "text": "Só porque ele tá com uma doença rara?"
+        },
+        {
+          "start": 7.8,
+          "end": 12.24,
+          "text": "Que que é isso? Olha, que eu vou fazer um tweet, hein?"
+        },
+        {
+          "start": 12.24,
+          "end": 17.12,
+          "text": "Eu vou chamar os lipojints pra cancelar vocês, tá bom?"
+        },
+        {
+          "start": 17.12,
+          "end": 18.52,
+          "text": "E esse é super de boa, né, pô?"
+        },
+        {
+          "start": 18.52,
+          "end": 20.24,
+          "text": "Obviamente a gente tem que fazer isso."
+        },
+        {
+          "start": 20.24,
+          "end": 21.28,
+          "text": "Obviamente."
+        },
+        {
+          "start": 21.28,
+          "end": 23.88,
+          "text": "Não é botar essa pessoa em quarentena."
+        },
+        {
+          "start": 23.88,
+          "end": 25.52,
+          "text": "Até porque a mãe dele fala, né?"
+        },
+        {
+          "start": 25.52,
+          "end": 26.6,
+          "text": "É..."
+        },
+        {
+          "start": 26.6,
+          "end": 27.52,
+          "text": "Isso que é parado."
+        },
+        {
+          "start": 27.52,
+          "end": 29.68,
+          "text": "Eu tenho que contar essa cena aqui pra vocês melhor, né?"
+        },
+        {
+          "start": 29.68,
+          "end": 31.68,
+          "text": "Não a cena toda, mais um..."
+        }
+      ],
+      "excerpt": "Vamos chegar lá na empresa e bater seu tata, tata, tata, tata, tata, tata. Escuta, que capacitismo é esse com o meu filho? Só porque ele tá com uma doença rara? Que que é isso? Olha, que eu vou fazer um tweet, hein? Eu vou chamar os lipojints pra cancelar vocês, tá bom? E esse é super de boa, né, pô? Obviamente a gente tem que fazer isso. Obviamente. Não é botar essa pessoa em quarentena. Até porque a mãe dele fala, né? É... Isso que é parado. Eu tenho que contar essa cena aqui pra vocês melhor, né? Não a cena toda, mais um...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5166:5207": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5166:5207",
+      "attachment_id": 17061,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5166,
+      "source_end_s": 5207,
+      "media_sha256": "2189dcbd683eeb37e53da57ab88a2c4bf3d5f3884955059b60c42b5b6e652657",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.84,
+          "text": "que é a mesma cena, mas a partinha, um inseto fóbico, isso mesmo,"
+        },
+        {
+          "start": 3.84,
+          "end": 7.44,
+          "text": "você é um inseto fóbico, é isso aqui, show, beleza."
+        },
+        {
+          "start": 7.44,
+          "end": 10,
+          "text": "Eu lembro da maçã, o gamadar, eu lembro."
+        },
+        {
+          "start": 10,
+          "end": 11.44,
+          "text": "Calma aí, vamos lá."
+        },
+        {
+          "start": 14.24,
+          "end": 18.88,
+          "text": "A irmã, ela entra no quarto, um dia lá, depois de dois meses,"
+        },
+        {
+          "start": 18.88,
+          "end": 21.92,
+          "text": "já cuidar dele, quem está alimentando ela é ele."
+        },
+        {
+          "start": 21.92,
+          "end": 24.48,
+          "text": "E a irmã, ela vê que o Gregor, para matar o tempo,"
+        },
+        {
+          "start": 24.48,
+          "end": 27.28,
+          "text": "ele fica subindo nas paredes, nas paredes do teto,"
+        },
+        {
+          "start": 27.28,
+          "end": 29.12,
+          "text": "ele fica zanzando por aí."
+        },
+        {
+          "start": 29.12,
+          "end": 32.22,
+          "text": "O Gregorzamos fica zanzando no quarto, né?"
+        },
+        {
+          "start": 32.22,
+          "end": 33.42,
+          "text": "Por que não tem nada para fazer?"
+        },
+        {
+          "start": 33.42,
+          "end": 35.62,
+          "text": "Ele fica lá correndo, e aí você quer ir..."
+        }
+      ],
+      "excerpt": "que é a mesma cena, mas a partinha, um inseto fóbico, isso mesmo, você é um inseto fóbico, é isso aqui, show, beleza. Eu lembro da maçã, o gamadar, eu lembro. Calma aí, vamos lá. A irmã, ela entra no quarto, um dia lá, depois de dois meses, já cuidar dele, quem está alimentando ela é ele. E a irmã, ela vê que o Gregor, para matar o tempo, ele fica subindo nas paredes, nas paredes do teto, ele fica zanzando por aí. O Gregorzamos fica zanzando no quarto, né? Por que não tem nada para fazer? Ele fica lá correndo, e aí você quer ir...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:5207:5247": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:5207:5247",
+      "attachment_id": 17064,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 5207,
+      "source_end_s": 5247,
+      "media_sha256": "9c6ebce1e023d4a8ac54c5b9288ff7d4e683640e051f3f8858ec128b304bde1f",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 6.56,
+          "text": "fazendo isso. E ela vê isso. E o que o narrador diz pra gente? O narrador fala, ela teve a ideia de"
+        },
+        {
+          "start": 6.56,
+          "end": 11.6,
+          "text": "tirar os móveis do quarto pra ele poder correr com mais liberdade, pra ele poder subir nas paredes"
+        },
+        {
+          "start": 11.6,
+          "end": 15.6,
+          "text": "entre elas, pra ele poder ficar brincando, virar um playground. Foi a ideia inicial dela."
+        },
+        {
+          "start": 15.6,
+          "end": 21.12,
+          "text": "Aí a mãe, que é astmática, ela encontra nessa oportunidade um jeito de poder ver o filho."
+        },
+        {
+          "start": 21.12,
+          "end": 25.12,
+          "text": "O narrador fala pra gente que ela queria ver o filho e que ela vai lá, insiste pra ajudar a"
+        },
+        {
+          "start": 25.12,
+          "end": 28.56,
+          "text": "filha a tirar os móveis do quarto porque ela quer poder entrar, entendeu? Pra poder ver o filho,"
+        },
+        {
+          "start": 28.56,
+          "end": 33.02,
+          "text": "o Fidavio na barata, ela viu a mesma moça que tomou um sushi no início que..."
+        }
+      ],
+      "excerpt": "fazendo isso. E ela vê isso. E o que o narrador diz pra gente? O narrador fala, ela teve a ideia de tirar os móveis do quarto pra ele poder correr com mais liberdade, pra ele poder subir nas paredes entre elas, pra ele poder ficar brincando, virar um playground. Foi a ideia inicial dela. Aí a mãe, que é astmática, ela encontra nessa oportunidade um jeito de poder ver o filho. O narrador fala pra gente que ela queria ver o filho e que ela vai lá, insiste pra ajudar a filha a tirar os móveis do quarto porque ela quer poder entrar, entendeu? Pra poder ver o filho, o Fidavio na barata, ela viu a mesma moça que tomou um sushi no início que...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:3699:3739": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:3699:3739",
+      "attachment_id": 17043,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 3699,
+      "source_end_s": 3739,
+      "media_sha256": "c479ecf83730269be6edc7497c57943b22ef18d0944285b2ef95627b622c1230",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2,
+          "text": "Bom, não tem como pular, pô. Ela tá acumulando."
+        },
+        {
+          "start": 2,
+          "end": 4,
+          "text": "Ela vai, ela, ela cita o Chestdon."
+        },
+        {
+          "start": 4,
+          "end": 6,
+          "text": "Ela cita o Chestdon. E ela vai acumulando."
+        },
+        {
+          "start": 6,
+          "end": 8,
+          "text": "E se você não ouvir aquilo ali,"
+        },
+        {
+          "start": 8,
+          "end": 10,
+          "text": "ou já não souber,"
+        },
+        {
+          "start": 10,
+          "end": 12,
+          "text": "mas o público talvez não sabe."
+        },
+        {
+          "start": 12,
+          "end": 14,
+          "text": "Se você não ouviu a argumentação inicial ali"
+        },
+        {
+          "start": 14,
+          "end": 16,
+          "text": "e eu refutando pra ver quanto ela tá errado,"
+        },
+        {
+          "start": 16,
+          "end": 18,
+          "text": "você não consegue ver as merda que vem depois."
+        },
+        {
+          "start": 18,
+          "end": 20,
+          "text": "É porque eu li o Chestdon também. Eu também adoro o Chestdon."
+        },
+        {
+          "start": 20,
+          "end": 22,
+          "text": "Inclusive, eu sei um argumento melhor no mesmo livro"
+        },
+        {
+          "start": 22,
+          "end": 24,
+          "text": "do que o dela. E mesmo ele não funciona."
+        },
+        {
+          "start": 24,
+          "end": 26,
+          "text": "Eu fiquei puto."
+        },
+        {
+          "start": 26,
+          "end": 28,
+          "text": "Achei que ela ia botar um argumento"
+        },
+        {
+          "start": 28,
+          "end": 34.72,
+          "text": "que é bom até entendê-la botou outra parada, nada a ver, nada a ver, mas enfim, se tu tiver"
+        },
+        {
+          "start": 34.72,
+          "end": 35.72,
+          "text": "que sair, sai pô, eu continuo."
+        }
+      ],
+      "excerpt": "Bom, não tem como pular, pô. Ela tá acumulando. Ela vai, ela, ela cita o Chestdon. Ela cita o Chestdon. E ela vai acumulando. E se você não ouvir aquilo ali, ou já não souber, mas o público talvez não sabe. Se você não ouviu a argumentação inicial ali e eu refutando pra ver quanto ela tá errado, você não consegue ver as merda que vem depois. É porque eu li o Chestdon também. Eu também adoro o Chestdon. Inclusive, eu sei um argumento melhor no mesmo livro do que o dela. E mesmo ele não funciona. Eu fiquei puto. Achei que ela ia botar um argumento que é bom até entendê-la botou outra parada, nada a ver, nada a ver, mas enfim, se tu tiver que sair, sai pô, eu continuo.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:3943:3985": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:3943:3985",
+      "attachment_id": 17044,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 3943,
+      "source_end_s": 3985,
+      "media_sha256": "a776d955d8503eee0793b86346d9df7b9ea775a6477f48b658fa603af50120dc",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.8,
+          "text": "muito enferrujado. Ele virou um fúscar em... Sabe o fúscar turbinado? O Herbie? Então é"
+        },
+        {
+          "start": 4.8,
+          "end": 8.4,
+          "text": "o fúscar enferrujado. Ele virou um fúscar... Ele tá tendo a virar assim muito devagar, entendeu?"
+        },
+        {
+          "start": 8.4,
+          "end": 12.4,
+          "text": "Parece um caminhão, aquele caminhão jumbo, né? Que tem que manobrar assim devagarinho, vai ser..."
+        },
+        {
+          "start": 12.4,
+          "end": 19.2,
+          "text": "Aí vai... Ele tem que fazer isso, né? E... E aí até acontece outra parada, enfim, que o"
+        },
+        {
+          "start": 19.2,
+          "end": 23.6,
+          "text": "padre ele chuta, chuta ele pra poder passar da porta, enfim. Mas essa cena específica,"
+        },
+        {
+          "start": 23.6,
+          "end": 28,
+          "text": "né, do pai resolvendo esse conflito com ameaça de violência e com violência,"
+        },
+        {
+          "start": 28,
+          "end": 31.6,
+          "text": "porque tem a hora que ele chuta, o Gregor para dentro do quarto, ele agarra na porta,"
+        },
+        {
+          "start": 31.6,
+          "end": 35.6,
+          "text": "ele não consegue entrar, o pai chuta para ele entrar, para ele acabar entrando."
+        },
+        {
+          "start": 35.6,
+          "end": 39.8,
+          "text": "Então assim, essa criança, qual que foi a segunda reação do pai?"
+        }
+      ],
+      "excerpt": "muito enferrujado. Ele virou um fúscar em... Sabe o fúscar turbinado? O Herbie? Então é o fúscar enferrujado. Ele virou um fúscar... Ele tá tendo a virar assim muito devagar, entendeu? Parece um caminhão, aquele caminhão jumbo, né? Que tem que manobrar assim devagarinho, vai ser... Aí vai... Ele tem que fazer isso, né? E... E aí até acontece outra parada, enfim, que o padre ele chuta, chuta ele pra poder passar da porta, enfim. Mas essa cena específica, né, do pai resolvendo esse conflito com ameaça de violência e com violência, porque tem a hora que ele chuta, o Gregor para dentro do quarto, ele agarra na porta, ele não consegue entrar, o pai chuta para ele entrar, para ele acabar entrando. Então assim, essa criança, qual que foi a segunda reação do pai?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:3985:4025": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:3985:4025",
+      "attachment_id": 17045,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 3985,
+      "source_end_s": 4025,
+      "media_sha256": "653fbe42cd0a481de9f2478fa97e929a51c767522a77918d85d94238b229e589",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4,
+          "text": "dentro do mesmo dia que foi o primeiro dia da transformação, da metamorfose."
+        },
+        {
+          "start": 4,
+          "end": 5.6,
+          "text": "A primeira foi chorar, foi olhar e..."
+        },
+        {
+          "start": 5.6,
+          "end": 10,
+          "text": "Oh, meu filho! Ele não fala nada, mas enfim, dá pra entender o que a gente fez isso."
+        },
+        {
+          "start": 10,
+          "end": 13.2,
+          "text": "Qual que foi a segunda coisa? Quando ele vê o Gregor saindo do quarto"
+        },
+        {
+          "start": 13.2,
+          "end": 18.6,
+          "text": "e indo atrás de alguém, balbucendo alguma coisa e mexendo as mandibulozinhas."
+        },
+        {
+          "start": 18.6,
+          "end": 20.8,
+          "text": "É ameaçar a violência e usar a violência."
+        },
+        {
+          "start": 20.8,
+          "end": 22.1,
+          "text": "E isso é algo importante."
+        },
+        {
+          "start": 22.1,
+          "end": 25.2,
+          "text": "Isso não pode ser esquecido, ela cortou essa parte"
+        },
+        {
+          "start": 25.2,
+          "end": 27.3,
+          "text": "e aí eu tive que trazer isso pra vocês."
+        },
+        {
+          "start": 27.3,
+          "end": 29.7,
+          "text": "Mas beleza, de resto ela tá acertando aqui, vamos lá."
+        },
+        {
+          "start": 29.7,
+          "end": 33.78,
+          "text": "sai correndo, entende? Então, é uma metáfora para uma doença só se fosse..."
+        }
+      ],
+      "excerpt": "dentro do mesmo dia que foi o primeiro dia da transformação, da metamorfose. A primeira foi chorar, foi olhar e... Oh, meu filho! Ele não fala nada, mas enfim, dá pra entender o que a gente fez isso. Qual que foi a segunda coisa? Quando ele vê o Gregor saindo do quarto e indo atrás de alguém, balbucendo alguma coisa e mexendo as mandibulozinhas. É ameaçar a violência e usar a violência. E isso é algo importante. Isso não pode ser esquecido, ela cortou essa parte e aí eu tive que trazer isso pra vocês. Mas beleza, de resto ela tá acertando aqui, vamos lá. sai correndo, entende? Então, é uma metáfora para uma doença só se fosse...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4025:4066": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4025:4066",
+      "attachment_id": 17046,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4025,
+      "source_end_s": 4066,
+      "media_sha256": "28752129df6ff4a2f7734de616f258e16876a6ef722783b9d8738fb6ea9b6e78",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 9,
+          "text": "doença bem parecida, assim, porque o genente vê o cara e sai correndo, tipo, que merda é essa?"
+        },
+        {
+          "start": 9,
+          "end": 14.44,
+          "text": "Deixa eu sair daqui como se não houvesse amanhã. E a mãe diz, mãe, ai meu deus do céu, ai uma"
+        },
+        {
+          "start": 14.44,
+          "end": 19.16,
+          "text": "chora, o pai, meu deus do céu, enxotam ele pra dentro do quarto. Que é a cena que o pai chuta"
+        },
+        {
+          "start": 19.16,
+          "end": 23.52,
+          "text": "ele pra dentro do quarto, né? Ele tenta entrar, agar na porta, e aí o pai chuta ele, ele sai"
+        },
+        {
+          "start": 23.52,
+          "end": 28.48,
+          "text": "voando e sangra, e fica manco de uma perna, uma perna traseira. É isso que acontece."
+        },
+        {
+          "start": 28.48,
+          "end": 33.88,
+          "text": "Não é só o tachotá tipo fechou, não, ele fica manco, e de fato se machucou, sabe?"
+        },
+        {
+          "start": 33.88,
+          "end": 37.28,
+          "text": "Eu não sei se você já tomou um chute que você sangraram, eu nunca."
+        },
+        {
+          "start": 37.28,
+          "end": 39.28,
+          "text": "Você já tomou, Lucas, um chute que você sangrou."
+        }
+      ],
+      "excerpt": "doença bem parecida, assim, porque o genente vê o cara e sai correndo, tipo, que merda é essa? Deixa eu sair daqui como se não houvesse amanhã. E a mãe diz, mãe, ai meu deus do céu, ai uma chora, o pai, meu deus do céu, enxotam ele pra dentro do quarto. Que é a cena que o pai chuta ele pra dentro do quarto, né? Ele tenta entrar, agar na porta, e aí o pai chuta ele, ele sai voando e sangra, e fica manco de uma perna, uma perna traseira. É isso que acontece. Não é só o tachotá tipo fechou, não, ele fica manco, e de fato se machucou, sabe? Eu não sei se você já tomou um chute que você sangraram, eu nunca. Você já tomou, Lucas, um chute que você sangrou.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4435:4475": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4435:4475",
+      "attachment_id": 17047,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4435,
+      "source_end_s": 4475,
+      "media_sha256": "d7c07c0f1875bb90d757728700298e085a7da1c81e6820bf95b785b233ca5311",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.94,
+          "text": "está me pertubando, mas eu não sei sobre o que é, entendeu?"
+        },
+        {
+          "start": 2.94,
+          "end": 4.14,
+          "text": "Ele manda a carta para a menina."
+        },
+        {
+          "start": 4.14,
+          "end": 6.84,
+          "text": "No dia 7 mesmo, eu comecei hoje a escrever uma história"
+        },
+        {
+          "start": 6.84,
+          "end": 9.84,
+          "text": "que eu não sei do que é, mas está me pertubando e eu preciso escrever."
+        },
+        {
+          "start": 9.84,
+          "end": 13.38,
+          "text": "Ele parece um cara que tinha uma visão muito diferente do mundo"
+        },
+        {
+          "start": 13.38,
+          "end": 15.02,
+          "text": "e sabia como expressar ela."
+        },
+        {
+          "start": 15.02,
+          "end": 18.9,
+          "text": "E tinha uma cultura literária muito boa,"
+        },
+        {
+          "start": 18.9,
+          "end": 20.4,
+          "text": "que lê Flober..."
+        },
+        {
+          "start": 20.4,
+          "end": 24.14,
+          "text": "O pessoal que lê Flober, todos os autores que eu conheço que lê muito Flober"
+        },
+        {
+          "start": 24.14,
+          "end": 26.48,
+          "text": "são ótimos artistas, que lê, gosta mesmo, assim."
+        },
+        {
+          "start": 26.48,
+          "end": 28.58,
+          "text": "Todos que eu conheço, não vou dizer que são todos que existem,"
+        },
+        {
+          "start": 28.58,
+          "end": 33.62,
+          "text": "todos que eu conheço, play muito Flaubert, adoram, Proust, um deles, sempre vou fazer, eu sempre..."
+        }
+      ],
+      "excerpt": "está me pertubando, mas eu não sei sobre o que é, entendeu? Ele manda a carta para a menina. No dia 7 mesmo, eu comecei hoje a escrever uma história que eu não sei do que é, mas está me pertubando e eu preciso escrever. Ele parece um cara que tinha uma visão muito diferente do mundo e sabia como expressar ela. E tinha uma cultura literária muito boa, que lê Flober... O pessoal que lê Flober, todos os autores que eu conheço que lê muito Flober são ótimos artistas, que lê, gosta mesmo, assim. Todos que eu conheço, não vou dizer que são todos que existem, todos que eu conheço, play muito Flaubert, adoram, Proust, um deles, sempre vou fazer, eu sempre...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4598:4639": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4598:4639",
+      "attachment_id": 17048,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4598,
+      "source_end_s": 4639,
+      "media_sha256": "a859949fda8a7c3e809552262105639e052a7b623aacc35f614fe0df32232931",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.6,
+          "text": "Certo gigante, em uma certa manhã depois estão os tranquilos."
+        },
+        {
+          "start": 2.6,
+          "end": 4.4,
+          "text": "Aí, ele era o que bancava, né?"
+        },
+        {
+          "start": 4.4,
+          "end": 5.9,
+          "text": "Ó, gente, ó, ó."
+        },
+        {
+          "start": 5.9,
+          "end": 7.3,
+          "text": "O como é que era antes?"
+        },
+        {
+          "start": 7.3,
+          "end": 9.5,
+          "text": "Gregor era um cachero viajante, né?"
+        },
+        {
+          "start": 9.5,
+          "end": 10.9,
+          "text": "Gregor bancava todo mundo."
+        },
+        {
+          "start": 10.9,
+          "end": 13.8,
+          "text": "Pai, a mãe, velhos, não trabalhavam."
+        },
+        {
+          "start": 13.8,
+          "end": 16.8,
+          "text": "Tinha a cozinheira e tinha uma faxineira."
+        },
+        {
+          "start": 16.8,
+          "end": 17.9,
+          "text": "E a irmãzinha, né?"
+        },
+        {
+          "start": 17.9,
+          "end": 21.1,
+          "text": "Esses três aqui, pai e mãe, irmãzinha não trabalhavam."
+        },
+        {
+          "start": 21.1,
+          "end": 23.2,
+          "text": "A cozinheira não tinha sido demitida"
+        },
+        {
+          "start": 23.2,
+          "end": 25.4,
+          "text": "e a faxineira, né, tava lá como antes."
+        },
+        {
+          "start": 25.4,
+          "end": 26.3,
+          "text": "Beleza, ok."
+        },
+        {
+          "start": 26.3,
+          "end": 28.8,
+          "text": "Isso é normal, isso é como tava antes."
+        },
+        {
+          "start": 28.8,
+          "end": 32.4,
+          "text": "Gregor virou inseto. O que ela mesma disse que aconteceu?"
+        }
+      ],
+      "excerpt": "Certo gigante, em uma certa manhã depois estão os tranquilos. Aí, ele era o que bancava, né? Ó, gente, ó, ó. O como é que era antes? Gregor era um cachero viajante, né? Gregor bancava todo mundo. Pai, a mãe, velhos, não trabalhavam. Tinha a cozinheira e tinha uma faxineira. E a irmãzinha, né? Esses três aqui, pai e mãe, irmãzinha não trabalhavam. A cozinheira não tinha sido demitida e a faxineira, né, tava lá como antes. Beleza, ok. Isso é normal, isso é como tava antes. Gregor virou inseto. O que ela mesma disse que aconteceu?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4639:4681": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4639:4681",
+      "attachment_id": 17049,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4639,
+      "source_end_s": 4681,
+      "media_sha256": "1f1e48b5ad501344686ec6ba3e15f91cfb70a6733ad5afa5f66d973934ebfeaa",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.5,
+          "text": "de fato aconteceu. O pai consegue o emprego, a mãe consegue o emprego, ela não mencionou,"
+        },
+        {
+          "start": 4.5,
+          "end": 10.08,
+          "text": "mas a filha eventualmente, eventualmente, um pouco depois, consegue o emprego também,"
+        },
+        {
+          "start": 10.08,
+          "end": 18.72,
+          "text": "e eles mandam embora a cozinheira que tem 16 anos, a cozinheira nova, mantém a faxineira"
+        },
+        {
+          "start": 18.72,
+          "end": 23.04,
+          "text": "e mais para frente ela não contou ainda, mas beleza, mais para frente vai contratar"
+        },
+        {
+          "start": 23.04,
+          "end": 29.2,
+          "text": "uma outra empregada. Eles têm que usar, agora sou eu que estou adicionando informações"
+        },
+        {
+          "start": 29.2,
+          "end": 33.28,
+          "text": "aqui, né? Eles têm que usar as economias que o grego..."
+        }
+      ],
+      "excerpt": "de fato aconteceu. O pai consegue o emprego, a mãe consegue o emprego, ela não mencionou, mas a filha eventualmente, eventualmente, um pouco depois, consegue o emprego também, e eles mandam embora a cozinheira que tem 16 anos, a cozinheira nova, mantém a faxineira e mais para frente ela não contou ainda, mas beleza, mais para frente vai contratar uma outra empregada. Eles têm que usar, agora sou eu que estou adicionando informações aqui, né? Eles têm que usar as economias que o grego...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4681:4722": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4681:4722",
+      "attachment_id": 17050,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4681,
+      "source_end_s": 4722,
+      "media_sha256": "fda3e82bc5056c742fd9038cae6c3ef28cb86314ab03bef232ce033fd56a8425",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.44,
+          "text": "Segurou para pagar a dívida dos pais,"
+        },
+        {
+          "start": 2.44,
+          "end": 4.72,
+          "text": "ao ponto dessa economia toda,"
+        },
+        {
+          "start": 4.72,
+          "end": 6.72,
+          "text": "zerar, tem um momento que ela acaba."
+        },
+        {
+          "start": 6.72,
+          "end": 8,
+          "text": "E que eles não tem mais economias,"
+        },
+        {
+          "start": 8,
+          "end": 9.52,
+          "text": "eles estão literalmente trabalhando"
+        },
+        {
+          "start": 9.52,
+          "end": 10.8,
+          "text": "para poder jantar no mesmo dia,"
+        },
+        {
+          "start": 10.8,
+          "end": 12.24,
+          "text": "eles estão trabalhando para conseguir dinheiro,"
+        },
+        {
+          "start": 12.24,
+          "end": 13.72,
+          "text": "para conseguir jantar, para conseguir comer."
+        },
+        {
+          "start": 13.72,
+          "end": 15.24,
+          "text": "Porque as economias acabaram,"
+        },
+        {
+          "start": 15.24,
+          "end": 16.16,
+          "text": "acabou o dinheiro."
+        },
+        {
+          "start": 16.16,
+          "end": 17.08,
+          "text": "Eu te pergunto,"
+        },
+        {
+          "start": 17.08,
+          "end": 18.52,
+          "text": "para todos vocês que estão aqui,"
+        },
+        {
+          "start": 18.52,
+          "end": 20.76,
+          "text": "mudou ou não mudou alguma coisa"
+        },
+        {
+          "start": 20.76,
+          "end": 22.28,
+          "text": "desde que ele virou um inseto?"
+        },
+        {
+          "start": 22.28,
+          "end": 23.8,
+          "text": "Estava tudo igual?"
+        },
+        {
+          "start": 23.8,
+          "end": 25.4,
+          "text": "Todo mundo levou a vida como igual?"
+        },
+        {
+          "start": 25.4,
+          "end": 27.44,
+          "text": "Porque se fosse, o pai estava no sofá lá,"
+        },
+        {
+          "start": 27.44,
+          "end": 28.68,
+          "text": "assim, né? Como ele estava antes, né?"
+        },
+        {
+          "start": 28.68,
+          "end": 30.48,
+          "text": "Tipo essa poltroninha meio aqui, entendeu?"
+        },
+        {
+          "start": 30.48,
+          "end": 31.98,
+          "text": "A mãe tava lá de boa..."
+        }
+      ],
+      "excerpt": "Segurou para pagar a dívida dos pais, ao ponto dessa economia toda, zerar, tem um momento que ela acaba. E que eles não tem mais economias, eles estão literalmente trabalhando para poder jantar no mesmo dia, eles estão trabalhando para conseguir dinheiro, para conseguir jantar, para conseguir comer. Porque as economias acabaram, acabou o dinheiro. Eu te pergunto, para todos vocês que estão aqui, mudou ou não mudou alguma coisa desde que ele virou um inseto? Estava tudo igual? Todo mundo levou a vida como igual? Porque se fosse, o pai estava no sofá lá, assim, né? Como ele estava antes, né? Tipo essa poltroninha meio aqui, entendeu? A mãe tava lá de boa...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4722:4762": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4722:4762",
+      "attachment_id": 17051,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4722,
+      "source_end_s": 4762,
+      "media_sha256": "86ef0c9617d46c7d62e7eba1a2c8c288f64b2bed19a95773bfb921958a2a381c",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.62,
+          "text": "Pô, sendo asmática e costurando, a filha tava tocando violão, entendeu?"
+        },
+        {
+          "start": 4.62,
+          "end": 8.36,
+          "text": "A empregada de 16 anos, tava fazendo comida lá, 16 anos fazendo comida, entendeu?"
+        },
+        {
+          "start": 8.36,
+          "end": 14.96,
+          "text": "A outra empregada contra ela depois, a Marvella, a Veota lá, pro letal, enfim, não tinha emprego ali."
+        },
+        {
+          "start": 14.96,
+          "end": 20.24,
+          "text": "E o Gregor, o Gregor tava indo trabalhar de baratão, o Gregor, insetão, bicho esquisito,"
+        },
+        {
+          "start": 20.24,
+          "end": 23.78,
+          "text": "escaravele com óreos que pisco, ele tava indo trabalhar."
+        },
+        {
+          "start": 23.78,
+          "end": 31.5,
+          "text": "E o gerente vai falar ó Gregor, e aí pô, machucou a patinha, tá tranquilo, daqui a pouco volta, né?"
+        },
+        {
+          "start": 31.5,
+          "end": 33.5,
+          "text": "Gregor, sai da luz Gregor, Gregor!"
+        }
+      ],
+      "excerpt": "Pô, sendo asmática e costurando, a filha tava tocando violão, entendeu? A empregada de 16 anos, tava fazendo comida lá, 16 anos fazendo comida, entendeu? A outra empregada contra ela depois, a Marvella, a Veota lá, pro letal, enfim, não tinha emprego ali. E o Gregor, o Gregor tava indo trabalhar de baratão, o Gregor, insetão, bicho esquisito, escaravele com óreos que pisco, ele tava indo trabalhar. E o gerente vai falar ó Gregor, e aí pô, machucou a patinha, tá tranquilo, daqui a pouco volta, né? Gregor, sai da luz Gregor, Gregor!",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4762:4803": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4762:4803",
+      "attachment_id": 17052,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4762,
+      "source_end_s": 4803,
+      "media_sha256": "2599779d94b82a4fbef02fd5d011b0ea2a47886c970bf204a97f72a27e31b98a",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 6.02,
+          "text": "Sai da luz, eu sei que você gosta, sai desgruda, esses insetos, meu Deus, eles não aprendem, né?"
+        },
+        {
+          "start": 6.02,
+          "end": 10.24,
+          "text": "Gregor, sai da janela, Gregor. Sabe quando a mosca fica indo para a janela?"
+        },
+        {
+          "start": 10.24,
+          "end": 13.74,
+          "text": "Mosquito fica indo para a janela? Então, sai da janela, Gregor, sai daí, entendeu?"
+        },
+        {
+          "start": 13.74,
+          "end": 15.24,
+          "text": "Era isso que era a vida era pra ser."
+        },
+        {
+          "start": 15.24,
+          "end": 19.6,
+          "text": "As coisas voltaram, ele ia virar um inseto-cacheiro viajante, podia ser a história muito legal."
+        },
+        {
+          "start": 19.6,
+          "end": 24.14,
+          "text": "Eu não acho que ia ser melhor do que o cara que escreveu, mas ia ser uma história engraçada, ao menos."
+        },
+        {
+          "start": 24.14,
+          "end": 26.74,
+          "text": "Cara, virou um inseto-cacheiro viajante."
+        },
+        {
+          "start": 26.74,
+          "end": 31.14,
+          "text": "e ninguém liga, isso seria as coisas voltarem ao normal, pô, entendeu?"
+        },
+        {
+          "start": 31.14,
+          "end": 32.3,
+          "text": "Seria ele virar bastante pra isso fazer,"
+        },
+        {
+          "start": 32.3,
+          "end": 34.41,
+          "text": "brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá br"
+        }
+      ],
+      "excerpt": "Sai da luz, eu sei que você gosta, sai desgruda, esses insetos, meu Deus, eles não aprendem, né? Gregor, sai da janela, Gregor. Sabe quando a mosca fica indo para a janela? Mosquito fica indo para a janela? Então, sai da janela, Gregor, sai daí, entendeu? Era isso que era a vida era pra ser. As coisas voltaram, ele ia virar um inseto-cacheiro viajante, podia ser a história muito legal. Eu não acho que ia ser melhor do que o cara que escreveu, mas ia ser uma história engraçada, ao menos. Cara, virou um inseto-cacheiro viajante. e ninguém liga, isso seria as coisas voltarem ao normal, pô, entendeu? Seria ele virar bastante pra isso fazer, brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá brá br",
+      "verified": true
     }
   },
   "failures": []
