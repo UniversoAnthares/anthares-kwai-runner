@@ -856,116 +856,198 @@
       }
     },
     "fOmihuHUT1M|g1:fOmihuHUT1M:628:668": {
-    "title": "Admirável Mundo Novo e O Retrato de Dorian Gray na conversa ● Universo Anthares",
-    "description": "Na abertura da conversa, o apresentador comenta uma ligação entre Admirável Mundo Novo e O Retrato de Dorian Gray, mas explica que um acontecimento mudou o plano. Também menciona um escritor francês contemporâneo. www.anthares.us",
-    "hashtags": [
-      "#AdmiravelMundoNovo",
-      "#DorianGray",
-      "#Literatura",
-      "#UniversoAnthares"
-    ],
-    "keywords": [
-      "Admirável Mundo Novo",
-      "O Retrato de Dorian Gray",
-      "literatura",
-      "romances",
-      "escritor francês"
-    ],
-    "transcript_attestation": {
-      "schema": "anthares.clip-transcript-attestation.v1",
-      "clip_id": "g1:fOmihuHUT1M:628:668",
-      "attachment_id": 16991,
-      "source_video_id": "fOmihuHUT1M",
-      "source_start_s": 628,
-      "source_end_s": 668,
-      "media_sha256": "f3fdd8c033eceed1a6989bd58c75579ca2e9ea6146e581453db422b177062bde",
-      "method": "faster-whisper-small-from-media",
-      "language": "pt",
-      "cues": [
-        {
-          "start": 1.52,
-          "end": 5.82,
-          "text": "Eu estou ouvindo."
-        },
-        {
-          "start": 5.82,
-          "end": 6.82,
-          "text": "Que nós..."
-        },
-        {
-          "start": 6.82,
-          "end": 8.82,
-          "text": "Deixa eu ver."
-        },
-        {
-          "start": 8.82,
-          "end": 12.46,
-          "text": "Agora você está ouvindo, né?"
-        },
-        {
-          "start": 12.46,
-          "end": 13.46,
-          "text": "Beleza."
-        },
-        {
-          "start": 13.46,
-          "end": 15.46,
-          "text": "É, porque eu tinha cortado o som do... Enfim."
-        },
-        {
-          "start": 15.46,
-          "end": 17.46,
-          "text": "Voltou aqui. Vamos lá."
-        },
-        {
-          "start": 17.46,
-          "end": 19.46,
-          "text": "Olá, vocês estão todos muito bem-vindos novamente."
-        },
-        {
-          "start": 19.46,
-          "end": 21.46,
-          "text": "Essa semana, eu não sei, aqui no meu Instagram,"
-        },
-        {
-          "start": 21.46,
-          "end": 23.46,
-          "text": "que nós iríamos continuar conversando sobre partículas alimentares"
-        },
-        {
-          "start": 23.46,
-          "end": 25.46,
-          "text": "e eu iria fazer uma junção de um retato de Doryn Gray"
-        },
-        {
-          "start": 25.46,
-          "end": 27.46,
-          "text": "e admirável mundo novo, que algumas refeições sobre admirável mundo novo"
-        },
-        {
-          "start": 27.46,
-          "end": 29.46,
-          "text": "que o Roback faz que você achei interessante,"
-        },
-        {
-          "start": 29.46,
-          "end": 32.46,
-          "text": "mas aconteceu um acontecido e me obriga necessariamente."
-        },
-        {
-          "start": 32.46,
-          "end": 34.46,
-          "text": "Só uma coisa rápida, tá, gente?"
-        },
-        {
-          "start": 34.46,
-          "end": 38.98,
-          "text": "Esse Michel Wallbeck é um Instituto francês atual, está vivendo a contemporâneo."
-        }
+      "title": "Admirável Mundo Novo e O Retrato de Dorian Gray na conversa ● Universo Anthares",
+      "description": "Na abertura da conversa, o apresentador comenta uma ligação entre Admirável Mundo Novo e O Retrato de Dorian Gray, mas explica que um acontecimento mudou o plano. Também menciona um escritor francês contemporâneo. www.anthares.us",
+      "hashtags": [
+        "#AdmiravelMundoNovo",
+        "#DorianGray",
+        "#Literatura",
+        "#UniversoAnthares"
       ],
-      "excerpt": "Eu estou ouvindo. Que nós... Deixa eu ver. Agora você está ouvindo, né? Beleza. É, porque eu tinha cortado o som do... Enfim. Voltou aqui. Vamos lá. Olá, vocês estão todos muito bem-vindos novamente. Essa semana, eu não sei, aqui no meu Instagram, que nós iríamos continuar conversando sobre partículas alimentares e eu iria fazer uma junção de um retato de Doryn Gray e admirável mundo novo, que algumas refeições sobre admirável mundo novo que o Roback faz que você achei interessante, mas aconteceu um acontecido e me obriga necessariamente. Só uma coisa rápida, tá, gente? Esse Michel Wallbeck é um Instituto francês atual, está vivendo a contemporâneo.",
-      "verified": true
+      "keywords": [
+        "Admirável Mundo Novo",
+        "O Retrato de Dorian Gray",
+        "literatura",
+        "romances",
+        "escritor francês"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:628:668",
+        "attachment_id": 16991,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 628,
+        "source_end_s": 668,
+        "media_sha256": "f3fdd8c033eceed1a6989bd58c75579ca2e9ea6146e581453db422b177062bde",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 1.52,
+            "end": 5.82,
+            "text": "Eu estou ouvindo."
+          },
+          {
+            "start": 5.82,
+            "end": 6.82,
+            "text": "Que nós..."
+          },
+          {
+            "start": 6.82,
+            "end": 8.82,
+            "text": "Deixa eu ver."
+          },
+          {
+            "start": 8.82,
+            "end": 12.46,
+            "text": "Agora você está ouvindo, né?"
+          },
+          {
+            "start": 12.46,
+            "end": 13.46,
+            "text": "Beleza."
+          },
+          {
+            "start": 13.46,
+            "end": 15.46,
+            "text": "É, porque eu tinha cortado o som do... Enfim."
+          },
+          {
+            "start": 15.46,
+            "end": 17.46,
+            "text": "Voltou aqui. Vamos lá."
+          },
+          {
+            "start": 17.46,
+            "end": 19.46,
+            "text": "Olá, vocês estão todos muito bem-vindos novamente."
+          },
+          {
+            "start": 19.46,
+            "end": 21.46,
+            "text": "Essa semana, eu não sei, aqui no meu Instagram,"
+          },
+          {
+            "start": 21.46,
+            "end": 23.46,
+            "text": "que nós iríamos continuar conversando sobre partículas alimentares"
+          },
+          {
+            "start": 23.46,
+            "end": 25.46,
+            "text": "e eu iria fazer uma junção de um retato de Doryn Gray"
+          },
+          {
+            "start": 25.46,
+            "end": 27.46,
+            "text": "e admirável mundo novo, que algumas refeições sobre admirável mundo novo"
+          },
+          {
+            "start": 27.46,
+            "end": 29.46,
+            "text": "que o Roback faz que você achei interessante,"
+          },
+          {
+            "start": 29.46,
+            "end": 32.46,
+            "text": "mas aconteceu um acontecido e me obriga necessariamente."
+          },
+          {
+            "start": 32.46,
+            "end": 34.46,
+            "text": "Só uma coisa rápida, tá, gente?"
+          },
+          {
+            "start": 34.46,
+            "end": 38.98,
+            "text": "Esse Michel Wallbeck é um Instituto francês atual, está vivendo a contemporâneo."
+          }
+        ],
+        "excerpt": "Eu estou ouvindo. Que nós... Deixa eu ver. Agora você está ouvindo, né? Beleza. É, porque eu tinha cortado o som do... Enfim. Voltou aqui. Vamos lá. Olá, vocês estão todos muito bem-vindos novamente. Essa semana, eu não sei, aqui no meu Instagram, que nós iríamos continuar conversando sobre partículas alimentares e eu iria fazer uma junção de um retato de Doryn Gray e admirável mundo novo, que algumas refeições sobre admirável mundo novo que o Roback faz que você achei interessante, mas aconteceu um acontecido e me obriga necessariamente. Só uma coisa rápida, tá, gente? Esse Michel Wallbeck é um Instituto francês atual, está vivendo a contemporâneo.",
+        "verified": true
+      }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:668:708": {
+      "title": "Partículas Elementares e Submissão: uma resposta prometida ● Universo Anthares",
+      "description": "O participante comenta Partículas Elementares e Submissão, critica uma interpretação do segundo romance e promete produzir um vídeo de resposta mais adiante, possivelmente no fim de janeiro. www.anthares.us",
+      "hashtags": [
+        "#ParticulasElementares",
+        "#Submissao",
+        "#Literatura",
+        "#Livros"
+      ],
+      "keywords": [
+        "Partículas Elementares",
+        "Submissão",
+        "romance",
+        "vídeo de resposta",
+        "debate literário"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:668:708",
+        "attachment_id": 16992,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 668,
+        "source_end_s": 708,
+        "media_sha256": "35cab02c13f525bbf1573cf91ce69bde2bde4b77fdf33856af415d96a7b6613a",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 8.36,
+            "text": "Tem dois livros que ela comentou aí dele, o Partículas Elementares e um outro, o Submissão."
+          },
+          {
+            "start": 8.36,
+            "end": 9.96,
+            "text": "Ela comentou no outro vídeo."
+          },
+          {
+            "start": 9.96,
+            "end": 15.84,
+            "text": "Futuramente vai ter um vídeo meu respondendo o que ela disse do Submissão, porque ela"
+          },
+          {
+            "start": 15.84,
+            "end": 20.72,
+            "text": "fala muita besteira dessa obra que é muito boa e ela fala muita, muita besteira e aí"
+          },
+          {
+            "start": 20.72,
+            "end": 22.28,
+            "text": "eu vou ter que fazer isso."
+          },
+          {
+            "start": 22.28,
+            "end": 26,
+            "text": "Mas vai ser mais pra frente se ela não que vem, velho, janeiro tá no que vem,"
+          },
+          {
+            "start": 26,
+            "end": 27.52,
+            "text": "que até lá eu tô ocupado, entendeu?"
+          },
+          {
+            "start": 27.52,
+            "end": 30.52,
+            "text": "final de janeiro eu faço isso eu tô ocupado por ter que fazer coisa tem que"
+          },
+          {
+            "start": 30.52,
+            "end": 33.64,
+            "text": "fazer até parar também enfim mas só apontando isso aqui tá já tem a"
+          },
+          {
+            "start": 33.64,
+            "end": 37.48,
+            "text": "promessa minha final de dano que"
+          }
+        ],
+        "excerpt": "Tem dois livros que ela comentou aí dele, o Partículas Elementares e um outro, o Submissão. Ela comentou no outro vídeo. Futuramente vai ter um vídeo meu respondendo o que ela disse do Submissão, porque ela fala muita besteira dessa obra que é muito boa e ela fala muita, muita besteira e aí eu vou ter que fazer isso. Mas vai ser mais pra frente se ela não que vem, velho, janeiro tá no que vem, que até lá eu tô ocupado, entendeu? final de janeiro eu faço isso eu tô ocupado por ter que fazer coisa tem que fazer até parar também enfim mas só apontando isso aqui tá já tem a promessa minha final de dano que",
+        "verified": true
+      }
     }
   }
-}
 }
