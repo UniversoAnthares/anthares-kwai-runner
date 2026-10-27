@@ -127,7 +127,7 @@
       ],
       "reference_implementation": "tools/ci_quota_cancel_first.py",
       "verification_tests": "tests/test_ci_quota_cancel_first.py",
-      "integration_state": "GITLAB_HANDOFF_PROVEN_APPVEYOR_AND_BITRISE_AUTHENTICATED_WATCHERS_REAL_QUOTA_CANCEL_NOT_OBSERVED",
+      "integration_state": "GITHUB_REAL_CONTROLLED_CANCEL_CONFIRMED_40502470893_LISTENER_40502486145_GITLAB_REAL_INDEPENDENT_FALLBACK_CONFIRMED_40510154187_APPVEYOR_BITRISE_WATCHERS_READY_NO_NATURAL_QUOTA_EVENT",
       "operational_cancel_redundancy": {
         "primary": "github_actions_oidc_external_watcher",
         "primary_workflow": ".github/workflows/ci-quota-external-cancel.yml",
@@ -140,7 +140,12 @@
         "provider_credentials": "APPVEYOR_AND_BITRISE_AUTHENTICATED_GITHUB_AND_ARA_SYSTEM_DPAPI_20261027",
         "shared_fence": "Neon public.anthares_ci_quota_attempts first-winner attempt_id",
         "external_cancel_confirmed": false,
-        "side_effect_fallback": "FORBIDDEN_UNTIL_REMOTE_TERMINAL_AND_NOT_APPLIED"
+        "side_effect_fallback": "FORBIDDEN_UNTIL_REMOTE_TERMINAL_AND_NOT_APPLIED",
+        "proof": {
+          "github_cancel": "CONTROLLED_RUN_40502470893_ACTUALLY_CANCELLED_BY_LISTENER_40502486145",
+          "gitlab_fallback": "REAL_QUOTA_FAILED_PIPELINE_2994547840_TO_GITHUB_RUN_40510154187_SUCCESS_NEON_FALLBACK_CONFIRMED",
+          "appveyor_bitrise": "MONITORS_AUTHENTICATED_READY_EVENTS_0_REAL_QUOTA_CANCEL_UNOBSERVED"
+        }
       },
       "operator_warning": "A policy file or tested core does not itself invoke provider APIs; each provider requires a verified cancel/status/dispatch adapter and durable cross-host fencing.",
       "shared_ledger": {
@@ -158,10 +163,14 @@
         "public_grants": false
       },
       "github_runtime_smoke": {
-        "status": "MERGED_TRIGGER_CONFIGURED_RESULT_NOT_VERIFIED_REMOTE_TOOL_SECURITY_DENIAL",
+        "status": "REAL_GITHUB_RUN_CANCELLED_LISTENER_SUCCESS_TERMINAL_CONFIRMED_20261027",
         "workflow": ".github/workflows/anthares-quota-cancel-controlled-smoke.yml",
         "controller": ".github/workflows/anthares-quota-cancel-listener.yml",
-        "scope": "SYNTHETIC_ALLOWLIST_ONLY_NO_REAL_WORKLOADS"
+        "scope": "SYNTHETIC_ALLOWLIST_ONLY_NO_REAL_WORKLOADS",
+        "original_run": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40502470893",
+        "listener_run": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40502486145",
+        "consumer_result": "CANCELLED_NO_INDEPENDENT_RESERVE",
+        "proof_limit": "SYNTHETIC_ALLOWLISTED_ZERO_SIDE_EFFECT_JOB_NO_PRODUCTION_QUOTA"
       },
       "harness_fallback": {
         "source_merged": true,
