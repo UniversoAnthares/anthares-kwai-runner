@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import time
 
@@ -7,18 +8,32 @@ from tiktok_session_authority import load_canonical_state
 
 t = v2.t
 
-# The publication process must resolve the same durable session authority used by
-# Anthares Browser. Any control-plane/session-file copy is bootstrap material only.
-_state, _authority = load_canonical_state()
+# The Codeberg primary receives an isolated session file only AFTER the hosted
+# controller has verified the exact account in TikTok's live profile. The local
+# Anthares Browser vault, which needs ARA_SHARED, is not available there.
+if os.getenv("FORGEJO_REPOSITORY") == "UniversoAnthares/anthares-kwai-runner":
+    expected = os.getenv("EXPECTED_TIKTOK_USERNAME", "").strip().lstrip("@").lower()
+    if expected != "universo.anthares" or not os.getenv("TIKTOK_STORAGE_STATE_FILE"):
+        raise RuntimeError("TIKTOK_CODEBERG_VERIFIED_ACCOUNT_STATE_REQUIRED")
+    _state = t.tw.storage_state()
+    if not t.tw.auth_cookie_names(_state):
+        raise RuntimeError("TIKTOK_CODEBERG_AUTH_COOKIES_REQUIRED")
+    print("TIKTOK_SESSION_AUTHORITY=codeberg-dedicated cookies="
+          + str(len(_state["cookies"])), flush=True)
+else:
+    # Preserve the original durable Anthares Browser authority for local and
+    # non-Codeberg executions. No silent fallback to unverified cookies.
+    _state, _authority = load_canonical_state()
+    print(
+        "TIKTOK_SESSION_AUTHORITY=runtime "
+        + "sha256=" + _authority["ciphertext_sha256"]
+        + " cookies=" + str(_authority["cookie_count"]),
+        flush=True,
+    )
+
 t.tw.STORAGE_RAW = json.dumps(_state, separators=(",", ":"))
 t.tw.STORAGE_FILE = ""
 t.tw.EXPECTED_USERNAME = "universo.anthares"
-print(
-    "TIKTOK_SESSION_AUTHORITY=runtime "
-    + "sha256=" + _authority["ciphertext_sha256"]
-    + " cookies=" + str(_authority["cookie_count"]),
-    flush=True,
-)
 
 _original_wait_confirmation = t.wait_confirmation
 

@@ -215,6 +215,33 @@ def request_followup_if_pending(control):
 
 
 
+
+def preflight_codeberg_publisher_import(folder, state):
+    """Reject an invalid hosted publisher before an irreversible Neon STARTED."""
+    state_file = folder / "canonical-state.json"
+    state_file.write_text(json.dumps(state, separators=(",", ":")), encoding="utf-8")
+    state_file.chmod(0o600)
+    env = os.environ.copy()
+    env.pop("TIKTOK_STORAGE_STATE", None)
+    env.update({
+        "EXPECTED_TIKTOK_USERNAME": EXPECTED,
+        "TIKTOK_STORAGE_STATE_FILE": str(state_file),
+    })
+    # Import-only: no browser launch, posting, claim or upload. Never echo
+    # captured stdout/stderr, which might contain session details.
+    script = "import sys; sys.path.insert(0, " + repr(
+        str(ROOT / "direct-tiktok-publisher")) + "); import tiktok_cloud_publish"
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", script], cwd=str(ROOT), env=env,
+            text=True, capture_output=True, timeout=35)
+    except subprocess.TimeoutExpired as exc:
+        raise q.SafeStop("TIKTOK_PUBLISHER_IMPORT_PREFLIGHT_TIMEOUT") from exc
+    if result.returncode:
+        raise q.SafeStop("TIKTOK_PUBLISHER_IMPORT_PREFLIGHT_FAILED")
+    print("CORTES_TIKTOK_PUBLISHER_IMPORT_PREFLIGHT_OK", flush=True)
+
+
 def main():
     if os.getenv("CORTES_TIKTOK_HOSTED_DRY_RUN")=="1":
         print("CORTES_TIKTOK_HOSTED_DRY_RUN_NO_PUBLISH",flush=True)
@@ -274,13 +301,18 @@ def main():
             # Release failed preflight leases immediately; Neon imposes a
             # bounded per-clip cooldown, allowing other ready clips to proceed.
             # No upload has begun, so this is safe to retry after recovery.
+            preflight_error = "media_preflight_failed_before_start"
             try:
                 download_verified(job,folder/"short.mp4")
+                if os.getenv("FORGEJO_REPOSITORY")=="UniversoAnthares/anthares-kwai-runner":
+                    preflight_error = "publisher_import_preflight_failed_before_start"
+                    q.caption(job)
+                    preflight_codeberg_publisher_import(folder,state)
             except Exception:
                 try:
                     q.qcall("fail",control,{
                         "id":job["id"],"lease_generation":generation,
-                        "error":"media_preflight_failed_before_start"
+                        "error":preflight_error
                     })
                     print("CORTES_TIKTOK_PREFLIGHT_LEASE_RELEASED",flush=True)
                 except Exception:
@@ -370,7 +402,8 @@ def publish_one_preloaded(job,sid,folder,state):
             ("confirmação inequívoca", "confirmation_missing"),
             ("múltiplos vídeos novos", "profile_multiple_posts"),
             ("nenhum vídeo novo", "profile_not_updated"),
-            ("module", "publisher_import_failure"),
+            ("modulenotfounderror", "publisher_import_failure"),
+            ("canonical_session_secret_missing", "canonical_vault_unavailable"),
             ("timeout", "browser_timeout"),
         )
         category=next((v for k,v in rules if k in body),"unclassified")
