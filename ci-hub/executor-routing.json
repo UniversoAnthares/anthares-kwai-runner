@@ -93,11 +93,12 @@
     "selection_rule": "All providers remain candidates in the ordered routing list; only fresh authenticated successful execution proof and current capability can mark them eligible. Skip blocked, quota-exceeded, or HTTP 500 providers and continue to the next candidate before any side effects. Never retry a request with uncertain effects or re-dispatch a job after publication started; reconcile durable job ID and fencing first.",
     "quota_policy": "BLOCKED_QUOTA providers are ineligible until fresh successful proof",
     "runner_allocation_health": {
-      "github_actions_public": "DEGRADED_CURRENT_REPO_BACKLOG_20261021",
+      "github_actions_public": "RUNNER_ALLOCATION_AND_READONLY_QUOTA_WATCHER_SUCCESS_20261027_RUN_40569858409_PUBLISHER_INDEPENDENT_PROOF_REQUIRED",
       "appveyor": "BLOCKED_HTTP500_BUILD_CREATION_20261026",
       "codeberg_actions": "NOT_CONFIGURED_REPOSITORY_ACTIONS_DISABLED",
       "gitlab_ci": "BLOCKED_QUOTA_TEMPORARY_AUTOMATIC_RECHECK",
-      "bitrise": "EXCLUDED_BY_OWNER_20261027_MACHINE_INVALID_HTTP400"
+      "bitrise": "EXCLUDED_BY_OWNER_20261027_MACHINE_INVALID_HTTP400",
+      "harness": "API_SECRET_NOT_CONFIGURED_RUN_40569858409_NOT_ELIGIBLE_FOR_CANCEL_FIRST_ROUTING"
     },
     "appveyor_routing_policy": {
       "rank": "penultimate",
@@ -167,6 +168,12 @@
       "reason": "Owner directed ignore Bitrise as CI executor on 2026-10-27 after HTTP 400 machine invalid",
       "retained_role": "authenticated cancellation/status monitoring only",
       "reentry": "requires new explicit owner direction and hosted execution proof"
+    },
+    "harness_routing_policy": {
+      "eligible": false,
+      "reason": "HARNESS_API_AUTH_READONLY=NOT_CONFIGURED confirmed in authenticated GitHub Action run 40569858409",
+      "enable_only_after": "HARNESS_API_KEY authenticated to owned execution, production OIDC claim/report live, real terminal/fencing evidence",
+      "independent_ci_stage": "Harness CI stage itself has live success but that does not authorize provider cancel-first routing"
     }
   },
   "retired": {
