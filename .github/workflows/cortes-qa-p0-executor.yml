@@ -49,6 +49,31 @@ jobs:
             });
             core.notice('QA_P0_STARTED issue='+issue_number+' network='+network);
 
+      - name: Classify Pinterest P0 incident and enforce safe repair gate
+        if: steps.preflight.outcome == 'success'
+        id: pinterest_gate
+        uses: actions/github-script@v7
+        env:
+          QA_ISSUE_NUMBER: ${{ inputs.issue_number }}
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const issue_number = Number(process.env.QA_ISSUE_NUMBER);
+            const {data: issue} = await github.rest.issues.get({owner,repo,issue_number});
+            const body = String(issue.body || '');
+            const title = String(issue.title || '');
+            let gate = 'GENERAL_DIAGNOSTIC_ONLY';
+            if (issue_number === 460 && /Mídia 404/.test(title) && /HTTP 404/.test(body)) {
+              gate = 'PINTEREST_MEDIA_404_SOURCE_REPAIR_REQUIRED';
+            } else if (issue_number === 492 && /PIN_PUBLISH_BUTTON_NOT_READY/.test(body)) {
+              gate = 'PINTEREST_PUBLISH_DISABLED_REMOTE_UI_DIAGNOSIS_REQUIRED';
+            } else if (issue_number === 528 && /PINTEREST_DRAFT_CAPACITY_EXHAUSTED/.test(body)) {
+              gate = 'PINTEREST_DRAFT_CAPACITY_RECONCILIATION_REQUIRED';
+            }
+            // Read-only classification. The executor must never retry, delete
+            // drafts, mark as published, or bypass Neon CAS from an issue body.
+            core.setOutput('gate', gate);
+            core.notice('QA_P0_REPAIR_GATE=' + gate);
       - name: Read Codeberg QA test evidence (no GitHub tests)
         if: steps.preflight.outcome == 'success'
         id: codeberg
@@ -102,6 +127,7 @@ jobs:
           QA_NETWORK: ${{ steps.preflight.outputs.network }}
           QA_CODEBERG: ${{ steps.codeberg.outputs.state }}
           QA_CODEBERG_URL: ${{ steps.codeberg.outputs.url }}
+          QA_REPAIR_GATE: ${{ steps.pinterest_gate.outputs.gate }}
           QA_AUTOHEAL: ${{ steps.recovery.outputs.action }}
           QA_DIAGNOSTIC: ${{ steps.recovery.outputs.diagnostic }}
         with:
