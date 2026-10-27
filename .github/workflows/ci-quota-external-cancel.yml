@@ -156,7 +156,7 @@ jobs:
         run: |
           node - <<'NODE'
           const {createPublicKey,publicEncrypt,constants}=require("node:crypto");
-          const key=process.env.BITRISE_KEY;
+          const key=(process.env.BITRISE_KEY||"").trim();
           if(!key) {console.log("ARA_BITRISE_TOKEN_TRANSFER=NOT_CONFIGURED");process.exit(0)}
           const base="https://anthares-ci-quota-controller.vercel.app/api/credential-bridge";
           async function main(){
