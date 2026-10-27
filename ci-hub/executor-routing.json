@@ -126,7 +126,21 @@
       ],
       "reference_implementation": "tools/ci_quota_cancel_first.py",
       "verification_tests": "tests/test_ci_quota_cancel_first.py",
-      "integration_state": "PRODUCTION_LEDGER_DEPLOYED_ADAPTERS_STAGED_CONTROLLER_E2E_NOT_CONFIRMED",
+      "integration_state": "PRODUCTION_GITLAB_HANDOFF_PROVEN_ARA_RSA_AUTH_READY_EXTERNAL_PROVIDER_CREDENTIALS_MISSING",
+      "operational_cancel_redundancy": {
+        "primary": "github_actions_oidc_external_watcher",
+        "primary_workflow": ".github/workflows/ci-quota-external-cancel.yml",
+        "secondary": "anthares_remote_windows_system",
+        "secondary_task": "Anthares CI Quota Cancel Standby",
+        "secondary_script": "anthares-remote-agent/windows/ci-quota-cancel-standby.ps1",
+        "secondary_interval_minutes": 15,
+        "secondary_identity": "WINDOWS_DPAPI_RSA3072_LOCAL_PRIVATE_VERCEL_PUBLIC_JWK",
+        "secondary_controller_auth": "READY_RSA_NEON_CONFIRMED_20261027",
+        "provider_credentials": "APPVEYOR_AND_BITRISE_NOT_CONFIGURED_FAIL_CLOSED",
+        "shared_fence": "Neon public.anthares_ci_quota_attempts first-winner attempt_id",
+        "external_cancel_confirmed": false,
+        "side_effect_fallback": "FORBIDDEN_UNTIL_REMOTE_TERMINAL_AND_NOT_APPLIED"
+      },
       "operator_warning": "A policy file or tested core does not itself invoke provider APIs; each provider requires a verified cancel/status/dispatch adapter and durable cross-host fencing.",
       "shared_ledger": {
         "status": "DEPLOYED_NOT_CONNECTED_TO_ALL_EXECUTORS",
