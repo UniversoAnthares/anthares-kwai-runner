@@ -33,9 +33,9 @@ jobs:
           import json
           m=json.load(open('ci-hub/executor-routing.json'))
           assert 'circleci' not in m['android_execution']['priority']
-          assert 'circleci' not in m['browser_execution']['priority']
-          assert m['providers']['circleci']['active'] is False
-          assert m['providers']['gitlab']['active'] is True
+          assert 'circleci' not in m['browser_execution']['backend_priority']
+          assert m['retired']['circleci']['active'] is False
+          assert m['providers']['gitlab_ci']['active'] is True
           print('CIRCLECI_RETIRED_ROUTING=PASS')
           PY
 
