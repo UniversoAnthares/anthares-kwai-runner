@@ -23,6 +23,7 @@ on:
 permissions:
   actions: write
   contents: read
+  id-token: write
 jobs:
   watch:
     # Use only trusted scheduled parent completions as secondary triggers.
@@ -70,5 +71,6 @@ jobs:
         env:
           GITLAB_TOKEN: ${{ env.ANTHARES_GITLAB_TOKEN_FROM_BW || secrets.GITLAB_TOKEN }}
           GH_TOKEN: ${{ github.token }}
+          ANTHARES_CI_QUOTA_LEDGER_URL: https://anthares-ci-quota-controller.vercel.app/api/gitlab-reserve
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: python tools/gitlab_quota_watcher.py

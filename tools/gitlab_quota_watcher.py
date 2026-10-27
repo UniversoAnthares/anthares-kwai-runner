@@ -153,6 +153,49 @@ def already_handled(component, workflow, sha, runs):
     return False
 
 
+def reserve_quota_handoff(component, project_id, event):
+    """Reserve exactly one GitLab quota successor across independently running hosts.
+
+    Source pipeline cancellation/terminal check has already passed. A failed,
+    ambiguous or duplicated Neon reservation must not dispatch a successor.
+    """
+    if DRY_RUN:
+        return "DRY_RUN"
+    controller=os.environ.get("ANTHARES_CI_QUOTA_LEDGER_URL", "")
+    if not controller.startswith("https://") or not controller.endswith("/api/gitlab-reserve"):
+        return "CONTROLLER_UNCONFIGURED"
+    oidc_url=os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL", "")
+    oidc_access=os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+    if not (oidc_url and oidc_access and GL_AUTH):
+        return "OIDC_OR_GITLAB_CREDENTIAL_UNAVAILABLE"
+    sep="&" if "?" in oidc_url else "?"
+    requested=oidc_url+sep+urllib.parse.urlencode(
+        {"audience":"anthares-ci-quota-controller"})
+    try:
+        with urllib.request.urlopen(urllib.request.Request(
+            requested, headers={"Authorization":"Bearer "+oidc_access}),
+            timeout=10) as resp:
+            identity=json.load(resp).get("value", "")
+        if not identity:
+            return "OIDC_UNAVAILABLE"
+        body=json.dumps({"component":component,"project_id":str(project_id),
+                         "pipeline_id":str(event["id"]),"sha":str(event["sha"])}).encode()
+        with urllib.request.urlopen(urllib.request.Request(
+            controller,data=body,method="POST",headers={
+                "Authorization":"Bearer "+identity,
+                "X-Gitlab-Token":GL_AUTH,
+                "Content-Type":"application/json"}),timeout=25) as resp:
+            receipt=json.load(resp)
+        return "RESERVED" if (receipt.get("ok") is True and
+              receipt.get("state")=="FALLBACK_RESERVED") else "UNCERTAIN"
+    except urllib.error.HTTPError as exc:
+        # 409 is an existing reservation or a rejected stale identity.
+        # Both must block duplicate dispatch without exposing remote details.
+        return "ALREADY_OR_INVALID" if exc.code in (400,401,403,409) else "UNAVAILABLE"
+    except (urllib.error.URLError,OSError,TimeoutError,ValueError,KeyError):
+        return "UNAVAILABLE"
+
+
 def dispatch(component, workflow, p):
     inputs = {"gitlab_pipeline_id": str(p["id"]), "gitlab_sha": p["sha"]}
     if workflow == "private-ci-quota-rescue.yml":
@@ -188,6 +231,12 @@ def main():
                 runs_cache[workflow] = latest_runs(workflow)
             if already_handled(component, workflow, event["sha"], runs_cache[workflow]):
                 print(f"{component}=DEDUPED sha={event['sha'][:12]}")
+                continue
+            claim=reserve_quota_handoff(component, project_id, event)
+            if claim != "RESERVED":
+                print(f"{component}=SHARED_LEDGER_{claim}_NO_DISPATCH")
+                if claim not in ("ALREADY_OR_INVALID", "DRY_RUN"):
+                    errors += 1
                 continue
             dispatch(component, workflow, event)
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, ProviderUncertain) as exc:
