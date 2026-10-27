@@ -240,7 +240,7 @@ try {
     $Status.auth='READY_DPAPI_SYSTEM'
     try{$Status.appveyor=AppVeyor $config (Secret 'ci-quota-appveyor-token.dpapi') $privateKey}
     catch{$Status.appveyor='SOURCE_UNAVAILABLE'}
-    try{$Status.bitrise=Bitrise $config (Secret 'ci-quota-bitrise-token.dpapi') $hmacKey}
+    try{$Status.bitrise=Bitrise $config (Secret 'ci-quota-bitrise-token.dpapi') $privateKey}
     catch{$Status.bitrise='SOURCE_UNAVAILABLE'}
 }finally{
     if(-not (Test-Path -LiteralPath $StateDir)){New-Item -ItemType Directory -Path $StateDir -Force|Out-Null}
