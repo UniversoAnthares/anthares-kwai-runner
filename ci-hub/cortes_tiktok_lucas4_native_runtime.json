@@ -17,12 +17,12 @@
   ],
   "provider_metadata_verified": false,
   "environment_provisioned_verified": true,
-  "repository_or_organization_alias_absence_verified": false,
+  "repository_or_organization_alias_absence_verified": true,
   "distinct_principals_positive_negative_verified": false,
   "escrow_entry_verified": true,
   "production_migration_status": "prepared_not_deployed",
   "deployment_authorized": false,
-  "notes": "Native environment, account identity, fresh-context session reuse and holder-approved Proton recovery escrow verified. Downloaded package integrity and in-memory decryption passed independently of Windows DPAPI. ZIP contains recovery key and relies on private Proton encrypted custody. Repo/org alias absence and distinct-provider-principal ALLOWED/DENIED remain unverified. No workflow dispatch, production deployment or legacy credential revocation.",
+  "notes": "Native environment, account identity, fresh-context session reuse and holder-approved Proton recovery escrow verified. Downloaded package integrity and in-memory decryption passed independently of Windows DPAPI. ZIP contains recovery key and relies on private Proton encrypted custody. Native name occurs once in the Environment table and zero times in repository scope; personal User repository has no organization scope. Distinct-provider-principal ALLOWED/DENIED remains unverified. No workflow dispatch, production deployment or legacy credential revocation.",
   "administration": {
     "external_collaborators_authorized": false,
     "independent_human_reviewer_available": false,
@@ -56,5 +56,14 @@
     "requires_windows_dpapi": false,
     "uses_original_local_artifact": false,
     "plaintext_session_written": false
+  },
+  "alias_absence_evidence": {
+    "observed_date": "2026-10-27",
+    "environment_match_count": 1,
+    "repository_match_count": 0,
+    "legacy_repository_credential_preserved": true,
+    "owner_type": "User",
+    "organization_scope_applicable": false,
+    "metadata_values_read": false
   }
 }
