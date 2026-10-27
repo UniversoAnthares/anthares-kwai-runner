@@ -306,22 +306,22 @@
       "evidence": "Neon table cortes_publications exists with prior confirmed real Kwai job and phase4 self-test; live 2026-10-18 Cloudflare CORTES backlog cannot be inferred or safely moved from this table alone."
     },
     "codeberg_repo": {
-      "status": "REACHABLE_STALE",
-      "evidence_class": "VERIFIED_LIVE",
-      "verified_at_utc": "2026-10-21T21:20:00Z",
-      "evidence": "Codeberg public main 1c2f7dc3 is 20 commits behind GitHub 2884ff77 at sampled point; merge-base verified ancestor, no divergence. Codeberg repo has Actions disabled, default branch is not main; Github main later advanced further. Authorized Github mirror workflow last proved Codeberg push at run 39665507700.",
-      "eligible": false,
-      "scope": "git recovery only, never publish from stale checkout",
+      "status": "LIVE_GIT_PARITY_PROVEN_20261027",
+      "evidence_class": "LIVE_GITHUB_MIRROR_RUN",
+      "verified_at_utc": "2026-10-27",
+      "evidence": "GitHub mirror job 122489626332 confirmed Codeberg public readback at f25cf957168cfabead97ba438fa286b7b8f4fa54, branch main correct, actions enabled.",
+      "eligible": true,
+      "scope": "git recovery mirror; not a CI runner",
       "reopen_condition": "authenticated Codeberg mirror finishes, public main equals fresh GitHub main and SHA readback succeeds"
     },
     "codeberg_actions": {
-      "status": "BLOCKED_NOT_ENABLED",
-      "evidence_class": "VERIFIED_LIVE",
-      "verified_at_utc": "2026-10-21T21:20:00Z",
-      "evidence": "Forgejo API reports has_actions=false; hosted CI eligibility/license/runner not validated.",
+      "status": "ACTIONS_ENABLED_RUNNER_NOT_PROVEN_20261027",
+      "evidence_class": "LIVE_GITHUB_MIRROR_RUN",
+      "verified_at_utc": "2026-10-27",
+      "evidence": "GitHub mirror job 122489626332 reports CODEBERG_ADMIN_SETTINGS=ALREADY_CORRECT, CODEBERG_MIRROR_CHECK actions_enabled=true default_branch_main=true sha_match=true, CODEBERG_GIT_PARITY_PROVEN=PASS. No runner or Forgejo job success yet.",
       "eligible": false,
       "scope": "candidate CI (not yet an active fallback)",
-      "reopen_condition": "Actions enabled, qualified runner available, real job success and publisher OIDC/secret access proven"
+      "reopen_condition": "Codeberg qualified runner executes SHA-pinned CI job to terminal success"
     },
     "bitrise": {
       "status": "EXCLUDED_FROM_CI_EXECUTION_BY_OWNER_20261027",
