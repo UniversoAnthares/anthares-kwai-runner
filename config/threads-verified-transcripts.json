@@ -1207,6 +1207,98 @@
         "excerpt": "Não tem problema se você não gostar de um livro, é comum que as pessoas fiquem chateadas também quando você não gosta de um livro que elas adoram, mas o que ela vai falar agora aí mesmo? É que as pessoas acham que a partir de ele ter virado um inseto começa uma história fantástica, começa literalmente uma história fantástica nesse sentido, é literalmente uma coisa fantástica que aconteceu. A grande questão é que parece que a Débora não anda lendo muito livro desse tipo, de histórias, de narrativas.",
         "verified": true
       }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:869:909": {
+      "title": "Kafka: O Processo, Na Colônia Penal e a primeira frase ● Universo Anthares",
+      "description": "Os participantes citam obras de Kafka, incluindo O Processo, Na Colônia Penal e O Castelo, e discutem a ideia de que o livro já se revela na primeira frase ou no primeiro parágrafo. www.anthares.us",
+      "hashtags": [
+        "#Kafka",
+        "#OProcesso",
+        "#Literatura",
+        "#Livros"
+      ],
+      "keywords": [
+        "Kafka",
+        "O Processo",
+        "Na Colônia Penal",
+        "O Castelo",
+        "primeira frase"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:869:909",
+        "attachment_id": 16995,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 869,
+        "source_end_s": 909,
+        "media_sha256": "91c12a91fb5a6d6cf87846120c99588029f85307a39ac9e782db11918d3af481",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 5.1,
+            "text": "Não sei o que tipo de livro ele vai lá andar lendo, porque a grande diferença que todo mundo enxerga no Cáfica,"
+          },
+          {
+            "start": 5.1,
+            "end": 10.74,
+            "text": "eu lhe do Cáfica, eu conheço o Metrôma Foz, conheço um conto dele que chamou Beredito,"
+          },
+          {
+            "start": 10.74,
+            "end": 12.24,
+            "text": "conheço..."
+          },
+          {
+            "start": 12.24,
+            "end": 14.04,
+            "text": "Processo? Processo?"
+          },
+          {
+            "start": 14.04,
+            "end": 18.44,
+            "text": "Processo e na Colônia Penal."
+          },
+          {
+            "start": 18.44,
+            "end": 19.94,
+            "text": "Na Colônia Penitenciária."
+          },
+          {
+            "start": 19.94,
+            "end": 21.74,
+            "text": "Na Colônia Penitenciária."
+          },
+          {
+            "start": 21.74,
+            "end": 23.94,
+            "text": "Conheço isso aí, nunca li o castelo."
+          },
+          {
+            "start": 23.94,
+            "end": 25.44,
+            "text": "É, eu sou baixo de câstulas."
+          },
+          {
+            "start": 25.44,
+            "end": 26.44,
+            "text": "Estão de coisas, sim."
+          },
+          {
+            "start": 26.44,
+            "end": 29.24,
+            "text": "Se eu não me engano, se eu não me engano, em todos eles,"
+          },
+          {
+            "start": 29.24,
+            "end": 35.24,
+            "text": "Você já tem o que é o livro na primeira, na primeira frase, no primeiro parámetro."
+          }
+        ],
+        "excerpt": "Não sei o que tipo de livro ele vai lá andar lendo, porque a grande diferença que todo mundo enxerga no Cáfica, eu lhe do Cáfica, eu conheço o Metrôma Foz, conheço um conto dele que chamou Beredito, conheço... Processo? Processo? Processo e na Colônia Penal. Na Colônia Penitenciária. Na Colônia Penitenciária. Conheço isso aí, nunca li o castelo. É, eu sou baixo de câstulas. Estão de coisas, sim. Se eu não me engano, se eu não me engano, em todos eles, Você já tem o que é o livro na primeira, na primeira frase, no primeiro parámetro.",
+        "verified": true
+      }
     }
   }
 }
