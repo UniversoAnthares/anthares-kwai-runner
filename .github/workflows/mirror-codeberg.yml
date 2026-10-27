@@ -18,14 +18,14 @@ concurrency:
 
 jobs:
   mirror:
-    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Verify and mirror main without force
-        shell: powershell
+        shell: pwsh
         env:
           CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
         run: |
@@ -39,37 +39,59 @@ jobs:
             git remote add codeberg $env:CODEBERG_PUSH_URL
           }
           if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_REMOTE_CONFIG_FAILED' }
-          git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main'
-          if ($LASTEXITCODE -ne 0) { throw 'GITHUB_MAIN_FETCH_FAILED' }
-          $expected=(git rev-parse refs/remotes/origin/main).Trim()
-          if ($expected -notmatch '^[a-f0-9]{40}$') { throw 'GITHUB_SHA_INVALID' }
-          git fetch --quiet codeberg '+refs/heads/main:refs/remotes/codeberg/main'
-          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_MAIN_FETCH_FAILED' }
-          git merge-base --is-ancestor refs/remotes/codeberg/main refs/remotes/origin/main
-          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_DIVERGED_NON_FAST_FORWARD_STOP' }
-          git -c credential.interactive=never push --quiet codeberg refs/remotes/origin/main:refs/heads/main
-          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_PUSH_FAILED' }
-          $actualLine=(git ls-remote https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git refs/heads/main)
-          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_PUBLIC_READBACK_FAILED' }
-          $actual=([string]$actualLine -split '\s+')[0]
-          if ($actual -ne $expected) { throw 'CODEBERG_MAIN_SHA_MISMATCH' }
-          Write-Output "CODEBERG_MAIN_SYNC_PROVEN=$expected"
+          # The repository receives frequent commits and another authorized mirror
+          # may advance Codeberg between fetch and push. Reconcile that race
+          # with bounded, fast-forward-only retries; never force a ref.
+          $synced=$false
+          for($attempt=1; $attempt -le 5; $attempt++){
+            git fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main'
+            if($LASTEXITCODE -ne 0){ throw 'GITHUB_MAIN_FETCH_FAILED' }
+            git fetch --quiet codeberg '+refs/heads/main:refs/remotes/codeberg/main'
+            if($LASTEXITCODE -ne 0){ throw 'CODEBERG_MAIN_FETCH_FAILED' }
+            $expected=(git rev-parse refs/remotes/origin/main).Trim()
+            $before=(git rev-parse refs/remotes/codeberg/main).Trim()
+            if($expected -notmatch '^[a-f0-9]{40}$' -or $before -notmatch '^[a-f0-9]{40}$'){ throw 'MIRROR_SHA_INVALID' }
+            if($expected -ne $before){
+              git merge-base --is-ancestor $before $expected
+              if($LASTEXITCODE -ne 0){ throw 'CODEBERG_DIVERGED_NON_FAST_FORWARD_STOP' }
+              git -c credential.interactive=never push --quiet codeberg refs/remotes/origin/main:refs/heads/main
+              if($LASTEXITCODE -ne 0){
+                Write-Output "CODEBERG_MAIN_CONCURRENT_UPDATE_RETRY=$attempt"
+                if($attempt -lt 5){ Start-Sleep -Seconds 2; continue }
+                throw 'CODEBERG_PUSH_RETRIES_EXHAUSTED'
+              }
+            }
+            $ghLine=(git ls-remote https://github.com/UniversoAnthares/anthares-kwai-runner.git refs/heads/main)
+            if($LASTEXITCODE -ne 0){ throw 'GITHUB_PUBLIC_READBACK_FAILED' }
+            $cbLine=(git ls-remote https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git refs/heads/main)
+            if($LASTEXITCODE -ne 0){ throw 'CODEBERG_PUBLIC_READBACK_FAILED' }
+            $latestGh=([string]$ghLine -split '\s+')[0]
+            $latestCb=([string]$cbLine -split '\s+')[0]
+            if($latestGh -eq $latestCb -and $latestGh -match '^[a-f0-9]{40}$'){
+              $synced=$true
+              $expected=$latestGh
+              Write-Output "CODEBERG_MAIN_SYNC_PROVEN=$expected"
+              break
+            }
+            Write-Output "CODEBERG_MAIN_ADVANCED_DURING_SYNC_RETRY=$attempt"
+            if($attempt -lt 5){ Start-Sleep -Seconds 2 }
+          }
+          if(!$synced){ throw 'CODEBERG_PARITY_RETRIES_EXHAUSTED' }
 
       - name: Repair Codeberg default branch and enable Actions
         # Missing repository-admin API scope must not invalidate a proven Git mirror.
         # Keep the independent Actions capability alarm in the readback report.
         continue-on-error: true
-        shell: powershell
+        shell: pwsh
         env:
           CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
           CODEBERG_API_TOKEN: ${{ secrets.CODEBERG_API_TOKEN }}
         run: |
-          set -euo pipefail
-          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/codeberg_admin_reconcile.py
+          python3 -u tools/codeberg_admin_reconcile.py
 
       - name: Prove repository settings and exact commit parity
-        shell: powershell
+        shell: pwsh
         run: |
           $env:EXPECTED_GITHUB_MAIN_SHA = (git rev-parse refs/remotes/origin/main)
-          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/codeberg_mirror_health.py
+          python3 -u tools/codeberg_mirror_health.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
