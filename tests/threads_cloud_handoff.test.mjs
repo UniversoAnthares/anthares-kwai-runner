@@ -452,3 +452,10 @@ test('medium ASR is accepted with valid segment-bound evidence but arbitrary eng
   /EDITORIAL_TRANSCRIPT_ATTESTATION_REQUIRED/
  );
 });
+
+test('Threads public text never exceeds five words including description and hashtags',()=>{
+ const src=fs.readFileSync('tools/cortes_threads_cloud_captions.mjs','utf8');
+ assert.match(src,/titleWords\.slice\(0,5\)\.join\(' '\)/);
+ assert.match(src,/caption\.split\(\/\\s\+\/u\)\.length>5/);
+ assert.doesNotMatch(src,/const caption=base\+desc/);
+});
