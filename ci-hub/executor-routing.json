@@ -350,10 +350,13 @@
       "cancel_first_adapter": "IMPLEMENTED_IN_REPO_NOT_CONNECTED_TO_SHARED_FENCE",
       "cancel_first_adapter_source": "tools/ci_quota_provider_adapters.py:HarnessPipelineRun",
       "cancel_first_adapter_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1590",
-      "cancel_first_test_status": "MOCK_TESTS_ADDED_EXECUTION_UNVERIFIED",
+      "cancel_first_test_status": "TESTS_ADDED_NOT_EXECUTED",
       "live_cancel_proof": false,
       "api_key_config_verified": false,
-      "eligible": false
+      "eligible": false,
+      "fenced_adapter": "CODE_INTEGRATED_WITH_SHARED_QUOTA_LEDGER_GATED",
+      "fenced_adapter_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1606",
+      "api_validation_block": "REMOTE_SECRET_ACCESS_SECURITY_REFUSED"
     },
     "floot": {
       "active": true,
