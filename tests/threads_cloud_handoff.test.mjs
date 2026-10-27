@@ -47,14 +47,27 @@ test('cloud publisher cannot post on an automated push event',()=>{
  assert.match(src,/callControl\(jwt,'uncertain'/);
 });
 
-test('cloud selects oldest source-day with queued identity, not just today',()=>{
+test('cloud selects queued identities using exact WordPress lookup',()=>{
+ const src=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
+ assert.match(src,/queued_rows/);
+ assert.match(src,/fetchCloudClipByIdentity/);
+ assert.doesNotMatch(src,/fetchCloudManifest/);
+ assert.match(src,/THREADS_QUEUE_EMPTY_OR_ISOLATED/);
+});,()=>{
  const src=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
  assert.match(src,/queued_rows/);
  assert.match(src,/\.sort\(\)/);
  assert.match(src,/fetchCloudManifest\(\{day\}\)/);
  assert.match(src,/THREADS_QUEUE_EMPTY_OR_ISOLATED/);
 });
-test('paged WordPress discovery miss cannot quarantine a queued Neon clip',()=>{
+test('exact WordPress lookup miss preserves queued Neon identity',()=>{
+ const src=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
+ const candidateMiss=src.match(/if\(!candidate\)\{([\s\S]*?)\n  \}/)?.[1]||'';
+ assert.match(candidateMiss,/THREADS_CLIP_NOT_FOUND_EXACT/);
+ assert.doesNotMatch(candidateMiss,/callControl\(jwt,'quarantine'/);
+ assert.doesNotMatch(candidateMiss,/reason:'MEDIA_INVALID'/);
+ assert.match(candidateMiss,/rejected\+\+/);
+});,()=>{
  const src=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
  const candidateMiss=src.match(/if\(!candidate\)\{([\s\S]*?)\n  \}/)?.[1]||'';
  assert.match(candidateMiss,/THREADS_CLIP_NOT_IN_PAGED_MANIFEST/);
