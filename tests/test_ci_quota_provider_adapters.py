@@ -1,6 +1,6 @@
 """Mocked provider adapter verification. No real remote cancellation."""
 import unittest
-from tools.ci_quota_provider_adapters import GitHubActionsRun,GitLabPipeline
+from tools.ci_quota_provider_adapters import GitHubActionsRun,GitLabPipeline,HarnessPipelineRun
 
 class ProvidersTest(unittest.TestCase):
     def test_github_post_cancel_before_status(self):
@@ -39,5 +39,48 @@ class ProvidersTest(unittest.TestCase):
         run=GitLabPipeline("org/project",5,"fixture",fake)
         self.assertFalse(run.cancel("owned-5"))
         self.assertEqual("UNKNOWN",run.status("owned-5"))
+
+
+    def test_harness_aborts_only_exact_owned_execution(self):
+        seen=[]
+        def fake(method,url,headers):
+            seen.append((method,url))
+            if method=="PUT":
+                return 200, {"status":"SUCCESS"}
+            return 200, {"data":{"planExecution":{
+                "uuid":"owned123","pipelineIdentifier":"pipe123",
+                "status":"Aborted"}}}
+        run=HarnessPipelineRun("acct123","default","project1",
+                               "pipe123","owned123","fixture",fake)
+        self.assertTrue(run.cancel("owned123"))
+        self.assertEqual("CANCELLED",run.status("owned123"))
+        self.assertEqual(["PUT","GET"],[m for m,_ in seen])
+        self.assertIn("interruptType=AbortAll",seen[0][1])
+        self.assertIn("x-api-key",run.headers)
+        with self.assertRaises(ValueError):
+            run.cancel("different")
+        self.assertEqual(2,len(seen))
+
+    def test_harness_fails_closed_on_foreign_or_unknown_status(self):
+        def fake(method,url,headers):
+            return 200,{"data":{"planExecution":{"uuid":"another",
+                          "pipelineIdentifier":"pipe123","status":"Aborted"}}}
+        run=HarnessPipelineRun("acct123","default","project1",
+                               "pipe123","owned123","fixture",fake)
+        self.assertEqual("UNKNOWN",run.status("owned123"))
+        bad=HarnessPipelineRun("acct123","default","project1",
+                               "pipe123","owned123","fixture",
+                               lambda *_:(403,{"status":"FAILURE"}))
+        self.assertFalse(bad.cancel("owned123"))
+        self.assertEqual("UNKNOWN",bad.status("owned123"))
+
+    def test_harness_application_failure_and_no_token(self):
+        with self.assertRaises(ValueError):
+            HarnessPipelineRun("acct123","default","project1",
+                               "pipe123","owned123","")
+        run=HarnessPipelineRun("acct123","default","project1",
+                               "pipe123","owned123","fixture",
+                               lambda *_:(200,{"status":"FAILURE"}))
+        self.assertFalse(run.cancel("owned123"))
 
 if __name__=="__main__": unittest.main()
