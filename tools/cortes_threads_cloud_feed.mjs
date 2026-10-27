@@ -48,3 +48,4 @@ if(process.argv[1]?.replaceAll('\\','/').endsWith('/cortes_threads_cloud_feed.mj
  console.log(JSON.stringify({ok:true,day:data.day,total:data.total,pages:data.pages,pc_independent:true}));}
  catch(e){const detail=[e.message,e.cause?.code,e.cause?.message].filter(Boolean).join(' | ').slice(0,250);console.error('::error title=Threads Cloud Feed::'+detail);process.exitCode=1;}
 }
+IKTOK_CODEBERG_PRIMA
