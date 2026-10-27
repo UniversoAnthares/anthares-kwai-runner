@@ -9166,6 +9166,686 @@
       ],
       "excerpt": "deve ser o comadário é que estou to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to parou aqui em 14.45 vai até 20.355 né então falta um pouquinho mais pra avançar vou",
       "verified": true
+    },
+    "g1:fOmihuHUT1M:11102:11142": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:11102:11142",
+      "attachment_id": 17154,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 11102,
+      "source_end_s": 11142,
+      "media_sha256": "b34f2c749d37f894acef432be5be025de5920ed4da9f477a1c312d3706ab74b7",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.24,
+          "text": "Opa, vocês e a mim desse cansaça que são 3,33 da manhã aqui, eu vou dormir, beleza?"
+        },
+        {
+          "start": 5.24,
+          "end": 7.34,
+          "text": "Eu tive um dia agitado, vou dormir."
+        },
+        {
+          "start": 7.34,
+          "end": 11.38,
+          "text": "Muito obrigado por terem ficado aqui, vocês ajudam muito para divulgar a divulgação, participação."
+        },
+        {
+          "start": 11.38,
+          "end": 12.44,
+          "text": "Espero que tenham gostado."
+        },
+        {
+          "start": 12.44,
+          "end": 15.58,
+          "text": "Como é que vocês gostaram do conteúdo? Vocês acharam a maneira, enfim?"
+        },
+        {
+          "start": 15.58,
+          "end": 20.12,
+          "text": "Eu gosto de saber, estamos trazendo mais coisa, estamos testando novos formatos, né?"
+        },
+        {
+          "start": 20.12,
+          "end": 22.72,
+          "text": "Sês dois que estão aqui, eu acho que vale a pena contar para vocês, né?"
+        },
+        {
+          "start": 22.72,
+          "end": 26.26,
+          "text": "Vocês estão sempre aí comentando os vídeos, participando, vendo, vocês gostam, né?"
+        },
+        {
+          "start": 26.26,
+          "end": 35.34,
+          "text": "vocês e outros, mas vocês dois muito, a gente vai testar um formato em que show, bom saber."
+        }
+      ],
+      "excerpt": "Opa, vocês e a mim desse cansaça que são 3,33 da manhã aqui, eu vou dormir, beleza? Eu tive um dia agitado, vou dormir. Muito obrigado por terem ficado aqui, vocês ajudam muito para divulgar a divulgação, participação. Espero que tenham gostado. Como é que vocês gostaram do conteúdo? Vocês acharam a maneira, enfim? Eu gosto de saber, estamos trazendo mais coisa, estamos testando novos formatos, né? Sês dois que estão aqui, eu acho que vale a pena contar para vocês, né? Vocês estão sempre aí comentando os vídeos, participando, vendo, vocês gostam, né? vocês e outros, mas vocês dois muito, a gente vai testar um formato em que show, bom saber.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:11142:11184": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:11142:11184",
+      "attachment_id": 17155,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 11142,
+      "source_end_s": 11184,
+      "media_sha256": "847a2ad61520ec13f36e9265635ea04d1118a8dafcb6f1a7e9a2c22113dba60d",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.3,
+          "text": "É que estou, bom saber que você gostou, muito bom."
+        },
+        {
+          "start": 2.3,
+          "end": 5.8,
+          "text": "A gente vai tentar de vídeo, não de live, é a mesma coisa de sempre."
+        },
+        {
+          "start": 5.8,
+          "end": 8.8,
+          "text": "Essas três horas aqui doida, assim, enfim."
+        },
+        {
+          "start": 8.8,
+          "end": 14,
+          "text": "Que vai de 11 pessoas a duas assistindo, é isso mesmo, entendeu?"
+        },
+        {
+          "start": 14,
+          "end": 16.9,
+          "text": "Mas o... como é que chama?"
+        },
+        {
+          "start": 16.9,
+          "end": 20.8,
+          "text": "Os vídeos da semana, eu estou pensando em fazer vídeos mais curtos, tá?"
+        },
+        {
+          "start": 20.8,
+          "end": 24.2,
+          "text": "Vídeos bem curtinhos, diretos, sem resumo."
+        },
+        {
+          "start": 24.2,
+          "end": 27.2,
+          "text": "Os últimos dois que tiveram aí, foi de uma hora e..."
+        },
+        {
+          "start": 27.2,
+          "end": 28.5,
+          "text": "Tem 38 minutos, né?"
+        },
+        {
+          "start": 28.5,
+          "end": 31.94,
+          "text": "Vocês viram que eu não resumi nada, é que eu contei assim e fui contando, né?"
+        },
+        {
+          "start": 31.94,
+          "end": 36.74,
+          "text": "Isso pôbe o meu tempo, talvez pôbe de vocês, e dá pra fazer..."
+        }
+      ],
+      "excerpt": "É que estou, bom saber que você gostou, muito bom. A gente vai tentar de vídeo, não de live, é a mesma coisa de sempre. Essas três horas aqui doida, assim, enfim. Que vai de 11 pessoas a duas assistindo, é isso mesmo, entendeu? Mas o... como é que chama? Os vídeos da semana, eu estou pensando em fazer vídeos mais curtos, tá? Vídeos bem curtinhos, diretos, sem resumo. Os últimos dois que tiveram aí, foi de uma hora e... Tem 38 minutos, né? Vocês viram que eu não resumi nada, é que eu contei assim e fui contando, né? Isso pôbe o meu tempo, talvez pôbe de vocês, e dá pra fazer...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:11184:11227": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:11184:11227",
+      "attachment_id": 17156,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 11184,
+      "source_end_s": 11227,
+      "media_sha256": "afd384d193eaaf107a39aa3af43bd832fb0e4e5270ddaaa8c99fe88c03bcc42d",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.76,
+          "text": "fazer mais vida para abordar mais assuntos. Tem muito assuntos que eu não abordo, porque"
+        },
+        {
+          "start": 2.76,
+          "end": 6.16,
+          "text": "eu olho e falo, cara, eu não consigo resumir isso aqui. Tipo, o Pruxo eu nunca vou conseguir."
+        },
+        {
+          "start": 6.16,
+          "end": 9.6,
+          "text": "Isso aqui eu nunca vou conseguir contar nada dos tesouros que eu encontro aqui dentro se"
+        },
+        {
+          "start": 9.6,
+          "end": 14.56,
+          "text": "eu tiver que resumir as histórias para você. Impossível. Impossível. Absolutamente"
+        },
+        {
+          "start": 14.56,
+          "end": 20.04,
+          "text": "impossível. Não tem como fazer. Não tem como. O resumo é o resumo de 8 horas."
+        },
+        {
+          "start": 20.04,
+          "end": 23.76,
+          "text": "Esse é o resumo que vocês vão ter. E eu não vou fazer isso, né? Então, vídeos"
+        },
+        {
+          "start": 23.76,
+          "end": 27.4,
+          "text": "bem curtinhos, mas com toda profundidade quanto antes. Eu vou tentar encadir a"
+        },
+        {
+          "start": 27.4,
+          "end": 31.06,
+          "text": "eles porque vocês veem que mesmo nesses vídeos aí os últimos aí de uma hora"
+        },
+        {
+          "start": 31.06,
+          "end": 35.48,
+          "text": "40 minutos enfim os últimos que tiveram"
+        }
+      ],
+      "excerpt": "fazer mais vida para abordar mais assuntos. Tem muito assuntos que eu não abordo, porque eu olho e falo, cara, eu não consigo resumir isso aqui. Tipo, o Pruxo eu nunca vou conseguir. Isso aqui eu nunca vou conseguir contar nada dos tesouros que eu encontro aqui dentro se eu tiver que resumir as histórias para você. Impossível. Impossível. Absolutamente impossível. Não tem como fazer. Não tem como. O resumo é o resumo de 8 horas. Esse é o resumo que vocês vão ter. E eu não vou fazer isso, né? Então, vídeos bem curtinhos, mas com toda profundidade quanto antes. Eu vou tentar encadir a eles porque vocês veem que mesmo nesses vídeos aí os últimos aí de uma hora 40 minutos enfim os últimos que tiveram",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:11227:11268": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:11227:11268",
+      "attachment_id": 17157,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 11227,
+      "source_end_s": 11268,
+      "media_sha256": "9d610de38778a5ca7433936de9855a4acb21e8f98f54fa9a2504077b2bf06c4f",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.86,
+          "text": "Os vídeos eles, eu fui encadeando várias ideias, eu pensei e falei, Lucas,"
+        },
+        {
+          "start": 4.86,
+          "end": 7.26,
+          "text": "o que você acha, velho, que você acha que terem maneiro de eu,"
+        },
+        {
+          "start": 7.26,
+          "end": 9.9,
+          "text": "de eu invés de fazer um vídeo com várias ideias encadeadas,"
+        },
+        {
+          "start": 9.9,
+          "end": 13.12,
+          "text": "eu fazia um vídeo pequeno, tipo, com uma ideia."
+        },
+        {
+          "start": 13.12,
+          "end": 16.38,
+          "text": "E no final do vídeo, eu encadio para outra, prometendo o próximo vídeo."
+        },
+        {
+          "start": 16.38,
+          "end": 19.82,
+          "text": "E no próximo vídeo, é justamente aquele encadeamento do anterior,"
+        },
+        {
+          "start": 19.82,
+          "end": 22.52,
+          "text": "porque aí fica bem separadinho, é pouca coisa, deu-se..."
+        },
+        {
+          "start": 22.52,
+          "end": 24.24,
+          "text": "Ao invés de ter que me ouvir durante uma hora inteira,"
+        },
+        {
+          "start": 24.24,
+          "end": 28.04,
+          "text": "uma hora e meia, 40 minutos, você vai me ouvir durante 10, 15 minutos, entendeu?"
+        },
+        {
+          "start": 28.04,
+          "end": 29.84,
+          "text": "10 minutos, 15 minutos, sabe?"
+        },
+        {
+          "start": 29.84,
+          "end": 32.84,
+          "text": "Tipo, num dos vídeos aí, eu acho que naquele foi de uma hora, eu f..."
+        }
+      ],
+      "excerpt": "Os vídeos eles, eu fui encadeando várias ideias, eu pensei e falei, Lucas, o que você acha, velho, que você acha que terem maneiro de eu, de eu invés de fazer um vídeo com várias ideias encadeadas, eu fazia um vídeo pequeno, tipo, com uma ideia. E no final do vídeo, eu encadio para outra, prometendo o próximo vídeo. E no próximo vídeo, é justamente aquele encadeamento do anterior, porque aí fica bem separadinho, é pouca coisa, deu-se... Ao invés de ter que me ouvir durante uma hora inteira, uma hora e meia, 40 minutos, você vai me ouvir durante 10, 15 minutos, entendeu? 10 minutos, 15 minutos, sabe? Tipo, num dos vídeos aí, eu acho que naquele foi de uma hora, eu f...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:11348:11388": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:11348:11388",
+      "attachment_id": 17158,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 11348,
+      "source_end_s": 11388,
+      "media_sha256": "80529db6d4d379e10925c958e1c070b98e547be39aa5a6ea261bc66570c34d2e",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.6,
+          "text": "Vocês vão ver só aquela parte, só no ovo, se vocês não lembrarem, vocês podem voltar no anterior, assistir no anterior, assistir no novo também, né?"
+        },
+        {
+          "start": 5.6,
+          "end": 9.44,
+          "text": "E aí, enfim, vamos fazer assim, mas muito obrigado a vocês terem ficado aqui, tá?"
+        },
+        {
+          "start": 9.44,
+          "end": 13.02,
+          "text": "Eu não sei quem entrou aí por último, mas enfim, obrigado a vocês terem entrado aí também."
+        },
+        {
+          "start": 13.02,
+          "end": 15.98,
+          "text": "Você vai ter que ver lá tudo nisso, amigo, desculpa, mas, né?"
+        },
+        {
+          "start": 15.98,
+          "end": 24.06,
+          "text": "Enfim, seja bem-vindo, eu sou o Panda, essa foi essa quinta, sexta, sétima, não tô..."
+        },
+        {
+          "start": 24.06,
+          "end": 26.06,
+          "text": "I'm not tracking the thing."
+        },
+        {
+          "start": 26.06,
+          "end": 31.06,
+          "text": "É, perdi o tré que tá parado, perdi o rastro, o rastro do pensamento"
+        },
+        {
+          "start": 31.06,
+          "end": 34.06,
+          "text": "e quase babando em cima do livro, vou até guardar ele."
+        }
+      ],
+      "excerpt": "Vocês vão ver só aquela parte, só no ovo, se vocês não lembrarem, vocês podem voltar no anterior, assistir no anterior, assistir no novo também, né? E aí, enfim, vamos fazer assim, mas muito obrigado a vocês terem ficado aqui, tá? Eu não sei quem entrou aí por último, mas enfim, obrigado a vocês terem entrado aí também. Você vai ter que ver lá tudo nisso, amigo, desculpa, mas, né? Enfim, seja bem-vindo, eu sou o Panda, essa foi essa quinta, sexta, sétima, não tô... I'm not tracking the thing. É, perdi o tré que tá parado, perdi o rastro, o rastro do pensamento e quase babando em cima do livro, vou até guardar ele.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:11388:11428": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:11388:11428",
+      "attachment_id": 17159,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 11388,
+      "source_end_s": 11428,
+      "media_sha256": "4244fd60f019fabee4e307452dfb867c0acb439a9d86894769a9be2c2a3af20e",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2,
+          "text": "A equipe num babá em cima dele."
+        },
+        {
+          "start": 2,
+          "end": 4,
+          "text": "É..."
+        },
+        {
+          "start": 4,
+          "end": 6,
+          "text": "Mas enfim..."
+        },
+        {
+          "start": 9.38,
+          "end": 11.38,
+          "text": "Não, uma página pra frente."
+        },
+        {
+          "start": 11.38,
+          "end": 13.38,
+          "text": "É, tava aqui."
+        },
+        {
+          "start": 13.38,
+          "end": 15.38,
+          "text": "Show."
+        },
+        {
+          "start": 15.38,
+          "end": 17.38,
+          "text": "É..."
+        },
+        {
+          "start": 17.38,
+          "end": 19.38,
+          "text": "Eu sou Panda,"
+        },
+        {
+          "start": 19.38,
+          "end": 21.38,
+          "text": "o outro lá era o Lucas,"
+        },
+        {
+          "start": 21.38,
+          "end": 23.38,
+          "text": "o Sr. Antares,"
+        },
+        {
+          "start": 23.38,
+          "end": 25.38,
+          "text": "a gente chama ele de Antares."
+        },
+        {
+          "start": 25.38,
+          "end": 27.38,
+          "text": "Não é Lucas Rosalén, é Lucas Antares."
+        },
+        {
+          "start": 27.38,
+          "end": 29.38,
+          "text": "Lucas Antares ou Antares."
+        },
+        {
+          "start": 29.38,
+          "end": 36.38,
+          "text": "o merinho cheve assim comigo. Fala quantares, eu falo, falo quantares, só é o que chama ele de Lucas."
+        },
+        {
+          "start": 36.38,
+          "end": 40.38,
+          "text": "Muito obrigado, gente."
+        }
+      ],
+      "excerpt": "A equipe num babá em cima dele. É... Mas enfim... Não, uma página pra frente. É, tava aqui. Show. É... Eu sou Panda, o outro lá era o Lucas, o Sr. Antares, a gente chama ele de Antares. Não é Lucas Rosalén, é Lucas Antares. Lucas Antares ou Antares. o merinho cheve assim comigo. Fala quantares, eu falo, falo quantares, só é o que chama ele de Lucas. Muito obrigado, gente.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:3739:3780": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:3739:3780",
+      "attachment_id": 17160,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 3739,
+      "source_end_s": 3780,
+      "media_sha256": "366f6825068d5b673b69a905b8731367d3bf2d47b4a3c42a1dbddbc2573f463a",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 1,
+          "text": "Não sei o que depois, pô."
+        },
+        {
+          "start": 1,
+          "end": 2,
+          "text": "Mas cadê a Lívia?"
+        },
+        {
+          "start": 2,
+          "end": 3,
+          "text": "Liga pra ela aí, pô."
+        },
+        {
+          "start": 3,
+          "end": 6,
+          "text": "Manda um mensagem aí e fala, oh, meu amor."
+        },
+        {
+          "start": 6,
+          "end": 7,
+          "text": "Posso... Você quer que eu saia?"
+        },
+        {
+          "start": 7,
+          "end": 9,
+          "text": "Não, não, fica, fica."
+        },
+        {
+          "start": 9,
+          "end": 10,
+          "text": "Eu não sou nada mesmo."
+        },
+        {
+          "start": 10,
+          "end": 11,
+          "text": "Você tá ligando mesmo?"
+        },
+        {
+          "start": 11,
+          "end": 12,
+          "text": "Eu liguei."
+        },
+        {
+          "start": 12,
+          "end": 13,
+          "text": "Deu um toque pra ela."
+        },
+        {
+          "start": 13,
+          "end": 14,
+          "text": "Deu um toque aí, pô."
+        },
+        {
+          "start": 14,
+          "end": 16,
+          "text": "A Lívia é brava demais, viu."
+        },
+        {
+          "start": 16,
+          "end": 18,
+          "text": "Aí, ó."
+        },
+        {
+          "start": 18,
+          "end": 19,
+          "text": "Isso é um sim, tá?"
+        },
+        {
+          "start": 19,
+          "end": 20,
+          "text": "Isso é mais meia hora."
+        },
+        {
+          "start": 20,
+          "end": 21,
+          "text": "Daqui a meia hora a gente pergunta."
+        },
+        {
+          "start": 21,
+          "end": 22,
+          "text": "Daqui a meia hora a gente fala, Lívia, pode."
+        },
+        {
+          "start": 22,
+          "end": 24,
+          "text": "E aí ela vai falar assim, ou não?"
+        },
+        {
+          "start": 24,
+          "end": 25,
+          "text": "Se ela mandar essa mensagem aqui de novo,"
+        },
+        {
+          "start": 25,
+          "end": 26,
+          "text": "fizer gracinha."
+        },
+        {
+          "start": 26,
+          "end": 27,
+          "text": "Se ela fizer uma gracinha assim,"
+        },
+        {
+          "start": 27,
+          "end": 29,
+          "text": "eu vou botar mais meia hora."
+        },
+        {
+          "start": 29,
+          "end": 31,
+          "text": "Vamos lá, vamos..."
+        }
+      ],
+      "excerpt": "Não sei o que depois, pô. Mas cadê a Lívia? Liga pra ela aí, pô. Manda um mensagem aí e fala, oh, meu amor. Posso... Você quer que eu saia? Não, não, fica, fica. Eu não sou nada mesmo. Você tá ligando mesmo? Eu liguei. Deu um toque pra ela. Deu um toque aí, pô. A Lívia é brava demais, viu. Aí, ó. Isso é um sim, tá? Isso é mais meia hora. Daqui a meia hora a gente pergunta. Daqui a meia hora a gente fala, Lívia, pode. E aí ela vai falar assim, ou não? Se ela mandar essa mensagem aqui de novo, fizer gracinha. Se ela fizer uma gracinha assim, eu vou botar mais meia hora. Vamos lá, vamos...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:9216:9259": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:9216:9259",
+      "attachment_id": 17161,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 9216,
+      "source_end_s": 9259,
+      "media_sha256": "a5ce3fabf79651df4578808ac2fcf6b52c6aa23755fa74b53c1511c31f8484ca",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3,
+          "text": "O que que tem interesse de um dragão invisível na garagem? Alguém me diz?"
+        },
+        {
+          "start": 3,
+          "end": 8,
+          "text": "Quem nunca, né? Quem nunca passou por isso, cara? Dragão invisível na garagem."
+        },
+        {
+          "start": 8,
+          "end": 14,
+          "text": "Caraca, maluco, né? Rapaz, o que tem surpreendente nisso, né cara? Dragão invisível na garagem."
+        },
+        {
+          "start": 14,
+          "end": 18,
+          "text": "Você fala, gente, eu vou te contar uma história de um menino, de um cara,"
+        },
+        {
+          "start": 18,
+          "end": 21,
+          "text": "que um dia ele descobriu que tinha um dragão invisível na garagem deles."
+        },
+        {
+          "start": 21,
+          "end": 23,
+          "text": "Quem é de vocês que quer ver aí falar? Cala a boca, pô."
+        },
+        {
+          "start": 23,
+          "end": 25,
+          "text": "Que história chata isso aí, véi."
+        },
+        {
+          "start": 25,
+          "end": 29,
+          "text": "Ah, não, pô. Conta pra mim daquela vez se o carteiro tô pensando na pedra."
+        },
+        {
+          "start": 29,
+          "end": 30,
+          "text": "É bom."
+        },
+        {
+          "start": 30,
+          "end": 31,
+          "text": "Qual carteira?"
+        },
+        {
+          "start": 31,
+          "end": 31.02,
+          "text": "Vamos cá."
+        }
+      ],
+      "excerpt": "O que que tem interesse de um dragão invisível na garagem? Alguém me diz? Quem nunca, né? Quem nunca passou por isso, cara? Dragão invisível na garagem. Caraca, maluco, né? Rapaz, o que tem surpreendente nisso, né cara? Dragão invisível na garagem. Você fala, gente, eu vou te contar uma história de um menino, de um cara, que um dia ele descobriu que tinha um dragão invisível na garagem deles. Quem é de vocês que quer ver aí falar? Cala a boca, pô. Que história chata isso aí, véi. Ah, não, pô. Conta pra mim daquela vez se o carteiro tô pensando na pedra. É bom. Qual carteira? Vamos cá.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10775:10815": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10775:10815",
+      "attachment_id": 17162,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10775,
+      "source_end_s": 10815,
+      "media_sha256": "a01b79150eff65b39dcefa172394c508d7fa2e75f24dd6f7ef023f1df0163036",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 1.2,
+          "text": "e vai pegar essa aqui, entendeu?"
+        },
+        {
+          "start": 1.2,
+          "end": 3.84,
+          "text": "Porque as outras aqui, elas são boas,"
+        },
+        {
+          "start": 3.84,
+          "end": 5.84,
+          "text": "enfim, são razoáveis, né?"
+        },
+        {
+          "start": 5.84,
+          "end": 8.8,
+          "text": "E essa aqui está mais próxima delas do que essa aqui, que está distante."
+        },
+        {
+          "start": 8.8,
+          "end": 9.68,
+          "text": "Ele procede assim."
+        },
+        {
+          "start": 9.68,
+          "end": 14.6,
+          "text": "Pelo menos foi como eu consegui entender a ortodoxia dele, né?"
+        },
+        {
+          "start": 14.6,
+          "end": 16.44,
+          "text": "E eu acho que é um método muito interessante."
+        },
+        {
+          "start": 16.44,
+          "end": 18.16,
+          "text": "É um método que ele é dialético,"
+        },
+        {
+          "start": 18.16,
+          "end": 21.68,
+          "text": "mas ele é dialético, é um procedimento dialético,"
+        },
+        {
+          "start": 21.68,
+          "end": 23.4,
+          "text": "só que é escrito de maneira poética,"
+        },
+        {
+          "start": 23.4,
+          "end": 28.44,
+          "text": "com elementos do discurso verossímil, do discurso retórico, do senso comum, né?"
+        },
+        {
+          "start": 28.44,
+          "end": 32.04,
+          "text": "Então, o Teatro Dom, ele é um escritor sinistro, velho, escreve muito bem."
+        }
+      ],
+      "excerpt": "e vai pegar essa aqui, entendeu? Porque as outras aqui, elas são boas, enfim, são razoáveis, né? E essa aqui está mais próxima delas do que essa aqui, que está distante. Ele procede assim. Pelo menos foi como eu consegui entender a ortodoxia dele, né? E eu acho que é um método muito interessante. É um método que ele é dialético, mas ele é dialético, é um procedimento dialético, só que é escrito de maneira poética, com elementos do discurso verossímil, do discurso retórico, do senso comum, né? Então, o Teatro Dom, ele é um escritor sinistro, velho, escreve muito bem.",
+      "verified": true
     }
   },
   "failures": []
