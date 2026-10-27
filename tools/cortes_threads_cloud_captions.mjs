@@ -46,16 +46,13 @@ export function validateEditorial(meta,clip){
 export function captionForClip(meta,clip){
  if(!clip?.id||!clip?.url)throw Error('EDITORIAL_CLIP_IDENTITY_MISSING');
  const validated=validateEditorial(meta,clip);
- const tags=[...new Set([...validated.hashtags,'#UniversoAnthares'])].slice(0,6).join(' ');
- const base=validated.title+'\n\n';
- const end='\n\n'+WEBSITE+'\n'+tags;
- const remaining=500-base.length-end.length;
- if(remaining<70)throw Error('EDITORIAL_THREADS_CAPTION_OVER_LIMIT');
- const desc=validated.description.replace(WEBSITE,'').trim();
- const caption=base+desc.slice(0,remaining).trimEnd()+end;
- if(caption.length>500||caption.includes('\uFFFD')||unsafe(caption))
+ // Threads only: the entire public text, including any description or tags,
+ // is limited to five whitespace-delimited words. Keep full evidence internally.
+ const titleWords=validated.title.replace(BRAND,'').trim().split(/\s+/u).filter(Boolean);
+ const caption=titleWords.slice(0,5).join(' ');
+ if(!caption||caption.split(/\s+/u).length>5||caption.includes('\uFFFD')||unsafe(caption))
   throw Error('EDITORIAL_THREADS_CAPTION_INVALID');
- return {...clip,title:validated.title,caption,
+ return {...clip,title:caption,caption,
   description:validated.description,keywords:validated.keywords,hashtags:validated.hashtags,
   editorial_policy:'anthares_editorial_transcript_attested_v3'};
 }
