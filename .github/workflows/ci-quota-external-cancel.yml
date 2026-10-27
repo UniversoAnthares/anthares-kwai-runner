@@ -220,6 +220,30 @@ jobs:
               except (ValueError,urllib.error.URLError):
                   print("BITRISE_HISTORY=SOURCE_UNAVAILABLE")
           PY
+      - name: Inspect Bitrise currently registered workflows read-only
+        env:
+          BITRISE_TOKEN: ${{ env.ANTHARES_BITRISE_TOKEN_FROM_BW || secrets.BITRISE_API_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          key=os.getenv("BITRISE_TOKEN","").strip()
+          if key:
+              url="https://api.bitrise.io/v0.1/apps/ef06f940-ffc7-4e37-b935-93ad06d8faeb/build-workflows"
+              try:
+                  req=urllib.request.Request(url,headers={"Authorization":key,"Accept":"application/json"})
+                  with urllib.request.urlopen(req,timeout=15) as r: obj=json.load(r)
+                  data=obj.get("data") or []
+                  if isinstance(data,dict): names=list(data.keys())
+                  elif isinstance(data,list):
+                      names=[str(x.get("workflow_id") or x.get("id") or x.get("name") or "UNKNOWN") for x in data if isinstance(x,dict)]
+                  else:names=[]
+                  print("BITRISE_REGISTERED_WORKFLOWS="+",".join(sorted(str(x)[:45] for x in names))[:500])
+                  print("BITRISE_SMOKE_WORKFLOW_PRESENT="+str("anthares_ci_smoke" in names))
+              except urllib.error.HTTPError as e:
+                  print("BITRISE_WORKFLOWS_HTTP="+str(e.code))
+              except (urllib.error.URLError,ValueError):
+                  print("BITRISE_WORKFLOWS=UNAVAILABLE")
+          PY
       - name: Detect provider-structured quota and cancel owned execution only
         env:
           APPVEYOR_ACCOUNT: ${{ vars.APPVEYOR_ACCOUNT || 'UniversoAnthares' }}
