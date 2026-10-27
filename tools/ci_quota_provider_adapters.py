@@ -145,14 +145,20 @@ class HarnessPipelineRun:
         response = data.get("data")
         if not isinstance(response, dict):
             return "UNKNOWN"
-        # Harness execution v2 returns planExecution.status; other envelopes
-        # are intentionally not guessed. An unexpected schema fails closed.
-        plan = response.get("planExecution")
+        # Harness official v2 execution response uses data.pipelineExecutionSummary.
+        # It is NOT data.planExecution. Compare the actual planExecutionId,
+        # org/project/pipeline fields before accepting any remote state.
+        # Missing or different identity fails closed: never issue AbortAll.
+        plan = response.get("pipelineExecutionSummary")
         if not isinstance(plan, dict):
             return "UNKNOWN"
-        if plan.get("uuid") != self.execution_id:
-            return "UNKNOWN"
-        if plan.get("pipelineIdentifier") != self.pipeline:
+        expected = {
+            "planExecutionId": self.execution_id,
+            "pipelineIdentifier": self.pipeline,
+            "orgIdentifier": self.org,
+            "projectIdentifier": self.project,
+        }
+        if any(plan.get(key) != value for key, value in expected.items()):
             return "UNKNOWN"
         value = plan.get("status")
         if not isinstance(value, str):
