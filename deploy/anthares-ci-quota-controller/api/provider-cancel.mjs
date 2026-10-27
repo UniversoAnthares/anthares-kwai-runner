@@ -52,6 +52,14 @@ export default async function handler(req,res){
    if(!valid)return respond(res,401,"REMOTE_AUTH_INVALID");
    owner="remote:"+id;
  }
+ if(body.phase==="health"&&owner==="remote:DESKTOP-FTDK0HP"){
+   try{
+     const probe=await neon(process.env.DATABASE_URL)`SELECT current_user AS who, to_regclass('public.anthares_ci_quota_attempts')::text AS ledger`;
+     if(probe[0]?.who!=="anthares_ci_quota_limited"||!probe[0]?.ledger)
+       return respond(res,503,"LEDGER_PRINCIPAL_MISMATCH");
+     return respond(res,200,"REMOTE_AUTH_READY",{ledger:"READY"});
+   }catch{return respond(res,503,"LEDGER_UNAVAILABLE");}
+ }
  const provider=String(body?.provider||""),
  target=String(body?.target||""),code=String(body?.code||""),
  source_sha=String(body?.sha||""),phase=String(body?.phase||"");

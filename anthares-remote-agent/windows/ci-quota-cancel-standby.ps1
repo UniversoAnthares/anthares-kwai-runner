@@ -11,7 +11,7 @@ $QuotaCodes=@('ci_quota_exceeded','quota_exceeded','quota_exhausted',
  'insufficient_quota','resource_exhausted','billing_hard_limit_reached',
  'credits_exhausted','usage_limit_reached','monthly_quota_exceeded','daily_quota_exceeded')
 $Status=[ordered]@{ observed_utc=(Get-Date).ToUniversalTime().ToString('o')
-    machine=$env:COMPUTERNAME; auth='UNKNOWN'; appveyor='NOT_CONFIGURED'
+    machine=$env:COMPUTERNAME; auth='UNKNOWN'; controller='UNKNOWN'; appveyor='NOT_CONFIGURED'
     bitrise='NOT_CONFIGURED'; events_claimed=0; remote_cancellations_confirmed=0; remote_terminal_confirmed=0
     uncertain=0; fallback_dispatched=$false }
 $mutex=New-Object System.Threading.Mutex($false,'Global\AntharesCiQuotaCancelStandby')
@@ -242,6 +242,14 @@ try {
     $privateKey=Secret 'ci-quota-remote-rsa.dpapi'
     if($privateKey.Length -lt 200){$Status.auth='AUTH_NOT_CONFIGURED';return}
     $Status.auth='READY_DPAPI_SYSTEM'
+    try {
+        $probe=SignedLedger @{phase='health'} $privateKey
+        if((Property $probe 'code') -ne 'REMOTE_AUTH_READY'){throw 'CONTROLLER_NOT_READY'}
+        $Status.controller='READY_RSA_NEON'
+    }catch{
+        $Status.controller='AUTH_OR_LEDGER_UNAVAILABLE'
+        return
+    }
     try{$Status.appveyor=AppVeyor $config (Secret 'ci-quota-appveyor-token.dpapi') $privateKey}
     catch{$Status.appveyor='SOURCE_UNAVAILABLE'}
     try{$Status.bitrise=Bitrise $config (Secret 'ci-quota-bitrise-token.dpapi') $privateKey}
