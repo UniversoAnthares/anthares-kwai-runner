@@ -87,7 +87,6 @@
       "cloudflare_workers_builds",
       "github_actions_private",
       "codeberg_actions",
-      "bitrise",
       "appveyor",
       "gitlab_ci"
     ],
@@ -98,7 +97,7 @@
       "appveyor": "BLOCKED_HTTP500_BUILD_CREATION_20261026",
       "codeberg_actions": "NOT_CONFIGURED_REPOSITORY_ACTIONS_DISABLED",
       "gitlab_ci": "BLOCKED_QUOTA_TEMPORARY_AUTOMATIC_RECHECK",
-      "bitrise": "BLOCKED_INVALID_DEFAULT_MACHINE_ELITE_ON_HOBBY_20261026"
+      "bitrise": "EXCLUDED_BY_OWNER_20261027_MACHINE_INVALID_HTTP400"
     },
     "appveyor_routing_policy": {
       "rank": "penultimate",
@@ -126,7 +125,7 @@
       ],
       "reference_implementation": "tools/ci_quota_cancel_first.py",
       "verification_tests": "tests/test_ci_quota_cancel_first.py",
-      "integration_state": "PRODUCTION_GITLAB_HANDOFF_PROVEN_ARA_RSA_AUTH_READY_EXTERNAL_PROVIDER_CREDENTIALS_MISSING",
+      "integration_state": "GITLAB_HANDOFF_PROVEN_APPVEYOR_AND_BITRISE_AUTHENTICATED_WATCHERS_REAL_QUOTA_CANCEL_NOT_OBSERVED",
       "operational_cancel_redundancy": {
         "primary": "github_actions_oidc_external_watcher",
         "primary_workflow": ".github/workflows/ci-quota-external-cancel.yml",
@@ -136,7 +135,7 @@
         "secondary_interval_minutes": 15,
         "secondary_identity": "WINDOWS_DPAPI_RSA3072_LOCAL_PRIVATE_VERCEL_PUBLIC_JWK",
         "secondary_controller_auth": "READY_RSA_NEON_CONFIRMED_20261027",
-        "provider_credentials": "APPVEYOR_AND_BITRISE_NOT_CONFIGURED_FAIL_CLOSED",
+        "provider_credentials": "APPVEYOR_AND_BITRISE_AUTHENTICATED_GITHUB_AND_ARA_SYSTEM_DPAPI_20261027",
         "shared_fence": "Neon public.anthares_ci_quota_attempts first-winner attempt_id",
         "external_cancel_confirmed": false,
         "side_effect_fallback": "FORBIDDEN_UNTIL_REMOTE_TERMINAL_AND_NOT_APPLIED"
@@ -162,6 +161,12 @@
         "controller": ".github/workflows/anthares-quota-cancel-listener.yml",
         "scope": "SYNTHETIC_ALLOWLIST_ONLY_NO_REAL_WORKLOADS"
       }
+    },
+    "bitrise_executor_policy": {
+      "dispatch_enabled": false,
+      "reason": "Owner directed ignore Bitrise as CI executor on 2026-10-27 after HTTP 400 machine invalid",
+      "retained_role": "authenticated cancellation/status monitoring only",
+      "reentry": "requires new explicit owner direction and hosted execution proof"
     }
   },
   "retired": {
