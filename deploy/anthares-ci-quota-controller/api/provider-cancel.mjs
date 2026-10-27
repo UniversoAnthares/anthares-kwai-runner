@@ -102,6 +102,7 @@ export default async function handler(req,res){
        updated_at=now(),lease_generation=lease_generation+1
    WHERE attempt_id=${attempt} AND owner_token=${owner_token}::uuid
      AND lease_generation=1 AND state='CANCEL_REQUESTED'
+     AND lease_until>now()
      AND data->>'owner_run'=${owner}
      AND data->>'source_sha'=${source_sha}
    RETURNING attempt_id`;
