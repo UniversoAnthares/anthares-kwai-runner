@@ -113,6 +113,230 @@
         "excerpt": "É vídeo bom, mas enfim, vamos falar do metamorfólogo francicáfrica, esse livro aqui que o cara em que um dia Gregor Samza, Samza, né, a pronúncia Samza aprendi hoje que pronúncia Samza, que Gregor Samza acordou depois de sonhos entranquilos, transformado num inseto, um enorme inseto, e aí a vida dele muda, isso aí dá aquela engajada, isso mesmo, isso aqui, para fazer aqui gente, dá aquela engajada, entendeu? é isso aí, tem o canal do Discord que está nos comentários, tem o link do grupo do Telegram, esse é o...",
         "verified": true
       }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:215:256": {
+      "title": "Discussão literária: discordâncias sobre um livro e a escolha de uma mediadora ● Universo Anthares",
+      "description": "Na conversa sobre um livro, os participantes recordam horas de discordância sobre a obra e anunciam uma mediadora para a live. Trecho de debate literário do Universo Anthares. www.anthares.us",
+      "hashtags": [
+        "#Literatura",
+        "#DebateLiterario",
+        "#Livros",
+        "#UniversoAnthares"
+      ],
+      "keywords": [
+        "livro",
+        "obra",
+        "discordância",
+        "mediadora",
+        "live"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:215:256",
+        "attachment_id": 16968,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 215,
+        "source_end_s": 256,
+        "media_sha256": "03f45eba15d84e06a2ccddcc427fe7af216b1e2ed0eac3a8ee7747f399daf6f8",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 4.86,
+            "text": "Esse é o espírito. Aí sim, rapaz. Aí sim, entendeu?"
+          },
+          {
+            "start": 4.86,
+            "end": 9.2,
+            "text": "Esse aqui eu vou até... Aqui, ó, porra. Esse é o espírito, carai."
+          },
+          {
+            "start": 9.2,
+            "end": 12.34,
+            "text": "Enfim, e a gente vai comentar esse livro aqui, só que a gente não vai comentar só ele."
+          },
+          {
+            "start": 12.34,
+            "end": 16.98,
+            "text": "Porque aí, o Lucas, não sei se vocês sabem, a gente ficou discutindo horas, horas, horas,"
+          },
+          {
+            "start": 16.98,
+            "end": 21.48,
+            "text": "horas em cima da obra do Cáfrica, com... com piseu da discordância."
+          },
+          {
+            "start": 21.48,
+            "end": 24.56,
+            "text": "Porque ele mandava um negócio pra mim, e eu falava, eu concordo contigo."
+          },
+          {
+            "start": 24.56,
+            "end": 30.92,
+            "text": "E aí ele falava, não, eu entendi, eu falei, não, você não entendeu, não, então a gente ficou assim direto."
+          },
+          {
+            "start": 30.92,
+            "end": 35.32,
+            "text": "Só que eu escolhi um mediador, ou melhor, uma mediadora, muito boa para essa live aqui."
+          }
+        ],
+        "excerpt": "Esse é o espírito. Aí sim, rapaz. Aí sim, entendeu? Esse aqui eu vou até... Aqui, ó, porra. Esse é o espírito, carai. Enfim, e a gente vai comentar esse livro aqui, só que a gente não vai comentar só ele. Porque aí, o Lucas, não sei se vocês sabem, a gente ficou discutindo horas, horas, horas, horas em cima da obra do Cáfrica, com... com piseu da discordância. Porque ele mandava um negócio pra mim, e eu falava, eu concordo contigo. E aí ele falava, não, eu entendi, eu falei, não, você não entendeu, não, então a gente ficou assim direto. Só que eu escolhi um mediador, ou melhor, uma mediadora, muito boa para essa live aqui.",
+        "verified": true
+      }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:256:297": {
+      "title": "Uma provocação na thumbnail antes do debate ● Universo Anthares",
+      "description": "Antes do debate, os participantes discutem exageros, discordâncias e uma thumbnail provocativa que chamou atenção. Trecho de conversa do Universo Anthares. www.anthares.us",
+      "hashtags": [
+        "#Debate",
+        "#Literatura",
+        "#Livros",
+        "#UniversoAnthares"
+      ],
+      "keywords": [
+        "discordar",
+        "debate",
+        "thumb",
+        "provocativa",
+        "conversa"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:256:297",
+        "attachment_id": 16981,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 256,
+        "source_end_s": 297,
+        "media_sha256": "ba9b2cfd9171d2b4934da14641acc49b2a4192704e8a8a7d94c23c2007f13aca",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 1.44,
+            "text": "Antes de começar a discordar."
+          },
+          {
+            "start": 1.44,
+            "end": 2.44,
+            "text": "Que é a ideia."
+          },
+          {
+            "start": 2.44,
+            "end": 3.44,
+            "text": "Uma pessoa que odeia."
+          },
+          {
+            "start": 3.44,
+            "end": 4.44,
+            "text": "A pessoa que quem?"
+          },
+          {
+            "start": 4.44,
+            "end": 5.44,
+            "text": "Que você odeia."
+          },
+          {
+            "start": 5.44,
+            "end": 6.44,
+            "text": "Eu não odeio."
+          },
+          {
+            "start": 6.44,
+            "end": 7.44,
+            "text": "Que eu sou exagerado."
+          },
+          {
+            "start": 7.44,
+            "end": 8.44,
+            "text": "Eu não odeio."
+          },
+          {
+            "start": 8.44,
+            "end": 11.44,
+            "text": "Eu não mal conheço essa pessoa, pô."
+          },
+          {
+            "start": 11.44,
+            "end": 12.44,
+            "text": "Mas eu vou desculpar."
+          },
+          {
+            "start": 12.44,
+            "end": 13.44,
+            "text": "Mas eu conheço uma odeia."
+          },
+          {
+            "start": 13.44,
+            "end": 15.44,
+            "text": "Mas o resto é já odeio, isso mesmo, mesmo."
+          },
+          {
+            "start": 15.44,
+            "end": 17.44,
+            "text": "Não, não vou dizer que odeio."
+          },
+          {
+            "start": 17.44,
+            "end": 18.44,
+            "text": "Não."
+          },
+          {
+            "start": 18.44,
+            "end": 19.44,
+            "text": "Deixa aproveitar, então."
+          },
+          {
+            "start": 19.44,
+            "end": 20.44,
+            "text": "Deixa aproveitar."
+          },
+          {
+            "start": 20.44,
+            "end": 21.44,
+            "text": "Muito obrigado, Paulo de Ar."
+          },
+          {
+            "start": 21.44,
+            "end": 22.44,
+            "text": "Fala."
+          },
+          {
+            "start": 22.44,
+            "end": 23.44,
+            "text": "Fala."
+          },
+          {
+            "start": 23.44,
+            "end": 24.44,
+            "text": "Fala, homem."
+          },
+          {
+            "start": 24.44,
+            "end": 29.44,
+            "text": "É que eu tinha feito uma thumb bem provocativa lá, bem forte e rupada ficou"
+          },
+          {
+            "start": 29.44,
+            "end": 31.44,
+            "text": "o cara"
+          },
+          {
+            "start": 31.44,
+            "end": 33.44,
+            "text": "ele está louco"
+          },
+          {
+            "start": 33.44,
+            "end": 35.44,
+            "text": "muda aqui lá cara, você o que?"
+          }
+        ],
+        "excerpt": "Antes de começar a discordar. Que é a ideia. Uma pessoa que odeia. A pessoa que quem? Que você odeia. Eu não odeio. Que eu sou exagerado. Eu não odeio. Eu não mal conheço essa pessoa, pô. Mas eu vou desculpar. Mas eu conheço uma odeia. Mas o resto é já odeio, isso mesmo, mesmo. Não, não vou dizer que odeio. Não. Deixa aproveitar, então. Deixa aproveitar. Muito obrigado, Paulo de Ar. Fala. Fala. Fala, homem. É que eu tinha feito uma thumb bem provocativa lá, bem forte e rupada ficou o cara ele está louco muda aqui lá cara, você o que?",
+        "verified": true
+      }
     }
   }
 }
