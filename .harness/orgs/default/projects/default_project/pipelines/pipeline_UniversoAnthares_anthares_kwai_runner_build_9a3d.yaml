@@ -44,7 +44,7 @@ pipeline:
                         tests.test_ci_quota_provider_adapters \
                         tests.test_ci_quota_harness_fenced_integration \
                         tests.test_ci_quota_harness_watcher
-                      echo HARNESS_NEON_CANCEL_FIRST_TESTS_PASS=33
+                      echo HARNESS_NEON_CANCEL_FIRST_TESTS_PASS=36
                       if command -v node >/dev/null 2>&1; then
                         node tests/test_ci_quota_harness_controller.mjs
                       else
