@@ -12,7 +12,7 @@ $QuotaCodes=@('ci_quota_exceeded','quota_exceeded','quota_exhausted',
  'credits_exhausted','usage_limit_reached','monthly_quota_exceeded','daily_quota_exceeded')
 $Status=[ordered]@{ observed_utc=(Get-Date).ToUniversalTime().ToString('o')
     machine=$env:COMPUTERNAME; auth='UNKNOWN'; appveyor='NOT_CONFIGURED'
-    bitrise='NOT_CONFIGURED'; events_claimed=0; remote_cancellations_confirmed=0
+    bitrise='NOT_CONFIGURED'; events_claimed=0; remote_cancellations_confirmed=0; remote_terminal_confirmed=0
     uncertain=0; fallback_dispatched=$false }
 $mutex=New-Object System.Threading.Mutex($false,'Global\AntharesCiQuotaCancelStandby')
 $owned=$false
@@ -119,6 +119,7 @@ function ProcessEvent($e,[string]$key) {
     if((Property $claim 'code') -ne 'CLAIMED'){return 'CLAIM_NOT_CONFIRMED'}
     $Status.events_claimed++
     $result='CANCEL_UNCONFIRMED'
+    $cancelWasRequested=$false
     try {
         $before=CallProvider $e.lookup $e.token $e.provider
         if(Terminal $e $before){$result='CANCELLED_NO_INDEPENDENT_RESERVE'}
@@ -132,6 +133,7 @@ function ProcessEvent($e,[string]$key) {
                     ([string](Property $b 'status')).ToLowerInvariant()){
                     throw 'UNSAFE_REMOTE_IDENTITY'
                 }
+                $cancelWasRequested=$true
                 $null=CallProvider $e.cancel $e.token $e.provider 'DELETE'
             } else {
                 $b=Property $before 'data'
@@ -141,6 +143,7 @@ function ProcessEvent($e,[string]$key) {
                    [string](Property $b 'status') -ne '0'){
                     throw 'UNSAFE_REMOTE_IDENTITY'
                 }
+                $cancelWasRequested=$true
                 $null=CallProvider $e.cancel $e.token $e.provider 'POST' @{
                     abort_reason='Confirmed provider quota exhaustion';abort_with_success=$false
                 }
@@ -163,7 +166,8 @@ function ProcessEvent($e,[string]$key) {
         if((Property $ack 'code') -ne 'RECORDED'){return 'REPORT_UNCONFIRMED'}
     }catch{return 'REPORT_UNCONFIRMED'}
     if($result -eq 'CANCELLED_NO_INDEPENDENT_RESERVE'){
-        $Status.remote_cancellations_confirmed++
+        $Status.remote_terminal_confirmed++
+        if($cancelWasRequested){$Status.remote_cancellations_confirmed++}
     }else{$Status.uncertain++}
     return $result
 }
