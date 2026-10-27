@@ -315,6 +315,12 @@ def main():
     if not key:
         print("HARNESS_QUOTA=MISSING_PROTECTED_SECRET")
         return 2
+    # One authenticated owner read before enumerating up to 12 executions.
+    # Fail closed if the shared Harness token was rotated or revoked.
+    auth = readonly_auth_probe(key)
+    if auth != "VERIFIED_OWNED_EXECUTION_908":
+        print("HARNESS_QUOTA=PREFLIGHT_" + auth)
+        return 2
     try:
         executions = recent_owned_runs(os.getenv("GH_TOKEN", ""))
     except (HTTPError, URLError, OSError, ValueError):
