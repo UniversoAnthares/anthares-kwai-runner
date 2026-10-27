@@ -7,6 +7,8 @@ must never be retried as a new job.
 import json
 import os
 import sys
+import time
+from urllib.error import HTTPError
 import urllib.parse
 import urllib.request
 
@@ -35,8 +37,28 @@ def submit(phase: str, sha: str, execution: str):
         ENDPOINT, data=payload, method="POST", headers={
             "Authorization": "Bearer " + identity,
             "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=15) as response:
-        receipt = json.load(response)
+    # Dispatch HTTP 204 can reach GitHub before the original watcher has
+    # recorded the Neon ACK. Wait briefly for that exact transition without
+    # redispatching the workflow or treating any other failure as transient.
+    attempts = 6 if phase == "start" else 1
+    receipt = None
+    for index in range(attempts):
+        try:
+            with urllib.request.urlopen(req, timeout=15) as response:
+                receipt = json.load(response)
+            break
+        except HTTPError as error:
+            if error.code != 409 or phase != "start":
+                raise
+            try:
+                body = json.load(error)
+            except (ValueError, OSError):
+                raise
+            if body.get("code") != "NOT_RESERVED_OR_ALREADY_EXECUTING":
+                raise
+            if index + 1 >= attempts:
+                raise
+            time.sleep(2)
     expected = ("FALLBACK_EXECUTION_AUTHORIZED" if phase == "start"
                 else "FALLBACK_CONFIRMED")
     if receipt.get("code") != expected:
