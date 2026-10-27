@@ -47,8 +47,9 @@ class ProvidersTest(unittest.TestCase):
             seen.append((method,url))
             if method=="PUT":
                 return 200, {"status":"SUCCESS"}
-            return 200, {"data":{"planExecution":{
-                "uuid":"owned123","pipelineIdentifier":"pipe123",
+            return 200, {"data":{"pipelineExecutionSummary":{
+                "planExecutionId":"owned123","pipelineIdentifier":"pipe123",
+                "orgIdentifier":"default","projectIdentifier":"project1",
                 "status":"Aborted"}}}
         run=HarnessPipelineRun("acct123","default","project1",
                                "pipe123","owned123","fixture",fake)
@@ -61,10 +62,27 @@ class ProvidersTest(unittest.TestCase):
             run.cancel("different")
         self.assertEqual(2,len(seen))
 
+    def test_harness_rejects_legacy_envelope_and_wrong_org_project(self):
+        template={"planExecutionId":"owned123","pipelineIdentifier":"pipe123",
+                  "orgIdentifier":"default","projectIdentifier":"project1",
+                  "status":"Running"}
+        for bad in [
+            {"data":{"planExecution":dict(template)}},
+            {"data":{"pipelineExecutionSummary":dict(template,orgIdentifier="other")}},
+            {"data":{"pipelineExecutionSummary":dict(template,projectIdentifier="other")}},
+            {"data":{"pipelineExecutionSummary":dict(template,planExecutionId="foreign")}},
+            {"data":{"pipelineExecutionSummary":dict(template,pipelineIdentifier="foreign")}},
+        ]:
+            run=HarnessPipelineRun("acct123","default","project1",
+                                  "pipe123","owned123","fixture",
+                                  lambda *_: (200,bad))
+            self.assertEqual("UNKNOWN",run.status("owned123"))
+
     def test_harness_fails_closed_on_foreign_or_unknown_status(self):
         def fake(method,url,headers):
-            return 200,{"data":{"planExecution":{"uuid":"another",
-                          "pipelineIdentifier":"pipe123","status":"Aborted"}}}
+            return 200,{"data":{"pipelineExecutionSummary":{"planExecutionId":"another",
+                          "pipelineIdentifier":"pipe123",
+                "orgIdentifier":"default","projectIdentifier":"project1","status":"Aborted"}}}
         run=HarnessPipelineRun("acct123","default","project1",
                                "pipe123","owned123","fixture",fake)
         self.assertEqual("UNKNOWN",run.status("owned123"))
