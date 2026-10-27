@@ -1,0 +1,40 @@
+name: CORTES TikTok Codeberg consumer readiness
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ['.forgejo/workflows/cortes-tiktok-universo-readiness.yml']
+enable-openid-connect: true
+jobs:
+  readiness:
+    runs-on: codeberg-small
+    timeout-minutes: 5
+    steps:
+      - name: Verify hosted Codeberg and consumer configuration
+        shell: bash
+        env:
+          HAS_SESSION: ${{ secrets.TIKTOK_UNIVERSO_STORAGE_STATE != '' }}
+          HAS_PRIMARY: ${{ vars.TIKTOK_CODEBERG_PRIMARY == 'true' }}
+        run: |
+          set -euo pipefail
+          test "${FORGEJO_REPOSITORY:-}" = "UniversoAnthares/anthares-kwai-runner"
+          test "${FORGEJO_REF:-}" = "refs/heads/main"
+          test "${FORGEJO_ACTIONS:-}" = "true"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          echo "CODEBERG_TIKTOK_RUNNER_READY=1"
+          if [ "${HAS_SESSION:-false}" = "true" ]; then
+            echo "CODEBERG_TIKTOK_SESSION_SECRET_PRESENT=1"
+          else
+            echo "CODEBERG_TIKTOK_SESSION_SECRET_PRESENT=0"
+          fi
+          if [ "${HAS_PRIMARY:-false}" = "true" ]; then
+            echo "CODEBERG_TIKTOK_PRIMARY_VAR_ENABLED=1"
+          else
+            echo "CODEBERG_TIKTOK_PRIMARY_VAR_ENABLED=0"
+          fi
+          if [ "${HAS_SESSION:-false}" != "true" ] || [ "${HAS_PRIMARY:-false}" != "true" ]; then
+            echo "CODEBERG_TIKTOK_CONSUMER_NOT_READY=1"
+            exit 2
+          fi
+          echo "CODEBERG_TIKTOK_CONSUMER_CONFIG_READY=1"
