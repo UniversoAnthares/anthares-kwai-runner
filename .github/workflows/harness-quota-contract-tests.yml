@@ -1,0 +1,33 @@
+name: Harness quota cancel-first contract tests
+on:
+  pull_request:
+    paths:
+      - 'tools/ci_quota_provider_adapters.py'
+      - 'tools/ci_quota_cancel_first.py'
+      - 'tools/ci_quota_neon_ledger.py'
+      - 'tests/test_ci_quota_provider_adapters.py'
+      - '.github/workflows/harness-quota-contract-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/ci_quota_provider_adapters.py'
+      - 'tools/ci_quota_cancel_first.py'
+      - 'tools/ci_quota_neon_ledger.py'
+      - 'tests/test_ci_quota_provider_adapters.py'
+      - '.github/workflows/harness-quota-contract-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile quota adapters and ledger
+        run: python -m py_compile tools/ci_quota_provider_adapters.py tools/ci_quota_cancel_first.py tools/ci_quota_neon_ledger.py
+      - name: Run offline Harness quota contract tests
+        run: python -m unittest discover -s tests -p 'test_ci_quota_provider_adapters.py' -v
