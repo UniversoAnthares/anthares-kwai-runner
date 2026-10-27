@@ -132,5 +132,57 @@ class NativeRuntimeBoundaryTests(unittest.TestCase):
         self.reject(mutate)
 
 
+class NativeCredentialCodecTests(unittest.TestCase):
+    """Exercise the existing provisioning encoder against the real consumer."""
+    @classmethod
+    def setUpClass(cls):
+        import ast
+        import base64
+        import importlib.util
+        import time
+        import zlib
+        tree = ast.parse((ROOT / "tools/cortes_codeberg_tiktok_bootstrap.py").read_text(encoding="utf-8"))
+        selected = [n for n in tree.body if isinstance(n, ast.FunctionDef)
+                    and n.name in {"auth_cookies", "compact"}]
+        namespace = {"json": json, "base64": base64, "zlib": zlib, "time": time}
+        exec(compile(ast.Module(body=selected, type_ignores=[]), "<existing-codec>", "exec"), namespace)
+        cls.encode = staticmethod(namespace["compact"])
+        spec = importlib.util.spec_from_file_location(
+            "native_runtime_consumer", ROOT / "tools/cortes_tiktok_lucasrosalem4_cloud_publish.py")
+        cls.consumer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.consumer)
+
+    def state(self):
+        return {"cookies": [{"name": "sessionid", "domain": ".tiktok.com",
+                             "value": "synthetic-not-a-credential", "expires": -1}],
+                "origins": []}
+
+    def decode(self, value):
+        from unittest.mock import patch
+        import os
+        with patch.dict(os.environ, {VARIABLE: value}, clear=True):
+            return self.consumer.state_from_secret()
+
+    def test_existing_encoder_round_trips_through_actual_consumer(self):
+        state = self.state()
+        self.assertEqual(self.decode(self.encode(state)), state)
+
+    def test_raw_recovery_json_requires_encoding_before_install(self):
+        with self.assertRaises(self.consumer.SafeStop):
+            self.decode(json.dumps(self.state()))
+
+    def test_expired_recovery_session_is_not_installable(self):
+        state = self.state()
+        state["cookies"][0]["expires"] = 1
+        with self.assertRaises(RuntimeError):
+            self.encode(state)
+
+    def test_existing_encoder_removes_other_domains_and_origins(self):
+        state = self.state()
+        state["cookies"].append({"name": "unrelated", "domain": ".example.org", "value": "synthetic"})
+        state["origins"] = [{"origin": "https://example.org", "localStorage": []}]
+        self.assertEqual(self.decode(self.encode(state)), self.state())
+
+
 if __name__ == "__main__":
     unittest.main()
