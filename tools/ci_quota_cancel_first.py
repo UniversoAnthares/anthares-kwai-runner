@@ -39,7 +39,7 @@ class Route:
 
 def is_quota(*, http_status: int | None, code: str = "", message: str = "") -> bool:
     norm = (code or "").strip().lower().replace("-", "_")
-    if http_status in (401, 405, 451):
+    if http_status in (401, 403, 405, 451):
         return False
     if norm in QUOTA_CODES:
         return True
