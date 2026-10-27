@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-26-bitrise-hobby-active-launch-blocked",
+  "revision": "2026-10-27-cancel-first-quota-contract",
   "checked_at_utc": "2026-10-21T21:20:00Z",
   "rules": {
     "regression_check_required_each_round": true,
@@ -14,7 +14,7 @@
       "meshcentral",
       "codespaces"
     ],
-    "quota_failure_action": "migrate_to_freshly_verified_eligible_provider",
+    "quota_failure_action": "cancel_owned_attempt_immediately_then_confirm_terminal_and_NOT_APPLIED_before_next_independent_verified_quota_provider",
     "anthares_failure_action": "repair_anthares_component_before_external_migration",
     "manual_owner_only_for": [
       "mfa",
@@ -27,7 +27,9 @@
       "codex",
       "kilo",
       "work"
-    ]
+    ],
+    "quota_cancel_contract": "CANCELAR_IMEDIATAMENTE_POR_COTA_V1",
+    "quota_cancel_adapter_state": "CORE_TESTED; GITHUB_AND_GITLAB_ADAPTERS_STAGED; NOT_YET_CONNECTED_TO_ALL_EVENT_SOURCES"
   },
   "providers": {
     "anthares_remote": {
