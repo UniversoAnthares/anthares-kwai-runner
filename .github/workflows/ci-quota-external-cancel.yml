@@ -194,6 +194,32 @@ jobs:
           }
           main().catch(e=>{console.error("ARA_BITRISE_TOKEN_TRANSFER="+e.message);process.exitCode=1});
           NODE
+      - name: Inspect Bitrise actual hosted build history without dispatch
+        env:
+          BITRISE_TOKEN: ${{ env.ANTHARES_BITRISE_TOKEN_FROM_BW || secrets.BITRISE_API_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error
+          token=os.getenv("BITRISE_TOKEN","").strip()
+          if not token:
+              print("BITRISE_HISTORY=NOT_CONFIGURED")
+          else:
+              url="https://api.bitrise.io/v0.1/apps/ef06f940-ffc7-4e37-b935-93ad06d8faeb/builds?limit=8"
+              try:
+                  req=urllib.request.Request(url,headers={"Authorization":token,"Accept":"application/json"})
+                  with urllib.request.urlopen(req,timeout=15) as res:
+                      builds=(json.load(res).get("data") or [])
+                  print("BITRISE_HISTORY_COUNT="+str(len(builds)))
+                  for i,b in enumerate(builds):
+                      print("BITRISE_HISTORY_"+str(i)+"_STATUS="+str(b.get("status")))
+                      print("BITRISE_HISTORY_"+str(i)+"_WORKFLOW="+str(b.get("triggered_workflow"))[:48])
+                      print("BITRISE_HISTORY_"+str(i)+"_DATE="+str(b.get("triggered_at"))[:40])
+                      print("BITRISE_HISTORY_"+str(i)+"_SLUG="+str(b.get("slug"))[:64])
+              except urllib.error.HTTPError as e:
+                  print("BITRISE_HISTORY_HTTP="+str(e.code))
+              except (ValueError,urllib.error.URLError):
+                  print("BITRISE_HISTORY=SOURCE_UNAVAILABLE")
+          PY
       - name: Detect provider-structured quota and cancel owned execution only
         env:
           APPVEYOR_ACCOUNT: ${{ vars.APPVEYOR_ACCOUNT || 'UniversoAnthares' }}
