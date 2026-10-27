@@ -14,8 +14,10 @@ return res.status(status).json({ok:status<300,code,...data});}
 export default async function handler(req,res){
  if(req.method!=="POST")return respond(res,405,"METHOD_NOT_ALLOWED");
  if(process.env.CI_QUOTA_MODE!=="ENABLED")return respond(res,503,"DISABLED");
+ let body;try{body=typeof req.body==="string"?JSON.parse(req.body):req.body;}
+ catch{return respond(res,400,"INVALID_JSON");}
  if(!body||typeof body!=="object")return respond(res,400,"INVALID_BODY");
- const bearer=/^Bearer ([\\w.-]+)$/.exec(req.headers.authorization||"");
+ const bearer=/^Bearer ([\w.-]+)$/.exec(req.headers.authorization||"");
  let owner;
  if(bearer){
    let claims;
@@ -38,14 +40,12 @@ export default async function handler(req,res){
    const secret=process.env.ANTHARES_REMOTE_QUOTA_HMAC;
    if(!secret||secret.length<48)return respond(res,503,"REMOTE_AUTH_DISABLED");
    const fields=["phase","provider","target","sha","code","owner_token","outcome"];
-   const message=[t,...fields.map(k=>String(body[k]||""))].join("\\n");
+   const message=[t,...fields.map(k=>String(body[k]||""))].join("\n");
    const expected=createHmac("sha256",secret).update(message,"utf8").digest("hex");
    if(!timingSafeEqual(Buffer.from(expected,"hex"),Buffer.from(signature,"hex")))
       return respond(res,401,"REMOTE_AUTH_INVALID");
    owner="remote:"+id;
  }
- let body;try{body=typeof req.body==="string"?JSON.parse(req.body):req.body;}
- catch{return respond(res,400,"INVALID_JSON");}
  const provider=String(body?.provider||""),
  target=String(body?.target||""),code=String(body?.code||""),
  source_sha=String(body?.sha||""),phase=String(body?.phase||"");
