@@ -12,14 +12,12 @@ pipeline:
           cloneCodebase: true
           buildIntelligence:
             enabled: false
-          infrastructure:
-            type: KubernetesDirect
-            spec:
-              connectorRef: account.harnessImage
-              namespace: default
-              automountServiceAccountToken: true
-              nodeSelector: {}
-              os: Linux
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
           execution:
             steps:
               - step:
