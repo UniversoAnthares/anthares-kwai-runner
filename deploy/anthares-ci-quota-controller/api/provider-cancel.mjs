@@ -1,6 +1,6 @@
 import {neon} from "@neondatabase/serverless";
 import {createRemoteJWKSet,jwtVerify} from "jose";
-import {randomUUID} from "node:crypto";
+import {randomUUID,createHmac,timingSafeEqual} from "node:crypto";
 
 const ROOT="UniversoAnthares/anthares-kwai-runner";
 const WF=ROOT+"/.github/workflows/ci-quota-external-cancel.yml@refs/heads/main";
@@ -14,16 +14,36 @@ return res.status(status).json({ok:status<300,code,...data});}
 export default async function handler(req,res){
  if(req.method!=="POST")return respond(res,405,"METHOD_NOT_ALLOWED");
  if(process.env.CI_QUOTA_MODE!=="ENABLED")return respond(res,503,"DISABLED");
- let claims;
- const bearer=/^Bearer ([\w.-]+)$/.exec(req.headers.authorization||"");
- if(!bearer)return respond(res,401,"OIDC_REQUIRED");
- try{({payload:claims}=await jwtVerify(bearer[1],jwks,{
- issuer:"https://token.actions.githubusercontent.com",
- audience:"anthares-ci-quota-controller",algorithms:["RS256"]}));}
- catch{return respond(res,401,"OIDC_INVALID");}
- if(claims.repository!==ROOT||claims.workflow_ref!==WF||claims.ref!=="refs/heads/main"||
- !["schedule","workflow_dispatch"].includes(claims.event_name))
- return respond(res,403,"WORKFLOW_IDENTITY_INVALID");
+ if(!body||typeof body!=="object")return respond(res,400,"INVALID_BODY");
+ const bearer=/^Bearer ([\\w.-]+)$/.exec(req.headers.authorization||"");
+ let owner;
+ if(bearer){
+   let claims;
+   try{({payload:claims}=await jwtVerify(bearer[1],jwks,{
+     issuer:"https://token.actions.githubusercontent.com",
+     audience:"anthares-ci-quota-controller",algorithms:["RS256"]}));}
+   catch{return respond(res,401,"OIDC_INVALID");}
+   if(claims.repository!==ROOT||claims.workflow_ref!==WF||
+      claims.ref!=="refs/heads/main"||
+      !["schedule","workflow_dispatch","push"].includes(claims.event_name))
+      return respond(res,403,"WORKFLOW_IDENTITY_INVALID");
+   owner=String(claims.run_id);
+ }else{
+   const id=String(req.headers["x-anthares-device"]||"");
+   const t=String(req.headers["x-anthares-timestamp"]||"");
+   const signature=String(req.headers["x-anthares-signature"]||"");
+   if(id!=="DESKTOP-FTDK0HP"||!/^[0-9]{10}$/.test(t)||
+      Math.abs(Date.now()/1000-Number(t))>120||!/^[0-9a-f]{64}$/.test(signature))
+      return respond(res,401,"REMOTE_AUTH_REQUIRED");
+   const secret=process.env.ANTHARES_REMOTE_QUOTA_HMAC;
+   if(!secret||secret.length<48)return respond(res,503,"REMOTE_AUTH_DISABLED");
+   const fields=["phase","provider","target","sha","code","owner_token","outcome"];
+   const message=[t,...fields.map(k=>String(body[k]||""))].join("\\n");
+   const expected=createHmac("sha256",secret).update(message,"utf8").digest("hex");
+   if(!timingSafeEqual(Buffer.from(expected,"hex"),Buffer.from(signature,"hex")))
+      return respond(res,401,"REMOTE_AUTH_INVALID");
+   owner="remote:"+id;
+ }
  let body;try{body=typeof req.body==="string"?JSON.parse(req.body):req.body;}
  catch{return respond(res,400,"INVALID_JSON");}
  const provider=String(body?.provider||""),
@@ -38,7 +58,7 @@ export default async function handler(req,res){
    const token=randomUUID();
    try{
     const data={provider,target,source_sha,quota_code:code,
-      state:"CANCEL_REQUESTED",owner_run:String(claims.run_id),
+      state:"CANCEL_REQUESTED",owner_run:owner,
       fallback_dispatched:false,side_effects_reconciled:false};
     const rows=await sql`INSERT INTO public.anthares_ci_quota_attempts
       (attempt_id,owner_token,state,data,lease_until)
@@ -63,7 +83,7 @@ export default async function handler(req,res){
        updated_at=now(),lease_generation=lease_generation+1
    WHERE attempt_id=${attempt} AND owner_token=${owner_token}::uuid
      AND lease_generation=1 AND state='CANCEL_REQUESTED'
-     AND data->>'owner_run'=${String(claims.run_id)}
+     AND data->>'owner_run'=${owner}
      AND data->>'source_sha'=${source_sha}
    RETURNING attempt_id`;
    if(rows.length!==1)return respond(res,409,"FENCING_REJECTED");
