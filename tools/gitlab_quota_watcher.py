@@ -9,6 +9,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from ci_quota_provider_adapters import GitLabPipeline, ProviderUncertain
+
 GITHUB_REPO = "UniversoAnthares/anthares-kwai-runner"
 PROJECTS = (
     ("cortes", "87307248", "gitlab-quota-fallback.yml"),
@@ -53,22 +55,77 @@ def api(url, token="", method="GET", payload=None, gl=False):
 
 def recent_qualifying_failure(project_id):
     url = ("https://gitlab.com/api/v4/projects/" + project_id +
-           "/pipelines?status=failed&ref=main&per_page=8&order_by=id&sort=desc")
+           "/pipelines?ref=main&per_page=16&order_by=id&sort=desc")
     pipelines = api(url, GL_AUTH, gl=True)
     now = dt.datetime.now(dt.timezone.utc)
     for p in pipelines:
         stamp = dt.datetime.fromisoformat(p["created_at"].replace("Z", "+00:00"))
         if (now - stamp).total_seconds() > WINDOW_MINUTES * 60:
             break
-        if p.get("ref") != "main" or not p.get("sha"):
+        if (p.get("ref") != "main" or not p.get("sha") or
+                p.get("status") not in
+                ("failed","canceled","running","pending","created","preparing","waiting_for_resource")):
             continue
         jobs = api("https://gitlab.com/api/v4/projects/" + project_id +
                    "/pipelines/" + str(p["id"]) + "/jobs?per_page=100", GL_AUTH, gl=True)
+        # Never infer quota from a generic failing job or a permission denial.
+        if not isinstance(jobs,list) or len(jobs)>=100:
+            continue  # incomplete job-page evidence: fail closed
         failed_quota = [j for j in jobs if j.get("failure_reason") == "ci_quota_exceeded"
-                        and j.get("started_at") is None]
+                        and j.get("status") == "failed" and j.get("started_at") is None]
         if failed_quota:
             return {"id": p["id"], "sha": p["sha"], "count": len(failed_quota)}
     return None
+
+
+def confirmed_terminal_before_reserve(project_id, event):
+    """Cancel only the exact owned GitLab quota pipeline if still active.
+
+    Existing FAILED/CANCELLED already are terminal; no active job is available
+    to cancel after GitLab's own ci_quota_exceeded rejection. Never dispatch
+    while an exact pipeline is still RUNNING, SUCCEEDED or UNKNOWN.
+    """
+    if not GL_AUTH or not str(event.get("id","")).isdigit():
+        return False
+    pipeline=GitLabPipeline(project_id,event["id"],GL_AUTH)
+    state=pipeline.status(str(event["id"]))
+    if state in ("FAILED","CANCELLED"):
+        return True
+    if state!="RUNNING":
+        return False
+    # Before canceling the entire pipeline, re-check its immutable identity
+    # and every job. A pipeline containing unrelated active jobs is shared;
+    # it must not be terminated on behalf of a quota-failed CI job.
+    endpoint=("https://gitlab.com/api/v4/projects/" + str(project_id) +
+              "/pipelines/" + str(event["id"]))
+    identity=api(endpoint, GL_AUTH, gl=True)
+    if (not isinstance(identity,dict) or identity.get("sha") != event.get("sha")
+            or identity.get("ref") != "main" or
+            identity.get("status") not in
+            ("running","pending","created","preparing","waiting_for_resource")):
+        return False
+    jobs=api(endpoint+"/jobs?per_page=100", GL_AUTH, gl=True)
+    if not isinstance(jobs,list) or len(jobs)>=100:
+        return False
+    confirmed_quota=any(
+        j.get("failure_reason")=="ci_quota_exceeded" and
+        j.get("status")=="failed" and j.get("started_at") is None
+        for j in jobs)
+    active_other=any(
+        j.get("status") in
+        ("running","pending","created","preparing","waiting_for_resource")
+        for j in jobs)
+    if not confirmed_quota or active_other:
+        return False
+    # Dry-run remains read-only even if a cancelable live quota appears.
+    if DRY_RUN:
+        print("DRY_RUN_CANCEL_WOULD_BE_REQUESTED",flush=True)
+        return False
+    # No other job is running; only now may this exact quota pipeline be
+    # canceled. Never reissue an uncertain cancel within the same attempt.
+    if not pipeline.cancel(str(event["id"])):
+        return False
+    return pipeline.status(str(event["id"])) in ("FAILED","CANCELLED")
 
 
 def latest_runs(workflow):
@@ -112,7 +169,7 @@ def main():
     if not GL_AUTH or not GH_AUTH:
         print("WATCHER_BLOCKED: missing protected API credentials")
         return 1
-    # Backups are QA-only. Do not retry failed GitLab pipelines or modify source/queues.
+    # Backups are QA-only. Cancel owned terminal-quota pipelines only after checking no other active jobs; never retry original CI jobs.
     runs_cache = {}
     errors = 0
     for component, project_id, workflow in PROJECTS:
@@ -121,13 +178,19 @@ def main():
             if not event:
                 print(f"{component}=NO_RECENT_MAIN_QUOTA_FAILURE")
                 continue
+            # Exact GitLab pipeline must be remotely terminal before any
+            # independent QA dispatch. Missing/uncertain status fails closed.
+            if not confirmed_terminal_before_reserve(project_id, event):
+                print(f"{component}=CANCEL_UNCONFIRMED_NO_FALLBACK")
+                errors += 1
+                continue
             if workflow not in runs_cache:
                 runs_cache[workflow] = latest_runs(workflow)
             if already_handled(component, workflow, event["sha"], runs_cache[workflow]):
                 print(f"{component}=DEDUPED sha={event['sha'][:12]}")
                 continue
             dispatch(component, workflow, event)
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError) as exc:
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, ProviderUncertain) as exc:
             # Never expose request URLs, response bodies, tokens or sensitive metadata.
             print(f"{component}=CONTROL_ERROR type={type(exc).__name__}")
             errors += 1
