@@ -1,0 +1,58 @@
+name: Anthares Bitrise config source correction (one-time)
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/anthares-bitrise-use-repository-config.yml']
+permissions:
+  contents: read
+jobs:
+  correct-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select authenticated repository config without starting builds
+        env:
+          BITRISE_API_TOKEN: ${{ secrets.BITRISE_API_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json,os,sys,urllib.request,urllib.error,pathlib
+          app="ef06f940-ffc7-4e37-b935-93ad06d8faeb"
+          base=f"https://api.bitrise.io/v0.1/apps/{app}"
+          token=os.environ.get("BITRISE_API_TOKEN","").strip()
+          if not token:
+              print("SOURCE_FIX=NO_CREDENTIAL");sys.exit(1)
+          y=pathlib.Path("bitrise.yml").read_text(encoding="utf8")
+          if "machine_type_id: standard" not in y or "machine_type_id: elite" in y:
+              print("SOURCE_FIX=REPOSITORY_CONFIG_NOT_SAFE");sys.exit(1)
+          def req(path,method="GET",data=None):
+              body=None if data is None else json.dumps(data).encode()
+              h={"Authorization":token,"Accept":"application/json"}
+              if body is not None:h["Content-Type"]="application/json"
+              r=urllib.request.Request(base+path,data=body,headers=h,method=method)
+              with urllib.request.urlopen(r,timeout=20) as response:return json.load(response)
+          try:
+              data=(req("").get("data") or {})
+              if data.get("slug")!=app or data.get("repo_url") not in (
+                  "https://github.com/UniversoAnthares/anthares-kwai-runner",
+                  "https://github.com/UniversoAnthares/anthares-kwai-runner.git",
+                  "git@github.com:UniversoAnthares/anthares-kwai-runner.git"):
+                  print("SOURCE_FIX=REPOSITORY_IDENTITY_MISMATCH");sys.exit(1)
+              before=req("/bitrise.yml/config")
+              location=before.get("location")
+              if location=="repository":
+                  print("SOURCE_FIX=ALREADY_REPOSITORY")
+              elif location=="bitrise.io":
+                  req("/bitrise.yml/config","PUT",{"location":"repository"})
+                  print("SOURCE_FIX=SWITCH_REQUESTED")
+              else:
+                  print("SOURCE_FIX=UNEXPECTED_LOCATION");sys.exit(1)
+              after=req("/bitrise.yml/config")
+              if after.get("location")!="repository":
+                  print("SOURCE_FIX=READBACK_FAILED");sys.exit(1)
+              print("SOURCE_FIX=REPOSITORY_CONFIRMED")
+          except urllib.error.HTTPError as err:
+              print("SOURCE_FIX_HTTP="+str(err.code));sys.exit(1)
+          except (ValueError,TypeError,KeyError,urllib.error.URLError):
+              print("SOURCE_FIX=API_UNAVAILABLE");sys.exit(1)
+          PY
