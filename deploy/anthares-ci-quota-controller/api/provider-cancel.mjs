@@ -1,6 +1,6 @@
 import {neon} from "@neondatabase/serverless";
 import {createRemoteJWKSet,jwtVerify} from "jose";
-import {randomUUID,createHmac,timingSafeEqual} from "node:crypto";
+import {randomUUID,createPublicKey,verify} from "node:crypto";
 
 const ROOT="UniversoAnthares/anthares-kwai-runner";
 const WF=ROOT+"/.github/workflows/ci-quota-external-cancel.yml@refs/heads/main";
@@ -35,15 +35,21 @@ export default async function handler(req,res){
    const t=String(req.headers["x-anthares-timestamp"]||"");
    const signature=String(req.headers["x-anthares-signature"]||"");
    if(id!=="DESKTOP-FTDK0HP"||!/^[0-9]{10}$/.test(t)||
-      Math.abs(Date.now()/1000-Number(t))>120||!/^[0-9a-f]{64}$/.test(signature))
+      Math.abs(Date.now()/1000-Number(t))>120||!/^[A-Za-z0-9+/]{300,600}={0,2}$/.test(signature))
       return respond(res,401,"REMOTE_AUTH_REQUIRED");
-   const secret=process.env.ANTHARES_REMOTE_QUOTA_HMAC;
-   if(!secret||secret.length<48)return respond(res,503,"REMOTE_AUTH_DISABLED");
+   const publicJwk=process.env.ANTHARES_REMOTE_QUOTA_PUBJWK;
+   if(!publicJwk)return respond(res,503,"REMOTE_AUTH_DISABLED");
    const fields=["phase","provider","target","sha","code","owner_token","outcome"];
    const message=[t,...fields.map(k=>String(body[k]||""))].join("\n");
-   const expected=createHmac("sha256",secret).update(message,"utf8").digest("hex");
-   if(!timingSafeEqual(Buffer.from(expected,"hex"),Buffer.from(signature,"hex")))
-      return respond(res,401,"REMOTE_AUTH_INVALID");
+   let valid=false;
+   try{
+     const jwk=JSON.parse(publicJwk);
+     if(jwk.kty!=="RSA"||jwk.alg!=="RS256"||!jwk.n||!jwk.e)
+       return respond(res,503,"REMOTE_KEY_INVALID");
+     valid=verify("RSA-SHA256",Buffer.from(message,"utf8"),
+       createPublicKey({key:jwk,format:"jwk"}),Buffer.from(signature,"base64"));
+   }catch{return respond(res,401,"REMOTE_AUTH_INVALID");}
+   if(!valid)return respond(res,401,"REMOTE_AUTH_INVALID");
    owner="remote:"+id;
  }
  const provider=String(body?.provider||""),
