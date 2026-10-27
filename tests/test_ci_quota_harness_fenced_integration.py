@@ -11,8 +11,10 @@ EXECUTION = "executionowned123"
 
 
 def response(state, execution=EXECUTION, pipeline=PIPELINE):
-    return {"data": {"planExecution": {
-        "uuid": execution, "pipelineIdentifier": pipeline, "status": state
+    return {"data": {"pipelineExecutionSummary": {
+        "planExecutionId": execution, "pipelineIdentifier": pipeline,
+        "orgIdentifier": "default", "projectIdentifier": "default_project",
+        "status": state
     }}}
 
 
