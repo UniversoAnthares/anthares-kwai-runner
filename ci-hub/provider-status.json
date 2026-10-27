@@ -182,14 +182,14 @@
       "eligible": false
     },
     "harness": {
-      "status": "API_AUTH_VERIFIED_QUOTA_WATCH_ACTIVE_FALLBACK_SOURCE_MERGED_DEPLOY_BLOCKED_402",
+      "status": "API_AUTH_VERIFIED_QUOTA_WATCH_ACTIVE_FALLBACK_CONTROLLER_READY_ENABLED",
       "evidence_class": "AUTHENTICATED_SUCCESSFUL_CI_EXECUTION",
       "verified_at_utc": "2026-10-27",
       "eligible": false,
       "verification_execution": "#908",
       "verification_url": "https://app.harness.io/ng/account/xAEBvmMUTjql7g2Exxmp-g/all/orgs/default/projects/default_project/pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d/executions/udezZluzS2KC0qbfKcwCng/pipeline",
       "verification_result": "SUCCESS_58S_MAIN_CLONE_PYTHON_SYNTAX_CONTROL_PUBLISHER",
-      "routing_gate": "HARNESS_API_KEY_NOT_CONFIGURED;CANCEL_FIRST_SHARED_FENCE_LIVE_NOT_PROVEN",
+      "routing_gate": "HARNESS_API_KEY_VERIFIED;FENCED_CONTROLLER_READY;REAL_QUOTA_ABORT_UNOBSERVED",
       "cancel_first_adapter": "OFFICIAL_V2_SCHEMA_FIXED_VERIFIED_WITH_33_UNIT_TESTS",
       "cancel_first_adapter_source": "tools/ci_quota_provider_adapters.py:HarnessPipelineRun",
       "cancel_first_adapter_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1590",
@@ -208,7 +208,7 @@
       "controller_claim_report_live": false,
       "controller_claim_report_tests": "NODE_5_PASS_FAKE_OIDC_FAKE_NEON",
       "controller_claim_report_source_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1625",
-      "controller_deploy_block": "VERCEL_402_API_DEPLOYMENTS_FREE_PER_DAY_RETRY_AFTER_86400",
+      "controller_deploy_block": "RESOLVED_VERCEL_PRODUCTION_READY_DPL_GPYBXDXSUMX4MBMYAJAV34SANXOC",
       "controller_deploy_attempt_date": "2026-10-27",
       "last_ci_stage_success_execution": "kbHfz70fTUiuYNoGx-QoBA",
       "last_ci_stage_success_commit": "66aef1245c04ebd16e0e4e4db593440a2604cc03",
@@ -237,7 +237,7 @@
       "api_auth_probe_result": "VERIFIED_OWNED_EXECUTION_908_IN_RUN_40573476128",
       "api_auth_probe_workflow": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40573476128",
       "api_auth_probe_python_import_fix_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1657",
-      "api_auth_probe_run_evidence": "HARNESS_API_AUTH_READONLY=NOT_CONFIGURED; module execution successful; prior traceback resolved",
+      "api_auth_probe_run_evidence": "HARNESS_API_AUTH_READONLY=VERIFIED_OWNED_EXECUTION_908; GitHub run 40582510426 attempt 2 succeeded after new Harness API token was stored in repository secret",
       "harness_github_nonpublishing_fallback": {
         "source_merged": true,
         "pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1682",
@@ -245,10 +245,13 @@
         "contract_run": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40576068709",
         "python_tests_passed": 41,
         "node_fencing_checks_passed": 19,
-        "controller_deployed": false,
-        "enabled": false,
+        "controller_deployed": true,
+        "enabled": true,
         "live_quota_abort_observed": false,
-        "activation_gate": "deploy Vercel provider-cancel.mjs and harness-fallback-verify.mjs; verify live endpoints, then enable HARNESS_QUOTA_FALLBACK_ENABLED"
+        "controller_deployment_id": "dpl_GpybXDXSumX4MBMYAjaV34SanXoc",
+        "controller_live_proof": "HEALTH_200_NEON_LIMITED_ROLE_READY; PROVIDER_CANCEL_405_401; HARNESS_VERIFY_405_401; OIDC_VALID_AND_FOREIGN_WORKFLOW_FENCING_PASS_GITHUB_RUN_40582510426",
+        "watcher_observation_run": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40582510426",
+        "activation_gate": "SATISFIED_FOR_NONPUBLISHING_CI_ONLY; REAL_QUOTA_CANCELLATION_AND_SUCCESSOR_HANDOFF_UNOBSERVED"
       }
     },
     "floot": {
