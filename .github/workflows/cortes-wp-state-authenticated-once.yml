@@ -21,6 +21,22 @@ jobs:
       WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
       PYTHONUTF8: "1"
     steps:
+      - uses: actions/checkout@v4
+      - name: Regression tests for guarded WordPress SSH fallback
+        shell: powershell
+        run: |
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -m unittest discover -s tests -p test_cortes_qa_p0_router.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Exercise actual QA incident parser with authenticated hosting fallback
+        shell: powershell
+        run: |
+          $script = @'
+          from tools.cortes_qa_p0_router import wp_incidents
+          result = wp_incidents()
+          print("WP_QA_ROUTER_ACTIVE=PASS incidents=%d" % len(result))
+          '@
+          $script | & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Authenticated GET of canonical state only; sanitized status
         id: rest
         continue-on-error: true
