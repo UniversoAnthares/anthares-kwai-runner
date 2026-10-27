@@ -148,6 +148,58 @@ class P0RouterTests(unittest.TestCase):
         self.assertIn("QA-P0-FINGERPRINT",events[0]["body"])
 
 
+
+    def test_wordpress_inaccessible_causes_nonzero_exit_and_one_deduped_alert(self):
+        from contextlib import redirect_stdout
+        import io
+        sinks = {"count": 0, "created": []}
+        def fake_wp():
+            raise RuntimeError("WP_QA_AUTH_UNAVAILABLE")
+        def fake_create(item):
+            sinks["created"].append(item)
+            return {"number": 1521}
+        def fake_dispatch():
+            sinks["count"] += 1
+        output=io.StringIO()
+        with patch.object(router,"TOKEN","fixture"), \
+             patch.object(router,"workflow_incidents",return_value=[]), \
+             patch.object(router,"codeberg_incidents",return_value=[]), \
+             patch.object(router,"daily_round_incidents",return_value=[]), \
+             patch.object(router,"wp_incidents",side_effect=fake_wp), \
+             patch.object(router,"labels"), \
+             patch.object(router,"known_markers",return_value=set()), \
+             patch.object(router,"create_issue",side_effect=fake_create), \
+             patch.object(router,"dispatch_controller",side_effect=fake_dispatch), \
+             redirect_stdout(output):
+            exit_code=router.main()
+        self.assertEqual(exit_code,2)
+        self.assertEqual(len(sinks["created"]),1)
+        self.assertEqual(sinks["created"][0]["stage"],"qa_visibility_lost_wordpress")
+        self.assertEqual(sinks["count"],1)
+        self.assertIn("CORTES_QA_ROUTER_PARTIAL sources_failed=1",output.getvalue())
+        self.assertNotIn("CORTES_QA_ROUTER_OK",output.getvalue())
+
+    def test_every_source_available_returns_success_even_without_incidents(self):
+        from contextlib import redirect_stdout
+        import io
+        output=io.StringIO()
+        with patch.object(router,"TOKEN","fixture"), \
+             patch.object(router,"workflow_incidents",return_value=[]), \
+             patch.object(router,"codeberg_incidents",return_value=[]), \
+             patch.object(router,"daily_round_incidents",return_value=[]), \
+             patch.object(router,"wp_incidents",return_value=[]), \
+             patch.object(router,"labels"), \
+             patch.object(router,"known_markers",return_value=set()), \
+             patch.object(router,"create_issue") as create_issue, \
+             patch.object(router,"dispatch_controller") as dispatch, \
+             redirect_stdout(output):
+            exit_code=router.main()
+        self.assertEqual(exit_code,0)
+        create_issue.assert_not_called()
+        dispatch.assert_not_called()
+        self.assertIn("CORTES_QA_ROUTER_OK",output.getvalue())
+        self.assertIn("sources_failed=0",output.getvalue())
+
     def test_direct_dispatch_requires_confirmed_controller_ack(self):
         with patch.object(router,"http",return_value={"ok":True}) as api:
             self.assertTrue(router.dispatch_controller(528))
