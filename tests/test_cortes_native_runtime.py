@@ -60,6 +60,9 @@ def assert_boundary(document):
     # Deny dynamic/indexed secret access, even when hidden in an unused field.
     if re.search(r"secrets\s*\[", serialized):
         raise ValueError("dynamic secret access forbidden")
+    for expression in re.findall(r"\$\{\{[^}]*secrets[^}]*\}\}", serialized):
+        if expression != EXPRESSION:
+            raise ValueError("secret context or expression escape")
     refs = set(re.findall(r"secrets\.([A-Za-z_][A-Za-z0-9_]*)", serialized))
     if refs != {SECRET}:
         raise ValueError("foreign or missing secret")
@@ -118,6 +121,10 @@ class NativeRuntimeBoundaryTests(unittest.TestCase):
     def test_dynamic_secret_reference(self):
         self.reject(lambda d, j: j["steps"][-1]["env"].update(
             {"FOREIGN": "${{ secrets['THREADS_ACCESS_TOKEN'] }}"}))
+
+    def test_entire_secret_context(self):
+        self.reject(lambda d, j: j["steps"][-1]["env"].update(
+            {"FOREIGN": "${{ toJSON(secrets) }}"}))
 
     def test_gate_reordered(self):
         def mutate(d, j):
