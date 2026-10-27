@@ -1048,6 +1048,98 @@
         "excerpt": "Tem dois livros que ela comentou aí dele, o Partículas Elementares e um outro, o Submissão. Ela comentou no outro vídeo. Futuramente vai ter um vídeo meu respondendo o que ela disse do Submissão, porque ela fala muita besteira dessa obra que é muito boa e ela fala muita, muita besteira e aí eu vou ter que fazer isso. Mas vai ser mais pra frente se ela não que vem, velho, janeiro tá no que vem, que até lá eu tô ocupado, entendeu? final de janeiro eu faço isso eu tô ocupado por ter que fazer coisa tem que fazer até parar também enfim mas só apontando isso aqui tá já tem a promessa minha final de dano que",
         "verified": true
       }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:708:748": {
+      "title": "Uma novela de Kafka: livro curto, edição e tradução ● Universo Anthares",
+      "description": "Ao comentar A Metamorfose, o apresentador descreve um livro bem curto, na verdade uma novela, e discute a edição, seu tamanho e recomendações de tradução. www.anthares.us",
+      "hashtags": [
+        "#Kafka",
+        "#Metamorfose",
+        "#Literatura",
+        "#Traducao"
+      ],
+      "keywords": [
+        "Kafka",
+        "A Metamorfose",
+        "novela",
+        "tradução",
+        "edição"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:708:748",
+        "attachment_id": 16993,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 708,
+        "source_end_s": 748,
+        "media_sha256": "5e7e9993d18ce7358219aac835eda644b451cfcc9affce4027afabe74a817605",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 3.76,
+            "text": "Do ano que vem tem, ó, submissão do Albeque ou submissão."
+          },
+          {
+            "start": 3.76,
+            "end": 8.6,
+            "text": "Chegou o Lisboa! Adoro o Lisboa! Adoro esse moleque aí. Adoro o Lisboa, esse pioenzinho."
+          },
+          {
+            "start": 8.6,
+            "end": 13.1,
+            "text": "Vamos lá, vamos continuar, Lisboa, você chegou suficientemente cedo. Vamos lá, vamos continuar aqui."
+          },
+          {
+            "start": 13.1,
+            "end": 16.3,
+            "text": "Vamos comentar com vocês esse revinho que eu ia essa semana chamada do Amitamofose, do Kaka."
+          },
+          {
+            "start": 16.3,
+            "end": 19.1,
+            "text": "Eu digo revinho porque é um livro bem curto mesmo, na verdade é uma novela que mais ou menos sem páginas."
+          },
+          {
+            "start": 19.1,
+            "end": 23.3,
+            "text": "Nessa edição da antofática que é toda misturada, que tem um monte de dedenzinho, então tem uns peços de apoio e tudo."
+          },
+          {
+            "start": 23.3,
+            "end": 25.9,
+            "text": "Acaba de 160 páginas, mas é por causa da abramação mesmo, certo?"
+          },
+          {
+            "start": 25.9,
+            "end": 28.2,
+            "text": "E também porque o tamanho do livro da antofática é bem diminuto."
+          },
+          {
+            "start": 28.2,
+            "end": 30.74,
+            "text": "Algumas pessoas criticaram uma tradução feita pelo PTR-SAT,"
+          },
+          {
+            "start": 30.74,
+            "end": 32.2,
+            "text": "não sei se é sim produzindo um tradutor,"
+          },
+          {
+            "start": 32.2,
+            "end": 34.2,
+            "text": "e recomendaram a tradução feita pelo Modesto Carvalhoça,"
+          },
+          {
+            "start": 34.2,
+            "end": 35.44,
+            "text": "eu acho que é sim que é outro tradutor."
+          }
+        ],
+        "excerpt": "Do ano que vem tem, ó, submissão do Albeque ou submissão. Chegou o Lisboa! Adoro o Lisboa! Adoro esse moleque aí. Adoro o Lisboa, esse pioenzinho. Vamos lá, vamos continuar, Lisboa, você chegou suficientemente cedo. Vamos lá, vamos continuar aqui. Vamos comentar com vocês esse revinho que eu ia essa semana chamada do Amitamofose, do Kaka. Eu digo revinho porque é um livro bem curto mesmo, na verdade é uma novela que mais ou menos sem páginas. Nessa edição da antofática que é toda misturada, que tem um monte de dedenzinho, então tem uns peços de apoio e tudo. Acaba de 160 páginas, mas é por causa da abramação mesmo, certo? E também porque o tamanho do livro da antofática é bem diminuto. Algumas pessoas criticaram uma tradução feita pelo PTR-SAT, não sei se é sim produzindo um tradutor, e recomendaram a tradução feita pelo Modesto Carvalhoça, eu acho que é sim que é outro tradutor.",
+        "verified": true
+      }
     }
   }
 }
