@@ -282,9 +282,29 @@ class P0RouterTests(unittest.TestCase):
         source.assert_called_once_with()
 
     def test_wordpress_ssh_requires_exact_runner_identity(self):
-        with patch.dict(router.os.environ,{"RUNNER_NAME":"some-other-runner"}):
+        with patch.dict(router.os.environ,{"RUNNER_NAME":"some-other-runner"}), \
+             patch.object(router,"_authorized_local_system_context",return_value=False):
             with self.assertRaisesRegex(RuntimeError,"WP_QA_AUTH_UNAVAILABLE"):
                 router.wp_state_from_authorized_hosting()
+
+    def test_wordpress_local_system_guard_checks_host_and_real_sid(self):
+        from types import SimpleNamespace
+        ok=SimpleNamespace(returncode=0,stdout=b'"SYSTEM","S-1-5-18"\\n')
+        other=SimpleNamespace(returncode=0,stdout=b'"USER","S-1-5-21-100"\\n')
+        with patch.object(router.sys,"platform","win32"), \
+             patch.object(router.socket,"gethostname",return_value="DESKTOP-FTDK0HP"), \
+             patch.object(router.subprocess,"run",return_value=ok) as process:
+            self.assertTrue(router._authorized_local_system_context())
+            self.assertEqual(process.call_args.args[0][0],"whoami")
+        with patch.object(router.sys,"platform","win32"), \
+             patch.object(router.socket,"gethostname",return_value="OTHER-PC"), \
+             patch.object(router.subprocess,"run",return_value=ok) as process:
+            self.assertFalse(router._authorized_local_system_context())
+            process.assert_not_called()
+        with patch.object(router.sys,"platform","win32"), \
+             patch.object(router.socket,"gethostname",return_value="DESKTOP-FTDK0HP"), \
+             patch.object(router.subprocess,"run",return_value=other):
+            self.assertFalse(router._authorized_local_system_context())
 
     def test_wordpress_ssh_success_parses_data_without_payload_logging(self):
         import io
