@@ -167,9 +167,9 @@
         "source_pr": 1682,
         "scope": "NONPUBLISHING_PINNED_SHA_CI_ONLY",
         "fenced_by": "Neon original owner CAS, OIDC successor one-run CAS, no resubmission on uncertainty",
-        "enabled": false,
+        "enabled": true,
         "production_ready": false,
-        "blocked_on": "VERCEL_DEPLOYMENT_HTTP_402_DAILY_LIMIT",
+        "blocked_on": "REAL_QUOTA_HANDOFF_NOT_YET_OBSERVED",
         "toggle": "HARNESS_QUOTA_FALLBACK_ENABLED",
         "contract_tests": "41_PYTHON_19_NODE_PASS_GITHUB_RUN_40576068709"
       }
