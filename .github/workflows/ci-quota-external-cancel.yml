@@ -22,6 +22,47 @@ jobs:
     timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
+      - name: Production controller OIDC and Neon read-only acceptance
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        run: |
+          node - <<'NODE'
+          async function main() {
+            const base='https://anthares-ci-quota-controller.vercel.app/api';
+            const health=await fetch(base+'/health',{signal:AbortSignal.timeout(12000)});
+            const status=await health.json();
+            if(health.status!==200||status.ok!==true||
+               status.ledger!=='READY'||status.mode!=='ENABLED')
+              throw Error('NEON_LEDGER_NOT_READY');
+            console.log('CONTROLLER_NEON_LIMITED_ROLE=VERIFIED');
+            const url=new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+            url.searchParams.set('audience','anthares-ci-quota-controller');
+            const identity=await fetch(url,{headers:{
+              Authorization:'Bearer '+process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN},
+              signal:AbortSignal.timeout(12000)});
+            if(!identity.ok)throw Error('OIDC_ISSUER_UNAVAILABLE');
+            const {value}=await identity.json();
+            if(!value)throw Error('OIDC_MISSING');
+            const headers={Authorization:'Bearer '+value,'Content-Type':'application/json'};
+            // Invalid event fails after valid OIDC, before any Neon mutation.
+            const valid=await fetch(base+'/provider-cancel',{method:'POST',headers,
+              body:JSON.stringify({phase:'health'}),
+              signal:AbortSignal.timeout(12000)});
+            const validBody=await valid.json();
+            if(valid.status!==400||validBody.code!=='INVALID_EVENT')
+              throw Error('PROVIDER_OIDC_SCOPE_UNVERIFIED_'+valid.status);
+            console.log('CONTROLLER_PROVIDER_OIDC=VERIFIED');
+            // A different workflow must be denied before the successor CAS.
+            const foreign=await fetch(base+'/harness-fallback-verify',{
+              method:'POST',headers,body:'{}',signal:AbortSignal.timeout(12000)});
+            const foreignBody=await foreign.json();
+            if(foreign.status!==403||foreignBody.code!=='WRONG_EXECUTOR')
+              throw Error('HARNESS_WORKFLOW_FENCING_UNVERIFIED_'+foreign.status);
+            console.log('HARNESS_WRONG_WORKFLOW_FENCE=VERIFIED');
+          }
+          main().catch(e=>{console.error('CONTROLLER_ACCEPTANCE='+e.message);
+            process.exitCode=1});
+          NODE
       - name: Harness API authenticated read-only identity probe
         continue-on-error: true
         env:
