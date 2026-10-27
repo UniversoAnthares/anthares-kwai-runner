@@ -583,6 +583,195 @@
         "excerpt": "Débora balcó, pô, Xavinda. Puto grila. Débora balcó, cabeças de melão. Pronto, feleiro aqui, show. Tá com medo do algoritmo? Tá com medo do eu? Eu tenho medo de fazer guerra, que você é diplomático, você tem medo de algoritmo, e aí, ó. De algoritmo, cara, é só porque é feio mesmo, pô. Que? Ok. Estou divulgando a parada aqui, e o cara só fica nessa malandraria, e aí, ó. Mas vai entrar logo no topo. Vou entrar... Já entramos no topo, enfim. Vamos comentar esse vídeo aqui dela aqui, o Lucca vai te forçar.",
         "verified": true
       }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:132:174": {
+      "title": "Links do Telegram e do YouTube na live: envio pelos comentários ● Universo Anthares",
+      "description": "Durante a live, os participantes discutem o link do grupo do Telegram, sua ausência na descrição do YouTube e a possibilidade de mandar o endereço pelos comentários. www.anthares.us",
+      "hashtags": [
+        "#Telegram",
+        "#YouTube",
+        "#Live",
+        "#UniversoAnthares"
+      ],
+      "keywords": [
+        "Telegram",
+        "YouTube",
+        "grupo",
+        "link",
+        "comentários"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:132:174",
+        "attachment_id": 16989,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 132,
+        "source_end_s": 174,
+        "media_sha256": "47e5d80cdeadfacb44a056024a2cf45bf23cd3bb742e286b0a91a8d2f7e54f50",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 3.68,
+            "text": "Eu vou ver o vídeo depois, a live você vê direto aqui, né, Comadara?"
+          },
+          {
+            "start": 3.68,
+            "end": 9.04,
+            "text": "Matheuszima não está no grupo, tem o grupo do Telegram, está aí o link na descrição, né Lucas?"
+          },
+          {
+            "start": 9.04,
+            "end": 10.84,
+            "text": "Você botou na descrição do Youtube?"
+          },
+          {
+            "start": 10.84,
+            "end": 12.48,
+            "text": "Acho que não, cara."
+          },
+          {
+            "start": 12.48,
+            "end": 18.28,
+            "text": "O Lucas, ele falhou miseravelmente, e aí a gente vai ter que te mandar o link depois, botar o link..."
+          },
+          {
+            "start": 18.28,
+            "end": 20.76,
+            "text": "Não, eu vou mandar agora, só que eu vou mandar..."
+          },
+          {
+            "start": 20.76,
+            "end": 24.04,
+            "text": "Mas dá pra ele, manda ele nos comentários, manda o link ali, isso aí."
+          },
+          {
+            "start": 24.04,
+            "end": 25.84,
+            "text": "Veio o vídeo deles depois, ô Comadara."
+          },
+          {
+            "start": 25.84,
+            "end": 29.12,
+            "text": "Veio o vídeo deles depois, eu vou ver o post também, vou ver amanhã, né, porque aqui já tá tarde."
+          },
+          {
+            "start": 29.12,
+            "end": 30.16,
+            "text": "Mas eu vou ver depois também?"
+          },
+          {
+            "start": 30.16,
+            "end": 31.24,
+            "text": "Vê depois também, pô."
+          },
+          {
+            "start": 31.24,
+            "end": 32,
+            "text": "Ux, qual problema."
+          },
+          {
+            "start": 32,
+            "end": 33.6,
+            "text": "Eu vou ter que esperar até amanhã pra ver."
+          },
+          {
+            "start": 33.6,
+            "end": 34.8,
+            "text": "Tu vai poder ver hoje e mais tarde."
+          },
+          {
+            "start": 34.8,
+            "end": 36.08,
+            "text": "E é vídeo, né, pô, né, live."
+          }
+        ],
+        "excerpt": "Eu vou ver o vídeo depois, a live você vê direto aqui, né, Comadara? Matheuszima não está no grupo, tem o grupo do Telegram, está aí o link na descrição, né Lucas? Você botou na descrição do Youtube? Acho que não, cara. O Lucas, ele falhou miseravelmente, e aí a gente vai ter que te mandar o link depois, botar o link... Não, eu vou mandar agora, só que eu vou mandar... Mas dá pra ele, manda ele nos comentários, manda o link ali, isso aí. Veio o vídeo deles depois, ô Comadara. Veio o vídeo deles depois, eu vou ver o post também, vou ver amanhã, né, porque aqui já tá tarde. Mas eu vou ver depois também? Vê depois também, pô. Ux, qual problema. Eu vou ter que esperar até amanhã pra ver. Tu vai poder ver hoje e mais tarde. E é vídeo, né, pô, né, live.",
+        "verified": true
+      }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:420:461": {
+      "title": "Vamos começar a live: cinco pessoas e a apresentação de Débora ● Universo Anthares",
+      "description": "Depois de sete minutos, o grupo decide começar a live mesmo com cinco pessoas presentes. A conversa menciona o pessoal que chegará depois e a apresentação de Débora. www.anthares.us",
+      "hashtags": [
+        "#AoVivo",
+        "#Debora",
+        "#Bastidores",
+        "#UniversoAnthares"
+      ],
+      "keywords": [
+        "live",
+        "Débora",
+        "começar",
+        "cinco pessoas",
+        "bastidores"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:420:461",
+        "attachment_id": 16990,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 420,
+        "source_end_s": 461,
+        "media_sha256": "1bca12f5d884442ea92cef94223f0628ee9ff4882007331851a9fcc4b2ac961a",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 8,
+            "text": "Nossa folha. Cadê? Cadê? Cadê? Cadê? Eu acho que dá pra... Já deu sete minutos."
+          },
+          {
+            "start": 8,
+            "end": 12,
+            "text": "Vamos começar, né? Cinco tão aqui, vamos começar. Vamos deixar o pessoal chegar depois."
+          },
+          {
+            "start": 12,
+            "end": 15,
+            "text": "Então, já pensou em questão, vocês sabem muito bem, vocês sempre que estão aqui."
+          },
+          {
+            "start": 15,
+            "end": 18,
+            "text": "Mas os outros que vão vir depois, né? Vão ver essa live depois."
+          },
+          {
+            "start": 18,
+            "end": 24,
+            "text": "A pessoa em questão é a Débora. Débora... Não lembro o nome dela. Débora Bocó."
+          },
+          {
+            "start": 24,
+            "end": 28,
+            "text": "Luciana. Débora Bocó. A Débs. A Bocó Azuda."
+          },
+          {
+            "start": 28,
+            "end": 29,
+            "text": "e agora Luciano dela."
+          },
+          {
+            "start": 29,
+            "end": 30,
+            "text": "E agora Bocó, porra."
+          },
+          {
+            "start": 30,
+            "end": 31,
+            "text": "Para de cortar uma parada."
+          },
+          {
+            "start": 31,
+            "end": 32,
+            "text": "Vai falar para a branca."
+          }
+        ],
+        "excerpt": "Nossa folha. Cadê? Cadê? Cadê? Cadê? Eu acho que dá pra... Já deu sete minutos. Vamos começar, né? Cinco tão aqui, vamos começar. Vamos deixar o pessoal chegar depois. Então, já pensou em questão, vocês sabem muito bem, vocês sempre que estão aqui. Mas os outros que vão vir depois, né? Vão ver essa live depois. A pessoa em questão é a Débora. Débora... Não lembro o nome dela. Débora Bocó. Luciana. Débora Bocó. A Débs. A Bocó Azuda. e agora Luciano dela. E agora Bocó, porra. Para de cortar uma parada. Vai falar para a branca.",
+        "verified": true
+      }
     }
   }
 }
