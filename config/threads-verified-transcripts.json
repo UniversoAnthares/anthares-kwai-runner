@@ -337,6 +337,252 @@
         "excerpt": "Antes de começar a discordar. Que é a ideia. Uma pessoa que odeia. A pessoa que quem? Que você odeia. Eu não odeio. Que eu sou exagerado. Eu não odeio. Eu não mal conheço essa pessoa, pô. Mas eu vou desculpar. Mas eu conheço uma odeia. Mas o resto é já odeio, isso mesmo, mesmo. Não, não vou dizer que odeio. Não. Deixa aproveitar, então. Deixa aproveitar. Muito obrigado, Paulo de Ar. Fala. Fala. Fala, homem. É que eu tinha feito uma thumb bem provocativa lá, bem forte e rupada ficou o cara ele está louco muda aqui lá cara, você o que?",
         "verified": true
       }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:377:420": {
+      "title": "Esperando o público chegar à live: bastidores e improviso ● Universo Anthares",
+      "description": "Enquanto a live começa, os participantes brincam sobre alguém que quase virou santo e aguardam o pessoal chegar. Nos bastidores, comemoram os cinco fiéis acompanhando a transmissão. www.anthares.us",
+      "hashtags": [
+        "#AoVivo",
+        "#Bastidores",
+        "#Live",
+        "#UniversoAnthares"
+      ],
+      "keywords": [
+        "live",
+        "bastidores",
+        "pessoal",
+        "público",
+        "humor"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:377:420",
+        "attachment_id": 16983,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 377,
+        "source_end_s": 420,
+        "media_sha256": "169453b8b993fd3f9d230995d481bc16b904b116a5fdbbbb1a0a3f69da7cfab8",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 3.84,
+            "text": "grande atocatório e quase virou santo só não virou porque bebeu demais aí a"
+          },
+          {
+            "start": 3.84,
+            "end": 8.16,
+            "text": "barriga ficou grande e aí o né o álcool segurou ele na terra pô mas aí se ele"
+          },
+          {
+            "start": 8.16,
+            "end": 11.76,
+            "text": "tivesse bebido um pouquinho menos ele subia até o céu"
+          },
+          {
+            "start": 11.76,
+            "end": 16.12,
+            "text": "infelizmente no virou santo é verdade né pô é verdade o cara tinha um barrigão pô e"
+          },
+          {
+            "start": 16.12,
+            "end": 20.6,
+            "text": "bebeu muito álcool o panda manda pra mim no atas aí você conseguiu o link do da"
+          },
+          {
+            "start": 20.6,
+            "end": 25.04,
+            "text": "live da live mesmo da live aqui a mim vai ser muito ruim de fazer isso agora"
+          },
+          {
+            "start": 25.04,
+            "end": 28.2,
+            "text": "a gente só esperando o pessoal chegar tá gente porque a gente começa do nada"
+          },
+          {
+            "start": 28.2,
+            "end": 34.2,
+            "text": "E aí não tem ninguém vendo, aqui tem 5 malandrovedo, show, os nossos 5 fiéis."
+          }
+        ],
+        "excerpt": "grande atocatório e quase virou santo só não virou porque bebeu demais aí a barriga ficou grande e aí o né o álcool segurou ele na terra pô mas aí se ele tivesse bebido um pouquinho menos ele subia até o céu infelizmente no virou santo é verdade né pô é verdade o cara tinha um barrigão pô e bebeu muito álcool o panda manda pra mim no atas aí você conseguiu o link do da live da live mesmo da live aqui a mim vai ser muito ruim de fazer isso agora a gente só esperando o pessoal chegar tá gente porque a gente começa do nada E aí não tem ninguém vendo, aqui tem 5 malandrovedo, show, os nossos 5 fiéis.",
+        "verified": true
+      }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:3:44": {
+      "title": "Panda apresenta Lucas Rosalém na abertura da live ● Universo Anthares",
+      "description": "Na abertura da transmissão no YouTube, Panda apresenta Lucas Rosalém, ajusta a orientação na tela e comenta o eco de ouvir a própria voz com atraso. www.anthares.us",
+      "hashtags": [
+        "#Panda",
+        "#LucasRosalem",
+        "#YouTube",
+        "#AoVivo"
+      ],
+      "keywords": [
+        "Panda",
+        "Lucas Rosalém",
+        "YouTube",
+        "eco",
+        "abertura"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:3:44",
+        "attachment_id": 16988,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 3,
+        "source_end_s": 44,
+        "media_sha256": "77068c65655f55d2831597321f1ddd9b072a1ba135108e823b7722d9e3c00e1a",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0.59,
+            "end": 2.59,
+            "text": "Começou, o YouTube tá marcando."
+          },
+          {
+            "start": 2.59,
+            "end": 7.59,
+            "text": "Salve pessoal, sou o Panda, esse cara aqui na minha..."
+          },
+          {
+            "start": 8.59,
+            "end": 10.59,
+            "text": "Na minha, o quê?"
+          },
+          {
+            "start": 11.59,
+            "end": 18.46,
+            "text": "Direita, esquerda, pera aí."
+          },
+          {
+            "start": 21.96,
+            "end": 23.96,
+            "text": "Não é que eu tava me ouvindo em eco, pô."
+          },
+          {
+            "start": 23.96,
+            "end": 27.96,
+            "text": "Eu botei no YouTube, eu tava me ouvindo falando com o minuto de atraso."
+          },
+          {
+            "start": 27.96,
+            "end": 30.96,
+            "text": "Enfim, esse cara aqui na minha..."
+          },
+          {
+            "start": 31.96,
+            "end": 34.96,
+            "text": "Na minha direita é na tela que eu tô olhando, mas enfim."
+          },
+          {
+            "start": 34.96,
+            "end": 39.96,
+            "text": "Na minha direita na tela, pra vocês também imagino, esse cara é o Lucas Rosalém"
+          }
+        ],
+        "excerpt": "Começou, o YouTube tá marcando. Salve pessoal, sou o Panda, esse cara aqui na minha... Na minha, o quê? Direita, esquerda, pera aí. Não é que eu tava me ouvindo em eco, pô. Eu botei no YouTube, eu tava me ouvindo falando com o minuto de atraso. Enfim, esse cara aqui na minha... Na minha direita é na tela que eu tô olhando, mas enfim. Na minha direita na tela, pra vocês também imagino, esse cara é o Lucas Rosalém",
+        "verified": true
+      }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:461:503": {
+      "title": "O medo do algoritmo e a conversa sobre o vídeo ● Universo Anthares",
+      "description": "Um participante pergunta se o outro tem medo do algoritmo, e a troca segue com brincadeiras sobre ser diplomático, divulgar a transmissão e comentar um vídeo. www.anthares.us",
+      "hashtags": [
+        "#Algoritmo",
+        "#Bastidores",
+        "#Conversa",
+        "#UniversoAnthares"
+      ],
+      "keywords": [
+        "algoritmo",
+        "medo",
+        "diplomático",
+        "vídeo",
+        "divulgação"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:461:503",
+        "attachment_id": 16984,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 461,
+        "source_end_s": 503,
+        "media_sha256": "253abbf89e49a75b01a7462e03f4b79660b169b98a939c327e32723e9b5e3be2",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0.08,
+            "end": 2.68,
+            "text": "Débora balcó, pô, Xavinda. Puto grila."
+          },
+          {
+            "start": 2.68,
+            "end": 5.08,
+            "text": "Débora balcó, cabeças de melão."
+          },
+          {
+            "start": 5.08,
+            "end": 8.88,
+            "text": "Pronto, feleiro aqui, show."
+          },
+          {
+            "start": 8.88,
+            "end": 11.58,
+            "text": "Tá com medo do algoritmo? Tá com medo do eu?"
+          },
+          {
+            "start": 11.58,
+            "end": 13.58,
+            "text": "Eu tenho medo de fazer guerra, que você é diplomático,"
+          },
+          {
+            "start": 13.58,
+            "end": 15.08,
+            "text": "você tem medo de algoritmo, e aí, ó."
+          },
+          {
+            "start": 15.08,
+            "end": 17.08,
+            "text": "De algoritmo, cara, é só porque é feio mesmo, pô."
+          },
+          {
+            "start": 17.08,
+            "end": 18.08,
+            "text": "Que?"
+          },
+          {
+            "start": 18.08,
+            "end": 21.1,
+            "text": "Ok."
+          },
+          {
+            "start": 21.1,
+            "end": 25.1,
+            "text": "Estou divulgando a parada aqui, e o cara só fica nessa malandraria, e aí, ó."
+          },
+          {
+            "start": 25.1,
+            "end": 26.6,
+            "text": "Mas vai entrar logo no topo."
+          },
+          {
+            "start": 26.6,
+            "end": 29.1,
+            "text": "Vou entrar... Já entramos no topo, enfim."
+          },
+          {
+            "start": 29.1,
+            "end": 35.1,
+            "text": "Vamos comentar esse vídeo aqui dela aqui, o Lucca vai te forçar."
+          }
+        ],
+        "excerpt": "Débora balcó, pô, Xavinda. Puto grila. Débora balcó, cabeças de melão. Pronto, feleiro aqui, show. Tá com medo do algoritmo? Tá com medo do eu? Eu tenho medo de fazer guerra, que você é diplomático, você tem medo de algoritmo, e aí, ó. De algoritmo, cara, é só porque é feio mesmo, pô. Que? Ok. Estou divulgando a parada aqui, e o cara só fica nessa malandraria, e aí, ó. Mas vai entrar logo no topo. Vou entrar... Já entramos no topo, enfim. Vamos comentar esse vídeo aqui dela aqui, o Lucca vai te forçar.",
+        "verified": true
+      }
     }
   }
 }
