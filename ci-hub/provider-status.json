@@ -315,13 +315,13 @@
       "reopen_condition": "authenticated Codeberg mirror finishes, public main equals fresh GitHub main and SHA readback succeeds"
     },
     "codeberg_actions": {
-      "status": "ACTIONS_ENABLED_RUNNER_NOT_PROVEN_20261027",
-      "evidence_class": "LIVE_GITHUB_MIRROR_RUN",
+      "status": "CI_RUNNER_HOMOLOGATED_SUCCESS_20261027",
+      "evidence_class": "LIVE_CODEBERG_ACTIONS_RUN_2",
       "verified_at_utc": "2026-10-27",
-      "evidence": "GitHub mirror job 122489626332 reports CODEBERG_ADMIN_SETTINGS=ALREADY_CORRECT, CODEBERG_MIRROR_CHECK actions_enabled=true default_branch_main=true sha_match=true, CODEBERG_GIT_PARITY_PROVEN=PASS. No runner or Forgejo job success yet.",
-      "eligible": false,
-      "scope": "candidate CI (not yet an active fallback)",
-      "reopen_condition": "Codeberg qualified runner executes SHA-pinned CI job to terminal success"
+      "evidence": "anthares-video-studio Forgejo Actions run #2 on main commit 9369a9213f succeeded in 22s: checkout, Node.js setup, configured secret check, Synthetic D1 journal contract and job completion. https://codeberg.org/UniversoAnthares/anthares-video-studio/actions/runs/2",
+      "eligible": true,
+      "scope": "verified synthetic D1 CI runner; not yet authorized as generic publisher or all-repository CI fallback",
+      "reopen_condition": "Generic CI routing and publisher capability require separate workload/permissions proof; Forgejo ignores workflow permissions field."
     },
     "bitrise": {
       "status": "EXCLUDED_FROM_CI_EXECUTION_BY_OWNER_20261027",
