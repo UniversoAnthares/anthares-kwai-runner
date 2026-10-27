@@ -294,14 +294,16 @@
       "reopen_condition": "Actions enabled, qualified runner available, real job success and publisher OIDC/secret access proven"
     },
     "bitrise": {
-      "status": "BLOCKED_INVALID_DEFAULT_MACHINE_ELITE_ON_HOBBY_20261026",
+      "status": "EXCLUDED_FROM_CI_EXECUTION_BY_OWNER_20261027",
       "eligible": false,
       "evidence_class": "VERIFIED_AUTHENTICATED_UI_AND_REJECTED_DISPATCH",
       "verified_at_utc": "2026-10-27T00:56:27Z",
-      "evidence": "Authenticated Anthares Browser accessed UniversoAnthares Bitrise workspace. CI Hobby -> Free activated in Plan & Billing, 300 free credits/month plan. Android app ef06f940-ffc7-4e37-b935-93ad06d8faeb uses repository bitrise.yml and offers anthares_ci_smoke; two Start build attempts on main were rejected BEFORE build creation with 'Invalid default machine type elite', even after meta bitrise.io machine_type_id standard merged. Other app 2369c362-dca7-4c74-8487-5c262aeab264 remains Configuration in progress: Hobby private-app limit reached; making it public exposes logs and GitHub-App-managed webhooks cannot be disabled via the setup UI. No new hosted runner, no credits consumed by successful builds, no plan upgrade.",
-      "reopen_condition": "Only promote after a fresh authenticated hosted Standard-machine anthares_ci_smoke build succeeds with matching source SHA, credits, no publication and a durable build ID.",
+      "evidence": "User directed to ignore Bitrise as executor. CI hosted machine rejected as INVALID_MACHINE HTTP400 (GitHub run 40565856321 and 2026-10-27 diagnostic). Authenticated status/structured-quota cancel monitor remains independently operational in GitHub Actions and Anthares Remote.",
+      "reopen_condition": "Owner explicitly reauthorizes provider AND real hosted smoke succeeds; no automatic attempts",
       "free_tier_verified": true,
-      "paid_plan_enabled": false
+      "paid_plan_enabled": false,
+      "execution_enabled": false,
+      "cancel_monitor_enabled": true
     }
   }
 }
