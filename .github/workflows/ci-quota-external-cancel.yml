@@ -2,6 +2,10 @@ name: Anthares external CI quota cancel-first
 on:
   schedule:
     - cron: '*/15 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ci-quota-external-cancel.yml
   workflow_dispatch: {}
 permissions:
   contents: read
