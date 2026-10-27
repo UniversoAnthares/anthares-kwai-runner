@@ -9,6 +9,7 @@ cross-platform idempotency authority.
 """
 from __future__ import annotations
 import base64
+import hashlib
 import json
 import os
 import re
@@ -299,6 +300,67 @@ def run_pipeline(windows, existing):
     return result, video, info
 
 
+def ensure_external_x_asset(video, tag, name, info):
+    """Reuse or upload the rendered input directly; never create a staging copy."""
+    if not re.fullmatch(r"x-longform-auto-\d{8}", tag) or not re.fullmatch(
+            r"anthares-x-[A-Za-z0-9_-]{6,60}-\d+-\d+\.mp4", name):
+        raise RuntimeError("X_RELEASE_DESTINATION_INVALID")
+    if preflight_video(video) != info:
+        raise RuntimeError("X_RENDERED_MEDIA_MISMATCH")
+    size = video.stat().st_size
+    digest = hashlib.sha256()
+    with video.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    expected_digest = "sha256:" + digest.hexdigest()
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    read = subprocess.run(
+        ["gh", "api", BASE + "/releases/tags/" + tag],
+        capture_output=True, text=True, encoding="utf-8", errors="strict",
+        timeout=55, creationflags=flags)
+    if read.returncode:
+        # Only a confirmed missing release permits creation. Auth/quota failures
+        # must not become another write attempt or a retry in a different route.
+        if not re.search(r"\(HTTP 404\)", read.stderr or ""):
+            raise RuntimeError("X_RELEASE_READ_FAILED")
+        release = gh("/releases", "POST", {
+            "tag_name": tag, "target_commitish": "main",
+            "name": "Anthares X longform " + tag,
+            "body": "Automatically validated horizontal longform reserves."})
+    else:
+        release = json.loads(read.stdout)
+    if (not isinstance(release, dict) or release.get("tag_name") != tag
+            or type(release.get("id")) is not int or release["id"] <= 0
+            or release.get("draft") is not False
+            or not isinstance(release.get("assets"), list)):
+        raise RuntimeError("X_RELEASE_IDENTITY_UNVERIFIED")
+    expected_url = "https://github.com/" + REPO + "/releases/download/" + tag + "/" + name
+    matches = [a for a in release["assets"] if a.get("name") == name]
+    if len(matches) > 1:
+        raise RuntimeError("X_RELEASE_ASSET_AMBIGUOUS")
+    if matches:
+        asset = matches[0]
+    else:
+        uploaded = subprocess.run([
+            "gh", "api", "--method", "POST",
+            "https://uploads.github.com/repos/" + REPO + "/releases/"
+            + str(release["id"]) + "/assets?name=" + name,
+            "-H", "Content-Type: video/mp4", "--input", str(video)],
+            capture_output=True, text=True, encoding="utf-8", errors="strict",
+            timeout=300, creationflags=flags)
+        if uploaded.returncode:
+            # The upload may have completed. Never retry blindly; a later
+            # attempt must reconcile the fixed asset name via the release read.
+            raise RuntimeError("X_RELEASE_UPLOAD_UNCERTAIN")
+        asset = json.loads(uploaded.stdout)
+    if (not isinstance(asset, dict) or asset.get("name") != name
+            or asset.get("state") != "uploaded" or asset.get("size") != size
+            or asset.get("digest") != expected_digest
+            or asset.get("browser_download_url") != expected_url):
+        raise RuntimeError("X_RELEASE_ASSET_CONTENT_UNVERIFIED")
+    return expected_url
+
+
 def enqueue(result, video, info, existing, ordinal=None):
     from tools.x_long_schedule import planned_for, MAX_LONG_MASTERS
     if ordinal is None:
@@ -323,30 +385,7 @@ def enqueue(result, video, info, existing, ordinal=None):
             return
     tag = "x-longform-auto-" + datetime.now(TZ).strftime("%Y%m%d")
     name = "anthares-x-" + vid + "-" + str(scan) + "-" + str(int(lo)) + ".mp4"
-    staging = ROOT / name
-    if not staging.exists():
-        shutil.copy2(video, staging)
-    if preflight_video(staging) != info:
-        raise RuntimeError("X_STAGED_MEDIA_MISMATCH")
-    release = subprocess.run(["gh", "release", "view", tag, "-R", REPO, "--json", "assets",
-                              "--jq", ".assets[].name"],
-                             capture_output=True, text=True, encoding="utf-8", errors="strict", timeout=55,
-                             creationflags=subprocess.CREATE_NO_WINDOW)
-    if release.returncode:
-        new = subprocess.run(["gh", "release", "create", tag, "-R", REPO,
-                              "--target", "main", "--title", "Anthares X longform " + tag,
-                              "--notes", "Automatically validated horizontal longform reserves."],
-                             capture_output=True, text=True, encoding="utf-8", errors="strict", timeout=80,
-                             creationflags=subprocess.CREATE_NO_WINDOW)
-        if new.returncode:
-            raise RuntimeError("X_RELEASE_CREATION_FAILED")
-    if name not in release.stdout.splitlines():
-        up = subprocess.run(["gh", "release", "upload", tag, str(staging), "-R", REPO],
-                            capture_output=True, text=True, encoding="utf-8", errors="strict", timeout=300,
-                            creationflags=subprocess.CREATE_NO_WINDOW)
-        if up.returncode and "already exists" not in up.stderr.lower():
-            raise RuntimeError("X_RELEASE_UPLOAD_FAILED")
-    url = "https://github.com/" + REPO + "/releases/download/" + tag + "/" + name
+    url = ensure_external_x_asset(video, tag, name, info)
     microedit = result.get("microedit") or {}
     body = {
         "platform": "x", "account": "lucasyahn", "duration_class": "long",
