@@ -1,0 +1,36 @@
+name: Anthares Threads 829-869 cloud ASR proof
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/anthares-threads-asr-829-869.yml'
+      - 'tools/threads_cloud_asr_829_869.py'
+      - 'test-hub/findings/2026-10-27-threads-cloud-asr-829-869-running.md'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-threads-asr-829-869-once
+  cancel-in-progress: false
+jobs:
+  transcription:
+    if: github.head_ref == 'automation/threads-cloud-asr-829-869-20261027'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned external ASR engine
+        run: python -m pip install --disable-pip-version-check faster-whisper==1.2.1
+      - name: Fetch exact WordPress media, validate Neon SHA-256 and transcribe
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+        run: python tools/threads_cloud_asr_829_869.py
+      - name: Preserve verified evidence on GitHub
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: threads-829-869-verified-transcript
+          path: threads-829-869-evidence.json
+          if-no-files-found: error
+          retention-days: 7
