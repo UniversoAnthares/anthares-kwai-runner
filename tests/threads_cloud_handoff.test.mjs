@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {spawnSync} from 'node:child_process';
 import backend from '../infra/neon-cortes-threads-execution/index.mjs';
+import {validateEditorial} from '../tools/cortes_threads_cloud_captions.mjs';
 const endpoint='https://neon.example.invalid/?action=control';
 test('cloud mutation rejects missing GitHub OIDC token',async()=>{
  const response=await backend.fetch(new Request(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:'{"action":"claim"}'}));
@@ -136,4 +137,15 @@ test('night batch remains dispatch-only, within approved deadline, with signed b
  assert.match(src,/await yieldToWindows\(\)/);
  assert.match(workflow,/THREADS_BATCH/);
  assert.match(workflow,/timeout-minutes: 350/);
+});
+
+test('medium ASR is accepted with valid segment-bound evidence but arbitrary engines are rejected',()=>{
+ const excerpt='Gregor Samsa e Kafka aparecem na conversa sobre o livro e a transformação em inseto.';
+ const media='a'.repeat(64);
+ const clip={clip_id:'g1:fOmihuHUT1M:1325:1365',attachment_id:17001,sha256:media,duration:40};
+ const attestation={schema:'anthares.clip-transcript-attestation.v1',clip_id:clip.clip_id,attachment_id:clip.attachment_id,media_sha256:media,method:'faster-whisper-medium-from-media',cues:[{start:0,end:12,text:excerpt}],excerpt,verified:true};
+ const meta={title:'Gregor Samsa e Kafka: a transformação em inseto ● Universo Anthares',description:'Uma conversa sobre Gregor Samsa, Kafka, o livro e a transformação em inseto. www.anthares.us',caption:'#Kafka #Literatura',alt_text:'Gregor, Kafka, inseto',transcript_attestation:attestation};
+ assert.ok(validateEditorial(meta,clip).title.includes('Gregor'));
+ assert.throws(()=>validateEditorial({...meta,transcript_attestation:{...attestation,method:'unverified-external-tool'}},clip),/EDITORIAL_TRANSCRIPT_ATTESTATION_REQUIRED/);
+ assert.throws(()=>validateEditorial({...meta,transcript_attestation:{...attestation,media_sha256:'b'.repeat(64)}},clip),/EDITORIAL_TRANSCRIPT_ATTESTATION_REQUIRED/);
 });
