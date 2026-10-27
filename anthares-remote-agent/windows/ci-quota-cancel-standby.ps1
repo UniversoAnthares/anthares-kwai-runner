@@ -151,19 +151,25 @@ function ImportSealedBitrise([string]$privateKey,[string]$appSlug) {
     }
     if((Property $wrapped 'code') -ne 'SEALED_CONSUMED' -or
        (Property $wrapped 'provider') -ne 'bitrise'){return 'INVALID_TRANSFER_RECEIPT'}
+    $phase='INIT_RSA'
     $bytes=$null
     $plain=$null
     $rsa=New-Object System.Security.Cryptography.RSACryptoServiceProvider
     try{
+        $phase='RSA_IMPORT'
         $rsa.PersistKeyInCsp=$false
         $rsa.FromXmlString($privateKey)
         $sealed=[Convert]::FromBase64String([string](Property $wrapped 'sealed'))
         if($sealed.Length -ne 384){throw 'INVALID_ENVELOPE_LENGTH'}
+        $phase='RSA_OAEP_DECRYPT'
         $bytes=$rsa.Decrypt($sealed,$true)
+        $phase='TOKEN_SHAPE'
         $plain=[Text.Encoding]::UTF8.GetString($bytes)
         if($plain.Length -lt 12 -or $plain.Length -gt 340 -or
            $plain -match '[\r\n]'){throw 'INVALID_SECRET_SHAPE'}
+        $phase='API_AUTH_READ'
         $doc=CallProvider ('https://api.bitrise.io/v0.1/apps/'+[Uri]::EscapeDataString($appSlug)) $plain 'bitrise'
+        $phase='PROJECT_IDENTITY'
         $app=Property $doc 'data'
         $repoUrl=[string](Property $app 'repo_url')
         if((Property $app 'slug') -ne $appSlug -or
@@ -172,14 +178,18 @@ function ImportSealedBitrise([string]$privateKey,[string]$appSlug) {
              'git@github.com:'+$Repo+'.git') -notcontains $repoUrl) {
             throw 'SOURCE_NOT_OWNED'
         }
+        $phase='SYSTEM_DPAPI_ENCRYPT'
         $encrypted=($plain|ConvertTo-SecureString -AsPlainText -Force|ConvertFrom-SecureString)
         $encrypted|Set-Content -LiteralPath $file -Encoding ASCII
+        $phase='ACL_RESTRICT'
         & icacls.exe $file /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' |Out-Null
         if($LASTEXITCODE -ne 0){throw 'ACL_UNVERIFIED'}
         return 'IMPORT_VERIFIED_AND_DPAPI_PROTECTED'
     }catch{
         if(Test-Path -LiteralPath $file){Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue}
-        return 'IMPORT_FAILED_AFTER_CONSUME'
+        $status='IMPORT_FAILED_'+$phase
+        if($phase -eq 'API_AUTH_READ' -and $_.Exception.Response){$status+='_' + [int]$_.Exception.Response.StatusCode}
+        return $status
     }finally{
         if($null -ne $bytes){[Array]::Clear($bytes,0,$bytes.Length)}
         $plain=$null
