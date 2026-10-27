@@ -263,6 +263,21 @@ def dispatch_controller(issue_number=None):
     return True
 
 
+def source_failure_code(label, exc):
+    """Sanitized, deterministic reason for operator logs; never echo exception text."""
+    if isinstance(exc, urllib.error.HTTPError):
+        if exc.code in (401, 403, 404, 429, 500, 502, 503):
+            return "HTTP_"+str(exc.code)
+        return "HTTP_OTHER"
+    if isinstance(exc, urllib.error.URLError):
+        return "NETWORK_UNAVAILABLE"
+    if label=="wordpress" and isinstance(exc, RuntimeError) and str(exc)=="WP_QA_AUTH_UNAVAILABLE":
+        return "AUTH_MISSING"
+    if isinstance(exc, (ValueError, TypeError)):
+        return "INVALID_RESPONSE"
+    return "SOURCE_RUNTIME_FAILURE"
+
+
 def main():
     if not TOKEN:raise RuntimeError("GITHUB_TOKEN_REQUIRED")
     items=[]
@@ -279,7 +294,7 @@ def main():
                           "evidence":("https://codeberg.org/"+HUB+"/issues" if label=="codeberg" else
                                       "https://github.com/"+HUB+"/actions"),
                           "description":"P0 audit source inaccessible; investigate credentials or network"})
-            print("::error::CORTES_QA_SCAN_FAILED source="+label+" type="+type(exc).__name__)
+            print("::error::CORTES_QA_SCAN_FAILED source="+label+" code="+source_failure_code(label,exc))
     labels()
     seen=known_markers()
     posted=0
