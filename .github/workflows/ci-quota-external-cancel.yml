@@ -19,12 +19,30 @@ jobs:
     timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
+      - name: Retrieve AppVeyor API token securely from Bitwarden when configured
+        if: ${{ vars.ANTHARES_SECRETS_APPVEYOR_TOKEN_ID != '' }}
+        id: appveyor-bws
+        uses: bitwarden/sm-action@f1de238fc00c738c56140796018be9084c2b5d21
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            ${{ vars.ANTHARES_SECRETS_APPVEYOR_TOKEN_ID }} > ANTHARES_APPVEYOR_TOKEN_FROM_BW
+      - name: Retrieve Bitrise API token securely from Bitwarden when configured
+        if: ${{ vars.ANTHARES_SECRETS_BITRISE_TOKEN_ID != '' }}
+        id: bitrise-bws
+        uses: bitwarden/sm-action@f1de238fc00c738c56140796018be9084c2b5d21
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            ${{ vars.ANTHARES_SECRETS_BITRISE_TOKEN_ID }} > ANTHARES_BITRISE_TOKEN_FROM_BW
       - name: Detect provider-structured quota and cancel owned execution only
         env:
           APPVEYOR_ACCOUNT: ${{ vars.APPVEYOR_ACCOUNT }}
           APPVEYOR_PROJECT: ${{ vars.APPVEYOR_PROJECT }}
-          APPVEYOR_API_TOKEN: ${{ secrets.APPVEYOR_API_TOKEN }}
+          APPVEYOR_API_TOKEN: ${{ env.ANTHARES_APPVEYOR_TOKEN_FROM_BW || secrets.APPVEYOR_API_TOKEN }}
           BITRISE_APP_SLUG: ${{ vars.BITRISE_APP_SLUG }}
-          BITRISE_API_TOKEN: ${{ secrets.BITRISE_API_TOKEN }}
+          BITRISE_API_TOKEN: ${{ env.ANTHARES_BITRISE_TOKEN_FROM_BW || secrets.BITRISE_API_TOKEN }}
         run: |
           python3 tools/ci_quota_external_watcher.py
