@@ -772,6 +772,88 @@
         "excerpt": "Nossa folha. Cadê? Cadê? Cadê? Cadê? Eu acho que dá pra... Já deu sete minutos. Vamos começar, né? Cinco tão aqui, vamos começar. Vamos deixar o pessoal chegar depois. Então, já pensou em questão, vocês sabem muito bem, vocês sempre que estão aqui. Mas os outros que vão vir depois, né? Vão ver essa live depois. A pessoa em questão é a Débora. Débora... Não lembro o nome dela. Débora Bocó. Luciana. Débora Bocó. A Débs. A Bocó Azuda. e agora Luciano dela. E agora Bocó, porra. Para de cortar uma parada. Vai falar para a branca.",
         "verified": true
       }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:297:337": {
+      "title": "Crítica à ideia de destruir a imagem de outra pessoa ● Universo Anthares",
+      "description": "Na conversa, o participante reage à proposta de destruir a imagem de uma pessoa, diferencia crítica de ideias de ataque à imagem pessoal e comenta diplomacia. Trecho de debate do Universo Anthares. www.anthares.us",
+      "hashtags": [
+        "#Debate",
+        "#Ideias",
+        "#Diplomacia",
+        "#UniversoAnthares"
+      ],
+      "keywords": [
+        "imagem",
+        "pessoa",
+        "ideias",
+        "destruir",
+        "diplomacia"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:297:337",
+        "attachment_id": 16982,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 297,
+        "source_end_s": 337,
+        "media_sha256": "77d715f5f806bd2e6e369b77e8923e83f8903248516973fb730b157375f949ae",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 7.92,
+            "text": "Ele fez na Tambi, ele fez na Tambi assim, vamos destruir a imagem dessa pessoa, falei cara,"
+          },
+          {
+            "start": 7.92,
+            "end": 14.72,
+            "text": "pera aí cara, o que é isso cara aí, você acha que eu sou marxista vai aí, marxista"
+          },
+          {
+            "start": 14.72,
+            "end": 19.24,
+            "text": "é o pessoal que destrói mais dos outros, eu não cara aí, eu não destrui ideias, eu"
+          },
+          {
+            "start": 19.24,
+            "end": 23.6,
+            "text": "destrui até as minhas ideias, mas a imagem não pô, assim por falho eu faço, mas"
+          },
+          {
+            "start": 23.6,
+            "end": 25.2,
+            "text": "Estou? Vou te defender agora, pô."
+          },
+          {
+            "start": 25.2,
+            "end": 27,
+            "text": "Cadê o ex-toto aqui, ó? Aqui, ó."
+          },
+          {
+            "start": 27,
+            "end": 28.86,
+            "text": "O Danico Vardem é um sujeito diplomático."
+          },
+          {
+            "start": 28.86,
+            "end": 30.6,
+            "text": "É isso aí, pô. Diplomacia."
+          },
+          {
+            "start": 30.6,
+            "end": 32.4,
+            "text": "Tá aí, ó. Tá aí o cara, meu."
+          },
+          {
+            "start": 32.4,
+            "end": 33.8,
+            "text": "Tá aí, aí, ó."
+          }
+        ],
+        "excerpt": "Ele fez na Tambi, ele fez na Tambi assim, vamos destruir a imagem dessa pessoa, falei cara, pera aí cara, o que é isso cara aí, você acha que eu sou marxista vai aí, marxista é o pessoal que destrói mais dos outros, eu não cara aí, eu não destrui ideias, eu destrui até as minhas ideias, mas a imagem não pô, assim por falho eu faço, mas Estou? Vou te defender agora, pô. Cadê o ex-toto aqui, ó? Aqui, ó. O Danico Vardem é um sujeito diplomático. É isso aí, pô. Diplomacia. Tá aí, ó. Tá aí o cara, meu. Tá aí, aí, ó.",
+        "verified": true
+      }
     }
   }
 }
