@@ -66,6 +66,53 @@
         "excerpt": "Hoje a gente vai falar sobre esse livrinho aqui, ó, a metamorfose, de um tal de Franz Kafka, não sei se vocês conhecem, um tal aí de Franz Kafka, entendeu, que esse na literatura austríaca tem dois caras que importam, o Rilke e o Kafka, é só isso, fala, pois é austríaca, cadê? Ah, botei lá atrás, enfim, Rilke, tá lá atrás, nós estamos atindo, vou conseguir pegar, deu um Rilke, fala, prosa austríaca, Kafka, só isso, todo o resto é dispensável, tudo mentira, é mentira, mas enfim, não sou vídeo da linguagem, pô, vê.",
         "verified": true
       }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:174:215": {
+      "title": "Gregor Samsa acorda transformado em um enorme inseto ● Universo Anthares",
+      "description": "Em A Metamorfose, Gregor Samsa acordou depois de sonhos inquietos transformado em um enorme inseto. O trecho comenta como a vida dele muda depois dessa transformação. www.anthares.us",
+      "hashtags": [
+        "#Kafka",
+        "#GregorSamsa",
+        "#Metamorfose",
+        "#Literatura"
+      ],
+      "keywords": [
+        "Gregor Samsa",
+        "transformação",
+        "inseto",
+        "Kafka",
+        "Metamorfose"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:174:215",
+        "attachment_id": 16960,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 174,
+        "source_end_s": 215,
+        "media_sha256": "a5011f1ab8104be504ed1b5307cbb984c773dfd956b5fa22f6957149207c652d",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 24,
+            "text": "É vídeo bom, mas enfim, vamos falar do metamorfólogo francicáfrica, esse livro aqui que o cara em que um dia Gregor Samza, Samza, né, a pronúncia Samza aprendi hoje que pronúncia Samza, que Gregor Samza acordou depois de sonhos entranquilos, transformado num inseto, um enorme inseto, e aí a vida dele muda, isso aí dá aquela engajada, isso mesmo, isso aqui, para fazer aqui gente, dá aquela engajada, entendeu?"
+          },
+          {
+            "start": 24,
+            "end": 29.64,
+            "text": "é isso aí, tem o canal do Discord que está nos comentários, tem o link do grupo do Telegram,"
+          },
+          {
+            "start": 29.64,
+            "end": 30.64,
+            "text": "esse é o..."
+          }
+        ],
+        "excerpt": "É vídeo bom, mas enfim, vamos falar do metamorfólogo francicáfrica, esse livro aqui que o cara em que um dia Gregor Samza, Samza, né, a pronúncia Samza aprendi hoje que pronúncia Samza, que Gregor Samza acordou depois de sonhos entranquilos, transformado num inseto, um enorme inseto, e aí a vida dele muda, isso aí dá aquela engajada, isso mesmo, isso aqui, para fazer aqui gente, dá aquela engajada, entendeu? é isso aí, tem o canal do Discord que está nos comentários, tem o link do grupo do Telegram, esse é o...",
+        "verified": true
+      }
     }
   }
 }
