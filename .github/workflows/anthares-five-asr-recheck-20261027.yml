@@ -1,0 +1,41 @@
+name: Anthares five noisy clips ASR recovery
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/anthares-five-asr-recheck-20261027.yml'
+      - 'tools/threads_five_asr_recheck_20261027.py'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-five-asr-quality-20261027
+  cancel-in-progress: false
+jobs:
+  proof:
+    if: github.head_ref == 'automation/threads-asr-five-recovery-20261027'
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        start: [1325, 2182, 4762, 7788, 11060]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      ASR_START: ${{ matrix.start }}
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned ASR engine
+        run: python -m pip install --disable-pip-version-check faster-whisper==1.2.1
+      - name: Verify exact media and compare small versus medium
+        run: python tools/threads_five_asr_recheck_20261027.py
+      - name: Preserve external evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: five-asr-recheck-${{ matrix.start }}
+          path: ${{ runner.temp }}/anthares-asr-five/*.json
+          retention-days: 7
+          if-no-files-found: warn
