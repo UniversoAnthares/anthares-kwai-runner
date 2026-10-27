@@ -278,7 +278,13 @@ async function choose(jwt,publish){
       'THREADS_QUARANTINE_WRITE_FAILED='+
       String(err.message).slice(0,90)
      );
-     throw err;
+     // Another executor may have fenced the row after the queue snapshot.
+     // Skip this stale candidate, but never bypass other quarantine failures.
+     if(String(err.message)==='CONTROL_quarantine_CANNOT_QUARANTINE_NONQUEUED'){
+      console.log('THREADS_QUARANTINE_STALE_ROW_SKIPPED='+id);
+     }else{
+      throw err;
+     }
     }
    }
 
