@@ -5,9 +5,11 @@ import crypto from 'node:crypto';
 const ISSUER='https://codeberg.org/api/actions';
 const KEYS_URL='https://codeberg.org/api/actions/.well-known/keys';
 const REPOSITORY='UniversoAnthares/anthares-kwai-runner';
+const PRODUCER_REPOSITORY='UniversoAnthares/anthares-clipper';
+const PRODUCER_WORKFLOW='cortes-tiktok-neon-producer.yml';
 let jwks=null,validUntil=0;
 
-export async function codebergConsumerRole(req,audience,workflowName) {
+export async function codebergRole(req,audience,workflowName) {
   const m=/^Bearer\s+(.+)$/i.exec(String(req.headers?.authorization||''));
   const jwt=m?m[1]:'';
   if(jwt.length<200||jwt.length>16000)return '';
@@ -21,10 +23,14 @@ export async function codebergConsumerRole(req,audience,workflowName) {
   if(hdr.alg!=='RS256'||!/^[A-Za-z0-9_.-]{1,200}$/.test(hdr.kid||''))return '';
   const now=Math.floor(Date.now()/1000);
   const aud=Array.isArray(claims.aud)?claims.aud:[claims.aud];
-  const wf=REPOSITORY+'/.forgejo/workflows/'+workflowName+'@refs/heads/main';
+  const producer=claims.repository===PRODUCER_REPOSITORY;
+  const expectedRepo=producer?PRODUCER_REPOSITORY:REPOSITORY;
+  const expectedWorkflow=producer?PRODUCER_WORKFLOW:workflowName;
+  const wf=expectedRepo+'/.forgejo/workflows/'+expectedWorkflow+'@refs/heads/main';
+  const allowedEvents=producer?['workflow_dispatch']:['schedule','workflow_dispatch'];
   if(claims.iss!==ISSUER||!aud.includes(audience)||
-     claims.repository!==REPOSITORY||claims.ref!=='refs/heads/main'||
-     claims.workflow_ref!==wf||!['schedule','workflow_dispatch'].includes(claims.event_name))return '';
+     claims.repository!==expectedRepo||claims.ref!=='refs/heads/main'||
+     claims.workflow_ref!==wf||!allowedEvents.includes(claims.event_name))return '';
   if(!Number.isFinite(claims.exp)||claims.exp<=now||claims.exp>now+3600||
      !Number.isFinite(claims.iat)||claims.iat>now+60||
      (claims.nbf!==undefined&&Number(claims.nbf)>now+60))return '';
@@ -40,6 +46,11 @@ export async function codebergConsumerRole(req,audience,workflowName) {
     if(!k)return '';
     const publicKey=crypto.createPublicKey({key:k,format:'jwk'});
     return crypto.verify('RSA-SHA256',Buffer.from(parts[0]+'.'+parts[1]),
-      publicKey,Buffer.from(parts[2],'base64url'))?'consumer':'';
+      publicKey,Buffer.from(parts[2],'base64url'))?(producer?'producer':'consumer'):'';
   }catch{return '';}
+}
+
+export async function codebergConsumerRole(req,audience,workflowName){
+ const role=await codebergRole(req,audience,workflowName);
+ return role==='consumer'?role:'';
 }

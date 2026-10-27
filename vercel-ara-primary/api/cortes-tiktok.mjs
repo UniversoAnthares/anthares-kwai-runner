@@ -3,6 +3,7 @@
 // No static credentials travel between repos, and no unverified upload is retried.
 import crypto from 'node:crypto';
 import {Pool} from 'pg';
+import { codebergRole } from './codeberg-oidc.mjs';
 
 const QUEUE_URL='https://anthares-remote-primary.vercel.app/api/cortes-tiktok';
 const AUDIENCE=QUEUE_URL;
@@ -222,7 +223,7 @@ export default async function handler(req,res){
  try{
   const u=new URL(req.url,'https://local.invalid'),action=u.searchParams.get('action')||'';
   if(req.method==='GET'&&action==='health'){await schema();return reply(res,200,{ok:true,service:'cortes-tiktok-neon',isolation:'separate_from_kwai',fencing:true});}
-  const role=await githubRole(req);
+  const role=(await githubRole(req)) || (await codebergRole(req,AUDIENCE,'cortes-tiktok-universo-codeberg.yml'));
   if(!role)return reply(res,401,{ok:false,error:'unauthorized_oidc'});
   const b=body(req);
   if(req.method==='POST'&&action==='enqueue'&&role==='producer')return reply(res,200,await enqueue(b));
