@@ -350,7 +350,7 @@
       "cancel_first_adapter": "OFFICIAL_V2_SCHEMA_FIXED_VERIFIED_WITH_33_UNIT_TESTS",
       "cancel_first_adapter_source": "tools/ci_quota_provider_adapters.py:HarnessPipelineRun",
       "cancel_first_adapter_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1590",
-      "cancel_first_test_status": "33_PASS_0_FAILURES_2026_10_27_MAIN_ANTHARES_REMOTE_MEMORY",
+      "cancel_first_test_status": "36_PASS_0_FAILURES_2026_10_27_HARNESS_AUTH_READONLY_PROBE",
       "live_cancel_proof": false,
       "api_key_config_verified": false,
       "eligible": false,
@@ -374,7 +374,7 @@
       "last_ci_stage_success_url": "https://app.harness.io/ng/account/xAEBvmMUTjql7g2Exxmp-g/ci/orgs/default/projects/default_project/pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d/executions/kbHfz70fTUiuYNoGx-QoBA/pipeline",
       "harness_live_ci_stage_result": "SUCCESS_GITHUB_COMMIT_STATUS_HARNESS_REPORTS_BUILD_AND_TEST_SUCCEEDED",
       "harness_ci_test_steps": "ADDED_TO_GIT_BACKED_PIPELINE_PR_1627_STAGE_SUCCEEDED_IN_LIVE_RUN",
-      "structured_quota_watcher": "MERGED_PR_1646_GATED_DISABLED_BY_DEFAULT",
+      "structured_quota_watcher": "IMPLEMENTED_GATED_DISABLED_GITHUB_WORKFLOW_PR_1646",
       "structured_quota_watcher_config": {
         "enabled_by_default": false,
         "enable_variable": "HARNESS_QUOTA_WATCH_ENABLED",
@@ -388,7 +388,11 @@
       "api_status_response_fixed_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1640",
       "harness_watcher_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1646",
       "vercel_neon_expired_lease_guard_source_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1648",
-      "vercel_neon_expired_lease_guard_tests": "6_NODE_CONTRACT_CASES_PASS_MOCKED_IO"
+      "vercel_neon_expired_lease_guard_tests": "6_NODE_CONTRACT_CASES_PASS_MOCKED_IO",
+      "api_auth_probe": "READ_ONLY_GET_OWNED_EXECUTION_908_ADDED_GITHUB_WORKFLOW",
+      "api_auth_probe_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1652",
+      "api_auth_probe_requires_secret": "HARNESS_API_KEY",
+      "api_auth_probe_result": "NOT_CONFIGURED_NO_SECRET_SUPPLIED_TO_GITHUB_ACTIONS"
     },
     "floot": {
       "active": true,
