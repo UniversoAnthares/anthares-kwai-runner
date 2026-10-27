@@ -74,6 +74,45 @@ jobs:
           print("APPVEYOR_AUTH_PROBE=ALL_SCOPES_REJECTED")
           sys.exit(1)
           PY
+      - name: Stage RSA-encrypted AppVeyor credential for authenticated Anthares Remote standby
+        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+        env:
+          AV_KEY: ${{ env.ANTHARES_APPVEYOR_TOKEN_FROM_BW || secrets.APPVEYOR_API_TOKEN }}
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const {createPublicKey,publicEncrypt,constants}=require("node:crypto");
+          const key=process.env.AV_KEY;
+          if(!key) {console.log("ARA_TOKEN_TRANSFER=NOT_CONFIGURED");process.exit(0)}
+          const base="https://anthares-ci-quota-controller.vercel.app/api/credential-bridge";
+          async function main(){
+            const pubResp=await fetch(base,{signal:AbortSignal.timeout(12000)});
+            if(!pubResp.ok)throw Error("PUBLIC_KEY_UNAVAILABLE");
+            const pub=await pubResp.json();
+            if(pub.code!=="RSA_PUBLIC_KEY"||pub.jwk?.kty!=="RSA")throw Error("INVALID_PUBLIC_KEY");
+            const sealed=publicEncrypt({key:createPublicKey({key:pub.jwk,format:"jwk"}),
+              padding:constants.RSA_PKCS1_OAEP_PADDING,oaepHash:"sha1"},
+              Buffer.from(key,"utf8")).toString("base64");
+            if(Buffer.from(sealed,"base64").length!==384)throw Error("INVALID_RSA_ENVELOPE");
+            const tokenUrl=new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+            tokenUrl.searchParams.set("audience","anthares-ci-quota-controller");
+            const oidcResponse=await fetch(tokenUrl,{
+              headers:{Authorization:"Bearer "+process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN},
+              signal:AbortSignal.timeout(12000)});
+            if(!oidcResponse.ok)throw Error("GITHUB_OIDC_UNAVAILABLE");
+            const {value}=await oidcResponse.json();
+            if(!value)throw Error("GITHUB_OIDC_MISSING");
+            const result=await fetch(base,{method:"POST",headers:{
+                Authorization:"Bearer "+value,"Content-Type":"application/json"},
+                body:JSON.stringify({phase:"stage",provider:"appveyor",sealed}),
+                signal:AbortSignal.timeout(15000)});
+            if(result.status!==202)throw Error("STAGE_RESPONSE_"+result.status);
+            const receipt=await result.json();
+            if(receipt.code!=="SEALED_READY")throw Error("STAGE_RECEIPT_MISMATCH");
+            console.log("ARA_TOKEN_TRANSFER=SEALED_READY");
+          }
+          main().catch(e=>{console.error("ARA_TOKEN_TRANSFER="+e.message);process.exitCode=1});
+          NODE
       - name: Detect provider-structured quota and cancel owned execution only
         env:
           APPVEYOR_ACCOUNT: ${{ vars.APPVEYOR_ACCOUNT || 'UniversoAnthares' }}
