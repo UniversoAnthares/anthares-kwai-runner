@@ -126,8 +126,28 @@
       ],
       "reference_implementation": "tools/ci_quota_cancel_first.py",
       "verification_tests": "tests/test_ci_quota_cancel_first.py",
-      "integration_state": "CORE_TESTED_PROVIDER_CALLBACKS_NOT_YET_WIRED",
-      "operator_warning": "A policy file or tested core does not itself invoke provider APIs; each provider requires a verified cancel/status/dispatch adapter and durable cross-host fencing."
+      "integration_state": "PRODUCTION_LEDGER_DEPLOYED_ADAPTERS_STAGED_CONTROLLER_E2E_NOT_CONFIRMED",
+      "operator_warning": "A policy file or tested core does not itself invoke provider APIs; each provider requires a verified cancel/status/dispatch adapter and durable cross-host fencing.",
+      "shared_ledger": {
+        "status": "DEPLOYED_NOT_CONNECTED_TO_ALL_EXECUTORS",
+        "project": "anthares-ara-ha",
+        "database": "neondb",
+        "branch": "main",
+        "schema": "anthares_quota",
+        "tables": [
+          "attempts",
+          "provider_health"
+        ],
+        "migration": "db/quota_cancel_shared_fencing.sql",
+        "qa_functional_test": "PASS_AT_2026-10-27",
+        "public_grants": false
+      },
+      "github_runtime_smoke": {
+        "status": "MERGED_TRIGGER_CONFIGURED_RESULT_NOT_VERIFIED_REMOTE_TOOL_SECURITY_DENIAL",
+        "workflow": ".github/workflows/anthares-quota-cancel-controlled-smoke.yml",
+        "controller": ".github/workflows/anthares-quota-cancel-listener.yml",
+        "scope": "SYNTHETIC_ALLOWLIST_ONLY_NO_REAL_WORKLOADS"
+      }
     }
   },
   "retired": {
