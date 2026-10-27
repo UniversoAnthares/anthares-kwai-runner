@@ -13,6 +13,7 @@ on:
         type: string
 permissions:
   contents: read
+  id-token: write
 concurrency:
   group: harness-quota-rescue-${{ inputs.harness_execution_id }}
   cancel-in-progress: false
@@ -29,10 +30,15 @@ jobs:
         run: |
           [[ "$SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
           [[ "$EXEC" =~ ^[A-Za-z0-9_-]{16,64}$ ]] || exit 2
+      - name: Checkout reviewed OIDC receipt client
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Checkout exact source revision
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.source_sha }}
+          path: source
           persist-credentials: false
       - name: Verify checked-out SHA and side-effect-free Harness source
         env:
@@ -40,10 +46,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$SHA"
-          test "$(git hash-object .harness/orgs/default/projects/default_project/pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d.yaml)" = "bdbbd74b693d2f9fdd6c08b94cc03d8921ebce18"
+          test "$(git -C source rev-parse HEAD)" = "$SHA"
+          test "$(git hash-object source/.harness/orgs/default/projects/default_project/pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d.yaml)" = "bdbbd74b693d2f9fdd6c08b94cc03d8921ebce18"
           echo "HARNESS_FALLBACK_PINNED_READONLY_CI=PASS"
+      - name: Acquire exclusively fenced CI successor slot
+        env:
+          SHA: ${{ inputs.source_sha }}
+          EXEC: ${{ inputs.harness_execution_id }}
+        shell: bash
+        run: python3 tools/harness_fallback_receipt.py start "$SHA" "$EXEC"
       - name: Harness equivalent Python syntax and quota tests
+        working-directory: source
         shell: bash
         run: |
           set -euo pipefail
@@ -56,6 +69,7 @@ jobs:
             tests.test_ci_quota_harness_watcher
           node tests/test_ci_quota_harness_controller.mjs
       - name: Harness equivalent publisher contract tests (mocked; no publishing)
+        working-directory: source
         shell: bash
         run: |
           set -euo pipefail
@@ -66,3 +80,9 @@ jobs:
             python3 tests/test_control_publisher_integration_final.py "$case"
           done
           echo "HARNESS_FALLBACK_EQUIVALENT_CI=PASS"
+      - name: Record exclusive success receipt
+        env:
+          SHA: ${{ inputs.source_sha }}
+          EXEC: ${{ inputs.harness_execution_id }}
+        shell: bash
+        run: python3 tools/harness_fallback_receipt.py finish "$SHA" "$EXEC"
