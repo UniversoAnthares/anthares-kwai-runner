@@ -272,7 +272,15 @@ def readonly_auth_probe(token: str, request=None) -> str:
     except (HTTPError, URLError, OSError, ValueError):
         return "API_TRANSPORT_UNAVAILABLE"
     if code in (401, 403):
-        return "AUTH_HTTP_" + str(code)
+        # Distinguish key rejection from endpoint-level permission failure.
+        # Both requests only read the account resource; never expose response bodies.
+        from tools.ci_quota_provider_adapters import http_json
+        account_url = "https://app.harness.io/ng/api/accounts/" + ACCOUNT
+        try:
+            acct_code, _ = http_json("GET", account_url, api.headers)
+        except (HTTPError, URLError, OSError, ValueError):
+            return "EXECUTION_AUTH_" + str(code) + "_ACCOUNT_UNAVAILABLE"
+        return "EXECUTION_AUTH_" + str(code) + "_ACCOUNT_HTTP_" + str(acct_code)
     if code != 200:
         return "STATUS_HTTP_" + str(code)
     if not isinstance(body, dict):
