@@ -1,0 +1,25 @@
+name: Anthares quota cancellation controlled listener
+on:
+  repository_dispatch:
+    types: [anthares-quota-exhausted]
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: anthares-quota-cancel-${{ github.event.client_payload.run_id }}
+  cancel-in-progress: false
+jobs:
+  cancel-original:
+    runs-on: qa-p0-independent
+    timeout-minutes: 4
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cancel exact synthetic quota-exhausted run
+        shell: powershell
+        run: |
+          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/ci_quota_smoke_consumer.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
