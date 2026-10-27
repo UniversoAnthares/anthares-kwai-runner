@@ -235,7 +235,7 @@ jobs:
                   data=obj.get("data") or []
                   if isinstance(data,dict): names=list(data.keys())
                   elif isinstance(data,list):
-                      names=[str(x.get("workflow_id") or x.get("id") or x.get("name") or "UNKNOWN") for x in data if isinstance(x,dict)]
+                      names=[x if isinstance(x,str) else str(x.get("workflow_id") or x.get("id") or x.get("name") or "UNKNOWN") for x in data if isinstance(x,(str,dict))]
                   else:names=[]
                   print("BITRISE_REGISTERED_WORKFLOWS="+",".join(sorted(str(x)[:45] for x in names))[:500])
                   print("BITRISE_SMOKE_WORKFLOW_PRESENT="+str("anthares_ci_smoke" in names))
