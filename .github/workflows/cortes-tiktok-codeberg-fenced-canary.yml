@@ -2,7 +2,9 @@ name: CORTES TikTok Codeberg fenced publishing canary
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/cortes-tiktok-codeberg-fenced-canary.yml']
+    paths:
+      - '.github/workflows/cortes-tiktok-codeberg-fenced-canary.yml'
+      - '.forgejo/workflows/cortes-tiktok-universo-codeberg.yml'
   workflow_dispatch:
     inputs:
       account:
@@ -47,6 +49,27 @@ jobs:
           if ($pair.Count -ne 2 -or !$pair[0] -or !$pair[1]) { throw 'CODEBERG_SECRET_CREDENTIALS_MISSING' }
           $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(([uri]::UnescapeDataString($pair[0]))+':'+([uri]::UnescapeDataString($pair[1]))))
           $headers = @{ Authorization = 'Basic '+$basic; Accept = 'application/json' }
+          # Cancel only the previous waiting, unassigned canary; never cancel a started post.
+          if ($env:TARGET_ACCOUNT -eq 'universo') {
+            $base = "https://codeberg.org/api/v1/repos/$repo/actions/runs/8077769"
+            $old = Invoke-RestMethod -Uri $base -Headers $headers -TimeoutSec 18
+            if ($old.workflow_id -ne 'cortes-tiktok-universo-codeberg.yml') { throw 'OLD_RUN_IDENTITY_MISMATCH' }
+            if ($old.status -in @('waiting','pending','queued')) {
+              $oldJobs = @(Invoke-RestMethod -Uri "$base/jobs" -Headers $headers -TimeoutSec 18)
+              if (@($oldJobs | Where-Object { [int]$_.task_id -gt 0 }).Count -gt 0) { throw 'OLD_JOB_ALREADY_ASSIGNED' }
+              $cancelled = Invoke-WebRequest -Uri "$base/cancel" -Method Post -Headers $headers -TimeoutSec 22 -UseBasicParsing
+              if ([int]$cancelled.StatusCode -notin @(200,202,204)) { throw 'OLD_WAITING_JOB_CANCEL_UNACKNOWLEDGED' }
+              for ($verify=1; $verify -le 8; $verify++) {
+                $old = Invoke-RestMethod -Uri $base -Headers $headers -TimeoutSec 18
+                if ($old.status -in @('cancelled','canceled')) { break }
+                Start-Sleep -Seconds 2
+              }
+              if ($old.status -notin @('cancelled','canceled')) { throw 'OLD_JOB_CANCELLATION_UNVERIFIED' }
+              Write-Output 'CODEBERG_OLD_WAITING_RUN_CANCELLED=8077769'
+            } elseif ($old.status -in @('running','in_progress')) {
+              throw 'OLD_RUN_IN_PROGRESS_WAIT_FOR_FENCED_RECONCILIATION'
+            }
+          }
           $name = if ($env:TARGET_ACCOUNT -eq 'lucas4') { 'cortes-tiktok-lucas4-codeberg.yml' } else { 'cortes-tiktok-universo-codeberg.yml' }
           $url = "https://codeberg.org/api/v1/repos/$repo/actions/workflows/$name/dispatches"
           $body = '{"ref":"main","inputs":{"smoke":"false","publish":"true"}}'
