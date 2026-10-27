@@ -12,10 +12,15 @@ assert.ok(source.includes("export default async function handler"), "source unav
 const body = source.replace(/^import .*;\s*$/gm, "")
   .replace("export default async function handler", "async function handler");
 const requests = [];
+let simulatedLeaseExpired = false;
 const pg = () => async (strings, ...args) => {
   requests.push(args);
   if (strings.join("").includes("INSERT INTO")) return [{attempt_id: "claimed"}];
-  if (strings.join("").includes("UPDATE public.")) return [{attempt_id: "claimed"}];
+  if (strings.join("").includes("UPDATE public.")) {
+    assert.ok(strings.join("").includes("lease_until>now()"),
+              "expired claim must not be allowed to report");
+    return simulatedLeaseExpired ? [] : [{attempt_id: "claimed"}];
+  }
   throw Error("UNEXPECTED_QUERY");
 };
 const fakeJwtVerify = async () => ({payload:{
@@ -55,4 +60,10 @@ const report=await invoke({...event,phase:"report",owner_token:randomUUID(),
   outcome:"CANCEL_UNCONFIRMED"});
 assert.equal(report.statusCode,200);assert.equal(report.response.code,"RECORDED");
 assert.equal(requests.length,2);
-console.log("HARNESS_NEON_CONTROLLER_CONTRACT=PASS CASES=5 MOCKED_IO=true");
+simulatedLeaseExpired = true;
+const expired=await invoke({...event,phase:"report",owner_token:randomUUID(),
+  outcome:"CANCEL_UNCONFIRMED"});
+assert.equal(expired.statusCode,409);
+assert.equal(expired.response.code,"FENCING_REJECTED");
+assert.equal(requests.length,3);
+console.log("HARNESS_NEON_CONTROLLER_CONTRACT=PASS CASES=6 MOCKED_IO=true EXPIRED_LEASE=REJECTED");
