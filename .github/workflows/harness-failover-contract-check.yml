@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - 'automation/harness-quota-fenced-failover-*'
+      - 'fix/harness-successor-ack-race-*'
     paths:
       - 'tools/ci_quota_harness_watcher.py'
       - 'tools/harness_fallback_receipt.py'
@@ -13,6 +14,7 @@ on:
       - 'tests/test_ci_quota_harness_watcher.py'
       - 'tests/test_ci_quota_harness_controller.mjs'
       - 'tests/test_harness_fallback_controller.mjs'
+      - 'tests/test_harness_fallback_receipt_race.py'
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -27,7 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m compileall -q tools/ci_quota_harness_watcher.py tools/harness_fallback_receipt.py
-          python3 -m unittest -v tests.test_ci_quota_harness_watcher tests.test_ci_quota_harness_fenced_integration tests.test_ci_quota_cancel_first tests.test_ci_quota_neon_ledger tests.test_ci_quota_provider_adapters
+          python3 -m unittest -v tests.test_ci_quota_harness_watcher tests.test_ci_quota_harness_fenced_integration tests.test_ci_quota_cancel_first tests.test_ci_quota_neon_ledger tests.test_ci_quota_provider_adapters tests.test_harness_fallback_receipt_race
       - name: Neon OIDC and Harness fencing contracts
         shell: bash
         run: |
