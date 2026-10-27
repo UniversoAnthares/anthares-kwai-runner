@@ -24,7 +24,7 @@ QUOTA_MESSAGE = re.compile(
     r"(?:quota|credit|usage|rate) (?:limit )?(?:exceeded|exhausted|reached)"
     r"|insufficient (?:credits|quota)|out of (?:credits|quota)", re.I
 )
-TERMINAL = {"CANCELED", "CANCELLED", "FAILED", "TERMINATED", "EXPIRED"}
+TERMINAL = {"CANCELED", "CANCELLED", "ABORTED", "FAILED", "TERMINATED", "EXPIRED"}
 UNCERTAIN = {"STARTED", "COMMITTING", "SUBMITTING_UNCERTAIN", "UNKNOWN"}
 
 
@@ -168,3 +168,147 @@ def cancel_first(*, ledger: LocalLedger, task_id: str, attempt_id: str,
     row["state"] = "FALLBACK_QUEUED"
     ledger.update(attempt_id, row)
     return row
+
+
+# Harness CI adapter. This code does not poll, enqueue or cancel upon import.
+# API endpoints: https://apidocs.harness.io/pipeline-execute and
+# https://apidocs.harness.io/pipeline-execution-details
+import urllib.parse
+import urllib.request
+
+
+_HARNESS_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+@dataclass(frozen=True)
+class HarnessExecution:
+    account: str
+    org: str
+    project: str
+    pipeline: str
+    plan_execution_id: str
+
+    def __post_init__(self):
+        for field in (self.account, self.org, self.project,
+                      self.pipeline, self.plan_execution_id):
+            if not isinstance(field, str) or not _HARNESS_ID.fullmatch(field):
+                raise ValueError("INVALID_HARNESS_EXECUTION_IDENTITY")
+
+
+class HarnessCancelAdapter:
+    """API client for ONE owned Harness execution, requiring exact identity.
+
+    The caller supplies a secret API key and an injected transport when testing.
+    A status response without unambiguous matching identity fails CLOSED.
+    No authenticated request is made unless invoked explicitly.
+    """
+
+    def __init__(self, execution: HarnessExecution, api_key: str, *,
+                 transport=None, origin: str = "https://app.harness.io"):
+        if not api_key or not isinstance(api_key, str):
+            raise ValueError("HARNESS_API_KEY_REQUIRED")
+        if origin != "https://app.harness.io":
+            raise ValueError("UNAPPROVED_HARNESS_API_ORIGIN")
+        self.execution = execution
+        self.api_key = api_key
+        self.transport = transport or urllib.request.urlopen
+        self.origin = origin
+
+    def _url(self, endpoint: str) -> str:
+        e = self.execution
+        params = urllib.parse.urlencode({
+            "accountIdentifier": e.account,
+            "orgIdentifier": e.org,
+            "projectIdentifier": e.project,
+        })
+        return self.origin + endpoint + "?" + params
+
+    def _request(self, method: str, path: str) -> dict:
+        req = urllib.request.Request(
+            self._url(path),
+            method=method,
+            headers={"x-api-key": self.api_key, "Accept": "application/json"},
+        )
+        with self.transport(req, timeout=12) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        if not isinstance(result, dict):
+            raise ValueError("HARNESS_RESPONSE_INVALID")
+        return result
+
+    def _execution_summary(self, result: dict) -> dict:
+        """Reject missing/ambiguous metadata rather than inferring an owned run."""
+        data = result.get("data")
+        if not isinstance(data, dict):
+            raise ValueError("HARNESS_STATUS_DATA_MISSING")
+        candidates = [data, data.get("pipelineExecutionSummary"),
+                      data.get("executionDetails")]
+        e = self.execution
+        for item in candidates:
+            if not isinstance(item, dict):
+                continue
+            if (item.get("planExecutionId") == e.plan_execution_id
+                    and item.get("pipelineIdentifier") == e.pipeline
+                    and item.get("accountIdentifier") == e.account
+                    and item.get("orgIdentifier") == e.org
+                    and item.get("projectIdentifier") == e.project
+                    and isinstance(item.get("status"), str)):
+                return item
+        raise ValueError("HARNESS_REMOTE_IDENTITY_UNCONFIRMED")
+
+    def get_owned_status(self) -> str:
+        e = self.execution
+        path = "/pipeline/api/pipelines/execution/v2/" + e.plan_execution_id
+        return self._execution_summary(self._request("GET", path))["status"].upper()
+
+    def request_cancel(self) -> bool:
+        """Verify identity BEFORE interrupt. Never infer success from HTTP alone."""
+        before = self.get_owned_status()
+        if before in TERMINAL or before in ("SUCCESS", "SUCCEEDED"):
+            return False
+        if before not in {
+            "RUNNING", "QUEUED", "TASKWAITING", "RESOURCEWAITING",
+            "ASYNCWAITING", "WAITSTEPRUNNING", "INPUTWAITING",
+            "QUEUEDLICENSELIMITREACHED", "QUEUEDEXECUTIONCONCURRENCYREACHED",
+        }:
+            return False
+        e = self.execution
+        path = "/pipeline/api/pipeline/execute/interrupt/" + e.plan_execution_id
+        self._request("PUT", path)
+        return True
+
+
+def cancel_harness_quota(*, ledger, execution: HarnessExecution,
+                         api_key: str, task_id: str, attempt_id: str,
+                         http_status: int | None, provider_code: str,
+                         error_message: str, candidates: Iterable[Route] = (),
+                         enqueue=None, side_effects_possible: bool = True,
+                         reconcile=None, transport=None) -> dict:
+    """Invoke the existing cancel-first contract, using a SHARED fenced ledger.
+
+    A LOCAL SQLite ledger must never be passed in production; callers supply the
+    opt-in SharedQuotaLedger/Neon service and reconcile an uncertain submission.
+    No dispatch is attempted without explicitly supplied enqueue callback.
+    """
+    if not is_quota(http_status=http_status, code=provider_code,
+                    message=error_message):
+        return {"state": "NOT_QUOTA"}
+    if not hasattr(ledger, "_owned") or not hasattr(ledger, "claim"):
+        return {"state": "BLOCKED_SHARED_FENCING_UNAVAILABLE"}
+    if not enqueue:
+        enqueue = lambda _r, _t, _k: ""
+    adapter = HarnessCancelAdapter(execution, api_key, transport=transport)
+    current = Route("harness", "harness_cloud_account_" + execution.account,
+                    eligible=True, independent_quota_verified=False,
+                    cancellation_capable=True)
+    return cancel_first(
+        ledger=ledger, task_id=task_id, attempt_id=attempt_id,
+        current=current, candidates=candidates,
+        http_status=http_status, provider_code=provider_code,
+        error_message=error_message,
+        cancel=lambda attempt: adapter.request_cancel()
+        if attempt == attempt_id else False,
+        status=lambda attempt: adapter.get_owned_status()
+        if attempt == attempt_id else "UNKNOWN",
+        enqueue=enqueue, side_effects_possible=side_effects_possible,
+        reconcile=reconcile,
+    )
