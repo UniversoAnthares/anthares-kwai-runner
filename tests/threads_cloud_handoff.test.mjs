@@ -315,9 +315,11 @@ test('404/410 and caption failures isolate a single clip without blocking the ne
   /notifyQA\(id,reason\)/
  );
 
- assert.match(backend,/expires_at<=now\(\)/);
- assert.match(backend,/status='failed'/);
- assert.match(backend,/cortes_threads_quarantine/);
+ assert.doesNotMatch(backend,/expires_at<=now\(\)/);
+ assert.doesNotMatch(backend,/SET status='failed'/);
+ assert.match(backend,/status='isolated',reason_code=EXCLUDED.reason_code/);
+ assert.match(backend,/cortes_threads_quarantine\.status IN \('isolated','resolved','expired'\)/);
+ assert.match(src,/THREADS_QUARANTINE_STALE_ROW_SKIPPED/);
 });
 
 test('local hot standby honors Neon primary and cloud watchdog stalls',()=>{
