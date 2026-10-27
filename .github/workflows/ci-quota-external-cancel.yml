@@ -27,7 +27,7 @@ jobs:
           HARNESS_AUTH_PROBE_ONLY: 'true'
         shell: bash
         run: |
-          python3 tools/ci_quota_harness_watcher.py
+          python3 -m tools.ci_quota_harness_watcher
       - name: Harness cancel-first by structured quota (explicitly gated)
         if: ${{ vars.HARNESS_QUOTA_WATCH_ENABLED == 'true' }}
         env:
@@ -36,7 +36,7 @@ jobs:
           HARNESS_QUOTA_WATCH_ENABLED: 'true'
         shell: bash
         run: |
-          python3 tools/ci_quota_harness_watcher.py
+          python3 -m tools.ci_quota_harness_watcher
       - name: Retrieve AppVeyor API token securely from Bitwarden when configured
         if: ${{ vars.ANTHARES_SECRETS_APPVEYOR_TOKEN_ID != '' }}
         id: appveyor-bws
