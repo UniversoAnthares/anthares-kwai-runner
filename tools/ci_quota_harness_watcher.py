@@ -173,10 +173,36 @@ def check_and_cancel(execution_id, sha, api, oidc, *, controller=ledger,
     return result if report.get("code") == "RECORDED" else "NEON_REPORT_UNCERTAIN"
 
 
+def readonly_auth_probe(token: str, request=None) -> str:
+    """One read-only authenticated GET on a known completed owned execution.
+
+    Does NOT access local/browser secrets, mutate Harness, or touch Neon.
+    Returns a status category only; never logs a key or response body.
+    """
+    if not token:
+        return "NOT_CONFIGURED"
+    known_id = "udezZluzS2KC0qbfKcwCng"  # Harness run #908, success
+    from tools.ci_quota_provider_adapters import http_json
+    api = HarnessPipelineRun(ACCOUNT, ORG, PROJECT, PIPELINE,
+                             known_id, token,
+                             request=request or http_json)
+    try:
+        result = api.status(known_id)
+    except (HTTPError, URLError, OSError, ValueError):
+        result = "UNKNOWN"
+    if result == "SUCCEEDED":
+        return "VERIFIED_OWNED_EXECUTION_908"
+    return "UNVERIFIED_RESPONSE_OR_CREDENTIAL"
+
+
 def main():
     if os.getenv("GITHUB_REPOSITORY") != REPO:
         print("HARNESS_QUOTA=UNAUTHORIZED_REPOSITORY")
         return 2
+    if os.getenv("HARNESS_AUTH_PROBE_ONLY") == "true":
+        verdict = readonly_auth_probe(os.getenv("HARNESS_API_KEY", ""))
+        print("HARNESS_API_AUTH_READONLY="+verdict)
+        return 0 if verdict in ("NOT_CONFIGURED", "VERIFIED_OWNED_EXECUTION_908") else 2
     if os.getenv("HARNESS_QUOTA_WATCH_ENABLED") != "true":
         print("HARNESS_QUOTA=SAFE_DISABLED")
         return 0

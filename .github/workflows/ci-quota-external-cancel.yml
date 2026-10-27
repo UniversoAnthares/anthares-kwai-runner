@@ -20,6 +20,14 @@ jobs:
     timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
+      - name: Harness API authenticated read-only identity probe
+        continue-on-error: true
+        env:
+          HARNESS_API_KEY: ${{ secrets.HARNESS_API_KEY }}
+          HARNESS_AUTH_PROBE_ONLY: 'true'
+        shell: bash
+        run: |
+          python3 tools/ci_quota_harness_watcher.py
       - name: Harness cancel-first by structured quota (explicitly gated)
         if: ${{ vars.HARNESS_QUOTA_WATCH_ENABLED == 'true' }}
         env:
