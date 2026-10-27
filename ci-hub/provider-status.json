@@ -29,7 +29,8 @@
       "work"
     ],
     "quota_cancel_contract": "CANCELAR_IMEDIATAMENTE_POR_COTA_V1",
-    "quota_cancel_adapter_state": "CORE_TESTED; GITHUB_AND_GITLAB_ADAPTERS_STAGED; NOT_YET_CONNECTED_TO_ALL_EVENT_SOURCES"
+    "quota_cancel_adapter_state": "SHARED_NEON_LEDGER_DEPLOYED; GITHUB_SYNTHETIC_LISTENER_MERGED_UNVERIFIED; UNIVERSAL_CALLBACKS_NOT_WIRED",
+    "wordpress_qa_auth_status": "AUTH_MISSING_CONFIRMED_IN_GITHUB_ACTIONS_RUN_40500306462_20261027"
   },
   "providers": {
     "anthares_remote": {
