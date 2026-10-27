@@ -297,7 +297,7 @@ class P0RouterTests(unittest.TestCase):
              redirect_stdout(output):
             self.assertEqual(router.wp_state_from_authorized_hosting()["items"],[])
         args=run.call_args.args[0]
-        self.assertIn("StrictHostKeyChecking=yes",args)
+        self.assertIn("-oStrictHostKeyChecking=yes",args)
         self.assertIn("wp eval",args[-1])
         self.assertIn("HOSTING_SSH_READONLY",output.getvalue())
         self.assertNotIn("blocker",output.getvalue())
