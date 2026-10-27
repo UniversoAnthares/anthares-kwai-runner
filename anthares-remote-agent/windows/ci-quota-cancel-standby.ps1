@@ -79,12 +79,16 @@ function SignedLedger($body,[string]$key) {
         $parts+= if($null -eq $v){''}else{[string]$v}
     }
     $canonical=$parts -join "`n"
-    $hmac=New-Object System.Security.Cryptography.HMACSHA256(,[Text.Encoding]::UTF8.GetBytes($key))
-    try{$hex=[BitConverter]::ToString($hmac.ComputeHash(
-           [Text.Encoding]::UTF8.GetBytes($canonical))).Replace('-','').ToLowerInvariant()}
-    finally{$hmac.Dispose()}
+    $rsa=New-Object System.Security.Cryptography.RSACryptoServiceProvider
+    try {
+        $rsa.PersistKeyInCsp=$false
+        $rsa.FromXmlString($key)
+        $oid=[System.Security.Cryptography.CryptoConfig]::MapNameToOID('SHA256')
+        $signature=[Convert]::ToBase64String($rsa.SignData(
+            [Text.Encoding]::UTF8.GetBytes($canonical),$oid))
+    }finally{$rsa.Dispose()}
     $headers=@{'X-Anthares-Device'='DESKTOP-FTDK0HP'
-        'X-Anthares-Timestamp'=$stamp;'X-Anthares-Signature'=$hex}
+        'X-Anthares-Timestamp'=$stamp;'X-Anthares-Signature'=$signature}
     Invoke-RestMethod -Uri $Controller -Method Post -Headers $headers -TimeoutSec 18 `
       -ContentType 'application/json' -Body ($body|ConvertTo-Json -Compress -Depth 5)
 }
@@ -231,10 +235,10 @@ try {
     $configFile=Join-Path $StateDir 'ci-quota-standby.json'
     if(-not (Test-Path -LiteralPath $configFile)){$Status.auth='CONFIG_MISSING';return}
     $config=Get-Content -LiteralPath $configFile -Raw|ConvertFrom-Json
-    $hmacKey=Secret 'ci-quota-remote-hmac.dpapi'
-    if($hmacKey.Length -lt 48){$Status.auth='AUTH_NOT_CONFIGURED';return}
+    $privateKey=Secret 'ci-quota-remote-rsa.dpapi'
+    if($privateKey.Length -lt 200){$Status.auth='AUTH_NOT_CONFIGURED';return}
     $Status.auth='READY_DPAPI_SYSTEM'
-    try{$Status.appveyor=AppVeyor $config (Secret 'ci-quota-appveyor-token.dpapi') $hmacKey}
+    try{$Status.appveyor=AppVeyor $config (Secret 'ci-quota-appveyor-token.dpapi') $privateKey}
     catch{$Status.appveyor='SOURCE_UNAVAILABLE'}
     try{$Status.bitrise=Bitrise $config (Secret 'ci-quota-bitrise-token.dpapi') $hmacKey}
     catch{$Status.bitrise='SOURCE_UNAVAILABLE'}
