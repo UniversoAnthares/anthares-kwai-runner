@@ -245,7 +245,7 @@ class HarnessWatcherTests(unittest.TestCase):
             }}}
         self.assertEqual("VERIFIED_OWNED_EXECUTION_908",
             watcher.readonly_auth_probe("fixture", fake))
-        self.assertEqual(["GET"], statuses)
+        self.assertEqual(["GET", "GET"], statuses)
 
     def test_readonly_auth_probe_rejects_wrong_run_or_permissions(self):
         def foreign(*_):
@@ -256,9 +256,9 @@ class HarnessWatcherTests(unittest.TestCase):
                 "projectIdentifier": watcher.PROJECT,
                 "status": "Success"
             }}}
-        self.assertEqual("UNVERIFIED_RESPONSE_OR_CREDENTIAL",
+        self.assertEqual("EXECUTION_ID_MISMATCH",
                          watcher.readonly_auth_probe("fixture", foreign))
-        self.assertEqual("UNVERIFIED_RESPONSE_OR_CREDENTIAL",
+        self.assertEqual("AUTH_HTTP_401",
                          watcher.readonly_auth_probe("fixture",lambda *_: (401,{})))
 
     def test_main_probe_does_not_trigger_watch(self):
