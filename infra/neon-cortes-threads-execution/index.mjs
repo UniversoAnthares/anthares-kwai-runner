@@ -74,8 +74,10 @@ async function control(){
 }
 const daySQL="(now() AT TIME ZONE 'America/Campo_Grande')::date";
 async function stats(){
- await database("UPDATE cortes_publications p SET status='failed',updated_at=now() FROM cortes_threads_quarantine q WHERE p.id=q.id AND p.target_key=$1 AND p.status='queued' AND q.status='isolated' AND q.expires_at<=now()",[TARGET]);
- await database("UPDATE cortes_threads_quarantine SET status='expired',updated_at=now() WHERE target_key=$1 AND status='isolated' AND expires_at<=now()",[TARGET]);
+ // Expiration is a review deadline, never evidence that a queued clip failed.
+ // Preserve isolated records and their queue identity until independently verified.
+ // The existing QA incident route is the secondary recovery path; do not replay.
+
  const [controlState,counts,confirmed,queued,inflight]=await Promise.all([
   control(),database('SELECT status,count(*)::int as n FROM cortes_publications WHERE target_key=$1 GROUP BY status',[TARGET]),
   database("SELECT id,remote_id FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND confirmation_evidence->>'kind'='threads_cloud_verified' ORDER BY updated_at DESC LIMIT 100",[TARGET]),database("SELECT p.id,p.payload->>'source_day' AS source_day FROM cortes_publications p WHERE p.target_key=$1 AND p.status='queued' AND NOT EXISTS (SELECT 1 FROM cortes_threads_quarantine q WHERE q.id=p.id AND q.status='isolated' AND q.expires_at>now()) ORDER BY p.created_at ASC LIMIT 200",[TARGET]),database("SELECT count(*)::int AS n FROM cortes_publications WHERE target_key=$1 AND status IN ('started','leased') AND lease_owner LIKE 'github-threads:%'",[TARGET])]);
