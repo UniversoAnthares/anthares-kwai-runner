@@ -112,3 +112,9 @@ Bitrise permanece candidato **desativado** ate autenticar a conta, confirmar cre
 
 **Limite de evidencia:** a configuracao no repositório e os testes locais nao comprovam acesso a conta Bitrise, configuracao ativa no serviço nem execucao hospedada. Nao promover Bitrise a `ci_eligible=true` ou `active=true` sem links e logs de um job real. A prioridade CI e um manifesto de decisao; selecao/configuracao nao garante dispatch automatico entre provedores.
 
+
+## Cancelamento imediato por cota (2026-10-27)
+
+A regra `CANCELAR_IMEDIATAMENTE_POR_COTA_V1` aplica-se a todas as plataformas Anthares. Falha de cota comprovada em execução propria exige pedido de cancelamento imediato da tentativa original e verificacao de estado remoto terminal. Nao permanecer no job aguardando reset. Somente apos confirmacao terminal, liberacao de lease/fencing e (para operacoes com efeitos) prova `NOT_APPLIED`, criar nova tentativa idempotente no proximo provedor elegivel com cota comprovadamente independente. Sem reserva, cancelar e manter na fila. Cancelamento ou envio ambiguo bloqueiam nova tentativa e exigem reconciliacao. Credenciais ausentes, MFA, 401/403 e recusas de seguranca nao sao cota.
+
+Implementacao inicial em `tools/ci_quota_cancel_first.py`, `tools/ci_quota_provider_adapters.py`, `tests/test_ci_quota_cancel_first.py` e `tests/test_ci_quota_provider_adapters.py`. Ver `ci-hub/QUOTA_CANCEL_FIRST.md` para o contrato. **O modulo e adaptadores nao sao, por si, prova de integracao live de todos os webhooks/runner cancellation APIs**; so promover depois de smoke real de cada provedor. AppVeyor permanece penultimo e GitLab CI ultimo na fila.
