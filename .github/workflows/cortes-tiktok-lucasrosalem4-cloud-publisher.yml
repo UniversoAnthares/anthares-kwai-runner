@@ -11,6 +11,9 @@ on:
       - '.github/workflows/cortes-tiktok-lucasrosalem4-cloud-publisher.yml'
       - 'tests/test_cortes_tiktok_lucas4_cloud.py'
       - 'tests/test_cortes_native_runtime.py'
+      - 'tests/test_cortes_account_iam_audit.py'
+      - 'ci-hub/cortes_account_iam_audit.py'
+      - 'ci-hub/cortes_tiktok_lucas4_ownership.json'
 permissions:
   contents: read
   id-token: write
@@ -58,6 +61,7 @@ jobs:
           node --check infra/neon-cortes-lucasrosalem4/index.mjs
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok_lucas4_cloud.py' -v
           python3 -m unittest discover -s tests -p 'test_cortes_native_runtime.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_account_iam_audit.py' -v
       - name: Probe cloud session or publish at most one fenced short
         env:
           TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.CORTES_TIKTOK_LUCAS4_STORAGE_STATE }}
