@@ -63,3 +63,5 @@ assert.equal(queries.length,6);
 assert.ok(queries.some(q=>q.includes("dispatch_accepted")));
 assert.ok(queries.some(q=>q.includes("successor_run_id")));
 console.log("HARNESS_FALLBACK_OIDC_NEON_FENCE=PASS CASES=8 MOCKED_IO=true");
+
+// Isolated CI contract rerun: quota, fencing and idempotence use mocked I/O only.
