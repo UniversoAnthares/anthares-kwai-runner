@@ -39,10 +39,10 @@ jobs:
             ${{ vars.ANTHARES_SECRETS_BITRISE_TOKEN_ID }} > ANTHARES_BITRISE_TOKEN_FROM_BW
       - name: Detect provider-structured quota and cancel owned execution only
         env:
-          APPVEYOR_ACCOUNT: ${{ vars.APPVEYOR_ACCOUNT }}
-          APPVEYOR_PROJECT: ${{ vars.APPVEYOR_PROJECT }}
+          APPVEYOR_ACCOUNT: ${{ vars.APPVEYOR_ACCOUNT || 'UniversoAnthares' }}
+          APPVEYOR_PROJECT: ${{ vars.APPVEYOR_PROJECT || 'anthares-kwai-runner' }}
           APPVEYOR_API_TOKEN: ${{ env.ANTHARES_APPVEYOR_TOKEN_FROM_BW || secrets.APPVEYOR_API_TOKEN }}
-          BITRISE_APP_SLUG: ${{ vars.BITRISE_APP_SLUG }}
+          BITRISE_APP_SLUG: ${{ vars.BITRISE_APP_SLUG || 'ef06f940-ffc7-4e37-b935-93ad06d8faeb' }}
           BITRISE_API_TOKEN: ${{ env.ANTHARES_BITRISE_TOKEN_FROM_BW || secrets.BITRISE_API_TOKEN }}
         run: |
           python3 tools/ci_quota_external_watcher.py
