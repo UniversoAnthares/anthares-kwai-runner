@@ -272,5 +272,54 @@ class P0RouterTests(unittest.TestCase):
         self.assertEqual(len(issues),2)
         self.assertEqual(len({i["id"] for i in issues}),2)
 
+    def test_wordpress_missing_credentials_uses_only_authorized_runner_ssh(self):
+        with patch.dict(router.os.environ,{
+                "RUNNER_NAME":"Anthares-QA-P0-Windows-Independent",
+                "WP_SITE_URL":"","WP_USERNAME":"","WP_APP_PASSWORD":""}), \
+             patch.object(router,"wp_state_from_authorized_hosting",
+                          return_value={"items":[],"blocker":None}) as source:
+            self.assertEqual(router.wp_incidents(),[])
+        source.assert_called_once_with()
+
+    def test_wordpress_ssh_requires_exact_runner_identity(self):
+        with patch.dict(router.os.environ,{"RUNNER_NAME":"some-other-runner"}):
+            with self.assertRaisesRegex(RuntimeError,"WP_QA_AUTH_UNAVAILABLE"):
+                router.wp_state_from_authorized_hosting()
+
+    def test_wordpress_ssh_success_parses_data_without_payload_logging(self):
+        import io
+        from types import SimpleNamespace
+        from contextlib import redirect_stdout
+        result=SimpleNamespace(returncode=0,stdout=b'{"items":[],"blocker":null}')
+        output=io.StringIO()
+        with patch.dict(router.os.environ,{"RUNNER_NAME":"Anthares-QA-P0-Windows-Independent"}), \
+             patch.object(router.subprocess,"run",return_value=result) as run, \
+             redirect_stdout(output):
+            self.assertEqual(router.wp_state_from_authorized_hosting()["items"],[])
+        args=run.call_args.args[0]
+        self.assertIn("StrictHostKeyChecking=yes",args)
+        self.assertIn("wp eval",args[-1])
+        self.assertIn("HOSTING_SSH_READONLY",output.getvalue())
+        self.assertNotIn("blocker",output.getvalue())
+
+    def test_wordpress_ssh_failure_never_calls_rest_or_retries(self):
+        from types import SimpleNamespace
+        result=SimpleNamespace(returncode=255,stdout=b'')
+        with patch.dict(router.os.environ,{"RUNNER_NAME":"Anthares-QA-P0-Windows-Independent"}), \
+             patch.object(router.subprocess,"run",return_value=result) as run:
+            with self.assertRaisesRegex(RuntimeError,"WP_QA_SSH_UNAVAILABLE"):
+                router.wp_state_from_authorized_hosting()
+        self.assertEqual(run.call_count,1)
+
+    def test_configured_wp_401_does_not_switch_to_ssh(self):
+        denied=router.urllib.error.HTTPError("https://anthares.us/wp-json/anthares/v1/cortes/state",401,"Denied",{},None)
+        with patch.dict(router.os.environ,{"WP_SITE_URL":"https://anthares.us",
+             "WP_USERNAME":"qa","WP_APP_PASSWORD":"invalid"}), \
+             patch.object(router,"http",side_effect=denied), \
+             patch.object(router,"wp_state_from_authorized_hosting") as ssh:
+            with self.assertRaises(router.urllib.error.HTTPError):
+                router.wp_incidents()
+        ssh.assert_not_called()
+
 if __name__=="__main__":
     unittest.main()
