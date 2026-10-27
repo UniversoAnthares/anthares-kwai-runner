@@ -163,3 +163,40 @@ class HarnessPipelineRun:
         if normalized in self._ACTIVE:
             return "RUNNING"
         return "UNKNOWN"
+
+
+def cancel_harness_quota_fenced(*, ledger, api: HarnessPipelineRun, task_id: str,
+                                attempt_id: str, quota_code: str, http_status=None,
+                                error_message="", owned_execution_proven=False,
+                                reconcile=None):
+    """Fail-closed shared-ledger cancel-first Harness handoff.
+
+    Requires a SHARED transactional fenced ledger such as SharedQuotaLedger,
+    not the single-host SQLite ledger. No successor dispatch is supported yet.
+    Callers must independently establish that exact owned remote execution
+    belongs to the expected account/project/pipeline and is quota-blocked.
+    """
+    from tools.ci_quota_cancel_first import Route, cancel_first, is_quota
+    from tools.ci_quota_neon_ledger import SharedQuotaLedger
+    if not isinstance(ledger, SharedQuotaLedger):
+        raise ValueError("SHARED_NEON_LEDGER_REQUIRED")
+    if not isinstance(api, HarnessPipelineRun):
+        raise ValueError("HARNESS_PROVIDER_ADAPTER_REQUIRED")
+    if not task_id or attempt_id != api.execution_id or not owned_execution_proven:
+        raise ValueError("HARNESS_OWNERSHIP_PROOF_REQUIRED")
+    if not is_quota(http_status=http_status, code=quota_code, message=error_message):
+        return {"state": "NOT_QUOTA"}
+    # Never enqueue a replacement here: cross-provider independent quota,
+    # side-effect reconciliation and global fencing need additional proof.
+    return cancel_first(
+        ledger=ledger, task_id=task_id, attempt_id="harness:" + attempt_id,
+        current=Route("harness", "harness_account:" + api.account,
+                      eligible=False, independent_quota_verified=False,
+                      cancellation_capable=True),
+        candidates=[], http_status=http_status, provider_code=quota_code,
+        error_message=error_message,
+        cancel=lambda _id: api.cancel(attempt_id),
+        status=lambda _id: api.status(attempt_id),
+        enqueue=lambda *_: (_ for _ in ()).throw(
+            AssertionError("HARNESS_FALLBACK_DISPATCH_FORBIDDEN")),
+        side_effects_possible=True, reconcile=reconcile)
