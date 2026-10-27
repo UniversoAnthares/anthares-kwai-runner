@@ -1,0 +1,26 @@
+name: Anthares external CI quota cancel-first
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: anthares-external-quota-cancel
+  cancel-in-progress: false
+jobs:
+  cancel-confirmed-owned-builds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect provider-structured quota and cancel owned execution only
+        env:
+          APPVEYOR_ACCOUNT: ${{ vars.APPVEYOR_ACCOUNT }}
+          APPVEYOR_PROJECT: ${{ vars.APPVEYOR_PROJECT }}
+          APPVEYOR_API_TOKEN: ${{ secrets.APPVEYOR_API_TOKEN }}
+          BITRISE_APP_SLUG: ${{ vars.BITRISE_APP_SLUG }}
+          BITRISE_API_TOKEN: ${{ secrets.BITRISE_API_TOKEN }}
+        run: |
+          python3 tools/ci_quota_external_watcher.py
