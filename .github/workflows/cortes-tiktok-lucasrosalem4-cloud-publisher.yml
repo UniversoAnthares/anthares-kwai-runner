@@ -10,6 +10,7 @@ on:
       - 'infra/neon-cortes-lucasrosalem4/**'
       - '.github/workflows/cortes-tiktok-lucasrosalem4-cloud-publisher.yml'
       - 'tests/test_cortes_tiktok_lucas4_cloud.py'
+      - 'tests/test_cortes_native_runtime.py'
 permissions:
   contents: read
   id-token: write
@@ -41,7 +42,7 @@ jobs:
           persist-credentials: false
       - name: Install isolated cloud browser
         run: |
-          python3 -m pip install -q --disable-pip-version-check playwright requests
+          python3 -m pip install -q --disable-pip-version-check playwright requests PyYAML
           installed=0
           for n in 1 2 3; do
             if PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium; then
@@ -56,6 +57,7 @@ jobs:
           python3 -m py_compile tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
           node --check infra/neon-cortes-lucasrosalem4/index.mjs
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok_lucas4_cloud.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_native_runtime.py' -v
       - name: Probe cloud session or publish at most one fenced short
         env:
           TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.CORTES_TIKTOK_LUCAS4_STORAGE_STATE }}
