@@ -63,9 +63,14 @@ export default async function handler(req,res){
  const provider=String(body?.provider||""),
  target=String(body?.target||""),code=String(body?.code||""),
  source_sha=String(body?.sha||""),phase=String(body?.phase||"");
- if(!["appveyor","bitrise"].includes(provider)||!plain.test(target)||
+ if(!["appveyor","bitrise","harness"].includes(provider)||!plain.test(target)||
  !codes.has(code)||!/^[a-f0-9]{40}$/.test(source_sha))
  return respond(res,400,"INVALID_EVENT");
+ // Harness claims are *only* ledger reservations: this endpoint never
+ // performs provider cancellation or enqueues a successor. Authorization and
+ // quota/source-commit validation remain the signed watcher's responsibility.
+ if(provider==="harness"&&!/^[A-Za-z0-9_-]{16,64}$/.test(target))
+   return respond(res,400,"INVALID_HARNESS_EXECUTION");
  const attempt=provider+":"+target;
  const sql=neon(process.env.DATABASE_URL);
  if(phase==="claim"){
