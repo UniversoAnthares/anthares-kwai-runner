@@ -88,6 +88,56 @@ export default async function handler(req,res){
     return respond(res,200,"CLAIMED",{attempt,owner_token:token});
    }catch{return respond(res,503,"LEDGER_UNAVAILABLE");}
  }
+
+ // The GitHub reserve is allowed only for the exact side-effect-free Harness
+ // CI pipeline blob, after a signed owner reported a verified terminal abort.
+ // One atomic transition grants ONE dispatch; uncertain responses never retry.
+ if(provider==="harness"&&(phase==="reserve"||phase==="ack")){
+   const owner_token=String(body.owner_token||"");
+   if(!/^[a-f0-9-]{36}$/.test(owner_token))
+     return respond(res,400,"OWNER_TOKEN_REQUIRED");
+   const pipelineBlob="bdbbd74b693d2f9fdd6c08b94cc03d8921ebce18";
+   if(String(body.pipeline_blob||"")!==pipelineBlob)
+     return respond(res,409,"SIDE_EFFECT_FREE_PIPELINE_NOT_PROVEN");
+   if(phase==="reserve"){
+     const extra={state:"FALLBACK_RESERVED",successor:"github_actions_public",
+       fallback_workflow:"harness-quota-rescue.yml",
+       source_pipeline_blob:pipelineBlob,side_effects_reconciled:true,
+       source_job_scope:"READONLY_BUILD_AND_TEST",fallback_dispatched:false};
+     try{
+       const rows=await sql`UPDATE public.anthares_ci_quota_attempts
+         SET state='FALLBACK_RESERVED',data=data || ${JSON.stringify(extra)}::jsonb,
+             lease_generation=lease_generation+1,updated_at=now()
+         WHERE attempt_id=${attempt} AND owner_token=${owner_token}::uuid
+           AND lease_generation=2 AND state='CANCELLED_NO_INDEPENDENT_RESERVE'
+           AND lease_until>now() AND data->>'owner_run'=${owner}
+           AND data->>'source_sha'=${source_sha}
+           AND data->>'provider_terminal_reported'='true'
+           AND data->>'fallback_dispatched'='false'
+         RETURNING attempt_id`;
+       if(rows.length!==1)return respond(res,409,"FALLBACK_RESERVATION_REJECTED");
+       return respond(res,200,"FALLBACK_RESERVED",{attempt,route:"github_actions_public"});
+     }catch{return respond(res,503,"LEDGER_RESERVE_UNAVAILABLE");}
+   }
+   if(String(body.dispatch_status||"")!=="204")
+     return respond(res,400,"DISPATCH_ACCEPTANCE_REQUIRED");
+   const extra={state:"FALLBACK_SUBMITTED",fallback_dispatched:true,
+     dispatch_http_status:204,dispatch_owner_run:owner,
+     dispatch_accepted:true,successor:"github_actions_public"};
+   try{
+     const rows=await sql`UPDATE public.anthares_ci_quota_attempts
+       SET state='FALLBACK_SUBMITTED',data=data || ${JSON.stringify(extra)}::jsonb,
+           lease_generation=lease_generation+1,updated_at=now()
+       WHERE attempt_id=${attempt} AND owner_token=${owner_token}::uuid
+         AND lease_generation=3 AND state='FALLBACK_RESERVED'
+         AND lease_until>now() AND data->>'owner_run'=${owner}
+         AND data->>'source_sha'=${source_sha}
+         AND data->>'source_pipeline_blob'=${pipelineBlob}
+       RETURNING attempt_id`;
+     if(rows.length!==1)return respond(res,409,"DISPATCH_ACK_FENCING_REJECTED");
+     return respond(res,200,"FALLBACK_SUBMITTED",{attempt});
+   }catch{return respond(res,503,"DISPATCH_ACK_UNAVAILABLE");}
+ }
  if(phase!=="report")return respond(res,400,"INVALID_PHASE");
  const owner_token=String(body.owner_token||"");
  const outcome=String(body.outcome||"");
