@@ -53,6 +53,14 @@ test('cloud selects oldest source-day with queued identity, not just today',()=>
  assert.match(src,/fetchCloudManifest\(\{day\}\)/);
  assert.match(src,/THREADS_QUEUE_EMPTY_OR_ISOLATED/);
 });
+test('paged WordPress discovery miss cannot quarantine a queued Neon clip',()=>{
+ const src=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
+ const candidateMiss=src.match(/if\(!candidate\)\{([\s\S]*?)\n  \}/)?.[1]||'';
+ assert.match(candidateMiss,/THREADS_CLIP_NOT_IN_PAGED_MANIFEST/);
+ assert.doesNotMatch(candidateMiss,/callControl\(jwt,'quarantine'/);
+ assert.doesNotMatch(candidateMiss,/reason:'MEDIA_INVALID'/);
+ assert.match(candidateMiss,/rejected\+\+;continue;/);
+});
 test('unknown cloud submissions retain a durable reconciliation block',()=>{
  const src=fs.readFileSync('infra/neon-cortes-threads-execution/index.mjs','utf8');
  assert.match(src,/threads_cloud_unknown/);
