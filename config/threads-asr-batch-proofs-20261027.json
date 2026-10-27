@@ -6761,6 +6761,2411 @@
       ],
       "excerpt": "Entendeu? É isso. Quem será que ela vai reduzir mais? Será que ela vai, não sei, um dia, para ela reduzir o Hulk, né? Vai pegar o Hulk e vai reduzir o coloridinho. O coloridinho é aquele que faz milho, né? Coração, né? O que mais será a Vem Vinda aqui, né? Vou voltar um pouquinho, vou botar para ela aqui, vai. Ah, todo mundo me odeia. Todo mundo só esperando um momento para me descartar. Todo mundo se aproveitando muito ali do personagem. É a partir do momento que não podem tirar mais nada daquele personagem, joga o personagem fora, a quem goste.",
       "verified": true
+    },
+    "g1:fOmihuHUT1M:585:628": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:585:628",
+      "attachment_id": 17124,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 585,
+      "source_end_s": 628,
+      "media_sha256": "ddb243510b33126deb0d4cfd1dd9268023ba93c96a146e93b22830cf77e9bf57",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 7.2,
+          "text": "É só lá dando o contexto do que ela tá falando ali, da situação dela que eu acho importante botar."
+        },
+        {
+          "start": 7.2,
+          "end": 11.84,
+          "text": "Pra ver por que ela tá tão assim, né? Por que ela tá tão ácida, tão soberba, assim?"
+        },
+        {
+          "start": 11.84,
+          "end": 16.16,
+          "text": "É porque atacaram ela no Twitter, né? Mas aí eu vou deixar ela mesmo dar o contexto, né?"
+        },
+        {
+          "start": 16.16,
+          "end": 20.76,
+          "text": "E aí, a partir dos 3 minutos, ela vai começar a dar o resuminho ali rapidinho, de 2, 3 minutinhos da obra,"
+        },
+        {
+          "start": 20.76,
+          "end": 25.28,
+          "text": "a gente vai pontuando, enfim, a gente segue daí, né? Vamos lá, vamos lá e..."
+        },
+        {
+          "start": 25.28,
+          "end": 27.52,
+          "text": "Bora, bora, bora, cadê? Começar..."
+        },
+        {
+          "start": 27.52,
+          "end": 30.32,
+          "text": "Olá, vocês não conseguem ver isso novamente, essa semana eu não sei aqui no Instagram."
+        },
+        {
+          "start": 30.32,
+          "end": 31.72,
+          "text": "Vocês estão ouvindo? Não, né?"
+        },
+        {
+          "start": 31.72,
+          "end": 34.22,
+          "text": "Estão ouvindo? Vou mandar, é que estou todo."
+        },
+        {
+          "start": 34.22,
+          "end": 34.72,
+          "text": "Cadê?"
+        }
+      ],
+      "excerpt": "É só lá dando o contexto do que ela tá falando ali, da situação dela que eu acho importante botar. Pra ver por que ela tá tão assim, né? Por que ela tá tão ácida, tão soberba, assim? É porque atacaram ela no Twitter, né? Mas aí eu vou deixar ela mesmo dar o contexto, né? E aí, a partir dos 3 minutos, ela vai começar a dar o resuminho ali rapidinho, de 2, 3 minutinhos da obra, a gente vai pontuando, enfim, a gente segue daí, né? Vamos lá, vamos lá e... Bora, bora, bora, cadê? Começar... Olá, vocês não conseguem ver isso novamente, essa semana eu não sei aqui no Instagram. Vocês estão ouvindo? Não, né? Estão ouvindo? Vou mandar, é que estou todo. Cadê?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:4843:4883": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:4843:4883",
+      "attachment_id": 17125,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 4843,
+      "source_end_s": 4883,
+      "media_sha256": "2b951ef17b8ae14352bb732423e7e6098ff07a6c14d64f39a6f15796572756ae",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.5,
+          "text": "como antes. Choraram, fugiram, ameaçaram ele, chutaram ele pro quarto, trancaram ele no"
+        },
+        {
+          "start": 5.5,
+          "end": 10.2,
+          "text": "quarto, manter ele em quarentena direto, tudo normal. Porque antes faziam isso com ele, né?"
+        },
+        {
+          "start": 10.2,
+          "end": 14.4,
+          "text": "Era assim que era a história. Ele era um caixairo de viagens dentro do quarto, né?"
+        },
+        {
+          "start": 14.4,
+          "end": 19.68,
+          "text": "Ele fazia aviãozinhos de papel e ia jogar... ele jogava pela janela, é por isso que"
+        },
+        {
+          "start": 19.68,
+          "end": 23.96,
+          "text": "ele gostava da janela. Porque ele jogava o aviãozinho e a carteia voando com as"
+        },
+        {
+          "start": 23.96,
+          "end": 27.52,
+          "text": "correntes de vento até o destinatário. Vocês não estão entendendo, é que vocês"
+        },
+        {
+          "start": 27.52,
+          "end": 33.02,
+          "text": "mas não tem a mente da Débora, que é incrivelmente apta para entender uma história tão simples."
+        }
+      ],
+      "excerpt": "como antes. Choraram, fugiram, ameaçaram ele, chutaram ele pro quarto, trancaram ele no quarto, manter ele em quarentena direto, tudo normal. Porque antes faziam isso com ele, né? Era assim que era a história. Ele era um caixairo de viagens dentro do quarto, né? Ele fazia aviãozinhos de papel e ia jogar... ele jogava pela janela, é por isso que ele gostava da janela. Porque ele jogava o aviãozinho e a carteia voando com as correntes de vento até o destinatário. Vocês não estão entendendo, é que vocês mas não tem a mente da Débora, que é incrivelmente apta para entender uma história tão simples.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:7539:7580": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:7539:7580",
+      "attachment_id": 17126,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 7539,
+      "source_end_s": 7580,
+      "media_sha256": "d201986003373e151ff8c7f4831e42435afcfd7a00ece2d3a4dc768222ddf888",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 6.4,
+          "text": "Ou, na metamorfose, não tem um dono depressivo, nem no processo tem, não tem, não tem."
+        },
+        {
+          "start": 6.4,
+          "end": 8,
+          "text": "E todo mundo me odeia..."
+        },
+        {
+          "start": 8,
+          "end": 8.9,
+          "text": "Isso não é dito."
+        },
+        {
+          "start": 8.9,
+          "end": 12.4,
+          "text": "E todo mundo só esperando um momento para me escartar..."
+        },
+        {
+          "start": 12.4,
+          "end": 15.1,
+          "text": "Não, não. Não tem esse lirismo, tudo aí não tem."
+        },
+        {
+          "start": 15.1,
+          "end": 16.9,
+          "text": "Ela mesmo fala no início do vídeo."
+        },
+        {
+          "start": 16.9,
+          "end": 27.1,
+          "text": "No início dela, ela fala que o Gregor Samza, o Gregor Samza, ele tá preocupado com a família."
+        },
+        {
+          "start": 27.1,
+          "end": 29.4,
+          "text": "Que negócio é esse? Você está preocupado com a sua família?"
+        },
+        {
+          "start": 29.4,
+          "end": 32.5,
+          "text": "Já a minha família, sim, que bom que eles estão guardando dinheiro."
+        },
+        {
+          "start": 32.5,
+          "end": 34.7,
+          "text": "Ah, que ruim que eu não posso ajudar eles."
+        }
+      ],
+      "excerpt": "Ou, na metamorfose, não tem um dono depressivo, nem no processo tem, não tem, não tem. E todo mundo me odeia... Isso não é dito. E todo mundo só esperando um momento para me escartar... Não, não. Não tem esse lirismo, tudo aí não tem. Ela mesmo fala no início do vídeo. No início dela, ela fala que o Gregor Samza, o Gregor Samza, ele tá preocupado com a família. Que negócio é esse? Você está preocupado com a sua família? Já a minha família, sim, que bom que eles estão guardando dinheiro. Ah, que ruim que eu não posso ajudar eles.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8768:8809": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8768:8809",
+      "attachment_id": 17127,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8768,
+      "source_end_s": 8809,
+      "media_sha256": "752e3e4d43b0d2a9c0a3ac9b1ecb2fab7e57383f17eb12f6ef10d8de101c3eb6",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 6,
+          "text": "da família ZAMZA. Essa é a situação deles. Aí os pais saíram do apartamento porque o Gregor"
+        },
+        {
+          "start": 6,
+          "end": 11.04,
+          "text": "morreu. Choraram a morte dele, enfim. Falaram lá com o empregador, disseram que me diriam"
+        },
+        {
+          "start": 11.04,
+          "end": 14.8,
+          "text": "me perdão, disseram que aconteceu tal e tal, se demitiram. Foram em outro lugar e pensaram,"
+        },
+        {
+          "start": 14.8,
+          "end": 18.32,
+          "text": "vamos casar a menina. Você pegar isso tudo que eu falei e você jogar fora, sabe por quê?"
+        },
+        {
+          "start": 18.32,
+          "end": 23.04,
+          "text": "Porque a Débora disse que todo mundo é muito escroto, porque os pais são os escroto,"
+        },
+        {
+          "start": 23.04,
+          "end": 27.92,
+          "text": "porque não é uma dinâmica de uma família num ambiente em que aquela é a melhor maneira de"
+        },
+        {
+          "start": 27.92,
+          "end": 33.42,
+          "text": "eles não viveram naquele inferno. Os três. Aí a menina, que se importa com os pais, esquece..."
+        }
+      ],
+      "excerpt": "da família ZAMZA. Essa é a situação deles. Aí os pais saíram do apartamento porque o Gregor morreu. Choraram a morte dele, enfim. Falaram lá com o empregador, disseram que me diriam me perdão, disseram que aconteceu tal e tal, se demitiram. Foram em outro lugar e pensaram, vamos casar a menina. Você pegar isso tudo que eu falei e você jogar fora, sabe por quê? Porque a Débora disse que todo mundo é muito escroto, porque os pais são os escroto, porque não é uma dinâmica de uma família num ambiente em que aquela é a melhor maneira de eles não viveram naquele inferno. Os três. Aí a menina, que se importa com os pais, esquece...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8809:8850": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8809:8850",
+      "attachment_id": 17128,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8809,
+      "source_end_s": 8850,
+      "media_sha256": "ad3b28e6a4c37f2acbb0091d8d437dd3bcc4c2cf8c789d4da1a03e3e319be789",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.84,
+          "text": "Ela está tentando se livrar, ela não aguenta mais, tudo o que ela fez ali não vai para"
+        },
+        {
+          "start": 3.84,
+          "end": 6.4,
+          "text": "proteger os pais e o Gregor, uns dos outros."
+        },
+        {
+          "start": 6.4,
+          "end": 10.64,
+          "text": "Não, não sei, é alguma coisa muito doida, mas era um gênio do mal, ela entendeu?"
+        },
+        {
+          "start": 10.64,
+          "end": 18.08,
+          "text": "Tipo um maquiavel com 17 anos e transinha, sabe, transinha com o caixa rodopiano, entendeu?"
+        },
+        {
+          "start": 18.08,
+          "end": 21.96,
+          "text": "E assim, ela quer se livrar dos pais e não consegue."
+        },
+        {
+          "start": 21.96,
+          "end": 26.76,
+          "text": "Essa é a história, e os pais são maus, eles ficam tipo, trabalhem, trabalhem,"
+        },
+        {
+          "start": 26.76,
+          "end": 30.6,
+          "text": "ter muitos netos pra gente, pra gente poder reclamar a fortuna do seu próximo esposo."
+        },
+        {
+          "start": 30.6,
+          "end": 34.84,
+          "text": "Não é uma família não, não é uma família, tentando sobreviver junta, unida."
+        }
+      ],
+      "excerpt": "Ela está tentando se livrar, ela não aguenta mais, tudo o que ela fez ali não vai para proteger os pais e o Gregor, uns dos outros. Não, não sei, é alguma coisa muito doida, mas era um gênio do mal, ela entendeu? Tipo um maquiavel com 17 anos e transinha, sabe, transinha com o caixa rodopiano, entendeu? E assim, ela quer se livrar dos pais e não consegue. Essa é a história, e os pais são maus, eles ficam tipo, trabalhem, trabalhem, ter muitos netos pra gente, pra gente poder reclamar a fortuna do seu próximo esposo. Não é uma família não, não é uma família, tentando sobreviver junta, unida.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8972:9012": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8972:9012",
+      "attachment_id": 17129,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8972,
+      "source_end_s": 9012,
+      "media_sha256": "21ed33b1010576b84d3a780c0a4bfb9187d8444c438216a19a6f467c1668eb48",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.2,
+          "text": "comia elas, não pagava, elas checlamavam, o cara dava um tapão na cara delas assim, entendeu?"
+        },
+        {
+          "start": 5.2,
+          "end": 14.44,
+          "text": "Ela tinha que procurar um cafetão, ou uma cafetã, para poder tomar conta delas, e agora"
+        },
+        {
+          "start": 14.44,
+          "end": 18.48,
+          "text": "quem agride é o cafetão ou a cafetã, que bate, né, falar, você está escondendo"
+        },
+        {
+          "start": 18.48,
+          "end": 21.96,
+          "text": "dinheiro de mim, eu disse para cobrar isso tudo aqui, você está gastando com droga,"
+        },
+        {
+          "start": 21.96,
+          "end": 26.28,
+          "text": "não sei o que, entendeu? Elas queriam estar lá, pô, porque não tem nada de algum"
+        },
+        {
+          "start": 26.28,
+          "end": 30.2,
+          "text": "um casamento arranjado. Eu não defendo isso, mas para aquela época, naquelas condições"
+        },
+        {
+          "start": 30.2,
+          "end": 33.36,
+          "text": "ali, o casamento arranjado não parece ser a pior das coisas, né?"
+        }
+      ],
+      "excerpt": "comia elas, não pagava, elas checlamavam, o cara dava um tapão na cara delas assim, entendeu? Ela tinha que procurar um cafetão, ou uma cafetã, para poder tomar conta delas, e agora quem agride é o cafetão ou a cafetã, que bate, né, falar, você está escondendo dinheiro de mim, eu disse para cobrar isso tudo aqui, você está gastando com droga, não sei o que, entendeu? Elas queriam estar lá, pô, porque não tem nada de algum um casamento arranjado. Eu não defendo isso, mas para aquela época, naquelas condições ali, o casamento arranjado não parece ser a pior das coisas, né?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:9012:9052": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:9012:9052",
+      "attachment_id": 17130,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 9012,
+      "source_end_s": 9052,
+      "media_sha256": "85af6d135049a3d440bb0b163253704cbef15547f78c7f8213adacc518ad2074",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.7,
+          "text": "Ainda mais a gente sabendo, a gente tendo visto o que aconteceu com eles."
+        },
+        {
+          "start": 2.7,
+          "end": 4.6,
+          "text": "Era aquilo que eles conheciam."
+        },
+        {
+          "start": 4.6,
+          "end": 7,
+          "text": "Que eles conheciam era aquilo ou casamento."
+        },
+        {
+          "start": 7,
+          "end": 9.4,
+          "text": "E claro, que aquilo que eles passaram era maravilhoso."
+        },
+        {
+          "start": 9.4,
+          "end": 11.9,
+          "text": "Eles estavam doidos para voltar para aquele apartamento."
+        },
+        {
+          "start": 11.9,
+          "end": 12.8,
+          "text": "Doidos."
+        },
+        {
+          "start": 12.8,
+          "end": 15.5,
+          "text": "Eles quase calugaram um monte de baratinhas"
+        },
+        {
+          "start": 15.5,
+          "end": 17.5,
+          "text": "para deixar num quarto a parte,"
+        },
+        {
+          "start": 17.5,
+          "end": 20.7,
+          "text": "para eles poderem lembrar do Gregor e de viver ainda mais no sufoco."
+        },
+        {
+          "start": 20.7,
+          "end": 21.6,
+          "text": "Porque por que não, né?"
+        },
+        {
+          "start": 21.6,
+          "end": 22.9,
+          "text": "Deve ser um..."
+        },
+        {
+          "start": 22.9,
+          "end": 25.4,
+          "text": "Tipo uma asfixia autoerótica, entendeu?"
+        },
+        {
+          "start": 25.4,
+          "end": 28.2,
+          "text": "Parece que é para matar, mas na verdade a pessoa gosta."
+        },
+        {
+          "start": 28.2,
+          "end": 31.54,
+          "text": "Se olha assim e fala, o cara vai morrendo, é a parada dele."
+        },
+        {
+          "start": 31.54,
+          "end": 33.04,
+          "text": "É o negócio dele, entendeu?"
+        },
+        {
+          "start": 33.04,
+          "end": 35.32,
+          "text": "Não é que ele está... Você não entende."
+        }
+      ],
+      "excerpt": "Ainda mais a gente sabendo, a gente tendo visto o que aconteceu com eles. Era aquilo que eles conheciam. Que eles conheciam era aquilo ou casamento. E claro, que aquilo que eles passaram era maravilhoso. Eles estavam doidos para voltar para aquele apartamento. Doidos. Eles quase calugaram um monte de baratinhas para deixar num quarto a parte, para eles poderem lembrar do Gregor e de viver ainda mais no sufoco. Porque por que não, né? Deve ser um... Tipo uma asfixia autoerótica, entendeu? Parece que é para matar, mas na verdade a pessoa gosta. Se olha assim e fala, o cara vai morrendo, é a parada dele. É o negócio dele, entendeu? Não é que ele está... Você não entende.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:9052:9092": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:9052:9092",
+      "attachment_id": 17131,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 9052,
+      "source_end_s": 9092,
+      "media_sha256": "acd7f3f2df99aaecd912ffbe46a8cde815ef38e92b73f0fc9e0e8bb2de7ecfcd",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 1.6,
+          "text": "Deu o feitiço do cara, né?"
+        },
+        {
+          "start": 1.6,
+          "end": 3.4,
+          "text": "Vamos continuar aqui, por favor."
+        },
+        {
+          "start": 3.4,
+          "end": 5.2,
+          "text": "Por favor, não se esqueça do que a Débora falou."
+        },
+        {
+          "start": 5.2,
+          "end": 7.2,
+          "text": "É muito importante vocês lembrem do que a Débora falou."
+        },
+        {
+          "start": 7.2,
+          "end": 8.7,
+          "text": "Muito importante, né?"
+        },
+        {
+          "start": 8.7,
+          "end": 10.3,
+          "text": "O bocó que sou eu, vamos lá."
+        },
+        {
+          "start": 10.3,
+          "end": 11.6,
+          "text": "Mas com ela, cê."
+        },
+        {
+          "start": 11.6,
+          "end": 13.2,
+          "text": "Então, assim, os pais são pessoas horríveis também."
+        },
+        {
+          "start": 13.2,
+          "end": 15.2,
+          "text": "Todo mundo tá nessa casa uma pessoa horrível."
+        },
+        {
+          "start": 15.2,
+          "end": 17.7,
+          "text": "Mas eu fico pensando, gente, se eu tivesse virado uma barata,"
+        },
+        {
+          "start": 17.7,
+          "end": 21.8,
+          "text": "no mínimo a minha mãe ia ter me dado uma chinelada"
+        },
+        {
+          "start": 21.8,
+          "end": 24.7,
+          "text": "e me jogado na rua."
+        },
+        {
+          "start": 24.7,
+          "end": 26.5,
+          "text": "Então, assim, o cara tá num lucro"
+        },
+        {
+          "start": 26.5,
+          "end": 32.44,
+          "text": "que os caras ainda aceitaram conviver com um inseto monstruoso dentro de um quarto isolado,"
+        },
+        {
+          "start": 32.44,
+          "end": 33.44,
+          "text": "certo?"
+        },
+        {
+          "start": 33.44,
+          "end": 34.94,
+          "text": "Partindo da premissa, assim, que ele realmente..."
+        }
+      ],
+      "excerpt": "Deu o feitiço do cara, né? Vamos continuar aqui, por favor. Por favor, não se esqueça do que a Débora falou. É muito importante vocês lembrem do que a Débora falou. Muito importante, né? O bocó que sou eu, vamos lá. Mas com ela, cê. Então, assim, os pais são pessoas horríveis também. Todo mundo tá nessa casa uma pessoa horrível. Mas eu fico pensando, gente, se eu tivesse virado uma barata, no mínimo a minha mãe ia ter me dado uma chinelada e me jogado na rua. Então, assim, o cara tá num lucro que os caras ainda aceitaram conviver com um inseto monstruoso dentro de um quarto isolado, certo? Partindo da premissa, assim, que ele realmente...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:9174:9216": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:9174:9216",
+      "attachment_id": 17132,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 9174,
+      "source_end_s": 9216,
+      "media_sha256": "39129b9c6d47efc7113e1ae250f9c8c03090ce7c3558bbcae632efef7c451c4d",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 1.33,
+          "end": 3.95,
+          "text": "Nada, isso aqui não é nada, não, fantástico."
+        },
+        {
+          "start": 3.95,
+          "end": 5.95,
+          "text": "O que é fantasia para Débora?"
+        },
+        {
+          "start": 5.95,
+          "end": 8.45,
+          "text": "Eu não sei, mas o que é fantasia, pô."
+        },
+        {
+          "start": 8.45,
+          "end": 11.45,
+          "text": "Eu tenho aqui Simaghi, né?"
+        },
+        {
+          "start": 11.45,
+          "end": 13.45,
+          "text": "Eu tenho toda uma coleção de fantasia."
+        },
+        {
+          "start": 13.45,
+          "end": 17.4,
+          "text": "Eu não sei, nem se é fantasia por ali, não."
+        },
+        {
+          "start": 17.4,
+          "end": 19.4,
+          "text": "Não sei, entendeu?"
+        },
+        {
+          "start": 19.4,
+          "end": 21.4,
+          "text": "Isso mesmo é que estou..."
+        },
+        {
+          "start": 21.4,
+          "end": 23.4,
+          "text": "Nada de estranho, vida que segue, irmão."
+        },
+        {
+          "start": 23.4,
+          "end": 25.4,
+          "text": "É isso aí, véi."
+        },
+        {
+          "start": 25.4,
+          "end": 27.4,
+          "text": "É isso aí, entramente isso, pô."
+        },
+        {
+          "start": 27.4,
+          "end": 29.4,
+          "text": "E pior que ela fala, né?"
+        },
+        {
+          "start": 29.4,
+          "end": 31.4,
+          "text": "É uma história estranha."
+        },
+        {
+          "start": 31.4,
+          "end": 41.4,
+          "text": "é tudo muito estranho e ao mesmo tempo nada especial, nada especial, né?"
+        }
+      ],
+      "excerpt": "Nada, isso aqui não é nada, não, fantástico. O que é fantasia para Débora? Eu não sei, mas o que é fantasia, pô. Eu tenho aqui Simaghi, né? Eu tenho toda uma coleção de fantasia. Eu não sei, nem se é fantasia por ali, não. Não sei, entendeu? Isso mesmo é que estou... Nada de estranho, vida que segue, irmão. É isso aí, véi. É isso aí, entramente isso, pô. E pior que ela fala, né? É uma história estranha. é tudo muito estranho e ao mesmo tempo nada especial, nada especial, né?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:9259:9301": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:9259:9301",
+      "attachment_id": 17133,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 9259,
+      "source_end_s": 9301,
+      "media_sha256": "9fd873e571812c29338dac7445e88b23cf445e9d2f2c18ffd803f98e8626c55b",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.52,
+          "text": "O carteiro hipotético. Conta pra mim, da vez que o carteiro hipotético, ele tropeçou na pedra, caiu e bateu a cabeça."
+        },
+        {
+          "start": 5.52,
+          "end": 16.24,
+          "text": "É aquele lá que tem, tipo, nas placas, tipo, cuidado, acidente possível, e aí tem um deles lá, tem um carinho que parece um carteiro tropeçando na pedra e caindo e batendo na cabeça, entendeu?"
+        },
+        {
+          "start": 16.24,
+          "end": 19.52,
+          "text": "Aquilo ali é o carteiro hipotético. É a parada que a Débora olha e fala..."
+        },
+        {
+          "start": 19.52,
+          "end": 24.78,
+          "text": "Eu quero ouvir a história do texto aqui, entendeu?"
+        },
+        {
+          "start": 24.78,
+          "end": 28.8,
+          "text": "É do carinha lá da placa de obras, que ele tá assim, tipo, aquele carinha preto, né?"
+        },
+        {
+          "start": 28.8,
+          "end": 33.96,
+          "text": "Um carinha pretinho, sem cor, sem nada, a cara dele é uma bolinha, e ele tá assim,"
+        },
+        {
+          "start": 33.96,
+          "end": 35.9,
+          "text": "tipo, com uma pazinha, com uma bomba acima."
+        }
+      ],
+      "excerpt": "O carteiro hipotético. Conta pra mim, da vez que o carteiro hipotético, ele tropeçou na pedra, caiu e bateu a cabeça. É aquele lá que tem, tipo, nas placas, tipo, cuidado, acidente possível, e aí tem um deles lá, tem um carinho que parece um carteiro tropeçando na pedra e caindo e batendo na cabeça, entendeu? Aquilo ali é o carteiro hipotético. É a parada que a Débora olha e fala... Eu quero ouvir a história do texto aqui, entendeu? É do carinha lá da placa de obras, que ele tá assim, tipo, aquele carinha preto, né? Um carinha pretinho, sem cor, sem nada, a cara dele é uma bolinha, e ele tá assim, tipo, com uma pazinha, com uma bomba acima.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8234:8276": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8234:8276",
+      "attachment_id": 17114,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8234,
+      "source_end_s": 8276,
+      "media_sha256": "54499f33839a8685371a5939b56d0adaa55f814b3351429ba8f71f4f8dec6d69",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.72,
+          "text": "Certo, tem muita gente que gostou e tudo, eu pessoalmente não gostei."
+        },
+        {
+          "start": 3.72,
+          "end": 8.2,
+          "text": "Gostei bastante do final, tem muita gente que fala que não gosta especificamente do final,"
+        },
+        {
+          "start": 8.2,
+          "end": 12.64,
+          "text": "porque o final é meio louco, os livros do Kafka ficam meio que interminados, assim."
+        },
+        {
+          "start": 12.64,
+          "end": 18.48,
+          "text": "Mas o final achei interessante, porque no finalzinho, depois que já descartaram o Gregor ali,"
+        },
+        {
+          "start": 18.48,
+          "end": 24.56,
+          "text": "com sendo um nada, os pais olham pra irmã e veem que a irmã está se tornando uma mulher bonita"
+        },
+        {
+          "start": 24.56,
+          "end": 27,
+          "text": "e pensam, hum, agora a gente vai poder."
+        },
+        {
+          "start": 27,
+          "end": 30.84,
+          "text": "Não é depois de terem descartado o Gregor, não, pô. Pelo amor de Deus, cara."
+        },
+        {
+          "start": 30.84,
+          "end": 32.96,
+          "text": "Aí é foda, bicho, não, pô. Aí não."
+        },
+        {
+          "start": 32.96,
+          "end": 34.96,
+          "text": "Foi depois de o Gregor ter morrido!"
+        }
+      ],
+      "excerpt": "Certo, tem muita gente que gostou e tudo, eu pessoalmente não gostei. Gostei bastante do final, tem muita gente que fala que não gosta especificamente do final, porque o final é meio louco, os livros do Kafka ficam meio que interminados, assim. Mas o final achei interessante, porque no finalzinho, depois que já descartaram o Gregor ali, com sendo um nada, os pais olham pra irmã e veem que a irmã está se tornando uma mulher bonita e pensam, hum, agora a gente vai poder. Não é depois de terem descartado o Gregor, não, pô. Pelo amor de Deus, cara. Aí é foda, bicho, não, pô. Aí não. Foi depois de o Gregor ter morrido!",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8276:8317": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8276:8317",
+      "attachment_id": 17115,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8276,
+      "source_end_s": 8317,
+      "media_sha256": "811621fece019075d7d528b0f6f62d0c8d5d34d9ebac29cb38a01bc054237e92",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 6.5,
+          "text": "ele morreu e aí eles falam a irmã né tá ficando um corpadinho assim ela vai"
+        },
+        {
+          "start": 6.5,
+          "end": 9.24,
+          "text": "continuar e não é que descartou né tipo a esquecêmo ele"
+        },
+        {
+          "start": 9.24,
+          "end": 13.8,
+          "text": "tamo a atenção pra irmã agora não é o gregor morreu e eles choraram a morte"
+        },
+        {
+          "start": 13.8,
+          "end": 16.92,
+          "text": "dele acho que ele esqueceu de falar né que o gregor morre a primeira coisa que"
+        },
+        {
+          "start": 16.92,
+          "end": 21.28,
+          "text": "eles fazem né é e ver conferir aí eles entram os três no quarto saem com os"
+        },
+        {
+          "start": 21.28,
+          "end": 25,
+          "text": "olhos avermelhados cheios de lágrimas sem nenhum não tão sorrindo tipo que"
+        },
+        {
+          "start": 25,
+          "end": 28.52,
+          "text": "alegria não eles tão com a cara séria triste né que opressor eu quero"
+        },
+        {
+          "start": 28.52,
+          "end": 32.24,
+          "text": "esses parasitas. Já falei, se não for assim, não me parasite."
+        }
+      ],
+      "excerpt": "ele morreu e aí eles falam a irmã né tá ficando um corpadinho assim ela vai continuar e não é que descartou né tipo a esquecêmo ele tamo a atenção pra irmã agora não é o gregor morreu e eles choraram a morte dele acho que ele esqueceu de falar né que o gregor morre a primeira coisa que eles fazem né é e ver conferir aí eles entram os três no quarto saem com os olhos avermelhados cheios de lágrimas sem nenhum não tão sorrindo tipo que alegria não eles tão com a cara séria triste né que opressor eu quero esses parasitas. Já falei, se não for assim, não me parasite.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8317:8357": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8317:8357",
+      "attachment_id": 17116,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8317,
+      "source_end_s": 8357,
+      "media_sha256": "85c9351c13b57d448d46015b52d07a0245fd8ada8c00d8edcfd89d740103fe80",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4,
+          "text": "Se você imagina se o Estado fosse assim com a gente, meu irmão, eu não ia ser em Capnão."
+        },
+        {
+          "start": 4,
+          "end": 7.7,
+          "text": "Eu não ia ser libertário não, bicho. De jeito nenhum, de jeito nenhum."
+        },
+        {
+          "start": 7.7,
+          "end": 9.6,
+          "text": "Ou seja, eu sou o cara mais estadista que tem."
+        },
+        {
+          "start": 9.6,
+          "end": 11.7,
+          "text": "Ah, tem posto, meu amigo."
+        },
+        {
+          "start": 11.7,
+          "end": 13.8,
+          "text": "O cara se preocupa com o meu café da manhã."
+        },
+        {
+          "start": 15.1,
+          "end": 17.2,
+          "text": "Eu paro de trabalho e trabalho é pra mim, pô."
+        },
+        {
+          "start": 17.2,
+          "end": 20.1,
+          "text": "Porra, se for assim, eu quero mesmo, eu quero mesmo, entendeu?"
+        },
+        {
+          "start": 20.1,
+          "end": 23.3,
+          "text": "Se for assim, eu quero. Eu quero esse parasita."
+        },
+        {
+          "start": 23.3,
+          "end": 25.1,
+          "text": "Por que o Estado não é assim, pô?"
+        },
+        {
+          "start": 25.1,
+          "end": 27.2,
+          "text": "Se o Estado fosse assim, eu ia ser o primeiro."
+        },
+        {
+          "start": 27.2,
+          "end": 29.5,
+          "text": "Eu ia criar um canal novo só pra combater a autolimbagem."
+        },
+        {
+          "start": 29.5,
+          "end": 33.42,
+          "text": "Eu ia falar, tem que ser comunismo, tem que ser isso mesmo, tem que ser estado pra..."
+        }
+      ],
+      "excerpt": "Se você imagina se o Estado fosse assim com a gente, meu irmão, eu não ia ser em Capnão. Eu não ia ser libertário não, bicho. De jeito nenhum, de jeito nenhum. Ou seja, eu sou o cara mais estadista que tem. Ah, tem posto, meu amigo. O cara se preocupa com o meu café da manhã. Eu paro de trabalho e trabalho é pra mim, pô. Porra, se for assim, eu quero mesmo, eu quero mesmo, entendeu? Se for assim, eu quero. Eu quero esse parasita. Por que o Estado não é assim, pô? Se o Estado fosse assim, eu ia ser o primeiro. Eu ia criar um canal novo só pra combater a autolimbagem. Eu ia falar, tem que ser comunismo, tem que ser isso mesmo, tem que ser estado pra...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8357:8397": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8357:8397",
+      "attachment_id": 17117,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8357,
+      "source_end_s": 8397,
+      "media_sha256": "d9342993fb44787f62d9bf91e18581430a5637acacd47a3289eae0eb53f133e4",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.7,
+          "text": "porque esse estado se importa comigo, esse estado aqui ele se preocupa com cada"
+        },
+        {
+          "start": 4.7,
+          "end": 9.24,
+          "text": "por menor da minha vida, sabe? E não só da minha, dos outros também, sabe? É você"
+        },
+        {
+          "start": 9.24,
+          "end": 14,
+          "text": "parar de trabalhar e não sei, o pessoal lá do Senado, eles trabalham dobrados, só"
+        },
+        {
+          "start": 14,
+          "end": 16.52,
+          "text": "pra poder te sustentar. Eu adoraria o estado assim, por."
+        },
+        {
+          "start": 16.52,
+          "end": 20.46,
+          "text": "Imagina a classe política, a classe burocrática trabalhando pra te"
+        },
+        {
+          "start": 20.46,
+          "end": 23.86,
+          "text": "sustentar quando você precisasse, se preocupando com o cara que ia ser outro"
+        },
+        {
+          "start": 23.86,
+          "end": 28.6,
+          "text": "mundo, por. Eu acho que o Miorim não ia ser mais um, não ia ser mais a capa, por."
+        },
+        {
+          "start": 28.6,
+          "end": 32.78,
+          "text": "É um tipo de parasita novo, que até agora está trazendo para a gente, velho."
+        },
+        {
+          "start": 32.78,
+          "end": 34.28,
+          "text": "Eu quero esse tipo de parasita para mim."
+        }
+      ],
+      "excerpt": "porque esse estado se importa comigo, esse estado aqui ele se preocupa com cada por menor da minha vida, sabe? E não só da minha, dos outros também, sabe? É você parar de trabalhar e não sei, o pessoal lá do Senado, eles trabalham dobrados, só pra poder te sustentar. Eu adoraria o estado assim, por. Imagina a classe política, a classe burocrática trabalhando pra te sustentar quando você precisasse, se preocupando com o cara que ia ser outro mundo, por. Eu acho que o Miorim não ia ser mais um, não ia ser mais a capa, por. É um tipo de parasita novo, que até agora está trazendo para a gente, velho. Eu quero esse tipo de parasita para mim.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1773:1813": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1773:1813",
+      "attachment_id": 17118,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1773,
+      "source_end_s": 1813,
+      "media_sha256": "50ec609d285b7b38f4e79aad656af402d6d60a63a62e20a25d6cd949bbef4af7",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 8,
+          "text": "só acrescentam mais ao livro, o livro Os Demônios do Dostoevsky, por exemplo, é um romance legal,"
+        },
+        {
+          "start": 8,
+          "end": 15,
+          "text": "uma narrativa legal, e tem um bônus que é uma discussão de filosofias ali dentro, que são"
+        },
+        {
+          "start": 15,
+          "end": 20,
+          "text": "discussões interessantes, mas se você quiser ler Os Demônios sem entender nenhum tipo de filosofia,"
+        },
+        {
+          "start": 20,
+          "end": 26,
+          "text": "vai ser uma leitura legal, mesmo assim, e ponto final. Esse era uma ponta inicial. E pra que que eu fui falar?"
+        },
+        {
+          "start": 26,
+          "end": 29,
+          "text": "Aliás, outra justiça que eu tenho que fazer aqui, tá?"
+        },
+        {
+          "start": 29,
+          "end": 37,
+          "text": "Eu critico muito a Débora, porque quando ela erra, ela erra muito e quando ela acerta, ela acerta o suficiente pra mim."
+        },
+        {
+          "start": 37,
+          "end": 39,
+          "text": "O Lucas acha que é pouca coisa."
+        }
+      ],
+      "excerpt": "só acrescentam mais ao livro, o livro Os Demônios do Dostoevsky, por exemplo, é um romance legal, uma narrativa legal, e tem um bônus que é uma discussão de filosofias ali dentro, que são discussões interessantes, mas se você quiser ler Os Demônios sem entender nenhum tipo de filosofia, vai ser uma leitura legal, mesmo assim, e ponto final. Esse era uma ponta inicial. E pra que que eu fui falar? Aliás, outra justiça que eu tenho que fazer aqui, tá? Eu critico muito a Débora, porque quando ela erra, ela erra muito e quando ela acerta, ela acerta o suficiente pra mim. O Lucas acha que é pouca coisa.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8397:8438": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8397:8438",
+      "attachment_id": 17119,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8397,
+      "source_end_s": 8438,
+      "media_sha256": "f0d356e79cb2957f24deaf88d8ee7de33e695fdec878e9bc24097f5e99280018",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.62,
+          "text": "Eu quero esse parazinho, esse tipo, que eu quero."
+        },
+        {
+          "start": 3.62,
+          "end": 4.62,
+          "text": "Vamos lá continuar."
+        },
+        {
+          "start": 4.62,
+          "end": 10.32,
+          "text": "Vem que a irmã está se tornando uma mulher bonita e pensa um, agora a gente vai poder"
+        },
+        {
+          "start": 10.32,
+          "end": 15.06,
+          "text": "continuar vivendo as cursas dessa filha mais nova, porque a gente vai fazer um bom casamento"
+        },
+        {
+          "start": 15.06,
+          "end": 16.06,
+          "text": "com ela, certo?"
+        },
+        {
+          "start": 16.06,
+          "end": 19.06,
+          "text": "Então assim, os pais são pessoas horríveis também, porque todo mundo tá nessa casa"
+        },
+        {
+          "start": 19.06,
+          "end": 20.06,
+          "text": "uma pessoa horrível."
+        },
+        {
+          "start": 20.06,
+          "end": 26.1,
+          "text": "Vamos lembrar aqui, eles passaram por períodos difíceis demais, tiveram que um velho"
+        },
+        {
+          "start": 26.1,
+          "end": 30.5,
+          "text": "Não é um cara assim à vidagem do Lugo, que a gente tem 39 anos, entendeu?"
+        }
+      ],
+      "excerpt": "Eu quero esse parazinho, esse tipo, que eu quero. Vamos lá continuar. Vem que a irmã está se tornando uma mulher bonita e pensa um, agora a gente vai poder continuar vivendo as cursas dessa filha mais nova, porque a gente vai fazer um bom casamento com ela, certo? Então assim, os pais são pessoas horríveis também, porque todo mundo tá nessa casa uma pessoa horrível. Vamos lembrar aqui, eles passaram por períodos difíceis demais, tiveram que um velho Não é um cara assim à vidagem do Lugo, que a gente tem 39 anos, entendeu?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8480:8523": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8480:8523",
+      "attachment_id": 17120,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8480,
+      "source_end_s": 8523,
+      "media_sha256": "5492cf555bfe2dfff16d5c2a4a8ee0788b82f33f5a2e07ed998d7fd4ebd4d1ed",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3,
+          "text": "Tente do assistente, cacete, para não perder o emprego, entendeu?"
+        },
+        {
+          "start": 3,
+          "end": 6.26,
+          "text": "Maravilha, ótima situação incrível, maravilhosa."
+        },
+        {
+          "start": 6.26,
+          "end": 12.24,
+          "text": "Aí, irmã, com 17 anos, que tocava música, enfim, ficava em casa, ajudava na casa ali,"
+        },
+        {
+          "start": 12.24,
+          "end": 13.44,
+          "text": "teve que trabalhar."
+        },
+        {
+          "start": 13.44,
+          "end": 16.04,
+          "text": "Trabalhar fora de casa, trabalhar dentro para ajudar a fazer comida,"
+        },
+        {
+          "start": 16.04,
+          "end": 19.24,
+          "text": "porque a cozinheira foi mandada embora, ficou só a faxineira."
+        },
+        {
+          "start": 19.24,
+          "end": 24.36,
+          "text": "Trabalhar fora, voltar, fazer comida, cuidar das paradas junto com a mãe, que é asthmática."
+        },
+        {
+          "start": 24.36,
+          "end": 29,
+          "text": "A mãe também consegue um... A mãe não consegue um emprego fora de casa, mas ela trabalha ali, enfim, né?"
+        },
+        {
+          "start": 29,
+          "end": 34.24,
+          "text": "Toda essa galera assim, nessa dificuldade, nessa desgraça, entendeu?"
+        },
+        {
+          "start": 34.24,
+          "end": 37.44,
+          "text": "Nesse problema todo, né? Porque não tem um homem."
+        }
+      ],
+      "excerpt": "Tente do assistente, cacete, para não perder o emprego, entendeu? Maravilha, ótima situação incrível, maravilhosa. Aí, irmã, com 17 anos, que tocava música, enfim, ficava em casa, ajudava na casa ali, teve que trabalhar. Trabalhar fora de casa, trabalhar dentro para ajudar a fazer comida, porque a cozinheira foi mandada embora, ficou só a faxineira. Trabalhar fora, voltar, fazer comida, cuidar das paradas junto com a mãe, que é asthmática. A mãe também consegue um... A mãe não consegue um emprego fora de casa, mas ela trabalha ali, enfim, né? Toda essa galera assim, nessa dificuldade, nessa desgraça, entendeu? Nesse problema todo, né? Porque não tem um homem.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8565:8605": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8565:8605",
+      "attachment_id": 17121,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8565,
+      "source_end_s": 8605,
+      "media_sha256": "c9a7255f1d8ca92db6a16a81db3c788b5210c5fa7d843d9569a7b25a3adf717d",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 10,
+          "text": "Não é uma dinâmica de família, não é uma família olhando, né, os pais, olhando para o mundo ao redor deles, como funciona e tentando todos eles sobreviverem."
+        },
+        {
+          "start": 10,
+          "end": 17.6,
+          "text": "Não, não, não, pô, é isso aí, é a exploração. Até porque a menina ia odiar susentar os pais, que o marido os dá susentar os pais."
+        },
+        {
+          "start": 17.6,
+          "end": 26.6,
+          "text": "Ela ia odiar, né, tanto que, né, ela tenta tornar o quarto do Gregor, mais assustador para eles, não para o Gregor, para eles, para que ela possa ser a única a ter coragem."
+        },
+        {
+          "start": 26.6,
+          "end": 31.6,
+          "text": "ela continua sendo a única que seja capaz de ter coragem e hábito"
+        },
+        {
+          "start": 31.6,
+          "end": 33.6,
+          "text": "para entrar no quarto para ajudar o Gregor."
+        },
+        {
+          "start": 33.6,
+          "end": 35.6,
+          "text": "Ou seja, ela quer evitar que..."
+        }
+      ],
+      "excerpt": "Não é uma dinâmica de família, não é uma família olhando, né, os pais, olhando para o mundo ao redor deles, como funciona e tentando todos eles sobreviverem. Não, não, não, pô, é isso aí, é a exploração. Até porque a menina ia odiar susentar os pais, que o marido os dá susentar os pais. Ela ia odiar, né, tanto que, né, ela tenta tornar o quarto do Gregor, mais assustador para eles, não para o Gregor, para eles, para que ela possa ser a única a ter coragem. ela continua sendo a única que seja capaz de ter coragem e hábito para entrar no quarto para ajudar o Gregor. Ou seja, ela quer evitar que...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8605:8646": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8605:8646",
+      "attachment_id": 17122,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8605,
+      "source_end_s": 8646,
+      "media_sha256": "3888de983e93615e45aadbaa680e710b5a0de8fafbaca73a3b3bc4caa1ba9596",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.68,
+          "text": "evitar conflitos familiares, entendeu? Dessa família. Ela trabalha para ajudar essa família."
+        },
+        {
+          "start": 4.68,
+          "end": 9.92,
+          "text": "Ela entretenha hóspedes porque eles começam a alugar um quarto da casa deles. O quarto dela"
+        },
+        {
+          "start": 9.92,
+          "end": 14.24,
+          "text": "vira quarto de hóspede, entendeu? Ela tem que passar a dormir, né, em outro quarto, ou"
+        },
+        {
+          "start": 14.24,
+          "end": 18.52,
+          "text": "o quarto do espada não fala onde, mas eu acho que o quarto dela, um quarto ou outro,"
+        },
+        {
+          "start": 18.52,
+          "end": 22.08,
+          "text": "um quarto dela vira um quarto de hóspedes. Se eu não me engano, tem os três quartos,"
+        },
+        {
+          "start": 22.08,
+          "end": 26.12,
+          "text": "uma sala e uma cozinha, uma parada assim, né? Então, o quarto dela vira quarto de hóspedes,"
+        },
+        {
+          "start": 26.12,
+          "end": 35.12,
+          "text": "Ela perdeu a intimidade. Ela vive agora com os pais, no mesmo quarto. Ela tinha 17 anos e ela voltou a ter 7."
+        }
+      ],
+      "excerpt": "evitar conflitos familiares, entendeu? Dessa família. Ela trabalha para ajudar essa família. Ela entretenha hóspedes porque eles começam a alugar um quarto da casa deles. O quarto dela vira quarto de hóspede, entendeu? Ela tem que passar a dormir, né, em outro quarto, ou o quarto do espada não fala onde, mas eu acho que o quarto dela, um quarto ou outro, um quarto dela vira um quarto de hóspedes. Se eu não me engano, tem os três quartos, uma sala e uma cozinha, uma parada assim, né? Então, o quarto dela vira quarto de hóspedes, Ela perdeu a intimidade. Ela vive agora com os pais, no mesmo quarto. Ela tinha 17 anos e ela voltou a ter 7.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:8728:8768": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:8728:8768",
+      "attachment_id": 17123,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 8728,
+      "source_end_s": 8768,
+      "media_sha256": "23511cd47b564af40f99e5508951a65f9270fb9bd7c10b9cb2295ca8fbd04f12",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.2,
+          "text": "o dinheiro para ele sobreviver e pequeno spoilerzinho mas não tem problema os"
+        },
+        {
+          "start": 4.2,
+          "end": 8.2,
+          "text": "hóspedes eles ameaçam ele judicialmente não chegou lá"
+        },
+        {
+          "start": 8.2,
+          "end": 15.52,
+          "text": "eles ameaçam de fazer um contra eles um processo judicial que eles sabem que"
+        },
+        {
+          "start": 15.52,
+          "end": 22,
+          "text": "ganhariam se se levassem conta e os próprios né a família Zamsa sabe disso"
+        },
+        {
+          "start": 22,
+          "end": 27.6,
+          "text": "a família Zamsa sabe disso e eles falam a gente vai sair daqui e a gente não"
+        },
+        {
+          "start": 27.6,
+          "end": 31.6,
+          "text": "a gente não vai pagar nada, nem o tempo que a gente ficou, nem a comida, nem a hospedaria,"
+        },
+        {
+          "start": 31.6,
+          "end": 32.6,
+          "text": "nada."
+        },
+        {
+          "start": 32.6,
+          "end": 33.6,
+          "text": "A gente vai embora."
+        },
+        {
+          "start": 33.6,
+          "end": 34.6,
+          "text": "Essa é a situação..."
+        }
+      ],
+      "excerpt": "o dinheiro para ele sobreviver e pequeno spoilerzinho mas não tem problema os hóspedes eles ameaçam ele judicialmente não chegou lá eles ameaçam de fazer um contra eles um processo judicial que eles sabem que ganhariam se se levassem conta e os próprios né a família Zamsa sabe disso a família Zamsa sabe disso e eles falam a gente vai sair daqui e a gente não a gente não vai pagar nada, nem o tempo que a gente ficou, nem a comida, nem a hospedaria, nada. A gente vai embora. Essa é a situação...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:7580:7621": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:7580:7621",
+      "attachment_id": 17134,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 7580,
+      "source_end_s": 7621,
+      "media_sha256": "6db02e902e177cfda990e8cf3b33c39f84c9b7ab82af44862e976fba622e014c",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.72,
+          "text": "que faz que eu estou sendo, que da onde que disso ela pegou e falou"
+        },
+        {
+          "start": 4.72,
+          "end": 10.2,
+          "text": "ah eu sou uma vítima, ah eu sou uma vítima, ninguém me odeia, todo mundo me odeia, ninguém me ama"
+        },
+        {
+          "start": 10.2,
+          "end": 15.6,
+          "text": "então são parazeres, estão me sugando, minhas energias, só estão se aproveitando de mim"
+        },
+        {
+          "start": 15.6,
+          "end": 19.12,
+          "text": "para poder me descartar, é o oposto, não tem isso nenhum"
+        },
+        {
+          "start": 19.12,
+          "end": 24.88,
+          "text": "cara, não tem isso nenhum dos personagens, nenhum, nenhum, nenhum, nenhum assim"
+        },
+        {
+          "start": 24.88,
+          "end": 27.84,
+          "text": "eu não li tudo do cáfica não tá, mas no processo não tem isso"
+        },
+        {
+          "start": 27.84,
+          "end": 32.84,
+          "text": "no metamorfose não tem isso, no castelo não tem isso, só não tem vi..."
+        }
+      ],
+      "excerpt": "que faz que eu estou sendo, que da onde que disso ela pegou e falou ah eu sou uma vítima, ah eu sou uma vítima, ninguém me odeia, todo mundo me odeia, ninguém me ama então são parazeres, estão me sugando, minhas energias, só estão se aproveitando de mim para poder me descartar, é o oposto, não tem isso nenhum cara, não tem isso nenhum dos personagens, nenhum, nenhum, nenhum, nenhum assim eu não li tudo do cáfica não tá, mas no processo não tem isso no metamorfose não tem isso, no castelo não tem isso, só não tem vi...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:9714:9754": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:9714:9754",
+      "attachment_id": 17135,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 9714,
+      "source_end_s": 9754,
+      "media_sha256": "1a345e96bd4b9ebc170a7327075bbcfb51d108a86f2609015eacedc787917df8",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0.02,
+          "end": 3.36,
+          "text": "são sintetizados a elementos do real."
+        },
+        {
+          "start": 3.36,
+          "end": 4.9,
+          "text": "Em elementos do fantástico,"
+        },
+        {
+          "start": 4.9,
+          "end": 8.36,
+          "text": "eles não são percebidos como estranhesas pelo real."
+        },
+        {
+          "start": 8.36,
+          "end": 9.96,
+          "text": "Por exemplo, no Seana de Solidão,"
+        },
+        {
+          "start": 9.96,
+          "end": 11.56,
+          "text": "lá nas primeiras páginas já,"
+        },
+        {
+          "start": 11.56,
+          "end": 13.6,
+          "text": "que a gente vê as crianças,"
+        },
+        {
+          "start": 13.6,
+          "end": 16.88,
+          "text": "a mãe vê os seus filhos brincando no tapete de voador,"
+        },
+        {
+          "start": 16.88,
+          "end": 18.48,
+          "text": "e ela fala, crianças, cuidado."
+        },
+        {
+          "start": 18.48,
+          "end": 20.04,
+          "text": "Ela diz, olha, crianças, cuidado!"
+        },
+        {
+          "start": 20.04,
+          "end": 22.04,
+          "text": "Não é necessária isso que ela fala, mas enfim,"
+        },
+        {
+          "start": 22.04,
+          "end": 22.92,
+          "text": "é a parada assim, entendeu?"
+        },
+        {
+          "start": 22.92,
+          "end": 24.84,
+          "text": "Tipo, o tapete de voador para aquela mãe,"
+        },
+        {
+          "start": 24.84,
+          "end": 26.38,
+          "text": "que vive no nosso mundo,"
+        },
+        {
+          "start": 26.38,
+          "end": 29.92,
+          "text": "ela vê aquilo ali como um brinquedo perigoso,"
+        },
+        {
+          "start": 29.92,
+          "end": 33.08,
+          "text": "mas é um brinquedo. As crianças estão brincando com o tapete voador, entendeu?"
+        }
+      ],
+      "excerpt": "são sintetizados a elementos do real. Em elementos do fantástico, eles não são percebidos como estranhesas pelo real. Por exemplo, no Seana de Solidão, lá nas primeiras páginas já, que a gente vê as crianças, a mãe vê os seus filhos brincando no tapete de voador, e ela fala, crianças, cuidado. Ela diz, olha, crianças, cuidado! Não é necessária isso que ela fala, mas enfim, é a parada assim, entendeu? Tipo, o tapete de voador para aquela mãe, que vive no nosso mundo, ela vê aquilo ali como um brinquedo perigoso, mas é um brinquedo. As crianças estão brincando com o tapete voador, entendeu?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:9754:9795": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:9754:9795",
+      "attachment_id": 17136,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 9754,
+      "source_end_s": 9795,
+      "media_sha256": "40651ee543a6f9f2ab66d341c126ebe2247b420de7f3452a5b10a2cf318dea3d",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.52,
+          "text": "Acontece um monte de coisa mágica na ilha, na ilha deles lá,"
+        },
+        {
+          "start": 4.52,
+          "end": 9.52,
+          "text": "mas assim, eles vêem isso como algo normal, entendeu?"
+        },
+        {
+          "start": 9.52,
+          "end": 11.64,
+          "text": "É algo, tipo, corriqueiro do dia a dia."
+        },
+        {
+          "start": 11.64,
+          "end": 13.2,
+          "text": "Eles realmente não se quietam tanto."
+        },
+        {
+          "start": 13.2,
+          "end": 16.08,
+          "text": "No máximo, é tipo, as bobolezas amarelas aparecem e,"
+        },
+        {
+          "start": 16.08,
+          "end": 20.76,
+          "text": "oh, tipo, é sinal de, é um sinal de esperança,"
+        },
+        {
+          "start": 20.76,
+          "end": 23.28,
+          "text": "de boas novas, coisas boas estão vindo aí."
+        },
+        {
+          "start": 23.28,
+          "end": 25.64,
+          "text": "O futuro é promissor, né?"
+        },
+        {
+          "start": 25.64,
+          "end": 29.32,
+          "text": "Mas assim, quando você vê as folhas das árvores nascendo,"
+        },
+        {
+          "start": 29.32,
+          "end": 34.12,
+          "text": "você fala primavera, o tempo vai ficar melhor, o frio do inverno está indo embora."
+        }
+      ],
+      "excerpt": "Acontece um monte de coisa mágica na ilha, na ilha deles lá, mas assim, eles vêem isso como algo normal, entendeu? É algo, tipo, corriqueiro do dia a dia. Eles realmente não se quietam tanto. No máximo, é tipo, as bobolezas amarelas aparecem e, oh, tipo, é sinal de, é um sinal de esperança, de boas novas, coisas boas estão vindo aí. O futuro é promissor, né? Mas assim, quando você vê as folhas das árvores nascendo, você fala primavera, o tempo vai ficar melhor, o frio do inverno está indo embora.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:9958:9999": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:9958:9999",
+      "attachment_id": 17137,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 9958,
+      "source_end_s": 9999,
+      "media_sha256": "e29a4d80cd3ca1858f907978ac578317a40f379bf213b7909293d702fe893a69",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.74,
+          "text": "Leia um senso solidão, é uma excelente história,"
+        },
+        {
+          "start": 2.74,
+          "end": 4.24,
+          "text": "eu vou fazer vídeo aqui com certeza no futuro,"
+        },
+        {
+          "start": 4.24,
+          "end": 5.54,
+          "text": "vou fazer live no futuro,"
+        },
+        {
+          "start": 5.54,
+          "end": 8.64,
+          "text": "ano que vem eu devo fazer uma live aqui do senso solidão,"
+        },
+        {
+          "start": 8.64,
+          "end": 17.92,
+          "text": "e leio também algumas obras do Kafka,"
+        },
+        {
+          "start": 17.92,
+          "end": 19.44,
+          "text": "o Metamorfose, o processo,"
+        },
+        {
+          "start": 19.44,
+          "end": 21.96,
+          "text": "e dei um jeito, que nem a Débora,"
+        },
+        {
+          "start": 21.96,
+          "end": 24.36,
+          "text": "de deformar os dois a ponto que os dois viram a mesma coisa,"
+        },
+        {
+          "start": 24.36,
+          "end": 26.52,
+          "text": "porque é assim que a gente faz crítica literária,"
+        },
+        {
+          "start": 26.52,
+          "end": 29,
+          "text": "é assim que a gente produz conhecimento e tal."
+        },
+        {
+          "start": 29,
+          "end": 31.04,
+          "text": "Realismo mágico, realismo fantástico."
+        },
+        {
+          "start": 31.04,
+          "end": 33.48,
+          "text": "Aí, gente, é inúancias que aqui são mais complicadas."
+        },
+        {
+          "start": 33.48,
+          "end": 34.72,
+          "text": "Realismo mágico é..."
+        }
+      ],
+      "excerpt": "Leia um senso solidão, é uma excelente história, eu vou fazer vídeo aqui com certeza no futuro, vou fazer live no futuro, ano que vem eu devo fazer uma live aqui do senso solidão, e leio também algumas obras do Kafka, o Metamorfose, o processo, e dei um jeito, que nem a Débora, de deformar os dois a ponto que os dois viram a mesma coisa, porque é assim que a gente faz crítica literária, é assim que a gente produz conhecimento e tal. Realismo mágico, realismo fantástico. Aí, gente, é inúancias que aqui são mais complicadas. Realismo mágico é...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:9999:10041": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:9999:10041",
+      "attachment_id": 17138,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 9999,
+      "source_end_s": 10041,
+      "media_sha256": "ec3e387e6b81c49c9f45a3b866fbf8e56ee486af9b6a22cbb008e44fec46d850",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.68,
+          "text": "É o maravilhoso ser isso mesmo. O realismo fantástico é aquele em que as coisas meio, tipo assim,"
+        },
+        {
+          "start": 5.68,
+          "end": 12.64,
+          "text": "que elas podem ser tanto explicadas pelo mágico, pelo maravilhoso, quanto pelo natural,"
+        },
+        {
+          "start": 12.64,
+          "end": 21.28,
+          "text": "por causas naturais, é a mesma coisa, é ambivalente. Então, o realismo fantástico é que essas ambivalências,"
+        },
+        {
+          "start": 21.28,
+          "end": 27.2,
+          "text": "as pessoas convivem com isso e é isso mesmo. Então, as pessoas não sabem se, por que, sei lá,"
+        },
+        {
+          "start": 27.2,
+          "end": 34.08,
+          "text": "Porque os meninos somem, se é um lobisomem que caça eles, se é um chupa cabra que confunde"
+        },
+        {
+          "start": 34.08,
+          "end": 37.24,
+          "text": "os meninos com ovelhas ou se é..."
+        }
+      ],
+      "excerpt": "É o maravilhoso ser isso mesmo. O realismo fantástico é aquele em que as coisas meio, tipo assim, que elas podem ser tanto explicadas pelo mágico, pelo maravilhoso, quanto pelo natural, por causas naturais, é a mesma coisa, é ambivalente. Então, o realismo fantástico é que essas ambivalências, as pessoas convivem com isso e é isso mesmo. Então, as pessoas não sabem se, por que, sei lá, Porque os meninos somem, se é um lobisomem que caça eles, se é um chupa cabra que confunde os meninos com ovelhas ou se é...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10041:10083": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10041:10083",
+      "attachment_id": 17139,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10041,
+      "source_end_s": 10083,
+      "media_sha256": "fca6c111319ea675581cfe5f6acb2573d9d2747508bfe27be06ea57efa926ee3",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2,
+          "text": "É, sei lá, os meninos que vão para a floresta lá,"
+        },
+        {
+          "start": 2,
+          "end": 5,
+          "text": "fazer merda e cometer suicídio, não sei alguma coisa assim, entendeu?"
+        },
+        {
+          "start": 5,
+          "end": 7,
+          "text": "E as duas causas são..."
+        },
+        {
+          "start": 7,
+          "end": 10,
+          "text": "Tem ótimas evidências."
+        },
+        {
+          "start": 10,
+          "end": 12,
+          "text": "Para as duas coisas, tem ótimas evidências."
+        },
+        {
+          "start": 12,
+          "end": 14,
+          "text": "As próprias evidências são ambivalentes."
+        },
+        {
+          "start": 14,
+          "end": 18,
+          "text": "São evidências de, pô, isso aqui denota claramente"
+        },
+        {
+          "start": 18,
+          "end": 22,
+          "text": "uma cultura de suicídio nesses meninos da Saudei aqui."
+        },
+        {
+          "start": 22,
+          "end": 25,
+          "text": "E o outro é, pô, isso aqui faz pensar em um chupa-cabra mesmo, entendeu?"
+        },
+        {
+          "start": 25,
+          "end": 26,
+          "text": "Caçando eles, enfim."
+        },
+        {
+          "start": 26,
+          "end": 28,
+          "text": "Isso seria o realismo fantástico,"
+        },
+        {
+          "start": 28,
+          "end": 34.64,
+          "text": "o realismo mágico já é do Gabriel Garcia Márquez e de outros, né?"
+        },
+        {
+          "start": 34.64,
+          "end": 38.12,
+          "text": "E, como a Débora falou, não esqueçam, também é o do..."
+        }
+      ],
+      "excerpt": "É, sei lá, os meninos que vão para a floresta lá, fazer merda e cometer suicídio, não sei alguma coisa assim, entendeu? E as duas causas são... Tem ótimas evidências. Para as duas coisas, tem ótimas evidências. As próprias evidências são ambivalentes. São evidências de, pô, isso aqui denota claramente uma cultura de suicídio nesses meninos da Saudei aqui. E o outro é, pô, isso aqui faz pensar em um chupa-cabra mesmo, entendeu? Caçando eles, enfim. Isso seria o realismo fantástico, o realismo mágico já é do Gabriel Garcia Márquez e de outros, né? E, como a Débora falou, não esqueçam, também é o do...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10083:10123": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10083:10123",
+      "attachment_id": 17140,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10083,
+      "source_end_s": 10123,
+      "media_sha256": "664761ae5bf44188570b59c52b2208dd57debdc3665c4d8853f39fe17d89f90d",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0.27,
+          "end": 7.87,
+          "text": "também é o é o do do cáfica né gente eu vou ficar mais 12 minutinhos tá e"
+        },
+        {
+          "start": 7.87,
+          "end": 12.63,
+          "text": "depois a gente encerra aqui é se precisar eu gravo um vídeo depois né não malive"
+        },
+        {
+          "start": 12.63,
+          "end": 16.55,
+          "text": "grava um vídeo depois comentando os últimos pontos beleza que aqui já são"
+        },
+        {
+          "start": 16.55,
+          "end": 22.23,
+          "text": "3 e 17 da manhã e já tem quase três horas de live tá então vou bater três"
+        },
+        {
+          "start": 22.23,
+          "end": 27.59,
+          "text": "horas de live e aí devo passar um pouquinho mas depois eu eu fecho aqui e"
+        },
+        {
+          "start": 27.59,
+          "end": 30.91,
+          "text": "e eu faço o vídeo depois para só encerrar o resto, tá?"
+        },
+        {
+          "start": 30.91,
+          "end": 31.91,
+          "text": "Beleza? Vamos continuar aqui."
+        }
+      ],
+      "excerpt": "também é o é o do do cáfica né gente eu vou ficar mais 12 minutinhos tá e depois a gente encerra aqui é se precisar eu gravo um vídeo depois né não malive grava um vídeo depois comentando os últimos pontos beleza que aqui já são 3 e 17 da manhã e já tem quase três horas de live tá então vou bater três horas de live e aí devo passar um pouquinho mas depois eu eu fecho aqui e e eu faço o vídeo depois para só encerrar o resto, tá? Beleza? Vamos continuar aqui.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10123:10163": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10123:10163",
+      "attachment_id": 17141,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10123,
+      "source_end_s": 10163,
+      "media_sha256": "fefe71111cc98f85ec51dda5b9af6eba03546891c92aa20edaba14f17bb49cd1",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4,
+          "text": "Eu também tive um dia agitado. Tive um dia bem agitado e tô cansadão."
+        },
+        {
+          "start": 4,
+          "end": 7,
+          "text": "Eu já tava cansadão de começar aqui, mas vamos lá, continuar aqui."
+        },
+        {
+          "start": 7,
+          "end": 11,
+          "text": "Ela puxou o chest, pra tentar justificar o ponto dela."
+        },
+        {
+          "start": 11,
+          "end": 15,
+          "text": "Pode tentar explicar, é muito mais eurístico, como eu disse."
+        },
+        {
+          "start": 15,
+          "end": 21,
+          "text": "Pra tentar explicar muito mais porque ela não vê isso como algo incrível, enfim."
+        },
+        {
+          "start": 21,
+          "end": 25,
+          "text": "Não é argumentativo aqui, é eurístico. Eu sei bem disso."
+        },
+        {
+          "start": 25,
+          "end": 29,
+          "text": "Deborah, eu sei que você tá só tentando transmitir a tua visão de mundo."
+        },
+        {
+          "start": 29,
+          "end": 34.68,
+          "text": "É que a gente acha ela ridícula e a gente está expondo isso também, de maneira não"
+        },
+        {
+          "start": 34.68,
+          "end": 35.56,
+          "text": "heurística."
+        }
+      ],
+      "excerpt": "Eu também tive um dia agitado. Tive um dia bem agitado e tô cansadão. Eu já tava cansadão de começar aqui, mas vamos lá, continuar aqui. Ela puxou o chest, pra tentar justificar o ponto dela. Pode tentar explicar, é muito mais eurístico, como eu disse. Pra tentar explicar muito mais porque ela não vê isso como algo incrível, enfim. Não é argumentativo aqui, é eurístico. Eu sei bem disso. Deborah, eu sei que você tá só tentando transmitir a tua visão de mundo. É que a gente acha ela ridícula e a gente está expondo isso também, de maneira não heurística.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10325:10367": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10325:10367",
+      "attachment_id": 17142,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10325,
+      "source_end_s": 10367,
+      "media_sha256": "5ae67e7452627de5868c9133813bdf5703b3393658c9ea6552a645c9773d39f7",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 6.52,
+          "text": "As frases hoje em dia eu esqueci da frase exata, eu faço paráfrases, mas são paráfrases bem"
+        },
+        {
+          "start": 6.52,
+          "end": 12.9,
+          "text": "muito próximas do texto mesmo ali, são de fato parafrásicas mesmo e são aproximativas"
+        },
+        {
+          "start": 12.9,
+          "end": 20.04,
+          "text": "da frase original e nunca tive problema, a primeira interpretação que eu tive, a primeira"
+        },
+        {
+          "start": 20.04,
+          "end": 25.48,
+          "text": "compreensão que eu tive do livro, me pareceu até agora ser não a compreensão final,"
+        },
+        {
+          "start": 25.48,
+          "end": 29.72,
+          "text": "assim, suficiente, só com pressão suficiente, saca? Tanto que, como eu disse pra vocês,"
+        },
+        {
+          "start": 29.72,
+          "end": 32.16,
+          "text": "talvez eu tenha que botar esse aqui em vídeo, tá gente? Talvez eu tenha que botar esse aqui"
+        },
+        {
+          "start": 32.16,
+          "end": 35.76,
+          "text": "em vídeo, no vídeo slide amanhã, enfim. E não vai ser aí amanhã, né? Eu gravarei"
+        },
+        {
+          "start": 35.76,
+          "end": 36.26,
+          "text": "a..."
+        }
+      ],
+      "excerpt": "As frases hoje em dia eu esqueci da frase exata, eu faço paráfrases, mas são paráfrases bem muito próximas do texto mesmo ali, são de fato parafrásicas mesmo e são aproximativas da frase original e nunca tive problema, a primeira interpretação que eu tive, a primeira compreensão que eu tive do livro, me pareceu até agora ser não a compreensão final, assim, suficiente, só com pressão suficiente, saca? Tanto que, como eu disse pra vocês, talvez eu tenha que botar esse aqui em vídeo, tá gente? Talvez eu tenha que botar esse aqui em vídeo, no vídeo slide amanhã, enfim. E não vai ser aí amanhã, né? Eu gravarei a...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10367:10408": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10367:10408",
+      "attachment_id": 17143,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10367,
+      "source_end_s": 10408,
+      "media_sha256": "194c084f6cf657e9104a3a95e208080a0d51df587861c65fd50416e438a90d32",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0.08,
+          "end": 7.08,
+          "text": "Eu gravo amanhã, mas não sai amanhã, para você só terça-feira, né, que eu gravo no domingo na segunda e vocês vêm terça, quarta, quinta e sexta, né?"
+        },
+        {
+          "start": 7.08,
+          "end": 10.58,
+          "text": "Enfim. É... Que é o..."
+        },
+        {
+          "start": 10.58,
+          "end": 15.08,
+          "text": "Um argumento que ela faz aí, que eu falei, cara, ela podia ter puxado outro argumento que ela não puxou."
+        },
+        {
+          "start": 15.08,
+          "end": 19.08,
+          "text": "No mesmo livro, no Autodoxia, alguns capítulos... Às vezes, no mesmo capítulo, eu falei, caraca, véi."
+        },
+        {
+          "start": 19.08,
+          "end": 24.08,
+          "text": "Esse argumento que era muito melhor, estava errado, mas era muito melhor, infinitamente melhor, e ela não puxou."
+        },
+        {
+          "start": 24.08,
+          "end": 28.08,
+          "text": "Mas talvez eu tenha que explicar isso no vídeo, né? Vamos voltar aqui."
+        },
+        {
+          "start": 28.08,
+          "end": 30.48,
+          "text": "e tentar traduzir o que ele..."
+        }
+      ],
+      "excerpt": "Eu gravo amanhã, mas não sai amanhã, para você só terça-feira, né, que eu gravo no domingo na segunda e vocês vêm terça, quarta, quinta e sexta, né? Enfim. É... Que é o... Um argumento que ela faz aí, que eu falei, cara, ela podia ter puxado outro argumento que ela não puxou. No mesmo livro, no Autodoxia, alguns capítulos... Às vezes, no mesmo capítulo, eu falei, caraca, véi. Esse argumento que era muito melhor, estava errado, mas era muito melhor, infinitamente melhor, e ela não puxou. Mas talvez eu tenha que explicar isso no vídeo, né? Vamos voltar aqui. e tentar traduzir o que ele...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10408:10449": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10408:10449",
+      "attachment_id": 17144,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10408,
+      "source_end_s": 10449,
+      "media_sha256": "ccf046668173ca1161e07f2a3edc55a0370fe6c2d098f7125c2c079ab715bc41",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 6.66,
+          "text": "que é passar é extremamente complicado também porque não é o tipo de leitura que você"
+        },
+        {
+          "start": 6.66,
+          "end": 10,
+          "text": "consegue racionalizar de uma forma muito fácil, certo?"
+        },
+        {
+          "start": 10,
+          "end": 15.4,
+          "text": "Se você tentar entender as ideias do Chesterton, logo de cara você realmente não consegue."
+        },
+        {
+          "start": 15.4,
+          "end": 19.6,
+          "text": "Só que eu tenho uma parada que é que eu sou paciente."
+        },
+        {
+          "start": 19.6,
+          "end": 25.12,
+          "text": "Então eu leio um livro do início ao fim segurando o que o autor pode estar querendo"
+        },
+        {
+          "start": 25.12,
+          "end": 27.72,
+          "text": "dizer ou como a ideia dele pode ser coerente."
+        },
+        {
+          "start": 27.72,
+          "end": 28.72,
+          "text": "Entendeu?"
+        },
+        {
+          "start": 28.72,
+          "end": 31.72,
+          "text": "como que a ideia desse autor pode de fato ser coerente?"
+        },
+        {
+          "start": 31.72,
+          "end": 34.72,
+          "text": "Então, eu fico segurando isso para conseguir chegar lá."
+        }
+      ],
+      "excerpt": "que é passar é extremamente complicado também porque não é o tipo de leitura que você consegue racionalizar de uma forma muito fácil, certo? Se você tentar entender as ideias do Chesterton, logo de cara você realmente não consegue. Só que eu tenho uma parada que é que eu sou paciente. Então eu leio um livro do início ao fim segurando o que o autor pode estar querendo dizer ou como a ideia dele pode ser coerente. Entendeu? como que a ideia desse autor pode de fato ser coerente? Então, eu fico segurando isso para conseguir chegar lá.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10531:10572": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10531:10572",
+      "attachment_id": 17145,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10531,
+      "source_end_s": 10572,
+      "media_sha256": "757c5bba133f93ebf2c4328834fa972efbddfd1d0eb6dec2c220a94041600577",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.72,
+          "text": "é quase tudo isso, le, repete, le, repete, le, repete, le, repete, le, repete, le, repete,"
+        },
+        {
+          "start": 5.72,
+          "end": 9.52,
+          "text": "toda vez, toda vez, toda, toda, assim, toda vez, saca, toda vez, né?"
+        },
+        {
+          "start": 9.52,
+          "end": 12.28,
+          "text": "E aí quando eu faço o prova e entrego pra eles, é tipo,"
+        },
+        {
+          "start": 12.28,
+          "end": 15.88,
+          "text": "ah, Gabriel, você tem uma interpretação, porque a interpretação caraca aí na mão,"
+        },
+        {
+          "start": 15.88,
+          "end": 18.84,
+          "text": "você não é opinião minha não, mas você tem uma interpretação interessante,"
+        },
+        {
+          "start": 18.84,
+          "end": 22.16,
+          "text": "não foi o que a gente deu em aula, mas assim, foi bom, e aí alguém uma nota alta e falou,"
+        },
+        {
+          "start": 22.16,
+          "end": 26.28,
+          "text": "cara, óbvio que não foi o que tava em aula, carai, nem você sabe o que você tá falando,"
+        },
+        {
+          "start": 26.28,
+          "end": 31.08,
+          "text": "Carai, nem tu tende a estar falando? Óbvio! E aí eu faço..."
+        }
+      ],
+      "excerpt": "é quase tudo isso, le, repete, le, repete, le, repete, le, repete, le, repete, le, repete, toda vez, toda vez, toda, toda, assim, toda vez, saca, toda vez, né? E aí quando eu faço o prova e entrego pra eles, é tipo, ah, Gabriel, você tem uma interpretação, porque a interpretação caraca aí na mão, você não é opinião minha não, mas você tem uma interpretação interessante, não foi o que a gente deu em aula, mas assim, foi bom, e aí alguém uma nota alta e falou, cara, óbvio que não foi o que tava em aula, carai, nem você sabe o que você tá falando, Carai, nem tu tende a estar falando? Óbvio! E aí eu faço...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10572:10613": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10572:10613",
+      "attachment_id": 17146,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10572,
+      "source_end_s": 10613,
+      "media_sha256": "3937eaba68f1c70c17eaf3b8995f16c8ac4ee9b963cc1a33604ff5393f536268",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.64,
+          "text": "parto de um ponto argumentativo diferente, os outros elementos,"
+        },
+        {
+          "start": 2.64,
+          "end": 5.04,
+          "text": "as outras leituras, outras referências, outras paradas."
+        },
+        {
+          "start": 5.04,
+          "end": 7.48,
+          "text": "E a pessoa lê e fala, pô, faz sentido e funciona assim,"
+        },
+        {
+          "start": 7.48,
+          "end": 9.08,
+          "text": "porque teve um trabalhão para fazer."
+        },
+        {
+          "start": 9.08,
+          "end": 11.52,
+          "text": "Eu tive um trabalhão, mas nem todos escritores estão rigorosos assim."
+        },
+        {
+          "start": 11.52,
+          "end": 13.2,
+          "text": "O Cheston, acho que ele é rigoroso sim,"
+        },
+        {
+          "start": 13.2,
+          "end": 15.84,
+          "text": "só que ele também gosta de escrever poeticamente,"
+        },
+        {
+          "start": 15.84,
+          "end": 17.48,
+          "text": "então ele faz de uma maneira resistência."
+        },
+        {
+          "start": 17.48,
+          "end": 19.72,
+          "text": "O meu jeito é outro, eu não escrevo de outra maneira."
+        },
+        {
+          "start": 19.72,
+          "end": 23.96,
+          "text": "Ele gosta de escrever um livro que vai ser lido mais uma vez."
+        },
+        {
+          "start": 23.96,
+          "end": 27,
+          "text": "Eu li uma só, mas eu li voltando, eu li, eu voltava um pouquinho,"
+        },
+        {
+          "start": 27,
+          "end": 31.32,
+          "text": "Então, foi uma primeira leitura lenta, devagar, enfim, saca,"
+        },
+        {
+          "start": 31.32,
+          "end": 34.16,
+          "text": "porque eu estava gostando muito e eu queria ler devagar aquele livro."
+        },
+        {
+          "start": 34.16,
+          "end": 35.44,
+          "text": "Então, vamos continuar aqui."
+        }
+      ],
+      "excerpt": "parto de um ponto argumentativo diferente, os outros elementos, as outras leituras, outras referências, outras paradas. E a pessoa lê e fala, pô, faz sentido e funciona assim, porque teve um trabalhão para fazer. Eu tive um trabalhão, mas nem todos escritores estão rigorosos assim. O Cheston, acho que ele é rigoroso sim, só que ele também gosta de escrever poeticamente, então ele faz de uma maneira resistência. O meu jeito é outro, eu não escrevo de outra maneira. Ele gosta de escrever um livro que vai ser lido mais uma vez. Eu li uma só, mas eu li voltando, eu li, eu voltava um pouquinho, Então, foi uma primeira leitura lenta, devagar, enfim, saca, porque eu estava gostando muito e eu queria ler devagar aquele livro. Então, vamos continuar aqui.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10654:10694": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10654:10694",
+      "attachment_id": 17147,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10654,
+      "source_end_s": 10694,
+      "media_sha256": "7bb344628622cfdc098154afb249e312ff2ec229ef0d2d92c6081f4721ccd252",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.52,
+          "text": "no ponto final. Ele não limita as coisas do Censo Comum, mas ele começa nelas, ele prefere"
+        },
+        {
+          "start": 4.52,
+          "end": 8.92,
+          "text": "começar nelas. Quando ele vê uma ideia, uma ideia que parece absurda, ele confronta"
+        },
+        {
+          "start": 8.92,
+          "end": 13.96,
+          "text": "ela com as ideias do Censo Comum e ele vai explorando para ver como que as ideias do"
+        },
+        {
+          "start": 13.96,
+          "end": 20.84,
+          "text": "Censo Comum são infinitamente mais razoáveis e mais prováveis, enfim, mas ele vai explorando"
+        },
+        {
+          "start": 20.84,
+          "end": 26.4,
+          "text": "retoricamente como que aquilo que já se tem construído é melhor do que aquilo"
+        },
+        {
+          "start": 26.4,
+          "end": 30.64,
+          "text": "que estou tentando fazer. Ou vice-versa, tem momentos que ele confronta o senso comum também,"
+        },
+        {
+          "start": 30.64,
+          "end": 35.84,
+          "text": "mas ele confronta com outro. Quando ele confronta o senso comum, é com outras..."
+        }
+      ],
+      "excerpt": "no ponto final. Ele não limita as coisas do Censo Comum, mas ele começa nelas, ele prefere começar nelas. Quando ele vê uma ideia, uma ideia que parece absurda, ele confronta ela com as ideias do Censo Comum e ele vai explorando para ver como que as ideias do Censo Comum são infinitamente mais razoáveis e mais prováveis, enfim, mas ele vai explorando retoricamente como que aquilo que já se tem construído é melhor do que aquilo que estou tentando fazer. Ou vice-versa, tem momentos que ele confronta o senso comum também, mas ele confronta com outro. Quando ele confronta o senso comum, é com outras...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10694:10735": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10694:10735",
+      "attachment_id": 17148,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10694,
+      "source_end_s": 10735,
+      "media_sha256": "c2defa0b6dfc8e29160bb44a4f1ce3ddb25a19472e1173793443305988b0d933",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.76,
+          "text": "do senso comum que é o posto, mas que coabita, né? O senso comum ele tem essa questão de ele tem esse"
+        },
+        {
+          "start": 5.76,
+          "end": 13.6,
+          "text": "aspecto de não só ele, mas enfim, ele tem, né, de manter em coabitação crenças opostas. É meio"
+        },
+        {
+          "start": 13.6,
+          "end": 20.76,
+          "text": "que um duplo pensar, só que com distância, né? Ao invés de ser tipo o grande irmão a mentira e eu"
+        },
+        {
+          "start": 20.76,
+          "end": 25.52,
+          "text": "amo o grande irmão tudo junto ao mesmo tempo, é tipo numa conversa com os meus amigos aqui,"
+        },
+        {
+          "start": 25.52,
+          "end": 30.32,
+          "text": "E o grande irmão me metia na ficção, só para controlar as massas, só para oprimir a gente, enfim."
+        },
+        {
+          "start": 30.32,
+          "end": 35.52,
+          "text": "E, sabe, no outro cenário, um pouco mais distante, eu falo o grande irmão sem ele..."
+        }
+      ],
+      "excerpt": "do senso comum que é o posto, mas que coabita, né? O senso comum ele tem essa questão de ele tem esse aspecto de não só ele, mas enfim, ele tem, né, de manter em coabitação crenças opostas. É meio que um duplo pensar, só que com distância, né? Ao invés de ser tipo o grande irmão a mentira e eu amo o grande irmão tudo junto ao mesmo tempo, é tipo numa conversa com os meus amigos aqui, E o grande irmão me metia na ficção, só para controlar as massas, só para oprimir a gente, enfim. E, sabe, no outro cenário, um pouco mais distante, eu falo o grande irmão sem ele...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10735:10775": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10735:10775",
+      "attachment_id": 17149,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10735,
+      "source_end_s": 10775,
+      "media_sha256": "64bbebdc9f12608585b57057606c6cd8683d686efaa3f3fea0bd094de29c390d",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 8,
+          "text": "tem que ser isso mesmo, é um duplo pensar que é distante, ele é bem distante e ele é bem situacional, ele é bem independente do contexto,"
+        },
+        {
+          "start": 8,
+          "end": 17,
+          "text": "bem dependente do contexto, né? Então é assim que ele faz, quando vai confrontar essa parte que é distante comum, ele usa essa que é distante,"
+        },
+        {
+          "start": 17,
+          "end": 22,
+          "text": "mas que a gente sabe qual que é, a gente conhece as duas, só que ele vai pegar aquela ali que é mais conforme,"
+        },
+        {
+          "start": 22,
+          "end": 27,
+          "text": "Outras ideias também são razoáveis, vai pegar essa aqui que não é razoável, que é muito mais..."
+        },
+        {
+          "start": 27,
+          "end": 32,
+          "text": "Não é que é artificial, mas que ela, em várias maneiras, é conflitante com as outras."
+        }
+      ],
+      "excerpt": "tem que ser isso mesmo, é um duplo pensar que é distante, ele é bem distante e ele é bem situacional, ele é bem independente do contexto, bem dependente do contexto, né? Então é assim que ele faz, quando vai confrontar essa parte que é distante comum, ele usa essa que é distante, mas que a gente sabe qual que é, a gente conhece as duas, só que ele vai pegar aquela ali que é mais conforme, Outras ideias também são razoáveis, vai pegar essa aqui que não é razoável, que é muito mais... Não é que é artificial, mas que ela, em várias maneiras, é conflitante com as outras.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10897:10937": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10897:10937",
+      "attachment_id": 17150,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10897,
+      "source_end_s": 10937,
+      "media_sha256": "e587e6c15ffbb36b831fa721198e6db48665762baab803df457c2398d645552b",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.28,
+          "text": "Exita o que é aquela obra de alienilamente."
+        },
+        {
+          "start": 2.28,
+          "end": 4.52,
+          "text": "Comparem o que ela acabou de falar, só preste atenção."
+        },
+        {
+          "start": 4.52,
+          "end": 5.84,
+          "text": "O que ela acabou de falar?"
+        },
+        {
+          "start": 5.84,
+          "end": 7.84,
+          "text": "As crianças, o mundo mágico."
+        },
+        {
+          "start": 7.84,
+          "end": 10.64,
+          "text": "Aí os adultos puxam as crianças para o mundo pragmático,"
+        },
+        {
+          "start": 10.64,
+          "end": 12.92,
+          "text": "direto, não tem magia, enfim."
+        },
+        {
+          "start": 12.92,
+          "end": 18,
+          "text": "Perde o senso da beleza, vai se afastando da beleza mágica, enfim."
+        },
+        {
+          "start": 18,
+          "end": 21.6,
+          "text": "Até que o que se torna de fato,"
+        },
+        {
+          "start": 21.6,
+          "end": 25.28,
+          "text": "o que toma lugar da machia é o maquinário,"
+        },
+        {
+          "start": 25.28,
+          "end": 28.08,
+          "text": "é a indústria, é a produção, é o trabalho,"
+        },
+        {
+          "start": 28.08,
+          "end": 33.16,
+          "text": "mundo pragmático, a correria, corre corre, e aí um dia você abre um livro e vê que..."
+        }
+      ],
+      "excerpt": "Exita o que é aquela obra de alienilamente. Comparem o que ela acabou de falar, só preste atenção. O que ela acabou de falar? As crianças, o mundo mágico. Aí os adultos puxam as crianças para o mundo pragmático, direto, não tem magia, enfim. Perde o senso da beleza, vai se afastando da beleza mágica, enfim. Até que o que se torna de fato, o que toma lugar da machia é o maquinário, é a indústria, é a produção, é o trabalho, mundo pragmático, a correria, corre corre, e aí um dia você abre um livro e vê que...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10937:10977": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10937:10977",
+      "attachment_id": 17151,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10937,
+      "source_end_s": 10977,
+      "media_sha256": "79d3fb7d407a81986b70d89d175b3c35dc789c9eaa527b76d8f8246883e325cd",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.5,
+          "text": "Gregor Zamza, acordou, depois de sonhos e tranquilos,"
+        },
+        {
+          "start": 5.5,
+          "end": 9.77,
+          "text": "deixou o mar do inseto e vou só olhar pra ele, opa."
+        },
+        {
+          "start": 9.77,
+          "end": 13.71,
+          "text": "Que que é essa máquina aqui? Não estou vendo essa máquina."
+        },
+        {
+          "start": 13.71,
+          "end": 20.42,
+          "text": "O que que é? Tá, cadê o salário?"
+        },
+        {
+          "start": 20.42,
+          "end": 29.02,
+          "text": "Opa. Cadê o... Cadê o chefe especial? Cadê o boleto pra pagar?"
+        },
+        {
+          "start": 29.02,
+          "end": 31.72,
+          "text": "Cadê as contas?"
+        },
+        {
+          "start": 31.72,
+          "end": 35.22,
+          "text": "Hein? Cadê o chefe reclamando?"
+        },
+        {
+          "start": 35.22,
+          "end": 37.82,
+          "text": "As coisas interessantes da vida são essas, né?"
+        }
+      ],
+      "excerpt": "Gregor Zamza, acordou, depois de sonhos e tranquilos, deixou o mar do inseto e vou só olhar pra ele, opa. Que que é essa máquina aqui? Não estou vendo essa máquina. O que que é? Tá, cadê o salário? Opa. Cadê o... Cadê o chefe especial? Cadê o boleto pra pagar? Cadê as contas? Hein? Cadê o chefe reclamando? As coisas interessantes da vida são essas, né?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:10977:11018": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:10977:11018",
+      "attachment_id": 17152,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 10977,
+      "source_end_s": 11018,
+      "media_sha256": "27bc1012264a6788514d97a7d4d79ac7039b9294b581d4ce0580a39b9d7d664d",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 7.34,
+          "text": "Não? As coisas interessantes da vida são essas, são essas as coisas, né?"
+        },
+        {
+          "start": 8.34,
+          "end": 12.34,
+          "text": "Um cara onde irá virar um inseto do nada e alguém escreveu uma história sobre isso"
+        },
+        {
+          "start": 12.34,
+          "end": 17.34,
+          "text": "que muita gente acha incrível, enfim, mas isso aí não, não sei, dane-se, isso aí não..."
+        },
+        {
+          "start": 18.34,
+          "end": 19.34,
+          "text": "Não é?"
+        },
+        {
+          "start": 20.34,
+          "end": 24.34,
+          "text": "Teve uma criança, eu sei se vocês entenderam, mas teve uma criança que morreu em alguém."
+        },
+        {
+          "start": 26.34,
+          "end": 27.34,
+          "text": "Acho que foi em mim."
+        },
+        {
+          "start": 28.34,
+          "end": 30.34,
+          "text": "Será que foi algum de vocês? Verifique, gente."
+        },
+        {
+          "start": 31.34,
+          "end": 40.84,
+          "text": "Diz aí no comentário. Fala, não fui eu não. Pode ficar tranquilo. Não foi me que morreu não. Foi eu não sei. Foi outra pessoa que morreu uma criança, né?"
+        }
+      ],
+      "excerpt": "Não? As coisas interessantes da vida são essas, são essas as coisas, né? Um cara onde irá virar um inseto do nada e alguém escreveu uma história sobre isso que muita gente acha incrível, enfim, mas isso aí não, não sei, dane-se, isso aí não... Não é? Teve uma criança, eu sei se vocês entenderam, mas teve uma criança que morreu em alguém. Acho que foi em mim. Será que foi algum de vocês? Verifique, gente. Diz aí no comentário. Fala, não fui eu não. Pode ficar tranquilo. Não foi me que morreu não. Foi eu não sei. Foi outra pessoa que morreu uma criança, né?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:11060:11102": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:11060:11102",
+      "attachment_id": 17153,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 11060,
+      "source_end_s": 11102,
+      "media_sha256": "9855f02d37e208272aac6996faea55d3413118b1b3cbab8c7f155eecc970b065",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 35.79,
+          "text": "deve ser o comadário é que estou to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to"
+        },
+        {
+          "start": 35.79,
+          "end": 41.67,
+          "text": "parou aqui em 14.45 vai até 20.355 né então falta um pouquinho mais pra avançar vou"
+        }
+      ],
+      "excerpt": "deve ser o comadário é que estou to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to to parou aqui em 14.45 vai até 20.355 né então falta um pouquinho mais pra avançar vou",
+      "verified": true
     }
   },
   "failures": []
