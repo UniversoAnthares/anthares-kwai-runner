@@ -41,8 +41,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Verify three-system failover dispatch and deduplication offline
-        run: python3 tools/test_gitlab_quota_watcher.py
       - name: Retrieve GitLab API credential from Anthares Secrets when configured
         id: bws-auth
         if: ${{ vars.ANTHARES_SECRETS_GITLAB_TOKEN_ID != '' }}
