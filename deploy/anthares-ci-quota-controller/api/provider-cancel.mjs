@@ -71,7 +71,7 @@ export default async function handler(req,res){
  try{({payload:jwt}=await jwtVerify(bearer[1],jwks,{
    issuer:"https://token.actions.githubusercontent.com",audience:"anthares-ci-quota-controller",
    algorithms:["RS256"]}));}catch{return answer(res,401,"OIDC_INVALID");}
- if(jwt.repository!==REPO||jwt.workflow_ref!==WORKFLOW||jwt.event_name!=="workflow_dispatch"
+ if(jwt.repository!==REPO||jwt.workflow_ref!==WORKFLOW||!["workflow_dispatch","schedule"].includes(jwt.event_name)
     ||jwt.ref!=="refs/heads/main")
    return answer(res,403,"WORKFLOW_NOT_ALLOWED");
  let b;try{b=typeof req.body==="string"?JSON.parse(req.body):req.body;}catch{return answer(res,400,"JSON_INVALID");}
