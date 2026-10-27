@@ -11,7 +11,7 @@ $QuotaCodes=@('ci_quota_exceeded','quota_exceeded','quota_exhausted',
  'insufficient_quota','resource_exhausted','billing_hard_limit_reached',
  'credits_exhausted','usage_limit_reached','monthly_quota_exceeded','daily_quota_exceeded')
 $Status=[ordered]@{ observed_utc=(Get-Date).ToUniversalTime().ToString('o')
-    machine=$env:COMPUTERNAME; auth='UNKNOWN'; controller='UNKNOWN'; credential_import='NOT_ATTEMPTED'; appveyor='NOT_CONFIGURED'
+    machine=$env:COMPUTERNAME; auth='UNKNOWN'; controller='UNKNOWN'; credential_import='NOT_ATTEMPTED'; bitrise_credential_import='NOT_ATTEMPTED'; appveyor='NOT_CONFIGURED'
     bitrise='NOT_CONFIGURED'; events_claimed=0; remote_cancellations_confirmed=0; remote_terminal_confirmed=0
     uncertain=0; fallback_dispatched=$false }
 $mutex=New-Object System.Threading.Mutex($false,'Global\AntharesCiQuotaCancelStandby')
@@ -129,6 +129,56 @@ function ImportSealedAppVeyor([string]$privateKey) {
         return 'IMPORT_VERIFIED_AND_DPAPI_PROTECTED'
     }catch{
         if(Test-Path $file){Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue}
+        return 'IMPORT_FAILED_AFTER_CONSUME'
+    }finally{
+        if($null -ne $bytes){[Array]::Clear($bytes,0,$bytes.Length)}
+        $plain=$null
+        $rsa.Dispose()
+    }
+}
+function ImportSealedBitrise([string]$privateKey,[string]$appSlug) {
+    $file=Join-Path $SecretDir 'ci-quota-bitrise-token.dpapi'
+    if(Test-Path -LiteralPath $file){return 'ALREADY_PROVISIONED'}
+    if($appSlug -notmatch '^[a-f0-9-]{36}$'){return 'INVALID_APP_ID'}
+    $endpoint='https://anthares-ci-quota-controller.vercel.app/api/credential-bridge'
+    try {
+        $wrapped=SignedLedger @{phase='consume';provider='bitrise'} $privateKey $endpoint
+    }catch{
+        if($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404){
+            return 'NO_PENDING_TRANSFER'
+        }
+        return 'BRIDGE_UNAVAILABLE'
+    }
+    if((Property $wrapped 'code') -ne 'SEALED_CONSUMED' -or
+       (Property $wrapped 'provider') -ne 'bitrise'){return 'INVALID_TRANSFER_RECEIPT'}
+    $bytes=$null
+    $plain=$null
+    $rsa=New-Object System.Security.Cryptography.RSACryptoServiceProvider
+    try{
+        $rsa.PersistKeyInCsp=$false
+        $rsa.FromXmlString($privateKey)
+        $sealed=[Convert]::FromBase64String([string](Property $wrapped 'sealed'))
+        if($sealed.Length -ne 384){throw 'INVALID_ENVELOPE_LENGTH'}
+        $bytes=$rsa.Decrypt($sealed,$true)
+        $plain=[Text.Encoding]::UTF8.GetString($bytes)
+        if($plain.Length -lt 12 -or $plain.Length -gt 340 -or
+           $plain -match '[\r\n]'){throw 'INVALID_SECRET_SHAPE'}
+        $doc=CallProvider ('https://api.bitrise.io/v0.1/apps/'+[Uri]::EscapeDataString($appSlug)) $plain 'bitrise'
+        $app=Property $doc 'data'
+        $repoUrl=[string](Property $app 'repo_url')
+        if((Property $app 'slug') -ne $appSlug -or
+           @('https://github.com/'+$Repo,
+             'https://github.com/'+$Repo+'.git',
+             'git@github.com:'+$Repo+'.git') -notcontains $repoUrl) {
+            throw 'SOURCE_NOT_OWNED'
+        }
+        $encrypted=($plain|ConvertTo-SecureString -AsPlainText -Force|ConvertFrom-SecureString)
+        $encrypted|Set-Content -LiteralPath $file -Encoding ASCII
+        & icacls.exe $file /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' |Out-Null
+        if($LASTEXITCODE -ne 0){throw 'ACL_UNVERIFIED'}
+        return 'IMPORT_VERIFIED_AND_DPAPI_PROTECTED'
+    }catch{
+        if(Test-Path -LiteralPath $file){Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue}
         return 'IMPORT_FAILED_AFTER_CONSUME'
     }finally{
         if($null -ne $bytes){[Array]::Clear($bytes,0,$bytes.Length)}
@@ -297,6 +347,7 @@ try {
     $Status.credential_import=ImportSealedAppVeyor $privateKey
     try{$Status.appveyor=AppVeyor $config (Secret 'ci-quota-appveyor-token.dpapi') $privateKey}
     catch{$Status.appveyor='SOURCE_UNAVAILABLE'}
+    $Status.bitrise_credential_import=ImportSealedBitrise $privateKey ([string]$config.bitrise_app_slug)
     try{$Status.bitrise=Bitrise $config (Secret 'ci-quota-bitrise-token.dpapi') $privateKey}
     catch{$Status.bitrise='SOURCE_UNAVAILABLE'}
 }finally{

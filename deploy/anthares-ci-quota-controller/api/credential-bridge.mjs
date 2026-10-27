@@ -56,7 +56,7 @@ export default async function handler(req,res){
   if(req.method!=="POST")return respond(res,405,"METHOD_NOT_ALLOWED");
   let body;try{body=typeof req.body==="string"?JSON.parse(req.body):req.body;}
   catch{return respond(res,400,"INVALID_JSON");}
-  if(!body||typeof body!=="object"||body.provider!=="appveyor")
+  if(!body||typeof body!=="object"||!["appveyor","bitrise"].includes(body.provider))
     return respond(res,400,"INVALID_PROVIDER");
   const db=neon(process.env.DATABASE_URL);
   if(body.phase==="stage"){
@@ -67,24 +67,36 @@ export default async function handler(req,res){
        Buffer.from(sealed,"base64").length!==384)
        return respond(res,400,"INVALID_SEALED_CREDENTIAL");
     try{
-      await db`INSERT INTO public.anthares_ci_quota_sealed_credentials
-       (provider,sealed_ciphertext,source_run,expires_at)
-       VALUES ('appveyor',${sealed},${run},now()+interval '90 minutes')
-       ON CONFLICT(provider) DO UPDATE SET
-       sealed_ciphertext=EXCLUDED.sealed_ciphertext,
-       source_run=EXCLUDED.source_run,
-       expires_at=EXCLUDED.expires_at`;
-      return respond(res,202,"SEALED_READY",{provider:"appveyor",expires_in_seconds:5400});
+      if(body.provider==="appveyor"){
+        await db`INSERT INTO public.anthares_ci_quota_sealed_credentials
+         (provider,sealed_ciphertext,source_run,expires_at)
+         VALUES ('appveyor',${sealed},${run},now()+interval '90 minutes')
+         ON CONFLICT(provider) DO UPDATE SET
+         sealed_ciphertext=EXCLUDED.sealed_ciphertext,source_run=EXCLUDED.source_run,
+         expires_at=EXCLUDED.expires_at`;
+      }else{
+        await db`INSERT INTO public.anthares_ci_quota_sealed_bitrise
+         (provider,sealed_ciphertext,source_run,expires_at)
+         VALUES ('bitrise',${sealed},${run},now()+interval '90 minutes')
+         ON CONFLICT(provider) DO UPDATE SET
+         sealed_ciphertext=EXCLUDED.sealed_ciphertext,source_run=EXCLUDED.source_run,
+         expires_at=EXCLUDED.expires_at`;
+      }
+      return respond(res,202,"SEALED_READY",{provider:body.provider,expires_in_seconds:5400});
     }catch{return respond(res,503,"SEALED_LEDGER_UNAVAILABLE");}
   }
   if(body.phase==="consume"){
     if(!remoteAuthorized(req,body))return respond(res,403,"REMOTE_IDENTITY_INVALID");
     try{
-      const rows=await db`DELETE FROM public.anthares_ci_quota_sealed_credentials
-       WHERE provider='appveyor' AND expires_at>now()
-       RETURNING sealed_ciphertext`;
+      const rows=body.provider==="appveyor"?
+        await db`DELETE FROM public.anthares_ci_quota_sealed_credentials
+         WHERE provider='appveyor' AND expires_at>now()
+         RETURNING sealed_ciphertext`:
+        await db`DELETE FROM public.anthares_ci_quota_sealed_bitrise
+         WHERE provider='bitrise' AND expires_at>now()
+         RETURNING sealed_ciphertext`;
       if(rows.length!==1)return respond(res,404,"NO_SEALED_CREDENTIAL");
-      return respond(res,200,"SEALED_CONSUMED",{sealed:rows[0].sealed_ciphertext});
+      return respond(res,200,"SEALED_CONSUMED",{provider:body.provider,sealed:rows[0].sealed_ciphertext});
     }catch{return respond(res,503,"SEALED_CONSUME_UNAVAILABLE");}
   }
   return respond(res,400,"INVALID_PHASE");
