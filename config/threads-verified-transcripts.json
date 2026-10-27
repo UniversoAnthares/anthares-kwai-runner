@@ -854,6 +854,118 @@
         "excerpt": "Ele fez na Tambi, ele fez na Tambi assim, vamos destruir a imagem dessa pessoa, falei cara, pera aí cara, o que é isso cara aí, você acha que eu sou marxista vai aí, marxista é o pessoal que destrói mais dos outros, eu não cara aí, eu não destrui ideias, eu destrui até as minhas ideias, mas a imagem não pô, assim por falho eu faço, mas Estou? Vou te defender agora, pô. Cadê o ex-toto aqui, ó? Aqui, ó. O Danico Vardem é um sujeito diplomático. É isso aí, pô. Diplomacia. Tá aí, ó. Tá aí o cara, meu. Tá aí, aí, ó.",
         "verified": true
       }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:628:668": {
+    "title": "Admirável Mundo Novo e O Retrato de Dorian Gray na conversa ● Universo Anthares",
+    "description": "Na abertura da conversa, o apresentador comenta uma ligação entre Admirável Mundo Novo e O Retrato de Dorian Gray, mas explica que um acontecimento mudou o plano. Também menciona um escritor francês contemporâneo. www.anthares.us",
+    "hashtags": [
+      "#AdmiravelMundoNovo",
+      "#DorianGray",
+      "#Literatura",
+      "#UniversoAnthares"
+    ],
+    "keywords": [
+      "Admirável Mundo Novo",
+      "O Retrato de Dorian Gray",
+      "literatura",
+      "romances",
+      "escritor francês"
+    ],
+    "transcript_attestation": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:628:668",
+      "attachment_id": 16991,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 628,
+      "source_end_s": 668,
+      "media_sha256": "f3fdd8c033eceed1a6989bd58c75579ca2e9ea6146e581453db422b177062bde",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 1.52,
+          "end": 5.82,
+          "text": "Eu estou ouvindo."
+        },
+        {
+          "start": 5.82,
+          "end": 6.82,
+          "text": "Que nós..."
+        },
+        {
+          "start": 6.82,
+          "end": 8.82,
+          "text": "Deixa eu ver."
+        },
+        {
+          "start": 8.82,
+          "end": 12.46,
+          "text": "Agora você está ouvindo, né?"
+        },
+        {
+          "start": 12.46,
+          "end": 13.46,
+          "text": "Beleza."
+        },
+        {
+          "start": 13.46,
+          "end": 15.46,
+          "text": "É, porque eu tinha cortado o som do... Enfim."
+        },
+        {
+          "start": 15.46,
+          "end": 17.46,
+          "text": "Voltou aqui. Vamos lá."
+        },
+        {
+          "start": 17.46,
+          "end": 19.46,
+          "text": "Olá, vocês estão todos muito bem-vindos novamente."
+        },
+        {
+          "start": 19.46,
+          "end": 21.46,
+          "text": "Essa semana, eu não sei, aqui no meu Instagram,"
+        },
+        {
+          "start": 21.46,
+          "end": 23.46,
+          "text": "que nós iríamos continuar conversando sobre partículas alimentares"
+        },
+        {
+          "start": 23.46,
+          "end": 25.46,
+          "text": "e eu iria fazer uma junção de um retato de Doryn Gray"
+        },
+        {
+          "start": 25.46,
+          "end": 27.46,
+          "text": "e admirável mundo novo, que algumas refeições sobre admirável mundo novo"
+        },
+        {
+          "start": 27.46,
+          "end": 29.46,
+          "text": "que o Roback faz que você achei interessante,"
+        },
+        {
+          "start": 29.46,
+          "end": 32.46,
+          "text": "mas aconteceu um acontecido e me obriga necessariamente."
+        },
+        {
+          "start": 32.46,
+          "end": 34.46,
+          "text": "Só uma coisa rápida, tá, gente?"
+        },
+        {
+          "start": 34.46,
+          "end": 38.98,
+          "text": "Esse Michel Wallbeck é um Instituto francês atual, está vivendo a contemporâneo."
+        }
+      ],
+      "excerpt": "Eu estou ouvindo. Que nós... Deixa eu ver. Agora você está ouvindo, né? Beleza. É, porque eu tinha cortado o som do... Enfim. Voltou aqui. Vamos lá. Olá, vocês estão todos muito bem-vindos novamente. Essa semana, eu não sei, aqui no meu Instagram, que nós iríamos continuar conversando sobre partículas alimentares e eu iria fazer uma junção de um retato de Doryn Gray e admirável mundo novo, que algumas refeições sobre admirável mundo novo que o Roback faz que você achei interessante, mas aconteceu um acontecido e me obriga necessariamente. Só uma coisa rápida, tá, gente? Esse Michel Wallbeck é um Instituto francês atual, está vivendo a contemporâneo.",
+      "verified": true
     }
   }
+}
 }
