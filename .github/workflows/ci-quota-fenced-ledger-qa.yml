@@ -1,0 +1,38 @@
+name: Anthares CI quota shared-ledger isolated QA
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/ci_quota_neon_ledger.py'
+      - 'tests/test_ci_quota_neon_ledger.py'
+      - 'db/migrations/20261027_ci_quota_fenced_ledger.sql'
+      - '.github/workflows/ci-quota-fenced-ledger-qa.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-ci-quota-ledger-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate fenced ledger and additive migration without credentials
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_ci_quota_neon_ledger.py' -v
+          python3 -m py_compile tools/ci_quota_neon_ledger.py
+          python3 - <<'PY'
+          from pathlib import Path
+          q = Path('db/migrations/20261027_ci_quota_fenced_ledger.sql').read_text()
+          assert 'owner_token uuid NOT NULL' in q
+          assert 'lease_generation bigint NOT NULL' in q
+          assert 'REVOKE ALL' in q and 'FROM PUBLIC' in q
+          assert 'DELETE FROM' not in q and 'DROP TABLE' not in q
+          print('CI_QUOTA_LEDGER_QA=PASS')
+          PY
