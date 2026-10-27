@@ -215,7 +215,7 @@
       "last_ci_stage_success_url": "https://app.harness.io/ng/account/xAEBvmMUTjql7g2Exxmp-g/ci/orgs/default/projects/default_project/pipelines/pipeline_UniversoAnthares_anthares_kwai_runner_build_9a3d/executions/kbHfz70fTUiuYNoGx-QoBA/pipeline",
       "harness_live_ci_stage_result": "SUCCESS_GITHUB_COMMIT_STATUS_HARNESS_REPORTS_BUILD_AND_TEST_SUCCEEDED",
       "harness_ci_test_steps": "ADDED_TO_GIT_BACKED_PIPELINE_PR_1627_STAGE_SUCCEEDED_IN_LIVE_RUN",
-      "structured_quota_watcher": "IMPLEMENTED_GATED_DISABLED_GITHUB_WORKFLOW_PR_1646",
+      "structured_quota_watcher": "IMPLEMENTED_GATED_DISABLED;STEP_SKIPPED_LIVE_RUN_40569858409",
       "structured_quota_watcher_config": {
         "enabled_by_default": false,
         "enable_variable": "HARNESS_QUOTA_WATCH_ENABLED",
@@ -233,7 +233,10 @@
       "api_auth_probe": "READ_ONLY_GET_OWNED_EXECUTION_908_ADDED_GITHUB_WORKFLOW",
       "api_auth_probe_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1652",
       "api_auth_probe_requires_secret": "HARNESS_API_KEY",
-      "api_auth_probe_result": "PENDING_FIRST_ACTUAL_GITHUB_ACTIONS_RUN_WITH_CREDENTIAL"
+      "api_auth_probe_result": "NOT_CONFIGURED_VERIFIED_IN_LIVE_GITHUB_ACTIONS_RUN_40569858409",
+      "api_auth_probe_workflow": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40569858409",
+      "api_auth_probe_python_import_fix_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1657",
+      "api_auth_probe_run_evidence": "HARNESS_API_AUTH_READONLY=NOT_CONFIGURED; module execution successful; prior traceback resolved"
     },
     "floot": {
       "status": "PENDING_FRESH_VERIFICATION",
