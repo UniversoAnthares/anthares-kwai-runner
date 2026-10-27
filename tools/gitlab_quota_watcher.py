@@ -231,6 +231,37 @@ def acknowledge_quota_dispatch(component, project_id, event):
         return False
 
 
+def confirm_successful_quota_handoff(component, project_id, event, remote_run):
+    """Passive readback: never create another workflow or publication."""
+    url=os.environ.get("ANTHARES_CI_QUOTA_LEDGER_URL","")
+    oidc_url=os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL","")
+    oidc_auth=os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN","")
+    if not (url.endswith("/api/gitlab-reserve") and oidc_url and oidc_auth and GH_AUTH):
+        return False
+    address=url.replace("/api/gitlab-reserve","/api/gitlab-confirm")
+    sep="&" if "?" in oidc_url else "?"
+    try:
+        audience=oidc_url+sep+urllib.parse.urlencode(
+            {"audience":"anthares-ci-quota-controller"})
+        with urllib.request.urlopen(urllib.request.Request(audience,
+            headers={"Authorization":"Bearer "+oidc_auth}),timeout=10) as resp:
+            identity=json.load(resp).get("value","")
+        if not identity:return False
+        body=json.dumps({"component":component,"project_id":str(project_id),
+            "pipeline_id":str(event["id"]),"sha":str(event["sha"]),
+            "github_run_id":str(remote_run["id"])}).encode()
+        with urllib.request.urlopen(urllib.request.Request(address,data=body,
+            method="POST",headers={"Authorization":"Bearer "+identity,
+            "X-Github-Actions-Token":GH_AUTH,
+            "Content-Type":"application/json"}),timeout=23) as resp:
+            reply=json.load(resp)
+        return reply.get("ok") is True and reply.get("state") in (
+            "FALLBACK_CONFIRMED","ALREADY_CONFIRMED")
+    except (urllib.error.HTTPError,urllib.error.URLError,OSError,
+            TimeoutError,ValueError,KeyError):
+        return False
+
+
 def dispatch(component, workflow, p):
     inputs = {"gitlab_pipeline_id": str(p["id"]), "gitlab_sha": p["sha"]}
     if workflow == "private-ci-quota-rescue.yml":
@@ -265,6 +296,16 @@ def main():
             if workflow not in runs_cache:
                 runs_cache[workflow] = latest_runs(workflow)
             if already_handled(component, workflow, event["sha"], runs_cache[workflow]):
+                marker="quota-rescue-"+component+"-glsha-"+event["sha"]
+                matching=next((r for r in runs_cache[workflow]
+                    if r.get("event")=="workflow_dispatch"
+                    and r.get("status")=="completed" and r.get("conclusion")=="success"
+                    and marker in str(r.get("display_title",""))),None)
+                if matching:
+                    if confirm_successful_quota_handoff(component, project_id, event, matching):
+                        print(f"{component}=FALLBACK_CONFIRMED run={matching['id']}")
+                    else:
+                        print(f"{component}=FALLBACK_RECONCILIATION_PENDING")
                 print(f"{component}=DEDUPED sha={event['sha'][:12]}")
                 continue
             claim=reserve_quota_handoff(component, project_id, event)
