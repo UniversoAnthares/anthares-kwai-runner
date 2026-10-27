@@ -26,7 +26,7 @@ export function validateEditorial(meta,clip){
     attested.attachment_id!==clip?.attachment_id||
     attested.media_sha256!==clip?.sha256||
     !/^[a-f0-9]{64}$/.test(attested.media_sha256||'')||
-    attested.method!=='faster-whisper-small-from-media'||
+    !['faster-whisper-small-from-media','faster-whisper-medium-from-media'].includes(attested.method)||
     !Array.isArray(attested.cues)||attested.cues.length===0||
     attested.cues.some(c=>typeof c.text!=='string'||typeof c.start!=='number'||
       typeof c.end!=='number'||c.start<0||c.end>clip.duration+5||c.end<=c.start)||
