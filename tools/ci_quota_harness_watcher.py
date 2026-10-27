@@ -268,12 +268,28 @@ def readonly_auth_probe(token: str, request=None) -> str:
                              known_id, token,
                              request=request or http_json)
     try:
-        result = api.status(known_id)
+        code, body = api.request("GET", api.status_url, api.headers)
     except (HTTPError, URLError, OSError, ValueError):
-        result = "UNKNOWN"
-    if result == "SUCCEEDED":
-        return "VERIFIED_OWNED_EXECUTION_908"
-    return "UNVERIFIED_RESPONSE_OR_CREDENTIAL"
+        return "API_TRANSPORT_UNAVAILABLE"
+    if code in (401, 403):
+        return "AUTH_HTTP_" + str(code)
+    if code != 200:
+        return "STATUS_HTTP_" + str(code)
+    if not isinstance(body, dict):
+        return "STATUS_RESPONSE_NOT_OBJECT"
+    data = body.get("data")
+    if not isinstance(data, dict):
+        return "STATUS_DATA_SHAPE_INVALID"
+    summary = data.get("pipelineExecutionSummary")
+    if not isinstance(summary, dict):
+        return "STATUS_SUMMARY_ABSENT"
+    if summary.get("planExecutionId") != known_id:
+        return "EXECUTION_ID_MISMATCH"
+    if (summary.get("orgIdentifier") != ORG or
+        summary.get("projectIdentifier") != PROJECT or
+        summary.get("pipelineIdentifier") != PIPELINE):
+        return "OWNED_IDENTITY_MISMATCH"
+    return "VERIFIED_OWNED_EXECUTION_908" if api.status(known_id) == "SUCCEEDED" else "STATUS_NOT_SUCCEEDED"
 
 
 def main():
