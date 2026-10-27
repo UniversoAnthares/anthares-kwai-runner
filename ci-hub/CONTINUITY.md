@@ -103,3 +103,12 @@ Finding detalhado desta correÃ§Ã£o: `test-hub/findings/20261015-android-runt
 ## Android Runtime authority rule â€” 2026-10-16
 
 For `MEmu_4`, there is exactly one recovery authority: **Anthares Android Runtime running from the SYSTEM path**. The direct SYSTEM/headless path is primary. The interactive `Lucas` launcher and isolated ADB helper are redundancy-only and must remain disabled outside an explicit fallback attempt. They must never run as a parallel watchdog or alternate authority. The runtime serializes MEmu recovery with the global recovery mutex and may invoke the interactive redundancy only after the SYSTEM path exhausts its bounded recovery window. Do not promote the interactive path to primary without a new explicit owner decision.
+
+## 2026-10-26 — Bitrise e AppVeyor (decisao operacional atual)
+
+A fila geral de CI do `ci-hub/executor-routing.json` preserva AppVeyor como **penultimo candidato** antes de GitLab CI. O AppVeyor permanece registrado, mas foi marcado como inelegivel para novos jobs apos resposta HTTP 500 em POST /api/builds com API key v1 autenticada e historico sem novo build. Antes de dispatch, erros confirmados autorizam considerar o proximo provedor que tenha readiness e quota atual; timeouts ou efeitos ambiguos exigem reconciliacao do job antes de nova tentativa, com fencing e deduplicacao. Esta regra nao autoriza repetir publicacao.
+
+Bitrise permanece candidato **desativado** ate autenticar a conta, confirmar creditos Hobby gratuitos, trocar no projeto remoto a origem da configuracao de "Stored on Bitrise" para o `bitrise.yml` versionado e validar o workflow `anthares_ci_smoke`. Ele nao publica, nao executa AVD nem instala apps. O workflow `primary` foi preservado integralmente para futura homologacao especifica de Android e browser.
+
+**Limite de evidencia:** a configuracao no repositório e os testes locais nao comprovam acesso a conta Bitrise, configuracao ativa no serviço nem execucao hospedada. Nao promover Bitrise a `ci_eligible=true` ou `active=true` sem links e logs de um job real. A prioridade CI e um manifesto de decisao; selecao/configuracao nao garante dispatch automatico entre provedores.
+

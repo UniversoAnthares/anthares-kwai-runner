@@ -17,6 +17,33 @@ class CodebergMirrorPolicyTests(unittest.TestCase):
         self.assertFalse(conf["git_redundancy"]["codeberg"]["eligible_for_promotion"])
         self.assertEqual(conf["git_redundancy"]["recovery_order"][0],"codeberg")
 
+    def test_appveyor_penultimate_and_fail_closed(self):
+        routing=json.loads((ROOT/"ci-hub/executor-routing.json").read_text(encoding="utf-8"))
+        status=json.loads((ROOT/"ci-hub/provider-status.json").read_text(encoding="utf-8"))
+        priority=routing["ci_execution"]["priority"]
+        self.assertEqual(priority[-2], "appveyor")
+        self.assertEqual(len(priority), len(set(priority)))
+        self.assertFalse(routing["providers"]["appveyor"]["ci_eligible"])
+        self.assertFalse(status["providers"]["appveyor"]["eligible"])
+        self.assertIn("HTTP500", routing["providers"]["appveyor"]["status"])
+        self.assertFalse(routing["providers"]["appveyor_linux_chromium"]["browser_backend_eligible"])
+
+    def test_bitrise_smoke_is_configured_but_not_activated(self):
+        routing=json.loads((ROOT/"ci-hub/executor-routing.json").read_text(encoding="utf-8"))
+        status=json.loads((ROOT/"ci-hub/provider-status.json").read_text(encoding="utf-8"))
+        priority=routing["ci_execution"]["priority"]
+        self.assertIn("bitrise", priority)
+        self.assertEqual(priority.index("bitrise"), priority.index("appveyor") - 1)
+        self.assertFalse(routing["providers"]["bitrise"]["active"])
+        self.assertFalse(routing["providers"]["bitrise"]["ci_eligible"])
+        self.assertFalse(status["providers"]["bitrise"]["eligible"])
+        yaml=(ROOT/"bitrise.yml").read_text(encoding="utf-8")
+        smoke=yaml.split("  anthares_ci_smoke:", 1)[1]
+        self.assertIn("BITRISE_HOSTED_SMOKE=PASS", smoke)
+        self.assertIn("ci/shared/provider-smoke.sh", smoke)
+        self.assertNotIn("deploy-to-bitrise-io@", smoke)
+        self.assertNotIn("avd-manager@", smoke)
+
     def test_mirror_rejects_missing_credentials_and_divergence(self):
         w=(ROOT/".github/workflows/mirror-codeberg.yml").read_text(encoding="utf-8")
         self.assertIn("CODEBERG_MIRROR_AUTH_REQUIRED",w)

@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-21-gitlab-retained-standby-codeberg-audit",
+  "revision": "2026-10-26-appveyor-500-bitrise-standby-auth-unverified",
   "checked_at_utc": "2026-10-21T21:20:00Z",
   "rules": {
     "regression_check_required_each_round": true,
@@ -81,12 +81,13 @@
       "scope": "Anthares Browser primary hosted Chromium backend"
     },
     "appveyor_linux_chromium": {
-      "status": "READY_BROWSER_SECONDARY",
+      "status": "HISTORIC_PROOF_BUT_NEW_APPVEYOR_BUILDS_HTTP500_20261026",
       "evidence_class": "VERIFIED",
       "verified_at_utc": "2026-10-16T03:44:34Z",
       "evidence": "build 54907970 / 1.0.425 commit 66718568e1f0e799e3d9f8348a8d0efedc192c05; Linux job bw7eb3k0ts0d94c3 success; ALL_3_CASES=PASS with health/readiness, control auth, CDP loopback, navigate/click/type/wait/evaluate/screenshot, noVNC, Chromium and persistent profile restart; duplicate project job w4g7x7ylrp9atulw reproduced success",
-      "eligible": true,
-      "scope": "Anthares Browser independent secondary hosted Chromium backend"
+      "eligible": false,
+      "scope": "Anthares Browser independent secondary hosted Chromium backend",
+      "reopen_condition": "Fresh hosted Linux runner accepts and finishes common browser runtime proof"
     },
     "anthares_reserva_browser": {
       "status": "DEGRADED_BY_CLOUDFLARE_DO_QUOTA",
@@ -114,12 +115,12 @@
       "reopen_condition": "A recent scheduled CORTES or mirror job is assigned a runner and its required success evidence appears"
     },
     "appveyor": {
-      "status": "DEGRADED_QUEUE_20261021",
-      "evidence_class": "VERIFIED_LIVE_QUEUE",
+      "status": "BLOCKED_HTTP500_NEW_BUILD_20261026",
+      "evidence_class": "VERIFIED_API_HTTP500",
       "verified_at_utc": "2026-10-21T21:20:00Z",
-      "evidence": "AppVeyor public projects anthares-kwai-runner and anthares-kwai-runner-1w7dq report newest builds 54927735/54927736 queued since 2026-10-19; historic 2026-10-16 proof does not imply new runner availability.",
+      "evidence": "On 2026-10-26 v1 account token authenticated and project identity 1229848 validated; one POST /api/builds for main returned HTTP 500; public AppVeyor history shows no new build and both queues empty after 50 queued builds were canceled.",
       "eligible": false,
-      "reopen_condition": "A new AppVeyor hosted job starts and completes successfully"
+      "reopen_condition": "A fresh AppVeyor build is created and runner executes successfully; verify no duplicate job ID"
     },
     "github_actions_private": {
       "status": "BLOCKED_QUOTA",
@@ -239,6 +240,13 @@
       "eligible": false,
       "scope": "candidate CI (not yet an active fallback)",
       "reopen_condition": "Actions enabled, qualified runner available, real job success and publisher OIDC/secret access proven"
+    },
+    "bitrise": {
+      "status": "PENDING_AUTH_REPOSITORY_CONFIG_AND_LIVE_PROOF",
+      "eligible": false,
+      "evidence_class": "CONFIG_ONLY_WITH_HISTORICAL_STORAGE_MISMATCH",
+      "evidence": "Bitrise.yml exists in canonical GitHub; 2026-10-06 Bitrise editor stored an onboarding YAML in Bitrise not repo. No verified Bitrise API session, free account quota, configured source, or new successful smoke run on 2026-10-26.",
+      "reopen_condition": "Auth API access; source switched to repository bitrise.yml; free credits proven; anthares_ci_smoke finishes and SHA matches; then update both runtime state and routing."
     }
   }
 }
