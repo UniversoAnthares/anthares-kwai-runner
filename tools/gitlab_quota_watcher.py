@@ -62,7 +62,9 @@ def recent_qualifying_failure(project_id):
         stamp = dt.datetime.fromisoformat(p["created_at"].replace("Z", "+00:00"))
         if (now - stamp).total_seconds() > WINDOW_MINUTES * 60:
             break
-        if p.get("ref") != "main" or not p.get("sha"):
+        if (p.get("ref") != "main" or not p.get("sha") or
+                p.get("status") not in
+                ("failed","canceled","running","pending","created","preparing","waiting_for_resource")):
             continue
         jobs = api("https://gitlab.com/api/v4/projects/" + project_id +
                    "/pipelines/" + str(p["id"]) + "/jobs?per_page=100", GL_AUTH, gl=True)
@@ -114,6 +116,10 @@ def confirmed_terminal_before_reserve(project_id, event):
         ("running","pending","created","preparing","waiting_for_resource")
         for j in jobs)
     if not confirmed_quota or active_other:
+        return False
+    # Dry-run remains read-only even if a cancelable live quota appears.
+    if DRY_RUN:
+        print("DRY_RUN_CANCEL_WOULD_BE_REQUESTED",flush=True)
         return False
     # No other job is running; only now may this exact quota pipeline be
     # canceled. Never reissue an uncertain cancel within the same attempt.
