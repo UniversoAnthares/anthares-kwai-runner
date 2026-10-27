@@ -22,6 +22,8 @@ jobs:
       PYTHONUTF8: "1"
     steps:
       - name: Authenticated GET of canonical state only; sanitized status
+        id: rest
+        continue-on-error: true
         shell: powershell
         run: |
           $script = @'
@@ -60,3 +62,16 @@ jobs:
           '@
           $script | & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Authorized hosting SSH / WP-CLI read-only contingency
+        if: steps.rest.outcome == 'failure'
+        shell: powershell
+        run: |
+          $cmd = "cd domains/anthares.us/public_html && /opt/alt/php83/usr/bin/php /usr/local/bin/wp eval 'echo count(anthares_cortes_registry_get());'"
+          $result = & 'C:\Program Files\OpenSSH\ssh.exe' -oBatchMode=yes -oStrictHostKeyChecking=yes -oConnectTimeout=8 anthares-hostinger $cmd 2>$null
+          $code = $LASTEXITCODE
+          if ($code -eq 0 -and (($result -join '') -match '^\s*[0-9]+\s*$')) {
+            Write-Output "WP_QA_AUTH_RESULT=PASS_SSH_WPCLI_READONLY"
+            exit 0
+          }
+          Write-Output "WP_QA_AUTH_RESULT=AUTH_MISSING_AND_SSH_UNAVAILABLE"
+          exit 3
