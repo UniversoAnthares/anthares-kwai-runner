@@ -49,6 +49,7 @@ jobs:
             Invoke-WebRequest -Uri $disableUrl -Headers $hgh -Method Put -TimeoutSec 18 -UseBasicParsing | Out-Null
             Write-Output "GITHUB_TIKTOK_WORKFLOW_DISABLED=$wf"
           }
+          try {
           $u=[uri]$env:CODEBERG_PUSH_URL
           if($u.Scheme -ne 'https' -or $u.Host -ne 'codeberg.org'){throw 'CODEBERG_AUTH_INVALID_ORIGIN'}
           $pair=$u.UserInfo.Split(':',2)
@@ -72,6 +73,16 @@ jobs:
           $verified=Invoke-RestMethod -Uri $url -Headers $h -TimeoutSec 18
           if($verified.value -ne 'true'){throw 'CODEBERG_PRIMARY_FLAG_NOT_VERIFIED'}
           Write-Output 'CODEBERG_TIKTOK_PRIMARY_ENABLED_AND_GITHUB_DRAINED=1'
+          } catch {
+            Write-Output ('CODEBERG_PROMOTION_FAILED=' + $_.Exception.Message)
+            foreach($wf in @('cortes-tiktok-publisher.yml','cortes-tiktok-lucasrosalem4-cloud-publisher.yml')){
+              try {
+                Invoke-WebRequest -Uri "https://api.github.com/repos/$repo/actions/workflows/$wf/enable" -Headers $hgh -Method Put -TimeoutSec 18 -UseBasicParsing | Out-Null
+                Write-Output "GITHUB_TIKTOK_WORKFLOW_RESTORED=$wf"
+              } catch { Write-Output "GITHUB_TIKTOK_WORKFLOW_RESTORE_FAILED=$wf" }
+            }
+            throw
+          }
           try{
             $self='cortes-tiktok-codeberg-guarded-promotion.yml'
             Invoke-WebRequest -Uri "https://api.github.com/repos/$repo/actions/workflows/$self/disable" -Headers $hgh -Method Put -TimeoutSec 16 -UseBasicParsing |Out-Null
