@@ -21,8 +21,10 @@ concurrency:
 jobs:
   publisher:
     if: ${{ (forgejo.event_name == 'schedule' && vars.TIKTOK_CODEBERG_PRIMARY == 'true') || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
-    runs-on: codeberg-medium
-    timeout-minutes: 9
+    runs-on: codeberg-small
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.64.1-noble
+    timeout-minutes: 5
     enable-openid-connect: true
     env:
       PYTHONUTF8: '1'
@@ -34,18 +36,21 @@ jobs:
       TIKTOK_CODEBERG_PREFLIGHT_ONLY: ${{ forgejo.event_name == 'workflow_dispatch' && inputs.smoke && !inputs.publish && '1' || '0' }}
       TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: 'true'
     steps:
-      - uses: https://code.forgejo.org/actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Prepare isolated Chromium
+      - name: Checkout exact mirrored commit without Node dependencies
         shell: bash
         run: |
           set -eu
-          python3 -m venv /tmp/anthares-tiktok-lucas4
-          /tmp/anthares-tiktok-lucas4/bin/python -m pip install -q --disable-pip-version-check playwright requests cryptography
-          /tmp/anthares-tiktok-lucas4/bin/python -m playwright install --with-deps chromium
+          git init -q .
+          git remote add origin https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git
+          git fetch -q --depth 1 origin "${FORGEJO_SHA}" || git fetch -q --depth 200 origin main
+          git checkout -q --detach "${FORGEJO_SHA}"
+      - name: Install Python libraries; Chromium already pinned in container
+        shell: bash
+        run: |
+          set -eu
+          python -m pip install -q --disable-pip-version-check playwright==1.64.1 requests cryptography
       - name: Validate identity, obtain OIDC and execute a fenced queue step
         shell: bash
         run: |
           set -eu
-          /tmp/anthares-tiktok-lucas4/bin/python -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
+          python -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
