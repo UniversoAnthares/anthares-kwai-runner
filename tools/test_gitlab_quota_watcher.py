@@ -14,6 +14,7 @@ class QuotaWatcherContract(unittest.TestCase):
         with patch.object(mod, "GL_AUTH", "test-only"), \
              patch.object(mod, "GH_AUTH", "test-only"), \
              patch.object(mod, "recent_qualifying_failure", side_effect=event), \
+             patch.object(mod, "confirmed_terminal_before_reserve", return_value=True), \
              patch.object(mod, "latest_runs", return_value=[]), \
              patch.object(mod, "dispatch", side_effect=lambda component, workflow, e: invocations.append((component, workflow))):
             self.assertEqual(mod.main(), 0)
@@ -67,6 +68,7 @@ class QuotaWatcherContract(unittest.TestCase):
         with patch.object(mod, "GL_AUTH", "fixture"), \
              patch.object(mod, "GH_AUTH", "fixture"), \
              patch.object(mod, "recent_qualifying_failure", side_effect=source), \
+             patch.object(mod, "confirmed_terminal_before_reserve", return_value=True), \
              patch.object(mod, "latest_runs", return_value=[]), \
              patch.object(mod, "dispatch", side_effect=lambda component, workflow, event: called.append(component)):
             self.assertEqual(mod.main(), 1)
