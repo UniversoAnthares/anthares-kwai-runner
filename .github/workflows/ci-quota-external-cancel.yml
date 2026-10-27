@@ -20,6 +20,15 @@ jobs:
     timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
+      - name: Harness cancel-first by structured quota (explicitly gated)
+        if: ${{ vars.HARNESS_QUOTA_WATCH_ENABLED == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HARNESS_API_KEY: ${{ secrets.HARNESS_API_KEY }}
+          HARNESS_QUOTA_WATCH_ENABLED: 'true'
+        shell: bash
+        run: |
+          python3 tools/ci_quota_harness_watcher.py
       - name: Retrieve AppVeyor API token securely from Bitwarden when configured
         if: ${{ vars.ANTHARES_SECRETS_APPVEYOR_TOKEN_ID != '' }}
         id: appveyor-bws
@@ -123,8 +132,10 @@ jobs:
           import json,os,sys,urllib.request,urllib.error
           key=os.getenv("BITRISE_KEY","").strip()
           if not key:
-              print("BITRISE_AUTH_PROBE=MISSING_SECRET")
-              sys.exit(1)
+              # Bitrise is optional; a missing credential is NOT quota failure.
+              # Do not block independent Harness/AppVeyor safety observers.
+              print("BITRISE_AUTH_PROBE=NOT_CONFIGURED")
+              sys.exit(0)
           url="https://api.bitrise.io/v0.1/apps/ef06f940-ffc7-4e37-b935-93ad06d8faeb"
           req=urllib.request.Request(url,headers={"Authorization":key,
                 "Accept":"application/json","User-Agent":"Anthares-Bitrise-Readiness/1"})
