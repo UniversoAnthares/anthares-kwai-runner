@@ -1,0 +1,46 @@
+name: Bitrise one-time nonpublishing hosted smoke
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/bitrise-hosted-smoke-once-20261027.yml']
+permissions:
+  contents: read
+jobs:
+  once:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Launch one single nonpublishing Bitrise smoke only if queue idle
+        env:
+          BITRISE_TOKEN: ${{ secrets.BITRISE_API_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json,os,sys,urllib.request,urllib.error
+          token=os.getenv("BITRISE_TOKEN","").strip()
+          app="ef06f940-ffc7-4e37-b935-93ad06d8faeb"
+          if not token:print("BITRISE_LIVE_SMOKE=NO_TOKEN");sys.exit(1)
+          url=f"https://api.bitrise.io/v0.1/apps/{app}/builds"
+          headers={"Authorization":token,"Accept":"application/json"}
+          try:
+              r=urllib.request.Request(url+"?limit=12",headers=headers)
+              with urllib.request.urlopen(r,timeout=15) as q: builds=(json.load(q).get("data") or [])
+              if any(str(b.get("status")) in ("0","1") for b in builds):
+                  print("BITRISE_LIVE_SMOKE=ACTIVE_BUILD_FOUND_NO_DUPLICATE")
+                  sys.exit(0)
+              payload={"hook_info":{"type":"bitrise"},"build_params":{
+                  "branch":"main","workflow_id":"anthares_ci_smoke",
+                  "machine_type_id":"standard","skip_git_status_report":True}}
+              h={**headers,"Content-Type":"application/json"}
+              request=urllib.request.Request(url,headers=h,data=json.dumps(payload).encode(),method="POST")
+              with urllib.request.urlopen(request,timeout=18) as q: response=json.load(q)
+              d=response.get("data") or {}
+              slug=d.get("build_slug") or d.get("slug")
+              if not isinstance(slug,str) or len(slug)<20:
+                  print("BITRISE_LIVE_SMOKE=DISPATCH_UNCERTAIN_NO_RETRY");sys.exit(1)
+              print("BITRISE_LIVE_SMOKE=DISPATCH_CONFIRMED")
+              print("BITRISE_LIVE_SMOKE_BUILD_SLUG="+slug)
+          except urllib.error.HTTPError as e:
+              print("BITRISE_LIVE_SMOKE_HTTP="+str(e.code));sys.exit(1)
+          except (urllib.error.URLError,ValueError,TypeError):
+              print("BITRISE_LIVE_SMOKE=DISPATCH_UNCERTAIN_NO_RETRY");sys.exit(1)
+          PY
