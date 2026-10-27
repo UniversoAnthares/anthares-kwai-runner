@@ -113,6 +113,41 @@ jobs:
           }
           main().catch(e=>{console.error("ARA_TOKEN_TRANSFER="+e.message);process.exitCode=1});
           NODE
+      - name: Verify Bitrise API token and exact owned app (read-only)
+        env:
+          BITRISE_KEY: ${{ env.ANTHARES_BITRISE_TOKEN_FROM_BW || secrets.BITRISE_API_TOKEN }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,sys,urllib.request,urllib.error
+          key=os.getenv("BITRISE_KEY","").strip()
+          if not key:
+              print("BITRISE_AUTH_PROBE=MISSING_SECRET")
+              sys.exit(1)
+          url="https://api.bitrise.io/v0.1/apps/ef06f940-ffc7-4e37-b935-93ad06d8faeb"
+          req=urllib.request.Request(url,headers={"Authorization":key,
+                "Accept":"application/json","User-Agent":"Anthares-Bitrise-Readiness/1"})
+          try:
+              with urllib.request.urlopen(req,timeout=15) as r:
+                  doc=json.load(r)
+              app=doc.get("data") or {}
+              repo=str(app.get("repo_url") or "")
+              owned=repo in ("https://github.com/UniversoAnthares/anthares-kwai-runner",
+                  "https://github.com/UniversoAnthares/anthares-kwai-runner.git",
+                  "git@github.com:UniversoAnthares/anthares-kwai-runner.git")
+              if app.get("slug")=="ef06f940-ffc7-4e37-b935-93ad06d8faeb" and owned:
+                  print("BITRISE_AUTH_PROBE=VERIFIED_PROJECT_AND_REPO")
+              else:
+                  print("BITRISE_AUTH_PROBE=PROJECT_OR_REPOSITORY_MISMATCH")
+                  print("BITRISE_PROJECT_SLUG_MATCH="+str(app.get("slug")=="ef06f940-ffc7-4e37-b935-93ad06d8faeb"))
+                  print("BITRISE_REPO_OWNER_MATCH="+str(app.get("repo_owner")=="UniversoAnthares"))
+                  print("BITRISE_REPO_SLUG_MATCH="+str(app.get("repo_slug")=="anthares-kwai-runner"))
+                  sys.exit(1)
+          except urllib.error.HTTPError as e:
+              print("BITRISE_AUTH_PROBE_HTTP="+str(e.code));sys.exit(1)
+          except (urllib.error.URLError,OSError,ValueError,TypeError):
+              print("BITRISE_AUTH_PROBE=SOURCE_UNAVAILABLE");sys.exit(1)
+          PY
       - name: Detect provider-structured quota and cancel owned execution only
         env:
           APPVEYOR_ACCOUNT: ${{ vars.APPVEYOR_ACCOUNT || 'UniversoAnthares' }}
