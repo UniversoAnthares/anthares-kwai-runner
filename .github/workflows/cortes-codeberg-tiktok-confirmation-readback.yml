@@ -41,7 +41,7 @@ jobs:
                 foreach($job in @($detail.jobs)) {
                   Write-Output "CODEBERG_TIKTOK_JOB_ID=$($job.id) STATUS=$($job.status) CONCLUSION=$($job.conclusion)"
                 }
-                if($target.conclusion -in @('success','')) {
+                if($target.conclusion -eq 'success' -or $target.status -eq 'success') {
                   Write-Output 'CODEBERG_TIKTOK_RUN_TERMINAL_SUCCESS_OR_STATUS_ONLY=1'
                   exit 0
                 }
