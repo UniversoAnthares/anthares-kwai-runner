@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/ci-quota-external-cancel.yml
       - anthares-remote-agent/windows/ci-quota-cancel-standby.ps1
+      - tools/ci_quota_harness_watcher.py
   workflow_dispatch: {}
 permissions:
   contents: read
