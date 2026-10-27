@@ -251,7 +251,14 @@
         "controller_deployment_id": "dpl_GpybXDXSumX4MBMYAjaV34SanXoc",
         "controller_live_proof": "HEALTH_200_NEON_LIMITED_ROLE_READY; PROVIDER_CANCEL_405_401; HARNESS_VERIFY_405_401; OIDC_VALID_AND_FOREIGN_WORKFLOW_FENCING_PASS_GITHUB_RUN_40582510426",
         "watcher_observation_run": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40582510426",
-        "activation_gate": "SATISFIED_FOR_NONPUBLISHING_CI_ONLY; REAL_QUOTA_CANCELLATION_AND_SUCCESSOR_HANDOFF_UNOBSERVED"
+        "activation_gate": "SATISFIED_FOR_NONPUBLISHING_CI_ONLY; REAL_QUOTA_CANCELLATION_AND_SUCCESSOR_HANDOFF_UNOBSERVED",
+        "implementation_status": "COMPLETE_DEPLOYED_ENABLED_SIMULATED",
+        "implementation_complete": true,
+        "simulation_contracts_verified": true,
+        "simulation_run": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40584613663/job/122472658582",
+        "simulation_result": "63_PASS_44_PYTHON_11_CONTROLLER_8_OIDC_0_FAILURES",
+        "simulation_integrated_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1694",
+        "pending_operational_evidence": "NATURAL_REAL_HARNESS_QUOTA_ABORT_AND_GITHUB_SUCCESSOR_HANDOFF_UNOBSERVED"
       }
     },
     "floot": {
