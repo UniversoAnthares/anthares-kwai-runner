@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/ci-quota-external-cancel.yml
+      - anthares-remote-agent/windows/ci-quota-cancel-standby.ps1
   workflow_dispatch: {}
 permissions:
   contents: read

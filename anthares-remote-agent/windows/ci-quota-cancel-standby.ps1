@@ -173,9 +173,9 @@ function ImportSealedBitrise([string]$privateKey,[string]$appSlug) {
         $app=Property $doc 'data'
         $repoUrl=[string](Property $app 'repo_url')
         if((Property $app 'slug') -ne $appSlug -or
-           @('https://github.com/'+$Repo,
-             'https://github.com/'+$Repo+'.git',
-             'git@github.com:'+$Repo+'.git') -notcontains $repoUrl) {
+           @( ('https://github.com/' + $Repo),
+              ('https://github.com/' + $Repo + '.git'),
+              ('git@github.com:' + $Repo + '.git') ) -notcontains $repoUrl) {
             throw 'SOURCE_NOT_OWNED'
         }
         $phase='SYSTEM_DPAPI_ENCRYPT'
@@ -312,8 +312,10 @@ function Bitrise($config,[string]$token,[string]$key) {
     $base='https://api.bitrise.io/v0.1/apps/'+[Uri]::EscapeDataString($app)
     $meta=CallProvider $base $token 'bitrise'
     $repoUrl=[string](Property (Property $meta 'data') 'repo_url')
-    if(@('https://github.com/'+$Repo,'https://github.com/'+$Repo+'.git',
-       'git@github.com:'+$Repo+'.git') -notcontains $repoUrl){return 'PROJECT_MISMATCH'}
+    $validRepos=@( ('https://github.com/' + $Repo),
+                   ('https://github.com/' + $Repo + '.git'),
+                   ('git@github.com:' + $Repo + '.git') )
+    if($validRepos -notcontains $repoUrl){return 'PROJECT_MISMATCH'}
     $history=CallProvider ($base+'/builds?limit=12&branch=main') $token 'bitrise'
     $count=0
     foreach($item in @((Property $history 'data'))|Select-Object -First 12){
