@@ -95,7 +95,7 @@
     "runner_allocation_health": {
       "github_actions_public": "RUNNER_ALLOCATION_AND_READONLY_QUOTA_WATCHER_SUCCESS_20261027_RUN_40569858409_PUBLISHER_INDEPENDENT_PROOF_REQUIRED",
       "appveyor": "BLOCKED_HTTP500_BUILD_CREATION_20261026",
-      "codeberg_actions": "NOT_CONFIGURED_REPOSITORY_ACTIONS_DISABLED",
+      "codeberg_actions": "ACTIONS_ENABLED_MIRROR_PARITY_PASS_20261027_RUNNER_UNVERIFIED",
       "gitlab_ci": "BLOCKED_QUOTA_TEMPORARY_AUTOMATIC_RECHECK",
       "bitrise": "EXCLUDED_BY_OWNER_20261027_MACHINE_INVALID_HTTP400",
       "harness": "WATCHER_AUTH_VERIFIED_RUN_40582510426_CONTROLLER_DEPLOYED_NONPUBLISHING_FALLBACK_ENABLED",
@@ -464,7 +464,7 @@
     },
     "codeberg_actions": {
       "active": false,
-      "status": "BLOCKED_ACTIONS_DISABLED_AND_RUNNER_UNVERIFIED",
+      "status": "ENABLED_NO_RUNNER_SUCCESS_PROOF",
       "ci_eligible": false,
       "role": "candidate_forgejo_ci",
       "reopen_condition": "Actions enabled, license and runner access validated, live job successful"
