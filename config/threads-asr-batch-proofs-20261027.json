@@ -1,0 +1,2632 @@
+{
+  "schema": "anthares.threads.external-asr-evidence.v1",
+  "source_run": 40565169978,
+  "proofs": {
+    "g1:fOmihuHUT1M:909:951": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:909:951",
+      "attachment_id": 16996,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 909,
+      "source_end_s": 951,
+      "media_sha256": "84531b3f442a8115cdcb7c257481e8d5f407b671163c06d2ba4777c44a477866",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.84,
+          "text": "Então, diferente do que se espera de um livro, que você tem que ter uma primeira frase marcante,"
+        },
+        {
+          "start": 5.84,
+          "end": 11.04,
+          "text": "tal, isso é quase que uma regra, assim, de pessoal ensina em cursos de escrita criativa,"
+        },
+        {
+          "start": 11.04,
+          "end": 16.72,
+          "text": "né, em livros também, mas apesar de você ter uma frase marcante para prender o leitor e uma"
+        },
+        {
+          "start": 16.72,
+          "end": 21.04,
+          "text": "primeira página inteira marcante, alguma coisa vai acontecer lá no, antes de virar a página,"
+        },
+        {
+          "start": 21.04,
+          "end": 25.6,
+          "text": "tem que acontecer alguma coisa, isso é mais para os livros de agora, né, não é bem isso que"
+        },
+        {
+          "start": 25.6,
+          "end": 32.6,
+          "text": "nos livros do Kafka. Ele realmente entrega a coisa mais doida do livro já no começo assim."
+        },
+        {
+          "start": 32.6,
+          "end": 38.6,
+          "text": "E os leitores, estão acostumados com qualquer tipo de leitura comum de ficção, não estão acostumados com isso."
+        }
+      ],
+      "excerpt": "Então, diferente do que se espera de um livro, que você tem que ter uma primeira frase marcante, tal, isso é quase que uma regra, assim, de pessoal ensina em cursos de escrita criativa, né, em livros também, mas apesar de você ter uma frase marcante para prender o leitor e uma primeira página inteira marcante, alguma coisa vai acontecer lá no, antes de virar a página, tem que acontecer alguma coisa, isso é mais para os livros de agora, né, não é bem isso que nos livros do Kafka. Ele realmente entrega a coisa mais doida do livro já no começo assim. E os leitores, estão acostumados com qualquer tipo de leitura comum de ficção, não estão acostumados com isso.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1032:1072": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1032:1072",
+      "attachment_id": 17004,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1032,
+      "source_end_s": 1072,
+      "media_sha256": "1a65d746fb72870c3f448e233c430c627437866135d4f4e100f85a0b599d9763",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.2,
+          "text": "Primeira frase é a seguinte, no processo, a primeira frase é a seguinte."
+        },
+        {
+          "start": 4.2,
+          "end": 10.04,
+          "text": "Alguém certamente havia caloniado o Joe Zafkei, pois uma manhã ele foi detido sem ter feito"
+        },
+        {
+          "start": 10.04,
+          "end": 11.04,
+          "text": "mal algum."
+        },
+        {
+          "start": 11.04,
+          "end": 14.12,
+          "text": "O cara foi preso sem saber por que, estava sendo detido."
+        },
+        {
+          "start": 14.12,
+          "end": 17.32,
+          "text": "O cara começa a entrar no diálogo dentro da casa dele com um monte de gente que vem"
+        },
+        {
+          "start": 17.32,
+          "end": 22.66,
+          "text": "falar com ele assim, como tratar ele como se ele fosse alguém já super suspeito assim"
+        },
+        {
+          "start": 22.66,
+          "end": 26.36,
+          "text": "mesmo e falar assim, você tem que ver isso com o juiz, né, e aí para ver o juiz"
+        },
+        {
+          "start": 26.36,
+          "end": 27.36,
+          "text": "é infeliz."
+        },
+        {
+          "start": 27.36,
+          "end": 28.6,
+          "text": "Aí vocês vão ter que ver a história, né, mas enfim."
+        },
+        {
+          "start": 28.6,
+          "end": 33.04,
+          "text": "outra coisa o Lucas falou aí né que a história né na primeira"
+        }
+      ],
+      "excerpt": "Primeira frase é a seguinte, no processo, a primeira frase é a seguinte. Alguém certamente havia caloniado o Joe Zafkei, pois uma manhã ele foi detido sem ter feito mal algum. O cara foi preso sem saber por que, estava sendo detido. O cara começa a entrar no diálogo dentro da casa dele com um monte de gente que vem falar com ele assim, como tratar ele como se ele fosse alguém já super suspeito assim mesmo e falar assim, você tem que ver isso com o juiz, né, e aí para ver o juiz é infeliz. Aí vocês vão ter que ver a história, né, mas enfim. outra coisa o Lucas falou aí né que a história né na primeira",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1072:1113": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1072:1113",
+      "attachment_id": 17005,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1072,
+      "source_end_s": 1113,
+      "media_sha256": "de3b62ffa02126222835999dc53103fd15c89c9f72175c34708be57e8ab2ad15",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.28,
+          "text": "Essa já começa a ser fantástica. Sim, Débora. Isso é justamente o registro do fantástico, pô."
+        },
+        {
+          "start": 5.28,
+          "end": 8.12,
+          "text": "Uma pessoa que vira um sete gigante, outra coisa que não é fantástico."
+        },
+        {
+          "start": 8.12,
+          "end": 12.84,
+          "text": "Tudo bem que ela pode ter dito fantástico, tipo, de, ah, muito incrível, muito diferente."
+        },
+        {
+          "start": 12.84,
+          "end": 16.04,
+          "text": "Meu irmão, olha, ela gostou muito do Moab Dick. Eu gosto também."
+        },
+        {
+          "start": 16.04,
+          "end": 18.16,
+          "text": "Primeira frase, a primeira frase do Moab Dick."
+        },
+        {
+          "start": 18.16,
+          "end": 20.52,
+          "text": "Calme e smile. Beleza?"
+        },
+        {
+          "start": 20.52,
+          "end": 27.4,
+          "text": "É uma referência a Esmael, Biblia, Show, tem um paralelo entre o capitão a chave e o Esmael."
+        },
+        {
+          "start": 27.4,
+          "end": 29.52,
+          "text": "Legal, mas não é um registro do fantástico."
+        },
+        {
+          "start": 29.52,
+          "end": 33.12,
+          "text": "A gente começa a entrar no fantasioso, que é parecido, mas depois da obra..."
+        }
+      ],
+      "excerpt": "Essa já começa a ser fantástica. Sim, Débora. Isso é justamente o registro do fantástico, pô. Uma pessoa que vira um sete gigante, outra coisa que não é fantástico. Tudo bem que ela pode ter dito fantástico, tipo, de, ah, muito incrível, muito diferente. Meu irmão, olha, ela gostou muito do Moab Dick. Eu gosto também. Primeira frase, a primeira frase do Moab Dick. Calme e smile. Beleza? É uma referência a Esmael, Biblia, Show, tem um paralelo entre o capitão a chave e o Esmael. Legal, mas não é um registro do fantástico. A gente começa a entrar no fantasioso, que é parecido, mas depois da obra...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1325:1365": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1325:1365",
+      "attachment_id": 17006,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1325,
+      "source_end_s": 1365,
+      "media_sha256": "5b34b28ec60bfcd3f2fe4e058575066766ee5af225a22c38f19d63dde63846e7",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 30,
+          "text": "não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não"
+        },
+        {
+          "start": 30,
+          "end": 34.38,
+          "text": "Eu não sabia, eu li a primeira vez e nem sabia que era cáfica, mas quando eu voltei pra"
+        },
+        {
+          "start": 34.38,
+          "end": 34.88,
+          "text": "ler..."
+        }
+      ],
+      "excerpt": "não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não, não Eu não sabia, eu li a primeira vez e nem sabia que era cáfica, mas quando eu voltei pra ler...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1365:1405": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1365:1405",
+      "attachment_id": 17007,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1365,
+      "source_end_s": 1405,
+      "media_sha256": "ec9570a0733fb49c0c4cce6e140ebf77de98e6d3e8c2127d142c16a6bb7cce9a",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 6.36,
+          "text": "Depois que eu descobri que K ficar na parada, assim, eu fui caraca, né, fui ir ali, né,"
+        },
+        {
+          "start": 6.36,
+          "end": 11.88,
+          "text": "e até ali uns trechinhos, assim, antes de eu fazer essa última reeleitura que eu fiz um alguns dias atrás,"
+        },
+        {
+          "start": 11.88,
+          "end": 15.08,
+          "text": "e cara, assim, é..."
+        },
+        {
+          "start": 15.08,
+          "end": 19.2,
+          "text": "Cara, você pode não se surpreender depois que você já ouviu."
+        },
+        {
+          "start": 19.2,
+          "end": 23.08,
+          "text": "Você já ouviu, aí você abre o livro e tá bom, o livro é um inseto, eu sei que a história é sobre ele ser um inseto"
+        },
+        {
+          "start": 23.08,
+          "end": 26.8,
+          "text": "e tem a relação com a família dele que é meio conturbada, mas assim, e a primeira vez você ouviu?"
+        },
+        {
+          "start": 26.8,
+          "end": 29.68,
+          "text": "E a primeira vez você teve contato com essa frase, entendeu?"
+        },
+        {
+          "start": 29.68,
+          "end": 31.68,
+          "text": "Se ela estiver fazendo referência a isso..."
+        }
+      ],
+      "excerpt": "Depois que eu descobri que K ficar na parada, assim, eu fui caraca, né, fui ir ali, né, e até ali uns trechinhos, assim, antes de eu fazer essa última reeleitura que eu fiz um alguns dias atrás, e cara, assim, é... Cara, você pode não se surpreender depois que você já ouviu. Você já ouviu, aí você abre o livro e tá bom, o livro é um inseto, eu sei que a história é sobre ele ser um inseto e tem a relação com a família dele que é meio conturbada, mas assim, e a primeira vez você ouviu? E a primeira vez você teve contato com essa frase, entendeu? Se ela estiver fazendo referência a isso...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1405:1445": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1405:1445",
+      "attachment_id": 17008,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1405,
+      "source_end_s": 1445,
+      "media_sha256": "0d6651bc78294fc4419f2b8460433b033f79f3b3e5fba1f38742b0f021cb7565",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.88,
+          "text": "A gente vai fazer uma referência, não é o que ela leu ali depois de ela saber quem é Kafka, enfim, o caça de A4,"
+        },
+        {
+          "start": 4.88,
+          "end": 8.6,
+          "text": "mas da primeira vez que ela viu, tipo, ela viu a primeira vez a frase e..."
+        },
+        {
+          "start": 8.6,
+          "end": 10.48,
+          "text": "Daí, virou um inseto e daí, entendeu?"
+        },
+        {
+          "start": 10.48,
+          "end": 11.44,
+          "text": "Aí, beleza."
+        },
+        {
+          "start": 11.44,
+          "end": 15.92,
+          "text": "Agora, se ela tá falando, porque nos dois casos é burrice, pô, porque, assim..."
+        },
+        {
+          "start": 15.92,
+          "end": 17.6,
+          "text": "Ou é esquisito pra caralho, né?"
+        },
+        {
+          "start": 17.6,
+          "end": 19.52,
+          "text": "Cara, virou um inseto, ah, que livro?"
+        },
+        {
+          "start": 19.52,
+          "end": 22.52,
+          "text": "Em, todo livro é assim, né, todo, não sei qual."
+        },
+        {
+          "start": 23.64,
+          "end": 28.84,
+          "text": "Ou ela tá falando dela ter lido, né, da primeira frase dela ter lido, mas..."
+        },
+        {
+          "start": 28.84,
+          "end": 33.08,
+          "text": "já sabendo essa frase desde muito tempo. O que é bem óbvio que ela não vai..."
+        }
+      ],
+      "excerpt": "A gente vai fazer uma referência, não é o que ela leu ali depois de ela saber quem é Kafka, enfim, o caça de A4, mas da primeira vez que ela viu, tipo, ela viu a primeira vez a frase e... Daí, virou um inseto e daí, entendeu? Aí, beleza. Agora, se ela tá falando, porque nos dois casos é burrice, pô, porque, assim... Ou é esquisito pra caralho, né? Cara, virou um inseto, ah, que livro? Em, todo livro é assim, né, todo, não sei qual. Ou ela tá falando dela ter lido, né, da primeira frase dela ter lido, mas... já sabendo essa frase desde muito tempo. O que é bem óbvio que ela não vai...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1568:1609": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1568:1609",
+      "attachment_id": 17009,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1568,
+      "source_end_s": 1609,
+      "media_sha256": "278445f8ebb3748e37dae20fada670db5fdd2928012c5f7b52c8bbc78f41d2df",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.08,
+          "text": "vídeo mágico aqui dela, porque magia é o vídeo dela, pô."
+        },
+        {
+          "start": 3.08,
+          "end": 6.64,
+          "text": "Pra mim, o vídeo dela é mágico. Eu fui vendo assim, eu fui olhando e falei, cara, esse"
+        },
+        {
+          "start": 6.64,
+          "end": 10.2,
+          "text": "não é o livro que eu lembrava. Aí eu relí o livro, aí eu falei, não, devo ser doido."
+        },
+        {
+          "start": 10.2,
+          "end": 15.36,
+          "text": "Aí eu conversei com o Lucas, aí a gente discordou muita coisa, mas eu entendi que ele entendeu"
+        },
+        {
+          "start": 15.36,
+          "end": 19.04,
+          "text": "as minhas maçanas aqui. Saca, ele entendeu o que tinha acontecido. Ele olhou e eu"
+        },
+        {
+          "start": 19.04,
+          "end": 22.8,
+          "text": "falei, tá, ele, ele leu o mesmo livro que eu. Saca. Aí eu fui relê a parada"
+        },
+        {
+          "start": 22.8,
+          "end": 27.6,
+          "text": "e aí eu revi o vídeo dela e eu falei, ah, pô, ela tava sobre algum encadamento."
+        },
+        {
+          "start": 27.6,
+          "end": 32.02,
+          "text": "Agora a Fara chegou ali e saiu do país da sua casa."
+        }
+      ],
+      "excerpt": "vídeo mágico aqui dela, porque magia é o vídeo dela, pô. Pra mim, o vídeo dela é mágico. Eu fui vendo assim, eu fui olhando e falei, cara, esse não é o livro que eu lembrava. Aí eu relí o livro, aí eu falei, não, devo ser doido. Aí eu conversei com o Lucas, aí a gente discordou muita coisa, mas eu entendi que ele entendeu as minhas maçanas aqui. Saca, ele entendeu o que tinha acontecido. Ele olhou e eu falei, tá, ele, ele leu o mesmo livro que eu. Saca. Aí eu fui relê a parada e aí eu revi o vídeo dela e eu falei, ah, pô, ela tava sobre algum encadamento. Agora a Fara chegou ali e saiu do país da sua casa.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1609:1650": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1609:1650",
+      "attachment_id": 17010,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1609,
+      "source_end_s": 1650,
+      "media_sha256": "b18c02d70679aeb0e69cee84b9d8b7ae08c08e2bdb65a20d367739e6432ac235",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3,
+          "text": "E eu não estava no livro, estava nela."
+        },
+        {
+          "start": 3,
+          "end": 10,
+          "text": "Estava nela, foi. A fada do chest não chegou assim com a varia mágica e jogou nela assim."
+        },
+        {
+          "start": 10,
+          "end": 14,
+          "text": "Que maravilha, eu adoro chest. Eu realmente gosto de chest, gente."
+        },
+        {
+          "start": 14,
+          "end": 17,
+          "text": "Mas eu acho que ele tem poderes muito na fose."
+        },
+        {
+          "start": 17,
+          "end": 19,
+          "text": "O meu comentário que eu ia fazer é o seguinte."
+        },
+        {
+          "start": 19,
+          "end": 23,
+          "text": "Talvez pode ser que a maioria fique presa no livro,"
+        },
+        {
+          "start": 23,
+          "end": 26,
+          "text": "tentando descobrir realmente por que isso aconteceu."
+        },
+        {
+          "start": 26,
+          "end": 28,
+          "text": "Por que aconteceu essa metamorfose?"
+        },
+        {
+          "start": 28,
+          "end": 32,
+          "text": "Você, sincero, pra mim, não foi isso que me prendeu no livro, não."
+        },
+        {
+          "start": 32,
+          "end": 35,
+          "text": "Não que eu prendi ninguém, não que eu prendi ninguém."
+        },
+        {
+          "start": 35,
+          "end": 38,
+          "text": "Me deu uma sensação de que ele não ia responder isso mesmo logo no..."
+        }
+      ],
+      "excerpt": "E eu não estava no livro, estava nela. Estava nela, foi. A fada do chest não chegou assim com a varia mágica e jogou nela assim. Que maravilha, eu adoro chest. Eu realmente gosto de chest, gente. Mas eu acho que ele tem poderes muito na fose. O meu comentário que eu ia fazer é o seguinte. Talvez pode ser que a maioria fique presa no livro, tentando descobrir realmente por que isso aconteceu. Por que aconteceu essa metamorfose? Você, sincero, pra mim, não foi isso que me prendeu no livro, não. Não que eu prendi ninguém, não que eu prendi ninguém. Me deu uma sensação de que ele não ia responder isso mesmo logo no...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1650:1690": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1650:1690",
+      "attachment_id": 17011,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1650,
+      "source_end_s": 1690,
+      "media_sha256": "3db667b536f0698f89dc413c149674e5d910b1bd8ff14230acd1ce6652d98864",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.12,
+          "text": "nesse então abandonei porque o cara protagonista ele não está também muito interessado nisso"
+        },
+        {
+          "start": 5.12,
+          "end": 14.24,
+          "text": "Ninguém está bem, nem o narrador, nem a família, nem o pessoal que está correndo, nem ninguém"
+        },
+        {
+          "start": 14.24,
+          "end": 20.24,
+          "text": "Irmão, sem noção, a frase por que isso aconteceu não aparece no livro?"
+        },
+        {
+          "start": 20.24,
+          "end": 22.8,
+          "text": "Não existe, não existe nem a sensação dela no livro"
+        },
+        {
+          "start": 22.8,
+          "end": 26.72,
+          "text": "Não tem, o que tem é claro que o de fato literalmente aconteceu"
+        },
+        {
+          "start": 26.72,
+          "end": 31.72,
+          "text": "Mas vamos estar aqui para Débora, porque acho que a gente já falou bastante, vamos voltar aqui e deixar ela..."
+        },
+        {
+          "start": 31.72,
+          "end": 33.72,
+          "text": "A gente precisa de uma munição, né?"
+        },
+        {
+          "start": 33.72,
+          "end": 37.72,
+          "text": "É precisa de álbum, o munição a gente tem, precisa de álbum, vamos deixar ela..."
+        }
+      ],
+      "excerpt": "nesse então abandonei porque o cara protagonista ele não está também muito interessado nisso Ninguém está bem, nem o narrador, nem a família, nem o pessoal que está correndo, nem ninguém Irmão, sem noção, a frase por que isso aconteceu não aparece no livro? Não existe, não existe nem a sensação dela no livro Não tem, o que tem é claro que o de fato literalmente aconteceu Mas vamos estar aqui para Débora, porque acho que a gente já falou bastante, vamos voltar aqui e deixar ela... A gente precisa de uma munição, né? É precisa de álbum, o munição a gente tem, precisa de álbum, vamos deixar ela...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1813:1854": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1813:1854",
+      "attachment_id": 17012,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1813,
+      "source_end_s": 1854,
+      "media_sha256": "d52c756998071f3123dd21e767bd28e922f56e59d2dc85666ada81f1f7bc7ba0",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.16,
+          "text": "Ele olha e fala, ah, isso é, eu acho muito melhor."
+        },
+        {
+          "start": 4.16,
+          "end": 8.36,
+          "text": "Eu falo, Polo, o pessoal que tem no YouTube normalmente é muito abaixo, pô."
+        },
+        {
+          "start": 8.36,
+          "end": 9.24,
+          "text": "Tem alguém me falando, pô."
+        },
+        {
+          "start": 9.24,
+          "end": 10.8,
+          "text": "Não, mas eu te falei isso, sim, pô."
+        },
+        {
+          "start": 10.8,
+          "end": 12.56,
+          "text": "Não, não vem sem isso, não."
+        },
+        {
+          "start": 12.56,
+          "end": 15.4,
+          "text": "Você falou, não, você falou, mas você fala como se fosse nada."
+        },
+        {
+          "start": 15.4,
+          "end": 16.56,
+          "text": "Eu falo como se fosse algo melhor."
+        },
+        {
+          "start": 16.56,
+          "end": 19.32,
+          "text": "Pra você, o cópio tá meio vazio, pra mim ele tá meio cheio."
+        },
+        {
+          "start": 19.32,
+          "end": 21.6,
+          "text": "Mas a gente concorda que o cópio tem algo suficiente."
+        },
+        {
+          "start": 23.4,
+          "end": 25.2,
+          "text": "Tem algo suficiente ali."
+        },
+        {
+          "start": 26.64,
+          "end": 29.6,
+          "text": "Então, assim, eu vi vários vídeos dela."
+        },
+        {
+          "start": 29.6,
+          "end": 37.6,
+          "text": "Tem vários que eu podia recomendar aqui, mas esse vídeo que ela tá falando aí dos demônios eu vi e eu achei ótimo, achei um vídeo excelente, saca?"
+        },
+        {
+          "start": 37.6,
+          "end": 39.6,
+          "text": "Não é uma coisa de outro mundo."
+        }
+      ],
+      "excerpt": "Ele olha e fala, ah, isso é, eu acho muito melhor. Eu falo, Polo, o pessoal que tem no YouTube normalmente é muito abaixo, pô. Tem alguém me falando, pô. Não, mas eu te falei isso, sim, pô. Não, não vem sem isso, não. Você falou, não, você falou, mas você fala como se fosse nada. Eu falo como se fosse algo melhor. Pra você, o cópio tá meio vazio, pra mim ele tá meio cheio. Mas a gente concorda que o cópio tem algo suficiente. Tem algo suficiente ali. Então, assim, eu vi vários vídeos dela. Tem vários que eu podia recomendar aqui, mas esse vídeo que ela tá falando aí dos demônios eu vi e eu achei ótimo, achei um vídeo excelente, saca? Não é uma coisa de outro mundo.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1854:1897": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1854:1897",
+      "attachment_id": 17013,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1854,
+      "source_end_s": 1897,
+      "media_sha256": "b461e38df79ab2a51a545bf6689f739587a18ef1893a1efc356b0713d2a4565c",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.3,
+          "text": "Mas assim, é melhor do que a maioria das coisas que você vai ver."
+        },
+        {
+          "start": 2.3,
+          "end": 9.9,
+          "text": "A maioria dos resenhes, resumos, críticas que você vai ver, não chega até aquele nível ali."
+        },
+        {
+          "start": 9.9,
+          "end": 13.5,
+          "text": "Eu acho que podia ir até mais, até porque ela posta vídeo uma vez por mês, pô."
+        },
+        {
+          "start": 13.5,
+          "end": 17.5,
+          "text": "Então, mas ela também tem emprego, né, enfim, no trabalho, enfim, mas enfim..."
+        },
+        {
+          "start": 17.5,
+          "end": 19.3,
+          "text": "Mas eu acho que podia ser melhor, entendeu?"
+        },
+        {
+          "start": 19.3,
+          "end": 23.5,
+          "text": "Eu acho que a qualidade podia ser melhor, mas já é bom o suficiente."
+        },
+        {
+          "start": 23.5,
+          "end": 26.1,
+          "text": "Então, se você quer saber sobre os demônios, eu recomendo o vídeo dela, né?"
+        },
+        {
+          "start": 26.1,
+          "end": 27.6,
+          "text": "Ela mencionou aí, então eu tô mencionando também."
+        },
+        {
+          "start": 27.6,
+          "end": 32.34,
+          "text": "Agora, do Michel Albert, meu irmão, você pode assistir, mas é uma merda."
+        },
+        {
+          "start": 32.34,
+          "end": 36.84,
+          "text": "Se você lê com atenção, meu irmão, puta que..."
+        },
+        {
+          "start": 36.84,
+          "end": 37.34,
+          "text": "Quanto..."
+        },
+        {
+          "start": 37.34,
+          "end": 38.34,
+          "text": "Irmão, não..."
+        },
+        {
+          "start": 38.34,
+          "end": 39.34,
+          "text": "Não só..."
+        }
+      ],
+      "excerpt": "Mas assim, é melhor do que a maioria das coisas que você vai ver. A maioria dos resenhes, resumos, críticas que você vai ver, não chega até aquele nível ali. Eu acho que podia ir até mais, até porque ela posta vídeo uma vez por mês, pô. Então, mas ela também tem emprego, né, enfim, no trabalho, enfim, mas enfim... Mas eu acho que podia ser melhor, entendeu? Eu acho que a qualidade podia ser melhor, mas já é bom o suficiente. Então, se você quer saber sobre os demônios, eu recomendo o vídeo dela, né? Ela mencionou aí, então eu tô mencionando também. Agora, do Michel Albert, meu irmão, você pode assistir, mas é uma merda. Se você lê com atenção, meu irmão, puta que... Quanto... Irmão, não... Não só...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1897:1937": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1897:1937",
+      "attachment_id": 17014,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1897,
+      "source_end_s": 1937,
+      "media_sha256": "790820af470fde47526f48c78544ac4117ac65ab0e58fb93dbd95bbe1d9d68df",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.2,
+          "text": "o que ela fala no vídeo, mas o que ela tira daquilo, que ela pega o livro e fala"
+        },
+        {
+          "start": 3.2,
+          "end": 5.6,
+          "text": "Ah, porque é isso que tá acontecendo na Europa mesmo, eu falei"
+        },
+        {
+          "start": 5.6,
+          "end": 8.8,
+          "text": "É o que? É isso que tá acontecendo na França? É isso?"
+        },
+        {
+          "start": 8.8,
+          "end": 13.2,
+          "text": "Não, mas isso aí tem uma live no outro canal lá do Adolinguagem"
+        },
+        {
+          "start": 13.2,
+          "end": 15.6,
+          "text": "É só pra membros que tá, que eu gravei lá com o Miorim"
+        },
+        {
+          "start": 15.6,
+          "end": 21.2,
+          "text": "Ele segurou a live pra mim, você só tem que pagar pelo menos 5 reais aí pra poder assistir, né?"
+        },
+        {
+          "start": 21.2,
+          "end": 26.4,
+          "text": "É que eu fiz uma live lá, acho que umas 2, 3 horas falando sobre a questão do Islã na França, enfim"
+        },
+        {
+          "start": 26.4,
+          "end": 31.9,
+          "text": "E essa seria a parte refutando esse último ponto final do vídeo, outro dela, mas enfim, vamos voltar pra cá, né?"
+        }
+      ],
+      "excerpt": "o que ela fala no vídeo, mas o que ela tira daquilo, que ela pega o livro e fala Ah, porque é isso que tá acontecendo na Europa mesmo, eu falei É o que? É isso que tá acontecendo na França? É isso? Não, mas isso aí tem uma live no outro canal lá do Adolinguagem É só pra membros que tá, que eu gravei lá com o Miorim Ele segurou a live pra mim, você só tem que pagar pelo menos 5 reais aí pra poder assistir, né? É que eu fiz uma live lá, acho que umas 2, 3 horas falando sobre a questão do Islã na França, enfim E essa seria a parte refutando esse último ponto final do vídeo, outro dela, mas enfim, vamos voltar pra cá, né?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1937:1977": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1937:1977",
+      "attachment_id": 17015,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1937,
+      "source_end_s": 1977,
+      "media_sha256": "493f9b108ef6ea7d21a561deb2c7e416bc8680e986f43e74be73148060a4f9ec",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 1.08,
+          "text": "Ok, beleza."
+        },
+        {
+          "start": 1.08,
+          "end": 4.42,
+          "text": "É que eu estou dando um comentário também, entendeu? Aí eu acabo me distrândo aqui, vamos lá."
+        },
+        {
+          "start": 4.42,
+          "end": 5.5,
+          "text": "É isso, gente."
+        },
+        {
+          "start": 5.5,
+          "end": 13.32,
+          "text": "As pessoas estão me xingando faz três dias na internet porque eu disse que eu não gostei do livro."
+        },
+        {
+          "start": 13.32,
+          "end": 17.12,
+          "text": "De todos os nomes possíveis. Eu gosto que o xingamento principal é"
+        },
+        {
+          "start": 17.12,
+          "end": 22.12,
+          "text": "É claro que você não gostou já que você é uma olavista."
+        },
+        {
+          "start": 22.12,
+          "end": 29.66,
+          "text": "Como se isso fosse o super sumo assim do xingamento que as pessoas conseguem achar para falar de alguém que elas não gostam."
+        },
+        {
+          "start": 29.66,
+          "end": 35.66,
+          "text": "E algumas pessoas dizem que não gostaram também, que a leitura é bem penosa e tudo me recomendaram ler o processo."
+        }
+      ],
+      "excerpt": "Ok, beleza. É que eu estou dando um comentário também, entendeu? Aí eu acabo me distrândo aqui, vamos lá. É isso, gente. As pessoas estão me xingando faz três dias na internet porque eu disse que eu não gostei do livro. De todos os nomes possíveis. Eu gosto que o xingamento principal é É claro que você não gostou já que você é uma olavista. Como se isso fosse o super sumo assim do xingamento que as pessoas conseguem achar para falar de alguém que elas não gostam. E algumas pessoas dizem que não gostaram também, que a leitura é bem penosa e tudo me recomendaram ler o processo.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:1977:2018": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:1977:2018",
+      "attachment_id": 17016,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 1977,
+      "source_end_s": 2018,
+      "media_sha256": "ef7f539d6a6b998e7293fcd24949454baf200301e32d9a68d1f377486b9a3332",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3.52,
+          "text": "isso eventualmente, dizendo que eu gostaria mais do processo."
+        },
+        {
+          "start": 3.52,
+          "end": 5.02,
+          "text": "Bom, assim que..."
+        },
+        {
+          "start": 5.02,
+          "end": 6.64,
+          "text": "O processo, de fato, é mais dinâmico."
+        },
+        {
+          "start": 6.64,
+          "end": 9.88,
+          "text": "O processo tem muito mais diálogo e tem muito mais um bate-volta"
+        },
+        {
+          "start": 9.88,
+          "end": 12.38,
+          "text": "e tem um drama com o movimento."
+        },
+        {
+          "start": 12.38,
+          "end": 15.92,
+          "text": "Tem um drama mais teatral, entendeu?"
+        },
+        {
+          "start": 15.92,
+          "end": 19.18,
+          "text": "Tem um drama que avança superiores."
+        },
+        {
+          "start": 19.18,
+          "end": 20.72,
+          "text": "Estão fazendo coisas, estão indo para o lado para o outro,"
+        },
+        {
+          "start": 20.72,
+          "end": 22.02,
+          "text": "estão debatendo, discutindo."
+        },
+        {
+          "start": 22.02,
+          "end": 25.36,
+          "text": "Parece que as coisas vão demolir a qualquer momento."
+        },
+        {
+          "start": 25.36,
+          "end": 26.72,
+          "text": "Parece que vai ter uma briga, entendeu?"
+        },
+        {
+          "start": 26.72,
+          "end": 28.36,
+          "text": "Parece que alguém vai tomar um tiro ali,"
+        },
+        {
+          "start": 28.36,
+          "end": 32.52,
+          "text": "embora isso demore muito para acontecer em nega uma peça, mas enfim, é verdade"
+        },
+        {
+          "start": 32.52,
+          "end": 36.32,
+          "text": "se vocês querem ver o cabo, assim, a metamorfosa nós pensamos"
+        }
+      ],
+      "excerpt": "isso eventualmente, dizendo que eu gostaria mais do processo. Bom, assim que... O processo, de fato, é mais dinâmico. O processo tem muito mais diálogo e tem muito mais um bate-volta e tem um drama com o movimento. Tem um drama mais teatral, entendeu? Tem um drama que avança superiores. Estão fazendo coisas, estão indo para o lado para o outro, estão debatendo, discutindo. Parece que as coisas vão demolir a qualquer momento. Parece que vai ter uma briga, entendeu? Parece que alguém vai tomar um tiro ali, embora isso demore muito para acontecer em nega uma peça, mas enfim, é verdade se vocês querem ver o cabo, assim, a metamorfosa nós pensamos",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2059:2099": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2059:2099",
+      "attachment_id": 17017,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2059,
+      "source_end_s": 2099,
+      "media_sha256": "c4eaba00d8c10f4d4faab11a1df7eb1e0a72b7a022886fd4c5ebdf347b90b7e7",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 1.6,
+          "text": "Só que ele é pequenininho, né?"
+        },
+        {
+          "start": 1.6,
+          "end": 3.6,
+          "text": "É, 7 páginas, eu vi aqui, 7 páginas."
+        },
+        {
+          "start": 3.6,
+          "end": 5.1,
+          "text": "Coutuquinho, eu vou ler então."
+        },
+        {
+          "start": 5.1,
+          "end": 7.9,
+          "text": "Talvez vira um vídeo, talvez eu leia e faça um vídeo aí, entendeu?"
+        },
+        {
+          "start": 7.9,
+          "end": 9.2,
+          "text": "Enfim, vamos voltar aqui pra ela."
+        },
+        {
+          "start": 9.2,
+          "end": 12.4,
+          "text": "Sare uma capinha melhor do processo, eu provavelmente vou ler mais."
+        },
+        {
+          "start": 12.4,
+          "end": 13.5,
+          "text": "Não, pera aí, pera aí."
+        },
+        {
+          "start": 13.5,
+          "end": 14.4,
+          "text": "Mais do processo."
+        },
+        {
+          "start": 14.4,
+          "end": 18.8,
+          "text": "Bom, assim que lançare uma capinha melhor do processo, eu provavelmente vou ler mais."
+        },
+        {
+          "start": 18.8,
+          "end": 23.3,
+          "text": "Então, Lucas, tem como você fazer uma capinha melhor do processo e mandar pra ela?"
+        },
+        {
+          "start": 23.3,
+          "end": 24.6,
+          "text": "Vou fazer."
+        },
+        {
+          "start": 24.6,
+          "end": 26.8,
+          "text": "Faz uma capinha... Gente, a gente vai fazer, tá?"
+        },
+        {
+          "start": 26.8,
+          "end": 28.1,
+          "text": "A gente só precisa achar o endereço."
+        },
+        {
+          "start": 28.1,
+          "end": 29.3,
+          "text": "Sabe lá, ele gosta, né?"
+        },
+        {
+          "start": 29.3,
+          "end": 30.92,
+          "text": "Fazer uns comentários do que anda."
+        },
+        {
+          "start": 30.92,
+          "end": 32.9,
+          "text": "Mas eu tô falando sério! Não porra!"
+        },
+        {
+          "start": 32.9,
+          "end": 33.94,
+          "text": "Eu tô falando sério, cara!"
+        },
+        {
+          "start": 33.94,
+          "end": 35.94,
+          "text": "Pega uma tradução aí que tá sem direito e só tá..."
+        }
+      ],
+      "excerpt": "Só que ele é pequenininho, né? É, 7 páginas, eu vi aqui, 7 páginas. Coutuquinho, eu vou ler então. Talvez vira um vídeo, talvez eu leia e faça um vídeo aí, entendeu? Enfim, vamos voltar aqui pra ela. Sare uma capinha melhor do processo, eu provavelmente vou ler mais. Não, pera aí, pera aí. Mais do processo. Bom, assim que lançare uma capinha melhor do processo, eu provavelmente vou ler mais. Então, Lucas, tem como você fazer uma capinha melhor do processo e mandar pra ela? Vou fazer. Faz uma capinha... Gente, a gente vai fazer, tá? A gente só precisa achar o endereço. Sabe lá, ele gosta, né? Fazer uns comentários do que anda. Mas eu tô falando sério! Não porra! Eu tô falando sério, cara! Pega uma tradução aí que tá sem direito e só tá...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2099:2142": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2099:2142",
+      "attachment_id": 17018,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2099,
+      "source_end_s": 2142,
+      "media_sha256": "0e8520dd8ddf7edbab5013969c40b915caf0875b9ee5e01a2d93655c142ef31b",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2,
+          "text": "É isso, uma tradução antiga ou algo assim, entendeu?"
+        },
+        {
+          "start": 2,
+          "end": 3.5,
+          "text": "Cara, aqui a máquina é legível, tá?"
+        },
+        {
+          "start": 3.5,
+          "end": 6,
+          "text": "Uma tradução legível, mas antiga, o trajetor morreu."
+        },
+        {
+          "start": 6,
+          "end": 9,
+          "text": "O trajetor morreu, a família toda morreu, entendeu?"
+        },
+        {
+          "start": 9,
+          "end": 11,
+          "text": "E é isso aí, ficou só a tradução e acabou."
+        },
+        {
+          "start": 11,
+          "end": 13,
+          "text": "Tipo, o Carpool, o Carpool tá tudo liberado."
+        },
+        {
+          "start": 14,
+          "end": 16,
+          "text": "A gente vai ali, eu faço uns pequenos comentários."
+        },
+        {
+          "start": 16,
+          "end": 18,
+          "text": "Não vale a gente saber o comentário, vai ser uma dedicatória."
+        },
+        {
+          "start": 18,
+          "end": 21,
+          "text": "Vai ser dedicatória dos tradutores..."
+        },
+        {
+          "start": 21,
+          "end": 25,
+          "text": "Não, dedicatória dos editores, traços, tradutores, traços, revisores."
+        },
+        {
+          "start": 25,
+          "end": 26,
+          "text": "Aí embaixo."
+        },
+        {
+          "start": 26,
+          "end": 28,
+          "text": "Para a nossa bocó favorita."
+        },
+        {
+          "start": 28,
+          "end": 31.16,
+          "text": "favorita. Pronto, não tem, precisa de marnab, precisa de"
+        },
+        {
+          "start": 31.16,
+          "end": 33.76,
+          "text": "frio fácil, nada, nada, só mandar isso, o livro do início ao"
+        },
+        {
+          "start": 33.76,
+          "end": 36.92,
+          "text": "fim, pô, pronto."
+        }
+      ],
+      "excerpt": "É isso, uma tradução antiga ou algo assim, entendeu? Cara, aqui a máquina é legível, tá? Uma tradução legível, mas antiga, o trajetor morreu. O trajetor morreu, a família toda morreu, entendeu? E é isso aí, ficou só a tradução e acabou. Tipo, o Carpool, o Carpool tá tudo liberado. A gente vai ali, eu faço uns pequenos comentários. Não vale a gente saber o comentário, vai ser uma dedicatória. Vai ser dedicatória dos tradutores... Não, dedicatória dos editores, traços, tradutores, traços, revisores. Aí embaixo. Para a nossa bocó favorita. favorita. Pronto, não tem, precisa de marnab, precisa de frio fácil, nada, nada, só mandar isso, o livro do início ao fim, pô, pronto.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2142:2182": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2142:2182",
+      "attachment_id": 17019,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2142,
+      "source_end_s": 2182,
+      "media_sha256": "8ed0778002bc7bf7254b70c5bc66cbde781adb3284dd1341855b7845513151ee",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.6,
+          "text": "com uma capa bonita, bonita em alguma coisa, tem que ser capa bonita cara, que senão eu não lê"
+        },
+        {
+          "start": 5.6,
+          "end": 11.9,
+          "text": "essa capa aqui, é uma planta só, aqui, tá vendo, é só uma planta, ela nunca valia bruxa"
+        },
+        {
+          "start": 11.9,
+          "end": 17.64,
+          "text": "a capa aqui são duas mulher, eu tava lendo aqui na mesa aqui, são duas mulher com garachuva, ela nunca vai ler"
+        },
+        {
+          "start": 17.64,
+          "end": 20.64,
+          "text": "isso aqui é coisa mais maravilhosa que eu jalei na minha vida, ela nunca vai ler"
+        },
+        {
+          "start": 20.64,
+          "end": 26.8,
+          "text": "sei lá, essa aqui ela vai ler, é uma máquina, não sei, tá bonita pra vocês"
+        },
+        {
+          "start": 26.8,
+          "end": 33.8,
+          "text": "Essa aqui do cáfica da metamorfose, tá legalzinho, é o cáfica aqui meio anão, meio anão com preto aqui, acho que fica legal, né?"
+        }
+      ],
+      "excerpt": "com uma capa bonita, bonita em alguma coisa, tem que ser capa bonita cara, que senão eu não lê essa capa aqui, é uma planta só, aqui, tá vendo, é só uma planta, ela nunca valia bruxa a capa aqui são duas mulher, eu tava lendo aqui na mesa aqui, são duas mulher com garachuva, ela nunca vai ler isso aqui é coisa mais maravilhosa que eu jalei na minha vida, ela nunca vai ler sei lá, essa aqui ela vai ler, é uma máquina, não sei, tá bonita pra vocês Essa aqui do cáfica da metamorfose, tá legalzinho, é o cáfica aqui meio anão, meio anão com preto aqui, acho que fica legal, né?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2182:2222": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2182:2222",
+      "attachment_id": 17020,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2182,
+      "source_end_s": 2222,
+      "media_sha256": "1163ee88e47fdba38a1139ab710295b7908c88751e87ca93793f686238d181ee",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.3,
+          "text": "Você tá descobrido qual que é o gosto dela, né?"
+        },
+        {
+          "start": 2.3,
+          "end": 3.5,
+          "text": "Tem que ver qual que é o gosto."
+        },
+        {
+          "start": 3.5,
+          "end": 8.8,
+          "text": "Tem que ver os vídeos dela, assim, as capas que ela mostra e ver o gosto, entendeu?"
+        },
+        {
+          "start": 8.8,
+          "end": 11.4,
+          "text": "Vai ver que foi por isso que ela não gostou do metamorfose."
+        },
+        {
+          "start": 11.4,
+          "end": 37.38,
+          "text": "Caraca, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, por"
+        }
+      ],
+      "excerpt": "Você tá descobrido qual que é o gosto dela, né? Tem que ver qual que é o gosto. Tem que ver os vídeos dela, assim, as capas que ela mostra e ver o gosto, entendeu? Vai ver que foi por isso que ela não gostou do metamorfose. Caraca, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, porra, por",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2222:2262": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2222:2262",
+      "attachment_id": 17021,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2222,
+      "source_end_s": 2262,
+      "media_sha256": "a59973dc355b949fd96623a594b6fdddb27f3ba3a1cfb9d75bc8052f8c6aa77d",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.4,
+          "text": "Eu quase brilhei no Neon na minha cara. Fiquei isso, pô."
+        },
+        {
+          "start": 2.4,
+          "end": 4.36,
+          "text": "O Pesco Livro foi feito pelo pessoal que vai na balada."
+        },
+        {
+          "start": 4.36,
+          "end": 10.2,
+          "text": "Você pegou aqueles lápis, né, que a pessoal passa no corpo, na pele, pra brilhar Neon, na parada, assim."
+        },
+        {
+          "start": 10.2,
+          "end": 12.48,
+          "text": "E fez o livro assim, eu fiquei, caraca, véi."
+        },
+        {
+          "start": 12.48,
+          "end": 17.16,
+          "text": "Pegou um conceito irado, fez a pior coloração e botou o pior texto do mundo."
+        },
+        {
+          "start": 17.16,
+          "end": 22.16,
+          "text": "É a mais bonita e horrorosa capa que eu já vi simultaneamente, véi."
+        },
+        {
+          "start": 22.16,
+          "end": 23.56,
+          "text": "Eles conseguiram fazer um fenômeno, véi."
+        },
+        {
+          "start": 23.56,
+          "end": 27.16,
+          "text": "Oi, gente. Oi, gente. Olha aí, ó."
+        },
+        {
+          "start": 27.16,
+          "end": 29,
+          "text": "Faz uma capa pra gente votar."
+        },
+        {
+          "start": 29,
+          "end": 34.04,
+          "text": "tem que fazer o capricho a lucas cara e sem graçados aí opanda fazer a"
+        },
+        {
+          "start": 34.04,
+          "end": 37.64,
+          "text": "votação aqui escolher as capas e"
+        }
+      ],
+      "excerpt": "Eu quase brilhei no Neon na minha cara. Fiquei isso, pô. O Pesco Livro foi feito pelo pessoal que vai na balada. Você pegou aqueles lápis, né, que a pessoal passa no corpo, na pele, pra brilhar Neon, na parada, assim. E fez o livro assim, eu fiquei, caraca, véi. Pegou um conceito irado, fez a pior coloração e botou o pior texto do mundo. É a mais bonita e horrorosa capa que eu já vi simultaneamente, véi. Eles conseguiram fazer um fenômeno, véi. Oi, gente. Oi, gente. Olha aí, ó. Faz uma capa pra gente votar. tem que fazer o capricho a lucas cara e sem graçados aí opanda fazer a votação aqui escolher as capas e",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2262:2303": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2262:2303",
+      "attachment_id": 17022,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2262,
+      "source_end_s": 2303,
+      "media_sha256": "9c66479dd645d195b8fbead68935386a499ebd8d27d198549a1933a9afb79898",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 8.4,
+          "text": "Manda mesmo, faz incluir o livro, manda lá, para dentro, a gente acha o endereço dela, manda e fala ali, para a nossa Bocó favorita."
+        },
+        {
+          "start": 8.4,
+          "end": 10.4,
+          "text": "Cara, essa é a hora de fazer isso aí."
+        },
+        {
+          "start": 10.4,
+          "end": 16.4,
+          "text": "O canal dela é uma palavra muito ambivalente, porque Bocó ela nunca vai saber se a gente tá falando mal, ela falou bem, entendeu?"
+        },
+        {
+          "start": 16.4,
+          "end": 17.4,
+          "text": "É sempre ambivalente."
+        },
+        {
+          "start": 17.4,
+          "end": 21.9,
+          "text": "Mas a gente podia fazer uma versão do metamorfose com a crítica lá e mandar a farela também junto."
+        },
+        {
+          "start": 21.9,
+          "end": 22.9,
+          "text": "Não, mas aí faz..."
+        },
+        {
+          "start": 22.9,
+          "end": 26.4,
+          "text": "A gente faz, mas tem que fazer a capa bonita, pô."
+        },
+        {
+          "start": 26.4,
+          "end": 30.4,
+          "text": "Eu tenho que ver no fádio que você tá caindo, acaba bonita."
+        },
+        {
+          "start": 30.4,
+          "end": 35.4,
+          "text": "E realmente eu tô vendo aqui, ela leu esse da antofágica mesmo, certeza?"
+        },
+        {
+          "start": 35.4,
+          "end": 38.4,
+          "text": "Bem, ela mostrou no vídeo ali, né? É porque esse..."
+        },
+        {
+          "start": 38.4,
+          "end": 40.4,
+          "text": "É esse aqui, né?"
+        }
+      ],
+      "excerpt": "Manda mesmo, faz incluir o livro, manda lá, para dentro, a gente acha o endereço dela, manda e fala ali, para a nossa Bocó favorita. Cara, essa é a hora de fazer isso aí. O canal dela é uma palavra muito ambivalente, porque Bocó ela nunca vai saber se a gente tá falando mal, ela falou bem, entendeu? É sempre ambivalente. Mas a gente podia fazer uma versão do metamorfose com a crítica lá e mandar a farela também junto. Não, mas aí faz... A gente faz, mas tem que fazer a capa bonita, pô. Eu tenho que ver no fádio que você tá caindo, acaba bonita. E realmente eu tô vendo aqui, ela leu esse da antofágica mesmo, certeza? Bem, ela mostrou no vídeo ali, né? É porque esse... É esse aqui, né?",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2303:2343": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2303:2343",
+      "attachment_id": 17023,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2303,
+      "source_end_s": 2343,
+      "media_sha256": "265a23d925fc1bb309ef3260f832643f24a1cb3eea95e62045c9a1635a9c5b16",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 16,
+          "text": "Esse aqui tá vermelho, tá 5 e 7 que a gente tá vendo, é antigo esse aqui, a metamorfose e o outro realmente é horrível, eu achei aqui o outro é bem feio mesmo, do processo?"
+        },
+        {
+          "start": 16,
+          "end": 20.74,
+          "text": "não é o novo que da outra"
+        },
+        {
+          "start": 20.74,
+          "end": 23.02,
+          "text": "antofágica né aquele mas você vê a"
+        },
+        {
+          "start": 23.02,
+          "end": 25.34,
+          "text": "cabeça dele com saindo patas saindo"
+        },
+        {
+          "start": 25.34,
+          "end": 27.1,
+          "text": "patas de de barato enfim eu falei"
+        },
+        {
+          "start": 27.1,
+          "end": 29.06,
+          "text": "pô show né maneira cabeça verdade"
+        },
+        {
+          "start": 29.06,
+          "end": 31.02,
+          "text": "tudo virou de cabeça para baixo né"
+        },
+        {
+          "start": 31.02,
+          "end": 32.38,
+          "text": "a mente de tudo virou de cabeça e"
+        },
+        {
+          "start": 32.38,
+          "end": 33.7,
+          "text": "está confinadamente dele"
+        }
+      ],
+      "excerpt": "Esse aqui tá vermelho, tá 5 e 7 que a gente tá vendo, é antigo esse aqui, a metamorfose e o outro realmente é horrível, eu achei aqui o outro é bem feio mesmo, do processo? não é o novo que da outra antofágica né aquele mas você vê a cabeça dele com saindo patas saindo patas de de barato enfim eu falei pô show né maneira cabeça verdade tudo virou de cabeça para baixo né a mente de tudo virou de cabeça e está confinadamente dele",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2343:2383": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2343:2383",
+      "attachment_id": 17024,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2343,
+      "source_end_s": 2383,
+      "media_sha256": "f459cc11c2bce31c5b6e0edbb7893e51c96ba33d72f1c73c1b202978919daf34",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.6,
+          "text": "Cara, artista que fez isso aqui, ela pensou bem,"
+        },
+        {
+          "start": 2.6,
+          "end": 4.76,
+          "text": "ela leu a obra e fez a capa com carinho."
+        },
+        {
+          "start": 4.76,
+          "end": 6.12,
+          "text": "Eu não sei quem é um artista."
+        },
+        {
+          "start": 6.12,
+          "end": 7.68,
+          "text": "Eu acho que é a moça, que eu me lembro da moça."
+        },
+        {
+          "start": 7.68,
+          "end": 8.68,
+          "text": "Ó, Palmas?"
+        },
+        {
+          "start": 8.68,
+          "end": 12.6,
+          "text": "A gente crita com a raquel do Oledo, mas quando a doutora faz com é certo,"
+        },
+        {
+          "start": 12.6,
+          "end": 13.6,
+          "text": "ó, Palmas."
+        },
+        {
+          "start": 13.6,
+          "end": 16,
+          "text": "Agora, para quem escolheu o texto da coloração,"
+        },
+        {
+          "start": 16,
+          "end": 17.48,
+          "text": "meu irmão você tem que ser demitido."
+        },
+        {
+          "start": 17.48,
+          "end": 19.24,
+          "text": "Meu irmão, você tem que ser demitido, na moral, véi."
+        },
+        {
+          "start": 19.24,
+          "end": 21.36,
+          "text": "Você precisa, é outro emprego que você precisa, véi."
+        },
+        {
+          "start": 21.36,
+          "end": 23.56,
+          "text": "E se foi o dono a dona doutorfática,"
+        },
+        {
+          "start": 23.56,
+          "end": 26.8,
+          "text": "você precisa se demitir e achar alguém para cuidar disso aí, véi."
+        },
+        {
+          "start": 26.8,
+          "end": 28.68,
+          "text": "Porque não dá, véi."
+        },
+        {
+          "start": 28.68,
+          "end": 32.12,
+          "text": "metamofase ambulante, isso mesmo, mas não tem trocas no livro não"
+        },
+        {
+          "start": 32.12,
+          "end": 33.62,
+          "text": "vamos voltar aqui para o nosso dedo"
+        }
+      ],
+      "excerpt": "Cara, artista que fez isso aqui, ela pensou bem, ela leu a obra e fez a capa com carinho. Eu não sei quem é um artista. Eu acho que é a moça, que eu me lembro da moça. Ó, Palmas? A gente crita com a raquel do Oledo, mas quando a doutora faz com é certo, ó, Palmas. Agora, para quem escolheu o texto da coloração, meu irmão você tem que ser demitido. Meu irmão, você tem que ser demitido, na moral, véi. Você precisa, é outro emprego que você precisa, véi. E se foi o dono a dona doutorfática, você precisa se demitir e achar alguém para cuidar disso aí, véi. Porque não dá, véi. metamofase ambulante, isso mesmo, mas não tem trocas no livro não vamos voltar aqui para o nosso dedo",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2383:2423": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2383:2423",
+      "attachment_id": 17025,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2383,
+      "source_end_s": 2423,
+      "media_sha256": "290a2d386e79ef4e3b03c50211d55ead971445b22c50be4f7ca35bb1069f6508",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4,
+          "text": "Daqui a um minuto, eu vou começar o resumido dela que é mais ou menos bom."
+        },
+        {
+          "start": 4,
+          "end": 5.1,
+          "text": "A gente vai apontar, mas vamos lá."
+        },
+        {
+          "start": 5.1,
+          "end": 11.2,
+          "text": "Capinha melhor do processo, eu provavelmente vou ler, mas vamos conversar sobre tudo isso no vídeo de hoje."
+        },
+        {
+          "start": 11.2,
+          "end": 18.2,
+          "text": "E eu vou explicar o porquê que a premissa do Gregor Samza ter se transformado em um inseto monstruoso pra mim"
+        },
+        {
+          "start": 18.2,
+          "end": 22.1,
+          "text": "não é uma premissa mágica muito interessante, certo?"
+        },
+        {
+          "start": 22.1,
+          "end": 24.6,
+          "text": "Tudo bem que ela falou aqui pra ela, né?"
+        },
+        {
+          "start": 24.6,
+          "end": 28.3,
+          "text": "Ela vai explicar por que pra ela não é interessante, ela vai dar os motivos dela, tá?"
+        },
+        {
+          "start": 28.3,
+          "end": 31.98,
+          "text": "Esse aqui é um vídeo muito mais heurístico do que argumentativo, então tem que levar isso em conta."
+        },
+        {
+          "start": 31.98,
+          "end": 35.7,
+          "text": "Então eu vou usar o livro do Tchester, então, ortodoxia."
+        }
+      ],
+      "excerpt": "Daqui a um minuto, eu vou começar o resumido dela que é mais ou menos bom. A gente vai apontar, mas vamos lá. Capinha melhor do processo, eu provavelmente vou ler, mas vamos conversar sobre tudo isso no vídeo de hoje. E eu vou explicar o porquê que a premissa do Gregor Samza ter se transformado em um inseto monstruoso pra mim não é uma premissa mágica muito interessante, certo? Tudo bem que ela falou aqui pra ela, né? Ela vai explicar por que pra ela não é interessante, ela vai dar os motivos dela, tá? Esse aqui é um vídeo muito mais heurístico do que argumentativo, então tem que levar isso em conta. Então eu vou usar o livro do Tchester, então, ortodoxia.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2423:2465": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2423:2465",
+      "attachment_id": 17026,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2423,
+      "source_end_s": 2465,
+      "media_sha256": "6abd5e525d31d96d017d394c96408e2f19d1ee97904983b900f654023979ecb0",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.98,
+          "text": "a gente começar sobre isso então vai ser interessante mas é justamente porque ela"
+        },
+        {
+          "start": 4.98,
+          "end": 8.7,
+          "text": "vai usar outra dorxia do cheston que também é um dos meus favoritos que a"
+        },
+        {
+          "start": 8.7,
+          "end": 13.8,
+          "text": "gente vai descer a linha dela aqui é por causa disso, entendeu? Não é porque ela não"
+        },
+        {
+          "start": 13.8,
+          "end": 16.6,
+          "text": "gostou, é porque ela usou o cheston."
+        },
+        {
+          "start": 16.6,
+          "end": 20.94,
+          "text": "Peguei o seu vinho, seu uís, que é sua água, vocês estão acostumados a se"
+        },
+        {
+          "start": 20.94,
+          "end": 27.24,
+          "text": "acomodarem. Hoje eu tô tomando um cafezinho e bora lá. Mas eu nem acondi"
+        },
+        {
+          "start": 27.24,
+          "end": 29.24,
+          "text": "Agora eu odeio por causa da..."
+        },
+        {
+          "start": 29.24,
+          "end": 31.24,
+          "text": "Vamos começar falando desse..."
+        },
+        {
+          "start": 31.24,
+          "end": 33.24,
+          "text": "Opanda, a sua câmera travou."
+        },
+        {
+          "start": 33.24,
+          "end": 35.24,
+          "text": "A minha câmera travou?"
+        },
+        {
+          "start": 35.24,
+          "end": 37.24,
+          "text": "Travou? Travou de certo."
+        }
+      ],
+      "excerpt": "a gente começar sobre isso então vai ser interessante mas é justamente porque ela vai usar outra dorxia do cheston que também é um dos meus favoritos que a gente vai descer a linha dela aqui é por causa disso, entendeu? Não é porque ela não gostou, é porque ela usou o cheston. Peguei o seu vinho, seu uís, que é sua água, vocês estão acostumados a se acomodarem. Hoje eu tô tomando um cafezinho e bora lá. Mas eu nem acondi Agora eu odeio por causa da... Vamos começar falando desse... Opanda, a sua câmera travou. A minha câmera travou? Travou? Travou de certo.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2465:2506": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2465:2506",
+      "attachment_id": 17027,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2465,
+      "source_end_s": 2506,
+      "media_sha256": "6807284909017967764ae7def032df2c0adc4ed78f9ea0eff53f1f8c99a18bfe",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.88,
+          "text": "Não, tá de boa aqui, tá vendo isso aqui? Tá vendo movendo?"
+        },
+        {
+          "start": 2.88,
+          "end": 4.72,
+          "text": "Agora voltou, agora voltou."
+        },
+        {
+          "start": 4.72,
+          "end": 7.72,
+          "text": "Isso aqui ela falou, bebe o seu vinho, seu isque, eu não ia dizer que isso aqui."
+        },
+        {
+          "start": 7.72,
+          "end": 11.38,
+          "text": "Mas isso aqui é vinho, né, cacis. É, vinho de cacis."
+        },
+        {
+          "start": 11.38,
+          "end": 14.18,
+          "text": "Não é vinho de uva, não é vinho de cacis aqui, ó."
+        },
+        {
+          "start": 14.18,
+          "end": 16.48,
+          "text": "Não vou beber não, mas enfim, vamos lá."
+        },
+        {
+          "start": 16.48,
+          "end": 20.96,
+          "text": "Mas ela falou aqui, né, não é nem que eu odeia a obra, a pela obra, mais pelo fã clube, né."
+        },
+        {
+          "start": 20.96,
+          "end": 25.3,
+          "text": "Não somos desse fã clube, não somos. Somos do outro, somos do fã clube mais chato ainda."
+        },
+        {
+          "start": 25.3,
+          "end": 30.3,
+          "text": "que eles são do fonecube chato é o chato vazio a gente é o chato"
+        },
+        {
+          "start": 30.3,
+          "end": 35.3,
+          "text": "fundamentado é o chato com substância entendeu esse"
+        }
+      ],
+      "excerpt": "Não, tá de boa aqui, tá vendo isso aqui? Tá vendo movendo? Agora voltou, agora voltou. Isso aqui ela falou, bebe o seu vinho, seu isque, eu não ia dizer que isso aqui. Mas isso aqui é vinho, né, cacis. É, vinho de cacis. Não é vinho de uva, não é vinho de cacis aqui, ó. Não vou beber não, mas enfim, vamos lá. Mas ela falou aqui, né, não é nem que eu odeia a obra, a pela obra, mais pelo fã clube, né. Não somos desse fã clube, não somos. Somos do outro, somos do fã clube mais chato ainda. que eles são do fonecube chato é o chato vazio a gente é o chato fundamentado é o chato com substância entendeu esse",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2506:2546": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2506:2546",
+      "attachment_id": 17028,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2506,
+      "source_end_s": 2546,
+      "media_sha256": "d0085f3b6587f8dd67ed0d930af17656de9e1bcf920adb14a75df1477cbab1b2",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 1,
+          "text": "chato que a gente é."
+        },
+        {
+          "start": 1,
+          "end": 4.16,
+          "text": "Um pouquinho aqui com spoiler, certo, porque é um livro, sem páginas, se você não quiser"
+        },
+        {
+          "start": 4.16,
+          "end": 7.2,
+          "text": "spoiler vai lá, lei, depois volta, assiste o vídeo depois."
+        },
+        {
+          "start": 7.2,
+          "end": 11.68,
+          "text": "Então a gente tem esse Gregor Samsa, que é um cacheiro viajante, e ele é um jovem, ele"
+        },
+        {
+          "start": 11.68,
+          "end": 16.32,
+          "text": "na casa de uns 20 anos, mais ou menos, que tem um emprego muito bom e esse emprego"
+        },
+        {
+          "start": 16.32,
+          "end": 19.88,
+          "text": "é o responsável por seus tentar toda a família, então eles parecem que tem uma condição"
+        },
+        {
+          "start": 19.88,
+          "end": 24.08,
+          "text": "de vida bacana, assim, porque eles moram em um grande apartamento, eles têm duas"
+        },
+        {
+          "start": 24.08,
+          "end": 25.08,
+          "text": "funcionários."
+        },
+        {
+          "start": 25.08,
+          "end": 28.64,
+          "text": "O emprego muito bem remunerado, ela mesma vai rebater sabado o emprego muito"
+        },
+        {
+          "start": 28.64,
+          "end": 31.12,
+          "text": "Bom, mas é só para deixar clata. É um emprego bem rebonerado."
+        },
+        {
+          "start": 31.12,
+          "end": 35.92,
+          "text": "Há, eles uma cozinheira e uma faxineira, uma empregada doméstica, e eles vivem disso só."
+        }
+      ],
+      "excerpt": "chato que a gente é. Um pouquinho aqui com spoiler, certo, porque é um livro, sem páginas, se você não quiser spoiler vai lá, lei, depois volta, assiste o vídeo depois. Então a gente tem esse Gregor Samsa, que é um cacheiro viajante, e ele é um jovem, ele na casa de uns 20 anos, mais ou menos, que tem um emprego muito bom e esse emprego é o responsável por seus tentar toda a família, então eles parecem que tem uma condição de vida bacana, assim, porque eles moram em um grande apartamento, eles têm duas funcionários. O emprego muito bem remunerado, ela mesma vai rebater sabado o emprego muito Bom, mas é só para deixar clata. É um emprego bem rebonerado. Há, eles uma cozinheira e uma faxineira, uma empregada doméstica, e eles vivem disso só.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2546:2587": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2546:2587",
+      "attachment_id": 17029,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2546,
+      "source_end_s": 2587,
+      "media_sha256": "d39c6b4abeb707eb4e8cc3f8e44de9fe1def16ce72396a03e273dec608122072",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.96,
+          "text": "com um salário que o Gregor tira como castelo viajante e o Gregor odeia esse emprego"
+        },
+        {
+          "start": 5.96,
+          "end": 11.84,
+          "text": "e ele tá lá só pra terminar de pagar uma dívida que o pai provavelmente fez com o chefe dele"
+        },
+        {
+          "start": 11.84,
+          "end": 14.88,
+          "text": "quando a empresa do pai faliu há uns 5 anos atrás."
+        },
+        {
+          "start": 14.88,
+          "end": 17.44,
+          "text": "Por isso que eu disse que é bem remunerado, entendeu?"
+        },
+        {
+          "start": 17.44,
+          "end": 19.44,
+          "text": "Ele fala um emprego muito bom, eu tô falando nesse sentido."
+        },
+        {
+          "start": 19.44,
+          "end": 24.48,
+          "text": "E num belo dia de sol, como eu disse, o Gregor acorda e ele se vê transformado em um inseto monstruoso."
+        },
+        {
+          "start": 24.48,
+          "end": 27.44,
+          "text": "E o que acontece depois que ele vira um inseto monstruoso?"
+        },
+        {
+          "start": 27.44,
+          "end": 34.44,
+          "text": "Ele não liga, ele simplesmente continua a pensar como ele pensaria se ele tivesse acordado como ser humano qualquer."
+        },
+        {
+          "start": 34.44,
+          "end": 38.44,
+          "text": "E isso, notem, o cara virou inseto."
+        }
+      ],
+      "excerpt": "com um salário que o Gregor tira como castelo viajante e o Gregor odeia esse emprego e ele tá lá só pra terminar de pagar uma dívida que o pai provavelmente fez com o chefe dele quando a empresa do pai faliu há uns 5 anos atrás. Por isso que eu disse que é bem remunerado, entendeu? Ele fala um emprego muito bom, eu tô falando nesse sentido. E num belo dia de sol, como eu disse, o Gregor acorda e ele se vê transformado em um inseto monstruoso. E o que acontece depois que ele vira um inseto monstruoso? Ele não liga, ele simplesmente continua a pensar como ele pensaria se ele tivesse acordado como ser humano qualquer. E isso, notem, o cara virou inseto.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2587:2627": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2587:2627",
+      "attachment_id": 17030,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2587,
+      "source_end_s": 2627,
+      "media_sha256": "21a59b954433a996f203360df43bf4418ce710a992b979841a15e97e8aa966c5",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.24,
+          "text": "E ele percebe isso, ele sabe disso, e ele não liga, ele age como se tudo tivesse normal."
+        },
+        {
+          "start": 5.24,
+          "end": 9.24,
+          "text": "Isso pra ela, segunda-feira. Isso não é extraordinário. Fantástico?"
+        },
+        {
+          "start": 9.24,
+          "end": 12.24,
+          "text": "Uxi, ele não ia pensar muito longe. Mas só precisa de um enveno, né?"
+        },
+        {
+          "start": 12.24,
+          "end": 13.24,
+          "text": "Vamos lá, vamos voltar aqui."
+        },
+        {
+          "start": 13.24,
+          "end": 19.74,
+          "text": "Ele pensa que ele perdeu o trem pra ir trabalhar, ele pensa que saco, meu Deus, agora eu vou..."
+        },
+        {
+          "start": 19.74,
+          "end": 22.74,
+          "text": "Vim aqui e me enchei o saco, porque eu perdi o trem."
+        },
+        {
+          "start": 22.74,
+          "end": 28,
+          "text": "E tem vários anos que eu trabalho nessa empresa, mas certeza que porque eu perdi sem nenhuma explicação,"
+        },
+        {
+          "start": 28,
+          "end": 33.64,
+          "text": "Vão vir aqui me apurrinha, o quanto isso, ele tá lá vendo que ele tem agora umas pezes..."
+        }
+      ],
+      "excerpt": "E ele percebe isso, ele sabe disso, e ele não liga, ele age como se tudo tivesse normal. Isso pra ela, segunda-feira. Isso não é extraordinário. Fantástico? Uxi, ele não ia pensar muito longe. Mas só precisa de um enveno, né? Vamos lá, vamos voltar aqui. Ele pensa que ele perdeu o trem pra ir trabalhar, ele pensa que saco, meu Deus, agora eu vou... Vim aqui e me enchei o saco, porque eu perdi o trem. E tem vários anos que eu trabalho nessa empresa, mas certeza que porque eu perdi sem nenhuma explicação, Vão vir aqui me apurrinha, o quanto isso, ele tá lá vendo que ele tem agora umas pezes...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2667:2709": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2667:2709",
+      "attachment_id": 17031,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2667,
+      "source_end_s": 2709,
+      "media_sha256": "201be8c76c9cca1ba733a513e2e5a6adc268bae251078e85e5d10b1ca17c9105",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3,
+          "text": "Vou até botar aqui pra eu poder vir na câmera, pra eu aumentar aqui, gente."
+        },
+        {
+          "start": 3,
+          "end": 6,
+          "text": "Eu vou botar só eu, tá, Lucas? Só pra mostrar aqui."
+        },
+        {
+          "start": 6,
+          "end": 8,
+          "text": "Não muda, enfim."
+        },
+        {
+          "start": 8,
+          "end": 10,
+          "text": "Tá vendo esse desenho aqui, gente? De sim e de perfil."
+        },
+        {
+          "start": 10,
+          "end": 12,
+          "text": "Ele fez certinho, véi. É assim mesmo."
+        },
+        {
+          "start": 12,
+          "end": 14,
+          "text": "Só que, tá vendo essas patinhas pequenas?"
+        },
+        {
+          "start": 14,
+          "end": 16,
+          "text": "A barata não tem patas pequenas assim."
+        },
+        {
+          "start": 16,
+          "end": 18,
+          "text": "A barata tem patas longas."
+        },
+        {
+          "start": 18,
+          "end": 20,
+          "text": "É que tem patas pequenas."
+        },
+        {
+          "start": 20,
+          "end": 22,
+          "text": "Como é descrito que ele tem patinhas, né?"
+        },
+        {
+          "start": 22,
+          "end": 24,
+          "text": "Ele tem patinhas e dentes pequenininhas."
+        },
+        {
+          "start": 24,
+          "end": 26,
+          "text": "E ele fez umas anteninhas aqui."
+        },
+        {
+          "start": 26,
+          "end": 28,
+          "text": "A similaridade que ele tem com a barata"
+        },
+        {
+          "start": 28,
+          "end": 33.84,
+          "text": "Ele tem a cor, a coloração marrom, o quem comum nos..."
+        }
+      ],
+      "excerpt": "Vou até botar aqui pra eu poder vir na câmera, pra eu aumentar aqui, gente. Eu vou botar só eu, tá, Lucas? Só pra mostrar aqui. Não muda, enfim. Tá vendo esse desenho aqui, gente? De sim e de perfil. Ele fez certinho, véi. É assim mesmo. Só que, tá vendo essas patinhas pequenas? A barata não tem patas pequenas assim. A barata tem patas longas. É que tem patas pequenas. Como é descrito que ele tem patinhas, né? Ele tem patinhas e dentes pequenininhas. E ele fez umas anteninhas aqui. A similaridade que ele tem com a barata Ele tem a cor, a coloração marrom, o quem comum nos...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2750:2791": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2750:2791",
+      "attachment_id": 17032,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2750,
+      "source_end_s": 2791,
+      "media_sha256": "bca79499ce090b52265c345eab70f9993c142c886bdc19fee4b08b7447408493",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0.14,
+          "end": 2.54,
+          "text": "Alguma coisa que piscam os olhos, sabe, um ser humano?"
+        },
+        {
+          "start": 2.54,
+          "end": 4.94,
+          "text": "São olhos que vão ficar ainda mais asquerosos, né, com o olho de humano assim."
+        },
+        {
+          "start": 4.94,
+          "end": 7.94,
+          "text": "Imagina, o Lucas é um baratão com esse olho dele aí, piscando assim, imagina."
+        },
+        {
+          "start": 7.94,
+          "end": 10.94,
+          "text": "Vamos lá, mas é normal, pessoalmente acha que é uma barata,"
+        },
+        {
+          "start": 10.94,
+          "end": 13.14,
+          "text": "mas não chega a ser uma barata não, mas vamos lá."
+        },
+        {
+          "start": 13.14,
+          "end": 17.14,
+          "text": "Aí tem uns pezinhos, ele tem uma casca grossa, ele não consegue se virar,"
+        },
+        {
+          "start": 17.14,
+          "end": 18.94,
+          "text": "ele não consegue sair da cama."
+        },
+        {
+          "start": 18.94,
+          "end": 22.94,
+          "text": "E nesse meio tempo, a mãe bate lá pra perguntar porque ele não foi trabalhar,"
+        },
+        {
+          "start": 22.94,
+          "end": 25.54,
+          "text": "o pai também bate lá pra perguntar porque ele não foi trabalhar."
+        },
+        {
+          "start": 25.54,
+          "end": 29.54,
+          "text": "E percebe-se que ele não consegue nem se comunicar mais com a família,"
+        },
+        {
+          "start": 29.54,
+          "end": 32.96,
+          "text": "porque ele está tendo uma voz assim de inseto."
+        },
+        {
+          "start": 32.96,
+          "end": 34.8,
+          "text": "Então o livro é todo estranho, certo?"
+        },
+        {
+          "start": 34.8,
+          "end": 36.96,
+          "text": "O livro todo parte dessa premissa que o cara virou."
+        }
+      ],
+      "excerpt": "Alguma coisa que piscam os olhos, sabe, um ser humano? São olhos que vão ficar ainda mais asquerosos, né, com o olho de humano assim. Imagina, o Lucas é um baratão com esse olho dele aí, piscando assim, imagina. Vamos lá, mas é normal, pessoalmente acha que é uma barata, mas não chega a ser uma barata não, mas vamos lá. Aí tem uns pezinhos, ele tem uma casca grossa, ele não consegue se virar, ele não consegue sair da cama. E nesse meio tempo, a mãe bate lá pra perguntar porque ele não foi trabalhar, o pai também bate lá pra perguntar porque ele não foi trabalhar. E percebe-se que ele não consegue nem se comunicar mais com a família, porque ele está tendo uma voz assim de inseto. Então o livro é todo estranho, certo? O livro todo parte dessa premissa que o cara virou.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2791:2831": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2791:2831",
+      "attachment_id": 17033,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2791,
+      "source_end_s": 2831,
+      "media_sha256": "5915c447139104dccb06d0bbafecb17211bff4837eab099cd73a4812b91b60de",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 3,
+          "text": "Um baratão e pronto!"
+        },
+        {
+          "start": 4,
+          "end": 6,
+          "text": "Isso é que eu não consigo entender."
+        },
+        {
+          "start": 6,
+          "end": 8,
+          "text": "E eu esqueci de botar ela na tela."
+        },
+        {
+          "start": 8,
+          "end": 11,
+          "text": "Desculpa, esqueci de botar ela na tela."
+        },
+        {
+          "start": 11,
+          "end": 13,
+          "text": "Olha, bota a gente aqui embaixo, fica bem melhor."
+        },
+        {
+          "start": 13,
+          "end": 15,
+          "text": "Né?"
+        },
+        {
+          "start": 15,
+          "end": 18,
+          "text": "Fica bem melhor. Você se mutou, Lucas?"
+        },
+        {
+          "start": 18,
+          "end": 21.24,
+          "text": "Sim."
+        },
+        {
+          "start": 21.24,
+          "end": 24.24,
+          "text": "Ah, tá, show, beleza. Fica melhor."
+        },
+        {
+          "start": 24.24,
+          "end": 28.24,
+          "text": "Cara, ela fala assim, o livro tudo é estranho, né?"
+        },
+        {
+          "start": 28.24,
+          "end": 31.74,
+          "text": "E ao mesmo tempo, o que que tem?"
+        },
+        {
+          "start": 31.74,
+          "end": 33.74,
+          "text": "Não consigo entender isso não, véi."
+        },
+        {
+          "start": 33.74,
+          "end": 37.74,
+          "text": "Não consigo entender a parada que é estranha e normal."
+        },
+        {
+          "start": 38.74,
+          "end": 40.74,
+          "text": "Magulho que não é..."
+        }
+      ],
+      "excerpt": "Um baratão e pronto! Isso é que eu não consigo entender. E eu esqueci de botar ela na tela. Desculpa, esqueci de botar ela na tela. Olha, bota a gente aqui embaixo, fica bem melhor. Né? Fica bem melhor. Você se mutou, Lucas? Sim. Ah, tá, show, beleza. Fica melhor. Cara, ela fala assim, o livro tudo é estranho, né? E ao mesmo tempo, o que que tem? Não consigo entender isso não, véi. Não consigo entender a parada que é estranha e normal. Magulho que não é...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2831:2872": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2831:2872",
+      "attachment_id": 17034,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2831,
+      "source_end_s": 2872,
+      "media_sha256": "327f2a77a16c7e63b2e95b450a34b0b2f849b8d3fee754188e748c20057d230e",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.28,
+          "text": "inesperado e é estranho, não é justamente o oposto, algo que é estranho, que é justamente algo que você fala"
+        },
+        {
+          "start": 5.28,
+          "end": 12.4,
+          "text": "o que causa espanto, né? Espanto do sentido aristotélico mesmo, né? O espanto, que é o de onde nasce a filosofia, né?"
+        },
+        {
+          "start": 12.4,
+          "end": 18.2,
+          "text": "Entendi, ela se espantou cobra, ela só não entendeu, ela só não conseguiu entender o que era aquilo que espantava ela"
+        },
+        {
+          "start": 18.2,
+          "end": 22.92,
+          "text": "e ela não quis ir atrás, achou que não tinha mais nada, mas enfim, vamos continuar aqui"
+        },
+        {
+          "start": 22.92,
+          "end": 27,
+          "text": "na verdade ela tentou ir atrás, tentou, mas eu acho que ela não conseguiu chegar onde queria chegar não"
+        },
+        {
+          "start": 27,
+          "end": 33.5,
+          "text": "Só que o que é mais interessante, ele realmente virou um inseto, não é que ele está se incitindo como um inseto e tal?"
+        },
+        {
+          "start": 33.5,
+          "end": 34.5,
+          "text": "Porque quando a..."
+        }
+      ],
+      "excerpt": "inesperado e é estranho, não é justamente o oposto, algo que é estranho, que é justamente algo que você fala o que causa espanto, né? Espanto do sentido aristotélico mesmo, né? O espanto, que é o de onde nasce a filosofia, né? Entendi, ela se espantou cobra, ela só não entendeu, ela só não conseguiu entender o que era aquilo que espantava ela e ela não quis ir atrás, achou que não tinha mais nada, mas enfim, vamos continuar aqui na verdade ela tentou ir atrás, tentou, mas eu acho que ela não conseguiu chegar onde queria chegar não Só que o que é mais interessante, ele realmente virou um inseto, não é que ele está se incitindo como um inseto e tal? Porque quando a...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:2872:2919": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:2872:2919",
+      "attachment_id": 17035,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 2872,
+      "source_end_s": 2919,
+      "media_sha256": "95069d6894301dd27d1d0bfdd5583c4cf3ab7b92a5455f6f6919aec433db60bc",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.32,
+          "text": "abre a porta assim e o gerente da firma vai lá conferir porque que ele não foi"
+        },
+        {
+          "start": 4.32,
+          "end": 7.76,
+          "text": "trabalhado tanto que esse povo da firma que ele trabalha insuportável"
+        },
+        {
+          "start": 7.76,
+          "end": 11.6,
+          "text": "o cara faltou um dia eu mandar o gerente pra ir lá ver o que que tinha"
+        },
+        {
+          "start": 11.6,
+          "end": 15.38,
+          "text": "acontecido com o cara quando ele abre a porta sabe que ela não percebe é que"
+        },
+        {
+          "start": 15.38,
+          "end": 20.24,
+          "text": "vem é que o que ela tá falando eu só percebi agora vendo agora tá o que ela"
+        },
+        {
+          "start": 20.24,
+          "end": 24,
+          "text": "tá falando aí ela tá falando com uma raiva que é a mesma que o gregor tem"
+        },
+        {
+          "start": 24,
+          "end": 28,
+          "text": "você chegou a perceber isso lucas que nas primeiras você tá mutada lucas"
+        },
+        {
+          "start": 28,
+          "end": 32,
+          "text": "Fala de novo, que dê uma piscada aqui na tua voz."
+        },
+        {
+          "start": 32,
+          "end": 33,
+          "text": "Você vai ver tá onde?"
+        },
+        {
+          "start": 33,
+          "end": 34,
+          "text": "Fala a frase inteira aí."
+        }
+      ],
+      "excerpt": "abre a porta assim e o gerente da firma vai lá conferir porque que ele não foi trabalhado tanto que esse povo da firma que ele trabalha insuportável o cara faltou um dia eu mandar o gerente pra ir lá ver o que que tinha acontecido com o cara quando ele abre a porta sabe que ela não percebe é que vem é que o que ela tá falando eu só percebi agora vendo agora tá o que ela tá falando aí ela tá falando com uma raiva que é a mesma que o gregor tem você chegou a perceber isso lucas que nas primeiras você tá mutada lucas Fala de novo, que dê uma piscada aqui na tua voz. Você vai ver tá onde? Fala a frase inteira aí.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:3085:3126": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:3085:3126",
+      "attachment_id": 17036,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 3085,
+      "source_end_s": 3126,
+      "media_sha256": "1ed02a1773ce5d93587093d2af942a2096d8786e63b25d00f389827f86a31119",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.96,
+          "text": "A Débora não gostou do plot e ela não entendeu que o Kafka, ele também não está nem aí"
+        },
+        {
+          "start": 4.96,
+          "end": 9.88,
+          "text": "para o plot em si, ele quer escrever certas coisas sobre isso, é como se alguém perguntasse"
+        },
+        {
+          "start": 9.88,
+          "end": 14.52,
+          "text": "o que significa, porque ele virou, não é isso, não tem que virar nada, eu estou falando"
+        },
+        {
+          "start": 14.52,
+          "end": 18.8,
+          "text": "sobre outra coisa no livro, você tem que prestar atenção em outra coisa lá, isso"
+        },
+        {
+          "start": 18.8,
+          "end": 23.04,
+          "text": "aqui é o argumento que eu tenho para dizer o que eu quero dizer, e a Débora por"
+        },
+        {
+          "start": 23.04,
+          "end": 27.08,
+          "text": "ela não ter gostado do plot, ela não está ouvindo o que ele tem para dizer no livro,"
+        },
+        {
+          "start": 27.08,
+          "end": 29.08,
+          "text": "Você vê que ela teve essa sensação correta?"
+        },
+        {
+          "start": 29.08,
+          "end": 31.08,
+          "text": "Não houve o que o livro tem para dizer"
+        },
+        {
+          "start": 31.08,
+          "end": 33.08,
+          "text": "Porque tem coisas às vezes que o autor não percebe que põe"
+        },
+        {
+          "start": 33.08,
+          "end": 35.08,
+          "text": "Tem coisas que o autor só percebe depois"
+        },
+        {
+          "start": 35.08,
+          "end": 37.08,
+          "text": "Viz o autor releia e fala"
+        }
+      ],
+      "excerpt": "A Débora não gostou do plot e ela não entendeu que o Kafka, ele também não está nem aí para o plot em si, ele quer escrever certas coisas sobre isso, é como se alguém perguntasse o que significa, porque ele virou, não é isso, não tem que virar nada, eu estou falando sobre outra coisa no livro, você tem que prestar atenção em outra coisa lá, isso aqui é o argumento que eu tenho para dizer o que eu quero dizer, e a Débora por ela não ter gostado do plot, ela não está ouvindo o que ele tem para dizer no livro, Você vê que ela teve essa sensação correta? Não houve o que o livro tem para dizer Porque tem coisas às vezes que o autor não percebe que põe Tem coisas que o autor só percebe depois Viz o autor releia e fala",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:3250:3291": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:3250:3291",
+      "attachment_id": 17037,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 3250,
+      "source_end_s": 3291,
+      "media_sha256": "e175db78561713bcfcd4039a60cdcb219795d6704f5d4661cfae039e64f67d38",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0.11,
+          "end": 4.87,
+          "text": "Desculpa, esse livro aqui, eu li por causa da faculdade, que é a porta dos infernos do"
+        },
+        {
+          "start": 4.87,
+          "end": 9.91,
+          "text": "Lorde H.O.D., ele lançou em 2008 esse livro aqui, mas essas são aqui em 2013, enfim,"
+        },
+        {
+          "start": 9.91,
+          "end": 12.99,
+          "text": "lançou em 2008, o estilo estou contemporâneo, tá vivo aí, lançando o livro."
+        },
+        {
+          "start": 12.99,
+          "end": 18.11,
+          "text": "Eu achei esse livro terrível, mas eu consegui, eu fiquei 5 horas na frente da câmera, 1 vídeo"
+        },
+        {
+          "start": 18.11,
+          "end": 22.39,
+          "text": "de 3, outro de 2 horas, tentando analisar, tentando fazer coisas, tentando trazer o"
+        },
+        {
+          "start": 22.39,
+          "end": 26.67,
+          "text": "máximo que dava, né, enfim, e eu vi que eu não estava conseguindo fazer direito,"
+        },
+        {
+          "start": 26.67,
+          "end": 32.67,
+          "text": "O que eu fiz? Eu falei, cara, eu vou ter que enlê esse livro no futuro, ou sei lá, ou não vou analisar, vou deixar pra lá, não sei, porque eu não consigo."
+        }
+      ],
+      "excerpt": "Desculpa, esse livro aqui, eu li por causa da faculdade, que é a porta dos infernos do Lorde H.O.D., ele lançou em 2008 esse livro aqui, mas essas são aqui em 2013, enfim, lançou em 2008, o estilo estou contemporâneo, tá vivo aí, lançando o livro. Eu achei esse livro terrível, mas eu consegui, eu fiquei 5 horas na frente da câmera, 1 vídeo de 3, outro de 2 horas, tentando analisar, tentando fazer coisas, tentando trazer o máximo que dava, né, enfim, e eu vi que eu não estava conseguindo fazer direito, O que eu fiz? Eu falei, cara, eu vou ter que enlê esse livro no futuro, ou sei lá, ou não vou analisar, vou deixar pra lá, não sei, porque eu não consigo.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:3291:3331": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:3291:3331",
+      "attachment_id": 17038,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 3291,
+      "source_end_s": 3331,
+      "media_sha256": "8121e65c6a004bbc84b12ae8e62d3f5324648207ff0fe8eaca1291430b43813c",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2,
+          "text": "eu não estou conseguindo, sabe?"
+        },
+        {
+          "start": 2,
+          "end": 6,
+          "text": "Eu estava com tanto desgosto disso aqui que eu não estava conseguindo fazer."
+        },
+        {
+          "start": 6,
+          "end": 8,
+          "text": "Você sabe o que eu falei? Vou deixar para lá."
+        },
+        {
+          "start": 8,
+          "end": 10,
+          "text": "Vou ler de cabeça mais fresca e mais para frente, entendeu?"
+        },
+        {
+          "start": 10,
+          "end": 12,
+          "text": "Ela fez um livro de cabeça quente."
+        },
+        {
+          "start": 12,
+          "end": 15,
+          "text": "Ela fez um vídeo falando de um autor muito importante,"
+        },
+        {
+          "start": 15,
+          "end": 17,
+          "text": "um autor muito impactante, como eu disse, cara,"
+        },
+        {
+          "start": 17,
+          "end": 22,
+          "text": "para a Áustria inteira você tem na poesia rioque e na prosa cáfica."
+        },
+        {
+          "start": 22,
+          "end": 25,
+          "text": "Claro, tem mais escritor, obviamente não tem só esses dois,"
+        },
+        {
+          "start": 25,
+          "end": 29,
+          "text": "mas eles são os dois grandes das duas modalidades de escrita"
+        },
+        {
+          "start": 29,
+          "end": 33.8,
+          "text": "e ela virou, sabe? Ela virou e fez o vídeo cuspindo, velho, cuspindo..."
+        }
+      ],
+      "excerpt": "eu não estou conseguindo, sabe? Eu estava com tanto desgosto disso aqui que eu não estava conseguindo fazer. Você sabe o que eu falei? Vou deixar para lá. Vou ler de cabeça mais fresca e mais para frente, entendeu? Ela fez um livro de cabeça quente. Ela fez um vídeo falando de um autor muito importante, um autor muito impactante, como eu disse, cara, para a Áustria inteira você tem na poesia rioque e na prosa cáfica. Claro, tem mais escritor, obviamente não tem só esses dois, mas eles são os dois grandes das duas modalidades de escrita e ela virou, sabe? Ela virou e fez o vídeo cuspindo, velho, cuspindo...",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:3497:3537": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:3497:3537",
+      "attachment_id": 17039,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 3497,
+      "source_end_s": 3537,
+      "media_sha256": "ecdd11f419c9d11024c71c48ac85e1397f3e6229f2076ee6f9cef5c3cf4cacb5",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 4.92,
+          "text": "de caralho. Será que é bem diferente, entendeu? Porque a planta hemafrodita procria, mas o ser humano"
+        },
+        {
+          "start": 4.92,
+          "end": 10.4,
+          "text": "hemafrodita não procria, os órgãos não funcionam. Rapaz, do que você tá falando? Eu tava dando"
+        },
+        {
+          "start": 10.4,
+          "end": 13.96,
+          "text": "um exemplo aqui, tava dando um exemplo, eu tava falando com um descomentado do pessoal aqui,"
+        },
+        {
+          "start": 13.96,
+          "end": 18.4,
+          "text": "entendeu? E eu puxei da Boa Voara, que é um exemplo que eu contei, que ela compara para tentar"
+        },
+        {
+          "start": 18.4,
+          "end": 24.16,
+          "text": "falar com tipo, ah, só ter um útero assim, sabe? E ser a função passiva da procreação,"
+        },
+        {
+          "start": 24.16,
+          "end": 28.64,
+          "text": "né? Da gestação, a função gestativa da procreação, não é o suficiente para dizer"
+        },
+        {
+          "start": 28.64,
+          "end": 33.64,
+          "text": "que a feme humana é mulher, não é suficiente para dividir os sexos."
+        }
+      ],
+      "excerpt": "de caralho. Será que é bem diferente, entendeu? Porque a planta hemafrodita procria, mas o ser humano hemafrodita não procria, os órgãos não funcionam. Rapaz, do que você tá falando? Eu tava dando um exemplo aqui, tava dando um exemplo, eu tava falando com um descomentado do pessoal aqui, entendeu? E eu puxei da Boa Voara, que é um exemplo que eu contei, que ela compara para tentar falar com tipo, ah, só ter um útero assim, sabe? E ser a função passiva da procreação, né? Da gestação, a função gestativa da procreação, não é o suficiente para dizer que a feme humana é mulher, não é suficiente para dividir os sexos.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:3537:3578": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:3537:3578",
+      "attachment_id": 17040,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 3537,
+      "source_end_s": 3578,
+      "media_sha256": "ac4c55b3031a17a886b8bc75e181284051de11e60a5115d9e42e4ec9d85e00ed",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5,
+          "text": "compara, ela faz uma analogia com plantas, plantas e outros seres vivos,"
+        },
+        {
+          "start": 5,
+          "end": 9.18,
+          "text": "animais que são hemafroditos e que ao mesmo tempo que fecundam"
+        },
+        {
+          "start": 9.18,
+          "end": 12.14,
+          "text": "o outro da sua espécie, que também é hemafrodito, também são fecundados."
+        },
+        {
+          "start": 12.14,
+          "end": 14.88,
+          "text": "Mas eu falei, pô, pera aí, mas o hemafrodito humano,"
+        },
+        {
+          "start": 14.88,
+          "end": 16.92,
+          "text": "ele não consegue fecundar nem ser fecundado."
+        },
+        {
+          "start": 16.92,
+          "end": 20.88,
+          "text": "Os genitais deles justamente não são dois genitais feitos."
+        },
+        {
+          "start": 21.22,
+          "end": 25.4,
+          "text": "É um genital formado para dois e não funciona nenhum dos dois."
+        },
+        {
+          "start": 25.4,
+          "end": 28.02,
+          "text": "O hemafrodito não tem relações sexuais."
+        },
+        {
+          "start": 28.02,
+          "end": 29.52,
+          "text": "Esse que é o problema, entendeu?"
+        },
+        {
+          "start": 29.52,
+          "end": 34.88,
+          "text": "essa que é a parada e ele não e se ele tiver que imagina já tem conseguido fazer mas se ele tiver"
+        }
+      ],
+      "excerpt": "compara, ela faz uma analogia com plantas, plantas e outros seres vivos, animais que são hemafroditos e que ao mesmo tempo que fecundam o outro da sua espécie, que também é hemafrodito, também são fecundados. Mas eu falei, pô, pera aí, mas o hemafrodito humano, ele não consegue fecundar nem ser fecundado. Os genitais deles justamente não são dois genitais feitos. É um genital formado para dois e não funciona nenhum dos dois. O hemafrodito não tem relações sexuais. Esse que é o problema, entendeu? essa que é a parada e ele não e se ele tiver que imagina já tem conseguido fazer mas se ele tiver",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:3578:3618": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:3578:3618",
+      "attachment_id": 17041,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 3578,
+      "source_end_s": 3618,
+      "media_sha256": "81805a2c1478e3a1a3f54cc64132bee2a363007049ce68ca0ba440093a55f234",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 5.94,
+          "text": "Se a gente tiver relações sexuais, é com operação, é com operação com a ajuda da tecnologia."
+        },
+        {
+          "start": 5.94,
+          "end": 8.94,
+          "text": "Essas plantas, esses animais, da maior parte desses são insetos, né?"
+        },
+        {
+          "start": 8.94,
+          "end": 13.5,
+          "text": "Tipo, por exemplo, gongolos, né? Gongolos, caramujos, muitos deles são hemafroditos, né?"
+        },
+        {
+          "start": 13.5,
+          "end": 14.6,
+          "text": "Peixes também, alguns."
+        },
+        {
+          "start": 14.6,
+          "end": 24,
+          "text": "Esses animais, assim, eles têm os dois sexos e eles conseguem procrear sem ajuda de qualquer tecnologia."
+        },
+        {
+          "start": 24,
+          "end": 30.14,
+          "text": "Um ser humano mal fraudido que consiga vir fazer isso, vai ser com a ajuda da tecnologia."
+        },
+        {
+          "start": 30.14,
+          "end": 32.9,
+          "text": "Quando me mostraram o que não for, eu admito, eu falo, beleza."
+        },
+        {
+          "start": 32.9,
+          "end": 35.4,
+          "text": "Ok, só que ela não improvou isso."
+        }
+      ],
+      "excerpt": "Se a gente tiver relações sexuais, é com operação, é com operação com a ajuda da tecnologia. Essas plantas, esses animais, da maior parte desses são insetos, né? Tipo, por exemplo, gongolos, né? Gongolos, caramujos, muitos deles são hemafroditos, né? Peixes também, alguns. Esses animais, assim, eles têm os dois sexos e eles conseguem procrear sem ajuda de qualquer tecnologia. Um ser humano mal fraudido que consiga vir fazer isso, vai ser com a ajuda da tecnologia. Quando me mostraram o que não for, eu admito, eu falo, beleza. Ok, só que ela não improvou isso.",
+      "verified": true
+    },
+    "g1:fOmihuHUT1M:3658:3699": {
+      "schema": "anthares.clip-transcript-attestation.v1",
+      "clip_id": "g1:fOmihuHUT1M:3658:3699",
+      "attachment_id": 17042,
+      "source_video_id": "fOmihuHUT1M",
+      "source_start_s": 3658,
+      "source_end_s": 3699,
+      "media_sha256": "78de2cf26e9f647651cf2c7b33c88bb0552e3dfd08c184be60bb5881456bcc6e",
+      "method": "faster-whisper-small-from-media",
+      "language": "pt",
+      "cues": [
+        {
+          "start": 0,
+          "end": 2.88,
+          "text": "eu vou usar as opções aqui de administrar"
+        },
+        {
+          "start": 2.88,
+          "end": 6.16,
+          "text": "ah, que eu dela que fofinha"
+        },
+        {
+          "start": 6.16,
+          "end": 9.12,
+          "text": "e aí Lívia, Lívia, Lívia linda ali, pô"
+        },
+        {
+          "start": 9.12,
+          "end": 11.36,
+          "text": "show, beleza, Lívia ele pode ficar, Lívia"
+        },
+        {
+          "start": 11.36,
+          "end": 13.92,
+          "text": "diz aí, sabe que se ela não responder é porque ela não tá vendo"
+        },
+        {
+          "start": 13.92,
+          "end": 16.72,
+          "text": "se ela não tá vendo é porque ela já tá braba contigo né"
+        },
+        {
+          "start": 16.72,
+          "end": 18.96,
+          "text": "sabe que ela já olhou assim já esqueceu"
+        },
+        {
+          "start": 18.96,
+          "end": 20.32,
+          "text": "e aí foi lá, fechou"
+        },
+        {
+          "start": 20.32,
+          "end": 24.32,
+          "text": "mas avança um pouco, vamos aos 15 minutos aí"
+        },
+        {
+          "start": 24.32,
+          "end": 27.52,
+          "text": "que eu quero saber ao dia que fica ruim a live, o vídeo dela"
+        },
+        {
+          "start": 27.52,
+          "end": 28.9,
+          "text": "Já tá ruim dentro do vídeo, pô."
+        },
+        {
+          "start": 28.9,
+          "end": 30.9,
+          "text": "Não, você falou que fica bem ruim, né?"
+        },
+        {
+          "start": 30.9,
+          "end": 31.9,
+          "text": "Eu tô querendo descobrir."
+        },
+        {
+          "start": 31.9,
+          "end": 33.9,
+          "text": "Não, mas é ruim o vídeo todo, cara!"
+        }
+      ],
+      "excerpt": "eu vou usar as opções aqui de administrar ah, que eu dela que fofinha e aí Lívia, Lívia, Lívia linda ali, pô show, beleza, Lívia ele pode ficar, Lívia diz aí, sabe que se ela não responder é porque ela não tá vendo se ela não tá vendo é porque ela já tá braba contigo né sabe que ela já olhou assim já esqueceu e aí foi lá, fechou mas avança um pouco, vamos aos 15 minutos aí que eu quero saber ao dia que fica ruim a live, o vídeo dela Já tá ruim dentro do vídeo, pô. Não, você falou que fica bem ruim, né? Eu tô querendo descobrir. Não, mas é ruim o vídeo todo, cara!",
+      "verified": true
+    }
+  },
+  "failures": []
+}
