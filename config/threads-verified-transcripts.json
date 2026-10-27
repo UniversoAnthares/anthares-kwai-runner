@@ -1140,6 +1140,73 @@
         "excerpt": "Do ano que vem tem, ó, submissão do Albeque ou submissão. Chegou o Lisboa! Adoro o Lisboa! Adoro esse moleque aí. Adoro o Lisboa, esse pioenzinho. Vamos lá, vamos continuar, Lisboa, você chegou suficientemente cedo. Vamos lá, vamos continuar aqui. Vamos comentar com vocês esse revinho que eu ia essa semana chamada do Amitamofose, do Kaka. Eu digo revinho porque é um livro bem curto mesmo, na verdade é uma novela que mais ou menos sem páginas. Nessa edição da antofática que é toda misturada, que tem um monte de dedenzinho, então tem uns peços de apoio e tudo. Acaba de 160 páginas, mas é por causa da abramação mesmo, certo? E também porque o tamanho do livro da antofática é bem diminuto. Algumas pessoas criticaram uma tradução feita pelo PTR-SAT, não sei se é sim produzindo um tradutor, e recomendaram a tradução feita pelo Modesto Carvalhoça, eu acho que é sim que é outro tradutor.",
         "verified": true
       }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:829:869": {
+      "title": "Kafka e a transformação em inseto: uma história fantástica ● Universo Anthares",
+      "description": "O trecho discute por que a transformação em inseto pode ser entendida como um acontecimento fantástico e comenta como leitores reagem quando alguém não gosta de um livro. www.anthares.us",
+      "hashtags": [
+        "#Kafka",
+        "#Metamorfose",
+        "#Literatura",
+        "#Fantastico"
+      ],
+      "keywords": [
+        "Kafka",
+        "inseto",
+        "história fantástica",
+        "livro",
+        "narrativas"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:829:869",
+        "attachment_id": 16994,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 829,
+        "source_end_s": 869,
+        "media_sha256": "9f9889430059749fafdd52ddd5483f868067cc87b122992dce6974a4d5619fc7",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 6.12,
+            "text": "Não tem problema se você não gostar de um livro, é comum que as pessoas fiquem chateadas"
+          },
+          {
+            "start": 6.12,
+            "end": 11.52,
+            "text": "também quando você não gosta de um livro que elas adoram, mas o que ela vai falar agora"
+          },
+          {
+            "start": 11.52,
+            "end": 12.52,
+            "text": "aí mesmo?"
+          },
+          {
+            "start": 12.52,
+            "end": 18.76,
+            "text": "É que as pessoas acham que a partir de ele ter virado um inseto começa uma história"
+          },
+          {
+            "start": 18.76,
+            "end": 24.36,
+            "text": "fantástica, começa literalmente uma história fantástica nesse sentido, é literalmente"
+          },
+          {
+            "start": 24.36,
+            "end": 26.2,
+            "text": "uma coisa fantástica que aconteceu."
+          },
+          {
+            "start": 26.2,
+            "end": 34.2,
+            "text": "A grande questão é que parece que a Débora não anda lendo muito livro desse tipo, de histórias, de narrativas."
+          }
+        ],
+        "excerpt": "Não tem problema se você não gostar de um livro, é comum que as pessoas fiquem chateadas também quando você não gosta de um livro que elas adoram, mas o que ela vai falar agora aí mesmo? É que as pessoas acham que a partir de ele ter virado um inseto começa uma história fantástica, começa literalmente uma história fantástica nesse sentido, é literalmente uma coisa fantástica que aconteceu. A grande questão é que parece que a Débora não anda lendo muito livro desse tipo, de histórias, de narrativas.",
+        "verified": true
+      }
     }
   }
 }
