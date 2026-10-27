@@ -98,7 +98,7 @@
       "codeberg_actions": "NOT_CONFIGURED_REPOSITORY_ACTIONS_DISABLED",
       "gitlab_ci": "BLOCKED_QUOTA_TEMPORARY_AUTOMATIC_RECHECK",
       "bitrise": "EXCLUDED_BY_OWNER_20261027_MACHINE_INVALID_HTTP400",
-      "harness": "WATCHER_AUTH_VERIFIED_RUN_40573476128_NONPUBLISHING_FALLBACK_DEPLOYMENT_BLOCKED_VERCEL_402"
+      "harness": "WATCHER_AUTH_VERIFIED_RUN_40582510426_CONTROLLER_DEPLOYED_NONPUBLISHING_FALLBACK_ENABLED"
     },
     "appveyor_routing_policy": {
       "rank": "penultimate",
@@ -167,10 +167,13 @@
         "source_pr": 1682,
         "scope": "NONPUBLISHING_PINNED_SHA_CI_ONLY",
         "fenced_by": "Neon original owner CAS, OIDC successor one-run CAS, no resubmission on uncertainty",
-        "enabled": false,
+        "enabled": true,
         "production_ready": false,
-        "blocked_on": "VERCEL_DEPLOYMENT_HTTP_402_DAILY_LIMIT",
+        "blocked_on": "REAL_QUOTA_HANDOFF_NOT_YET_OBSERVED",
         "toggle": "HARNESS_QUOTA_FALLBACK_ENABLED",
+        "controller_deployment": "dpl_GpybXDXSumX4MBMYAjaV34SanXoc",
+        "live_oidc_neon_proof": "GITHUB_RUN_40582510426",
+        "real_quota_abort_observed": false,
         "contract_tests": "41_PYTHON_19_NODE_PASS_GITHUB_RUN_40576068709"
       }
     },
@@ -182,7 +185,7 @@
     },
     "harness_routing_policy": {
       "eligible": false,
-      "reason": "Harness x-api-key and running watch verified; actual quota abort unobserved and fenced GitHub fallback Vercel deployment blocked by daily 402",
+      "reason": "Harness credential and OIDC-Neon controller verified; nonpublishing CI fallback enabled; real quota abort remains unobserved",
       "enable_only_after": "Exact terminal/fencing evidence plus deployed and validated Vercel successor controller and approved original Harness source blob",
       "independent_ci_stage": "Harness CI build/test stage completed and GitHub watcher runner proven; not a publisher routing authorization"
     }
