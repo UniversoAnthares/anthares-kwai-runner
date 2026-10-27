@@ -196,7 +196,7 @@
       "independent_ci_stage": "Harness CI build/test stage completed and GitHub watcher runner proven; not a publisher routing authorization"
     },
     "codeberg_handoff_policy": {
-      "stage": "RUNNER_HOMOLOGATED_ADAPTER_PENDING",
+      "stage": "ADAPTER_SOURCE_IMPLEMENTED_INTEGRATION_PENDING",
       "proof": "https://codeberg.org/UniversoAnthares/anthares-video-studio/actions/runs/2",
       "verified_job": "d1-journal-contract",
       "verified_commit": "9369a9213f",
@@ -211,7 +211,10 @@
         "durable_successor_job_id_and_terminal_readback"
       ],
       "on_uncertainty": "STOP_AND_RECONCILE_NO_RETRY",
-      "publisher_allowed": false
+      "publisher_allowed": false,
+      "adapter": "tools/codeberg_fenced_dispatch.mjs",
+      "adapter_tests": "tests/test_codeberg_fenced_dispatch.mjs",
+      "pending": "Connect authenticated controller using shared Neon atomic receipt and verify provider run ID/readback against expected SHA before promoting dispatch"
     }
   },
   "retired": {
