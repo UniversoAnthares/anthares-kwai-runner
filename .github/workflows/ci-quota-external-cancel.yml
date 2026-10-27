@@ -37,6 +37,43 @@ jobs:
           cloud_region: us
           secrets: |
             ${{ vars.ANTHARES_SECRETS_BITRISE_TOKEN_ID }} > ANTHARES_BITRISE_TOKEN_FROM_BW
+      - name: Verify AppVeyor API credential against exact owned project (read-only)
+        env:
+          AV_KEY: ${{ env.ANTHARES_APPVEYOR_TOKEN_FROM_BW || secrets.APPVEYOR_API_TOKEN }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.error, urllib.request
+          token=os.getenv("AV_KEY","")
+          if not token:
+              print("APPVEYOR_AUTH_PROBE=MISSING_SECRET")
+              sys.exit(0)
+          urls=[
+              ("ACCOUNT_V1","https://ci.appveyor.com/api/projects/UniversoAnthares/anthares-kwai-runner"),
+              ("USER_V2","https://ci.appveyor.com/api/account/UniversoAnthares/projects/UniversoAnthares/anthares-kwai-runner")]
+          for scope,url in urls:
+              req=urllib.request.Request(url,headers={"Authorization":"Bearer "+token,
+                  "Accept":"application/json","User-Agent":"Anthares-AppVeyor-Credential-Probe"})
+              try:
+                  with urllib.request.urlopen(req,timeout=12) as resp:
+                      doc=json.load(resp)
+                  project=doc.get("project",{})
+                  if project.get("repositoryName")=="UniversoAnthares/anthares-kwai-runner" and project.get("slug")=="anthares-kwai-runner":
+                      print("APPVEYOR_AUTH_PROBE=VERIFIED_SCOPE_"+scope)
+                      sys.exit(0)
+                  print("APPVEYOR_AUTH_PROBE=OWNERSHIP_MISMATCH")
+                  sys.exit(1)
+              except urllib.error.HTTPError as exc:
+                  print("APPVEYOR_AUTH_PROBE_"+scope+"_HTTP="+str(exc.code))
+                  if exc.code in (401,403,404):
+                      continue
+                  sys.exit(1)
+              except (urllib.error.URLError,ValueError,OSError,KeyError):
+                  print("APPVEYOR_AUTH_PROBE="+scope+"_REQUEST_ERROR")
+                  sys.exit(1)
+          print("APPVEYOR_AUTH_PROBE=ALL_SCOPES_REJECTED")
+          sys.exit(1)
+          PY
       - name: Detect provider-structured quota and cancel owned execution only
         env:
           APPVEYOR_ACCOUNT: ${{ vars.APPVEYOR_ACCOUNT || 'UniversoAnthares' }}
