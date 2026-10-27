@@ -6,6 +6,8 @@ import hashlib
 import json
 import os
 import re
+import shlex
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -181,15 +183,53 @@ def daily_round_incidents():
                             "Dispatch only fenced canonical recovery; never manufacture clips."}]
 
 
+def wp_state_from_authorized_hosting():
+    """Read WordPress state via existing hosting SSH when API secrets are absent.
+
+    Only the named QA runner may use this existing authorized SSH identity.
+    No data or credentials from the response are printed. Never use this
+    fallback after an explicit 401/403 with configured credentials.
+    """
+    if os.getenv("RUNNER_NAME","") != "Anthares-QA-P0-Windows-Independent":
+        raise RuntimeError("WP_QA_AUTH_UNAVAILABLE")
+    php = ("echo wp_json_encode(array('items'=>array_values("
+           "anthares_cortes_registry_get()),'blocker'=>"
+           "anthares_cortes_current_blocker()));")
+    remote = ("cd domains/anthares.us/public_html && "
+              "/opt/alt/php83/usr/bin/php /usr/local/bin/wp eval " +
+              shlex.quote(php))
+    try:
+        result = subprocess.run(
+            ["ssh","-oBatchMode=yes","-oStrictHostKeyChecking=yes",
+             "-oConnectTimeout=8","anthares-hostinger",remote],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=35, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise RuntimeError("WP_QA_SSH_UNAVAILABLE") from None
+    if result.returncode != 0 or not result.stdout or len(result.stdout)>16777216:
+        raise RuntimeError("WP_QA_SSH_UNAVAILABLE")
+    try:
+        data = json.loads(result.stdout.decode("utf-8"))
+    except (ValueError,UnicodeError):
+        raise RuntimeError("WP_QA_SSH_INVALID") from None
+    if not isinstance(data,dict) or not isinstance(data.get("items"),list):
+        raise RuntimeError("WP_QA_SSH_INVALID")
+    print("CORTES_WP_QA_AUTH_SOURCE=HOSTING_SSH_READONLY",flush=True)
+    return data
+
+
 def wp_incidents():
     site=os.getenv("WP_SITE_URL","").strip().rstrip("/")
     user=os.getenv("WP_USERNAME","").strip()
     password="".join(os.getenv("WP_APP_PASSWORD","").split())
-    if not site.startswith("https://") or not user or not password:
+    if site and site not in ("https://anthares.us","https://www.anthares.us"):
         raise RuntimeError("WP_QA_AUTH_UNAVAILABLE")
-    b64=base64.b64encode((user+":"+password).encode()).decode()
-    data=http(site+"/wp-json/anthares/v1/cortes/state",
-              headers={"Authorization":"Basic "+b64})
+    if not site or not user or not password:
+        data=wp_state_from_authorized_hosting()
+    else:
+        b64=base64.b64encode((user+":"+password).encode()).decode()
+        data=http(site+"/wp-json/anthares/v1/cortes/state",
+                  headers={"Authorization":"Basic "+b64})
     failures={}
     for live in [*(data.get("items") or []),data.get("blocker")]:
         if not isinstance(live,dict):continue
