@@ -1,5 +1,8 @@
 name: CORTES TikTok Codeberg fenced publishing canary
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cortes-tiktok-codeberg-fenced-canary.yml']
   workflow_dispatch:
     inputs:
       account:
@@ -18,7 +21,7 @@ jobs:
     timeout-minutes: 6
     env:
       CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
-      TARGET_ACCOUNT: ${{ inputs.account }}
+      TARGET_ACCOUNT: ${{ github.event_name == 'push' && 'universo' || inputs.account }}
     steps:
       - name: Verify main commit parity and invoke Codeberg one-shot fenced publisher
         shell: pwsh
