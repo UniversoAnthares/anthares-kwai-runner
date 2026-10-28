@@ -63,3 +63,15 @@ test('429/401/403 failures are not silently reported as delivered',async()=>{
     assert.equal(r.ok,false);assert.equal(r.reason,'http_'+status);
   }
 });
+
+
+test('Node Vercel signer interoperates with Cloudflare Worker verifier',async()=>{
+  const {webcrypto}=await import('node:crypto');
+  const {verifyWakeNotification}=await import('../../cloudflare-ara-wake/src/protocol.mjs');
+  const signed=signedWake(WAKE_DEVICE,secret,time,nonce);
+  const request=new Request('https://wake.invalid/notify',{
+    method:'POST',headers:signed.headers,body:signed.body
+  });
+  const proof=await verifyWakeNotification(request,secret,time,webcrypto);
+  assert.deepEqual(proof,{ok:true,code:'authorized_wake',device_id:WAKE_DEVICE});
+});
