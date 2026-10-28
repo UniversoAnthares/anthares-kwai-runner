@@ -145,14 +145,39 @@ def first_item():
     from datetime import datetime
     from zoneinfo import ZoneInfo
     tz = ZoneInfo("America/Campo_Grande")
+    # The repository also hosts many unrelated CORTES queues. Query only
+    # X publication issues, rather than truncating the generic open-issue list.
+    # GitHub Search caps result pagination at 1,000: fail closed on overflow
+    # or an incomplete search instead of silently skipping eligible work.
     all_items = []
-    for page in range(1, 8):
-        batch = github(f"/issues?state=open&sort=created&direction=asc&per_page=100&page={page}")
+    query = f'repo:{REPO} is:issue is:open in:title "[X-PUBLISH]"'
+    for page in range(1, 11):
+        response = requests.get(
+            "https://api.github.com/search/issues",
+            params={"q": query, "sort": "created", "order": "asc",
+                    "per_page": 100, "page": page},
+            timeout=32,
+            headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
+                     "Accept": "application/vnd.github+json"},
+        )
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict) or data.get("incomplete_results"):
+            raise RuntimeError("X_GITHUB_OPEN_QUEUE_SEARCH_INCOMPLETE")
+        total = data.get("total_count")
+        batch = data.get("items")
+        if (not isinstance(total, int) or total < 0
+                or not isinstance(batch, list)):
+            raise RuntimeError("X_GITHUB_OPEN_QUEUE_SEARCH_INVALID")
+        if total >= 1000:
+            raise RuntimeError("X_GITHUB_OPEN_QUEUE_SEARCH_LIMIT")
         all_items.extend(batch)
-        if len(batch) < 100:
+        if len(all_items) >= total:
             break
+        if not batch:
+            raise RuntimeError("X_GITHUB_OPEN_QUEUE_SEARCH_INCOMPLETE")
     else:
-        raise RuntimeError("X_GITHUB_OPEN_QUEUE_PAGINATION")
+        raise RuntimeError("X_GITHUB_OPEN_QUEUE_SEARCH_LIMIT")
     ready = []
     for item in all_items:
         if item.get("pull_request"):
