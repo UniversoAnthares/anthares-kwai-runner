@@ -1,0 +1,46 @@
+name: ARA item 9 PostgreSQL lease/idempotency acceptance
+on:
+  pull_request:
+    paths:
+      - 'vercel-ara-reserve/api/mcp.js'
+      - 'vercel-ara-reserve/api/lease-idempotency.test.js'
+      - '.github/workflows/ara-item9-lease-idempotency.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  atomic-queue-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ara_item9_isolated
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ara_item9_isolated"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 8
+    env:
+      ARA_ITEM9_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ara_item9_isolated
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install only production PostgreSQL driver
+        shell: bash
+        run: npm install --no-save --no-package-lock --ignore-scripts --prefix vercel-ara-reserve pg@8.13.1
+      - name: Syntax and PostgreSQL concurrency evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check vercel-ara-reserve/api/mcp.js
+          node --check vercel-ara-reserve/api/lease-idempotency.test.js
+          node --test vercel-ara-reserve/api/lease-idempotency.test.js
