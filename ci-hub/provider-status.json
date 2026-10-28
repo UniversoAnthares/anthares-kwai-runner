@@ -434,9 +434,20 @@
         },
         "qa": {
           "git_backup": "anthares-admin/anthares-ci-sandbox",
-          "proof": "Forgejo sandbox real success QA run 243, contracts 246, Clipper 245, Kwai 247, safety 248, Node 249, Claude 250/251; 12h QA registered",
-          "operational_state": "NONPUBLISHING_QA_MIGRATED_LIVE_VERIFIED; GitHub P0 remains incident authority",
-          "missing": "No global CI/publisher promotion"
+          "proof": "Forgejo sandbox real success QA run 243, contracts 246, Clipper 245, Kwai 247, safety 248, Node 249, Claude 250/251; 12h QA registered; external GitHub-hosted P0 watchdog run 40782057532/job 123145935173 SUCCESS, detected two real issues (#1780,#1728), delivered one deduplicated P0 alert to issue #1780 comment 6482589037 with independent GET readback; GitHub PRs #1819,#1820,#1821 merged",
+          "operational_state": "FORGEJO_12H_NONPUBLISHING_QA_AND_INDEPENDENT_GITHUB_HOSTED_P0_ALERT_DELIVERY_PROVEN_20261028",
+          "missing": "Real P0 incident repair and remote publication reconciliation remain item 16. General CI/publisher promotion remains separately gated.",
+          "alert_delivery": {
+            "status": "LIVE_HOSTED_GITHUB_P0_ALERT_READBACK_PROVEN",
+            "source_run": "https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40782057532",
+            "hosted_job_id": 123145935173,
+            "issue_url": "https://github.com/UniversoAnthares/anthares-kwai-runner/issues/1780",
+            "comment_id": 6482589037,
+            "proof": "QA_P0_CLOUD_ALERT_DELIVERED=PASS; QA_P0_CLOUD_MONITOR=PASS candidates=2 verified=2 opened=0 alert_receipts=1 alert_comments_sent=1",
+            "windows_required": false,
+            "codeberg_required": false,
+            "repair_scope": "item16"
+          }
         },
         "wordpress": {
           "git_backup": "anthares-admin/anthares-wordpress",
