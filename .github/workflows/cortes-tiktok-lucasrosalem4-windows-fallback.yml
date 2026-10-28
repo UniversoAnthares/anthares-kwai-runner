@@ -23,14 +23,27 @@ jobs:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
     timeout-minutes: 18
+    environment: cortes-tiktok-lucas4
     env:
       PYTHONUTF8: '1'
-      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
       TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: ${{ ((github.event_name == 'workflow_run' && vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.proof_publish_one == true && vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'false')) && 'true' || 'false' }}
     steps:
+      - name: Require dedicated account credential
+        env:
+          TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.CORTES_TIKTOK_LUCAS4_STORAGE_STATE }}
+        shell: pwsh
+        run: |
+          python -c "import os,sys; sys.exit(0 if os.environ.get('TIKTOK_LUCASROSALEM4_STORAGE_STATE','').strip() else 'ACCOUNT_NATIVE_CREDENTIAL_MISSING')"
       - uses: actions/checkout@v4
-      - shell: pwsh
+        with:
+          persist-credentials: false
+      - name: Install isolated browser dependencies
+        shell: pwsh
         run: |
           python -m pip install -q playwright requests
           python -m playwright install chromium
-          python -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
+      - name: Run account publisher
+        shell: pwsh
+        env:
+          TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.CORTES_TIKTOK_LUCAS4_STORAGE_STATE }}
+        run: python -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py

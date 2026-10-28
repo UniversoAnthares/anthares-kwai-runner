@@ -10,6 +10,10 @@ on:
       - 'infra/neon-cortes-lucasrosalem4/**'
       - '.github/workflows/cortes-tiktok-lucasrosalem4-cloud-publisher.yml'
       - 'tests/test_cortes_tiktok_lucas4_cloud.py'
+      - 'tests/test_cortes_native_runtime.py'
+      - 'tests/test_cortes_account_iam_audit.py'
+      - 'ci-hub/cortes_account_iam_audit.py'
+      - 'ci-hub/cortes_tiktok_lucas4_ownership.json'
 permissions:
   contents: read
   id-token: write
@@ -21,16 +25,27 @@ jobs:
     if: github.ref == 'refs/heads/main' && (vars.TIKTOK_CODEBERG_PRIMARY != 'true' && vars.TIKTOK_FORGEJO_PRIMARY != 'true') && (github.event_name != 'schedule' || vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 14
+    environment: cortes-tiktok-lucas4
     env:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: 'utf-8'
       TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: ${{ vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED }}
-      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
     steps:
+      - name: Require dedicated account credential
+        env:
+          TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.CORTES_TIKTOK_LUCAS4_STORAGE_STATE }}
+        run: |
+          python3 - <<'PY'
+          import os
+          if not os.environ.get("TIKTOK_LUCASROSALEM4_STORAGE_STATE", "").strip():
+              raise SystemExit("ACCOUNT_NATIVE_CREDENTIAL_MISSING")
+          PY
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Install isolated cloud browser
         run: |
-          python3 -m pip install -q --disable-pip-version-check playwright requests
+          python3 -m pip install -q --disable-pip-version-check playwright requests PyYAML
           installed=0
           for n in 1 2 3; do
             if PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium; then
@@ -45,6 +60,10 @@ jobs:
           python3 -m py_compile tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
           node --check infra/neon-cortes-lucasrosalem4/index.mjs
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok_lucas4_cloud.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_native_runtime.py' -v
+          python3 -m unittest discover -s tests -p 'test_cortes_account_iam_audit.py' -v
       - name: Probe cloud session or publish at most one fenced short
+        env:
+          TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.CORTES_TIKTOK_LUCAS4_STORAGE_STATE }}
         run: |
           python3 -u tools/cortes_tiktok_lucasrosalem4_cloud_publish.py

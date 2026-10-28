@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "network": "tiktok",
+  "account": "lucasrosalem4",
+  "custody": {
+    "administrative": "Proton Drive (holder-approved independent recovery escrow)",
+    "runtime": "GitHub Actions environment",
+    "runtime_has_bws_token": false,
+    "bitwarden_optional": true
+  },
+  "environment": "cortes-tiktok-lucas4",
+  "native_secret_name": "CORTES_TIKTOK_LUCAS4_STORAGE_STATE",
+  "runtime_variable": "TIKTOK_LUCASROSALEM4_STORAGE_STATE",
+  "consumer_workflows": [
+    ".github/workflows/cortes-tiktok-lucasrosalem4-cloud-publisher.yml",
+    ".github/workflows/cortes-tiktok-lucasrosalem4-windows-fallback.yml"
+  ],
+  "provider_metadata_verified": false,
+  "environment_provisioned_verified": true,
+  "repository_or_organization_alias_absence_verified": true,
+  "distinct_principals_positive_negative_verified": false,
+  "escrow_entry_verified": true,
+  "production_migration_status": "prepared_not_deployed",
+  "deployment_authorized": false,
+  "notes": "Native environment, account identity, fresh-context session reuse and holder-approved Proton recovery escrow verified. Downloaded package integrity and in-memory decryption passed independently of Windows DPAPI. ZIP contains recovery key and relies on private Proton encrypted custody. Native name occurs once in the Environment table and zero times in repository scope; personal User repository has no organization scope. Distinct-provider-principal ALLOWED/DENIED remains unverified. No workflow dispatch, production deployment or legacy credential revocation.",
+  "administration": {
+    "external_collaborators_authorized": false,
+    "independent_human_reviewer_available": false,
+    "owner_review_required": true,
+    "distinct_runtime_principals_still_required": true
+  },
+  "session_identity_verified": true,
+  "session_replay_in_fresh_context_verified": true,
+  "native_environment_evidence": {
+    "observed_date": "2026-10-27",
+    "environment_id": "25347389669",
+    "allowed_branches": [
+      "main"
+    ],
+    "allowed_tags": [],
+    "administrator_bypass": false,
+    "secret_name": "CORTES_TIKTOK_LUCAS4_STORAGE_STATE",
+    "secret_save_verified_from_github_ui": true,
+    "secret_value_read_back": false
+  },
+  "independent_recovery_verified": true,
+  "recovery_evidence": {
+    "observed_date": "2026-10-27",
+    "account": "lucasrosalem4",
+    "provider": "Proton Drive",
+    "shared": false,
+    "digital_signature_verified_from_provider_ui": true,
+    "downloaded_package_bytes": 11564,
+    "downloaded_package_sha256": "852caa58796ebd5ea8021850e0ed1fdc1492ef75628f898f59632758c652757b",
+    "restored_cookie_count": 34,
+    "requires_windows_dpapi": false,
+    "uses_original_local_artifact": false,
+    "plaintext_session_written": false
+  },
+  "alias_absence_evidence": {
+    "observed_date": "2026-10-27",
+    "environment_match_count": 1,
+    "repository_match_count": 0,
+    "legacy_repository_credential_preserved": true,
+    "owner_type": "User",
+    "organization_scope_applicable": false,
+    "metadata_values_read": false
+  },
+  "session_serialization": {
+    "format": "base64(zlib(JSON))",
+    "canonical_encoder": "tools/cortes_codeberg_tiktok_bootstrap.py:compact",
+    "actual_consumer": "tools/cortes_tiktok_lucasrosalem4_cloud_publish.py:state_from_secret",
+    "in_memory_roundtrip_verified": true,
+    "raw_json_rejected": true,
+    "native_secret_format_corrected_on": "2026-10-27",
+    "github_ui_update_time": "09:09 America/Cuiaba",
+    "value_read_back": false
+  },
+  "pre_migration_tests": {
+    "date": "2026-10-27",
+    "passed": 51,
+    "native_workflow_and_codec": 17,
+    "account_iam_contract": 13,
+    "publisher_and_fencing": 21,
+    "provider_calls": 0,
+    "publications": 0,
+    "provider_iam_proven": false
+  },
+  "observed_writer_flags": {
+    "TIKTOK_CODEBERG_PRIMARY": false,
+    "TIKTOK_LUCASROSALEM4_CLOUD_ENABLED": true
+  }
+}
