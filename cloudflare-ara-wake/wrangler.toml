@@ -1,0 +1,17 @@
+name = "anthares-ara-wake"
+account_id = "5c24be052e5144391f73a8e03491e88e"
+main = "src/index.mjs"
+compatibility_date = "2026-10-28"
+workers_dev = true
+
+# New dedicated Durable Object. No SQL/storage writes; used for socket hibernation.
+[[durable_objects.bindings]]
+name = "ARA_WAKE_CHANNEL"
+class_name = "AraWakeChannel"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AraWakeChannel"]
+
+# Secret ARA_WAKE_NOTIFY_SECRET (>= 32 random bytes) must be provisioned
+# through Cloudflare, never committed. Stage A is NOT DEPLOYED.

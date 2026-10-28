@@ -1,0 +1,33 @@
+name: ARA wake-only transport - offline contracts
+on:
+  pull_request:
+    paths:
+      - 'cloudflare-ara-wake/**'
+      - '.github/workflows/ara-wake-isolated-ci.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ara-wake-offline-ci-20261028
+  cancel-in-progress: false
+
+jobs:
+  protocol:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Isolated protocol and syntax checks - no deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check cloudflare-ara-wake/src/index.mjs
+          node --check cloudflare-ara-wake/src/protocol.mjs
+          node --test cloudflare-ara-wake/src/protocol.test.mjs
+          ! grep -Eq 'pool\.query|DATABASE_URL|\.storage\.(put|sql|transaction)' cloudflare-ara-wake/src/index.mjs
+          echo 'ARA_WAKE_NOTIFICATION_ONLY_CONTRACT=PASS'
