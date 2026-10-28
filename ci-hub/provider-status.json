@@ -492,6 +492,22 @@
         "proof": "GitHub PRs #1731,#1736,#1791,#1802,#1809; Forgejo Git mirror host-independent receipt run 40746611827; GitHub QA hosted alert run 40782057532; source quarantine in PR item17 pending merge",
         "preserve": "No social publisher promotion, no Codeberg API writes, no GitLab blocked historic ref pushes; scoped publisher migration remains items 1,2,3,15"
       }
+    },
+    "windows_github_contingency_item18": {
+      "status": "PARTIAL_READINESS_SAFE_NO_PRODUCTION_TAKEOVER",
+      "verified_at_utc": "2026-10-28T23:43:26Z",
+      "item": 18,
+      "git_and_ci": "PRIOR_INDEPENDENT_RECOVERY_PROVEN_FRESH_PARITY_REQUIRED_AT_TAKEOVER",
+      "windows_workflows": "BOTH_ACTIVE_GITHUB_API_READBACK; WORKFLOW_RUN_AUTODISPATCH_REMOVED; EXPLICIT_MANUAL_ACCOUNT_GATES",
+      "windows_runner_ready": "UNKNOWN_REMOTE_CONTROL_BUSY",
+      "live_neon": "universo 10 uncertain; lucas4 2 closed_unverified; both started without remote_id",
+      "contract": "GITHUB_HOSTED_RUN_40789291185_JOB_123170204928_SUCCESS",
+      "safety": "ITEM18_UNIVERSO_FALLBACK_FENCED=PASS; ITEM18_LUCAS4_FALLBACK_FENCED=PASS; ITEM18_SAFE_READINESS_CONTRACT=PASS",
+      "takeover_allowed": false,
+      "contingency_ready": false,
+      "missing": "Source FROZEN and terminal NOT_APPLIED; independent reconciliation; Neon publisher_authority generation/account lock; verified backup identity; owner-authorized single live publication and independent receipt; remote Windows readback.",
+      "source": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1831",
+      "finding": "test-hub/findings/20261028-item18-windows-github-readiness-partial.md"
     }
   }
 }
