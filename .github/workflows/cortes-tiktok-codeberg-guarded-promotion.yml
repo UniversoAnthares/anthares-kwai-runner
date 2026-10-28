@@ -1,11 +1,8 @@
 name: Promote Codeberg TikTok after GitHub primary toggle
+# Codeberg account suspended: archive only. No automatic or manual provider action.
 on:
-  schedule:
-    - cron: '*/15 * * * *'
-  push:
-    branches: [main]
-    paths: ['.github/workflows/cortes-tiktok-codeberg-guarded-promotion.yml']
   workflow_dispatch: {}
+
 permissions:
   actions: write
   contents: read
@@ -14,6 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   promote:
+    if: ${{ false }} # Disabled: Codeberg account suspended
     # Account suspended: preserve existing GitHub publishers and Neon fencing.
     if: ${{ false }}
     runs-on: ubuntu-24.04

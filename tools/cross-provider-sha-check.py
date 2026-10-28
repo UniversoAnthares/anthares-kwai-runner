@@ -3,7 +3,6 @@ import json, os, subprocess, sys
 providers = {
  "github": os.getenv("ANTHARES_GITHUB_READ_URL","https://github.com/UniversoAnthares/anthares-kwai-runner.git"),
  "gitlab": os.getenv("ANTHARES_GITLAB_READ_URL",""),
- "codeberg": os.getenv("ANTHARES_CODEBERG_READ_URL",""),
 }
 branch=os.getenv("ANTHARES_COMPARE_BRANCH","main")
 out={}
