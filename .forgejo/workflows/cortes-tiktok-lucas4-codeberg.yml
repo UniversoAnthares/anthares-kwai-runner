@@ -1,18 +1,7 @@
 name: CORTES TikTok Codeberg lucas4 cloud primary
+# Suspended Codeberg provider. Historical workflow retained but not executable.
 on:
-  workflow_dispatch:
-    inputs:
-      smoke:
-        type: boolean
-        default: true
-        description: "Validate exact account identity and signed OIDC without posting"
-      publish:
-        type: boolean
-        default: false
-        description: "Allow one authoritative fenced queue operation"
-  schedule:
-    - cron: '*/12 * * * *'
-enable-openid-connect: true
+  workflow_dispatch: {}
 permissions:
   contents: read
 concurrency:
@@ -20,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publisher:
-    if: ${{ (forgejo.event_name == 'schedule' && vars.TIKTOK_CODEBERG_PRIMARY == 'true') || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
+    if: ${{ false }} # Provider retired; no session or publication permitted
     runs-on: codeberg-small
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
