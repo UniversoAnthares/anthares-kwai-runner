@@ -25,7 +25,8 @@ test('202 receipt records sequence and sends only device identity',async()=>{
  assert.deepEqual(r,{enabled:true,ok:true,reason:'broker_recorded',sequence:17});
  assert.equal(seen.url,SIGNAL_URL);assert.equal(seen.opts.method,'POST');assert.equal(seen.opts.redirect,'error');
  assert.deepEqual(JSON.parse(seen.opts.body),{device_id:DEVICE});
- assert.equal(seen.opts.headers['X-Anthares-Notify-Key'],goodSecret);
+ assert.equal(seen.opts.headers.Authorization,'Bearer '+goodSecret);
+ assert.match(seen.opts.headers['User-Agent'],/AntharesARA-Wake/);
  assert.doesNotMatch(seen.opts.body,/job|args|secret|token|command/);
 });
 test('202 without sequence remains accepted without false sequence proof',async()=>{
