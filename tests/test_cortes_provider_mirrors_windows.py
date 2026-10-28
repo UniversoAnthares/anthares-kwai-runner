@@ -29,11 +29,13 @@ class MirrorContracts(unittest.TestCase):
         self.assertNotIn("push -f",self.code)
         self.assertIn("merge-base --is-ancestor",self.code)
         self.assertIn("REMOTE_SHA_MISMATCH",self.code)
-    def test_separate_provider_failures(self):
-        self.assertIn("@('gitlab','codeberg')",self.code)
+    def test_suspended_codeberg_is_excluded_from_automatic_git_routing(self):
+        self.assertIn("@('gitlab')",self.code)
+        self.assertNotIn("@('gitlab','codeberg')",self.code)
+        self.assertNotIn("https://codeberg.org/",self.code)
         self.assertIn("GITLAB_SYNC_REQUIRES_REVIEW",self.code)
-        self.assertIn("CODEBERG_AUTH_OR_DIVERGENCE_REQUIRES_REVIEW",self.code)
         self.assertIn("mirror-health-",self.code)
+        self.assertIn("GitLab via independent Windows runner",self.install)
     def test_hidden_scheduled_user_principal(self):
         self.assertIn("-WindowStyle Hidden",self.install)
         self.assertIn("New-ScheduledTaskPrincipal",self.install)
