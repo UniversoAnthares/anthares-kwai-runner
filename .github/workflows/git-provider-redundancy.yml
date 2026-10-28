@@ -1,7 +1,7 @@
 name: Git provider redundancy
 on:
   workflow_dispatch:
-  # Automatic runs paused until authenticated GitLab and Codeberg destinations
+  # Automatic runs paused until authenticated GitLab destination
   # are configured and verified. Trigger manually after prerequisites are ready.
 permissions:
   contents: read
@@ -14,13 +14,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        provider: [gitlab, codeberg]
+        provider: [gitlab]
     steps:
       - uses: actions/checkout@v4
       - name: Mirror independently
         env:
           ANTHARES_GITLAB_PUSH_URL: ${{ secrets.ANTHARES_GITLAB_PUSH_URL }}
-          ANTHARES_CODEBERG_PUSH_URL: ${{ secrets.ANTHARES_CODEBERG_PUSH_URL }}
         run: bash tools/git-provider-sync.sh "${{ matrix.provider }}"
   verify:
     needs: mirror
@@ -31,5 +30,4 @@ jobs:
       - name: Compare provider SHAs
         env:
           ANTHARES_GITLAB_READ_URL: ${{ secrets.ANTHARES_GITLAB_READ_URL }}
-          ANTHARES_CODEBERG_READ_URL: ${{ secrets.ANTHARES_CODEBERG_READ_URL }}
         run: python3 tools/cross-provider-sha-check.py
