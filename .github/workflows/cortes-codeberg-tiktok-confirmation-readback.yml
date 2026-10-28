@@ -1,13 +1,12 @@
 name: Verify Codeberg TikTok fenced canary result
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/cortes-codeberg-tiktok-confirmation-readback.yml']
   workflow_dispatch: {}
 permissions:
   contents: read
 jobs:
   check:
+    # Suspended Codeberg account: no provider calls or secrets, retain for history.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 9
     env:
