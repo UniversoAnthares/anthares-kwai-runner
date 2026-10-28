@@ -1,0 +1,46 @@
+name: ARA reserve Hostinger post-commit notifier
+on:
+  pull_request:
+    paths:
+      - 'vercel-ara-reserve/**'
+      - '.github/workflows/ara-reserve-hostinger-contracts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check original controller and new notifier syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check vercel-ara-reserve/api/router.js
+          node --check vercel-ara-reserve/api/mcp.js
+          node --check vercel-ara-reserve/api/bootstrap.js
+          node --check vercel-ara-reserve/api/wake-notifier.js
+      - name: Test fail-open wake-only contracts
+        shell: bash
+        run: node --test vercel-ara-reserve/api/wake-notifier.test.js
+      - name: Verify post-INSERT ordering and deployment rewrites
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('vercel-ara-reserve/api/mcp.js').read_text()
+          assert p.count('await notifyWakeAfterCommit(d)')==1
+          insert=p.index('await pool.query("INSERT INTO ara_reserve_jobs')
+          signal=p.index('await notifyWakeAfterCommit(d)')
+          wait=p.index('async function execute(')
+          assert insert < signal < wait
+          rules=json.loads(Path('vercel-ara-reserve/vercel.json').read_text())['rewrites']
+          assert any(x['source']=='/v1/mcp/execute' and x['destination']=='/api/mcp?route=execute' for x in rules)
+          assert not any(x['source']=='/v1/mcp/execute' and 'router' in x['destination'] for x in rules)
+          print('ARA_RESERVE_POST_COMMIT_CONTRACT_PASS')
+          PY
