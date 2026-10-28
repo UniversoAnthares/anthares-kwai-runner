@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-27-cancel-first-quota-contract",
+  "revision": "2026-10-27-codeberg-account-suspended-quarantine",
   "checked_at_utc": "2026-10-21T21:20:00Z",
   "rules": {
     "regression_check_required_each_round": true,
@@ -30,7 +30,8 @@
     ],
     "quota_cancel_contract": "CANCELAR_IMEDIATAMENTE_POR_COTA_V1",
     "quota_cancel_adapter_state": "SHARED_NEON_LEDGER_DEPLOYED; GITHUB_SYNTHETIC_LISTENER_MERGED_UNVERIFIED; UNIVERSAL_CALLBACKS_NOT_WIRED",
-    "wordpress_qa_auth_status": "AUTH_MISSING_CONFIRMED_IN_GITHUB_ACTIONS_RUN_40500306462_20261027"
+    "wordpress_qa_auth_status": "AUTH_MISSING_CONFIRMED_IN_GITHUB_ACTIONS_RUN_40500306462_20261027",
+    "codeberg_runtime_policy": "DISABLED_ACCOUNT_SUSPENDED_OWNER_REPORTED_USE_GITHUB_CANONICAL_GITLAB_GIT_MIRROR_NO_CODEBERG_DISPATCH"
   },
   "providers": {
     "anthares_remote": {
@@ -306,22 +307,26 @@
       "evidence": "Neon table cortes_publications exists with prior confirmed real Kwai job and phase4 self-test; live 2026-10-18 Cloudflare CORTES backlog cannot be inferred or safely moved from this table alone."
     },
     "codeberg_repo": {
-      "status": "LIVE_GIT_PARITY_PROVEN_20261027",
-      "evidence_class": "LIVE_GITHUB_MIRROR_RUN",
+      "status": "DISABLED_OWNER_REPORTED_ACCOUNT_SUSPENSION_20261027",
+      "evidence_class": "OWNER_REPORTED_ACCOUNT_SUSPENSION_NOT_PROVIDER_INDEPENDENTLY_CONFIRMED",
       "verified_at_utc": "2026-10-27",
       "evidence": "GitHub mirror job 122489626332 confirmed Codeberg public readback at f25cf957168cfabead97ba438fa286b7b8f4fa54, branch main correct, actions enabled.",
-      "eligible": true,
+      "eligible": false,
       "scope": "git recovery mirror; not a CI runner",
-      "reopen_condition": "authenticated Codeberg mirror finishes, public main equals fresh GitHub main and SHA readback succeeds"
+      "reopen_condition": "ONLY_EXPLICIT_OWNER_REAUTHORIZATION_AFTER_ACCOUNT_RESTORED_AND_FRESH_PROOF",
+      "previous_status": "LIVE_GIT_PARITY_PROVEN_20261027",
+      "disabled_reason": "ACCOUNT_SUSPENDED; DO_NOT_PUSH_PULL_DISPATCH_OR_ROUTE"
     },
     "codeberg_actions": {
-      "status": "CI_RUNNER_HOMOLOGATED_SUCCESS_20261027",
-      "evidence_class": "LIVE_CODEBERG_ACTIONS_RUN_2",
+      "status": "DISABLED_OWNER_REPORTED_ACCOUNT_SUSPENSION_20261027",
+      "evidence_class": "OWNER_REPORTED_ACCOUNT_SUSPENSION_NOT_PROVIDER_INDEPENDENTLY_CONFIRMED",
       "verified_at_utc": "2026-10-27",
       "evidence": "anthares-video-studio Forgejo Actions run #2 on main commit 9369a9213f succeeded in 22s: checkout, Node.js setup, configured secret check, Synthetic D1 journal contract and job completion. https://codeberg.org/UniversoAnthares/anthares-video-studio/actions/runs/2",
-      "eligible": true,
+      "eligible": false,
       "scope": "verified synthetic D1 CI runner; not yet authorized as generic publisher or all-repository CI fallback",
-      "reopen_condition": "Generic CI routing and publisher capability require separate workload/permissions proof; Forgejo ignores workflow permissions field."
+      "reopen_condition": "ONLY_EXPLICIT_OWNER_REAUTHORIZATION_AFTER_ACCOUNT_RESTORED_AND_FRESH_PROOF",
+      "previous_status": "CI_RUNNER_HOMOLOGATED_SUCCESS_20261027",
+      "disabled_reason": "ACCOUNT_SUSPENDED; DO_NOT_PUSH_PULL_DISPATCH_OR_ROUTE"
     },
     "bitrise": {
       "status": "EXCLUDED_FROM_CI_EXECUTION_BY_OWNER_20261027",
