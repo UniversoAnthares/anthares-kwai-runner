@@ -1,4 +1,4 @@
-# Independent Windows Git mirror; NO GitHub Actions or GitLab CI minutes.
+# Independent Windows GitLab-only mirror from canonical GitHub; no Codeberg access or hosted CI minutes.
 # Uses the interactive Windows account's existing OS Git credentials.
 # No PAT values, passwords or credential URLs may be stored or logged.
 param(
@@ -47,8 +47,8 @@ try {
         if($LASTEXITCODE -ne 0){throw 'INITIAL_CLONE_FAILED'}
     }
     $existing=@(Invoke-ProviderGit @('remote'))
-    foreach($provider in @('gitlab','codeberg')) {
-        $url=if($provider -eq 'gitlab') {'https://gitlab.com/UniversoAnthares/anthares-kwai-runner.git'} else {'https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git'}
+    foreach($provider in @('gitlab')) {
+        $url='https://gitlab.com/UniversoAnthares/anthares-kwai-runner.git'
         if(-not ((Invoke-ProviderGit @('remote')) -split '\r?\n' -contains $provider)){
             Invoke-ProviderGit @('remote','add',$provider,$url)|Out-Null
         }
@@ -57,7 +57,7 @@ try {
     Invoke-ProviderGit @('fetch','--no-tags','origin','+refs/heads/main:refs/remotes/origin/main')|Out-Null
     $source=Invoke-ProviderGit @('rev-parse','refs/remotes/origin/main')
     if($source -notmatch '^[a-f0-9]{40}$'){throw 'GITHUB_SHA_INVALID'}
-    foreach($provider in @('gitlab','codeberg')) {
+    foreach($provider in @('gitlab')) {
         try{
             Invoke-ProviderGit @('fetch','--no-tags',$provider,('+refs/heads/main:refs/remotes/'+$provider+'/main'))|Out-Null
             $target=Invoke-ProviderGit @('rev-parse',('refs/remotes/'+$provider+'/main'))
@@ -78,7 +78,7 @@ try {
                     throw 'GITLAB_MERGE_CONFLICT'
                 }
                 Invoke-ProviderGit @('push','gitlab','HEAD:refs/heads/main')|Out-Null
-            }else{throw 'CODEBERG_DIVERGED_NO_FORCE_PUSH'}
+            }else{throw 'GIT_PROVIDER_DIVERGED_NO_FORCE_PUSH'}
             # An acknowledged push is not sufficient without SHA readback.
             $remote=(& git.exe -c "safe.directory=$Checkout" -C $Checkout ls-remote $provider refs/heads/main 2>$null|Out-String).Trim()
             if($LASTEXITCODE -ne 0){throw 'READBACK_FAILED'}
@@ -87,7 +87,7 @@ try {
             if($actual -ne $expected){throw 'REMOTE_SHA_MISMATCH'}
             Audit $provider 'PROVEN' $actual
         }catch{
-            $reason=if($provider -eq 'codeberg'){'CODEBERG_AUTH_OR_DIVERGENCE_REQUIRES_REVIEW'}else{'GITLAB_SYNC_REQUIRES_REVIEW'}
+            $reason='GITLAB_SYNC_REQUIRES_REVIEW'
             Audit $provider 'BLOCKED' ($reason+'_LINE_'+[string]$_.InvocationInfo.ScriptLineNumber+'_'+$_.Exception.GetType().Name)
         }
     }
