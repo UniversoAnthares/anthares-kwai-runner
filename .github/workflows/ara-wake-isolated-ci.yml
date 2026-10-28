@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -56,4 +58,14 @@ jobs:
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe ./cmd/agent
           test -s /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe
           sha256sum /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe
+          sha256sum /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe > /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe.sha256
           echo 'ARA_WAKE_C8_OFFLINE_TESTS_AND_WINDOWS_BUILD=PASS'
+      - name: Preserve exact-commit Windows C8 wake candidate (not deployed)
+        uses: actions/upload-artifact@v4
+        with:
+          name: anthares-c8-wake-candidate
+          path: |
+            /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe
+            /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe.sha256
+          retention-days: 7
+          if-no-files-found: error
