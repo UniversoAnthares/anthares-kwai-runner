@@ -541,8 +541,8 @@
       "base_url": "https://anthares.us/forgejo/anthares-admin",
       "role": "LAST_GIT_RECOVERY_REPLICA_ONLY",
       "source": "UniversoAnthares GitHub main and all head/tag refs",
-      "verified_repositories": 12,
-      "head_tag_ref_parity": "VERIFIED_ALL_12_REPOSITORIES_20261027_2138_CAMPO_GRANDE",
+      "verified_repositories": 15,
+      "head_tag_ref_parity": "WINDOWS_SYSTEM_TASK_20261027_2206_LOCAL_ALL_15_HEADS_AND_TAGS_VERIFIED_ZERO_FAILURES",
       "empty_source_repositories": [
         "anthares-browser-state",
         "anthares-kwai-session-vault"
@@ -557,7 +557,37 @@
       "non_destructive": true,
       "force_push": false,
       "prune_remote": false,
-      "hosting_limitation": "Shared Hostinger; keep after GitLab for Git recovery; no CI/publishing promotion"
+      "hosting_limitation": "Shared Hostinger; keep after GitLab for Git recovery; no CI/publishing promotion",
+      "additional_github_repositories": [
+        "home",
+        "wiki",
+        "github-slideshow"
+      ],
+      "additional_gitlab_mirrors": [
+        {
+          "forgejo": "home-gitlab",
+          "gitlab": "UniversoAnthares/home"
+        },
+        {
+          "forgejo": "wiki-gitlab",
+          "gitlab": "UniversoAnthares/wiki"
+        },
+        {
+          "forgejo": "anthares-transcricao-gitlab",
+          "gitlab": "UniversoAnthares/anthares-transcricao"
+        }
+      ],
+      "independent_forgejo_repo": {
+        "repository": "anthares-tiktok-forgejo",
+        "canonical_source": "anthares-kwai-runner",
+        "local_default_branch": "main",
+        "tracking_branch": "github-canonical",
+        "main_policy": "PRESERVE_PRIVATE_PUBLISHER_COMMIT_DO_NOT_REPLACE",
+        "tracking_state": "TRACKING_REF_PARITY_CONFIRMED"
+      },
+      "additional_gitlab_task": "Anthares Forgejo GitLab Extra Mirrors 30min",
+      "additional_gitlab_hostinger_script": "~/.anthares-forgejo/gitlab-extra-mirrors.py",
+      "coverage_note": "15 GitHub canonical repositories (two originally empty), 3 distinct GitLab source mirrors, 1 TikTok independent Git repo with canonical tracking branch; total 19. Git-only redundancy; no CI or publishing activation."
     }
   }
 }
