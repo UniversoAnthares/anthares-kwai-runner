@@ -344,9 +344,11 @@ def source_failure_code(label, exc):
 
 def main():
     if not TOKEN:raise RuntimeError("GITHUB_TOKEN_REQUIRED")
+    # Codeberg is suspended; Github is the active incident and QA authority.
+    # Do not query Codeberg or emit repeated false 'visibility lost' incidents.
     items=[]
     bad=[]
-    for label,fn in (("github",workflow_incidents),("codeberg",codeberg_incidents),("daily-round",daily_round_incidents),("wordpress",wp_incidents)):
+    for label,fn in (("github",workflow_incidents),("daily-round",daily_round_incidents),("wordpress",wp_incidents)):
         try:
             result=fn()
             items.extend(result)
