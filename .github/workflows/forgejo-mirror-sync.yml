@@ -15,8 +15,18 @@ jobs:
       - name: Sync fixed Forgejo mirror
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error -X POST https://anthares.us/forgejo-sync.php
+          # Hostinger independently mirrors and validates all refs. This
+          # read-only receipt avoids CDN 403 on the public Forgejo Git URL.
+          receipt="$(curl --fail --silent --show-error --max-time 25 -X POST https://anthares.us/forgejo-sync.php)"
+          if [[ ! "$receipt" =~ ^SYNC_PROVEN[[:space:]]([0-9a-f]{40})$ ]]; then
+            echo "FORGEJO_INDEPENDENT_RECEIPT_INVALID"
+            exit 1
+          fi
+          forgejo_sha="${BASH_REMATCH[1]}"
           github_sha="$(git ls-remote https://github.com/UniversoAnthares/anthares-kwai-runner.git refs/heads/main | awk '{print $1}')"
-          forgejo_sha="$(git ls-remote https://anthares.us/forgejo/anthares-admin/anthares-kwai-runner.git refs/heads/main | awk '{print $1}')"
-          test "$github_sha" = "$forgejo_sha"
+          if [[ ! "$github_sha" =~ ^[0-9a-f]{40}$ ]] || [[ "$github_sha" != "$forgejo_sha" ]]; then
+            echo "FORGEJO_SOURCE_SHA_MISMATCH"
+            exit 1
+          fi
+          echo "HOSTINGER_INDEPENDENT_RECEIPT=PROVEN"
           echo "CROSS_PROVIDER_SHA_CHECK=PROVEN sha=$github_sha"
