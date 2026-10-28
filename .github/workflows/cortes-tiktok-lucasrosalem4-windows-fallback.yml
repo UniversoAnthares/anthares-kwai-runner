@@ -6,12 +6,10 @@ on:
         type: boolean
         default: true
       proof_publish_one:
-        description: Publish exactly one on Windows ONLY when cloud cron is disabled
+        description: Owner-approved manual recovery only after source frozen, terminal check and Neon fencing
         type: boolean
         default: false
-  workflow_run:
-    workflows: ['CORTES TikTok @lucasrosalem4 cloud publisher']
-    types: [completed]
+# No automatic failover on failed cloud runs: a remote upload might have succeeded.
 permissions:
   contents: read
   id-token: write
@@ -20,13 +18,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   windows_backup:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository))
+    # An explicit per-account owner-approved handoff must follow Neon reconciliation.
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.diagnostic_only == false && inputs.proof_publish_one == true && vars.TIKTOK_LUCAS4_WINDOWS_TAKEOVER_APPROVED == 'true' && vars.TIKTOK_FORGEJO_PRIMARY != 'true' && vars.TIKTOK_CODEBERG_PRIMARY != 'true' }}
     runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
     timeout-minutes: 18
     env:
       PYTHONUTF8: '1'
       TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
-      TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: ${{ ((github.event_name == 'workflow_run' && vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.proof_publish_one == true && vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'false')) && 'true' || 'false' }}
+      TIKTOK_LUCASROSALEM4_CLOUD_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.proof_publish_one == true && inputs.diagnostic_only == false && vars.TIKTOK_LUCAS4_WINDOWS_TAKEOVER_APPROVED == 'true' && vars.TIKTOK_LUCASROSALEM4_CLOUD_ENABLED == 'false' && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
       - shell: pwsh
