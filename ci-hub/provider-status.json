@@ -339,6 +339,18 @@
       "paid_plan_enabled": false,
       "execution_enabled": false,
       "cancel_monitor_enabled": true
+    },
+    "forgejo_git_backup": {
+      "status": "LIVE_ALL_GIT_REFS_VERIFIED_12_REPOS_20261027",
+      "evidence_class": "LIVE_HOSTINGER_GIT_BARE_READBACK_AND_WINDOWS_PERIODIC_SNAPSHOT",
+      "verified_at_utc": "2026-10-28T01:38:52Z",
+      "evidence": "Anthares Forgejo Git Redundancy 30min SYSTEM run completed exit 0 failures 0; 12 canonical repositories verified across GitHub heads/tags and local Forgejo bare refs; two GitHub sources are legitimately empty.",
+      "eligible": true,
+      "ci_eligible": false,
+      "scope": "Last-resort source-code Git repository recovery only; no CI or publishing",
+      "reopen_condition": "Retry only missing refs after non-fast-forward/divergence reconciliation, never force or prune",
+      "source": "github",
+      "url": "https://anthares.us/forgejo/anthares-admin"
     }
   }
 }
