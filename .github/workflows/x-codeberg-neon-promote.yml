@@ -1,10 +1,8 @@
 name: X Codeberg Neon primary promotion after verified QA
+# Codeberg account suspended: archive only. No automatic or manual provider action.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/x-codeberg-neon-promote.yml'
   workflow_dispatch: {}
+
 permissions:
   contents: read
 concurrency:
@@ -12,6 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   promote:
+    if: ${{ false }} # Disabled: Codeberg account suspended
     runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
     timeout-minutes: 8
     env:
