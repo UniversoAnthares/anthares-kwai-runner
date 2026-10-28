@@ -91,7 +91,7 @@ return server;}
 
 function metadata(res){reply(res,200,{issuer:ORIGIN,authorization_endpoint:`${ORIGIN}/oauth/authorize`,token_endpoint:`${ORIGIN}/oauth/token`,response_types_supported:['code'],grant_types_supported:['authorization_code','refresh_token'],code_challenge_methods_supported:['S256'],token_endpoint_auth_methods_supported:['none'],scopes_supported:[...SCOPES],client_id_metadata_document_supported:true,authorization_response_iss_parameter_supported:true});}
 
-export default async function handler(req,res){try{await ensureSchema();const route=String(req.query?.route||'').replace(/^\/+|\/+$/g,'');
+export default async function handler(req,res){try{const route=String(req.query?.route||'').replace(/^\/+|\/+$/g,'');
 if(req.method==='GET'&&route==='health'){let db=true;try{await pool.query('SELECT 1')}catch{db=false}const s=await status(DEFAULT_DEVICE).catch(()=>({connected:false}));return reply(res,db&&TOKEN_SECRET.length>=32&&OWNER_HASH.length===64?200:503,{ok:db&&TOKEN_SECRET.length>=32&&OWNER_HASH.length===64,service:'anthares-remote-primary',provider:'vercel',state:'neon',cloudflare_dependency:false,oauth:true,mcp:true,device_connected:!!s.connected,device_seen_at:s.seen_at||null});}
 if(req.method==='GET'&&route==='well-known/oauth-protected-resource')return reply(res,200,{resource:ORIGIN,authorization_servers:[ORIGIN],scopes_supported:[...SCOPES],resource_documentation:'https://github.com/UniversoAnthares/anthares-kwai-runner'});
 if(req.method==='GET'&&(route==='well-known/oauth-authorization-server'||route==='well-known/openid-configuration'))return metadata(res);
