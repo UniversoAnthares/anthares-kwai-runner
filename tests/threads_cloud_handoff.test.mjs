@@ -7,7 +7,8 @@ import os from 'node:os';
 import {spawnSync} from 'node:child_process';
 
 import backend from '../infra/neon-cortes-threads-execution/index.mjs';
-import {validateEditorial} from '../tools/cortes_threads_cloud_captions.mjs';
+import {validateEditorial, captionForClip} from '../tools/cortes_threads_cloud_captions.mjs';
+import {fetchCloudClipByIdentity} from '../tools/cortes_threads_cloud_feed.mjs';
 
 const endpoint='https://neon.example.invalid/?action=control';
 
@@ -137,6 +138,49 @@ test('cloud selects queued identities using exact WordPress lookup',()=>{
  assert.match(src,/fetchCloudClipByIdentity/);
  assert.doesNotMatch(src,/fetchCloudManifest/);
  assert.match(src,/THREADS_QUEUE_EMPTY_OR_ISOLATED/);
+});
+
+test('WordPress search HTTP 403 permits only exact SHA-attested public media',async()=>{
+ let requested='';
+ const clip=await fetchCloudClipByIdentity({
+  id:'threads:fOmihuHUT1M|g1:fOmihuHUT1M:3985:4025',
+  day:'2026-10-27',
+  fetcher:async url=>{
+   requested=String(url);
+   return {ok:false,status:403};
+  }
+ });
+ assert.match(requested,/search=short_fOmihuHUT1M_g1_3985_4025/);
+ assert.equal(clip.id,'fOmihuHUT1M|g1:fOmihuHUT1M:3985:4025');
+ assert.equal(clip.clip_id,'g1:fOmihuHUT1M:3985:4025');
+ assert.equal(clip.attachment_id,17045);
+ assert.equal(clip.url,'https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_fOmihuHUT1M_g1_3985_4025.mp4');
+ assert.match(clip.editorial.transcript_attestation.media_sha256,/^[a-f0-9]{64}$/);
+ const verified=captionForClip(clip.editorial,{
+  ...clip,sha256:clip.editorial.transcript_attestation.media_sha256
+ });
+ assert.equal(verified.editorial_policy,'anthares_editorial_transcript_attested_v3');
+ assert.throws(()=>captionForClip(clip.editorial,{
+  ...clip,sha256:'0'.repeat(64)
+ }),/EDITORIAL_TRANSCRIPT_ATTESTATION_REQUIRED/);
+});
+
+test('WordPress 403 cannot authorize unknown or unattested identity',async()=>{
+ const fake=async()=>({ok:false,status:403});
+ await assert.rejects(
+  fetchCloudClipByIdentity({
+   id:'threads:fOmihuHUT1M|g999:fOmihuHUT1M:3985:4025',
+   day:'2026-10-27',fetcher:fake
+  }),
+  /WORDPRESS_403_EXACT_ATTESTATION_REQUIRED/
+ );
+ await assert.rejects(
+  fetchCloudClipByIdentity({
+   id:'threads:fOmihuHUT1M|g1:fOmihuHUT1M:3985:4025',
+   day:'2026-10-27',fetcher:async()=>({ok:false,status:401})
+  }),
+  /WORDPRESS_HTTP_401/
+ );
 });
 
 test('exact WordPress lookup miss preserves queued Neon identity',()=>{
