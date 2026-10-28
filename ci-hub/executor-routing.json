@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-27-cancel-first-quota-contract-in-ci",
+  "revision": "2026-10-27-codeberg-quarantined-github-gitlab-primary",
   "provider_status_source": "ci-hub/provider-status.json",
   "continuity_policy": "ci-hub/CONTINUITY.md",
   "regression_check_required_each_round": true,
@@ -86,7 +86,6 @@
       "floot",
       "cloudflare_workers_builds",
       "github_actions_private",
-      "codeberg_actions",
       "appveyor",
       "gitlab_ci"
     ],
@@ -95,7 +94,7 @@
     "runner_allocation_health": {
       "github_actions_public": "RUNNER_ALLOCATION_AND_READONLY_QUOTA_WATCHER_SUCCESS_20261027_RUN_40569858409_PUBLISHER_INDEPENDENT_PROOF_REQUIRED",
       "appveyor": "BLOCKED_HTTP500_BUILD_CREATION_20261026",
-      "codeberg_actions": "CODEBERG_RUN_2_SUCCESS_22S_COMMIT_9369a9213f_SYNTHETIC_D1_VERIFIED_GENERIC_PUBLISHER_UNVERIFIED",
+      "codeberg_actions": "DISABLED_ACCOUNT_SUSPENDED_DO_NOT_DISPATCH",
       "gitlab_ci": "BLOCKED_QUOTA_TEMPORARY_AUTOMATIC_RECHECK",
       "bitrise": "EXCLUDED_BY_OWNER_20261027_MACHINE_INVALID_HTTP400",
       "harness": "WATCHER_AUTH_VERIFIED_RUN_40582510426_CONTROLLER_DEPLOYED_NONPUBLISHING_FALLBACK_ENABLED",
@@ -205,7 +204,7 @@
       "independent_ci_stage": "Harness CI build/test stage completed and GitHub watcher runner proven; not a publisher routing authorization"
     },
     "codeberg_handoff_policy": {
-      "stage": "ADAPTER_SOURCE_IMPLEMENTED_INTEGRATION_PENDING",
+      "stage": "DISABLED_ACCOUNT_SUSPENDED",
       "proof": "https://codeberg.org/UniversoAnthares/anthares-video-studio/actions/runs/2",
       "verified_job": "d1-journal-contract",
       "verified_commit": "9369a9213f",
@@ -223,7 +222,8 @@
       "publisher_allowed": false,
       "adapter": "tools/codeberg_fenced_dispatch.mjs",
       "adapter_tests": "tests/test_codeberg_fenced_dispatch.mjs",
-      "pending": "Connect authenticated controller using shared Neon atomic receipt and verify provider run ID/readback against expected SHA before promoting dispatch"
+      "pending": "Connect authenticated controller using shared Neon atomic receipt and verify provider run ID/readback against expected SHA before promoting dispatch",
+      "disabled_reason": "OWNER_REPORTED_SUSPENSION; NEVER_DISPATCH"
     }
   },
   "retired": {
@@ -494,14 +494,14 @@
     },
     "codeberg_actions": {
       "active": false,
-      "status": "RUNNER_HOMOLOGATED_SYNTHETIC_D1_SUCCESS",
-      "ci_eligible": true,
+      "status": "DISABLED_ACCOUNT_SUSPENDED_DO_NOT_ROUTE",
+      "ci_eligible": false,
       "role": "verified_synthetic_ci_standby_not_automatic_dispatch",
       "reopen_condition": "Independent controller dispatch adapter with shared Neon CAS, verified terminal original and NOT_APPLIED, pinned revision and Codeberg job readback; production publishing separately authorized"
     },
     "codeberg_git_mirror": {
-      "active": true,
-      "status": "READABLE_STALE_MAIN_20_COMMITS_AT_AUDIT",
+      "active": false,
+      "status": "DISABLED_OWNER_REPORTED_SUSPENSION",
       "source_eligible": false,
       "role": "git_recovery_after_sha_parity"
     },
@@ -518,19 +518,18 @@
   "git_redundancy": {
     "canonical": "github",
     "recovery_order": [
-      "codeberg",
       "gitlab"
     ],
     "codeberg": {
       "repository": "https://codeberg.org/UniversoAnthares/anthares-kwai-runner",
       "source_ref": "refs/heads/main",
-      "status": "STALE_VERIFIED_2026_10_21",
+      "status": "DISABLED_OWNER_REPORTED_ACCOUNT_SUSPENSION",
       "fast_forward_possible": true,
       "eligible_for_promotion": false,
       "requires": "head parity verified after authenticated mirror"
     },
     "gitlab": {
-      "role": "FALLBACK_SOURCE_AND_CI_WHEN_HEALTHY",
+      "role": "FIRST_GIT_RECOVERY_SOURCE_WHEN_FRESH_SHA_VERIFIED; CI_STILL_GATED_BY_QUOTA",
       "ci_eligible": false,
       "temporary_block": "ci_quota_exceeded",
       "reopen_condition": "fresh pipeline proof"
