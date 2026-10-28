@@ -91,3 +91,47 @@ Do not present stale online status as real connected status.
 - No code/configuration in this PR enables the feature in production.
 - DO NOT deploy the production Vercel controller before Stage B CI and
   Stage A Worker cloud quota/security review are accepted.
+
+
+## Stage C: canonical agent subscriber (code staged, OFF by default)
+- Go package: anthares-remote-agent/cmd/agent/wake_subscriber.go.
+- Existing C8 main loop uses the same executionSemaphore for HTTP and
+  GitHub/GitLab; new transport never executes a command itself.
+- New opt-in env flag ANTHARES_WAKE_ENABLED=1, default OFF. When disabled,
+  the exact 2-second idle poll and 60-second Neon heartbeat remain unchanged.
+- A WSS connection is attempted only with the authorized device identity,
+  existing device bearer, fixed trusted origin and no redirects.
+- Valid Worker "ready" triggers an immediate original queue scan, closing the
+  subscribe-before-enqueue race; each valid "wake" triggers another scan.
+- WebSocket payloads cannot include commands, arbitrary job IDs, URLs or
+  shell arguments. Every job is still leased from the canonical HTTP endpoint.
+- A healthy socket reduces empty HTTP polling from every 2 seconds to a
+  12-second bounded safety scan. This is essential because the Worker reports
+  socket writes rather than durable device acknowledgments and a job may
+  expire in as little as 31 seconds. A 5-minute scan could lose commands.
+- A disconnected/auth-failed/malformed/stalled socket restores 2-second
+  HTTP polling; "ready" and disconnect wake the main poll loop immediately.
+  Reconnect uses bounded 2–33-second backoff with jitter, without any new
+  Windows service, process, file spool or queue.
+- WebSocket liveness messages are exchanged with Cloudflare (no Neon traffic);
+  heartbeat to the canonical controller is intentionally UNCHANGED.
+- The external dependency is github.com/gorilla/websocket v1.5.3, pinned with
+  official module hashes in go.sum. No new network process is installed.
+- CI tests validate parsing, auth flag default OFF, connected/fallback idle
+  intervals, local WebSocket ready/wake/disconnect and Windows cross-build.
+- Live C8 binary is older than latest source; require exact build provenance
+  and existing supervisor/last-good integrity verification before replacement.
+
+## Deployment gate — still CLOSED
+1. Worker (item 8) must be deployed and pass authorized WSS + HMAC proofs
+   without consuming paid Cloudflare quota or changing another ARA DO.
+2. Vercel notifier (item 9) must be deployed with matching secret; only
+   enable after safe queue transaction and delivery behavior are proven.
+3. Build the exact Go Windows agent commit that includes this source, verify
+   SHA-256 and run pre-/post-change real command roundtrip via HTTP and both
+   GitHub/GitLab private issue queues, without duplicate execution.
+4. Enable ANTHARES_WAKE_ENABLED only after the wake source is independently
+   ready. Preserve last-good C8 and original SYSTEM supervisor; no reboot.
+5. Item 11 must measure resulting Neon compute activity and separately
+   address the still-live every-minute heartbeat, whose traffic can keep
+   the Neon main branch awake even with reduced empty queue polling.

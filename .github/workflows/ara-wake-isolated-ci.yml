@@ -6,6 +6,11 @@ on:
       - 'vercel-ara-primary/api/wake-notifier.mjs'
       - 'vercel-ara-primary/api/wake-notifier.test.mjs'
       - 'vercel-ara-primary/api/router.mjs'
+      - 'anthares-remote-agent/cmd/agent/main.go'
+      - 'anthares-remote-agent/cmd/agent/wake_subscriber.go'
+      - 'anthares-remote-agent/cmd/agent/wake_subscriber_test.go'
+      - 'anthares-remote-agent/go.mod'
+      - 'anthares-remote-agent/go.sum'
       - '.github/workflows/ara-wake-isolated-ci.yml'
   workflow_dispatch: {}
 
@@ -19,7 +24,7 @@ concurrency:
 jobs:
   protocol:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,3 +42,18 @@ jobs:
           node --test vercel-ara-primary/api/wake-notifier.test.mjs
           ! grep -Eq 'pool\.query|DATABASE_URL|\.storage\.(put|sql|transaction)' cloudflare-ara-wake/src/index.mjs
           echo 'ARA_WAKE_NOTIFICATION_ONLY_CONTRACT=PASS'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: anthares-remote-agent/go.mod
+          cache: false
+      - name: Verify canonical C8 agent wake subscriber and Windows build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd anthares-remote-agent
+          go mod verify
+          go test -count=1 ./...
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe ./cmd/agent
+          test -s /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe
+          sha256sum /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe
+          echo 'ARA_WAKE_C8_OFFLINE_TESTS_AND_WINDOWS_BUILD=PASS'
