@@ -2,7 +2,7 @@
 """Independent X cloud publisher/controller QA: report and remediate safely.
 
 Run every five minutes from the existing invisible Windows X watchdog.
-GitHub / Codeberg cloud state is READ ONLY. Persist incidents before attempts
+GitHub cloud state is READ ONLY; suspended Codeberg is excluded. Persist incidents before attempts
 to notify the QA issue. Missing GH API credentials never cause incident loss.
 Only deterministic known recovery is permitted; NEVER retry an uncertain post.
 """
@@ -153,7 +153,7 @@ def check_cloud_service():
 
 def run():
     ROOT.mkdir(parents=True,exist_ok=True)
-    check_codeberg()
+    # Codeberg account suspended: inspect only active GitHub and Northflank.
     check_github()
     check_cloud_service()
     flush()
