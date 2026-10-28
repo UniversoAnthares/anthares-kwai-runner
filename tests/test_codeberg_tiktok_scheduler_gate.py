@@ -8,4 +8,14 @@ class CodebergTikTokSchedulerGate(unittest.TestCase):
    self.assertIn("cron: '*/12 * * * *'",raw)
    self.assertIn("cancel-in-progress: false",raw)
    self.assertIn("TIKTOK_CODEBERG_PREFLIGHT_ONLY:",raw)
+ def test_github_jobs_stop_when_forgejo_is_primary(self):
+  paths=(
+   ROOT/".github"/"workflows"/"cortes-tiktok-publisher.yml",
+   ROOT/".github"/"workflows"/"cortes-tiktok-lucasrosalem4-cloud-publisher.yml",
+  )
+  for path in paths:
+   raw=path.read_text(encoding="utf-8")
+   for line in raw.splitlines():
+    if line.lstrip().startswith("if:") and "TIKTOK_CODEBERG_PRIMARY" in line:
+     self.assertIn("TIKTOK_FORGEJO_PRIMARY != 'true'",line,path.name)
 if __name__=="__main__":unittest.main()
