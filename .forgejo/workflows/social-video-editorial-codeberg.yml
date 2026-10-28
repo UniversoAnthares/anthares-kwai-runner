@@ -1,29 +1,13 @@
 # Read-only editorial and adapter tests migrated from GitHub Actions.
 name: Social editorial QA - Codeberg
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/social-video-editorial-codeberg.yml'
-      - 'anthares_publisher/**'
-      - 'social_adapters/**'
-      - 'scripts/instagram_autopublish.py'
-      - 'tools/kwai_physical_queue_daemon.py'
-      - 'tools/cortes_social_queue_consumer.py'
-      - 'tools/cortes_buffer_linkedin_cloud.py'
-      - 'tools/cortes_linkedin_neon_fanout.py'
-      - 'tools/cortes_queue_ha.py'
-      - 'direct-tiktok-publisher/**'
-      - 'cloudflare-worker/patches/apply-publisher-target-v17.py'
-      - 'db/migrations/**'
-      - 'tests/**'
-  schedule:
-    - cron: '39 3 * * *'
 permissions:
   contents: read
 jobs:
   editorial-contracts:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 12
     steps:

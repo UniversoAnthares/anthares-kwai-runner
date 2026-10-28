@@ -1,11 +1,7 @@
 name: TikTok Codeberg hosted browser capability
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/tiktok-codeberg-browser-smoke.yml'
-      - 'tools/cortes_codeberg_tiktok_bootstrap.py'
 permissions:
   contents: read
 concurrency:
@@ -13,6 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   browser-smoke:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 8
     steps:

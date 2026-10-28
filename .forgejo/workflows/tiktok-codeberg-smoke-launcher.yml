@@ -1,15 +1,13 @@
 name: Codeberg native TikTok smoke launcher
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/tiktok-codeberg-smoke-launcher.yml'
   workflow_dispatch: {}
 permissions:
   contents: read
   actions: write
 jobs:
   launch:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 2
     env:

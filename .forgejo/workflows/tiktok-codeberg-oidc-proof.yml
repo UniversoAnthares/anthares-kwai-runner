@@ -1,13 +1,11 @@
 name: TikTok Codeberg OIDC and browser proof
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/tiktok-codeberg-oidc-proof.yml'
 enable-openid-connect: true
 jobs:
   oidc:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-medium
     timeout-minutes: 9
     enable-openid-connect: true

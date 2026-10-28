@@ -1,12 +1,11 @@
 name: CORTES TikTok Codeberg consumer readiness
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths: ['.forgejo/workflows/cortes-tiktok-universo-readiness.yml']
 enable-openid-connect: true
 jobs:
   readiness:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-small
     timeout-minutes: 5
     steps:

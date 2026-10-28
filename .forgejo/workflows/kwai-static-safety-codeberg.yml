@@ -1,27 +1,13 @@
 # Kwai safety and startup diagnostic contracts executed on Codeberg, no Android device.
 name: Kwai static safety contracts - Codeberg
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/kwai-static-safety-codeberg.yml'
-      - 'kwai_native_email_smoke.sh'
-      - 'kwai_auth_probe.py'
-      - 'tools/kwai_android_causal_probe.py'
-      - 'tools/kwai_android_startup_fingerprint.py'
-      - 'tools/kwai_ui_safe_diagnose.py'
-      - 'tests/test_kwai_android_causal_probe.py'
-      - 'tests/test_kwai_android_startup_fingerprint.py'
-      - 'tests/test_kwai_ui_safe_diagnose.py'
-      - 'tests/test_kwai_semantic_profile.py'
-      - '.github/workflows/kwai-interactive-remote-login.yml'
-  schedule:
-    - cron: '53 5 * * *'
 permissions:
   contents: read
 jobs:
   offline-safety:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 7
     steps:
