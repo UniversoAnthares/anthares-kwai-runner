@@ -58,6 +58,9 @@ jobs:
     # This job never reads publication secrets or runs publisher code.
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'
     runs-on: ubuntu-24.04
+    concurrency:
+      group: qa-p0-cloud-alert-delivery
+      cancel-in-progress: false
     timeout-minutes: 5
     permissions:
       contents: read
@@ -126,7 +129,7 @@ jobs:
               issues.push(...data.filter(x => !x.pull_request));
               if (data.length<100) break;
             }
-            let readbacks=0, opened=0;
+            let readbacks=0, opened=0, alertSent=0, alertReceipts=0;
             for (const item of candidates) {
               const marker = 'QA-P0-FINGERPRINT:' + item.fingerprint;
               let existing = issues.find(x => String(x.body||'').includes(marker));
@@ -163,6 +166,38 @@ jobs:
               readbacks++;
               core.notice('QA_P0_CLOUD_DELIVERY_READBACK=PASS issue='+proof.number+
                 ' source_run='+item.run.id+' created='+createdNow);
+              // A verified real P0 also receives one cloud-origin alert comment,
+              // proving write + readback without duplicating the incident.
+              if (!createdNow && proof.state === 'open' && alertSent < 1) {
+                const alertTag = '[QA-P0-CLOUD-ALERT] ' + item.fingerprint;
+                const {data:comments} = await github.rest.issues.listComments({
+                  owner,repo,issue_number:proof.number,per_page:100
+                });
+                let receipt = comments.find(x => String(x.body||'').includes(alertTag));
+                let sentNow = false;
+                if (!receipt) {
+                  const {data} = await github.rest.issues.createComment({
+                    owner,repo,issue_number:proof.number,
+                    body: alertTag + '\nSupervisão P0 externa confirmou novamente uma falha real: '+
+                      evidence + '\nExecutor: GitHub-hosted, independente do Windows/Codeberg. '+
+                      'O incidente continua aberto; reconciliar qualquer envio incerto. '+
+                      'Este alerta não reinicia publicação nem fecha o P0.'
+                  });
+                  receipt = data;
+                  sentNow = true;
+                  alertSent++;
+                }
+                const {data:commentProof} = await github.rest.issues.getComment({
+                  owner,repo,comment_id:receipt.id
+                });
+                if (!String(commentProof.body||'').includes(alertTag)) {
+                  throw new Error('QA_P0_CLOUD_ALERT_READBACK_MISSING');
+                }
+                alertReceipts++;
+                core.notice('QA_P0_CLOUD_ALERT_DELIVERED=PASS issue='+proof.number+
+                  ' comment='+commentProof.id+' created='+sentNow);
+              }
             }
             core.notice('QA_P0_CLOUD_MONITOR=PASS candidates='+candidates.length+
-              ' verified='+readbacks+' opened='+opened);
+              ' verified='+readbacks+' opened='+opened+
+              ' alert_receipts='+alertReceipts+' alert_comments_sent='+alertSent);
