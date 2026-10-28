@@ -1,0 +1,94 @@
+# CI/CD controlado do repositório Forgejo principal.
+# Não publica vídeos, não aciona serviços sociais e não promove executores.
+name: Anthares Forgejo principal - CI/CD isolado
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: anthares-forgejo-principal-ci-cd
+  cancel-in-progress: false
+jobs:
+  ci:
+    if: ${{ forgejo.repository == 'anthares-admin/anthares-kwai-runner' && forgejo.ref == 'refs/heads/main' }}
+    runs-on: anthares-ci-main-host
+    timeout-minutes: 10
+    steps:
+      - name: Checkout sem credenciais persistidas
+        uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirmar identidade e SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${FORGEJO_REPOSITORY:-}" = 'anthares-admin/anthares-kwai-runner'
+          test "${FORGEJO_REF:-}" = 'refs/heads/main'
+          sha="$(git rev-parse HEAD)"
+          test "$sha" = "${FORGEJO_SHA:-}"
+          echo "ANTHARES_FORGEJO_MAIN_IDENTITY=PASS sha=$sha"
+      - name: Testar sintaxe e cancelamento por cota sem efeitos externos
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tools/git-provider-sync.sh
+          python3.11 -m py_compile tools/ci_quota_cancel_first.py
+          python3.11 -m unittest discover -s tests -p 'test_ci_quota_cancel_first.py' -v
+          echo 'ANTHARES_FORGEJO_MAIN_CI=PASS'
+
+  cd:
+    needs: ci
+    if: ${{ forgejo.repository == 'anthares-admin/anthares-kwai-runner' && forgejo.ref == 'refs/heads/main' }}
+    runs-on: anthares-ci-main-host
+    timeout-minutes: 5
+    steps:
+      - name: Checkout de implantação restrita
+        uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Instalar e ler comprovante privado de implantação
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${FORGEJO_REPOSITORY:-}" = 'anthares-admin/anthares-kwai-runner'
+          test "${FORGEJO_REF:-}" = 'refs/heads/main'
+          test -d "$HOME/.anthares-forgejo"
+          test "$(id -u)" -ne 0
+          sha="$(git rev-parse HEAD)"
+          test "$sha" = "${FORGEJO_SHA:-}"
+          export ANTHARES_CI_CD_PROVEN_SHA="$sha"
+          python3.11 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import tempfile
+          from datetime import datetime, timezone
+          root = pathlib.Path.home() / ".anthares-forgejo" / "ci-main-cd"
+          root.mkdir(mode=0o700, parents=True, exist_ok=True)
+          os.chmod(str(root), 0o700)
+          receipt = {
+              "schema": "anthares-main-ci-cd-attestation-v1",
+              "repository": "anthares-admin/anthares-kwai-runner",
+              "commit_sha": os.environ["ANTHARES_CI_CD_PROVEN_SHA"],
+              "ci": "pass",
+              "deployment": "private-ci-artifact-only",
+              "updated_utc": datetime.now(timezone.utc).isoformat(),
+          }
+          target = root / "current.json"
+          fd, tmp = tempfile.mkstemp(prefix=".current-", suffix=".tmp", dir=str(root))
+          try:
+              with os.fdopen(fd, "w", encoding="utf-8") as f:
+                  json.dump(receipt, f, sort_keys=True)
+                  f.write("\n")
+                  f.flush()
+                  os.fsync(f.fileno())
+              os.chmod(tmp, 0o600)
+              os.replace(tmp, str(target))
+          finally:
+              if os.path.exists(tmp):
+                  os.unlink(tmp)
+          recovered = json.loads(target.read_text(encoding="utf-8"))
+          assert recovered == receipt
+          assert recovered["commit_sha"] == os.environ["ANTHARES_CI_CD_PROVEN_SHA"]
+          print("ANTHARES_FORGEJO_MAIN_CD=PASS sha=" + recovered["commit_sha"])
+          PY
