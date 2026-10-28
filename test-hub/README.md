@@ -223,3 +223,9 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - **PROVEN:** [job 123145935173](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40782057532/job/123145935173) concluiu SUCCESS e registrou `QA_P0_CLOUD_ALERT_DELIVERED=PASS` na issue real #1780, comentário 6482589037; readback GET confirmou entrega, 0 tickets duplicados e 2 fingerprints reconciliados.
 - A rota hospedada tem concorrência própria e continua operacional mesmo com a job Windows queued. Leitura autenticada WordPress pelo Windows é preservada; **reparação de incidentes é item 16**.
 - Finding append-only: `test-hub/findings/20261028-qa-p0-hosted-alert-delivery-proven.md`, que supera o finding RUNNING do mesmo escopo.
+
+### AOI item fixo 17 — Codeberg aposentado como primário (2026-10-28)
+- GitHub canônico; GitLab e Forgejo Hostinger são redundâncias condicionadas a paridade recente. Codeberg suspenso permanece excluído de execução, CI, Git, QA e publicação.
+- **Quarentena comprovada em fonte:** 27/27 workflows históricos `.forgejo/workflows/` sem gatilhos automáticos; 28/28 jobs com `if: false`. Os 13 workflows Codeberg-only do GitHub também estão inertes; as rotas independentes Git/QA possuem recibos reais anteriores.
+- A promoção de produtores/publicadores continua separadamente controlada pelos itens 1, 2, 3 e 15; o CI principal Forgejo está em revisão separada. O item 13 mantém os históricos GitLab sob revisão.
+- Registro de evidência: `test-hub/findings/20261028-item17-codeberg-retired-proven.md`.
