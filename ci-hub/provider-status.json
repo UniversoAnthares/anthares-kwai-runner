@@ -341,14 +341,14 @@
       "cancel_monitor_enabled": true
     },
     "forgejo_git_backup": {
-      "status": "LIVE_ALL_GIT_REFS_VERIFIED_12_REPOS_20261027",
+      "status": "LIVE_ALL_GIT_REFS_VERIFIED_15_GITHUB_3_GITLAB_TIKTOK_TRACKING_20261027",
       "evidence_class": "LIVE_HOSTINGER_GIT_BARE_READBACK_AND_WINDOWS_PERIODIC_SNAPSHOT",
-      "verified_at_utc": "2026-10-28T01:38:52Z",
-      "evidence": "Anthares Forgejo Git Redundancy 30min SYSTEM run completed exit 0 failures 0; 12 canonical repositories verified across GitHub heads/tags and local Forgejo bare refs; two GitHub sources are legitimately empty.",
+      "verified_at_utc": "2026-10-28T02:07:10Z",
+      "evidence": "Windows task Anthares Forgejo Git Redundancy 30min completed 15 canonical GitHub repos, all heads/tags matched, exit 0 failures 0. Independent scheduled task Anthares Forgejo GitLab Extra Mirrors 30min completed 3 GitLab source repos with full ref readback (2/4/6 refs), plus anthares-tiktok-forgejo private main preserved and refs/heads/github-canonical tracked to local canonical SHA. Both tasks SYSTEM and exit 0; no Codeberg quota, CI or publication used.",
       "eligible": true,
       "ci_eligible": false,
-      "scope": "Last-resort source-code Git repository recovery only; no CI or publishing",
-      "reopen_condition": "Retry only missing refs after non-fast-forward/divergence reconciliation, never force or prune",
+      "scope": "Source-code Git recovery: 15 GitHub canonical, 3 GitLab independent-source mirrors and 1 TikTok independent Forgejo repository with canonical tracking. No CI or publishing",
+      "reopen_condition": "On ref readback mismatch, safe non-forced merge/fast-forward only; preserve independent TikTok main and fail closed on divergence",
       "source": "github",
       "url": "https://anthares.us/forgejo/anthares-admin"
     }
