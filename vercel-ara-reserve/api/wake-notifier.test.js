@@ -107,5 +107,5 @@ test('direct origin non-202 response fails open',async()=>{
     return req;
   };
   const r=await notifyWakeAfterCommit(DEVICE,{env:{...env,ARA_WAKE_ORIGIN_IP:'203.0.113.10'},requestImpl});
-  assert.equal(r.ok,false);assert.equal(r.reason,'http_403');
+  assert.equal(r.ok,false);assert.match(r.reason,/^http_403_no_lookup_unknown$/);
 });
