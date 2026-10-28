@@ -446,9 +446,9 @@
         },
         "avs": {
           "git_backup": "anthares-admin/anthares-video-studio",
-          "proof": "AVS GitHub PR #53 merged retiring Codeberg-only jobs; Github remains source and Cloudflare/Vercel routes",
-          "operational_state": "CODEBERG_FREE_GIT_AND_DEPLOY_ROUTE; BLOB_HOMOLOGATION_SEPARATELY_OPEN",
-          "missing": "Dedicated Forgejo AVS runner registered online without actual run; synthetic D1 work and protected Function POST remain separately gated"
+          "proof": "AVS Forgejo runner ID 7 repo-scoped, persistent, label avs-codespaces-ci; real run #3 (internal 296/task 205) SUCCESS, AVS_FORGEJO_RUNNER=PROVEN and source SHA a490d8f05ac801dfcd86e55a14d11ec0bc4ef43a; AVS GitHub PR #59 merged; Hostinger controlled recovery receipt PROVEN (old PID 2266452 to new 3017649), existing cron supervisor hook installed.",
+          "operational_state": "FORGEJO_AVS_RUNNER_PERSISTENT_NONPUBLISHING_CI_AND_CONTROLLED_RECOVERY_PROVEN_20261028",
+          "missing": "AVS D1/Blob/protected Function POST and cloud production admission remain separately gated; no publisher or generic CI failover promotion."
         }
       },
       "disabled_this_round": [
