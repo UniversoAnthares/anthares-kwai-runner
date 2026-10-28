@@ -34,6 +34,7 @@ jobs:
         env:
           QA_REQUESTED_ACCOUNT: ${{ inputs.account || '' }}
           QA_CODEBERG_PRIMARY: ${{ vars.TIKTOK_CODEBERG_PRIMARY }}
+          QA_FORGEJO_PRIMARY: ${{ vars.TIKTOK_FORGEJO_PRIMARY }}
         with:
           script: |
             const {owner,repo}=context.repo;
@@ -87,6 +88,13 @@ jobs:
               targets=choice==='both'?['universo','lucas4']:[choice];
             }
             const codeberg=process.env.QA_CODEBERG_PRIMARY==='true';
+            const forgejo=process.env.QA_FORGEJO_PRIMARY==='true';
+            // Suspended Codeberg cannot dispatch, and Forgejo publishers lack approved
+            // two-account identity/ledger homologation. Preserve independent fencing.
+            if (codeberg || forgejo) {
+              core.warning('TIKTOK_QA_P0_RECOVERY_NOT_DISPATCHED: primary provider requires independent reconciliation');
+              return;
+            }
             let accepted=0, suppressed=0;
             for(const target of targets) {
               const workflow=codeberg?'cortes-tiktok-codeberg-fenced-canary.yml':
