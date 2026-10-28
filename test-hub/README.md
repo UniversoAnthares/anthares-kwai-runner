@@ -229,3 +229,9 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - **Quarentena comprovada em fonte:** 27/27 workflows históricos `.forgejo/workflows/` sem gatilhos automáticos; 28/28 jobs com `if: false`. Os 13 workflows Codeberg-only do GitHub também estão inertes; as rotas independentes Git/QA possuem recibos reais anteriores.
 - A promoção de produtores/publicadores continua separadamente controlada pelos itens 1, 2, 3 e 15; o CI principal Forgejo está em revisão separada. O item 13 mantém os históricos GitLab sob revisão.
 - Registro de evidência: `test-hub/findings/20261028-item17-codeberg-retired-proven.md`.
+
+### AOI item fixo 18 — contingência Windows/GitHub em prontidão parcial (2026-10-28)
+- **PROVEN (sem mídia):** [GitHub run 40789291185](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40789291185), job 123170204928, `SUCCESS`: ambos os fallbacks Windows agora exigem autorização manual específica e não disparam automaticamente quando o cloud falha; PR #1831 integrada.
+- **Live GitHub Actions:** os dois workflows Windows estão `active`; isso não equivale a autorização de takeover. **Neon:** 10 resultados incertos universo e 2 `closed_unverified` lucas4 sem remote_id após `STARTED`.
+- `TAKEOVER_ALLOWED=false`, `CONTINGENCY_READY=false` até freeze, reconciliação remota independente, generation/lock Neon e publicação normal autorizada com recibo. Os runners Windows não foram novamente homologados nesta rodada (controle remoto ocupado).
+- Finding: `test-hub/findings/20261028-item18-windows-github-readiness-partial.md`, que supera o registro RUNNING do mesmo escopo. Item **18 permanece PARCIAL**.
