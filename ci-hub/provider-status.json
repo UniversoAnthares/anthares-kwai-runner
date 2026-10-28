@@ -406,7 +406,7 @@
       "migration_scope_complete": true
     },
     "forgejo_service_redirection_20261028": {
-      "status": "SOURCE_ROUTES_ACTIVE_CODEBERG_EXCLUDED_PUBLISHER_PROMOTION_PENDING",
+      "status": "GIT_AND_OFFLINE_QA_REDIRECT_VERIFIED; WORDPRESS_PRODUCER_READY_BUT_DISARMED; PUBLISHER_HANDOFF_BLOCKED",
       "evidence_class": "GITHUB_MERGED_PRS_PLUS_HOSTINGER_FORGEJO_ACTION_RUN_DATABASE_READBACK",
       "verified_date": "2026-10-28",
       "canonical_git_provider": "github",
@@ -418,19 +418,19 @@
           "git_backup": "anthares-admin/anthares-tiktok-forgejo; anthares-admin/anthares-clipper",
           "proof": "Own Forgejo independent account identity/preflight runs 233 and 234 SUCCESS; Github PR #1750 preserves mutually exclusive primary variable",
           "operational_state": "INDEPENDENT_SESSION_OIDC_PREFLIGHT_VERIFIED_NO_PRODUCTION_PUBLISHER_PROMOTION",
-          "missing": "Fresh durable Neon ownership reconciliation, verified scheduler, both account-specific sessions and no duplicate queue STARTED before switching primary"
+          "missing": "Old Codeberg paths disabled by source PR #1802; still requires independently proven two-account session owner and Neon nonduplicate handoff to Forgejo publisher"
         },
         "x": {
           "git_backup": "anthares-admin/anthares-kwai-runner",
           "proof": "Github X cloud/QA is active authority; Codeberg X promotion disabled PR #1736; X secret sync disabled PR #1791",
           "operational_state": "GITHUB_CLOUD_AUTHORITY_FOR_X_FORGEJO_IS_CODE_RECOVERY_ONLY",
-          "missing": "Independent Forgejo authenticated browser/session, Neon ownership and live no-duplicate proof before Forgejo publishing"
+          "missing": "Old Codeberg cloud primary schedule/publisher source disabled by PR #1802; independent Forgejo browser/Neon publisher still unproven; GitHub remains owner"
         },
         "cortes": {
           "git_backup": "anthares-admin/anthares-clipper",
           "proof": "WordPress-hosted Forgejo CORTES producer preflight run 238 SUCCESS, preflight=true, no enqueue (WP PR #205; clipper PRs #219-222)",
           "operational_state": "FORGEJO_WP_INGRESS_PREFLIGHT_VERIFIED_LIVE_QUEUE_PRODUCER_NOT_ARMED",
-          "missing": "Reconcile dormant Forgejo clipper runs 235/237 (WAITING, no assigned task), prove live shared Neon fence, explicitly arm one writer only"
+          "missing": "Preflight success run 238; scheduled gate variable CORTES_FORGEJO_PRODUCER_ENABLED absent (404); cancel legacy pending run ids 235,237 (unassigned task) through authorized UI, confirm single Neon owner before live enqueue"
         },
         "qa": {
           "git_backup": "anthares-admin/anthares-ci-sandbox",
@@ -441,14 +441,14 @@
         "wordpress": {
           "git_backup": "anthares-admin/anthares-wordpress",
           "proof": "Forgejo independent external QA run 236 SUCCESS, WordPress-hosted CORTES read-only producer preflight run 238 SUCCESS",
-          "operational_state": "EXTERNAL_WORDPRESS_QA_ROUTED_FORGEJO_VERIFIED",
+          "operational_state": "FORGEJO_EXTERNAL_WORDPRESS_QA_AND_CORTES_PREFLIGHT_VERIFIED; PRODUCER_SCHEDULE_REGISTERED; ENQUEUE_GATE_ABSENT",
           "missing": "WordPress producer live enqueue remains separately gated"
         },
         "avs": {
           "git_backup": "anthares-admin/anthares-video-studio",
           "proof": "AVS GitHub PR #53 merged retiring Codeberg-only jobs; Github remains source and Cloudflare/Vercel routes",
           "operational_state": "CODEBERG_FREE_GIT_AND_DEPLOY_ROUTE; BLOB_HOMOLOGATION_SEPARATELY_OPEN",
-          "missing": "Item 12 positive protected Preview Function POST independent of provider redirection"
+          "missing": "Dedicated Forgejo AVS runner registered online without actual run; synthetic D1 work and protected Function POST remain separately gated"
         }
       },
       "disabled_this_round": [
@@ -460,7 +460,16 @@
         ".github/workflows/cortes-tiktok-codeberg-fenced-canary.yml",
         ".github/workflows/cortes-tiktok-codeberg-readonly-dispatch.yml"
       ],
-      "guard": "No automatic publisher switch, no Codeberg dispatch, no credentials movement, no Neon lease changes; require terminal original and NOT_APPLIED for any successor publisher"
+      "guard": "No automatic publisher switch, no Codeberg dispatch, no credentials movement, no Neon lease changes; require terminal original and NOT_APPLIED for any successor publisher",
+      "latest_scoped_changes": {
+        "wordpress_scheduler_ref_guard": "Merged UniversoAnthares/anthares-wordpress PR #208; accepts main and refs/heads/main, exact repo and OIDC guards unchanged",
+        "cortes_codeberg_admission_disabled": "Merged UniversoAnthares/anthares-clipper PR #223; retired Codeberg-only schedule and fail-closed manual job on source branch",
+        "x_and_tiktok_legacy_workflows_disabled": "Merged UniversoAnthares/anthares-kwai-runner PR #1802; legacy x-codeberg-primary.yml, cortes-tiktok-universo-codeberg.yml and cortes-tiktok-lucas4-codeberg.yml schedules removed and all jobs fail-closed",
+        "hostinger_forgejo_schedule_registered": "anthares-wordpress actions_schedule id 134 cortes-tiktok-neon-producer.yml; vars.CORTES_FORGEJO_PRODUCER_ENABLED 404 (absent; live enqueue disarmed)",
+        "legacy_cortes_pending": "Forgejo anthares-clipper global action runs 235 and 237 remain waiting, no assigned task. Cancellation refused by tool security settings; manual authorization needed to cancel via UI",
+        "source_integrity": "WordPress Forgejo main SHA 3df318c4690bad78e127c4a29d979d5175cbb409 matches merged GitHub #208; Clipper #223 and Kwai #1802 verified on canonical GitHub main, pending Forgejo mirror readback",
+        "bounded_scope": "Source and CI routing changes only; no social publishing, Neon data writes, primary flag toggles, Windows browser launches, D1 activation, quotas, billing or secrets"
+      }
     }
   }
 }
