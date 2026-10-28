@@ -53,3 +53,116 @@ jobs:
         run: |
           & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/cortes_qa_p0_router.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  cloud-alert-redundancy:
+    # Existing watchdog: independent GitHub-hosted incident delivery if Windows is offline.
+    # This job never reads publication secrets or runs publisher code.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - name: Reconcile real failed runs with canonical QA P0 issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const crypto = require('crypto');
+            const {owner, repo} = context.repo;
+            const repository = owner + '/' + repo;
+            const now = Date.now();
+            const hash = (...parts) => crypto.createHash('sha256')
+              .update(parts.map(String).join('|')).digest('hex').slice(0,24);
+            const networkOf = name => {
+              const text = String(name || '').toLowerCase();
+              const networks = ['pinterest','linkedin','instagram','threads','tiktok',
+                'kwai','facebook','youtube','rumble','odysee','bilibili','bluesky','reddit','x'];
+              return networks.find(n => text.includes(n)) || 'cortes-general';
+            };
+            let runs;
+            if (context.eventName === 'workflow_run') {
+              runs = [context.payload.workflow_run];
+            } else {
+              const {data} = await github.rest.actions.listWorkflowRunsForRepo({
+                owner,repo,per_page:75
+              });
+              runs = data.workflow_runs || [];
+            }
+            const candidates = [];
+            const seen = new Set();
+            for (const run of runs) {
+              if (!run || !Number.isSafeInteger(run.id) ||
+                  run.head_branch !== 'main' ||
+                  (run.head_repository?.full_name &&
+                   run.head_repository.full_name !== repository)) continue;
+              const name = String(run.name || '');
+              if (!/cortes|tiktok|kwai|pinterest|threads|instagram|facebook|linkedin|youtube|publish|buffer/i.test(name)) continue;
+              if (/qa[- ]p0|p0[- ]qa|p0 publication incident|watchdog|controller|executor|diagnostic/i.test(name)) continue;
+              const queued = ['queued','pending','waiting','requested'].includes(run.status);
+              if (!queued && !['failure','timed_out'].includes(run.conclusion)) continue;
+              const created = Date.parse(run.created_at || '');
+              const age = now - created;
+              if (!Number.isFinite(created) || age < 0) continue;
+              if (queued ? age < 20*60000 || age > 8*3600000 :
+                  age > (context.eventName === 'workflow_run' ? 24 : 2)*3600000) continue;
+              const day = new Date(created).toISOString().slice(0,10);
+              const fingerprint = queued
+                ? hash('gha-stale',repository,name,day)
+                : hash('gha',repository,name,run.conclusion,day);
+              if (seen.has(fingerprint)) continue;
+              seen.add(fingerprint);
+              candidates.push({run,name,fingerprint,queued,network:networkOf(name)});
+            }
+            if (!candidates.length) {
+              core.notice('QA_P0_CLOUD_MONITOR=PASS candidates=0 opened=0');
+              return;
+            }
+            const issues = [];
+            for (let page=1; page<=5; page++) {
+              const {data} = await github.rest.issues.listForRepo({
+                owner,repo,state:'all',labels:'QA-P0',per_page:100,page
+              });
+              issues.push(...data.filter(x => !x.pull_request));
+              if (data.length<100) break;
+            }
+            let readbacks=0, opened=0;
+            for (const item of candidates) {
+              const marker = 'QA-P0-FINGERPRINT:' + item.fingerprint;
+              let existing = issues.find(x => String(x.body||'').includes(marker));
+              let createdNow = false;
+              if (!existing && opened >= 2) {
+                core.warning('QA_P0_CLOUD_BACKPRESSURE remaining=1');
+                break;
+              }
+              const evidence = 'https://github.com/'+repository+'/actions/runs/'+item.run.id;
+              if (!existing) {
+                const stage = 'github_actions_' +
+                  (item.queued ? 'queued_stale' : item.run.conclusion);
+                const body = marker + '\n\nPRIORIDADE P0 / CORREÇÃO IMEDIATA.\n\n' +
+                  'Rede: '+item.network+'\nEstágio: '+stage+'\nEvidência: '+
+                  evidence+'\nInformação sanitizada: '+item.name.slice(0,100)+
+                  '\n\nInvestigar logs e reconciliar qualquer publicação incerta antes de reenviar. '+
+                  'Nenhum retry automático de mídia foi autorizado.';
+                const {data} = await github.rest.issues.create({
+                  owner,repo,
+                  title:'[QA P0]['+item.network+'] Falha de publicação — CORRIGIR IMEDIATAMENTE',
+                  body,labels:['QA-P0','publication-failure']
+                });
+                existing=data;
+                opened++;
+                createdNow = true;
+              }
+              const {data:proof} = await github.rest.issues.get({
+                owner,repo,issue_number:existing.number
+              });
+              if (!String(proof.body||'').includes(marker) ||
+                  !proof.labels.some(x => x.name==='QA-P0')) {
+                throw new Error('QA_P0_CLOUD_DELIVERY_NOT_VERIFIED');
+              }
+              readbacks++;
+              core.notice('QA_P0_CLOUD_DELIVERY_READBACK=PASS issue='+proof.number+
+                ' source_run='+item.run.id+' created='+createdNow);
+            }
+            core.notice('QA_P0_CLOUD_MONITOR=PASS candidates='+candidates.length+
+              ' verified='+readbacks+' opened='+opened);
