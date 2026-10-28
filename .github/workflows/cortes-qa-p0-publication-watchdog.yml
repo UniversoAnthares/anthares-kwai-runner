@@ -130,6 +130,7 @@ jobs:
             for (const item of candidates) {
               const marker = 'QA-P0-FINGERPRINT:' + item.fingerprint;
               let existing = issues.find(x => String(x.body||'').includes(marker));
+              let createdNow = false;
               if (!existing && opened >= 2) {
                 core.warning('QA_P0_CLOUD_BACKPRESSURE remaining=1');
                 break;
@@ -138,10 +139,10 @@ jobs:
               if (!existing) {
                 const stage = 'github_actions_' +
                   (item.queued ? 'queued_stale' : item.run.conclusion);
-                const body = marker + '\\n\\nPRIORIDADE P0 / CORREÇÃO IMEDIATA.\\n\\n' +
-                  'Rede: '+item.network+'\\nEstágio: '+stage+'\\nEvidência: '+
-                  evidence+'\\nInformação sanitizada: '+item.name.slice(0,100)+
-                  '\\n\\nInvestigar logs e reconciliar qualquer publicação incerta antes de reenviar. '+
+                const body = marker + '\n\nPRIORIDADE P0 / CORREÇÃO IMEDIATA.\n\n' +
+                  'Rede: '+item.network+'\nEstágio: '+stage+'\nEvidência: '+
+                  evidence+'\nInformação sanitizada: '+item.name.slice(0,100)+
+                  '\n\nInvestigar logs e reconciliar qualquer publicação incerta antes de reenviar. '+
                   'Nenhum retry automático de mídia foi autorizado.';
                 const {data} = await github.rest.issues.create({
                   owner,repo,
@@ -150,6 +151,7 @@ jobs:
                 });
                 existing=data;
                 opened++;
+                createdNow = true;
               }
               const {data:proof} = await github.rest.issues.get({
                 owner,repo,issue_number:existing.number
@@ -160,7 +162,7 @@ jobs:
               }
               readbacks++;
               core.notice('QA_P0_CLOUD_DELIVERY_READBACK=PASS issue='+proof.number+
-                ' source_run='+item.run.id+' created='+Boolean(existing.number && opened));
+                ' source_run='+item.run.id+' created='+createdNow);
             }
             core.notice('QA_P0_CLOUD_MONITOR=PASS candidates='+candidates.length+
               ' verified='+readbacks+' opened='+opened);
