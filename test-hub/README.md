@@ -217,3 +217,9 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - **PROVEN:** o run [40565169978](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40565169978) gerou 149 transcrições e hashes de mídia verificados; cinco casos ruidosos foram reavaliados pelo run [40568800225](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40568800225).
 - **PROVEN EM NEON:** 149 quarentenas editoriais resolvidas após integração de prova e metadados no GitHub; resultado final: 131 confirmadas, 162 queued elegíveis, **zero isolated**; primário cloud desativado e nenhuma execução em curso.
 - Registro detalhado: `test-hub/findings/2026-10-27-threads-asr-149-proven.md`. Isso não autoriza publicação nem ativação do cloud primary sem fencing.
+
+### AOI item fixo 9 — supervisão e alertas P0 externos PROVEN (2026-10-28)
+- GitHub Issues é a autoridade dos incidentes P0; a detecção externa roda em **GitHub-hosted Ubuntu 24.04**, sem depender do runner Windows ou Codeberg. Forgejo CI sandbox mantém QA não publicador a cada 12 horas.
+- **PROVEN:** [job 123145935173](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/40782057532/job/123145935173) concluiu SUCCESS e registrou `QA_P0_CLOUD_ALERT_DELIVERED=PASS` na issue real #1780, comentário 6482589037; readback GET confirmou entrega, 0 tickets duplicados e 2 fingerprints reconciliados.
+- A rota hospedada tem concorrência própria e continua operacional mesmo com a job Windows queued. Leitura autenticada WordPress pelo Windows é preservada; **reparação de incidentes é item 16**.
+- Finding append-only: `test-hub/findings/20261028-qa-p0-hosted-alert-delivery-proven.md`, que supera o finding RUNNING do mesmo escopo.
