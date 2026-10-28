@@ -30,6 +30,45 @@ class XIndependentCloudPrimaryTests(unittest.TestCase):
         self.assertIsNone(cloud.eligible(self.sample(media_url="https://evil.example/clip.mp4")))
         self.assertIsNone(cloud.eligible(self.sample(microedit={"final_duration":50})))
 
+    def test_x_cloud_queries_only_x_queue_without_other_open_issues(self):
+        from unittest.mock import MagicMock
+        issue = self.sample()
+        issue["number"] = 1002
+        issue["created_at"] = (datetime.now(timezone.utc) -
+                               timedelta(days=1)).isoformat()
+        response = MagicMock()
+        response.json.return_value = {
+            "total_count": 1, "incomplete_results": False,
+            "items": [issue],
+        }
+        with patch.dict("os.environ", {"GH_TOKEN": "unit-test"}), \
+             patch.object(cloud.requests, "get", return_value=response) as get, \
+             patch.object(cloud, "github", side_effect=AssertionError(
+                 "Generic open-issue queue must not be scanned")):
+            actual, payload = cloud.first_item()
+        self.assertEqual(actual["number"], 1002)
+        self.assertEqual(payload["account"], "lucasyahn")
+        self.assertIn('in:title "[X-PUBLISH]"', get.call_args.kwargs["params"]["q"])
+        self.assertEqual(get.call_args.kwargs["params"]["per_page"], 100)
+
+    def test_x_cloud_fails_closed_on_incomplete_or_capped_search(self):
+        from unittest.mock import MagicMock
+        for result, expected in [
+            ({"total_count": 1, "incomplete_results": True, "items": []},
+             "X_GITHUB_OPEN_QUEUE_SEARCH_INCOMPLETE"),
+            ({"total_count": 1000, "incomplete_results": False, "items": []},
+             "X_GITHUB_OPEN_QUEUE_SEARCH_LIMIT"),
+            ({"total_count": 2, "incomplete_results": False, "items": []},
+             "X_GITHUB_OPEN_QUEUE_SEARCH_INCOMPLETE"),
+        ]:
+            with self.subTest(expected=expected):
+                response = MagicMock()
+                response.json.return_value = result
+                with patch.dict("os.environ", {"GH_TOKEN": "unit-test"}), \
+                     patch.object(cloud.requests, "get", return_value=response):
+                    with self.assertRaisesRegex(RuntimeError, expected):
+                        cloud.first_item()
+
     def test_window_failover_uses_recent_successful_authenticated_cloud(self):
         fresh=(datetime.now(timezone.utc)-timedelta(minutes=3)).isoformat()
         def repo(path):
