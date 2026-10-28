@@ -346,7 +346,7 @@ def main():
     if not TOKEN:raise RuntimeError("GITHUB_TOKEN_REQUIRED")
     items=[]
     bad=[]
-    for label,fn in (("github",workflow_incidents),("codeberg",codeberg_incidents),("daily-round",daily_round_incidents),("wordpress",wp_incidents)):
+    for label,fn in (("github",workflow_incidents),("daily-round",daily_round_incidents),("wordpress",wp_incidents)):
         try:
             result=fn()
             items.extend(result)

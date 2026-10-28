@@ -1,5 +1,5 @@
 {
-  "revision": "2026-10-27-cancel-first-quota-contract",
+  "revision": "2026-10-27-codeberg-suspended-excluded-github-gitlab",
   "checked_at_utc": "2026-10-21T21:20:00Z",
   "rules": {
     "regression_check_required_each_round": true,
@@ -306,22 +306,22 @@
       "evidence": "Neon table cortes_publications exists with prior confirmed real Kwai job and phase4 self-test; live 2026-10-18 Cloudflare CORTES backlog cannot be inferred or safely moved from this table alone."
     },
     "codeberg_repo": {
-      "status": "LIVE_GIT_PARITY_PROVEN_20261027",
-      "evidence_class": "LIVE_GITHUB_MIRROR_RUN",
+      "status": "SUSPENDED_ACCOUNT_DISABLED_20261027",
+      "evidence_class": "OWNER_CONFIRMED_ACCOUNT_SUSPENSION",
       "verified_at_utc": "2026-10-27",
-      "evidence": "GitHub mirror job 122489626332 confirmed Codeberg public readback at f25cf957168cfabead97ba438fa286b7b8f4fa54, branch main correct, actions enabled.",
-      "eligible": true,
+      "evidence": "Owner confirmed account suspended; use GitHub source and existing GitLab Git mirror. Windows Codeberg clipper mirror and TikTok watchdog disabled; QA GitHub primary; Codeberg excluded from routing.",
+      "eligible": false,
       "scope": "git recovery mirror; not a CI runner",
-      "reopen_condition": "authenticated Codeberg mirror finishes, public main equals fresh GitHub main and SHA readback succeeds"
+      "reopen_condition": "Owner explicitly authorizes after provider account reinstatement and fresh independently verified permissions/quota"
     },
     "codeberg_actions": {
-      "status": "CI_RUNNER_HOMOLOGATED_SUCCESS_20261027",
-      "evidence_class": "LIVE_CODEBERG_ACTIONS_RUN_2",
+      "status": "SUSPENDED_ACCOUNT_DISABLED_20261027",
+      "evidence_class": "OWNER_CONFIRMED_ACCOUNT_SUSPENSION",
       "verified_at_utc": "2026-10-27",
-      "evidence": "anthares-video-studio Forgejo Actions run #2 on main commit 9369a9213f succeeded in 22s: checkout, Node.js setup, configured secret check, Synthetic D1 journal contract and job completion. https://codeberg.org/UniversoAnthares/anthares-video-studio/actions/runs/2",
-      "eligible": true,
+      "evidence": "Owner confirmed account suspended; use GitHub source and existing GitLab Git mirror. Windows Codeberg clipper mirror and TikTok watchdog disabled; QA GitHub primary; Codeberg excluded from routing.",
+      "eligible": false,
       "scope": "verified synthetic D1 CI runner; not yet authorized as generic publisher or all-repository CI fallback",
-      "reopen_condition": "Generic CI routing and publisher capability require separate workload/permissions proof; Forgejo ignores workflow permissions field."
+      "reopen_condition": "Owner explicitly authorizes after provider account reinstatement and fresh independently verified permissions/quota"
     },
     "bitrise": {
       "status": "EXCLUDED_FROM_CI_EXECUTION_BY_OWNER_20261027",
