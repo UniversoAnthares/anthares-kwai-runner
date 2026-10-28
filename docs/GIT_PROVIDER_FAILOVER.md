@@ -1,68 +1,62 @@
-# Git provider failover — Codeberg preferred peer
+# Git provider failover — Codeberg suspended
 
-As of 2026-10-21, GitHub is the canonical write authority. Codeberg is the
-preferred **source mirror** for recovery, with strict fresh-content checks.
-GitLab hosted CI is excluded because real pipeline jobs fail with
-`ci_quota_exceeded`. The previously proven private GitLab issue queue for
-Anthares Remote stays active until a separately proven transport replaces it;
-that API is independent of GitLab CI minutes.
+Operational routing as verified on 2026-10-28. GitHub remains the canonical
+write authority. Codeberg is **not** an eligible automatic mirror, CI executor,
+publisher, or failover destination while the account is suspended.
 
-## Verified state (21 October 2026)
+## Current verified routes
 
-- GitHub main: `2884ff77c425` at the sampled comparison (moves frequently).
-- Codeberg main: `1c2f7dc3341c`, 20 commits behind at the sampled comparison.
-  Codeberg commit was a direct ancestor, so fast-forward is safe. **Not promoted.**
-- Last Codeberg mirror job proven to update the public ref:
-  GitHub Actions run `39665507700`. The authenticated secret
-  `CODEBERG_PUSH_URL` already exists on that runner; never copy or print it.
-- Codeberg API shows `has_actions=false` and default branch
-  `fix/queue-claim-shell-env-injection-20261010`, **not** `main`.
-  An authenticated repository administrator must enable Actions and correct the
-  default branch after verifying the intended protected-branch policy.
-- GitLab hosted CI reports `ci_quota_exceeded` in pipeline `2973638637`.
-- AppVeyor mirror project builds `54927735` and `54927736` were queued,
-  without a currently proven hosted runner. Do not equate historical success
-  with present-day capacity.
+- **GitHub → Forgejo:** the independent Windows job
+  `Anthares Forgejo Git Redundancy 30min` verifies all source refs for its
+  15 allowlisted repositories. The GitHub workflow
+  `.github/workflows/forgejo-mirror-sync.yml` provides an additional
+  scheduled check, but GitHub cron delivery is not a guaranteed 10-minute SLA.
+- **GitHub → GitLab:** the Windows task `CORTES-Git-Provider-Mirrors`
+  targets only GitLab. Its recorded `PROVEN_SUPERSET` result means the
+  GitHub main commit is an ancestor of the GitLab main commit; it does
+  **not** establish exact head equality, full-ref parity, or permission
+  to reset the GitLab branch. GitLab hosted CI remains ineligible when
+  `ci_quota_exceeded` persists.
+- **GitLab → Forgejo:** `Anthares Forgejo GitLab Extra Mirrors 30min`
+  verifies three extra public source sets. Other independent GitLab
+  histories are tracked separately; do not treat these extra mirrors as
+  evidence that all six independent histories have been imported.
+- **Codeberg:** `.github/workflows/mirror-codeberg.yml`,
+  `.github/workflows/x-codeberg-neon-promote.yml` and
+  `.github/workflows/cortes-tiktok-codeberg-guarded-promotion.yml`
+  are intentionally disabled. The legacy Windows Codeberg Clipper
+  mirror and Codeberg TikTok watchdog are disabled.
 
-## Safe synchronization
+## Selection and safety
 
-Workflow `.github/workflows/mirror-codeberg.yml` now only mirrors
-`main`, serializes and coalesces frequent pushes, and runs periodically.
-It fails closed if the existing Codeberg push secret is missing. For every run:
+NORMAL: use GitHub as canonical source, with Forgejo and GitLab as
+independent, verified backups. Never take Codeberg as primary or attempt
+to restore Codeberg publishing because a stale URL or workflow exists.
 
-1. Fetch the latest authoritative GitHub main.
-2. Fetch the current public Codeberg main without privileged credentials.
-3. Verify Codeberg head is an ancestor of GitHub head, otherwise stop.
-4. Push exactly `main` **without force** using the preexisting GitHub secret.
-5. Independently read back public Codeberg main and compare full SHAs.
+GITHUB_UNAVAILABLE: independently confirm the intended Git ref, commit
+and tree on Forgejo, then on GitLab if needed. Promote neither a stale
+nor a divergent replica automatically. Require fresh integrity,
+appropriate authorization and an explicitly validated recovery plan.
 
-A queued/pending/canceled workflow or a green result without
-`CODEBERG_MAIN_FAST_FORWARD_VERIFIED=PASS` does **not** count as synchronization.
-The source mirror is eligible for failover only after fresh SHA parity.
+CI: use a provider only after current real runner eligibility, secret
+availability, quota and job results are verified. A Git mirror does not
+itself establish a working CI runner. Do not assume the Hostinger
+read-only Forgejo runner can execute Linux browser or publishing jobs.
 
-## Selection rules
+PUBLICATIONS: GitHub's TikTok jobs are guarded against simultaneous
+Forgejo-primary publication. X has a separate GitHub workflow gated by
+`ANTHARES_X_AUTOPUBLISH`. Do not arm X, Clipper or TikTok on an
+unhomologated provider. Keep Neon idempotency, fencing, daily limits
+and reconciliation of uncertain publication outcomes.
 
-NORMAL: Github is canonical. Codeberg is a checked independent repository backup.
+RECOVERY: compare source and destination branches, tags and reachable
+objects. Never force-push, reset shared branches, overwrite unrelated
+histories or recreate blocked operations through another route. The
+Codeberg-exclusive public histories were recovered separately to
+private external storage, not merged into production Git branches.
 
-GITHUB_UNAVAILABLE: consider Codeberg first **only** after a new independent
-read confirms correct SHA/branch/tree, absence of divergence and the intended
-checkpoint. If Codeberg is stale, fail closed and inspect the verified GitLab
-repository in an explicitly authorized emergency recovery; never silently
-deploy old Codeberg code.
+## Historical note
 
-CI: GitLab CI is removed from automatic routing. AppVeyor and Github public
-Actions are candidates only when a recent real job proves an available runner.
-Codeberg Actions is **not** an executor while `has_actions=false`; merely
-hosting a Git mirror does not create a worker or authorize personal LinkedIn
-OAuth and Neon OIDC. Enabling Actions, establishing runner eligibility, and
-independently validating signed publisher authorization are explicit gates.
-
-PUBLICATIONS: the Neon central ledger/fencing, 100/day ceiling across social
-networks and account-level limits remain authoritative. Never run simultaneous
-GitHub and Codeberg publishers before proving idempotence and mutually
-exclusive leases; reconcile uncertain posts before re-execution.
-
-RECOVERY: compare every reachable provider's intended branch and tag refs.
-Never automatically force-push, hard-reset a shared branch, rewrite divergent
-history, or promote stale content. All credentials stay in authorized
-provider/CI secret stores.
+The 2026-10-21 Codeberg-preferred mirror strategy and its pre-suspension
+SHA and Actions findings are obsolete. Do not use them as operational
+selection criteria after the 2026-10-27 account suspension.
