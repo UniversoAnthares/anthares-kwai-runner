@@ -25,9 +25,6 @@ type Config struct {
 	AllowShell    bool
 	AllowedRoots  []string
 	MaxConcurrent int
-	WakeURL string
-	WakeHeartbeatURL string
-	WakeToken string
 }
 
 type Job struct {
@@ -86,10 +83,9 @@ func main() {
 	go resultReplayLoop(cfg)
 
 	sem := executionSemaphore(cfg.MaxConcurrent)
-	var wake wakePollState
 	for {
 		sem <- struct{}{}
-		job, err := wake.poll(cfg)
+		job, err := pollJob(cfg)
 		if err != nil {
 			<-sem
 			fmt.Fprintln(os.Stderr, "poll error:", err)
@@ -132,9 +128,6 @@ func loadConfig() (Config, error) {
 		DeviceID:      os.Getenv("ANTHARES_DEVICE_ID"),
 		AllowShell:    os.Getenv("ANTHARES_ALLOW_SHELL") == "1",
 		MaxConcurrent: 4,
-		WakeURL: strings.TrimSpace(os.Getenv("ANTHARES_WAKE_URL")),
-		WakeHeartbeatURL: strings.TrimSpace(os.Getenv("ANTHARES_WAKE_HEARTBEAT_URL")),
-		WakeToken: os.Getenv("ANTHARES_WAKE_TOKEN"),
 	}
 	if v, err := strconv.Atoi(os.Getenv("ANTHARES_MAX_CONCURRENT")); err == nil && v >= 1 && v <= 8 {
 		c.MaxConcurrent = v
@@ -151,9 +144,6 @@ func loadConfig() (Config, error) {
 	}
 	if c.DeviceID == "" {
 		return c, errors.New("ANTHARES_DEVICE_ID is required")
-	}
-	if err := validateWakeConfig(c); err != nil {
-		return c, err
 	}
 	if c.ControlURL == "" {
 		if !issueQueueConfigured() {
@@ -182,7 +172,7 @@ func heartbeatLoop(cfg Config) {
 	defer ticker.Stop()
 	failures := 0
 	for {
-		if err := heartbeatWithWakeFallback(cfg); err != nil {
+		if err := heartbeat(cfg); err != nil {
 			failures++
 			fmt.Fprintf(os.Stderr, "heartbeat error (%d/4): %v\n", failures, err)
 			if failures >= 4 {
