@@ -35,7 +35,7 @@ jobs:
           import json
           p=Path('vercel-ara-reserve/api/mcp.js').read_text()
           assert p.count('await notifyWakeAfterCommit(d)')==1
-          insert=p.index('await pool.query("INSERT INTO ara_reserve_jobs')
+          insert=p.index('pool.query("INSERT INTO ara_reserve_jobs')
           signal=p.index('await notifyWakeAfterCommit(d)')
           wait=p.index('async function execute(')
           assert insert < signal < wait
