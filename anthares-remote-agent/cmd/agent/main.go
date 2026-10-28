@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"sync/atomic"
 )
 
 type Config struct {
@@ -25,6 +26,8 @@ type Config struct {
 	AllowShell    bool
 	AllowedRoots  []string
 	MaxConcurrent int
+	WakeEnabled bool
+	WakeListenerToken string
 }
 
 type Job struct {
@@ -83,6 +86,7 @@ func main() {
 	go resultReplayLoop(cfg)
 
 	sem := executionSemaphore(cfg.MaxConcurrent)
+	wake := startWakeListener(cfg)
 	for {
 		sem <- struct{}{}
 		job, err := pollJob(cfg)
@@ -94,7 +98,7 @@ func main() {
 		}
 		if job == nil {
 			<-sem
-			time.Sleep(2 * time.Second)
+			wake.waitAfterEmpty()
 			continue
 		}
 		if err := validateJobID(job.ID); err != nil || strings.TrimSpace(job.Type) == "" {
@@ -128,6 +132,8 @@ func loadConfig() (Config, error) {
 		DeviceID:      os.Getenv("ANTHARES_DEVICE_ID"),
 		AllowShell:    os.Getenv("ANTHARES_ALLOW_SHELL") == "1",
 		MaxConcurrent: 4,
+		WakeEnabled: os.Getenv("ANTHARES_WAKE_ENABLED") == "1",
+		WakeListenerToken: os.Getenv("ANTHARES_WAKE_LISTENER_TOKEN"),
 	}
 	if v, err := strconv.Atoi(os.Getenv("ANTHARES_MAX_CONCURRENT")); err == nil && v >= 1 && v <= 8 {
 		c.MaxConcurrent = v
@@ -157,6 +163,12 @@ func loadConfig() (Config, error) {
 	u, err := url.Parse(c.ControlURL)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
 		return c, errors.New("ANTHARES_CONTROL_URL must be an HTTPS origin without credentials, path, query or fragment")
+	}
+	// Invalid wake credentials never prevent the original HTTP or private
+	// issue-queue transport from operating normally.
+	if c.WakeEnabled && (c.DeviceID != "DESKTOP-FTDK0HP" || !validWakeListenerToken(c.WakeListenerToken)) {
+		c.WakeEnabled = false
+		c.WakeListenerToken = ""
 	}
 	return c, nil
 }
@@ -518,4 +530,176 @@ func validateJobID(id string) error {
 		}
 	}
 	return nil
+}
+
+// wakeListener is only an out-of-band hint. All jobs, leases, results and
+// idempotency remain with the original authenticated Vercel control plane.
+// The opt-in listener has its own credential, never the device bearer token.
+const (
+	wakeHostingerURL = "https://anthares.us/ara-notify/index.php"
+	wakeIdleRecheck = 12 * time.Second
+	wakeLegacyRecheck = 2 * time.Second
+)
+
+type wakeListener struct {
+	online atomic.Bool
+	events chan struct{}
+}
+
+type wakeReply struct {
+	OK bool
+	Protocol string
+	Sequence int64
+	Wake *bool
+	Role string
+}
+
+func validWakeListenerToken(token string) bool {
+	if len(token) < 32 || len(token) > 128 {
+		return false
+	}
+	for _, ch := range token {
+		if !(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' ||
+			ch >= '0' && ch <= '9' || ch == '_' || ch == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func (w *wakeListener) signal() {
+	if w == nil {
+		return
+	}
+	select {
+	case w.events <- struct{}{}:
+	default:
+	}
+}
+
+func (w *wakeListener) setOnline(value bool) {
+	if w != nil && w.online.Swap(value) != value {
+		// Reconcile immediately on connection or failure, never wait for a
+		// notification that might have arrived before subscription.
+		w.signal()
+	}
+}
+
+func (w *wakeListener) idleDelay() time.Duration {
+	if w != nil && w.online.Load() {
+		return wakeIdleRecheck
+	}
+	return wakeLegacyRecheck
+}
+
+func (w *wakeListener) waitAfterEmpty() {
+	delay := w.idleDelay()
+	if w == nil {
+		time.Sleep(delay)
+		return
+	}
+	t := time.NewTimer(delay)
+	defer t.Stop()
+	select {
+	case <-w.events:
+	case <-t.C:
+	}
+}
+
+// The broker never supplies commands or job IDs. Reject unexpected fields,
+// redirects, stale sequences and ambiguous acknowledgements.
+func readHostingerWake(cfg Config, endpoint, action string, since int64, client *http.Client) (wakeReply, error) {
+	var out wakeReply
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Hostname() == "" ||
+		u.RawQuery != "" || u.Fragment != "" {
+		return out, errors.New("wake_origin_invalid")
+	}
+	if action != "health" && action != "wait" {
+		return out, errors.New("wake_action_invalid")
+	}
+	q := u.Query()
+	q.Set("action", action)
+	q.Set("device_id", cfg.DeviceID)
+	if action == "wait" {
+		q.Set("since", strconv.FormatInt(since, 10))
+		q.Set("seconds", "20")
+	}
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("X-Anthares-Notify-Key", cfg.WakeListenerToken)
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return out, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return out, fmt.Errorf("wake_http_status_%d", resp.StatusCode)
+	}
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, 513))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&out); err != nil {
+		return wakeReply{}, errors.New("wake_payload_invalid")
+	}
+	var trailing any
+	if decoder.Decode(&trailing) != io.EOF {
+		return wakeReply{}, errors.New("wake_payload_trailing")
+	}
+	if !out.OK || out.Protocol != "ara-wake-v1" || out.Sequence < 0 {
+		return wakeReply{}, errors.New("wake_protocol_invalid")
+	}
+	if action == "health" {
+		if out.Role != "listener" || out.Wake != nil {
+			return wakeReply{}, errors.New("wake_health_invalid")
+		}
+	} else if out.Wake == nil || out.Role != "" || out.Sequence < since ||
+		(*out.Wake != (out.Sequence > since)) {
+		return wakeReply{}, errors.New("wake_sequence_invalid")
+	}
+	return out, nil
+}
+
+func (w *wakeListener) run(cfg Config) {
+	client := &http.Client{
+		Timeout: 28 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	for {
+		first, err := readHostingerWake(cfg, wakeHostingerURL, "health", 0, client)
+		if err != nil {
+			w.setOnline(false)
+			time.Sleep(4 * time.Second)
+			continue
+		}
+		sequence := first.Sequence
+		w.setOnline(true)
+		for {
+			next, err := readHostingerWake(cfg, wakeHostingerURL, "wait", sequence, client)
+			if err != nil {
+				break
+			}
+			if *next.Wake {
+				sequence = next.Sequence
+				w.signal()
+			}
+		}
+		w.setOnline(false)
+		time.Sleep(4 * time.Second)
+	}
+}
+
+func startWakeListener(cfg Config) *wakeListener {
+	if !cfg.WakeEnabled || cfg.ControlURL == "" || cfg.DeviceID != "DESKTOP-FTDK0HP" ||
+		!validWakeListenerToken(cfg.WakeListenerToken) {
+		return nil
+	}
+	w := &wakeListener{events: make(chan struct{}, 1)}
+	go w.run(cfg)
+	return w
 }
