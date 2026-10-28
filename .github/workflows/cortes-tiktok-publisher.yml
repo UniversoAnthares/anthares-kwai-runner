@@ -50,7 +50,7 @@ concurrency:
 
 jobs:
   tiktok:
-    if: github.event_name == 'pull_request' || (github.event_name != 'workflow_run' && vars.TIKTOK_CODEBERG_PRIMARY != 'true')
+    if: github.event_name == 'pull_request' || (github.event_name != 'workflow_run' && (vars.TIKTOK_CODEBERG_PRIMARY != 'true' && vars.TIKTOK_FORGEJO_PRIMARY != 'true'))
     runs-on: ubuntu-24.04
     outputs:
       queue_followup: ${{ steps.publish.outputs.queue_followup }}
@@ -143,7 +143,7 @@ jobs:
   # workflow_dispatch/schedule caller. For a Core Supervisor workflow_run,
   # dispatch that canonical entrypoint instead of calling Neon directly.
   relay:
-    if: vars.TIKTOK_CODEBERG_PRIMARY != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == 'UniversoAnthares/anthares-kwai-runner' && github.event.workflow_run.name == 'Anthares Core Supervisor'))
+    if: (vars.TIKTOK_CODEBERG_PRIMARY != 'true' && vars.TIKTOK_FORGEJO_PRIMARY != 'true') && github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == 'UniversoAnthares/anthares-kwai-runner' && github.event.workflow_run.name == 'Anthares Core Supervisor'))
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
@@ -160,7 +160,7 @@ jobs:
   # The canonical Neon lease and STARTED fence serialize every upload.
   followup:
     needs: [tiktok]
-    if: ${{ vars.TIKTOK_CODEBERG_PRIMARY != 'true' && github.ref == 'refs/heads/main' && needs.tiktok.result == 'success' && needs.tiktok.outputs.queue_followup == 'true' && github.event_name != 'pull_request' }}
+    if: ${{ (vars.TIKTOK_CODEBERG_PRIMARY != 'true' && vars.TIKTOK_FORGEJO_PRIMARY != 'true') && github.ref == 'refs/heads/main' && needs.tiktok.result == 'success' && needs.tiktok.outputs.queue_followup == 'true' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 7
     permissions:
