@@ -15,7 +15,6 @@ concurrency:
 
 jobs:
   mirror:
-    if: ${{ false }} # Disabled: Codeberg account suspended
     # Codeberg account suspended. Never attempt Git/API/Actions against it.
     if: ${{ false }}
     runs-on: ubuntu-24.04
