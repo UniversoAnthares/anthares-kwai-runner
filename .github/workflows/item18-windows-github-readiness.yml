@@ -1,0 +1,80 @@
+# AOI item 18. A single nonpublishing GitHub-hosted readiness check.
+name: Item 18 Windows GitHub contingency - readiness only
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/cortes-tiktok-primary-windows-fallback.yml'
+      - '.github/workflows/cortes-tiktok-lucasrosalem4-windows-fallback.yml'
+      - '.github/workflows/item18-windows-github-readiness.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: item18-readiness
+  cancel-in-progress: false
+jobs:
+  readiness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Checkout source without stored credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify that neither Windows fallback automatically publishes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          files={
+            'universo':'cortes-tiktok-primary-windows-fallback.yml',
+            'lucas4':'cortes-tiktok-lucasrosalem4-windows-fallback.yml',
+          }
+          for account,name in files.items():
+              raw=(Path('.github/workflows')/name).read_text(encoding='utf-8')
+              head=raw.split('jobs:',1)[0]
+              assert re.search(r'(?m)^on:\\s*$',head)
+              assert re.search(r'(?m)^  workflow_dispatch:',head)
+              assert not re.search(r'(?m)^  (schedule|workflow_run|push):',head)
+              expected_var='TIKTOK_'+('UNIVERSO' if account=='universo' else 'LUCAS4')+'_WINDOWS_TAKEOVER_APPROVED'
+              assert "vars."+expected_var+" == 'true'" in raw
+              assert "inputs.diagnostic_only == false" in raw
+              assert "inputs.proof_publish_one == true" in raw
+              assert "vars.TIKTOK_FORGEJO_PRIMARY != 'true'" in raw
+              assert "vars.TIKTOK_CODEBERG_PRIMARY != 'true'" in raw
+              assert "    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]" in raw
+              print('ITEM18_'+account.upper()+'_FALLBACK_FENCED=PASS')
+          print('ITEM18_SAFE_READINESS_CONTRACT=PASS')
+          PY
+      - name: Check actual GitHub workflow eligibility without dispatch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner,repo}=context.repo;
+            const names=[
+              'cortes-tiktok-primary-windows-fallback.yml',
+              'cortes-tiktok-lucasrosalem4-windows-fallback.yml'
+            ];
+            let enabled=0;
+            for (const workflow_id of names) {
+              let state='UNKNOWN';
+              try {
+                const response=await github.rest.actions.getWorkflow({owner,repo,workflow_id});
+                state=response.data.state||'UNKNOWN';
+              } catch(error) {
+                core.warning('ITEM18_GITHUB_WORKFLOW_READ_UNAVAILABLE '+workflow_id+
+                  ' code='+String(error.status||'UNKNOWN'));
+              }
+              if(state==='active')enabled++;
+              core.notice('ITEM18_WORKFLOW_STATE '+workflow_id+'='+state);
+            }
+            core.notice('GIT_READY=UNKNOWN (external ref readback not part of this check)');
+            core.notice('RUNNER_READY=UNKNOWN (self-hosted Windows not exercised)');
+            core.notice('PUBLISH_WORKFLOW_ENABLED='+String(enabled===names.length));
+            core.notice('PUBLISH_AUTH_VERIFIED=false');
+            core.notice('LEASE_RELEASE_PROVEN=false');
+            core.notice('TAKEOVER_ALLOWED=false');
+            core.notice('CONTINGENCY_READY=false');
+            core.notice('ITEM18_READINESS=PARTIAL');
