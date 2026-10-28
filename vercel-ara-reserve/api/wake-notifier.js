@@ -18,6 +18,7 @@ function validPublicIPv4(value){
 }
 function postDirectOrigin(device,secret,ip,requestImpl=https.request){
   return new Promise(resolve=>{
+    let usedOriginLookup=false;
     let settled=false;
     const finish=result=>{if(!settled){settled=true;resolve(result);}};
     const body=JSON.stringify({device_id:device});
@@ -31,6 +32,7 @@ function postDirectOrigin(device,secret,ip,requestImpl=https.request){
         'Content-Length':Buffer.byteLength(body)
       },
       lookup:(hostname,opts,callback)=>{
+        usedOriginLookup=true;
         if(hostname!=='anthares.us')return callback(new Error('wake_host_mismatch'));
         if(opts&&opts.all)return callback(null,[{address:ip,family:4}]);
         return callback(null,ip,4);
@@ -45,8 +47,15 @@ function postDirectOrigin(device,secret,ip,requestImpl=https.request){
         });
         res.on('error',()=>finish({enabled:true,ok:false,reason:'transport_error'}));
         res.on('end',()=>{
-          if(res.statusCode!==202)
-            return finish({enabled:true,ok:false,reason:'http_'+res.statusCode});
+          if(res.statusCode!==202){
+            const rawServer=String(res.headers?.server||'unknown');
+            const server=rawServer.replace(/[^A-Za-z0-9_-]/g,'').slice(0,36);
+            const reqId=String(res.headers?.['x-hcdn-request-id']||'')
+              .replace(/[^A-Za-z0-9_-]/g,'').slice(0,90);
+            return finish({enabled:true,ok:false,reason:
+              'http_'+res.statusCode+'_'+(usedOriginLookup?'lookup':'no_lookup')+
+              '_'+server+(reqId?'_rid_'+reqId:'')});
+          }
           let receipt={};
           try{receipt=JSON.parse(responseBody);}catch{}
           const sequence=Number(receipt?.sequence);
