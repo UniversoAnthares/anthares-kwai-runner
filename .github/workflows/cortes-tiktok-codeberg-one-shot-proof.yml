@@ -9,6 +9,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   dispatch:
+    # Codeberg is suspended. Retain history; dispatch only through separately homologated Forgejo identity.
+    if: ${{ false }}
     runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
     timeout-minutes: 6
     env:

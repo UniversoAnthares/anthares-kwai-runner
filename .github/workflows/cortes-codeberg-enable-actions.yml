@@ -10,6 +10,8 @@ permissions:
   contents: read
 jobs:
   configure-codeberg:
+    # Codeberg is suspended. Retain history; dispatch only through separately homologated Forgejo identity.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
