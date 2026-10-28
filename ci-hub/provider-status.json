@@ -404,6 +404,63 @@
       "global_dispatch_enabled": false,
       "node_runtime": "v24.22.1 LTS installed on Hostinger, official nodejs.org SHA-256 verified",
       "migration_scope_complete": true
+    },
+    "forgejo_service_redirection_20261028": {
+      "status": "SOURCE_ROUTES_ACTIVE_CODEBERG_EXCLUDED_PUBLISHER_PROMOTION_PENDING",
+      "evidence_class": "GITHUB_MERGED_PRS_PLUS_HOSTINGER_FORGEJO_ACTION_RUN_DATABASE_READBACK",
+      "verified_date": "2026-10-28",
+      "canonical_git_provider": "github",
+      "redundant_git_provider": "anthares-admin Forgejo on anthares.us",
+      "suspended_provider": "codeberg",
+      "codeberg_runtime_eligible": false,
+      "services": {
+        "tiktok": {
+          "git_backup": "anthares-admin/anthares-tiktok-forgejo; anthares-admin/anthares-clipper",
+          "proof": "Own Forgejo independent account identity/preflight runs 233 and 234 SUCCESS; Github PR #1750 preserves mutually exclusive primary variable",
+          "operational_state": "INDEPENDENT_SESSION_OIDC_PREFLIGHT_VERIFIED_NO_PRODUCTION_PUBLISHER_PROMOTION",
+          "missing": "Fresh durable Neon ownership reconciliation, verified scheduler, both account-specific sessions and no duplicate queue STARTED before switching primary"
+        },
+        "x": {
+          "git_backup": "anthares-admin/anthares-kwai-runner",
+          "proof": "Github X cloud/QA is active authority; Codeberg X promotion disabled PR #1736; X secret sync disabled PR #1791",
+          "operational_state": "GITHUB_CLOUD_AUTHORITY_FOR_X_FORGEJO_IS_CODE_RECOVERY_ONLY",
+          "missing": "Independent Forgejo authenticated browser/session, Neon ownership and live no-duplicate proof before Forgejo publishing"
+        },
+        "cortes": {
+          "git_backup": "anthares-admin/anthares-clipper",
+          "proof": "WordPress-hosted Forgejo CORTES producer preflight run 238 SUCCESS, preflight=true, no enqueue (WP PR #205; clipper PRs #219-222)",
+          "operational_state": "FORGEJO_WP_INGRESS_PREFLIGHT_VERIFIED_LIVE_QUEUE_PRODUCER_NOT_ARMED",
+          "missing": "Reconcile dormant Forgejo clipper runs 235/237 (WAITING, no assigned task), prove live shared Neon fence, explicitly arm one writer only"
+        },
+        "qa": {
+          "git_backup": "anthares-admin/anthares-ci-sandbox",
+          "proof": "Forgejo sandbox real success QA run 243, contracts 246, Clipper 245, Kwai 247, safety 248, Node 249, Claude 250/251; 12h QA registered",
+          "operational_state": "NONPUBLISHING_QA_MIGRATED_LIVE_VERIFIED; GitHub P0 remains incident authority",
+          "missing": "No global CI/publisher promotion"
+        },
+        "wordpress": {
+          "git_backup": "anthares-admin/anthares-wordpress",
+          "proof": "Forgejo independent external QA run 236 SUCCESS, WordPress-hosted CORTES read-only producer preflight run 238 SUCCESS",
+          "operational_state": "EXTERNAL_WORDPRESS_QA_ROUTED_FORGEJO_VERIFIED",
+          "missing": "WordPress producer live enqueue remains separately gated"
+        },
+        "avs": {
+          "git_backup": "anthares-admin/anthares-video-studio",
+          "proof": "AVS GitHub PR #53 merged retiring Codeberg-only jobs; Github remains source and Cloudflare/Vercel routes",
+          "operational_state": "CODEBERG_FREE_GIT_AND_DEPLOY_ROUTE; BLOB_HOMOLOGATION_SEPARATELY_OPEN",
+          "missing": "Item 12 positive protected Preview Function POST independent of provider redirection"
+        }
+      },
+      "disabled_this_round": [
+        ".github/workflows/codeberg-x-secret-sync.yml",
+        ".github/workflows/cortes-codeberg-tiktok-confirmation-readback.yml"
+      ],
+      "disabling_pr": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1791",
+      "remaining_blocked_codeberg_workflow_mutations": [
+        ".github/workflows/cortes-tiktok-codeberg-fenced-canary.yml",
+        ".github/workflows/cortes-tiktok-codeberg-readonly-dispatch.yml"
+      ],
+      "guard": "No automatic publisher switch, no Codeberg dispatch, no credentials movement, no Neon lease changes; require terminal original and NOT_APPLIED for any successor publisher"
     }
   }
 }
