@@ -518,7 +518,8 @@
   "git_redundancy": {
     "canonical": "github",
     "recovery_order": [
-      "gitlab"
+      "gitlab",
+      "forgejo"
     ],
     "codeberg": {
       "repository": "https://codeberg.org/UniversoAnthares/anthares-kwai-runner",
@@ -535,6 +536,28 @@
       "reopen_condition": "fresh pipeline proof"
     },
     "fail_closed_on_divergence": true,
-    "no_force_push": true
+    "no_force_push": true,
+    "forgejo": {
+      "base_url": "https://anthares.us/forgejo/anthares-admin",
+      "role": "LAST_GIT_RECOVERY_REPLICA_ONLY",
+      "source": "UniversoAnthares GitHub main and all head/tag refs",
+      "verified_repositories": 12,
+      "head_tag_ref_parity": "VERIFIED_ALL_12_REPOSITORIES_20261027_2138_CAMPO_GRANDE",
+      "empty_source_repositories": [
+        "anthares-browser-state",
+        "anthares-kwai-session-vault"
+      ],
+      "windows_task": "Anthares Forgejo Git Redundancy 30min",
+      "windows_script": "D:\\AntharsWork\\cloud-storage\\forgejo-git-redundancy.ps1",
+      "sync_interval_minutes": 30,
+      "task_last_result": 0,
+      "reported_failures": 0,
+      "ci_eligible": false,
+      "autonomous_publisher_enabled": false,
+      "non_destructive": true,
+      "force_push": false,
+      "prune_remote": false,
+      "hosting_limitation": "Shared Hostinger; keep after GitLab for Git recovery; no CI/publishing promotion"
+    }
   }
 }
