@@ -1,38 +1,9 @@
 # Read-only standalone QA migrated from GitHub Actions.
 # All tests run on Codeberg's existing runner; publishers are untouched.
 name: Anthares standalone safety tests - Codeberg
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/anthares-standalone-safety-codeberg.yml'
-      - 'anthares_core/**'
-      - 'anthares_mobile/**'
-      - 'anthares_native/**'
-      - 'anthares_publisher/media_model.py'
-      - 'tools/kwai_login_ui_locator.py'
-      - 'tools/cortes_buffer_three_fanout.py'
-      - 'tools/cortes_linkedin_neon_fanout.py'
-      - 'tools/cortes_threads_cloud_*.mjs'
-      - 'infra/neon-cortes-threads-execution/**'
-      - 'email_queue.py'
-      - 'infra/x_*.py'
-      - 'tools/x_*.py'
-      - 'social_adapters/buffer_linkedin.py'
-      - 'cloudflare-worker/patches/apply-publisher-target-v17.py'
-      - 'tests/test_anthares_core_*.py'
-      - 'tests/test_anthares_mobile_ui_state.py'
-      - 'tests/test_kwai_login_ui_locator_semantic.py'
-      - 'tests/test_anthares_native_*.py'
-      - 'tests/test_email_queue.py'
-      - 'tests/test_x_*.py'
-      - 'tests/test_buffer_linkedin.py'
-      - 'tests/test_cortes_buffer_distribution.py'
-      - 'tests/test_strategic_publication_metadata.py'
-      - 'tests/threads_strategic_editorial.test.mjs'
-  schedule:
-    - cron: '41 4 * * *'
 permissions:
   contents: read
 concurrency:
@@ -40,6 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   contracts:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 14
     steps:

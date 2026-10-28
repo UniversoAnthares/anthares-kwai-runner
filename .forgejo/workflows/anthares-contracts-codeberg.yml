@@ -1,23 +1,8 @@
 # Offline contract coverage migrated from standalone GitHub Actions.
 name: Anthares contracts - Codeberg
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/anthares-contracts-codeberg.yml'
-      - 'ai-runners/**'
-      - 'anthares_publisher/**'
-      - 'social_adapters/**'
-      - 'tools/cortes_buffer_pinterest_cloud.py'
-      - 'infra/neon-cortes-queue/**'
-      - 'infra/cloudflare-cortes-queue-ha/**'
-      - 'tools/cortes_threads_continuity_guard.mjs'
-      - 'tools/threads_primary_gate.mjs'
-      - 'infra/neon-cortes-threads-sync/**'
-      - 'tests/**'
-  schedule:
-    - cron: '27 2 * * *'
 permissions:
   contents: read
 concurrency:
@@ -25,6 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   contracts:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 12
     steps:

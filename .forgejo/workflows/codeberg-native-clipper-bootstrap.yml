@@ -1,14 +1,12 @@
 name: Codeberg native - bootstrap clipper repository (identity fenced)
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/codeberg-native-clipper-bootstrap.yml'
   workflow_dispatch: {}
 permissions:
   contents: write
 jobs:
   codeberg-bootstrap:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 3
     env:

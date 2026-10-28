@@ -1,32 +1,9 @@
 # Tests execute on Codeberg's Forgejo runner, not GitHub Actions.
 # All commands are read-only offline contract tests; no network publishing.
 name: Anthares tests - Codeberg primary
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/anthares-tests-codeberg.yml'
-      - 'tests/**'
-      - 'infra/neon-cortes-tiktok/**'
-      - 'infra/neon-cortes-lucasrosalem4/**'
-      - '.forgejo/workflows/tiktok-codeberg-primary.yml'
-      - 'tools/cortes_tiktok_lucasrosalem4_cloud_publish.py'
-      - 'anthares_publisher/**'
-      - 'tools/cortes_qa_*.py'
-      - '.github/workflows/cortes-qa-p0-controller.yml'
-      - '.github/workflows/cortes-qa-p0-executor.yml'
-      - 'tools/cortes_qa_p0_recovery.ps1'
-      - 'tools/cortes_pinterest_*.py'
-      - 'tools/cortes_buffer_pinterest_cloud.py'
-      - 'tools/cortes_linkedin_neon_fanout.py'
-      - 'tools/x_github_anthares_browser_publisher.py'
-      - 'infra/x_durable_ledger.py'
-      - '.forgejo/workflows/x-codeberg-primary.yml'
-      - 'infra/neon-cortes-queue/**'
-      - 'vercel-ara-primary/api/cortes-queue.mjs'
-  schedule:
-    - cron: '17 0,12 * * *'
 permissions:
   contents: read
 concurrency:
@@ -34,6 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   unit-and-contracts:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 10
     steps:

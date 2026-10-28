@@ -1,11 +1,12 @@
 name: Codeberg independent Forgejo runner smoke
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
 permissions:
   contents: read
 jobs:
   prove:
-    if: forgejo.ref == 'refs/heads/main'
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: anthares-codeberg-linux
     timeout-minutes: 5
     steps:
