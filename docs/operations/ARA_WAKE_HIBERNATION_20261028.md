@@ -76,3 +76,18 @@ Do not present stale online status as real connected status.
 - Source, CI, READY or a socket handshake are NOT equivalent to live CU savings.
 - Rollback is flag OFF; restore original polling/heartbeats and existing
   supervisor. No reboot, no second runner or new local artifact.
+
+
+## Stage B implementation in same draft PR (source only)
+- Added vercel-ara-primary/api/wake-notifier.mjs and an isolated test module.
+- The Vercel route createJob sends a wake only AFTER the Neon INSERT/UPSERT
+  returns. It is gated on ARA_WAKE_NOTIFY_ENABLED=1, default disabled.
+- Protected secret ARA_WAKE_NOTIFY_SECRET must be configured independently
+  on Cloudflare Worker and Vercel, never committed or logged.
+- Notification target URL is an exact, hard-coded Cloudflare Worker endpoint.
+- Request has 900ms cap, no retries or job resubmission, fail-open for the
+  original persisted job and the existing 2-second poll.
+- delivered=0 is recorded as unacknowledged notification, not completed job.
+- No code/configuration in this PR enables the feature in production.
+- DO NOT deploy the production Vercel controller before Stage B CI and
+  Stage A Worker cloud quota/security review are accepted.

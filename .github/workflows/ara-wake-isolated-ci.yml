@@ -29,5 +29,8 @@ jobs:
           node --check cloudflare-ara-wake/src/index.mjs
           node --check cloudflare-ara-wake/src/protocol.mjs
           node --test cloudflare-ara-wake/src/protocol.test.mjs
+          node --check vercel-ara-primary/api/wake-notifier.mjs
+          node --check vercel-ara-primary/api/router.mjs
+          node --test vercel-ara-primary/api/wake-notifier.test.mjs
           ! grep -Eq 'pool\.query|DATABASE_URL|\.storage\.(put|sql|transaction)' cloudflare-ara-wake/src/index.mjs
           echo 'ARA_WAKE_NOTIFICATION_ONLY_CONTRACT=PASS'
