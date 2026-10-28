@@ -1,14 +1,12 @@
 name: X Neon Ledger Atomicity QA (isolated database branch)
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/x-neon-ledger-atomicity-qa.yml'
   workflow_dispatch: {}
 permissions:
   contents: read
 jobs:
   qa:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 5
     env:

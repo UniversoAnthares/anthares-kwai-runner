@@ -1,12 +1,8 @@
 name: X Codeberg Authenticated Browser Proof
 
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
-  workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/x-codeberg-auth-identity.yml'
-
+  workflow_dispatch: {}
 permissions:
   contents: read
 
@@ -16,6 +12,7 @@ concurrency:
 
 jobs:
   authenticated-identity:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     # Codeberg tiny stops at 2 min; Chromium dependencies + X login exceed it.
     # Codeberg medium permits up to 10 min for read-only identity preflight.
     runs-on: codeberg-medium

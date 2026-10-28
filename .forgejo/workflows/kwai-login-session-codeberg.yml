@@ -1,28 +1,14 @@
 # Kwai login selector and encrypted-browser-session contract tests.
 # No emulator, publishing, remote login or social credentials are permitted.
 name: Kwai login and session contracts - Codeberg
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/kwai-login-session-codeberg.yml'
-      - 'tools/kwai_login_ui_locator.py'
-      - 'tools/kwai_ui_safe_diagnose.py'
-      - 'kwai_chrome_session_probe.py'
-      - 'kwai_remote_android_login.sh'
-      - 'kwai_remote_android_login_with_restore.sh'
-      - 'kwai_native_email_smoke.sh'
-      - 'tests/test_kwai_login_ui_locator.py'
-      - 'tests/test_kwai_semantic_profile.py'
-      - 'tests/test_kwai_chrome_session_security.py'
-      - 'tests/test_kwai_ui_safe_diagnose.py'
-  schedule:
-    - cron: '11 6 * * *'
 permissions:
   contents: read
 jobs:
   selectors-and-session-security:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 11
     steps:

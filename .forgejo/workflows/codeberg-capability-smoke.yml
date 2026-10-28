@@ -3,16 +3,14 @@
 # The separate .forgejo/workflows directory prevents automatic fallback
 # to the GitHub publishing workflows copied into this mirrored repository.
 name: Codeberg capability - isolated read-only runner
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/codeberg-capability-smoke.yml'
 permissions:
   contents: read
 jobs:
   hosted-runner-proof:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 2
     steps:

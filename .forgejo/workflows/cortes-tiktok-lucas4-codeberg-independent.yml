@@ -1,17 +1,7 @@
 name: CORTES TikTok lucas4 Codeberg independent runner
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
-  workflow_dispatch:
-    inputs:
-      smoke:
-        type: boolean
-        default: true
-        description: "Read-only account/OIDC verification"
-      publish:
-        type: boolean
-        default: false
-        description: "Attempt at most one Neon-fenced publication"
-  schedule:
-    - cron: '2,14,26,38,50 * * * *'
+  workflow_dispatch: {}
 enable-openid-connect: true
 permissions:
   contents: read
@@ -20,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publisher:
-    if: ${{ (forgejo.event_name == 'schedule' && vars.TIKTOK_CODEBERG_PRIMARY == 'true' && vars.TIKTOK_CODEBERG_SELFHOSTED_ENABLED == 'true') || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: anthares-codeberg-linux
     timeout-minutes: 12
     enable-openid-connect: true

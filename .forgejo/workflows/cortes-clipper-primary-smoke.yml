@@ -1,9 +1,6 @@
 name: CORTES clipper - Codeberg source and executor smoke
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/cortes-clipper-primary-smoke.yml'
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -12,6 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   validate-codeberg-source:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 3
     steps:

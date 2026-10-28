@@ -1,20 +1,12 @@
 name: Anthares Claude MCP bridge contracts - Codeberg
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/anthares-claude-bridge-codeberg.yml'
-      - 'cloudflare-ara-mcp/**'
-      - 'tools/test_anthares_free_claude.js'
-      - '.github/workflows/anthares-free-claude.yml'
-      - '.github/workflows/anthares-claude-code-mcp-deploy.yml'
-      - '.github/workflows/ara-mcp-stateless-bootstrap.yml'
-      - '.github/workflows/ara-mcp-email-otp-deploy.yml'
 permissions:
   contents: read
 jobs:
   security-contracts:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 9
     steps:

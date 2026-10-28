@@ -1,9 +1,7 @@
 name: TikTok Codeberg native no-upload OIDC proof dispatcher
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/tiktok-codeberg-native-smoke.yml'
+  workflow_dispatch: {}
 permissions:
   contents: read
   actions: write
@@ -12,6 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   dispatch:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 3
     env:

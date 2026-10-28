@@ -480,6 +480,17 @@
         "legacy_cortes_pending": "Forgejo anthares-clipper global action runs 235 and 237 remain waiting, no assigned task. Cancellation refused by tool security settings; manual authorization needed to cancel via UI",
         "source_integrity": "WordPress Forgejo main SHA 3df318c4690bad78e127c4a29d979d5175cbb409 matches merged GitHub #208; Clipper #223 and Kwai #1802 verified on canonical GitHub main, pending Forgejo mirror readback",
         "bounded_scope": "Source and CI routing changes only; no social publishing, Neon data writes, primary flag toggles, Windows browser launches, D1 activation, quotas, billing or secrets"
+      },
+      "codeberg_primary_replacement_item17": {
+        "status": "PROVEN_CODEBERG_NO_LONGER_PRIMARY_20261028",
+        "canonical_git": "github",
+        "peer_git": "gitlab_if_current_parity",
+        "recovery_git": "hostinger_forgejo_if_current_parity",
+        "codeberg_operational_eligible": false,
+        "github_legacy_jobs": "13/13 CODEBERG-ONLY WORKFLOWS FAIL_CLOSED",
+        "forgejo_main_legacy": "27/27 HISTORICAL WORKFLOWS QUARANTINED; 28/28 JOBS if:false; 0 automatic triggers",
+        "proof": "GitHub PRs #1731,#1736,#1791,#1802,#1809; Forgejo Git mirror host-independent receipt run 40746611827; GitHub QA hosted alert run 40782057532; source quarantine in PR item17 pending merge",
+        "preserve": "No social publisher promotion, no Codeberg API writes, no GitLab blocked historic ref pushes; scoped publisher migration remains items 1,2,3,15"
       }
     }
   }

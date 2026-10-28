@@ -1,6 +1,7 @@
 name: Anthares X - Codeberg Cloud Primary
 
 # Suspended Codeberg provider. Historical workflow retained but not executable.
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
 permissions:
@@ -12,7 +13,7 @@ concurrency:
 
 jobs:
   browser-smoke:
-    if: ${{ false }} # Provider retired; no session or publication permitted
+    if: ${{ false }} # Codeberg suspended; workflow retired
     # Proven Codeberg tiny runner is enough for isolated Chromium smoke.
     runs-on: codeberg-tiny
     timeout-minutes: 8
@@ -25,7 +26,7 @@ jobs:
           /tmp/anthares-x-smoke-venv/bin/python -m playwright install --with-deps chromium
           /tmp/anthares-x-smoke-venv/bin/python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"]); t=b.new_page(); t.goto("https://x.com",wait_until="domcontentloaded",timeout=40000); print("CODEBERG_ANTHARES_BROWSER_EXECUTABLE=TRUE");b.close();p.stop()'
   publish:
-    if: ${{ false }} # Provider retired; no session or publication permitted
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-medium
     timeout-minutes: 9
     env:

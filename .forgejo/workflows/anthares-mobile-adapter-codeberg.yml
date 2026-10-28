@@ -1,29 +1,13 @@
 # Five additional offline suites formerly on GitHub Actions.
 name: Anthares mobile and adapter QA - Codeberg
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/anthares-mobile-adapter-codeberg.yml'
-      - 'anthares_mobile/session_proof.py'
-      - 'independent_session/**'
-      - '.devcontainer/kwai-existing-session-publisher.py'
-      - 'direct-tiktok-publisher/tiktok_publish_adapter.py'
-      - 'direct-tiktok-publisher/tiktok_adapter_execute.py'
-      - 'tools/cortes_threads_*.mjs'
-      - 'tools/threads_*.mjs'
-      - 'infra/neon-threads-sync/**'
-      - 'tests/test_anthares_mobile_session_proof.py'
-      - 'tests/test_kwai_existing_session_publisher.py'
-      - 'tests/test_tiktok_publish_adapter.py'
-      - 'tests/threads_*.test.mjs'
-  schedule:
-    - cron: '23 7 * * *'
 permissions:
   contents: read
 jobs:
   offline-contracts:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 9
     steps:

@@ -1,17 +1,12 @@
 name: X Neon Ledger Acceptance (readback and duplicate denial)
+# Historical suspended Codeberg workflow: opt-in metadata only; every job disabled.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.forgejo/workflows/x-neon-ledger-acceptance.yml'
-      - 'infra/x-neon-ledger/index.mjs'
-      - 'tools/x_github_anthares_browser_publisher.py'
-      - '.forgejo/workflows/x-codeberg-primary.yml'
   workflow_dispatch: {}
 permissions:
   contents: read
 jobs:
   neon-ledger-acceptance:
+    if: ${{ false }} # Codeberg suspended; workflow retired
     runs-on: codeberg-tiny
     timeout-minutes: 4
     env:
