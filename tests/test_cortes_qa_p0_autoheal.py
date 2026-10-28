@@ -49,6 +49,6 @@ class P0Recovery(unittest.TestCase):
         self.assertIn("QA_AUTOHEAL",WF)
         self.assertIn("actions: write",WF)
         self.assertIn("if: steps.preflight.outcome == 'success'",WF)
-        self.assertIn("CODEBERG_TESTS_VERIFIED_REPAIR_UNCONFIRMED",WF)
+        self.assertIn("GITHUB_QA_POLICY_CHECKED_REPAIR_UNCONFIRMED",WF)
 
 if __name__=="__main__":unittest.main()
