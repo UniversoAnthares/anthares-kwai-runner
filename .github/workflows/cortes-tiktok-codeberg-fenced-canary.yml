@@ -19,6 +19,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   dispatch:
+    # Codeberg is suspended. Retain history; dispatch only through separately homologated Forgejo identity.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     env:
