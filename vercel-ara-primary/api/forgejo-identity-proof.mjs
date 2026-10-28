@@ -3,8 +3,10 @@ import crypto from 'node:crypto';
 const ISSUER = 'https://anthares.us/forgejo/api/actions';
 const KEYS = ISSUER + '/.well-known/keys';
 const AUDIENCE = 'urn:anthares:forgejo:identity-proof:v1';
-const REPOSITORY = 'anthares-admin/anthares-ci-sandbox';
-const WORKFLOW = REPOSITORY + '/.forgejo/workflows/forgejo-identity-proof.yml@refs/heads/main';
+const TRUSTED_WORKFLOWS = new Map([
+  ['anthares-admin/anthares-ci-sandbox', 'forgejo-identity-proof.yml'],
+  ['anthares-admin/anthares-tiktok-forgejo', 'item6-hostinger-readonly-standby.yml'],
+]);
 
 function send(res, status, result) {
   res.statusCode = status;
@@ -24,11 +26,13 @@ export default async function handler(req, res) {
     const claims = JSON.parse(Buffer.from(segments[1], 'base64url').toString('utf8'));
     const now = Math.floor(Date.now() / 1000);
     const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+    const workflowName = TRUSTED_WORKFLOWS.get(claims.repository);
+    const expectedWorkflow = claims.repository + '/.forgejo/workflows/' + workflowName + '@refs/heads/main';
     if (header.alg !== 'RS256' || !/^[A-Za-z0-9_.-]{1,200}$/.test(header.kid || '') ||
-        claims.iss !== ISSUER || !aud.includes(AUDIENCE) ||
-        claims.repository !== REPOSITORY || claims.repository_owner !== 'anthares-admin' ||
-        claims.sub !== 'repo:' + REPOSITORY + ':ref:refs/heads/main' ||
-        claims.ref !== 'refs/heads/main' || claims.workflow_ref !== WORKFLOW ||
+        !workflowName || claims.iss !== ISSUER || !aud.includes(AUDIENCE) ||
+        claims.repository_owner !== 'anthares-admin' ||
+        claims.sub !== 'repo:' + claims.repository + ':ref:refs/heads/main' ||
+        claims.ref !== 'refs/heads/main' || claims.workflow_ref !== expectedWorkflow ||
         claims.event_name !== 'workflow_dispatch' ||
         !Number.isInteger(claims.iat) || !Number.isInteger(claims.exp) ||
         claims.iat > now + 60 || claims.exp <= now || claims.exp > now + 3600 ||
