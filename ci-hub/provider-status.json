@@ -355,8 +355,8 @@
     "forgejo_ci_host_sandbox": {
       "status": "LIVE_CI_JOB_SUCCEEDED_20261028",
       "evidence_class": "FORGEJO_AUTHENTICATED_UNIX_SOCKET_ACTIONS_RUN_READBACK_PLUS_RUNNER_LOG",
-      "verified_at_utc": "2026-10-28T12:59:00Z",
-      "evidence": "anthares-admin/anthares-ci-sandbox workflow .forgejo/workflows/anthares-ci-smoke.yml manually dispatched via authenticated Forgejo API HTTP 204; internal run id 239 (public actions/runs/1) status success; runner anthares-ci-hostinger-v2, repo-scoped id 5 with label anthares-ci-host, fetched task 156; post-run runner status idle. Workflow has no publisher side effects.",
+      "verified_at_utc": "2026-10-28T14:31:36Z",
+      "evidence": "Forgejo CI runner repo-scoped id 5 label anthares-ci-host; initial smoke 239 plus seven migrated nonpublishing workflows terminal SUCCESS 243,245,246,247,248,249,250. No general CI or publishing promotion.",
       "eligible": true,
       "ci_eligible": true,
       "scope": "Isolated nonpublishing Forgejo CI sandbox runner only. NOT a globally dispatched CI fallback, not an autonomous publisher.",
@@ -369,26 +369,41 @@
       "limitations": "Hostinger public CDN intermittently returns 403; IPv6 /128 exception was reported saved, per-edge propagation and WAF decision unverified; status must be rechecked before broad CI promotion. Migration and dispatch remain fixed items 3 to 5."
     },
     "forgejo_safe_workflow_migration": {
-      "status": "THREE_NONPUBLISHING_WORKFLOWS_IMPORTED_LIVE_RUNS_PENDING",
-      "evidence_class": "FORGEJO_REPO_TREE_AND_DB_SCHEDULE_READBACK_PLUS_DIRECT_OFFLINE_TESTS",
-      "verified_at_utc": "2026-10-28T13:12:00Z",
+      "status": "SEVEN_NONPUBLISHING_FORGEJO_WORKFLOWS_REAL_SUCCESS_20261028",
+      "evidence_class": "FORGEJO_UNIX_SOCKET_ACTIONS_RUN_TASK_TERMINAL_DB_READBACK",
+      "verified_at_utc": "2026-10-28T14:31:36Z",
       "repository": "anthares-admin/anthares-ci-sandbox",
       "workflows": [
         ".forgejo/workflows/anthares-qa-12h.yml",
         ".forgejo/workflows/anthares-offline-contracts.yml",
-        ".forgejo/workflows/anthares-clipper-static.yml"
+        ".forgejo/workflows/anthares-clipper-static.yml",
+        ".forgejo/workflows/anthares-kwai-static-qa.yml",
+        ".forgejo/workflows/anthares-standalone-safety-qa.yml",
+        ".forgejo/workflows/anthares-node-contracts.yml",
+        ".forgejo/workflows/anthares-claude-bridge-qa.yml"
       ],
       "qa_schedule": "17 0,12 * * *",
-      "qa_schedule_registered_id": 105,
+      "qa_schedule_registered_id": 118,
       "runner_label": "anthares-ci-host",
       "read_only": true,
       "publishing_allowed": false,
-      "source_of_tests": "local Forgejo bare mirrors of anthares-kwai-runner and anthares-clipper",
-      "offline_tests": "QA 28+4 tests passed with Python3.11; Clipper four Python modules compiled; local Git shared cloning verified",
-      "live_action_results": "QA first run 240 failed pre-fix due Hostinger Git pack-object thread quota; workflows changed to git clone --shared; subsequent runs 241/242 waiting while public CDN 403 intermittently blocks runner; no live pass yet.",
-      "eligible": false,
-      "ci_eligible": false,
-      "pending": "Obtain SUCCESS for migrated workflows before promoting; retain no publisher and no global dispatch."
+      "source_of_tests": "Private local Forgejo bare mirrors of GitHub canonical branches; no Codeberg API/Git/CI access",
+      "offline_tests": "Python 3.11 and Node.js 24; read-only isolated tests with disposable Hostinger workdirs",
+      "live_action_results": "SUCCESS Forgejo internal run ids 243 QA, 245 Clipper, 246 contracts, 247 Kwai, 248 standalone core, 249 Node queue/Threads, 250 and 251 Claude; initial CI runner smoke run 239 SUCCESS. Historical failed runs 240-244 superseded by later green results.",
+      "eligible": true,
+      "ci_eligible": true,
+      "pending": "Scoped nonpublishing Forgejo CI only. No global CI fallback or autonomous publisher. Specialized historical Codeberg browser/Android, worker deploy and publisher jobs are excluded and require separate proof before any promotion.",
+      "scheduled_workflows": [
+        "anthares-qa-12h.yml",
+        "anthares-kwai-static-qa.yml",
+        "anthares-standalone-safety-qa.yml",
+        "anthares-node-contracts.yml",
+        "anthares-claude-bridge-qa.yml"
+      ],
+      "runner_scope": "repository_only",
+      "global_dispatch_enabled": false,
+      "node_runtime": "v24.22.1 LTS installed on Hostinger, official nodejs.org SHA-256 verified",
+      "migration_scope_complete": true
     }
   }
 }

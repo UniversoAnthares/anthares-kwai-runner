@@ -98,7 +98,8 @@
       "gitlab_ci": "BLOCKED_QUOTA_TEMPORARY_AUTOMATIC_RECHECK",
       "bitrise": "EXCLUDED_BY_OWNER_20261027_MACHINE_INVALID_HTTP400",
       "harness": "WATCHER_AUTH_VERIFIED_RUN_40582510426_CONTROLLER_DEPLOYED_NONPUBLISHING_FALLBACK_ENABLED",
-      "cloudflare_workers_builds": "SERVICE_ANTHARES_RESERVA_BROWSER_BUILD_SUCCESS_CHECK_122489778798_GENERAL_CI_NOT_HOMOLOGATED"
+      "cloudflare_workers_builds": "SERVICE_ANTHARES_RESERVA_BROWSER_BUILD_SUCCESS_CHECK_122489778798_GENERAL_CI_NOT_HOMOLOGATED",
+      "forgejo_hostinger_sandbox": "SEVEN_NONPUBLISHING_WORKFLOWS_LIVE_SUCCESS_20261028_REPO_SCOPED_ONLY"
     },
     "appveyor_routing_policy": {
       "rank": "penultimate",
@@ -224,6 +225,39 @@
       "adapter_tests": "tests/test_codeberg_fenced_dispatch.mjs",
       "pending": "Connect authenticated controller using shared Neon atomic receipt and verify provider run ID/readback against expected SHA before promoting dispatch",
       "disabled_reason": "OWNER_REPORTED_SUSPENSION; NEVER_DISPATCH"
+    },
+    "codeberg_replacement_scoped": {
+      "provider": "hostinger_forgejo_ci_sandbox",
+      "status": "LIVE_NONPUBLISHING_REPLACEMENT_FOR_VERIFIED_OFFLINE_CI",
+      "repository": "anthares-admin/anthares-ci-sandbox",
+      "runner_label": "anthares-ci-host",
+      "workflow_allowlist": [
+        "anthares-qa-12h.yml",
+        "anthares-offline-contracts.yml",
+        "anthares-clipper-static.yml",
+        "anthares-kwai-static-qa.yml",
+        "anthares-standalone-safety-qa.yml",
+        "anthares-node-contracts.yml",
+        "anthares-claude-bridge-qa.yml"
+      ],
+      "evidence_run_ids": [
+        243,
+        245,
+        246,
+        247,
+        248,
+        249,
+        250
+      ],
+      "source": "Hostinger Forgejo local git mirrors (GitHub canonical); no Codeberg access",
+      "node_runtime": "v24.22.1 SHA256 verified",
+      "scope": "Python and Node nonpublishing CI only; no Android/browser/publisher/secret-dependent workflows",
+      "eligible_for_allowlisted_ci": true,
+      "generic_ci_fallback_enabled": false,
+      "provider_dispatch_autonomous": false,
+      "published_side_effects_permitted": false,
+      "quota_and_duplicate_policy": "Use existing run/runner terminal readback; no automatic retry of ambiguous run",
+      "account_codeberg_suspended": true
     }
   },
   "retired": {
