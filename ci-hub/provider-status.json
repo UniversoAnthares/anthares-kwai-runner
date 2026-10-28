@@ -351,6 +351,22 @@
       "reopen_condition": "On ref readback mismatch, safe non-forced merge/fast-forward only; preserve independent TikTok main and fail closed on divergence",
       "source": "github",
       "url": "https://anthares.us/forgejo/anthares-admin"
+    },
+    "forgejo_ci_host_sandbox": {
+      "status": "LIVE_CI_JOB_SUCCEEDED_20261028",
+      "evidence_class": "FORGEJO_AUTHENTICATED_UNIX_SOCKET_ACTIONS_RUN_READBACK_PLUS_RUNNER_LOG",
+      "verified_at_utc": "2026-10-28T12:59:00Z",
+      "evidence": "anthares-admin/anthares-ci-sandbox workflow .forgejo/workflows/anthares-ci-smoke.yml manually dispatched via authenticated Forgejo API HTTP 204; internal run id 239 (public actions/runs/1) status success; runner anthares-ci-hostinger-v2, repo-scoped id 5 with label anthares-ci-host, fetched task 156; post-run runner status idle. Workflow has no publisher side effects.",
+      "eligible": true,
+      "ci_eligible": true,
+      "scope": "Isolated nonpublishing Forgejo CI sandbox runner only. NOT a globally dispatched CI fallback, not an autonomous publisher.",
+      "runner_name": "anthares-ci-hostinger-v2",
+      "runner_label": "anthares-ci-host",
+      "runner_scope": "anthares-admin/anthares-ci-sandbox",
+      "run_url": "https://anthares.us/forgejo/anthares-admin/anthares-ci-sandbox/actions/runs/1",
+      "global_dispatch_enabled": false,
+      "publishing_allowed": false,
+      "limitations": "Hostinger public CDN intermittently returns 403; IPv6 /128 exception was reported saved, per-edge propagation and WAF decision unverified; status must be rechecked before broad CI promotion. Migration and dispatch remain fixed items 3 to 5."
     }
   }
 }
