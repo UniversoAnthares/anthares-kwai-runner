@@ -13822,6 +13822,81 @@
         "excerpt": "Eu e seu comandante estão vendo. Que horas estão aí no Brasil, por favor? Porque deve estar tarde. Deve estar tarde e não é pouco tarde que deve estar, não. 10h30, 10h53, valeu. Show, beleza. Cara, então, vou encerrar aqui, tá? Mas como eu prometi, eu falei, faltam um pouco menos de 10 minutos. A gente parou aqui em 14,45, vai até 23,55, então falta um pouquinho mais pra avançar.",
         "verified": true
       }
+    },
+    "fOmihuHUT1M|g1:fOmihuHUT1M:7747:7788": {
+      "title": "Parasita se preocupa com sentimentos ● Universo Anthares",
+      "description": "O trecho pergunta que parasita se preocupa com os meus sentimentos. Depois, fala de quem procura livros e da vontade de ter um parasita assim. www.anthares.us",
+      "hashtags": [
+        "#Literatura",
+        "#Kafka",
+        "#UniversoAnthares"
+      ],
+      "keywords": [
+        "parasita",
+        "preocupa",
+        "sentimentos",
+        "livros"
+      ],
+      "transcript_attestation": {
+        "schema": "anthares.clip-transcript-attestation.v1",
+        "clip_id": "g1:fOmihuHUT1M:7747:7788",
+        "attachment_id": 17101,
+        "source_video_id": "fOmihuHUT1M",
+        "source_start_s": 7747,
+        "source_end_s": 7788,
+        "media_sha256": "da5a5166563a5677637e09460bb1cf87be5bcccb4bdc1eb4d280e541294db4a9",
+        "method": "faster-whisper-small-from-media",
+        "language": "pt",
+        "cues": [
+          {
+            "start": 0,
+            "end": 5.36,
+            "text": "Parasita? Parasita é do quê, irmão? Que parasita é essa? Que parasita é esse que se preocupa com"
+          },
+          {
+            "start": 5.36,
+            "end": 9.96,
+            "text": "os meus sentimentos? Eu quero um parasita assim. Eu quero um parasita que olha para a"
+          },
+          {
+            "start": 9.96,
+            "end": 17.52,
+            "text": "mistante e fala, hum, será que o panda, será que se arrumar de um jeito assim, ele vai, ele vai"
+          },
+          {
+            "start": 17.52,
+            "end": 20.92,
+            "text": "conseguir encontrar melhor os livros dele, porque ele fica procurando, que nem um idiota"
+          },
+          {
+            "start": 20.92,
+            "end": 25.84,
+            "text": "não consegue encontrar, fica meio hora procurando o livro e não acha? Ah não, mas se eu fizer isso,"
+          },
+          {
+            "start": 25.84,
+            "end": 30.4,
+            "text": "né? Ele vai perceber que a gente tá tocando o livro dele e ele vai ficar, vai achar, quando ele perdeu"
+          },
+          {
+            "start": 30.4,
+            "end": 34.56,
+            "text": "o livro, vai achar que foi a gente, vai criar a briga toa. Melhor deixar do jeito dele,"
+          },
+          {
+            "start": 34.56,
+            "end": 38.24,
+            "text": "é meio caótico, mas ele se acha no caos dele, né? Eu quero um parásito desses, me dêem,"
+          },
+          {
+            "start": 38.24,
+            "end": 40.24,
+            "text": "você é um parásito assim, eu quero você na minha casa aqui."
+          }
+        ],
+        "excerpt": "Parasita? Parasita é do quê, irmão? Que parasita é essa? Que parasita é esse que se preocupa com os meus sentimentos? Eu quero um parasita assim. Eu quero um parasita que olha para a mistante e fala, hum, será que o panda, será que se arrumar de um jeito assim, ele vai, ele vai conseguir encontrar melhor os livros dele, porque ele fica procurando, que nem um idiota não consegue encontrar, fica meio hora procurando o livro e não acha? Ah não, mas se eu fizer isso, né? Ele vai perceber que a gente tá tocando o livro dele e ele vai ficar, vai achar, quando ele perdeu o livro, vai achar que foi a gente, vai criar a briga toa. Melhor deixar do jeito dele, é meio caótico, mas ele se acha no caos dele, né? Eu quero um parásito desses, me dêem, você é um parásito assim, eu quero você na minha casa aqui.",
+        "verified": true
+      }
     }
   }
 }
