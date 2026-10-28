@@ -45,3 +45,67 @@ test('transport exceptions and timeouts are fail-open to caller',async()=>{
  const t=await notifyWakeAfterCommit(DEVICE,{env,fetchImpl:async()=>{throw Object.assign(Error('timeout'),{name:'TimeoutError'})}});
  assert.equal(t.reason,'timeout');
 });
+
+
+test('HTTPS direct origin uses custom lookup with original hostname and bearer',async()=>{
+  const {EventEmitter}=require('node:events');
+  let captured={};
+  const requestImpl=(url,opts,done)=>{
+    captured={url,opts};
+    const req=new EventEmitter();
+    req.end=body=>{
+      captured.body=body;
+      const res=new EventEmitter();
+      res.statusCode=202;
+      queueMicrotask(()=>{
+        done(res);
+        res.emit('data',Buffer.from('{"ok":true,"protocol":"ara-wake-v1","sequence":29}'));
+        res.emit('end');
+      });
+    };
+    req.destroy=e=>req.emit('error',e);
+    return req;
+  };
+  const result=await notifyWakeAfterCommit(DEVICE,{
+    env:{...env,ARA_WAKE_ORIGIN_IP:'203.0.113.10'},requestImpl,
+    fetchImpl:async()=>{throw Error('public CDN fetch must not be used');}
+  });
+  assert.deepEqual(result,{enabled:true,ok:true,reason:'broker_recorded',sequence:29});
+  assert.equal(captured.url,SIGNAL_URL);
+  assert.equal(captured.opts.method,'POST');
+  assert.equal(captured.opts.agent,false);
+  assert.equal(captured.opts.headers.Authorization,'Bearer '+goodSecret);
+  assert.equal(captured.opts.headers['Content-Length'],Buffer.byteLength(captured.body));
+  assert.deepEqual(JSON.parse(captured.body),{device_id:DEVICE});
+  await new Promise(resolve=>captured.opts.lookup('anthares.us',{all:false},(error,address,family)=>{
+    assert.equal(error,null);assert.equal(address,'203.0.113.10');assert.equal(family,4);resolve();
+  }));
+  await new Promise(resolve=>captured.opts.lookup('anthares.us',{all:true},(error,addresses)=>{
+    assert.equal(error,null);assert.deepEqual(addresses,[{address:'203.0.113.10',family:4}]);resolve();
+  }));
+});
+test('invalid direct origin is rejected before networking',async()=>{
+  for(const invalid of ['127.0.0.1','10.0.0.2','192.168.1.2','not-an-ip']){
+    let used=false;
+    const r=await notifyWakeAfterCommit(DEVICE,{
+      env:{...env,ARA_WAKE_ORIGIN_IP:invalid},
+      requestImpl:()=>{used=true;throw Error('should not call');},
+      fetchImpl:async()=>{used=true;throw Error('should not call');}
+    });
+    assert.equal(r.reason,'invalid_origin');assert.equal(used,false);
+  }
+});
+test('direct origin non-202 response fails open',async()=>{
+  const {EventEmitter}=require('node:events');
+  const requestImpl=(url,opts,done)=>{
+    const req=new EventEmitter();
+    req.end=()=>{
+      const res=new EventEmitter();res.statusCode=403;
+      queueMicrotask(()=>{done(res);res.emit('data',Buffer.from('blocked'));res.emit('end');});
+    };
+    req.destroy=e=>req.emit('error',e);
+    return req;
+  };
+  const r=await notifyWakeAfterCommit(DEVICE,{env:{...env,ARA_WAKE_ORIGIN_IP:'203.0.113.10'},requestImpl});
+  assert.equal(r.ok,false);assert.equal(r.reason,'http_403');
+});
