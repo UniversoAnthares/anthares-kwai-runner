@@ -15,7 +15,9 @@ async function notifyWakeAfterCommit(device,{env=process.env,fetchImpl=globalThi
   try{
     const response=await fetchImpl(SIGNAL_URL,{
       method:'POST',
-      headers:{'Content-Type':'application/json','X-Anthares-Notify-Key':secret},
+      headers:{'Content-Type':'application/json','Accept':'application/json',
+        'Authorization':'Bearer '+secret,
+        'User-Agent':'Mozilla/5.0 (compatible; AntharesARA-Wake/1.0; +https://anthares.us)'},
       body:JSON.stringify({device_id:device}),
       signal:AbortSignal.timeout(MAX_MS),
       redirect:'error'
