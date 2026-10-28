@@ -367,6 +367,28 @@
       "global_dispatch_enabled": false,
       "publishing_allowed": false,
       "limitations": "Hostinger public CDN intermittently returns 403; IPv6 /128 exception was reported saved, per-edge propagation and WAF decision unverified; status must be rechecked before broad CI promotion. Migration and dispatch remain fixed items 3 to 5."
+    },
+    "forgejo_safe_workflow_migration": {
+      "status": "THREE_NONPUBLISHING_WORKFLOWS_IMPORTED_LIVE_RUNS_PENDING",
+      "evidence_class": "FORGEJO_REPO_TREE_AND_DB_SCHEDULE_READBACK_PLUS_DIRECT_OFFLINE_TESTS",
+      "verified_at_utc": "2026-10-28T13:12:00Z",
+      "repository": "anthares-admin/anthares-ci-sandbox",
+      "workflows": [
+        ".forgejo/workflows/anthares-qa-12h.yml",
+        ".forgejo/workflows/anthares-offline-contracts.yml",
+        ".forgejo/workflows/anthares-clipper-static.yml"
+      ],
+      "qa_schedule": "17 0,12 * * *",
+      "qa_schedule_registered_id": 105,
+      "runner_label": "anthares-ci-host",
+      "read_only": true,
+      "publishing_allowed": false,
+      "source_of_tests": "local Forgejo bare mirrors of anthares-kwai-runner and anthares-clipper",
+      "offline_tests": "QA 28+4 tests passed with Python3.11; Clipper four Python modules compiled; local Git shared cloning verified",
+      "live_action_results": "QA first run 240 failed pre-fix due Hostinger Git pack-object thread quota; workflows changed to git clone --shared; subsequent runs 241/242 waiting while public CDN 403 intermittently blocks runner; no live pass yet.",
+      "eligible": false,
+      "ci_eligible": false,
+      "pending": "Obtain SUCCESS for migrated workflows before promoting; retain no publisher and no global dispatch."
     }
   }
 }
