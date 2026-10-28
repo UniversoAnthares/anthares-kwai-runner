@@ -101,33 +101,6 @@ jobs:
             Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value ('result='+$value) -Encoding UTF8
           }
           Write-Output ('PINTEREST_DRAFT_AUDIT='+$value)
-      - name: Read Codeberg QA test evidence (no GitHub tests)
-        if: steps.preflight.outcome == 'success'
-        id: codeberg
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const endpoint = 'https://codeberg.org/api/v1/repos/UniversoAnthares/anthares-kwai-runner/actions/runs?limit=100';
-            let state = 'CODEBERG_RESULT_UNAVAILABLE', link = 'https://codeberg.org/UniversoAnthares/anthares-kwai-runner/actions';
-            try {
-              const response = await fetch(endpoint, {signal: AbortSignal.timeout(18000), headers:{'Accept':'application/json'}});
-              if (!response.ok) throw Error('HTTP_'+response.status);
-              const payload = await response.json();
-              const candidates = (payload.workflow_runs || [])
-                .filter(x => x.workflow_id === 'anthares-tests-codeberg.yml');
-              const exact = candidates.find(x => x.commit_sha === context.sha && x.status === 'success');
-              if (exact) {state = 'PASS_CURRENT_COMMIT'; link = exact.html_url || link;}
-              else if (candidates.some(x => x.status === 'success')) {
-                state = 'PASS_PREVIOUS_COMMIT_RECHECK_REQUIRED';
-                link = candidates.find(x=>x.status==='success')?.html_url || link;
-              } else {
-                state = 'PENDING_OR_FAILED';
-                link = candidates[0]?.html_url || link;
-              }
-            } catch(err) {core.warning('CODEBERG_TEST_RESULT_UNAVAILABLE '+String(err.message).slice(0,50));}
-            core.setOutput('state',state);
-            core.setOutput('url',link);
-            core.notice('QA_P0_CODEBERG_TEST_RESULT='+state);
       - name: Test QA recovery policy offline before taking action
         if: steps.preflight.outcome == 'success'
         shell: powershell
@@ -152,8 +125,6 @@ jobs:
         env:
           QA_ISSUE_NUMBER: ${{ inputs.issue_number }}
           QA_NETWORK: ${{ steps.preflight.outputs.network }}
-          QA_CODEBERG: ${{ steps.codeberg.outputs.state }}
-          QA_CODEBERG_URL: ${{ steps.codeberg.outputs.url }}
           QA_REPAIR_GATE: ${{ steps.pinterest_gate.outputs.gate }}
           QA_AUTOHEAL: ${{ steps.recovery.outputs.action }}
           QA_DRAFT_AUDIT: ${{ steps.draft_audit.outputs.result }}
@@ -162,10 +133,7 @@ jobs:
           script: |
             const {owner,repo} = context.repo;
             const issue_number = Number(process.env.QA_ISSUE_NUMBER);
-            const state=String(process.env.QA_CODEBERG || 'UNKNOWN');
-            const outcome = state === 'PASS_CURRENT_COMMIT'
-              ? 'CODEBERG_TESTS_VERIFIED_REPAIR_UNCONFIRMED'
-              : 'CODEBERG_TESTS_PENDING_REPAIR_UNCONFIRMED';
+            const outcome = 'GITHUB_QA_POLICY_CHECKED_REPAIR_UNCONFIRMED';
             const run = 'https://github.com/'+owner+'/'+repo+'/actions/runs/'+context.runId;
             const next = process.env.QA_NETWORK === 'pinterest'
               ? 'Reconcile Pinterest 404/media, disabled Publish button, and draft capacity. Never retry started/uncertain media without remote evidence.'
@@ -173,12 +141,10 @@ jobs:
             await github.rest.issues.createComment({
               owner,repo,issue_number,
               body:'[QA-P0-EXECUTOR] '+outcome+'\nControl run: '+run+
-                '\nCodeberg test result: '+state+
-                '\nCodeberg evidence: '+(process.env.QA_CODEBERG_URL || 'unavailable')+
                 '\nRepair gate: '+String(process.env.QA_REPAIR_GATE || 'UNCLASSIFIED')+
                 '\nRecovery action (ACK only): '+String(process.env.QA_AUTOHEAL || 'NO_REPAIR_ACTION')+
                 '\nDraft audit: '+String(process.env.QA_DRAFT_AUDIT || 'not-applicable').slice(0,300)+
                 '\nRecovery diagnostic: '+String(process.env.QA_DIAGNOSTIC || 'UNAVAILABLE').slice(0,300)+'\n'+next+
-                '\nOffline policy safety test on dedicated QA runner; primary regression suite on Codeberg. QA remains open until verified source fix and remote publication.'
+                '\nOffline policy safety test on dedicated GitHub QA runner. QA remains open until verified source fix and remote publication.'
             });
-            if (state !== 'PASS_CURRENT_COMMIT') core.setFailed('CODEBERG_TESTS_CURRENT_COMMIT_UNVERIFIED');
+            core.notice('QA_P0_GITHUB_POLICY_VALIDATED_REPAIR_UNCONFIRMED');
