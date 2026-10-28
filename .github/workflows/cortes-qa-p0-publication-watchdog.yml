@@ -25,10 +25,13 @@ permissions:
   actions: read
   issues: write
 concurrency:
-  group: cortes-p0-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.workflow_run.name || 'routine' }}
+  group: cortes-p0-${{ github.event_name }}-${{ github.event_name == 'workflow_run' && github.event.workflow_run.name || github.event_name == 'schedule' && 'routine' || github.run_id }}
   cancel-in-progress: false
 jobs:
   route:
+    concurrency:
+      group: cortes-qa-p0-windows-route
+      cancel-in-progress: false
     permissions:
       contents: read
       issues: write
