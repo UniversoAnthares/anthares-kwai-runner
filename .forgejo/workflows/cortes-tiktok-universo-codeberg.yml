@@ -10,7 +10,6 @@ concurrency:
 jobs:
   publisher:
     if: ${{ false }} # Provider retired; no session or publication permitted
-    if: ${{ (forgejo.event_name == 'schedule' && vars.TIKTOK_CODEBERG_PRIMARY == 'true') || (forgejo.event_name == 'workflow_dispatch' && (inputs.smoke || inputs.publish)) }}
     runs-on: codeberg-small
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
