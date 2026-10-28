@@ -103,6 +103,47 @@ function attachEvidence(clip,approved){
  };
 }
 
+// The public WordPress media search may be forbidden by a CDN rule even when
+// the exact clip has already been independently transcribed and SHA-attested.
+// This read-only fallback authorizes only that known identity; the publisher
+// STILL downloads the public MP4 and compares its real digest to the signed
+// evidence before acquiring any Neon lease or submitting to Threads.
+async function exactAttestedClipOn403({expectedId,day,source,round,start,end,filename}){
+ const approved=await evidenceRegistry();
+ const evidence=approved[expectedId];
+ const att=evidence?.transcript_attestation;
+ const clipId='g'+round+':'+source+':'+start+':'+end;
+ const duration=Number(end)-Number(start);
+ if(!evidence||!att||att.verified!==true||
+    att.schema!=='anthares.clip-transcript-attestation.v1'||
+    att.clip_id!==clipId||
+    att.source_video_id!==source||
+    Number(att.source_start_s)!==Number(start)||
+    Number(att.source_end_s)!==Number(end)||
+    !Number.isSafeInteger(att.attachment_id)||att.attachment_id<=0||
+    !/^[a-f0-9]{64}$/.test(String(att.media_sha256||''))||
+    !Number.isSafeInteger(duration)||duration<5||duration>180||
+    typeof evidence.title!=='string'||
+    typeof evidence.description!=='string'||
+    !Array.isArray(evidence.hashtags)||
+    !Array.isArray(evidence.keywords)){
+  throw Error('WORDPRESS_403_EXACT_ATTESTATION_REQUIRED');
+ }
+ const url='https://anthares.us/wp-content/uploads/anthares-clips/'+
+  day.slice(0,4)+'/'+day.slice(5,7)+'/'+filename;
+ return{
+  id:expectedId,clip_id:clipId,source,date:day,
+  attachment_id:att.attachment_id,duration,url,
+  stored_at:day+'T00:00:00',
+  editorial:{
+   title:evidence.title,description:evidence.description,
+   caption:evidence.hashtags.join(' '),
+   alt_text:evidence.keywords.join(', '),
+   transcript_attestation:att
+  }
+ };
+}
+
 export async function fetchCloudClipByIdentity({
  id,
  day,
@@ -145,6 +186,11 @@ export async function fetchCloudClipByIdentity({
   signal:AbortSignal.timeout(20000)
  });
 
+ if(response.status===403){
+  return exactAttestedClipOn403({
+   expectedId,day,source,round,start,end,filename
+  });
+ }
  if(!response.ok){
   throw Error('WORDPRESS_HTTP_'+response.status);
  }
