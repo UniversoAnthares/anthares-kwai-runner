@@ -98,8 +98,9 @@ finally:
  try{
   [void]$proc.Start()
   $proc.StandardInput.Write($json);$proc.StandardInput.Close()
-  $outTask=$proc.StandardOutput.ReadToEndAsync();$errTask=$proc.StandardError.ReadToEndAsync()
+  $outTask=$proc.StandardOutput.ReadLineAsync();$errTask=$proc.StandardError.ReadToEndAsync()
   if(-not $proc.WaitForExit(([int]$request.timeout+12)*1000)){throw 'CHILD_STATE_UNCERTAIN'}
+  if(-not $outTask.Wait(2000)){throw 'CHILD_RESULT_UNAVAILABLE'}
   $result=$outTask.Result|ConvertFrom-Json
   if($null -eq $result){throw 'CHILD_RESULT_UNAVAILABLE'}
   return @{ok=($result.exit_code -eq 0 -and -not $result.timed_out);status=$(if($result.timed_out){'TIMED_OUT_RECONCILE_REQUIRED'}else{'COMPLETED'});exit_code=$result.exit_code;output=$result.output;identity=[Security.Principal.WindowsIdentity]::GetCurrent().Name;sid=$cfg.user_sid;context=$request.service;request_id=$request.id}
