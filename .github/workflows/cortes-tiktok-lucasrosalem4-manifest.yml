@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'tools/cortes_tiktok_lucasrosalem4_manifest.py'
+      - 'tests/test_cortes_tiktok_lucasrosalem4_manifest.py'
       - '.github/workflows/cortes-tiktok-lucasrosalem4-manifest.yml'
   schedule:
     - cron: '*/15 * * * *'
@@ -16,25 +17,27 @@ concurrency:
   cancel-in-progress: false
 jobs:
   manifest:
-    if: github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, Windows]
+    # Branch dispatch validates the isolated code. Neon OIDC only accepts main.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
     timeout-minutes: 7
     env:
+      PYTHONDONTWRITEBYTECODE: '1'
       PYTHONUTF8: '1'
       PYTHONIOENCODING: 'utf-8'
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Test read-only manifest contract
-        shell: pwsh
+      - name: Verify isolated read-only Neon manifest contract
+        shell: bash
         run: |
-          python -m py_compile tools/cortes_tiktok_lucasrosalem4_manifest.py
-          python -m unittest discover -s tests -p test_cortes_tiktok_lucasrosalem4_manifest.py -v
-          if ($LASTEXITCODE -ne 0) { throw 'SECONDARY_MANIFEST_PY_COMPILE_FAILED' }
-      - name: Refresh isolated second-account queue manifest
-        shell: pwsh
+          python -B -m unittest discover -s tests -p test_cortes_tiktok_lucasrosalem4_manifest.py -v
+      - name: Read and validate canonical Neon source without local persistence
+        if: github.ref == 'refs/heads/main'
+        shell: bash
         run: |
-          python -u tools/cortes_tiktok_lucasrosalem4_manifest.py
-          if ($LASTEXITCODE -ne 0) { throw 'SECONDARY_MANIFEST_SYNC_FAILED' }
+          python -B -u tools/cortes_tiktok_lucasrosalem4_manifest.py
