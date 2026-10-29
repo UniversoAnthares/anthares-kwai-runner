@@ -108,7 +108,54 @@ jobs:
                 '; outstanding incidents remain open and will be retried next scan.');
               return;
             }
-            const events = await candidates();
+            // The same external P0 fingerprint may arrive as several GitHub issues.
+            // Keep the oldest still-open issue as the only dispatch target; never
+            // close a duplicate or treat a diagnostic as a repaired publication.
+            const rawEvents = await candidates();
+            const fingerprintOf = issue => {
+              const found = String(issue.body || '').match(/QA-P0-FINGERPRINT:([a-f0-9]{24})/i);
+              return found ? found[1].toLowerCase() : null;
+            };
+            const canonicalByFingerprint = new Map();
+            function consider(issue) {
+              if (!eligible(issue)) return;
+              const key = fingerprintOf(issue);
+              if (!key) return;
+              const prior = canonicalByFingerprint.get(key);
+              if (!prior || issue.number < prior) canonicalByFingerprint.set(key, issue.number);
+            }
+            rawEvents.forEach(consider);
+            if ((context.eventName === 'issues' || explicitUrgent) &&
+                rawEvents.some(issue => fingerprintOf(issue))) {
+              // Event dispatch normally sees one issue. Check existing open P0s
+              // before deciding it is canonical. Stop at the first older match.
+              const target = fingerprintOf(rawEvents[0]);
+              const number = rawEvents[0].number;
+              for (let page = 1; page <= 4; page++) {
+                const {data} = await github.rest.issues.listForRepo({
+                  owner,repo,state:'open',labels:'QA-P0',
+                  sort:'created',direction:'desc',per_page:100,page
+                });
+                data.filter(x => !x.pull_request).forEach(consider);
+                if (target && canonicalByFingerprint.get(target) < number) break;
+                if (data.length < 100) break;
+              }
+            }
+            const usedFingerprints = new Set();
+            let suppressedDuplicates = 0;
+            const events = rawEvents.filter(issue => {
+              const key = fingerprintOf(issue);
+              if (!key) return true;
+              if (canonicalByFingerprint.get(key) !== issue.number ||
+                  usedFingerprints.has(key)) {
+                suppressedDuplicates++;
+                return false;
+              }
+              usedFingerprints.add(key);
+              return true;
+            });
+            core.notice('QA_P0_FINGERPRINT_DEDUP=PASS candidates=' + rawEvents.length +
+              ' unique=' + events.length + ' suppressed=' + suppressedDuplicates);
             let dispatched = 0, skipped = 0, failures = 0;
             for (const issue of events) {
               if (!eligible(issue)) {skipped++;continue;}
