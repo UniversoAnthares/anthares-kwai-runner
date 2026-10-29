@@ -508,6 +508,28 @@
       "missing": "Source FROZEN and terminal NOT_APPLIED; independent reconciliation; Neon publisher_authority generation/account lock; verified backup identity; owner-authorized single live publication and independent receipt; remote Windows readback.",
       "source": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1831",
       "finding": "test-hub/findings/20261028-item18-windows-github-readiness-partial.md"
+    },
+    "forgejo_main_ci_item4": {
+      "status": "PARTIAL_SOURCE_MERGED_ADMIN_ACTIVATION_AND_REAL_FORGEJO_RUN_PENDING",
+      "verified_date_utc": "2026-10-29",
+      "fixed_item": 4,
+      "source_main_sha": "bfc2b66ab34dc4a8dca29a9e8a51c820fcf1279d",
+      "source_blob_sha": "9cb5859f8331c17bfe06ace98abfa835ff8e49b0",
+      "pr_stage": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1816",
+      "pr_offline_checkout": "https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1854",
+      "workflow": ".forgejo/workflows/anthares-main-ci-cd.yml",
+      "trigger": "workflow_dispatch_only",
+      "runner_scope_required": "anthares-admin/anthares-kwai-runner repo_id=1",
+      "runner_label_required": "anthares-ci-main-host",
+      "legacy_workflows": "27/27 historical .forgejo workflows quarantined with 28 false job guards",
+      "sandbox_runner_id": 5,
+      "sandbox_runner_reused": false,
+      "forgejo_main_actions_enabled": "UNKNOWN_ADMIN_READ_DENIED_PREVIOUSLY",
+      "forgejo_main_run_success": false,
+      "forgejo_main_cd_receipt": false,
+      "admin_approval_required": true,
+      "limitations": "Forgejo authenticated admin query refused by security controls; no alternative channel employed. User must enable Actions via authorized admin UI, register repo-scoped runner without exposing token, and permit one nonpublishing real manual run. Source commit is STAGED, not DONE.",
+      "finding": "test-hub/findings/20261029-item4-main-ci-staged-admin-pending.md"
     }
   }
 }
