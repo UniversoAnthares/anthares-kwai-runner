@@ -12,24 +12,36 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect-identity:
-    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
+    runs-on: ubuntu-24.04
     timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Verify Instagram Graph profile credentials without mutation
-        shell: powershell
+        shell: bash
         env:
           INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
           INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
           INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST || 'graph.instagram.com' }}
         run: |
-          $py='C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe'
-          & $py -c "import os,sys;from scripts.instagram_publish import client_from_env,InstagramAPIError;u=os.environ.get('INSTAGRAM_USER_ID','');t=os.environ.get('INSTAGRAM_ACCESS_TOKEN','');print('INSTAGRAM_TOKEN_CONFIG_PRESENT='+str(bool(u and t)));exit_code=2
+          python - <<'PY'
+          import os
+          import sys
+          from scripts.instagram_publish import client_from_env, InstagramAPIError
+          user = os.environ.get("INSTAGRAM_USER_ID", "")
+          token = os.environ.get("INSTAGRAM_ACCESS_TOKEN", "")
+          print("INSTAGRAM_TOKEN_CONFIG_PRESENT=" + str(bool(user and token)))
+          exit_code = 2
           try:
-           x=client_from_env()._request('GET',u,query={'fields':'id,username'})
-           exit_code=0 if x.get('id')==u and str(x.get('username','')).lower()=='universoanthares' else 3
-          except Exception as e:
-           exit_code=4 if isinstance(e,InstagramAPIError) else 5
-          print('INSTAGRAM_GRAPH_PROFILE_CHECK='+str(exit_code));sys.exit(exit_code)"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              profile = client_from_env()._request("GET", user, query={"fields": "id,username"})
+              exit_code = 0 if profile.get("id") == user and str(profile.get("username", "")).lower() == "universoanthares" else 3
+          except Exception as exc:
+              exit_code = 4 if isinstance(exc, InstagramAPIError) else 5
+          print("INSTAGRAM_GRAPH_PROFILE_CHECK=" + str(exit_code))
+          sys.exit(exit_code)
+          PY
