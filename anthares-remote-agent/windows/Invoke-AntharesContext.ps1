@@ -14,7 +14,9 @@ function Assert-OwnerPolicy {
  $m=Get-Content -LiteralPath (Join-Path $cfg.governance_root 'manifest.json') -Raw|ConvertFrom-Json
  foreach($name in @('REGRAS-OBRIGATORIAS.md','INDICE.md','PROMPT-MESTRE.md')){
   $path=Join-Path $cfg.governance_root $name
-  if((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $m.files.$name){throw 'GOVERNANCE_INTEGRITY_FAILURE'}
+  $hasher=[Security.Cryptography.SHA256]::Create()
+  try{$digest=[BitConverter]::ToString($hasher.ComputeHash([IO.File]::ReadAllBytes($path))).Replace('-','').ToLowerInvariant()}finally{$hasher.Dispose()}
+  if($digest -ne $m.files.$name){throw 'GOVERNANCE_INTEGRITY_FAILURE'}
  }
  $cfg.governance=$m.version
 }
@@ -61,6 +63,9 @@ try:
   probe=subprocess.run([p['file'],p['arguments'][0],'whoami'],cwd=p['cwd'],env=env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,creationflags=subprocess.CREATE_NO_WINDOW,startupinfo=si,timeout=20)
   if probe.returncode or p['expected_account'] not in (probe.stdout+probe.stderr).decode('utf-8',errors='replace'):
    print(json.dumps(dict(exit_code=401,output='PROVIDER_IDENTITY_NOT_VERIFIED; authenticate existing owner account; do not switch identity or copy credentials',timed_out=False)))
+   sys.exit(0)
+  if p['arguments'][1:]==['whoami']:
+   print(json.dumps(dict(exit_code=0,output='CLOUDFLARE_ACCOUNT_VERIFIED='+p['expected_account'],timed_out=False)))
    sys.exit(0)
  if p['service']=='GitHub':
   probe=subprocess.run([p['file'],'api','user','--jq','.login'],cwd=p['cwd'],env=env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,creationflags=subprocess.CREATE_NO_WINDOW,startupinfo=si,timeout=20)
