@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 const MANIFEST=new URL('../config/threads-media-delivery-mirrors.json',import.meta.url);
 const BLOB_HOST='izu4hsz4kmpqtwkl.public.blob.vercel-storage.com';
 const SHA=/^[0-9a-f]{64}$/;
-const KEY=/^([A-Za-z0-9_-]{11})\\|g([0-9]+):([A-Za-z0-9_-]{11}):([0-9]+):([0-9]+)$/;
+const KEY=/^([A-Za-z0-9_-]{11})\|g([0-9]+):([A-Za-z0-9_-]{11}):([0-9]+):([0-9]+)$/;
 
 // This is a delivery-only override. It never changes the canonical
 // WordPress URL or Neon reservation identity and cannot release quarantine.
