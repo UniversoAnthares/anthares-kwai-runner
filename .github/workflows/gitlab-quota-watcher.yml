@@ -6,6 +6,8 @@ on:
     workflows:
       - "Sync GitHub main to GitLab"
       - "Anthares Core Supervisor"
+      - "GitLab CI quota fallback - CORTES contracts"
+      - "Anthares remote private CI quota rescue"
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -26,9 +28,9 @@ permissions:
   id-token: write
 jobs:
   watch:
-    # Use only trusted scheduled parent completions as secondary triggers.
-    # Every mirror push previously caused excess runs and pending cancellations.
-    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'schedule') }}
+    # Admit trusted scheduled parent checks and successful dispatch-based quota rescues.
+    # Other parent events stay blocked to prevent redundant watcher launches.
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success' && ((github.event.workflow_run.event == 'schedule' && (github.event.workflow_run.name == 'Sync GitHub main to GitLab' || github.event.workflow_run.name == 'Anthares Core Supervisor')) || (github.event.workflow_run.event == 'workflow_dispatch' && (github.event.workflow_run.name == 'GitLab CI quota fallback - CORTES contracts' || github.event.workflow_run.name == 'Anthares remote private CI quota rescue') && startsWith(github.event.workflow_run.display_title, 'quota-rescue-')))) }}
     runs-on: ubuntu-latest
     # Evaluate the job eligibility before acquiring the mutex; discarded
     # workflow_run push events must not replace legitimate pending work.
