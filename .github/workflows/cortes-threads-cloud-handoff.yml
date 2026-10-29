@@ -52,6 +52,28 @@ jobs:
           node --check infra/neon-cortes-threads-execution/index.mjs
       - name: Run cloud and local fencing contract tests
         run: node --test tests/threads_cloud_handoff.test.mjs
+      - name: One-time read-only proof of MP4 reachability from GitHub-hosted network
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const url = 'https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_fOmihuHUT1M_g1_7868_7908.mp4';
+          try {
+            const r = await fetch(url, {
+              headers: { Range: 'bytes=0-1023', Accept: 'video/mp4' },
+              redirect: 'manual',
+              signal: AbortSignal.timeout(15000)
+            });
+            console.log('THREADS_GH_HTTP403_ORIGIN_STATUS=' + r.status);
+            console.log('THREADS_GH_HTTP403_EDGE_SERVER=' + (r.headers.get('server') || 'missing').slice(0,80));
+            console.log('THREADS_GH_HTTP403_REQUEST_ID=' + (r.headers.get('x-hcdn-request-id') || 'missing').slice(0,150));
+            console.log('THREADS_GH_HTTP403_MEDIA_TYPE=' + (r.headers.get('content-type') || 'missing').slice(0,80));
+            if (r.body) await r.body.cancel();
+          } catch (e) {
+            console.log('THREADS_GH_HTTP403_ORIGIN_ERROR=' + e.constructor.name);
+          }
+          NODE
       - name: Read account token directly from existing Bitwarden Secrets Manager
         uses: bitwarden/sm-action@v2
         with:
