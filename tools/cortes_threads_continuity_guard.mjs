@@ -51,7 +51,11 @@ if(canRetry && process.argv.includes('--recover')){
 if(problems.length){
  const fingerprint=crypto.createHash('sha256').update(problems.slice().sort().join('|')).digest('hex').slice(0,16);
  const previousAlarm=Date.parse(previous.last_alarm_at||0);
- if(previous.last_alarm_fingerprint!==fingerprint||now-previousAlarm>30*60000){
+ // An unchanged incident is already open in the QA P0 authority.
+ // Preserve immediate escalation on changed failure class, but avoid flooding
+ // the same evidence directory and GitHub issue bridge every 30 minutes.
+ // General QA cadence remains capped at one repeat per 12 hours.
+ if(previous.last_alarm_fingerprint!==fingerprint||now-previousAlarm>12*60*60000){
   const dir=at('qa-incidents');fs.mkdirSync(dir,{recursive:true});
   const incident={priority:critical?'P0':'P1',project:'CORTES',network:'threads',kind:'CONTINUITY_FAILURE',fingerprint,created_at:new Date().toISOString(),state,requires_reconciliation:uncertain.map(x=>x.id),automatic_republish_of_uncertain:false};
   const name='threads-'+new Date().toISOString().replace(/[:.]/g,'-')+'-'+fingerprint+'.json';
