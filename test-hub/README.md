@@ -235,3 +235,9 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - **Live GitHub Actions:** os dois workflows Windows estão `active`; isso não equivale a autorização de takeover. **Neon:** 10 resultados incertos universo e 2 `closed_unverified` lucas4 sem remote_id após `STARTED`.
 - `TAKEOVER_ALLOWED=false`, `CONTINGENCY_READY=false` até freeze, reconciliação remota independente, generation/lock Neon e publicação normal autorizada com recibo. Os runners Windows não foram novamente homologados nesta rodada (controle remoto ocupado).
 - Finding: `test-hub/findings/20261028-item18-windows-github-readiness-partial.md`, que supera o registro RUNNING do mesmo escopo. Item **18 permanece PARCIAL**.
+
+### AOI item fixo 4 — CI/CD Forgejo principal em admissão (2026-10-29)
+- **SOURCE READY:** [PR #1816](https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1816) adicionou o único workflow CI/CD manual, isolado e não publicador para o Forgejo principal; [PR #1854](https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1854) eliminou checkout externo, vinculando Git ao SHA exato do espelho Hostinger já existente.
+- **Admin/runner ainda não comprovados:** a antiga leitura do Forgejo principal indicou Actions desligado e nenhum runner repo-scoped; consulta autenticada foi recusada por segurança e segue sem nova autorização. Runner de sandbox é de outro repositório e não foi promovido.
+- **Critério restante:** ativação administrativa legítima de Actions, runner exclusivo `anthares-ci-main-host`, execução manual real com markers `ANTHARES_FORGEJO_MAIN_CI=PASS` e `ANTHARES_FORGEJO_MAIN_CD=PASS` + recibo SHA. **Item 4 PARCIAL, não DONE.**
+- Evidência: `test-hub/findings/20261029-item4-main-ci-staged-admin-pending.md`.
