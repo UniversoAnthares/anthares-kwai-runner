@@ -96,7 +96,7 @@ func main() {
 		}
 		if job == nil {
 			<-sem
-			// Only after a proven socket ready does idle waiting change.
+			// Only after a valid broker health receipt does idle waiting change.
 			// A 12s safety scan still catches lost wake events before expiry.
 			wake.waitAfterEmpty()
 			continue
