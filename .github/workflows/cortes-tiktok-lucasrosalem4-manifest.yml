@@ -7,20 +7,44 @@ on:
       - 'tools/cortes_tiktok_lucasrosalem4_manifest.py'
       - 'tests/test_cortes_tiktok_lucasrosalem4_manifest.py'
       - '.github/workflows/cortes-tiktok-lucasrosalem4-manifest.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/cortes_tiktok_lucasrosalem4_manifest.py'
+      - 'tests/test_cortes_tiktok_lucasrosalem4_manifest.py'
+      - '.github/workflows/cortes-tiktok-lucasrosalem4-manifest.yml'
   schedule:
     - cron: '*/15 * * * *'
 permissions:
   contents: read
-  id-token: write
 concurrency:
-  group: cortes-tiktok-lucasrosalem4-source-manifest
+  group: cortes-tiktok-lucasrosalem4-source-manifest-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify source integrity and no-PC write contract
+        run: python -B -m unittest discover -s tests -p test_cortes_tiktok_lucasrosalem4_manifest.py -v
   manifest:
-    # Branch dispatch validates the isolated code. Neon OIDC only accepts main.
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 7
+    permissions:
+      contents: read
+      id-token: write
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONUTF8: '1'
@@ -33,11 +57,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify isolated read-only Neon manifest contract
-        shell: bash
-        run: |
-          python -B -m unittest discover -s tests -p test_cortes_tiktok_lucasrosalem4_manifest.py -v
+        run: python -B -m unittest discover -s tests -p test_cortes_tiktok_lucasrosalem4_manifest.py -v
       - name: Read and validate canonical Neon source without local persistence
-        if: github.ref == 'refs/heads/main'
-        shell: bash
-        run: |
-          python -B -u tools/cortes_tiktok_lucasrosalem4_manifest.py
+        run: python -B -u tools/cortes_tiktok_lucasrosalem4_manifest.py
