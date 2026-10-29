@@ -1,5 +1,8 @@
 # Anthares Test Hub
 
+## C8 Hostinger wake integration — 2026-10-29
+Source-only correction in PR #1808: deployed broker is HTTPS JSON long polling with independent listener credential, not WSS/HMAC. Exact commit `19368d9d79a451e9bf39e7dbdb30d17aed6d37fa` passed CI `40935158539`, Go regression tests and Windows build. Preserved 2s fallback/12s safety scan/leases/idempotency; existing PR1815 sender reused for one emitter. Live HTTPS health remains unproved (hcdn403); C8 not replaced. Evidence: [finding](findings/20261029-item5-hostinger-c8-integration-result.md). This supersedes the old Stage C transport assumption, not historical offline proofs.
+
 Fonte compartilhada de verdade para testes, decisões e falhas do projeto Anthares remoto.
 
 ## Regra obrigatória para qualquer chat/agente
