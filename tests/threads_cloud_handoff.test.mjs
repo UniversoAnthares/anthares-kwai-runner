@@ -9,6 +9,33 @@ import {spawnSync} from 'node:child_process';
 import backend from '../infra/neon-cortes-threads-execution/index.mjs';
 import {validateEditorial, captionForClip} from '../tools/cortes_threads_cloud_captions.mjs';
 import {fetchCloudClipByIdentity} from '../tools/cortes_threads_cloud_feed.mjs';
+import {deliveryUrlForClip} from '../tools/cortes_threads_cloud_media_delivery.mjs';
+
+
+test('only SHA-attested exact canonical cut uses the Vercel Blob delivery URL',async()=>{
+ const clip=await fetchCloudClipByIdentity({
+  id:'threads:fOmihuHUT1M|g1:fOmihuHUT1M:7868:7908',
+  day:'2026-10-22',
+  fetcher:async()=>({ok:false,status:403})
+ });
+ const expected='https://izu4hsz4kmpqtwkl.public.blob.vercel-storage.com/threads/fOmihuHUT1M/g1-7868-7908-7355d6c5358f.mp4';
+ assert.equal(await deliveryUrlForClip(clip),expected);
+ await assert.rejects(
+  deliveryUrlForClip({...clip,url:'https://evil.example.invalid/media.mp4'}),
+  /THREADS_MIRROR_EVIDENCE_MISMATCH/
+ );
+ await assert.rejects(
+  deliveryUrlForClip({...clip,editorial:{...clip.editorial,
+   transcript_attestation:{...clip.editorial.transcript_attestation,media_sha256:'0'.repeat(64)}}}),
+  /THREADS_MIRROR_EVIDENCE_MISMATCH/
+ );
+ assert.equal(await deliveryUrlForClip({...clip,id:'non-allowlisted'}),
+  clip.url);
+ const consumer=fs.readFileSync('tools/cortes_threads_cloud_handoff.mjs','utf8');
+ assert.match(consumer,/media_url:selected\.clip\.url/);
+ assert.match(consumer,/video_url:item\.delivery_url\|\|item\.url/);
+ assert.match(consumer,/digest=await mediaDigest\(delivery\)/);
+});
 
 const endpoint='https://neon.example.invalid/?action=control';
 

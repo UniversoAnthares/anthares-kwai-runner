@@ -46,6 +46,7 @@ jobs:
       - name: Verify scripts and fail-closed fencing without side effects
         run: |
           node --check tools/cortes_threads_cloud_handoff.mjs
+          node --check tools/cortes_threads_cloud_media_delivery.mjs
           node --check tools/threads_cloud_batch_pump.mjs
           node --check tools/cortes_threads_cloud_feed.mjs
           node --check tools/cortes_threads_cloud_captions.mjs

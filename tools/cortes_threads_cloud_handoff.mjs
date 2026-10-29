@@ -1,5 +1,6 @@
 
 import crypto from 'node:crypto';
+import { deliveryUrlForClip } from './cortes_threads_cloud_media_delivery.mjs';
 import fs from 'node:fs';
 import {fetchCloudClipByIdentity} from './cortes_threads_cloud_feed.mjs';
 import {captionForClip} from './cortes_threads_cloud_captions.mjs';
@@ -110,12 +111,18 @@ async function gate(){
 }
 
 async function mediaDigest(uri){
+ let u;
+ try{u=new URL(uri)}catch{throw Error('UNTRUSTED_MEDIA_ORIGIN')}
+ const sourceOk=u.hostname==='anthares.us'&&
+  /^\/wp-content\/uploads\/anthares-clips\/\d{4}\/\d{2}\/short_/.test(u.pathname);
+ const blobOk=u.hostname==='izu4hsz4kmpqtwkl.public.blob.vercel-storage.com'&&
+  /^\/threads\/[A-Za-z0-9_-]{11}\/g\d+-\d+-\d+-[a-f0-9]{12}\.mp4$/.test(u.pathname);
  requireOk(
-  /^https:\/\/anthares\.us\/wp-content\/uploads\/anthares-clips\/\d{4}\/\d{2}\/short_/.test(uri),
-  'UNTRUSTED_MEDIA_ORIGIN'
+  u.protocol==='https:'&&!u.search&&!u.hash&&!u.username&&!u.password&&
+  (sourceOk||blobOk),'UNTRUSTED_MEDIA_ORIGIN'
  );
-
  const r=await fetch(uri,{
+  redirect:'error',
   signal:AbortSignal.timeout(90000)
  });
 
@@ -233,7 +240,9 @@ async function choose(jwt,publish){
   let digest,tagged;
 
   try{
-   digest=await mediaDigest(candidate.url);
+   const delivery=await deliveryUrlForClip(candidate);
+   digest=await mediaDigest(delivery);
+   candidate={...candidate,delivery_url:delivery};
 
    tagged=captionForClip(
     candidate.editorial,
@@ -312,7 +321,7 @@ async function publishVideo(item,token,id){
  // A reserva e o fencing são estabelecidos antes desta chamada.
  const create=await graph('/'+id+'/threads',token,{
   media_type:'VIDEO',
-  video_url:item.url,
+  video_url:item.delivery_url||item.url,
   text:item.caption
  });
 

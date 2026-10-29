@@ -1,0 +1,12 @@
+{
+  "schema": "anthares.threads.media-delivery-mirrors.v1",
+  "items": {
+    "fOmihuHUT1M|g1:fOmihuHUT1M:7868:7908": {
+      "canonical_url": "https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_fOmihuHUT1M_g1_7868_7908.mp4",
+      "delivery_url": "https://izu4hsz4kmpqtwkl.public.blob.vercel-storage.com/threads/fOmihuHUT1M/g1-7868-7908-7355d6c5358f.mp4",
+      "media_sha256": "7355d6c5358fdd81a53c93bff17275259bb57f15e44cbe639f95639f0b5cef96",
+      "bytes": 2090126,
+      "evidence": "vercel deployment dpl_D5KvEGXvspA1mLca6qC7JNpEs3fG verified source and blob SHA256"
+    }
+  }
+}
