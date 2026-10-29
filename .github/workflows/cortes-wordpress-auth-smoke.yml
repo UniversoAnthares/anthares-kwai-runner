@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   read-only-auth-check:
-    runs-on: qa-p0-independent
+    runs-on: ubuntu-24.04
     timeout-minutes: 3
     env:
       WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
@@ -22,8 +22,12 @@ jobs:
       PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Check WordPress API identity and JSON shape without writing
-        shell: powershell
+        shell: bash
         run: |
-          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/cortes_wp_auth_smoke.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -u tools/cortes_wp_auth_smoke.py
