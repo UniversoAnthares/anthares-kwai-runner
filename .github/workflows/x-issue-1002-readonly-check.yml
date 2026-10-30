@@ -1,0 +1,63 @@
+name: X issue 1002 read-only publication readiness
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/x-issue-1002-readonly-check.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check known X issue state without creating posts
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error,urllib.parse,sys
+          from tools.x_issue_publisher import fingerprint
+          from tools.x_publication_safety import _issue_payload
+          root='https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner'
+          req=urllib.request.Request(root+'/issues/1002',headers={'Accept':'application/vnd.github+json','User-Agent':'anthares-x-readonly-diagnostic'})
+          with urllib.request.urlopen(req,timeout=25) as r:issue=json.load(r)
+          payload=_issue_payload(issue.get('body'))
+          assert payload.get('platform')=='x' and payload.get('account')=='lucasyahn'
+          key='x_'+fingerprint(payload)
+          print('X_1002_ISSUE_STATE='+str(issue.get('state')))
+          print('X_1002_COMMENTS='+str(issue.get('comments')))
+          media=str(payload.get('media_url') or '')
+          try:
+              req=urllib.request.Request(media,method='HEAD',headers={'User-Agent':'anthares-x-readonly-diagnostic'})
+              with urllib.request.urlopen(req,timeout=35) as response:
+                  print('X_1002_MEDIA_HTTP='+str(response.status))
+                  print('X_1002_MEDIA_BYTES='+str(response.headers.get('Content-Length','unknown')))
+          except urllib.error.HTTPError as e:
+              print('X_1002_MEDIA_HTTP='+str(e.code))
+          except Exception as e:
+              print('X_1002_MEDIA_ERROR_TYPE='+type(e).__name__)
+          secret=os.getenv('ARA_SHARED','')
+          print('X_1002_WORKER_SECRET_BOUND='+str(bool(secret)))
+          if not secret:sys.exit(0)
+          base='https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x'
+          for label,route in (
+              ('VERIFY','/verify'),
+              ('POST_STATUS','/post-status?idempotency_key='+urllib.parse.quote(key,safe='')),
+          ):
+              req=urllib.request.Request(base+route,headers={
+                  'Authorization':'Bearer '+secret,'User-Agent':'anthares-x-readonly-diagnostic'})
+              try:
+                  with urllib.request.urlopen(req,timeout=85) as response:
+                      data=json.load(response)
+                      print('X_1002_'+label+'_HTTP='+str(response.status))
+                      for k in ('ok','status','handle','durable','video_verified','post_url','error'):
+                          if k in data and k!='error':
+                              print('X_1002_'+label+'_'+k.upper()+'='+str(data[k])[:150])
+                      if 'error' in data:print('X_1002_'+label+'_ERROR_TYPE='+str(data['error'])[:80])
+              except urllib.error.HTTPError as e:
+                  print('X_1002_'+label+'_HTTP='+str(e.code))
+              except Exception as e:
+                  print('X_1002_'+label+'_ERROR_TYPE='+type(e).__name__)
+          PY
