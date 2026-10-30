@@ -1,5 +1,8 @@
 name: CORTES P0 publication incident watchdog
 on:
+  pull_request:
+    paths:
+      - .github/workflows/cortes-qa-p0-publication-watchdog.yml
   workflow_dispatch: {}
   push:
     branches: [main]
@@ -28,6 +31,24 @@ concurrency:
   group: cortes-p0-${{ github.event_name }}-${{ github.event_name == 'workflow_run' && github.event.workflow_run.name || github.event_name == 'schedule' && 'routine' || github.run_id }}
   cancel-in-progress: false
 jobs:
+  hosted-wp-auth-canary:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'ops/qa-p0-watchdog-hosted-wp-canary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    env:
+      WP_SITE_URL: ${{ secrets.WP_QA_SITE_URL || secrets.WP_SITE_URL }}
+      WP_USERNAME: ${{ secrets.WP_QA_USERNAME || secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_QA_APP_PASSWORD || secrets.WP_APP_PASSWORD }}
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify authenticated WordPress CORTES QA state read-only
+        shell: bash
+        run: python -B -u tools/cortes_wp_auth_smoke.py
   route:
     concurrency:
       group: cortes-qa-p0-windows-route
@@ -36,7 +57,7 @@ jobs:
       contents: read
       issues: write
       actions: write
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success')
     # This route invokes Windows PowerShell and Python311 installed on the local runner.
     # Self-hosted execution also remains available when hosted minutes are exhausted.
     runs-on: qa-p0-independent
