@@ -5,9 +5,6 @@ on:
     paths:
       - '.github/workflows/cortes-instagram-graph-auth-preflight.yml'
   workflow_dispatch: {}
-  pull_request:
-    paths:
-      - '.github/workflows/cortes-instagram-graph-auth-preflight.yml'
 permissions:
   contents: read
 concurrency:
@@ -15,7 +12,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect-identity:
-    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'ops/item11-instagram-graph-credential-classification-20261030')
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     steps:
