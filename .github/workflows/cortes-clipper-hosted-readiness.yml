@@ -92,6 +92,12 @@ jobs:
           for f in cortes_discover.py cortes_source_adapter.py cortes_method12_long.py cortes_short_batch.py qa/cortes_short_resume_guard.py qa/cortes_06am_preflight.py; do
             test -s "$f" || { echo "::error::CORTES_HOSTED_SOURCE_FILE_MISSING"; exit 1; }
           done
+          # The GitHub Ubuntu image used by this job did not include ffmpeg/ffprobe.
+          # Install tools on the disposable hosted VM; nothing touches the PC.
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq >/dev/null
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg >/dev/null
+          fi
           if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
             echo "::error::CORTES_HOSTED_FFMPEG_UNAVAILABLE"; exit 1
           fi
