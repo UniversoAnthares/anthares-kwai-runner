@@ -1,0 +1,26 @@
+name: AOI read-only Northflank X retirement audit
+on:
+  push:
+    branches:
+      - aoi/northflank-x-retirement-audit-20261030
+    paths:
+      - tools/northflank_x_retirement_audit.py
+      - .github/workflows/aoi-northflank-x-retirement-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ANTHARES_X_AUTOPUBLISH: ${{ vars.ANTHARES_X_AUTOPUBLISH }}
+      ANTHARES_X_NEON_LEDGER_VERIFIED: ${{ vars.ANTHARES_X_NEON_LEDGER_VERIFIED }}
+      ANTHARES_X_LEGACY_FALLBACK_ARM: ${{ vars.ANTHARES_X_LEGACY_FALLBACK_ARM }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check X receipts, Neon migration, and Northflank ARA usage without mutation
+        run: python tools/northflank_x_retirement_audit.py
