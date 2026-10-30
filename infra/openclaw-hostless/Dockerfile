@@ -11,4 +11,4 @@ EXPOSE 18789
 
 # Fail closed: a token is mandatory, and no account/connector credentials are provisioned.
 # Exec forwards container termination directly to the OpenClaw Gateway process.
-CMD ["/bin/sh", "-ec", "test -n \"\u0024{OPENCLAW_GATEWAY_TOKEN:-}\" || { echo OPENCLAW_GATEWAY_TOKEN_REQUIRED >&2; exit 78; }; mkdir -p \"\u0024OPENCLAW_STATE_DIR\" \"\u0024OPENCLAW_CONFIG_DIR\"; exec node dist/index.js gateway run --bind lan --auth token --port \"\u0024{PORT:-18789}\" --allow-unconfigured"]
+CMD ["/bin/sh", "-ec", "test -n \"${OPENCLAW_GATEWAY_TOKEN:-}\" || { echo OPENCLAW_GATEWAY_TOKEN_REQUIRED >&2; exit 78; }; mkdir -p \"$OPENCLAW_STATE_DIR\" \"$OPENCLAW_CONFIG_DIR\"; exec node dist/index.js gateway run --bind lan --auth token --port \"${PORT:-18789}\" --allow-unconfigured"]
