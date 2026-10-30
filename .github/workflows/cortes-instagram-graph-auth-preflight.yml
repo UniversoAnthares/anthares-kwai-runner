@@ -28,20 +28,58 @@ jobs:
           INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
           INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST || 'graph.instagram.com' }}
+          META_INSTAGRAM_USER_ID: ${{ secrets.META_INSTAGRAM_USER_ID }}
+          META_INSTAGRAM_ACCESS_TOKEN: ${{ secrets.META_INSTAGRAM_ACCESS_TOKEN }}
         run: |
           python - <<'PY'
-          import os
-          import sys
-          from scripts.instagram_publish import client_from_env, InstagramAPIError
-          user = os.environ.get("INSTAGRAM_USER_ID", "")
-          token = os.environ.get("INSTAGRAM_ACCESS_TOKEN", "")
-          print("INSTAGRAM_TOKEN_CONFIG_PRESENT=" + str(bool(user and token)))
-          exit_code = 2
-          try:
-              profile = client_from_env()._request("GET", user, query={"fields": "id,username"})
-              exit_code = 0 if profile.get("id") == user and str(profile.get("username", "")).lower() == "universoanthares" else 3
-          except Exception as exc:
-              exit_code = 4 if isinstance(exc, InstagramAPIError) else 5
-          print("INSTAGRAM_GRAPH_PROFILE_CHECK=" + str(exit_code))
-          sys.exit(exit_code)
+          import json, os, re, sys, urllib.error, urllib.request
+          expected = "universoanthares"
+          families = (
+              ("direct", os.getenv("INSTAGRAM_USER_ID", ""), os.getenv("INSTAGRAM_ACCESS_TOKEN", ""), os.getenv("INSTAGRAM_API_VERSION", "v26.0")),
+              ("alternate", os.getenv("META_INSTAGRAM_USER_ID", ""), os.getenv("META_INSTAGRAM_ACCESS_TOKEN", ""), "v24.0"),
+          )
+          found = False
+          for family, uid, token, version in families:
+              configured = bool(uid.strip() and token.strip())
+              print("INSTAGRAM_GRAPH_CANDIDATE=" + family + " configured=" + str(configured))
+              if not configured:
+                  continue
+              if not re.fullmatch(r"[0-9]{6,30}", uid) or not re.fullmatch(r"v[0-9]{1,3}[.][0-9]",version):
+                  print("INSTAGRAM_GRAPH_DIAG=" + family + ":INVALID_CONFIG")
+                  continue
+              preferred = os.getenv("INSTAGRAM_GRAPH_HOST", "graph.instagram.com") if family == "direct" else "graph.instagram.com"
+              hosts = (preferred, "graph.facebook.com" if preferred == "graph.instagram.com" else "graph.instagram.com")
+              for host in hosts:
+                  if host not in ("graph.instagram.com","graph.facebook.com"):
+                      print("INSTAGRAM_GRAPH_DIAG=" + family + ":UNTRUSTED_HOST")
+                      continue
+                  req = urllib.request.Request("https://" + host + "/" + version + "/" + uid + "?fields=id%2Cusername",
+                      headers={"Authorization":"Bearer "+token,"Accept":"application/json","User-Agent":"Anthares-Graph-Auth-ReadOnly-Diag/1"},method="GET")
+                  try:
+                      with urllib.request.urlopen(req,timeout=16) as resp:
+                          payload = json.loads(resp.read(4097))
+                      if str(payload.get("id")) == uid and str(payload.get("username","")).lower() == expected:
+                          print("INSTAGRAM_GRAPH_DIAG=" + family + ":" + host + ":AUTHENTICATED_EXACT_ACCOUNT")
+                          found = True
+                          break
+                      print("INSTAGRAM_GRAPH_DIAG=" + family + ":" + host + ":IDENTITY_MISMATCH")
+                  except urllib.error.HTTPError as exc:
+                      try:
+                          data = json.loads(exc.read(4096))
+                          err = data.get("error",{}) if isinstance(data,dict) else {}
+                          code = err.get("code")
+                          subcode = err.get("error_subcode")
+                          code = str(code) if isinstance(code,int) else "unknown"
+                          subcode = str(subcode) if isinstance(subcode,int) else "none"
+                      except (ValueError, UnicodeDecodeError):
+                          code,subcode = "unknown","none"
+                      print("INSTAGRAM_GRAPH_DIAG=" + family + ":" + host + ":HTTP_" + str(exc.code) + ":META_CODE_" + code + ":SUBCODE_" + subcode)
+                  except (urllib.error.URLError, TimeoutError):
+                      print("INSTAGRAM_GRAPH_DIAG=" + family + ":" + host + ":NETWORK_ERROR")
+                  except (ValueError, UnicodeDecodeError):
+                      print("INSTAGRAM_GRAPH_DIAG=" + family + ":" + host + ":INVALID_RESPONSE")
+              if found:
+                  break
+          print("INSTAGRAM_GRAPH_PROFILE_CHECK=" + ("0" if found else "4"))
+          sys.exit(0 if found else 4)
           PY
