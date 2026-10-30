@@ -495,15 +495,15 @@ var index_default = { async fetch(req, env) {
   try {
     if (req.method === "GET" && (u.pathname === "/" || u.pathname === "/health")) {
       await st(env).ensure();
-      let controlReady = false, connected = false;
+      let controlReady = false, connected = false, controlError = null;
       try {
         const s = await status(env, DEFAULT_DEVICE);
         controlReady = true;
         connected = !!s.connected;
-      } catch {
+      } catch(e) {controlError=/^control(?:_http_| )[0-9]{3}/.test(String(e?.message))?String(e.message).slice(0,100):"control_unavailable";
       }
       const pinned = !!await st(env).pinnedClient();
-      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: ownerGithubConfigured(env) ? "github_owner_identity" : "email_otp", oauth_client_pinned: pinned, mcp_server_version: "1.2.0", discovery_revision: DISCOVERY_REVISION, mcp_delegation_tools: githubTools.filter(t => t.name === "run_claude_code" || t.name === "get_claude_code_status" || t.name === "get_claude_code_result").map(t => t.name) }, controlReady ? 200 : 503);
+      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, control_error: controlError, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: ownerGithubConfigured(env) ? "github_owner_identity" : "email_otp", oauth_client_pinned: pinned, mcp_server_version: "1.2.0", discovery_revision: DISCOVERY_REVISION, mcp_delegation_tools: githubTools.filter(t => t.name === "run_claude_code" || t.name === "get_claude_code_status" || t.name === "get_claude_code_result").map(t => t.name) }, controlReady ? 200 : 503);
     }
     if (req.method === "GET" && u.pathname === "/.well-known/ara-control-key") return new Response(await st(env).publicPem(), { headers: { "content-type": "application/x-pem-file", "cache-control": "no-store" } });
     if (req.method === "GET" && u.pathname === "/.well-known/oauth-protected-resource") return json({ resource: ORIGIN, authorization_servers: [ORIGIN], scopes_supported: [...SCOPES], resource_documentation: "https://github.com/UniversoAnthares/anthares-kwai-runner" });
