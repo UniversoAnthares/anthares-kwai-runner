@@ -22,6 +22,7 @@ jobs:
           python3 -m playwright install chromium
       - name: Audit 10 current uncertain segments across Studio pages (read-only)
         run: |
+          python3 - <<'PY'
           import hashlib,json,re,sys
           from playwright.sync_api import sync_playwright
           sys.path.insert(0,'direct-tiktok-publisher')
@@ -96,3 +97,4 @@ jobs:
                   print('TIKTOK_UNCERTAIN_SCAN_TOTAL_RECORDS='+str(len(records)),flush=True)
                   print('TIKTOK_UNCERTAIN_SCAN_COMPLETE='+str(len(found)==len(segments)),flush=True)
               finally:browser.close()
+          PY
