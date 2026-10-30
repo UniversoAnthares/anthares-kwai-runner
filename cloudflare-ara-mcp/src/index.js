@@ -267,7 +267,7 @@ ${raw}`;
     return true;
   }
 };
-async function control(env,path,opts={}) {return requestControl({origins:[CONTROL,CONTROL_STANDBY,"https://anthares-ara-neon-standby.anthares1.workers.dev"],path,...opts,sign:(method,p,raw)=>st(env).signControl(method,p,raw)});}
+async function control(env,path,opts={}) {return requestControl({origins:[CONTROL,CONTROL_STANDBY,"https://anthares-ara-neon-standby.anthares1.workers.dev"],path,...opts,fetchImpl:(url,init)=>url.startsWith("https://anthares-ara-neon-standby.anthares1.workers.dev/")&&env.ARA_NEON_STANDBY?env.ARA_NEON_STANDBY.fetch(url,init):fetch(url,init),sign:(method,p,raw)=>st(env).signControl(method,p,raw)});}
 __name(control, "control");
 async function controlJson(env, path, opts) {
   const r = await control(env, path, opts);
