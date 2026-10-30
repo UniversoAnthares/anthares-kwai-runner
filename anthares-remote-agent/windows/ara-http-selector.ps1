@@ -18,7 +18,9 @@ function Select-AraHttpTransport {
   if(-not $SimulatePrimaryFailure){$primaryOk=Test-AraHttpTransport -Origin $Primary -Token $Token -Device $Device}
   $secondaryOk=$false
   if(-not $primaryOk){$secondaryOk=Test-AraHttpTransport -Origin $Secondary -Token $Token -Device $Device}
-  $origin=if($primaryOk){$Primary}elseif($secondaryOk){$Secondary}else{$Primary}
+  # A disabled Vercel deployment (402) must not start a failing HTTP loop.
+  # A blank origin allows the same C8 process to use its configured private queues.
+  $origin=if($primaryOk){$Primary}elseif($secondaryOk){$Secondary}else{$null}
   $reason=if($primaryOk){'primary_verified'}elseif($secondaryOk){'secondary_verified'}else{'both_unavailable_queue_only'}
   [pscustomobject]@{origin=$origin;reason=$reason;primary_ok=$primaryOk;secondary_ok=$secondaryOk}
 }
