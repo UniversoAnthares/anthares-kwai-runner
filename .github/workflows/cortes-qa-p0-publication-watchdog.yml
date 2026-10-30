@@ -48,7 +48,9 @@ jobs:
           persist-credentials: false
       - name: Verify authenticated WordPress CORTES QA state read-only
         shell: bash
-        run: python -B -u tools/cortes_wp_auth_smoke.py
+        run: |
+          python -B -m unittest discover -s tests -p test_cortes_wp_auth_smoke.py -q
+          python -B -u tools/cortes_wp_auth_smoke.py
   route:
     concurrency:
       group: cortes-qa-p0-windows-route
