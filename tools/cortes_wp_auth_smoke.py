@@ -7,7 +7,8 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 
-MAX_BYTES = 2_000_000
+# Match the existing trusted QA-SSH maximum without admitting unbounded responses.
+MAX_BYTES = 16_777_216
 
 
 def probe(env=None, open_url=None):

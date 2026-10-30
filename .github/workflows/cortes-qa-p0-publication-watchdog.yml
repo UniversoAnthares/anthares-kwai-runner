@@ -37,9 +37,8 @@ jobs:
       issues: write
       actions: write
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'
-    # This route invokes Windows PowerShell and Python311 installed on the local runner.
-    # Self-hosted execution also remains available when hosted minutes are exhausted.
-    runs-on: qa-p0-independent
+    # Authenticated WordPress read-only QA proven on hosted Ubuntu; preserve original serial route lock.
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     env:
       GITHUB_TOKEN: ${{ github.token }}
@@ -49,15 +48,18 @@ jobs:
       WP_APP_PASSWORD: ${{ secrets.WP_QA_APP_PASSWORD || secrets.WP_APP_PASSWORD }}
       PYTHONIOENCODING: utf-8
       PYTHONUTF8: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Detect publisher failures and open immediate-priority QA issues
-        shell: powershell
+        shell: bash
         run: |
-          & 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe' -u tools/cortes_qa_p0_router.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          set -euo pipefail
+          python -B -u tools/cortes_qa_p0_router.py
   cloud-alert-redundancy:
-    # Existing watchdog: independent GitHub-hosted incident delivery if Windows is offline.
+    # Separate hosted incident delivery job, with its own lock and no publishing secrets.
     # This job never reads publication secrets or runs publisher code.
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'
     runs-on: ubuntu-24.04

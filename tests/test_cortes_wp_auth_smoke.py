@@ -3,7 +3,7 @@ import io
 import json
 import unittest
 import urllib.error
-from tools.cortes_wp_auth_smoke import probe
+from tools.cortes_wp_auth_smoke import probe, MAX_BYTES
 
 class FakeResponse:
     status=200
@@ -31,6 +31,12 @@ class WordPressSmokeTest(unittest.TestCase):
         self.assertEqual(probe(self.env,lambda req,timeout:FakeResponse(b"not-json")),("INVALID_JSON",2))
     def test_invalid_structure_not_green(self):
         self.assertEqual(probe(self.env,lambda req,timeout:FakeResponse(b'{"other":true}')),("INVALID_SCHEMA",2))
+    def test_valid_large_authenticated_response_within_qa_limit(self):
+        data=json.dumps({"items":[{"description":"x"*2_100_000}],"blocker":None}).encode()
+        self.assertLess(len(data), MAX_BYTES)
+        self.assertEqual(probe(self.env,lambda req,timeout:FakeResponse(data)),("AUTHENTICATED_JSON_ITEMS_1",0))
+    def test_response_above_qa_limit_fails_closed(self):
+        self.assertEqual(probe(self.env,lambda req,timeout:FakeResponse(b"x"*(MAX_BYTES+1))),("PAYLOAD_TOO_LARGE",2))
     def test_invalid_http_site(self):
         env=dict(self.env,WP_SITE_URL="http://anthares.us")
         self.assertEqual(probe(env),("SITE_URL_INVALID",2))
