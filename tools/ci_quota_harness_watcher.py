@@ -80,12 +80,14 @@ def owned_execution_id(status: dict):
 
 def recent_owned_runs(github_token, reader=get_json) -> list[tuple[str, str]]:
     base = "https://api.github.com/repos/" + REPO
-    commits = reader(base + "/commits?sha=main&per_page=6", github_token)
+    # Each 15-minute poll can span more than six main commits during bursts.
+    # Cap GitHub status lookups to 16 so slow API responses still fit the job timeout.
+    commits = reader(base + "/commits?sha=main&per_page=16", github_token)
     if not isinstance(commits, list):
         raise ValueError("INVALID_GITHUB_COMMITS_RESPONSE")
     seen = set()
     candidates = []
-    for commit in commits[:6]:
+    for commit in commits[:16]:
         sha = str(commit.get("sha", "")) if isinstance(commit, dict) else ""
         if not SHA.fullmatch(sha):
             continue
