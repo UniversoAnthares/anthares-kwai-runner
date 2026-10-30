@@ -1,0 +1,48 @@
+name: AOI read-only Northflank X retirement audit
+on:
+  push:
+    branches:
+      - main
+      - aoi/northflank-x-retirement-audit-20261030
+    paths:
+      - tools/northflank_x_retirement_audit.py
+      - .github/workflows/aoi-northflank-x-retirement-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ANTHARES_X_AUTOPUBLISH: ${{ vars.ANTHARES_X_AUTOPUBLISH }}
+      ANTHARES_X_NEON_LEDGER_VERIFIED: ${{ vars.ANTHARES_X_NEON_LEDGER_VERIFIED }}
+      ANTHARES_X_LEGACY_FALLBACK_ARM: ${{ vars.ANTHARES_X_LEGACY_FALLBACK_ARM }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read-only X receipts and Northflank logs
+        shell: bash
+        run: |
+          python tools/northflank_x_retirement_audit.py > audit-result.txt || true
+          cat audit-result.txt
+      - name: Report sanitized audit result to this PR
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request
+          from pathlib import Path
+          data=Path('audit-result.txt').read_text(encoding='utf-8').strip()
+          allowed=('ANTHARES_NORTHFLANK_X_RETIREMENT_AUDIT=','ANTHARES_NORTHFLANK_AUDIT_ERROR=')
+          data='\n'.join(s for s in data.splitlines() if s.startswith(allowed))[:6000]
+          if not data: data='AUDIT_RESULT_MISSING'
+          body='AOI Northflank X audit (read-only, no publication/deletion):\n\n' + '```text\n' + data + '\n```'
+          url='https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/issues/1987/comments'
+          req=urllib.request.Request(url,data=json.dumps({'body':body}).encode(),method='POST',headers={
+            'Authorization':'Bearer '+os.environ['GH_TOKEN'],
+            'Accept':'application/vnd.github+json','Content-Type':'application/json'})
+          with urllib.request.urlopen(req, timeout=30) as result:
+            print('AUDIT_PR_COMMENT_HTTP='+str(result.status))
+          PY
