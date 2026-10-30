@@ -9,55 +9,57 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-24.04
-    timeout-minutes: 6
+    timeout-minutes: 3
     env:
-      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Check known X issue state without creating posts
+      - name: Check Northflank public health and service metadata read-only
         run: |
           python3 - <<'PY'
-          import json,os,urllib.request,urllib.error,urllib.parse,sys
-          from tools.x_issue_publisher import fingerprint
-          from tools.x_publication_safety import _issue_payload
-          root='https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner'
-          req=urllib.request.Request(root+'/issues/1002',headers={'Accept':'application/vnd.github+json','User-Agent':'anthares-x-readonly-diagnostic'})
-          with urllib.request.urlopen(req,timeout=25) as r:issue=json.load(r)
-          payload=_issue_payload(issue.get('body'))
-          assert payload.get('platform')=='x' and payload.get('account')=='lucasyahn'
-          key='x_'+fingerprint(payload)
-          print('X_1002_ISSUE_STATE='+str(issue.get('state')))
-          print('X_1002_COMMENTS='+str(issue.get('comments')))
-          media=str(payload.get('media_url') or '')
-          try:
-              req=urllib.request.Request(media,method='HEAD',headers={'User-Agent':'anthares-x-readonly-diagnostic'})
-              with urllib.request.urlopen(req,timeout=35) as response:
-                  print('X_1002_MEDIA_HTTP='+str(response.status))
-                  print('X_1002_MEDIA_BYTES='+str(response.headers.get('Content-Length','unknown')))
-          except urllib.error.HTTPError as e:
-              print('X_1002_MEDIA_HTTP='+str(e.code))
-          except Exception as e:
-              print('X_1002_MEDIA_ERROR_TYPE='+type(e).__name__)
-          secret=os.getenv('ARA_SHARED','')
-          print('X_1002_WORKER_SECRET_BOUND='+str(bool(secret)))
-          if not secret:sys.exit(0)
-          base='https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run/x'
-          for label,route in (
-              ('VERIFY','/verify'),
-              ('POST_STATUS','/post-status?idempotency_key='+urllib.parse.quote(key,safe='')),
-          ):
-              req=urllib.request.Request(base+route,headers={
-                  'Authorization':'Bearer '+secret,'User-Agent':'anthares-x-readonly-diagnostic'})
+          import json,os,urllib.request,urllib.error
+          base='https://http--anthares-ara-northflank--6f6pbqmvhpv6.code.run'
+          def call(url,headers=None,timeout=18):
+              req=urllib.request.Request(url,headers=headers or {'User-Agent':'anthares-x-diagnostic-readonly'})
               try:
-                  with urllib.request.urlopen(req,timeout=85) as response:
-                      data=json.load(response)
-                      print('X_1002_'+label+'_HTTP='+str(response.status))
-                      for k in ('ok','status','handle','durable','video_verified','post_url','error'):
-                          if k in data and k!='error':
-                              print('X_1002_'+label+'_'+k.upper()+'='+str(data[k])[:150])
-                      if 'error' in data:print('X_1002_'+label+'_ERROR_TYPE='+str(data['error'])[:80])
-              except urllib.error.HTTPError as e:
-                  print('X_1002_'+label+'_HTTP='+str(e.code))
-              except Exception as e:
-                  print('X_1002_'+label+'_ERROR_TYPE='+type(e).__name__)
+                  with urllib.request.urlopen(req,timeout=timeout) as r:
+                      body=r.read(120000).decode('utf-8','replace')
+                      try:return r.status,json.loads(body)
+                      except ValueError:return r.status,{}
+              except urllib.error.HTTPError as e:return e.code,{}
+              except Exception as e:return 'ERR_'+type(e).__name__,{}
+          for name,path in [('ARA','/healthz'),('X','/x/health')]:
+              http,d=call(base+path)
+              print('X_NORTHFLANK_'+name+'_HEALTH_HTTP='+str(http))
+              for k in ('ok','backend','vault_ready','browser_ready','browser_preflight_required','restore_status','render_dependency'):
+                  if k in d: print('X_NORTHFLANK_'+name+'_'+k.upper()+'='+str(d[k])[:110])
+          token=os.getenv('NORTHFLANK_API_TOKEN','')
+          print('X_NORTHFLANK_API_SECRET_BOUND='+str(bool(token)))
+          if token:
+              api='https://api.northflank.com/v1'
+              headers={'Authorization':'Bearer '+token,'Accept':'application/json'}
+              status,d=call(api+'/projects',headers)
+              print('X_NORTHFLANK_API_PROJECTS_HTTP='+str(status))
+              projects=(d.get('data') or {}).get('projects') or []
+              if isinstance(projects,dict):projects=list(projects.values())
+              project=next((p for p in projects if p.get('name')=='Default'),None)
+              if project:
+                  pid=project.get('id')
+                  status,s=call(api+'/projects/'+str(pid)+'/services',headers)
+                  print('X_NORTHFLANK_API_SERVICES_HTTP='+str(status))
+                  services=(s.get('data') or {}).get('services') or []
+                  if isinstance(services,dict):services=list(services.values())
+                  svc=next((x for x in services if x.get('name')=='anthares-ara-northflank'),None)
+                  if svc:
+                      sid=svc.get('id')
+                      status,full=call(api+'/projects/'+str(pid)+'/services/'+str(sid),headers)
+                      print('X_NORTHFLANK_SERVICE_DETAIL_HTTP='+str(status))
+                      d=full.get('data') or {}
+                      for key in ('name','status','paused','running','deploymentStatus','serviceType','type'):
+                          if key in d:print('X_NORTHFLANK_SERVICE_'+key.upper()+'='+str(d[key])[:125])
+                      for key in ('billing','computePlan','deployment','resources','deploymentConfig'):
+                          v=d.get(key)
+                          if isinstance(v,dict):
+                              safe={k:v[k] for k in ('cpu','memory','replicas','status','state','plan','name','size','instanceType','minInstances','maxInstances') if k in v}
+                              if safe:print('X_NORTHFLANK_SERVICE_'+key.upper()+'='+json.dumps(safe,separators=(',',':'))[:400])
+                  else: print('X_NORTHFLANK_SERVICE_FOUND=False')
           PY
