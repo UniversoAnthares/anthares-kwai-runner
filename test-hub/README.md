@@ -241,3 +241,9 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - **Admin/runner ainda não comprovados:** a antiga leitura do Forgejo principal indicou Actions desligado e nenhum runner repo-scoped; consulta autenticada foi recusada por segurança e segue sem nova autorização. Runner de sandbox é de outro repositório e não foi promovido.
 - **Critério restante:** ativação administrativa legítima de Actions, runner exclusivo `anthares-ci-main-host`, execução manual real com markers `ANTHARES_FORGEJO_MAIN_CI=PASS` e `ANTHARES_FORGEJO_MAIN_CD=PASS` + recibo SHA. **Item 4 PARCIAL, não DONE.**
 - Evidência: `test-hub/findings/20261029-item4-main-ci-staged-admin-pending.md`.
+
+
+### ARA — independent compute reserve (2026-10-30)
+- PR #1940 merged; Vercel retained and Cloudflare independent compute shares the original Neon replay/job authority. Canonical run40996377835 SUCCESS; 24 safety tests PASS, gateway control_ready=true, anonymous401.
+- Owner connector reconnection and disconnected Windows transport remain pending; no duplicate executor, paid plan, Vercel replacement, database HA claim or AVS item12 execution.
+- Evidence and lease closure: test-hub/findings/20261030-ara-independent-neon-standby-deployed.md.
