@@ -55,6 +55,24 @@ class HarnessWatcherTests(unittest.TestCase):
         self.assertEqual(watcher.recent_owned_runs("fixture", fake),
                          [(EXEC, SHA)])
 
+    def test_recent_discovery_includes_seventh_commit(self):
+        # The 15-minute watcher may see more than six main commits.
+        seventh_sha = "7" * 40
+        earlier_shas = [f"{index:040x}" for index in range(1, 7)]
+        inspected = []
+
+        def fake(url, token):
+            if "/commits?sha=main&per_page=16" in url:
+                return [{"sha": sha} for sha in earlier_shas + [seventh_sha]]
+            inspected.append(url)
+            if seventh_sha in url:
+                return [gh_status()]
+            return []
+
+        self.assertEqual(watcher.recent_owned_runs("fixture", fake),
+                         [(EXEC, seventh_sha)])
+        self.assertEqual(len(inspected), 7)
+
     def test_structured_error_proof_only(self):
         self.assertEqual(watcher.structured_quota(detail(), EXEC),
                          "quota_exceeded")
