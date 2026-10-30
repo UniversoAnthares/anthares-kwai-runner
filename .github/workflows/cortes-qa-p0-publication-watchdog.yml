@@ -80,7 +80,7 @@ jobs:
   cloud-alert-redundancy:
     # Existing watchdog: independent GitHub-hosted incident delivery if Windows is offline.
     # This job never reads publication secrets or runs publisher code.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success')
     runs-on: ubuntu-24.04
     concurrency:
       group: qa-p0-cloud-alert-delivery
