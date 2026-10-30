@@ -174,3 +174,24 @@ test('transaction cookie cannot authorize a different callback state',async()=>{
  const wrongName=two.cookie.slice(0,two.cookie.indexOf('='))+'='+one.cookie.slice(one.cookie.indexOf('=')+1);
  const r=await callback({...two,cookie:wrongName});assert.equal(r.status,403);assert.equal(providerCalls,before);
 });
+
+for (const client of ['https://chatgpt.com/oauth/aaaaaaaa/client.json','https://chatgpt.com/oauth/bbbbbbbb/client.json']) {
+ test('refresh outage is temporary and retry rotates safely for '+client,async()=>{
+  const now=Math.floor(Date.now()/1000),jti='refresh-outage-'+client;
+  const refresh=sign({typ:'refresh',iss:origin,aud:origin,exp:now+600,cid:client,sub:'anthares-owner',scp:['ara.read','ara.write'],jti});
+  const exchange=()=>worker.fetch(form('/oauth/token',{grant_type:'refresh_token',client_id:client,refresh_token:refresh}),env);
+  simulateControlFailures=3;
+  const down=await exchange();assert.equal(down.status,503);assert.deepEqual(await down.json(),{error:'temporarily_unavailable'});
+  assert.equal(down.headers.get('cache-control'),'no-store');assert.equal(down.headers.get('retry-after'),'5');assert(!used.has('refresh_token:'+jti));
+  const recovered=await exchange();assert.equal(recovered.status,200);const tokens=await recovered.json();assert(tokens.refresh_token!==refresh);assert.equal(tokens.scope,'ara.read ara.write');
+  const ping=await worker.fetch(new Request(origin+'/mcp',{method:'POST',headers:{authorization:'Bearer '+tokens.access_token},body:JSON.stringify({jsonrpc:'2.0',id:44,method:'ping'})}),env);assert.equal(ping.status,200);
+  const replay=await exchange();assert.equal(replay.status,400);assert.deepEqual(await replay.json(),{error:'invalid_grant'});
+ });
+}
+test('authorization code outage preserves PKCE and one-use grant',async()=>{
+ const now=Math.floor(Date.now()/1000),jti='code-outage';
+ const code=sign({typ:'oauth_code',iss:origin,aud:origin,exp:now+600,scp:['ara.read'],scopes:['ara.read'],clientId:cid,redirectUri:redirect,challenge,jti});
+ const exchange=()=>worker.fetch(form('/oauth/token',{grant_type:'authorization_code',client_id:cid,redirect_uri:redirect,code,code_verifier:verifier}),env);
+ simulateControlFailures=3;const down=await exchange();assert.equal(down.status,503);assert.equal((await down.json()).error,'temporarily_unavailable');assert(!used.has('authorization_code:'+jti));
+ assert.equal((await exchange()).status,200);assert.equal((await exchange()).status,400);
+});

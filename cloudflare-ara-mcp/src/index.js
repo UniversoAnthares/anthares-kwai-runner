@@ -290,6 +290,7 @@ async function consumeViaControl(env, kind, jti, exp) {
     return true;
   } catch {
     if (kind === "oauth_owner_callback") throw new Error("owner_replay_store_unavailable");
+    if (kind === "refresh_token" || kind === "authorization_code") throw new Error("oauth_replay_store_unavailable");
     return false;
   }
 }
@@ -588,6 +589,7 @@ var index_default = { async fetch(req, env) {
     }
     return json({ error: "not_found" }, 404);
   } catch (e) {
+    if (e?.message === "oauth_replay_store_unavailable") return json({ error: "temporarily_unavailable" }, 503, { "Retry-After": "5" });
     return json({ error: "internal_error", detail: String(e?.message || e) }, 500);
   }
 } };
