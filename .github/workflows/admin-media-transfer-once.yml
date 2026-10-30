@@ -9,29 +9,26 @@ permissions:
   contents: read
 jobs:
   transfer:
-    runs-on: [self-hosted, Windows, X64]
+    # GitHub-hosted: no PC runner, Windows path or persistent local media.
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Validate exact prebuilt clip
-        shell: powershell
+      - name: Download and validate prebuilt clip on the hosted runner
+        shell: bash
+        env:
+          MEDIA_URL: https://raw.githubusercontent.com/UniversoAnthares/anthares-kwai-runner/media-transfer-tiktok-9CIk-I_3VhM-8-98/transfer-media/tiktok_9CIk-I_3VhM_8_98.mp4
         run: |
-          $ErrorActionPreference='Stop'
-          $p='D:\AntharesWork\e2e-video-test-20261013\microcuts_semantic_validation_9CIk-I_3VhM_8_98.mp4'
-          if(-not (Test-Path $p)){ throw 'MEDIA_NOT_FOUND' }
-          $expected='5A43C90508464C016E3F26F4CF17C04CA9BFA3E9EC9AFB7BD160E7A740B395E9'
-          $actual=(Get-FileHash -Algorithm SHA256 $p).Hash
-          if($actual -ne $expected){ throw "MEDIA_SHA_MISMATCH:$actual" }
-          $f=Get-Item $p
-          if($f.Length -ne 11398993){ throw "MEDIA_SIZE_MISMATCH:$($f.Length)" }
-          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\anthares-media" | Out-Null
-          Copy-Item -LiteralPath $p -Destination "$env:RUNNER_TEMP\anthares-media\tiktok_9CIk-I_3VhM_8_98.mp4" -Force
-          Write-Output "MEDIA_TRANSFER_SHA256=$actual"
-          Write-Output "MEDIA_TRANSFER_BYTES=$($f.Length)"
+          set -euo pipefail
+          FILE="$RUNNER_TEMP/tiktok_9CIk-I_3VhM_8_98.mp4"
+          curl --fail --location --retry 2 --connect-timeout 15 --max-time 120 --output "$FILE" "$MEDIA_URL"
+          test "$(stat -c%s "$FILE")" -eq 11398993
+          printf '%s  %s\n' '5a43c90508464c016e3f26f4cf17c04ca9bfa3e9ec9afb7bd160e7a740b395e9' "$FILE" | sha256sum --check --status
+          echo 'MEDIA_TRANSFER_SHA256=VERIFIED'
+          echo 'MEDIA_TRANSFER_BYTES=11398993'
       - name: Upload immutable clip artifact
         uses: actions/upload-artifact@v4
         with:
           name: tiktok-9CIk-I_3VhM-8-98-validated
-          path: ${{ runner.temp }}\anthares-media\tiktok_9CIk-I_3VhM_8_98.mp4
+          path: ${{ runner.temp }}/tiktok_9CIk-I_3VhM_8_98.mp4
           if-no-files-found: error
           retention-days: 7
-# triggered 2026-10-15 to migrate the already-verified local clip into a short-lived cloud artifact

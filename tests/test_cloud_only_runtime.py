@@ -16,6 +16,7 @@ FILES=[
  ".github/workflows/kwai-real-publish.yml",
  ".github/workflows/tiktok-real-publish.yml",
  ".github/workflows/tiktok-github-direct-publisher.yml",
+ ".github/workflows/admin-media-transfer-once.yml",
 ]
 forbidden={
  "memu":r"MEmu",
