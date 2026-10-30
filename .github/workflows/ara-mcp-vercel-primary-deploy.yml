@@ -1,16 +1,13 @@
 name: ARA MCP OAuth Continuity Deploy
 on:
   workflow_dispatch:
+    inputs:
+      phase:
+        type: choice
+        options: [validate, standby, gateway]
+        default: validate
   pull_request:
-    paths:
-      - 'cloudflare-ara-mcp/src/**'
-      - '.github/workflows/ara-mcp-vercel-primary-deploy.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'cloudflare-ara-mcp/src/**'
-      - 'cloudflare-ara-mcp/wrangler.toml'
-      - '.github/workflows/ara-mcp-vercel-primary-deploy.yml'
+    paths: ['cloudflare-ara-mcp/**', 'cloudflare-ara-neon-standby/**', '.github/workflows/ara-mcp-vercel-primary-deploy.yml']
 permissions:
   contents: read
 concurrency:
@@ -24,42 +21,49 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - name: Validate OAuth, replay protection and control failover
-        shell: bash
+          node-version: '24'
+      - name: Verify owner identity and sequential failover safety
         run: |
-          set -euo pipefail
           node --check cloudflare-ara-mcp/src/index.js
-          node --check cloudflare-ara-mcp/src/owner-github-auth.mjs
-          node --test --test-concurrency=1 cloudflare-ara-mcp/src/owner-github-auth.test.mjs
-          grep -q 'CONTROL_STANDBY' cloudflare-ara-mcp/src/index.js
-          grep -q 'owner_control_unavailable' cloudflare-ara-mcp/src/owner-github-auth.mjs
-          echo 'ARA_OAUTH_CONTINUITY_TESTS_PASSED=1'
+          node --check cloudflare-ara-neon-standby/src/worker.mjs
+          node --check cloudflare-ara-neon-standby/src/control.generated.mjs
+          node --test cloudflare-ara-mcp/src/control-transport.test.mjs cloudflare-ara-mcp/src/owner-github-auth.test.mjs cloudflare-ara-mcp/src/claude-client-policy.test.mjs
+          node cloudflare-ara-mcp/capabilities.test.mjs
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' && inputs.phase != 'validate'
     needs: validate
     runs-on: ubuntu-24.04
-    timeout-minutes: 9
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - name: Deploy tested Cloudflare Worker
-        shell: bash
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+          node-version: '24'
+      - name: Build and deploy independent compute only
+        if: inputs.phase == 'standby'
+        working-directory: cloudflare-ara-neon-standby
         run: |
-          set -euo pipefail
-          test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-save --package-lock=false @neondatabase/serverless@1.0.2
+          npx --yes wrangler@4.154.0 deploy --keep-vars
+          echo ARA_INDEPENDENT_COMPUTE_DEPLOYED=PASS
+      - name: Gate gateway activation on provisioned independent standby
+        if: inputs.phase == 'gateway'
+        run: |
+          curl --fail --silent --show-error --max-time 20 https://anthares-ara-neon-standby.anthares1.workers.dev/health -o "$RUNNER_TEMP/standby.json"
+          node -e 'const h=require(process.env.RUNNER_TEMP+"/standby.json");if(!h.ok||h.state!=="shared-neon"||!h.vercel_preserved)process.exit(1)'
           cd cloudflare-ara-mcp
-          npx --yes wrangler@4.43.0 deploy --keep-vars
-      - name: Confirm production OAuth control health
-        shell: bash
+          npx --yes wrangler@4.154.0 deploy --keep-vars
+          echo ARA_GATEWAY_INDEPENDENT_RESERVE_DEPLOYED=PASS
+      - name: Verify fail-closed anonymous access
+        if: inputs.phase == 'gateway'
         run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --max-time 20 --retry 3 --retry-delay 2 \
-            https://anthares-ara-mcp.anthares1.workers.dev/ -o /tmp/ara-health.json
-          node -e 'const h=require("/tmp/ara-health.json");if(!h.ok||!h.control_ready||!h.oauth||!h.mcp)process.exit(1);'
-          echo 'ARA_MCP_OAUTH_PRODUCTION_READY=1'
+          curl --fail --silent --show-error --max-time 30 https://anthares-ara-mcp.anthares1.workers.dev/health -o "$RUNNER_TEMP/gateway.json"
+          node -e 'const h=require(process.env.RUNNER_TEMP+"/gateway.json");if(!h.ok||!h.control_ready||h.oauth_owner_code_mode!=="github_owner_identity")process.exit(1)'
+          code="$(curl --silent --max-time 15 -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' https://anthares-ara-neon-standby.anthares1.workers.dev/v1/mcp/oauth/consume)"
+          test "$code" = 401
+          code="$(curl --silent --max-time 15 -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' https://anthares-ara-mcp.anthares1.workers.dev/mcp)"
+          test "$code" = 401
+          echo ARA_SHARED_LEDGER_FALLBACK_HEALTH_AND_ANON_DENIAL=PASS
