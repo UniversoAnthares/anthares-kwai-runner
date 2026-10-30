@@ -14,28 +14,85 @@ jobs:
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
       EXPECTED_TIKTOK_USERNAME: universo.anthares
-      CORTES_TIKTOK_FORENSIC_SEGMENT_ID: 'g1:9CIk-I_3VhM:252:337'
     steps:
       - uses: actions/checkout@v4
       - name: Install read-only browser dependencies
         run: |
           python3 -m pip install --disable-pip-version-check -q playwright cryptography requests
           python3 -m playwright install chromium
-      - name: Audit existing uncertain clip without publication
-        run: python3 -u tools/tiktok_uncertain_post_audit.py
-      - name: Inventory published videos and deduplication markers (read-only)
+      - name: Audit 10 current uncertain segments across Studio pages (read-only)
         run: |
-          python3 - <<'PY'
-          import sys,re,json
+          import hashlib,json,re,sys
+          from playwright.sync_api import sync_playwright
           sys.path.insert(0,'direct-tiktok-publisher')
-          from tiktok_creator_inventory import inventory_studio
-          rows=inventory_studio('universo.anthares')
-          candidates=[]
-          for row in rows:
-              label=str(row.get('text') or '')
-              marks=sorted(set(re.findall(r'#anthares[a-f0-9]{10}',label.lower())))
-              if marks:
-                  candidates.append({'remote_id':str(row.get('id') or ''),'markers':marks})
-          print('TIKTOK_READONLY_MARKED_POST_COUNT='+str(len(candidates)))
-          print('TIKTOK_READONLY_MARKED_POSTS='+json.dumps(candidates[:250],separators=(',',':')))
-          PY
+          from tiktok_session_authority import load_canonical_state
+          from tiktok_creator_inventory import collect_posts
+          segments=["g1:A7BsgCe3-oo:4989:5029","g1:A7BsgCe3-oo:4946:4989","g1:A7BsgCe3-oo:4905:4946","g1:A7BsgCe3-oo:4864:4905","g1:A7BsgCe3-oo:4822:4864","g1:A7BsgCe3-oo:4781:4822","g1:A7BsgCe3-oo:4741:4781","g1:A7BsgCe3-oo:2513:2554","g1:A7BsgCe3-oo:3503:3544","g1:A7BsgCe3-oo:3463:3503"]
+          marks={('#anthares'+hashlib.sha256(('universo.anthares:'+seg).encode()).hexdigest()[:10]):seg for seg in segments}
+          found={}
+          records={}
+          state,_=load_canonical_state()
+          def record(node):
+              data=collect_posts(node)
+              for vid,item in data.items():
+                  records[vid]=item
+                  s=str(item.get('text') or '').casefold()
+                  for mark,segment in marks.items():
+                      if mark in s:found[segment]=vid
+          def from_page(page):
+              for selector in ('#__UNIVERSAL_DATA_FOR_REHYDRATION__','#__SIGI_STATE'):
+                  try: record(json.loads(page.locator(selector).text_content(timeout=700) or '{}'))
+                  except Exception: pass
+              try:
+                  for item in page.locator('a[href*="/video/"]').evaluate_all("""xs=>xs.map(a=>({url:a.href,text:(a.closest('tr')||a.closest('[role=row]')||a.parentElement?.parentElement||a).innerText.slice(0,1200)}))"""):
+                      m=re.search(r'/video/([0-9]{12,25})',str(item.get('url') or ''))
+                      if not m:continue
+                      vid=m.group(1)
+                      label=str(item.get('text') or '').casefold()
+                      for mark,segment in marks.items():
+                          if mark in label:found[segment]=vid
+              except Exception: pass
+          with sync_playwright() as p:
+              browser=p.chromium.launch(headless=True,args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
+              try:
+                  ctx=browser.new_context(storage_state=state,locale='pt-BR',viewport={'width':1440,'height':950})
+                  page=ctx.new_page()
+                  def watch_response(response):
+                      try:
+                          if 'tiktok.com' in response.url and any(s in response.url for s in ('item_list','creator','content')) and 'json' in response.headers.get('content-type',''):
+                              record(response.json())
+                      except Exception:pass
+                  page.on('response',watch_response)
+                  resp=page.goto('https://www.tiktok.com/tiktokstudio/content',wait_until='domcontentloaded',timeout=45000)
+                  page.wait_for_timeout(5000)
+                  assert '/login' not in page.url and not page.locator('input[type=password]').count(),'SESSION_LOGIN_GATE'
+                  assert not resp or resp.status<400,'STUDIO_HTTP_ERROR'
+                  stale=0
+                  for iteration in range(45):
+                      before=(len(records),len(found),page.url)
+                      from_page(page)
+                      print('TIKTOK_AUDIT_SCAN_PAGE='+str(iteration+1)+' RECORDS='+str(len(records))+' MATCHES='+str(len(found)),flush=True)
+                      if len(found)==len(segments):break
+                      btn=None
+                      for item in page.locator('button').all():
+                          try:
+                              if not item.is_visible() or not item.is_enabled():continue
+                              label=' '.join((item.inner_text(timeout=350) or '',item.get_attribute('aria-label') or '',item.get_attribute('title') or '')).strip()
+                              if re.search(r'^(next|next page|pr[oó]xim[oa]|p[aá]gina seguinte|seguinte)$',label,re.I):
+                                  btn=item;break
+                          except Exception:pass
+                      if btn:
+                          try:btn.click(timeout=2500)
+                          except Exception:btn=None
+                      if not btn:
+                          page.mouse.wheel(0,5200)
+                      page.wait_for_timeout(1800)
+                      from_page(page)
+                      after=(len(records),len(found),page.url)
+                      stale=stale+1 if before==after else 0
+                      if stale>=4:break
+                  rows=[{'segment_id':s,'marker':m,'remote_id':found.get(s)} for m,s in marks.items()]
+                  print('TIKTOK_UNCERTAIN_READONLY_RESULT='+json.dumps(rows,separators=(',',':')),flush=True)
+                  print('TIKTOK_UNCERTAIN_SCAN_TOTAL_RECORDS='+str(len(records)),flush=True)
+                  print('TIKTOK_UNCERTAIN_SCAN_COMPLETE='+str(len(found)==len(segments)),flush=True)
+              finally:browser.close()
