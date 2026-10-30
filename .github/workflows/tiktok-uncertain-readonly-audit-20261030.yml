@@ -1,0 +1,41 @@
+name: TikTok uncertain read-only forensic audit 2026-10-30
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tiktok-uncertain-readonly-audit-20261030.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      EXPECTED_TIKTOK_USERNAME: universo.anthares
+      CORTES_TIKTOK_FORENSIC_SEGMENT_ID: 'g1:9CIk-I_3VhM:252:337'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install read-only browser dependencies
+        run: |
+          python3 -m pip install --disable-pip-version-check -q playwright cryptography requests
+          python3 -m playwright install chromium
+      - name: Audit existing uncertain clip without publication
+        run: python3 -u tools/tiktok_uncertain_post_audit.py
+      - name: Inventory published videos and deduplication markers (read-only)
+        run: |
+          python3 - <<'PY'
+          import sys,re,json
+          sys.path.insert(0,'direct-tiktok-publisher')
+          from tiktok_creator_inventory import inventory_studio
+          rows=inventory_studio('universo.anthares')
+          candidates=[]
+          for row in rows:
+              label=str(row.get('text') or '')
+              marks=sorted(set(re.findall(r'#anthares[a-f0-9]{10}',label.lower())))
+              if marks:
+                  candidates.append({'remote_id':str(row.get('id') or ''),'markers':marks})
+          print('TIKTOK_READONLY_MARKED_POST_COUNT='+str(len(candidates)))
+          print('TIKTOK_READONLY_MARKED_POSTS='+json.dumps(candidates[:250],separators=(',',':')))
+          PY
