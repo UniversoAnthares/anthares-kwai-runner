@@ -1,3 +1,4 @@
+import {requestControl} from "./control-transport.mjs";
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
@@ -266,38 +267,7 @@ ${raw}`;
     return true;
   }
 };
-async function control(env, path, { method = "GET", body, timeoutMs = 3e4 } = {}) {
-  const raw = body === void 0 ? "" : JSON.stringify(body);
-  const origins = [CONTROL, CONTROL_STANDBY];
-  let lastError;
-  for (let i = 0; i < origins.length; i++) {
-    const sig = await st(env).signControl(method, path, raw);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), Math.max(4000, Math.min(timeoutMs, 15000)));
-    try {
-      const response = await fetch(origins[i] + path, {
-        method,
-        headers: { "content-type": "application/json", "x-ara-timestamp": sig.timestamp, "x-ara-signature": sig.signature, "x-ara-signer": "anthares-remote-mcp" },
-        body: body === void 0 ? void 0 : raw,
-        signal: controller.signal
-      });
-      const retryable = response.status === 404 || response.status === 429 || response.status >= 500;
-      if (i === 0 && retryable) {
-        lastError = new Error("primary_control_http_" + response.status);
-        try { await response.body?.cancel(); } catch {}
-        continue;
-      }
-      if (i === 1) console.info("ara_control_standby_used route=" + path.split("?")[0]);
-      return response;
-    } catch (error) {
-      lastError = error;
-      if (i + 1 === origins.length) throw error;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  throw lastError || new Error("control_unavailable");
-}
+async function control(env,path,opts={}) {return requestControl({origins:[CONTROL,CONTROL_STANDBY,"https://anthares-ara-neon-standby.anthares1.workers.dev"],path,...opts,fetchImpl:(url,init)=>url.startsWith("https://anthares-ara-neon-standby.anthares1.workers.dev/")&&env.ARA_NEON_STANDBY?env.ARA_NEON_STANDBY.fetch(url,init):fetch(url,init),sign:(method,p,raw)=>st(env).signControl(method,p,raw)});}
 __name(control, "control");
 async function controlJson(env, path, opts) {
   const r = await control(env, path, opts);
@@ -525,15 +495,15 @@ var index_default = { async fetch(req, env) {
   try {
     if (req.method === "GET" && (u.pathname === "/" || u.pathname === "/health")) {
       await st(env).ensure();
-      let controlReady = false, connected = false;
+      let controlReady = false, connected = false, controlError = null;
       try {
         const s = await status(env, DEFAULT_DEVICE);
         controlReady = true;
         connected = !!s.connected;
-      } catch {
+      } catch(e) {controlError=/^control(?:_http_| )[0-9]{3}/.test(String(e?.message))?String(e.message).slice(0,100):"control_unavailable";
       }
       const pinned = !!await st(env).pinnedClient();
-      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: ownerGithubConfigured(env) ? "github_owner_identity" : "email_otp", oauth_client_pinned: pinned, mcp_server_version: "1.2.0", discovery_revision: DISCOVERY_REVISION, mcp_delegation_tools: githubTools.filter(t => t.name === "run_claude_code" || t.name === "get_claude_code_status" || t.name === "get_claude_code_result").map(t => t.name) }, controlReady ? 200 : 503);
+      return json({ ok: controlReady, service: "anthares-ara-mcp", provider: "cloudflare", render_independent: true, control: CONTROL, control_ready: controlReady, control_error: controlError, device_connected: connected, oauth: true, mcp: true, oauth_owner_code_mode: ownerGithubConfigured(env) ? "github_owner_identity" : "email_otp", oauth_client_pinned: pinned, mcp_server_version: "1.2.0", discovery_revision: DISCOVERY_REVISION, mcp_delegation_tools: githubTools.filter(t => t.name === "run_claude_code" || t.name === "get_claude_code_status" || t.name === "get_claude_code_result").map(t => t.name) }, controlReady ? 200 : 503);
     }
     if (req.method === "GET" && u.pathname === "/.well-known/ara-control-key") return new Response(await st(env).publicPem(), { headers: { "content-type": "application/x-pem-file", "cache-control": "no-store" } });
     if (req.method === "GET" && u.pathname === "/.well-known/oauth-protected-resource") return json({ resource: ORIGIN, authorization_servers: [ORIGIN], scopes_supported: [...SCOPES], resource_documentation: "https://github.com/UniversoAnthares/anthares-kwai-runner" });

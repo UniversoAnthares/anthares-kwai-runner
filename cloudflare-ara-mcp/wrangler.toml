@@ -19,3 +19,7 @@ AUTH_EMAIL_FROM = "contato@anthares.us"
 AUTH_OWNER_METHOD = "github"
 ARA_OWNER_GITHUB_CLIENT_ID = "Ov23li1xRCECmyI7JYsn"
 ARA_OWNER_GITHUB_ID = "81930373"
+
+[[services]]
+binding = "ARA_NEON_STANDBY"
+service = "anthares-ara-neon-standby"
