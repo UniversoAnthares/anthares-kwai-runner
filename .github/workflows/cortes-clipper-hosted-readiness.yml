@@ -32,25 +32,50 @@ jobs:
           secrets: |
             ${{ vars.ANTHARES_SECRETS_GITLAB_TOKEN_ID }} > ANTHARES_GITLAB_TOKEN_FROM_BW
 
-      - name: Clone existing private Clipper mirror read-only
+      - name: Clone canonical private GitHub Clipper source read-only
         shell: bash
         env:
           GL_AUTH: ${{ env.ANTHARES_GITLAB_TOKEN_FROM_BW || secrets.GITLAB_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "$GL_AUTH" ]; then
-            echo "::error::CLIPPER_SOURCE_READ_CREDENTIAL_NOT_AVAILABLE"
+            echo "::error::CORTES_GITLAB_BRIDGE_CREDENTIAL_UNAVAILABLE"
             exit 1
           fi
-          auth="$(printf 'oauth2:%s' "$GL_AUTH" | base64 -w0)"
+          # The GitLab mirror is missing the current CORTES producer files.
+          # Obtain the pre-existing canonical GitHub mirror credential from the
+          # authorized GitLab project variables, never from a public artifact.
+          token="$(python3 - <<'PY'
+          import json, os, sys, urllib.request
+          req=urllib.request.Request(
+              "https://gitlab.com/api/v4/projects/87361776/variables/GITHUB_MIRROR_TOKEN",
+              headers={"PRIVATE-TOKEN":os.environ["GL_AUTH"],"Accept":"application/json"},
+          )
+          try:
+              with urllib.request.urlopen(req,timeout=25) as response:
+                  token=str(json.load(response).get("value") or "").strip()
+          except Exception:
+              print("::error::CORTES_CANONICAL_SOURCE_CREDENTIAL_UNAVAILABLE",file=sys.stderr)
+              sys.exit(1)
+          if not token:
+              print("::error::CORTES_CANONICAL_SOURCE_CREDENTIAL_EMPTY",file=sys.stderr)
+              sys.exit(1)
+          print(token)
+          PY
+          )" || exit 1
+          echo "::add-mask::$token"
+          auth="$(printf 'x-access-token:%s' "$token" | base64 -w0)"
+          unset token
           if ! git -c "http.extraheader=AUTHORIZATION: Basic $auth" clone --quiet --depth 1 --branch main \
-            https://gitlab.com/UniversoAnthares/anthares-clipper.git source >/dev/null 2>&1; then
+            https://github.com/UniversoAnthares/anthares-clipper.git source >/dev/null 2>&1; then
             unset auth
-            echo "::error::CLIPPER_SOURCE_READ_DENIED"
+            echo "::error::CORTES_GITHUB_CANONICAL_CLONE_DENIED"
             exit 1
           fi
           unset auth
-          echo "CORTES_HOSTED_PRIVATE_SOURCE_READ=PASS"
+          git -C source remote set-url origin https://github.com/UniversoAnthares/anthares-clipper.git
+          echo "CORTES_HOSTED_CANONICAL_SOURCE=PASS"
+          echo "CORTES_HOSTED_SOURCE_SHA=$(git -C source rev-parse HEAD)"
 
       - uses: actions/setup-python@v5
         with:
