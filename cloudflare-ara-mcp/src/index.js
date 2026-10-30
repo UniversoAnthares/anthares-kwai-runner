@@ -1,3 +1,4 @@
+import { EXTERNAL_DEVICE, externalReadOnly } from "./external-readonly.mjs";
 import {requestControl} from "./control-transport.mjs";
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
@@ -376,6 +377,7 @@ function textResult(v) {
 __name(textResult, "textResult");
 async function callTool(env, name, a = {}, scopes = []) {
   const device = a.device_id || DEFAULT_DEVICE;
+  if (device === EXTERNAL_DEVICE) return textResult(await externalReadOnly(name, { sign: (method, path, raw) => st(env).signControl(method, path, raw) }));
   if (name === "session_status") {
     let x = await status(env, device);
     if (device === DEFAULT_DEVICE && !x.connected) {

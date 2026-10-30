@@ -1,0 +1,21 @@
+name: Anthares independent read-only service tests
+on:
+  pull_request:
+    paths: ['anthares-independent-service/**', 'cloudflare-ara-mcp/src/external-readonly.mjs', 'cloudflare-ara-mcp/src/index.js', '.github/workflows/anthares-independent-readonly-tests.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify signatures, protocol, lifecycle and MCP dispatch
+        run: |
+          php -l anthares-independent-service/status.php
+          node --check cloudflare-ara-mcp/src/index.js
+          node --test anthares-independent-service/handler.test.mjs
+          echo ANTHARES_INDEPENDENT_READONLY_TESTS=PASS
