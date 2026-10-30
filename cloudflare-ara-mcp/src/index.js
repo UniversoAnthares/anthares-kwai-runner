@@ -589,7 +589,7 @@ var index_default = { async fetch(req, env) {
     }
     return json({ error: "not_found" }, 404);
   } catch (e) {
-    if (e?.message === "oauth_replay_store_unavailable") return json({ error: "temporarily_unavailable" }, 503, { "Cache-Control": "no-store", "Retry-After": "5" });
+    if (e?.message === "oauth_replay_store_unavailable") return json({ error: "temporarily_unavailable" }, 503, { "Retry-After": "5" });
     return json({ error: "internal_error", detail: String(e?.message || e) }, 500);
   }
 } };
