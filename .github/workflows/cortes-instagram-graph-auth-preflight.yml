@@ -48,7 +48,7 @@ jobs:
               print("INSTAGRAM_GRAPH_CANDIDATE=" + family + " configured=" + str(configured))
               if not configured:
                   continue
-              if not re.fullmatch(r"[0-9]{6,30}", uid) or not re.fullmatch(r"v[0-9]{1,3}\\.[0-9]",version):
+              if not re.fullmatch(r"[0-9]{6,30}", uid) or not re.fullmatch(r"v[0-9]{1,3}[.][0-9]",version):
                   print("INSTAGRAM_GRAPH_DIAG=" + family + ":INVALID_CONFIG")
                   continue
               preferred = os.getenv("INSTAGRAM_GRAPH_HOST", "graph.instagram.com") if family == "direct" else "graph.instagram.com"
