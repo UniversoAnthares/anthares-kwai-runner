@@ -31,3 +31,15 @@ function Get-QaLinkedinPersonalDecision {
     if ($minutes -lt 20) { return 'RECENT_WORKFLOW_NO_DISPATCH_PUBLICATION_UNVERIFIED' }
     return 'LINKEDIN_PERSONAL_PRIMARY_DISPATCH_ALLOWED'
 }
+
+# Hosted QA may diagnose source failure, never wake a Windows task.
+function Get-QaDailyHostedDecision {
+    param([int]$MasterCount,[int]$LocalHour)
+    if($MasterCount -lt 0 -or $LocalHour -lt 0 -or $LocalHour -gt 23) {
+        return 'DAILY_SOURCE_INVALID_NO_ACTION'
+    }
+    if($MasterCount -eq 0 -and $LocalHour -ge 7 -and $LocalHour -lt 21) {
+        return 'DAILY_EXTERNAL_RECOVERY_REQUIRED_NO_LOCAL_WAKE'
+    }
+    return 'DAILY_NEON_PRESENT_OR_OUTSIDE_WINDOW'
+}

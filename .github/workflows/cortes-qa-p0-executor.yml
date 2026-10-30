@@ -7,6 +7,12 @@ on:
         description: 'Number of an existing labeled QA-P0 issue'
         required: true
         type: string
+  pull_request:
+    paths:
+      - .github/workflows/cortes-qa-p0-executor.yml
+      - tools/cortes_qa_p0_recovery.ps1
+      - tools/cortes_qa_p0_policy.ps1
+      - tests/test_cortes_qa_p0_policy.ps1
 permissions:
   contents: read
   issues: write
@@ -15,8 +21,22 @@ concurrency:
   group: cortes-qa-p0-executor-${{ inputs.issue_number }}
   cancel-in-progress: false
 jobs:
+  contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate QA P0 recovery policy on hosted PowerShell
+        shell: pwsh
+        run: |
+          & ./tests/test_cortes_qa_p0_policy.ps1
   investigate:
-    runs-on: qa-p0-independent
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - name: Checkout repository for recovery playbook
@@ -78,7 +98,7 @@ jobs:
         if: steps.preflight.outcome == 'success' && inputs.issue_number == '528'
         id: draft_audit
         continue-on-error: true
-        shell: powershell
+        shell: pwsh
         run: |
           $value='AUDIT_UNAVAILABLE_RECONCILIATION_REQUIRED'
           try {
@@ -103,20 +123,20 @@ jobs:
           Write-Output ('PINTEREST_DRAFT_AUDIT='+$value)
       - name: Test QA recovery policy offline before taking action
         if: steps.preflight.outcome == 'success'
-        shell: powershell
+        shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          & .\tests\test_cortes_qa_p0_policy.ps1
+          & ./tests/test_cortes_qa_p0_policy.ps1
       - name: Execute approved P0 recovery playbook
         id: recovery
         if: steps.preflight.outcome == 'success'
-        shell: powershell
+        shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
           QA_ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: |
           $ErrorActionPreference='Stop'
-          & .\\tools\\cortes_qa_p0_recovery.ps1 -IssueNumber ([int]$env:QA_ISSUE_NUMBER)
+          & ./tools/cortes_qa_p0_recovery.ps1 -IssueNumber ([int]$env:QA_ISSUE_NUMBER)
           # Native exit codes are not meaningful for a PowerShell-only script;
           # terminating errors propagate through ErrorActionPreference=Stop.
       - name: Report actual execution and evidence to incident
