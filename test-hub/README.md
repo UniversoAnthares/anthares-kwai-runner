@@ -247,3 +247,8 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - PR #1940 merged; Vercel retained and Cloudflare independent compute shares the original Neon replay/job authority. Canonical run40996377835 SUCCESS; 24 safety tests PASS, gateway control_ready=true, anonymous401.
 - Owner connector reconnection and disconnected Windows transport remain pending; no duplicate executor, paid plan, Vercel replacement, database HA claim or AVS item12 execution.
 - Evidence and lease closure: test-hub/findings/20261030-ara-independent-neon-standby-deployed.md.
+
+
+### ARA OAuth temporary grant errors (2026-10-30)
+- PR1979 merged; validation41067237783:30/30 tests. Canonical deploy41067344555 succeeded, version883973f7-ebd3-4924-b3b1-69f818e4cf37. Temporary replay-store outage now returns503 rather than invalid_grant400; atomic replay and existing credentials preserved.
+- PARTIAL: actual ChatGPT browser connection persistence remains unconfirmed, and Windows device is independently offline. Do not equate capabilities200 with persistence. Evidence: test-hub/findings/20261030-ara-refresh-backend-errors-deployed.md.
