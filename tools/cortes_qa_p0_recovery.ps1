@@ -3,7 +3,7 @@
 # started/uncertain posts. A dispatch ACK is not media-publication proof.
 param([Parameter(Mandatory=$true)][int]$IssueNumber)
 $ErrorActionPreference='Stop'
-if($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows' -or
+if($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Linux' -or
     $env:GITHUB_REPOSITORY -ne 'UniversoAnthares/anthares-kwai-runner'){
     throw 'QA_AUTOHEAL_TRUSTED_RUNNER_REQUIRED'
 }
@@ -22,7 +22,7 @@ $body=([string]$issue.body)
 . (Join-Path $PSScriptRoot 'cortes_qa_p0_policy.ps1')
 $diagnostic='NO_AUTOMATED_REPAIR_CONTRACT'
 $title=([string]$issue.title)
-$local=[TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow,'Central Brazilian Standard Time')
+$local=[TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow,'America/Campo_Grande')
 $isDaily=($title -match '(?i)cortes|daily|produtor' -and
           $body -match '(?i)zero masters|sem masters|P0_DAILY_PRODUCER_ZERO_MASTERS|HTTP 502')
 $isPersonal=Test-QaLinkedinPersonalIncident -Title $title -Body $body
@@ -33,12 +33,12 @@ if($isDaily){
         throw 'QA_AUTOHEAL_NEON_HEALTH_INVALID'
     }
     if([int]$health.today_master_count -eq 0 -and $local.Hour -ge 7 -and $local.Hour -lt 21){
-        $task='Anthares CORTES Shorts Daytime Recovery 20min'
-        $scheduled=Get-ScheduledTask -TaskName $task -ErrorAction Stop
-        if($scheduled.State -eq 'Disabled'){throw 'QA_AUTOHEAL_TASK_DISABLED'}
-        Start-ScheduledTask -TaskName $task -ErrorAction Stop
-        $action='DAILY_PRODUCER_WATCHDOG_WAKEUP_ACCEPTED'
-    }else{$action='DAILY_NEON_PRESENT_OR_OUTSIDE_WINDOW'}
+        # The dedicated local Windows task has no hosted equivalent.
+        # Preserve fenced producer recovery under its separate workflow.
+        # Never claim that a local wakeup occurred from GitHub-hosted QA.
+        $action=Get-QaDailyHostedDecision -MasterCount ([int]$health.today_master_count) -LocalHour $local.Hour
+        $diagnostic='daily_round=zero;executor=github_hosted;wakeup=false;source=neon_round_health'
+    }else{$action='DAILY_NEON_PRESENT_OR_OUTSIDE_WINDOW';$diagnostic='daily_round=healthy_or_outside_window;wakeup=false'}
 }elseif($isPersonal){
     # The publisher is protected by its own Neon lease/started/uncertain CAS.
     # This QA path only dispatches the approved existing workflow; it never
