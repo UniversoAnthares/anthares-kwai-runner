@@ -8,6 +8,9 @@ on:
       - tests/test_cortes_qa_p0_router.py
       - .github/workflows/cortes-qa-p0-publication-watchdog.yml
   schedule:
+    # Match the former five-minute WordPress/system QA scanner without using Windows.
+    - cron: "*/5 * * * *"
+    # Keep the independent cloud alert cadence unchanged.
     - cron: "13,43 * * * *"
   workflow_run:
     workflows:
@@ -36,7 +39,7 @@ jobs:
       contents: read
       issues: write
       actions: write
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'
+    if: (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success') && (github.event_name != 'schedule' || github.event.schedule != '13,43 * * * *')
     # Authenticated WordPress read-only QA proven on hosted Ubuntu; preserve original serial route lock.
     runs-on: ubuntu-24.04
     timeout-minutes: 8
@@ -61,7 +64,7 @@ jobs:
   cloud-alert-redundancy:
     # Separate hosted incident delivery job, with its own lock and no publishing secrets.
     # This job never reads publication secrets or runs publisher code.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'
+    if: (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success') && (github.event_name != 'schedule' || github.event.schedule == '13,43 * * * *')
     runs-on: ubuntu-24.04
     concurrency:
       group: qa-p0-cloud-alert-delivery
