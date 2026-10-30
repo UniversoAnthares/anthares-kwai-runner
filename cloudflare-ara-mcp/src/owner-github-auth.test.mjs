@@ -141,13 +141,15 @@ test('OAuth owner callback transparently uses standby control alias on primary 5
  assert.equal((await callback(a)).status,409);
 });
 
-test('two unavailable controllers return 503 and allow safe OAuth retry',async()=>{
+test('all three unavailable controllers return 503 and allow safe OAuth retry',async()=>{
  const p=await pending(),a=await begin(p.tx);
  const providerBefore=providerCalls;
- simulateControlFailures=2;
+ simulateControlFailures=3;
  const r=await callback(a);assert.equal(r.status,503);
  assert.equal((await r.json()).error,'owner_control_unavailable');
  assert.equal(providerCalls,providerBefore);
  const recovered=await callback(a);assert.equal(recovered.status,302);
  assert.equal((await callback(a)).status,409);
 });
+
+test("two unavailable Vercel controllers reach independent shared-ledger reserve",async()=>{const p=await pending(),a=await begin(p.tx);simulateControlFailures=2;const r=await callback(a);assert.equal(r.status,302);assert.equal((await callback(a)).status,409);});
