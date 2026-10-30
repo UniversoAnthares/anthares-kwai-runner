@@ -58,6 +58,14 @@ assert '2026-10-14-render-retired-r2' in worker
 assert worker.count('error:"retired_executor"') >= 3, 'retired executor not rejected across auth/heartbeat/job surfaces'
 assert not (ROOT/"direct-tiktok-publisher/tiktok_web_publish_local.py").exists(), "legacy local-named publisher still tracked"
 assert "tiktok_web_publish_local.py" not in (ROOT/".github/workflows/tiktok-github-direct-publisher.yml").read_text(encoding="utf-8-sig")
+# The Instagram Windows fallback must never run automatically on the PC.
+windows_ig=(ROOT/".github/workflows/cortes-buffer-instagram-windows-fallback.yml").read_text(encoding="utf-8-sig")
+hosted_ig=(ROOT/".github/workflows/cortes-buffer-instagram-cloud.yml").read_text(encoding="utf-8-sig")
+assert re.search(r"(?m)^  workflow_dispatch:",windows_ig)
+assert not re.search(r"(?m)^  (?:push|schedule|workflow_run):",windows_ig)
+assert re.search(r"(?m)^  schedule:",hosted_ig)
+assert 'runs-on: ubuntu-24.04' in hosted_ig
+
 assert not viol, viol
 print("CLOUD_ONLY_RUNTIME=PROVEN")
 print("RENDER_ACTIVE_ROUTING=ABSENT")
