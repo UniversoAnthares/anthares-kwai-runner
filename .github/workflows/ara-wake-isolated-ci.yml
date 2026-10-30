@@ -1,0 +1,71 @@
+name: ARA wake-only transport - offline contracts
+on:
+  pull_request:
+    paths:
+      - 'cloudflare-ara-wake/**'
+      - 'vercel-ara-primary/api/wake-notifier.mjs'
+      - 'vercel-ara-primary/api/wake-notifier.test.mjs'
+      - 'vercel-ara-primary/api/router.mjs'
+      - 'anthares-remote-agent/cmd/agent/main.go'
+      - 'anthares-remote-agent/cmd/agent/wake_subscriber.go'
+      - 'anthares-remote-agent/cmd/agent/wake_subscriber_test.go'
+      - 'anthares-remote-agent/go.mod'
+      - 'anthares-remote-agent/go.sum'
+      - '.github/workflows/ara-wake-isolated-ci.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ara-wake-offline-ci-20261028
+  cancel-in-progress: false
+
+jobs:
+  protocol:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Isolated protocol and syntax checks - no deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check cloudflare-ara-wake/src/index.mjs
+          node --check cloudflare-ara-wake/src/protocol.mjs
+          node --test cloudflare-ara-wake/src/protocol.test.mjs
+          node --check vercel-ara-primary/api/wake-notifier.mjs
+          node --check vercel-ara-primary/api/router.mjs
+          node --test vercel-ara-primary/api/wake-notifier.test.mjs
+          ! grep -Eq 'pool\.query|DATABASE_URL|\.storage\.(put|sql|transaction)' cloudflare-ara-wake/src/index.mjs
+          echo 'ARA_WAKE_NOTIFICATION_ONLY_CONTRACT=PASS'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: anthares-remote-agent/go.mod
+          cache: false
+      - name: Verify canonical C8 agent wake subscriber and Windows build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd anthares-remote-agent
+          go mod verify
+          go test -count=1 ./...
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe ./cmd/agent
+          test -s /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe
+          sha256sum /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe
+          sha256sum /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe > /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe.sha256
+          echo 'ARA_WAKE_C8_OFFLINE_TESTS_AND_WINDOWS_BUILD=PASS'
+      - name: Preserve exact-commit Windows C8 wake candidate (not deployed)
+        uses: actions/upload-artifact@v4
+        with:
+          name: anthares-c8-wake-candidate
+          path: |
+            /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe
+            /tmp/anthares-remote-agent-v4-c8-wake-candidate.exe.sha256
+          retention-days: 7
+          if-no-files-found: error
