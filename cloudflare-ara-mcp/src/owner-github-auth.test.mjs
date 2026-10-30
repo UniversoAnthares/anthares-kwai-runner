@@ -153,3 +153,14 @@ test('all three unavailable controllers return 503 and allow safe OAuth retry',a
 });
 
 test("two unavailable Vercel controllers reach independent shared-ledger reserve",async()=>{const p=await pending(),a=await begin(p.tx);simulateControlFailures=2;const r=await callback(a);assert.equal(r.status,302);assert.equal((await callback(a)).status,409);});
+
+test('two connector authorizations in one browser survive reverse completion order',async()=>{
+ const jar=new Map();
+ function apply(setCookie){const [pair,...attrs]=setCookie.split(';');const i=pair.indexOf('=');const name=pair.slice(0,i);if(attrs.some(a=>a.trim()==='Max-Age=0'))jar.delete(name);else jar.set(name,pair.slice(i+1));}
+ const one=await begin((await pending('https://chatgpt.com/oauth/aaaaaaaa/client.json','https://chatgpt.com/connector/oauth/first','ara.read ara.write')).tx),challengeOne=ghChallenge;apply(one.r.headers.get('set-cookie'));
+ const two=await begin((await pending('https://chatgpt.com/oauth/bbbbbbbb/client.json','https://chatgpt.com/connector/oauth/second','ara.read ara.write')).tx),challengeTwo=ghChallenge;apply(two.r.headers.get('set-cookie'));
+ const cookies=()=>[...jar].map(([k,v])=>k+'='+v).join('; ');
+ ghChallenge=challengeTwo;const second=await callback({...two,cookie:cookies()});assert.equal(second.status,302);apply(second.headers.get('set-cookie'));
+ ghChallenge=challengeOne;const first=await callback({...one,cookie:cookies()});assert.equal(first.status,302);assert.equal(new URL(first.headers.get('location')).pathname,'/connector/oauth/first');
+ assert.equal((await callback(one)).status,409);
+});
