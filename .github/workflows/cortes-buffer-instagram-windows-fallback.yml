@@ -1,12 +1,8 @@
 name: CORTES Instagram - Windows redundancy (Neon OIDC)
+# Continuous execution already lives in cortes-buffer-instagram-cloud.yml
+# (GitHub-hosted Ubuntu, Neon-fenced). Keep Windows as manual recovery only.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/cortes-buffer-instagram-windows-fallback.yml'
   workflow_dispatch: {}
-  schedule:
-    - cron: '4,19,34,49 * * * *'
 permissions:
   contents: read
   id-token: write
