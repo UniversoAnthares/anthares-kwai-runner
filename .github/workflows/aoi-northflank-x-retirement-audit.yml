@@ -2,6 +2,7 @@ name: AOI read-only Northflank X retirement audit
 on:
   push:
     branches:
+      - main
       - aoi/northflank-x-retirement-audit-20261030
     paths:
       - tools/northflank_x_retirement_audit.py
