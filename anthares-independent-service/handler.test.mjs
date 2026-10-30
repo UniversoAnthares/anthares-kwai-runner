@@ -106,3 +106,16 @@ test("OAuth MCP dispatch reaches external service; write operations never reach 
   const denied=await invoke("remote_exec");assert.equal(denied.result.isError,true);assert.match(denied.result.content[0].text,/not_supported/);assert.equal(calls,1);
  }finally{globalThis.fetch=oldFetch;}
 });
+
+test("owner operator client is independent of HTTP signer and refuses every argument",async()=>{
+ const dir=await mkdtemp(join(tmpdir(),"anthares-operator-"));
+ try{
+  await copyFile(new URL("./status-cli.mjs",import.meta.url),join(dir,"status-cli.mjs"));
+  await copyFile(new URL("./handler.mjs",import.meta.url),join(dir,"handler.mjs"));
+  await writeFile(join(dir,"config.json"),JSON.stringify({executor_id:DEVICE,kilo_binary:join(dir,"absent"),gateway_socket:join(dir,"absent.sock")}),{mode:0o600});
+  const r=spawnSync(process.execPath,[join(dir,"status-cli.mjs")],{encoding:"utf8",timeout:10000});
+  assert.equal(r.status,0);const d=JSON.parse(r.stdout);assert.equal(d.executor_id,DEVICE);assert.equal(d.read_only,true);assert.equal(d.client,"anthares-operator-cli");
+  const denied=spawnSync(process.execPath,[join(dir,"status-cli.mjs"),"unexpected"],{encoding:"utf8",timeout:10000});
+  assert.equal(denied.status,1);assert.equal(JSON.parse(denied.stdout).ok,false);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
