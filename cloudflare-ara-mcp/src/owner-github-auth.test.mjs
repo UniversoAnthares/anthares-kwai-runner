@@ -164,3 +164,13 @@ test('two connector authorizations in one browser survive reverse completion ord
  ghChallenge=challengeOne;const first=await callback({...one,cookie:cookies()});assert.equal(first.status,302);assert.equal(new URL(first.headers.get('location')).pathname,'/connector/oauth/first');
  assert.equal((await callback(one)).status,409);
 });
+
+test('in-flight legacy cookie remains valid across the rollout',async()=>{
+ const a=await begin((await pending()).tx);const legacy={...a,cookie:'__Host-ara-owner='+a.cookie.slice(a.cookie.indexOf('=')+1)};
+ const r=await callback(legacy);assert.equal(r.status,302);assert.match(r.headers.get('set-cookie'),/^__Host-ara-owner=;/);assert.equal((await callback(legacy)).status,409);
+});
+test('transaction cookie cannot authorize a different callback state',async()=>{
+ const one=await begin((await pending()).tx),two=await begin((await pending()).tx),before=providerCalls;
+ const wrongName=two.cookie.slice(0,two.cookie.indexOf('='))+'='+one.cookie.slice(one.cookie.indexOf('=')+1);
+ const r=await callback({...two,cookie:wrongName});assert.equal(r.status,403);assert.equal(providerCalls,before);
+});

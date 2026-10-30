@@ -6,7 +6,9 @@ const encode = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/
 const decode = s => Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
 const random = n => encode(crypto.getRandomValues(new Uint8Array(n)));
 const fail = (error,status=400) => Response.json({error},{status,headers:{'cache-control':'no-store'}});
-const cookie = value => COOKIE+'='+value+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age='+(value?'600':'0');
+const cookie = (value,name=COOKIE) => name+'='+value+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age='+(value?'600':'0');
+// Separate short-lived, authenticated browser state for each authorization transaction.
+const cookieName = nonce => /^[A-Za-z0-9_-]{43}$/.test(nonce||'') ? COOKIE+'-'+nonce : null;
 export function ownerGithubConfigured(env) {
   return env.AUTH_OWNER_METHOD==='github' && !!env.ARA_OWNER_GITHUB_CLIENT_ID &&
     !!env.ARA_OWNER_GITHUB_CLIENT_SECRET && /^[1-9][0-9]*$/.test(env.ARA_OWNER_GITHUB_ID||'');
@@ -40,7 +42,7 @@ export async function startOwnerGithub(req,env,h) {
   const target=new URL('https://github.com/login/oauth/authorize');
   target.search=new URLSearchParams({client_id:env.ARA_OWNER_GITHUB_CLIENT_ID,redirect_uri:h.origin+CALLBACK,
     state:nonce,code_challenge:challenge,code_challenge_method:'S256',scope:'',allow_signup:'false'});
-  return new Response(null,{status:302,headers:{location:target.href,'set-cookie':cookie(await seal(env,h,{tx,verifier,nonce,exp})),
+  return new Response(null,{status:302,headers:{location:target.href,'set-cookie':cookie(await seal(env,h,{tx,verifier,nonce,exp}),cookieName(nonce)),
     'cache-control':'no-store','referrer-policy':'no-referrer'}});
 }
 async function githubFetch(url,init={}) {
@@ -49,7 +51,12 @@ async function githubFetch(url,init={}) {
 export async function finishOwnerGithub(req,env,h) {
   if(!configured(env))return fail('owner_identity_unavailable',503);
   const u=new URL(req.url);
-  const raw=(req.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);
+  const state=u.searchParams.get('state'), scoped=cookieName(state);
+  if(!scoped)return fail('owner_state_invalid',403);
+  const cookies=(req.headers.get('cookie')||'').split(';').map(x=>x.trim());
+  const selected=cookies.find(x=>x.startsWith(scoped+'=')) || cookies.find(x=>x.startsWith(COOKIE+'='));
+  const selectedName=selected?.slice(0,selected.indexOf('=')) || scoped;
+  const raw=selected?.slice(selected.indexOf('=')+1);
   const p=await unseal(env,h,raw);
   if(!p || !u.searchParams.get('state') || u.searchParams.get('state')!==p.nonce)return fail('owner_state_invalid',403);
   if(!await h.pending(env,p.tx))return fail('authorization_expired');
@@ -76,7 +83,7 @@ export async function finishOwnerGithub(req,env,h) {
     if(!user.ok || String(identity.id)!==String(env.ARA_OWNER_GITHUB_ID))return fail('owner_identity_denied',403);
     stage="authorization_code";
     const result=await h.complete(env,p.tx);
-    result.headers.set('set-cookie',cookie(''));
+    result.headers.set('set-cookie',cookie('',selectedName));
     return result;
   } catch (error) {
     const kind=['TypeError','AbortError','TimeoutError'].includes(error?.name)?error.name:'Error';
