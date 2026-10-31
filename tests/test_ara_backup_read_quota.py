@@ -80,7 +80,7 @@ class DurableObjectReadQuotaTests(unittest.TestCase):
         self.assertEqual(leases, {"l-lease-expired"})
 
     def test_stateful_deployment_requires_explicit_dispatch(self):
-        workflow = (SOURCE.parents[1] / ".github/workflows/trigger-cloudflare-ara-backup-deploy.yml").read_text(encoding="utf-8")
+        workflow = (SOURCE.parents[2] / ".github/workflows/trigger-cloudflare-ara-backup-deploy.yml").read_text(encoding="utf-8")
         self.assertIn("  workflow_dispatch:", workflow)
         self.assertNotIn("  push:", workflow)
 
