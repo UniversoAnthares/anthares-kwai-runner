@@ -84,10 +84,10 @@ class QuotaWatcherContract(unittest.TestCase):
                               dt.timedelta(hours=30)).isoformat()}
         pipeline = {"id": 3005500025, "sha": sha, "ref": "main",
                     "status": "failed"}
-        with patch.object(mod, "GL_AUTH", "fixture"), \\
-             patch.object(mod, "api", return_value=[pipeline]) as api_mock, \\
+        with patch.object(mod, "GL_AUTH", "fixture"), \
+             patch.object(mod, "api", return_value=[pipeline]) as api_mock, \
              patch.object(mod, "confirm_successful_quota_handoff",
-                          return_value=True) as confirm_mock, \\
+                          return_value=True) as confirm_mock, \
              patch.object(mod, "dispatch") as dispatch_mock:
             result = mod.reconcile_stale_successful_handoffs(
                 "cortes", "87307248", "gitlab-quota-fallback.yml", [run])
@@ -101,7 +101,7 @@ class QuotaWatcherContract(unittest.TestCase):
                "conclusion": "failure",
                "display_title": "quota-rescue-cortes-glsha-" + "a" * 40,
                "created_at": dt.datetime.now(dt.timezone.utc).isoformat()}
-        with patch.object(mod, "api") as api_mock, \\
+        with patch.object(mod, "api") as api_mock, \
              patch.object(mod, "confirm_successful_quota_handoff") as confirm:
             result = mod.reconcile_stale_successful_handoffs(
                 "cortes", "87307248", "gitlab-quota-fallback.yml", [run])
