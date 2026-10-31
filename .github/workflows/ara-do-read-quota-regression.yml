@@ -1,0 +1,20 @@
+name: ARA Durable Object SQL read quota regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'cloudflare-ara-backup/src/index.js'
+      - 'tests/test_ara_backup_read_quota.py'
+      - '.github/workflows/ara-do-read-quota-regression.yml'
+permissions:
+  contents: read
+jobs:
+  quota-sql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check Worker
+        run: node --experimental-default-type=module --check cloudflare-ara-backup/src/index.js
+      - name: Test indexed SQLite queries against historical jobs
+        run: python3 -m unittest discover -s tests -p 'test_ara_backup_read_quota.py' -v
