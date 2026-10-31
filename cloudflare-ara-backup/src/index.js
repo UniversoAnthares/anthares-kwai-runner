@@ -231,7 +231,14 @@ export class AraState extends DurableObject {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS ara_jobs_dedupe
         ON ara_jobs(device_id,idempotency_key) WHERE idempotency_key IS NOT NULL;
-      DROP INDEX IF EXISTS ara_jobs_pick;
+      CREATE INDEX IF NOT EXISTS ara_jobs_pick
+        ON ara_jobs(device_id,status,created_at);
+      CREATE INDEX IF NOT EXISTS ara_jobs_active_expiry
+        ON ara_jobs(device_id,expires_at)
+        WHERE status IN ('queued','leased','uncertain');
+      CREATE INDEX IF NOT EXISTS ara_jobs_active_lease
+        ON ara_jobs(device_id,lease_until)
+        WHERE status='leased';
       CREATE TABLE IF NOT EXISTS ara_oauth_consumed(
         kind TEXT NOT NULL,
         issuer TEXT NOT NULL,
@@ -271,14 +278,20 @@ export class AraState extends DurableObject {
 
   _reap(device) {
     const now = Date.now();
-    const rows = this.sql.exec(
-      "SELECT * FROM ara_jobs WHERE device_id=? AND status IN ('queued','leased','uncertain')",
-      device
+    const expired = this.sql.exec(
+      `SELECT id,type,status,expires_at,lease_until FROM ara_jobs
+       WHERE device_id=? AND status IN ('queued','leased','uncertain') AND expires_at<=?`,
+      device, now
+    ).toArray();
+    const expiredLeases = this.sql.exec(
+      `SELECT id,type,status,expires_at,lease_until FROM ara_jobs
+       WHERE device_id=? AND status='leased' AND lease_until<=? AND expires_at>?`,
+      device, now, now
     ).toArray();
     const unknown = JSON.stringify({
       ok: false, error: "execution_outcome_unknown", reconciled: "expired_after_deadline",
     });
-    for (const row of rows) {
+    for (const row of [...expired, ...expiredLeases]) {
       const expires = Number(row.expires_at || 0);
       const lease = row.lease_until == null ? null : Number(row.lease_until);
       if (row.status === "uncertain" && expires <= now) {
@@ -333,13 +346,13 @@ export class AraState extends DurableObject {
   async status(device, freshnessSeconds = 360) {
     this._reap(device);
     const d = this._one("SELECT heartbeat,seen_at FROM ara_devices WHERE device_id=?", device);
-    const counts = this._one(
-      `SELECT
-         SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) queued,
-         SUM(CASE WHEN status='leased' THEN 1 ELSE 0 END) leased,
-         SUM(CASE WHEN status='uncertain' THEN 1 ELSE 0 END) uncertain
-       FROM ara_jobs WHERE device_id=?`, device
-    ) || {};
+    const counts = { queued: 0, leased: 0, uncertain: 0 };
+    const activeCounts = this.sql.exec(
+      `SELECT status,COUNT(*) AS n FROM ara_jobs
+       WHERE device_id=? AND status IN ('queued','leased','uncertain')
+       GROUP BY status`, device
+    ).toArray();
+    for (const row of activeCounts) counts[row.status] = Number(row.n || 0);
     const seen = d ? Number(d.seen_at) : 0;
     const age = seen ? (Date.now() - seen) / 1000 : null;
     return {
