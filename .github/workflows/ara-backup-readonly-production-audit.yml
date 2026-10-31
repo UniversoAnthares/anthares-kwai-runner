@@ -1,0 +1,65 @@
+name: ARA backup read-only production verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ara-backup-readonly-production-audit.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  statuses: write
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Inspect backup health and binding metadata (no writes to Cloudflare)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          def get(url, headers=None):
+              r=urllib.request.Request(url,headers=headers or {'User-Agent':'Anthares-ARA-Readonly'})
+              try:
+                  with urllib.request.urlopen(r,timeout=12) as f:
+                      return f.status,{k.lower():v for k,v in f.headers.items()},f.read(10000)
+              except urllib.error.HTTPError as e:return e.code,{},b''
+              except Exception as e:return 0,{},str(type(e).__name__).encode()
+          cf_code,cf_headers,cf_body=get('https://anthares-ara-backup.anthares1.workers.dev/healthz')
+          vr_code,vr_headers,vr_body=get('https://anthares-ara-vercel-reserve.vercel.app/healthz')
+          def field(body,key):
+              try:return json.loads(body).get(key)
+              except Exception:return None
+          cf={'http':cf_code,'transport':cf_headers.get('x-ara-transport'),
+              'backend':field(cf_body,'backend'),'version':field(cf_body,'version')}
+          reserve={'http':vr_code,'backend':field(vr_body,'backend')}
+          token=os.environ.get('CLOUDFLARE_API_TOKEN','')
+          bindings={'status':'token_unavailable'}
+          if token:
+              url='https://api.cloudflare.com/client/v4/accounts/5c24be052e5144391f73a8e03491e88e/workers/scripts/anthares-ara-backup/settings'
+              code,_,body=get(url,{'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'Anthares-ARA-Readonly'})
+              try:
+                  val=json.loads(body)
+                  bindings={'http':code,'success':val.get('success'),
+                    'types':[{'name':x.get('name'),'type':x.get('type')}
+                             for x in (val.get('result') or {}).get('bindings',[])]}
+              except Exception:bindings={'http':code,'status':'unavailable'}
+          report={'backup':cf,'reserve':reserve,'binding_metadata':bindings}
+          print('ARA_READONLY_REPORT='+json.dumps(report,separators=(',',':')))
+          if cf.get('transport')=='vercel-neon-stateless-proxy':
+              state,description='success','ARA stateless backup verified; no Durable Object binding in runtime'
+          elif cf.get('backend')=='cloudflare-durable-object-sqlite':
+              state,description='failure','ARA stateful backup still active; SQL read quota risk'
+          else:
+              state,description='pending','ARA live deployment not conclusively identified'
+          status_data={'state':state,'description':description,
+                       'context':'ara/readonly-production','target_url':'https://github.com/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+os.environ['GITHUB_RUN_ID']}
+          url='https://api.github.com/repos/'+os.environ['GITHUB_REPOSITORY']+'/statuses/'+os.environ['GITHUB_SHA']
+          req=urllib.request.Request(url,data=json.dumps(status_data).encode(),method='POST',
+            headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],
+                     'Accept':'application/vnd.github+json','Content-Type':'application/json',
+                     'User-Agent':'Anthares-ARA-Readonly'})
+          with urllib.request.urlopen(req,timeout=15) as r:print('COMMIT_STATUS_HTTP='+str(r.status))
+          PY
