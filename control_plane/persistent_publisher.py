@@ -197,13 +197,60 @@ class PublishReceipt:
         return row
 
 
-def write_receipt(receipt: PublishReceipt, path: str | Path) -> Path:
+def require_receipt_write_domain(receipt: PublishReceipt, path: str | Path, *,
+                                 actor_network: str, state_root: str | Path) -> Path:
+    """Fail closed for scoped receipts; external IAM must constrain the caller."""
+    if actor_network not in PLATFORMS or receipt.platform != actor_network:
+        raise RuntimeError("cross_network_write_denied")
+    root = Path(state_root)
+    if root.is_symlink() or not root.is_dir():
+        raise RuntimeError("state_root_invalid")
+    root = root.resolve(strict=True)
+    domain = root / actor_network
+    if domain.is_symlink() or not domain.is_dir():
+        raise RuntimeError("network_state_directory_missing")
+    domain = domain.resolve(strict=True)
     target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_text(json.dumps(receipt.public_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(target)
+    if not target.is_absolute() or ".." in target.parts:
+        raise RuntimeError("cross_network_path_denied")
+    resolved = target.resolve(strict=False)
+    if resolved.parent != domain or resolved.suffix.lower() != ".json":
+        raise RuntimeError("cross_network_path_denied")
+    if target.is_symlink() or (target.exists() and not target.is_file()):
+        raise RuntimeError("state_target_invalid")
+    return resolved
+
+
+def write_receipt(receipt: PublishReceipt, path: str | Path, *,
+                  actor_network: str, state_root: str | Path) -> Path:
+    """All writes, including the original entrypoint, require network scope."""
+    import os
+    import tempfile
+    target = require_receipt_write_domain(
+        receipt, path, actor_network=actor_network, state_root=state_root)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", delete=False, dir=str(target.parent),
+            prefix="." + target.name + ".", suffix=".tmp",
+        ) as stream:
+            temporary = Path(stream.name)
+            json.dump(receipt.public_dict(), stream, ensure_ascii=False, indent=2)
+        os.chmod(temporary, 0o600)
+        require_receipt_write_domain(
+            receipt, target, actor_network=actor_network, state_root=state_root)
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return target
+
+
+def write_receipt_scoped(receipt: PublishReceipt, path: str | Path, *,
+                         actor_network: str, state_root: str | Path) -> Path:
+    """Alias retained for callers that already opted into explicit scope."""
+    return write_receipt(
+        receipt, path, actor_network=actor_network, state_root=state_root)
 
 
 def receipt_evidence(receipt: PublishReceipt) -> dict:
