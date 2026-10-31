@@ -15,7 +15,7 @@ on:
         required: false
         type: string
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/10 * * * *'
   pull_request:
     paths:
       - .github/workflows/cortes-qa-p0-controller.yml
@@ -160,7 +160,7 @@ jobs:
             for (const issue of events) {
               if (!eligible(issue)) {skipped++;continue;}
               if (dispatched >= maxDispatchPerRun) {
-                core.warning('QA_P0_BACKLOG_INCOMPLETE: rerun scheduled in five minutes');
+                core.warning('QA_P0_BACKLOG_INCOMPLETE: rerun scheduled in ten minutes');
                 break;
               }
               const runTitle = 'QA-P0 #' + issue.number;
