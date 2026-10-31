@@ -262,6 +262,58 @@ def confirm_successful_quota_handoff(component, project_id, event, remote_run):
         return False
 
 
+
+def reconcile_stale_successful_handoffs(component, project_id, workflow, runs):
+    """Read back historical, already-dispatched CI successes; never dispatch here.
+
+    The normal 90-minute discovery window intentionally limits NEW dispatches.
+    Successful successors can take longer to finish, so their receipt needs a
+    separate bounded readback window. The Vercel endpoint verifies OIDC,
+    repository, GitHub run, exact workflow, SHA and the existing Neon reservation.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    candidates = {}
+    prefix = "quota-rescue-" + component + "-glsha-"
+    for run in runs:
+        if (run.get("event") != "workflow_dispatch" or
+            run.get("status") != "completed" or
+            run.get("conclusion") != "success"):
+            continue
+        title = str(run.get("display_title", ""))
+        sha = title[len(prefix):] if title.startswith(prefix) else ""
+        if len(sha) != 40 or any(c not in "0123456789abcdef" for c in sha):
+            continue
+        try:
+            age = (now - dt.datetime.fromisoformat(
+                run["created_at"].replace("Z", "+00:00"))).total_seconds()
+        except (KeyError, ValueError, TypeError):
+            continue
+        if 0 <= age <= 72 * 3600:
+            candidates[sha] = run
+    if not candidates:
+        return 0
+    url = ("https://gitlab.com/api/v4/projects/" + str(project_id) +
+           "/pipelines?ref=main&per_page=100&order_by=id&sort=desc")
+    pipelines = api(url, GL_AUTH, gl=True)
+    if not isinstance(pipelines, list):
+        return 0
+    confirmed, checks = 0, 0
+    for p in pipelines:
+        if checks >= 3:
+            break
+        if (p.get("ref") != "main" or
+            p.get("status") not in ("failed", "canceled") or
+            p.get("sha") not in candidates or
+            not str(p.get("id", "")).isdigit()):
+            continue
+        checks += 1
+        if confirm_successful_quota_handoff(
+                component, project_id, p, candidates[p["sha"]]):
+            print(f"{component}=OLDER_FALLBACK_CONFIRMED pipeline={p['id']}")
+            confirmed += 1
+    return confirmed
+
+
 def dispatch(component, workflow, p):
     inputs = {"gitlab_pipeline_id": str(p["id"]), "gitlab_sha": p["sha"]}
     if workflow == "private-ci-quota-rescue.yml":
@@ -324,6 +376,19 @@ def main():
             # Never expose request URLs, response bodies, tokens or sensitive metadata.
             print(f"{component}=CONTROL_ERROR type={type(exc).__name__}")
             errors += 1
+    # Passive reconciliation also handles successes older than the 90-minute
+    # new-dispatch window. Run at most once an hour; exact controller fencing
+    # prevents confirmations without a matching already-existing reservation.
+    if dt.datetime.now(dt.timezone.utc).minute < 15:
+        for component, project_id, workflow in PROJECTS:
+            try:
+                if workflow not in runs_cache:
+                    runs_cache[workflow] = latest_runs(workflow)
+                reconcile_stale_successful_handoffs(
+                    component, project_id, workflow, runs_cache[workflow])
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError,
+                    OSError, ValueError, KeyError):
+                print(f"{component}=OLDER_FALLBACK_RECONCILIATION_UNAVAILABLE")
     return 1 if errors else 0
 
 

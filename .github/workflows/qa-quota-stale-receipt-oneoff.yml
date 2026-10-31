@@ -1,0 +1,20 @@
+name: One-off CI quota stale-receipt QA
+on:
+  push:
+    branches: [fix/gitlab-quota-stale-confirm-20261030]
+    paths:
+      - 'tools/gitlab_quota_watcher.py'
+      - 'tools/test_gitlab_quota_watcher.py'
+      - '.github/workflows/qa-quota-stale-receipt-oneoff.yml'
+permissions:
+  contents: read
+jobs:
+  python-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify syntax and quota contracts
+        run: |
+          python3 -m py_compile tools/gitlab_quota_watcher.py tools/test_gitlab_quota_watcher.py
+          python3 tools/test_gitlab_quota_watcher.py
