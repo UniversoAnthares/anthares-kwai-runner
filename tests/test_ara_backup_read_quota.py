@@ -79,6 +79,11 @@ class DurableObjectReadQuotaTests(unittest.TestCase):
         self.assertEqual(expired, {"q-expired", "l-expired", "u-expired"})
         self.assertEqual(leases, {"l-lease-expired"})
 
+    def test_stateful_deployment_requires_explicit_dispatch(self):
+        workflow = (SOURCE.parents[1] / ".github/workflows/trigger-cloudflare-ara-backup-deploy.yml").read_text(encoding="utf-8")
+        self.assertIn("  workflow_dispatch:", workflow)
+        self.assertNotIn("  push:", workflow)
+
     def test_lease_pick_uses_created_order_index(self):
         self.assert_index_plan(PICK, ("workstation", self.now), "ara_jobs_pick")
         row = self.db.execute(PICK, ("workstation", self.now)).fetchone()
