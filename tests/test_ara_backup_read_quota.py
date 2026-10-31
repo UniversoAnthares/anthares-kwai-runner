@@ -67,7 +67,7 @@ class DurableObjectReadQuotaTests(unittest.TestCase):
         self.assertNotIn("DROP INDEX IF EXISTS ara_jobs_pick;", self.source)
 
     def test_active_counts_exclude_historical_rows(self):
-        self.assert_index_plan(COUNTS, ("workstation",), "ara_jobs_pick")
+        self.assert_index_plan(COUNTS, ("workstation",), "ara_jobs_active_counts")
         counts = {row["status"]: row["n"] for row in self.db.execute(COUNTS, ("workstation",))}
         self.assertEqual(counts, {"queued": 2, "leased": 3, "uncertain": 2})
 
