@@ -29,6 +29,13 @@ jobs:
           ! grep -q 'floot.app' cloudflare-ara-backup/src/index.js
           ! grep -q 'onrender.com' cloudflare-ara-backup/src/index.js
           node --check cloudflare-ara-backup/src/index.js
+      - name: Validate bounded Durable Object reads before deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_ara_backup_read_quota.py' -v
+          grep -q 'main = "src/quota-guard.js"' cloudflare-ara-backup/wrangler.toml
+          node --check cloudflare-ara-backup/src/quota-guard.js
       - name: Pin Cloudflare MCP signing key only
         shell: bash
         run: |
