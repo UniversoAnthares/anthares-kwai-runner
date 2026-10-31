@@ -1,11 +1,10 @@
 name: Trigger Cloudflare ARA deploy
 
+# The stateful Worker shares its name with the stateless backup proxy.
+# Restrict rollback/redeployment to explicit owner action: a normal push must
+# never replace the proxy and silently resume Durable Object SQL consumption.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'cloudflare-ara-backup/**'
-      - '.github/workflows/trigger-cloudflare-ara-backup-deploy.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
