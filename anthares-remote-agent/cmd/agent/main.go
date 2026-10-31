@@ -25,6 +25,9 @@ type Config struct {
 	AllowShell    bool
 	AllowedRoots  []string
 	MaxConcurrent int
+	WakeEnabled bool
+	WakeListenerToken string
+	WakeOriginIP string
 }
 
 type Job struct {
@@ -83,6 +86,7 @@ func main() {
 	go resultReplayLoop(cfg)
 
 	sem := executionSemaphore(cfg.MaxConcurrent)
+	wake := startWakeSubscriber(cfg)
 	for {
 		sem <- struct{}{}
 		job, err := pollJob(cfg)
@@ -94,7 +98,8 @@ func main() {
 		}
 		if job == nil {
 			<-sem
-			time.Sleep(2 * time.Second)
+			// Event transport never carries a job; it only schedules the next Neon lease.
+			wake.waitAfterEmpty()
 			continue
 		}
 		if err := validateJobID(job.ID); err != nil || strings.TrimSpace(job.Type) == "" {
@@ -128,6 +133,9 @@ func loadConfig() (Config, error) {
 		DeviceID:      os.Getenv("ANTHARES_DEVICE_ID"),
 		AllowShell:    os.Getenv("ANTHARES_ALLOW_SHELL") == "1",
 		MaxConcurrent: 4,
+		WakeEnabled: os.Getenv("ANTHARES_WAKE_ENABLED") == "1",
+		WakeListenerToken: os.Getenv("ANTHARES_WAKE_LISTENER_TOKEN"),
+		WakeOriginIP: strings.TrimSpace(os.Getenv("ANTHARES_WAKE_ORIGIN_IP")),
 	}
 	if v, err := strconv.Atoi(os.Getenv("ANTHARES_MAX_CONCURRENT")); err == nil && v >= 1 && v <= 8 {
 		c.MaxConcurrent = v
