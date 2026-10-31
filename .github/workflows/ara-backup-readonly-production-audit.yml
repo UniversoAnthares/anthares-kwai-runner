@@ -24,7 +24,7 @@ jobs:
               r=urllib.request.Request(url,headers=headers or {'User-Agent':'Anthares-ARA-Readonly'})
               try:
                   with urllib.request.urlopen(r,timeout=12) as f:
-                      return f.status,dict(f.headers),f.read(10000)
+                      return f.status,{k.lower():v for k,v in f.headers.items()},f.read(10000)
               except urllib.error.HTTPError as e:return e.code,{},b''
               except Exception as e:return 0,{},str(type(e).__name__).encode()
           cf_code,cf_headers,cf_body=get('https://anthares-ara-backup.anthares1.workers.dev/healthz')
