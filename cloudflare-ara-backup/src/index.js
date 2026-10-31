@@ -232,7 +232,10 @@ export class AraState extends DurableObject {
       CREATE UNIQUE INDEX IF NOT EXISTS ara_jobs_dedupe
         ON ara_jobs(device_id,idempotency_key) WHERE idempotency_key IS NOT NULL;
       CREATE INDEX IF NOT EXISTS ara_jobs_pick
-        ON ara_jobs(device_id,status,created_at);
+        ON ara_jobs(device_id,created_at) WHERE status='queued';
+      CREATE INDEX IF NOT EXISTS ara_jobs_active_counts
+        ON ara_jobs(device_id,status)
+        WHERE status IN ('queued','leased','uncertain');
       CREATE INDEX IF NOT EXISTS ara_jobs_active_expiry
         ON ara_jobs(device_id,expires_at)
         WHERE status IN ('queued','leased','uncertain');
