@@ -111,7 +111,11 @@ def workflow_incidents():
             if ("p0 publication incident" in lower or
                 ("qa" in lower and any(t in lower for t in
                      ("controller","executor","watchdog","immediate","incident"))) or
-                ("mirror" in lower and "codeberg" in lower)):
+                ("mirror" in lower and "codeberg" in lower) or
+                any(t in lower for t in
+                    ("watchdog", "p0 immediate cloud recovery",
+                     "hosted migration preflight", "identity audit",
+                     "read-only forensic audit"))):
                 continue
             status=str(run.get("status") or "")
             conclusion=str(run.get("conclusion") or "")
