@@ -218,12 +218,15 @@ async function kwaiAction(action,b,actor){
  if(action==='kwai-confirm'){
   const proof=b.confirmation_evidence||{},remote=String(b.remote_id||'');
   let u;try{u=new URL(String(proof.public_url||''));}catch{}
-  if(!u||u.protocol!=='https:'||!['kwai.com','www.kwai.com'].includes(u.hostname)||
-    u.username||u.password||u.port||u.search||u.hash||
-    !u.pathname.startsWith('/@lucasrosalem/video/')||
-    !/^[A-Za-z0-9_-]{5,100}$/.test(u.pathname.split('/').filter(Boolean).pop()||'')||
-    proof.kind!=='kwai_account_media_readback_verified'||proof.account!=='lucasrosalem'||
-    proof.remote_id!==remote||u.pathname.split('/').filter(Boolean).pop()!==remote||
+  const p=u?.pathname||'',h=u?.hostname||'';
+  const official=(h==='k.kwai.com'&&/^\/p\/[A-Za-z0-9_-]{5,100}$/.test(p))||
+   (h==='www.kwai.com'&&/^\/@lucasrosalem\/photo\/[0-9]{5,100}$/.test(p));
+  if(!u||u.protocol!=='https:'||!official||u.username||u.password||
+    u.port||u.search||u.hash||p.split('/').filter(Boolean).pop()!==remote||
+    proof.kind!=='kwai_account_media_readback_verified'||
+    !['kwai_public_deeplink_title_and_author_profile_handle',
+      'physical_profile_exact_account_timestamp_and_share_ui'].includes(proof.method)||
+    proof.account!=='lucasrosalem'||proof.remote_id!==remote||
     !/^[A-Za-z0-9_-]{5,100}$/.test(remote)||
     !/^[a-f0-9]{64}$/.test(String(proof.media_sha256||'')))
    return{ok:false,error:'KWAI_PUBLIC_READBACK_REQUIRED'};
