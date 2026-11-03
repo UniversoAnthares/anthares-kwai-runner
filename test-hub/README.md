@@ -50,6 +50,13 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 
 > Atualizado em 2026-10-05 20:35 -04:00. Os findings append-only continuam sendo a autoridade detalhada.
 
+### Homologação 2026-11-03 — continuidade CORTES remota
+
+- **PROVEN (camadas isoladas):** preflight Ubuntu hospedado (run 41116819377), saúde dos dois ingressos Cloudflare/Neon (HTTP 200), negativa de escrita sem credenciais (HTTP 401), integridade de dois snapshots de ledger e restauração por SHA-256 de uma mídia existente do Google Drive sem uso do PC.
+- **WAITING_EXTERNAL:** endpoint principal Vercel de fila retornou HTTP 402. Suspender tentativas, cobranças e upgrades até revalidação administrativa autorizada.
+- **RECONCILE_REQUIRED:** fila Kwai mantém publicações UNCERTAIN sem recibo remoto e o HA atual não oferece o ciclo completo de lease/start/confirm Kwai. Permanecem caminhos self-hosted Windows nos workflows de CORTES; produção fora do PC continua sem aceite.
+- **Finding:** `test-hub/findings/20261103-cortes-remote-continuity-homologation-partial.md`. Preservar filas, dados, tokens e nenhum upload de teste. Nenhuma publicação nova foi efetuada nesta homologação.
+
 ### Auditoria 2026-11-03 — CRON CORTES Windows
 
 - **PROVEN (suspensão operacional):** PR [anthares-clipper #230](https://github.com/UniversoAnthares/anthares-clipper/pull/230) incorporada no commit `8c31afffe137a9ed1d9860d10e8c8d380b3a86ec`. O main retirou somente os dois gatilhos `on.schedule` de `cortes-daily.yml` e `cortes-kwai-dispatch-refill.yml`, preservando os acionamentos manuais. O runner registrado `DESKTOP-FTDK0HP` estava offline e não havia processos/tarefas de runner habilitados.
