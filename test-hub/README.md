@@ -50,6 +50,13 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 
 > Atualizado em 2026-10-05 20:35 -04:00. Os findings append-only continuam sendo a autoridade detalhada.
 
+### Coordenação 2026-11-03 — contrato HA Kwai e refill externo
+
+- **PARTIAL / STAGED:** [PR #2057](https://github.com/UniversoAnthares/anthares-kwai-runner/pull/2057) adiciona contrato OIDC Kwai/Neon/Cloudflare, com publicação bloqueada por padrão; [PR privada Clipper #231](https://github.com/UniversoAnthares/anthares-clipper/pull/231) prepara o reabastecimento manual no Ubuntu, sem PC e sem cron. Ambas são draft, sem merge de produção.
+- **RECONCILE_REQUIRED:** 68 registros Kwai ainda incertos e sem remote ID/comprovante; zero SHA exato e zero sobreposição com 456 confirmados. Três grupos por origem: 51, 16 e 1. Preservar todos e exigir link público Kwai com verificação de conta antes de marcar confirmado.
+- **WAITING_EXTERNAL:** Vercel CORTES HTTP 402; Cloudflare/Neon health e bloqueio OIDC anônimo já comprovados, contrato novo ainda exige QA. Daily/resume continuam dependentes de Windows e checkpoints/mídia remotos incompletos.
+- **Finding:** `test-hub/findings/20261103-cortes-kwai-neon-ha-contract-staged-lease-closed.md`. Lease queue encerrada; novo lease para deploy/cutover. Sem vídeo de teste, despesa nova ou alteração em publicadores reais.
+
 ### Homologação 2026-11-03 — continuidade CORTES remota
 
 - **PROVEN (camadas isoladas):** preflight Ubuntu hospedado (run 41116819377), saúde dos dois ingressos Cloudflare/Neon (HTTP 200), negativa de escrita sem credenciais (HTTP 401), integridade de dois snapshots de ledger e restauração por SHA-256 de uma mídia existente do Google Drive sem uso do PC.
