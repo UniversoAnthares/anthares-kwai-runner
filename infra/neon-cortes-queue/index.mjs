@@ -123,6 +123,54 @@ async function kwaiAction(action,b,actor){
   return{ok:true,status:'RECONCILE_REQUIRED',target_key:KWAI_TARGET,
    records:rows.slice(0,100),truncated:rows.length>100,safe_to_retry:false};
  }
+ // Cloud refill is a distinct producer. Existing UNCERTAIN work must stay held.
+ if(action==='kwai-enqueue'){
+  if(actor.role!=='producer'||actor.workflow!=='cortes-neon-short-dispatch.yml')
+   return{ok:false,error:'KWAI_PRODUCER_IDENTITY_REQUIRED'};
+  if(process.env.CORTES_KWAI_CLOUD_PUBLISH_ENABLED!=='1')
+   return{ok:false,error:'KWAI_PUBLISHER_NOT_ENABLED'};
+  const source=String(b.source_id||''),segment=String(b.segment_id||'');
+  const id=String(b.id||''),media=String(b.video_url||'');
+  const start=Number(b.source_start),end=Number(b.source_end);
+  let u;try{u=new URL(media);}catch{}
+  if(b.target_key!==KWAI_TARGET||b.account_id!=='lucasrosalem'||
+    b.expected_account!=='lucasrosalem'||b.executor!=='physical_android'||
+    b.master_id!==source||b.duration_class!=='short'||!source||!segment||
+    !u||u.protocol!=='https:'||!['anthares.us','www.anthares.us'].includes(u.hostname)||
+    u.username||u.password||u.port||!u.pathname.toLowerCase().endsWith('.mp4')||
+    !Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<=start||
+    id!=='kwai-cortes-'+source+'-'+segment.replace(/:/g,'-')||
+    b.dedupe_key!==id||b.media_sha256!==sha(source+'|'+segment+'|'+media)||
+    !Number.isInteger(Number(b.cortes_attachment_id))||
+    Number(b.cortes_attachment_id)<=0||!String(b.cortes_callback_token||'')||
+    !/^https:\/\/(www\.)?anthares\.us\/wp-json\/anthares\/v1\/cortes\/clip-network-callback$/.test(String(b.cortes_callback_url||'')))
+     return{ok:false,error:'KWAI_ENQUEUE_IDENTITY_INVALID'};
+  const vals=[id,id,KWAI_TARGET,source,b.media_sha256,source,start,end,'short',JSON.stringify(b)];
+  const rows=await query(
+   "INSERT INTO cortes_publications "+
+   "(id,dedupe_key,target_key,master_id,media_sha256,source_id,"+
+   "source_start,source_end,duration_class,payload) "+
+   "SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb "+
+   "WHERE NOT EXISTS (SELECT 1 FROM cortes_publications u "+
+   "WHERE u.target_key=$3 AND u.status='uncertain') "+
+   "AND NOT EXISTS (SELECT 1 FROM cortes_publications p WHERE "+
+   "p.target_key=$3 AND p.source_id=$6 AND p.source_start<$8 "+
+   "AND p.source_end>$7 AND p.status<>'failed') "+
+   "ON CONFLICT DO NOTHING RETURNING id,target_key,status",vals);
+  if(rows.length)return{ok:true,deduped:false,job:rows[0]};
+  const same=await query(
+   "SELECT id,target_key,status,source_id,source_start,source_end,"+
+   "payload FROM cortes_publications WHERE id=$1 OR dedupe_key=$2 LIMIT 1",[id,id]);
+  if(same.length)return{ok:true,deduped:true,reason:'identity',job:same[0]};
+  const overlap=await query(
+   "SELECT id,target_key,status,source_id,source_start,source_end,"+
+   "payload FROM cortes_publications WHERE target_key=$1 AND "+
+   "source_id=$2 AND source_start<$4 AND source_end>$3 "+
+   "AND status<>'failed' ORDER BY created_at LIMIT 1",
+   [KWAI_TARGET,source,start,end]);
+  if(overlap.length)return{ok:true,deduped:true,reason:'timeline_overlap',job:overlap[0]};
+  return{ok:false,error:'KWAI_UNCERTAIN_HOLD_OR_CONCURRENT_WRITE'};
+ }
  if(actor.role!=='kwai-publisher'||actor.workflow!=='cortes-kwai-cloud-publisher.yml')
   return{ok:false,error:'KWAI_PUBLISHER_ROLE_REQUIRED'};
  if(process.env.CORTES_KWAI_CLOUD_PUBLISH_ENABLED!=='1')
