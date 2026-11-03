@@ -97,3 +97,20 @@ test('Cloudflare health can fail over read-only to the second function', async (
     globalThis.fetch=prior;
   }
 });
+
+test('Cloudflare standby: a transport exception must not be retried for writes', async () => {
+  const mod = await import('../cloudflare-cortes-queue-ha/src/index.mjs');
+  const prior = globalThis.fetch;
+  let calls=0;
+  globalThis.fetch = async () => { calls++; throw new Error('simulated timeout'); };
+  try {
+    const response = await mod.default.fetch(new Request('https://standby.invalid/?action=kwai-start', {
+      method:'POST',
+      headers:{authorization:'Bearer '+ 'A'.repeat(120), 'content-type':'application/json'},
+      body:'{}'
+    }));
+    assert.equal(response.status,503);
+    assert.equal((await response.json()).error,'mutation_result_uncertain_no_replay');
+    assert.equal(calls,1,'do not replay writes after network errors');
+  } finally { globalThis.fetch=prior; }
+});
