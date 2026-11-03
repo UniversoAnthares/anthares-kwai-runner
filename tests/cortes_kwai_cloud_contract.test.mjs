@@ -54,3 +54,46 @@ test('unsigned write is rejected by Neon function before querying database', asy
     assert.equal(response.status,401,action);
   }
 });
+
+test('Cloudflare standby never repeats a mutating 5xx on another backend', async () => {
+  const mod = await import('../cloudflare-cortes-queue-ha/src/index.mjs');
+  const prior = globalThis.fetch;
+  const called = [];
+  globalThis.fetch = async (input) => {
+    called.push(String(input));
+    return new Response(JSON.stringify({ok:false,error:'transient'}), {
+      status:503,headers:{'content-type':'application/json'}
+    });
+  };
+  try {
+    const request = new Request('https://standby.invalid/?action=kwai-lease', {
+      method:'POST',
+      headers:{authorization:'Bearer '+ 'A'.repeat(120), 'content-type':'application/json'},
+      body:'{}'
+    });
+    const response = await mod.default.fetch(request);
+    assert.equal(response.status,503);
+    assert.equal(called.length,1,'a 5xx write must not be replayed');
+  } finally {
+    globalThis.fetch=prior;
+  }
+});
+
+test('Cloudflare health can fail over read-only to the second function', async () => {
+  const mod = await import('../cloudflare-cortes-queue-ha/src/index.mjs');
+  const prior = globalThis.fetch;
+  let calls=0;
+  globalThis.fetch = async () => {
+    calls++;
+    return new Response(calls===1?'{"ok":false}':'{"ok":true}', {
+      status:calls===1?503:200,headers:{'content-type':'application/json'}
+    });
+  };
+  try {
+    const response = await mod.default.fetch(new Request('https://standby.invalid/?action=health'));
+    assert.equal(response.status,200);
+    assert.equal(calls,2);
+  } finally {
+    globalThis.fetch=prior;
+  }
+});
