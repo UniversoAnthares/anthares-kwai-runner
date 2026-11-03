@@ -30,7 +30,7 @@ test('account, fingerprint, remote readback and fencing guards remain present', 
   assert.ok(core.includes("const KWAI_TARGET='kwai:lucasrosalem'"));
   assert.ok(core.includes("b.media_sha256!==sha(source+'|'+segment+'|'+media)"));
   assert.ok(core.includes("proof.kind!=='kwai_account_media_readback_verified'"));
-  assert.ok(core.includes("u.pathname.split('/').filter(Boolean).pop()!==remote"));
+  assert.ok(core.includes("p.split('/').filter(Boolean).pop()!==remote"));
   assert.ok(core.includes("lease_generation=$4"));
   assert.ok(core.includes("cortes_daily_publication_budget.reserved<100"));
 });
