@@ -36,7 +36,11 @@ export default {async fetch(request){
    const outputHeaders=new Headers({"Content-Type":"application/json","Cache-Control":"no-store",
       "X-Anthares-Queue-HA":"cloudflare-neon"});
    return new Response(body,{status:response.status,headers:outputHeaders});
-  }catch{continue;}
+  }catch{
+   // A transport timeout may happen after the upstream committed a write.
+   if(!health)return respond(503,"mutation_result_uncertain_no_replay");
+   continue;
+  }
  }
  return respond(503,"all_independent_backends_unavailable");
 }};
