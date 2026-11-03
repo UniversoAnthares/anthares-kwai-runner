@@ -50,6 +50,13 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 
 > Atualizado em 2026-10-05 20:35 -04:00. Os findings append-only continuam sendo a autoridade detalhada.
 
+### Auditoria 2026-11-03 — CRON CORTES Windows
+
+- **PROVEN (suspensão operacional):** PR [anthares-clipper #230](https://github.com/UniversoAnthares/anthares-clipper/pull/230) incorporada no commit `8c31afffe137a9ed1d9860d10e8c8d380b3a86ec`. O main retirou somente os dois gatilhos `on.schedule` de `cortes-daily.yml` e `cortes-kwai-dispatch-refill.yml`, preservando os acionamentos manuais. O runner registrado `DESKTOP-FTDK0HP` estava offline e não havia processos/tarefas de runner habilitados.
+- **PROVEN (preflight hospedado):** execução [41116819377](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/41116819377), com sinais `CORTES_HOSTED_CANONICAL_SOURCE=PASS` e `CORTES_HOSTED_READONLY_GATE=PASS`. Confirma apenas origem e pré-requisitos em Ubuntu efêmero.
+- **PARTIAL (migração de produção):** os três workflows de CORTES ainda declaram `runs-on: [self-hosted, Windows]` para acionamento manual/push; publicação remota, checkpoint, ledger e failover dependem de homologação antes do cutover. Execução antiga `41126324696` segue `queued`, com zero jobs, sujeita a reconciliação.
+- **Fonte append-only:** `test-hub/findings/20261103-cortes-windows-cron-suspension-production-proven.md`. A suspensão não autoriza reiniciar runner local nem reenviar publicações incertas.
+
 ### Arquitetura comprovada/descartada
 - PROVEN: runner público GitHub funciona sem depender da cota do repositório privado.
 - PROVEN: vault público validado; PRIVATE_REPO_TOKEN não pertence à arquitetura final.
