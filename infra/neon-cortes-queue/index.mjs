@@ -223,7 +223,8 @@ async function kwaiAction(action,b,actor){
     !u.pathname.startsWith('/@lucasrosalem/video/')||
     !/^[A-Za-z0-9_-]{5,100}$/.test(u.pathname.split('/').filter(Boolean).pop()||'')||
     proof.kind!=='kwai_account_media_readback_verified'||proof.account!=='lucasrosalem'||
-    proof.remote_id!==remote||!/^[A-Za-z0-9_-]{5,100}$/.test(remote)||
+    proof.remote_id!==remote||u.pathname.split('/').filter(Boolean).pop()!==remote||
+    !/^[A-Za-z0-9_-]{5,100}$/.test(remote)||
     !/^[a-f0-9]{64}$/.test(String(proof.media_sha256||'')))
    return{ok:false,error:'KWAI_PUBLIC_READBACK_REQUIRED'};
   const rows=await query("UPDATE cortes_publications SET status='confirmed',"+
