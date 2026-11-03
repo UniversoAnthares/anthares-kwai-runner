@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 const AUD='https://anthares-remote-primary.vercel.app/api/cortes-queue';
 const TARGETS={linkedin:'linkedin:primary',instagram:'instagram:universoanthares',pinterest:'pinterest:lucasyahn'};
 const BUFFER_WORKFLOWS={linkedin:'cortes-buffer-linkedin-cloud.yml',instagram:'cortes-buffer-instagram-cloud.yml',pinterest:'cortes-buffer-pinterest-cloud.yml'};
-const CLIPPER_PRODUCERS=new Set(['cortes-buffer-fanout-cloud.yml','cortes-neon-short-dispatch.yml','cortes-daily.yml']);
+const CLIPPER_PRODUCERS=new Set(['cortes-buffer-fanout-cloud.yml','cortes-neon-short-dispatch.yml','cortes-kwai-dispatch-refill.yml','cortes-daily.yml']);
 const RUNNER_PRODUCERS=new Set(['cortes-linkedin-neon-fanout.yml','cortes-buffer-three-fanout-cloud.yml']);
 const PROBE_WORKFLOWS=new Set(['cortes-queue-ha-acceptance.yml','cortes-queue-cloudflare-ha.yml']);
 const LIMITS={linkedin:50,instagram:50,pinterest:25};
@@ -125,7 +125,7 @@ async function kwaiAction(action,b,actor){
  }
  // Cloud refill is a distinct producer. Existing UNCERTAIN work must stay held.
  if(action==='kwai-enqueue'){
-  if(actor.role!=='producer'||actor.workflow!=='cortes-neon-short-dispatch.yml')
+  if(actor.role!=='producer'||actor.workflow!=='cortes-kwai-dispatch-refill.yml')
    return{ok:false,error:'KWAI_PRODUCER_IDENTITY_REQUIRED'};
   if(process.env.CORTES_KWAI_CLOUD_PUBLISH_ENABLED!=='1')
    return{ok:false,error:'KWAI_PUBLISHER_NOT_ENABLED'};
