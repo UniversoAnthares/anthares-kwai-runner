@@ -3,7 +3,8 @@ const BACKENDS=[
  "https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/",
  "https://br-crimson-unit-b89nau08-cortesbackup.compute.c-14.us-east-1.aws.neon.tech/"
 ];
-const ACTIONS=new Set(["enqueue","buffer-lease","buffer-start","buffer-fail","buffer-scheduled","buffer-pending","buffer-reconcile"]);
+const ACTIONS=new Set(["enqueue","buffer-lease","buffer-start","buffer-fail","buffer-scheduled","buffer-pending","buffer-reconcile",
+ "kwai-uncertain-read","kwai-lease","kwai-start","kwai-confirm","kwai-fail"]);
 function respond(code,error){return Response.json({ok:false,error},{status:code,headers:{"Cache-Control":"no-store"}});}
 export default {async fetch(request){
  const url=new URL(request.url),action=url.searchParams.get("action")||"";
