@@ -50,6 +50,13 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 
 > Atualizado em 2026-10-05 20:35 -04:00. Os findings append-only continuam sendo a autoridade detalhada.
 
+### Atualização 2026-11-03 — refill Ubuntu implantado com execução bloqueada
+
+- **DEPLOYED (código, gate OFF):** [Clipper PR #231](https://github.com/UniversoAnthares/anthares-clipper/pull/231) incorporada no main, commit `55807ac002d7cd2ce8e5be6017df7f3d6271db00`. `cortes-kwai-dispatch-refill.yml` agora usa `ubuntu-24.04`, OIDC e `workflow_dispatch`, sem cron nem dependência de Windows.
+- **WAITING_EXTERNAL:** variável `CORTES_CLOUD_REFILL_ENABLED` ausente (404), execução bloqueada. API Kwai/Neon continua em PR draft #2057 e nenhum consumidor/publicador foi promovido.
+- **PARTIAL:** `cortes-daily.yml` e `cortes-short-resume.yml` ainda precisam do cutover de armazenamento/ledger para execução hospedada; 68 UNCERTAIN permanecem em reconciliação.
+- **Recibo:** `test-hub/findings/20261103-cortes-cloud-refill-merged-gated-lease-closed.md`.
+
 ### Coordenação 2026-11-03 — contrato HA Kwai e refill externo
 
 - **PARTIAL / STAGED:** [PR #2057](https://github.com/UniversoAnthares/anthares-kwai-runner/pull/2057) adiciona contrato OIDC Kwai/Neon/Cloudflare, com publicação bloqueada por padrão; [PR privada Clipper #231](https://github.com/UniversoAnthares/anthares-clipper/pull/231) prepara o reabastecimento manual no Ubuntu, sem PC e sem cron. Ambas são draft, sem merge de produção.
