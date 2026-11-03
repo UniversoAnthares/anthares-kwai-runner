@@ -55,7 +55,7 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 - **DEPLOYED (código, gate OFF):** [Clipper PR #231](https://github.com/UniversoAnthares/anthares-clipper/pull/231) incorporada no main, commit `55807ac002d7cd2ce8e5be6017df7f3d6271db00`. `cortes-kwai-dispatch-refill.yml` agora usa `ubuntu-24.04`, OIDC e `workflow_dispatch`, sem cron nem dependência de Windows.
 - **WAITING_EXTERNAL:** variável `CORTES_CLOUD_REFILL_ENABLED` ausente (404), execução bloqueada. API Kwai/Neon continua em PR draft #2057 e nenhum consumidor/publicador foi promovido.
 - **PARTIAL:** `cortes-daily.yml` e `cortes-short-resume.yml` ainda precisam do cutover de armazenamento/ledger para execução hospedada; 68 UNCERTAIN permanecem em reconciliação.
-- **Recibo:** `test-hub/findings/20261103-cortes-cloud-refill-merged-gated-lease-closed.md`.
+- **Recibo:** `test-hub/findings/20261103-cortes-cloud-refill-config-deployed-gated-lease-closed.md`.
 
 ### Coordenação 2026-11-03 — contrato HA Kwai e refill externo
 
