@@ -28,7 +28,10 @@ export default {async fetch(request){
    const response=await fetch(target,{method:request.method,headers,body:payload||undefined,
       redirect:"manual",signal:AbortSignal.timeout(12000)});
    // Only infrastructure faults trigger failover; do not bypass rate limits or auth.
-   if(response.status>=500)continue;
+   // An unknown HTTP 5xx may arrive after a committed write. Forward the
+   // response without replaying mutating operations on another backend.
+   if(response.status>=500 && health)continue;
+
    const body=await response.text();
    const outputHeaders=new Headers({"Content-Type":"application/json","Cache-Control":"no-store",
       "X-Anthares-Queue-HA":"cloudflare-neon"});
