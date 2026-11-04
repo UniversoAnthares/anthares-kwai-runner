@@ -120,11 +120,11 @@ class QuotaWatcherContract(unittest.TestCase):
             "ANTHARES_RECONCILE_SHA": "94ba06e628d0b1ba0bdfeabbdfd9a00b86508759",
             "ANTHARES_RECONCILE_GITHUB_RUN_ID": "40942048873",
         }
-        with patch.dict(mod.os.environ, fields), \\
-             patch.object(mod, "GH_AUTH", "fixture"), \\
-             patch.object(mod, "DRY_RUN", False), \\
-             patch.object(mod, "confirm_successful_quota_handoff", return_value=True) as confirm, \\
-             patch.object(mod, "dispatch") as dispatch, \\
+        with patch.dict(mod.os.environ, fields), \
+             patch.object(mod, "GH_AUTH", "fixture"), \
+             patch.object(mod, "DRY_RUN", False), \
+             patch.object(mod, "confirm_successful_quota_handoff", return_value=True) as confirm, \
+             patch.object(mod, "dispatch") as dispatch, \
              patch.object(mod, "api") as api:
             self.assertEqual(mod.main(), 0)
         confirm.assert_called_once_with("cortes", "87307248",
@@ -140,9 +140,9 @@ class QuotaWatcherContract(unittest.TestCase):
             "ANTHARES_RECONCILE_PIPELINE_ID": "3005500025",
             "ANTHARES_RECONCILE_SHA": "not-a-sha",
             "ANTHARES_RECONCILE_GITHUB_RUN_ID": "40942048873"}
-        with patch.dict(mod.os.environ, fields), \\
-             patch.object(mod, "GH_AUTH", "fixture"), \\
-             patch.object(mod, "DRY_RUN", False), \\
+        with patch.dict(mod.os.environ, fields), \
+             patch.object(mod, "GH_AUTH", "fixture"), \
+             patch.object(mod, "DRY_RUN", False), \
              patch.object(mod, "confirm_successful_quota_handoff") as confirm:
             self.assertEqual(mod.main(), 2)
         confirm.assert_not_called()
@@ -154,8 +154,8 @@ class QuotaWatcherContract(unittest.TestCase):
             "ANTHARES_RECONCILE_PIPELINE_ID": "3005500025",
             "ANTHARES_RECONCILE_SHA": "94ba06e628d0b1ba0bdfeabbdfd9a00b86508759",
             "ANTHARES_RECONCILE_GITHUB_RUN_ID": "40942048873"}
-        with patch.dict(mod.os.environ, fields), \\
-             patch.object(mod, "DRY_RUN", True), \\
+        with patch.dict(mod.os.environ, fields), \
+             patch.object(mod, "DRY_RUN", True), \
              patch.object(mod, "confirm_successful_quota_handoff") as confirm:
             self.assertEqual(mod.main(), 0)
         confirm.assert_not_called()
