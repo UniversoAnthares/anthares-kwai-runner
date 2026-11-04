@@ -50,6 +50,13 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 
 > Atualizado em 2026-10-05 20:35 -04:00. Os findings append-only continuam sendo a autoridade detalhada.
 
+### Auditoria 2026-11-04 — 68 mídias CORTES e checkpoint Neon
+
+- **PROVEN (mídias externas):** 68/68 URLs HTTPS distintas de arquivos MP4 do WordPress, relacionadas a registros Kwai `uncertain`, responderam HTTP 200 e `video/mp4` com tamanho positivo, em quatro lotes de 17 requisições HEAD. Nenhuma mídia foi publicada, baixada ou transferida.
+- **PROVEN (checkpoint):** ledger de revisão 15399 armazenado no Neon tem os mesmos 2.932.006 bytes e SHA-256 da cópia histórica; dois snapshots remotos passaram no SHA interno. Restauro funcional do executor ainda depende de homologação.
+- **RECONCILE_REQUIRED:** os 68 posts Kwai permanecem sem ID/URL públicos ou comprovação de conta; resposta WordPress 200 prova disponibilidade de arquivo, não publicação Kwai.
+- **PARTIAL (migração):** daily/resume continuam Windows/self-hosted; tarefa F1 local retornou `idle_no_eligible_media` (zero masters verificados); Hostinger sem FFmpeg comprovado, cota GitHub Actions não verificada. Nenhum serviço alterado. Finding: `test-hub/findings/20261104-cortes-media-68-head-ledger-recovery-verified.md`.
+
 ### Atualização 2026-11-03 — refill Ubuntu implantado com execução bloqueada
 
 - **DEPLOYED (código, gate OFF):** [Clipper PR #231](https://github.com/UniversoAnthares/anthares-clipper/pull/231) incorporada no main, commit `55807ac002d7cd2ce8e5be6017df7f3d6271db00`. `cortes-kwai-dispatch-refill.yml` agora usa `ubuntu-24.04`, OIDC e `workflow_dispatch`, sem cron nem dependência de Windows.
