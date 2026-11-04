@@ -3,7 +3,8 @@ const BACKENDS=[
  "https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/",
  "https://br-crimson-unit-b89nau08-cortesbackup.compute.c-14.us-east-1.aws.neon.tech/"
 ];
-const ACTIONS=new Set(["enqueue","buffer-lease","buffer-start","buffer-fail","buffer-scheduled","buffer-pending","buffer-reconcile"]);
+const ACTIONS=new Set(["enqueue","buffer-lease","buffer-start","buffer-fail","buffer-scheduled","buffer-pending","buffer-reconcile",
+ "kwai-uncertain-read","kwai-enqueue","kwai-lease","kwai-start","kwai-confirm","kwai-fail"]);
 function respond(code,error){return Response.json({ok:false,error},{status:code,headers:{"Cache-Control":"no-store"}});}
 export default {async fetch(request){
  const url=new URL(request.url),action=url.searchParams.get("action")||"";
@@ -27,12 +28,19 @@ export default {async fetch(request){
    const response=await fetch(target,{method:request.method,headers,body:payload||undefined,
       redirect:"manual",signal:AbortSignal.timeout(12000)});
    // Only infrastructure faults trigger failover; do not bypass rate limits or auth.
-   if(response.status>=500)continue;
+   // An unknown HTTP 5xx may arrive after a committed write. Forward the
+   // response without replaying mutating operations on another backend.
+   if(response.status>=500 && health)continue;
+
    const body=await response.text();
    const outputHeaders=new Headers({"Content-Type":"application/json","Cache-Control":"no-store",
       "X-Anthares-Queue-HA":"cloudflare-neon"});
    return new Response(body,{status:response.status,headers:outputHeaders});
-  }catch{continue;}
+  }catch{
+   // A transport timeout may happen after the upstream committed a write.
+   if(!health)return respond(503,"mutation_result_uncertain_no_replay");
+   continue;
+  }
  }
  return respond(503,"all_independent_backends_unavailable");
 }};

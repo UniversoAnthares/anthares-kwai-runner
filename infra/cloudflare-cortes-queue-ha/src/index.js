@@ -2,7 +2,8 @@
 // Fixed upstream, no dynamic proxying, no authentication bypass, no media hosting.
 const UPSTREAM='https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/';
 const WRITE=new Set(['probe','enqueue','buffer-lease','buffer-start','buffer-fail','buffer-scheduled',
- 'buffer-pending','buffer-reconcile','buffer-stats','buffer-retention']);
+ 'buffer-pending','buffer-reconcile','buffer-stats','buffer-retention',
+ 'kwai-uncertain-read','kwai-enqueue','kwai-lease','kwai-start','kwai-confirm','kwai-fail']);
 export default {async fetch(request){
  const u=new URL(request.url),method=request.method,act=u.searchParams.get('action')||'';
  if(method==='GET'&&(u.pathname==='/healthz'||u.pathname==='/'||u.pathname==='/api/cortes-queue')){
