@@ -177,6 +177,40 @@ class P0RouterTests(unittest.TestCase):
 
 
 
+    def test_visibility_only_issue_is_infrastructure_alert(self):
+        posted=[]
+        def fake(url, method="GET", payload=None, headers=None):
+            posted.append(payload)
+            return {"number":2045}
+        item={"id":router.marker("github-partial-visibility","clipper","day"),
+              "network":"cortes-general","stage":"qa_visibility_lost_github_repo",
+              "evidence":"https://github.com/UniversoAnthares/anthares-clipper/actions",
+              "description":"Missing Action run visibility"}
+        with patch.object(router,"http",side_effect=fake):
+            router.create_issue(item)
+        self.assertEqual(len(posted),1)
+        self.assertEqual(posted[0]["labels"],["QA-P0"])
+        self.assertIn("[infra]",posted[0]["title"])
+        self.assertIn("visibilidade",posted[0]["body"])
+        self.assertNotIn("corrigir o publicador",posted[0]["body"])
+        self.assertIn("QA-P0-FINGERPRINT",posted[0]["body"])
+
+    def test_publication_issue_keeps_existing_safety_gates(self):
+        posted=[]
+        def fake(url, method="GET", payload=None, headers=None):
+            posted.append(payload)
+            return {"number":2047}
+        item={"id":router.marker("publisher","kwai","day"),
+              "network":"kwai","stage":"github_actions_failure",
+              "evidence":"https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/3",
+              "description":"publisher failure"}
+        with patch.object(router,"http",side_effect=fake):
+            router.create_issue(item)
+        self.assertEqual(posted[0]["labels"],["QA-P0","publication-failure"])
+        self.assertIn("Falha de publicação",posted[0]["title"])
+        self.assertIn("reconciliar",posted[0]["body"])
+        self.assertIn("idempotência",posted[0]["body"])
+
     def test_wordpress_inaccessible_causes_nonzero_exit_and_one_deduped_alert(self):
         from contextlib import redirect_stdout
         import io
