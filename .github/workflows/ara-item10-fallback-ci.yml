@@ -1,0 +1,56 @@
+name: ARA items 6+10 - Hostinger listener and fallback isolated acceptance
+on:
+  pull_request:
+    paths:
+      - 'anthares-remote-agent/cmd/agent/main.go'
+      - 'anthares-remote-agent/cmd/agent/wake_hostinger.go'
+      - 'anthares-remote-agent/cmd/agent/wake_hostinger_test.go'
+      - 'anthares-remote-agent/cmd/agent/wake_fallback_test.go'
+      - '.github/workflows/ara-item10-fallback-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-windows-agent:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: anthares-remote-agent/go.mod
+          cache: false
+      - name: Full canonical agent source contract and fallback
+        working-directory: anthares-remote-agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          go mod verify
+          go vet ./...
+          go test -race -count=1 ./...
+          grep -F 'sem := executionSemaphore(cfg.MaxConcurrent)' cmd/agent/main.go
+          grep -F 'go heartbeatLoop(cfg)' cmd/agent/main.go
+          grep -F 'wake.waitAfterEmpty()' cmd/agent/main.go
+          grep -F 'ARA_ITEM10' cmd/agent/wake_fallback_test.go
+          echo 'ARA_ITEM10_FALLBACK_FULL_AGENT_CONTRACTS_PASS'
+      - name: Compile Windows/amd64 C8 candidate (no deployment)
+        working-directory: anthares-remote-agent
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4-c8-wake-item10.exe ./cmd/agent
+          sha256sum dist/anthares-remote-agent-v4-c8-wake-item10.exe > dist/anthares-remote-agent-v4-c8-wake-item10.exe.sha256
+          echo 'ARA_ITEM10_WINDOWS_CROSS_BUILD_PASS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ara-c8-hostinger-item10-candidate
+          path: |
+            anthares-remote-agent/dist/anthares-remote-agent-v4-c8-wake-item10.exe
+            anthares-remote-agent/dist/anthares-remote-agent-v4-c8-wake-item10.exe.sha256
+          retention-days: 7
+          if-no-files-found: error
