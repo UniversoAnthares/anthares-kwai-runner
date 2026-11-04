@@ -11,17 +11,37 @@ on:
     types: [completed]
   workflow_dispatch:
     inputs:
+      reconcile_only:
+        description: Confirm an existing exact successful CI receipt; no dispatch
+        type: boolean
+        required: false
+        default: false
+      reconcile_component:
+        description: Fixed project component
+        type: choice
+        options: [cortes, clipper, wordpress]
+        required: false
+      reconcile_project_id:
+        description: Original numeric GitLab project ID
+        type: string
+        required: false
+      reconcile_pipeline_id:
+        description: Original numeric GitLab pipeline ID
+        type: string
+        required: false
+      reconcile_sha:
+        description: Exact 40-character original GitLab SHA
+        type: string
+        required: false
+      reconcile_github_run_id:
+        description: Already completed/successful GitHub rescue run ID
+        type: string
+        required: false
       dry_run:
         description: Read-only inspect without dispatch
         type: boolean
         required: false
         default: true
-  push:
-    branches: [main]
-    paths:
-      - 'tools/gitlab_quota_watcher.py'
-      - 'tools/test_gitlab_quota_watcher.py'
-      - '.github/workflows/gitlab-quota-watcher.yml'
 permissions:
   actions: write
   contents: read
@@ -45,7 +65,7 @@ jobs:
           python-version: '3.12'
       - name: Retrieve GitLab API credential from Anthares Secrets when configured
         id: bws-auth
-        if: ${{ vars.ANTHARES_SECRETS_GITLAB_TOKEN_ID != '' }}
+        if: ${{ vars.ANTHARES_SECRETS_GITLAB_TOKEN_ID != '' && !(github.event_name == 'workflow_dispatch' && inputs.reconcile_only) }}
         continue-on-error: true
         uses: bitwarden/sm-action@f1de238fc00c738c56140796018be9084c2b5d21
         with:
@@ -54,6 +74,7 @@ jobs:
           secrets: |
             ${{ vars.ANTHARES_SECRETS_GITLAB_TOKEN_ID }} > ANTHARES_GITLAB_TOKEN_FROM_BW
       - name: Confirm selected credential source without printing its value
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.reconcile_only) }}
         env:
           FROM_BW: ${{ env.ANTHARES_GITLAB_TOKEN_FROM_BW }}
           LEGACY: ${{ secrets.GITLAB_TOKEN }}
@@ -73,4 +94,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ANTHARES_CI_QUOTA_LEDGER_URL: https://anthares-ci-quota-controller.vercel.app/api/gitlab-reserve
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          ANTHARES_RECONCILE_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.reconcile_only }}
+          ANTHARES_RECONCILE_COMPONENT: ${{ inputs.reconcile_component }}
+          ANTHARES_RECONCILE_PROJECT_ID: ${{ inputs.reconcile_project_id }}
+          ANTHARES_RECONCILE_PIPELINE_ID: ${{ inputs.reconcile_pipeline_id }}
+          ANTHARES_RECONCILE_SHA: ${{ inputs.reconcile_sha }}
+          ANTHARES_RECONCILE_GITHUB_RUN_ID: ${{ inputs.reconcile_github_run_id }}
         run: python tools/gitlab_quota_watcher.py

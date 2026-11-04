@@ -262,6 +262,41 @@ def confirm_successful_quota_handoff(component, project_id, event, remote_run):
         return False
 
 
+
+def reconcile_exact_existing_receipt():
+    """One manually specified, already-successful fallback receipt; no dispatch.
+
+    The protected Vercel controller verifies GitHub OIDC, workflow identity,
+    exact successful runner SHA and the pre-existing Neon reservation by CAS.
+    GitLab quota discovery and source re-execution are intentionally absent.
+    """
+    component = os.environ.get("ANTHARES_RECONCILE_COMPONENT", "")
+    project = os.environ.get("ANTHARES_RECONCILE_PROJECT_ID", "")
+    pipeline = os.environ.get("ANTHARES_RECONCILE_PIPELINE_ID", "")
+    sha = os.environ.get("ANTHARES_RECONCILE_SHA", "")
+    run_id = os.environ.get("ANTHARES_RECONCILE_GITHUB_RUN_ID", "")
+    valid_pair = any(c == component and p == project for c, p, _ in PROJECTS)
+    valid_number = lambda x: x.isdecimal() and 1 <= len(x) <= 20
+    valid_sha = len(sha) == 40 and all(ch in "0123456789abcdef" for ch in sha)
+    if not (valid_pair and valid_number(pipeline) and
+            valid_number(run_id) and valid_sha):
+        print("EXACT_RECONCILIATION_INVALID_INPUT_NO_EFFECT")
+        return 2
+    if DRY_RUN:
+        print("EXACT_RECONCILIATION_DRY_RUN_NO_EFFECT")
+        return 0
+    if not GH_AUTH:
+        print("EXACT_RECONCILIATION_GITHUB_AUTH_UNAVAILABLE")
+        return 1
+    event = {"id": int(pipeline), "sha": sha}
+    remote_run = {"id": int(run_id)}
+    if confirm_successful_quota_handoff(component, project, event, remote_run):
+        print("EXACT_RECONCILIATION_CONFIRMED_BY_OIDC_CONTROLLER")
+        return 0
+    print("EXACT_RECONCILIATION_UNCONFIRMED_NO_DISPATCH")
+    return 1
+
+
 def dispatch(component, workflow, p):
     inputs = {"gitlab_pipeline_id": str(p["id"]), "gitlab_sha": p["sha"]}
     if workflow == "private-ci-quota-rescue.yml":
@@ -275,6 +310,10 @@ def dispatch(component, workflow, p):
 
 
 def main():
+    # Explicit one-off receipt mode never discovers/dispatches jobs or accesses
+    # GitLab. Vercel independently verifies the exact old successful run.
+    if os.environ.get("ANTHARES_RECONCILE_ONLY", "").lower() == "true":
+        return reconcile_exact_existing_receipt()
     if not GL_AUTH or not GH_AUTH:
         print("WATCHER_BLOCKED: missing protected API credentials")
         return 1

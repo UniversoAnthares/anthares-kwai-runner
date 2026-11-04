@@ -75,5 +75,55 @@ class QuotaWatcherContract(unittest.TestCase):
         self.assertEqual(called, ["clipper", "wordpress"])
 
 
+    def test_exact_old_receipt_uses_authenticated_controller_without_new_dispatch(self):
+        fields = {
+            "ANTHARES_RECONCILE_ONLY": "true",
+            "ANTHARES_RECONCILE_COMPONENT": "cortes",
+            "ANTHARES_RECONCILE_PROJECT_ID": "87307248",
+            "ANTHARES_RECONCILE_PIPELINE_ID": "3005500025",
+            "ANTHARES_RECONCILE_SHA": "94ba06e628d0b1ba0bdfeabbdfd9a00b86508759",
+            "ANTHARES_RECONCILE_GITHUB_RUN_ID": "40942048873",
+        }
+        with patch.dict(mod.os.environ, fields), \
+             patch.object(mod, "GH_AUTH", "fixture"), \
+             patch.object(mod, "DRY_RUN", False), \
+             patch.object(mod, "confirm_successful_quota_handoff", return_value=True) as confirm, \
+             patch.object(mod, "dispatch") as dispatch, \
+             patch.object(mod, "api") as api:
+            self.assertEqual(mod.main(), 0)
+        confirm.assert_called_once_with("cortes", "87307248",
+            {"id": 3005500025, "sha": fields["ANTHARES_RECONCILE_SHA"]},
+            {"id": 40942048873})
+        dispatch.assert_not_called()
+        api.assert_not_called()
+
+    def test_exact_receipt_fails_closed_on_invalid_sha(self):
+        fields = {"ANTHARES_RECONCILE_ONLY": "true",
+            "ANTHARES_RECONCILE_COMPONENT": "cortes",
+            "ANTHARES_RECONCILE_PROJECT_ID": "87307248",
+            "ANTHARES_RECONCILE_PIPELINE_ID": "3005500025",
+            "ANTHARES_RECONCILE_SHA": "not-a-sha",
+            "ANTHARES_RECONCILE_GITHUB_RUN_ID": "40942048873"}
+        with patch.dict(mod.os.environ, fields), \
+             patch.object(mod, "GH_AUTH", "fixture"), \
+             patch.object(mod, "DRY_RUN", False), \
+             patch.object(mod, "confirm_successful_quota_handoff") as confirm:
+            self.assertEqual(mod.main(), 2)
+        confirm.assert_not_called()
+
+    def test_exact_receipt_dry_run_has_no_write(self):
+        fields = {"ANTHARES_RECONCILE_ONLY": "true",
+            "ANTHARES_RECONCILE_COMPONENT": "cortes",
+            "ANTHARES_RECONCILE_PROJECT_ID": "87307248",
+            "ANTHARES_RECONCILE_PIPELINE_ID": "3005500025",
+            "ANTHARES_RECONCILE_SHA": "94ba06e628d0b1ba0bdfeabbdfd9a00b86508759",
+            "ANTHARES_RECONCILE_GITHUB_RUN_ID": "40942048873"}
+        with patch.dict(mod.os.environ, fields), \
+             patch.object(mod, "DRY_RUN", True), \
+             patch.object(mod, "confirm_successful_quota_handoff") as confirm:
+            self.assertEqual(mod.main(), 0)
+        confirm.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
