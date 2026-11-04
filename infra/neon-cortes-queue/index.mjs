@@ -115,7 +115,7 @@ async function identity(request){
 const KWAI_TARGET='kwai:lucasrosalem';
 async function kwaiAction(action,b,actor){
  if(action==='kwai-uncertain-read'){
-  if(!['probe','kwai-publisher'].includes(actor.role))return{ok:false,error:'KWAI_READ_DENIED'};
+  if(actor.role!=='kwai-publisher'||actor.workflow!=='cortes-kwai-cloud-publisher.yml')return{ok:false,error:'KWAI_READ_DENIED'};
   const rows=await query("SELECT id,source_id,source_start,source_end,media_sha256,updated_at,"+
    "payload->>'segment_id' AS segment_id,payload->>'title' AS title "+
    "FROM cortes_publications WHERE target_key=$1 AND status='uncertain' "+
@@ -230,11 +230,37 @@ async function kwaiAction(action,b,actor){
     !/^[A-Za-z0-9_-]{5,100}$/.test(remote)||
     !/^[a-f0-9]{64}$/.test(String(proof.media_sha256||'')))
    return{ok:false,error:'KWAI_PUBLIC_READBACK_REQUIRED'};
+
+  // A URL and method are claimed by the publishing client. A separate,
+  // approved identity must attest the actual external Kwai readback.
+  // Missing configuration always fails closed. Keep the key out of Git/logs.
+  const key=process.env.CORTES_KWAI_INDEPENDENT_ATTESTATION_KEY||'';
+  const signedAt=String(proof.verified_at||'');
+  const stamp=Date.parse(signedAt),delta=Date.now()-stamp;
+  if(key.length<32||proof.verifier_id!=='kwai-independent-account-readback-v1'||
+     !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(signedAt)||
+     !Number.isFinite(stamp)||delta<(-30000)||delta>600000||
+     !/^[a-f0-9]{64}$/.test(String(proof.attestation_hmac||'')))
+   return{ok:false,error:'KWAI_INDEPENDENT_ATTESTATION_REQUIRED'};
+  const signedFields=JSON.stringify([
+   'kwai-readback-v1',id,gen,KWAI_TARGET,proof.account,remote,
+   proof.public_url,proof.method,proof.media_sha256,signedAt
+  ]);
+  const expected=crypto.createHmac('sha256',key).update(signedFields).digest();
+  const provided=Buffer.from(proof.attestation_hmac,'hex');
+  if(provided.length!==expected.length||!crypto.timingSafeEqual(provided,expected))
+   return{ok:false,error:'KWAI_INDEPENDENT_ATTESTATION_INVALID'};
+
+  const evidence={...proof,attestation_scheme:'hmac-sha256',
+   attestation_verified_by:'neon-cortes-queue',
+   attestation_verified_at:new Date().toISOString()};
+  delete evidence.attestation_hmac;
   const rows=await query("UPDATE cortes_publications SET status='confirmed',"+
    "remote_id=$5,confirmation_evidence=$6::jsonb,lease_owner=NULL,lease_until=NULL,"+
    "updated_at=now() WHERE id=$1 AND target_key=$2 AND status='started' "+
    "AND lease_owner=$3 AND lease_generation=$4 AND media_sha256=$7 "+
-   "RETURNING id,status,remote_id",[id,KWAI_TARGET,owner,gen,remote,JSON.stringify(proof),proof.media_sha256]);
+   "RETURNING id,status,remote_id",[id,KWAI_TARGET,owner,gen,remote,
+    JSON.stringify(evidence),proof.media_sha256]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_STALE_FENCE_OR_MEDIA'};
  }
  if(action==='kwai-fail'){
