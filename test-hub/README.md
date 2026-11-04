@@ -50,6 +50,13 @@ O que os próximos chats DEVEM ou NÃO DEVEM fazer.
 
 > Atualizado em 2026-10-05 20:35 -04:00. Os findings append-only continuam sendo a autoridade detalhada.
 
+### Auditoria 2026-11-04 — restauração integral 15399 e controle de escritor
+
+- **PROVEN (recuperação integral):** snapshot Neon revisão 15399 lido completamente em executor isolado de código, sem PC, sem arquivo persistido, `2.932.006/2.932.006` bytes, SHA-256 independente idêntico, JSON versionado com cinco fontes e 649 segmentos. O leitor Python de QA está no main do Clipper, mas sua execução end-to-end em GitHub-hosted ainda é **UNVERIFIED** por quota/credencial não homologadas.
+- **PARTIAL (controle):** hash obrigatório e dedupe da fila verificados; zero leases Kwai ativos e zero segmentos duplicados. O `cortes_cloud.cortes_short_ledger_head`, papel dedicado de escritor e índice de revisão seguem ausentes da produção, aguardando PR privada #229 e aceitação de fencing.
+- **RECONCILE_REQUIRED:** 68 Kwai `uncertain` sem recibo; três `confirmed` históricos sem `remote_id`. Sem reenvio ou alteração de fila.
+- **Finding:** `test-hub/findings/20261104-cortes-15399-full-memory-readback-and-writer-control.md`. Registro de segurança `DENIED_PENDING_REVIEW` para uma consulta agregada recusada, sem repetição.
+
 ### Auditoria 2026-11-04 — 68 mídias CORTES e checkpoint Neon
 
 - **PROVEN (mídias externas):** 68/68 URLs HTTPS distintas de arquivos MP4 do WordPress, relacionadas a registros Kwai `uncertain`, responderam HTTP 200 e `video/mp4` com tamanho positivo, em quatro lotes de 17 requisições HEAD. Nenhuma mídia foi publicada, baixada ou transferida.
