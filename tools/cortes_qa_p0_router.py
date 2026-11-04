@@ -299,21 +299,31 @@ def labels():
                  {"name":label,"color":color})
 
 def create_issue(item):
-    title="[QA P0]["+item["network"]+"] Falha de publicação — CORRIGIR IMEDIATAMENTE"
+    visibility=str(item["stage"]).startswith("qa_visibility_lost_")
+    if visibility:
+        title="[QA P0][infra] Visibilidade da auditoria indisponível — INVESTIGAR"
+        action=("AÇÃO EXIGIDA: recuperar acesso à fonte de QA, conferir permissões "
+                "e quota do provedor, e comprovar novamente a visibilidade. "
+                "Preservar filas, leases e publicações incertas. "
+                "A perda de visibilidade isoladamente não comprova falha de envio. "
+                "Não registrar tokens nem conteúdo privado.")
+        issue_labels=["QA-P0"]
+    else:
+        title="[QA P0]["+item["network"]+"] Falha de publicação — CORRIGIR IMEDIATAMENTE"
+        action=("AÇÃO EXIGIDA: investigar logs, identificar causa, corrigir o publicador,"
+                " testar e confirmar publicação remota. Preservar idempotência, filas e "
+                "estado incerto. Se qualquer operação de envio já começou, reconciliar "
+                "antes de tentar novamente para evitar duplicatas. "
+                "Não registrar tokens nem conteúdo privado. "
+                "Esta ocorrência exige atenção imediata, independentemente do QA 12h.")
+        issue_labels=["QA-P0","publication-failure"]
     body=("QA-P0-FINGERPRINT:"+item["id"]+"\n\n"
           "PRIORIDADE MÁXIMA / CORREÇÃO IMEDIATA.\n\n"
           "Rede: "+item["network"]+"\nEstágio: "+item["stage"]+"\n"
           "Evidência: "+item["evidence"]+"\n"
-          "Informação sanitizada: "+item["description"]+"\n\n"
-          "AÇÃO EXIGIDA: investigar logs, identificar causa, corrigir o publicador,"
-          " testar e confirmar publicação remota. Preservar idempotência, filas e "
-          "estado incerto. Se qualquer operação de envio já começou, reconciliar "
-          "antes de tentar novamente para evitar duplicatas. "
-          "Não registrar tokens nem conteúdo privado. "
-          "Esta ocorrência exige atenção imediata, independentemente do QA 12h.")
+          "Informação sanitizada: "+item["description"]+"\n\n"+action)
     return http("https://api.github.com/repos/"+HUB+"/issues","POST",
-                {"title":title,"body":body,
-                 "labels":["QA-P0","publication-failure"]})
+                {"title":title,"body":body,"labels":issue_labels})
 
 def dispatch_controller(issue_number=None):
     """One batch dispatch for a scan; scheduled polling recovers missed events."""
