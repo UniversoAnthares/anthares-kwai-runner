@@ -109,7 +109,7 @@ jobs:
                    run.head_repository.full_name !== repository)) continue;
               const name = String(run.name || '');
               if (!/cortes|tiktok|kwai|pinterest|threads|instagram|facebook|linkedin|youtube|publish|buffer/i.test(name)) continue;
-              if (/qa[- ]p0|p0[- ]qa|p0 publication incident|watchdog|controller|executor|diagnostic/i.test(name)) continue;
+              if (/qa[- ]p0|p0[- ]qa|p0 publication incident|watchdog|controller|executor|diagnostic|p0 immediate cloud recovery|hosted migration preflight|identity audit|read-only forensic audit/i.test(name)) continue;
               const queued = ['queued','pending','waiting','requested'].includes(run.status);
               if (!queued && !['failure','timed_out'].includes(run.conclusion)) continue;
               const created = Date.parse(run.created_at || '');

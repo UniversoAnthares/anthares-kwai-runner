@@ -49,6 +49,34 @@ class P0RouterTests(unittest.TestCase):
         self.assertEqual(router.marker("gha","clipper","123"),router.marker("gha","clipper","123"))
         self.assertNotEqual(router.marker("gha","clipper","123"),router.marker("gha","clipper","124"))
 
+    def test_diagnostic_and_p0_recovery_workflows_do_not_generate_publication_incidents(self):
+        names=[
+            "CORTES Clipper hosted migration preflight",
+            "Buffer - Cloud Channel Identity Audit",
+            "TikTok uncertain read-only forensic audit 2026-10-30",
+            "CORTES TikTok P0 immediate cloud recovery",
+            "CORTES independent cloud round watchdog",
+        ]
+        runs={"workflow_runs":[{"name":name,"conclusion":"failure",
+               "created_at":router.NOW.isoformat(),"id":i+100}
+              for i,name in enumerate(names)]}
+        with patch.object(router,"http",return_value=runs):
+            self.assertEqual(router.workflow_incidents(),[])
+
+    def test_cloud_alert_excludes_the_same_nonpublisher_workflow_classes(self):
+        import re
+        watchdog=(PATH.parents[1]/".github/workflows"/
+                  "cortes-qa-p0-publication-watchdog.yml").read_text(encoding="utf-8")
+        match=re.search(r"if \(/([^/]+?)/i\.test\(name\)\) continue;",watchdog)
+        self.assertIsNotNone(match)
+        for name in ("CORTES Clipper hosted migration preflight",
+                     "Buffer - Cloud Channel Identity Audit",
+                     "TikTok uncertain read-only forensic audit 2026-10-30",
+                     "CORTES TikTok P0 immediate cloud recovery",
+                     "CORTES independent cloud round watchdog"):
+            self.assertRegex(name,re.compile(match.group(1),re.I))
+        self.assertNotRegex("CORTES TikTok Neon Producer",re.compile(match.group(1),re.I))
+
     def test_action_failure_creates_incident_from_real_run_id(self):
         run={"workflow_runs":[{
             "name":"CORTES TikTok Neon Producer","conclusion":"failure",
