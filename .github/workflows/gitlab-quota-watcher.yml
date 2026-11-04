@@ -42,12 +42,6 @@ on:
         type: boolean
         required: false
         default: true
-  push:
-    branches: [main]
-    paths:
-      - 'tools/gitlab_quota_watcher.py'
-      - 'tools/test_gitlab_quota_watcher.py'
-      - '.github/workflows/gitlab-quota-watcher.yml'
 permissions:
   actions: write
   contents: read
