@@ -15,7 +15,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from anthares_publisher.editorial import branded_title, add_site_to_keywords
 
-from instagram_publish import InstagramAPIError, client_from_env
+from scripts.instagram_publish import InstagramAPIError, client_from_env
 
 WP_MEDIA_ENDPOINT = os.getenv(
     "INSTAGRAM_WP_MEDIA_ENDPOINT",
