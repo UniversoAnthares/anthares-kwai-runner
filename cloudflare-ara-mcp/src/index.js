@@ -582,7 +582,7 @@ var index_default = { async fetch(req, env) {
         const required = githubTool ? githubTool.scope : (WRITE_TOOLS.has(name) ? "ara.write" : "ara.read");
         if (!token.scp.includes(required)) return rpcError(rpc.id, -32003, "insufficient_scope", { required_scope: required });
         try {
-          const result = name === "run_tests" ? textResult(await runApprovedTests(env, rpc.params?.arguments || {}, (type,args,timeout)=>execute(env,type,args,timeout), (kind,jti,exp)=>st(env).consume(kind,jti,exp), (status,id,result)=>recordApprovedRegression(env,status,id,result))) : githubTool ? textResult(await callGithubTool(env, name, rpc.params?.arguments || {})) : await callTool(env, name, rpc.params?.arguments || {}, token.scp);
+          const result = name === "run_tests" ? textResult(await runApprovedTests(env, rpc.params?.arguments || {}, (type,args,timeout)=>execute(env,type,args,timeout), (kind,jti,exp)=>st(env).consume(kind,jti,exp), (status,id,result)=>recordApprovedRegression(env,status,id,result))) : forgejoTools.some(t=>t.name===name) ? textResult(await callForgejoTool(env, name, rpc.params?.arguments || {})) : githubTool ? textResult(await callGithubTool(env, name, rpc.params?.arguments || {})) : await callTool(env, name, rpc.params?.arguments || {}, token.scp);
           return rpcResult(rpc.id, result);
         } catch (e) {
           return rpcResult(rpc.id, { content: [{ type: "text", text: String(e?.message || e) }], isError: true });
