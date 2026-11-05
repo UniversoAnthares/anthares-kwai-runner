@@ -118,6 +118,8 @@ class QuotaWatcherContract(unittest.TestCase):
             if url == ("https://br-crimson-unit-b89nau08-cquotarec"
                         ".compute.c-14.us-east-1.aws.neon.tech/"):
                 return FakeReply({"ok": True, "state": "FALLBACK_CONFIRMED"})
+            if url.endswith("/api/gitlab-confirm"):
+                return FakeReply({"ok": False, "state": "UNCONFIRMED"})
             raise AssertionError("Unexpected endpoint: " + url)
 
         fields = {
