@@ -8,6 +8,7 @@ import { DurableObject } from "cloudflare:workers";
 import { isClaudeClient, isClaudeCallbackPair, permittedClaudeScopes } from "./claude-client-policy.mjs";
 import { isKiloClient, isKiloCallbackPair, isKiloResource } from "./kilo-client-policy.mjs";
 import { githubTools, callGithubTool, recordApprovedRegression } from "./github-bridge.mjs";
+import { forgejoTools, callForgejoTool } from "./forgejo-bridge.mjs";
 import { approvedTestTool, runApprovedTests } from "./approved-tests.mjs";
 import { ownerGithubConfigured, startOwnerGithub, finishOwnerGithub } from "./owner-github-auth.mjs";
 import { CLIENT_INSTRUCTIONS, DISCOVERY_REVISION, clientDiscovery } from "./client-discovery.mjs";
@@ -16,7 +17,7 @@ var CONTROL = "https://anthares-ara-vercel-reserve.vercel.app";
 var CONTROL_STANDBY = "https://anthares-ara-vercel-reserve-lucasyahn-6808.vercel.app";
 var DEFAULT_DEVICE = "DESKTOP-FTDK0HP";
 var FALLBACK_DEVICE = "DESKTOP-FTDK0HP-SYSTEM";
-var SCOPES = /* @__PURE__ */ new Set(["ara.read", "ara.write", "github.read", "github.write"]);
+var SCOPES = /* @__PURE__ */ new Set(["ara.read", "ara.write", "github.read", "github.write", "forgejo.read"]);
 var WRITE_TOOLS = /* @__PURE__ */ new Set(["remote_exec", "clipboard_set", "file_write", "file_write_chunk", "file_mkdir", "file_remove", "file_rename", "file_copy", "file_write_atomic", "remote_job_start", "remote_job_cancel", "process_start", "process_kill", "service_start", "service_stop"]);
 var AUTH_EMAIL = "lucasyahn@gmail.com";
 var te = new TextEncoder();
@@ -574,10 +575,10 @@ var index_default = { async fetch(req, env) {
       if (rpc.method === "notifications/initialized" || String(rpc.method || "").startsWith("notifications/")) return new Response(null, { status: 202 });
       if (rpc.method === "initialize") return rpcResult(rpc.id, { protocolVersion: rpc.params?.protocolVersion || "2025-06-18", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Anthares Remote", version: "1.2.0" }, instructions: CLIENT_INSTRUCTIONS });
       if (rpc.method === "ping") return rpcResult(rpc.id, {});
-      if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS.filter(t => token.scp.includes(WRITE_TOOLS.has(t.name) ? "ara.write" : "ara.read")).concat(githubTools.concat(approvedTestTool).filter(t => token.scp.includes(t.scope)).map(({scope, ...tool}) => tool)) });
+      if (rpc.method === "tools/list") return rpcResult(rpc.id, { tools: TOOLS.filter(t => token.scp.includes(WRITE_TOOLS.has(t.name) ? "ara.write" : "ara.read")).concat(githubTools.concat(forgejoTools).concat(approvedTestTool).filter(t => token.scp.includes(t.scope)).map(({scope, ...tool}) => tool)) });
       if (rpc.method === "tools/call") {
         const name = rpc.params?.name || "";
-        const githubTool = githubTools.concat(approvedTestTool).find(t => t.name === name);
+        const githubTool = githubTools.concat(forgejoTools).concat(approvedTestTool).find(t => t.name === name);
         const required = githubTool ? githubTool.scope : (WRITE_TOOLS.has(name) ? "ara.write" : "ara.read");
         if (!token.scp.includes(required)) return rpcError(rpc.id, -32003, "insufficient_scope", { required_scope: required });
         try {
