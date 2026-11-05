@@ -40,6 +40,22 @@ class InstagramAutopublishTests(unittest.TestCase):
         self.assertIn("#UniversoAnthares", caption)
         self.assertNotIn("microcut", caption.lower())
 
+    def test_repository_root_package_import_in_clean_process(self):
+        """Regression: inline workflow imports scripts.instagram_autopublish."""
+        import subprocess
+        root = MODULE_PATH.parents[1]
+        probe = (
+            "import sys; "
+            f"sys.path.insert(0, {str(root)!r}); "
+            "from scripts.instagram_autopublish import load_ledger, save_ledger; "
+            "assert callable(load_ledger) and callable(save_ledger)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-I", "-c", probe],
+            cwd=root, capture_output=True, text=True, timeout=15, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_ledger_roundtrip(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "ledger.json"
