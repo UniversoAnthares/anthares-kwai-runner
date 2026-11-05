@@ -1,4 +1,6 @@
-﻿const BASE = 'https://anthares.us/forgejo';
+﻿import {fetchWithoutRedirects} from "./secure-fetch.mjs";
+
+const BASE = 'https://anthares.us/forgejo';
 const ALLOWED_FORGEJO_HOSTS = new Set(['anthares.us', 'forgejo.anthares.us']);
 const MAX_B64_BYTES = 4 * 1024 * 1024;
 const ALLOWED_REPOS = new Set(['anthares-admin/anthares-kwai-runner', 'anthares-admin/anthares-clipper', 'anthares-admin/anthares-wordpress']);
@@ -9,17 +11,20 @@ function base(env){ const b = String(env.FORGEJO_BASE_URL || BASE).replace(/\/+$
 function token(env){ const t = String(env.FORGEJO_READ_TOKEN || '').trim(); if (!t) throw new Error('forgejo_read_token_missing'); return t; }
 function safeHeaderValue(v){ return String(v||'').replace(/[\r\n]+/g, ' '); }
 async function api(env, method, path) {
+  validateEndpoint(path);
   const url = base(env) + path;
   const headers = { 'Accept': 'application/json', 'User-Agent': 'Anthares-Forgejo-Read-Bridge' };
   const t = token(env);
   if (t) headers.Authorization = 'token ' + safeHeaderValue(t);
-  const r = await fetch(url, { method, headers });
+  const r = await fetchWithoutRedirects(url, { method, headers });
   if (!r.ok) throw new Error('forgejo_request_failed');
   return r.json();
 }
 function validateRepo(v){ const s=String(v||'').trim(); if(!s||s.length>REPO_MAX_LEN||s.includes('..')||s.includes('//')||s.includes('\\')||/[\x00-\x1f]/.test(s)||s.includes('%')||s.includes(':')||s.startsWith('/')||s.endsWith('/')) throw new Error('invalid_repo'); if(!ALLOWED_REPOS.has(s)) throw new Error('repository_not_allowed'); return s; }
 function validatePath(v){ const s=String(v||'').trim(); if(!s||s.length>PATH_MAX_LEN||s.startsWith('/')||s.startsWith('\\')||s.includes('\\')||/[\x00-\x1f]/.test(s)||s.includes('%')||s.includes(':')||s.includes('..')) throw new Error('invalid_path'); const segments=s.split('/'); if (segments.some(x=>!x || x==='.' || x==='..' || x==='.git')) throw new Error('path_traversal'); return s; }
 function validateOwner(v){ const s=String(v||'').trim(); if(!s||!ALLOWED_OWNERS.has(s)) throw new Error('owner_not_allowed'); return s; }
+const FORGEJO_ENDPOINT_RE = /^\/api\/v1\/(?:version|users\/[^/]+\/repos(?:\?.*)?|repos\/[^/]+\/contents\/[^/]+(?:\?.*)?|repos\/[^/]+\/actions\/runs(?:\/\d+)?(?:\/jobs)?(?:\?.*)?)$/;
+function validateEndpoint(path){ if(!FORGEJO_ENDPOINT_RE.test(path)) throw new Error('forgejo_endpoint_not_allowed'); return path; }
 function validateRunId(v){ const n=Number(v); if(!Number.isInteger(n)||n<=0||n>Number.MAX_SAFE_INTEGER) throw new Error('invalid_run_id'); return n; }
 export const forgejoTools = [
   { name:'forgejo_version', description:'Read Forgejo server version.', inputSchema:{ type:'object', properties:{} }, scope:'forgejo.read' },
