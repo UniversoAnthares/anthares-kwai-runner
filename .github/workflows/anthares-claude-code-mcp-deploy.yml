@@ -7,9 +7,11 @@ on:
       - 'cloudflare-ara-mcp/src/claude-code-bridge.test.mjs'
       - 'cloudflare-ara-mcp/src/github-bridge.mjs'
       - 'cloudflare-ara-mcp/src/index.js'
+      - 'cloudflare-ara-mcp/src/forgejo-bridge.mjs'
       - 'cloudflare-ara-mcp/src/github-bridge.test.mjs'
       - 'cloudflare-ara-mcp/src/client-discovery.mjs'
       - 'cloudflare-ara-mcp/capabilities.test.mjs'
+      - 'cloudflare-ara-mcp/forgejo-forwarding.test.mjs'
       - '.github/workflows/anthares-claude-code-mcp-deploy.yml'
   workflow_dispatch: {}
 permissions:
@@ -36,10 +38,10 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN" || { echo CLOUDFLARE_TOKEN_UNAVAILABLE; exit 1; }
           grep -Fq 'AUTH_OWNER_METHOD = "github"' cloudflare-ara-mcp/wrangler.toml
           grep -Fq 'var ORIGIN = "https://anthares-ara-mcp.anthares1.workers.dev"' cloudflare-ara-mcp/src/index.js
-          grep -Fq 'githubTools.concat(approvedTestTool)' cloudflare-ara-mcp/src/index.js
+          grep -Fq 'githubTools.concat(forgejoTools).concat(approvedTestTool)' cloudflare-ara-mcp/src/index.js
           node --check cloudflare-ara-mcp/src/index.js
           node --check cloudflare-ara-mcp/src/claude-code-bridge.mjs
-          node --test cloudflare-ara-mcp/src/claude-code-bridge.test.mjs cloudflare-ara-mcp/src/github-bridge.test.mjs cloudflare-ara-mcp/src/claude-client-policy.test.mjs cloudflare-ara-mcp/src/owner-github-auth.test.mjs
+          node --test cloudflare-ara-mcp/src/claude-code-bridge.test.mjs cloudflare-ara-mcp/src/github-bridge.test.mjs cloudflare-ara-mcp/src/claude-client-policy.test.mjs cloudflare-ara-mcp/src/owner-github-auth.test.mjs cloudflare-ara-mcp/forgejo-forwarding.test.mjs
           node cloudflare-ara-mcp/capabilities.test.mjs
           echo ANTHARES_CLAUDE_BRIDGE_REVIEWED_TESTS=PASS
       - name: Verify Cloudflare account and existing auth secrets
