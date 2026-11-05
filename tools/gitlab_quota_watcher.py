@@ -239,6 +239,18 @@ def confirm_successful_quota_handoff(component, project_id, event, remote_run):
     if not (url.endswith("/api/gitlab-reserve") and oidc_url and oidc_auth and GH_AUTH):
         return False
     address=url.replace("/api/gitlab-reserve","/api/gitlab-confirm")
+    # Only the already-successful historical CI receipt has an independent,
+    # free Neon OIDC controller; normal reserve/ack flows stay on Vercel.
+    historical = (
+        os.environ.get("ANTHARES_RECONCILE_ONLY", "").lower() == "true"
+        and component == "cortes" and str(project_id) == "87307248"
+        and str(event.get("id")) == "3005500025"
+        and str(event.get("sha")) == "94ba06e628d0b1ba0bdfeabbdfd9a00b86508759"
+        and str(remote_run.get("id")) == "40942048873"
+    )
+    if historical:
+        address = ("https://br-crimson-unit-b89nau08-cquotarec"
+                   ".compute.c-14.us-east-1.aws.neon.tech/")
     sep="&" if "?" in oidc_url else "?"
     try:
         audience=oidc_url+sep+urllib.parse.urlencode(

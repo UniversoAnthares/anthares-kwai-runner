@@ -97,6 +97,49 @@ class QuotaWatcherContract(unittest.TestCase):
         dispatch.assert_not_called()
         api.assert_not_called()
 
+    def test_exact_receipt_neon_controller_requires_full_historical_tuple(self):
+        class FakeReply:
+            def __init__(self, value):
+                self.value = value
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self):
+                return mod.json.dumps(self.value).encode()
+
+        sha = "94ba06e628d0b1ba0bdfeabbdfd9a00b86508759"
+        observed = []
+        def mocked(request, timeout=None):
+            url = request.full_url
+            observed.append(url)
+            if "request-id-token" in url:
+                return FakeReply({"value": "fixture-oidc"})
+            if url == ("https://br-crimson-unit-b89nau08-cquotarec"
+                        ".compute.c-14.us-east-1.aws.neon.tech/"):
+                return FakeReply({"ok": True, "state": "FALLBACK_CONFIRMED"})
+            raise AssertionError("Unexpected endpoint: " + url)
+
+        fields = {
+            "ANTHARES_RECONCILE_ONLY": "true",
+            "ANTHARES_CI_QUOTA_LEDGER_URL":
+                "https://anthares-ci-quota-controller.vercel.app/api/gitlab-reserve",
+            "ACTIONS_ID_TOKEN_REQUEST_URL": "https://example.test/request-id-token",
+            "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "fixture-access",
+        }
+        with patch.dict(mod.os.environ, fields), \
+             patch.object(mod, "GH_AUTH", "fixture-gh-token"), \
+             patch.object(mod.urllib.request, "urlopen", side_effect=mocked):
+            self.assertTrue(mod.confirm_successful_quota_handoff(
+                "cortes", "87307248", {"id": 3005500025, "sha": sha},
+                {"id": 40942048873}))
+            self.assertFalse(mod.confirm_successful_quota_handoff(
+                "cortes", "87307248", {"id": 3005500026, "sha": sha},
+                {"id": 40942048873}))
+        self.assertEqual(observed.count(
+            "https://br-crimson-unit-b89nau08-cquotarec"
+            ".compute.c-14.us-east-1.aws.neon.tech/"), 1)
+
     def test_exact_receipt_fails_closed_on_invalid_sha(self):
         fields = {"ANTHARES_RECONCILE_ONLY": "true",
             "ANTHARES_RECONCILE_COMPONENT": "cortes",
