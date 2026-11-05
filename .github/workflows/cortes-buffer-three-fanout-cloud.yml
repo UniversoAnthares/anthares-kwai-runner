@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 9
     env:
+      RUNNER_ENVIRONMENT: github-hosted
       WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
       WP_USERNAME: ${{ secrets.WP_USERNAME }}
       WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
