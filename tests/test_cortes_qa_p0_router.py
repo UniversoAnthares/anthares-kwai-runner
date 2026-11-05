@@ -195,6 +195,44 @@ class P0RouterTests(unittest.TestCase):
         self.assertNotIn("corrigir o publicador",posted[0]["body"])
         self.assertIn("QA-P0-FINGERPRINT",posted[0]["body"])
 
+    def test_queued_github_job_is_infra_without_publication_failure(self):
+        posted=[]
+        def fake(url,method="GET",payload=None,headers=None):
+            posted.append(payload)
+            return {"number":1986}
+        item={"id":router.marker("queued","kwai","today"),"network":"kwai",
+              "stage":"github_actions_queued_stale",
+              "evidence":"https://github.com/UniversoAnthares/anthares-clipper/actions/runs/2",
+              "description":"Kwai refill job queued without execution"}
+        with patch.object(router,"http",side_effect=fake):
+            router.create_issue(item)
+        self.assertEqual(posted[0]["labels"],["QA-P0"])
+        self.assertIn("[infra]",posted[0]["title"])
+        self.assertIn("queued não comprova",posted[0]["body"])
+        self.assertNotIn("corrigir o publicador",posted[0]["body"])
+        self.assertIn("QA-P0-FINGERPRINT",posted[0]["body"])
+
+    def test_daily_zero_and_distribution_are_prepublication_diagnostics(self):
+        for stage,section in (
+            ("P0_DAILY_PRODUCER_ZERO_MASTERS","[produção]"),
+            ("P0_DAILY_KWAI_DISTRIBUTION_STALLED","[distribuição]"),
+        ):
+            with self.subTest(stage=stage):
+                posted=[]
+                def fake(url,method="GET",payload=None,headers=None):
+                    posted.append(payload)
+                    return {"number":2029}
+                item={"id":router.marker(stage,"cortes-general"),"network":"cortes-general",
+                      "stage":stage,
+                      "evidence":"https://github.com/UniversoAnthares/anthares-clipper/actions",
+                      "description":"downstream count zero without a source receipt"}
+                with patch.object(router,"http",side_effect=fake):
+                    router.create_issue(item)
+                self.assertEqual(posted[0]["labels"],["QA-P0"])
+                self.assertIn(section,posted[0]["title"])
+                self.assertIn("não comprova",posted[0]["body"])
+                self.assertNotIn("corrigir o publicador",posted[0]["body"])
+
     def test_publication_issue_keeps_existing_safety_gates(self):
         posted=[]
         def fake(url, method="GET", payload=None, headers=None):
