@@ -17,8 +17,40 @@ const token = await runtime.st(env).signToken({typ:'access',iss:origin,aud:origi
 const res = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})}),env);
 const list = (await res.json()).result.tools.map(t=>t.name);
 assert(list.includes('forgejo_version'));
+assert(list.includes('forgejo_list_repos'));
+assert(list.includes('forgejo_get_file'));
+assert(list.includes('forgejo_list_runs'));
+assert(list.includes('forgejo_get_run'));
 assert(list.includes('github_get_file'));
 const callRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'forgejo_version',arguments:{}}})}),env);
 const callJson = await callRes.json();
 assert.equal(callJson.result.isError, undefined);
+// forgejo_list_repos with default allowed owner
+const reposRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'forgejo_list_repos',arguments:{owner:'anthares-admin'}}})}),env);
+const reposJson = await reposRes.json();
+assert.equal(reposJson.result.isError, undefined);
+// forgejo_list_repos with disallowed owner must be rejected
+const badOwnerRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'forgejo_list_repos',arguments:{owner:'evil-owner'}}})}),env);
+const badOwnerJson = await badOwnerRes.json();
+assert.equal(badOwnerJson.result.isError, true);
+// forgejo_get_file with allowed repo and path
+const fileRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'forgejo_get_file',arguments:{repo:'anthares-admin/anthares-kwai-runner',path:'README.md'}}})}),env);
+const fileJson = await fileRes.json();
+assert.equal(fileJson.result.isError, undefined);
+// forgejo_get_file with disallowed repo must be rejected
+const badRepoRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:6,method:'tools/call',params:{name:'forgejo_get_file',arguments:{repo:'evil/repo',path:'README.md'}}})}),env);
+const badRepoJson = await badRepoRes.json();
+assert.equal(badRepoJson.result.isError, true);
+// forgejo_get_file with path traversal must be rejected
+const travRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:7,method:'tools/call',params:{name:'forgejo_get_file',arguments:{repo:'anthares-admin/anthares-kwai-runner',path:'../../etc/passwd'}}})}),env);
+const travJson = await travRes.json();
+assert.equal(travJson.result.isError, true);
+// forgejo_get_run with valid run_id
+const runRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:8,method:'tools/call',params:{name:'forgejo_get_run',arguments:{repo:'anthares-admin/anthares-kwai-runner',run_id:42}}})}),env);
+const runJson = await runRes.json();
+assert.equal(runJson.result.isError, undefined);
+// forgejo_get_run with invalid run_id must be rejected
+const badRunRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:9,method:'tools/call',params:{name:'forgejo_get_run',arguments:{repo:'anthares-admin/anthares-kwai-runner',run_id:'not-a-number'}}})}),env);
+const badRunJson = await badRunRes.json();
+assert.equal(badRunJson.result.isError, true);
 console.log('FORGEJO_FORWARDING_OK');
