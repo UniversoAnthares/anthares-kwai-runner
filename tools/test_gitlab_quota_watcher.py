@@ -13,6 +13,9 @@ class QuotaWatcherContract(unittest.TestCase):
             return {"id": int(project_id), "sha": str(project_id).zfill(40), "count": 1}
         with patch.object(mod, "GL_AUTH", "test-only"), \
              patch.object(mod, "GH_AUTH", "test-only"), \
+             patch.object(mod, "DRY_RUN", False), \
+             patch.object(mod, "reserve_quota_handoff", return_value="RESERVED"), \
+             patch.object(mod, "acknowledge_quota_dispatch", return_value=True), \
              patch.object(mod, "recent_qualifying_failure", side_effect=event), \
              patch.object(mod, "confirmed_terminal_before_reserve", return_value=True), \
              patch.object(mod, "latest_runs", return_value=[]), \
@@ -67,6 +70,9 @@ class QuotaWatcherContract(unittest.TestCase):
             return {"id": 5, "sha": project_id.zfill(40), "count": 1}
         with patch.object(mod, "GL_AUTH", "fixture"), \
              patch.object(mod, "GH_AUTH", "fixture"), \
+             patch.object(mod, "DRY_RUN", False), \
+             patch.object(mod, "reserve_quota_handoff", return_value="RESERVED"), \
+             patch.object(mod, "acknowledge_quota_dispatch", return_value=True), \
              patch.object(mod, "recent_qualifying_failure", side_effect=source), \
              patch.object(mod, "confirmed_terminal_before_reserve", return_value=True), \
              patch.object(mod, "latest_runs", return_value=[]), \
