@@ -308,6 +308,30 @@ def create_issue(item):
                 "A perda de visibilidade isoladamente não comprova falha de envio. "
                 "Não registrar tokens nem conteúdo privado.")
         issue_labels=["QA-P0"]
+    elif item["stage"]=="github_actions_queued_stale":
+        # A runner queue delay is an infrastructure signal before execution.
+        # Do not imply that any social API accepted a submission.
+        title="[QA P0][infra] Job em fila aguardando executor — INVESTIGAR"
+        action=("AÇÃO EXIGIDA: verificar fila, runner, cota e concorrência; "
+                "consultar a execução original antes de qualquer reenvio. "
+                "O estágio queued não comprova tentativa de publicação. "
+                "Preservar leases, idempotência e trabalhos concorrentes. "
+                "Não registrar tokens nem conteúdo privado.")
+        issue_labels=["QA-P0"]
+    elif item["stage"] in ("P0_DAILY_PRODUCER_ZERO_MASTERS",
+                           "P0_DAILY_KWAI_DISTRIBUTION_STALLED"):
+        # A downstream zero counter alone cannot prove a publication failure.
+        stalled=item["stage"]=="P0_DAILY_KWAI_DISTRIBUTION_STALLED"
+        title=("[QA P0][distribuição] Repasse diário sem confirmação — INVESTIGAR"
+               if stalled else
+               "[QA P0][produção] Masters diários sem confirmação — INVESTIGAR")
+        action=("AÇÃO EXIGIDA: verificar masters no WordPress, produtor, fila "
+                "e contadores Neon por destino. Zero no enfileiramento "
+                "downstream não comprova envio, falha de publicação nem "
+                "ausência de masters. Preservar identidade, lease e idempotência; "
+                "nunca gerar clipes artificiais ou reenviar sem readback. "
+                "Não registrar tokens nem conteúdo privado.")
+        issue_labels=["QA-P0"]
     else:
         title="[QA P0]["+item["network"]+"] Falha de publicação — CORRIGIR IMEDIATAMENTE"
         action=("AÇÃO EXIGIDA: investigar logs, identificar causa, corrigir o publicador,"
