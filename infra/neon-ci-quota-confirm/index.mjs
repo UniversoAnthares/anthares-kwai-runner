@@ -147,7 +147,7 @@ async function jsonBody(request){
 }
 async function remoteJson(url,token,header){
  const response=await fetch(url,{headers:{
-  [header]:token,'Accept':'application/json','User-Agent':'Anthares-Neon-Quota-Control/2'},
+  [header]:(header==='Authorization'?'Bearer '+token:token),'Accept':'application/json','User-Agent':'Anthares-Neon-Quota-Control/2'},
   signal:AbortSignal.timeout(8500)});
  if(!response.ok)throw Error('UPSTREAM_UNAVAILABLE');
  return response.json();
