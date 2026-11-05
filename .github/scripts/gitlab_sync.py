@@ -36,16 +36,22 @@ run("git", "fetch", "--no-tags", url,
     "+refs/heads/main:refs/remotes/gitlab/main",
     f"+refs/heads/{PRESERVED_BRANCH}:refs/remotes/gitlab/preserved")
 
-# Exact disposable tracking branch. Force is safe here because this branch exists
-# only to represent the GitHub source SHA for each synchronization round.
-run("git", "push", "--force", url, f"{source_sha}:refs/heads/github-main")
+# Preserve the existing remote tracking ref. Update it only when the
+# previous GitHub source is an ancestor of this checked-out canonical SHA.
+# Any unrelated history refuses the push; no remote ref is overwritten.
+run("git", "fetch", "--no-tags", url,
+    "+refs/heads/github-main:refs/remotes/gitlab/github-main")
+if run("git", "merge-base", "--is-ancestor",
+       "refs/remotes/gitlab/github-main", source_sha, check=False).returncode != 0:
+    raise SystemExit("GITHUB_SOURCE_TRACKING_DIVERGED_NO_PUSH")
+run("git", "push", url, f"{source_sha}:refs/heads/github-main")
 
-# GitLab main remains the integration branch and is never force-pushed. Start
-# from its current tip so GitLab-only history is retained. On textual conflicts,
-# retain the GitLab side; all non-conflicting GitHub changes are still imported.
+# GitLab main remains the integration branch and is never force-pushed.
+# Keep all GitLab commits; any textual merge conflict stops this sync without
+# accepting one side silently. Preserve both source and destination histories.
 run("git", "switch", "--force-create", "gitlab-sync", "refs/remotes/gitlab/main")
 if run("git", "merge-base", "--is-ancestor", source_sha, "HEAD", check=False).returncode != 0:
-    merge = run("git", "merge", "--no-edit", "-X", "ours", source_sha, check=False)
+    merge = run("git", "merge", "--no-edit", source_sha, check=False)
     if merge.returncode != 0:
         run("git", "status", "--short", check=False)
         run("git", "merge", "--abort", check=False)
