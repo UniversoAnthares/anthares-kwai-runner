@@ -127,8 +127,8 @@ class QuotaWatcherContract(unittest.TestCase):
             "ACTIONS_ID_TOKEN_REQUEST_URL": "https://example.test/request-id-token",
             "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "fixture-access",
         }
-        with patch.dict(mod.os.environ, fields), \\
-             patch.object(mod, "GH_AUTH", "fixture-gh-token"), \\
+        with patch.dict(mod.os.environ, fields), \
+             patch.object(mod, "GH_AUTH", "fixture-gh-token"), \
              patch.object(mod.urllib.request, "urlopen", side_effect=mocked):
             self.assertTrue(mod.confirm_successful_quota_handoff(
                 "cortes", "87307248", {"id": 3005500025, "sha": sha},
