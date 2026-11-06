@@ -156,6 +156,28 @@ class InstagramBufferReadbackDiagnostics(unittest.TestCase):
         self.assertIn('"error_category": "MEDIA_SOURCE_UNAVAILABLE"',out.getvalue())
         self.assertNotIn(message,out.getvalue())
 
+    def test_regular_run_schedules_at_most_one_media_item(self):
+        with (patch.dict(os.environ, {"CORTES_RECONCILE_ONLY": "0"}),
+              patch.object(ig, "cloud_only"),
+              patch.object(ig, "queue", side_effect=lambda action: (
+                  {"active": False} if action == "cooldown-status"
+                  else {"enabled": True, "remaining": 20} if action == "policy"
+                  else (_ for _ in ()).throw(AssertionError(action)))),
+              patch.object(ig, "reconcile", return_value=0),
+              patch.object(ig, "publish_once", return_value="SCHEDULED_IN_BUFFER") as publisher,
+              redirect_stdout(io.StringIO())):
+            self.assertEqual(ig.main(), 0)
+            publisher.assert_called_once()
+
+    def test_only_schedule_and_manual_dispatch_trigger_instagram_workflow(self):
+        from pathlib import Path
+        workflow=(Path(__file__).resolve().parents[1] /
+                  ".github/workflows/cortes-buffer-instagram-cloud.yml").read_text()
+        self.assertNotIn("  push:", workflow)
+        self.assertNotIn("AOI16_BUFFER_ERROR_CAUSE_ONCE", workflow)
+        self.assertIn("cron: '8 */3 * * *'", workflow)
+        self.assertIn("vars.CORTES_INSTAGRAM_BUFFER_PAUSED == 'false'", workflow)
+
     def test_uncertain_provider_response_stops_without_reconcile_write(self):
         actions = []
         def queue(action, payload=None):
