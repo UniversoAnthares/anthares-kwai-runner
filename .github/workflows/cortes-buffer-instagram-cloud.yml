@@ -26,8 +26,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish-and-reconcile:
-    # Enable only after the cloud worker and canonical account are authenticated.
-    if: ${{ vars.CORTES_INSTAGRAM_BUFFER_PAUSED != 'true' }}
+    # Allow explicitly read-only reconciliation while publishing is paused.
+    # Scheduled and ordinary dispatches remain blocked by the production pause.
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true) || vars.CORTES_INSTAGRAM_BUFFER_PAUSED != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
