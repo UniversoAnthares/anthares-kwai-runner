@@ -127,6 +127,35 @@ class InstagramBufferReadbackDiagnostics(unittest.TestCase):
         self.assertIn("ANTHARES_SOCIAL_COMMIT: ${{ inputs.reconcile_only == true && '0' || '1' }}", workflow)
         self.assertIn("CORTES_RECONCILE_ONLY: ${{ inputs.reconcile_only && '1' || '0' }}", workflow)
 
+    def test_buffer_error_message_is_classified_without_disclosing_text(self):
+        message="It looks like Buffer has lost authorization to post to this account"
+        row=post("buffer-1", "error")
+        row["post"]["error"]={"message": message}
+        with patch.object(ig, "api", return_value=row):
+            self.assertEqual(ig.inspect_buffer_post("buffer-1"),
+                             ("error", None))
+            self.assertEqual(ig.inspect_buffer_post("buffer-1",include_error=True),
+                             ("error", None, "ACCOUNT_AUTH_OR_PERMISSION"))
+        self.assertEqual(ig.classify_buffer_publish_error("unknown private details"),
+                         "OTHER_PROVIDER_ERROR")
+
+    def test_reconcile_logs_cause_code_without_provider_message(self):
+        message="Your media URL could not be downloaded: private-file.mp4"
+        row=post("buffer-2", "error")
+        row["post"]["error"]={"message": message}
+        def queue(action, payload=None):
+            if action=="pending":
+                return {"jobs":[{"id":"cortes-fanout-instagram-123456789abc",
+                                 "remote_id":"buffer-2"}]}
+            raise AssertionError("unexpected queue mutation")
+        out=io.StringIO()
+        with (patch.object(ig,"queue",side_effect=queue),
+              patch.object(ig,"api",return_value=row),
+              redirect_stdout(out)):
+            self.assertEqual(ig.reconcile(),0)
+        self.assertIn('"error_category": "MEDIA_SOURCE_UNAVAILABLE"',out.getvalue())
+        self.assertNotIn(message,out.getvalue())
+
     def test_uncertain_provider_response_stops_without_reconcile_write(self):
         actions = []
         def queue(action, payload=None):
