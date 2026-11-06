@@ -59,13 +59,49 @@ def queue(action,payload=None):
     return result
 
 
-def inspect_buffer_post(remote_id):
+def classify_buffer_publish_error(message):
+    """Classify Buffer's user-facing publishing error without logging its text."""
+    value=" ".join(str(message or "").lower().split())[:1200]
+    if not value:
+        return "DETAIL_NOT_PROVIDED"
+    if any(p in value for p in (
+        "authorization", "authorisation", "reauthoriz", "re-authoriz",
+        "authentication", "access token", "expired token", "reconnect",
+        "disconnected", "permission", "account connection",
+    )):
+        return "ACCOUNT_AUTH_OR_PERMISSION"
+    if any(p in value for p in (
+        "media url", "media unavailable", "can't fetch", "cannot fetch",
+        "download", "not accessible", "not found", "404", "403",
+        "url could not", "invalid url", "file could not", "timeout",
+    )):
+        return "MEDIA_SOURCE_UNAVAILABLE"
+    if any(p in value for p in (
+        "aspect ratio", "resolution", "video format", "file format",
+        "codec", "unsupported media", "unsupported video", "file size",
+        "too large", "duration", "invalid video", "invalid media",
+    )):
+        return "MEDIA_FORMAT_INVALID"
+    if any(p in value for p in (
+        "rate limit", "too many requests", "quota", "limit reached",
+        "daily limit", "temporarily unavailable", "try again later",
+    )):
+        return "RATE_OR_TRANSIENT"
+    if any(p in value for p in (
+        "copyright", "policy", "restricted", "blocked", "violat",
+        "community guidelines",
+    )):
+        return "CONTENT_OR_ACCOUNT_RESTRICTION"
+    return "OTHER_PROVIDER_ERROR"
+
+
+def inspect_buffer_post(remote_id, *, include_error=False):
     """Read only an existing Buffer record; never create a new post."""
     query=('query { post(input: { id: '+json.dumps(str(remote_id))+
-           ' }) { id status externalLink channelId schedulingType } }')
+           ' }) { id status externalLink channelId schedulingType error { message } } }')
     row=api(query).get("post")
     if row is None:
-        return "missing",None
+        return ("missing",None,None) if include_error else ("missing",None)
     if not isinstance(row,dict) or str(row.get("id") or "")!=str(remote_id) or str(row.get("channelId") or "")!=INSTAGRAM_ID:
         raise RuntimeError("BUFFER_INSTAGRAM_POST_IDENTITY_UNVERIFIED")
     if str(row.get("schedulingType") or "").lower()!="automatic":
@@ -75,14 +111,15 @@ def inspect_buffer_post(remote_id):
         # A fixed allowlist prevents untrusted provider text in public CI logs.
         if state not in ("scheduled","pending","queued","failed","error","rejected","cancelled","canceled","draft"):
             state="other"
-        return state,None
+        reason=classify_buffer_publish_error((row.get("error") or {}).get("message")) if state=="error" else None
+        return (state,None,reason) if include_error else (state,None)
     link=str(row.get("externalLink") or "")
     uri=urllib.parse.urlparse(link)
     if uri.scheme!="https" or uri.hostname not in ("instagram.com","www.instagram.com"):
         raise RuntimeError("BUFFER_INSTAGRAM_SENT_WITHOUT_PUBLIC_LINK")
     if not __import__("re").fullmatch(r"/(reel|p)/[A-Za-z0-9_-]+/?",uri.path):
         raise RuntimeError("BUFFER_INSTAGRAM_EXTERNAL_PIN_LINK_INVALID")
-    return "sent",link
+    return ("sent",link,None) if include_error else ("sent",link)
 
 
 def verify_sent_post(remote_id):
@@ -103,7 +140,7 @@ def reconcile():
         # Only a short, non-secret ledger suffix identifies the diagnostic row.
         record_ref=str(item["id"])[-12:]
         try:
-            state,link=inspect_buffer_post(remote_id)
+            state,link,error_category=inspect_buffer_post(remote_id,include_error=True)
         except RuntimeError as exc:
             if str(exc) in ("BUFFER_INSTAGRAM_POST_IDENTITY_UNVERIFIED",
                             "BUFFER_INSTAGRAM_REQUIRES_MANUAL_PUBLICATION",
@@ -118,6 +155,7 @@ def reconcile():
             total+=1
         print(json.dumps({"instagram_buffer_readback":"REMOTE_POST_STATE",
                           "record_ref":record_ref,"state":state,
+                          "error_category":error_category,
                           "neon_confirmed":bool(link),"new_posts":0}),flush=True)
     return total
 
