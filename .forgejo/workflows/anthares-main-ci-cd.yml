@@ -48,8 +48,28 @@ jobs:
         run: |
           set -euo pipefail
           bash -n tools/git-provider-sync.sh
-          python3.11 -m py_compile tools/ci_quota_cancel_first.py
-          python3.11 -m unittest discover -s tests -p 'test_ci_quota_cancel_first.py' -v
+          # CloudLinux/Hostinger may provide modern Python outside PATH.
+          # Select only an already-installed interpreter with Python >=3.10
+          # and sqlite3; fail closed without a paid installer or fake CI PASS.
+          py=''
+          for candidate in \
+            /opt/alt/python311/bin/python3.11 \
+            /opt/alt/python312/bin/python3.12 \
+            /opt/alt/python310/bin/python3.10 \
+            python3.11 python3.12 python3.13 python3.10 python3; do
+            if command -v "$candidate" >/dev/null 2>&1 &&
+               "$candidate" -c 'import sys,sqlite3; sys.exit(0 if sys.version_info >= (3,10) else 1)' >/dev/null 2>&1; then
+              py="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$py" ]]; then
+            echo 'ANTHARES_FORGEJO_PYTHON310_UNAVAILABLE' >&2
+            exit 78
+          fi
+          echo "ANTHARES_FORGEJO_PYTHON_VERSION=$("$py" -c 'import platform;print(platform.python_version())')"
+          "$py" -m py_compile tools/ci_quota_cancel_first.py
+          "$py" -m unittest discover -s tests -p 'test_ci_quota_cancel_first.py' -v
           echo 'ANTHARES_FORGEJO_MAIN_CI=PASS'
 
   cd:
@@ -72,7 +92,23 @@ jobs:
           test "$sha" = "${FORGEJO_SHA:-}"
           git --git-dir="$bare" cat-file -e "$sha^{commit}"
           export ANTHARES_CI_CD_PROVEN_SHA="$sha"
-          python3.11 - <<'PY'
+          py=''
+          for candidate in \
+            /opt/alt/python311/bin/python3.11 \
+            /opt/alt/python312/bin/python3.12 \
+            /opt/alt/python310/bin/python3.10 \
+            python3.11 python3.12 python3.13 python3.10 python3; do
+            if command -v "$candidate" >/dev/null 2>&1 &&
+               "$candidate" -c 'import sys,sqlite3; sys.exit(0 if sys.version_info >= (3,10) else 1)' >/dev/null 2>&1; then
+              py="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$py" ]]; then
+            echo 'ANTHARES_FORGEJO_PYTHON310_UNAVAILABLE' >&2
+            exit 78
+          fi
+          "$py" - <<'PY'
           import json
           import os
           import pathlib
