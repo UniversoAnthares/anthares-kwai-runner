@@ -27,8 +27,8 @@ concurrency:
 jobs:
   publish-and-reconcile:
     # Allow explicitly read-only reconciliation while publishing is paused.
-    # Scheduled and ordinary dispatches remain blocked by the production pause.
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true) || vars.CORTES_INSTAGRAM_BUFFER_PAUSED != 'true' }}
+    # Scheduled and ordinary dispatches require an explicit unpause; missing variable fails closed.
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true) || vars.CORTES_INSTAGRAM_BUFFER_PAUSED == 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
