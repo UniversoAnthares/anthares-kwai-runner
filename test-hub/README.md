@@ -278,10 +278,10 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - `TAKEOVER_ALLOWED=false`, `CONTINGENCY_READY=false` até freeze, reconciliação remota independente, generation/lock Neon e publicação normal autorizada com recibo. Os runners Windows não foram novamente homologados nesta rodada (controle remoto ocupado).
 - Finding: `test-hub/findings/20261028-item18-windows-github-readiness-partial.md`, que supera o registro RUNNING do mesmo escopo. Item **18 permanece PARCIAL**.
 
-### AOI item fixo 4 — CI/CD Forgejo principal em admissão (2026-10-29)
+### AOI item fixo 4 — CI/CD Forgejo principal PROVEN (2026-11-06)
 - **SOURCE READY:** [PR #1816](https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1816) adicionou o único workflow CI/CD manual, isolado e não publicador para o Forgejo principal; [PR #1854](https://github.com/UniversoAnthares/anthares-kwai-runner/pull/1854) eliminou checkout externo, vinculando Git ao SHA exato do espelho Hostinger já existente.
 - **Admin/runner ainda não comprovados:** a antiga leitura do Forgejo principal indicou Actions desligado e nenhum runner repo-scoped; consulta autenticada foi recusada por segurança e segue sem nova autorização. Runner de sandbox é de outro repositório e não foi promovido.
-- **Critério restante:** ativação administrativa legítima de Actions, runner exclusivo `anthares-ci-main-host`, execução manual real com markers `ANTHARES_FORGEJO_MAIN_CI=PASS` e `ANTHARES_FORGEJO_MAIN_CD=PASS` + recibo SHA. **Item 4 PARCIAL, não DONE.**
+- **PRODUCTION_PROVEN / DONE — 2026-11-06 02:21:22Z:** Forgejo run [#2](https://anthares.us/forgejo/anthares-admin/anthares-kwai-runner/actions/runs/2), API run ID `588`, concluiu `success`; `ci` job `589` e `cd` job `590` ambos `success`. Logs reais: `ANTHARES_FORGEJO_MAIN_IDENTITY=PASS`, Python `3.11.18`, 3/3 testes, `ANTHARES_FORGEJO_MAIN_CI=PASS` e `ANTHARES_FORGEJO_MAIN_CD=PASS sha=888f4180b905e36afb118364eb094003e08a7522`. O CD instalou, releu e validou recibo privado no host. Runner preexistente `anthares-ci-main-host` foi recuperado pelo titular. CI/CD é isolado, manual e sem publicação social. Item fixo **#4 DONE**; detalhes em `test-hub/findings/20261106-aoi4-forgejo-run2-ci-cd-production-proven.md`.
 - Evidência: `test-hub/findings/20261029-item4-main-ci-staged-admin-pending.md`.
 
 
