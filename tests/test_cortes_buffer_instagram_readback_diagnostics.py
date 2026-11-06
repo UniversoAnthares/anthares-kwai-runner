@@ -118,6 +118,15 @@ class InstagramBufferReadbackDiagnostics(unittest.TestCase):
         publisher.assert_not_called()
         schedule.assert_not_called()
 
+    def test_workflow_is_paused_by_default_and_readback_cannot_create_posts(self):
+        from pathlib import Path
+        workflow=(Path(__file__).resolve().parents[1] /
+                  ".github/workflows/cortes-buffer-instagram-cloud.yml").read_text()
+        self.assertIn("vars.CORTES_INSTAGRAM_BUFFER_PAUSED == 'false'", workflow)
+        self.assertIn("inputs.reconcile_only == true", workflow)
+        self.assertIn("ANTHARES_SOCIAL_COMMIT: ${{ inputs.reconcile_only == true && '0' || '1' }}", workflow)
+        self.assertIn("CORTES_RECONCILE_ONLY: ${{ inputs.reconcile_only && '1' || '0' }}", workflow)
+
     def test_uncertain_provider_response_stops_without_reconcile_write(self):
         actions = []
         def queue(action, payload=None):
