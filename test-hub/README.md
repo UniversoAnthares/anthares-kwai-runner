@@ -294,3 +294,9 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 ### ARA OAuth temporary grant errors (2026-10-30)
 - PR1979 merged; validation41067237783:30/30 tests. Canonical deploy41067344555 succeeded, version883973f7-ebd3-4924-b3b1-69f818e4cf37. Temporary replay-store outage now returns503 rather than invalid_grant400; atomic replay and existing credentials preserved.
 - PARTIAL: actual ChatGPT browser connection persistence remains unconfirmed, and Windows device is independently offline. Do not equate capabilities200 with persistence. Evidence: test-hub/findings/20261030-ara-refresh-backend-errors-deployed.md.
+
+### AOI #16 — LinkedIn pessoal: falha de mídia anterior ao upload classificada (2026-11-06)
+- Histórico: [run 41260916613](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/41260916613) alcançou `PERSONAL_STAGE=media_readonly`, encerrou com `RuntimeError` e sem marcador de upload; causa exata do erro remoto permanece sem confirmação.
+- Proteção em fonte: falhas de leitura de mídia `SOURCE_MEDIA_*` recebem `BLOCKED_BEFORE_UPLOAD` exclusivamente após liberação do lease reconhecida pela fila; falha na liberação preserva `BLOCKED_OR_UNCERTAIN`. Dois cenários dirigidos com stubs e compile Python aprovados, sem postagem ou nova execução.
+- Estado global do item **#16: PARTIAL**; P0 #2043 ainda aberto. Ver `test-hub/findings/20261106-aoi16-linkedin-preupload-classification-source-ready.md`.
+
