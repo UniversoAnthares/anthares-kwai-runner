@@ -59,22 +59,37 @@ def queue(action,payload=None):
     return result
 
 
-def verify_sent_post(remote_id):
+def inspect_buffer_post(remote_id):
+    """Read only an existing Buffer record; never create a new post."""
     query=('query { post(input: { id: '+json.dumps(str(remote_id))+
            ' }) { id status externalLink channelId schedulingType } }')
-    row=api(query).get("post") or {}
-    if str(row.get("id") or "")!=str(remote_id) or str(row.get("channelId") or "")!=INSTAGRAM_ID:
+    row=api(query).get("post")
+    if row is None:
+        return "missing",None
+    if not isinstance(row,dict) or str(row.get("id") or "")!=str(remote_id) or str(row.get("channelId") or "")!=INSTAGRAM_ID:
         raise RuntimeError("BUFFER_INSTAGRAM_POST_IDENTITY_UNVERIFIED")
     if str(row.get("schedulingType") or "").lower()!="automatic":
         raise RuntimeError("BUFFER_INSTAGRAM_REQUIRES_MANUAL_PUBLICATION")
-    if str(row.get("status") or "").lower()!="sent":
-        return None
+    state=str(row.get("status") or "").lower()
+    if state!="sent":
+        # A fixed allowlist prevents untrusted provider text in public CI logs.
+        if state not in ("scheduled","pending","queued","failed","error","rejected","cancelled","canceled","draft"):
+            state="other"
+        return state,None
     link=str(row.get("externalLink") or "")
     uri=urllib.parse.urlparse(link)
     if uri.scheme!="https" or uri.hostname not in ("instagram.com","www.instagram.com"):
         raise RuntimeError("BUFFER_INSTAGRAM_SENT_WITHOUT_PUBLIC_LINK")
     if not __import__("re").fullmatch(r"/(reel|p)/[A-Za-z0-9_-]+/?",uri.path):
         raise RuntimeError("BUFFER_INSTAGRAM_EXTERNAL_PIN_LINK_INVALID")
+    return "sent",link
+
+
+def verify_sent_post(remote_id):
+    """Compatibility: preserve the original confirmation-only contract."""
+    state,link=inspect_buffer_post(remote_id)
+    if state=="missing":
+        raise RuntimeError("BUFFER_INSTAGRAM_POST_IDENTITY_UNVERIFIED")
     return link
 
 
@@ -85,10 +100,25 @@ def reconcile():
         remote_id=str(item.get("remote_id") or "")
         if not remote_id:
             continue
-        link=verify_sent_post(remote_id)
+        # Only a short, non-secret ledger suffix identifies the diagnostic row.
+        record_ref=str(item["id"])[-12:]
+        try:
+            state,link=inspect_buffer_post(remote_id)
+        except RuntimeError as exc:
+            if str(exc) in ("BUFFER_INSTAGRAM_POST_IDENTITY_UNVERIFIED",
+                            "BUFFER_INSTAGRAM_REQUIRES_MANUAL_PUBLICATION",
+                            "BUFFER_INSTAGRAM_SENT_WITHOUT_PUBLIC_LINK",
+                            "BUFFER_INSTAGRAM_EXTERNAL_PIN_LINK_INVALID"):
+                print(json.dumps({"instagram_buffer_readback":"REMOTE_POST_STATE",
+                                  "record_ref":record_ref,"state":"blocked",
+                                  "reason":str(exc)}),flush=True)
+            raise
         if link:
             queue("reconcile",{"id":item["id"],"remote_id":remote_id,"external_link":link})
             total+=1
+        print(json.dumps({"instagram_buffer_readback":"REMOTE_POST_STATE",
+                          "record_ref":record_ref,"state":state,
+                          "neon_confirmed":bool(link),"new_posts":0}),flush=True)
     return total
 
 
