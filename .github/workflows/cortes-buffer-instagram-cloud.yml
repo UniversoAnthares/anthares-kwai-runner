@@ -22,13 +22,13 @@ permissions:
 concurrency:
   # Readback-only can safely run while the publisher queue is busy; Neon CAS
   # keeps confirmation idempotent. Frequent schedules must not cancel QA proof.
-  group: ${{ github.event_name == 'workflow_dispatch' && inputs.reconcile_only && 'cortes-instagram-buffer-readback-only' || 'cortes-instagram-buffer-cloud-producer' }}
+  group: ${{ ((github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true) || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'AOI16_BUFFER_ERROR_CAUSE_ONCE'))) && 'cortes-instagram-buffer-readback-only' || 'cortes-instagram-buffer-cloud-producer' }}
   cancel-in-progress: false
 jobs:
   publish-and-reconcile:
-    # Allow explicitly read-only reconciliation while publishing is paused.
+    # Allow manual reconcile or one uniquely marked readback push under the pause.
     # Scheduled and ordinary dispatches require an explicit unpause; missing variable fails closed.
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true) || vars.CORTES_INSTAGRAM_BUFFER_PAUSED == 'false' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true) || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'AOI16_BUFFER_ERROR_CAUSE_ONCE')) || vars.CORTES_INSTAGRAM_BUFFER_PAUSED == 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
@@ -46,8 +46,8 @@ jobs:
       - name: Reconcile Instagram receipts or publish one eligible Reel with Neon fencing
         shell: bash
         env:
-          ANTHARES_SOCIAL_COMMIT: ${{ inputs.reconcile_only == true && '0' || '1' }}
-          CORTES_RECONCILE_ONLY: ${{ inputs.reconcile_only && '1' || '0' }}
+          ANTHARES_SOCIAL_COMMIT: ${{ ((github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true) || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'AOI16_BUFFER_ERROR_CAUSE_ONCE'))) && '0' || '1' }}
+          CORTES_RECONCILE_ONLY: ${{ ((github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true) || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'AOI16_BUFFER_ERROR_CAUSE_ONCE'))) && '1' || '0' }}
           CORTES_QUEUE_PRIMARY: neon
           CORTES_IG_IMMEDIATE_UNTIL_UTC: '2026-10-22T09:00:00Z'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
