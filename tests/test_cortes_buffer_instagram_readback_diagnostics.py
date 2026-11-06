@@ -173,7 +173,7 @@ class InstagramBufferReadbackDiagnostics(unittest.TestCase):
         from pathlib import Path
         workflow=(Path(__file__).resolve().parents[1] /
                   ".github/workflows/cortes-buffer-instagram-cloud.yml").read_text()
-        self.assertNotIn("\\n  push:\\n", workflow)
+        self.assertNotIn("  push:", workflow)
         self.assertNotIn("AOI16_BUFFER_ERROR_CAUSE_ONCE", workflow)
         self.assertIn("cron: '8 */3 * * *'", workflow)
         self.assertIn("vars.CORTES_INSTAGRAM_BUFFER_PAUSED == 'false'", workflow)
