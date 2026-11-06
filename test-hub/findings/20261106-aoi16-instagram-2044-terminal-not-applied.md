@@ -1,10 +1,10 @@
 # AOI #16 — Instagram P0 #2044: correção causal e NOT_APPLIED do envio histórico
-STATUS: RUNNING
+STATUS: INCIDENT_DONE; AOI_ITEM_16_PARTIAL
 AREA: qa-p0-instagram-2044-terminal
 ITEMS: [16]
 DATE_UTC: 2026-11-06
 OWNER: chatgpt-aoi16-instagram-2044-terminal-20261106
-LEASE: scoped to issue #2044 and this finding; 40min.
+LEASE: CLOSED; scoped to issue #2044 and this finding.
 GOVERNANCE_MANIFEST: 223433740e807a90
 BASE_HEAD: bf79285042633bcc8b80450ae3dcd6b268b1c0d9
 PREVIOUS_FINDING: test-hub/findings/20261105-aoi16-instagram-import-rootcause-fixed-lease-closed.md
@@ -33,3 +33,9 @@ FAILURE_SIGNAL: issue/source drift, security refusal, concurrent operator: stop,
 TEST_VALIDITY: actual previous failing hosted execution + current merged source and regression documentation; no live test needed.
 ROLLBACK: reopen issue if later evidence contradicts the NOT_APPLIED proof. No media deletion.
 COST_ADDED: R$0
+
+## Fechamento e recibos (UTC)
+- 2026-11-06T19:41:31Z: GitHub issue #2044 moved to `closed` with `state_reason=completed`, after posting terminal evidence in comment ID `6693774320`.
+- Verified source import blob: `d1fcd28950310b2732ddbdb5bc1e7f345a3cb432`; previous offending import before Graph call in job `124706765819`; NOT_APPLIED per job.
+- Live publisher state: `disabled_manually`, untouched. No post-fix public posting asserted, no Instagram API mutation.
+- AOI item #16 remains PARTIAL because other P0s and live operational proof remain independent.
