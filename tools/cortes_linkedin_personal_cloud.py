@@ -27,6 +27,19 @@ OWNER = "linkedin-personal:github-cloud-v1"
 TARGET = "linkedin:personal"
 _MEMBER_SUB = re.compile(r"[A-Za-z0-9_-]{2,200}\Z")
 
+# Only these bounded read-only probe errors are eligible for preupload
+# classification. Queue/fence failures remain uncertain.
+_MEDIA_PREFLIGHT_CODES = frozenset({
+    "SOURCE_MEDIA_UNEXPECTED_HTTP", "SOURCE_MEDIA_WRONG_TYPE",
+    "SOURCE_MEDIA_TOO_SHORT", "SOURCE_MEDIA_TEMPORARY_HTTP",
+    "SOURCE_MEDIA_TEMPORARY_UNAVAILABLE",
+})
+
+
+class MediaPreuploadDeferred(RuntimeError):
+    """Fenced preupload failure; the queue has acknowledged release."""
+
+
 
 def cloud_only():
     if (os.getenv("GITHUB_ACTIONS") != "true" or
@@ -164,10 +177,15 @@ def publish_one(skipped=0):
         if not media_available(payload["media_url"]):
             queue("media-missing", fence)
             return publish_one(skipped + 1) if skipped < 10 else {"linkedin_personal": "SOURCE_MEDIA_MISSING_FOR_REPAIR"}
-    except Exception:
-        # Nested media-404 skips may have already closed this lease.
-        try: queue("fail", fence)
-        except Exception: pass
+    except Exception as error:
+        # A preupload lease must be released before classifying the failure.
+        # If release is unconfirmed, preserve the original uncertainty gate.
+        try:
+            queue("fail", fence)
+        except Exception:
+            raise
+        if isinstance(error, RuntimeError) and str(error) in _MEDIA_PREFLIGHT_CODES:
+            raise MediaPreuploadDeferred(str(error)) from None
         raise
     print("PERSONAL_STAGE=queue_start", flush=True)
     queue("start", fence)
@@ -219,6 +237,10 @@ def main():
             if result.get("linkedin_personal") != "CONFIRMED_BY_AUTHOR_READBACK" and result.get("linkedin_personal") != "LINKEDIN_ACCEPTED_PENDING_PUBLIC_PROOF":
                 break
         return 0
+    except MediaPreuploadDeferred as exc:
+        print(json.dumps({"linkedin_personal": "BLOCKED_BEFORE_UPLOAD",
+                          "reason": str(exc)}, separators=(",", ":")))
+        return 2
     except (ConfigRequired, PlatformLimit) as exc:
         print(json.dumps({"linkedin_personal": "BLOCKED",
                           "reason": type(exc).__name__}, separators=(",", ":")))
