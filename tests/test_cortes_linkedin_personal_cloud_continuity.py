@@ -1,5 +1,8 @@
 """Fail-closed LinkedIn personal continuity without touching real OAuth or Neon."""
 import unittest
+import io
+import json
+from contextlib import redirect_stdout
 from unittest.mock import patch
 from pathlib import Path
 from tools import cortes_linkedin_personal_cloud as publisher
@@ -24,6 +27,61 @@ class LinkedInPersonalContinuityTests(unittest.TestCase):
         self.assertEqual(events,["lease","media-missing"])
         provider.assert_called_once()
     
+    def test_temporary_media_failure_releases_fenced_lease_and_reports_preupload(self):
+        row={"id":"media-transient","lease_generation":4,"target_key":"linkedin:personal",
+             "duration_class":"short","payload":{"platform":"linkedin","account_id":"personal",
+             "media_url":"https://anthares.us/clip.mp4","title":"Test","duration_seconds":55}}
+        events=[]
+        def fakequeue(action,data):
+            events.append(action)
+            return {"ok":True,"job":row} if action=="lease" else {"ok":True}
+        output=io.StringIO()
+        with (patch.object(publisher,"cloud_only"),
+              patch.object(publisher,"account_preflight"),
+              patch.object(publisher,"reconcile_personal",return_value=0),
+              patch.object(publisher,"queue",side_effect=fakequeue),
+              patch.object(publisher,"media_available",
+                           side_effect=RuntimeError("SOURCE_MEDIA_TEMPORARY_UNAVAILABLE")),
+              patch.object(publisher,"linkedin",return_value={"status":"READY"}) as service,
+              redirect_stdout(output)):
+            exitcode=publisher.main()
+        self.assertEqual(exitcode,2)
+        final=json.loads(output.getvalue().splitlines()[-1])
+        self.assertEqual(final,{"linkedin_personal":"BLOCKED_BEFORE_UPLOAD",
+                                "reason":"SOURCE_MEDIA_TEMPORARY_UNAVAILABLE"})
+        self.assertEqual(events,["lease","fail"])
+        self.assertNotIn("PERSONAL_STAGE=queue_start",output.getvalue())
+        self.assertNotIn("PERSONAL_STAGE=linkedin_upload",output.getvalue())
+        self.assertEqual(service.call_count,1)
+        self.assertFalse(service.call_args.kwargs["publish"])
+
+    def test_unconfirmed_preupload_release_keeps_uncertainty_classification(self):
+        row={"id":"media-unconfirmed","lease_generation":5,"target_key":"linkedin:personal",
+             "duration_class":"short","payload":{"platform":"linkedin","account_id":"personal",
+             "media_url":"https://anthares.us/clip.mp4","title":"Test","duration_seconds":55}}
+        events=[]
+        def fakequeue(action,data):
+            events.append(action)
+            if action=="lease":
+                return {"ok":True,"job":row}
+            raise RuntimeError("QUEUE_FENCE_UNCONFIRMED")
+        output=io.StringIO()
+        with (patch.object(publisher,"cloud_only"),
+              patch.object(publisher,"account_preflight"),
+              patch.object(publisher,"reconcile_personal",return_value=0),
+              patch.object(publisher,"queue",side_effect=fakequeue),
+              patch.object(publisher,"media_available",
+                           side_effect=RuntimeError("SOURCE_MEDIA_TEMPORARY_UNAVAILABLE")),
+              patch.object(publisher,"linkedin",return_value={"status":"READY"}) as service,
+              redirect_stdout(output)):
+            exitcode=publisher.main()
+        self.assertEqual(exitcode,3)
+        self.assertEqual(json.loads(output.getvalue().splitlines()[-1]),
+                         {"linkedin_personal":"BLOCKED_OR_UNCERTAIN","reason":"RuntimeError"})
+        self.assertEqual(events,["lease","fail"])
+        self.assertEqual(service.call_count,1)
+        self.assertFalse(service.call_args.kwargs["publish"])
+
     def test_one_unverified_post_does_not_repost_same_job(self):
         ids=["cut-A","cut-B"]
         events=[]
