@@ -12,7 +12,18 @@ const env = {
   FORGEJO_BASE_URL: 'https://anthares.us/forgejo',
   FORGEJO_READ_TOKEN: 'test-read-token-12345'
 };
-globalThis.fetch = async (url) => Response.json({ ok: true, url });
+const requestedForgejoUrls = [];
+globalThis.fetch = async (url) => {
+  const value = String(url);
+  requestedForgejoUrls.push(value);
+  if (value.includes('/actions/runs?limit=')) {
+    return Response.json({workflow_runs:[{
+      id:567,
+      html_url:'https://anthares.us/forgejo/anthares-admin/anthares-kwai-runner/actions/runs/1'
+    }]});
+  }
+  return Response.json({ok:true,url:value});
+};
 const origin = 'https://anthares-ara-mcp.anthares1.workers.dev';
 const token = await runtime.st(env).signToken({typ:'access',iss:origin,aud:origin,exp:Math.floor(Date.now()/1000)+60,scp:['forgejo.read','github.read']});
 const res = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})}),env);
@@ -50,6 +61,16 @@ assert.equal(travJson.result.isError, true);
 const runRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:8,method:'tools/call',params:{name:'forgejo_get_run',arguments:{repo:'anthares-admin/anthares-kwai-runner',run_id:42}}})}),env);
 const runJson = await runRes.json();
 assert.equal(runJson.result.isError, undefined);
+// Regression from real Forgejo v15.0.9: web run #1 is API run id 567.
+const uiRunRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:81,method:'tools/call',params:{name:'forgejo_get_run',arguments:{repo:'anthares-admin/anthares-kwai-runner',run_id:1}}})}),env);
+assert.equal((await uiRunRes.json()).result.isError, undefined);
+assert(requestedForgejoUrls.some(url => url.includes('/repos/anthares-admin/anthares-kwai-runner/actions/runs?limit=50')));
+assert(requestedForgejoUrls.some(url => url.endsWith('/repos/anthares-admin/anthares-kwai-runner/actions/runs/567')));
+assert(!requestedForgejoUrls.some(url => url.includes('anthares-admin%2Fanthares-kwai-runner')));
+// Nested file paths must retain separators when routed to the real API.
+const nestedRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:82,method:'tools/call',params:{name:'forgejo_get_file',arguments:{repo:'anthares-admin/anthares-kwai-runner',path:'docs/README.md'}}})}),env);
+assert.equal((await nestedRes.json()).result.isError, undefined);
+assert(requestedForgejoUrls.some(url => url.includes('/repos/anthares-admin/anthares-kwai-runner/contents/docs/README.md?ref=main')));
 // forgejo_get_run with invalid run_id must be rejected
 const badRunRes = await runtime.default.fetch(new Request(origin+'/mcp', {method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:9,method:'tools/call',params:{name:'forgejo_get_run',arguments:{repo:'anthares-admin/anthares-kwai-runner',run_id:'not-a-number'}}})}),env);
 const badRunJson = await badRunRes.json();
