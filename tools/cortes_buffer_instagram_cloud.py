@@ -13,7 +13,6 @@ import os
 import sys
 import urllib.error
 import datetime
-import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -285,18 +284,13 @@ def main():
                               "buffer_weekday_enabled":bool(policy.get("enabled")),
                               "posts_confirmed_this_run":confirmed}),flush=True)
             return 0
-        batch=6 if os.getenv("CORTES_IG_IMMEDIATE_UNTIL_UTC")=="2026-10-22T09:00:00Z" else 1
-        outcomes=[]
-        for attempt in range(batch):
-            status=publish_once()
-            outcomes.append(status)
-            print(json.dumps({"instagram":"BUFFER_QUEUE_ITEM_RESULT","attempt":attempt+1,
-                              "status":status}),flush=True)
-            if status.startswith("IDLE"): break
-            if attempt+1<batch: time.sleep(3)
+        # One eligible new post per scheduled run, under the shared Buffer quota.
+        status=publish_once()
+        print(json.dumps({"instagram":"BUFFER_QUEUE_ITEM_RESULT","attempt":1,
+                          "status":status}),flush=True)
         confirmed+=reconcile()
-        print(json.dumps({"instagram_cloud":"PASS","scheduled":outcomes.count("SCHEDULED_IN_BUFFER"),
-                          "isolated_404":outcomes.count("QUARANTINED_HTTP_404"),
+        print(json.dumps({"instagram_cloud":"PASS","scheduled":int(status=="SCHEDULED_IN_BUFFER"),
+                          "isolated_404":int(status=="QUARANTINED_HTTP_404"),
                           "confirmed":confirmed}),flush=True)
         return 0
     except BufferBlocked as exc:
