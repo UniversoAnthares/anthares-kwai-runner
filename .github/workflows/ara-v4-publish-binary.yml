@@ -1,24 +1,62 @@
 name: Publish ARA V4 C8 recovery binary
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'anthares-remote-agent/**'
-      - 'infra/anthares_remote_bootstrap.py'
-      - '.github/workflows/anthares-remote-agent-install-selfhosted.yml'
-      - '.github/workflows/ara-v4-publish-binary.yml'
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact approved SHA for recovery binary'
+        required: true
+        type: string
+      mode:
+        description: 'Approved release or incident-scoped recovery'
+        required: true
+        type: choice
+        default: release
+        options: [release, emergency]
+      incident_ref:
+        description: 'Required when restoring an older approved binary'
+        required: false
+        type: string
 
 permissions:
   contents: write
+concurrency:
+  group: anthares-ara-v4-binary-release
+  cancel-in-progress: false
 
 jobs:
   build-and-publish:
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Authorize exact binary source and incident rollback
+        shell: bash
+        env:
+          APPROVED_SHA: ${{ inputs.release_sha }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          INCIDENT_REF: ${{ inputs.incident_ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$APPROVED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          test "$(git rev-parse HEAD)" = "$APPROVED_SHA" || exit 1
+          main_sha="$(curl -fsS --retry 0 --max-time 20 -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPOSITORY/git/ref/heads/main" | python3 -c 'import json,sys; print(json.load(sys.stdin)["object"]["sha"])')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          if [[ "$RELEASE_MODE" == release ]]; then
+            test "$APPROVED_SHA" = "$main_sha" || exit 1
+          elif [[ "$RELEASE_MODE" == emergency ]]; then
+            test -n "$INCIDENT_REF" || exit 1
+            git merge-base --is-ancestor "$APPROVED_SHA" "$main_sha" || exit 1
+          else
+            exit 1
+          fi
+          echo "ARA_BINARY_RELEASE_APPROVED=$APPROVED_SHA"
       - uses: actions/setup-go@v5
         with:
           go-version-file: anthares-remote-agent/go.mod
@@ -80,15 +118,30 @@ jobs:
           mkdir -p dist
           go build -trimpath -ldflags='-s -w' -o dist/anthares-remote-agent-v4-c8.exe ./cmd/agent
           sha256sum dist/anthares-remote-agent-v4-c8.exe | tee dist/anthares-remote-agent-v4-c8.exe.sha256
-      - name: Publish stable recovery release
+      - name: Publish stable recovery release once per verified SHA
         env:
           GH_TOKEN: ${{ github.token }}
+          APPROVED_SHA: ${{ inputs.release_sha }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          INCIDENT_REF: ${{ inputs.incident_ref }}
         run: |
           set -euo pipefail
-          if ! gh release view ara-v4-latest >/dev/null 2>&1; then
-            gh release create ara-v4-latest --target "$GITHUB_SHA" --title 'ARA V4 C8 latest recovery binary' --notes 'Stable C8 recovery asset for Anthares Remote. Updated automatically after validated agent changes.'
+          notes="approved_sha=$APPROVED_SHA mode=$RELEASE_MODE incident=$INCIDENT_REF"
+          if gh release view ara-v4-latest >/dev/null 2>&1; then
+            previous="$(gh release view ara-v4-latest --json body --jq '.body')"
+            assets="$(gh release view ara-v4-latest --json assets --jq '.assets[].name')"
+            if [[ "$previous" == *"approved_sha=$APPROVED_SHA"* ]] &&
+               grep -qx 'anthares-remote-agent-v4-c8.exe' <<< "$assets" &&
+               grep -qx 'anthares-remote-agent-v4-c8.exe.sha256' <<< "$assets"; then
+              echo 'ARA_RECOVERY_BINARY_SAME_SHA=SKIP'
+              exit 0
+            fi
+          else
+            gh release create ara-v4-latest --target "$APPROVED_SHA" --title 'ARA V4 C8 latest recovery binary' --notes "$notes"
           fi
           gh release upload ara-v4-latest \
             anthares-remote-agent/dist/anthares-remote-agent-v4-c8.exe \
             anthares-remote-agent/dist/anthares-remote-agent-v4-c8.exe.sha256 \
             --clobber
+          gh release edit ara-v4-latest --notes "$notes"
+          echo "ARA_RECOVERY_BINARY_PUBLISHED_SHA=$APPROVED_SHA"
