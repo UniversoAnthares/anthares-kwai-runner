@@ -89,6 +89,17 @@ def main():
             print("KWAI_NEON_LEASE=NONE")
             print("KWAI_NEON_PUBLICATION_ATTEMPTED=0")
         else:
+            if not isinstance(job,dict):
+                raise QueueError("KWAI_NEON_JOB_INVALID")
+            payload=job.get("payload")
+            if isinstance(payload,str):
+                try:
+                    payload=json.loads(payload)
+                except (ValueError,TypeError):
+                    raise QueueError("KWAI_NEON_PAYLOAD_NOT_JSON") from None
+            if not isinstance(payload,dict):
+                raise QueueError("KWAI_NEON_PAYLOAD_NOT_OBJECT")
+            job["payload"]=payload
             print("KWAI_NEON_LEASE=ACQUIRED")
             # Use file with restricted permissions; never echo callback tokens.
             dest=os.getenv("KWAI_NEON_LEASE_FILE","kwai-neon-lease.json")
