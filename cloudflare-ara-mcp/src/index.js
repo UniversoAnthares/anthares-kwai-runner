@@ -1,5 +1,6 @@
 import { EXTERNAL_DEVICE, externalReadOnly } from "./external-readonly.mjs";
 import {requestControl} from "./control-transport.mjs";
+import {queueExecute, queueStatus} from "./private-queue-control.mjs";
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
@@ -298,6 +299,7 @@ async function consumeViaControl(env, kind, jti, exp) {
 }
 __name(consumeViaControl, "consumeViaControl");
 async function status(env, device = DEFAULT_DEVICE) {
+  if (env.ARA_PRIVATE_QUEUE_PRIMARY === "enabled") return queueStatus(env, device);
   return controlJson(env, `/v1/mcp/status?device_id=${encodeURIComponent(device)}`);
 }
 __name(status, "status");
@@ -336,6 +338,11 @@ async function resolveDevice(env, device = DEFAULT_DEVICE) {
 }
 __name(resolveDevice, "resolveDevice");
 async function execute(env, type, args = {}, timeout = 30, device = DEFAULT_DEVICE) {
+  // ChatGPT sends commands only when requested; the agent's independent
+  // private issue queue becomes the primary control transport.
+  if (env.ARA_PRIVATE_QUEUE_PRIMARY === "enabled") {
+    return queueExecute(env, type, args, timeout, device);
+  }
   const active = await resolveDevice(env, device);
   return controlJson(env, "/v1/mcp/execute", { method: "POST", timeoutMs: Math.min(15e4, (Number(timeout) + 12) * 1e3), body: { device_id: active, type, args, timeout_seconds: Math.max(1, Math.min(Number(timeout) || 30, 120)), idempotency_key: `cfmcp-${crypto.randomUUID()}` } });
 }
@@ -394,7 +401,17 @@ async function callTool(env, name, a = {}, scopes = []) {
     // The signed Vercel bridge supports status/execute but has no capabilities route.
     // Verify the legitimate signed control path before reporting the gateway contract.
     const current = await status(env, device);
+    let private_queue_probe;
+    if (env.ARA_PRIVATE_QUEUE_PRIMARY === "probe") {
+      try {
+        const sample = await queueStatus(env, device);
+        private_queue_probe = {ok:true,backend:sample.backend,connected:sample.connected,queue_providers:sample.queue_providers};
+      } catch (error) {
+        private_queue_probe = {ok:false,error:String(error?.message || error).slice(0,120)};
+      }
+    }
     return textResult({
+      ...(private_queue_probe === undefined ? {} : {private_queue_probe}),
       ok: true,
       protocol: "anthares-remote-agent/1.0",
       backend: current.backend,
