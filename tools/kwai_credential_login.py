@@ -76,8 +76,8 @@ def kw02_public_ui_messages(ns, stage):
         value=((n.get('text') or '')+' '+(n.get('content-desc') or '')).strip()
         if not value:continue
         value=re.sub(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+','[EMAIL_REDACTED]',value)
-        value=re.sub(r'\\b\\+?\\d[\\d\\s().-]{6,}\\b','[NUMBER_REDACTED]',value)
-        value=re.sub(r'https?://\\S+','[LINK_REDACTED]',value)
+        value=re.sub(r'\b\+?\d[\d\s().-]{6,}\b','[NUMBER_REDACTED]',value)
+        value=re.sub(r'https?://\S+','[LINK_REDACTED]',value)
         if value.casefold()==LOGIN.casefold():continue
         if value not in allowed:allowed.append(value)
     print('KWAI_KW02_UI_MESSAGES_%s=%s'%(stage,' ; '.join(allowed[:18])[:800]),flush=True)
