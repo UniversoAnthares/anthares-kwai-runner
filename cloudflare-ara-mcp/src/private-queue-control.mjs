@@ -28,7 +28,9 @@ async function github(env, method, path, body) {
       ...(body === undefined ? {} : {'Content-Type':'application/json'})
     },
     body: body === undefined ? undefined : JSON.stringify(body),
-    redirect: 'error'
+    // Workers allows only 'follow' or 'manual'; manual rejects redirects
+    // through the HTTP non-2xx guard without forwarding credentials.
+    redirect: 'manual'
   });
   if (!response.ok) {
     // Do not echo provider response bodies, bearer tokens or URL fragments.
