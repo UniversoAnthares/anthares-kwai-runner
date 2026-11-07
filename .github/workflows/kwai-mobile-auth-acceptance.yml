@@ -1,4 +1,4 @@
-name: Kwai Mobile Auth Acceptance
+name: Kwai Mobile Auth Acceptance - KW02 isolated
 on:
   workflow_dispatch:
   push:
