@@ -111,7 +111,7 @@ def profile_content(root,ns):
     return clickable_center(root,n) if n is not None else None
 
 def login_target(root,ns):
-    for key in ('login_container','login_button','btn_login','tv_login','login_platform_expand_text'):
+    for key in ('login_platform_expand_text','login_container','login_button','btn_login','tv_login'):
         n=find_id(ns,key)
         if n is not None:return clickable_center(root,n)
     n=find_label(ns,'log in','login','sign in','entrar','fazer login','log in / sign up','log in or sign up')
@@ -179,6 +179,18 @@ def state(tag):
             log('KWAI_KW02_LOGIN_NODE=%d stage:%s id:%s cls:%s enabled:%s clickable:%s kind:%s' %
                 (j,tag,identifier,classname,n.get('enabled'),n.get('clickable'),classification))
 
+    if os.environ.get('KWAI_KW02_LOGIN_CONTROL_PROBE')=='1' and 35<len(ns)<=95 and ('profile' in tag or 'before-me' in tag):
+        relevant=('login','email','phone','platform','profile','me','account','google','facebook','btn','entrar','signin','code','native')
+        k=0
+        for n in ns:
+            if n.get('clickable')!='true' or not center(n):continue
+            ridx=rid(n)
+            lbl=label(n)
+            label_kind=next((w for w in relevant if w in ridx.casefold() or w in lbl), 'other')
+            log('KWAI_KW02_PROFILE_CONTROL_%s_%d=id:%s package:%s kind:%s' %
+                (tag,k,ridx[-65:],n.get('package',''),label_kind))
+            k+=1
+            if k>=24:break
     log('HAS_ME='+str(int('id_home_bottom_tab_me' in ids))+' HAS_LOGIN_CONTAINER='+str(int('login_container' in ids))+' HAS_UNCONNECTED='+str(int(unconnected)))
     if unconnected:ensure_network('ui-unconnected')
     return xml,root,ns
@@ -190,16 +202,23 @@ def open_profile_then_login(tag):
         xml,root,ns=state(tag+'-after-gate')
     p=profile_target(root,ns)
     if p:tap_xy(p,tag+'-me')
-    for i in range(5):
+    for i in range(9):
         xml,root,ns=state(f'{tag}-profile-{i}')
         if success(xml,ns):return True
         if clear_known_gate(root,ns):continue
-        q=login_target(root,ns)
-        if q:
-            tap_xy(q,tag+'-login')
-            xml,root,ns=state(f'{tag}-login-result-{i}')
-            if success(xml,ns):return True
-        time.sleep(max(1,SETTLE/2))
+        if i<3:
+            time.sleep(3)
+            continue
+        # The external Chrome first-run is not a Kwai login method.
+        # One bounded attempt at native login; then allow the native chooser to settle.
+        if i==3:
+            q=login_target(root,ns)
+            if q is not None:
+                log('KWAI_KW02_NATIVE_LOGIN_TARGET_ID='+rid(q))
+                tap_xy(q,tag+'-login')
+                xml,root,ns=state(f'{tag}-login-result-{i}')
+                if success(xml,ns):return True
+        time.sleep(3)
     return False
 
 if os.environ.get('KWAI_KW02_PRESERVE_FOREGROUND') == '1':
@@ -258,8 +277,11 @@ for i in range(12):
     if success(xml,ns):log('SEMANTIC_LOGIN_ROUTE=PASS_LATE');sys.exit(0)
     if clear_known_gate(root,ns):continue
     if i in {2,5,8}:
-        q=login_target(root,ns) or profile_target(root,ns)
-        if q:tap_xy(q,'late-semantic-target')
+        p=profile_target(root,ns)
+        if p is not None:
+            tap_xy(p,'late-semantic-profile')
+        else:
+            log('KWAI_KW02_LATE_SKIP_EXTERNAL_LOGIN=1')
     time.sleep(max(1,SETTLE/2))
 
 Path('semantic-activities.txt').write_text(adb('shell','dumpsys','activity','activities').stdout,encoding='utf-8')
