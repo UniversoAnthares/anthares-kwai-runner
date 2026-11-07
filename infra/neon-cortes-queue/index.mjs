@@ -127,8 +127,8 @@ async function kwaiAction(action,b,actor){
  if(action==='kwai-enqueue'){
   if(actor.role!=='producer'||actor.workflow!=='cortes-kwai-dispatch-refill.yml')
    return{ok:false,error:'KWAI_PRODUCER_IDENTITY_REQUIRED'};
-  if(process.env.CORTES_KWAI_CLOUD_PUBLISH_ENABLED!=='1')
-   return{ok:false,error:'KWAI_PUBLISHER_NOT_ENABLED'};
+  // Enqueue is OIDC-producer-only. The publication switch remains enforced
+  // at START, while safe new-source jobs can be prepared independently.
   const source=String(b.source_id||''),segment=String(b.segment_id||'');
   const id=String(b.id||''),media=String(b.video_url||'');
   const start=Number(b.source_start),end=Number(b.source_end);
@@ -152,7 +152,7 @@ async function kwaiAction(action,b,actor){
    "source_start,source_end,duration_class,payload) "+
    "SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb "+
    "WHERE NOT EXISTS (SELECT 1 FROM cortes_publications u "+
-   "WHERE u.target_key=$3 AND u.status='uncertain') "+
+   "WHERE u.target_key=$3 AND u.status='uncertain' AND u.source_id=$6) "+
    "AND NOT EXISTS (SELECT 1 FROM cortes_publications p WHERE "+
    "p.target_key=$3 AND p.source_id=$6 AND p.source_start<$8 "+
    "AND p.source_end>$7 AND p.status<>'failed') "+
@@ -173,8 +173,6 @@ async function kwaiAction(action,b,actor){
  }
  if(actor.role!=='kwai-publisher'||actor.workflow!=='cortes-kwai-cloud-publisher.yml')
   return{ok:false,error:'KWAI_PUBLISHER_ROLE_REQUIRED'};
- if(process.env.CORTES_KWAI_CLOUD_PUBLISH_ENABLED!=='1')
-  return{ok:false,error:'KWAI_PUBLISHER_NOT_ENABLED'};
  if(b.target_key!==KWAI_TARGET||b.expected_account!=='lucasrosalem')
   return{ok:false,error:'KWAI_ACCOUNT_IDENTITY_MISMATCH'};
  const owner='kwai-cloud:'+actor.workflow;
@@ -182,18 +180,28 @@ async function kwaiAction(action,b,actor){
   const seconds=Number(b.lease_seconds||180);
   if(!Number.isSafeInteger(seconds)||seconds<60||seconds>600)
    return{ok:false,error:'KWAI_TTL_INVALID'};
-  const sql="WITH pick AS (SELECT id FROM cortes_publications "+
-   "WHERE target_key=$1 AND status='queued' AND publication_started_at IS NULL AND "+
-   "NOT EXISTS (SELECT 1 FROM cortes_publications u WHERE "+
-   "u.target_key=$1 AND u.status='uncertain') "+
-   "ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1) "+
+  // Historical UNCERTAIN rows remain quarantined. A new master/source is
+  // eligible only when no unresolved item shares its source identity, and no
+  // earlier active or confirmed job overlaps its exact source interval.
+  // FOR UPDATE SKIP LOCKED plus status CAS prevents dual consumers.
+  const sql="WITH pick AS (SELECT p.id FROM cortes_publications p "+
+   "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
+   "AND NOT EXISTS (SELECT 1 FROM cortes_publications u WHERE "+
+   "u.target_key=$1 AND u.status='uncertain' AND u.source_id=p.source_id) "+
+   "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE "+
+   "d.target_key=$1 AND d.id<>p.id AND d.status<>'failed' AND "+
+   "((d.source_id=p.source_id AND d.source_start<p.source_end AND d.source_end>p.source_start) "+
+   "OR d.media_sha256=p.media_sha256) AND "+
+   "(d.status IN ('leased','started','confirmed','uncertain') OR "+
+   "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id)))) "+
+   "ORDER BY p.created_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1) "+
    "UPDATE cortes_publications p SET status='leased',lease_owner=$2,"+
    "lease_generation=p.lease_generation+1,"+
    "lease_until=now()+($3::integer * interval '1 second'),updated_at=now() "+
-   "FROM pick WHERE p.id=pick.id AND p.status='queued' "+
+   "FROM pick WHERE p.id=pick.id AND p.status='queued' AND p.publication_started_at IS NULL "+
    "RETURNING p.id,p.target_key,p.payload,p.media_sha256,p.lease_generation,p.lease_until";
   const rows=await query(sql,[KWAI_TARGET,owner,seconds]);
-  return{ok:true,job:rows[0]||null,uncertain_gate:'zero_required'};
+  return{ok:true,job:rows[0]||null,uncertain_gate:'same_source_quarantined'};
  }
  const id=String(b.id||''),gen=Number(b.lease_generation);
  if(!id||id.length>200||!Number.isSafeInteger(gen)||gen<1)
@@ -210,6 +218,8 @@ async function kwaiAction(action,b,actor){
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_RENEW_STALE_FENCE'};
  }
  if(action==='kwai-start'){
+  if(process.env.CORTES_KWAI_CLOUD_PUBLISH_ENABLED!=='1')
+   return{ok:false,error:'KWAI_PUBLISHER_NOT_ENABLED'};
   // Two existing database triggers atomically reserve account and platform caps.
   // A second reservation here would double-count the platform:kwai quota.
   const sql="UPDATE cortes_publications p SET status='started',"+
