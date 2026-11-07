@@ -136,6 +136,31 @@ else:
     adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(2)
 state,ns=wait_password_or_challenge()
 if state=='challenge': print('KWAI_LOGIN_CHALLENGE_AFTER_ACCOUNT'); raise SystemExit(6)
+if state=='stuck':
+    safe_form_inventory(ns,'AFTER_NATIVE_NEXT')
+    visible=' '.join(((n.get('text') or '')+' '+(n.get('content-desc') or '')).casefold() for n in ns)
+    for key,terms in (
+        ('INVALID_ACCOUNT',('invalid email','invalid address','email is invalid','endereço inválido')),
+        ('ACCOUNT_NOT_FOUND',('account not found','no account','account does not exist','conta inexistente')),
+        ('AUTH_NETWORK_FAILURE',('network error','network unavailable','connection failed','try again later','erro de rede')),
+        ('EXCESSIVE_ATTEMPTS',('too many attempts','try again tomorrow','many requests','muitas tentativas')),
+    ):
+        if any(t in visible for t in terms):
+            print('KWAI_ACCOUNT_NEXT_FAILURE='+key,flush=True)
+            raise SystemExit(7)
+    # Some builds keep the suggestion layer over Next after the IME closes.
+    # Try the native keyboard submit action without changing the identifier.
+    print('KWAI_ACCOUNT_NEXT_RECOVERY=IME_SUBMIT',flush=True)
+    adb('shell','input','keyevent','KEYCODE_ENTER')
+    state,ns=wait_password_or_challenge(5)
+    if state=='stuck':
+        safe_form_inventory(ns,'AFTER_IME_SUBMIT')
+        print('KWAI_ACCOUNT_NEXT_RECOVERY=DIRECT_BUTTON_RETRY',flush=True)
+        candidate=find_semantic_control(ns,('btn_next','next_button'))
+        if candidate is not None and candidate.get('enabled')!='false':
+            tap(candidate)
+            state,ns=wait_password_or_challenge(5)
+        if state=='stuck':safe_form_inventory(ns,'AFTER_DIRECT_RETRY')
 if state!='password':
     # Some builds require choosing password login explicitly from the account step.
     alt=exact_button(ns,('Use password','Log in with password','Login with password','Entrar com senha','Password login','Other methods'))
