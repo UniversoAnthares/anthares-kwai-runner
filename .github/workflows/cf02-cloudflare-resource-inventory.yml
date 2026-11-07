@@ -89,7 +89,7 @@ jobs:
             name=x
             base=ACC+'/workers/scripts/'+urllib.parse.quote(name,safe='')
             details={}
-            queries=[('SCHEDULE','/schedules'),('DEPLOYMENTS','/deployments'),('VERSIONS','/versions?per_page=100'),('SUBDOMAIN','/subdomain'),('BINDINGS','/script-settings')]
+            queries=[('SCHEDULE','/schedules'),('DEPLOYMENTS','/deployments'),('VERSIONS','/versions?per_page=100'),('SUBDOMAIN','/subdomain'),('BINDINGS','/settings')]
             for key,suffix in queries:
               j,e=req(base+suffix)
               if e:
