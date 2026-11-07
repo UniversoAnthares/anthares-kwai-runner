@@ -88,6 +88,30 @@ def day_analytics(cloudflare_token, day):
     }
 
 
+def day_do_sql_analytics(cloudflare_token, day):
+    query = """query($accountTag:String!,$day:Date){
+      viewer {accounts(filter:{accountTag:$accountTag}){
+        durableObjectsPeriodicGroups(filter:{date:$day},limit:10000){
+          dimensions{date namespaceId}sum{rowsRead rowsWritten}
+        }
+      }}
+    }"""
+    data = http(GRAPH, cloudflare_token, {"query": query, "variables": {
+        "accountTag": CF_ACCOUNT, "day": day.isoformat()}})
+    if data.get("errors"):
+        raise RuntimeError("CF14_DO_SQL_GRAPHQL_INVALID")
+    accounts = (((data.get("data") or {}).get("viewer") or {}).get("accounts") or [])
+    if len(accounts) != 1:
+        raise RuntimeError("CF14_DO_SQL_ACCOUNT_MISMATCH")
+    rows = accounts[0].get("durableObjectsPeriodicGroups")
+    if not isinstance(rows, list) or len(rows) >= 10000:
+        raise RuntimeError("CF14_DO_SQL_DATA_INCOMPLETE")
+    return {
+        "do_sql_rows_read": sum(int((r.get("sum") or {}).get("rowsRead") or 0) for r in rows),
+        "do_sql_rows_written": sum(int((r.get("sum") or {}).get("rowsWritten") or 0) for r in rows),
+    }
+
+
 def probe_summaries(gh_token):
     records = {}
     base = "/repos/" + REPO + "/issues/" + str(QUOTA_ISSUE) + "/comments"
@@ -150,12 +174,20 @@ def main():
         return
     summaries = probe_summaries(gh_token)
     days = [first + dt.timedelta(days=i) for i in range(7)]
-    rows = [day_analytics(cf_token, day) for day in days]
+    rows = []
+    for day in days:
+        row = day_analytics(cf_token, day)
+        row.update(day_do_sql_analytics(cf_token, day))
+        rows.append(row)
     failures = []
     for row in rows:
         date = row["utc_day"]
         if row["workers_requests"] >= 30000:
             failures.append(date + ":quota_30000")
+        if row["do_sql_rows_read"] >= 5000000:
+            failures.append(date + ":do_sql_rows_read_limit")
+        if row["do_sql_rows_written"] >= 100000:
+            failures.append(date + ":do_sql_rows_written_limit")
         if row["worker_errors"] != 0:
             failures.append(date + ":worker_errors")
         sample = summaries.get(date)
