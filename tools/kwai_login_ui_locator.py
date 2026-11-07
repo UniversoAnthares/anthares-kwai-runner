@@ -12,6 +12,7 @@ from anthares_mobile.ui_state import parse as semantic_parse
 
 BOUNDS = re.compile(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]")
 EMAIL = re.compile(r"e[ -]?mail|correio eletr[oô]nico", re.I)
+PHONE = re.compile(r"phone|telefone|celular", re.I)
 LOGIN_CONTEXT = re.compile(
     r"log[ -]?in|sign[ -]?in|entrar|password|senha|verification|verifica[cç][aã]o|"
     r"phone number|n[uú]mero de telefone|e[ -]?mail|account login",
@@ -74,7 +75,16 @@ def native_chooser_visible(nodes,xml_text=""):
         for n in nodes
     ):
         return True
-    return any(not (n.get("class") or "").endswith("EditText") and EMAIL.fullmatch(label(n)) and bounds(n) for n in nodes) or (semantic_action(xml_text,"email") is not None and not any((n.get("class") or "").endswith("EditText") for n in nodes))
+    # This Kwai package can expose Phone first, with Email under its nested
+    # native login options. Require the official login_container as context.
+    phone_only=any(
+        "login_container" in (n.get("resource-id") or "")
+        for n in nodes
+    ) and any(
+        "login_platform_expand_text" in (n.get("resource-id") or "")
+        and PHONE.search(label(n)) and bounds(n) for n in nodes
+    )
+    return phone_only or any(not (n.get("class") or "").endswith("EditText") and EMAIL.fullmatch(label(n)) and bounds(n) for n in nodes) or (semantic_action(xml_text,"email") is not None and not any((n.get("class") or "").endswith("EditText") for n in nodes))
 
 
 def login_surface_kind(nodes, xml_text=""):
