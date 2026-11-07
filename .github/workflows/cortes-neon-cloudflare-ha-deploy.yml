@@ -1,11 +1,23 @@
 name: CORTES Queue - Deploy Cloudflare/Neon independent HA
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'infra/cloudflare-cortes-queue-ha/**'
-      - '.github/workflows/cortes-neon-cloudflare-ha-deploy.yml'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact reviewed Git SHA (40 lowercase hex characters)'
+        required: true
+        type: string
+      mode:
+        description: 'Approved release or incident recovery'
+        required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - emergency
+      incident_ref:
+        description: 'Mandatory incident reference for emergency recovery'
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -13,6 +25,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
@@ -20,6 +33,32 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require approved SHA and incident-scoped emergency recovery
+        shell: bash
+        env:
+          APPROVED_SHA: ${{ inputs.release_sha }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          INCIDENT_REF: ${{ inputs.incident_ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$APPROVED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'RELEASE_SHA_INVALID'; exit 1; }
+          test "$(git rev-parse HEAD)" = "$APPROVED_SHA" || { echo 'RELEASE_SHA_MISMATCH'; exit 1; }
+          main_sha="$(curl -fsS --retry 0 --max-time 20 -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPOSITORY/git/ref/heads/main" | python3 -c 'import json,sys; print(json.load(sys.stdin)["object"]["sha"])')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          if [[ "$RELEASE_MODE" == release ]]; then
+            test "$APPROVED_SHA" = "$main_sha" || { echo 'RELEASE_MAIN_MOVED'; exit 1; }
+          elif [[ "$RELEASE_MODE" == emergency ]]; then
+            test -n "$INCIDENT_REF" || { echo 'EMERGENCY_INCIDENT_REQUIRED'; exit 1; }
+            git merge-base --is-ancestor "$APPROVED_SHA" "$main_sha" || { echo 'EMERGENCY_SHA_OUTSIDE_MAIN'; exit 1; }
+          else
+            echo 'RELEASE_MODE_INVALID'; exit 1
+          fi
+          echo "RELEASE_APPROVED_SHA=$APPROVED_SHA mode=$RELEASE_MODE"
       - name: Fail closed when Cloudflare credential is unavailable
         shell: bash
         run: |
