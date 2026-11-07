@@ -1,6 +1,59 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# Canonical KW-05 cloud route. Never fall back to legacy Cloudflare authority.
+if [ "${KWAI_QUEUE_BACKEND:-}" = "neon" ]; then
+  op="${1:?usage: kwai_queue_state.sh started|renew|complete|fail}"
+  value="${2:-}"
+  : "${KWAI_QUEUE_JOB_ID:?}"
+  : "${KWAI_LEASE_GENERATION:?}"
+  file="$(mktemp)"
+  trap 'rm -f "$file"' EXIT
+  case "$op" in
+    started|renew|fail)
+      python3 - "$file" "$op" "$KWAI_QUEUE_JOB_ID" "$KWAI_LEASE_GENERATION" "$value" <<'PY'
+import json,sys
+path,op,job,gen,val=sys.argv[1:]
+d={'id':job,'lease_generation':int(gen)}
+if op=='renew': d['lease_seconds']=int(val or 600)
+with open(path,'w',encoding='utf8') as f:json.dump(d,f)
+PY
+      action="$op"
+      [ "$action" = "started" ] && action=start
+      python3 tools/cortes_kwai_neon_cloud.py "$action" --json "@$file"
+      ;;
+    complete)
+      : "${KWAI_NEON_ATTESTATION_JSON:?independent attestation required}"
+      python3 - "$file" "$KWAI_NEON_ATTESTATION_JSON" "$KWAI_QUEUE_JOB_ID" "$KWAI_LEASE_GENERATION" "${KWAI_MEDIA_SHA256:-}" "$value" <<'PY'
+import base64,json,sys
+out,source,job,generation,sha,legacy=sys.argv[1:]
+with open(source,encoding='utf8') as f: proof=json.load(f)
+assert proof.get('account')=='lucasrosalem'
+assert proof.get('media_sha256')==sha and len(sha)==64
+assert proof.get('verifier_id')=='kwai-independent-account-readback-v1'
+assert proof.get('attestation_hmac') and proof.get('public_url') and proof.get('remote_id')
+if legacy:
+ d=json.loads(base64.urlsafe_b64decode(legacy+'='*(-len(legacy)%4)))
+ assert d.get('job_id')==job and d.get('media_sha256')==sha
+ with open(out,'w',encoding='utf8') as f:
+  json.dump({'id':job,'lease_generation':int(generation),
+             'remote_id':proof['remote_id'],'confirmation_evidence':proof},f)
+PY
+      python3 tools/cortes_kwai_neon_cloud.py confirm --json "@$file"
+      ;;
+    reconcile) echo KWAI_NEON_RECONCILIATION_REQUIRES_EXTERNAL_READBACK >&2; exit 90 ;;
+    *) echo KWAI_NEON_QUEUE_OP_INVALID >&2; exit 44 ;;
+  esac
+  echo "STATE=CENTRAL_${op^^}_ACK"
+  exit 0
+fi
+# All publication-capable consumers of the legacy queue are retired.
+if [ "${KWAI_KW05_LEGACY_PUBLISH_DISABLED:-1}" = "1" ]; then
+  echo KWAI_LEGACY_CLOUDFLARE_QUEUE_DISABLED >&2
+  exit 91
+fi
+
+
 OP="${1:?usage: kwai_queue_state.sh started|complete|fail|reconcile|renew [value]}"
 VALUE="${2:-}"
 CONTROL_URL="${ANTHARES_CONTROL_URL:-https://anthares-control.anthares1.workers.dev}"
