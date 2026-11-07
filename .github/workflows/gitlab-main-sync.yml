@@ -3,6 +3,14 @@ name: Sync GitHub main to GitLab
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdx'
+      - 'docs/**'
+      - 'test-hub/**'
+      - 'leases/**'
+      - 'lease/**'
+      - 'evidence/**'
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
