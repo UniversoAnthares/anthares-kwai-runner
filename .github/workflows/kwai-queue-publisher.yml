@@ -96,7 +96,8 @@ jobs:
 
   publish:
     needs: control_preflight
-    if: ${{ needs.control_preflight.outputs.ready == 'true' && !((github.event_name == 'workflow_dispatch' && inputs.mode == 'mobile_auth') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]'))) }}
+    # KW-05: legacy Cloudflare authority retired for publication; mobile-auth jobs remain available.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:

@@ -1,0 +1,87 @@
+name: Kwai Canonical Neon Cloud Publisher
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Status read-only or hosted Android pre-publication
+        type: choice
+        options:
+          - status
+          - stage
+        default: status
+        required: true
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: anthares-kwai-cloud-neon-exclusive
+  cancel-in-progress: false
+jobs:
+  canonical-state:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      clear: ${{ steps.gate.outputs.clear }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read Neon publication authority, refuse any uncertain replay
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/cortes_kwai_neon_cloud.py status | tee "$RUNNER_TEMP/kwai-neon-status.txt"
+          if grep -qx 'KWAI_NEON_UNCERTAIN=0' "$RUNNER_TEMP/kwai-neon-status.txt"; then
+            echo clear=true >> "$GITHUB_OUTPUT"
+            echo KWAI_NEON_CANONICAL_LEDGER_UNCERTAIN_FREE=1
+          else
+            echo clear=false >> "$GITHUB_OUTPUT"
+            echo KWAI_NEON_HOLD_UNCERTAIN=1
+          fi
+  android-stage:
+    needs: canonical-state
+    if: ${{ inputs.mode == 'stage' && needs.canonical-state.outputs.clear == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 24
+    env:
+      KWAI_EXPECTED_ACCOUNT: lucasrosalem
+      KWAI_SESSION_ENCRYPTION_KEY: ${{ secrets.KWAI_SESSION_KEY }}
+      KWAI_CLOUD_PUBLISH_ENABLED: ${{ vars.CORTES_KWAI_CLOUD_PUBLISH_ENABLED }}
+      KWAI_INDEPENDENT_VERIFIER_ENABLED: ${{ vars.CORTES_KWAI_INDEPENDENT_VERIFIER_ENABLED }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require authentication and independent verification prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$KWAI_CLOUD_PUBLISH_ENABLED" = 1
+          test "$KWAI_INDEPENDENT_VERIFIER_ENABLED" = 1
+          test -n "$KWAI_SESSION_ENCRYPTION_KEY"
+          curl -fsSL --retry 2 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          unzip -q kwai-vault.zip -d kwai-vault
+          python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
+          test -s kwai-session.enc
+      - name: Enable hosted Android KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Canonical Neon lease, identity, staging, fenced release before publish
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            bash tools/cortes_kwai_cloud_stage.sh
+      - name: Destroy ephemeral queue receipt
+        if: always()
+        shell: bash
+        run: |
+          rm -f kwai-neon-lease.json kwai-media-ready.json kwai-session.enc
