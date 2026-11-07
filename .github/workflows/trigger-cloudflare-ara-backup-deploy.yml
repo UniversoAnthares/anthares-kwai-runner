@@ -5,6 +5,20 @@ name: Trigger Cloudflare ARA deploy
 # never replace the proxy and silently resume Durable Object SQL consumption.
 on:
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact reviewed Git SHA from main history'
+        required: true
+        type: string
+      incident_ref:
+        description: 'Incident authorizing replacement of stateless proxy'
+        required: true
+        type: string
+      acknowledge_override:
+        description: 'Authorize stateful override of the same Cloudflare Worker'
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -12,9 +26,21 @@ permissions:
 
 jobs:
   dispatch:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.acknowledge_override == true }}
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch canonical Cloudflare deployment
+      - name: Dispatch reviewed stateful emergency
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run cloudflare-ara-backup-deploy.yml --repo UniversoAnthares/anthares-kwai-runner --ref main
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          INCIDENT_REF: ${{ inputs.incident_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          test -n "$INCIDENT_REF" || exit 1
+          gh workflow run cloudflare-ara-backup-deploy.yml \
+            --repo UniversoAnthares/anthares-kwai-runner --ref main \
+            -f release_sha="$RELEASE_SHA" \
+            -f incident_ref="$INCIDENT_REF" \
+            -f acknowledge_override=true

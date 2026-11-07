@@ -1,6 +1,21 @@
 name: Cloudflare ARA Canonical Control Deploy
+# The legacy stateful Worker shares its name with the active stateless proxy.
 on:
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact 40-character reviewed SHA from main history'
+        required: true
+        type: string
+      incident_ref:
+        description: 'Incident authorizing legacy stateful recovery'
+        required: true
+        type: string
+      acknowledge_override:
+        description: 'I authorize replacing the stateless proxy with the stateful Worker'
+        required: true
+        default: false
+        type: boolean
 concurrency:
   # Both Cloudflare workflows deploy the same Worker name; never cancel an in-flight deploy.
   group: anthares-ara-backup-deploy
@@ -9,6 +24,7 @@ permissions:
   contents: read
 jobs:
   deploy:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.acknowledge_override == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -16,6 +32,25 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate explicit incident and reviewed code SHA
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          INCIDENT_REF: ${{ inputs.incident_ref }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'STATEFUL_SHA_INVALID'; exit 1; }
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA" || { echo 'STATEFUL_SHA_MISMATCH'; exit 1; }
+          test -n "$INCIDENT_REF" || { echo 'STATEFUL_INCIDENT_REQUIRED'; exit 1; }
+          git rev-parse --verify refs/remotes/origin/main >/dev/null
+          git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main || {
+            echo 'STATEFUL_SHA_OUTSIDE_MAIN_HISTORY'; exit 1;
+          }
+          echo "STATEFUL_EMERGENCY_APPROVED_SHA=$RELEASE_SHA"
       - name: Validate Cloudflare-only source
         shell: bash
         run: |
