@@ -19,7 +19,7 @@ BASE="https://anthares-control.anthares1.workers.dev"
 AUDIENCE=BASE
 ACCOUNT="lucasrosalem"
 MAX_BYTES=17_900_000
-EXPECTED_VERSION="2026-10-15-publisher-target-v17"
+EXPECTED_VERSION="2026-10-17-physical-android-v18"
 
 def get_json(url,headers=None,data=None,timeout=20):
     safe_headers={"User-Agent":"curl/8.5.0","Accept":"application/json"}
