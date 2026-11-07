@@ -120,8 +120,20 @@ async function kwaiAction(action,b,actor){
    "payload->>'segment_id' AS segment_id,payload->>'title' AS title "+
    "FROM cortes_publications WHERE target_key=$1 AND status='uncertain' "+
    "ORDER BY source_id,source_start,id LIMIT 101",[KWAI_TARGET]);
-  return{ok:true,status:'RECONCILE_REQUIRED',target_key:KWAI_TARGET,
-   records:rows.slice(0,100),truncated:rows.length>100,safe_to_retry:false};
+  const eligible=await query("SELECT count(*)::int AS n FROM cortes_publications p "+
+   "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
+   "AND NOT EXISTS (SELECT 1 FROM cortes_publications u WHERE "+
+   "u.target_key=$1 AND u.status='uncertain' AND u.source_id=p.source_id) "+
+   "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE "+
+   "d.target_key=$1 AND d.id<>p.id AND d.status<>'failed' AND "+
+   "((d.source_id=p.source_id AND d.source_start<p.source_end AND d.source_end>p.source_start) "+
+   "OR d.media_sha256=p.media_sha256) AND "+
+   "(d.status IN ('leased','started','confirmed','uncertain') OR "+
+   "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))",[KWAI_TARGET]);
+  return{ok:true,status:rows.length?'RECONCILE_REQUIRED':'READY',target_key:KWAI_TARGET,
+   records:rows.slice(0,100),truncated:rows.length>100,
+   eligible_count:Number(eligible[0]?.n||0),
+   safe_to_retry:false};
  }
  // Cloud refill is a distinct producer. Existing UNCERTAIN work must stay held.
  if(action==='kwai-enqueue'){
