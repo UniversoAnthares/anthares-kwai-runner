@@ -1,0 +1,80 @@
+name: CF-03 live request route attribution
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  routes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+      CI: "true"
+    steps:
+      - name: Sample three Workers without printing request credentials
+        shell: bash
+        run: |
+          python - <<'PY'
+          import subprocess,os,signal,time,threading,json,collections,urllib.parse,re
+          targets=['anthares-ara-neon-standby','anthares-ara-reserva','anthares-ara-backup']
+          token=os.getenv('CLOUDFLARE_API_TOKEN','')
+          if len(token)<10:raise SystemExit('CF03_AUTH_MISSING')
+          pids={};samples={};errs={}
+          def drain(proc,name,is_err=False):
+            sink=errs[name] if is_err else samples[name]
+            for line in iter(proc.stderr.readline if is_err else proc.stdout.readline,''):
+              if is_err:
+                t=line.strip()
+                if len(sink)<20 and ('ERROR' in t or 'failed' in t.lower() or 'permission' in t.lower() or 'connected' in t.lower()):
+                  sink.append(t[:240].replace(token,'[REDACTED]'))
+                continue
+              try:
+                event=json.loads(line.strip())
+              except Exception:continue
+              req=((event.get('event') or {}).get('request') or {})
+              u=urllib.parse.urlsplit(req.get('url') or '')
+              if u.scheme not in ('http','https'):continue
+              headers=req.get('headers') or {}
+              ua=headers.get('user-agent') or headers.get('User-Agent') or ''
+              if 'AntharesRemoteAgent' in ua:client='AntharesRemoteAgent'
+              elif 'github' in ua.lower() or 'actions' in ua.lower():client='GitHubActions'
+              elif 'wrangler' in ua.lower():client='Wrangler'
+              elif 'curl' in ua.lower():client='curl'
+              elif 'python' in ua.lower():client='Python'
+              elif 'cloudflare' in ua.lower():client='Cloudflare'
+              elif 'Mozilla' in ua:client='Browser'
+              elif ua:client='other-user-agent'
+              else:client='none'
+              sink.append({'path':u.path,'method':req.get('method'),'host':u.hostname,'ua_class':client,
+                'status':((event.get('event') or {}).get('response') or {}).get('status'),
+                'outcome':event.get('outcome')})
+          try:
+            for name in targets:
+              samples[name]=[];errs[name]=[]
+              cmd=['npx','--yes','wrangler@4.154.0','tail',name,'--format','json','--sampling-rate','1']
+              p=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
+                env=os.environ.copy(),start_new_session=True,bufsize=1)
+              pids[name]=p
+              threading.Thread(target=drain,args=(p,name,False),daemon=True).start()
+              threading.Thread(target=drain,args=(p,name,True),daemon=True).start()
+            time.sleep(48)
+          finally:
+            for name,p in pids.items():
+              try:os.killpg(p.pid,signal.SIGTERM)
+              except ProcessLookupError:pass
+              except Exception:pass
+            time.sleep(1)
+            for name,p in pids.items():
+              if p.poll() is None:
+                try:os.killpg(p.pid,signal.SIGKILL)
+                except:pass
+          for name in targets:
+            events=samples[name]
+            bypath=collections.Counter((r['method'],r['path'],r['ua_class'],str(r['status']),r['outcome']) for r in events)
+            byhost=collections.Counter(r['host'] for r in events)
+            print('CF03_TAIL',json.dumps({'worker':name,'events':len(events),'hosts':byhost,
+              'routes':[{'method':a,'path':b,'client':c,'status':d,'outcome':e,'count':n}
+                  for (a,b,c,d,e),n in bypath.most_common(40)],
+              'errors':errs[name][:10]},sort_keys=True))
+          PY
