@@ -47,6 +47,40 @@ def exact_button(ns,words):
         if t in pats and bounds(n): c.append(n)
     return c[-1] if c else None
 
+def safe_form_inventory(ns,stage):
+    """Resource and control semantics only: never print field text or credentials."""
+    known=('next','continue','login','log in','sign in','submit','send','code','password','email','phone','check','agree','entrar','avançar','continuar','senha','verifica','confirmar','obter','enviar')
+    fields=edits(ns)
+    print('KWAI_FORM_%s_FIELDS=%d' % (stage,len(fields)),flush=True)
+    for i,n in enumerate(fields[:5]):
+        print('KWAI_FORM_%s_FIELD_%d=type:%s password:%s enabled:%s clickable:%s id:%s' %
+            (stage,i,(n.get('class') or '').split('.')[-1],n.get('password'),n.get('enabled'),n.get('clickable'),(n.get('resource-id') or '')[-90:]),flush=True)
+    count=0
+    for n in ns:
+        label=((n.get('text') or '')+' '+(n.get('content-desc') or '')).strip().casefold()
+        rid=(n.get('resource-id') or '').casefold()
+        cls=(n.get('class') or '').split('.')[-1]
+        if not bounds(n) or cls=='EditText':continue
+        if not (n.get('clickable')=='true' or cls in ('Button','CheckBox','TextView')):continue
+        relevant=next((w.replace(' ','_') for w in known if w in label or w in rid),None)
+        if not relevant:continue
+        print('KWAI_FORM_%s_CTL_%d=kind:%s id:%s enabled:%s clickable:%s checked:%s class:%s' %
+            (stage,count,relevant,rid[-85:],n.get('enabled'),n.get('clickable'),n.get('checked'),cls),flush=True)
+        count+=1
+        if count>=24:break
+
+def find_semantic_control(ns,words):
+    target=tuple(w.casefold() for w in words)
+    choices=[]
+    for n in ns:
+        idstr=(n.get('resource-id') or '').casefold()
+        label=((n.get('text') or '')+' '+(n.get('content-desc') or '')).casefold()
+        if not bounds(n) or n.get('enabled')=='false':continue
+        if any(w in label or w in idstr for w in target):
+            p=bounds(n)
+            choices.append((int(n.get('clickable')=='true'),int(n.get('class','').endswith('Button')),p[1],n))
+    return sorted(choices,key=lambda x:(x[0],x[1],x[2]),reverse=True)[0][-1] if choices else None
+
 def challenge(ns):
     t=' '.join(txt(n) for n in ns)
     if any(x in t for x in ('verification code','enter code','code sent','código de verificação','digite o código','verify it\'s you','verify its you','captcha')): return True
@@ -85,11 +119,16 @@ if email_field is None:
     print('KWAI_ACCOUNT_FIELD_NOT_VERIFIED')
     raise SystemExit(3)
 if not clear_and_type(email_field,LOGIN): raise SystemExit(3)
+ns=snap()
+typed=any(LOGIN.casefold() in (n.get('text') or '').casefold() for n in edits(ns))
+print('KWAI_ACCOUNT_INPUT_COMMITTED='+str(typed),flush=True)
+safe_form_inventory(ns,'WITH_KEYBOARD')
 # Dismiss Android soft keyboard before choosing the native continuation control.
 adb('shell','input','keyevent','KEYCODE_BACK'); time.sleep(1)
 ns=snap()
+safe_form_inventory(ns,'AFTER_IME_DISMISS')
 continue_labels=('Next','Continue','Avançar','Continuar','Log in','Login','Sign in','Entrar','Send code','Get code','Submit','Use password')
-b=exact_button(ns,continue_labels)
+b=exact_button(ns,continue_labels) or find_semantic_control(ns,('btn_next','next_button','submit','continue','send_code','get_code','login_button','email_next','sendcode'))
 print('KWAI_ACCOUNT_CONTINUE_PRESENT='+str(bool(b)))
 if b and b.get('enabled')!='false':
     tap(b)
