@@ -36,14 +36,18 @@ jobs:
               except urllib.error.HTTPError as e:
                 if e.code in (429,500,502,503) and retry<2:
                   time.sleep(2*(retry+1));continue
-                return None,'HTTP_'+str(e.code)
+                try:
+                  body=json.loads(e.read(2048))
+                  public=[str(item.get('code',''))+':'+str(item.get('message',''))[:110] for item in (body.get('errors') or [])[:2] if isinstance(item,dict)]
+                except Exception:public=[]
+                return None,'HTTP_'+str(e.code)+(':'+','.join(public) if public else '')
               except Exception as e:return None,type(e).__name__
             return None,'RETRY_EXHAUSTED'
-          def allpages(path,limit=20):
+          def allpages(path,limit=20,per_page=100):
             out=[]
             for page in range(1,limit+1):
               sep='&' if '?' in path else '?'
-              j,err=req(path+sep+'page='+str(page)+'&per_page=100')
+              j,err=req(path+sep+'page='+str(page)+'&per_page='+str(per_page))
               if err:return out,err
               result=j.get('result')
               if isinstance(result,list):rows=result
@@ -52,7 +56,7 @@ jobs:
               out.extend(rows)
               ri=j.get('result_info') or {}
               tp=ri.get('total_pages')
-              if (tp is not None and page>=int(tp)) or (tp is None and len(rows)<100):break
+              if (tp is not None and page>=int(tp)) or (tp is None and len(rows)<per_page):break
             else:
               return out,'TRUNCATED_AFTER_'+str(limit)+'_PAGES'
             return out,None
@@ -72,7 +76,7 @@ jobs:
           }
           lists={}
           for key,path in paths.items():
-            data,err=allpages(path,limit=15)
+            data,err=allpages(path,limit=15,per_page=25 if key=='PAGES_PROJECTS' else 100)
             lists[key]=data
             show('TOTAL',{'resource':key,'count':len(data),'error':err})
             if err:errors.append((key,err))
