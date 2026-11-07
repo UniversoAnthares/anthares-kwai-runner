@@ -3,9 +3,7 @@ const handlers=new WeakMap();
 const healthSnapshots=new WeakMap();
 async function databaseHealth(env) {
  const current=healthSnapshots.get(env);
- if(current && (current.pending || current.expires > Date.now())) {
-  return current.pending || current.result;
- }
+ if(current && current.expires > Date.now()) return current.result;
  const pending=(async()=>{
   try {
    const {query}=await import("./database.mjs");
@@ -16,7 +14,7 @@ async function databaseHealth(env) {
    return {ok:false,error:"standby_database_unavailable"};
   }
  })();
- healthSnapshots.set(env,{pending,expires:0});
+ // Cross-request network promises are not shared between Cloudflare requests.
  const result=await pending;
  // Healthy schema existence changes rarely. Short TTL suppresses bursts
  // of identical checks; failed checks retry promptly.
