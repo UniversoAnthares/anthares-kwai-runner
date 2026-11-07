@@ -396,13 +396,32 @@ async function resolveDevice(env, device = DEFAULT_DEVICE) {
 }
 __name(resolveDevice, "resolveDevice");
 async function execute(env, type, args = {}, timeout = 30, device = DEFAULT_DEVICE) {
-  // ChatGPT sends commands only when requested; the agent's independent
-  // private issue queue becomes the primary control transport.
   if (env.ARA_PRIVATE_QUEUE_PRIMARY === "enabled") {
     return queueExecute(env, type, args, timeout, device);
   }
+  if (env.ARA_PRIVATE_QUEUE_PRIMARY === "push") {
+    if(device !== DEFAULT_DEVICE) throw new Error("cf06_unknown_device");
+    const t=Math.max(1,Math.min(Number(timeout)||30,120));
+    // Create the signed Neon job exactly once. Send repeated wake signals only
+    // while the command is in progress, with zero idle HTTP polling.
+    const running=controlJson(env,"/v1/mcp/execute",{
+      method:"POST",timeoutMs:Math.min(150000,(t+12)*1000),
+      body:{device_id:device,type,args,timeout_seconds:t,idempotency_key:"cfmcp-"+crypto.randomUUID()}
+    }).then(value=>({ok:true,value}),error=>({ok:false,error}));
+    for(let i=0;i<4;i++) {
+      await new Promise(resolve=>setTimeout(resolve,i===0?350:850));
+      try {await cf06Wake(env);} catch {}
+    }
+    const done=await running;
+    if(!done.ok) throw done.error;
+    return done.value;
+  }
   const active = await resolveDevice(env, device);
-  return controlJson(env, "/v1/mcp/execute", { method: "POST", timeoutMs: Math.min(15e4, (Number(timeout) + 12) * 1e3), body: { device_id: active, type, args, timeout_seconds: Math.max(1, Math.min(Number(timeout) || 30, 120)), idempotency_key: `cfmcp-${crypto.randomUUID()}` } });
+  return controlJson(env, "/v1/mcp/execute", { method: "POST",
+    timeoutMs: Math.min(150000, (Number(timeout) + 12) * 1000),
+    body: { device_id: active, type, args,
+      timeout_seconds: Math.max(1, Math.min(Number(timeout) || 30, 120)),
+      idempotency_key: "cfmcp-" + crypto.randomUUID() } });
 }
 __name(execute, "execute");
 var TOOLS = [
