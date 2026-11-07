@@ -122,8 +122,6 @@ async function kwaiAction(action,b,actor){
    "ORDER BY source_id,source_start,id LIMIT 101",[KWAI_TARGET]);
   const eligible=await query("SELECT count(*)::int AS n FROM cortes_publications p "+
    "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
-   "AND NOT EXISTS (SELECT 1 FROM cortes_publications u WHERE "+
-   "u.target_key=$1 AND u.status='uncertain' AND u.source_id=p.source_id) "+
    "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE "+
    "d.target_key=$1 AND d.id<>p.id AND d.status<>'failed' AND "+
    "((d.source_id=p.source_id AND d.source_start<p.source_end AND d.source_end>p.source_start) "+
@@ -163,9 +161,7 @@ async function kwaiAction(action,b,actor){
    "(id,dedupe_key,target_key,master_id,media_sha256,source_id,"+
    "source_start,source_end,duration_class,payload) "+
    "SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb "+
-   "WHERE NOT EXISTS (SELECT 1 FROM cortes_publications u "+
-   "WHERE u.target_key=$3 AND u.status='uncertain' AND u.source_id=$6) "+
-   "AND NOT EXISTS (SELECT 1 FROM cortes_publications p WHERE "+
+   "WHERE NOT EXISTS (SELECT 1 FROM cortes_publications p WHERE "+
    "p.target_key=$3 AND p.source_id=$6 AND p.source_start<$8 "+
    "AND p.source_end>$7 AND p.status<>'failed') "+
    "ON CONFLICT DO NOTHING RETURNING id,target_key,status",vals);
@@ -173,7 +169,15 @@ async function kwaiAction(action,b,actor){
   const same=await query(
    "SELECT id,target_key,status,source_id,source_start,source_end,"+
    "payload FROM cortes_publications WHERE id=$1 OR dedupe_key=$2 LIMIT 1",[id,id]);
-  if(same.length)return{ok:true,deduped:true,reason:'identity',job:same[0]};
+  if(same.length){
+   const j=same[0];
+   if(j.target_key!==KWAI_TARGET||j.source_id!==source||
+      String(j.source_start)!==String(start)||String(j.source_end)!==String(end)||
+      String(j.payload?.video_url||'')!==media||
+      String(j.payload?.media_sha256||'')!==String(b.media_sha256))
+     return{ok:false,error:'KWAI_DEDUPE_IDENTITY_COLLISION'};
+   return{ok:true,deduped:true,reason:'identity',job:j};
+  }
   const overlap=await query(
    "SELECT id,target_key,status,source_id,source_start,source_end,"+
    "payload FROM cortes_publications WHERE target_key=$1 AND "+
@@ -198,8 +202,6 @@ async function kwaiAction(action,b,actor){
   // FOR UPDATE SKIP LOCKED plus status CAS prevents dual consumers.
   const sql="WITH pick AS (SELECT p.id FROM cortes_publications p "+
    "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
-   "AND NOT EXISTS (SELECT 1 FROM cortes_publications u WHERE "+
-   "u.target_key=$1 AND u.status='uncertain' AND u.source_id=p.source_id) "+
    "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE "+
    "d.target_key=$1 AND d.id<>p.id AND d.status<>'failed' AND "+
    "((d.source_id=p.source_id AND d.source_start<p.source_end AND d.source_end>p.source_start) "+
