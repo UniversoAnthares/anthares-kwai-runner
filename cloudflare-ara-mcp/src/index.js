@@ -14,8 +14,11 @@ import { approvedTestTool, runApprovedTests } from "./approved-tests.mjs";
 import { ownerGithubConfigured, startOwnerGithub, finishOwnerGithub } from "./owner-github-auth.mjs";
 import { CLIENT_INSTRUCTIONS, DISCOVERY_REVISION, clientDiscovery } from "./client-discovery.mjs";
 var ORIGIN = "https://anthares-ara-mcp.anthares1.workers.dev";
-var CONTROL = "https://anthares-ara-vercel-reserve.vercel.app";
-var CONTROL_STANDBY = "https://anthares-ara-vercel-reserve-lucasyahn-6808.vercel.app";
+// The signed shared-Neon Worker is the active control plane. Two Vercel
+// endpoints remain ordered, quota-independent recovery routes for safe calls.
+var CONTROL = "https://anthares-ara-neon-standby.anthares1.workers.dev";
+var CONTROL_STANDBY = "https://anthares-ara-vercel-reserve.vercel.app";
+var CONTROL_TERTIARY = "https://anthares-ara-vercel-reserve-lucasyahn-6808.vercel.app";
 var DEFAULT_DEVICE = "DESKTOP-FTDK0HP";
 var FALLBACK_DEVICE = "DESKTOP-FTDK0HP-SYSTEM";
 var SCOPES = /* @__PURE__ */ new Set(["ara.read", "ara.write", "github.read", "github.write", "forgejo.read"]);
@@ -308,7 +311,7 @@ ${raw}`;
     return true;
   }
 };
-async function control(env,path,opts={}) {return requestControl({origins:[CONTROL,CONTROL_STANDBY,"https://anthares-ara-neon-standby.anthares1.workers.dev"],path,...opts,fetchImpl:(url,init)=>url.startsWith("https://anthares-ara-neon-standby.anthares1.workers.dev/")&&env.ARA_NEON_STANDBY?env.ARA_NEON_STANDBY.fetch(url,init):fetch(url,init),sign:(method,p,raw)=>st(env).signControl(method,p,raw)});}
+async function control(env,path,opts={}) {return requestControl({origins:[CONTROL,CONTROL_STANDBY,CONTROL_TERTIARY],path,...opts,fetchImpl:(url,init)=>url.startsWith(CONTROL+"/")&&env.ARA_NEON_STANDBY?env.ARA_NEON_STANDBY.fetch(url,init):fetch(url,init),sign:(method,p,raw)=>st(env).signControl(method,p,raw)});}
 __name(control, "control");
 async function controlJson(env, path, opts) {
   const r = await control(env, path, opts);
