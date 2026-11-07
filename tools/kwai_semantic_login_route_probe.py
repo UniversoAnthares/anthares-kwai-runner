@@ -146,6 +146,16 @@ def state(tag):
     ids={rid(n) for n in ns}
     unconnected=any('un_connected_network' in x for x in ids)
     log(f'STATE={tag} NODES={len(ns)} PID='+(adb('shell','pidof',PKG).stdout.strip() or 'none'))
+    if os.environ.get('KWAI_KW02_LOGIN_CONTROL_PROBE')=='1' and len(ns)<=35:
+        allowed=('email','phone','google','facebook','continue','login','log in','sign in','password','code','skip','verify','allow','agree','accept','profile','entrar','avançar','senha','cadastre','fechar','close','back')
+        for j,n in enumerate(ns[:35]):
+            identifier=(n.get('resource-id') or '')[-96:]
+            classname=(n.get('class') or '').split('.')[-1]
+            label=(n.get('text','')+' '+n.get('content-desc','')).casefold()
+            classification=next((v.replace(' ','_') for v in allowed if v in label or v in identifier.lower()),'other')
+            log('KWAI_KW02_LOGIN_NODE=%d stage:%s id:%s cls:%s enabled:%s clickable:%s kind:%s' %
+                (j,tag,identifier,classname,n.get('enabled'),n.get('clickable'),classification))
+
     log('HAS_ME='+str(int('id_home_bottom_tab_me' in ids))+' HAS_LOGIN_CONTAINER='+str(int('login_container' in ids))+' HAS_UNCONNECTED='+str(int(unconnected)))
     if unconnected:ensure_network('ui-unconnected')
     return xml,root,ns
