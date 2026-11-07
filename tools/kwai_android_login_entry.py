@@ -104,17 +104,44 @@ def main():
             print("KWAI_NATIVE_LOGIN_CHOOSER_ABSENT")
             return 3
         coords=method_coords(nodes,method) or (email_entry(nodes,xml_text) if method=="email" else None)
+        fallback_phone=False
+        if coords is None and method=="email" and os.environ.get("KWAI_KW02_EMAIL_NESTED")=="1":
+            coords=method_coords(nodes,"phone")
+            fallback_phone=coords is not None
+            if fallback_phone:print("KWAI_NATIVE_EMAIL_IN_PHONE_CHOOSER=1")
         if not coords:
             print("KWAI_NATIVE_LOGIN_METHOD_NOT_FOUND")
             return 3
         adb("shell","input","tap",str(coords[0]),str(coords[1]))
-        print("KWAI_NATIVE_LOGIN_METHOD_TAPPED="+method.upper())
-        for _ in range(5):
+        print("KWAI_NATIVE_LOGIN_METHOD_TAPPED="+("PHONE_ROUTE_TO_EMAIL" if fallback_phone else method.upper()))
+        for attempt in range(8):
             time.sleep(1)
             nodes, xml_text=snapshot()
-            if email_form_visible(nodes):
+            fields=[n for n in nodes if (n.get("class") or "").endswith("EditText")]
+            has_email_field=any(
+                re.search(r"e[ -]?mail", ((n.get("resource-id") or "")+" "+(n.get("hint") or "")), re.I)
+                for n in fields
+            )
+            if email_form_visible(nodes) and (not fallback_phone or has_email_field):
                 print("KWAI_NATIVE_LOGIN_FORM_VISIBLE")
                 return 0
+            if fallback_phone:
+                options=[]
+                for n in nodes:
+                    t=label(n)
+                    rid=(n.get("resource-id") or "")
+                    if bounds(n) and METHODS["email"].search(t) and not (n.get("class") or "").endswith("EditText"):
+                        options.append(n)
+                if options:
+                    option=next((n for n in options if n.get("clickable")=="true"),options[0])
+                    b=bounds(option)
+                    print("KWAI_NATIVE_PHONE_TO_EMAIL_OPTION="+str(len(options)))
+                    if b is not None:
+                        adb("shell","input","tap",str((b[0]+b[2])//2),str((b[1]+b[3])//2))
+                        fallback_phone=False
+                        continue
+                if attempt==7:
+                    print("KWAI_NATIVE_PHONE_LOGIN_NO_EMAIL_SWITCH")
             if clear_interest_onboarding(nodes):
                 nodes, xml_text=snapshot()
                 coords=method_coords(nodes,method) or (email_entry(nodes,xml_text) if method=="email" else None)
