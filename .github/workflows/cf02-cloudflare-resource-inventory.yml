@@ -1,0 +1,154 @@
+name: CF-02 Cloudflare resources inventory
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  account_inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Enumerate deployed resources, routes, schedules and bindings
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: 5c24be052e5144391f73a8e03491e88e
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,json,time,concurrent.futures,urllib.request,urllib.error,urllib.parse
+          T=os.environ.get('CF_TOKEN','')
+          A=os.environ['CF_ACCOUNT']
+          assert len(T)>10,'CF02_AUTH_MISSING'
+          ROOT='https://api.cloudflare.com/client/v4'
+          errors=[]
+          def req(path):
+            u=ROOT+path
+            for retry in range(3):
+              try:
+                r=urllib.request.Request(u,headers={'Authorization':'Bearer '+T,'Accept':'application/json','User-Agent':'Anthares-CF02-Inventory/1'})
+                with urllib.request.urlopen(r,timeout=22) as f: j=json.load(f)
+                if j.get('success') is False:
+                  return None,'CF_'+','.join(str(x.get('code',''))+':'+str(x.get('message',''))[:80] for x in j.get('errors',[])[:2])
+                return j,None
+              except urllib.error.HTTPError as e:
+                if e.code in (429,500,502,503) and retry<2:
+                  time.sleep(2*(retry+1));continue
+                return None,'HTTP_'+str(e.code)
+              except Exception as e:return None,type(e).__name__
+            return None,'RETRY_EXHAUSTED'
+          def allpages(path,limit=20):
+            out=[]
+            for page in range(1,limit+1):
+              sep='&' if '?' in path else '?'
+              j,err=req(path+sep+'page='+str(page)+'&per_page=100')
+              if err:return out,err
+              result=j.get('result')
+              if isinstance(result,list):rows=result
+              elif isinstance(result,dict):rows=next((v for v in result.values() if isinstance(v,list)),[])
+              else:rows=[]
+              out.extend(rows)
+              ri=j.get('result_info') or {}
+              tp=ri.get('total_pages')
+              if (tp is not None and page>=int(tp)) or (tp is None and len(rows)<100):break
+            else:
+              return out,'TRUNCATED_AFTER_'+str(limit)+'_PAGES'
+            return out,None
+          def show(tag,obj):print('CF02_'+tag,json.dumps(obj,ensure_ascii=False,sort_keys=True,separators=(',',':')))
+          ACC='/accounts/'+A
+          paths={
+            'SCRIPTS':ACC+'/workers/scripts',
+            'DURABLE_NAMESPACES':ACC+'/workers/durable_objects/namespaces',
+            'KV_NAMESPACES':ACC+'/storage/kv/namespaces',
+            'D1_DATABASES':ACC+'/d1/database',
+            'R2_BUCKETS':ACC+'/r2/buckets',
+            'QUEUES':ACC+'/queues',
+            'PAGES_PROJECTS':ACC+'/pages/projects',
+            'CUSTOM_DOMAINS':ACC+'/workers/domains',
+            'DISPATCH_NAMESPACES':ACC+'/workers/dispatch/namespaces',
+            'ZONES':'/zones?account.id='+A,
+          }
+          lists={}
+          for key,path in paths.items():
+            data,err=allpages(path,limit=15)
+            lists[key]=data
+            show('TOTAL',{'resource':key,'count':len(data),'error':err})
+            if err:errors.append((key,err))
+          scripts=lists.get('SCRIPTS',[])
+          script_names=[]
+          for s in scripts:
+            if not isinstance(s,dict):continue
+            name=s.get('id') or s.get('name')
+            if not name:continue
+            script_names.append(name)
+            show('SCRIPT',{'name':name,'created_on':s.get('created_on'),'modified_on':s.get('modified_on'),
+              'compatibility_date':s.get('compatibility_date'),'usage_model':s.get('usage_model'),
+              'placement_status':(s.get('placement') or {}).get('status') if isinstance(s.get('placement'),dict) else None,
+              'tail_consumers':[x.get('service') for x in (s.get('tail_consumers') or []) if isinstance(x,dict)],
+              'logpush':s.get('logpush')})
+          def describe(x):
+            name=x
+            base=ACC+'/workers/scripts/'+urllib.parse.quote(name,safe='')
+            details={}
+            queries=[('SCHEDULE','/schedules'),('DEPLOYMENTS','/deployments'),('VERSIONS','/versions?per_page=100'),('SUBDOMAIN','/subdomain'),('BINDINGS','/script-settings')]
+            for key,suffix in queries:
+              j,e=req(base+suffix)
+              if e:
+                details[key]={'error':e}
+                continue
+              v=j.get('result') or {}
+              if key=='SCHEDULE':
+                v=v.get('schedules',[]) if isinstance(v,dict) else v
+                details[key]=[{'cron':x.get('cron')} for x in v or [] if isinstance(x,dict)]
+              elif key=='DEPLOYMENTS':
+                v=v.get('deployments',[]) if isinstance(v,dict) else v
+                details[key]=[{'created_on':x.get('created_on'),'source':x.get('source'),
+                  'versions':[{'version_id':d.get('version_id'),'percentage':d.get('percentage')} for d in x.get('versions',[])]}
+                  for x in (v or [])[:2] if isinstance(x,dict)]
+              elif key=='VERSIONS':
+                count=(j.get('result_info') or {}).get('total_count')
+                v=v.get('items',[]) if isinstance(v,dict) else v
+                details[key]={'count':count if count is not None else len(v or []),
+                  'latest':[{'number':x.get('number'),'id':x.get('id'),'created_on':(x.get('metadata') or {}).get('created_on'),
+                    'hasPreview':(x.get('metadata') or {}).get('hasPreview')}
+                    for x in (v or [])[:2] if isinstance(x,dict)],
+                  'preview_enabled':sum(1 for x in (v or []) if (x.get('metadata') or {}).get('hasPreview') is True)}
+              elif key=='SUBDOMAIN':
+                details[key]={'enabled':v.get('enabled') if isinstance(v,dict) else None}
+              else:
+                v=(v.get('bindings') if isinstance(v,dict) else None) or []
+                supported=[]
+                for b in v:
+                  if not isinstance(b,dict):continue
+                  typ=b.get('type')
+                  if typ in ('secret_text','secret_key','plain_text'):continue
+                  fields={k:b.get(k) for k in ['type','name','service','environment','class_name','namespace','queue_name','database_name','bucket_name','workflow','dataset'] if b.get(k) is not None}
+                  if typ=='durable_object_namespace':fields['namespace_binding']=True
+                  supported.append(fields)
+                details[key]=supported
+            return name,details
+          with concurrent.futures.ThreadPoolExecutor(max_workers=7) as pool:
+            for n,details in pool.map(describe,script_names):
+              show('DETAIL',{'name':n,**details})
+          for z in lists['ZONES']:
+            if not isinstance(z,dict):continue
+            zid=z.get('id')
+            if not zid:continue
+            rows,err=allpages('/zones/'+zid+'/workers/routes',limit=5)
+            show('ZONE',{'name':z.get('name'),'status':z.get('status'),'routes':[{'pattern':r.get('pattern'),'script':r.get('script')} for r in rows if isinstance(r,dict)],'error':err})
+            if err:errors.append(('ROUTES_'+str(z.get('name')),err))
+          for typ in ['DURABLE_NAMESPACES','KV_NAMESPACES','D1_DATABASES','R2_BUCKETS','QUEUES','PAGES_PROJECTS','CUSTOM_DOMAINS','DISPATCH_NAMESPACES']:
+            for v in lists.get(typ,[]):
+              if not isinstance(v,dict):continue
+              if typ=='DURABLE_NAMESPACES':obj={k:v.get(k) for k in ['name','class','script','use_sqlite']}
+              elif typ=='KV_NAMESPACES':obj={'title':v.get('title')}
+              elif typ=='D1_DATABASES':obj={'name':v.get('name')}
+              elif typ=='R2_BUCKETS':obj={'name':v.get('name')}
+              elif typ=='QUEUES':obj={'name':v.get('queue_name') or v.get('name')}
+              elif typ=='PAGES_PROJECTS':obj={'name':v.get('name'),'subdomain':v.get('subdomain')}
+              elif typ=='CUSTOM_DOMAINS':obj={k:v.get(k) for k in ['hostname','service','environment','enabled']}
+              else:obj={k:v.get(k) for k in ['namespace_name','script_count']}
+              show('RESOURCE',{'type':typ,**obj})
+          j,err=req(ACC+'/workers/subdomain')
+          show('ACCOUNT_SUBDOMAIN',{'subdomain':(j or {}).get('result',{}).get('subdomain') if isinstance((j or {}).get('result'),dict) else None,'error':err})
+          show('FINAL',{'scripts':len(script_names),'resource_errors':errors,'inventory_complete_without_permission_gaps':not errors})
+          PY
