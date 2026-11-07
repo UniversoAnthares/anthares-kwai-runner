@@ -17,4 +17,4 @@ tag = "v1-queue-sqlite"
 new_sqlite_classes = ["AntharesQueue"]
 
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/10 * * * *"]

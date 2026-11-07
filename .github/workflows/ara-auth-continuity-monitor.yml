@@ -1,9 +1,6 @@
 name: ARA Authentication Continuity Monitor
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '*/30 * * * *' # metadata-only: no Neon
-    - cron: '17 */12 * * *' # deep control+Neon readiness twice daily
   push:
     branches: [main]
     paths:
