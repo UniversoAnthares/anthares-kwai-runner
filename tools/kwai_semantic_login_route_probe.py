@@ -202,19 +202,19 @@ def open_profile_then_login(tag):
         xml,root,ns=state(tag+'-after-gate')
     p=profile_target(root,ns)
     if p:tap_xy(p,tag+'-me')
-    for i in range(9):
+    for i in range(5):
         xml,root,ns=state(f'{tag}-profile-{i}')
         if success(xml,ns):return True
         if clear_known_gate(root,ns):continue
-        if i<3:
-            time.sleep(3)
+        if i<1:
+            time.sleep(2)
             continue
         # The external Chrome first-run is not a Kwai login method.
         # One bounded attempt at native login; then allow the native chooser to settle.
-        if i==3:
+        if i==1:
             q=login_target(root,ns)
             if q is not None:
-                log('KWAI_KW02_NATIVE_LOGIN_TARGET_ID='+rid(q))
+                log('KWAI_KW02_NATIVE_LOGIN_TARGET_FOUND=1 COORDS='+str(q))
                 tap_xy(q,tag+'-login')
                 xml,root,ns=state(f'{tag}-login-result-{i}')
                 if success(xml,ns):return True
