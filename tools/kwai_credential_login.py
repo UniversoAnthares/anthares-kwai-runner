@@ -123,18 +123,38 @@ ns=snap()
 typed=any(LOGIN.casefold() in (n.get('text') or '').casefold() for n in edits(ns))
 print('KWAI_ACCOUNT_INPUT_COMMITTED='+str(typed),flush=True)
 safe_form_inventory(ns,'WITH_KEYBOARD')
-# Dismiss Android soft keyboard before choosing the native continuation control.
+# Dismiss keyboard and explicitly clear the native email suggestion cover.
 adb('shell','input','keyevent','KEYCODE_BACK'); time.sleep(1)
 ns=snap()
 safe_form_inventory(ns,'AFTER_IME_DISMISS')
-continue_labels=('Next','Continue','Avançar','Continuar','Log in','Login','Sign in','Entrar','Send code','Get code','Submit','Use password')
-b=exact_button(ns,continue_labels) or find_semantic_control(ns,('btn_next','next_button','submit','continue','send_code','get_code','login_button','email_next','sendcode'))
-print('KWAI_ACCOUNT_CONTINUE_PRESENT='+str(b is not None))
-if b is not None and b.get('enabled')!='false':
-    tap(b)
+cover=next((n for n in ns if (n.get('resource-id') or '').endswith('/candidate_email_address_list_cover')),None)
+if cover is not None:
+    n_btn=next((n for n in ns if (n.get('resource-id') or '').endswith('/btn_next')),None)
+    print('KWAI_EMAIL_COVER_PRESENT=1 BOUNDS='+str(cover.get('bounds','')),flush=True)
+    print('KWAI_EMAIL_NEXT_BOUNDS='+str(n_btn.get('bounds','') if n_btn is not None else 'absent'),flush=True)
+    tap(cover)
+    ns=snap()
+    print('KWAI_EMAIL_COVER_CLEARED='+str(not any((n.get('resource-id') or '').endswith('/candidate_email_address_list_cover') for n in ns)),flush=True)
+    if not any(LOGIN.casefold()==(n.get('text') or '').casefold().strip() for n in edits(ns) if not is_password(n)):
+        field=next((n for n in edits(ns) if not is_password(n)),None)
+        if field is not None:
+            clear_and_type(field,LOGIN)
+            adb('shell','input','keyevent','KEYCODE_BACK')
+            ns=snap()
+if any(is_password(n) for n in edits(ns)):
+    state='password'
 else:
-    adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(2)
-state,ns=wait_password_or_challenge()
+    continue_labels=('Next','Continue','Avançar','Continuar','Log in','Login','Sign in','Entrar','Send code','Get code','Submit','Use password')
+    b=exact_button(ns,continue_labels)
+    if b is None:
+        b=find_semantic_control(ns,('btn_next','next_button','submit','continue','send_code','get_code','login_button','email_next','sendcode'))
+    print('KWAI_ACCOUNT_CONTINUE_PRESENT='+str(b is not None))
+    if b is not None and b.get('enabled')!='false':
+        print('KWAI_ACCOUNT_NEXT_TAP_BOUNDS='+str(b.get('bounds','')),flush=True)
+        tap(b)
+    else:
+        adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(2)
+    state,ns=wait_password_or_challenge()
 if state=='challenge': print('KWAI_LOGIN_CHALLENGE_AFTER_ACCOUNT'); raise SystemExit(6)
 if state=='stuck':
     safe_form_inventory(ns,'AFTER_NATIVE_NEXT')
