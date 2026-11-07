@@ -29,7 +29,7 @@ d=json.load(open('kwai-neon-lease.json',encoding='utf-8'))
 with open('/tmp/kwai-release.json','w',encoding='utf-8') as f:
  json.dump({'id':d['id'],'lease_generation':int(d['lease_generation'])},f)
 PY
-  python3 tools/cortes_kwai_neon_cloud.py fail --json @/tmp/kwai-release.json || true
+  python3 tools/cortes_kwai_neon_cloud.py fail --json @/tmp/kwai-release.json
 }
 trap release_fenced ERR
 eval "$(python3 - <<'PY'
