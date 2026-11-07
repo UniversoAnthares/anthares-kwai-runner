@@ -24,6 +24,7 @@ jobs:
           assert len(T)>10,'CF02_AUTH_MISSING'
           ROOT='https://api.cloudflare.com/client/v4'
           errors=[]
+          unavailable=[]
           def req(path):
             u=ROOT+path
             for retry in range(3):
@@ -47,7 +48,8 @@ jobs:
             out=[]
             for page in range(1,limit+1):
               sep='&' if '?' in path else '?'
-              j,err=req(path+sep+'page='+str(page)+'&per_page='+str(per_page))
+              url=path if per_page is None and page==1 else (path+sep+'page='+str(page)+(('&per_page='+str(per_page)) if per_page is not None else ''))
+              j,err=req(url)
               if err:return out,err
               result=j.get('result')
               if isinstance(result,list):rows=result
@@ -56,7 +58,7 @@ jobs:
               out.extend(rows)
               ri=j.get('result_info') or {}
               tp=ri.get('total_pages')
-              if (tp is not None and page>=int(tp)) or (tp is None and len(rows)<per_page):break
+              if (tp is not None and page>=int(tp)) or (tp is None and len(rows)<(per_page or int(ri.get('per_page') or 20))):break
             else:
               return out,'TRUNCATED_AFTER_'+str(limit)+'_PAGES'
             return out,None
@@ -76,10 +78,14 @@ jobs:
           }
           lists={}
           for key,path in paths.items():
-            data,err=allpages(path,limit=15,per_page=25 if key=='PAGES_PROJECTS' else 100)
+            data,err=allpages(path,limit=15,per_page=None if key=='PAGES_PROJECTS' else 100)
             lists[key]=data
             show('TOTAL',{'resource':key,'count':len(data),'error':err})
-            if err:errors.append((key,err))
+            if err:
+              if ((key=='R2_BUCKETS' and err.startswith('HTTP_403:10042:')) or
+                  (key=='DISPATCH_NAMESPACES' and err.startswith('HTTP_403:10121:'))):
+                unavailable.append({'resource':key,'reason':'FEATURE_NOT_ENABLED_OR_PAID','response':err[:160]})
+              else:errors.append((key,err))
           scripts=lists.get('SCRIPTS',[])
           script_names=[]
           for s in scripts:
@@ -157,5 +163,8 @@ jobs:
               show('RESOURCE',{'type':typ,**obj})
           j,err=req(ACC+'/workers/subdomain')
           show('ACCOUNT_SUBDOMAIN',{'subdomain':(j or {}).get('result',{}).get('subdomain') if isinstance((j or {}).get('result'),dict) else None,'error':err})
-          show('FINAL',{'scripts':len(script_names),'resource_errors':errors,'inventory_complete_without_permission_gaps':not errors})
+          show('FINAL',{'scripts':len(script_names),'resource_errors':errors,
+            'unavailable_by_plan':unavailable,
+            'inventory_complete_for_available_resources':not errors,
+            'inventory_complete_without_permission_gaps':not errors and not unavailable})
           PY
