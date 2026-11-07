@@ -118,6 +118,11 @@ email_field=next((n for n in es if not is_password(n)),None)
 if email_field is None:
     print('KWAI_ACCOUNT_FIELD_NOT_VERIFIED')
     raise SystemExit(3)
+if login_kind=='email':
+    field_context=txt(email_field)
+    if 'email' not in field_context and 'e-mail' not in field_context:
+        print('KWAI_EMAIL_FIELD_SEMANTICS_NOT_VERIFIED')
+        raise SystemExit(8)
 if not clear_and_type(email_field,LOGIN): raise SystemExit(3)
 ns=snap()
 typed=any(LOGIN.casefold() in (n.get('text') or '').casefold() for n in edits(ns))
