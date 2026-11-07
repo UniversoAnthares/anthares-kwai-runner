@@ -1,0 +1,53 @@
+name: Vercel Selective Deployment - ARA Secondary
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'vercel-ara-primary/**'
+      - 'anthares-remote-mcp/**'
+      - 'db/**'
+      - 'config/**'
+      - '!**/*.md'
+      - '!**/*.mdx'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-selective-ara-secondary
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ github.ref == 'refs/heads/main' && vars.ANTHARES_VERCEL_SELECTIVE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_ARA_SECONDARY }}
+    steps:
+      - name: Trigger approved main release once
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::error::Missing VERCEL_DEPLOY_HOOK_ARA_SECONDARY"; exit 1
+          fi
+          case "$DEPLOY_HOOK" in
+            https://api.vercel.com/v1/integrations/deploy/*) ;;
+            *) echo "::error::Unexpected deploy-hook origin"; exit 1 ;;
+          esac
+          response="$RUNNER_TEMP/vercel-selective-result.json"
+          code=$(curl --silent --show-error --max-time 40 -X POST -o "$response" -w '%{http_code}' "$DEPLOY_HOOK")
+          if [ "$code" != 201 ] && [ "$code" != 200 ]; then
+            echo "::error::Vercel deploy-hook HTTP $code"; exit 1
+          fi
+          python3 - "$response" <<'PY'
+          import json, sys
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              reply = json.load(handle)
+          job = reply.get("job") or {}
+          if not isinstance(job.get("id"), str) or not job["id"]:
+              raise SystemExit("VERCEL_HOOK_NO_JOB")
+          print("VERCEL_HOOK_QUEUED=" + job["id"])
+          PY
