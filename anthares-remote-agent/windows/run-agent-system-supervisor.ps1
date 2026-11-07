@@ -31,6 +31,29 @@ $created=$false
 $mutex=New-Object System.Threading.Mutex($true,'Global\AntharesRemoteSystemSupervisorV12',[ref]$created)
 if(-not $created){exit 0}
 function Load-QueueAuth{if(Test-Path $queueAuthLoader){try{. $queueAuthLoader}catch{}}}
+# CF-05: keep one canonical SYSTEM consumer and reject installed legacy agents.
+# Cached backup executables remain untouched; only competing running processes are stopped.
+function Enforce-SingleQueueConsumer([int]$preferredPid=0){
+  $candidates=@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like 'anthares-remote-agent*.exe' -and
+      -not [string]::IsNullOrWhiteSpace($_.ExecutablePath) -and
+      $_.ExecutablePath.StartsWith(($root+'\'),[StringComparison]::OrdinalIgnoreCase) })
+  $canonical=@($candidates | Where-Object {
+    $_.Name -ieq 'anthares-remote-agent-v4-c8.exe' -and $_.SessionId -eq 0 -and $_.ExecutablePath -ieq $exe
+  })
+  $keep=$null
+  if($canonical.Count -gt 0){
+    $keep=@($canonical | Where-Object {$_.ProcessId -eq $preferredPid} | Select-Object -First 1)
+    if($keep.Count -eq 0){$keep=@($canonical | Sort-Object CreationDate | Select-Object -First 1)}
+    $keep=$keep[0]
+  }
+  foreach($proc in $candidates){
+    if($keep -and $proc.ProcessId -eq $keep.ProcessId){continue}
+    try{Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop}catch{
+      throw ('CF05_CONCURRENT_CONSUMER_STOP_FAILED_PID_'+$proc.ProcessId)
+    }
+  }
+}
 function Queue-Configured{
   return ((-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_REPOSITORY))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITHUB_QUEUE_TOKEN))) -or
          ((-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_PROJECT))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_TOKEN)))
@@ -89,7 +112,7 @@ try{
         $transition=New-Object System.Threading.Mutex($false,'Global\AntharesRemoteExecutionTransitionV1')
         $transitionHeld=$transition.WaitOne(10000)
         if(-not $transitionHeld){throw 'execution_transition_lock_busy'}
-        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {$_.Name -eq 'anthares-remote-agent-v4.exe'} | ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}
+        Enforce-SingleQueueConsumer
         # A stopped SYSTEM task may leave its child agent running.
         # Adopt that already healthy canonical agent instead of creating
         # a second consumer of the same queues.
@@ -108,7 +131,7 @@ try{
       }
       $mode=if($env:ANTHARES_PUSH_TRANSPORT -eq 'enabled'){'running-push-websocket-with-private-queue-recovery'}elseif($env:ANTHARES_CONTROL_URL){'running-http-with-private-queue-recovery'}else{'running-private-queue'}
       Save-State $mode $p.Id
-      while(-not $p.HasExited){Start-Sleep 10;Load-QueueAuth;[void](Configure-HttpTransport);Save-State $mode $p.Id}
+      while(-not $p.HasExited){Start-Sleep 10;Enforce-SingleQueueConsumer $p.Id;Load-QueueAuth;[void](Configure-HttpTransport);Save-State $mode $p.Id}
       Save-State ('agent-exited:'+ $p.ExitCode)
     }catch{Save-State ('start-failed:'+ $_.Exception.GetType().Name)}
     Start-Sleep 2
