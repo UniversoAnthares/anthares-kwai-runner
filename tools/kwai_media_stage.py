@@ -69,7 +69,11 @@ def download(url: str, dest: Path, expected: str) -> tuple[str, int]:
     opener = build_opener(PublicRedirect())
     digest = hashlib.sha256()
     total = 0
-    with opener.open(Request(url, headers={"User-Agent": "Anthares-Kwai-MediaStage/1.0"}), timeout=80) as response:
+    try:
+        response = opener.open(Request(url, headers={"User-Agent": "Anthares-Kwai-MediaStage/1.0"}), timeout=80)
+    except Exception:
+        raise StageError("source-fetch-failed") from None
+    with response:
         if response.geturl() != url:
             safe_public_https(response.geturl())
         declared = response.headers.get("Content-Length")
@@ -113,8 +117,11 @@ def android_sha(path: str) -> str | None:
 
 def media_id(name: str, size: int, path: str) -> str:
     for attempt in range(15):
-        listing = adb("shell", "content", "query", "--uri", MEDIA_URI,
-                      "--projection", "_id:_display_name:_size:_data", timeout=45)
+        query = subprocess.run(["adb", "shell", "content", "query", "--uri", MEDIA_URI,
+                                "--projection", "_id:_display_name:_size:_data"],
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                               text=True, timeout=45)
+        listing = query.stdout if query.returncode == 0 else ""
         matches = []
         for line in listing.replace("\r", "").splitlines():
             if not line.lstrip().startswith("Row:"):
