@@ -30,6 +30,10 @@ jobs:
             echo KW02_SESSION_VAULT_UNAVAILABLE_OR_NOT_AUTHORIZED=YES
           fi
           # A failed pull is not permission to write, guess credentials or bypass OIDC.
+          if [ ! -s /tmp/kw02-native-session.enc ]; then
+            echo KW02_CLOUD_SESSION_BOOTSTRAP_REQUIRED=YES
+            exit 67
+          fi
       - name: Validate official Kwai app and remote runtime
         shell: bash
         run: |
