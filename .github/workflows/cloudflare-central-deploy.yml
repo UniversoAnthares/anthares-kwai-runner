@@ -18,6 +18,11 @@ on:
         description: 'Mandatory incident reference for emergency recovery'
         required: false
         type: string
+      skip_legacy_cleanup:
+        description: 'YES when deploying KW-04 read-only queue ingress'
+        required: false
+        default: "NO"
+        type: string
 concurrency:
   group: anthares-cloudflare-controller-deploy
   cancel-in-progress: false
@@ -134,6 +139,13 @@ jobs:
           python3 cloudflare-worker/patches/apply-queue-storage-health.py
           node --experimental-default-type=module --check cloudflare-worker/src/index.js
           node --experimental-default-type=module --test tests/test_queue_storage_health.mjs
+      - name: Expose authorized read-only Kwai CORTES queue media for KW-04
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 cloudflare-worker/patches/apply-kw04-queue-readonly-stage.py
+          node --experimental-default-type=module --check cloudflare-worker/src/index.js
+
       - name: Validate private Kwai session vault before deploy
         shell: bash
         run: |
@@ -153,6 +165,7 @@ jobs:
           npx --yes wrangler@4.43.0 deploy
           echo 'WRANGLER_DEPLOY_OK=1'
       - name: Remove old Kwai queue entries without touching CORTES or uncertain publications
+        if: ${{ inputs.skip_legacy_cleanup != 'YES' }}
         id: cleanup_legacy
         shell: bash
         run: |
