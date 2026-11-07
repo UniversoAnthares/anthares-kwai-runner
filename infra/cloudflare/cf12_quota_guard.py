@@ -234,10 +234,17 @@ def restore_yesterday(cloudflare_token, github_token, state, current_date):
         print("CF12_RESTORED " + script, flush=True)
     if state["date"] != current_date:
         previous_day = state["date"]
+        details = "CF12_DAILY_SUMMARY " + json.dumps({
+            "utc_day": previous_day,
+            "last_count_sample": int(state.get("last_count") or 0),
+            "health_probes": int(state.get("health_probes") or 0),
+            "observed_1027": int(state.get("observed_1027") or 0),
+            "sample_errors": int(state.get("sample_errors") or 0)
+        }, sort_keys=True)
+        notify(github_token, dt.datetime.now(dt.timezone.utc), "daily_summary",
+               int(state.get("last_count") or 0), details)
         state = empty_state(current_date)
         persist_state(github_token, state)
-        notify(github_token, dt.datetime.now(dt.timezone.utc), "reset", 0,
-               "Entradas secundárias restauradas após encerramento UTC de " + previous_day + ".")
     return state
 
 
@@ -293,6 +300,43 @@ def simulate():
     print("CF12_ESSENTIAL_PROTECTED=1 CF12_ZERO_MUTATIONS=1")
 
 
+def endpoint_health():
+    # GitHub's independent network samples Workers ingress response codes.
+    # Error 1027 can be rejected before an invocation reaches Worker Analytics.
+    hosts = (
+        "anthares-control.anthares1.workers.dev",
+        "anthares-ara-neon-standby.anthares1.workers.dev",
+        "anthares-ara-mcp.anthares1.workers.dev",
+    )
+    failures = 0
+    quota_1027 = 0
+    for host in hosts:
+        request = urllib.request.Request(
+            "https://" + host + "/health", headers={
+                "User-Agent": "Anthares-CF12-QuotaHealth/1",
+                "Accept": "application/json",
+            })
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:
+                status = response.status
+                body = response.read(1024)
+        except urllib.error.HTTPError as err:
+            status = err.code
+            body = err.read(1024)
+        except Exception as err:
+            failures += 1
+            print("CF12_PROBE_UNAVAILABLE " + host + " " + type(err).__name__)
+            continue
+        if b"1027" in body or status == 1027:
+            quota_1027 += 1
+            failures += 1
+            print("CF12_QUOTA_1027 " + host)
+        elif status != 200:
+            failures += 1
+            print("CF12_PROBE_BAD_STATUS " + host + " " + str(status))
+    return len(hosts), quota_1027, failures
+
+
 def main():
     mode = os.environ.get("CF12_MODE", "run")
     if mode == "simulate":
@@ -323,6 +367,14 @@ def main():
     # An unresolved prior-day restore blocks fresh actions.
     state = restore_yesterday(cloudflare_token, github_token, state, day)
     count, errors, workers = observed_request_total(cloudflare_token, now)
+    probes, errors_1027, probe_errors = endpoint_health()
+    state["health_probes"] = int(state.get("health_probes") or 0) + probes
+    state["observed_1027"] = int(state.get("observed_1027") or 0) + errors_1027
+    state["sample_errors"] = int(state.get("sample_errors") or 0) + probe_errors
+    persist_state(github_token, state)
+    if errors_1027:
+        notify(github_token, now, "quota_1027", count,
+               "Falha 1027 observada no monitor externo; proteger serviços essenciais.")
     if state.get("manual_hold_date") == day:
         print("CF12_MANUAL_HOLD", json.dumps({"requests":count,"utc_day":day,"essential_preserved":True}))
         return
