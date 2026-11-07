@@ -20,11 +20,11 @@ concurrency:
 
 jobs:
   deploy:
-    if: \${{ github.ref == 'refs/heads/main' && vars.ANTHARES_VERCEL_SELECTIVE_ENABLED == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && vars.ANTHARES_VERCEL_SELECTIVE_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
     env:
-      DEPLOY_HOOK: \${{ secrets.VERCEL_DEPLOY_HOOK_ARA_SECONDARY }}
+      DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_ARA_SECONDARY }}
     steps:
       - name: Trigger approved main release once
         shell: bash
