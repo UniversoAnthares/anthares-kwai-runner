@@ -197,7 +197,7 @@ jobs:
           retention-days: 3
 
   mobile_auth_contract_matrix:
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'mobile_auth') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]')) }}
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     strategy:
@@ -218,7 +218,7 @@ jobs:
       session_ready: ${{ steps.seal.outputs.ready }}
     env:
       REMOTE_USER: anthares
-      KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+      KWAI_SESSION_ENCRYPTION_KEY: ${{ secrets.KWAI_SESSION_KEY }}
       KWAI_AUTH_STRATEGY: mobile_only
     steps:
       - uses: actions/checkout@v4
@@ -226,7 +226,7 @@ jobs:
       - name: Validate mobile-auth prerequisites
         run: |
           set -euo pipefail
-          test -n "$KWAI_PASSWORD" || { echo 'KWAI_SESSION_ENCRYPTION_KEY_MISSING'; exit 42; }
+          test -n "$KWAI_SESSION_ENCRYPTION_KEY" || { echo 'KWAI_SESSION_ENCRYPTION_KEY_MISSING'; exit 42; }
           test -e /dev/kvm
           sudo chmod 666 /dev/kvm
           bash -n kwai_session_state.sh kwai_headless_login.sh
@@ -244,20 +244,6 @@ jobs:
           elif [ "$rc" -ne 0 ]; then
             exit "$rc"
           fi
-
-      - name: Restore cached Android runtime when available
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ~/.android/avd/kwai-speed.avd
-            ~/.android/avd/kwai-speed.ini
-            /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
-            /usr/local/lib/android/sdk/emulator
-          key: kwai-mobile-auth-runtime-v1
-          restore-keys: |
-            kwai-speed-avd-direct-slim-android35-v4
-            kwai-speed-android35-google-apis-x86_64-v1
-            kwai-speed-emulator-headless-x86_64-v2
 
       - name: Prepare Android and protected remote-display stack
         run: |
@@ -317,11 +303,12 @@ jobs:
 
       - name: Start protected temporary Android login window
         if: steps.initial.outputs.authenticated != 'true'
+        env:
+          REMOTE_PASSWORD: ${{ secrets.KWAI_REMOTE_GUI_PASSWORD }}
         run: |
           set -euo pipefail
-          REMOTE_PASSWORD="$(openssl rand -hex 18)"
+          test -n "$REMOTE_PASSWORD" || { echo KWAI_REMOTE_GUI_PASSWORD_MISSING; exit 42; }
           echo "::add-mask::$REMOTE_PASSWORD"
-          echo "REMOTE_PASSWORD=$REMOTE_PASSWORD" >> "$GITHUB_ENV"
           export DISPLAY=:99
           nohup Xvfb :99 -screen 0 1280x800x24 -ac >/tmp/xvfb.log 2>&1 &
           sleep 2
@@ -366,22 +353,8 @@ jobs:
             sleep 2
           done
           test "$READY" = 1
-          python3 - "$URL" "$REMOTE_USER" "$REMOTE_PASSWORD" > kwai-mobile-auth-access.json <<'PY'
-          import datetime,json,sys
-          expires=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(minutes=22)).isoformat()
-          print(json.dumps({"url":sys.argv[1]+"/vnc.html?autoconnect=1&resize=scale","username":sys.argv[2],"password":sys.argv[3],"expires_at":expires}))
-          PY
-          chmod 600 kwai-mobile-auth-access.json
+          printf '### Acesso privado ao Android Kwai\n\nURL: %s/vnc.html?autoconnect=1&resize=scale\n\nUsuário: %s\nSenha: credencial privada KWAI_REMOTE_GUI_PASSWORD (não publicada)\n' "$URL" "$REMOTE_USER" >> "$GITHUB_STEP_SUMMARY"
           echo KWAI_MOBILE_AUTH_TUNNEL_PROTECTED=1
-
-      - name: Publish temporary private access bundle
-        if: steps.initial.outputs.authenticated != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: kwai-mobile-auth-access-${{ github.run_id }}
-          path: kwai-mobile-auth-access.json
-          if-no-files-found: error
-          retention-days: 1
 
       - name: Wait for phone-authenticated Kwai identity
         if: steps.initial.outputs.authenticated != 'true'
@@ -419,17 +392,6 @@ jobs:
           echo 'ready=true' >> "$GITHUB_OUTPUT"
           echo KWAI_MOBILE_SESSION_STORED=1
 
-      - name: Remove temporary login access artifact
-        if: always() && steps.initial.outputs.authenticated != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set +e
-          ids="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[] | select(.name | startswith("kwai-mobile-auth-access-")) | .id' 2>/dev/null)"
-          for id in $ids; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" >/dev/null 2>&1 || true; done
-          rm -f kwai-mobile-auth-access.json
-          set -e
-
       - name: Upload privacy-safe mobile-auth evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -447,7 +409,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     env:
-      KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+      KWAI_SESSION_ENCRYPTION_KEY: ${{ secrets.KWAI_SESSION_KEY }}
       KWAI_AUTH_STRATEGY: mobile_only
     steps:
       - uses: actions/checkout@v4
@@ -500,6 +462,68 @@ jobs:
           path: |
             kwai-mobile-fresh-restore.txt
             kwai-mobile-fresh-proof.txt
+          if-no-files-found: warn
+          retention-days: 3
+
+  mobile_auth_restore_verify_second:
+    needs: mobile_auth_restore_verify
+    if: ${{ needs.mobile_auth_restore_verify.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      KWAI_SESSION_ENCRYPTION_KEY: ${{ secrets.KWAI_SESSION_KEY }}
+      KWAI_AUTH_STRATEGY: mobile_only
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pull independently stored session
+        run: |
+          set -euo pipefail
+          python3 tools/kwai_session_vault_client.py pull --path kwai-session.enc
+          test -s kwai-session.enc
+      - name: Download validated Kwai vault
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
+          echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
+          rm -rf kwai-vault
+          unzip -q kwai-vault.zip -d kwai-vault
+      - name: Enable KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Verify mobile-authenticated identity on a fresh cloud Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            set -euo pipefail
+            bash kwai_vault_install.sh
+            adb root >/dev/null 2>&1 || true
+            adb wait-for-device
+            bash kwai_session_state.sh restore | tee kwai-mobile-fresh-restore-second.txt
+            adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+            sleep 6
+            KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py | tee kwai-mobile-fresh-proof-second.txt
+            grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' kwai-mobile-fresh-proof-second.txt
+            grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' kwai-mobile-fresh-proof-second.txt
+            echo KWAI_MOBILE_SECOND_CROSS_RUN_RESTORE=PASS
+      - name: Upload fresh-runner proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-mobile-auth-restore-second-${{ github.run_id }}
+          path: |
+            kwai-mobile-fresh-restore-second.txt
+            kwai-mobile-fresh-proof-second.txt
           if-no-files-found: warn
           retention-days: 3
 
