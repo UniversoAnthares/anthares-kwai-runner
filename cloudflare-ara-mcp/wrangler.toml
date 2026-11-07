@@ -15,6 +15,7 @@ name = "AUTH_EMAIL_SEND"
 destination_address = "lucasyahn@gmail.com"
 
 [vars]
+ARA_PRIVATE_QUEUE_PRIMARY = "probe"
 AUTH_EMAIL_FROM = "contato@anthares.us"
 AUTH_OWNER_METHOD = "github"
 ARA_OWNER_GITHUB_CLIENT_ID = "Ov23li1xRCECmyI7JYsn"
