@@ -4,7 +4,7 @@ set -Eeuo pipefail
 OP="${1:?usage: kwai_queue_state.sh started|complete|fail|reconcile|renew [value]}"
 VALUE="${2:-}"
 CONTROL_URL="${ANTHARES_CONTROL_URL:-https://anthares-control.anthares1.workers.dev}"
-EXPECTED_VERSION="${ANTHARES_CONTROL_EXPECTED_VERSION:-2026-10-05-queue-fencing-v16}"
+EXPECTED_VERSION="${ANTHARES_CONTROL_EXPECTED_VERSION:-2026-10-17-physical-android-v18}"
 : "${KWAI_QUEUE_JOB_ID:?KWAI_QUEUE_JOB_ID is required}"
 
 case "$OP" in

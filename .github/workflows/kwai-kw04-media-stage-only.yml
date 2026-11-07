@@ -1,0 +1,73 @@
+name: Kwai KW-04 remote media delivery only
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kwai-kw04-remote-stage
+  cancel-in-progress: false
+
+jobs:
+  remote-media-stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 23
+    env:
+      KWAI_QUEUE_JOB_ID: kw04-live-media-${{ github.run_id }}
+      KWAI_EXPECTED_ACCOUNT: lucasrosalem
+      KWAI_VIDEO_URL: https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_A7BsgCe3-oo_g1_9678_9719.mp4
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bind existing Anthares MP4 to an independent source checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 --connect-timeout 10 --max-time 180 --output "$RUNNER_TEMP/source.mp4" "$KWAI_VIDEO_URL"
+          test -s "$RUNNER_TEMP/source.mp4"
+          test "$(dd if="$RUNNER_TEMP/source.mp4" bs=1 skip=4 count=4 2>/dev/null)" = ftyp
+          sha="$(sha256sum "$RUNNER_TEMP/source.mp4" | cut -d' ' -f1)"
+          echo "KWAI_EXPECTED_MEDIA_SHA256=$sha" >> "$GITHUB_ENV"
+          echo "KWAI_SOURCE_CHECKSUM_BOUND=1"
+
+      - name: Enable KVM for hosted Android
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+
+      - name: Deliver exact source MP4 to Android MediaStore without publishing
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          ram-size: 2048M
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 420
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
+          script: |
+            set -euo pipefail
+            python3 tools/kwai_media_stage.py
+            python3 - <<'PY'
+            import json,os
+            with open("kwai-media-ready.json",encoding="utf-8") as f: p=json.load(f)
+            assert p["job_id"]==os.environ["KWAI_QUEUE_JOB_ID"]
+            assert p["account"]==os.environ["KWAI_EXPECTED_ACCOUNT"]
+            assert p["sha256"]==os.environ["KWAI_EXPECTED_MEDIA_SHA256"]
+            assert p["media_uri"].startswith("content://media/external/video/media/")
+            assert p["remote_path"].startswith("/sdcard/Movies/AntharesPublish/")
+            assert p["size"]>1024
+            print("KWAI_KW04_REMOTE_SOURCE_TO_ANDROID=PASS")
+            print("KWAI_KW04_NO_PUBLICATION=1")
+            PY
+
+      - name: Remove ephemeral source and media identity from workspace
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/source.mp4" kwai-media-ready.json

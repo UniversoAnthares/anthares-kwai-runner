@@ -27,28 +27,34 @@ mark_uncertain(){
 }
 
 log "STATE=MEDIA_PREPARING"
-curl -fL --retry 3 --connect-timeout 15 --max-time 300 -o /tmp/anthares-upload.mp4 "$KWAI_VIDEO_URL"
-test -s /tmp/anthares-upload.mp4 || { log "STATE=FAILED_SAFE REASON=empty-video"; exit 80; }
-head -c 64 /tmp/anthares-upload.mp4 | grep -a -q 'ftyp' || { log "STATE=FAILED_SAFE REASON=invalid-mp4"; exit 81; }
-KWAI_MEDIA_SHA256="$(sha256sum /tmp/anthares-upload.mp4 | awk '{print $1}')"
-KWAI_MEDIA_SIZE="$(stat -c %s /tmp/anthares-upload.mp4)"
-KWAI_MEDIA_NAME="anthares-${JOB_SAFE//[^A-Za-z0-9._-]/_}-${KWAI_MEDIA_SHA256:0:12}.mp4"
-KWAI_ANDROID_VIDEO="/sdcard/Movies/AntharesPublish/$KWAI_MEDIA_NAME"
-export KWAI_MEDIA_SHA256 KWAI_MEDIA_SIZE KWAI_MEDIA_NAME KWAI_ANDROID_VIDEO
+# The queue's job_id + content digest bind the transfer to exactly one cut.
+# Staging is performed in the cloud runner; no Windows/PC path is used.
+if ! python3 tools/kwai_media_stage.py > /tmp/kwai-media-stage.out 2>&1; then
+  cat /tmp/kwai-media-stage.out | tee -a "$REPORT"
+  log "STATE=FAILED_SAFE REASON=remote-media-stage-failed"
+  exit 84
+fi
+grep -qx 'KWAI_MEDIA_STAGE=READY' /tmp/kwai-media-stage.out || {
+  log "STATE=FAILED_SAFE REASON=remote-media-ready-missing"; exit 85;
+}
+mapfile -t VERIFIED_MEDIA < <(python3 - <<'PY'
+import json
+p=json.load(open("kwai-media-ready.json",encoding="utf-8"))
+assert p["schema"]=="anthares.kwai.media-ready.v1"
+for key in ("sha256","size","name","remote_path","media_uri"):
+ print(p[key])
+PY
+)
+[ "${#VERIFIED_MEDIA[@]}" -eq 5 ] || { log "STATE=FAILED_SAFE REASON=remote-media-proof-invalid"; exit 85; }
+KWAI_MEDIA_SHA256="${VERIFIED_MEDIA[0]}"
+KWAI_MEDIA_SIZE="${VERIFIED_MEDIA[1]}"
+KWAI_MEDIA_NAME="${VERIFIED_MEDIA[2]}"
+KWAI_ANDROID_VIDEO="${VERIFIED_MEDIA[3]}"
+KWAI_ANDROID_MEDIA_URI="${VERIFIED_MEDIA[4]}"
+export KWAI_MEDIA_SHA256 KWAI_MEDIA_SIZE KWAI_MEDIA_NAME KWAI_ANDROID_VIDEO KWAI_ANDROID_MEDIA_URI
 log "MEDIA_SHA256=$KWAI_MEDIA_SHA256"
 log "MEDIA_SIZE=$KWAI_MEDIA_SIZE"
 log "MEDIA_NAME=$KWAI_MEDIA_NAME"
-
-adb shell mkdir -p /sdcard/Movies/AntharesPublish
-# This directory is owned by this publication harness; never clear general user media.
-adb shell 'rm -f /sdcard/Movies/AntharesPublish/* 2>/dev/null || true'
-adb push /tmp/anthares-upload.mp4 "$KWAI_ANDROID_VIDEO" >/dev/null
-adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$KWAI_ANDROID_VIDEO" >/dev/null
-sleep 2
-REMOTE_SIZE="$(adb shell stat -c %s "$KWAI_ANDROID_VIDEO" | tr -d '\r')"
-test "$REMOTE_SIZE" = "$KWAI_MEDIA_SIZE" || { log "STATE=FAILED_SAFE REASON=android-size-mismatch"; exit 84; }
-COUNT="$(adb shell content query --uri content://media/external/video/media --projection _id:_display_name:_size 2>/dev/null | tr -d '\r' | grep -F "_display_name=$KWAI_MEDIA_NAME" | grep -F "_size=$KWAI_MEDIA_SIZE" | wc -l | tr -d ' ')"
-test "$COUNT" = "1" || { log "STATE=FAILED_SAFE REASON=mediastore-identity-count-$COUNT"; exit 85; }
 log "STATE=MEDIA_IMPORTED MEDIASTORE_MATCHES=1"
 
 # Transitional gate: real workflow remains quarantined until kwai-login supplies READY.
