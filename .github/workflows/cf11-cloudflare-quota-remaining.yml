@@ -6,11 +6,15 @@ on:
   schedule:
     # Consult yesterday's closed UTC day and a seven-day lookback, no local runner.
     - cron: '37 0 * * *'
+  issue_comment:
+    types: [created]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   quota:
+    # Owner-only command on the existing quota control issue. Other comments do not run a job.
+    if: ${{ github.event_name != 'issue_comment' || (github.event.issue.number == 2160 && github.event.comment.user.login == 'UniversoAnthares' && github.event.comment.body == '/anthares-cf11-sql-audit') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
