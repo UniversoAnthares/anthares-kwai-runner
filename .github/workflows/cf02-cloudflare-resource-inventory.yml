@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Enumerate deployed resources, routes, schedules and bindings
         env:
-          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_INVENTORY_READ_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
           CF_ACCOUNT: 5c24be052e5144391f73a8e03491e88e
         shell: bash
         run: |
