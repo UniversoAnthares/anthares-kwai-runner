@@ -146,7 +146,7 @@ async function kwaiAction(action,b,actor){
   const start=Number(b.source_start),end=Number(b.source_end);
   let u;try{u=new URL(media);}catch{}
   if(b.target_key!==KWAI_TARGET||b.account_id!=='lucasrosalem'||
-    b.expected_account!=='lucasrosalem'||b.executor!=='physical_android'||
+    b.expected_account!=='lucasrosalem'||b.executor!=='github_hosted_android'||
     b.master_id!==source||b.duration_class!=='short'||!source||!segment||
     !u||u.protocol!=='https:'||!['anthares.us','www.anthares.us'].includes(u.hostname)||
     u.username||u.password||u.port||!u.pathname.toLowerCase().endsWith('.mp4')||
