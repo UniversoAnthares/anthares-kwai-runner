@@ -18,6 +18,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
       CF10_OPERATION: ${{ inputs.operation }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Discover only the exact preview resources and purge archived previews when requested
         shell: bash
@@ -83,30 +84,61 @@ jobs:
             raise SystemExit(0)
           if perr:raise SystemExit('CF10_NO_PREVIEW_LIST_NO_DELETION')
           if not previews:raise SystemExit('CF10_NO_PREVIEW_RECORDS')
-          # Only delete historical branch Previews of this named Worker.
+          # Only historical previews whose source branch is no longer live
+          # are eligible. Read branch names with the standard GitHub token;
+          # abort on inability to enumerate, instead of guessing.
+          github_token=os.environ.get('GH_TOKEN','')
+          if not github_token:raise SystemExit('CF10_GITHUB_BRANCH_AUTH_MISSING')
+          active=set()
+          for page in range(1,51):
+            url=f'https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/branches?per_page=100&page={page}'
+            request=urllib.request.Request(url,headers={
+              'Authorization':'Bearer '+github_token,
+              'Accept':'application/vnd.github+json',
+              'X-GitHub-Api-Version':'2022-11-28',
+              'User-Agent':'Anthares-CF10-BranchGuard/1'})
+            with urllib.request.urlopen(request,timeout=25) as response:
+              listed=json.load(response)
+            if not isinstance(listed,list):raise SystemExit('CF10_BRANCH_LIST_INVALID')
+            active.update(x['name'] for x in listed if isinstance(x,dict) and x.get('name'))
+            if len(listed)<100:break
+          else:raise SystemExit('CF10_TOO_MANY_BRANCH_PAGES')
+          printrow('BRANCH_GUARD',{'active_branches':len(active)})
           blocked={'main','master','prod','production','stable','release','staging','develop','dev'}
+          cutoff=datetime.datetime(2026,11,1,tzinfo=datetime.timezone.utc)
           candidates=[]
+          skipped_active=[]
           for p in previews:
-            name=p.get('name') or p.get('slug')
-            if not isinstance(name,str):continue
-            if len(name)>140 or not name or name.lower() in blocked:continue
-            if not name.startswith(('fix-','feat-','feature-','docs-','ci-','diagnostic-','optimization-','ops-','test-')):
+            name=p.get('name')
+            slug=p.get('slug')
+            stamp=p.get('updated_on') or p.get('created_on')
+            if not isinstance(name,str) or not isinstance(slug,str):continue
+            if not name or len(name)>150 or len(slug)>90:continue
+            if slug.lower() in blocked or name.lower() in blocked:continue
+            if not stamp:continue
+            try:modified=datetime.datetime.fromisoformat(stamp.replace('Z','+00:00'))
+            except:continue
+            if modified>=cutoff:continue
+            if name in active or slug in active:
+              skipped_active.append(name)
               continue
-            # Existing production's one BrowserState class is never a preview.
-            # Require a separate historical namespace whose normalized name
-            # mentions this preview's beginning, preventing broad deletion.
-            prefix=W+'_'+name[:min(len(name),24)]
-            if not any(str(n.get('name','')).startswith(prefix) for n in legacy):continue
-            candidates.append(name)
-          printrow('CANDIDATES',{'count':len(candidates),'names':candidates[:100]})
+            # Preview slug is returned by the Cloudflare control plane.
+            # Never infer it from a namespace's truncated display name.
+            candidates.append({'name':name,'slug':slug})
+          printrow('CANDIDATES',{'count':len(candidates),'skipped_active':skipped_active,
+            'names':[x['name'] for x in candidates[:100]]})
           deleted=[]
           errors=[]
-          for idx,name in enumerate(candidates):
-            path=prepath+'/'+urllib.parse.quote(name,safe='')
+          for idx,target in enumerate(candidates):
+            name,slug=target['name'],target['slug']
+            path=prepath+'/'+urllib.parse.quote(slug,safe='')
             result,err=req('DELETE',path)
             if err or (isinstance(result,dict) and result.get('success') is False):
-              errors.append({'name':name,'error':err or 'CF_RESULT_NOT_SUCCESS'})
+              errors.append({'name':name,'slug':slug,'error':err or 'CF_RESULT_NOT_SUCCESS'})
               printrow('DELETE_ERROR',errors[-1])
+              # Stop on the first failure instead of racing ahead with
+              # uncertain deletion state.
+              break
             else:
               deleted.append(name)
               printrow('DELETED',{'name':name,'index':idx+1})
