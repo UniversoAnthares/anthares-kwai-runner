@@ -200,6 +200,19 @@ def open_profile_then_login(tag):
     if success(xml,ns):return True
     if clear_known_gate(root,ns):
         xml,root,ns=state(tag+'-after-gate')
+    if os.environ.get('KWAI_KW02_MAIN_LOGIN_PROVEN')=='1':
+        # Reproduce known good 37417286394: UIAutomator exact "Log in"
+        # element, its own native bounds, direct ADB tap, 5s settle.
+        direct=find_label(ns,'log in','login','sign in','entrar')
+        if direct is not None and center(direct) is not None:
+            log('KWAI_KW02_MAIN_LOGIN_EXACT_CONTROL=1')
+            tap_xy(center(direct),tag+'-main-login-proven')
+            time.sleep(5)
+            xml,root,ns=state(tag+'-main-login-proven-result')
+            if success(xml,ns):return True
+            if clear_known_gate(root,ns):
+                xml,root,ns=state(tag+'-main-login-after-gate')
+                if success(xml,ns):return True
     p=profile_target(root,ns)
     if p:tap_xy(p,tag+'-me')
     for i in range(5):
