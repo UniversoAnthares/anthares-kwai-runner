@@ -45,7 +45,7 @@ jobs:
             query($accountTag:String!,$start:Date,$end:Date){
              viewer{accounts(filter:{accountTag:$accountTag}){
               durableObjectsInvocationsAdaptiveGroups(filter:{date_geq:$start,date_leq:$end},
-               limit:10000){sum{requests responseBodySize}}
+               limit:10000){dimensions{date} sum{requests responseBodySize}}
              }}
             }''',
            'do_storage':'''
@@ -108,9 +108,14 @@ jobs:
             print('CF11_D1_DAILY',json.dumps({k:dict(v) for k,v in sorted(agg.items())},sort_keys=True))
            elif name=='do_compute':
             totals=collections.Counter()
+            daily=collections.defaultdict(lambda:collections.Counter())
             for row in rows:
-             for k,v in (row.get('sum') or {}).items():totals[k]+=round(float(v or 0))
-            print('CF11_DO_COMPUTE',json.dumps({'rows':len(rows),'totals':dict(totals)},sort_keys=True))
+             day=(row.get('dimensions') or {}).get('date','unknown')
+             for k,v in (row.get('sum') or {}).items():
+              value=round(float(v or 0))
+              totals[k]+=value
+              daily[day][k]+=value
+            print('CF11_DO_COMPUTE',json.dumps({'rows':len(rows),'totals':dict(totals),'daily':{d:dict(c) for d,c in sorted(daily.items())}},sort_keys=True))
            elif name=='do_storage':
             max_bytes=max([float((row.get('max') or {}).get('storedBytes') or 0) for row in rows] or [0])
             print('CF11_DO_STORAGE',json.dumps({'rows':len(rows),'max_stored_bytes':int(max_bytes)},sort_keys=True))
