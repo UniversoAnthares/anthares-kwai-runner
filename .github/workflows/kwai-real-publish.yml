@@ -156,7 +156,7 @@ jobs:
           token="$(curl -fsSL --retry 2 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
           test -n "$token"
           echo "::add-mask::$token"
-          curl --fail-with-body -fsS --retry 2 --connect-timeout 10 --max-time 25 -H "Authorization: Bearer $token" \
+          curl --fail-with-body -sS --retry 2 --connect-timeout 10 --max-time 25 -H "Authorization: Bearer $token" \
             https://anthares-control.anthares1.workers.dev/github-queue-get/kw04-peek -o "$RUNNER_TEMP/kw04-job.json"
           python3 - "$RUNNER_TEMP/kw04-job.json" <<'PY'
           import json,os,re,sys
