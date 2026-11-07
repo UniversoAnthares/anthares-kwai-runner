@@ -24,6 +24,8 @@ jobs:
           mkdir -p /tmp/kw02-auth-vault
           unzip -q /tmp/kw02-auth-vault.zip -d /tmp/kw02-auth-vault
           test -s /tmp/kw02-auth-vault/MANIFEST.tsv
+          ln -s /tmp/kw02-auth-vault kwai-vault
+          test -s kwai-vault/MANIFEST.tsv
       - name: Prepare credential-safe native Android script
         shell: bash
         run: |
