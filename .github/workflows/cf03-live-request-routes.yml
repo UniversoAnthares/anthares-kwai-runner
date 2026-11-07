@@ -52,7 +52,7 @@ jobs:
           try:
             for name in targets:
               samples[name]=[];errs[name]=[]
-              cmd=['npx','--yes','wrangler@4.154.0','tail',name,'--format','json','--sampling-rate','1']
+              cmd=['npx','--yes','wrangler@4.154.0','tail',name,'--format','json']
               p=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
                 env=os.environ.copy(),start_new_session=True,bufsize=1)
               pids[name]=p
