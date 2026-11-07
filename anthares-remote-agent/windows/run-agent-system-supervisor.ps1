@@ -60,7 +60,7 @@ function Save-State([string]$reason,[int]$agentPid=0){
   $gitlabQueue=(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_PROJECT))-and(-not [string]::IsNullOrWhiteSpace($env:ANTHARES_GITLAB_QUEUE_TOKEN))
   try{[pscustomobject]@{
     active_control=if($httpEnabled){$env:ANTHARES_CONTROL_URL}else{'private-issue-queues'}
-    mode=if($httpEnabled){'single-process-dual-transport'}else{'issue-queues-only'}
+    mode=if($env:ANTHARES_PUSH_TRANSPORT -eq 'enabled'){'push-websocket-private-issue-queues'}elseif($httpEnabled){'single-process-dual-transport'}else{'issue-queues-only'}
     recovery_transport='gitlab+github-private-issue-queues';reason=$reason
     updated_at=(Get-Date).ToUniversalTime().ToString('o');supervisor_pid=$PID;agent_pid=$agentPid
     device_id=$env:ANTHARES_DEVICE_ID;identity=[Security.Principal.WindowsIdentity]::GetCurrent().Name
@@ -70,7 +70,7 @@ function Save-State([string]$reason,[int]$agentPid=0){
     gitlab_queue=$gitlabQueue
     dual_queue_redundancy=($githubQueue -and $gitlabQueue)
     http_control_enabled=$httpEnabled;http_control=if($httpEnabled){$env:ANTHARES_CONTROL_URL}else{$null}
-    single_executor=$true;work_root=$env:ANTHARES_WORK_ROOT;install_root=$root
+    single_executor=$true;push_transport_enabled=($env:ANTHARES_PUSH_TRANSPORT -eq 'enabled');work_root=$env:ANTHARES_WORK_ROOT;install_root=$root
     stdout_path=$stdout;stderr_path=$stderr
   }|ConvertTo-Json -Depth 4|Set-Content -Path $stateFile -Encoding UTF8}catch{}
 }
@@ -78,6 +78,7 @@ try{
   while($true){
     # Reload protected device configuration before every supervised agent launch.
     if(Test-Path $envFile){. $envFile}
+    $env:ANTHARES_PUSH_TRANSPORT='enabled'
     Load-QueueAuth
     if(-not (Queue-Configured)){Save-State 'waiting-for-private-queue-credential';Start-Sleep 15;continue}
     [void](Configure-HttpTransport -Refresh)
@@ -105,7 +106,7 @@ try{
         if($transitionHeld -and $transition){try{$transition.ReleaseMutex()}catch{}}
         if($transition){$transition.Dispose()}
       }
-      $mode=if($env:ANTHARES_CONTROL_URL){'running-vercel-selected-with-private-queue-recovery'}else{'running-private-queue'}
+      $mode=if($env:ANTHARES_PUSH_TRANSPORT -eq 'enabled'){'running-push-websocket-with-private-queue-recovery'}elseif($env:ANTHARES_CONTROL_URL){'running-http-with-private-queue-recovery'}else{'running-private-queue'}
       Save-State $mode $p.Id
       while(-not $p.HasExited){Start-Sleep 10;Load-QueueAuth;[void](Configure-HttpTransport);Save-State $mode $p.Id}
       Save-State ('agent-exited:'+ $p.ExitCode)
