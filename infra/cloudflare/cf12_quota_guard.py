@@ -298,7 +298,7 @@ def main():
     if mode == "simulate":
         simulate()
         return
-    if mode != "run":
+    if mode not in ("run", "rollback"):
         raise RuntimeError("CF12_MODE_NOT_ALLOWED")
     cloudflare_token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
     github_token = os.environ.get("GITHUB_TOKEN", "")
@@ -307,9 +307,25 @@ def main():
     now = dt.datetime.now(dt.timezone.utc)
     day = now.date().isoformat()
     state = read_state(github_token)
+    if mode == "rollback":
+        while state["managed_disabled"]:
+            script = state["managed_disabled"][0]
+            change_subdomain(cloudflare_token, script, True)
+            state["managed_disabled"].pop(0)
+            persist_state(github_token, state)
+        state["manual_hold_date"] = day
+        state["level"] = "manual_override"
+        persist_state(github_token, state)
+        notify(github_token, now, "manual_rollback", state.get("last_count", 0),
+               "Entradas restauradas; ações automáticas de redução pausadas até 00:00 UTC.")
+        print("CF13_ROLLBACK_DONE", json.dumps({"date":day,"state":state},sort_keys=True))
+        return
     # An unresolved prior-day restore blocks fresh actions.
     state = restore_yesterday(cloudflare_token, github_token, state, day)
     count, errors, workers = observed_request_total(cloudflare_token, now)
+    if state.get("manual_hold_date") == day:
+        print("CF12_MANUAL_HOLD", json.dumps({"requests":count,"utc_day":day,"essential_preserved":True}))
+        return
     level = stage_for(count)
     apply(cloudflare_token, github_token, state, level, count, now)
     print("CF12_LIVE", json.dumps({
