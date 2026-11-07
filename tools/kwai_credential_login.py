@@ -35,7 +35,7 @@ def is_password(n): return n.get('password')=='true' or 'password' in txt(n) or 
 def clear_and_type(n,value):
     if not tap(n): return False
     adb('shell','input','keyevent','KEYCODE_MOVE_END')
-    for _ in range(160): adb('shell','input','keyevent','KEYCODE_DEL')
+    for _ in range(min(160,len(n.get('text') or '')+8) if (n.get('text') or '') else 0): adb('shell','input','keyevent','KEYCODE_DEL')
     safe=value.replace('%','%25').replace(' ','%s').replace('&','\\&').replace('(','\\(').replace(')','\\)')
     adb('shell','input','text',safe);time.sleep(1);return True
 
@@ -70,7 +70,11 @@ env.setdefault('KWAI_LOGIN_SETTLE','3')
 r=subprocess.run(['python3','tools/kwai_home_login_state_machine.py'],env=env).returncode
 if r != 0:
     print('KWAI_HOME_LOGIN_STATE_MACHINE_FAILED'); raise SystemExit(3)
-r=subprocess.run(['python3','tools/kwai_android_login_entry.py','auto'],env=env).returncode
+digits=re.sub(r'\\D','',LOGIN)
+login_kind='email' if '@' in LOGIN else ('phone' if len(digits)>=8 else 'other')
+print('KWAI_LOGIN_IDENTIFIER_KIND='+login_kind)
+chosen='phone' if login_kind=='phone' else 'email'
+r=subprocess.run(['python3','tools/kwai_android_login_entry.py',chosen],env=env).returncode
 if r != 0:
     print('KWAI_CREDENTIAL_METHOD_NOT_READY'); raise SystemExit(3)
 
@@ -81,11 +85,26 @@ if email_field is None:
     print('KWAI_ACCOUNT_FIELD_NOT_VERIFIED')
     raise SystemExit(3)
 if not clear_and_type(email_field,LOGIN): raise SystemExit(3)
-ns=snap(); b=exact_button(ns,('Next','Continue','Avançar','Continuar'))
-if b: tap(b)
-else: adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(1)
+# Dismiss Android soft keyboard before choosing the native continuation control.
+adb('shell','input','keyevent','KEYCODE_BACK'); time.sleep(1)
+ns=snap()
+continue_labels=('Next','Continue','Avançar','Continuar','Log in','Login','Sign in','Entrar','Send code','Get code','Submit','Use password')
+b=exact_button(ns,continue_labels)
+print('KWAI_ACCOUNT_CONTINUE_PRESENT='+str(bool(b)))
+if b and b.get('enabled')!='false':
+    tap(b)
+else:
+    adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(2)
 state,ns=wait_password_or_challenge()
 if state=='challenge': print('KWAI_LOGIN_CHALLENGE_AFTER_ACCOUNT'); raise SystemExit(6)
+if state!='password':
+    # Some builds require choosing password login explicitly from the account step.
+    alt=exact_button(ns,('Use password','Log in with password','Login with password','Entrar com senha','Password login','Other methods'))
+    print('KWAI_PASSWORD_LOGIN_OPTION_PRESENT='+str(bool(alt)))
+    if alt:
+        tap(alt)
+        state,ns=wait_password_or_challenge(8)
+    if state=='challenge': print('KWAI_LOGIN_CHALLENGE_AFTER_ACCOUNT'); raise SystemExit(6)
 if state!='password': print('KWAI_ACCOUNT_STEP_DID_NOT_ADVANCE'); raise SystemExit(3)
 
 es=edits(ns); verified=[n for n in es if is_password(n)]
