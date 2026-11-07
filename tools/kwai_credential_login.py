@@ -69,6 +69,19 @@ def safe_form_inventory(ns,stage):
         count+=1
         if count>=24:break
 
+def kw02_public_ui_messages(ns, stage):
+    allowed=[]
+    for n in ns:
+        if (n.get('class') or '').endswith('EditText'):continue
+        value=((n.get('text') or '')+' '+(n.get('content-desc') or '')).strip()
+        if not value:continue
+        value=re.sub(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+','[EMAIL_REDACTED]',value)
+        value=re.sub(r'\\b\\+?\\d[\\d\\s().-]{6,}\\b','[NUMBER_REDACTED]',value)
+        value=re.sub(r'https?://\\S+','[LINK_REDACTED]',value)
+        if value.casefold()==LOGIN.casefold():continue
+        if value not in allowed:allowed.append(value)
+    print('KWAI_KW02_UI_MESSAGES_%s=%s'%(stage,' ; '.join(allowed[:18])[:800]),flush=True)
+
 def find_semantic_control(ns,words):
     target=tuple(w.casefold() for w in words)
     choices=[]
@@ -157,6 +170,7 @@ else:
     if b is not None and b.get('enabled')!='false':
         print('KWAI_ACCOUNT_NEXT_TAP_BOUNDS='+str(b.get('bounds','')),flush=True)
         tap(b)
+        kw02_public_ui_messages(snap(),'AFTER_NEXT')
     else:
         adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(2)
     state,ns=wait_password_or_challenge()
@@ -184,6 +198,7 @@ if state=='stuck':
         candidate=find_semantic_control(ns,('btn_next','next_button'))
         if candidate is not None and candidate.get('enabled')!='false':
             tap(candidate)
+            kw02_public_ui_messages(snap(),'AFTER_NATIVE_RETRY')
             state,ns=wait_password_or_challenge(5)
         if state=='stuck':safe_form_inventory(ns,'AFTER_DIRECT_RETRY')
 if state!='password':
