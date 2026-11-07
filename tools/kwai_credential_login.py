@@ -129,8 +129,8 @@ ns=snap()
 safe_form_inventory(ns,'AFTER_IME_DISMISS')
 continue_labels=('Next','Continue','Avançar','Continuar','Log in','Login','Sign in','Entrar','Send code','Get code','Submit','Use password')
 b=exact_button(ns,continue_labels) or find_semantic_control(ns,('btn_next','next_button','submit','continue','send_code','get_code','login_button','email_next','sendcode'))
-print('KWAI_ACCOUNT_CONTINUE_PRESENT='+str(bool(b)))
-if b and b.get('enabled')!='false':
+print('KWAI_ACCOUNT_CONTINUE_PRESENT='+str(b is not None))
+if b is not None and b.get('enabled')!='false':
     tap(b)
 else:
     adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(2)
@@ -140,7 +140,7 @@ if state!='password':
     # Some builds require choosing password login explicitly from the account step.
     alt=exact_button(ns,('Use password','Log in with password','Login with password','Entrar com senha','Password login','Other methods'))
     print('KWAI_PASSWORD_LOGIN_OPTION_PRESENT='+str(bool(alt)))
-    if alt:
+    if alt is not None:
         tap(alt)
         state,ns=wait_password_or_challenge(8)
     if state=='challenge': print('KWAI_LOGIN_CHALLENGE_AFTER_ACCOUNT'); raise SystemExit(6)
@@ -152,7 +152,7 @@ if len(verified)!=1:
     raise SystemExit(4)
 if not clear_and_type(verified[0],PASSWORD): print('KWAI_PASSWORD_FIELD_MISSING'); raise SystemExit(4)
 ns=snap(); b=exact_button(ns,('Log in','Login','Sign in','Entrar','Continue','Continuar','Next','Avançar'))
-if b: tap(b)
+if b is not None: tap(b)
 else: adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(1)
 
 for _ in range(20):
