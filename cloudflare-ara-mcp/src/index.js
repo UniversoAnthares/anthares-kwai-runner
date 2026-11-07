@@ -14,8 +14,11 @@ import { approvedTestTool, runApprovedTests } from "./approved-tests.mjs";
 import { ownerGithubConfigured, startOwnerGithub, finishOwnerGithub } from "./owner-github-auth.mjs";
 import { CLIENT_INSTRUCTIONS, DISCOVERY_REVISION, clientDiscovery } from "./client-discovery.mjs";
 var ORIGIN = "https://anthares-ara-mcp.anthares1.workers.dev";
-var CONTROL = "https://anthares-ara-vercel-reserve.vercel.app";
-var CONTROL_STANDBY = "https://anthares-ara-vercel-reserve-lucasyahn-6808.vercel.app";
+// The signed shared-Neon Worker is the active control plane. Two Vercel
+// endpoints remain ordered, quota-independent recovery routes for safe calls.
+var CONTROL = "https://anthares-ara-neon-standby.anthares1.workers.dev";
+var CONTROL_STANDBY = "https://anthares-ara-vercel-reserve.vercel.app";
+var CONTROL_TERTIARY = "https://anthares-ara-vercel-reserve-lucasyahn-6808.vercel.app";
 var DEFAULT_DEVICE = "DESKTOP-FTDK0HP";
 var FALLBACK_DEVICE = "DESKTOP-FTDK0HP-SYSTEM";
 var SCOPES = /* @__PURE__ */ new Set(["ara.read", "ara.write", "github.read", "github.write", "forgejo.read"]);
@@ -85,6 +88,10 @@ var StatelessGatewayState = class {
     this.env = env;
   }
   async ensure() {
+    // Secrets are immutable for the lifetime of this deployed Worker isolate.
+    // Reuse the decoded JWK material instead of re-parsing it on every token
+    // and control request. Never serialize key material to KV, DO or logs.
+    if (this._material) return this._material;
     const a = String(this.env.ARA_OAUTH_SECRET || "");
     const pr = String(this.env.ARA_SIGNING_PRIVATE_JWK || "");
     const pu = String(this.env.ARA_SIGNING_PUBLIC_JWK || "");
@@ -96,7 +103,8 @@ var StatelessGatewayState = class {
     } catch {
       throw new Error("stateless_gateway_key_invalid");
     }
-    return { priv, pub, secret: a };
+    this._material = { priv, pub, secret: a };
+    return this._material;
   }
   async publicPem() {
     const { pub } = await this.ensure();
@@ -111,7 +119,8 @@ ${lines.join("\n")}
   }
   async signControl(method, path, raw = "") {
     const { priv } = await this.ensure();
-    const k = await crypto.subtle.importKey("jwk", priv, { name: "Ed25519" }, false, ["sign"]);
+    const k = this._cachedSigningKey || await crypto.subtle.importKey("jwk", priv, { name: "Ed25519" }, false, ["sign"]);
+    this._cachedSigningKey = k;
     const ts = String(Date.now());
     const payload = `${ts}
 ${String(method).toUpperCase()}
@@ -122,7 +131,8 @@ ${raw}`;
   }
   async hmac(input) {
     const { secret } = await this.ensure();
-    const k = await crypto.subtle.importKey("raw", fromB64url(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const k = this._cachedHmacKey || await crypto.subtle.importKey("raw", fromB64url(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    this._cachedHmacKey = k;
     return b64urlBytes(new Uint8Array(await crypto.subtle.sign("HMAC", k, te.encode(input))));
   }
   async signToken(payload) {
@@ -308,7 +318,7 @@ ${raw}`;
     return true;
   }
 };
-async function control(env,path,opts={}) {return requestControl({origins:[CONTROL,CONTROL_STANDBY,"https://anthares-ara-neon-standby.anthares1.workers.dev"],path,...opts,fetchImpl:(url,init)=>url.startsWith("https://anthares-ara-neon-standby.anthares1.workers.dev/")&&env.ARA_NEON_STANDBY?env.ARA_NEON_STANDBY.fetch(url,init):fetch(url,init),sign:(method,p,raw)=>st(env).signControl(method,p,raw)});}
+async function control(env,path,opts={}) {return requestControl({origins:[CONTROL,CONTROL_STANDBY,CONTROL_TERTIARY],path,...opts,fetchImpl:(url,init)=>url.startsWith(CONTROL+"/")&&env.ARA_NEON_STANDBY?env.ARA_NEON_STANDBY.fetch(url,init):fetch(url,init),sign:(method,p,raw)=>st(env).signControl(method,p,raw)});}
 __name(control, "control");
 async function controlJson(env, path, opts) {
   const r = await control(env, path, opts);
