@@ -88,7 +88,7 @@ jobs:
           assert 'single-process-dual-transport' in supervisor, 'canonical SYSTEM supervisor lost dual-transport mode'
           assert "recovery_transport='gitlab+github-private-issue-queues'" in supervisor, 'private queues are no longer the recovery transport'
           assert "https://anthares-remote-primary.vercel.app" in supervisor, 'Vercel+Neon primary control is no longer wired into canonical V4'
-          assert '$env:ANTHARES_CONTROL_URL=$httpControl' in supervisor, 'canonical V4 no longer enables the primary HTTP transport when a device token exists'
+          assert ("$env:ANTHARES_CONTROL_URL=$httpControl" in supervisor or "$env:ANTHARES_CONTROL_URL=$choice.origin" in supervisor), 'canonical V4 has no authenticated HTTP controller selector'
           assert 'single_executor=$true' in supervisor, 'canonical supervisor lost single-executor invariant'
           assert 'existing SYSTEM private queue credential is missing' in installer, 'installer no longer fails closed when SYSTEM credential is absent'
           assert 'queue_credential_validated=$true' in installer, 'installer no longer records credential validation'
