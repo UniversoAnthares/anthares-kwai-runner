@@ -47,6 +47,7 @@ jobs:
           export KWAI_KW02_LOGIN_CONTROL_PROBE=1
           export KWAI_KW02_SUPPRESS_EXTERNAL_AUTH=1
           export KWAI_KW02_MAIN_LOGIN_PROVEN=1
+          export KWAI_KW02_EMAIL_NESTED=1
           python3 tools/kwai_credential_login.py
           sleep 8
           KWAI_EXPECTED_ACCOUNT=lucasrosalem python3 kwai_auth_probe.py
