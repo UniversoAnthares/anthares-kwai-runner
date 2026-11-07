@@ -39,12 +39,20 @@ open(REPORT,'w').close()
 
 # Preserve the old contract: this adapter is still responsible for making sure
 # the verified split APK set is installed and the app has been launched.
-install=subprocess.run(['bash','kwai_vault_install.sh'],stdout=subprocess.PIPE,
-                       stderr=subprocess.STDOUT,text=True,timeout=300)
-print(install.stdout,end='')
-if install.returncode!=0:
-    emit('FAIL_INSTALL_OR_INITIAL_LAUNCH='+str(install.returncode))
-    raise SystemExit(install.returncode)
+if os.environ.get('KWAI_KW02_SKIP_REINSTALL') == '1':
+    check=subprocess.run(['adb','shell','pm','path','com.kwai.video'],stdout=subprocess.PIPE,
+                         stderr=subprocess.DEVNULL,text=True,timeout=30)
+    if check.returncode!=0 or 'package:' not in check.stdout:
+        emit('FAIL_KW02_EXISTING_PACKAGE_NOT_INSTALLED')
+        raise SystemExit(40)
+    emit('KWAI_EXISTING_VERIFIED_APK_INSTALL_REUSED=1')
+else:
+    install=subprocess.run(['bash','kwai_vault_install.sh'],stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT,text=True,timeout=300)
+    print(install.stdout,end='')
+    if install.returncode!=0:
+        emit('FAIL_INSTALL_OR_INITIAL_LAUNCH='+str(install.returncode))
+        raise SystemExit(install.returncode)
 
 env=os.environ.copy()
 env['KWAI_ROUTE']=ROUTE_MAP.get(MODE,'me_direct')
