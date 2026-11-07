@@ -81,6 +81,7 @@ def main():
     if args.action=="status":
         print("KWAI_NEON_STATUS=READ_ONLY")
         print("KWAI_NEON_UNCERTAIN="+str(len(outcome.get("records",[]))))
+        print("KWAI_NEON_ELIGIBLE="+str(outcome.get("eligible_count",0)))
         print("KWAI_NEON_UNCERTAIN_GATE="+str(outcome.get("status","UNKNOWN")))
     elif args.action=="lease":
         job=outcome.get("job")
