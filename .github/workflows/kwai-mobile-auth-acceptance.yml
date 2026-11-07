@@ -44,6 +44,7 @@ jobs:
           grep -q 'FSM_MAIN_REACHED' /tmp/kw02-fsm.log
           export KWAI_KW02_SKIP_REINSTALL=1
           export KWAI_KW02_PRESERVE_FOREGROUND=1
+          export KWAI_KW02_LOGIN_CONTROL_PROBE=1
           python3 tools/kwai_credential_login.py
           sleep 8
           KWAI_EXPECTED_ACCOUNT=lucasrosalem python3 kwai_auth_probe.py
