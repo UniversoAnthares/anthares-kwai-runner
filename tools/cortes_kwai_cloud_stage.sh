@@ -16,6 +16,7 @@ python3 tools/cortes_kwai_neon_cloud.py lease --json '{"lease_seconds":600}' >/t
 grep -qx KWAI_NEON_LEASE=ACQUIRED /tmp/kwai-lease.txt || { echo KWAI_QUEUE_EMPTY=1; exit 0; }
 # A lease must be released if publication has not started.
 release_prestart() {
+  trap - ERR
   python3 -c 'import json; d=json.load(open("kwai-neon-lease.json")); json.dump({"id":d["id"],"lease_generation":int(d["lease_generation"])},open("/tmp/kwai-release.json","w"))'
   python3 tools/cortes_kwai_neon_cloud.py fail --json @/tmp/kwai-release.json
 }
