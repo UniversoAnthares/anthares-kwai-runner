@@ -119,7 +119,8 @@ ${lines.join("\n")}
   }
   async signControl(method, path, raw = "") {
     const { priv } = await this.ensure();
-    const k = await (this._cachedSigningKey ||= crypto.subtle.importKey("jwk", priv, { name: "Ed25519" }, false, ["sign"]));
+    const k = this._cachedSigningKey || await crypto.subtle.importKey("jwk", priv, { name: "Ed25519" }, false, ["sign"]);
+    this._cachedSigningKey = k;
     const ts = String(Date.now());
     const payload = `${ts}
 ${String(method).toUpperCase()}
@@ -130,7 +131,8 @@ ${raw}`;
   }
   async hmac(input) {
     const { secret } = await this.ensure();
-    const k = await (this._cachedHmacKey ||= crypto.subtle.importKey("raw", fromB64url(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]));
+    const k = this._cachedHmacKey || await crypto.subtle.importKey("raw", fromB64url(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    this._cachedHmacKey = k;
     return b64urlBytes(new Uint8Array(await crypto.subtle.sign("HMAC", k, te.encode(input))));
   }
   async signToken(payload) {
