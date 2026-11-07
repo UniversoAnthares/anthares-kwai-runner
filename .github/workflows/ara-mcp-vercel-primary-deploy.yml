@@ -6,6 +6,20 @@ on:
         type: choice
         options: [validate, standby, gateway]
         default: validate
+      release_sha:
+        description: 'Exact reviewed SHA required for standby or gateway release'
+        required: false
+        type: string
+      mode:
+        description: 'Regular release or incident recovery'
+        required: false
+        default: release
+        type: choice
+        options: [release, emergency]
+      incident_ref:
+        description: 'Required for emergency recovery'
+        required: false
+        type: string
   pull_request:
     paths: ['cloudflare-ara-mcp/**', 'cloudflare-ara-neon-standby/**', '.github/workflows/ara-mcp-vercel-primary-deploy.yml']
 permissions:
@@ -19,6 +33,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.phase != 'validate' && inputs.release_sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -30,7 +48,7 @@ jobs:
           node --test cloudflare-ara-mcp/src/control-transport.test.mjs cloudflare-ara-mcp/src/owner-github-auth.test.mjs cloudflare-ara-mcp/src/claude-client-policy.test.mjs
           node cloudflare-ara-mcp/capabilities.test.mjs
   deploy:
-    if: github.event_name == 'workflow_dispatch' && inputs.phase != 'validate'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.phase != 'validate'
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 8
@@ -39,6 +57,32 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Enforce approved SHA and emergency incident before changing Cloudflare
+        shell: bash
+        env:
+          APPROVED_SHA: ${{ inputs.release_sha }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          INCIDENT_REF: ${{ inputs.incident_ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$APPROVED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          test "$(git rev-parse HEAD)" = "$APPROVED_SHA" || exit 1
+          main_sha="$(curl -fsS --retry 0 --max-time 20 -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPOSITORY/git/ref/heads/main" | python3 -c 'import json,sys; print(json.load(sys.stdin)["object"]["sha"])')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          if [[ "$RELEASE_MODE" == release ]]; then
+            test "$APPROVED_SHA" = "$main_sha" || exit 1
+          elif [[ "$RELEASE_MODE" == emergency ]]; then
+            test -n "$INCIDENT_REF" || exit 1
+            git merge-base --is-ancestor "$APPROVED_SHA" "$main_sha" || exit 1
+          else
+            exit 1
+          fi
+          echo "ARA_MCP_RELEASE_APPROVED_SHA=$APPROVED_SHA mode=$RELEASE_MODE"
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
