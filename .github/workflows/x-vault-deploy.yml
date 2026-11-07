@@ -1,24 +1,61 @@
 name: X Durable Session Vault Deploy
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'cloudflare-x-vault/**'
-      - '.github/workflows/x-vault-deploy.yml'
+    inputs:
+      release_sha:
+        description: 'Exact approved 40-character Git SHA'
+        required: true
+        type: string
+      mode:
+        description: 'Normal release or authorized incident recovery'
+        required: true
+        type: choice
+        default: release
+        options: [release, emergency]
+      incident_ref:
+        description: 'Incident reference (required for emergency)'
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
   group: anthares-x-vault-deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: macos-14
     timeout-minutes: 10
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Enforce approved SHA and incident recovery boundary
+        env:
+          APPROVED_SHA: ${{ inputs.release_sha }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          INCIDENT_REF: ${{ inputs.incident_ref }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$APPROVED_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          test "$(git rev-parse HEAD)" = "$APPROVED_SHA" || exit 1
+          main_sha="$(curl -fsS --retry 0 --max-time 20 -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPOSITORY/git/ref/heads/main" | python3 -c 'import json,sys; print(json.load(sys.stdin)["object"]["sha"])')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          if [[ "$RELEASE_MODE" == release ]]; then
+            test "$APPROVED_SHA" = "$main_sha" || exit 1
+          elif [[ "$RELEASE_MODE" == emergency ]]; then
+            test -n "$INCIDENT_REF" || exit 1
+            git merge-base --is-ancestor "$APPROVED_SHA" "$main_sha" || exit 1
+          else
+            exit 1
+          fi
+          echo "APPROVED_DEPLOY_SHA=$APPROVED_SHA mode=$RELEASE_MODE"
       - name: Validate Render-independent vault source
         run: |
           set -euo pipefail
