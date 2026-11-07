@@ -3,6 +3,9 @@ on:
   push:
     paths:
       - .github/workflows/cf11-cloudflare-quota-remaining.yml
+  schedule:
+    # Consult yesterday's closed UTC day and a seven-day lookback, no local runner.
+    - cron: '37 0 * * *'
   workflow_dispatch:
 permissions:
   contents: read

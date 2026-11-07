@@ -83,6 +83,18 @@ jobs:
           node --check cloudflare-ara-backup/src/stateless-vercel-proxy.js
           grep -q 'anthares-ara-vercel-reserve.vercel.app' cloudflare-ara-backup/src/stateless-vercel-proxy.js
           ! grep -q 'durable_objects' cloudflare-ara-backup/wrangler-stateless-proxy.toml
+      - name: Preflight Vercel upstream before any Worker replacement
+        if: ${{ steps.gate.outputs.already_deployed != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="https://anthares-ara-vercel-reserve.vercel.app/healthz"
+          code="$(curl --retry 0 -sS -o /tmp/ara-upstream-health -w '%{http_code}' --max-time 15 "$upstream" || true)"
+          echo "ARA_UPSTREAM_HEALTH_HTTP=$code"
+          if [ "$code" != 200 ] || ! grep -q '"ok":true' /tmp/ara-upstream-health; then
+            echo 'ARA_UPSTREAM_NOT_HEALTHY: preserving active stateful Durable Object Worker'
+            exit 1
+          fi
       - name: Deploy quota-independent proxy
         if: ${{ steps.gate.outputs.already_deployed != 'true' }}
         shell: bash
