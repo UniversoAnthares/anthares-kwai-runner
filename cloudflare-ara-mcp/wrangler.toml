@@ -5,6 +5,10 @@ compatibility_date = "2026-10-01"
 
 # Current production uses protected stateless signing/OAuth secrets and Neon replay storage.
 # Retain the historical class registration without binding runtime requests to its quota.
+[[durable_objects.bindings]]
+name = "ARA_LIVE_CHANNEL"
+class_name = "GatewayState"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GatewayState"]
@@ -15,7 +19,7 @@ name = "AUTH_EMAIL_SEND"
 destination_address = "lucasyahn@gmail.com"
 
 [vars]
-ARA_PRIVATE_QUEUE_PRIMARY = "probe"
+ARA_PRIVATE_QUEUE_PRIMARY = "push"
 AUTH_EMAIL_FROM = "contato@anthares.us"
 AUTH_OWNER_METHOD = "github"
 ARA_OWNER_GITHUB_CLIENT_ID = "Ov23li1xRCECmyI7JYsn"
