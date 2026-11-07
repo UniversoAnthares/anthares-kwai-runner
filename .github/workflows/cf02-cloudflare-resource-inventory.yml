@@ -1,5 +1,8 @@
 name: CF-02 Cloudflare resources inventory
 on:
+  push:
+    paths:
+      - .github/workflows/cf02-cloudflare-resource-inventory.yml
   workflow_dispatch:
 permissions:
   contents: read
