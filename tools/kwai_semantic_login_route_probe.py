@@ -169,8 +169,17 @@ def open_profile_then_login(tag):
         time.sleep(max(1,SETTLE/2))
     return False
 
-ensure_network('initial')
-relaunch()
+if os.environ.get('KWAI_KW02_PRESERVE_FOREGROUND') == '1':
+    existing=adb('shell','pidof',PKG).stdout.strip()
+    if existing:
+        log('KWAI_AUTH_REUSE_EXISTING_FOREGROUND=1')
+    else:
+        log('KWAI_AUTH_EXISTING_FOREGROUND_ABSENT_ATTEMPT_LAUNCH')
+        adb('shell','monkey','-p',PKG,'-c','android.intent.category.LAUNCHER','1')
+        time.sleep(6)
+else:
+    ensure_network('initial')
+    relaunch()
 
 for i in range(8):
     xml,root,ns=state(f'pre-{i}')
