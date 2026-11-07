@@ -1,0 +1,119 @@
+name: CF-11 Cloudflare Free Quota Remaining Operations
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quota:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: 5c24be052e5144391f73a8e03491e88e
+    steps:
+      - name: Inspect actual KV D1 DO usage without sensitive values
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,datetime,collections,urllib.error
+          endpoint='https://api.cloudflare.com/client/v4/graphql'
+          tok=os.environ.get('CF_TOKEN','')
+          account=os.environ['CF_ACCOUNT']
+          assert len(tok)>15,'CF11_MISSING_TOKEN'
+          queries={
+           'kv':'''
+            query($accountTag:String!,$start:Date,$end:Date){
+             viewer{accounts(filter:{accountTag:$accountTag}){
+              kvOperationsAdaptiveGroups(filter:{date_geq:$start,date_leq:$end},
+               limit:10000){dimensions{date namespaceId actionType} sum{requests}}
+             }}
+            }''',
+           'kv_storage':'''
+            query($accountTag:String!,$start:Date,$end:Date){
+             viewer{accounts(filter:{accountTag:$accountTag}){
+              kvStorageAdaptiveGroups(filter:{date_geq:$start,date_leq:$end},
+               limit:10000){dimensions{date namespaceId}max{keyCount byteCount}}
+             }}
+            }''',
+           'd1':'''
+            query($accountTag:String!,$start:Date,$end:Date){
+             viewer{accounts(filter:{accountTag:$accountTag}){
+              d1AnalyticsAdaptiveGroups(filter:{date_geq:$start,date_leq:$end},
+               limit:10000){dimensions{date databaseId}sum{rowsRead rowsWritten readQueries writeQueries}}
+             }}
+            }''',
+           'do_compute':'''
+            query($accountTag:String!,$start:Date,$end:Date){
+             viewer{accounts(filter:{accountTag:$accountTag}){
+              durableObjectsInvocationsAdaptiveGroups(filter:{date_geq:$start,date_leq:$end},
+               limit:10000){sum{requests responseBodySize}}
+             }}
+            }''',
+           'do_storage':'''
+            query($accountTag:String!,$start:Date,$end:Date){
+             viewer{accounts(filter:{accountTag:$accountTag}){
+              durableObjectsStorageGroups(filter:{date_geq:$start,date_leq:$end},
+               limit:10000){max{storedBytes}}
+             }}
+            }'''
+          }
+          var={'accountTag':account,'start':'2026-10-31','end':'2026-11-07'}
+          errors=[]
+          for name,query in queries.items():
+           body=json.dumps({'query':query,'variables':var}).encode()
+           req=urllib.request.Request(endpoint,data=body,headers={
+             'Authorization':'Bearer '+tok,'Content-Type':'application/json','Accept':'application/json',
+             'User-Agent':'Anthares-CF11-Quota/1'})
+           try:
+            with urllib.request.urlopen(req,timeout=25) as r: data=json.load(r)
+           except urllib.error.HTTPError as e:
+            errors.append((name,'HTTP_'+str(e.code)));continue
+           except Exception as e:
+            errors.append((name,type(e).__name__));continue
+           if data.get('errors'):
+            errors.append((name,[str(x.get('message'))[:160] for x in data['errors'][:3]]))
+            continue
+           accounts=((data.get('data') or {}).get('viewer') or {}).get('accounts') or []
+           if not accounts:
+            errors.append((name,'ACCOUNT_GRAPHQL_EMPTY'));continue
+           raw=accounts[0] or {}
+           key=next((k for k in raw if k.lower().startswith(name.split('_')[0]) or (name.startswith('do_') and k.startswith('durableObjects'))),None)
+           rows=raw.get(key) if key else []
+           if rows is None:
+            errors.append((name,'NO_DATA_KEY'));continue
+           if name=='kv':
+            agg=collections.defaultdict(lambda:collections.Counter())
+            for row in rows:
+             d=row.get('dimensions') or {}
+             agg[d.get('date','unknown')][d.get('actionType','other')]+=round(float((row.get('sum') or {}).get('requests',0)))
+            for date,c in sorted(agg.items()):
+             print('CF11_KV_DAILY',json.dumps({'date':date,'operations':dict(c)},sort_keys=True))
+            namespaces=collections.defaultdict(lambda:collections.Counter())
+            for row in rows:
+             d=row.get('dimensions') or {}
+             namespaces[d.get('namespaceId','unknown')][d.get('actionType','other')]+=round(float((row.get('sum') or {}).get('requests',0)))
+            print('CF11_KV_NAMESPACE',json.dumps({key:dict(val) for key,val in namespaces.items()},sort_keys=True))
+           elif name=='kv_storage':
+            latest={}
+            for row in rows:
+             d=row.get('dimensions') or {}
+             id=d.get('namespaceId','unknown')
+             if id not in latest or (d.get('date','')>latest[id]['date']):
+              latest[id]={'date':d.get('date'),**(row.get('max') or {})}
+            print('CF11_KV_STORAGE',json.dumps(latest,sort_keys=True))
+           elif name=='d1':
+            agg=collections.defaultdict(lambda:collections.Counter())
+            for row in rows:
+             d=row.get('dimensions') or {}
+             for k,v in (row.get('sum') or {}).items():agg[d.get('date','unknown')][k]+=round(float(v or 0))
+            print('CF11_D1_DAILY',json.dumps({k:dict(v) for k,v in sorted(agg.items())},sort_keys=True))
+           elif name=='do_compute':
+            totals=collections.Counter()
+            for row in rows:
+             for k,v in (row.get('sum') or {}).items():totals[k]+=round(float(v or 0))
+            print('CF11_DO_COMPUTE',json.dumps({'rows':len(rows),'totals':dict(totals)},sort_keys=True))
+           elif name=='do_storage':
+            max_bytes=max([float((row.get('max') or {}).get('storedBytes') or 0) for row in rows] or [0])
+            print('CF11_DO_STORAGE',json.dumps({'rows':len(rows),'max_stored_bytes':int(max_bytes)},sort_keys=True))
+          print('CF11_FINAL',json.dumps({'errors':errors,'queries':list(queries),'range':var},sort_keys=True))
+          if errors:raise SystemExit('CF11_USAGE_INCOMPLETE')
+          PY
