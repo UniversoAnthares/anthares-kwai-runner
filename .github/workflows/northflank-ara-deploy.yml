@@ -1,10 +1,9 @@
 # Provisioning workflow: explicit build start is required because CI is disabled.
 name: Provision isolated ARA Northflank controller
+# Legacy provisioning uses nf-compute-10, which has no verified R$0 entitlement.
+# Keep source for recovery; execution requires a separately approved no-cost replacement.
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/northflank-ara-deploy.yml
 permissions:
   contents: read
 concurrency:
@@ -12,6 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   provision:
+    if: ${{ false }} # No new paid provisioning under the standing R$0 policy
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
