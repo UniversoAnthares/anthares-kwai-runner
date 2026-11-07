@@ -87,7 +87,7 @@ def success(xml,ns):
     return False
 
 def clear_known_gate(root,ns):
-    for key in ('bt_interest_skip_top_right','signin_fre_continue_button'):
+    for key in ('bt_interest_skip_top_right',):
         n=find_id(ns,key)
         if n is not None:return tap_xy(clickable_center(root,n),key)
     if any('interest' in rid(x) for x in ns):
@@ -143,6 +143,29 @@ def ensure_network(reason='initial'):
 def state(tag):
     xml=dump(tag);root,ns=root_nodes(xml)
     if not xml:return xml,root,ns
+    if os.environ.get('KWAI_KW02_SUPPRESS_EXTERNAL_AUTH')=='1':
+        pkgs={n.get('package','') for n in ns}
+        chrome=any('com.android.chrome' in x for x in pkgs) or any((n.get('resource-id') or '').startswith('com.android.chrome:') for n in ns)
+        google=any('com.google.android.gms' in x for x in pkgs)
+        if chrome or google:
+            log('KWAI_KW02_EXTERNAL_SIGNIN_INTERCEPT='+('CHROME_SETUP' if chrome else 'GOOGLE_SIGNIN'))
+            if chrome:
+                skip=find_id(ns,'signin_fre_dismiss_button')
+                if skip is not None:
+                    tap_xy(clickable_center(root,skip),'chrome_first_run_skip_google_account')
+            adb('shell','input','keyevent','4')
+            time.sleep(2)
+            xml=dump(tag+'-after-back');root,ns=root_nodes(xml)
+            external=any('com.google.android.gms' in (n.get('package') or '') or 'com.android.chrome' in (n.get('package') or '') for n in ns)
+            if external:
+                adb('shell','input','keyevent','4')
+                time.sleep(2)
+                xml=dump(tag+'-after-second-back');root,ns=root_nodes(xml)
+            if not any((n.get('package') or '')==PKG for n in ns):
+                adb('shell','am','start','-W','--activity-clear-top','-n',PKG+'/com.yxcorp.gifshow.homepage.HomeActivity',timeout=22)
+                time.sleep(3)
+                xml=dump(tag+'-native-home');root,ns=root_nodes(xml)
+            log('KWAI_KW02_EXTERNAL_SIGNIN_HANDLED=1')
     ids={rid(n) for n in ns}
     unconnected=any('un_connected_network' in x for x in ids)
     log(f'STATE={tag} NODES={len(ns)} PID='+(adb('shell','pidof',PKG).stdout.strip() or 'none'))
