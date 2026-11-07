@@ -3,12 +3,15 @@ on:
   push:
     branches: [main]
     paths:
-      - 'vercel-ara-primary/**'
-      - 'anthares-remote-mcp/**'
-      - 'db/**'
-      - 'config/**'
+      - '**'
       - '!**/*.md'
       - '!**/*.mdx'
+      - '!docs/**'
+      - '!test-hub/**'
+      - '!leases/**'
+      - '!lease/**'
+      - '!evidence/**'
+      - '!.github/**'
   workflow_dispatch:
 
 permissions:
