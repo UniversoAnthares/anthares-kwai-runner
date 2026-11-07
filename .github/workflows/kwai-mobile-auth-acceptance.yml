@@ -1,6 +1,9 @@
 name: Kwai Mobile Auth Acceptance
 on:
   workflow_dispatch:
+  push:
+    branches: [kwai-kw02-auth-ui-20261107]
+    paths: ['.github/workflows/kwai-mobile-auth-acceptance.yml']
 permissions:
   contents: read
 concurrency:
