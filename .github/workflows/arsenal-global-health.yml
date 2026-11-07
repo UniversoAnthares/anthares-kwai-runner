@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - 'tools/arsenal_health.py'
-      - 'test-hub/ARSENAL.md'
       - '.github/workflows/arsenal-global-health.yml'
   schedule:
     - cron: "17 */6 * * *"
