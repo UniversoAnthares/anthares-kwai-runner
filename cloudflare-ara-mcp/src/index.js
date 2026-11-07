@@ -404,13 +404,18 @@ async function execute(env, type, args = {}, timeout = 30, device = DEFAULT_DEVI
     const t=Math.max(1,Math.min(Number(timeout)||30,120));
     // Create the signed Neon job exactly once. Send repeated wake signals only
     // while the command is in progress, with zero idle HTTP polling.
+    let settled=false;
     const running=controlJson(env,"/v1/mcp/execute",{
       method:"POST",timeoutMs:Math.min(150000,(t+12)*1000),
       body:{device_id:device,type,args,timeout_seconds:t,idempotency_key:"cfmcp-"+crypto.randomUUID()}
-    }).then(value=>({ok:true,value}),error=>({ok:false,error}));
-    for(let i=0;i<4;i++) {
-      await new Promise(resolve=>setTimeout(resolve,i===0?350:850));
-      try {await cf06Wake(env);} catch {}
+    }).then(value=>{settled=true;return {ok:true,value};},error=>{settled=true;return {ok:false,error};});
+    // Wake only while the job is pending. Delay increases for a slow
+    // persistence path; a completed job generates no further DO traffic.
+    for(const ms of [350,800,1600,3200]) {
+      if(settled)break;
+      await new Promise(resolve=>setTimeout(resolve,ms));
+      if(settled)break;
+      try{await cf06Wake(env);}catch{}
     }
     const done=await running;
     if(!done.ok) throw done.error;

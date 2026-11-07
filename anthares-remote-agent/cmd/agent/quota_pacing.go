@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/url"
+	"math/rand"
 	"strings"
 	"time"
 )
@@ -23,4 +24,22 @@ func controlPollDelay(controlURL string, afterError bool) time.Duration {
 		return 3 * time.Second
 	}
 	return 2 * time.Second
+}
+
+
+// controlPollErrorBackoff limits sustained traffic when an HTTP controller
+// is unavailable. It is used only in the legacy HTTP fallback transport;
+// push mode has no idle polling. Jitter prevents concurrent agents reconnecting
+// on the same boundary. The maximum delay is bounded to preserve recovery.
+func controlPollErrorBackoff(controlURL string, failures int) time.Duration {
+    delay := controlPollDelay(controlURL, true)
+    if failures < 1 {failures = 1}
+    for i:=1;i<failures && i<5;i++ {
+        delay *= 2
+        if delay >= 12*time.Minute {delay = 12*time.Minute;break}
+    }
+    if delay > 12*time.Minute {delay = 12*time.Minute}
+    jitter := time.Duration(rand.Int63n(int64(delay/10)+1))
+    if delay+jitter > 15*time.Minute {return 15*time.Minute}
+    return delay+jitter
 }

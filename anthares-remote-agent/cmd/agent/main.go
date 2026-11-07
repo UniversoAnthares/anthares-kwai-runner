@@ -92,15 +92,18 @@ func main() {
 	go resultReplayLoop(cfg)
 
 	sem := executionSemaphore(cfg.MaxConcurrent)
+	pollFailures := 0
 	for {
 		sem <- struct{}{}
 		job, err := pollJob(cfg)
 		if err != nil {
 			<-sem
+			pollFailures++
 			fmt.Fprintln(os.Stderr, "poll error:", err)
-			time.Sleep(controlPollDelay(cfg.ControlURL, true))
+			time.Sleep(controlPollErrorBackoff(cfg.ControlURL, pollFailures))
 			continue
 		}
+		pollFailures = 0
 		if job == nil {
 			<-sem
 			time.Sleep(controlPollDelay(cfg.ControlURL, false))
