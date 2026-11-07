@@ -1,0 +1,77 @@
+name: CF-01 Cloudflare seven-day inventory
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cf01:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Query account analytics read-only
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: 5c24be052e5144391f73a8e03491e88e
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,json,datetime as dt,urllib.request,urllib.error,collections
+          token=os.environ.get('CF_TOKEN','')
+          if len(token)<10:raise SystemExit('CF01_AUTH_MISSING')
+          end=dt.datetime.now(dt.timezone.utc).replace(hour=0,minute=0,second=0,microsecond=0)
+          begin=end-dt.timedelta(days=7)
+          query='''query($acc: string,$start: string,$end: string) {
+            viewer {accounts(filter:{accountTag:$acc}) {
+              workersInvocationsAdaptive(limit:10000,filter:{datetime_geq:$start,datetime_lt:$end}) {
+                dimensions {scriptName datetimeHour status}
+                sum {requests errors subrequests}
+              }
+            }}
+          }'''
+          workers=collections.Counter();hours=collections.Counter();daily=collections.Counter();wh=collections.Counter()
+          for index in range(7):
+            a=begin+dt.timedelta(days=index);b=a+dt.timedelta(days=1)
+            variables={'acc':os.environ['CF_ACCOUNT'],'start':a.strftime('%Y-%m-%dT%H:%M:%SZ'),'end':b.strftime('%Y-%m-%dT%H:%M:%SZ')}
+            body=json.dumps({'query':query,'variables':variables}).encode()
+            request=urllib.request.Request('https://api.cloudflare.com/client/v4/graphql',
+              data=body,headers={'Authorization':'Bearer '+token,'Content-Type':'application/json','Accept':'application/json'},method='POST')
+            try:
+              with urllib.request.urlopen(request,timeout=40) as response:j=json.load(response)
+            except urllib.error.HTTPError as ex:
+              print('CF01_HTTP',ex.code,ex.read(500).decode('utf8','replace').replace(token,'[REDACTED]'))
+              raise SystemExit(2)
+            except Exception as ex:raise SystemExit('CF01_TRANSPORT:'+type(ex).__name__)
+            if j.get('errors'):
+              print('CF01_GRAPHQL',json.dumps([e.get('message','')[:300].replace(token,'[REDACTED]') for e in j['errors']]))
+              raise SystemExit(3)
+            accounts=((j.get('data') or {}).get('viewer') or {}).get('accounts') or []
+            if not accounts:raise SystemExit('CF01_NO_ACCOUNT')
+            rows=accounts[0].get('workersInvocationsAdaptive') or []
+            if len(rows)>=10000:raise SystemExit('CF01_ROW_LIMIT_'+str(a.date()))
+            print('CF01_ROWS',str(a.date()),len(rows))
+            for row in rows:
+              d=row.get('dimensions') or {};s=row.get('sum') or {}
+              n=d.get('scriptName') or '(unknown)'
+              h=str(d.get('datetimeHour') or '')[:13]
+              counts=tuple(int(s.get(field) or 0) for field in ('requests','errors','subrequests'))
+              for metric,value in zip(('requests','errors','subrequests'),counts):workers[n,metric]+=value
+              hours[h]+=counts[0];daily[str(a.date()),n]+=counts[0];wh[n,h]+=counts[0]
+          order=sorted({n for n,m in workers.keys()},key=lambda n:-workers[n,'requests'])
+          total=sum(workers[n,'requests'] for n in order);coverage=0;count95=0
+          print('CF01_WINDOW',begin.isoformat(),end.isoformat(),'TOTAL',total,'WORKERS',len(order))
+          for i,n in enumerate(order):
+            r=workers[n,'requests'];coverage+=r
+            if count95==0 and coverage>=0.95*total:count95=i+1
+            print('CF01_WORKER',json.dumps({'rank':i+1,'name':n,'requests':r,'errors':workers[n,'errors'],
+              'subrequests':workers[n,'subrequests'],'percentage':round(100*r/max(1,total),3),
+              'cumulative':round(100*coverage/max(1,total),3)}))
+            for k in range(7):
+              date=(begin+dt.timedelta(days=k)).date().isoformat()
+              print('CF01_WORKER_DAY',n,date,daily.get((date,n),0))
+          for k in range(7):
+            date=(begin+dt.timedelta(days=k)).date().isoformat()
+            print('CF01_ACCOUNT_DAY',date,sum(v for (d,n),v in daily.items() if d==date))
+          for h,r in sorted(hours.items()):print('CF01_ACCOUNT_HOUR',h,r)
+          for (n,h),r in sorted(wh.items()):print('CF01_WORKER_HOUR',n,h,r)
+          print('CF01_TOP95_WORKER_COUNT',count95)
+          PY
