@@ -51,7 +51,7 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
-            set -euo pipefail
+            set -eu
             python3 tools/kwai_media_stage.py
             python3 - <<'PY'
             import json,os
