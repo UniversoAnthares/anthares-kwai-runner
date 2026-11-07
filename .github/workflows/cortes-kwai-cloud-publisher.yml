@@ -7,6 +7,7 @@ on:
         type: choice
         options:
           - status
+          - lease_cycle
           - stage
           - publish
         default: status
@@ -88,3 +89,61 @@ jobs:
         shell: bash
         run: |
           rm -f kwai-neon-lease.json kwai-media-ready.json kwai-session.enc
+
+  kw05-fenced-queue-cycle:
+    needs: canonical-state
+    if: ${{ inputs.mode == 'lease_cycle' && needs.canonical-state.outputs.eligible == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Acquire, renew and release real Neon job without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          export KWAI_NEON_LEASE_FILE="$RUNNER_TEMP/kw05-lease.json"
+          trap 'if [ -s "$RUNNER_TEMP/kw05-current.json" ]; then python3 tools/cortes_kwai_neon_cloud.py fail --json @"$RUNNER_TEMP/kw05-current.json" >/dev/null 2>&1 || true; fi; rm -f "$RUNNER_TEMP"/kw05-{lease,current,first,old-attempt}.json "$RUNNER_TEMP/kw05-old-attempt.log"' EXIT
+          python3 tools/cortes_kwai_neon_cloud.py lease --json '{"lease_seconds":600}' | grep -qx 'KWAI_NEON_LEASE=ACQUIRED'
+          python3 - "$RUNNER_TEMP/kw05-lease.json" "$RUNNER_TEMP/kw05-first.json" <<'PY'
+          import json,sys,re
+          d=json.load(open(sys.argv[1],encoding='utf8'))
+          p=d.get('payload') or {}
+          assert d.get('target_key')=='kwai:lucasrosalem'
+          assert re.fullmatch(r'kwai-cortes-[A-Za-z0-9._:-]{3,145}',d['id'])
+          assert p.get('expected_account')=='lucasrosalem'
+          assert p.get('executor')=='github_hosted_android'
+          assert int(d.get('lease_generation',0))>=1
+          with open(sys.argv[2],'w',encoding='utf8') as f:
+            json.dump({'id':d['id'],'lease_generation':int(d['lease_generation'])},f)
+          print('KW05_CANONICAL_QUEUE_IDENTITY=PASS')
+          PY
+          cp "$RUNNER_TEMP/kw05-first.json" "$RUNNER_TEMP/kw05-current.json"
+          python3 - "$RUNNER_TEMP/kw05-first.json" "$RUNNER_TEMP/kw05-current.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1],encoding='utf8'))
+          d['lease_seconds']=600
+          json.dump(d,open(sys.argv[2],'w',encoding='utf8'))
+          PY
+          python3 tools/cortes_kwai_neon_cloud.py renew --json @"$RUNNER_TEMP/kw05-current.json" | grep -qx 'KWAI_NEON_RENEW=ACK'
+          python3 tools/cortes_kwai_neon_cloud.py fail --json @"$RUNNER_TEMP/kw05-first.json" | grep -qx 'KWAI_NEON_FAIL=ACK'
+          rm -f "$RUNNER_TEMP/kw05-lease.json" "$RUNNER_TEMP/kw05-current.json"
+          python3 tools/cortes_kwai_neon_cloud.py lease --json '{"lease_seconds":600}' | grep -qx 'KWAI_NEON_LEASE=ACQUIRED'
+          python3 - "$RUNNER_TEMP/kw05-lease.json" "$RUNNER_TEMP/kw05-first.json" "$RUNNER_TEMP/kw05-current.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1],encoding='utf8'))
+          a=json.load(open(sys.argv[2],encoding='utf8'))
+          assert d['id']==a['id'], 'queue-order-changed'
+          assert int(d['lease_generation'])==a['lease_generation']+1, 'lease-generation-not-incremented'
+          json.dump({'id':d['id'],'lease_generation':int(d['lease_generation'])},open(sys.argv[3],'w',encoding='utf8'))
+          print('KW05_LEASE_GENERATION_INCREMENT=PASS')
+          PY
+          if python3 tools/cortes_kwai_neon_cloud.py renew --json @"$RUNNER_TEMP/kw05-first.json" > "$RUNNER_TEMP/kw05-old-attempt.log" 2>&1; then
+            echo KW05_STALE_FENCE_ERRONEOUSLY_ACCEPTED=1
+            exit 91
+          fi
+          grep -qx 'KWAI_NEON_HTTP_409' "$RUNNER_TEMP/kw05-old-attempt.log"
+          python3 tools/cortes_kwai_neon_cloud.py fail --json @"$RUNNER_TEMP/kw05-current.json" | grep -qx 'KWAI_NEON_FAIL=ACK'
+          rm -f "$RUNNER_TEMP/kw05-current.json"
+          echo KW05_REAL_NEON_LEASE_RENEW_RELEASE=PASS
+          echo KW05_STALE_FENCE_REJECTED=PASS
+          echo KW05_MEDIA_PUBLICATION_ATTEMPTED=0
