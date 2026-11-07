@@ -120,12 +120,14 @@ jobs:
             except:continue
             if modified>=cutoff:continue
             if name in active or slug in active:
+              # The branch is source code, not an active Preview deployment.
+              # Preserve the branch for rollback; this only cleans the stale
+              # Cloudflare Preview whose last deployment predates Nov 1.
               skipped_active.append(name)
-              continue
             # Preview slug is returned by the Cloudflare control plane.
             # Never infer it from a namespace's truncated display name.
             candidates.append({'name':name,'slug':slug})
-          printrow('CANDIDATES',{'count':len(candidates),'skipped_active':skipped_active,
+          printrow('CANDIDATES',{'count':len(candidates),'source_branches_preserved':len(skipped_active),
             'names':[x['name'] for x in candidates[:100]]})
           deleted=[]
           errors=[]
