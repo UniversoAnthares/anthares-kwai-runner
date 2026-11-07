@@ -12,6 +12,8 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
       CI: "true"
     steps:
+      - name: Prepare Wrangler CLI before sampling
+        run: npm install --global --no-audit --no-fund wrangler@4.154.0
       - name: Sample three Workers without printing request credentials
         shell: bash
         run: |
@@ -20,7 +22,7 @@ jobs:
           targets=['anthares-ara-neon-standby','anthares-ara-reserva','anthares-ara-backup']
           token=os.getenv('CLOUDFLARE_API_TOKEN','')
           if len(token)<10:raise SystemExit('CF03_AUTH_MISSING')
-          pids={};samples={};errs={}
+          pids={};samples={};errs={};nonjson={}
           def drain(proc,name,is_err=False):
             sink=errs[name] if is_err else samples[name]
             for line in iter(proc.stderr.readline if is_err else proc.stdout.readline,''):
@@ -31,7 +33,10 @@ jobs:
                 continue
               try:
                 event=json.loads(line.strip())
-              except Exception:continue
+              except Exception:
+                v=line.strip()
+                if v and len(nonjson[name])<6:nonjson[name].append(re.sub(r'(?i)(bearer\s+)[^\s]+',r'\1[REDACTED]',v[:240]).replace(token,'[REDACTED]'))
+                continue
               req=((event.get('event') or {}).get('request') or {})
               u=urllib.parse.urlsplit(req.get('url') or '')
               if u.scheme not in ('http','https'):continue
@@ -51,14 +56,14 @@ jobs:
                 'outcome':event.get('outcome')})
           try:
             for name in targets:
-              samples[name]=[];errs[name]=[]
-              cmd=['npx','--yes','wrangler@4.154.0','tail',name,'--format','json']
+              samples[name]=[];errs[name]=[];nonjson[name]=[]
+              cmd=['wrangler','tail',name,'--format','json']
               p=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
                 env=os.environ.copy(),start_new_session=True,bufsize=1)
               pids[name]=p
               threading.Thread(target=drain,args=(p,name,False),daemon=True).start()
               threading.Thread(target=drain,args=(p,name,True),daemon=True).start()
-            time.sleep(48)
+            time.sleep(32)
           finally:
             for name,p in pids.items():
               try:os.killpg(p.pid,signal.SIGTERM)
@@ -76,5 +81,5 @@ jobs:
             print('CF03_TAIL',json.dumps({'worker':name,'events':len(events),'hosts':byhost,
               'routes':[{'method':a,'path':b,'client':c,'status':d,'outcome':e,'count':n}
                   for (a,b,c,d,e),n in bypath.most_common(40)],
-              'errors':errs[name][:10]},sort_keys=True))
+              'errors':errs[name][:10], 'nonjson':nonjson[name], 'exit_status':pids[name].poll()},sort_keys=True))
           PY
