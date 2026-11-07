@@ -1,0 +1,56 @@
+name: CF-08 Apply Existing Cloudflare Cron Only
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  update_schedule:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Update Anthares control trigger without redeploying code or media
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error,pathlib
+          account='5c24be052e5144391f73a8e03491e88e'
+          script='anthares-control'
+          old='*/5 * * * *'
+          target='*/10 * * * *'
+          text=pathlib.Path('cloudflare-worker/wrangler.toml').read_text(encoding='utf-8')
+          if f'crons = ["{target}"]' not in text:
+            raise SystemExit('CF08_APPROVED_WANGLER_CRON_MISMATCH')
+          token=os.environ.get('CF_TOKEN','')
+          if len(token)<15:raise SystemExit('CF08_AUTH_MISSING')
+          url=f'https://api.cloudflare.com/client/v4/accounts/{account}/workers/scripts/{script}/schedules'
+          headers={'Authorization':'Bearer '+token,'Accept':'application/json','Content-Type':'application/json'}
+          def request(method,data=None):
+            req=urllib.request.Request(url,data=None if data is None else json.dumps(data).encode('utf-8'),
+              headers=headers,method=method)
+            with urllib.request.urlopen(req,timeout=25) as resp:
+              body=json.load(resp)
+            if body.get('success') is not True:
+              raise RuntimeError('CF08_API_'+method+'_REJECTED')
+            return body
+          current=request('GET')
+          result=current.get('result',{})
+          schedules=result.get('schedules',[]) if isinstance(result,dict) else []
+          crons=[x.get('cron') for x in schedules if isinstance(x,dict)]
+          if crons==[target]:
+            print('CF08_CRON_ALREADY_10MIN')
+          elif crons==[old]:
+            response=request('PUT',[{'cron':target}])
+            next_value=response.get('result',{})
+            new=(next_value.get('schedules',[]) if isinstance(next_value,dict) else [])
+            if [x.get('cron') for x in new]!=[target]:
+              raise RuntimeError('CF08_CRON_WRITE_UNCERTAIN')
+            print('CF08_CRON_5_TO_10MIN_APPLIED')
+          else:
+            raise RuntimeError('CF08_UNEXPECTED_CURRENT_SCHEDULES')
+          print('CF08_WORKER=anthares-control schedule=every_10min old_events_day=288 new_events_day=144')
+          PY
