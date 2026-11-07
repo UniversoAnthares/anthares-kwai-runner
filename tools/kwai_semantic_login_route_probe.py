@@ -174,8 +174,8 @@ def state(tag):
         for j,n in enumerate(ns[:35]):
             identifier=(n.get('resource-id') or '')[-96:]
             classname=(n.get('class') or '').split('.')[-1]
-            label=(n.get('text','')+' '+n.get('content-desc','')).casefold()
-            classification=next((v.replace(' ','_') for v in allowed if v in label or v in identifier.lower()),'other')
+            label_text=(n.get('text','')+' '+n.get('content-desc','')).casefold()
+            classification=next((v.replace(' ','_') for v in allowed if v in label_text or v in identifier.lower()),'other')
             log('KWAI_KW02_LOGIN_NODE=%d stage:%s id:%s cls:%s enabled:%s clickable:%s kind:%s' %
                 (j,tag,identifier,classname,n.get('enabled'),n.get('clickable'),classification))
 
