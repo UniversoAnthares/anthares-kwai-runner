@@ -1,0 +1,36 @@
+name: CF-12 Hosted Cloudflare Free Quota Guard
+on:
+  schedule:
+    # Executed by GitHub, never by a Cloudflare Worker Cron.
+    - cron: '13,43 * * * *'
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "run = real limits; simulate = zero-write contract; rollback = restore CF12-managed routes"
+        required: true
+        default: simulate
+        type: choice
+        options: [simulate, run, rollback]
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: anthares-cf12-account-budget-guard
+  cancel-in-progress: false
+jobs:
+  budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      CF12_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.operation || 'run' }}
+      CF12_ISSUE_NUMBER: "2160"
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Fetch approved CF12 quota policy
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run hosted account budget guard and fail closed on unavailable metrics
+        run: python3 infra/cloudflare/cf12_quota_guard.py
