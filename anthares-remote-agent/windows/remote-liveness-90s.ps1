@@ -61,6 +61,19 @@ try{
 do{
   try{
     . (Join-Path $root 'agent-env.ps1')
+    # Push mode is event-driven; stale HTTP heartbeat is not evidence
+    # of agent failure. The independent recovery watchdog owns process health.
+    $push=$false
+    try{$push=([string](Get-Content -LiteralPath $state -Raw|ConvertFrom-Json).mode -eq 'push-websocket-private-issue-queues')}catch{}
+    if($push){
+      $online=@(Get-CimInstance Win32_Process -Filter "Name='anthares-remote-agent-v4-c8.exe'" -ErrorAction SilentlyContinue|Where-Object{$_.SessionId -eq 0})
+      if($online.Count -eq 0 -and -not $Once){
+        try{Start-ScheduledTask -TaskName 'Anthares Remote Recovery' -ErrorAction SilentlyContinue}catch{}
+      }
+      if($Once){break}
+      Start-Sleep -Seconds 30
+      continue
+    }
     $token=$env:ANTHARES_DEVICE_TOKEN
     if([string]::IsNullOrWhiteSpace($token)){Log 'SKIP missing_device_token';if($Once){break};Start-Sleep 30;continue}
     $current=$primary

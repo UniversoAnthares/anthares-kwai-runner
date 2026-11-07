@@ -76,6 +76,15 @@ func main() {
 		select {}
 	}
 
+	if os.Getenv("ANTHARES_PUSH_TRANSPORT") == "enabled" {
+		if err := replayEncryptedResults(cfg); err != nil {
+			fmt.Fprintln(os.Stderr, "pending result replay deferred:", err)
+		}
+		go resultReplayLoop(cfg)
+		fmt.Println("ARA_PUSH_MODE=ENABLED no_idle_cloudflare_polling")
+		runPushTransport(cfg)
+		return
+	}
 	go heartbeatLoop(cfg)
 	if err := replayEncryptedResults(cfg); err != nil {
 		fmt.Fprintln(os.Stderr, "pending result replay deferred:", err)

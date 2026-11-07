@@ -114,6 +114,7 @@ Stop-ScheduledTask -TaskName $canonicalTask -ErrorAction SilentlyContinue
 Stop-ScheduledTask -TaskName $watchdogTask -ErrorAction SilentlyContinue
 Start-ScheduledTask -TaskName $canonicalTask
 Start-ScheduledTask -TaskName $watchdogTask
+Stop-ScheduledTask -TaskName 'Anthares Remote Liveness 90s' -ErrorAction SilentlyContinue
 Start-ScheduledTask -TaskName 'Anthares Remote Liveness 90s'
 Start-ScheduledTask -TaskName 'Anthares Remote Failover Arbiter'
 Log 'SYSTEM supervisor and watchdog registered and started'

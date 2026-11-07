@@ -18,7 +18,7 @@ func init() {
 		if err != nil {
 			return
 		}
-		if strings.TrimSpace(cfg.ControlURL) == "" {
+		if strings.TrimSpace(cfg.ControlURL) == "" || os.Getenv("ANTHARES_PUSH_TRANSPORT") == "enabled" {
 			return
 		}
 		failures := 0

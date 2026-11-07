@@ -172,6 +172,44 @@ var GatewayState = class extends DurableObject {
     super(ctx, env);
     this.ctx = ctx;
   }
+  // CF-06: reuse the existing GatewayState namespace. Hibernatable
+  // WebSockets keep the agent connected without periodic HTTP requests.
+  async fetch(request) {
+    const route = new URL(request.url).pathname;
+    const deviceTag = "device:DESKTOP-FTDK0HP";
+    if (route === "/attach") {
+      if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+        return json({error:"upgrade_required"},426);
+      }
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      for (const previous of this.ctx.getWebSockets(deviceTag)) {
+        try { previous.close(1000,"replaced"); } catch {}
+      }
+      this.ctx.acceptWebSocket(server,[deviceTag]);
+      server.serializeAttachment({device:"DESKTOP-FTDK0HP",connected_at:Date.now()});
+      // After reconnect, wake once to pick up any queued jobs.
+      server.send("wake");
+      return new Response(null,{status:101,webSocket:client});
+    }
+    if (route === "/status") {
+      return json({ok:true,connected:this.ctx.getWebSockets(deviceTag).some(ws=>ws.readyState===1),transport:"websocket-hibernation"});
+    }
+    if (route === "/wake" && request.method === "POST") {
+      let delivered=0;
+      for (const ws of this.ctx.getWebSockets(deviceTag)) {
+        try {if(ws.readyState===1){ws.send("wake");delivered++;}}catch{}
+      }
+      return json({ok:true,delivered});
+    }
+    return json({error:"not_found"},404);
+  }
+  async webSocketMessage(ws,message) {
+    if (typeof message==="string" && message==="ping") ws.send("pong");
+  }
+  async webSocketClose(ws,code,reason,wasClean) {
+    try {ws.close(code,reason);} catch {}
+  }
   async ensure() {
     let priv = await this.ctx.storage.get("priv");
     let pub = await this.ctx.storage.get("pub");
@@ -298,9 +336,29 @@ async function consumeViaControl(env, kind, jti, exp) {
   }
 }
 __name(consumeViaControl, "consumeViaControl");
+function cf06LiveStub(env) {
+  if (!env.ARA_LIVE_CHANNEL) throw new Error("cf06_live_channel_unbound");
+  return env.ARA_LIVE_CHANNEL.get(env.ARA_LIVE_CHANNEL.idFromName("ARA-DESKTOP-FTDK0HP"));
+}
+async function cf06LiveStatus(env) {
+  const r = await cf06LiveStub(env).fetch("https://ara.internal/status");
+  if (!r.ok) throw new Error("cf06_live_status_http_"+r.status);
+  const x = await r.json();
+  return {connected:!!x.connected,backend:"cloudflare-websocket-hibernation",
+    seen_at:null,heartbeat:null,queued:0,leased:0,uncertain:0,transport:"event-driven"};
+}
+async function cf06Wake(env) {
+  const r=await cf06LiveStub(env).fetch("https://ara.internal/wake",{method:"POST"});
+  if(!r.ok) throw new Error("cf06_live_wake_http_"+r.status);
+  return r.json();
+}
 async function status(env, device = DEFAULT_DEVICE) {
+  if (env.ARA_PRIVATE_QUEUE_PRIMARY === "push") {
+    if(device !== DEFAULT_DEVICE) return {connected:false,backend:"cloudflare-websocket-hibernation"};
+    return cf06LiveStatus(env);
+  }
   if (env.ARA_PRIVATE_QUEUE_PRIMARY === "enabled") return queueStatus(env, device);
-  return controlJson(env, `/v1/mcp/status?device_id=${encodeURIComponent(device)}`);
+  return controlJson(env, "/v1/mcp/status?device_id=" + encodeURIComponent(device));
 }
 __name(status, "status");
 async function bootstrapOtpStatus(env) {
@@ -338,13 +396,32 @@ async function resolveDevice(env, device = DEFAULT_DEVICE) {
 }
 __name(resolveDevice, "resolveDevice");
 async function execute(env, type, args = {}, timeout = 30, device = DEFAULT_DEVICE) {
-  // ChatGPT sends commands only when requested; the agent's independent
-  // private issue queue becomes the primary control transport.
   if (env.ARA_PRIVATE_QUEUE_PRIMARY === "enabled") {
     return queueExecute(env, type, args, timeout, device);
   }
+  if (env.ARA_PRIVATE_QUEUE_PRIMARY === "push") {
+    if(device !== DEFAULT_DEVICE) throw new Error("cf06_unknown_device");
+    const t=Math.max(1,Math.min(Number(timeout)||30,120));
+    // Create the signed Neon job exactly once. Send repeated wake signals only
+    // while the command is in progress, with zero idle HTTP polling.
+    const running=controlJson(env,"/v1/mcp/execute",{
+      method:"POST",timeoutMs:Math.min(150000,(t+12)*1000),
+      body:{device_id:device,type,args,timeout_seconds:t,idempotency_key:"cfmcp-"+crypto.randomUUID()}
+    }).then(value=>({ok:true,value}),error=>({ok:false,error}));
+    for(let i=0;i<4;i++) {
+      await new Promise(resolve=>setTimeout(resolve,i===0?350:850));
+      try {await cf06Wake(env);} catch {}
+    }
+    const done=await running;
+    if(!done.ok) throw done.error;
+    return done.value;
+  }
   const active = await resolveDevice(env, device);
-  return controlJson(env, "/v1/mcp/execute", { method: "POST", timeoutMs: Math.min(15e4, (Number(timeout) + 12) * 1e3), body: { device_id: active, type, args, timeout_seconds: Math.max(1, Math.min(Number(timeout) || 30, 120)), idempotency_key: `cfmcp-${crypto.randomUUID()}` } });
+  return controlJson(env, "/v1/mcp/execute", { method: "POST",
+    timeoutMs: Math.min(150000, (Number(timeout) + 12) * 1000),
+    body: { device_id: active, type, args,
+      timeout_seconds: Math.max(1, Math.min(Number(timeout) || 30, 120)),
+      idempotency_key: "cfmcp-" + crypto.randomUUID() } });
 }
 __name(execute, "execute");
 var TOOLS = [
@@ -514,6 +591,25 @@ const ownerHelpers={origin:ORIGIN,state:st,pending:pendingOwner,complete:complet
 var index_default = { async fetch(req, env) {
   const u = new URL(req.url);
   try {
+    // Device connection is authorized against the existing signed Neon
+    // device auth check. No token is logged, exported, or retained in the DO.
+    if(u.pathname==="/_ara_live/device") {
+      const bearer=req.headers.get("Authorization")||"";
+      const device=req.headers.get("X-Anthares-Device")||"";
+      if(req.method!=="GET" || req.headers.get("Upgrade")?.toLowerCase()!=="websocket")
+        return json({error:"upgrade_required"},426);
+      if(device!==DEFAULT_DEVICE || !/^Bearer [A-Za-z0-9._~+/=-]{24,}$/.test(bearer))
+        return json({error:"unauthorized"},401);
+      const auth=await control(env,"/v1/device/auth-check",{
+        extraHeaders:{Authorization:bearer,"X-Anthares-Device":device},timeoutMs:10000
+      });
+      if(auth.status!==200)return json({error:"unauthorized"},401);
+      const verdict=await auth.json();
+      if(verdict?.ok!==true)return json({error:"unauthorized"},401);
+      return cf06LiveStub(env).fetch("https://ara.internal/attach",{
+        headers:{Upgrade:"websocket"}
+      });
+    }
     if (req.method === "GET" && (u.pathname === "/" || u.pathname === "/health")) {
       await st(env).ensure();
       let controlReady = false, connected = false, controlError = null;
