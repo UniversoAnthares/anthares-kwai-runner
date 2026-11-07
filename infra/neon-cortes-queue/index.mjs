@@ -210,19 +210,14 @@ async function kwaiAction(action,b,actor){
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_RENEW_STALE_FENCE'};
  }
  if(action==='kwai-start'){
-  const sql="WITH ticket AS (SELECT id FROM cortes_publications WHERE "+
-   "id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 "+
-   "AND lease_generation=$4 AND lease_until>now() AND publication_started_at "+
-   "IS NULL FOR UPDATE), budget AS (INSERT INTO cortes_daily_publication_budget "+
-   "(target_key,local_day,reserved) SELECT 'platform:kwai',"+
-   "(now() AT TIME ZONE 'America/Campo_Grande')::date,1 FROM ticket "+
-   "ON CONFLICT (target_key,local_day) DO UPDATE SET "+
-   "reserved=cortes_daily_publication_budget.reserved+1,updated_at=now() "+
-   "WHERE cortes_daily_publication_budget.reserved<100 RETURNING reserved) "+
-   "UPDATE cortes_publications p SET status='started',publication_started_at=now(),"+
-   "updated_at=now() FROM ticket,budget WHERE p.id=ticket.id "+
-   "AND p.status='leased' AND p.lease_owner=$3 AND p.lease_generation=$4 "+
-   "AND p.lease_until>now() RETURNING p.id,p.status,p.lease_generation";
+  // Two existing database triggers atomically reserve account and platform caps.
+  // A second reservation here would double-count the platform:kwai quota.
+  const sql="UPDATE cortes_publications p SET status='started',"+
+   "publication_started_at=now(),updated_at=now() "+
+   "WHERE p.id=$1 AND p.target_key=$2 AND p.status='leased' "+
+   "AND p.lease_owner=$3 AND p.lease_generation=$4 AND p.lease_until>now() "+
+   "AND p.publication_started_at IS NULL "+
+   "RETURNING p.id,p.status,p.lease_generation";
   const rows=await query(sql,[id,KWAI_TARGET,owner,gen]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_STALE_FENCE_OR_QUOTA'};
  }
@@ -269,9 +264,9 @@ async function kwaiAction(action,b,actor){
   const rows=await query("UPDATE cortes_publications SET status='confirmed',"+
    "remote_id=$5,confirmation_evidence=$6::jsonb,lease_owner=NULL,lease_until=NULL,"+
    "updated_at=now() WHERE id=$1 AND target_key=$2 AND status='started' "+
-   "AND lease_owner=$3 AND lease_generation=$4 AND media_sha256=$7 "+
+   "AND lease_owner=$3 AND lease_generation=$4 "+
    "RETURNING id,status,remote_id",[id,KWAI_TARGET,owner,gen,remote,
-    JSON.stringify(evidence),proof.media_sha256]);
+    JSON.stringify(evidence)]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_STALE_FENCE_OR_MEDIA'};
  }
  if(action==='kwai-fail'){
