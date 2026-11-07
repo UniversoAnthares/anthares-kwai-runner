@@ -51,20 +51,8 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -accel on -memory 2048
           script: |
-            set -eu
             python3 tools/kwai_media_stage.py
-            python3 - <<'PY'
-            import json,os
-            with open("kwai-media-ready.json",encoding="utf-8") as f: p=json.load(f)
-            assert p["job_id"]==os.environ["KWAI_QUEUE_JOB_ID"]
-            assert p["account"]==os.environ["KWAI_EXPECTED_ACCOUNT"]
-            assert p["sha256"]==os.environ["KWAI_EXPECTED_MEDIA_SHA256"]
-            assert p["media_uri"].startswith("content://media/external/video/media/")
-            assert p["remote_path"].startswith("/sdcard/Movies/AntharesPublish/")
-            assert p["size"]>1024
-            print("KWAI_KW04_REMOTE_SOURCE_TO_ANDROID=PASS")
-            print("KWAI_KW04_NO_PUBLICATION=1")
-            PY
+            python3 -c 'import json,os; p=json.load(open("kwai-media-ready.json",encoding="utf-8")); assert p["job_id"]==os.environ["KWAI_QUEUE_JOB_ID"]; assert p["account"]==os.environ["KWAI_EXPECTED_ACCOUNT"]; assert p["sha256"]==os.environ["KWAI_EXPECTED_MEDIA_SHA256"]; assert p["media_uri"].startswith("content://media/external/video/media/"); assert p["remote_path"].startswith("/sdcard/Movies/AntharesPublish/"); assert p["size"]>1024; print("KWAI_KW04_REMOTE_SOURCE_TO_ANDROID=PASS"); print("KWAI_KW04_NO_PUBLICATION=1")'
 
       - name: Remove ephemeral source and media identity from workspace
         if: always()
