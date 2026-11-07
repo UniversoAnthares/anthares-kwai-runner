@@ -212,11 +212,22 @@ def open_profile_then_login(tag):
         # The external Chrome first-run is not a Kwai login method.
         # One bounded attempt at native login; then allow the native chooser to settle.
         if i==1:
-            q=login_target(root,ns)
-            if q is not None:
-                log('KWAI_KW02_NATIVE_LOGIN_TARGET_FOUND=1 COORDS='+str(q))
-                tap_xy(q,tag+'-login')
-                xml,root,ns=state(f'{tag}-login-result-{i}')
+            # A direct semantic "Log in" entry may reveal the email chooser.
+            # Avoid tapping the center of login_platform_expand_text, whose
+            # subsegments select distinct methods (Phone/Facebook/Email).
+            direct=find_label(ns,'log in','login','sign in','entrar','fazer login')
+            if direct is not None and rid(direct) not in ('login_platform_item_layout',):
+                point=clickable_center(root,direct)
+                log('KWAI_KW02_LOGIN_LABEL_ACTION=1')
+                tap_xy(point,tag+'-native-entry')
+                xml,root,ns=state(f'{tag}-native-entry-result')
+                if success(xml,ns):return True
+        if i in (2,3):
+            p=profile_target(root,ns)
+            if p is not None:
+                log('KWAI_KW02_NATIVE_CHOOSER_RETRY='+str(i))
+                tap_xy(p,tag+'-retry-profile')
+                xml,root,ns=state(f'{tag}-after-retry-profile')
                 if success(xml,ns):return True
         time.sleep(3)
     return False
