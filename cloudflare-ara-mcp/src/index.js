@@ -88,6 +88,10 @@ var StatelessGatewayState = class {
     this.env = env;
   }
   async ensure() {
+    // Secrets are immutable for the lifetime of this deployed Worker isolate.
+    // Reuse the decoded JWK material instead of re-parsing it on every token
+    // and control request. Never serialize key material to KV, DO or logs.
+    if (this._material) return this._material;
     const a = String(this.env.ARA_OAUTH_SECRET || "");
     const pr = String(this.env.ARA_SIGNING_PRIVATE_JWK || "");
     const pu = String(this.env.ARA_SIGNING_PUBLIC_JWK || "");
@@ -99,7 +103,8 @@ var StatelessGatewayState = class {
     } catch {
       throw new Error("stateless_gateway_key_invalid");
     }
-    return { priv, pub, secret: a };
+    this._material = { priv, pub, secret: a };
+    return this._material;
   }
   async publicPem() {
     const { pub } = await this.ensure();
@@ -114,7 +119,7 @@ ${lines.join("\n")}
   }
   async signControl(method, path, raw = "") {
     const { priv } = await this.ensure();
-    const k = await crypto.subtle.importKey("jwk", priv, { name: "Ed25519" }, false, ["sign"]);
+    const k = await (this._cachedSigningKey ||= crypto.subtle.importKey("jwk", priv, { name: "Ed25519" }, false, ["sign"]));
     const ts = String(Date.now());
     const payload = `${ts}
 ${String(method).toUpperCase()}
@@ -125,7 +130,7 @@ ${raw}`;
   }
   async hmac(input) {
     const { secret } = await this.ensure();
-    const k = await crypto.subtle.importKey("raw", fromB64url(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const k = await (this._cachedHmacKey ||= crypto.subtle.importKey("raw", fromB64url(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]));
     return b64urlBytes(new Uint8Array(await crypto.subtle.sign("HMAC", k, te.encode(input))));
   }
   async signToken(payload) {
