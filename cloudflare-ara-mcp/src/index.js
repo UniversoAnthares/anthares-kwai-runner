@@ -336,9 +336,29 @@ async function consumeViaControl(env, kind, jti, exp) {
   }
 }
 __name(consumeViaControl, "consumeViaControl");
+function cf06LiveStub(env) {
+  if (!env.ARA_LIVE_CHANNEL) throw new Error("cf06_live_channel_unbound");
+  return env.ARA_LIVE_CHANNEL.get(env.ARA_LIVE_CHANNEL.idFromName("ARA-DESKTOP-FTDK0HP"));
+}
+async function cf06LiveStatus(env) {
+  const r = await cf06LiveStub(env).fetch("https://ara.internal/status");
+  if (!r.ok) throw new Error("cf06_live_status_http_"+r.status);
+  const x = await r.json();
+  return {connected:!!x.connected,backend:"cloudflare-websocket-hibernation",
+    seen_at:null,heartbeat:null,queued:0,leased:0,uncertain:0,transport:"event-driven"};
+}
+async function cf06Wake(env) {
+  const r=await cf06LiveStub(env).fetch("https://ara.internal/wake",{method:"POST"});
+  if(!r.ok) throw new Error("cf06_live_wake_http_"+r.status);
+  return r.json();
+}
 async function status(env, device = DEFAULT_DEVICE) {
+  if (env.ARA_PRIVATE_QUEUE_PRIMARY === "push") {
+    if(device !== DEFAULT_DEVICE) return {connected:false,backend:"cloudflare-websocket-hibernation"};
+    return cf06LiveStatus(env);
+  }
   if (env.ARA_PRIVATE_QUEUE_PRIMARY === "enabled") return queueStatus(env, device);
-  return controlJson(env, `/v1/mcp/status?device_id=${encodeURIComponent(device)}`);
+  return controlJson(env, "/v1/mcp/status?device_id=" + encodeURIComponent(device));
 }
 __name(status, "status");
 async function bootstrapOtpStatus(env) {
