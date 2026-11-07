@@ -25,18 +25,22 @@ jobs:
           pids={};samples={};errs={};nonjson={}
           def drain(proc,name,is_err=False):
             sink=errs[name] if is_err else samples[name]
+            buffer=''
             for line in iter(proc.stderr.readline if is_err else proc.stdout.readline,''):
               if is_err:
                 t=line.strip()
                 if len(sink)<20 and ('ERROR' in t or 'failed' in t.lower() or 'permission' in t.lower() or 'connected' in t.lower()):
                   sink.append(t[:240].replace(token,'[REDACTED]'))
                 continue
+              if not buffer and line.strip() not in ('{','[') and not line.lstrip().startswith('{"'):continue
+              buffer+=line
               try:
-                event=json.loads(line.strip())
-              except Exception:
-                v=line.strip()
-                if v and len(nonjson[name])<6:nonjson[name].append(re.sub(r'(?i)(bearer\s+)[^\s]+',r'\1[REDACTED]',v[:240]).replace(token,'[REDACTED]'))
+                event=json.loads(buffer)
+              except json.JSONDecodeError:
+                if len(buffer)>200000:buffer=''
                 continue
+              buffer=''
+              if not isinstance(event,dict):continue
               req=((event.get('event') or {}).get('request') or {})
               u=urllib.parse.urlsplit(req.get('url') or '')
               if u.scheme not in ('http','https'):continue
@@ -63,7 +67,7 @@ jobs:
               pids[name]=p
               threading.Thread(target=drain,args=(p,name,False),daemon=True).start()
               threading.Thread(target=drain,args=(p,name,True),daemon=True).start()
-            time.sleep(32)
+            time.sleep(30)
           finally:
             for name,p in pids.items():
               try:os.killpg(p.pid,signal.SIGTERM)
