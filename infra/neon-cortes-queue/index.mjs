@@ -196,6 +196,13 @@ async function kwaiAction(action,b,actor){
   const seconds=Number(b.lease_seconds||180);
   if(!Number.isSafeInteger(seconds)||seconds<60||seconds>600)
    return{ok:false,error:'KWAI_TTL_INVALID'};
+  // A crashed runner can leave a lease abandoned before the irreversible
+  // publish start. Requeue only leases past their fencing deadline and only
+  // when publication_started_at remains NULL. STARTED / UNCERTAIN are held.
+  await query("UPDATE cortes_publications SET status='queued',lease_owner=NULL,"+
+   "lease_until=NULL,updated_at=now() WHERE target_key=$1 AND status='leased' "+
+   "AND lease_owner=$2 AND lease_until<now() "+
+   "AND publication_started_at IS NULL",[KWAI_TARGET,owner]);
   // Historical UNCERTAIN rows remain quarantined. A new master/source is
   // eligible only when no unresolved item shares its source identity, and no
   // earlier active or confirmed job overlaps its exact source interval.
