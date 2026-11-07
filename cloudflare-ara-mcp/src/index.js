@@ -591,6 +591,25 @@ const ownerHelpers={origin:ORIGIN,state:st,pending:pendingOwner,complete:complet
 var index_default = { async fetch(req, env) {
   const u = new URL(req.url);
   try {
+    // Device connection is authorized against the existing signed Neon
+    // device auth check. No token is logged, exported, or retained in the DO.
+    if(u.pathname==="/_ara_live/device") {
+      const bearer=req.headers.get("Authorization")||"";
+      const device=req.headers.get("X-Anthares-Device")||"";
+      if(req.method!=="GET" || req.headers.get("Upgrade")?.toLowerCase()!=="websocket")
+        return json({error:"upgrade_required"},426);
+      if(device!==DEFAULT_DEVICE || !/^Bearer [A-Za-z0-9._~+/=-]{24,}$/.test(bearer))
+        return json({error:"unauthorized"},401);
+      const auth=await control(env,"/v1/device/auth-check",{
+        extraHeaders:{Authorization:bearer,"X-Anthares-Device":device},timeoutMs:10000
+      });
+      if(auth.status!==200)return json({error:"unauthorized"},401);
+      const verdict=await auth.json();
+      if(verdict?.ok!==true)return json({error:"unauthorized"},401);
+      return cf06LiveStub(env).fetch("https://ara.internal/attach",{
+        headers:{Upgrade:"websocket"}
+      });
+    }
     if (req.method === "GET" && (u.pathname === "/" || u.pathname === "/health")) {
       await st(env).ensure();
       let controlReady = false, connected = false, controlError = null;
