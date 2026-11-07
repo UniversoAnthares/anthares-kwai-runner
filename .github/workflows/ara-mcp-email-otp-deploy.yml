@@ -3,17 +3,51 @@ name: ARA MCP Email OTP Deploy
 # Recovery-only, deliberately manual. Do not auto-deploy over GitHub owner OAuth.
 on:
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact reviewed Git SHA from main history'
+        required: true
+        type: string
+      incident_ref:
+        description: 'Required incident authorizing legacy Email OTP recovery'
+        required: true
+        type: string
+      acknowledge_legacy_recovery:
+        description: 'I authorize replacing the active owner OAuth gateway'
+        required: true
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
-  group: anthares-ara-mcp-email-otp
-  cancel-in-progress: true
+  group: anthares-ara-mcp-reviewed-claude-delegation
+  cancel-in-progress: false
 jobs:
   deploy:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.acknowledge_legacy_recovery == true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Enforce approved legacy recovery intent
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          INCIDENT_REF: ${{ inputs.incident_ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          test -n "$INCIDENT_REF" || exit 1
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA" || exit 1
+          main_sha="$(curl -fsS --retry 0 --max-time 20 -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPOSITORY/git/ref/heads/main" | python3 -c 'import json,sys; print(json.load(sys.stdin)["object"]["sha"])')"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha" || exit 1
+          echo "ARA_MCP_LEGACY_EMERGENCY_APPROVED=$RELEASE_SHA"
       - name: Validate source
         shell: bash
         run: |
