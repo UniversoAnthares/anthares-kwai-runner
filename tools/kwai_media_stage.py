@@ -102,7 +102,9 @@ def adb(*args: str, timeout: int = 45) -> str:
     proc = subprocess.run(["adb", *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           timeout=timeout, text=True)
     if proc.returncode:
-        raise StageError("adb-command-failed:" + args[0])
+        detail = (proc.stderr or "").strip().splitlines()
+        suffix = re.sub(r"[^a-zA-Z0-9 _.:/=-]", "", detail[-1])[:160] if detail else "unknown"
+        raise StageError("adb-command-failed:" + args[0] + ":" + suffix)
     return proc.stdout.strip()
 
 
@@ -113,6 +115,32 @@ def android_sha(path: str) -> str | None:
         return None
     found = proc.stdout.split()
     return found[0].lower() if found and SHA_RE.fullmatch(found[0].lower()) else None
+
+
+def transfer(src: Path, remote: str) -> None:
+    # The ADB sync transport occasionally drops newly booted emulators.
+    # Reattempt only before publication; use Android streaming as a second path.
+    reasons = []
+    for attempt in range(3):
+        try:
+            adb("push", str(src), remote, timeout=240)
+            return
+        except StageError as exc:
+            reasons.append(str(exc))
+            try:
+                adb("wait-for-device", timeout=40)
+            except StageError:
+                pass
+            time.sleep(3)
+    with src.open("rb") as handle:
+        proc = subprocess.run(["adb", "exec-in", "sh", "-c",
+                               "cat > '" + remote + "'"],
+                              stdin=handle, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=240)
+    if proc.returncode:
+        detail = (proc.stderr or b"").decode("utf-8", "replace").splitlines()
+        err = re.sub(r"[^a-zA-Z0-9 _.:/=-]", "", detail[-1])[:160] if detail else "unknown"
+        raise StageError("android-transfer-both-paths-failed:" + reasons[-1][:120] + ":" + err)
 
 
 def media_id(name: str, size: int, path: str) -> str:
@@ -166,7 +194,7 @@ def main() -> int:
         adb("shell", "mkdir", "-p", MEDIA_DIR)
         current = android_sha(remote)
         if current is None:
-            adb("push", str(src), remote, timeout=240)
+            transfer(src, remote)
             current = android_sha(remote)
         if current != digest:
             raise StageError("android-sha256-mismatch")
