@@ -103,6 +103,7 @@ export KWAI_CONFIRMATION_EVIDENCE
 
 # CONFIRMED is emitted only after the controller accepts the specific evidence.
 if ! bash kwai_queue_state.sh complete "$KWAI_CONFIRMATION_EVIDENCE" >>"$REPORT" 2>&1; then
+  mark_uncertain "central-complete-not-acknowledged"
   log "STATE=UNCERTAIN REASON=central-complete-not-acknowledged"
   exit 90
 fi
