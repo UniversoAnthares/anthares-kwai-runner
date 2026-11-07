@@ -1,0 +1,123 @@
+name: CF-10 Remove Obsolete Cloudflare Worker Previews
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Inventory or delete only obsolete Anthares Reserva Browser previews"
+        required: true
+        type: choice
+        default: inventory
+        options: [inventory, cleanup]
+permissions:
+  contents: read
+jobs:
+  preview_cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
+      CF10_OPERATION: ${{ inputs.operation }}
+    steps:
+      - name: Discover only the exact preview resources and purge archived previews when requested
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.parse,urllib.error,time,datetime,collections,concurrent.futures
+          BASE='https://api.cloudflare.com/client/v4'
+          A=os.environ['CLOUDFLARE_ACCOUNT_ID']
+          W='anthares-reserva-browser'
+          token=os.getenv('CLOUDFLARE_API_TOKEN','')
+          mode=os.getenv('CF10_OPERATION','inventory')
+          if mode not in ('inventory','cleanup') or len(token)<15:
+            raise SystemExit('CF10_UNAPPROVED_MODE_OR_TOKEN')
+          def req(method,path,body=None):
+            u=BASE+path
+            request=urllib.request.Request(u,method=method,
+              headers={'Authorization':'Bearer '+token,'Accept':'application/json','Content-Type':'application/json','User-Agent':'Anthares-CF10/1'},
+              data=json.dumps(body).encode() if body is not None else None)
+            try:
+              with urllib.request.urlopen(request,timeout=25) as response:
+                raw=response.read()
+                data=json.loads(raw) if raw else {'success':True,'result':None}
+              return data,None
+            except urllib.error.HTTPError as e:
+              return None,'HTTP_'+str(e.code)
+            except Exception as e:
+              return None,type(e).__name__
+          def allpages(path,limit=12):
+            rows=[]
+            for page in range(1,limit+1):
+              j,e=req('GET',path+('?' if '?' not in path else '&')+'page='+str(page)+'&per_page=100')
+              if e or not j.get('success',False):
+                return rows,e or 'API_RESULT_NOT_SUCCESS'
+              result=j.get('result')
+              data=result if isinstance(result,list) else next((v for v in result.values() if isinstance(v,list)),[]) if isinstance(result,dict) else []
+              rows.extend(data)
+              info=j.get('result_info') or {}
+              totalpages=info.get('total_pages')
+              if (totalpages is not None and page>=int(totalpages)) or (totalpages is None and len(data)<100):break
+            return rows,None
+          def printrow(label,obj):print('CF10_'+label,json.dumps(obj,ensure_ascii=False,sort_keys=True,separators=(',',':')))
+          prepath=f'/accounts/{A}/workers/workers/{W}/previews'
+          previews,perr=allpages(prepath)
+          namespaces,nerr=allpages(f'/accounts/{A}/workers/durable_objects/namespaces')
+          scripts,serr=allpages(f'/accounts/{A}/workers/scripts')
+          if perr:printrow('PREVIEW_API_ERROR',{'error':perr})
+          if nerr:printrow('NAMESPACE_API_ERROR',{'error':nerr})
+          if serr:printrow('SCRIPT_API_ERROR',{'error':serr})
+          if nerr or serr:raise SystemExit('CF10_INVENTORY_INCOMPLETE')
+          live_scripts={s.get('id') for s in scripts}
+          target=[x for x in namespaces if x.get('script')==W]
+          prod=[x for x in target if x.get('name')==W+'_BrowserState']
+          legacy=[x for x in target if x.get('name')!=W+'_BrowserState']
+          printrow('BASELINE',{'mode':mode,'scripts':len(live_scripts),'all_namespaces':len(namespaces),
+            'reserva_namespaces':len(target),'production_namespace':len(prod),
+            'historical_preview_namespaces':len(legacy),'preview_api_count':len(previews),'preview_api_error':perr})
+          if len(prod)!=1 or W not in live_scripts:
+            raise SystemExit('CF10_PRODUCTION_RESOURCE_INVARIANT')
+          printrow('PREVIEW_NAMES',[{k:v.get(k) for k in ('name','id','created_on','updated_on','modified_on','slug') if v.get(k) is not None} for v in previews[:130]])
+          printrow('ORPHAN_NAMESPACE_EXAMPLES',[{'name':x.get('name'),'class':x.get('class')} for x in legacy[:12]])
+          if mode=='inventory':
+            printrow('FINAL',{'mode':'inventory','candidate_previews':len(previews),'deleted':0,'namespaces_before':len(namespaces)})
+            raise SystemExit(0)
+          if perr:raise SystemExit('CF10_NO_PREVIEW_LIST_NO_DELETION')
+          if not previews:raise SystemExit('CF10_NO_PREVIEW_RECORDS')
+          # Only delete historical branch Previews of this named Worker.
+          blocked={'main','master','prod','production','stable','release','staging','develop','dev'}
+          candidates=[]
+          for p in previews:
+            name=p.get('name') or p.get('slug')
+            if not isinstance(name,str):continue
+            if len(name)>140 or not name or name.lower() in blocked:continue
+            if not name.startswith(('fix-','feat-','feature-','docs-','ci-','diagnostic-','optimization-','ops-','test-')):
+              continue
+            # Existing production's one BrowserState class is never a preview.
+            # Require a separate historical namespace whose normalized name
+            # mentions this preview's beginning, preventing broad deletion.
+            prefix=W+'_'+name[:min(len(name),24)]
+            if not any(str(n.get('name','')).startswith(prefix) for n in legacy):continue
+            candidates.append(name)
+          printrow('CANDIDATES',{'count':len(candidates),'names':candidates[:100]})
+          deleted=[]
+          errors=[]
+          for idx,name in enumerate(candidates):
+            path=prepath+'/'+urllib.parse.quote(name,safe='')
+            result,err=req('DELETE',path)
+            if err or (isinstance(result,dict) and result.get('success') is False):
+              errors.append({'name':name,'error':err or 'CF_RESULT_NOT_SUCCESS'})
+              printrow('DELETE_ERROR',errors[-1])
+            else:
+              deleted.append(name)
+              printrow('DELETED',{'name':name,'index':idx+1})
+            if (idx+1)%15==0:time.sleep(1)
+          latest,posterr=allpages(f'/accounts/{A}/workers/durable_objects/namespaces')
+          if posterr:raise SystemExit('CF10_POST_DELETE_INVENTORY_FAILED')
+          pns=[x for x in latest if x.get('script')==W and x.get('name')==W+'_BrowserState']
+          printrow('FINAL',{'attempted':len(candidates),'deleted_records':len(deleted),'errors':errors,
+            'namespaces_before':len(namespaces),'namespaces_after':len(latest),
+            'reserva_namespaces_after':sum(1 for x in latest if x.get('script')==W),
+            'production_namespace_preserved':len(pns)==1,'other_worker_namespaces_preserved':sum(1 for x in latest if x.get('script')!=W)==sum(1 for x in namespaces if x.get('script')!=W)})
+          if errors or len(pns)!=1 or sum(1 for x in latest if x.get('script')!=W)!=sum(1 for x in namespaces if x.get('script')!=W):
+            raise SystemExit('CF10_INCOMPLETE_OR_PRODUCTION_INVARIANT_FAIL')
+          PY
