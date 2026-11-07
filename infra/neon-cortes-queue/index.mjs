@@ -223,8 +223,8 @@ async function kwaiAction(action,b,actor){
   if(!Number.isSafeInteger(seconds)||seconds<60||seconds>600)
    return {ok:false,error:'KWAI_RENEW_TTL_INVALID'};
   const rows=await query("UPDATE cortes_publications SET lease_until=GREATEST(lease_until,now()+($5::integer * interval '1 second')),updated_at=now() "+
-   "WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 "+
-   "AND lease_generation=$4 AND lease_until>now() AND publication_started_at IS NULL "+
+   "WHERE id=$1 AND target_key=$2 AND status IN ('leased','started') AND lease_owner=$3 "+
+   "AND lease_generation=$4 AND lease_until>now() "+
    "RETURNING id,status,lease_generation,lease_until",
    [id,KWAI_TARGET,owner,gen,seconds]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_RENEW_STALE_FENCE'};
