@@ -1,5 +1,8 @@
 name: CF-11 Cloudflare Free Quota Remaining Operations
 on:
+  push:
+    paths:
+      - .github/workflows/cf11-cloudflare-quota-remaining.yml
   workflow_dispatch:
 permissions:
   contents: read
@@ -48,6 +51,13 @@ jobs:
                limit:10000){dimensions{date} sum{requests responseBodySize}}
              }}
             }''',
+           'do_sql':'''
+            query($accountTag:String!,$start:Date,$end:Date){
+             viewer{accounts(filter:{accountTag:$accountTag}){
+              durableObjectsPeriodicGroups(filter:{date_geq:$start,date_leq:$end},
+               limit:10000){dimensions{date namespaceId}sum{rowsRead rowsWritten}}
+             }}
+            }''',
            'do_storage':'''
             query($accountTag:String!,$start:Date,$end:Date){
              viewer{accounts(filter:{accountTag:$accountTag}){
@@ -56,7 +66,8 @@ jobs:
              }}
             }'''
           }
-          var={'accountTag':account,'start':'2026-10-31','end':'2026-11-07'}
+          today=datetime.datetime.now(datetime.timezone.utc).date()
+          var={'accountTag':account,'start':(today-datetime.timedelta(days=7)).isoformat(),'end':today.isoformat()}
           errors=[]
           for name,query in queries.items():
            body=json.dumps({'query':query,'variables':var}).encode()
@@ -80,6 +91,8 @@ jobs:
            rows=raw.get(key) if key else []
            if rows is None:
             errors.append((name,'NO_DATA_KEY'));continue
+           if name=='do_sql' and len(rows)>=10000:
+            errors.append((name,'DO_SQL_RESULTS_TRUNCATED'));continue
            if name=='kv':
             agg=collections.defaultdict(lambda:collections.Counter())
             for row in rows:
@@ -116,6 +129,21 @@ jobs:
               totals[k]+=value
               daily[day][k]+=value
             print('CF11_DO_COMPUTE',json.dumps({'rows':len(rows),'totals':dict(totals),'daily':{d:dict(c) for d,c in sorted(daily.items())}},sort_keys=True))
+           elif name=='do_sql':
+            daily=collections.defaultdict(lambda:collections.Counter())
+            ns=collections.defaultdict(lambda:collections.Counter())
+            for row in rows:
+             d=row.get('dimensions') or {}
+             day=d.get('date','unknown')
+             namespace=d.get('namespaceId','unknown')
+             for key in ('rowsRead','rowsWritten'):
+              value=round(float((row.get('sum') or {}).get(key) or 0))
+              daily[day][key]+=value
+              ns[namespace][key]+=value
+            for date,metrics in sorted(daily.items()):
+             print('CF11_DO_SQL_DAILY',json.dumps({'date':date,**dict(metrics),'read_limit':5000000,'write_limit':100000,'within_free_limit':metrics['rowsRead']<5000000 and metrics['rowsWritten']<100000},sort_keys=True))
+            print('CF11_DO_SQL_NAMESPACES',json.dumps({k:dict(v) for k,v in sorted(ns.items())},sort_keys=True))
+            print('CF11_DO_SQL_SUMMARY',json.dumps({'days':len(daily),'samples':len(rows),'peak_rows_read':max((v['rowsRead'] for v in daily.values()),default=0),'peak_rows_written':max((v['rowsWritten'] for v in daily.values()),default=0)},sort_keys=True))
            elif name=='do_storage':
             max_bytes=max([float((row.get('max') or {}).get('storedBytes') or 0) for row in rows] or [0])
             print('CF11_DO_STORAGE',json.dumps({'rows':len(rows),'max_stored_bytes':int(max_bytes)},sort_keys=True))
