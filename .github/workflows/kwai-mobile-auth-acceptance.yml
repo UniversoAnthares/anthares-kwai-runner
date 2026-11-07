@@ -6,6 +6,7 @@ on:
     paths: ['.github/workflows/kwai-mobile-auth-acceptance.yml']
 permissions:
   contents: read
+  id-token: write
 concurrency:
   group: kwai-kw02-auth-ui-${{ github.ref }}
   cancel-in-progress: false
@@ -15,6 +16,20 @@ jobs:
     timeout-minutes: 28
     steps:
       - uses: actions/checkout@v4
+      - name: Recover previously authorized encrypted native Kwai session
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rc=0
+          python3 tools/kwai_session_vault_client.py pull --path /tmp/kw02-native-session.enc || rc=$?
+          if [ "${rc}" -eq 0 ] && [ -s /tmp/kw02-native-session.enc ]; then
+            echo KW02_EXISTING_ENCRYPTED_SESSION_AVAILABLE=YES
+          elif [ "${rc}" -eq 3 ]; then
+            echo KW02_EXISTING_ENCRYPTED_SESSION_AVAILABLE=NO
+          else
+            echo KW02_SESSION_VAULT_UNAVAILABLE_OR_NOT_AUTHORIZED=YES
+          fi
+          # A failed pull is not permission to write, guess credentials or bypass OIDC.
       - name: Validate official Kwai app and remote runtime
         shell: bash
         run: |
@@ -51,10 +66,25 @@ jobs:
           export KWAI_KW02_SUPPRESS_EXTERNAL_AUTH=1
           export KWAI_KW02_MAIN_LOGIN_PROVEN=1
           export KWAI_KW02_EMAIL_NESTED=1
-          python3 tools/kwai_credential_login.py
-          sleep 8
-          KWAI_EXPECTED_ACCOUNT=lucasrosalem python3 kwai_auth_probe.py
-          python3 tools/kwai_kw02_auth_creator_only.py
+          if [ -s /tmp/kw02-native-session.enc ]; then
+            export KWAI_SESSION_FILE=/tmp/kw02-native-session.enc
+            if bash kwai_session_state.sh restore >/tmp/kw02-native-restore.log 2>&1; then
+              adb shell monkey -p com.kwai.video -c android.intent.category.LAUNCHER 1 >/dev/null
+              sleep 8
+              if KWAI_EXPECTED_ACCOUNT=lucasrosalem python3 kwai_auth_probe.py >/tmp/kw02-native-account-proof.log 2>&1; then
+                echo KW02_NATIVE_AUTHORIZED_SESSION_RESTORED=YES
+                python3 tools/kwai_kw02_auth_creator_only.py
+                exit $?
+              fi
+              echo KW02_NATIVE_SESSION_IDENTITY_NOT_CONFIRMED=YES
+            else
+              echo KW02_NATIVE_SESSION_RESTORE_UNAVAILABLE=YES
+            fi
+          fi
+          # The server explicitly refuses email login ("mail registration is not
+          # supported"); avoid repeating the same rejected credential path.
+          echo KW02_AUTH_METHOD_PHONE_OR_EXISTING_SESSION_REQUIRED=YES
+          exit 67
           KW02_AUTH_BASH
           chmod 700 /tmp/kw02-auth-creator.sh
       - name: Authenticate authorized Kwai account and open creator without publishing
