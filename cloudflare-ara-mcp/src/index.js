@@ -172,6 +172,44 @@ var GatewayState = class extends DurableObject {
     super(ctx, env);
     this.ctx = ctx;
   }
+  // CF-06: reuse the existing GatewayState namespace. Hibernatable
+  // WebSockets keep the agent connected without periodic HTTP requests.
+  async fetch(request) {
+    const route = new URL(request.url).pathname;
+    const deviceTag = "device:DESKTOP-FTDK0HP";
+    if (route === "/attach") {
+      if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+        return json({error:"upgrade_required"},426);
+      }
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      for (const previous of this.ctx.getWebSockets(deviceTag)) {
+        try { previous.close(1000,"replaced"); } catch {}
+      }
+      this.ctx.acceptWebSocket(server,[deviceTag]);
+      server.serializeAttachment({device:"DESKTOP-FTDK0HP",connected_at:Date.now()});
+      // After reconnect, wake once to pick up any queued jobs.
+      server.send("wake");
+      return new Response(null,{status:101,webSocket:client});
+    }
+    if (route === "/status") {
+      return json({ok:true,connected:this.ctx.getWebSockets(deviceTag).some(ws=>ws.readyState===1),transport:"websocket-hibernation"});
+    }
+    if (route === "/wake" && request.method === "POST") {
+      let delivered=0;
+      for (const ws of this.ctx.getWebSockets(deviceTag)) {
+        try {if(ws.readyState===1){ws.send("wake");delivered++;}}catch{}
+      }
+      return json({ok:true,delivered});
+    }
+    return json({error:"not_found"},404);
+  }
+  async webSocketMessage(ws,message) {
+    if (typeof message==="string" && message==="ping") ws.send("pong");
+  }
+  async webSocketClose(ws,code,reason,wasClean) {
+    try {ws.close(code,reason);} catch {}
+  }
   async ensure() {
     let priv = await this.ctx.storage.get("priv");
     let pub = await this.ctx.storage.get("pub");
