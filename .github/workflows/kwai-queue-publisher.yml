@@ -197,7 +197,7 @@ jobs:
           retention-days: 3
 
   mobile_auth_contract_matrix:
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'mobile_auth') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]')) }}
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     strategy:
@@ -353,7 +353,7 @@ jobs:
             sleep 2
           done
           test "$READY" = 1
-          printf '### Acesso privado ao Android Kwai\\n\\nURL: %s/vnc.html?autoconnect=1&resize=scale\\n\\nUsuário: %s\\nSenha: credencial privada KWAI_REMOTE_GUI_PASSWORD (não publicada)\\n' "$URL" "$REMOTE_USER" >> "$GITHUB_STEP_SUMMARY"
+          printf '### Acesso privado ao Android Kwai\n\nURL: %s/vnc.html?autoconnect=1&resize=scale\n\nUsuário: %s\nSenha: credencial privada KWAI_REMOTE_GUI_PASSWORD (não publicada)\n' "$URL" "$REMOTE_USER" >> "$GITHUB_STEP_SUMMARY"
           echo KWAI_MOBILE_AUTH_TUNNEL_PROTECTED=1
 
       - name: Wait for phone-authenticated Kwai identity
