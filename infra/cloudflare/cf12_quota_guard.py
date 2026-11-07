@@ -16,6 +16,8 @@ import urllib.request
 ACCOUNT = "5c24be052e5144391f73a8e03491e88e"
 REPO = "UniversoAnthares/anthares-kwai-runner"
 STATE_MARKER = "CF12_STATE_JSON:"
+DO_SQL_READ_WARN = 4_000_000
+DO_SQL_WRITE_WARN = 80_000
 STAGES = ((70000, "critical"), (50000, "reduced"), (30000, "warning"))
 OPTIONAL = (
     "anthares-cf02-stage-r0725",
@@ -146,6 +148,43 @@ def observed_request_total(token, now):
         totals[name] = totals.get(name, 0) + value
         errors += int(summed.get("errors") or 0)
     return sum(totals.values()), errors, totals
+
+
+def observed_do_sql_usage(token, now):
+    # SQLite quota is independent of Workers request count. Read per-day
+    # GraphQL accounting without invoking the Durable Object itself.
+    query = """query($accountTag:String!,$day:Date){
+      viewer{accounts(filter:{accountTag:$accountTag}){
+        durableObjectsPeriodicGroups(filter:{date:$day},limit:10000){
+          dimensions{namespaceId}sum{rowsRead rowsWritten}
+        }
+      }}
+    }"""
+    data = call(
+        "POST", CF_API + "/graphql", token,
+        {"query": query, "variables": {
+            "accountTag": ACCOUNT, "day": now.date().isoformat()}},
+    )
+    if not isinstance(data, dict) or data.get("errors"):
+        raise RuntimeError("CF12_DO_SQL_GRAPHQL_UNAVAILABLE")
+    accounts = (((data.get("data") or {}).get("viewer") or {}).get("accounts") or [])
+    if len(accounts) != 1:
+        raise RuntimeError("CF12_DO_SQL_ACCOUNT_MISMATCH")
+    rows = accounts[0].get("durableObjectsPeriodicGroups")
+    if not isinstance(rows, list) or len(rows) >= 10000:
+        raise RuntimeError("CF12_DO_SQL_DATA_INCOMPLETE")
+    totals = {"rowsRead": 0, "rowsWritten": 0}
+    namespaces = {}
+    for row in rows:
+        values = row.get("sum") or {}
+        ns = (row.get("dimensions") or {}).get("namespaceId") or "unknown"
+        for key in totals:
+            val = int(values.get(key) or 0)
+            if val < 0:
+                raise RuntimeError("CF12_DO_SQL_INVALID_METRIC")
+            totals[key] += val
+            namespaces.setdefault(ns, {"rowsRead": 0, "rowsWritten": 0})[key] += val
+    return totals, namespaces
 
 
 def empty_state(day):
@@ -286,6 +325,7 @@ def simulate():
     }
     for count, level in expected.items():
         assert stage_for(count) == level
+    assert DO_SQL_READ_WARN < 5_000_000 and DO_SQL_WRITE_WARN < 100_000
     assert set(targets_for("warning")) == set()
     assert set(targets_for("reduced")) == set(OPTIONAL)
     assert set(targets_for("critical")) == set(OPTIONAL + SECONDARY)
@@ -367,11 +407,26 @@ def main():
     # An unresolved prior-day restore blocks fresh actions.
     state = restore_yesterday(cloudflare_token, github_token, state, day)
     count, errors, workers = observed_request_total(cloudflare_token, now)
+    try:
+        sql_usage, sql_namespaces = observed_do_sql_usage(cloudflare_token, now)
+    except RuntimeError as ex:
+        sql_usage, sql_namespaces = None, {}
+        print("CF12_DO_SQL_UNAVAILABLE " + str(ex), flush=True)
     probes, errors_1027, probe_errors = endpoint_health()
     state["health_probes"] = int(state.get("health_probes") or 0) + probes
     state["observed_1027"] = int(state.get("observed_1027") or 0) + errors_1027
     state["sample_errors"] = int(state.get("sample_errors") or 0) + probe_errors
     persist_state(github_token, state)
+    if sql_usage is not None:
+        state["sql_usage"] = sql_usage
+        if (sql_usage["rowsRead"] >= DO_SQL_READ_WARN or
+                sql_usage["rowsWritten"] >= DO_SQL_WRITE_WARN):
+            if state.get("sql_warning_date") != day:
+                state["sql_warning_date"] = day
+                persist_state(github_token, state)
+                notify(github_token, now, "do_sql_warning", count,
+                       "Durable Objects SQLite chegando ao limite Free: " +
+                       json.dumps({"utc_day": day, **sql_usage}, sort_keys=True))
     if errors_1027:
         notify(github_token, now, "quota_1027", count,
                "Falha 1027 observada no monitor externo; proteger serviços essenciais.")
@@ -384,6 +439,8 @@ def main():
         "utc_day": day,
         "requests": count,
         "worker_errors": errors,
+        "do_sql_usage": sql_usage,
+        "do_sql_namespaces": sql_namespaces,
         "level": level,
         "top3": sorted(workers.items(), key=lambda x: -x[1])[:3],
         "owned_disabled": state["managed_disabled"],
