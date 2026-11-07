@@ -5,13 +5,11 @@ on:
     paths:
       - 'tools/provider_router.py'
       - 'tools/test_provider_router.py'
-      - 'tools/DUAL_PROVIDER_ARCHITECTURE.md'
       - '.github/workflows/provider-router-unit.yml'
   pull_request:
     paths:
       - 'tools/provider_router.py'
       - 'tools/test_provider_router.py'
-      - 'tools/DUAL_PROVIDER_ARCHITECTURE.md'
       - '.github/workflows/provider-router-unit.yml'
 
 permissions:
