@@ -294,31 +294,47 @@ async function kwaiAction(action,b,actor){
  if(action==='kwai-confirm'){
   const proof=b.confirmation_evidence||{},remote=String(b.remote_id||'');
   if(physical){
-   // Signed real-device receipt: direct Kwai share URL, independent account
-   // author readback and two distinct frame matches against the source video.
-   // The phone's private RSA key signs the exact JSON request. Rejected proof
-   // leaves STARTED untouched and a failed commit is quarantined as UNCERTAIN.
-   const matched=proof.media_match||{},scores=matched.inliers||[];
-   const nowMs=Date.now(),receipt=Number(proof.share_receipt_epoch_ms),checked=Number(proof.verified_at_epoch_ms);
+   // The existing phone signs this request with its private RSA key.
+   // Accept either a fresh direct share receipt or an independently fetched
+   // public author profile, caption and matching original/public CDN frames.
+   const match=proof.media_match||{},scores=match.inliers||[];
+   const isPublic=proof.method==='public_profile_independent_cdn_video_frame_match';
+   const verified=Number(proof.verified_at_epoch_ms);
+   const observed=Number(isPublic?proof.public_post_timestamp_ms:proof.share_receipt_epoch_ms);
+   const now=Date.now();
+   const url=String(proof.public_url||'');
+   const official=isPublic?
+       /^https:\/\/www\.kwai\.com\/@lucasrosalem\/video\/[0-9]{16,21}$/.test(url):
+       /^https:\/\/k\.kwai\.com\/p\/[A-Za-z0-9_-]{5,100}$/.test(url);
    if(proof.kind!=='kwai_verified_public_media_v2'||
       proof.schema!=='kwai-public-media-proof-v2'||proof.ok!==true||
       proof.job_id!==String(b.id)||proof.expected_account!=='lucasrosalem'||
       proof.actual_author_handle!=='lucasrosalem'||proof.public_url!==remote||
-      !/^https:\/\/k\.kwai\.com\/p\/[A-Za-z0-9_-]{5,100}$/.test(remote)||
-      !/^[a-f0-9]{64}$/.test(String(proof.media_sha256||''))||
+      !official||!/^[a-f0-9]{64}$/.test(String(proof.media_sha256||''))||
       !Array.isArray(scores)||scores.length<2||Number(scores[0])<24||
-      Number(scores[1])<17||!Number.isFinite(receipt)||!Number.isFinite(checked)||
-      receipt<=0||checked<receipt||checked>nowMs+10000||
-      nowMs-checked>900000)
-    return{ok:false,error:'KWAI_PHYSICAL_VERIFIED_SHARE_MEDIA_PROOF_REQUIRED'};
+      Number(scores[1])<17||!Number.isFinite(observed)||!Number.isFinite(verified)||
+      observed<=0||verified<observed||verified>now+10000||now-verified>900000||
+      (isPublic&&(
+        proof.official_permalink!==url||
+        proof.author_verified_on_external_website!==true||
+        match.source_and_public_matching_frames!==true||
+        !Number.isInteger(Number(match.frames_compared))||Number(match.frames_compared)<6||
+        !/^[a-f0-9]{64}$/.test(String(proof.public_media_sha256||'')))))
+      return{ok:false,error:'KWAI_PHYSICAL_VERIFIED_SHARE_MEDIA_PROOF_REQUIRED'};
    const evidence={...proof,attested_device:'DESKTOP-FTDK0HP',
      device_signature_verified:true,verified_at_neon:new Date().toISOString()};
+   // The public site's observed upload time must agree with our permanent
+   // pre-publication STARTED fence, and this exact lease generation must own it.
    const rows=await query("UPDATE cortes_publications SET status='confirmed',"+
      "remote_id=$5,confirmation_evidence=$6::jsonb,lease_owner=NULL,lease_until=NULL,"+
      "updated_at=now() WHERE id=$1 AND target_key=$2 AND status='started' "+
      "AND lease_owner=$3 AND lease_generation=$4 AND publication_started_at IS NOT NULL "+
+     (isPublic?"AND abs(extract(epoch from (publication_started_at-to_timestamp($7/1000.0))))<600 ":"")+
      "RETURNING id,status,remote_id",
-     [String(b.id),KWAI_TARGET,owner,Number(b.lease_generation),remote,JSON.stringify(evidence)]);
+     isPublic?[String(b.id),KWAI_TARGET,owner,Number(b.lease_generation),remote,
+                JSON.stringify(evidence),observed]:
+              [String(b.id),KWAI_TARGET,owner,Number(b.lease_generation),remote,
+                JSON.stringify(evidence)]);
    return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_PHYSICAL_CONFIRM_STALE_FENCE'};
   }
   let u;try{u=new URL(String(proof.public_url||''));}catch{}
