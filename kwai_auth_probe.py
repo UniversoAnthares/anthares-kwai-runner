@@ -260,6 +260,40 @@ def emit_authenticated(source):
     return 0
 
 
+def observe_profile():
+    # Use a fresh dump and avoid injecting input while the owner is signing in.
+    command = (
+        'snapshot=/sdcard/kwai-auth-observe-$.xml; '
+        'trap \'rm -f "$snapshot"\' EXIT; '
+        'uiautomator dump "$snapshot" >/dev/null 2>&1 && cat "$snapshot"'
+    )
+    try:
+        root = ET.fromstring(adb("exec-out", command))
+    except (ET.ParseError, OSError, subprocess.TimeoutExpired):
+        print("KWAI_MOBILE_PROFILE_OBSERVATION=UI_UNAVAILABLE")
+        return 11
+
+    nodes = [node for node in root.iter("node") if node.get("package") == PKG]
+    if not nodes:
+        print("KWAI_MOBILE_PROFILE_OBSERVATION=KWAI_NOT_VISIBLE")
+        return 11
+    text = visible_text(nodes)
+    own_profile = any(
+        node_label(node).casefold() in {"edit profile", "editar perfil"}
+        or re.search(r"(?:edit.*profile|profile.*edit)", node.get("resource-id", "").split("/")[-1])
+        for node in nodes
+    )
+    if own_profile and strong_identity(text):
+        return emit_authenticated("VISIBLE_OWN_PROFILE_HANDLE")
+    if auth_prompt(nodes):
+        print("KWAI_MOBILE_PROFILE_OBSERVATION=LOGIN_REQUIRED")
+        return 10
+    if own_profile:
+        print("KWAI_MOBILE_PROFILE_OBSERVATION=EXPECTED_HANDLE_NOT_VISIBLE")
+        return 11
+    print("KWAI_MOBILE_PROFILE_OBSERVATION=OWN_PROFILE_NOT_VISIBLE")
+    return 11
+
 def main():
     for _ in range(8):
         try:
@@ -301,4 +335,4 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(observe_profile() if sys.argv[1:] == ["--observe-profile"] else main())

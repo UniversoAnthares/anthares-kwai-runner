@@ -387,18 +387,24 @@ jobs:
         run: |
           set -euo pipefail
           deadline=$((SECONDS+1200))
+          previous_observation=''
           while [ "$SECONDS" -lt "$deadline" ]; do
             if ! kill -0 "$(cat /tmp/kwai-mobile-tunnel.pid)" 2>/dev/null; then
               echo KWAI_MOBILE_AUTH_TUNNEL_DIED
               exit 71
             fi
             set +e
-            KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py >/tmp/kwai-mobile-live-proof.txt 2>&1
+            KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py --observe-profile >/tmp/kwai-mobile-live-proof.txt 2>&1
             rc=$?
             set -e
             if [ "$rc" -eq 0 ] && grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/kwai-mobile-live-proof.txt && grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/kwai-mobile-live-proof.txt; then
               echo KWAI_MOBILE_AUTH_IDENTITY_CONFIRMED=1
               exit 0
+            fi
+            observation="$(grep -xE 'KWAI_MOBILE_PROFILE_OBSERVATION=(UI_UNAVAILABLE|KWAI_NOT_VISIBLE|LOGIN_REQUIRED|EXPECTED_HANDLE_NOT_VISIBLE|OWN_PROFILE_NOT_VISIBLE)' /tmp/kwai-mobile-live-proof.txt | head -1 || true)"
+            if [ -n "$observation" ] && [ "$observation" != "$previous_observation" ]; then
+              printf '%s\n' "$observation"
+              previous_observation="$observation"
             fi
             sleep 8
           done
