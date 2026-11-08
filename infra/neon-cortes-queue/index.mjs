@@ -359,7 +359,7 @@ async function kwaiAction(action,b,actor){
    "lease_generation=p.lease_generation+1,"+
    "lease_until=now()+($3::integer * interval '1 second'),updated_at=now() "+
    "FROM pick WHERE p.id=pick.id AND p.status='queued' AND p.publication_started_at IS NULL "+
-   "RETURNING p.id,p.target_key,p.payload,p.media_sha256,p.lease_generation,p.lease_until";
+   "RETURNING p.id,p.target_key,p.payload,p.media_sha256,p.lease_generation,p.lease_until,p.confirmation_evidence";
   const rows=await query(sql,[KWAI_TARGET,owner,seconds]);
   return{ok:true,job:rows[0]||null,uncertain_gate:'same_source_quarantined'};
  }
