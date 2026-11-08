@@ -293,6 +293,34 @@ async function kwaiAction(action,b,actor){
  }
  if(action==='kwai-confirm'){
   const proof=b.confirmation_evidence||{},remote=String(b.remote_id||'');
+  if(physical){
+   // Signed real-device receipt: direct Kwai share URL, independent account
+   // author readback and two distinct frame matches against the source video.
+   // The phone's private RSA key signs the exact JSON request. Rejected proof
+   // leaves STARTED untouched and a failed commit is quarantined as UNCERTAIN.
+   const matched=proof.media_match||{},scores=matched.inliers||[];
+   const nowMs=Date.now(),receipt=Number(proof.share_receipt_epoch_ms),checked=Number(proof.verified_at_epoch_ms);
+   if(proof.kind!=='kwai_verified_public_media_v2'||
+      proof.schema!=='kwai-public-media-proof-v2'||proof.ok!==true||
+      proof.job_id!==String(b.id)||proof.expected_account!=='lucasrosalem'||
+      proof.actual_author_handle!=='lucasrosalem'||proof.public_url!==remote||
+      !/^https:\/\/k\.kwai\.com\/p\/[A-Za-z0-9_-]{5,100}$/.test(remote)||
+      !/^[a-f0-9]{64}$/.test(String(proof.media_sha256||''))||
+      !Array.isArray(scores)||scores.length<2||Number(scores[0])<24||
+      Number(scores[1])<17||!Number.isFinite(receipt)||!Number.isFinite(checked)||
+      receipt<=0||checked<receipt||checked>nowMs+10000||
+      nowMs-checked>900000)
+    return{ok:false,error:'KWAI_PHYSICAL_VERIFIED_SHARE_MEDIA_PROOF_REQUIRED'};
+   const evidence={...proof,attested_device:'DESKTOP-FTDK0HP',
+     device_signature_verified:true,verified_at_neon:new Date().toISOString()};
+   const rows=await query("UPDATE cortes_publications SET status='confirmed',"+
+     "remote_id=$5,confirmation_evidence=$6::jsonb,lease_owner=NULL,lease_until=NULL,"+
+     "updated_at=now() WHERE id=$1 AND target_key=$2 AND status='started' "+
+     "AND lease_owner=$3 AND lease_generation=$4 AND publication_started_at IS NOT NULL "+
+     "RETURNING id,status,remote_id",
+     [String(b.id),KWAI_TARGET,owner,Number(b.lease_generation),remote,JSON.stringify(evidence)]);
+   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_PHYSICAL_CONFIRM_STALE_FENCE'};
+  }
   let u;try{u=new URL(String(proof.public_url||''));}catch{}
   const p=u?.pathname||'',h=u?.hostname||'';
   const official=(h==='k.kwai.com'&&/^\/p\/[A-Za-z0-9_-]{5,100}$/.test(p))||
