@@ -310,7 +310,7 @@ async function kwaiAction(action,b,actor){
       proof.schema!=='kwai-public-media-proof-v2'||proof.ok!==true||
       proof.job_id!==String(b.id)||proof.expected_account!=='lucasrosalem'||
       proof.actual_author_handle!=='lucasrosalem'||proof.public_url!==remote||
-      !official||!/[a-f0-9]{64}/.test(String(proof.media_sha256||''))||
+      !official||!/^[a-f0-9]{64}$/.test(String(proof.media_sha256||''))||
       !Array.isArray(scores)||scores.length<2||Number(scores[0])<24||
       Number(scores[1])<17||!Number.isFinite(observed)||!Number.isFinite(verified)||
       observed<=0||verified<observed||verified>now+10000||now-verified>900000||
