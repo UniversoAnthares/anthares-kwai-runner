@@ -214,6 +214,11 @@ jobs:
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'mobile_auth') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[kwai-mobile-auth]')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+      actions: write
+      statuses: write
     outputs:
       session_ready: ${{ steps.seal.outputs.ready }}
     env:
@@ -249,7 +254,10 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb x11vnc novnc websockify nginx apache2-utils scrcpy
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb x11vnc novnc websockify nginx apache2-utils x11-utils
+          curl -fsSL --retry 3 -o /tmp/kwai-scrcpy.tar.gz https://github.com/Genymobile/scrcpy/releases/download/v3.3.4/scrcpy-linux-x86_64-v3.3.4.tar.gz
+          echo '0305d98c06178c67e12427bbf340c436d0d58c9e2a39bf9ffbbf8f54d7ef95a5  /tmp/kwai-scrcpy.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/kwai-scrcpy.tar.gz -C /tmp
           curl -fsSL --retry 3 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x /tmp/cloudflared
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -305,6 +313,7 @@ jobs:
         if: steps.initial.outputs.authenticated != 'true'
         env:
           REMOTE_PASSWORD: ${{ secrets.KWAI_REMOTE_GUI_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test -n "$REMOTE_PASSWORD" || { echo KWAI_REMOTE_GUI_PASSWORD_MISSING; exit 42; }
@@ -312,8 +321,16 @@ jobs:
           export DISPLAY=:99
           nohup Xvfb :99 -screen 0 1280x800x24 -ac >/tmp/xvfb.log 2>&1 &
           sleep 2
-          nohup scrcpy --no-audio --stay-awake --max-size=1080 --window-title='Kwai Authentication' >/tmp/scrcpy.log 2>&1 &
-          sleep 4
+          nohup /tmp/scrcpy-linux-x86_64-v3.3.4/scrcpy --no-audio --stay-awake --max-size=1080 --window-title='Kwai Authentication' >/tmp/scrcpy.log 2>&1 &
+          scrcpy_pid=$!
+          for _ in $(seq 1 30); do
+            kill -0 "$scrcpy_pid" || { echo KWAI_MOBILE_DISPLAY_PROCESS_EXITED=1; exit 73; }
+            if xwininfo -name 'Kwai Authentication' 2>/dev/null | grep -F 'Map State: IsViewable' >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          xwininfo -name 'Kwai Authentication' 2>/dev/null | grep -F 'Map State: IsViewable' >/dev/null
           nohup x11vnc -display :99 -forever -shared -nopw -localhost -rfbport 5900 >/tmp/x11vnc.log 2>&1 &
           nohup websockify --web=/usr/share/novnc 6081 127.0.0.1:5900 >/tmp/websockify.log 2>&1 &
           sudo htpasswd -bc /etc/nginx/.kwai-htpasswd "$REMOTE_USER" "$REMOTE_PASSWORD" >/dev/null
@@ -338,6 +355,7 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:6080/vnc.html)" = 401
           test "$(curl -s -u "$REMOTE_USER:$REMOTE_PASSWORD" -o /dev/null -w '%{http_code}' http://127.0.0.1:6080/vnc.html)" = 200
           nohup /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 >/tmp/cloudflared.log 2>&1 &
+          echo "$!" > /tmp/kwai-mobile-tunnel.pid
           URL=''
           for _ in $(seq 1 50); do
             URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | tail -1 || true)"
@@ -354,6 +372,12 @@ jobs:
           done
           test "$READY" = 1
           printf '### Acesso privado ao Android Kwai\n\nURL: %s/vnc.html?autoconnect=1&resize=scale\n\nUsuário: %s\nSenha: credencial privada KWAI_REMOTE_GUI_PASSWORD (não publicada)\n' "$URL" "$REMOTE_USER" >> "$GITHUB_STEP_SUMMARY"
+          # The job summary is shown after the login window closes. Deliver the
+          # password-protected address while this runner is waiting for the owner.
+          gh api --silent --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state=pending -f "context=kwai/mobile-auth/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT" \
+            -f 'description=Password-protected Android login window ready' \
+            -f "target_url=$URL/vnc.html?autoconnect=1&resize=scale"
           echo KWAI_MOBILE_AUTH_TUNNEL_PROTECTED=1
 
       - name: Wait for phone-authenticated Kwai identity
@@ -362,7 +386,7 @@ jobs:
           set -euo pipefail
           deadline=$((SECONDS+1200))
           while [ "$SECONDS" -lt "$deadline" ]; do
-            if ! pgrep -f 'cloudflared tunnel' >/dev/null; then
+            if ! kill -0 "$(cat /tmp/kwai-mobile-tunnel.pid)" 2>/dev/null; then
               echo KWAI_MOBILE_AUTH_TUNNEL_DIED
               exit 71
             fi
@@ -378,6 +402,14 @@ jobs:
           done
           echo KWAI_MOBILE_AUTH_TIMEOUT=1
           exit 72
+
+      - name: Close the temporary Android tunnel
+        if: always()
+        run: |
+          if [ -s /tmp/kwai-mobile-tunnel.pid ]; then
+            kill "$(cat /tmp/kwai-mobile-tunnel.pid)" 2>/dev/null || true
+            rm -f /tmp/kwai-mobile-tunnel.pid
+          fi
 
       - name: Seal verified Android session in private vault
         id: seal
