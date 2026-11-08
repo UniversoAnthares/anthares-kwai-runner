@@ -1,5 +1,5 @@
 # AOI #16 — Duplicatas de masters 22/10
-STATUS: RUNNING
+STATUS: PROVEN
 AREA: qa-p0-daily-masters-20261022-duplicate-issues
 DATE_UTC: 2026-11-08T23:19:21.064Z
 LEASE_EXPIRES_UTC: 2026-11-08T23:54:21.068Z
@@ -17,4 +17,11 @@ COST_ADDED: 0
 ROLLBACK: reopen duplicate issues when justified; original bodies remain unchanged.
 
 ## Resultado
-PENDING: Update after issue closure.
+LEASE: CLOSED
+LEASE_CLOSED_UTC: 2026-11-08T23:20:23.318Z
+CLOSED_DUPLICATES: #774 #955, GitHub state_reason=duplicate, bodies preserved.
+CANONICAL_OPEN: #610 remains open (root producer incident unresolved).
+DISTINCT_NOT_TOUCHED: #1060 (Kwai enqueue distinct description).
+ITEM_16_FINAL: PARTIAL; closing duplicates is not evidence of producer repair.
+EVIDENCE: https://github.com/UniversoAnthares/anthares-kwai-runner/issues/610 ; https://github.com/UniversoAnthares/anthares-kwai-runner/issues/774 ; https://github.com/UniversoAnthares/anthares-kwai-runner/issues/955
+COST_ADDED: 0; MEDIA_POSTED: 0; WORKFLOWS_DISPATCHED: 0
