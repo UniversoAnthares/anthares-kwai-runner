@@ -110,6 +110,29 @@ async function identity(request){
   return {role,platform,workflow:wf};
  }catch{return null;}
 }
+
+// Existing physical Android executor uses an RSA key kept exclusively on
+// DESKTOP-FTDK0HP. Authorize this key for Kwai actions only, never other queues.
+// The key below is public; the existing private signing key stays on Windows.
+const KWAI_PHYSICAL_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwqMVKLsftqOwVa5U7CWq\nksPdck2z17p1sJMbFI8Ul7YeRaayxEI3l91NApPpSr5SjNZnTnZ/lmZiowXs6tdb\nVrPPcj8Ip5tiYcuuQlZ4ItBD0cfj0KuDpBiGyWJkKrtSz89GRHePP1eI6VsiBlhG\nQSUaxQ71RjAuCBB0miPcZ58iy+G4NzOP8p3PjgCq7nfVIQqJMDbORydzPjDIgLbW\nKibXLbbvIThyanJ0wgK4fr4ciUsn67ZGsWSEYpr8A303TMXjmDyvd3TFz+9mKEUh\nZYejXgb2k/0KgIUsSlXMkXe1E7lDfKoNWmKiu3z633hmu+KpTraHn1WTf2aiRPR/\ndQIDAQAB\n-----END PUBLIC KEY-----";
+async function kwaiPhysicalIdentity(request,action){
+ if(!action.startsWith('kwai-')||request.method!=='POST'||
+    request.headers.get('x-anthares-device')!=='DESKTOP-FTDK0HP')return null;
+ const ts=String(request.headers.get('x-anthares-executor-timestamp')||'');
+ const nonce=String(request.headers.get('x-anthares-executor-nonce')||'');
+ const signature=String(request.headers.get('x-anthares-executor-signature')||'');
+ if(!/^\d{10}$/.test(ts)||Math.abs(Date.now()/1000-Number(ts))>90||
+    !/^[a-f0-9]{32}$/.test(nonce)||!/^[-A-Za-z0-9+/=]{250,700}$/.test(signature))return null;
+ try{
+  const raw=await request.clone().text();
+  if(raw.length>65536)return null;
+  const u=new URL(request.url);
+  const signed=ts+'\nPOST\n'+u.pathname+u.search+'\n'+nonce+'\n'+raw;
+  if(!crypto.verify('RSA-SHA256',Buffer.from(signed),KWAI_PHYSICAL_PUBLIC_KEY,
+                    Buffer.from(signature,'base64')))return null;
+  return {role:'kwai-physical',workflow:'physical:DESKTOP-FTDK0HP',platform:'kwai'};
+ }catch{return null;}
+}
 // Kwai HA contract, default disabled. OIDC publisher identity and media readback
 // must be proven before promoting this shared Neon queue to production.
 const KWAI_TARGET='kwai:lucasrosalem';
@@ -187,14 +210,30 @@ async function kwaiAction(action,b,actor){
   if(overlap.length)return{ok:true,deduped:true,reason:'timeline_overlap',job:overlap[0]};
   return{ok:false,error:'KWAI_UNCERTAIN_HOLD_OR_CONCURRENT_WRITE'};
  }
- if(actor.role!=='kwai-publisher'||actor.workflow!=='cortes-kwai-cloud-publisher.yml')
-  return{ok:false,error:'KWAI_PUBLISHER_ROLE_REQUIRED'};
+ const physical=actor.role==='kwai-physical'&&actor.workflow==='physical:DESKTOP-FTDK0HP';
+ const cloud=actor.role==='kwai-publisher'&&actor.workflow==='cortes-kwai-cloud-publisher.yml';
+ if(!physical&&!cloud)return{ok:false,error:'KWAI_PUBLISHER_ROLE_REQUIRED'};
  if(b.target_key!==KWAI_TARGET||b.expected_account!=='lucasrosalem')
   return{ok:false,error:'KWAI_ACCOUNT_IDENTITY_MISMATCH'};
- const owner='kwai-cloud:'+actor.workflow;
+ const owner=physical?'physical_android:DESKTOP-FTDK0HP':'kwai-cloud:'+actor.workflow;
+ if(action==='kwai-physical-stats'){
+  if(!physical)return{ok:false,error:'KWAI_DEVICE_ONLY'};
+  const rows=await query("SELECT status,count(*)::int AS n FROM cortes_publications WHERE target_key=$1 GROUP BY status",[KWAI_TARGET]);
+  const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+  const usage=await query("SELECT count(*)::int AS n,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
+  const safe=await query("SELECT count(*)::int AS n FROM cortes_publications p "+
+   "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
+   "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE d.target_key=$1 AND d.id<>p.id "+
+   "AND d.status<>'failed' AND ((d.source_id=p.source_id AND d.source_start<p.source_end "+
+   "AND d.source_end>p.source_start) OR d.media_sha256=p.media_sha256) "+
+   "AND (d.status IN ('leased','started','confirmed','uncertain') OR "+
+   "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))",[KWAI_TARGET]);
+  return{ok:true,pending:Number(safe[0]?.n||0),confirmed_today:Number(usage[0]?.n||0),
+   last_confirmed_at:usage[0]?.latest||null,states:rows};
+ }
  if(action==='kwai-lease'){
   const seconds=Number(b.lease_seconds||180);
-  if(!Number.isSafeInteger(seconds)||seconds<60||seconds>600)
+  if(!Number.isSafeInteger(seconds)||seconds<60||seconds>(physical?3600:600))
    return{ok:false,error:'KWAI_TTL_INVALID'};
   // A crashed runner can leave a lease abandoned before the irreversible
   // publish start. Requeue only leases past their fencing deadline and only
@@ -239,7 +278,7 @@ async function kwaiAction(action,b,actor){
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_RENEW_STALE_FENCE'};
  }
  if(action==='kwai-start'){
-  if(process.env.CORTES_KWAI_CLOUD_PUBLISH_ENABLED!=='1')
+  if(cloud&&process.env.CORTES_KWAI_CLOUD_PUBLISH_ENABLED!=='1')
    return{ok:false,error:'KWAI_PUBLISHER_NOT_ENABLED'};
   // Two existing database triggers atomically reserve account and platform caps.
   // A second reservation here would double-count the platform:kwai quota.
@@ -254,6 +293,34 @@ async function kwaiAction(action,b,actor){
  }
  if(action==='kwai-confirm'){
   const proof=b.confirmation_evidence||{},remote=String(b.remote_id||'');
+  if(physical){
+   // Signed real-device receipt: direct Kwai share URL, independent account
+   // author readback and two distinct frame matches against the source video.
+   // The phone's private RSA key signs the exact JSON request. Rejected proof
+   // leaves STARTED untouched and a failed commit is quarantined as UNCERTAIN.
+   const matched=proof.media_match||{},scores=matched.inliers||[];
+   const nowMs=Date.now(),receipt=Number(proof.share_receipt_epoch_ms),checked=Number(proof.verified_at_epoch_ms);
+   if(proof.kind!=='kwai_verified_public_media_v2'||
+      proof.schema!=='kwai-public-media-proof-v2'||proof.ok!==true||
+      proof.job_id!==String(b.id)||proof.expected_account!=='lucasrosalem'||
+      proof.actual_author_handle!=='lucasrosalem'||proof.public_url!==remote||
+      !/^https:\/\/k\.kwai\.com\/p\/[A-Za-z0-9_-]{5,100}$/.test(remote)||
+      !/^[a-f0-9]{64}$/.test(String(proof.media_sha256||''))||
+      !Array.isArray(scores)||scores.length<2||Number(scores[0])<24||
+      Number(scores[1])<17||!Number.isFinite(receipt)||!Number.isFinite(checked)||
+      receipt<=0||checked<receipt||checked>nowMs+10000||
+      nowMs-checked>900000)
+    return{ok:false,error:'KWAI_PHYSICAL_VERIFIED_SHARE_MEDIA_PROOF_REQUIRED'};
+   const evidence={...proof,attested_device:'DESKTOP-FTDK0HP',
+     device_signature_verified:true,verified_at_neon:new Date().toISOString()};
+   const rows=await query("UPDATE cortes_publications SET status='confirmed',"+
+     "remote_id=$5,confirmation_evidence=$6::jsonb,lease_owner=NULL,lease_until=NULL,"+
+     "updated_at=now() WHERE id=$1 AND target_key=$2 AND status='started' "+
+     "AND lease_owner=$3 AND lease_generation=$4 AND publication_started_at IS NOT NULL "+
+     "RETURNING id,status,remote_id",
+     [String(b.id),KWAI_TARGET,owner,Number(b.lease_generation),remote,JSON.stringify(evidence)]);
+   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_PHYSICAL_CONFIRM_STALE_FENCE'};
+  }
   let u;try{u=new URL(String(proof.public_url||''));}catch{}
   const p=u?.pathname||'',h=u?.hostname||'';
   const official=(h==='k.kwai.com'&&/^\/p\/[A-Za-z0-9_-]{5,100}$/.test(p))||
@@ -1044,7 +1111,7 @@ export default {async fetch(request){
  if(Number(request.headers.get('content-length')||0)>65536)return answer({ok:false,error:'TOO_LARGE'},413);
  const actor=action.startsWith('browser-')?
     (await authorizePinterestBrowser(request)?{role:'pinterest-browser'}:null):
-    await identity(request);
+    (action.startsWith('kwai-')?(await kwaiPhysicalIdentity(request,action))||await identity(request):await identity(request));
  if(!actor)return answer({ok:false,error:'PUBLISHER_AUTH_UNAUTHORIZED'},401);
  let body;try{body=await request.json();}catch{return answer({ok:false,error:'INVALID_JSON'},400);}
  if(!body||typeof body!=='object'||Array.isArray(body))return answer({ok:false,error:'INVALID_BODY'},400);
