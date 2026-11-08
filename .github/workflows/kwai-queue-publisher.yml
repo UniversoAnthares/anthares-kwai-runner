@@ -272,6 +272,8 @@ jobs:
             mkdir -p "$HOME/.android/avd"
             echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd --force --name kwai-speed --package "$IMAGE" --device pixel_5
           fi
+          test -x "$SDK/platform-tools/adb"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
 
       - name: Boot remote Android, install Kwai and test prior session
         id: initial
