@@ -71,6 +71,23 @@ test('dedicated probe workflow cannot read or write any session ciphertext',asyn
   assert.equal((await handleKwaiSessionVault(req(),e,probeAuth)).status,401);
   assert.equal((await handleKwaiSessionVault(req('POST',{account:'lucasrosalem',ciphertext,sha256}),e,probeAuth)).status,401);
 });
+test('canonical Neon cloud publisher reads but cannot mutate encrypted session',async()=>{
+  const e=env();
+  const cloudWorkflow='UniversoAnthares/anthares-kwai-runner/.github/workflows/cortes-kwai-cloud-publisher.yml@refs/heads/main';
+  const cloudAuth=async(token,environment,allowlist)=>{
+    assert.ok(allowlist.includes('cortes-kwai-cloud-publisher.yml'));
+    return {ok:true,claims:{...claims,job_workflow_ref:cloudWorkflow}};
+  };
+  const publisherAuth=ok;
+  assert.equal((await handleKwaiSessionVault(req('POST',{account:'lucasrosalem',ciphertext,sha256}),e,publisherAuth)).status,200);
+  const read=await handleKwaiSessionVault(req(),e,cloudAuth);
+  assert.equal(read.status,200);
+  assert.equal((await read.json()).sha256,sha256);
+  assert.equal((await handleKwaiSessionVault(req('POST',{account:'lucasrosalem',ciphertext,sha256}),e,cloudAuth)).status,401);
+  const otherBranch=async()=>({ok:true,claims:{...claims,job_workflow_ref:cloudWorkflow.replace('@refs/heads/main','@refs/heads/dev')}});
+  assert.equal((await handleKwaiSessionVault(req(),e,otherBranch)).status,401);
+});
+
 test('tampered stored ciphertext is rejected',async()=>{
   const e=env();
   await handleKwaiSessionVault(req('POST',{account:'lucasrosalem',ciphertext,sha256}),e,ok);
