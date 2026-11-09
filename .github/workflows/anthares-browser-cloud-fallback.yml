@@ -67,8 +67,11 @@ jobs:
           set -euo pipefail
           control="$(openssl rand -hex 32)"
           if [ "${{ inputs.mode }}" = "login" ]; then
-            vnc="$(openssl rand -hex 4)"
-            echo "KW12_TEMPORARY_VNC_PASSWORD=$vnc"
+            vnc="$(openssl rand -hex 12)"
+            manual="$(openssl rand -hex 24)"
+            expires="$(date -u -d '+45 minutes' +%s)"
+            echo "manual=$manual" >> "$GITHUB_OUTPUT"
+            echo "manual_expires=$expires" >> "$GITHUB_OUTPUT"
           elif [ -n "$VNC_SECRET" ]; then
             vnc="$VNC_SECRET"
           else
@@ -91,6 +94,8 @@ jobs:
             -e CONTROL_TOKEN="$CONTROL" \
             -e VNC_PASSWORD="$VNC" \
             -e START_URL="https://studio.kwai.com/live/list?source=" \
+            -e NOVNC_MANUAL_TOKEN="${{ steps.creds.outputs.manual }}" \
+            -e NOVNC_MANUAL_EXPIRES="${{ steps.creds.outputs.manual_expires }}" \
             -v "$PROFILE_DIR:/data" \
             -p 127.0.0.1:18080:8080 \
             -p 127.0.0.1:16080:6080 \
@@ -164,15 +169,21 @@ jobs:
           fi
           curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
           chmod +x /tmp/cloudflared
-          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:16080 > /tmp/tunnel.log 2>&1 &
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:18080 > /tmp/tunnel.log 2>&1 &
+          url=""
           for i in $(seq 1 60); do
             url="$(grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/tunnel.log | tail -1 || true)"
-            if [ -n "$url" ]; then
-              echo "NOVNC_URL=${url}/vnc.html?autoconnect=true&resize=scale"
-              break
-            fi
+            [ -n "$url" ] && break
             sleep 1
           done
+          test -n "$url" || { echo "KW12_CLOUDFLARE_TUNNEL_UNAVAILABLE"; exit 1; }
+          printf '%s\n' "$url" > "$PROFILE_DIR/novnc_public_origin"
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$url/novnc/login")" = "200" || {
+            echo "KW12_AUTHENTICATED_BROWSER_GATEWAY_UNAVAILABLE"
+            exit 1
+          }
+          echo "KW12_SECURE_NOVNC_URL=${url}/novnc/once/${{ steps.creds.outputs.manual }}"
+          echo "KW12_BROWSER_GATEWAY_READY=1"
           minutes="$KEEP"; [ "$minutes" -gt 45 ] && minutes=45; [ "$minutes" -lt 1 ] && minutes=1
           # Only owner authentication can complete this once; login/captcha remain user-operated.
           for (( i=0; i<minutes*10; i++ )); do

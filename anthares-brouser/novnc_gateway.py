@@ -168,9 +168,17 @@ def novnc_static(asset_path: str, _: int = Depends(_require_cookie)):
 
 def _same_origin(websocket: WebSocket) -> bool:
     origin = urlsplit(websocket.headers.get("origin", ""))
-    public_url = urlsplit(os.environ.get(
-        "NOVNC_PUBLIC_ORIGIN", ""
-    ))
+    configured = os.environ.get("NOVNC_PUBLIC_ORIGIN", "")
+    if not configured:
+        # An ephemeral Quick Tunnel URL becomes known after Chromium starts.
+        origin_file = Path(os.environ.get(
+            "NOVNC_PUBLIC_ORIGIN_FILE", "/data/novnc_public_origin"
+        ))
+        try:
+            configured = origin_file.read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeError):
+            configured = ""
+    public_url = urlsplit(configured)
     return bool(
         origin.scheme == "https"
         and origin.hostname == public_url.hostname
