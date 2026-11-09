@@ -62,6 +62,7 @@ jobs:
           rm -f "$RUNNER_TEMP/kw12-artifact.zip" "$RUNNER_TEMP/kw12-profile.tgz"
           echo 'KW12_EXISTING_PROFILE_RESTORED=1'
       - name: Probe Studio owner through existing Chromium profile
+        id: probe
         shell: bash
         run: |
           set -euo pipefail
@@ -69,7 +70,7 @@ jobs:
           python -m playwright install --with-deps chromium >/dev/null
           python3 - <<'PY'
           from playwright.sync_api import sync_playwright
-          import os
+          import os,re
           profile=os.path.join(os.environ['RUNNER_TEMP'],'kw12-browser','chrome-profile')
           with sync_playwright() as p:
               ctx=p.chromium.launch_persistent_context(profile,headless=True,args=['--no-sandbox','--disable-dev-shm-usage'],locale='pt-BR')
@@ -79,11 +80,55 @@ jobs:
                   page.wait_for_timeout(4500)
                   result=page.evaluate('''async()=>{try{const r=await fetch('/rest/o/w/live/supplier/cloudLive/checkPermission',{credentials:'include'});const d=await r.json();const u=d.userInfo||d.data?.userInfo||{};const name=(document.body?.innerText||'').includes('Lucas Rosalem');return {status:r.status,allowed:d.result===1,owner:!!(u.ksId||u.userId),name}}catch(e){return {status:0,allowed:false,owner:false,name:false}}}''')
                   good=result['status']==200 and (result['allowed'] or result['owner']) and result['name']
+                  if not good:
+                      # Try only the legitimate Google SSO button; do not enter credentials,
+                      # select an ambiguous identity or bypass challenges.
+                      try:
+                          entry=page.get_by_role('button',name=re.compile(r'entrar|login|sign in|log in',re.I))
+                          if entry.count()==1 and entry.first.is_visible():
+                              entry.first.click(timeout=3500)
+                              page.wait_for_timeout(1300)
+                          google=page.get_by_text(re.compile(r'continuar com google|continue with google|sign in with google|entrar com google',re.I))
+                          if google.count()==1 and google.first.is_visible():
+                              google.first.click(timeout=5000)
+                              print('KW12_GOOGLE_SSO_BUTTON_USED=1',flush=True)
+                              page.wait_for_timeout(4500)
+                          else:
+                              print('KW12_GOOGLE_SSO_BUTTON_AVAILABLE=0',flush=True)
+                      except Exception:
+                          print('KW12_GOOGLE_SSO_REQUIRES_INTERACTIVE_OWNER=1',flush=True)
+                      try:
+                          page.goto('https://studio.kwai.com/live/list?source=',wait_until='domcontentloaded',timeout=25000)
+                          page.wait_for_timeout(2200)
+                          result=page.evaluate('''async()=>{try{const r=await fetch('/rest/o/w/live/supplier/cloudLive/checkPermission',{credentials:'include'});const d=await r.json();const u=d.userInfo||d.data?.userInfo||{};const name=(document.body?.innerText||'').includes('Lucas Rosalem');return {status:r.status,allowed:d.result===1,owner:!!(u.ksId||u.userId),name}}catch(e){return {status:0,allowed:false,owner:false,name:false}}}''')
+                          good=result['status']==200 and (result['allowed'] or result['owner']) and result['name']
+                      except Exception:
+                          good=False
+                  if good:
+                      with open(os.environ['RUNNER_TEMP']+'/kw12-auth-success.flag','w') as mark:mark.write('1')
+                  with open(os.environ['GITHUB_OUTPUT'],'a') as output:output.write('authorized='+str(good).lower()+'\\n')
                   print('KW12_REMOTE_STUDIO_SESSION='+('AUTHORIZED' if good else 'NOT_AUTHORIZED'),flush=True)
                   with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('Kwai Studio cloud session: '+('authorized' if good else 'not authorized')+' (no secrets exported).\n')
               finally:
                   ctx.close()
           PY
+      - name: Re-seal authorized cloud profile only if owner proven
+        if: steps.probe.outputs.authorized == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/kw12-auth-success.flag"
+          tar -czf "$RUNNER_TEMP/kw12-profile.tgz" -C "$RUNNER_TEMP/kw12-browser" chrome-profile
+          openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:STATE_KEY -in "$RUNNER_TEMP/kw12-profile.tgz" -out "$RUNNER_TEMP/kw12-profile.tgz.enc"
+          rm -f "$RUNNER_TEMP/kw12-profile.tgz"
+      - name: Store authorized encrypted cloud profile for future six-hour sessions
+        if: steps.probe.outputs.authorized == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: anthares-browser-profile-encrypted
+          path: ${{ runner.temp }}/kw12-profile.tgz.enc
+          retention-days: 30
+          if-no-files-found: error
       - name: Remove temporary browser profile
         if: always()
         shell: bash
