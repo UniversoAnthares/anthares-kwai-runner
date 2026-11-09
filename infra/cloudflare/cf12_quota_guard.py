@@ -273,17 +273,26 @@ def restore_yesterday(cloudflare_token, github_token, state, current_date):
         print("CF12_RESTORED " + script, flush=True)
     if state["date"] != current_date:
         previous_day = state["date"]
-        details = "CF12_DAILY_SUMMARY " + json.dumps({
+        summary = {
             "utc_day": previous_day,
             "last_count_sample": int(state.get("last_count") or 0),
             "health_probes": int(state.get("health_probes") or 0),
             "observed_1027": int(state.get("observed_1027") or 0),
             "sample_errors": int(state.get("sample_errors") or 0)
-        }, sort_keys=True)
-        notify(github_token, dt.datetime.now(dt.timezone.utc), "daily_summary",
-               int(state.get("last_count") or 0), details)
+        }
+        # Keep a rolling 15-day history in issue state. Unlike new issue
+        # comments, PATCHing issue state does not email a daily notification.
+        summaries = state.get("daily_summaries") or []
+        if not isinstance(summaries, list):
+            raise RuntimeError("CF12_SUMMARY_STATE_INVALID")
+        summaries = [row for row in summaries if isinstance(row, dict)
+                     and row.get("utc_day") != previous_day]
+        summaries.append(summary)
+        summaries = sorted(summaries, key=lambda row: str(row.get("utc_day") or ""))[-15:]
         state = empty_state(current_date)
+        state["daily_summaries"] = summaries
         persist_state(github_token, state)
+        print("CF12_DAILY_SUMMARY_RETAINED " + json.dumps(summary, sort_keys=True), flush=True)
     return state
 
 
