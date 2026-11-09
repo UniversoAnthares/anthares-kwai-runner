@@ -18,7 +18,7 @@ REPO = "UniversoAnthares/anthares-kwai-runner"
 STATE_MARKER = "CF12_STATE_JSON:"
 DO_SQL_READ_WARN = 4_000_000
 DO_SQL_WRITE_WARN = 80_000
-STAGES = ((70000, "critical"), (50000, "reduced"), (30000, "warning"))
+STAGES = ((70000, "critical"), (27000, "reduced"), (25000, "warning"))
 OPTIONAL = (
     "anthares-cf02-stage-r0725",
     "anthares-cf03-qa-r0725",
@@ -318,8 +318,8 @@ def apply(cloudflare_token, github_token, state, target_level, count, now):
     persist_state(github_token, state)
     if previous != target_level:
         details = {
-            "warning": "Aviso de 30.000 invocações; modo normal preservado.",
-            "reduced": "50.000: entradas públicas de homologação reduzidas.",
+            "warning": "Aviso de 25.000 invocações; serviços essenciais preservados.",
+            "reduced": "27.000: entradas públicas de homologação reduzidas preventivamente.",
             "critical": "70.000: entradas HTTP legadas ARA de reserva/backup temporariamente suspensas.",
             "normal": "Franquia abaixo de 30.000; sem alterações.",
         }[target_level]
@@ -328,8 +328,8 @@ def apply(cloudflare_token, github_token, state, target_level, count, now):
 
 def simulate():
     expected = {
-        0: "normal", 29999: "normal", 30000: "warning",
-        49999: "warning", 50000: "reduced", 69999: "reduced",
+        0: "normal", 24999: "normal", 25000: "warning",
+        26999: "warning", 27000: "reduced", 69999: "reduced",
         70000: "critical", 100000: "critical",
     }
     for count, level in expected.items():
@@ -345,7 +345,7 @@ def simulate():
         pass
     else:
         raise AssertionError("essential protection missing")
-    print("CF12_POLICY_OK 30000=warning 50000=reduced 70000=critical")
+    print("CF12_POLICY_OK 25000=warning 27000=reduced 70000=critical")
     print("CF12_ESSENTIAL_PROTECTED=1 CF12_ZERO_MUTATIONS=1")
 
 
@@ -415,7 +415,9 @@ def main():
         return
     # An unresolved prior-day restore blocks fresh actions.
     state = restore_yesterday(cloudflare_token, github_token, state, day)
-    count, errors, workers = observed_request_total(cloudflare_token, now)
+    raw_count, errors, workers = observed_request_total(cloudflare_token, now)
+    # Cloudflare analytics may lag; never regress a threshold within a UTC day.
+    count = max(raw_count, int(state.get("last_count") or 0))
     try:
         sql_usage, sql_namespaces = observed_do_sql_usage(cloudflare_token, now)
     except RuntimeError as ex:
