@@ -251,9 +251,6 @@ def open_context(playwright):
 
 def main() -> None:
     issue_id, state = issue_and_state()
-    if state.get("status") == "active" and int(time.time()) < int(state.get("renew_after", 0)):
-        print("KW12_CURRENT_ROOM_IN_SIX_HOUR_WINDOW=1", flush=True)
-        return
     with sync_playwright() as pw:
         browser, ctx = open_context(pw)
         try:
@@ -265,13 +262,32 @@ def main() -> None:
                 raise RuntimeError("KW12_REMOTE_STUDIO_AUTHORIZATION_REQUIRED")
             if state.get("status") == "active":
                 room = str(state["room_id"])
+                if not re.fullmatch(r"[0-9]{10,21}", room):
+                    raise RuntimeError("KW12_PREVIOUS_ROOM_ID_INVALID")
                 status = room_status(page, room)
+                within_window = int(time.time()) < int(state.get("renew_after", 0))
+                if status == 1 and within_window:
+                    # The previous room is genuinely broadcasting. Leave the
+                    # Hostinger minute cron in charge of FFmpeg recovery.
+                    print("KW12_CURRENT_ROOM_IN_SIX_HOUR_WINDOW=1", flush=True)
+                    return
                 if status == 1:
                     reply = call(page, "stopLive", room)
                     if (reply.get("body") or {}).get("result") != 1 and room_status(page, room) == 1:
                         raise RuntimeError("KW12_PREVIOUS_ROOM_STILL_ACTIVE")
+                else:
+                    # 0 can denote a room still being prepared. A numeric
+                    # response on its own is never proof of expiry.
+                    if status not in (2, 3, 4, 5):
+                        raise RuntimeError("KW12_PREVIOUS_ROOM_STATE_INDETERMINATE")
+                    page.wait_for_timeout(1200)
+                    if room_status(page, room) != status:
+                        raise RuntimeError("KW12_PREVIOUS_ROOM_STATUS_TRANSIENT")
+                    if within_window:
+                        print("KW12_EARLY_REMOTE_ROOM_END_CONFIRMED=1", flush=True)
                 remove_hostinger_room(room)
-                state = dict(state, status="ended", ended_at=int(time.time()))
+                state = dict(state, status="ended", ended_at=int(time.time()),
+                             previous_remote_status=status)
                 save_state(issue_id, state)
                 print("KW12_PREVIOUS_ROOM_ENDED=1", flush=True)
             create_and_start(page, issue_id, state)
