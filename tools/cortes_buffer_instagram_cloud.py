@@ -178,10 +178,7 @@ def safe_payload(row):
         "duration_seconds":payload.get("duration_seconds"),
         "title":payload.get("title") or payload.get("video_title"),
         "description":payload.get("description") or "",
-        "same_day": (trusted_instagram_one_time_runner() or
-                     (os.getenv("CORTES_IG_IMMEDIATE_UNTIL_UTC")=="2026-10-22T09:00:00Z"
-                      and datetime.datetime.now(datetime.timezone.utc)
-                          < datetime.datetime(2026,10,22,9,0,tzinfo=datetime.timezone.utc))),
+        "same_day": True,  # Buffer shareNow for same-day Instagram Reels.
     }
     if result["duration_seconds"] is None:
         raise RuntimeError("NEON_INSTAGRAM_DURATION_MISSING")
