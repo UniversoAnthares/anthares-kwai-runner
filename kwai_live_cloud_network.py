@@ -29,7 +29,19 @@ def hls_preflight():
     base=HLS_URL.rsplit('/',1)[0]+'/'
     with urllib.request.urlopen(urllib.request.Request(base+segs[0]+'?cb='+str(int(time.time())),headers={'User-Agent':'Anthares-Live/1.0'}),timeout=25) as r: body=r.read()
     if len(body)<1000: raise RuntimeError('HLS_SEGMENT_INVALID')
-    print('KWAI_LIVE_HLS=PROVEN sequence='+seq[0].split(':',1)[1]+' segments='+str(len(segs))+' first_segment_bytes='+str(len(body)),flush=True)
+    # A moving one-minute window is insufficient proof of a six-hour library.
+    vod_url=HLS_URL.rsplit('/',1)[0]+'/vod/index.m3u8'
+    with urllib.request.urlopen(urllib.request.Request(vod_url,headers={'User-Agent':'Anthares-Live/1.0'}),timeout=25) as r:
+        vod_lines=r.read().decode('utf-8','replace').splitlines()
+    from decimal import Decimal, InvalidOperation
+    try:
+        vod_seconds=sum((Decimal(line.split(':',1)[1].split(',',1)[0]) for line in vod_lines
+                         if line.startswith('#EXTINF:')),Decimal(0))
+    except InvalidOperation as e:
+        raise RuntimeError('KWAI_LIVE_VOD_DURATION_INVALID') from e
+    if vod_seconds < 21600: raise RuntimeError('KWAI_LIVE_SIX_HOUR_SOURCE_MISSING')
+    print('KWAI_LIVE_HLS=PROVEN sequence='+seq[0].split(':',1)[1]+
+          ' segments='+str(len(segs))+' source_seconds='+str(vod_seconds),flush=True)
 
 
 def click_first(page,pattern,selectors=('button','a','[role="button"]')):
@@ -142,9 +154,9 @@ def run(activate=False,seconds=60):
             print('KWAI_LIVE_START_RESULT='+str(start.get('result')),flush=True)
             if start.get('result')!=1: raise RuntimeError('KWAI_LIVE_START_REJECTED')
             started=True
-            end=time.time()+max(15,min(int(seconds),120))
+            end=time.monotonic()+max(15,min(int(seconds),21600))
             good=0
-            while time.time()<end:
+            while time.monotonic()<end:
                 info=page.evaluate("""async id=>await (await fetch('/rest/o/w/live/supplier/cloudLive/room?liveRoomId='+encodeURIComponent(id))).json()""",room)
                 status=(info.get('curRoomVo') or {}).get('roomStatus')
                 if status==1: good+=1
@@ -163,6 +175,7 @@ def run(activate=False,seconds=60):
             ctx.close(); b.close()
         if room and not cleanup: raise RuntimeError('KWAI_LIVE_CLEANUP_UNCONFIRMED')
         print('KWAI_LIVE_CLOUD_CANARY=PROVEN',flush=True)
+        if int(seconds)>=21600: print('KWAI_LIVE_SIX_HOURS_COMPLETED=1',flush=True)
 
 
 def main():
