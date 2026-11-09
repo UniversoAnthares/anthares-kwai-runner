@@ -173,7 +173,7 @@ async function kwaiAction(action,b,actor){
   const r=rows[0],prior=r.confirmation_evidence||{};
   if(r.status==='queued'&&prior.kind==='kwai_historical_verified_public_absent_v1'&&
      prior.recovered_from_no_touch===true)return{ok:true,already_resolved:true,job:{id,status:'queued'}};
-  if(r.status!=='uncertain'||r.lease_owner!==null||
+  if(r.status!=='uncertain'||r.lease_owner!=null||
      Number(r.lease_generation)!==Number(b.lease_generation)||
      !r.publication_started_at||
      Math.abs(new Date(r.publication_started_at).getTime()-start)>1500||
@@ -181,7 +181,7 @@ async function kwaiAction(action,b,actor){
      prior.device_signature_verified!==true||
      prior.attested_device!=='DESKTOP-FTDK0HP'||
      prior.job_id!==id||prior.source_sha256!==p.source_sha256)
-   return{ok:false,error:'KWAI_PHYSICAL_NO_POST_FENCE_OR_SOURCE_MISMATCH'};
+   return{ok:false,error:'KWAI_PHYSICAL_NO_POST_FENCE_OR_SOURCE_MISMATCH',checks:{status:r.status,owner_null:r.lease_owner==null,lease:Number(r.lease_generation)===Number(b.lease_generation),started:Math.abs(new Date(r.publication_started_at).getTime()-start),kind:prior.kind,source_equal:prior.source_sha256===p.source_sha256,sig:prior.device_signature_verified===true,device:prior.attested_device,job:prior.job_id===id}};
   const evidence={...p,kind:'kwai_historical_verified_public_absent_v1',
     recovered_from_no_touch:true,prior_lease_generation:Number(r.lease_generation),
     attested_device:'DESKTOP-FTDK0HP',device_signature_verified:true,
