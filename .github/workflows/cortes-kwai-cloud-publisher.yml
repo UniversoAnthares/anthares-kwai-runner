@@ -1,9 +1,5 @@
 name: Kwai Canonical Neon Cloud Publisher
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/cortes-kwai-cloud-publisher.yml
   workflow_dispatch:
     inputs:
       mode:
@@ -24,40 +20,6 @@ concurrency:
   group: anthares-kwai-cloud-neon-exclusive
   cancel-in-progress: false
 jobs:
-  kw09-phone-stage-probe:
-    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[KW09_PHONE_PROBE]') }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 3
-    env:
-      KW09_MACRODROID_STAGE_WEBHOOK: ${{ secrets.KW09_MACRODROID_STAGE_WEBHOOK }}
-    steps:
-      - name: Send verified, already-public MP4 to staging-only Android macro
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          from urllib.parse import urlencode, urlsplit
-          from urllib.request import Request, urlopen
-          secret=os.getenv("KW09_MACRODROID_STAGE_WEBHOOK","")
-          u=urlsplit(secret)
-          assert u.scheme=="https" and u.hostname=="trigger.macrodroid.com"
-          assert u.path.endswith("/kw09_stage_only") and not (u.username or u.password or u.query or u.fragment)
-          values={
-            "kw09_mode":"stage_only",
-            "kw09_job_id":"kwai-cortes-kw09probe-gh-20261109-verified",
-            "kw09_generation":"1",
-            "kw09_expected_account":"lucasrosalem",
-            "kw09_expected_sha256":"7355d6c5358fdd81a53c93bff17275259bb57f15e44cbe639f95639f0b5cef96",
-            "kw09_video_url":"https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_fOmihuHUT1M_g1_7868_7908.mp4",
-          }
-          args={**values,**{"kw09_stage_q("+k+")":v for k,v in values.items()}}
-          with urlopen(Request(secret+"?"+urlencode(args),method="GET"),timeout=20) as result:
-            assert result.status==200
-          print("KW09_GITHUB_PHONE_STAGING_WEBHOOK=ACCEPTED")
-          print("KW09_GITHUB_TEST_PUBLICATION=DISABLED")
-          PY
-
   canonical-state:
     runs-on: ubuntu-24.04
     timeout-minutes: 3
