@@ -35,6 +35,22 @@ class QuotaWatcherContract(unittest.TestCase):
         self.assertTrue(mod.already_handled("wordpress", "private-ci-quota-rescue.yml", sha, [run]))
         self.assertFalse(mod.already_handled("clipper", "private-ci-quota-rescue.yml", sha, [run]))
 
+    def test_one_shot_cooldown_allows_distinct_sha_only_after_terminal(self):
+        sha = "ca4e7a0dbd2c7a72ba0b4ae953688213f49f845d"
+        previous = {"display_title": "quota-rescue-cortes-glsha-" + "b" * 40,
+                    "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                    "event": "workflow_dispatch", "status": "completed"}
+        with patch.object(mod, "HISTORICAL_AOI8_ONCE", True):
+            self.assertFalse(mod.already_handled("cortes", "gitlab-quota-fallback.yml", sha, [previous]))
+            previous["status"] = "in_progress"
+            self.assertTrue(mod.already_handled("cortes", "gitlab-quota-fallback.yml", sha, [previous]))
+            previous["status"] = "completed"
+            previous["display_title"] = "quota-rescue-cortes-glsha-" + sha
+            self.assertTrue(mod.already_handled("cortes", "gitlab-quota-fallback.yml", sha, [previous]))
+        previous["display_title"] = "quota-rescue-cortes-glsha-" + "b" * 40
+        with patch.object(mod, "HISTORICAL_AOI8_ONCE", False):
+            self.assertTrue(mod.already_handled("cortes", "gitlab-quota-fallback.yml", sha, [previous]))
+
     def test_no_dispatch_on_nonquota_failure(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()
         def fake_api(url, *args, **kwargs):
