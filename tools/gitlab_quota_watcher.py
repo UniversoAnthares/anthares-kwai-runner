@@ -21,6 +21,7 @@ WINDOW_MINUTES = 90
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() == "true"
 GL_AUTH = os.environ.get("GITLAB_TOKEN", "")
 GH_AUTH = os.environ.get("GH_TOKEN", "")
+HISTORICAL_AOI8_ONCE = os.environ.get("ANTHARES_HISTORICAL_AOI8_ONCE", "").lower() == "true"
 
 
 def api(url, token="", method="GET", payload=None, gl=False):
@@ -64,11 +65,14 @@ def recent_qualifying_failure(project_id):
             # Recover one independently verified, terminal quota failure from
             # the existing backlog. Never reopen the global time window.
             exact_backlog = (
-                str(project_id) == "87307248"
-                and p.get("id") == 3010066125
-                and p.get("sha") == "27beeff7fba0341ae0ebb2ee681d7de975a56597"
+                HISTORICAL_AOI8_ONCE
+                and str(project_id) == "87307248"
+                and p.get("id") == 3010062525
+                and p.get("sha") == "ca4e7a0dbd2c7a72ba0b4ae953688213f49f845d"
             )
             if not exact_backlog:
+                if HISTORICAL_AOI8_ONCE:
+                    continue
                 break
         if (p.get("ref") != "main" or not p.get("sha") or
                 p.get("status") not in
