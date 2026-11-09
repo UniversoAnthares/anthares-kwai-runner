@@ -1,7 +1,14 @@
 name: Kwai LIVE Cloud Executor
 on:
+  schedule:
+    - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
+      six_hour_cycle:
+        description: 'Renew a cloud network-pull LIVE after its full six-hour interval'
+        required: true
+        default: false
+        type: boolean
       activate:
         description: 'Create and start a short real LIVE canary'
         required: true
@@ -14,12 +21,14 @@ on:
         type: string
 permissions:
   contents: read
+  issues: write
   id-token: write
 concurrency:
   group: kwai-live-cloud-executor
   cancel-in-progress: false
 jobs:
   preflight:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.six_hour_cycle != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
@@ -48,7 +57,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 2
   canary:
-    if: ${{ inputs.activate == true }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.activate == true && inputs.six_hour_cycle != true }}
     needs: preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 12
@@ -71,3 +80,26 @@ jobs:
       - name: Require cleanup marker in controller semantics
         if: always()
         run: grep -q 'KWAI_LIVE_CLEANUP_CONFIRMED' kwai_live_cloud_network.py
+
+  six_hour_cycle:
+    # All runs share the workflow concurrency group, including manual dispatch.
+    if: ${{ (github.event_name == 'schedule' && vars.KWAI_LIVE_6H_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.six_hour_cycle == true) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+      KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+      KWAI_LIVE_STORAGE_STATE_B64: ${{ secrets.KWAI_LIVE_STORAGE_STATE_B64 }}
+      GH_TOKEN: ${{ github.token }}
+      ANTHARES_PUBLIC_HLS_URL: https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing browser runtime
+        run: |
+          python -m pip install -q playwright pillow
+          python -m playwright install --with-deps chromium >/dev/null
+      - name: Start or renew one six-hour Kwai server-side network-pull LIVE
+        run: python -u kwai_live_6h_cycle.py
