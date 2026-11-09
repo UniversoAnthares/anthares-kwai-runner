@@ -77,6 +77,39 @@ def _require_cookie(anthares_novnc_session: str | None = Cookie(default=None)) -
 def _secure_cookie() -> bool:
     return os.environ.get("NOVNC_COOKIE_SECURE", "1") != "0"
 
+def _public_origin() -> str:
+    configured = os.environ.get("NOVNC_PUBLIC_ORIGIN", "")
+    if not configured:
+        try:
+            configured = Path(os.environ.get(
+                "NOVNC_PUBLIC_ORIGIN_FILE", "/data/novnc_public_origin"
+            )).read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeError):
+            configured = ""
+    return configured
+
+
+def _external_https(request: Request) -> bool:
+    """Accept TLS terminated by the configured Cloudflare Quick Tunnel only.
+
+    The gateway sits behind a loopback-only Docker port; its ASGI request
+    scheme is HTTP after Cloudflare decrypts the external HTTPS connection.
+    Require the exact published hostname and Cloudflare HTTPS forwarding
+    headers before issuing any Secure cookie.
+    """
+    if request.url.scheme == "https":
+        return True
+    expected = urlsplit(_public_origin())
+    host = request.headers.get("host", "").split(":", 1)[0].lower()
+    if expected.scheme != "https" or host != (expected.hostname or "").lower():
+        return False
+    if request.headers.get("x-forwarded-proto", "").lower() != "https":
+        return False
+    cf_visitor = request.headers.get("cf-visitor", "")
+    return '"scheme":"https"' in cf_visitor.replace(" ", "")
+
+
+
 
 def _set_session_cookie(response: Response) -> None:
     response.set_cookie(
@@ -102,7 +135,7 @@ def login_form() -> HTMLResponse:
 @router.get("/novnc/once/{token}")
 def manual_once(token: str, request: Request):
     global MANUAL_USED
-    if _secure_cookie() and request.url.scheme != "https":
+    if _secure_cookie() and not _external_https(request):
         raise HTTPException(status_code=403, detail="HTTPS required")
     now = int(time.time())
     supplied = token.encode("utf-8", "strict")
@@ -117,7 +150,7 @@ def manual_once(token: str, request: Request):
 
 @router.post("/novnc/login")
 async def browser_login(request: Request):
-    if _secure_cookie() and request.url.scheme != "https":
+    if _secure_cookie() and not _external_https(request):
         raise HTTPException(status_code=403, detail="HTTPS required")
     if request.headers.get("content-type", "").split(";")[0].strip() != "application/x-www-form-urlencoded":
         raise HTTPException(status_code=415, detail="unsupported form")
