@@ -7,7 +7,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_android_backup_uses_same_device_api_as_primary():
     src = (ROOT / "android-agent/app/src/main/java/us/anthares/agent/RemoteControlLoop.java").read_text(encoding="utf-8")
+    assert 'PRIMARY="https://anthares-ara-reserva.anthares1.workers.dev"' in src
     assert 'BACKUP="https://anthares-remote-secondary.vercel.app"' in src
+    assert '!"anthares-ara-reserva.anthares1.workers.dev".equals(host)' in src
+    assert '!"anthares-remote-secondary.vercel.app".equals(host)' in src
     assert 'BACKUP="https://anthares-ara-vercel-reserve.vercel.app"' not in src
 
 
