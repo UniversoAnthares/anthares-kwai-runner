@@ -167,11 +167,17 @@ async function kwaiAction(action,b,actor){
      p.recent_attempt_posted_to_android!==false)
    return{ok:false,error:'KWAI_PHYSICAL_NO_POST_RECOVERY_PROOF_INVALID'};
   const rows=await query("SELECT id,status,lease_generation,lease_owner,"+
-   "publication_started_at,confirmation_evidence FROM cortes_publications "+
-   "WHERE id=$1 AND target_key=$2 LIMIT 1",[id,KWAI_TARGET]);
+   "publication_started_at,"+
+   "confirmation_evidence->>'kind' AS proof_kind,"+
+   "confirmation_evidence->>'job_id' AS proof_job,"+
+   "confirmation_evidence->>'source_sha256' AS proof_sha,"+
+   "confirmation_evidence->>'attested_device' AS proof_device,"+
+   "confirmation_evidence->>'device_signature_verified' AS proof_signed "+
+   "FROM cortes_publications WHERE id=$1 AND target_key=$2 LIMIT 1",[id,KWAI_TARGET]);
   if(rows.length!==1)return{ok:false,error:'KWAI_NO_POST_JOB_MISSING'};
-  const r=rows[0],rawPrior=r.confirmation_evidence||{};
-  const prior=typeof rawPrior==='string'?JSON.parse(rawPrior):rawPrior;
+  const r=rows[0],prior={kind:r.proof_kind,job_id:r.proof_job,
+   source_sha256:r.proof_sha,attested_device:r.proof_device,
+   device_signature_verified:dbTrue(r.proof_signed)};
   if(r.status==='queued'&&prior.kind==='kwai_historical_verified_public_absent_v1'&&
      prior.recovered_from_no_touch===true)return{ok:true,already_resolved:true,job:{id,status:'queued'}};
   if(r.status!=='uncertain'||r.lease_owner!=null||
