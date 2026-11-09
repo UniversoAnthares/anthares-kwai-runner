@@ -417,6 +417,21 @@ def run():
     state = vault._vault_pull()
     if not state or not isinstance(state.get("cookies"), list):
         raise RuntimeError("X_GH_CLOUD_VAULT_EMPTY")
+    if os.getenv("X_READINESS_ONLY", "").lower() == "true":
+        # Manual hosted authentication proof, before queue/claim/upload.
+        # The caller cannot publish while this branch is selected.
+        with sync_playwright() as engine:
+            browser = engine.chromium.launch(headless=True, timeout=45000, args=[
+                "--no-sandbox", "--disable-dev-shm-usage", "--mute-audio",
+            ])
+            try:
+                context = browser.new_context(storage_state=state, locale="pt-BR")
+                page = open_authenticated(context)
+                account(page)
+            finally:
+                browser.close()
+        print("X_GH_CLOUD_READINESS_ACCOUNT_VERIFIED=lucasyahn", flush=True)
+        return
     issue, data = first_item()
     if not issue:
         with sync_playwright() as engine:
