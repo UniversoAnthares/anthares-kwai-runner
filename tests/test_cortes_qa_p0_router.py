@@ -45,6 +45,28 @@ class P0RouterTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"CODEBERG_P0_ISSUES_INVALID"):
                 router.codeberg_incidents()
 
+    def test_historical_fingerprint_lookup_uses_exact_global_search(self):
+        fp="81b0f6db9c83a2cc885af277"
+        def fake(url, *args, **kwargs):
+            self.assertIn("/search/issues?",url)
+            self.assertIn(fp,url)
+            return {"incomplete_results":False,"total_count":2,"items":[
+                {"body":"QA-P0-FINGERPRINT:"+fp+"\nOlder source"},
+                {"body":"unrelated body"}]}
+        with patch.object(router,"http",side_effect=fake):
+            self.assertTrue(router.historical_fingerprint_exists(fp))
+
+    def test_historical_fingerprint_lookup_rejects_incomplete_search(self):
+        fp="81b0f6db9c83a2cc885af277"
+        with patch.object(router,"http",return_value={
+                "incomplete_results":True,"total_count":2,"items":[]}):
+            with self.assertRaisesRegex(RuntimeError,"INCOMPLETE"):
+                router.historical_fingerprint_exists(fp)
+        with patch.object(router,"http",return_value={
+                "incomplete_results":False,"total_count":101,"items":[]}):
+            with self.assertRaisesRegex(RuntimeError,"INCOMPLETE"):
+                router.historical_fingerprint_exists(fp)
+
     def test_same_event_has_same_dedupe_key(self):
         self.assertEqual(router.marker("gha","clipper","123"),router.marker("gha","clipper","123"))
         self.assertNotEqual(router.marker("gha","clipper","123"),router.marker("gha","clipper","124"))
