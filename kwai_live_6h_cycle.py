@@ -250,7 +250,25 @@ def main():
                 page.set_default_timeout(18000)
                 page.goto("https://studio.kwai.com/", wait_until="domcontentloaded", timeout=90000)
                 page.wait_for_timeout(3500)
-                perm = login_if_needed(page)
+                try:
+                    perm = login_if_needed(page)
+                except RuntimeError:
+                    # Diagnostic categories only; never output form values, account IDs,
+                    # credentials, cookies, QR payloads or full page markup.
+                    ui = page.evaluate("""() => {
+                      const t = (document.body?.innerText || '').toLowerCase();
+                      const visible = e => !!e.getClientRects().length;
+                      return {
+                        page_path: location.pathname,
+                        input_types: [...document.querySelectorAll('input')].filter(visible).map(e=>e.type),
+                        iframe_count: document.querySelectorAll('iframe').length,
+                        form_count: document.querySelectorAll('form').length,
+                        labels: ['email','phone','password','qr code','senha','telefone','verificação','verification',
+                                 'google','entrar','login','continue','continuar'].filter(x=>t.includes(x))
+                      };
+                    }""")
+                    print("KWAI_STUDIO_LOGIN_SURFACE=" + json.dumps(ui, ensure_ascii=True), flush=True)
+                    raise
                 body = perm.get("body") or {}
                 user = body.get("userInfo") or (body.get("data") or {}).get("userInfo") or {}
                 if not (user.get("ksId") or user.get("userId")):
