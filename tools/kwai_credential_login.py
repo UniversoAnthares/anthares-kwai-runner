@@ -34,8 +34,11 @@ def edits(ns): return [n for n in ns if (n.get('class') or '').endswith('EditTex
 def is_password(n): return n.get('password')=='true' or 'password' in txt(n) or 'senha' in txt(n)
 def clear_and_type(n,value):
     if not tap(n): return False
-    adb('shell','input','keyevent','KEYCODE_MOVE_END')
-    for _ in range(160): adb('shell','input','keyevent','KEYCODE_DEL')
+    existing=n.get('text') or ''
+    if existing:
+        adb('shell','input','keyevent','KEYCODE_MOVE_END')
+        for _ in range(min(160,len(existing)+4)):
+            adb('shell','input','keyevent','KEYCODE_DEL')
     safe=value.replace('%','%25').replace(' ','%s').replace('&','\\&').replace('(','\\(').replace(')','\\)')
     adb('shell','input','text',safe);time.sleep(1);return True
 
@@ -43,8 +46,10 @@ def exact_button(ns,words):
     pats={w.casefold() for w in words}
     c=[]
     for n in ns:
-        t=((n.get('text') or '')+' '+(n.get('content-desc') or '')).strip().casefold()
-        if t in pats and bounds(n): c.append(n)
+        labels=[(n.get('text') or '').strip().casefold(),
+                (n.get('content-desc') or '').strip().casefold()]
+        if any(label in pats for label in labels if label) and bounds(n):
+            c.append(n)
     return c[-1] if c else None
 
 def challenge(ns):
@@ -69,6 +74,19 @@ env.setdefault('KWAI_LOGIN_MODE','plain')
 env.setdefault('KWAI_LOGIN_SETTLE','3')
 r=subprocess.run(['python3','tools/kwai_home_login_state_machine.py'],env=env).returncode
 if r != 0:
+    # The existing semantic route already supports one genuine Android
+    # relaunch path. Retry only a pre-login navigation failure, never a
+    # rejected password, OTP challenge or attempted publication.
+    env['KWAI_LOGIN_MODE']='relaunch-before-login'
+    env['KWAI_LOGIN_SETTLE']='5'
+    print('KWAI_HOME_LOGIN_RELAUNCH_FALLBACK=1')
+    r=subprocess.run(['python3','tools/kwai_home_login_state_machine.py'],env=env).returncode
+if r != 0:
+    # Existing native recovery uses only observed first-party Kwai controls.
+    env['KWAI_CAPTURE_MODE']='relaunch'
+    print('KWAI_EXISTING_NATIVE_RECOVERY=1')
+    r=subprocess.run(['python3','tools/kwai_login_surface_recovery_v2.py'],env=env).returncode
+if r != 0:
     print('KWAI_HOME_LOGIN_STATE_MACHINE_FAILED'); raise SystemExit(3)
 r=subprocess.run(['python3','tools/kwai_android_login_entry.py','auto'],env=env).returncode
 if r != 0:
@@ -81,10 +99,23 @@ if email_field is None:
     print('KWAI_ACCOUNT_FIELD_NOT_VERIFIED')
     raise SystemExit(3)
 if not clear_and_type(email_field,LOGIN): raise SystemExit(3)
-ns=snap(); b=exact_button(ns,('Next','Continue','Avançar','Continuar'))
-if b: tap(b)
-else: adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(1)
-state,ns=wait_password_or_challenge()
+ns=snap()
+if any(is_password(n) for n in edits(ns)):
+    state='password'
+else:
+    b=exact_button(ns,('Next','Continue','Avançar','Continuar',
+                       'Use password','Usar senha','Log in','Login','Sign in','Entrar'))
+    if b: tap(b)
+    else: adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(1)
+    state,ns=wait_password_or_challenge()
+    if state=='stuck':
+        # Retry once only if the live native form exposes an exact
+        # first-party submit action. Never activate OAuth or guess taps.
+        b=exact_button(ns,('Next','Continue','Avançar','Continuar',
+                           'Use password','Usar senha','Log in','Login','Sign in','Entrar'))
+        if b:
+            tap(b)
+            state,ns=wait_password_or_challenge(seconds=8)
 if state=='challenge': print('KWAI_LOGIN_CHALLENGE_AFTER_ACCOUNT'); raise SystemExit(6)
 if state!='password': print('KWAI_ACCOUNT_STEP_DID_NOT_ADVANCE'); raise SystemExit(3)
 
