@@ -11,6 +11,11 @@ on:
     types: [completed]
   workflow_dispatch:
     inputs:
+      historical_aoi8_once:
+        description: Admit one already-terminal GitLab quota incident with exact tuple
+        type: boolean
+        required: false
+        default: false
       reconcile_only:
         description: Confirm an existing exact successful CI receipt; no dispatch
         type: boolean
@@ -94,6 +99,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ANTHARES_CI_QUOTA_LEDGER_URL: https://br-crimson-unit-b89nau08-cquotarec.compute.c-14.us-east-1.aws.neon.tech/api/gitlab-reserve
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          ANTHARES_HISTORICAL_AOI8_ONCE: ${{ github.event_name == 'workflow_dispatch' && inputs.historical_aoi8_once }}
           ANTHARES_RECONCILE_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.reconcile_only }}
           ANTHARES_RECONCILE_COMPONENT: ${{ inputs.reconcile_component }}
           ANTHARES_RECONCILE_PROJECT_ID: ${{ inputs.reconcile_project_id }}
