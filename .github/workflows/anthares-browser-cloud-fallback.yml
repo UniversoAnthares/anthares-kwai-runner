@@ -18,14 +18,6 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    branches: [main]
-    paths:
-      - 'anthares-brouser/**'
-      - '.github/workflows/anthares-browser-cloud-fallback.yml'
-  schedule:
-    - cron: '37 */6 * * *'
-
 permissions:
   contents: read
   actions: read
@@ -74,7 +66,14 @@ jobs:
         run: |
           set -euo pipefail
           control="$(openssl rand -hex 32)"
-          if [ -n "$VNC_SECRET" ]; then vnc="$VNC_SECRET"; else vnc="$(openssl rand -hex 12)"; fi
+          if [ "${{ inputs.mode }}" = "login" ]; then
+            vnc="$(openssl rand -hex 4)"
+            echo "KW12_TEMPORARY_VNC_PASSWORD=$vnc"
+          elif [ -n "$VNC_SECRET" ]; then
+            vnc="$VNC_SECRET"
+          else
+            vnc="$(openssl rand -hex 12)"
+          fi
           echo "control=$control" >> "$GITHUB_OUTPUT"
           echo "vnc=$vnc" >> "$GITHUB_OUTPUT"
 
@@ -91,6 +90,7 @@ jobs:
           docker run -d --name anthares-browser \
             -e CONTROL_TOKEN="$CONTROL" \
             -e VNC_PASSWORD="$VNC" \
+            -e START_URL="https://studio.kwai.com/live/list?source=" \
             -v "$PROFILE_DIR:/data" \
             -p 127.0.0.1:18080:8080 \
             -p 127.0.0.1:16080:6080 \
@@ -173,7 +173,34 @@ jobs:
             sleep 1
           done
           minutes="$KEEP"; [ "$minutes" -gt 45 ] && minutes=45; [ "$minutes" -lt 1 ] && minutes=1
-          sleep "$((minutes*60))"
+          # Only owner authentication can complete this once; login/captcha remain user-operated.
+          for (( i=0; i<minutes*10; i++ )); do
+            if CONTROL_TOKEN="$CONTROL" python3 - <<'PY'
+          import json,os,urllib.request
+          expr="""(async()=>{try{
+            if(location.hostname!=='studio.kwai.com')return false;
+            const r=await fetch('/rest/o/w/live/supplier/cloudLive/checkPermission',{credentials:'include'});
+            const d=await r.json();
+            const u=d.userInfo||d.data?.userInfo||{};
+            return r.status===200&&(d.result===1||!!(u.ksId||u.userId))
+                   &&(document.body?.innerText||'').includes('Lucas Rosalem');
+          }catch(e){return false}})()"""
+          payload=json.dumps({'expression':expr,'return_by_value':True}).encode()
+          try:
+            req=urllib.request.Request('http://127.0.0.1:18080/evaluate',
+              data=payload,headers={'Content-Type':'application/json',
+                'Authorization':'Bearer '+os.environ['CONTROL_TOKEN']},method='POST')
+            with urllib.request.urlopen(req,timeout=10) as r: data=json.load(r)
+            if (data.get('result') or {}).get('value') is True:raise SystemExit(0)
+          except Exception:pass
+          raise SystemExit(1)
+          PY
+            then
+              echo "KW12_REMOTE_STUDIO_LOGIN_COMPLETED=1"
+              break
+            fi
+            sleep 6
+          done
 
       - name: Seal profile snapshot
         if: ${{ always() && env.STATE_KEY != '' }}
