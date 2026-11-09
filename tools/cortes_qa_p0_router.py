@@ -115,7 +115,9 @@ def workflow_incidents():
                 any(t in lower for t in
                     ("watchdog", "p0 immediate cloud recovery",
                      "hosted migration preflight", "identity audit",
-                     "read-only forensic audit"))):
+                     "read-only forensic audit", "test cortes cycle policy",
+                     "cortes python ci", "cortes strategic editorial meta",
+                     "cortes quota cancellation policy"))):
                 continue
             status=str(run.get("status") or "")
             conclusion=str(run.get("conclusion") or "")

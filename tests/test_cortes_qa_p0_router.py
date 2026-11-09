@@ -56,6 +56,10 @@ class P0RouterTests(unittest.TestCase):
             "TikTok uncertain read-only forensic audit 2026-10-30",
             "CORTES TikTok P0 immediate cloud recovery",
             "CORTES independent cloud round watchdog",
+            "Test CORTES cycle policy",
+            "CORTES Python CI",
+            "CORTES strategic editorial meta",
+            "CORTES Quota Cancellation Policy",
         ]
         runs={"workflow_runs":[{"name":name,"conclusion":"failure",
                "created_at":router.NOW.isoformat(),"id":i+100}
@@ -73,7 +77,11 @@ class P0RouterTests(unittest.TestCase):
                      "Buffer - Cloud Channel Identity Audit",
                      "TikTok uncertain read-only forensic audit 2026-10-30",
                      "CORTES TikTok P0 immediate cloud recovery",
-                     "CORTES independent cloud round watchdog"):
+                     "CORTES independent cloud round watchdog",
+                     "Test CORTES cycle policy",
+                     "CORTES Python CI",
+                     "CORTES strategic editorial meta",
+                     "CORTES Quota Cancellation Policy"):
             self.assertRegex(name,re.compile(match.group(1),re.I))
         self.assertNotRegex("CORTES TikTok Neon Producer",re.compile(match.group(1),re.I))
 
