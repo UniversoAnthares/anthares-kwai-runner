@@ -1,7 +1,9 @@
 name: Kwai LIVE Cloud Executor
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    # A fixed six-hour cron can miss a renewal when room creation starts
+    # after the cron boundary; the state lock below prevents early restarts.
+    - cron: '*/30 * * * *'
   workflow_dispatch:
     inputs:
       six_hour_cycle:
