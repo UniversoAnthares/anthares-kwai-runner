@@ -116,7 +116,11 @@ def room_status(page, room_id):
     if result.get("http") != 200:
         raise RuntimeError("KWAI_ROOM_STATUS_HTTP_FAILED")
     obj = result.get("body") or {}
-    return (obj.get("curRoomVo") or {}).get("roomStatus")
+    status = (obj.get("curRoomVo") or {}).get("roomStatus")
+    # An absent/malformed status is not evidence that a live has ended.
+    if isinstance(status, bool) or not re.fullmatch(r"[0-9]{1,2}", str(status)):
+        raise RuntimeError("KWAI_ROOM_REMOTE_STATUS_UNCONFIRMED")
+    return int(status)
 
 
 def stop_previous(page, issue_id, state):
@@ -235,9 +239,8 @@ def begin_new(page, issue_id, state):
 def main():
     # The lock in kwai-live-6h.yml must remain serial and never cancel in progress.
     issue_id, state = issue_and_state()
-    if state.get("status") == "active" and time.time() < float(state.get("renew_after", 0)):
-        print("KWAI_LIVE_ALREADY_RUNNING=1", flush=True)
-        return
+    # The issue describes what we last observed. An active issue alone cannot
+    # prove that Kwai has kept the remote transmission open for six hours.
     hls_preflight()
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True, args=[
@@ -274,8 +277,26 @@ def main():
                 if not (user.get("ksId") or user.get("userId")):
                     raise RuntimeError("KWAI_STUDIO_ACCOUNT_ID_UNCONFIRMED")
                 if state.get("status") == "active":
-                    stop_previous(page, issue_id, state)
-                    state = dict(state, status="ended")
+                    room = str(state.get("room_id") or "")
+                    if not re.fullmatch(r"[0-9]{10,21}", room):
+                        raise RuntimeError("KWAI_PREVIOUS_ROOM_ID_INVALID")
+                    observed = room_status(page, room)
+                    if time.time() < float(state.get("renew_after", 0)):
+                        if observed == 1:
+                            print("KWAI_LIVE_ALREADY_RUNNING=1 remote_status=1", flush=True)
+                            return
+                        # A room created by a preceding run may expire early,
+                        # including when the ingest stops. Rotate immediately
+                        # only after the official Studio API proves it is dead.
+                        state = dict(state, status="ended",
+                                     ended_at=int(time.time()),
+                                     end_reason="remote_room_ended_early",
+                                     last_remote_status=observed)
+                        save_state(issue_id, state)
+                        print("KWAI_LIVE_INTERRUPTED_ROOM_RECOVERY=1", flush=True)
+                    else:
+                        stop_previous(page, issue_id, state)
+                        state = dict(state, status="ended")
                 begin_new(page, issue_id, state)
             finally:
                 context.close()
