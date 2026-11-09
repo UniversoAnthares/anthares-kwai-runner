@@ -150,6 +150,16 @@ def already_handled(component, workflow, sha, runs):
     key = f"quota-rescue-{component}-glsha-{sha}"
     if any(key in str(r.get("display_title", "")) for r in runs):
         return True
+    # One explicitly authenticated, exact, terminal historical quota event may
+    # follow a COMPLETED, different-SHA rescue within 15 minutes. Never overlap
+    # an active rescue or bypass the same SHA dedupe / shared Neon reservation.
+    if (HISTORICAL_AOI8_ONCE and component == "cortes" and
+            sha == "ca4e7a0dbd2c7a72ba0b4ae953688213f49f845d"):
+        return any(
+            r.get("event") == "workflow_dispatch" and
+            r.get("status") != "completed" and
+            "quota-rescue-cortes-" in str(r.get("display_title", ""))
+            for r in runs)
     # Additional limit: one attempt per component every 15 min, including in-progress.
     now = dt.datetime.now(dt.timezone.utc)
     for run in runs:
