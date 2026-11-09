@@ -1210,6 +1210,8 @@ async function bufferAction(verb,b,platform){
      ORDER BY p.created_at,p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1`:
      `SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued'
        AND created_at >= ${cutoffForBuffer}
+       AND (COALESCE(confirmation_evidence->>'kind','') <> 'buffer_typed_rejection'
+         OR COALESCE((confirmation_evidence->>'retry_after_at')::timestamptz,now())<=now())
        ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1`;
   // The reservation and lease share one statement; unique (local_day,slot)
   // prevents concurrent channels reserving more than 20 global daily slots.
@@ -1268,23 +1270,27 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'EDITORIAL_INVALID_FENCE_REJECTED'};
  }
  if(verb==='rejected'){
-  // A typed Buffer MutationError is an explicit rejection, not a transport
-  // timeout. The remote action returned NO post. Requeue with backoff while
-  // preserving all evidence and queue CAS protections.
+  // A typed Buffer MutationError proves the createPost request was refused.
+  // Preserve the same CAS lease/fencing used by Pinterest. An Instagram
+  // MEDIA rejection is terminal for that asset; never resubmit that MP4.
   const reason=String(b.reason||'');
-  if(platform!=='pinterest'||!['BOARD','MEDIA','METADATA','QUOTA','PERMISSION','UNCLASSIFIED'].includes(reason))
+  if(!['pinterest','instagram'].includes(platform)||
+     !['BOARD','MEDIA','METADATA','QUOTA','PERMISSION','UNCLASSIFIED'].includes(reason))
     return{ok:false,error:'BUFFER_REJECTED_PROOF_INVALID'};
+  const terminalMedia=platform==='instagram'&&reason==='MEDIA';
   const rows=await query(`UPDATE cortes_publications
-    SET status='queued', publication_started_at=NULL,
+    SET status=CASE WHEN $6::boolean THEN 'failed' ELSE 'queued' END,
+      publication_started_at=NULL,
       lease_owner=NULL,lease_until=NULL,updated_at=now(),
       confirmation_evidence=jsonb_build_object(
         'kind','buffer_typed_rejection','classification',$5::text,
+        'terminal_media_rejection',$6::boolean,
         'retry_after_at',to_char((now()+interval '120 minutes') AT TIME ZONE 'UTC',
                   'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
         'confirmed_on_network',false)
     WHERE id=$1 AND target_key=$2 AND lease_owner=$3 AND lease_generation=$4
       AND status='started' AND remote_id IS NULL AND lease_until>now()
-    RETURNING id,status`,[id,dest,who,fence,reason]);
+    RETURNING id,status`,[id,dest,who,fence,reason,terminalMedia]);
   if(rows.length)
     await query("DELETE FROM cortes_buffer_daily_slots WHERE job_id=$1 AND target_key=$2 AND local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date",[id,dest]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'BUFFER_REJECTED_FENCE_REJECTED'};
