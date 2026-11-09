@@ -85,7 +85,7 @@ async function session(p){
  await pause(6000);
  const r=await p.js('(()=>({href:location.href,login:!![...document.querySelectorAll("button")].find(x=>/^(entrar|log in|login)$/i.test((x.innerText||"").trim())),profile:[...document.querySelectorAll("a")].some(x=>{try{const u=new URL(x.href);return u.hostname.endsWith("pinterest.com")&&u.pathname==="/lucasyahn/"&&(x.querySelector("img")||/profile|perfil|account|conta/i.test([x.getAttribute("aria-label"),x.getAttribute("data-test-id")].join(" ")))}catch{return false}}),upload:!!document.querySelector("input[type=file]"),text:document.body?.innerText.slice(0,250)||""}))()');
  const url=new URL(r.href);
- if(!url.hostname.endsWith('.pinterest.com'))throw Error('PIN_WRONG_ORIGIN');
+ if(url.hostname!=='pinterest.com'&&!url.hostname.endsWith('.pinterest.com'))throw Error('PIN_WRONG_ORIGIN');
  if(r.login||!url.pathname.includes('pin-creation-tool'))throw Error('PINTEREST_BROWSER_LOGIN_REQUIRED');
  if(!r.profile)throw Error('PINTEREST_BROWSER_ACCOUNT_NOT_VERIFIED');
  const draftCount=await p.js('document.querySelectorAll(\'[data-test-id^="pinDraft-"]\').length');
