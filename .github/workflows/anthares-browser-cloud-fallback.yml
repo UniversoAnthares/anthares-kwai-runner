@@ -154,6 +154,7 @@ jobs:
         if: ${{ inputs.mode == 'login' }}
         env:
           KEEP: ${{ inputs.keep_minutes }}
+          CONTROL: ${{ steps.creds.outputs.control }}
         shell: bash
         run: |
           set -euo pipefail
