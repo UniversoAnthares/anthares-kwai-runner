@@ -114,6 +114,23 @@ def day_do_sql_analytics(cloudflare_token, day):
 
 def probe_summaries(gh_token):
     records = {}
+    issue = github("GET", "/repos/" + REPO + "/issues/" + str(QUOTA_ISSUE), gh_token)
+    if not isinstance(issue, dict):
+        raise RuntimeError("CF14_QUOTA_ISSUE_UNAVAILABLE")
+    marker = "CF12_STATE_JSON:"
+    state_line = next((line[len(marker):] for line in str(issue.get("body") or "").splitlines()
+                       if line.startswith(marker)), None)
+    if state_line is not None:
+        try:
+            state = json.loads(state_line)
+        except ValueError:
+            raise RuntimeError("CF14_QUOTA_STATE_INVALID") from None
+        if not isinstance(state, dict) or not isinstance(state.get("daily_summaries", []), list):
+            raise RuntimeError("CF14_QUOTA_SUMMARIES_INVALID")
+        for row in state.get("daily_summaries", []):
+            if isinstance(row, dict) and row.get("utc_day"):
+                records[str(row["utc_day"])] = row
+    # Historical entries were posted as comments; newer summaries live in issue state.
     base = "/repos/" + REPO + "/issues/" + str(QUOTA_ISSUE) + "/comments"
     for page in range(1, 6):
         comments = github("GET", base + "?per_page=100&page=" + str(page), gh_token)
@@ -129,7 +146,7 @@ def probe_summaries(gh_token):
             except ValueError:
                 continue
             if isinstance(row, dict) and row.get("utc_day"):
-                records[str(row["utc_day"])] = row
+                records.setdefault(str(row["utc_day"]), row)
         if len(comments) < 100:
             break
     return records
