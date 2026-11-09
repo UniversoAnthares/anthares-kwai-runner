@@ -1,7 +1,10 @@
 name: CORTES Instagram - automatic Buffer cloud publisher
 on:
   schedule:
-    - cron: '8 */3 * * *'
+    # Twice per hour during weekdays, 11:00-22:30 America/Campo_Grande.
+    # The existing Neon shared Buffer quota caps actual sends at 20 per weekday.
+    - cron: '0,30 15-23 * * 1-5'
+    - cron: '0,30 0-2 * * 2-6'
   workflow_dispatch:
     inputs:
       reconcile_only:
