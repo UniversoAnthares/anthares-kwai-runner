@@ -8,7 +8,7 @@ HLS_URL=os.getenv('ANTHARES_PUBLIC_HLS_URL','https://anthares.us/wp-content/uplo
 LOGIN=os.getenv('KWAI_LOGIN','').strip()
 PASSWORD=os.getenv('KWAI_PASSWORD','').strip()
 OUT=Path(os.getenv('ATD_ARTIFACT_DIR','live-artifacts'))
-CHALLENGE_RE=re.compile(r'captcha|verification code|security check|qr code|scan.*code|one.?time|c[oó]digo de verifica|verifica[cç][aã]o',re.I)
+CHALLENGE_RE=re.compile(r'captcha|security check|verify you are human|verification required|enter verification code|digite o c[oó]digo de verifica|verifica[cç][aã]o obrigat[oó]ria',re.I)
 LOGIN_RE=re.compile(r'log in|login|sign in|entrar|fazer login',re.I)
 
 
