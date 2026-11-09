@@ -137,6 +137,7 @@ async function kwaiPhysicalIdentity(request,action){
 // must be proven before promoting this shared Neon queue to production.
 const KWAI_TARGET='kwai:lucasrosalem';
 async function kwaiAction(action,b,actor){
+ if(b.target_key==='kwai:universoanthares')return kwaiSecondaryAction(action,b,actor);
  if(action==='kwai-physical-repair-no-post'){
   // Recover a fresh UNCERTAIN state where the physical Android publisher
   // never sent a new post: its old October on-device anti-duplicate marker
@@ -557,11 +558,446 @@ async function kwaiAction(action,b,actor){
  }
  if(action==='kwai-fail'){
   const rows=await query("UPDATE cortes_publications SET status=CASE "+
-   "WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain' END,"+
+   "WHEN publication_started_at IS NULL AND $5::boolean=FALSE THEN 'queued' ELSE 'uncertain' END,"+
    "lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 "+
    "AND target_key=$2 AND status IN ('leased','started') "+
    "AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",
-   [id,KWAI_TARGET,owner,gen]);
+   [id,KWAI_TARGET,owner,gen,b.published_possible===true]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_STALE_FENCE'};
+ }
+ return{ok:false,error:'KWAI_ACTION_NOT_ALLOWED'};
+}
+
+async function kwaiSecondaryAction(action,b,actor){
+ const KWAI_TARGET='kwai:universoanthares';
+ if(actor.role!=='kwai-physical'||actor.workflow!=='physical:DESKTOP-FTDK0HP')return{ok:false,error:'KWAI_SECONDARY_PHYSICAL_ONLY'};
+ if(b.target_key!==KWAI_TARGET||b.expected_account!=='universoanthares')return{ok:false,error:'KWAI_SECONDARY_ACCOUNT_MISMATCH'};
+ if(!['kwai-physical-stats','kwai-lease','kwai-renew','kwai-start','kwai-confirm','kwai-fail'].includes(action))return{ok:false,error:'KWAI_SECONDARY_UNSUPPORTED_ACTION'};
+ if(action==='kwai-physical-repair-no-post'){
+  // Recover a fresh UNCERTAIN state where the physical Android publisher
+  // never sent a new post: its old October on-device anti-duplicate marker
+  // returned ALREADY_ATTEMPTED. Require independent recent full public feed
+  // and source-frame exclusion before restoring the same canonical job.
+  if(actor.role!=='kwai-physical'||actor.workflow!=='physical:DESKTOP-FTDK0HP'||
+     b.target_key!==KWAI_TARGET||b.expected_account!=='universoanthares')
+   return{ok:false,error:'KWAI_PHYSICAL_RECOVERY_IDENTITY_REQUIRED'};
+  const id=String(b.id||''),p=b.proof||{},now=Date.now();
+  const start=Number(p.previous_started_at_epoch_ms),verified=Number(p.verified_at_epoch_ms);
+  const marker=Number(p.native_marker_epoch_ms),scan=p.public_scan||{};
+  if(!/^kwai-cortes-[A-Za-z0-9_-]{10,180}$/.test(id)||
+     p.kind!=='kwai_physical_no_new_post_marker_v1'||p.job_id!==id||
+     p.author_handle!=='universoanthares'||
+     p.native_rc!==3||p.native_stdout!=='ALREADY_ATTEMPTED PUBLICATION_ATTEMPTED_UNVERIFIED'||
+     !/^[a-f0-9]{64}$/.test(String(p.source_sha256||''))||
+     !Number.isSafeInteger(Number(b.lease_generation))||
+     !Number.isFinite(start)||!Number.isFinite(verified)||verified>now+15000||
+     verified<now-1800000||!Number.isFinite(marker)||marker>start-86400000||
+     Number(p.source_http_code)!==200||
+     Number(scan.total_distinct_posts)<1000||
+     Number(scan.oldest_post_epoch_ms)>start-86400000||
+     Number(scan.newest_post_epoch_ms)<start+1800000||
+     Number(scan.scanned_at_epoch_ms)<start+3600000||
+     Number(p.near_public_media_matches)!==0||
+     Number(p.near_candidates_total)!==Number(p.near_candidates_tested)||
+     Number(p.near_candidates_total)<0||
+     p.recent_attempt_posted_to_android!==false)
+   return{ok:false,error:'KWAI_PHYSICAL_NO_POST_RECOVERY_PROOF_INVALID'};
+  const rows=await query("SELECT id,status,lease_generation,lease_owner,"+
+   "publication_started_at,"+
+   "confirmation_evidence->>'kind' AS proof_kind,"+
+   "confirmation_evidence->>'job_id' AS proof_job,"+
+   "confirmation_evidence->>'source_sha256' AS proof_sha,"+
+   "confirmation_evidence->>'attested_device' AS proof_device,"+
+   "confirmation_evidence->>'device_signature_verified' AS proof_signed "+
+   "FROM cortes_publications WHERE id=$1 AND target_key=$2 LIMIT 1",[id,KWAI_TARGET]);
+  if(rows.length!==1)return{ok:false,error:'KWAI_NO_POST_JOB_MISSING'};
+  const r=rows[0],prior={kind:r.proof_kind,job_id:r.proof_job,
+   source_sha256:r.proof_sha,attested_device:r.proof_device,
+   device_signature_verified:dbTrue(r.proof_signed)};
+  if(r.status==='queued'&&prior.kind==='kwai_historical_verified_public_absent_v1'&&
+     prior.recovered_from_no_touch===true)return{ok:true,already_resolved:true,job:{id,status:'queued'}};
+  if(r.status!=='uncertain'||r.lease_owner!=null||
+     Number(r.lease_generation)!==Number(b.lease_generation)||
+     !r.publication_started_at||
+     Math.abs(new Date(r.publication_started_at).getTime()-start)>1500||
+     prior.kind!=='kwai_historical_verified_public_absent_v1'||
+     prior.device_signature_verified!==true||
+     prior.attested_device!=='DESKTOP-FTDK0HP'||
+     prior.job_id!==id||prior.source_sha256!==p.source_sha256)
+   return{ok:false,error:'KWAI_PHYSICAL_NO_POST_FENCE_OR_SOURCE_MISMATCH',checks:{status:r.status,owner_null:r.lease_owner==null,lease:Number(r.lease_generation)===Number(b.lease_generation),started:Math.abs(new Date(r.publication_started_at).getTime()-start),kind:prior.kind,source_equal:prior.source_sha256===p.source_sha256,sig:prior.device_signature_verified===true,device:prior.attested_device,job:prior.job_id===id}};
+  const evidence={...p,kind:'kwai_historical_verified_public_absent_v1',
+    recovered_from_no_touch:true,prior_lease_generation:Number(r.lease_generation),
+    attested_device:'DESKTOP-FTDK0HP',device_signature_verified:true,
+    verified_at_neon:new Date().toISOString()};
+  const result=await query("UPDATE cortes_publications p SET status='queued',"+
+    "lease_owner=NULL,lease_until=NULL,publication_started_at=NULL,"+
+    "confirmation_evidence=$4::jsonb,updated_at=now() "+
+    "WHERE p.id=$1 AND p.target_key=$2 AND p.status='uncertain' "+
+    "AND p.lease_owner IS NULL AND p.lease_generation=$3 "+
+    "AND abs(extract(epoch FROM (p.publication_started_at-to_timestamp($5/1000.0))))<2 "+
+    "AND NOT EXISTS(SELECT 1 FROM cortes_publications d WHERE "+
+    "d.target_key=$2 AND d.id<>p.id AND d.status IN "+
+    "('queued','leased','started','confirmed','uncertain') AND "+
+    "((d.source_id=p.source_id AND d.source_start<p.source_end "+
+    "AND d.source_end>p.source_start) OR d.media_sha256=p.media_sha256)) "+
+    "RETURNING p.id,p.status",
+    [id,KWAI_TARGET,Number(b.lease_generation),JSON.stringify(evidence),start]);
+  return result.length?{ok:true,decision:'requeue_no_android_post',job:result[0]}:
+   {ok:false,error:'KWAI_NO_POST_REQUEUE_CONFLICT'};
+ }
+ if(action==='kwai-historical-resolve'){
+  // Reconcile pre-November physical-phone attempts in the existing canonical
+  // queue. Only the registered phone host can sign decisions. Public matches
+  // require six matched source frames; safe retries require a complete,
+  // independent scan of the public author's history and zero matches.
+  if(actor.role!=='kwai-physical'||actor.workflow!=='physical:DESKTOP-FTDK0HP'||
+     b.target_key!==KWAI_TARGET||b.expected_account!=='universoanthares')
+   return{ok:false,error:'KWAI_HISTORICAL_PHYSICAL_IDENTITY_REQUIRED'};
+  const id=String(b.id||''),decision=String(b.decision||''),p=b.proof||{};
+  const now=Date.now(),verified=Number(p.verified_at_epoch_ms);
+  const started=Number(p.previous_started_at_epoch_ms);
+  if(!/^kwai-cortes-[A-Za-z0-9_-]{10,180}$/.test(id)||
+     p.job_id!==id||!['confirm','requeue'].includes(decision)||
+     p.schema!=='kwai-historical-reconciliation-v1'||
+     p.author_handle!=='universoanthares'||
+     !Number.isFinite(verified)||verified<now-1800000||verified>now+15000||
+     !Number.isFinite(started)||started<1760000000000||started>now||
+     !/^[a-f0-9]{64}$/.test(String(p.source_sha256||'')))
+   return{ok:false,error:'KWAI_HISTORICAL_PROOF_INVALID'};
+  const prior=await query("SELECT id,status,remote_id,confirmation_evidence,lease_owner,"+
+     "lease_generation,publication_started_at FROM cortes_publications "+
+     "WHERE id=$1 AND target_key=$2 LIMIT 1",[id,KWAI_TARGET]);
+  if(prior.length!==1)return{ok:false,error:'KWAI_HISTORICAL_JOB_MISSING'};
+  const row=prior[0];
+  const oldProof=row.confirmation_evidence||{};
+  if((decision==='confirm'&&row.status==='confirmed'&&
+       oldProof.kind==='kwai_historical_public_video_verified_v1')||
+     (decision==='requeue'&&row.status==='queued'&&
+       oldProof.kind==='kwai_historical_verified_public_absent_v1'))
+   return{ok:true,already_resolved:true,job:{id,status:row.status,remote_id:row.remote_id}};
+  if(row.status!=='uncertain'||row.lease_owner!=='physical_android:DESKTOP-FTDK0HP'||
+      !row.publication_started_at||Number(row.lease_generation)<1||
+      Math.abs(new Date(row.publication_started_at).getTime()-started)>1500)
+   return{ok:false,error:'KWAI_HISTORICAL_FENCE_CHANGED'};
+  const proofBase={...p,attested_device:'DESKTOP-FTDK0HP',
+    device_signature_verified:true,verified_at_neon:new Date().toISOString(),
+    prior_lease_generation:Number(row.lease_generation)};
+  if(decision==='confirm'){
+   const videoId=String(p.photo_id||''),url=String(p.public_url||'');
+   const scores=p.media_match?.source_best_inliers||[];
+   const posted=Number(p.public_post_timestamp_ms);
+   const canon='https://www.kwai.com/@universoanthares/video/'+videoId;
+   if(!/^[0-9]{16,21}$/.test(videoId)||url!==canon||
+      p.public_account!=='universoanthares'||
+      p.media_match?.kind!=='sift_source_to_public_cdn_v1'||
+      !Array.isArray(scores)||scores.length!==6||
+      scores.some(n=>!Number.isInteger(n)||n<240)||
+      Number(p.media_match?.qualifying_distinct_frames)!==6||
+      !/^[a-f0-9]{64}$/.test(String(p.public_media_sha256||''))||
+      !Number.isFinite(posted)||Math.abs(posted-started)>120000)
+    return{ok:false,error:'KWAI_HISTORICAL_PUBLIC_MEDIA_MATCH_INVALID'};
+   const evidence={...proofBase,kind:'kwai_historical_public_video_verified_v1',
+      previously_uncertain:true};
+   const rows=await query("UPDATE cortes_publications SET status='confirmed',"+
+      "remote_id=$3,confirmation_evidence=$4::jsonb,lease_owner=NULL,"+
+      "lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 "+
+      "AND status='uncertain' AND lease_owner='physical_android:DESKTOP-FTDK0HP' "+
+      "AND abs(extract(epoch FROM (publication_started_at-to_timestamp($5/1000.0))))<2 "+
+      "AND NOT EXISTS(SELECT 1 FROM cortes_publications d WHERE "+
+      "d.target_key=$2 AND d.id<>$1 AND d.status='confirmed' AND d.remote_id=$3) "+
+      "RETURNING id,status,remote_id",
+      [id,KWAI_TARGET,url,JSON.stringify(evidence),started]);
+   return rows.length?{ok:true,decision,job:rows[0]}:
+     {ok:false,error:'KWAI_HISTORICAL_MATCH_COLLISION_OR_STALE_FENCE'};
+  }
+  // Retry only where the entire public profile interval is covered, the
+  // original source still exists, and no public caption or media matches.
+  const scan=p.public_scan||{},from=Number(scan.oldest_post_epoch_ms),
+        to=Number(scan.newest_post_epoch_ms);
+  if(p.kind!=='kwai_historical_verified_public_absent_v1'||
+     Number(p.source_http_code)!==200||
+     Number(scan.total_distinct_posts)<1000||
+     !Number.isFinite(from)||!Number.isFinite(to)||
+     from>started-86400000||to<started+86400000||
+     Number(p.exact_caption_matches)!==0||
+     Number(p.near_public_media_matches)!==0||
+     Number(p.near_candidates_tested)!==Number(p.near_candidates_total)||
+     !Number.isInteger(Number(p.near_candidates_total))||
+     Number(p.near_candidates_total)<0)
+   return{ok:false,error:'KWAI_HISTORICAL_RETRY_NOT_PROVEN_SAFE'};
+  const evidence={...proofBase,kind:'kwai_historical_verified_public_absent_v1',
+     previously_uncertain:true,restored_for_first_verified_republication:true};
+  const rows=await query("UPDATE cortes_publications SET status='queued',"+
+     "lease_owner=NULL,lease_until=NULL,publication_started_at=NULL,"+
+     "confirmation_evidence=$3::jsonb,updated_at=now() "+
+     "WHERE id=$1 AND target_key=$2 AND status='uncertain' "+
+     "AND lease_owner='physical_android:DESKTOP-FTDK0HP' "+
+     "AND abs(extract(epoch FROM (publication_started_at-to_timestamp($4/1000.0))))<2 "+
+     "AND NOT EXISTS(SELECT 1 FROM cortes_publications d WHERE "+
+     "d.target_key=$2 AND d.id<>$1 AND "+
+     "d.status IN ('queued','leased','started','confirmed','uncertain') AND "+
+     "((d.source_id=cortes_publications.source_id AND "+
+     "d.source_start<cortes_publications.source_end AND "+
+     "d.source_end>cortes_publications.source_start) OR "+
+     "d.media_sha256=cortes_publications.media_sha256)) "+
+     "RETURNING id,status",
+     [id,KWAI_TARGET,JSON.stringify(evidence),started]);
+  return rows.length?{ok:true,decision,job:rows[0]}:
+    {ok:false,error:'KWAI_HISTORICAL_RETRY_CONFLICT_OR_STALE_FENCE'};
+ }
+ if(action==='kwai-uncertain-read'){
+  if(actor.role!=='kwai-publisher'||actor.workflow!=='cortes-kwai-cloud-publisher.yml')return{ok:false,error:'KWAI_READ_DENIED'};
+  const rows=await query("SELECT id,source_id,source_start,source_end,media_sha256,updated_at,"+
+   "payload->>'segment_id' AS segment_id,payload->>'title' AS title "+
+   "FROM cortes_publications WHERE target_key=$1 AND status='uncertain' "+
+   "ORDER BY source_id,source_start,id LIMIT 101",[KWAI_TARGET]);
+  const eligible=await query("SELECT count(*)::int AS n FROM cortes_publications p "+
+   "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
+   "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE "+
+   "d.target_key=$1 AND d.id<>p.id AND d.status<>'failed' AND "+
+   "((d.source_id=p.source_id AND d.source_start<p.source_end AND d.source_end>p.source_start) "+
+   "OR d.media_sha256=p.media_sha256) AND "+
+   "(d.status IN ('leased','started','confirmed','uncertain') OR "+
+   "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))",[KWAI_TARGET]);
+  return{ok:true,status:rows.length?'RECONCILE_REQUIRED':'READY',target_key:KWAI_TARGET,
+   records:rows.slice(0,100),truncated:rows.length>100,
+   eligible_count:Number(eligible[0]?.n||0),
+   safe_to_retry:false};
+ }
+ // Cloud refill is a distinct producer. Existing UNCERTAIN work must stay held.
+ if(action==='kwai-enqueue'){
+  if(actor.role!=='producer'||actor.workflow!=='cortes-kwai-dispatch-refill.yml')
+   return{ok:false,error:'KWAI_PRODUCER_IDENTITY_REQUIRED'};
+  // Enqueue is OIDC-producer-only. The publication switch remains enforced
+  // at START, while safe new-source jobs can be prepared independently.
+  const source=String(b.source_id||''),segment=String(b.segment_id||'');
+  const id=String(b.id||''),media=String(b.video_url||'');
+  const start=Number(b.source_start),end=Number(b.source_end);
+  let u;try{u=new URL(media);}catch{}
+  if(b.target_key!==KWAI_TARGET||b.account_id!=='universoanthares'||
+    b.expected_account!=='universoanthares'||b.executor!=='github_hosted_android'||
+    b.master_id!==source||b.duration_class!=='short'||!source||!segment||
+    !u||u.protocol!=='https:'||!['anthares.us','www.anthares.us'].includes(u.hostname)||
+    u.username||u.password||u.port||!u.pathname.toLowerCase().endsWith('.mp4')||
+    !Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<=start||
+    id!=='kwai-cortes-'+source+'-'+segment.replace(/:/g,'-')||
+    b.dedupe_key!==id||b.media_sha256!==sha(source+'|'+segment+'|'+media)||
+    !Number.isInteger(Number(b.cortes_attachment_id))||
+    Number(b.cortes_attachment_id)<=0||!String(b.cortes_callback_token||'')||
+    !/^https:\/\/(www\.)?anthares\.us\/wp-json\/anthares\/v1\/cortes\/clip-network-callback$/.test(String(b.cortes_callback_url||'')))
+     return{ok:false,error:'KWAI_ENQUEUE_IDENTITY_INVALID'};
+  const vals=[id,id,KWAI_TARGET,source,b.media_sha256,source,start,end,'short',JSON.stringify(b)];
+  const rows=await query(
+   "INSERT INTO cortes_publications "+
+   "(id,dedupe_key,target_key,master_id,media_sha256,source_id,"+
+   "source_start,source_end,duration_class,payload) "+
+   "SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb "+
+   "WHERE NOT EXISTS (SELECT 1 FROM cortes_publications p WHERE "+
+   "p.target_key=$3 AND p.source_id=$6 AND p.source_start<$8 "+
+   "AND p.source_end>$7 AND p.status<>'failed') "+
+   "ON CONFLICT DO NOTHING RETURNING id,target_key,status",vals);
+  if(rows.length)return{ok:true,deduped:false,job:rows[0]};
+  const same=await query(
+   "SELECT id,target_key,status,source_id,source_start,source_end,"+
+   "payload FROM cortes_publications WHERE id=$1 OR dedupe_key=$2 LIMIT 1",[id,id]);
+  if(same.length){
+   const j=same[0];
+   if(j.target_key!==KWAI_TARGET||j.source_id!==source||
+      String(j.source_start)!==String(start)||String(j.source_end)!==String(end)||
+      String(j.payload?.video_url||'')!==media||
+      String(j.payload?.media_sha256||'')!==String(b.media_sha256))
+     return{ok:false,error:'KWAI_DEDUPE_IDENTITY_COLLISION'};
+   return{ok:true,deduped:true,reason:'identity',job:j};
+  }
+  const overlap=await query(
+   "SELECT id,target_key,status,source_id,source_start,source_end,"+
+   "payload FROM cortes_publications WHERE target_key=$1 AND "+
+   "source_id=$2 AND source_start<$4 AND source_end>$3 "+
+   "AND status<>'failed' ORDER BY created_at LIMIT 1",
+   [KWAI_TARGET,source,start,end]);
+  if(overlap.length)return{ok:true,deduped:true,reason:'timeline_overlap',job:overlap[0]};
+  return{ok:false,error:'KWAI_UNCERTAIN_HOLD_OR_CONCURRENT_WRITE'};
+ }
+ const physical=actor.role==='kwai-physical'&&actor.workflow==='physical:DESKTOP-FTDK0HP';
+ const cloud=actor.role==='kwai-publisher'&&actor.workflow==='cortes-kwai-cloud-publisher.yml';
+ if(!physical&&!cloud)return{ok:false,error:'KWAI_PUBLISHER_ROLE_REQUIRED'};
+ if(b.target_key!==KWAI_TARGET||b.expected_account!=='universoanthares')
+  return{ok:false,error:'KWAI_ACCOUNT_IDENTITY_MISMATCH'};
+ const owner=physical?'physical_android:DESKTOP-FTDK0HP':'kwai-cloud:'+actor.workflow;
+ if(action==='kwai-physical-stats'){
+  if(!physical)return{ok:false,error:'KWAI_DEVICE_ONLY'};
+  const rows=await query("SELECT status,count(*)::int AS n FROM cortes_publications WHERE target_key=$1 GROUP BY status",[KWAI_TARGET]);
+  const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+  const usage=await query("SELECT count(*)::int AS n,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
+  const safe=await query("SELECT count(*)::int AS n FROM cortes_publications p "+
+   "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
+   "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE d.target_key=$1 AND d.id<>p.id "+
+   "AND d.status<>'failed' AND ((d.source_id=p.source_id AND d.source_start<p.source_end "+
+   "AND d.source_end>p.source_start) OR d.media_sha256=p.media_sha256) "+
+   "AND (d.status IN ('leased','started','confirmed','uncertain') OR "+
+   "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))",[KWAI_TARGET]);
+  return{ok:true,pending:Number(safe[0]?.n||0),confirmed_today:Number(usage[0]?.n||0),
+   last_confirmed_at:usage[0]?.latest||null,states:rows};
+ }
+ if(action==='kwai-lease'){
+  const seconds=Number(b.lease_seconds||180);
+  if(!Number.isSafeInteger(seconds)||seconds<60||seconds>(physical?3600:600))
+   return{ok:false,error:'KWAI_TTL_INVALID'};
+  // A crashed runner can leave a lease abandoned before the irreversible
+  // publish start. Requeue only leases past their fencing deadline and only
+  // when publication_started_at remains NULL. STARTED / UNCERTAIN are held.
+  await query("UPDATE cortes_publications SET status='queued',lease_owner=NULL,"+
+   "lease_until=NULL,updated_at=now() WHERE target_key=$1 AND status='leased' "+
+   "AND lease_owner=$2 AND lease_until<now() "+
+   "AND publication_started_at IS NULL",[KWAI_TARGET,owner]);
+  // Historical UNCERTAIN rows remain quarantined. A new master/source is
+  // eligible only when no unresolved item shares its source identity, and no
+  // earlier active or confirmed job overlaps its exact source interval.
+  // FOR UPDATE SKIP LOCKED plus status CAS prevents dual consumers.
+  const sql="WITH pick AS (SELECT p.id FROM cortes_publications p "+
+   "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
+   "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE "+
+   "d.target_key=$1 AND d.id<>p.id AND d.status<>'failed' AND "+
+   "((d.source_id=p.source_id AND d.source_start<p.source_end AND d.source_end>p.source_start) "+
+   "OR d.media_sha256=p.media_sha256) AND "+
+   "(d.status IN ('leased','started','confirmed','uncertain') OR "+
+   "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id)))) "+
+   "ORDER BY p.created_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1) "+
+   "UPDATE cortes_publications p SET status='leased',lease_owner=$2,"+
+   "lease_generation=p.lease_generation+1,"+
+   "lease_until=now()+($3::integer * interval '1 second'),updated_at=now() "+
+   "FROM pick WHERE p.id=pick.id AND p.status='queued' AND p.publication_started_at IS NULL "+
+   "RETURNING p.id,p.target_key,p.payload,p.media_sha256,p.lease_generation,p.lease_until,p.confirmation_evidence";
+  const rows=await query(sql,[KWAI_TARGET,owner,seconds]);
+  return{ok:true,job:rows[0]||null,uncertain_gate:'same_source_quarantined'};
+ }
+ const id=String(b.id||''),gen=Number(b.lease_generation);
+ if(!id||id.length>200||!Number.isSafeInteger(gen)||gen<1)
+  return{ok:false,error:'KWAI_FENCE_INVALID'};
+ if(action==='kwai-renew'){
+  const seconds=Number(b.lease_seconds||180);
+  if(!Number.isSafeInteger(seconds)||seconds<60||seconds>600)
+   return {ok:false,error:'KWAI_RENEW_TTL_INVALID'};
+  const rows=await query("UPDATE cortes_publications SET lease_until=GREATEST(lease_until,now()+($5::integer * interval '1 second')),updated_at=now() "+
+   "WHERE id=$1 AND target_key=$2 AND status IN ('leased','started') AND lease_owner=$3 "+
+   "AND lease_generation=$4 AND lease_until>now() "+
+   "RETURNING id,status,lease_generation,lease_until",
+   [id,KWAI_TARGET,owner,gen,seconds]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_RENEW_STALE_FENCE'};
+ }
+ if(action==='kwai-start'){
+  if(cloud&&process.env.CORTES_KWAI_CLOUD_PUBLISH_ENABLED!=='1')
+   return{ok:false,error:'KWAI_PUBLISHER_NOT_ENABLED'};
+  // Two existing database triggers atomically reserve account and platform caps.
+  // A second reservation here would double-count the platform:kwai quota.
+  const sql="UPDATE cortes_publications p SET status='started',"+
+   "publication_started_at=now(),updated_at=now() "+
+   "WHERE p.id=$1 AND p.target_key=$2 AND p.status='leased' "+
+   "AND p.lease_owner=$3 AND p.lease_generation=$4 AND p.lease_until>now() "+
+   "AND p.publication_started_at IS NULL "+
+   "RETURNING p.id,p.status,p.lease_generation";
+  const rows=await query(sql,[id,KWAI_TARGET,owner,gen]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_STALE_FENCE_OR_QUOTA'};
+ }
+ if(action==='kwai-confirm'){
+  const proof=b.confirmation_evidence||{},remote=String(b.remote_id||'');
+  if(physical){
+   // The existing phone signs this request with its private RSA key.
+   // Accept either a fresh direct share receipt or an independently fetched
+   // public author profile, caption and matching original/public CDN frames.
+   const match=proof.media_match||{},scores=match.inliers||[];
+   const isPublic=proof.method==='public_profile_independent_cdn_video_frame_match';
+   const verified=Number(proof.verified_at_epoch_ms);
+   const observed=Number(isPublic?proof.public_post_timestamp_ms:proof.share_receipt_epoch_ms);
+   const now=Date.now();
+   const url=String(proof.public_url||'');
+   const official=isPublic?
+       /^https:\/\/www\.kwai\.com\/@universoanthares\/video\/[0-9]{16,21}$/.test(url):
+       /^https:\/\/k\.kwai\.com\/p\/[A-Za-z0-9_-]{5,100}$/.test(url);
+   if(proof.kind!=='kwai_verified_public_media_v2'||
+      proof.schema!=='kwai-public-media-proof-v2'||proof.ok!==true||
+      proof.job_id!==String(b.id)||proof.expected_account!=='universoanthares'||
+      proof.actual_author_handle!=='universoanthares'||proof.public_url!==remote||
+      !official||!/^[a-f0-9]{64}$/.test(String(proof.media_sha256||''))||
+      !Array.isArray(scores)||scores.length<2||Number(scores[0])<24||
+      Number(scores[1])<17||!Number.isFinite(observed)||!Number.isFinite(verified)||
+      observed<=0||verified<observed||verified>now+10000||now-verified>900000||
+      (isPublic&&(
+        proof.official_permalink!==url||
+        proof.author_verified_on_external_website!==true||
+        match.source_and_public_matching_frames!==true||
+        !Number.isInteger(Number(match.frames_compared))||Number(match.frames_compared)<6||
+        !/^[a-f0-9]{64}$/.test(String(proof.public_media_sha256||'')))))
+      return{ok:false,error:'KWAI_PHYSICAL_VERIFIED_SHARE_MEDIA_PROOF_REQUIRED'};
+   const evidence={...proof,attested_device:'DESKTOP-FTDK0HP',
+     device_signature_verified:true,verified_at_neon:new Date().toISOString()};
+   // The public site's observed upload time must agree with our permanent
+   // pre-publication STARTED fence, and this exact lease generation must own it.
+   const rows=await query("UPDATE cortes_publications SET status='confirmed',"+
+     "remote_id=$5,confirmation_evidence=$6::jsonb,lease_owner=NULL,lease_until=NULL,"+
+     "updated_at=now() WHERE id=$1 AND target_key=$2 AND status='started' "+
+     "AND lease_owner=$3 AND lease_generation=$4 AND publication_started_at IS NOT NULL "+
+     (isPublic?"AND abs(extract(epoch from (publication_started_at-to_timestamp($7/1000.0))))<600 ":"")+
+     "RETURNING id,status,remote_id",
+     isPublic?[String(b.id),KWAI_TARGET,owner,Number(b.lease_generation),remote,
+                JSON.stringify(evidence),observed]:
+              [String(b.id),KWAI_TARGET,owner,Number(b.lease_generation),remote,
+                JSON.stringify(evidence)]);
+   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_PHYSICAL_CONFIRM_STALE_FENCE'};
+  }
+  let u;try{u=new URL(String(proof.public_url||''));}catch{}
+  const p=u?.pathname||'',h=u?.hostname||'';
+  const official=(h==='k.kwai.com'&&/^\/p\/[A-Za-z0-9_-]{5,100}$/.test(p))||
+   (h==='www.kwai.com'&&/^\/@universoanthares\/photo\/[0-9]{5,100}$/.test(p));
+  if(!u||u.protocol!=='https:'||!official||u.username||u.password||
+    u.port||u.search||u.hash||p.split('/').filter(Boolean).pop()!==remote||
+    proof.kind!=='kwai_account_media_readback_verified'||
+    !['kwai_public_deeplink_title_and_author_profile_handle',
+      'physical_profile_exact_account_timestamp_and_share_ui'].includes(proof.method)||
+    proof.account!=='universoanthares'||proof.remote_id!==remote||
+    !/^[A-Za-z0-9_-]{5,100}$/.test(remote)||
+    !/^[a-f0-9]{64}$/.test(String(proof.media_sha256||'')))
+   return{ok:false,error:'KWAI_PUBLIC_READBACK_REQUIRED'};
+
+  // A URL and method are claimed by the publishing client. A separate,
+  // approved identity must attest the actual external Kwai readback.
+  // Missing configuration always fails closed. Keep the key out of Git/logs.
+  const key=process.env.CORTES_KWAI_INDEPENDENT_ATTESTATION_KEY||'';
+  const signedAt=String(proof.verified_at||'');
+  const stamp=Date.parse(signedAt),delta=Date.now()-stamp;
+  if(key.length<32||proof.verifier_id!=='kwai-independent-account-readback-v1'||
+     !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(signedAt)||
+     !Number.isFinite(stamp)||delta<(-30000)||delta>600000||
+     !/^[a-f0-9]{64}$/.test(String(proof.attestation_hmac||'')))
+   return{ok:false,error:'KWAI_INDEPENDENT_ATTESTATION_REQUIRED'};
+  const signedFields=JSON.stringify([
+   'kwai-readback-v1',id,gen,KWAI_TARGET,proof.account,remote,
+   proof.public_url,proof.method,proof.media_sha256,signedAt
+  ]);
+  const expected=crypto.createHmac('sha256',key).update(signedFields).digest();
+  const provided=Buffer.from(proof.attestation_hmac,'hex');
+  if(provided.length!==expected.length||!crypto.timingSafeEqual(provided,expected))
+   return{ok:false,error:'KWAI_INDEPENDENT_ATTESTATION_INVALID'};
+
+  const evidence={...proof,attestation_scheme:'hmac-sha256',
+   attestation_verified_by:'neon-cortes-queue',
+   attestation_verified_at:new Date().toISOString()};
+  delete evidence.attestation_hmac;
+  const rows=await query("UPDATE cortes_publications SET status='confirmed',"+
+   "remote_id=$5,confirmation_evidence=$6::jsonb,lease_owner=NULL,lease_until=NULL,"+
+   "updated_at=now() WHERE id=$1 AND target_key=$2 AND status='started' "+
+   "AND lease_owner=$3 AND lease_generation=$4 "+
+   "RETURNING id,status,remote_id",[id,KWAI_TARGET,owner,gen,remote,
+    JSON.stringify(evidence)]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_STALE_FENCE_OR_MEDIA'};
+ }
+ if(action==='kwai-fail'){
+  const rows=await query("UPDATE cortes_publications SET status=CASE "+
+   "WHEN publication_started_at IS NULL AND $5::boolean=FALSE THEN 'queued' ELSE 'uncertain' END,"+
+   "lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 "+
+   "AND target_key=$2 AND status IN ('leased','started') "+
+   "AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",
+   [id,KWAI_TARGET,owner,gen,b.published_possible===true]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_STALE_FENCE'};
  }
  return{ok:false,error:'KWAI_ACTION_NOT_ALLOWED'};
