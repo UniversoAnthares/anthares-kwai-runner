@@ -1,5 +1,6 @@
 name: Anthares Android Agent Build
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths: ['android-agent/**', '.github/workflows/android-agent-build.yml']
