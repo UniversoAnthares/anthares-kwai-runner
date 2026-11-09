@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""KW-09: stage one canonical Kwai media file on Android, without publishing.
+
+Runs only from the existing Kwai GitHub Actions OIDC publisher workflow.
+The Neon lease is always released with its generation fence before exit.
+Android receives public media coordinates through an authenticated MacroDroid
+webhook. The phone-side macro MUST be stage-only: no Kwai share/post action.
+"""
+import os
+import re
+import sys
+from urllib.parse import urlencode, urlsplit
+from urllib.request import Request, urlopen
+
+from cortes_kwai_neon_cloud import QueueError, request
+
+
+def validated_webhook():
+    value = os.environ.get("KW09_MACRODROID_STAGE_WEBHOOK", "").strip()
+    try:
+        url = urlsplit(value)
+    except ValueError as exc:
+        raise QueueError("KW09_STAGE_WEBHOOK_INVALID") from exc
+    if (url.scheme != "https" or url.hostname != "trigger.macrodroid.com"
+            or url.username or url.password or url.port or url.query or url.fragment
+            or not re.fullmatch(
+                r"/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/kw09_stage_only",
+                url.path)):
+        raise QueueError("KW09_STAGE_WEBHOOK_UNCONFIGURED_OR_INVALID")
+    return value
+
+
+def stage_metadata(job):
+    payload = job.get("payload") or {}
+    if not isinstance(payload, dict):
+        raise QueueError("KW09_STAGE_PAYLOAD_INVALID")
+    ident = str(job.get("id") or "")
+    gen = job.get("lease_generation")
+    url = str(payload.get("video_url") or "")
+    sha = str(payload.get("content_sha256") or payload.get("media_content_sha256") or "").lower()
+    parsed = urlsplit(url)
+    if (job.get("target_key") != "kwai:lucasrosalem"
+            or payload.get("expected_account") != "lucasrosalem"
+            or not re.fullmatch(r"kwai-cortes-[A-Za-z0-9._:-]{3,145}", ident)
+            or not isinstance(gen, int) or gen < 1
+            or parsed.scheme != "https"
+            or parsed.hostname not in ("anthares.us", "www.anthares.us")
+            or parsed.username or parsed.password or parsed.port or parsed.fragment
+            or not parsed.path.lower().endswith(".mp4")
+            or (sha and not re.fullmatch(r"[a-f0-9]{64}", sha))):
+        raise QueueError("KW09_STAGE_IDENTITY_OR_MEDIA_INVALID")
+    return {
+        "kw09_mode": "stage_only",
+        "kw09_job_id": ident,
+        "kw09_generation": str(gen),
+        "kw09_video_url": url,
+        "kw09_expected_sha256": sha,
+        "kw09_expected_account": "lucasrosalem",
+    }
+
+
+def main():
+    webhook = validated_webhook()
+    receipt = None
+    try:
+        result = request("lease", {"lease_seconds":600})
+        job = result.get("job")
+        if job is None:
+            print("KW09_ANDROID_STAGE_NO_ELIGIBLE_JOB")
+            return 0
+        receipt = {"id": str(job["id"]), "lease_generation": int(job["lease_generation"])}
+        params = stage_metadata(job)
+        with urlopen(Request(webhook + "?" + urlencode(params), method="GET"),
+                     timeout=20) as response:
+            if response.status != 200:
+                raise QueueError("KW09_ANDROID_WEBHOOK_DELIVERY_REJECTED")
+        # HTTP 200 means the command was accepted, NOT that the phone fetched
+        # the video or uploaded it to Kwai. Neither action is claimed here.
+        print("KW09_ANDROID_STAGE_COMMAND_ACCEPTED")
+        return 0
+    finally:
+        if receipt is not None:
+            # Single-shot CAS. Do not retry ambiguous writes: unstarted leases
+            # are automatically reclaimed after the 600-second fencing TTL.
+            released = request("fail", receipt)
+            if released.get("ok") is not True:
+                raise QueueError("KW09_STAGE_LEASE_RELEASE_NOT_ACKNOWLEDGED")
+            print("KW09_STAGE_NEON_FENCE_RELEASED")
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (QueueError, ValueError, KeyError, OSError) as exc:
+        print("KW09_STAGE_ERROR=" + str(exc).splitlines()[0][:130], file=sys.stderr)
+        sys.exit(89)
