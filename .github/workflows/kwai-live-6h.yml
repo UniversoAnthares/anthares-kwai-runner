@@ -6,6 +6,11 @@ on:
     - cron: '*/30 * * * *'
   workflow_dispatch:
     inputs:
+      probe_studio_profile:
+        description: 'Check existing encrypted cloud Studio session without starting a live'
+        required: false
+        default: false
+        type: boolean
       six_hour_cycle:
         description: 'Renew a cloud network-pull LIVE after its full six-hour interval'
         required: true
@@ -29,8 +34,62 @@ concurrency:
   group: kwai-live-cloud-executor
   cancel-in-progress: false
 jobs:
+  profile_probe:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.probe_studio_profile == true }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      STATE_KEY: ${{ secrets.ANTHARES_BROWSER_STATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Restore existing encrypted browser profile, without changing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$STATE_KEY"
+          id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=anthares-browser-profile-encrypted&per_page=50" --jq '.artifacts | map(select(.expired==false)) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$id"
+          mkdir -p "$RUNNER_TEMP/kw12-artifact" "$RUNNER_TEMP/kw12-browser"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "$RUNNER_TEMP/kw12-artifact.zip"
+          unzip -q "$RUNNER_TEMP/kw12-artifact.zip" -d "$RUNNER_TEMP/kw12-artifact"
+          openssl enc -d -aes-256-cbc -pbkdf2 -salt -pass env:STATE_KEY -in "$RUNNER_TEMP/kw12-artifact/profile.tgz.enc" -out "$RUNNER_TEMP/kw12-profile.tgz"
+          tar -xzf "$RUNNER_TEMP/kw12-profile.tgz" -C "$RUNNER_TEMP/kw12-browser"
+          test -d "$RUNNER_TEMP/kw12-browser/chrome-profile"
+          rm -f "$RUNNER_TEMP/kw12-artifact.zip" "$RUNNER_TEMP/kw12-profile.tgz"
+          echo 'KW12_EXISTING_PROFILE_RESTORED=1'
+      - name: Probe Studio owner through existing Chromium profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q playwright
+          python -m playwright install --with-deps chromium >/dev/null
+          python3 - <<'PY'
+          from playwright.sync_api import sync_playwright
+          import os
+          profile=os.path.join(os.environ['RUNNER_TEMP'],'kw12-browser','chrome-profile')
+          with sync_playwright() as p:
+              ctx=p.chromium.launch_persistent_context(profile,headless=True,args=['--no-sandbox','--disable-dev-shm-usage'],locale='pt-BR')
+              try:
+                  page=ctx.new_page()
+                  page.goto('https://studio.kwai.com/live/list?source=',wait_until='domcontentloaded',timeout=60000)
+                  page.wait_for_timeout(4500)
+                  result=page.evaluate('''async()=>{try{const r=await fetch('/rest/o/w/live/supplier/cloudLive/checkPermission',{credentials:'include'});const d=await r.json();const u=d.userInfo||d.data?.userInfo||{};const name=(document.body?.innerText||'').includes('Lucas Rosalem');return {status:r.status,allowed:d.result===1,owner:!!(u.ksId||u.userId),name}}catch(e){return {status:0,allowed:false,owner:false,name:false}}}''')
+                  good=result['status']==200 and (result['allowed'] or result['owner']) and result['name']
+                  print('KW12_REMOTE_STUDIO_SESSION='+('AUTHORIZED' if good else 'NOT_AUTHORIZED'),flush=True)
+                  with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('Kwai Studio cloud session: '+('authorized' if good else 'not authorized')+' (no secrets exported).\n')
+              finally:
+                  ctx.close()
+          PY
+      - name: Remove temporary browser profile
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/kw12-browser" "$RUNNER_TEMP/kw12-artifact" "$RUNNER_TEMP/kw12-profile.tgz" "$RUNNER_TEMP/kw12-artifact.zip"
   preflight:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.six_hour_cycle != true }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.six_hour_cycle != true && inputs.probe_studio_profile != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
