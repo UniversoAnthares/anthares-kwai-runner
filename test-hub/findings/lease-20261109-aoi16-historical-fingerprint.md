@@ -1,5 +1,7 @@
 # AOI 16 — dedupe dos marcadores históricos QA-P0
-STATUS: RUNNING
+STATUS: CLOSED
+RESULT: PR #2243 merged, SHA 55c1d252844f9ac4f2b66b976413345451e4e853; exact historical fingerprint lookup added and 22 old duplicate GitHub QA-P0 issues closed in this operation. Canonical issues remain open, AOI #16 remains PARTIAL.
+CLOSED_UTC: 2026-11-09T12:28:00Z
 AREA: qa-p0-fingerprint-router
 ITEMS: [16]
 OWNER: chatgpt-aoi16-20261109-historical
