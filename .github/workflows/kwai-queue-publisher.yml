@@ -311,8 +311,41 @@ jobs:
           python3 tools/kwai_android_login_entry.py auto >>/tmp/kwai-mobile-login-surface.log 2>&1 || true
           echo KWAI_MOBILE_AUTH_WINDOW_REQUIRED=1
 
-      - name: Start protected temporary Android login window
+      - name: Try the configured Kwai account credentials once on hosted Android
         if: steps.initial.outputs.authenticated != 'true'
+        id: credentials
+        env:
+          KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
+          KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${KWAI_LOGIN:-}" ] || [ -z "${KWAI_PASSWORD:-}" ]; then
+            echo 'authenticated=false' >> "$GITHUB_OUTPUT"
+            echo KWAI_CREDENTIALS_CONFIGURED=0
+            exit 0
+          fi
+          echo '::add-mask::'"$KWAI_LOGIN"
+          echo '::add-mask::'"$KWAI_PASSWORD"
+          set +e
+          python3 tools/kwai_credential_login.py >/tmp/kwai-one-shot-login.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            if KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py >/tmp/kwai-one-shot-proof.log 2>&1 &&
+               grep -qx 'KWAI_AUTH_STATE=AUTHENTICATED_UI' /tmp/kwai-one-shot-proof.log &&
+               grep -qx 'KWAI_IDENTITY_PROFILE_MATCH=1' /tmp/kwai-one-shot-proof.log; then
+              echo 'authenticated=true' >> "$GITHUB_OUTPUT"
+              echo KWAI_HOSTED_ACCOUNT_VERIFIED=1
+              exit 0
+            fi
+          fi
+          echo 'authenticated=false' >> "$GITHUB_OUTPUT"
+          if [ "$rc" -eq 6 ]; then echo KWAI_OWNER_INTERACTIVE_VERIFICATION_REQUIRED=1; fi
+          echo "KWAI_CREDENTIAL_SINGLE_ATTEMPT_RC=$rc"
+          echo KWAI_HOSTED_ACCOUNT_VERIFIED=0
+      - name: Start protected temporary Android login window
+        if: steps.initial.outputs.authenticated != 'true' && steps.credentials.outputs.authenticated != 'true'
         env:
           REMOTE_PASSWORD: ${{ secrets.KWAI_REMOTE_GUI_PASSWORD }}
           GH_TOKEN: ${{ github.token }}
@@ -383,7 +416,7 @@ jobs:
           echo KWAI_MOBILE_AUTH_TUNNEL_PROTECTED=1
 
       - name: Wait for phone-authenticated Kwai identity
-        if: steps.initial.outputs.authenticated != 'true'
+        if: steps.initial.outputs.authenticated != 'true' && steps.credentials.outputs.authenticated != 'true'
         run: |
           set -euo pipefail
           deadline=$((SECONDS+1200))
