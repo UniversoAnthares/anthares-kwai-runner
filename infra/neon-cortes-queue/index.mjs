@@ -159,7 +159,8 @@ async function kwaiAction(action,b,actor){
      Number(p.source_http_code)!==200||
      Number(scan.total_distinct_posts)<1000||
      Number(scan.oldest_post_epoch_ms)>start-86400000||
-     Number(scan.newest_post_epoch_ms)<start+3600000||
+     Number(scan.newest_post_epoch_ms)<start+1800000||
+     Number(scan.scanned_at_epoch_ms)<start+3600000||
      Number(p.near_public_media_matches)!==0||
      Number(p.near_candidates_total)!==Number(p.near_candidates_tested)||
      Number(p.near_candidates_total)<0||
