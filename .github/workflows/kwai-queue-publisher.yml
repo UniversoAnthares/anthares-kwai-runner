@@ -222,7 +222,7 @@ jobs:
     outputs:
       session_ready: ${{ steps.seal.outputs.ready }}
     env:
-      REMOTE_USER: anthares
+      REMOTE_USER: universoanthares
       KWAI_SESSION_ENCRYPTION_KEY: ${{ secrets.KWAI_SESSION_KEY }}
       KWAI_AUTH_STRATEGY: mobile_only
     steps:
@@ -312,7 +312,7 @@ jobs:
           echo KWAI_MOBILE_AUTH_WINDOW_REQUIRED=1
 
       - name: Try the configured Kwai account credentials once on hosted Android
-        if: steps.initial.outputs.authenticated != 'true'
+        if: ${{ steps.initial.outputs.authenticated != 'true' && vars.KWAI_PASSWORD_LOGIN_ENABLED == '1' }}
         id: credentials
         env:
           KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
