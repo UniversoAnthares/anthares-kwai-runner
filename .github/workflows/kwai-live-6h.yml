@@ -81,6 +81,8 @@ jobs:
                   good=result['status']==200 and (result['allowed'] or result['owner']) and result['name']
                   print('KW12_REMOTE_STUDIO_SESSION='+('AUTHORIZED' if good else 'NOT_AUTHORIZED'),flush=True)
                   with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('Kwai Studio cloud session: '+('authorized' if good else 'not authorized')+' (no secrets exported).\n')
+                  if not good:
+                      raise SystemExit('KW12_REMOTE_STUDIO_REQUIRES_AUTHENTICATION')
               finally:
                   ctx.close()
           PY
@@ -158,9 +160,32 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Restore encrypted Anthares Browser Hub profile
+        shell: bash
+        env:
+          STATE_KEY: ${{ secrets.ANTHARES_BROWSER_STATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$STATE_KEY"
+          id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=anthares-browser-profile-encrypted&per_page=50" --jq '.artifacts | map(select(.expired==false)) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$id"
+          mkdir -p "$RUNNER_TEMP/kw12-artifact" "$RUNNER_TEMP/kw12-browser"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "$RUNNER_TEMP/kw12-artifact.zip"
+          unzip -q "$RUNNER_TEMP/kw12-artifact.zip" -d "$RUNNER_TEMP/kw12-artifact"
+          openssl enc -d -aes-256-cbc -pbkdf2 -salt -pass env:STATE_KEY -in "$RUNNER_TEMP/kw12-artifact/profile.tgz.enc" -out "$RUNNER_TEMP/kw12-profile.tgz"
+          tar -xzf "$RUNNER_TEMP/kw12-profile.tgz" -C "$RUNNER_TEMP/kw12-browser"
+          test -d "$RUNNER_TEMP/kw12-browser/chrome-profile"
+          rm -f "$RUNNER_TEMP/kw12-artifact.zip" "$RUNNER_TEMP/kw12-profile.tgz"
+          echo 'KW12_LIVE_HUB_PROFILE_RESTORED=1'
       - name: Install existing browser runtime
         run: |
           python -m pip install -q playwright pillow
           python -m playwright install --with-deps chromium >/dev/null
       - name: Start or renew one six-hour Kwai server-side network-pull LIVE
+        env:
+          KWAI_LIVE_PROFILE_DIR: ${{ runner.temp }}/kw12-browser/chrome-profile
         run: python -u kwai_live_6h_cycle.py
+      - name: Remove temporary browser profile
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/kw12-browser" "$RUNNER_TEMP/kw12-artifact" "$RUNNER_TEMP/kw12-profile.tgz" "$RUNNER_TEMP/kw12-artifact.zip"

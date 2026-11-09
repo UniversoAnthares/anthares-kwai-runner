@@ -20,7 +20,7 @@ from io import BytesIO
 
 from playwright.sync_api import sync_playwright
 from kwai_live_cloud_network import (
-    HLS_URL, hls_preflight, login_if_needed, extract_room_id,
+    HLS_URL, hls_preflight, login_if_needed, authenticated, extract_room_id,
 )
 
 TITLE = "[KWAI-LIVE-6H-STATE]"
@@ -243,18 +243,37 @@ def main():
     # prove that Kwai has kept the remote transmission open for six hours.
     hls_preflight()
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, args=[
-            "--no-sandbox", "--disable-dev-shm-usage",
-        ])
-        try:
+        # Reuse the encrypted Anthares Browser Hub profile restored by the
+        # workflow, preserving the exact cookies/IndexedDB that were saved.
+        # A profile on this ephemeral runner is owned by this invocation only.
+        profile_dir = os.getenv("KWAI_LIVE_PROFILE_DIR", "").strip()
+        if profile_dir:
+            if not os.path.isdir(profile_dir):
+                raise RuntimeError("KWAI_LIVE_ENCRYPTED_PROFILE_MISSING")
+            browser = None
+            context = playwright.chromium.launch_persistent_context(
+                profile_dir, headless=True, locale="pt-BR",
+                viewport={"width": 1440, "height": 1000},
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
+        else:
+            browser = playwright.chromium.launch(headless=True, args=[
+                "--no-sandbox", "--disable-dev-shm-usage",
+            ])
             context = studio_context(browser)
+        try:
             try:
                 page = context.new_page()
                 page.set_default_timeout(18000)
                 page.goto("https://studio.kwai.com/", wait_until="domcontentloaded", timeout=90000)
                 page.wait_for_timeout(3500)
                 try:
-                    perm = login_if_needed(page)
+                    if profile_dir:
+                        is_authenticated, perm = authenticated(page)
+                        if not is_authenticated:
+                            raise RuntimeError("KWAI_LIVE_HUB_PROFILE_UNAUTHORIZED")
+                    else:
+                        perm = login_if_needed(page)
                 except RuntimeError:
                     # Diagnostic categories only; never output form values, account IDs,
                     # credentials, cookies, QR payloads or full page markup.
@@ -301,7 +320,8 @@ def main():
             finally:
                 context.close()
         finally:
-            browser.close()
+            if browser is not None:
+                browser.close()
 
 
 if __name__ == "__main__":
