@@ -20,7 +20,7 @@ from io import BytesIO
 
 from playwright.sync_api import sync_playwright
 from kwai_live_cloud_network import (
-    HLS_URL, hls_preflight, login_if_needed, extract_room_id,
+    HLS_URL, hls_preflight, login_if_needed, authenticated, extract_room_id,
 )
 
 TITLE = "[KWAI-LIVE-6H-STATE]"
@@ -268,7 +268,12 @@ def main():
                 page.goto("https://studio.kwai.com/", wait_until="domcontentloaded", timeout=90000)
                 page.wait_for_timeout(3500)
                 try:
-                    perm = login_if_needed(page)
+                    if profile_dir:
+                        is_authenticated, perm = authenticated(page)
+                        if not is_authenticated:
+                            raise RuntimeError("KWAI_LIVE_HUB_PROFILE_UNAUTHORIZED")
+                    else:
+                        perm = login_if_needed(page)
                 except RuntimeError:
                     # Diagnostic categories only; never output form values, account IDs,
                     # credentials, cookies, QR payloads or full page markup.
