@@ -10,6 +10,7 @@ on:
           - lease_cycle
           - stage
           - publish
+          - android_stage
         default: status
         required: true
 permissions:
@@ -89,6 +90,21 @@ jobs:
         shell: bash
         run: |
           rm -f kwai-neon-lease.json kwai-media-ready.json kwai-session.enc
+
+  kw09-android-neon-stage:
+    needs: canonical-state
+    if: ${{ inputs.mode == 'android_stage' && needs.canonical-state.outputs.eligible == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    env:
+      KW09_MACRODROID_STAGE_WEBHOOK: ${{ secrets.KW09_MACRODROID_STAGE_WEBHOOK }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage canonical Neon Kwai media on independent Android (no publishing)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/kw09_android_stage.py
 
   kw05-fenced-queue-cycle:
     needs: canonical-state
