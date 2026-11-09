@@ -20,7 +20,7 @@ import java.nio.charset.StandardCharsets;
 final class RemoteControlLoop {
     private static final String TAG="AntharesAgent";
     private static final String PREFS="anthares_remote_control";
-    private static final String PRIMARY="https://anthares-remote-primary.vercel.app";
+    private static final String PRIMARY="https://anthares-ara-reserva.anthares1.workers.dev";
     private static final String BACKUP="https://anthares-remote-secondary.vercel.app";
     private static volatile Thread worker;
     private static volatile boolean running;
@@ -56,7 +56,7 @@ final class RemoteControlLoop {
                     JSONObject result=execute(c,job);
                     postResult(cfg,base,job.optString("id"),result);
                 }
-                sleep(job==null?5000:500);
+                sleep(job==null?30000:500);
             } catch(Throwable t){
                 Log.w(TAG,"REMOTE_CONTROL_ERROR="+t.getClass().getSimpleName());
                 sleep(backoff); backoff=Math.min(backoff*2,60000L);
@@ -147,7 +147,7 @@ final class RemoteControlLoop {
 
     private static Response request(String method,String raw,Config cfg,String body) throws Exception{
         URL u=new URL(raw); if(!"https".equalsIgnoreCase(u.getProtocol())) throw new SecurityException("https_required");
-        String host=u.getHost(); if(!"anthares-remote-primary.vercel.app".equals(host)&&!"anthares-ara-vercel-reserve.vercel.app".equals(host)) throw new SecurityException("host_not_allowed");
+        String host=u.getHost(); if(!"anthares-ara-reserva.anthares1.workers.dev".equals(host)&&!"anthares-remote-secondary.vercel.app".equals(host)) throw new SecurityException("host_not_allowed");
         HttpURLConnection x=(HttpURLConnection)u.openConnection(); x.setConnectTimeout(12000);x.setReadTimeout(20000);x.setRequestMethod(method);x.setRequestProperty("Authorization","Bearer "+cfg.token);x.setRequestProperty("X-Anthares-Device",cfg.deviceId);x.setRequestProperty("Accept","application/json");
         if(body!=null){byte[] data=body.getBytes(StandardCharsets.UTF_8);x.setDoOutput(true);x.setRequestProperty("Content-Type","application/json");try(OutputStream o=x.getOutputStream()){o.write(data);}}
         int code=x.getResponseCode();InputStream in=code>=400?x.getErrorStream():x.getInputStream();StringBuilder s=new StringBuilder();if(in!=null)try(BufferedReader br=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String line;while((line=br.readLine())!=null)s.append(line);}x.disconnect();return new Response(code,s.toString());
