@@ -6,6 +6,7 @@ The Neon lease is always released with its generation fence before exit.
 Android receives public media coordinates through an authenticated MacroDroid
 webhook. The phone-side macro MUST be stage-only: no Kwai share/post action.
 """
+import hashlib
 import os
 import re
 import sys
@@ -30,6 +31,27 @@ def validated_webhook():
     return value
 
 
+def source_content_sha256(source_url):
+    """Hash MP4 bytes on hosted GitHub; never store media on the Windows PC."""
+    h = hashlib.sha256()
+    total = 0
+    request = Request(source_url, headers={"User-Agent": "AntharesKW09HostedStage/1.0"})
+    with urlopen(request, timeout=45) as response:
+        if response.status != 200:
+            raise QueueError("KW09_STAGE_SOURCE_NOT_HTTP_200")
+        while True:
+            block = response.read(1024 * 512)
+            if not block:
+                break
+            total += len(block)
+            if total > 70 * 1024 * 1024:
+                raise QueueError("KW09_STAGE_SOURCE_TOO_LARGE")
+            h.update(block)
+    if total < 2048:
+        raise QueueError("KW09_STAGE_SOURCE_EMPTY")
+    return h.hexdigest()
+
+
 def stage_metadata(job):
     payload = job.get("payload") or {}
     if not isinstance(payload, dict):
@@ -49,6 +71,10 @@ def stage_metadata(job):
             or not parsed.path.lower().endswith(".mp4")
             or (sha and not re.fullmatch(r"[a-f0-9]{64}", sha))):
         raise QueueError("KW09_STAGE_IDENTITY_OR_MEDIA_INVALID")
+    # Neon media_sha256 may be the dispatch identity, not the MP4 content.
+    # The Android must receive a real content checksum before fetching.
+    if not sha:
+        sha = source_content_sha256(url)
     return {
         "kw09_mode": "stage_only",
         "kw09_job_id": ident,
