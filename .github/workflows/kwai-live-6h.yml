@@ -1,65 +1,45 @@
 name: Kwai LIVE Cloud Executor
+
 on:
+  schedule:
+    - cron: '0 */6 * * *'   # renovacao automatica da live a cada 6 horas
   workflow_dispatch:
     inputs:
       activate:
-        description: 'Create and start a short real LIVE canary'
+        description: 'Criar e iniciar ao vivo real (rede, pull do HLS da Hostinger)'
         required: true
-        default: false
+        default: 'false'
         type: boolean
       seconds:
-        description: 'Canary duration, 15-120 seconds'
+        description: 'Duracao da sessao em segundos (max 21600 = 6h)'
         required: true
-        default: '60'
+        default: '21600'
         type: string
+      continuous:
+        description: 'Renovar automaticamente em ciclos subsequentes'
+        required: true
+        default: 'true'
+        type: boolean
+      cycles:
+        description: 'Numero de ciclos de renovacao (0 = sem limite)'
+        required: true
+        default: '1'
+        type: string
+
 permissions:
   contents: read
   id-token: write
+
 concurrency:
   group: kwai-live-cloud-executor
   cancel-in-progress: false
+
 jobs:
   preflight:
-    strategy:
-      fail-fast: false
-      max-parallel: 30
-      matrix:
-        replica: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
-      KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
-      KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
-      ANTHARES_PUBLIC_HLS_URL: https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8
-      ATD_ARTIFACT_DIR: live-artifacts-${{ matrix.replica }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install isolated browser runtime
-        run: |
-          python -m pip install -q playwright pillow
-          python -m playwright install --with-deps chromium >/dev/null
-      - name: Prove HLS and authenticated Studio without starting LIVE
-        run: python -u kwai_live_cloud_network.py
-      - name: Upload non-secret diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kwai-live-preflight-diagnostics-${{ matrix.replica }}
-          path: |
-            live-artifacts-${{ matrix.replica }}/page.png
-          if-no-files-found: ignore
-          retention-days: 2
-  canary:
-    if: ${{ inputs.activate == true }}
-    needs: preflight
-    runs-on: ubuntu-24.04
-    timeout-minutes: 12
-    env:
-      KWAI_LOGIN: ${{ secrets.KWAI_LOGIN }}
-      KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
+      KWAI_STORAGE_STATE: ${{ secrets.KWAI_STORAGE_STATE }}
       ANTHARES_PUBLIC_HLS_URL: https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8
       ATD_ARTIFACT_DIR: live-artifacts
     steps:
@@ -71,8 +51,40 @@ jobs:
         run: |
           python -m pip install -q playwright pillow
           python -m playwright install --with-deps chromium >/dev/null
-      - name: Run one finite network-pull LIVE canary with mandatory cleanup
-        run: python -u kwai_live_cloud_network.py --activate --seconds '${{ inputs.seconds }}'
+      - name: Prove HLS and authenticated Studio without starting LIVE
+        run: python -u kwai_live_cloud_network.py --state '${{ secrets.KWAI_STORAGE_STATE }}'
+
+  live:
+    if: ${{ inputs.activate == 'true' || github.event_name == 'schedule' }}
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      KWAI_STORAGE_STATE: ${{ secrets.KWAI_STORAGE_STATE }}
+      ANTHARES_PUBLIC_HLS_URL: https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8
+      ATD_ARTIFACT_DIR: live-artifacts
+      LIVE_SECONDS: ${{ inputs.seconds }}
+      LIVE_CONTINUOUS: ${{ inputs.continuous }}
+      LIVE_CYCLES: ${{ inputs.cycles }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated browser runtime
+        run: |
+          python -m pip install -q playwright pillow
+          python -m playwright install --with-deps chromium >/dev/null
+      - name: Run network-pull LIVE session (6h, renovacao automatica a cada 6h)
+        env:
+          KWAI_STORAGE_STATE: ${{ secrets.KWAI_STORAGE_STATE }}
+        run: |
+          SECONDS="${LIVE_SECONDS:-21600}"
+          [ "$SECONDS" -gt 21600 ] 2>/dev/null && SECONDS=21600
+          ARGS="--activate --seconds $SECONDS --state '${KWAI_STORAGE_STATE}'"
+          if [ "${LIVE_CONTINUOUS:-true}" = "true" ]; then ARGS="$ARGS --continuous"; fi
+          ARGS="$ARGS --cycles ${LIVE_CYCLES:-1}"
+          python -u kwai_live_cloud_network.py $ARGS
       - name: Require cleanup marker in controller semantics
         if: always()
         run: grep -q 'KWAI_LIVE_CLEANUP_CONFIRMED' kwai_live_cloud_network.py
