@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from social_adapters.buffer_three_channels import api, schedule, BufferBlocked, buffer_cooldown_seconds, PINNED_CHANNELS, trusted_instagram_one_time_runner
+from social_adapters.buffer_three_channels import api, schedule, BufferBlocked, BufferDefiniteRejection, buffer_cooldown_seconds, PINNED_CHANNELS, trusted_instagram_one_time_runner
 
 BASE="https://anthares-remote-primary.vercel.app/api/cortes-queue"
 INSTAGRAM_ID=PINNED_CHANNELS["instagram"][0]
@@ -254,9 +254,21 @@ def publish_once():
             raise RuntimeError("BUFFER_NOT_SCHEDULED")
         queue("scheduled",{**fence,"buffer_post_id":result["remote_id"]})
         return "SCHEDULED_IN_BUFFER"
+    except BufferDefiniteRejection as exc:
+        # A typed Buffer MutationError explicitly refused createPost. Neon
+        # must own the exact source job under its original lease/CAS fence.
+        # MEDIA fails terminally; other classes back off without a second post.
+        rejected=queue("rejected",{**fence,"reason":exc.classification})
+        if not rejected.get("ok"):
+            raise RuntimeError("INSTAGRAM_BUFFER_REJECTION_FENCE_FAILED")
+        print(json.dumps({"instagram_cloud":"DEFINITE_BUFFER_REJECTION",
+                          "class":exc.classification,
+                          "ledger_status":(rejected.get("job") or {}).get("status"),
+                          "new_posts":0}),flush=True)
+        return "DEFINITE_REJECTION_"+exc.classification+"_FENCED"
     except Exception:
-        # The Buffer request may already have created a post. Never retry it
-        # automatically: started job becomes uncertain, pending reconciliation.
+        # A transport timeout/unknown Buffer result may have created a post.
+        # Retain UNCERTAIN and never retry without independent reconciliation.
         try: queue("fail",fence)
         except Exception: pass
         raise
