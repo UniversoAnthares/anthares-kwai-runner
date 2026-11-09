@@ -12,7 +12,7 @@ on:
         default: false
         type: boolean
       six_hour_cycle:
-        description: 'Renew a cloud network-pull LIVE after its full six-hour interval'
+        description: 'Renew six-hour Kwai RTMP LIVE using the existing Hostinger cron'
         required: true
         default: false
         type: boolean
@@ -154,6 +154,7 @@ jobs:
       KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
       KWAI_LIVE_STORAGE_STATE_B64: ${{ secrets.KWAI_LIVE_STORAGE_STATE_B64 }}
       GH_TOKEN: ${{ github.token }}
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
       ANTHARES_PUBLIC_HLS_URL: https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8
     steps:
       - uses: actions/checkout@v4
@@ -181,11 +182,54 @@ jobs:
         run: |
           python -m pip install -q playwright pillow
           python -m playwright install --with-deps chromium >/dev/null
-      - name: Start or renew one six-hour Kwai server-side network-pull LIVE
+      - name: Load existing protected Hostinger SSH bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GITLAB_TOKEN:-}"
+          python3 - <<'PY'
+          import json,os,pathlib,urllib.request
+          req=urllib.request.Request(
+              'https://gitlab.com/api/v4/projects/87361776/variables?per_page=100',
+              headers={'PRIVATE-TOKEN':os.environ['GITLAB_TOKEN'],
+                       'User-Agent':'anthares-kw12-existing-hostinger-bridge'})
+          with urllib.request.urlopen(req,timeout=30) as response:
+              rows=json.load(response)
+          values={str(v.get('key')):str(v.get('value') or '') for v in rows}
+          keys=['ANTHARES_QA_SSH_KEY','ANTHARES_QA_SSH_HOST','ANTHARES_QA_SSH_USER']
+          if any(not values.get(k) for k in keys):
+              raise SystemExit('KW12_EXISTING_HOSTINGER_SSH_BRIDGE_UNAVAILABLE')
+          home=pathlib.Path(os.environ['RUNNER_TEMP'])/'kw12-ssh'
+          home.mkdir(mode=0o700)
+          key=home/'id_hostinger'
+          key.write_text(values['ANTHARES_QA_SSH_KEY'])
+          key.chmod(0o600)
+          host=values['ANTHARES_QA_SSH_HOST']
+          user=values['ANTHARES_QA_SSH_USER']
+          port=values.get('ANTHARES_QA_SSH_PORT') or '65002'
+          for value in (host,user,values['ANTHARES_QA_SSH_KEY']):
+              print('::add-mask::'+value.replace('\n','%0A'))
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write('KW12_SSH_HOST='+host+'\n')
+              f.write('KW12_SSH_USER='+user+'\n')
+              f.write('KW12_SSH_PORT='+port+'\n')
+              f.write('KW12_SSH_KEY_FILE='+str(key)+'\n')
+          import subprocess
+          sshdir=pathlib.Path.home()/'.ssh'
+          sshdir.mkdir(mode=0o700,exist_ok=True)
+          keyscan=subprocess.run(['ssh-keyscan','-p',port,host],
+                                 capture_output=True,text=True,timeout=18)
+          if keyscan.returncode!=0 or not keyscan.stdout.strip():
+              raise SystemExit('KW12_HOSTINGER_HOSTKEY_UNAVAILABLE')
+          with (sshdir/'known_hosts').open('a') as trusted:
+              trusted.write(keyscan.stdout)
+          print('KW12_EXISTING_HOSTINGER_SSH_BRIDGE_LOADED=1')
+          PY
+      - name: Create or renew six-hour Kwai RTMP LIVE
         env:
-          KWAI_LIVE_PROFILE_DIR: ${{ runner.temp }}/kw12-browser/chrome-profile
-        run: python -u kwai_live_6h_cycle.py
+          KW12_STUDIO_PROFILE_DIR: ${{ runner.temp }}/kw12-browser/chrome-profile
+        run: python -u kwai_live_rtmp_cycle.py
       - name: Remove temporary browser profile
         if: always()
         shell: bash
-        run: rm -rf "$RUNNER_TEMP/kw12-browser" "$RUNNER_TEMP/kw12-artifact" "$RUNNER_TEMP/kw12-profile.tgz" "$RUNNER_TEMP/kw12-artifact.zip"
+        run: rm -rf "$RUNNER_TEMP/kw12-browser" "$RUNNER_TEMP/kw12-artifact" "$RUNNER_TEMP/kw12-profile.tgz" "$RUNNER_TEMP/kw12-artifact.zip" "$RUNNER_TEMP/kw12-ssh"
