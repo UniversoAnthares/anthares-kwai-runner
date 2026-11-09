@@ -22,7 +22,18 @@ import java.util.Locale;
  * handles Kwai login credentials or browser cookies.
  */
 public final class KwaiVideoHandoff {
-    private static final String KWAI_PACKAGE = "com.kwai.video";
+    private static final String KWAI_FULL = "com.kwai.video";
+    private static final String KWAI_LITE = "kwai.lite.video";
+    // The owner's authenticated Redmi 9 uses the Lite package.
+    private static String chooseInstalledKwai(Activity activity) {
+        for (String pkg : new String[]{KWAI_LITE, KWAI_FULL}) {
+            try {
+                activity.getPackageManager().getPackageInfo(pkg, 0);
+                return pkg;
+            } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {}
+        }
+        throw new IllegalStateException("Kwai application not installed");
+    }
     private static final long MAX_VIDEO_BYTES = 250L * 1024L * 1024L;
     private KwaiVideoHandoff() {}
 
@@ -36,7 +47,7 @@ public final class KwaiVideoHandoff {
             show(activity, "O arquivo selecionado não é um vídeo.");
             return;
         }
-        shareUri(activity, uri, "");
+        shareUri(activity, uri, "", chooseInstalledKwai(activity));
     }
 
     public static void shareFromApprovedLink(Activity activity, Uri link) {
@@ -121,7 +132,7 @@ public final class KwaiVideoHandoff {
                     Uri content = FileProvider.getUriForFile(activity,
                             activity.getPackageName() + ".files", ready);
                     AutoPublishState.arm(activity, caption, jobId);
-                    shareUri(activity, content, caption);
+                    shareUri(activity, content, caption, chooseInstalledKwai(activity));
                 });
             } catch (Exception e) {
                 AutoPublishState.clear(activity);
@@ -150,10 +161,10 @@ public final class KwaiVideoHandoff {
         return s.toString();
     }
 
-    private static void shareUri(Activity activity, Uri uri, String caption) {
+    private static void shareUri(Activity activity, Uri uri, String caption, String packageName) {
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("video/mp4");
-        send.setPackage(KWAI_PACKAGE);
+        send.setPackage(packageName);
         send.putExtra(Intent.EXTRA_STREAM, uri);
         if (caption != null && !caption.isEmpty()) send.putExtra(Intent.EXTRA_TEXT, caption);
         send.setClipData(ClipData.newUri(activity.getContentResolver(), "Anthares video", uri));
