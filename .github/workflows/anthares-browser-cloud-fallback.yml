@@ -81,7 +81,10 @@ jobs:
           echo "vnc=$vnc" >> "$GITHUB_OUTPUT"
 
       - name: Build Anthares-browser
-        run: docker build -t anthares-browser ./anthares-brouser
+        run: |
+          set -euo pipefail
+          # Keep ephemeral GitHub logs readable while Debian installs Chromium.
+          docker build --quiet -t anthares-browser ./anthares-brouser
 
       - name: Start isolated Anthares-browser
         env:
@@ -196,6 +199,12 @@ jobs:
             exit 1
           fi
           echo "KW12_SECURE_NOVNC_URL=${url}/novnc/once/${{ steps.creds.outputs.manual }}"
+          echo "::notice title=KW12 Navegador Remoto::${url}/novnc/once/${{ steps.creds.outputs.manual }}"
+          {
+            echo "### KW-12: acesso remoto do Kwai Studio"
+            echo "Abra o [navegador autenticado](${url}/novnc/once/${{ steps.creds.outputs.manual }}) para concluir o login oficial."
+            echo "O endereço é temporário e permite uma única utilização."
+          } >> "$GITHUB_STEP_SUMMARY"
           echo "KW12_BROWSER_GATEWAY_READY=1"
           minutes="$KEEP"; [ "$minutes" -gt 45 ] && minutes=45; [ "$minutes" -lt 1 ] && minutes=1
           # Only owner authentication can complete this once; login/captcha remain user-operated.
