@@ -13,6 +13,11 @@ on:
         description: Interactive login window, max 45
         required: false
         default: '20'
+      probe_studio:
+        description: 'Check whether the existing encrypted cloud browser profile is authorized in Kwai Studio (read only)'
+        required: false
+        default: false
+        type: boolean
   push:
     branches: [main]
     paths:
@@ -113,6 +118,38 @@ jobs:
           ! docker port anthares-browser | grep -q 9222
           echo HOST_DESKTOP_FALLBACK=FALSE
 
+      - name: Check existing Kwai Studio cloud-session availability
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.probe_studio == true }}
+        env:
+          CONTROL: ${{ steps.creds.outputs.control }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          BASE='http://127.0.0.1:18080'
+          HEADERS={'Authorization':'Bearer '+os.environ['CONTROL'],'Content-Type':'application/json'}
+          def post(path,payload):
+              req=urllib.request.Request(BASE+path,data=json.dumps(payload).encode(),headers=HEADERS,method='POST')
+              with urllib.request.urlopen(req,timeout=28) as response:return json.load(response)
+          expression='''(async()=>{
+            try {
+              const r=await fetch('/rest/o/w/live/supplier/cloudLive/checkPermission',{credentials:'include'});
+              const data=await r.json();
+              const u=data.userInfo||data.data?.userInfo||{};
+              const label=(document.body?.innerText||'').includes('Lucas Rosalem');
+              return {http:r.status,allow:data.result===1,identity:!!(u.ksId||u.userId),ownerLabel:label};
+            } catch(e){return {http:0,allow:false,identity:false,ownerLabel:false}}
+          })()'''
+          try:
+              post('/navigate',{'url':'https://studio.kwai.com/live/list?source=','wait_ms':3000})
+              answer=post('/evaluate',{'expression':expression,'return_by_value':True})
+              v=(answer.get('result') or {}).get('value') or {}
+              ready=v.get('http')==200 and bool(v.get('allow') or v.get('identity')) and bool(v.get('ownerLabel'))
+              print('KW12_CLOUD_STUDIO_AUTH='+('CONFIRMED' if ready else 'NOT_AVAILABLE'))
+          except (urllib.error.URLError,OSError,ValueError,KeyError) as err:
+              print('KW12_CLOUD_STUDIO_AUTH=UNVERIFIED_'+type(err).__name__)
+          PY
       - name: Open temporary noVNC tunnel for legitimate manual login
         if: ${{ inputs.mode == 'login' }}
         env:
