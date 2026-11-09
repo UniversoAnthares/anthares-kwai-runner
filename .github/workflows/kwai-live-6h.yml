@@ -214,10 +214,17 @@ jobs:
               f.write('KW12_SSH_USER='+user+'\n')
               f.write('KW12_SSH_PORT='+port+'\n')
               f.write('KW12_SSH_KEY_FILE='+str(key)+'\n')
+          import subprocess
+          sshdir=pathlib.Path.home()/'.ssh'
+          sshdir.mkdir(mode=0o700,exist_ok=True)
+          keyscan=subprocess.run(['ssh-keyscan','-p',port,host],
+                                 capture_output=True,text=True,timeout=18)
+          if keyscan.returncode!=0 or not keyscan.stdout.strip():
+              raise SystemExit('KW12_HOSTINGER_HOSTKEY_UNAVAILABLE')
+          with (sshdir/'known_hosts').open('a') as trusted:
+              trusted.write(keyscan.stdout)
           print('KW12_EXISTING_HOSTINGER_SSH_BRIDGE_LOADED=1')
           PY
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          ssh-keyscan -p "$KW12_SSH_PORT" "$KW12_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
       - name: Create or renew six-hour Kwai RTMP LIVE
         env:
           KW12_STUDIO_PROFILE_DIR: ${{ runner.temp }}/kw12-browser/chrome-profile
