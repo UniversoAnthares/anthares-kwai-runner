@@ -5,15 +5,10 @@ on:
     inputs:
       gitlab_pipeline_id:
         type: string
-        required: false
+        required: true
       gitlab_sha:
         type: string
-        required: false
-  schedule:
-    - cron: '17 */12 * * *'
-  push:
-    branches: [main]
-    paths: ['.github/workflows/gitlab-quota-fallback.yml']
+        required: true
 permissions:
   contents: read
 concurrency:
@@ -33,6 +28,10 @@ jobs:
           set -euo pipefail
           git clone --quiet --depth 1 --single-branch --branch main \
             https://gitlab.com/UniversoAnthares/anthares-kwai-runner.git source
+          if [ -z "$AOI_EXACT_SOURCE_SHA" ]; then
+            echo "::error::GITLAB_ORIGINAL_SHA_REQUIRED"
+            exit 1
+          fi
           if [ -n "$AOI_EXACT_SOURCE_SHA" ]; then
             if [[ ! "$AOI_EXACT_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
               echo "::error::GITLAB_ORIGINAL_SHA_INVALID"
