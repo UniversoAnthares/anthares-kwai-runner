@@ -165,17 +165,20 @@ def remove_hostinger_room(room: str) -> None:
 
 
 def wait_for_stream(room: str) -> None:
-    # A stream-process acknowledgement is required before starting the LIVE.
-    for _ in range(9):
-        status = ssh("bash -lc " + __import__("shlex").quote(
+    # Require both an active FFmpeg process and actual video-time progress.
+    for _ in range(10):
+        check = (
             "p=" + REMOTE + "/ffmpeg-" + room + ".pid; "
             "progress=" + REMOTE + "/cron-rtmp-" + room + ".progress; "
-            "if test -s \"$p\" && kill -0 \"$(cat \"$p\")\" 2>/dev/null "
-            "&& grep -Eq '^out_time_ms=[1-9][0-9]*
+            'if test -s "$p" && kill -0 "$(cat "$p")" 2>/dev/null '
+            '&& grep -Eq "^out_time_ms=[1-9][0-9]*$" "$progress" 2>/dev/null; '
+            "then echo KW12_STREAM_PROCESS_RUNNING=1; fi"
+        )
+        status = ssh("bash -lc " + __import__("shlex").quote(check))
+        if "KW12_STREAM_PROCESS_RUNNING=1" in status:
             return
         time.sleep(3)
     raise RuntimeError("KW12_RTMP_PUSH_NOT_ALIVE")
-
 
 def create_and_start(page, issue_id: int, state: dict) -> None:
     room = ""
