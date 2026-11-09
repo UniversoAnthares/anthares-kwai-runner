@@ -12,6 +12,7 @@ import socket
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from zoneinfo import ZoneInfo
 
@@ -292,6 +293,32 @@ def known_markers():
             if hit:known.add(hit.group(1))
     return known
 
+def historical_fingerprint_exists(fingerprint):
+    """Query all-time issue history for only an exact 24-hex marker.
+
+    The 500 most recent issues cache is a fast path; an older incident must
+    never be recreated merely because it is outside that pagination window.
+    GitHub search is bounded and must fail closed on incomplete results.
+    """
+    if not re.fullmatch(r"[a-f0-9]{24}", fingerprint):
+        raise RuntimeError("P0_INVALID_FINGERPRINT")
+    query=urllib.parse.urlencode({
+        "q":'repo:'+HUB+' is:issue in:body "'+fingerprint+'"',
+        "per_page":"100",
+    })
+    result=http("https://api.github.com/search/issues?"+query)
+    if (not isinstance(result,dict)
+            or result.get("incomplete_results") is not False
+            or not isinstance(result.get("total_count"),int)
+            or result["total_count"]>100
+            or not isinstance(result.get("items"),list)
+            or len(result["items"])!=result["total_count"]):
+        raise RuntimeError("P0_HISTORICAL_LOOKUP_INCOMPLETE")
+    exact="QA-P0-FINGERPRINT:"+fingerprint
+    return any(exact in str(row.get("body") or "")
+               for row in result["items"] if isinstance(row,dict))
+
+
 def labels():
     for label,color in (("QA-P0","B60205"),("publication-failure","D93F0B")):
         try:http("https://api.github.com/repos/"+HUB+"/labels/"+label)
@@ -404,11 +431,18 @@ def main():
     labels()
     seen=known_markers()
     posted=0
+    historical_lookups=0
     for item in items:
         if item["id"] in seen:continue
-        if posted>=20:
+        # Search is limited to 20 provider requests per scan: preserve quota.
+        # An incomplete provider answer aborts the scan before any new issue.
+        if historical_lookups>=20 or posted>=20:
             print("::warning::CORTES_QA_BACKLOG_REMAINING")
             break
+        historical_lookups+=1
+        if historical_fingerprint_exists(item["id"]):
+            seen.add(item["id"])
+            continue
         created=create_issue(item)
         if not created.get("number"):raise RuntimeError("P0_ISSUE_UNCONFIRMED")
         posted+=1
