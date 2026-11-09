@@ -2,6 +2,12 @@ name: X Anthares Browser Cloud Primary
 
 on:
   workflow_dispatch:
+    inputs:
+      readiness_only:
+        description: 'Verify hosted X account session without queue, upload or publishing'
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: '*/10 * * * *'
   push:
@@ -20,13 +26,14 @@ concurrency:
 
 jobs:
   publish:
-    if: ${{ vars.ANTHARES_X_AUTOPUBLISH == '1' }}
+    if: ${{ vars.ANTHARES_X_AUTOPUBLISH == '1' || (github.event_name == 'workflow_dispatch' && inputs.readiness_only == true) }}
     runs-on: ubuntu-latest
     timeout-minutes: 44
     env:
       GITHUB_ACTIONS: 'true'
       RUNNER_ENVIRONMENT: github-hosted
-      X_CLOUD_ARM: ${{ vars.ANTHARES_X_AUTOPUBLISH }}
+      X_CLOUD_ARM: ${{ github.event_name == 'workflow_dispatch' && inputs.readiness_only == true && '1' || vars.ANTHARES_X_AUTOPUBLISH }}
+      X_READINESS_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.readiness_only == true }}
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
       X_LEDGER_BACKEND: neon-api
       X_LEDGER_API: https://br-crimson-unit-b89nau08-xledger.compute.c-14.us-east-1.aws.neon.tech/
