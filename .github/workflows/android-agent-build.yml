@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths: ['android-agent/**', '.github/workflows/android-agent-build.yml']
-permissions: { contents: write }
+permissions: { contents: read }
 concurrency:
   group: android-agent-build-${{ github.ref }}
   cancel-in-progress: true
@@ -21,27 +21,6 @@ jobs:
       - name: Build release agent
         working-directory: android-agent
         run: gradle --no-daemon :app:assembleRelease :app:assembleDebug
-      - name: Publish unsigned release APK branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          src="android-agent/app/build/outputs/apk/release/app-release-unsigned.apk"
-          test -s "$src"
-          cp "$src" /tmp/ANTHARES-AGENT-RELEASE-UNSIGNED.apk
-          test -s android-agent/app/build/outputs/apk/debug/app-debug.apk
-          cp android-agent/app/build/outputs/apk/debug/app-debug.apk /tmp/ANTHARES-AGENT-DEBUG-SIGNED.apk
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout --orphan apk-dist
-          git rm -rf .
-          mkdir -p dist
-          cp /tmp/ANTHARES-AGENT-RELEASE-UNSIGNED.apk dist/ANTHARES-AGENT-RELEASE-UNSIGNED.apk
-          cp /tmp/ANTHARES-AGENT-DEBUG-SIGNED.apk dist/ANTHARES-AGENT-DEBUG-SIGNED.apk
-          sha256sum dist/ANTHARES-AGENT-RELEASE-UNSIGNED.apk > dist/ANTHARES-AGENT-RELEASE-UNSIGNED.sha256
-          sha256sum dist/ANTHARES-AGENT-DEBUG-SIGNED.apk > dist/ANTHARES-AGENT-DEBUG-SIGNED.sha256
-          git add dist
-          git commit -m "chore(android-agent): publish unsigned release APK"
-          git push --force origin apk-dist
       - uses: actions/upload-artifact@v4
         with:
           name: anthares-android-agent-apks
