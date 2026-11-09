@@ -243,11 +243,25 @@ def main():
     # prove that Kwai has kept the remote transmission open for six hours.
     hls_preflight()
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True, args=[
-            "--no-sandbox", "--disable-dev-shm-usage",
-        ])
-        try:
+        # Reuse the encrypted Anthares Browser Hub profile restored by the
+        # workflow, preserving the exact cookies/IndexedDB that were saved.
+        # A profile on this ephemeral runner is owned by this invocation only.
+        profile_dir = os.getenv("KWAI_LIVE_PROFILE_DIR", "").strip()
+        if profile_dir:
+            if not os.path.isdir(profile_dir):
+                raise RuntimeError("KWAI_LIVE_ENCRYPTED_PROFILE_MISSING")
+            browser = None
+            context = playwright.chromium.launch_persistent_context(
+                profile_dir, headless=True, locale="pt-BR",
+                viewport={"width": 1440, "height": 1000},
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
+        else:
+            browser = playwright.chromium.launch(headless=True, args=[
+                "--no-sandbox", "--disable-dev-shm-usage",
+            ])
             context = studio_context(browser)
+        try:
             try:
                 page = context.new_page()
                 page.set_default_timeout(18000)
@@ -301,7 +315,8 @@ def main():
             finally:
                 context.close()
         finally:
-            browser.close()
+            if browser is not None:
+                browser.close()
 
 
 if __name__ == "__main__":
