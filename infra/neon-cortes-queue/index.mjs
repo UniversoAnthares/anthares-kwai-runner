@@ -170,7 +170,8 @@ async function kwaiAction(action,b,actor){
    "publication_started_at,confirmation_evidence FROM cortes_publications "+
    "WHERE id=$1 AND target_key=$2 LIMIT 1",[id,KWAI_TARGET]);
   if(rows.length!==1)return{ok:false,error:'KWAI_NO_POST_JOB_MISSING'};
-  const r=rows[0],prior=r.confirmation_evidence||{};
+  const r=rows[0],rawPrior=r.confirmation_evidence||{};
+  const prior=typeof rawPrior==='string'?JSON.parse(rawPrior):rawPrior;
   if(r.status==='queued'&&prior.kind==='kwai_historical_verified_public_absent_v1'&&
      prior.recovered_from_no_touch===true)return{ok:true,already_resolved:true,job:{id,status:'queued'}};
   if(r.status!=='uncertain'||r.lease_owner!=null||
