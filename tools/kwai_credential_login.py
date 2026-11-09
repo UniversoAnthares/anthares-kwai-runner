@@ -34,8 +34,11 @@ def edits(ns): return [n for n in ns if (n.get('class') or '').endswith('EditTex
 def is_password(n): return n.get('password')=='true' or 'password' in txt(n) or 'senha' in txt(n)
 def clear_and_type(n,value):
     if not tap(n): return False
-    adb('shell','input','keyevent','KEYCODE_MOVE_END')
-    for _ in range(160): adb('shell','input','keyevent','KEYCODE_DEL')
+    existing=n.get('text') or ''
+    if existing:
+        adb('shell','input','keyevent','KEYCODE_MOVE_END')
+        for _ in range(min(160,len(existing)+4)):
+            adb('shell','input','keyevent','KEYCODE_DEL')
     safe=value.replace('%','%25').replace(' ','%s').replace('&','\\&').replace('(','\\(').replace(')','\\)')
     adb('shell','input','text',safe);time.sleep(1);return True
 
@@ -78,6 +81,11 @@ if r != 0:
     env['KWAI_LOGIN_SETTLE']='5'
     print('KWAI_HOME_LOGIN_RELAUNCH_FALLBACK=1')
     r=subprocess.run(['python3','tools/kwai_home_login_state_machine.py'],env=env).returncode
+if r != 0:
+    # Existing native recovery uses only observed first-party Kwai controls.
+    env['KWAI_CAPTURE_MODE']='relaunch'
+    print('KWAI_EXISTING_NATIVE_RECOVERY=1')
+    r=subprocess.run(['python3','tools/kwai_login_surface_recovery_v2.py'],env=env).returncode
 if r != 0:
     print('KWAI_HOME_LOGIN_STATE_MACHINE_FAILED'); raise SystemExit(3)
 r=subprocess.run(['python3','tools/kwai_android_login_entry.py','auto'],env=env).returncode
