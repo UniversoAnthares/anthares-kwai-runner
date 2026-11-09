@@ -12,10 +12,10 @@ func TestControlPollDelay(t *testing.T) {
 		afterError bool
 		want       time.Duration
 	}{
-		{"cf idle", "https://anthares-ara-backup.anthares1.workers.dev", false, 15 * time.Second},
+		{"cf idle", "https://anthares-ara-backup.anthares1.workers.dev", false, 60 * time.Second},
 		{"cf fail", "https://anthares-ara-backup.anthares1.workers.dev", true, 60 * time.Second},
-		{"cf other", "https://anthares-control.anthares1.workers.dev", false, 15 * time.Second},
-		{"cf mixedcase", "https://TEST.Workers.Dev", false, 15 * time.Second},
+		{"cf other", "https://anthares-control.anthares1.workers.dev", false, 60 * time.Second},
+		{"cf mixedcase", "https://TEST.Workers.Dev", false, 60 * time.Second},
 		{"vercel idle", "https://anthares-ara-vercel-reserve.vercel.app", false, 2 * time.Second},
 		{"vercel fail", "https://anthares-ara-vercel-reserve.vercel.app", true, 3 * time.Second},
 		{"malformed", "no URL", false, 2 * time.Second},
