@@ -27,10 +27,24 @@ jobs:
     steps:
       - name: Download public GitLab canonical tests without GitLab runners
         shell: bash
+        env:
+          AOI_EXACT_SOURCE_SHA: ${{ inputs.gitlab_sha }}
         run: |
           set -euo pipefail
           git clone --quiet --depth 1 --single-branch --branch main \
             https://gitlab.com/UniversoAnthares/anthares-kwai-runner.git source
+          if [ -n "$AOI_EXACT_SOURCE_SHA" ]; then
+            if [[ ! "$AOI_EXACT_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::GITLAB_ORIGINAL_SHA_INVALID"
+              exit 1
+            fi
+            if ! git -C source fetch --quiet --depth 1 origin "$AOI_EXACT_SOURCE_SHA"; then
+              echo "::error::GITLAB_ORIGINAL_SHA_UNAVAILABLE"
+              exit 1
+            fi
+            git -C source checkout --quiet --detach "$AOI_EXACT_SOURCE_SHA"
+            test "$(git -C source rev-parse HEAD)" = "$AOI_EXACT_SOURCE_SHA" || exit 1
+          fi
           echo "GITLAB_SOURCE_SHA=$(git -C source rev-parse HEAD)"
       - name: Nonmutating Test Hub preflight
         shell: bash
