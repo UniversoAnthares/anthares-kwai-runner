@@ -102,6 +102,10 @@ def main():
             return 0
         receipt = {"id": str(job["id"]), "lease_generation": int(job["lease_generation"])}
         params = stage_metadata(job)
+        # MacroDroid can consume a webhook query either as existing global
+        # variables or as a dictionary. Support both import versions while the
+        # Android receiver is being promoted, with identical validated values.
+        params.update({f"kw09_stage_q({key})": value for key, value in tuple(params.items())})
         with urlopen(Request(webhook + "?" + urlencode(params), method="GET"),
                      timeout=20) as response:
             if response.status != 200:
