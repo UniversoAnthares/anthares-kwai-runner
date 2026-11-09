@@ -6,8 +6,9 @@ case "${1:-}" in
   acquire)
     bash kwai_vault_install.sh
     adb shell pm grant com.kwai.video android.permission.POST_NOTIFICATIONS 2>/dev/null || true
-    bash kwai_session_state.sh restore || true
-    if KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py >kwai-mobile-auth-proof.txt 2>&1; then
+    restored=0
+    if bash kwai_session_state.sh restore; then restored=1; fi
+    if [ "$restored" = 1 ] && KWAI_EXPECTED_ACCOUNT="$KWAI_EXPECTED_ACCOUNT" python3 kwai_auth_probe.py >kwai-mobile-auth-proof.txt 2>&1; then
       echo KWAI_MOBILE_RESTORED_AUTH_ALREADY=1 | tee -a kwai-mobile-auth-proof.txt
     else
       python3 tools/kwai_credential_login.py | tee kwai-mobile-login.txt
