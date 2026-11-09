@@ -71,6 +71,14 @@ env.setdefault('KWAI_LOGIN_MODE','plain')
 env.setdefault('KWAI_LOGIN_SETTLE','3')
 r=subprocess.run(['python3','tools/kwai_home_login_state_machine.py'],env=env).returncode
 if r != 0:
+    # The existing semantic route already supports one genuine Android
+    # relaunch path. Retry only a pre-login navigation failure, never a
+    # rejected password, OTP challenge or attempted publication.
+    env['KWAI_LOGIN_MODE']='relaunch-before-login'
+    env['KWAI_LOGIN_SETTLE']='5'
+    print('KWAI_HOME_LOGIN_RELAUNCH_FALLBACK=1')
+    r=subprocess.run(['python3','tools/kwai_home_login_state_machine.py'],env=env).returncode
+if r != 0:
     print('KWAI_HOME_LOGIN_STATE_MACHINE_FAILED'); raise SystemExit(3)
 r=subprocess.run(['python3','tools/kwai_android_login_entry.py','auto'],env=env).returncode
 if r != 0:
