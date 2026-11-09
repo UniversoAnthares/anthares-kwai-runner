@@ -86,13 +86,23 @@ def create_rtmp_room(page) -> str:
     if not owner_authorized(page):
         raise RuntimeError("KW12_EXPECTED_STUDIO_OWNER_NOT_AUTHORIZED")
     page.get_by_role("button", name=re.compile(r"criar tr[aá]fego", re.I)).first.click()
-    page.wait_for_timeout(500)
-    mode = page.get_by_text(re.compile(
-        r"transmiss[aã]o ao vivo via envio de transmiss[aã]o", re.I), exact=False)
-    if not mode.count():
-        raise RuntimeError("KW12_RTMP_MODE_UNAVAILABLE")
-    mode.first.click()
     page.wait_for_timeout(650)
+    # Studio keeps a *hidden* dialog titled "Transmissão ao vivo via envio
+    # de transmissão" mounted on the page. A global text locator selected
+    # that hidden title and hung, even with a valid authenticated session.
+    # Restrict mode selection to the active dialog, never the hidden one.
+    active_dialog = page.locator(".el-dialog:visible")
+    if active_dialog.count() != 1:
+        raise RuntimeError("KW12_RTMP_CREATION_DIALOG_NOT_VISIBLE")
+    mode = active_dialog.get_by_text(re.compile(
+        r"transmiss[aã]o ao vivo via envio de transmiss[aã]o", re.I),
+        exact=False)
+    if mode.count() and mode.first.is_visible():
+        mode.first.click()
+        page.wait_for_timeout(650)
+    elif not (page.locator('input[type="text"]:visible').count()
+              and page.locator('input[type="file"]').count()):
+        raise RuntimeError("KW12_RTMP_MODE_NOT_SELECTABLE")
     fields = page.locator('input[type="text"]:visible')
     if not fields.count():
         raise RuntimeError("KW12_ROOM_TITLE_FIELD_MISSING")
