@@ -10,6 +10,8 @@ import (
 // controlPollDelay preserves the normal fast path for non-Cloudflare controllers.
 // Cloudflare Workers Free charges each incoming request, even cached empty polls.
 // Keep the idle/error pacing in the client so requests never reach the Worker.
+// A 60-second fallback poll cuts idle Worker requests by 75%; authenticated
+// WebSocket push remains the immediate-delivery primary transport.
 func controlPollDelay(controlURL string, afterError bool) time.Duration {
 	endpoint, err := url.Parse(controlURL)
 	isWorkers := err == nil && endpoint.Scheme == "https" &&
@@ -18,7 +20,7 @@ func controlPollDelay(controlURL string, afterError bool) time.Duration {
 		if afterError {
 			return 60 * time.Second
 		}
-		return 15 * time.Second
+		return 60 * time.Second
 	}
 	if afterError {
 		return 3 * time.Second
