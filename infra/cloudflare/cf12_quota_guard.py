@@ -273,17 +273,26 @@ def restore_yesterday(cloudflare_token, github_token, state, current_date):
         print("CF12_RESTORED " + script, flush=True)
     if state["date"] != current_date:
         previous_day = state["date"]
-        details = "CF12_DAILY_SUMMARY " + json.dumps({
+        summary = {
             "utc_day": previous_day,
             "last_count_sample": int(state.get("last_count") or 0),
             "health_probes": int(state.get("health_probes") or 0),
             "observed_1027": int(state.get("observed_1027") or 0),
             "sample_errors": int(state.get("sample_errors") or 0)
-        }, sort_keys=True)
-        notify(github_token, dt.datetime.now(dt.timezone.utc), "daily_summary",
-               int(state.get("last_count") or 0), details)
+        }
+        # Retain acceptance evidence in the control issue's state rather than
+        # commenting on every normal day (which generates notification emails).
+        summaries = state.get("daily_summaries") or {}
+        if not isinstance(summaries, dict):
+            raise RuntimeError("CF12_DAILY_HISTORY_INVALID")
+        summaries[previous_day] = summary
         state = empty_state(current_date)
+        state["daily_summaries"] = {
+            day: summaries[day] for day in sorted(summaries)[-14:]
+        }
         persist_state(github_token, state)
+        print("CF12_DAILY_ARCHIVED " + json.dumps(summary, sort_keys=True),
+              flush=True)
     return state
 
 

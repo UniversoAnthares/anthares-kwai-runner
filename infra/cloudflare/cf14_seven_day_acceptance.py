@@ -132,6 +132,25 @@ def probe_summaries(gh_token):
                 records[str(row["utc_day"])] = row
         if len(comments) < 100:
             break
+    # New CF12 reports are kept in the issue body to avoid daily email alerts.
+    # Previously published comment summaries remain valid for the same window.
+    issue = github("GET", "/repos/" + REPO + "/issues/" + str(QUOTA_ISSUE), gh_token)
+    line = next((entry[len("CF12_STATE_JSON:"):]
+                 for entry in str(issue.get("body") or "").splitlines()
+                 if entry.startswith("CF12_STATE_JSON:")), None)
+    if line is None:
+        raise RuntimeError("CF14_CF12_STATE_UNAVAILABLE")
+    try:
+        state = json.loads(line)
+    except ValueError:
+        raise RuntimeError("CF14_CF12_STATE_INVALID") from None
+    stored = state.get("daily_summaries") or {}
+    if not isinstance(stored, dict):
+        raise RuntimeError("CF14_DAILY_HISTORY_INVALID")
+    for day, row in stored.items():
+        if not isinstance(row, dict) or row.get("utc_day") != day:
+            raise RuntimeError("CF14_DAILY_HISTORY_INVALID")
+        records[day] = row
     return records
 
 
