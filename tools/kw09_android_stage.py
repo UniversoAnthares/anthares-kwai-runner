@@ -7,6 +7,7 @@ Android receives public media coordinates through an authenticated MacroDroid
 webhook. The phone-side macro MUST be stage-only: no Kwai share/post action.
 """
 import hashlib
+import json
 import os
 import re
 import sys
@@ -54,6 +55,11 @@ def source_content_sha256(source_url):
 
 def stage_metadata(job):
     payload = job.get("payload") or {}
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (ValueError, TypeError) as exc:
+            raise QueueError("KW09_STAGE_PAYLOAD_INVALID") from exc
     if not isinstance(payload, dict):
         raise QueueError("KW09_STAGE_PAYLOAD_INVALID")
     ident = str(job.get("id") or "")
