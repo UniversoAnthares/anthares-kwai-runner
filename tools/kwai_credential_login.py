@@ -43,8 +43,10 @@ def exact_button(ns,words):
     pats={w.casefold() for w in words}
     c=[]
     for n in ns:
-        t=((n.get('text') or '')+' '+(n.get('content-desc') or '')).strip().casefold()
-        if t in pats and bounds(n): c.append(n)
+        labels=[(n.get('text') or '').strip().casefold(),
+                (n.get('content-desc') or '').strip().casefold()]
+        if any(label in pats for label in labels if label) and bounds(n):
+            c.append(n)
     return c[-1] if c else None
 
 def challenge(ns):
@@ -81,10 +83,23 @@ if email_field is None:
     print('KWAI_ACCOUNT_FIELD_NOT_VERIFIED')
     raise SystemExit(3)
 if not clear_and_type(email_field,LOGIN): raise SystemExit(3)
-ns=snap(); b=exact_button(ns,('Next','Continue','Avançar','Continuar'))
-if b: tap(b)
-else: adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(1)
-state,ns=wait_password_or_challenge()
+ns=snap()
+if any(is_password(n) for n in edits(ns)):
+    state='password'
+else:
+    b=exact_button(ns,('Next','Continue','Avançar','Continuar',
+                       'Use password','Usar senha','Log in','Login','Sign in','Entrar'))
+    if b: tap(b)
+    else: adb('shell','input','keyevent','KEYCODE_ENTER');time.sleep(1)
+    state,ns=wait_password_or_challenge()
+    if state=='stuck':
+        # Retry once only if the live native form exposes an exact
+        # first-party submit action. Never activate OAuth or guess taps.
+        b=exact_button(ns,('Next','Continue','Avançar','Continuar',
+                           'Use password','Usar senha','Log in','Login','Sign in','Entrar'))
+        if b:
+            tap(b)
+            state,ns=wait_password_or_challenge(seconds=8)
 if state=='challenge': print('KWAI_LOGIN_CHALLENGE_AFTER_ACCOUNT'); raise SystemExit(6)
 if state!='password': print('KWAI_ACCOUNT_STEP_DID_NOT_ADVANCE'); raise SystemExit(3)
 
