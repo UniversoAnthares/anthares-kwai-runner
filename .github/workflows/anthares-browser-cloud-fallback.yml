@@ -178,10 +178,23 @@ jobs:
           done
           test -n "$url" || { echo "KW12_CLOUDFLARE_TUNNEL_UNAVAILABLE"; exit 1; }
           printf '%s\n' "$url" > "$PROFILE_DIR/novnc_public_origin"
-          test "$(curl -s -o /dev/null -w '%{http_code}' "$url/novnc/login")" = "200" || {
+          # Cloudflare Quick Tunnel may announce a URL before the edge route is live.
+          # Wait for the authenticated gateway; do not discard a working tunnel on initial 502.
+          gateway_ready=0
+          for attempt in $(seq 1 90); do
+            code="$(curl --connect-timeout 5 --max-time 8 -s -o /dev/null -w '%{http_code}' "$url/novnc/login" || true)"
+            if [ "$code" = "200" ]; then
+              gateway_ready=1
+              echo "KW12_AUTHENTICATED_BROWSER_GATEWAY_READY=1"
+              break
+            fi
+            sleep 2
+          done
+          if [ "$gateway_ready" != "1" ]; then
             echo "KW12_AUTHENTICATED_BROWSER_GATEWAY_UNAVAILABLE"
+            tail -n 20 /tmp/tunnel.log | sed -E 's/https?:\/\/[^ ]+/[REDACTED_URL]/g'
             exit 1
-          }
+          fi
           echo "KW12_SECURE_NOVNC_URL=${url}/novnc/once/${{ steps.creds.outputs.manual }}"
           echo "KW12_BROWSER_GATEWAY_READY=1"
           minutes="$KEEP"; [ "$minutes" -gt 45 ] && minutes=45; [ "$minutes" -lt 1 ] && minutes=1
