@@ -61,7 +61,15 @@ def recent_qualifying_failure(project_id):
     for p in pipelines:
         stamp = dt.datetime.fromisoformat(p["created_at"].replace("Z", "+00:00"))
         if (now - stamp).total_seconds() > WINDOW_MINUTES * 60:
-            break
+            # Recover one independently verified, terminal quota failure from
+            # the existing backlog. Never reopen the global time window.
+            exact_backlog = (
+                str(project_id) == "87307248"
+                and p.get("id") == 3010066125
+                and p.get("sha") == "27beeff7fba0341ae0ebb2ee681d7de975a56597"
+            )
+            if not exact_backlog:
+                break
         if (p.get("ref") != "main" or not p.get("sha") or
                 p.get("status") not in
                 ("failed","canceled","running","pending","created","preparing","waiting_for_resource")):

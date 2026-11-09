@@ -45,6 +45,33 @@ class QuotaWatcherContract(unittest.TestCase):
             self.assertIsNone(mod.recent_qualifying_failure("87361776"))
 
 
+    def test_single_real_terminal_quota_backlog_is_eligible(self):
+        historical = "2026-10-30T19:38:08Z"
+        original = {
+            "id": 3010066125,
+            "ref": "main",
+            "sha": "27beeff7fba0341ae0ebb2ee681d7de975a56597",
+            "status": "failed",
+            "created_at": historical,
+        }
+        quota_job = {"failure_reason": "ci_quota_exceeded",
+                     "status": "failed", "started_at": None}
+        def fake_api(url, *args, **kwargs):
+            return [original] if "/pipelines?" in url else [quota_job]
+        with patch.object(mod, "api", side_effect=fake_api):
+            self.assertEqual(mod.recent_qualifying_failure("87307248")["id"], 3010066125)
+            self.assertIsNone(mod.recent_qualifying_failure("87361774"))
+            original["sha"] = "f" * 40
+            self.assertIsNone(mod.recent_qualifying_failure("87307248"))
+
+    def test_quota_backup_pins_original_sha_without_publisher(self):
+        from pathlib import Path
+        yaml_path = Path(__file__).resolve().parents[1] / ".github/workflows/gitlab-quota-fallback.yml"
+        content = yaml_path.read_text(encoding="utf-8")
+        self.assertIn("AOI_EXACT_SOURCE_SHA: ${{ inputs.gitlab_sha }}", content)
+        self.assertIn('git -C source checkout --quiet --detach "$AOI_EXACT_SOURCE_SHA"', content)
+        self.assertNotIn("cortes_youtube_shorts_cloud.py", content)
+
     def test_timeout_retries_only_safe_read(self):
         class Response:
             status = 200
