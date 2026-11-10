@@ -91,12 +91,23 @@ def stage_metadata(job):
     # The Android must receive a real content checksum before fetching.
     if not sha:
         sha = source_content_sha256(url)
+    title = str(payload.get("video_title") or payload.get("title") or "").strip()
+    title = re.sub(r"\\s*[●|]\\s*Universo Anthares\\s*$", "", title, flags=re.IGNORECASE).strip()
+    title = " ".join(title.split())
+    if not (15 <= len(title) <= 180):
+        raise QueueError("KW09_STAGE_CAPTION_INVALID")
+    caption = title + " www.anthares.us - Universo Anthares"
+    identity_sha = str(payload.get("media_sha256") or job.get("media_sha256") or "").lower()
+    if not re.fullmatch(r"[a-f0-9]{64}", identity_sha):
+        raise QueueError("KW09_STAGE_DISPATCH_SHA_INVALID")
     return {
         "kw09_mode": "stage_only",
         "kw09_job_id": ident,
         "kw09_generation": str(gen),
         "kw09_video_url": url,
         "kw09_expected_sha256": sha,
+        "kw09_caption": caption,
+        "kw09_dispatch_sha256": identity_sha,
         "kw09_expected_account": "lucasrosalem",
     }
 
