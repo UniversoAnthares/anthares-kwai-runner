@@ -63,6 +63,7 @@ def build_command(source, destination, seconds):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--preflight", action="store_true")
+    p.add_argument("--dry-encode", action="store_true", help="Validate encoding to null output, without TikTok")
     p.add_argument("--seconds", type=int, default=600)
     args = p.parse_args()
     source = validate_source(os.getenv("ANTHARES_LIVE_HLS_URL", DEFAULT_SOURCE))
@@ -71,6 +72,20 @@ def main():
     source_preflight(source)
     print("ANTHARES_HLS_PREFLIGHT_OK=1", flush=True)
     if args.preflight:
+        return 0
+    if args.dry_encode:
+        # Run the full encoding graph against the live HLS source, without RTMP.
+        # Never open or log any TikTok credential in this mode.
+        if not 3 <= args.seconds <= 20:
+            raise RuntimeError("dry_encode_duration_out_of_range")
+        command = build_command(source, "dry-run", args.seconds)
+        command[-3:] = ["-f", "null", "-"]
+        with open(os.devnull, "wb") as sink:
+            proc = subprocess.run(command, stdout=sink, stderr=sink,
+                                  timeout=args.seconds + 45, check=False)
+        if proc.returncode:
+            raise RuntimeError("dry_encode_failed")
+        print("ANTHARES_DRY_ENCODE_OK=1", flush=True)
         return 0
     if os.getenv("TIKTOK_LIVE_ACCOUNT_AUTHORIZED") != "true":
         raise RuntimeError("tiktok_account_authorization_required")
