@@ -92,7 +92,7 @@ def stage_metadata(job):
     if not sha:
         sha = source_content_sha256(url)
     title = str(payload.get("video_title") or payload.get("title") or "").strip()
-    title = re.sub(r"\\s*[●|]\\s*Universo Anthares\\s*$", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"\s*[●|]\s*Universo Anthares\s*$", "", title, flags=re.IGNORECASE).strip()
     title = " ".join(title.split())
     if not (15 <= len(title) <= 180):
         raise QueueError("KW09_STAGE_CAPTION_INVALID")
