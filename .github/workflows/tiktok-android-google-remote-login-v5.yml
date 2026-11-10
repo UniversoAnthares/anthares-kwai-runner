@@ -84,11 +84,8 @@ jobs:
           umask 077
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"; ADB="$SDK/platform-tools/adb"
           export ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
-          cleanup() {
-            "$ADB" -s emulator-5554 emu kill >/dev/null 2>&1 || true
-            rm -f /tmp/android-google-public.pem
-          }
-          trap cleanup EXIT
+          # The emulator remains running during the encrypted-artifact handoff.
+          # Cleanup occurs only after the owner login window ends.
           password="$(openssl rand -hex 22)"
           echo 'ANDROID_REMOTE_GUI_PASSWORD_CREATED=1'
           export DISPLAY=:99
@@ -190,3 +187,11 @@ jobs:
             sleep 12
           done
           echo ANDROID_REMOTE_LOGIN_WINDOW_ENDED=1
+      - name: Close ephemeral Android session
+        if: always()
+        shell: bash
+        run: |
+          ADB="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb"
+          "$ADB" -s emulator-5554 emu kill >/dev/null 2>&1 || true
+          rm -f /tmp/android-google-public.pem /tmp/android-google-ciphertext.b64
+          echo ANDROID_REMOTE_EPHEMERAL_SESSION_ENDED=1
