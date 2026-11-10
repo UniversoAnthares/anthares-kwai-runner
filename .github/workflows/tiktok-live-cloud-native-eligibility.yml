@@ -81,44 +81,12 @@ jobs:
           else
             echo TIKTOK_OFFICIAL_NATIVE_APK=UNAVAILABLE_USE_GOOGLE_PLAY
             "$ADB" -s emulator-5554 shell am start -a android.intent.action.VIEW -d 'market://details?id=com.zhiliaoapp.musically' com.android.vending >/dev/null || { echo TIKTOK_GOOGLE_PLAY=NOT_AVAILABLE; exit 46; }
-            sleep 12
-            "$ADB" -s emulator-5554 shell uiautomator dump /sdcard/tiktok-market.xml >/dev/null 2>&1 || true
-            "$ADB" -s emulator-5554 exec-out cat /sdcard/tiktok-market.xml > /tmp/tiktok-market.xml || true
-            python3 - <<'PY'
-          from pathlib import Path
-          import re,xml.etree.ElementTree as ET
-          p=Path('/tmp/tiktok-market.xml')
-          if not p.exists() or p.stat().st_size<200:
-              print('TIKTOK_GOOGLE_PLAY=UI_UNAVAILABLE'); raise SystemExit(2)
-          try: root=ET.fromstring(p.read_bytes())
-          except ET.ParseError:
-              print('TIKTOK_GOOGLE_PLAY=UI_INVALID'); raise SystemExit(2)
-          items=[(n.attrib.get('text','')+' '+n.attrib.get('content-desc','')).strip().lower() for n in root.iter('node')]
-          labels=' '.join(items)
-          needs_login=bool(re.search(r'\\b(sign in|fazer login|entrar|add account|adicionar conta)\\b',labels))
-          print('TIKTOK_GOOGLE_PLAY_LOGIN_REQUIRED='+str(needs_login).lower())
-          found=False
-          for n in root.iter('node'):
-              label=(n.attrib.get('text','')+' '+n.attrib.get('content-desc','')).strip().lower()
-              if label in ('install','instalar','instalar app'):
-                  bounds=n.attrib.get('bounds','')
-                  m=re.match(r'\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]',bounds)
-                  if m:
-                      x1,y1,x2,y2=map(int,m.groups())
-                      Path('/tmp/tiktok-market-tap').write_text(f'{(x1+x2)//2} {(y1+y2)//2}')
-                      found=True
-                      break
-          print('TIKTOK_GOOGLE_PLAY_INSTALL_CONTROL='+str(found).lower())
-          PY
-            if [ -f /tmp/tiktok-market-tap ]; then
-              read -r ix iy </tmp/tiktok-market-tap
-              "$ADB" -s emulator-5554 shell input tap "$ix" "$iy"
-              for i in $(seq 1 40); do
-                if "$ADB" -s emulator-5554 shell pm path "$package" | grep -q '^package:'; then break; fi
-                sleep 5
-              done
+            export ANDROID_ADB="$ADB"
+            python3 tools/tiktok_google_play_ui_wait.py
+            if ! "$ADB" -s emulator-5554 shell pm path "$package" | grep -q '^package:'; then
+              echo TIKTOK_GOOGLE_PLAY=APP_NOT_INSTALLED_AFTER_UI_DIAGNOSIS
+              exit 47
             fi
-            "$ADB" -s emulator-5554 shell pm path "$package" | grep -q '^package:' || { echo TIKTOK_GOOGLE_PLAY=OFFICIAL_INSTALL_REQUIRES_ACCOUNT_OR_UNAVAILABLE; exit 47; }
           fi
           echo TIKTOK_OFFICIAL_NATIVE_APP=INSTALLED
           "$ADB" -s emulator-5554 shell monkey -p "$package" -c android.intent.category.LAUNCHER 1 >/dev/null
