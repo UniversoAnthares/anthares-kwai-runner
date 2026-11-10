@@ -104,8 +104,16 @@ def home(s,preserve_upload=False):
   adb(s,'shell','monkey','-p',PKG,'-c','android.intent.category.LAUNCHER','1',check=False,timeout=25)
  time.sleep(3)
 def latest(s,prefix,preserve_upload=False):
- home(s,preserve_upload=preserve_upload); _,tab,_=wait(s,RID_PROFILE,prefix+'-home',25); tap(s,tab); time.sleep(4)
- root,user,px=wait(s,RID_USER,prefix+'-profile',30); account=(user.attrib.get('text') or '').strip().lstrip('@').lower()
+ home(s,preserve_upload=preserve_upload)
+ for attempt in range(2):
+  _,tab,_=wait(s,RID_PROFILE,prefix+'-home-'+str(attempt),25)
+  tap(s,tab); time.sleep(4)
+  try:
+   root,user,px=wait(s,RID_USER,prefix+'-profile-'+str(attempt),12 if attempt==0 else 30)
+   break
+  except E as exc:
+   if attempt or not str(exc).startswith('missing:'+RID_USER): raise
+ account=(user.attrib.get('text') or '').strip().lstrip('@').lower()
  if account!=ACCOUNT: raise E('profile-account:'+account)
  thumbs=[n for n in rid(root,RID_THUMB) if n.attrib.get('clickable')=='true' and center(n.attrib.get('bounds',''))]
  if not thumbs: raise E('no-published-thumb')
