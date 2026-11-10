@@ -34,7 +34,13 @@ async function nf(env,path,{method="GET",body}={}){
     const r=await (env.TIKTOK_WORKER ? env.TIKTOK_WORKER.fetch(NF_BASE+path,init) : fetch(NF_BASE+path,init));let d={};try{d=await r.json();}catch{d={ok:false,error:"invalid_upstream_json"};}d._status=r.status;return d;
   }catch(err){return {ok:false,error:"northflank_browser_unavailable",detail:String(err?.message||err).slice(0,160),_status:503};}
 }
-async function ensureStarted(env){const state=await readPlainState(env);return nf(env,"/interactive-browser/start",{method:"POST",body:state?{state}:{}});}
+async function ensureStarted(env){
+  const current=await nf(env,"/interactive-browser/status");
+  if(current.ok&&current.active&&current.responsive!==false)return {ok:true,active:true,starting:false};
+  if(current.ok&&current.starting)return {ok:true,active:false,starting:true};
+  const state=await readPlainState(env);
+  return nf(env,"/interactive-browser/start-async",{method:"POST",body:state?{state}:{}});
+}
 async function shot(env){const d=await nf(env,"/interactive-browser/screenshot");return d.ok?d:null;}
 function normalizeState(input){if(!input||typeof input!=="object")throw new Error("invalid_state");const cookies=(Array.isArray(input.cookies)?input.cookies:[]).filter(c=>c&&c.name&&typeof c.value==="string"&&String(c.domain||"").toLowerCase().includes("tiktok.com")).slice(0,256);if(!cookies.length)throw new Error("no_tiktok_cookies");const origins=Array.isArray(input.origins)?input.origins.slice(0,16):[];return {schema:"anthares.tiktok-browser-state.v1",cookies,origins,saved_at:new Date().toISOString()};}
 
@@ -45,7 +51,7 @@ function browserPage(message="",screen=null,verify=null){
 }
 
 async function verifySession(env){
-  const started=await ensureStarted(env);if(!started.ok)return {ok:false,error:started.error||"start_failed"};
+  const started=await ensureStarted(env);if(!started.ok||started.starting)return {ok:false,starting:!!started.starting,error:started.starting?"browser_starting":started.error||"start_failed"};
   await nf(env,"/interactive-browser/navigate",{method:"POST",body:{url:"https://www.tiktok.com/@universo.anthares"}});await new Promise(r=>setTimeout(r,1800));
   const p=await nf(env,"/interactive-browser/tiktok-evidence");const profile=p.evidence||{};const identity=!!(!profile.login_gate&&profile.account_marker&&String(profile.host||"").endsWith("tiktok.com"));
   let studio={};let studioOk=false;
@@ -65,7 +71,7 @@ export default {
       const status=await nf(env,"/interactive-browser/status");const screen=status.active?await shot(env):null;return html(browserPage(status.active?"Sessão Northflank ativa.":"Sessão pronta para iniciar.",screen));
     }
     if(url.pathname==="/owner/tiktok/start"&&request.method==="POST"){
-      const r=await ensureStarted(env);return html(browserPage(r.ok?"Chromium iniciado no Northflank.":`Falha: ${r.error||"desconhecida"}`,r.ok?await shot(env):null),r.ok?200:503);
+      const r=await ensureStarted(env);return html(browserPage(r.starting?"Chromium iniciando no Northflank. Atualize a imagem para acompanhar.":r.ok?"Chromium iniciado no Northflank.":`Falha: ${r.error||"desconhecida"}`,r.active?await shot(env):null),r.ok?200:503);
     }
     if((url.pathname==="/owner/tiktok/live"||url.pathname==="/owner/tiktok/screen")&&request.method==="POST"){
       const r=await ensureStarted(env);const screen=r.ok?await shot(env):null;return html(browserPage(screen?"Imagem atualizada.":`Falha: ${r.error||"screenshot"}`,screen),screen?200:503);
