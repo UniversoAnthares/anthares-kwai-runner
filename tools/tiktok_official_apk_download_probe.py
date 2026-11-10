@@ -51,6 +51,7 @@ def main():
                     status=response.status if response else 0
                     print("TIKTOK_APK_FIRST_PARTY_PAGE_HTTP="+str(status),flush=True)
                     print("TIKTOK_APK_FIRST_PARTY_DOMAIN_OK="+str(host=="tiktok.com" or host.endswith(".tiktok.com")).lower(),flush=True)
+                    print("TIKTOK_APK_REDIRECT_HOST="+host[:100],flush=True)
                     if not (host=="tiktok.com" or host.endswith(".tiktok.com")) or status in (401,403,429):
                         print("TIKTOK_APK_PROBE=OFFICIAL_PAGE_UNAVAILABLE",flush=True)
                         return 0
