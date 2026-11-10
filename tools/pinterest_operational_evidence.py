@@ -29,6 +29,8 @@ def inspect(raw: str, *, event: str, run_id: str, conclusion: str) -> dict:
     elif accepted and scheduled and consistent:result="SCHEDULED_NOT_PUBLISHED"
     elif recent.get("pinterest_cloud")=="BACKPRESSURE_BUFFER":result="WAITING_BUFFER_DELIVERY"
     elif recent.get("pinterest_cloud")=="COOLDOWN_HTTP_429":result="RATE_LIMIT_ISOLATED"
+    elif (recent.get("pinterest_cloud")=="RECONCILE_ONLY" and
+          recent.get("new_posts")==0 and consistent):result="PASS_NO_NEW_PIN"
     elif accepted and consistent:result="PASS_NO_NEW_PIN"
     else:result="UNVERIFIED_OR_FAILED"
     return {
