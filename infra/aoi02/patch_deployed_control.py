@@ -96,7 +96,7 @@ async function aoi02RuntimeSecrets(req, env) {
     const profile = await response.json();
     if (Number(profile?.id) !== 1)
       return reply(503, {ok: false, error: "wordpress_identity_mismatch"});
-  } catch { return reply(503, {ok: false, error: "wordpress_auth_transport_failed"}); }
+  } catch (e) { return reply(503, {ok: false, error: "wordpress_auth_transport_failed", diagnostic: String(e && e.name || "Unknown").slice(0,40)}); }
   return reply(200, {ok: true, values: {
     WP_SITE_URL: site, WP_USERNAME: username, WP_APP_PASSWORD: password
   }});
