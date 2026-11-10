@@ -1,9 +1,10 @@
 name: Kwai LIVE Cloud Executor
 on:
   schedule:
-    # A fixed six-hour cron can miss a renewal when room creation starts
-    # after the cron boundary; the state lock below prevents early restarts.
-    - cron: '*/30 * * * *'
+    # Off-peak minutes: GitHub may drop workflows scheduled at :00/:30.
+    # A 20-minute window allows the active room to be checked frequently and
+    # renews soon after the six-hour deadline; room state prevents duplicates.
+    - cron: '3,23,43 * * * *'
   workflow_dispatch:
     inputs:
       probe_studio_profile:
