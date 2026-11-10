@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
-from tools.pinterest_qa_cooldown_loop import assess, should_report
+from tools.pinterest_qa_cooldown_loop import assess, should_report, should_reopen_429_incident
+from tools.pinterest_operational_evidence import inspect
 
 
 class PinterestAutonomousQA(unittest.TestCase):
@@ -52,6 +53,21 @@ class PinterestAutonomousQA(unittest.TestCase):
         state, _ = assess({"worker_conclusion": "failure", "result": "PASS_NO_NEW_PIN"},
                           {"confirmed": 8}, {"active": False})
         self.assertEqual(state, "EXECUTION_FAILED")
+
+    def test_closed_quota_incident_not_reopened_by_queue_or_readonly(self):
+        for state in ("RETRY_UNTIL_CONFIRMED", "BUFFER_BACKPRESSURE",
+                      "EXECUTION_UNVERIFIED", "QA_VISIBILITY_UNAVAILABLE"):
+            self.assertFalse(should_reopen_429_incident("closed", state))
+        self.assertFalse(should_reopen_429_incident("open", "COOLDOWN_HTTP_429"))
+        self.assertTrue(should_reopen_429_incident("closed", "COOLDOWN_HTTP_429"))
+
+    def test_readonly_receipt_check_is_valid_without_new_pin(self):
+        raw = '{"pinterest_cloud":"RECONCILE_ONLY","posts_confirmed_this_run":0,"new_posts":0}'
+        proof = inspect(raw, event="workflow_dispatch", run_id="42816051468",
+                        conclusion="success")
+        self.assertEqual(proof["result"], "PASS_NO_NEW_PIN")
+        self.assertEqual(proof["new_public_pin_count"], 0)
+        self.assertFalse(proof["buffer_schedule_accepted"])
 
     def test_report_on_cooldown_change_but_no_comment_storm(self):
         now = datetime(2026, 10, 22, 18, 1, tzinfo=timezone.utc)
