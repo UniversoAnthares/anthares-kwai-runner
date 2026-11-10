@@ -135,13 +135,22 @@ async function kwaiPhysicalIdentity(request,action){
 }
 // KW-09: device-specific bearer for the existing secondary Kwai queue only.
 const KWAI_MOBILE_TOKEN_HASH='e67ce56a65791266af49f5318a85d35d8b78fcfcbf5fcb41ae0d4ae155da031e';
+// KW-09: independent, device-bound authorization for the primary account.
+// Store only a SHA-256 digest; the random token exists solely on the Redmi 9.
+const KWAI_MOBILE_PRIMARY_TOKEN_HASH='7dc4d0485f8472ac618ba000bad92739762e0cdb3c07c4514fd8df859f0740f8';
 async function kwaiMobileIdentity(request,action){
  if(request.method!=='POST'||!['kwai-physical-stats','kwai-lease','kwai-renew','kwai-start','kwai-confirm','kwai-fail'].includes(action))return null;
  const m=/^Bearer ([A-Za-z0-9_-]{43})$/.exec(request.headers.get('authorization')||'');
  if(!m)return null;
- const actual=Buffer.from(sha(m[1]),'hex'),expected=Buffer.from(KWAI_MOBILE_TOKEN_HASH,'hex');
- if(actual.length!==expected.length||!crypto.timingSafeEqual(actual,expected))return null;
- return {role:'kwai-mobile',workflow:'mobile:M2004J19C:universoanthares',platform:'kwai'};
+ const actual=Buffer.from(sha(m[1]),'hex');
+ const secondary=Buffer.from(KWAI_MOBILE_TOKEN_HASH,'hex');
+ const primary=Buffer.from(KWAI_MOBILE_PRIMARY_TOKEN_HASH,'hex');
+ if(actual.length!==32)return null;
+ if(crypto.timingSafeEqual(actual,secondary))
+  return {role:'kwai-mobile',workflow:'mobile:M2004J19C:universoanthares',platform:'kwai'};
+ if(crypto.timingSafeEqual(actual,primary))
+  return {role:'kwai-mobile-primary',workflow:'mobile:M2004J19C:lucasrosalem',platform:'kwai'};
+ return null;
 }
 // Kwai HA contract, default disabled. OIDC publisher identity and media readback
 // must be proven before promoting this shared Neon queue to production.
@@ -395,12 +404,13 @@ async function kwaiAction(action,b,actor){
  }
  const physical=actor.role==='kwai-physical'&&actor.workflow==='physical:DESKTOP-FTDK0HP';
  const cloud=actor.role==='kwai-publisher'&&actor.workflow==='cortes-kwai-cloud-publisher.yml';
- if(!physical&&!cloud)return{ok:false,error:'KWAI_PUBLISHER_ROLE_REQUIRED'};
+ const mobilePrimary=actor.role==='kwai-mobile-primary'&&actor.workflow==='mobile:M2004J19C:lucasrosalem';
+ if(!physical&&!cloud&&!mobilePrimary)return{ok:false,error:'KWAI_PUBLISHER_ROLE_REQUIRED'};
  if(b.target_key!==KWAI_TARGET||b.expected_account!=='lucasrosalem')
   return{ok:false,error:'KWAI_ACCOUNT_IDENTITY_MISMATCH'};
- const owner=physical?'physical_android:DESKTOP-FTDK0HP':'kwai-cloud:'+actor.workflow;
+ const owner=physical?'physical_android:DESKTOP-FTDK0HP':mobilePrimary?'mobile_android:M2004J19C:lucasrosalem':'kwai-cloud:'+actor.workflow;
  if(action==='kwai-physical-stats'){
-  if(!physical)return{ok:false,error:'KWAI_DEVICE_ONLY'};
+  if(!physical&&!mobilePrimary)return{ok:false,error:'KWAI_DEVICE_ONLY'};
   const rows=await query("SELECT status,count(*)::int AS n FROM cortes_publications WHERE target_key=$1 GROUP BY status",[KWAI_TARGET]);
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
   const usage=await query("SELECT count(*)::int AS n,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
@@ -475,6 +485,47 @@ async function kwaiAction(action,b,actor){
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_STALE_FENCE_OR_QUOTA'};
  }
  if(action==='kwai-confirm'){
+  if(mobilePrimary){
+   // The Android returns an official in-app Kwai share URL after pressing Publish.
+   // Resolve it independently on Neon; bind author, job, generation and source
+   // identity, and reject any URL already confirmed for a different job.
+   const short=String(b.remote_id||''),proof=b.confirmation_evidence||{};
+   const captured=Date.parse(String(proof.receipt_captured_at||''));
+   const now=Date.now();
+   if(!/^https:\/\/k\.kwai\.com\/p\/[A-Za-z0-9_-]{5,100}$/.test(short)||
+      proof.kind!=='kwai-mobile-official-share-v1'||proof.job_id!==id||
+      proof.account!=='lucasrosalem'||proof.share_url!==short||
+      !/^[a-f0-9]{64}$/.test(String(proof.media_sha256||''))||
+      !Number.isFinite(captured)||captured<now-900000||captured>now+15000)
+    return{ok:false,error:'KWAI_PRIMARY_MOBILE_OFFICIAL_RECEIPT_REQUIRED'};
+   const existing=await query("SELECT status,media_sha256,publication_started_at FROM cortes_publications WHERE id=$1 AND target_key=$2 AND lease_owner=$3 AND lease_generation=$4 LIMIT 1",
+    [id,KWAI_TARGET,owner,gen]);
+   if(existing.length!==1||existing[0].status!=='started'||
+      existing[0].media_sha256!==proof.media_sha256||
+      !existing[0].publication_started_at||
+      captured<new Date(existing[0].publication_started_at).getTime()-30000)
+    return{ok:false,error:'KWAI_PRIMARY_MOBILE_SOURCE_FENCE_INVALID'};
+   let actual;
+   try{
+    const response=await fetch(short,{redirect:'follow',
+      headers:{'User-Agent':'Mozilla/5.0'},signal:AbortSignal.timeout(15000)});
+    if(!response.ok)return{ok:false,error:'KWAI_PRIMARY_MOBILE_PUBLIC_LINK_UNAVAILABLE'};
+    actual=new URL(response.url);
+   }catch{return{ok:false,error:'KWAI_PRIMARY_MOBILE_PUBLIC_LINK_UNAVAILABLE'};}
+   const match=/^\/@lucasrosalem\/video\/([0-9]{16,21})$/.exec(actual.pathname);
+   const photo=actual.searchParams.get('photoId'),author=actual.searchParams.get('authorKwaiId');
+   if(actual.protocol!=='https:'||actual.host!=='www.kwai.com'||!match||
+      (photo&&photo!==match[1])||(author&&author!=='lucasrosalem'))
+    return{ok:false,error:'KWAI_PRIMARY_MOBILE_PUBLIC_ACCOUNT_MISMATCH'};
+   const canonical='https://www.kwai.com/@lucasrosalem/video/'+match[1];
+   const evidence={kind:'kwai_primary_mobile_official_receipt_v1',
+     account:'lucasrosalem',job_id:id,source_sha256:proof.media_sha256,
+     short_url:short,public_url:canonical,receipt_captured_at:proof.receipt_captured_at,
+     receipt_resolved_by:'neon-cortesqueue',verified_at:new Date().toISOString()};
+   const rows=await query("UPDATE cortes_publications SET status='confirmed',remote_id=$5,confirmation_evidence=$6::jsonb,lease_owner=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status='started' AND lease_owner=$3 AND lease_generation=$4 AND publication_started_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE d.target_key=$2 AND d.id<>$1 AND d.status='confirmed' AND d.remote_id=$5) RETURNING id,status,remote_id",
+    [id,KWAI_TARGET,owner,gen,canonical,JSON.stringify(evidence)]);
+   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_PRIMARY_MOBILE_STALE_FENCE_OR_DUPLICATE'};
+  }
   const proof=b.confirmation_evidence||{},remote=String(b.remote_id||'');
   if(physical){
    // The existing phone signs this request with its private RSA key.
