@@ -104,10 +104,14 @@ def create_rtmp_room(page) -> str:
     elif not (page.locator('input[type="text"]:visible').count()
               and page.locator('input[type="file"]').count()):
         raise RuntimeError("KW12_RTMP_MODE_NOT_SELECTABLE")
-    fields = page.locator('input[type="text"]:visible')
+    # The Studio list has visible date-filter inputs; filling the page's
+    # first text field corrupts the filter instead of setting the room title.
+    # Scope the title to the currently open creation dialog.
+    form = page.locator(".el-dialog:visible").last
+    fields = form.locator('input[type="text"]:visible')
     if not fields.count():
         raise RuntimeError("KW12_ROOM_TITLE_FIELD_MISSING")
-    fields.first.fill("Universo Anthares: Livros e Escrita")
+    fields.last.fill("Universo Anthares: Livros e Escrita")
     uploader = page.locator('input[type="file"]').last
     if not uploader.count():
         raise RuntimeError("KW12_ROOM_COVER_FIELD_MISSING")
@@ -339,6 +343,18 @@ def main() -> None:
                     reply = call(page, "stopLive", room)
                     if (reply.get("body") or {}).get("result") != 1 and room_status(page, room) == 1:
                         raise RuntimeError("KW12_PREVIOUS_ROOM_STILL_ACTIVE")
+                    # Studio may acknowledge stopLive before the room status is
+                    # committed. Wait for a terminal state before creating the
+                    # successor; avoids its "existing room" creation dialog.
+                    previous_closed = False
+                    for _ in range(18):
+                        page.wait_for_timeout(1000)
+                        current = room_status(page, room)
+                        if current in (2, 3, 4, 5):
+                            previous_closed = True
+                            break
+                    if not previous_closed:
+                        raise RuntimeError("KW12_PREVIOUS_ROOM_TERMINATION_NOT_CONFIRMED")
                 else:
                     # 0 can denote a room still being prepared. A numeric
                     # response on its own is never proof of expiry.
