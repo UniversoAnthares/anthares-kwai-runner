@@ -28,7 +28,7 @@ export async function gitlabProducerRole(req,audience) {
     ||claims.project_path!==PROJECT||claims.sub!==SUBJECT
     ||claims.ref!=='main'||claims.ref_type!=='branch'
     ||String(claims.ref_protected)!=='true'
-    ||!['push','web','schedule'].includes(claims.pipeline_source))return '';
+    ||!['push','web','schedule','api'].includes(claims.pipeline_source))return '';
   if(!Number.isInteger(claims.exp)||claims.exp<=now||claims.exp>now+3600
     ||!Number.isInteger(claims.iat)||claims.iat>now+60||claims.iat<now-600
     ||(claims.nbf!==undefined&&(!Number.isInteger(claims.nbf)||claims.nbf>now+60)))return '';
