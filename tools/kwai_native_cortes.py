@@ -58,9 +58,17 @@ def verify_device(s):
  return s
 def dump(s,name):
  EVID.mkdir(parents=True,exist_ok=True); remote=f'/data/local/tmp/{name}.xml'; local=EVID/(name+'.xml')
- adb(s,'shell','uiautomator','dump',remote,timeout=35,check=False); adb(s,'pull',remote,str(local),timeout=30)
- try: return ET.fromstring(local.read_bytes()),local
- except ET.ParseError as e: raise E(f'xml:{e}')
+ for attempt in range(3):
+  local.unlink(missing_ok=True)
+  adb(s,'shell','rm','-f',remote,timeout=10,check=False)
+  d=adb(s,'shell','uiautomator','dump',remote,timeout=35,check=False)
+  if d.returncode==0:
+   p=adb(s,'pull',remote,str(local),timeout=30,check=False)
+   if p.returncode==0 and local.is_file():
+    try: return ET.fromstring(local.read_bytes()),local
+    except ET.ParseError: pass
+  time.sleep(1)
+ raise E('ui-dump-unavailable:'+name)
 def rid(root,r):
  # Exact whitelisted UI variants; package installation name differs from view ids.
  known={
