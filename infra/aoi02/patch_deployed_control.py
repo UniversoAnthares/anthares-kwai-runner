@@ -39,7 +39,7 @@ async function aoi02SignedGitLab(req) {
       || claims.sub !== "project_path:UniversoAnthares/anthares-clipper:ref_type:branch:ref:main"
       || claims.ref !== "main" || claims.ref_type !== "branch"
       || String(claims.ref_protected) !== "true"
-      || !["push", "web", "schedule"].includes(claims.pipeline_source)
+      || !["push", "web", "schedule", "api"].includes(claims.pipeline_source)
       || !Number.isInteger(claims.exp) || claims.exp <= now || claims.exp > now + 3600
       || !Number.isInteger(claims.iat) || claims.iat > now + 60 || claims.iat < now - 600
       || (claims.nbf !== undefined && (!Number.isInteger(claims.nbf)
