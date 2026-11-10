@@ -223,11 +223,29 @@ def wait_for_studio_ingest(page, room: str) -> None:
 
 
 def start_from_official_studio_button(page, room: str) -> dict:
-    """Use the supported Studio start control after verified RTMP ingest.
-
-    The historical 12-hour transmitter started by clicking this control.
-    Calling startLive directly can omit validation performed by the page.
-    """
+    """Use only the actual live-start control, never the network speed-test button."""
+    page.reload(wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_timeout(1600)
+    labels = page.locator("button:visible").evaluate_all(
+        """els => els.map(e => (e.innerText || e.getAttribute('aria-label') || '')
+                              .trim()).filter(Boolean)""")
+    safe_labels = [re.sub(r"[^A-Za-zÀ-ÿ -]", "", str(x))[:55]
+                   for x in labels[:35]]
+    print("KW12_STUDIO_VISIBLE_BUTTONS=" +
+          json.dumps(safe_labels, ensure_ascii=False), flush=True)
+    status = room_status(page, room)
+    print("KW12_STUDIO_ROOM_STATUS_BEFORE_START=" + str(status), flush=True)
+    if status == 1:
+        return {"http": 200, "body": {"result": 1}}
+    candidates = page.get_by_role(
+        "button",
+        name=re.compile(r"(?:iniciar|começar|start).*(?:transmissão|ao vivo|live)"
+                        r"|(?:transmissão|ao vivo|live).*(?:iniciar|começar|start)",
+                        re.I))
+    if not candidates.count():
+        # A bare "Iniciar" in this page belongs to "Teste de velocidade
+        # da rede"; clicking it never calls cloudLive/startLive.
+        raise RuntimeError("KW12_STUDIO_LIVE_START_BUTTON_NOT_PRESENT")
     observed = {}
     def watch(response):
         if "/cloudLive/startLive" not in response.url:
@@ -239,22 +257,24 @@ def start_from_official_studio_button(page, room: str) -> dict:
         except (ValueError, RuntimeError):
             pass
     page.on("response", watch)
-    start_button = page.get_by_role(
-        "button", name=re.compile(r"iniciar|começar|start", re.I))
-    if not start_button.count() or not start_button.last.is_visible():
-        raise RuntimeError("KW12_STUDIO_OFFICIAL_START_BUTTON_MISSING")
-    if not start_button.last.is_enabled():
-        raise RuntimeError("KW12_STUDIO_OFFICIAL_START_BUTTON_DISABLED")
-    start_button.last.click()
-    deadline = time.monotonic() + 20
+    button = candidates.last
+    if not button.is_visible() or not button.is_enabled():
+        raise RuntimeError("KW12_STUDIO_LIVE_START_BUTTON_DISABLED")
+    button.click()
+    deadline = time.monotonic() + 15
     while not observed and time.monotonic() < deadline:
-        page.wait_for_timeout(350)
+        page.wait_for_timeout(400)
     if not observed:
         if room_status(page, room) == 1:
             return {"http": 200, "body": {"result": 1}}
+        dialogs = page.locator(".el-message-box:visible, .el-dialog:visible")
+        if dialogs.count():
+            text = dialogs.last.inner_text()[:220]
+            print("KW12_STUDIO_AFTER_START_DIALOG=" +
+                  re.sub(r"[^A-Za-zÀ-ÿ0-9: ,.?!-]", " ", text),
+                  flush=True)
         raise RuntimeError("KW12_STUDIO_OFFICIAL_START_RESULT_MISSING")
     return {"http": 200, "body": observed}
-
 
 def studio_confirmed_start(page, room: str) -> int:
     """Read the authoritative live start time from the Studio room API."""
@@ -275,13 +295,15 @@ def studio_confirmed_start(page, room: str) -> int:
     return started
 
 
-def align_hostinger_window(room: str, studio_start: int) -> None:
+def align_hostinger_window(room: str, studio_start: int, cycle_seconds: int = SIX_HOURS) -> None:
     """Keep Hostinger's stop time synchronized with Kwai's actual live start."""
     if not re.fullmatch(r"[0-9]{10,16}", room):
         raise RuntimeError("KW12_WINDOW_ROOM_INVALID")
     if not (1000000000 < studio_start < 9999999999):
         raise RuntimeError("KW12_WINDOW_TIME_INVALID")
-    end = studio_start + SIX_HOURS
+    if cycle_seconds not in (600, SIX_HOURS):
+        raise RuntimeError("KW12_CYCLE_DURATION_INVALID")
+    end = studio_start + cycle_seconds
     script = (
         "set -euo pipefail; umask 077; root=" + REMOTE + "; "
         'conf="$root/active-room.env"; '
@@ -308,11 +330,28 @@ def align_hostinger_window(room: str, studio_start: int) -> None:
         raise RuntimeError("KW12_HOSTINGER_WINDOW_ALIGNMENT_UNCONFIRMED")
 
 
+def cycle_plan(state: dict) -> tuple[int, int]:
+    """Exactly two 10-minute tests, then automatically resume six-hour windows."""
+    requested = os.environ.get("KW12_TEST_CYCLE_MINUTES", "0").strip()
+    if requested not in ("0", "10"):
+        raise RuntimeError("KW12_TEST_CYCLE_MINUTES_INVALID")
+    remaining = state.get("test_cycles_remaining", 0)
+    if isinstance(remaining, bool) or not isinstance(remaining, int) or not (0 <= remaining <= 2):
+        raise RuntimeError("KW12_TEST_CYCLES_STATE_INVALID")
+    if requested == "10":
+        return 600, 1
+    if remaining:
+        return 600, remaining - 1
+    return SIX_HOURS, 0
+
+
 def create_and_start(page, issue_id: int, state: dict) -> None:
     room = ""
     host_active = False
     live_active = False
     persisted = False
+    cycle_seconds, remaining_tests = cycle_plan(state)
+    print("KW12_REQUESTED_CYCLE_SECONDS=" + str(cycle_seconds), flush=True)
     try:
         room = create_rtmp_room(page)
         server, key = stream_endpoint(page, room)
@@ -345,15 +384,17 @@ def create_and_start(page, issue_id: int, state: dict) -> None:
         if good < 2:
             raise RuntimeError("KW12_STUDIO_LIVE_NOT_CONFIRMED")
         started_at = studio_confirmed_start(page, room)
-        align_hostinger_window(room, started_at)
+        align_hostinger_window(room, started_at, cycle_seconds)
         updated = {"version": 1, "status": "active", "room_id": room,
-                   "started_at": started_at, "renew_after": started_at + SIX_HOURS,
+                   "started_at": started_at, "renew_after": started_at + cycle_seconds,
+                   "cycle_seconds": cycle_seconds,
+                   "test_cycles_remaining": remaining_tests,
                    "cycle": int(state.get("cycle", 0)) + 1,
                    "hls_url": os.environ.get("ANTHARES_PUBLIC_HLS_URL", ""),
                    "mode": "rtmp_hostinger"}
         save_state(issue_id, updated)
         persisted = True
-        print("KW12_RTMP_SIX_HOUR_CYCLE_ACTIVE=1", flush=True)
+        print("KW12_RTMP_CYCLE_ACTIVE_SECONDS=" + str(cycle_seconds), flush=True)
         print("KW12_NEXT_RENEWAL_UNIX=" + str(updated["renew_after"]), flush=True)
     finally:
         if room and not persisted:
