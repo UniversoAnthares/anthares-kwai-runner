@@ -21,7 +21,7 @@ async function ownerCodeMatches(value,configured){
     const hex=Array.from(digest,b=>b.toString(16).padStart(2,"0")).join("");
     return sameSecret(hex,raw.toLowerCase());
   }
-  const standard=raw.replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"");
+  const standard=raw.replaceAll("+","-").replaceAll("/","_").replace(/=+$/,"");
   return /^[A-Za-z0-9_-]{43}$/.test(standard)&&sameSecret(b64url(digest),standard);
 }
 const ownerLoginPage=message=>`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Reserva | Proprietário</title></head><body style="font:16px system-ui;max-width:640px;margin:40px auto;padding:0 18px"><h1>Anthares Reserva</h1>${message?`<p role="alert">${message}</p>`:""}<form method="post" action="/owner/login"><label>Código do proprietário <input name="code" type="password" autocomplete="one-time-code" required maxlength="256"></label> <button type="submit">Entrar</button></form><p>Digite o código original utilizado para gerar o hash na Cloudflare. O hash não é um código de login.</p></body></html>`;
