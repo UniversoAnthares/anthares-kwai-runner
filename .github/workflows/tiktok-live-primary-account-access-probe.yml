@@ -1,0 +1,67 @@
+name: TikTok LIVE Primary Account Read-Only Access Probe
+on:
+  push:
+    branches: ['feature/tiktok-live-authorized-cloud-*']
+    paths:
+      - '.github/workflows/tiktok-live-primary-account-access-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: tiktok-live-primary-account-readonly
+  cancel-in-progress: false
+jobs:
+  inspect-primary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      TIKTOK_LIVE_STORAGE_STATE_FILE: ${{ runner.temp }}/tiktok-primary-session.json
+      TIKTOK_LIVE_EXPECTED_ACCOUNT: universo.anthares
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read existing primary TikTok session with authorized OIDC
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ARA_SHARED:-}" || { echo TIKTOK_PRIMARY_AUTH_SECRET_UNAVAILABLE=1; exit 20; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo TIKTOK_PRIMARY_OIDC_UNAVAILABLE=1; exit 21; }
+          sep='&'; [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *'?'* ]] || sep='?'
+          aud='https%3A%2F%2Fanthares-control.anthares1.workers.dev'
+          jwt="$(curl -fsSL --max-time 20 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}${sep}audience=${aud}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["value"])')"
+          echo "::add-mask::$jwt"
+          status="$(curl -sS -o "$RUNNER_TEMP/primary-session-response.json" -w '%{http_code}' --max-time 30 -H "Authorization: Bearer $jwt" https://anthares-control.anthares1.workers.dev/tiktok/session-state)"
+          echo "TIKTOK_PRIMARY_SESSION_HTTP=$status"
+          if [ "$status" != 200 ]; then
+            case "$status" in
+              401|403) echo 'TIKTOK_PRIMARY_SESSION_AUTH_DENIED=1' ;;
+              404) echo 'TIKTOK_PRIMARY_SESSION_ABSENT=1' ;;
+              429) echo 'TIKTOK_PRIMARY_PROVIDER_QUOTA_STOP=1' ;;
+              *) echo 'TIKTOK_PRIMARY_SESSION_UNAVAILABLE=1' ;;
+            esac
+            exit 41
+          fi
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          source=Path(os.environ['RUNNER_TEMP'])/'primary-session-response.json'
+          d=json.loads(source.read_text(encoding='utf8'))
+          st=d.get('state') or {}
+          if d.get('available') is not True or not isinstance(st.get('cookies'),list) or not st['cookies']:
+              raise SystemExit('TIKTOK_PRIMARY_STATE_EMPTY')
+          dest=Path(os.environ['TIKTOK_LIVE_STORAGE_STATE_FILE'])
+          dest.write_text(json.dumps({'cookies':st['cookies'],'origins':st.get('origins') or []}),encoding='utf8')
+          dest.chmod(0o600)
+          print('TIKTOK_PRIMARY_CLOUD_STATE_READY=1')
+          PY
+      - name: Install ephemeral Chromium
+        run: |
+          python3 -m pip install -q playwright
+          python3 -m playwright install --with-deps chromium >/dev/null
+          echo TIKTOK_PRIMARY_READONLY_BROWSER_READY=1
+      - name: Inspect TikTok Studio and LIVE Center without changing account
+        run: python3 tools/tiktok_live_account_access_probe.py
+      - name: Erase ephemeral session material
+        if: always()
+        run: rm -f "$TIKTOK_LIVE_STORAGE_STATE_FILE" "$RUNNER_TEMP/primary-session-response.json"
