@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  issues: write
 concurrency:
   group: tiktok-google-play-remote-login-v5
   cancel-in-progress: false
@@ -80,8 +79,6 @@ jobs:
 
       - name: Start protected remote Android, deliver owner-only credentials
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           umask 077
@@ -170,23 +167,26 @@ jobs:
             -pubin -inkey /tmp/android-google-public.pem \
             -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 | base64 -w0)"
           echo "ANDROID_REMOTE_RSA_OAEP_SHA256=$encrypted"
-          body="$(jq -cn --arg data "$encrypted" --arg run "$GITHUB_RUN_ID" \
-            '{body:("REMOTE_ANDROID_LOGIN_V5_ENCRYPTED run="+$run+" rsa_oaep_sha256="+$data+
-              "\nTunnel URL and BasicAuth credentials encrypted for owner; no plaintext access data in public logs.")}')"
-          curl -fsS --connect-timeout 10 --max-time 30 -X POST \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Content-Type: application/json" \
-            --data "$body" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/2301/comments" >/dev/null
-          echo ANDROID_REMOTE_ENCRYPTED_ACCESS_POSTED=1
-          echo 'Android virtual protegido ativo; acesso privado enviado ao titular via ChatGPT.' >>"$GITHUB_STEP_SUMMARY"
-          deadline=$((SECONDS+2250))
+          printf '%s\n' "$encrypted" >/tmp/android-google-ciphertext.b64
+          echo ANDROID_REMOTE_ENCRYPTED_ACCESS_ARTIFACT_STAGED=1
+          echo 'Android virtual protegido ativo, com credenciais criptografadas.' >>"$GITHUB_STEP_SUMMARY"
+          echo ANDROID_REMOTE_HANDOFF_STAGE_COMPLETE=1
+      - name: Upload RSA-encrypted one-time access credentials
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiktok-google-login-ciphertext-${{ github.run_id }}
+          path: /tmp/android-google-ciphertext.b64
+          retention-days: 1
+          if-no-files-found: error
+      - name: Keep virtual Android and remote tunnel accessible
+        shell: bash
+        run: |
+          set -euo pipefail
           echo ANDROID_REMOTE_GOOGLE_LOGIN_WINDOW_OPEN=1
+          deadline=$((SECONDS+2300))
           while [ "$SECONDS" -lt "$deadline" ]; do
-            kill -0 "$SCRCPY_PID" 2>/dev/null || { echo ANDROID_REMOTE_SCRCPY_DIED=1; exit 51; }
-            pgrep -f 'cloudflared tunnel --no-autoupdate' >/dev/null || { echo ANDROID_REMOTE_TUNNEL_DIED=1; exit 52; }
+            pgrep -f '^/tmp/scrcpy-linux-x86_64-v3.3.4/scrcpy' >/dev/null || { echo ANDROID_REMOTE_SCRCPY_DIED=1; exit 51; }
+            pgrep -f '/tmp/cloudflared tunnel --no-autoupdate' >/dev/null || { echo ANDROID_REMOTE_TUNNEL_DIED=1; exit 52; }
             sleep 12
           done
           echo ANDROID_REMOTE_LOGIN_WINDOW_ENDED=1
