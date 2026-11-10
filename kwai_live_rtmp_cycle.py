@@ -222,6 +222,40 @@ def wait_for_studio_ingest(page, room: str) -> None:
     raise RuntimeError("KW12_STUDIO_RTMP_INGEST_NOT_CONFIRMED")
 
 
+def start_from_official_studio_button(page, room: str) -> dict:
+    """Use the supported Studio start control after verified RTMP ingest.
+
+    The historical 12-hour transmitter started by clicking this control.
+    Calling startLive directly can omit validation performed by the page.
+    """
+    observed = {}
+    def watch(response):
+        if "/cloudLive/startLive" not in response.url:
+            return
+        try:
+            body = response.json()
+            if isinstance(body, dict):
+                observed.update(body)
+        except (ValueError, RuntimeError):
+            pass
+    page.on("response", watch)
+    start_button = page.get_by_role(
+        "button", name=re.compile(r"iniciar|começar|start", re.I))
+    if not start_button.count() or not start_button.last.is_visible():
+        raise RuntimeError("KW12_STUDIO_OFFICIAL_START_BUTTON_MISSING")
+    if not start_button.last.is_enabled():
+        raise RuntimeError("KW12_STUDIO_OFFICIAL_START_BUTTON_DISABLED")
+    start_button.last.click()
+    deadline = time.monotonic() + 20
+    while not observed and time.monotonic() < deadline:
+        page.wait_for_timeout(350)
+    if not observed:
+        if room_status(page, room) == 1:
+            return {"http": 200, "body": {"result": 1}}
+        raise RuntimeError("KW12_STUDIO_OFFICIAL_START_RESULT_MISSING")
+    return {"http": 200, "body": observed}
+
+
 def studio_confirmed_start(page, room: str) -> int:
     """Read the authoritative live start time from the Studio room API."""
     result = call(page, "room", room)
@@ -287,7 +321,7 @@ def create_and_start(page, issue_id: int, state: dict) -> None:
         del server, key
         wait_for_stream(room)
         wait_for_studio_ingest(page, room)
-        result = call(page, "startLive", room)
+        result = start_from_official_studio_button(page, room)
         if (result.get("body") or {}).get("result") != 1:
             # Numeric codes are safe diagnostics. Never log entire Studio
             # responses, headers or RTMP destinations.
