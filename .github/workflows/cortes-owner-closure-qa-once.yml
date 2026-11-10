@@ -39,7 +39,7 @@ jobs:
           git -c "http.extraheader=AUTHORIZATION: Basic $auth" clone --quiet --depth=1 --branch fix/cortes-close-unavailable-source-owner-policy-20261110 https://github.com/UniversoAnthares/anthares-wordpress.git wp
           git -c "http.extraheader=AUTHORIZATION: Basic $auth" clone --quiet --depth=1 --branch fix/cortes-owner-close-missing-source-20261110 https://github.com/UniversoAnthares/anthares-clipper.git clipper
           unset auth
-          test "$(git -C wp rev-parse HEAD)" = "5f9c9d4eccc3e67c6168cc1b393fa8a2db376b7f"
+          test "$(git -C wp rev-parse HEAD)" = "7880cd8a039ab74beee623cb69ea9109b4b78890"
           test "$(git -C clipper rev-parse HEAD)" = "e23701f4f5092da02991e119bb8b3ef43f2a5504"
           echo "CORTES_CLOSURE_SOURCE_SHA_VERIFIED=1"
       - name: PHP syntax, authorization, chronology and manifest
