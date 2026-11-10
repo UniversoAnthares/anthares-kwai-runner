@@ -195,6 +195,33 @@ def wait_for_stream(room: str) -> None:
         time.sleep(3)
     raise RuntimeError("KW12_RTMP_PUSH_NOT_ALIVE")
 
+def wait_for_studio_ingest(page, room: str) -> None:
+    """Require Kwai Studio to acknowledge transcoding the RTMP push.
+
+    A local FFmpeg progress counter alone is not proof of remote ingest.
+    The prior functioning 12h transmitter used streamInfo before startLive.
+    """
+    for _ in range(30):
+        observation = page.evaluate("""async room => {
+            const path='/rest/o/w/live/supplier/cloudLive/streamInfo?liveRoomId='
+                       + encodeURIComponent(room);
+            try {
+                const response=await fetch(path,{credentials:'include'});
+                if (!response.ok) return {http:response.status,ready:false};
+                const data=await response.json();
+                const entries=data?.transcodeInfo?.transcodeInfos;
+                return {http:response.status,
+                        ready:Array.isArray(entries)?entries.length>0:!!entries};
+            } catch(e) {return {http:0,ready:false};}
+        }""", room)
+        if observation.get("http") == 200 and observation.get("ready"):
+            print("KW12_STUDIO_RTMP_INGEST_CONFIRMED=1", flush=True)
+            page.wait_for_timeout(3000)
+            return
+        page.wait_for_timeout(3000)
+    raise RuntimeError("KW12_STUDIO_RTMP_INGEST_NOT_CONFIRMED")
+
+
 def studio_confirmed_start(page, room: str) -> int:
     """Read the authoritative live start time from the Studio room API."""
     result = call(page, "room", room)
@@ -259,8 +286,19 @@ def create_and_start(page, issue_id: int, state: dict) -> None:
         host_active = True
         del server, key
         wait_for_stream(room)
+        wait_for_studio_ingest(page, room)
         result = call(page, "startLive", room)
         if (result.get("body") or {}).get("result") != 1:
+            # Numeric codes are safe diagnostics. Never log entire Studio
+            # responses, headers or RTMP destinations.
+            body = result.get("body") or {}
+            code = body.get("errorCode", body.get("code", body.get("result")))
+            if isinstance(code, bool) or not isinstance(code, int):
+                code = "unknown"
+            http = result.get("http")
+            if isinstance(http, bool) or not isinstance(http, int):
+                http = 0
+            print(f"KW12_STUDIO_START_REJECTION_HTTP={http} CODE={code}", flush=True)
             raise RuntimeError("KW12_STUDIO_LIVE_START_REJECTED")
         live_active = True
         good = 0
