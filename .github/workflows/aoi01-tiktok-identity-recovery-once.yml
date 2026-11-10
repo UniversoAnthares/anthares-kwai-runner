@@ -1,0 +1,72 @@
+name: AOI-01 TikTok Northflank identity recovery (one time, no publish)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/aoi01-tiktok-identity-recovery-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: aoi01-tiktok-identity-recovery-once
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Verify existing TikTok session without publishing or queue changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.error,urllib.request
+          BASE="https://anthares-tiktok-worker.anthares1.workers.dev"
+          TOKEN=os.getenv("ARA_SHARED","")
+          if len(TOKEN)<20:
+              print("AOI01_CLOUD_AUTH_MISSING")
+              raise SystemExit(2)
+          AUTH={"Authorization":"Bearer "+TOKEN,"Accept":"application/json",
+                "User-Agent":"Anthares-AOI01-Session-Validator/1.0"}
+          def call(path,method="GET",payload=None,timeout=25):
+              h=dict(AUTH);raw=None
+              if payload is not None:
+                  raw=json.dumps(payload,separators=(",",":")).encode()
+                  h["Content-Type"]="application/json"
+              req=urllib.request.Request(BASE+path,data=raw,headers=h,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as resp:
+                      obj=json.loads(resp.read(900000))
+                      return resp.status,(obj if isinstance(obj,dict) else {})
+              except urllib.error.HTTPError as e:
+                  return e.code,{}
+              except Exception as e:
+                  print("AOI01_"+path.strip("/").upper().replace("-","_")+"_TRANSPORT="+type(e).__name__)
+                  return 0,{}
+          code,health=call("/health")
+          print("AOI01_HEALTH_HTTP="+str(code))
+          if code!=200 or not health.get("ok") or not health.get("session_bootstrapped"):
+              print("AOI01_SESSION_SEED_MISSING");raise SystemExit(2)
+          code,status=call("/session-status",timeout=55)
+          print("AOI01_SESSION_STATUS_HTTP="+str(code))
+          if code!=200 or not status.get("ok") or not status.get("bootstrapped"):
+              print("AOI01_SESSION_STATUS_BLOCKED");raise SystemExit(2)
+          print("AOI01_ALREADY_VERIFIED="+str(bool(status.get("identity_verified"))))
+          if status.get("identity_verified") and status.get("ready_for_tiktok"):
+              print("AOI01_IDENTITY_RECOVERY=ALREADY_READY")
+              raise SystemExit(0)
+          code,tested=call("/session-test",method="POST",payload={},timeout=390)
+          print("AOI01_SESSION_TEST_HTTP="+str(code))
+          print("AOI01_SESSION_TEST_SUCCESS="+str(bool(tested.get("ok"))))
+          print("AOI01_SESSION_TEST_IDENTITY_VERIFIED="+str(bool(tested.get("identity_verified"))))
+          print("AOI01_CENTRAL_PERSISTED="+str(bool(tested.get("central_persisted"))))
+          if code!=200 or not tested.get("ok") or not tested.get("identity_verified"):
+              print("AOI01_IDENTITY_RECOVERY=BLOCKED");raise SystemExit(2)
+          code,after=call("/health")
+          print("AOI01_FINAL_READY_FOR_TIKTOK="+str(bool(after.get("ready_for_tiktok"))))
+          if code!=200 or not after.get("ready_for_tiktok"):raise SystemExit(2)
+          print("AOI01_IDENTITY_RECOVERY=PROVEN")
+          PY
