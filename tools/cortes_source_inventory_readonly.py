@@ -99,6 +99,12 @@ def audit(state,stream_ids):
     locked["registry_long_analyzed"]=bool((item_phases.get("long") or {}).get("analyzed"))
     locked["registry_short_analyzed"]=bool((item_phases.get("short") or {}).get("analyzed"))
     locked["registry_clips"]=len(counterpart.get("clips") or [])
+    locked["generation_closed_at"]=bool(counterpart.get("generation_closed_at"))
+    locked["generation_close_reason"]=str(counterpart.get("generation_close_reason") or "")
+    locked["generation_closed_cycle"]=counterpart.get("generation_closed_cycle")
+    locked["generation_preserved_clips"]=counterpart.get("generation_preserved_clips")
+    locked["registry_source_file_available"]=bool(counterpart.get("source_file"))
+    locked["registry_files_deleted_at"]=bool(counterpart.get("files_deleted_at"))
     return {"status":"READ_ONLY",
             "locked_source":locked,
             "youtube_streams":len(stream_ids),
@@ -144,6 +150,25 @@ def main():
     for row in result['active_missing'][:3]:
         row['direct_video_status']=verify_single_video(row['video_id'])
     print("CORTES_SOURCE_INVENTORY_QA="+json.dumps(result,ensure_ascii=False,separators=(",",":")))
+    # Separate WordPress/CAS cycle readback, never changed by this audit.
+    site="https://anthares.us"
+    auth=base64.b64encode((str(os.environ["WP_USERNAME"])+":"+
+        "".join(str(os.environ["WP_APP_PASSWORD"]).split())).encode()).decode()
+    req=urllib.request.Request(site+"/wp-json/anthares/v1/cortes/source-cycle",
+         headers={"Authorization":"Basic "+auth,"Accept":"application/json"})
+    with urllib.request.urlopen(req,timeout=30) as response:
+        cycle=json.load(response)
+    lock=cycle.get("daily_lock") or {}
+    source=lock.get("source") or {}
+    print("CORTES_CYCLE_LOCK_READONLY="+json.dumps({
+        "locked_source":str(source.get("video_id") or ""),
+        "locked_date":str(lock.get("date") or ""),
+        "locked_status":str(lock.get("status") or ""),
+        "live_cursor":cycle.get("live_cursor"),
+        "live_cycle_generation":cycle.get("live_cycle_generation"),
+        "source_kind":str(source.get("source_kind") or ""),
+        "writes":0
+    },ensure_ascii=False,separators=(",",":")))
     return 0 if result["active_missing_count"]==0 else 2
 
 if __name__=="__main__":
