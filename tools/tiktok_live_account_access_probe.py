@@ -15,9 +15,21 @@ import time
 import zlib
 from urllib.parse import urlsplit
 
-EXPECTED = "lucasrosalem4"
+EXPECTED = os.getenv("TIKTOK_LIVE_EXPECTED_ACCOUNT", "lucasrosalem4").strip().lstrip("@").lower()
+if EXPECTED not in ("lucasrosalem4", "universo.anthares"):
+    raise SystemExit("UNAUTHORIZED_ACCOUNT_SELECTION")
 
 def state_from_secret():
+    file_path = os.getenv("TIKTOK_LIVE_STORAGE_STATE_FILE", "")
+    if file_path:
+        try:
+            with open(file_path, "r", encoding="utf-8") as h:
+                state = json.load(h)
+        except (ValueError, OSError) as exc:
+            raise ValueError("PRIMARY_SESSION_FILE_INVALID") from exc
+        if not isinstance(state, dict) or not isinstance(state.get("cookies"), list):
+            raise ValueError("PRIMARY_SESSION_NOT_PLAYWRIGHT_STATE")
+        return state
     raw = os.getenv("TIKTOK_LUCASROSALEM4_STORAGE_STATE", "")
     if not raw or len(raw) > 48000:
         raise ValueError("CLOUD_SESSION_SECRET_MISSING_OR_TOO_LARGE")
@@ -62,7 +74,7 @@ def inspect(page, stage):
 
     # Only bounded boolean evidence is exported. Avoid page text, URL queries,
     # cookies, authenticated requests, screenshots, and sensitive DOM details.
-    signal = page.evaluate("""() => {
+    signal = page.evaluate("""(account) => {
       const text=(document.body?.innerText||'').toLowerCase().slice(0,45000);
       const labels=[...document.querySelectorAll('button,a,[role=button]')]
         .filter(x=>{const b=x.getBoundingClientRect();return b.width>0&&b.height>0})
@@ -73,14 +85,14 @@ def inspect(page, stage):
       const actions=labels.filter(s=>/rtmp|stream key|chave de transmiss|software|obs|go live|iniciar live|transmitir ao vivo/.test(s));
       return {
         login_prompt:login,
-        owner_media_links:links.some(s=>s.toLowerCase().includes('/@lucasrosalem4/video/')),
-        owner_marker:text.includes('lucasrosalem4'),
+        owner_media_links:links.some(s=>s.toLowerCase().includes('/@'+account.toLowerCase()+'/video/')),
+        owner_marker:text.includes(account.toLowerCase()),
         producer_marker:text.includes('live center')||text.includes('central de live')||text.includes('live studio'),
         rtmp_label_visible:actions.some(s=>/rtmp|stream key|chave de transmiss/.test(s)),
         live_action_visible:actions.some(s=>/go live|iniciar live|transmitir ao vivo/.test(s)),
         download_only_visible:actions.some(s=>/baixe o live studio|download live studio/.test(s))
       };
-    }""")
+    }""", EXPECTED)
     parsed = urlsplit(page.url)
     host = (parsed.hostname or "").lower()
     same_service = host.endswith(".tiktok.com") or host == "tiktok.com"
