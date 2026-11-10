@@ -59,6 +59,15 @@ def should_report(previous, state, expiry, unresolved, now):
         return True
 
 
+def should_reopen_429_incident(issue_state, observed_state):
+    """Keep a resolved API-429 incident closed during ordinary queue work.
+
+    Scheduled Buffer posts, read-only reconciliation and a backlog awaiting
+    delivery are separate states and must never resurrect a resolved quota P0.
+    """
+    return issue_state == "closed" and observed_state == "COOLDOWN_HTTP_429"
+
+
 def request(method, endpoint, payload=None):
     token = os.environ.get("GITHUB_TOKEN", "")
     if not token:
@@ -107,9 +116,13 @@ def main():
               "unresolved": unresolved,
               "confirmed": (counts or {}).get("confirmed") if isinstance(counts, dict) else None,
               "run": os.environ.get("GITHUB_RUN_ID", "unknown")}
-    if state != "PASS" and issue.get("state") == "closed":
+    if should_reopen_429_incident(issue.get("state"), state):
         request("PATCH", "/issues/" + str(ISSUE), {"state": "open"})
-    if should_report(prior, state, expiry, unresolved, now) or state == "PASS":
+        issue["state"] = "open"
+    # A closed quota incident stays closed while Buffer awaits its dueAt slot.
+    # Other publication failures are tracked by their own QA incidents.
+    if (issue.get("state") == "open" or state == "PASS") and (
+            should_report(prior, state, expiry, unresolved, now) or state == "PASS"):
         comment = (MARKER + " " + json.dumps(result, separators=(",", ":")) + "\n\n"
                    + "QA automático Pinterest: observação autenticada do Neon e prova do publicador. "
                    + ("Aprovado: novo Pin público confirmado por Buffer e CAS Neon, sem cooldown. O restante da fila segue supervisionado pelo publicador; encerrar somente o incidente HTTP 429."
