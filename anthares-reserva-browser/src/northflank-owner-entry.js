@@ -36,7 +36,7 @@ async function nf(env,path,{method="GET",body}={}){
 }
 async function ensureStarted(env){
   const current=await nf(env,"/interactive-browser/status");
-  if(current.ok&&current.active&&current.responsive)return {ok:true,active:true,starting:false};
+  if(current.ok&&current.active&&current.responsive!==false)return {ok:true,active:true,starting:false};
   if(current.ok&&current.starting)return {ok:true,active:false,starting:true};
   const state=await readPlainState(env);
   return nf(env,"/interactive-browser/start-async",{method:"POST",body:state?{state}:{}});
