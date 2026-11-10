@@ -63,7 +63,13 @@ def stage_metadata(job):
     if not isinstance(payload, dict):
         raise QueueError("KW09_STAGE_PAYLOAD_INVALID")
     ident = str(job.get("id") or "")
-    gen = job.get("lease_generation")
+    raw_gen = job.get("lease_generation")
+    # Canonical API can return a decimal-encoded generation string.
+    # Accept only positive integers in canonical decimal form.
+    gen = (int(raw_gen) if isinstance(raw_gen, (int, str))
+           and not isinstance(raw_gen, bool)
+           and re.fullmatch(r"[1-9][0-9]{0,8}", str(raw_gen))
+           else None)
     url = str(payload.get("video_url") or "")
     sha = str(payload.get("content_sha256") or payload.get("media_content_sha256") or "").lower()
     parsed = urlsplit(url)
