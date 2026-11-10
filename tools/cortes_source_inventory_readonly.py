@@ -56,7 +56,18 @@ def audit(state,stream_ids):
         if vid in present or row.get("legacy_completed") or str(row.get("stage") or "")=="completed":
             continue
         phases=row.get("phases") or {}
+        try:
+            original_index=int(row.get("chronological_index") or 0)
+        except (ValueError,TypeError):
+            original_index=0
+        proposed_pos=len(current)-original_index
+        proposed_pos=proposed_pos if 0<=proposed_pos<=len(stream_ids) else None
         missing.append({
+            "suggested_public_insertion_index":proposed_pos,
+            "previous_public_video_id":(stream_ids[proposed_pos-1]
+                                        if proposed_pos is not None and proposed_pos>0 else None),
+            "next_public_video_id":(stream_ids[proposed_pos]
+                                    if proposed_pos is not None and proposed_pos<len(stream_ids) else None),
             "video_id":vid,
             "stage":str(row.get("stage") or ""),
             "kind":str(row.get("source_kind") or "live"),
