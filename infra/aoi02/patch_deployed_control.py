@@ -20,7 +20,7 @@ let aoi02JwksAt = Date.now() + 300000;
 async function aoi02SignedGitLab(req) {
   const match = /^Bearer\s+(.+)$/i.exec(req.headers.get("Authorization") || "");
   const jwt = match ? match[1] : "";
-  if (jwt.length < 200 || jwt.length > 16000) return false;
+  if (jwt.length < 200 || jwt.length > 16000) { console.warn("AOI02_JWT_LENGTH"); return false; }
   const parts = jwt.split(".");
   if (parts.length !== 3) return false;
   let hdr, claims;
@@ -28,7 +28,7 @@ async function aoi02SignedGitLab(req) {
     const decode = s => JSON.parse(atob(s.replace(/-/g, "+").replace(/_/g, "/")
       .padEnd(Math.ceil(s.length / 4) * 4, "=")));
     hdr = decode(parts[0]); claims = decode(parts[1]);
-  } catch { return false; }
+  } catch { console.warn("AOI02_JWT_DECODE"); return false; }
   const now = Math.floor(Date.now() / 1000);
   const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
   if (hdr.alg !== "RS256" || !/^[A-Za-z0-9_.-]{1,200}$/.test(hdr.kid || "")
@@ -43,7 +43,7 @@ async function aoi02SignedGitLab(req) {
       || !Number.isInteger(claims.exp) || claims.exp <= now || claims.exp > now + 3600
       || !Number.isInteger(claims.iat) || claims.iat > now + 60 || claims.iat < now - 600
       || (claims.nbf !== undefined && (!Number.isInteger(claims.nbf)
-          || claims.nbf > now + 60))) return false;
+          || claims.nbf > now + 60))) { console.warn("AOI02_JWT_CLAIMS"); return false; }
   try {
     if (!aoi02Jwks || Date.now() > aoi02JwksAt) {
       try {
@@ -67,14 +67,16 @@ async function aoi02SignedGitLab(req) {
       && (!k.alg || k.alg === "RS256"))
       || aoi02PinnedJwks.find(k => k.kid === hdr.kid && k.kty === "RSA"
         && (!k.alg || k.alg === "RS256"));
-    if (!jwk) return false;
+    if (!jwk) { console.warn("AOI02_JWT_KID_NOT_FOUND"); return false; }
     const key = await crypto.subtle.importKey("jwk", jwk,
       {name: "RSASSA-PKCS1-v1_5", hash: "SHA-256"}, false, ["verify"]);
     const bytes = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")
       .padEnd(Math.ceil(s.length / 4) * 4, "=")), c => c.charCodeAt(0));
-    return await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key,
+    const verified = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key,
       bytes(parts[2]), new TextEncoder().encode(parts[0] + "." + parts[1]));
-  } catch { return false; }
+    if (!verified) console.warn("AOI02_JWT_SIGNATURE_FALSE");
+    return verified;
+  } catch (e) { console.warn("AOI02_JWT_VERIFY_ERROR:" + String(e && e.name || "Unknown").slice(0,30)); return false; }
 }
 async function aoi02RuntimeSecrets(req, env) {
   const reply = (status, data) => Response.json(data, {
