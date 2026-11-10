@@ -77,10 +77,40 @@ def audit(state,stream_ids):
             "blocker_stage":str(blocker.get("stage") or ""),
             "writes":0}
 
+def verify_single_video(video_id):
+    """Probe an exact missing video URL without downloading it or changing WP."""
+    if not isinstance(video_id,str) or len(video_id)!=11 or any(
+            not (c.isalnum() or c in "-_") for c in video_id):
+        return "INVALID_VIDEO_ID"
+    url="https://www.youtube.com/watch?v="+video_id
+    cmd=[sys.executable,"-m","yt_dlp","--skip-download","--dump-single-json",
+         "--no-warnings","--extractor-args","youtube:player_client=web_safari",url]
+    try:
+        proc=subprocess.run(cmd,text=True,capture_output=True,timeout=75,check=False)
+    except subprocess.TimeoutExpired:
+        return "UNVERIFIED_TIMEOUT"
+    if proc.returncode==0:
+        try:
+            video=json.loads(proc.stdout)
+            if str(video.get("id") or "") != video_id:
+                return "UNVERIFIED_IDENTITY_MISMATCH"
+            return ("PUBLIC_AVAILABLE" if video.get("is_live") is not True
+                    else "UNVERIFIED_IS_LIVE")
+        except (ValueError,TypeError):
+            return "UNVERIFIED_JSON"
+    err=proc.stderr.lower()
+    if "private video" in err or "this video is private" in err:
+        return "PRIVATE_VIDEO"
+    if "video unavailable" in err or "video has been removed" in err:
+        return "VIDEO_UNAVAILABLE"
+    return "UNVERIFIED_EXTRACTION_ERROR"
+
 def main():
     state=get_state()
     ids=get_streams()
     result=audit(state,ids)
+    for row in result['active_missing'][:3]:
+        row['direct_video_status']=verify_single_video(row['video_id'])
     print("CORTES_SOURCE_INVENTORY_QA="+json.dumps(result,ensure_ascii=False,separators=(",",":")))
     return 0 if result["active_missing_count"]==0 else 2
 
