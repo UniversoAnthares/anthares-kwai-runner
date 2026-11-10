@@ -13,6 +13,9 @@ on:
       - tests/test_pinterest_backpressure_evidence.py
       - tests/test_pinterest_batch_receipts.py
       - tests/test_pinterest_stale_pending_audit.py
+      - tests/test_pinterest_terminal_error_reconcile.py
+      - tests/test_pinterest_terminal_error_backend.mjs
+      - infra/neon-cortes-queue/index.mjs
       - tools/pinterest_qa_cooldown_loop.py
       - tests/test_pinterest_qa_cooldown_loop.py
       - .github/workflows/cortes-buffer-pinterest-cloud.yml
@@ -26,6 +29,11 @@ on:
     inputs:
       reconcile_only:
         description: 'Only reconcile previously scheduled posts; never create a new post'
+        type: boolean
+        required: false
+        default: false
+      terminal_error_only:
+        description: 'Quarantine only verified 24h-old Buffer error receipts, never create a post'
         type: boolean
         required: false
         default: false
@@ -65,6 +73,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_pinterest_backpressure_evidence.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_batch_receipts.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_stale_pending_audit.py' -v
+          python -m unittest discover -s tests -p 'test_pinterest_terminal_error_reconcile.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_qa_cooldown_loop.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_today_slot_gate.py' -v
           python -m py_compile tools/cortes_buffer_pinterest_cloud.py anthares_publisher/editorial.py
@@ -81,6 +90,7 @@ jobs:
           ANTHARES_SOCIAL_COMMIT: '1'
           CORTES_RECONCILE_ONLY: ${{ inputs.reconcile_only && '1' || '0' }}
           CORTES_AUDIT_PENDING_ONLY: ${{ inputs.audit_pending_only && '1' || '0' }}
+          CORTES_RECONCILE_TERMINAL_ERROR_ONLY: ${{ inputs.terminal_error_only && '1' || '0' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CORTES_QUEUE_PRIMARY: neon
           BUFFER_PINTEREST_BOARD_ID: '819514532133906920'
@@ -88,20 +98,20 @@ jobs:
           set -euo pipefail
           python -u tools/cortes_buffer_pinterest_cloud.py | tee /tmp/pinterest-run.log
       - name: Produce strict machine-readable publication evidence
-        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.audit_pending_only != true) }}
+        if: ${{ always() && (github.event_name != 'workflow_dispatch' || (inputs.audit_pending_only != true && inputs.terminal_error_only != true)) }}
         env:
           CORTES_WORKER_CONCLUSION: ${{ steps.publisher.outcome }}
         run: |
           python tools/pinterest_operational_evidence.py /tmp/pinterest-run.log
       - name: Archive publication evidence
-        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.audit_pending_only != true) }}
+        if: ${{ always() && (github.event_name != 'workflow_dispatch' || (inputs.audit_pending_only != true && inputs.terminal_error_only != true)) }}
         uses: actions/upload-artifact@v4
         with:
           name: pinterest-evidence-${{ github.run_id }}
           path: /tmp/pinterest-evidence/
           retention-days: 7
       - name: Verify cooldown recovery and update existing Pinterest QA P0
-        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.audit_pending_only != true) }}
+        if: ${{ always() && (github.event_name != 'workflow_dispatch' || (inputs.audit_pending_only != true && inputs.terminal_error_only != true)) }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           CORTES_QUEUE_PRIMARY: neon
