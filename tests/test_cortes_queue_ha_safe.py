@@ -134,6 +134,11 @@ class PinterestCooldownActions(unittest.TestCase):
         self.assertIn("buffer-cooldown-status",ha.ACTIONS)
         self.assertNotIn("buffer-cooldown",ha.RETRYABLE)
 
+    def test_terminal_error_neon_action_allowlisted_and_nonretryable(self):
+        self.assertIn("buffer-terminal-error",ha.ACTIONS)
+        self.assertNotIn("buffer-terminal-error",ha.RETRYABLE)
+        self.assertNotIn("buffer-terminal-undo",ha.ACTIONS)
+
 
 if __name__=="__main__":
     unittest.main()
