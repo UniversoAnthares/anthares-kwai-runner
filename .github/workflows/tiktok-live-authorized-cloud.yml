@@ -34,6 +34,16 @@ jobs:
       TIKTOK_LIVE_RTMP_DESTINATION: ${{ secrets.TIKTOK_LIVE_RTMP_DESTINATION }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install FFmpeg on ephemeral Ubuntu runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg
+          fi
+          ffmpeg -hide_banner -version | head -n 1
+          echo ANTHARES_CLOUD_FFMPEG_READY=1
       - name: FFmpeg installed and HLS source available (read-only)
         run: python3 tools/tiktok_live_authorized_cloud.py --preflight
       - name: Validate cloud FFmpeg processing without publishing
