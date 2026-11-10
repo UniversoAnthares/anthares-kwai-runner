@@ -1,5 +1,5 @@
 
-import test from "node:test";import assert from "node:assert/strict";import {requestControl} from "./control-transport.mjs";
+import test from "node:test";import assert from "node:assert/strict";import {requestControl,boundedControlTimeoutMs} from "./control-transport.mjs";
 let n=0;const opts=(fetchImpl,extra={})=>({origins:["https://primary"+(++n), "https://reserve"+n],path:"/v1/mcp/status",sign:async()=>({timestamp:"1",signature:"test"}),fetchImpl,...extra});
 test("confirmed 402 quota reaches independent reserve and cancels old response",async()=>{let calls=0;const r=await requestControl(opts(async()=>++calls===1?new Response("",{status:402,headers:{"x-vercel-error":"DEPLOYMENT_DISABLED"}}):new Response("ok")));assert.equal(await r.text(),"ok");assert.equal(calls,2)});
 for(const status of [401,403,409,402])test("does not bypass response "+status,async()=>{let calls=0;const r=await requestControl(opts(async()=>{calls++;return new Response("",{status})}));assert.equal(r.status,status);assert.equal(calls,1)});
@@ -10,3 +10,11 @@ test("quota circuit skips known exhausted origin",async()=>{let calls=0;const o=
 test("read-only timeout reaches next route",async()=>{let calls=0;const r=await requestControl(opts(async()=>{if(++calls===1)throw Error("timeout");return new Response("ok")}));assert.equal(r.status,200);assert.equal(calls,2)});
 
 test("same Vercel team quota skips its second alias",async()=>{const urls=[];await requestControl(opts(async u=>{urls.push(u);return urls.length===1?new Response("",{status:402,headers:{"x-vercel-error":"DEPLOYMENT_DISABLED"}}):new Response("ok")},{origins:["https://one.vercel.app","https://two.vercel.app","https://independent.workers.dev"]}));assert.equal(urls.length,2);assert.match(urls[1],/independent/)});
+
+test("control timeout preserves legitimate 120s jobs plus transport allowance",()=>{
+ assert.equal(boundedControlTimeoutMs(),15000);
+ assert.equal(boundedControlTimeoutMs(132000),132000);
+ assert.equal(boundedControlTimeoutMs(200000),150000);
+ assert.equal(boundedControlTimeoutMs(0),1);
+ assert.equal(boundedControlTimeoutMs(Infinity),15000);
+});
