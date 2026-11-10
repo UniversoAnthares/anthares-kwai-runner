@@ -26,7 +26,7 @@ concurrency:
 jobs:
   verify-and-optional-transmit:
     runs-on: ubuntu-24.04
-    timeout-minutes: 370
+    timeout-minutes: 360
     env:
       ANTHARES_LIVE_HLS_URL: https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8
       TIKTOK_LIVE_ACCOUNT_AUTHORIZED: ${{ vars.TIKTOK_LIVE_ACCOUNT_AUTHORIZED }}
@@ -36,6 +36,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: FFmpeg installed and HLS source available (read-only)
         run: python3 tools/tiktok_live_authorized_cloud.py --preflight
+      - name: Validate cloud FFmpeg processing without publishing
+        run: python3 tools/tiktok_live_authorized_cloud.py --dry-encode --seconds 8
       - name: Transmit only with explicit authorization and eligible RTMP destination
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.transmit == true }}
         env:
