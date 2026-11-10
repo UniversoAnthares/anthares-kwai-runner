@@ -1,12 +1,7 @@
-name: Provision Render-independent TikTok worker on Northflank
+name: Release existing TikTok Northflank browser (no provisioning)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - cloudflare-tiktok-router/**
-      - .github/workflows/northflank-tiktok-worker.yml
 
 permissions:
   contents: read
@@ -16,130 +11,79 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  provision:
-    runs-on: ubuntu-latest
-    timeout-minutes: 18
+  deploy-existing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
     env:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
-      CLOUDFLARE_ACCOUNT_ID: 5c24be052e5144391f73a8e03491e88e
     steps:
-      - uses: actions/checkout@v4
-      - name: Require existing platform credentials
+      - name: Verify credentials without disclosing values
         run: |
           set -euo pipefail
           test -n "$NORTHFLANK_API_TOKEN"
-          test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$ARA_SHARED"
-
-      - name: Provision/update Northflank TikTok worker
-        id: nf
+          echo NF_EXISTING_RELEASE_SECRETS_PRESENT=1
+      - name: Build only the known existing Northflank service and verify v12
         shell: bash
         run: |
-          python3 - <<'PY' | tee /tmp/northflank-tiktok.out
-          import json, os, sys, time, urllib.request, urllib.error
-          token=os.environ['NORTHFLANK_API_TOKEN']; shared=os.environ['ARA_SHARED']
-          print('::add-mask::'+shared)
-          base='https://api.northflank.com/v1'
-          headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
-          def api(method,path,data=None,allow=()):
-              body=None if data is None else json.dumps(data).encode()
-              req=urllib.request.Request(base+path,data=body,method=method,headers=headers)
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,time,urllib.request,urllib.error
+          token=os.environ["NORTHFLANK_API_TOKEN"]
+          shared=os.environ["ARA_SHARED"]
+          api_root="https://api.northflank.com/v1"
+          service_name="anthares-tiktok-northflank"
+          existing_base="https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run"
+          expected_revision="2026-11-10-cdp-fast-status-v12"
+          def request_json(url,method="GET",token=None,payload=None,timeout=30):
+              headers={"Accept":"application/json","User-Agent":"Anthares-Northflank-Existing-Release/1.0"}
+              if token:headers["Authorization"]="Bearer "+token
+              if payload is not None:headers["Content-Type"]="application/json"
+              data=None if payload is None else json.dumps(payload).encode()
+              req=urllib.request.Request(url,headers=headers,method=method,data=data)
               try:
-                  with urllib.request.urlopen(req,timeout=40) as r:
-                      raw=r.read().decode('utf-8','replace')
-                      return json.loads(raw) if raw else {}
-              except urllib.error.HTTPError as e:
-                  raw=e.read().decode('utf-8','replace')
-                  if e.code in allow:return {'_status':e.code,'_body':raw}
-                  raise RuntimeError(f'Northflank HTTP {e.code} {path}: {raw[:800]}')
-          projects=api('GET','/projects').get('data',{}).get('projects',[])
-          if isinstance(projects,dict):projects=list(projects.values())
-          project=next((p.get('id') for p in projects if p.get('name')=='Default'),None)
-          if not project:sys.exit('Northflank Default project not found')
-          services=api('GET',f'/projects/{project}/services').get('data',{}).get('services',[])
-          if isinstance(services,dict):services=list(services.values())
-          name='anthares-tiktok-northflank'
-          target=next((s for s in services if s.get('name')==name),None)
-          runtime={
-            'PORT':'10000',
-            'WORKER_RUNTIME_PROVIDER':'northflank',
-            'EXPECTED_TIKTOK_USERNAME':'universo.anthares',
-            'EXPECTED_TIKTOK_USER_ID':'7577123938226406401',
-            'GITHUB_OIDC_AUDIENCE':'anthares-render-worker',
-            'ANTHARES_CONTROL_URL':'https://anthares-control.anthares1.workers.dev',
-            'RENDER_WORKER_TOKEN':shared
-          }
-          if not target:
-              payload={
-                'name':name,'description':'Canonical Render-independent TikTok browser worker',
-                'billing':{'deploymentPlan':'nf-compute-10'},
-                'deployment':{'instances':1,'docker':{'configType':'default'}},
-                'ports':[{'name':'http','internalPort':10000,'public':True,'protocol':'HTTP'}],
-                'buildSource':'git',
-                'vcsData':{'projectUrl':'https://github.com/UniversoAnthares/anthares-clipper','projectType':'github','projectBranch':'main'},
-                'buildSettings':{'dockerfile':{'buildEngine':'buildkit','dockerFilePath':'/render-tiktok-worker/Dockerfile.northflank','dockerWorkDir':'/'}},
-                'runtimeEnvironment':runtime,'disabledCI':True
-              }
-              created=api('POST',f'/projects/{project}/services/combined',payload)
-              service_id=(created.get('data') or {}).get('id') or name
+                  with urllib.request.urlopen(req,timeout=timeout) as resp:
+                      body=resp.read(250000)
+                      return resp.status,json.loads(body) if body else {}
+              except urllib.error.HTTPError as exc:
+                  return exc.code,{}
+              except Exception:
+                  return 0,{}
+          code,projects=request_json(api_root+"/projects",token=token)
+          print("NF_PROJECTS_HTTP="+str(code))
+          if code!=200:raise SystemExit("NORTHFLANK_ADMIN_AUTH_REQUIRED")
+          entries=(projects.get("data") or {}).get("projects") or []
+          if isinstance(entries,dict):entries=list(entries.values())
+          found=[]
+          for project in entries:
+              project_id=project.get("id")
+              if not project_id:continue
+              status,body=request_json(api_root+"/projects/"+project_id+"/services",token=token)
+              if status!=200:continue
+              services=(body.get("data") or {}).get("services") or []
+              if isinstance(services,dict):services=list(services.values())
+              for service in services:
+                  if service.get("name")==service_name:
+                      found.append((project_id,service.get("id") or service_name))
+          if len(found)!=1:raise SystemExit("NORTHFLANK_EXISTING_SERVICE_MISSING_OR_AMBIGUOUS")
+          project_id,service_id=found[0]
+          # Never modify runtime vars, compute plan, scaling, credentials or router.
+          code,revision=request_json(existing_base+"/interactive-browser/revision",token=shared,timeout=20)
+          if code==200 and revision.get("revision")==expected_revision:
+              print("NF_RELEASE_ALREADY_CURRENT=1")
           else:
-              service_id=target.get('id') or name
-              api('POST',f'/projects/{project}/services/{service_id}/runtime-environment',{'runtimeEnvironment':runtime,'runtimeFiles':{}},allow=(400,404,405))
-          api('POST',f'/projects/{project}/services/{service_id}/build',{},allow=(409,))
-          ports=api('GET',f'/projects/{project}/services/{service_id}/ports').get('data',{}).get('ports',[])
-          public=next((p for p in ports if p.get('public') and p.get('dns')),None)
-          if not public:sys.exit('Northflank TikTok worker has no public DNS')
-          public_base='https://'+public['dns']
-          expected_revision='2026-10-15-cdp-v2'
-          last='not_ready'
-          for _ in range(90):
-              try:
-                  req=urllib.request.Request(public_base+'/interactive-browser/revision',headers={'Authorization':'Bearer '+shared})
-                  with urllib.request.urlopen(req,timeout=20) as r:
-                      data=json.loads(r.read().decode())
-                  if data.get('ok') is True and data.get('revision')==expected_revision:
-                      break
-                  last=json.dumps(data)[:500]
-              except Exception as exc:
-                  last=type(exc).__name__+':'+str(exc)[:300]
-              time.sleep(10)
-          else:
-              sys.exit('Northflank TikTok worker revision did not roll out: '+last)
-          print('NORTHFLANK_TIKTOK_URL='+public_base)
-          print('NORTHFLANK_EXECUTOR_REVISION='+expected_revision)
-          print(json.dumps({'ok':True,'service':service_id,'public_url':public_base,'render_dependency':False,'interactive_browser':True,'revision':expected_revision},sort_keys=True))
+              status,_=request_json(api_root+"/projects/"+project_id+"/services/"+service_id+"/build",method="POST",token=token,payload={},timeout=40)
+              print("NF_EXISTING_BUILD_HTTP="+str(status))
+              if status not in (200,201,202):raise SystemExit("NORTHFLANK_BUILD_UNCONFIRMED_OR_REJECTED")
+              for attempt in range(72):
+                  time.sleep(10)
+                  code,revision=request_json(existing_base+"/interactive-browser/revision",token=shared,timeout=18)
+                  if code==200 and revision.get("revision")==expected_revision:break
+              else:raise SystemExit("NORTHFLANK_V12_ROLLOUT_UNCONFIRMED")
+          code,status=request_json(existing_base+"/interactive-browser/status",token=shared,timeout=20)
+          print("NF_BROWSER_STATUS_HTTP="+str(code))
+          if code!=200 or status.get("ok") is not True or status.get("backend")!="northflank_chromium_cdp":
+              raise SystemExit("NORTHFLANK_STATUS_NOT_READY")
+          print("NORTHFLANK_EXISTING_BROWSER_V12_VERIFIED=1")
           PY
-          url="$(grep '^NORTHFLANK_TIKTOK_URL=' /tmp/northflank-tiktok.out | tail -1 | cut -d= -f2-)"
-          test -n "$url"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy stable Cloudflare TikTok router
-        env:
-          NORTHFLANK_TIKTOK_URL: ${{ steps.nf.outputs.url }}
-        run: |
-          set -euo pipefail
-          test -n "$NORTHFLANK_TIKTOK_URL"
-          cd cloudflare-tiktok-router
-          npx --yes wrangler@4.43.0 deploy --var "NORTHFLANK_TIKTOK_URL:$NORTHFLANK_TIKTOK_URL"
-
-      - name: Verify stable route uses Northflank without Render
-        run: |
-          set -euo pipefail
-          router='https://anthares-tiktok-worker.anthares1.workers.dev'
-          out="$(curl --fail-with-body -sS "$router/router-health")"
-          echo "$out"
-          echo "$out" | grep -q '"primary_provider":"northflank"'
-          echo "$out" | grep -q '"render_fallback_enabled":false'
-          echo "$out" | grep -q '"render_required":false'
-          health="$(curl --fail-with-body -sS "$router/health")"
-          echo "$health"
-          echo "$health" | grep -q '"ok":true'
-          revision="$(curl --fail-with-body -sS -H "Authorization: Bearer $ARA_SHARED" "$router/interactive-browser/revision")"
-          echo "$revision"
-          echo "$revision" | grep -q '"revision":"2026-10-15-cdp-v2"'
-          browser="$(curl --fail-with-body -sS -H "Authorization: Bearer $ARA_SHARED" "$router/interactive-browser/status")"
-          echo "$browser"
-          echo "$browser" | grep -q '"backend":"northflank_chromium_cdp"'
-          echo NORTHFLANK_INTERACTIVE_BROWSER_ROUTE_READY=1
