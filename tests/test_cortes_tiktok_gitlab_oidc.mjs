@@ -32,6 +32,7 @@ globalThis.fetch=async (url)=>{
 function req(jwt){return{headers:{authorization:'Bearer '+jwt}};}
 test('accept signed exact protected GitLab producer only',async()=>{
  assert.equal(await gitlabProducerRole(req(token()),AUDIENCE),'producer');
+ assert.equal(await gitlabProducerRole(req(token({pipeline_source:'api'})),AUDIENCE),'producer');
  assert.deepEqual(requests,[
    'https://gitlab.com/.well-known/openid-configuration',
    'https://gitlab.com/oauth/discovery/keys'
