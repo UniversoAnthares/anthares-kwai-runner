@@ -235,19 +235,14 @@ def start_from_official_studio_button(page, room: str) -> dict:
                    for x in labels[:35]]
     print("KW12_STUDIO_VISIBLE_BUTTONS=" +
           json.dumps(safe_labels, ensure_ascii=False), flush=True)
-    status = room_status(page, room)
-    print("KW12_STUDIO_ROOM_STATUS_BEFORE_START=" + str(status), flush=True)
-    if status == 1:
-        return {"http": 200, "body": {"result": 1}}
     candidates = page.get_by_role(
         "button",
         name=re.compile(r"(?:iniciar|começar|start).*(?:transmissão|ao vivo|live)"
                         r"|(?:transmissão|ao vivo|live).*(?:iniciar|começar|start)",
                         re.I))
-    if not candidates.count():
-        # A bare "Iniciar" in this page belongs to "Teste de velocidade
-        # da rede"; clicking it never calls cloudLive/startLive.
-        raise RuntimeError("KW12_STUDIO_LIVE_START_BUTTON_NOT_PRESENT")
+    # After RTMP ingest the Studio may keep the live-start button disabled
+    # until a stream handshake completes. Another observed path is an
+    # automatic transition to roomStatus=1. Wait for either supported path.
     observed = {}
     def watch(response):
         if "/cloudLive/startLive" not in response.url:
@@ -259,24 +254,37 @@ def start_from_official_studio_button(page, room: str) -> dict:
         except (ValueError, RuntimeError):
             pass
     page.on("response", watch)
-    button = candidates.last
-    if not button.is_visible() or not button.is_enabled():
-        raise RuntimeError("KW12_STUDIO_LIVE_START_BUTTON_DISABLED")
-    button.click()
-    deadline = time.monotonic() + 15
-    while not observed and time.monotonic() < deadline:
-        page.wait_for_timeout(400)
-    if not observed:
-        if room_status(page, room) == 1:
+    print("KW12_STUDIO_START_SETTLEMENT_WAIT=1", flush=True)
+    clicked = False
+    for attempt in range(35):
+        status = room_status(page, room)
+        if status == 1:
+            print("KW12_STUDIO_LIVE_STATUS_CONFIRMED=1", flush=True)
             return {"http": 200, "body": {"result": 1}}
-        dialogs = page.locator(".el-message-box:visible, .el-dialog:visible")
-        if dialogs.count():
-            text = dialogs.last.inner_text()[:220]
-            print("KW12_STUDIO_AFTER_START_DIALOG=" +
-                  re.sub(r"[^A-Za-zÀ-ÿ0-9: ,.?!-]", " ", text),
-                  flush=True)
-        raise RuntimeError("KW12_STUDIO_OFFICIAL_START_RESULT_MISSING")
-    return {"http": 200, "body": observed}
+        if status != 0:
+            raise RuntimeError("KW12_STUDIO_ROOM_NOT_READY_STATUS_" + str(status))
+        if not clicked and candidates.count():
+            button = candidates.last
+            if button.is_visible() and button.is_enabled():
+                print("KW12_STUDIO_LIVE_BUTTON_READY=1", flush=True)
+                button.click()
+                clicked = True
+        if observed:
+            if observed.get("result") == 1:
+                return {"http": 200, "body": observed}
+            # Some responses arrive before the room transitions to status 1.
+            # Confirm the server status before treating a numeric rejection
+            # as a real failure; avoid repeated startLive requests.
+            for _ in range(6):
+                page.wait_for_timeout(500)
+                if room_status(page, room) == 1:
+                    return {"http": 200, "body": {"result": 1}}
+            return {"http": 200, "body": observed}
+        page.wait_for_timeout(2500)
+        if attempt in (7, 19, 29):
+            page.reload(wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(500)
+    raise RuntimeError("KW12_STUDIO_LIVE_START_SETTLEMENT_TIMEOUT")
 
 def studio_confirmed_start(page, room: str) -> int:
     """Read the authoritative live start time from the Studio room API."""
