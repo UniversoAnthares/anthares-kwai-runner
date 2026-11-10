@@ -526,6 +526,12 @@ def main():
                               "buffer_weekday_enabled":bool(policy.get("enabled"))},
                              separators=(",",":")),flush=True)
             return 0
+        from tools.pinterest_today_slot_gate import has_open_slot_today
+        if not has_open_slot_today(api, PINTEREST_ID):
+            print(json.dumps({"pinterest_cloud":"PASS",
+                              "scheduled_action":"BUFFER_TODAY_SLOTS_FILLED",
+                              "posts_confirmed_this_run":confirmed},separators=(",",":")),flush=True)
+            return 0
         board_gate()
         status=publish_once()
         print(json.dumps({"pinterest_cloud":"PASS","scheduled_action":status,

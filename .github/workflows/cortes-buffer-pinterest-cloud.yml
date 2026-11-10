@@ -6,6 +6,8 @@ on:
     paths:
       - social_adapters/buffer_three_channels.py
       - tools/cortes_buffer_pinterest_cloud.py
+      - tools/pinterest_today_slot_gate.py
+      - tests/test_pinterest_today_slot_gate.py
       - tests/test_pinterest_editorial_preflight_isolation.py
       - tests/test_pinterest_reconcile_quota.py
       - tests/test_pinterest_backpressure_evidence.py
@@ -15,7 +17,10 @@ on:
       - .github/workflows/cortes-buffer-pinterest-cloud.yml
   schedule:
     # Best effort: first 5-minute run after the Neon cooldown expires.
-    - cron: '38 */3 * * *'
+    # Hourly during 09:00-22:59 local weekdays; admission prevents tomorrow rollover.
+    - cron: '8 13-23 * * 1-5'
+    # 00-02 UTC on Tue-Sat belongs to the previous local weekday (20-22h).
+    - cron: '8 0-2 * * 2-6'
   workflow_dispatch:
     inputs:
       reconcile_only:
@@ -54,6 +59,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_pinterest_backpressure_evidence.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_batch_receipts.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_qa_cooldown_loop.py' -v
+          python -m unittest discover -s tests -p 'test_pinterest_today_slot_gate.py' -v
           python -m py_compile tools/cortes_buffer_pinterest_cloud.py anthares_publisher/editorial.py
       - name: Read Buffer key from Anthares Secrets without logging it
         uses: bitwarden/sm-action@v2
