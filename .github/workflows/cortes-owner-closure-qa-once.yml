@@ -1,0 +1,64 @@
+name: CORTES owner-closed missing source — isolated crossrepo QA
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Obtain preexisting private repository read token
+        env:
+          GL_AUTH: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,json,urllib.request
+          if not os.environ.get("GL_AUTH"): raise SystemExit("SOURCE_QA_GITLAB_CREDENTIAL_MISSING")
+          req=urllib.request.Request(
+            "https://gitlab.com/api/v4/projects/87361776/variables/GITHUB_MIRROR_TOKEN",
+            headers={"PRIVATE-TOKEN":os.environ["GL_AUTH"],"Accept":"application/json"})
+          try:
+              with urllib.request.urlopen(req,timeout=25) as r:
+                  token=str(json.load(r).get("value") or "").strip()
+          except Exception: raise SystemExit("SOURCE_QA_GITHUB_READ_TOKEN_UNAVAILABLE")
+          if len(token)<20:raise SystemExit("SOURCE_QA_GITHUB_READ_TOKEN_INVALID")
+          print("::add-mask::"+token)
+          with open(os.environ["GITHUB_ENV"],"a") as f:
+              f.write("CORTES_AUTH="+token+"\n")
+          PY
+      - name: Read exact GitHub PR commits with no repository mutation
+        env:
+          AUTH: ${{ env.CORTES_AUTH }}
+        run: |
+          set -euo pipefail
+          auth="$(printf 'x-access-token:%s' "$AUTH" | base64 -w0)"
+          unset AUTH
+          git -c "http.extraheader=AUTHORIZATION: Basic $auth" clone --quiet --depth=1 --branch fix/cortes-close-unavailable-source-owner-policy-20261110 https://github.com/UniversoAnthares/anthares-wordpress.git wp
+          git -c "http.extraheader=AUTHORIZATION: Basic $auth" clone --quiet --depth=1 --branch fix/cortes-owner-close-missing-source-20261110 https://github.com/UniversoAnthares/anthares-clipper.git clipper
+          unset auth
+          test "$(git -C wp rev-parse HEAD)" = "5f9c9d4eccc3e67c6168cc1b393fa8a2db376b7f"
+          test "$(git -C clipper rev-parse HEAD)" = "e23701f4f5092da02991e119bb8b3ef43f2a5504"
+          echo "CORTES_CLOSURE_SOURCE_SHA_VERIFIED=1"
+      - name: PHP syntax, authorization, chronology and manifest
+        run: |
+          set -euo pipefail
+          php -l wp/anthares-clipper/cortes-control.php
+          php -l wp/anthares-clipper/cortes-source-adapter.php
+          php wp/tests/test-cortes-source-order.php
+          php wp/tests/test-cortes-access-failover.php
+          (cd wp && python3 qa/manifest-coverage-preflight.py --check)
+          echo "CORTES_CLOSURE_WORDPRESS_CHECKS=PASS"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Clipper policy and no-recreation regression tests
+        working-directory: clipper
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --disable-pip-version-check pytest requests pillow 'yt-dlp[default]' tzdata imageio-ffmpeg
+          python -m py_compile cortes_source_adapter.py cortes_short_batch.py
+          python -m pytest -q tests/test_cortes_cycle_policy.py tests/test_cortes_short_batch_topup_lifecycle.py
+          echo "CORTES_CLOSURE_CLIPPER_CHECKS=PASS"
