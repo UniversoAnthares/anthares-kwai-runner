@@ -1,0 +1,192 @@
+name: TikTok Google Play cloud Android private login v5
+on:
+  push:
+    branches: ['feature/tiktok-live-authorized-cloud-*']
+    paths: ['.github/workflows/tiktok-android-google-remote-login-v5.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: tiktok-google-play-remote-login-v5
+  cancel-in-progress: false
+jobs:
+  interactive-google-login:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      REMOTE_USER: anthares
+      TIKTOK_PACKAGE: com.zhiliaoapp.musically
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install private remote display and current scrcpy
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            libpulse0 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 \
+            libxrandr2 libasound2t64 libpangocairo-1.0-0 libatk1.0-0 \
+            libcups2 libdrm2 libgbm1 libsdl2-2.0-0 \
+            xvfb x11vnc x11-utils novnc websockify nginx apache2-utils
+          curl -fsSL --retry 3 -o /tmp/scrcpy-v3.3.4.tar.gz \
+            https://github.com/Genymobile/scrcpy/releases/download/v3.3.4/scrcpy-linux-x86_64-v3.3.4.tar.gz
+          echo '0305d98c06178c67e12427bbf340c436d0d58c9e2a39bf9ffbbf8f54d7ef95a5  /tmp/scrcpy-v3.3.4.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/scrcpy-v3.3.4.tar.gz -C /tmp
+          /tmp/scrcpy-linux-x86_64-v3.3.4/scrcpy --version | head -2
+          curl -fsSL --retry 3 -o /tmp/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod 755 /tmp/cloudflared
+          echo ANDROID_REMOTE_GUI_TOOLING_READY=1
+      - name: Prepare fresh Google Play Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$SDK" ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" 'emulator' 'platform-tools' 'system-images;android-35;google_apis_playstore;x86_64'
+          rm -rf "$ANDROID_AVD_HOME/tiktok-login-v5.avd" "$ANDROID_AVD_HOME/tiktok-login-v5.ini"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -f -n tiktok-login-v5 -k 'system-images;android-35;google_apis_playstore;x86_64' -d pixel_6
+          "$SDK/emulator/emulator" -version | head -3
+
+      - name: Boot Android and prove framebuffer
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"; ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          sudo chmod 666 /dev/kvm
+          "$ADB" kill-server || true
+          "$ADB" start-server
+          nohup "$SDK/emulator/emulator" -avd tiktok-login-v5 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 -no-snapshot-load -wipe-data -port 5554 >/tmp/tiktok-emulator.log 2>&1 &
+          EMU_PID=$!
+          ready=0
+          for i in $(seq 1 120); do
+            if "$ADB" devices | grep -q '^emulator-5554[[:space:]]*device'; then ready=1; break; fi
+            kill -0 "$EMU_PID" 2>/dev/null || { tail -100 /tmp/tiktok-emulator.log; exit 31; }
+            sleep 2
+          done
+          [ "$ready" = 1 ] || { echo ADB_DEVICE_TIMEOUT; tail -100 /tmp/tiktok-emulator.log; exit 32; }
+          timeout 180 bash -c 'until [ "$("$1" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done' _ "$ADB"
+          "$ADB" -s emulator-5554 shell settings put global stay_on_while_plugged_in 3 || true
+          "$ADB" -s emulator-5554 shell svc power stayon true || true
+          "$ADB" -s emulator-5554 shell input keyevent KEYCODE_WAKEUP || true
+          "$ADB" -s emulator-5554 shell wm dismiss-keyguard || true
+          "$ADB" -s emulator-5554 exec-out screencap -p >/tmp/android-screen.png
+          test "$(stat -c%s /tmp/android-screen.png)" -gt 10000
+          "$ADB" -s emulator-5554 shell am start -a android.intent.action.VIEW -d "market://details?id=$TIKTOK_PACKAGE" com.android.vending >/dev/null || true
+
+      - name: Start protected remote Android, deliver owner-only credentials
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"; ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          cleanup() {
+            "$ADB" -s emulator-5554 emu kill >/dev/null 2>&1 || true
+            rm -f /tmp/android-google-public.pem
+          }
+          trap cleanup EXIT
+          password="$(openssl rand -hex 22)"
+          echo 'ANDROID_REMOTE_GUI_PASSWORD_CREATED=1'
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1280x940x24 -nolisten tcp >/tmp/tiktok-xvfb.log 2>&1 &
+          sleep 2
+          xdpyinfo -display :99 >/dev/null
+          /tmp/scrcpy-linux-x86_64-v3.3.4/scrcpy -s emulator-5554 --no-audio \
+            --stay-awake --max-size=1000 --window-title='Android virtual Google Play' >/tmp/tiktok-scrcpy.log 2>&1 &
+          SCRCPY_PID="$!"
+          sleep 7
+          if ! kill -0 "$SCRCPY_PID" 2>/dev/null; then
+            echo ANDROID_REMOTE_SCRCPY_FAILED=1
+            sed -n '1,40p' /tmp/tiktok-scrcpy.log
+            exit 41
+          fi
+          echo ANDROID_REMOTE_SCRCPY_READY=1
+          x11vnc -display :99 -forever -shared -nopw -localhost -rfbport 5900 -xkb \
+            >/tmp/tiktok-x11vnc.log 2>&1 &
+          websockify --web=/usr/share/novnc 6081 127.0.0.1:5900 \
+            >/tmp/tiktok-websockify.log 2>&1 &
+          printf '%s\n' "$password" | sudo htpasswd -i -B -c /etc/nginx/.tiktok-login-htpasswd "$REMOTE_USER" >/dev/null
+          sudo tee /etc/nginx/sites-available/default >/dev/null <<'NGINX'
+          server {
+            listen 6080;
+            server_name _;
+            auth_basic "Private Anthares Android login";
+            auth_basic_user_file /etc/nginx/.tiktok-login-htpasswd;
+            location / {
+              proxy_pass http://127.0.0.1:6081;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+              proxy_read_timeout 3600;
+            }
+          }
+          NGINX
+          sudo nginx -t >/dev/null
+          sudo systemctl restart nginx
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 \
+            >/tmp/tiktok-cloudflared.log 2>&1 &
+          URL=''
+          for i in $(seq 1 75); do
+            URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/tiktok-cloudflared.log | tail -1 || true)"
+            [ -n "$URL" ] && break
+            sleep 2
+          done
+          [ -n "$URL" ] || { echo ANDROID_REMOTE_TUNNEL_NOT_READY=1; exit 42; }
+          unauth=0; auth=0
+          for i in $(seq 1 25); do
+            unauth="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$URL/vnc.html" || true)"
+            auth="$(curl -s -u "$REMOTE_USER:$password" -o /dev/null -w '%{http_code}' --max-time 10 "$URL/vnc.html" || true)"
+            [ "$unauth" = 401 ] && [ "$auth" = 200 ] && break
+            sleep 2
+          done
+          [ "$unauth" = 401 ] && [ "$auth" = 200 ] || { echo ANDROID_REMOTE_TUNNEL_AUTH_FAILED=1; exit 43; }
+          echo ANDROID_REMOTE_TUNNEL_PRIVATE_CHECK_PASSED=1
+
+          cat >/tmp/android-google-public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAotycFcg8nPz+T3iMZ6Dy
+          2HTKKFrOV5+cPaMF7Jr5QF6K+0QhAJTyDoA9RHP+GNiTLjxUImyUHaHRMEtZwt87
+          gjKdo1Q1u6iYMepq4lf20WTsiylXqqjTQzHg+pqi0Ib3N8xJfqE0xbufoIdy4Hz9
+          ZcB4QuXtPgGM2BE1Lakhx5bqK60Szg6NUYxnksm2D13lNXWbg6iHFTetxArl5qG3
+          wden7y6+0qTS3kHtNDm2bpDMrO4LCfqC4UTeSkNvx8CQ7V9A7lUcxixS4EQVq2PL
+          JPYiK91d+/+3QnWPr9rOAi7BCdpdKQeLWfAmdbjnKmso+Ju7Lizi1g962wI45sxr
+          T18OrjbHWTDNABiZsMh9yAQhWzJeg74gv438yDeKlNiorEX/omKradpMDyQxrmZl
+          jn2UHh+GDySkr8ibPQTbctT9BYQYKKA0+eXPS81389f9dyb+ap6cLJEed2uNN59n
+          tv+4rI+rrNlW2EtN8BX9osheBWMJT7x1gfrPTJ/h46hjAgMBAAE=
+          -----END PUBLIC KEY-----
+          PEM
+          link="$URL/vnc.html?autoconnect=1&resize=scale"
+          payload="$(jq -cn --arg url "$link" --arg user "$REMOTE_USER" \
+            --arg pass "$password" --arg run "$GITHUB_RUN_ID" \
+            '{url:$url,username:$user,password:$pass,run_id:$run}')"
+          encrypted="$(printf '%s' "$payload" | openssl pkeyutl -encrypt \
+            -pubin -inkey /tmp/android-google-public.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 | base64 -w0)"
+          echo "ANDROID_REMOTE_RSA_OAEP_SHA256=$encrypted"
+          body="$(jq -cn --arg data "$encrypted" --arg run "$GITHUB_RUN_ID" \
+            '{body:("REMOTE_ANDROID_LOGIN_V5_ENCRYPTED run="+$run+" rsa_oaep_sha256="+$data+
+              "\nTunnel URL and BasicAuth credentials encrypted for owner; no plaintext access data in public logs.")}')"
+          curl -fsS --connect-timeout 10 --max-time 30 -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            --data "$body" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/2301/comments" >/dev/null
+          echo ANDROID_REMOTE_ENCRYPTED_ACCESS_POSTED=1
+          echo 'Android virtual protegido ativo; acesso privado enviado ao titular via ChatGPT.' >>"$GITHUB_STEP_SUMMARY"
+          deadline=$((SECONDS+2250))
+          echo ANDROID_REMOTE_GOOGLE_LOGIN_WINDOW_OPEN=1
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            kill -0 "$SCRCPY_PID" 2>/dev/null || { echo ANDROID_REMOTE_SCRCPY_DIED=1; exit 51; }
+            pgrep -f 'cloudflared tunnel --no-autoupdate' >/dev/null || { echo ANDROID_REMOTE_TUNNEL_DIED=1; exit 52; }
+            sleep 12
+          done
+          echo ANDROID_REMOTE_LOGIN_WINDOW_ENDED=1
