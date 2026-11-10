@@ -489,8 +489,74 @@ def notify_rate_limit_p0():
         print("::warning::PINTEREST_RATE_LIMIT_QA_ISSUE_UNAVAILABLE",flush=True)
 
 
+def audit_stale_buffer_pending():
+    """Read exact pending Buffer receipts without leasing, enqueueing or CAS.
+
+    Status is a sanitized provider enum and dueAt is a timestamp. No titles,
+    descriptions, media URLs, credentials or full remote IDs are exposed.
+    """
+    from datetime import datetime, timezone
+    import re
+    jobs=queue("pending").get("jobs") or []
+    ids=[str(j.get("remote_id") or "") for j in jobs]
+    if not ids or len(ids)>25 or len(ids)!=len(set(ids)) or any(
+            not re.fullmatch(r"[A-Za-z0-9_:-]{1,160}",v) for v in ids):
+        raise RuntimeError("PINTEREST_BUFFER_AUDIT_PENDING_INVALID")
+    print("PINTEREST_PENDING_AUDIT_COUNT="+str(len(ids)),flush=True)
+    # Small read-only batches: Buffer's proven 8-alias read path.
+    for offset in range(0,len(ids),8):
+        part=ids[offset:offset+8]
+        parts=[("p"+str(i)+": post(input: { id: "+json.dumps(remote)+
+                ' }) { id status externalLink channelId schedulingType dueAt }')
+               for i,remote in enumerate(part)]
+        response=api("query CortesPinterestPendingAudit { "+" ".join(parts)+" }")
+        if not isinstance(response,dict):
+            raise RuntimeError("PINTEREST_BUFFER_AUDIT_RESPONSE_INVALID")
+        for i,remote in enumerate(part):
+            row=response.get("p"+str(i))
+            fingerprint=hashlib.sha256(remote.encode()).hexdigest()[:12]
+            if not isinstance(row,dict) or not row:
+                print("PINTEREST_PENDING_AUDIT="+json.dumps({
+                    "id_hash":fingerprint,"status":"MISSING_REMOTE",
+                    "identity_verified":False},separators=(",",":")),flush=True)
+                continue
+            identity=(str(row.get("id") or "")==remote
+                      and str(row.get("channelId") or "")==PINTEREST_ID)
+            status=str(row.get("status") or "").lower()
+            if not re.fullmatch(r"[a-z_]{1,32}",status):
+                status="unverified"
+            due=str(row.get("dueAt") or "")
+            if due:
+                try:
+                    dt=datetime.fromisoformat(due.replace("Z","+00:00"))
+                    if dt.tzinfo is None:
+                        raise ValueError("timestamp without timezone")
+                    due=dt.astimezone(timezone.utc).isoformat()
+                except ValueError:
+                    due="UNVERIFIED"
+            link=str(row.get("externalLink") or "")
+            uri=urllib.parse.urlparse(link)
+            valid_link=(uri.scheme=="https" and uri.hostname in
+                        ("pinterest.com","www.pinterest.com") and
+                        re.fullmatch(r"/pin/[0-9]+/?",uri.path) is not None)
+            print("PINTEREST_PENDING_AUDIT="+json.dumps({
+                "id_hash":fingerprint,
+                "identity_verified":identity,
+                "status":status if identity else "IDENTITY_MISMATCH",
+                "schedulingType":str(row.get("schedulingType") or "")[:32],
+                "due_at_utc":due,
+                "public_link_verified":bool(identity and valid_link)
+            },separators=(",",":")),flush=True)
+    print(json.dumps({"pinterest_cloud":"AUDIT_PENDING_READ_ONLY",
+                      "inspected":len(ids),"new_posts":0,
+                      "cas_mutations":0},separators=(",",":")),flush=True)
+    return 0
+
+
 def main():
     cloud_only()
+    if os.getenv("CORTES_AUDIT_PENDING_ONLY")=="1":
+        return audit_stale_buffer_pending()
     # The Buffer quota governs NEW posts only. Existing scheduled posts
     # must still be reconciled even on disabled days or after the quota fills.
     state=queue("cooldown-status")
