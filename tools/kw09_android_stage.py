@@ -67,16 +67,20 @@ def stage_metadata(job):
     url = str(payload.get("video_url") or "")
     sha = str(payload.get("content_sha256") or payload.get("media_content_sha256") or "").lower()
     parsed = urlsplit(url)
-    if (job.get("target_key") != "kwai:lucasrosalem"
-            or payload.get("expected_account") != "lucasrosalem"
-            or not re.fullmatch(r"kwai-cortes-[A-Za-z0-9._:-]{3,145}", ident)
-            or not isinstance(gen, int) or gen < 1
-            or parsed.scheme != "https"
-            or parsed.hostname not in ("anthares.us", "www.anthares.us")
-            or parsed.username or parsed.password or parsed.port or parsed.fragment
-            or not parsed.path.lower().endswith(".mp4")
-            or (sha and not re.fullmatch(r"[a-f0-9]{64}", sha))):
-        raise QueueError("KW09_STAGE_IDENTITY_OR_MEDIA_INVALID")
+    checks = {
+        "target": job.get("target_key") == "kwai:lucasrosalem",
+        "account": payload.get("expected_account") == "lucasrosalem",
+        "jobid": bool(re.fullmatch(r"kwai-cortes-[A-Za-z0-9._:-]{3,145}", ident)),
+        "fence": isinstance(gen, int) and gen >= 1,
+        "https": parsed.scheme == "https",
+        "host": parsed.hostname in ("anthares.us", "www.anthares.us"),
+        "authority": not (parsed.username or parsed.password or parsed.port or parsed.fragment),
+        "filename": parsed.path.lower().endswith(".mp4"),
+        "checksum": not sha or bool(re.fullmatch(r"[a-f0-9]{64}", sha)),
+    }
+    if not all(checks.values()):
+        bad = "_".join(name for name, ok in checks.items() if not ok)
+        raise QueueError("KW09_STAGE_IDENTITY_OR_MEDIA_INVALID_" + bad)
     # Neon media_sha256 may be the dispatch identity, not the MP4 content.
     # The Android must receive a real content checksum before fetching.
     if not sha:
