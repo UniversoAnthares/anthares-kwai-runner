@@ -23,6 +23,9 @@ class SourceInventoryAuditTests(unittest.TestCase):
         r=audit(self.state(),["alpha","beta","gamma"])
         self.assertEqual(r["active_missing_count"],0)
         self.assertEqual(r["blocker_id"],"alpha")
+        self.assertEqual(r["locked_source"]["video_id"],"alpha")
+        self.assertEqual(r["locked_source"]["registry_stage"],"queued")
+        self.assertEqual(r["locked_source"]["registry_clips"],1)
 
 if __name__=="__main__":
     unittest.main()
