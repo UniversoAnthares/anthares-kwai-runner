@@ -7,6 +7,8 @@ This producer never publishes or marks a post confirmed.
 """
 import hashlib
 import json
+import os
+import re
 import sys
 import time
 import urllib.error
@@ -45,9 +47,26 @@ def enqueue(job):
     return bool(body.get("deduped"))
 
 def main():
-    linked.require_cloud()
-    source=linked.wp_state()
-    selected=linked.candidate_jobs(source)
+    stage="preflight"
+    try:
+        linked.require_cloud()
+        stage="wordpress"
+        source=linked.wp_state()
+        stage="candidate_jobs"
+        selected=linked.candidate_jobs(source)
+    except Exception as exc:
+        # Emit safe operational classifiers only, never WordPress credentials.
+        reason=str(exc)
+        if not re.fullmatch(r"(?:CORTES|LINKEDIN)_[A-Z0-9_]{5,100}", reason):
+            reason=type(exc).__name__
+        print("::error::CORTES_FANOUT_PREFLIGHT_FAILED stage="+stage+" reason="+reason,flush=True)
+        raise
+    if os.getenv("CORTES_FANOUT_DIAGNOSE_ONLY")=="1":
+        print(json.dumps({"CORTES_FANOUT_DIAGNOSTIC":"READ_ONLY",
+                          "eligible_masters":len(selected),
+                          "destinations":list(NETWORKS),
+                          "new_enqueues":0},separators=(",",":")),flush=True)
+        return
     # Source-level editorial candidates do not reserve Buffer quota. The
     # only Buffer capacity authority is the shared Neon 20/day Mon-Fri ledger.
     # Incremental daily reruns safely reuse the same identities.
