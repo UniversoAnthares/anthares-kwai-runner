@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -190,6 +191,58 @@ def wait_for_stream(room: str) -> None:
         time.sleep(3)
     raise RuntimeError("KW12_RTMP_PUSH_NOT_ALIVE")
 
+def studio_confirmed_start(page, room: str) -> int:
+    """Read the authoritative live start time from the Studio room API."""
+    result = call(page, "room", room)
+    if result.get("http") != 200:
+        raise RuntimeError("KW12_STUDIO_START_TIME_HTTP_FAILED")
+    view = (result.get("body") or {}).get("curRoomVo") or {}
+    if str(view.get("roomStatus")) != "1":
+        raise RuntimeError("KW12_STUDIO_ROOM_NOT_ACTIVE_FOR_START_ALIGNMENT")
+    raw = view.get("startTime")
+    if isinstance(raw, bool) or not re.fullmatch(r"[0-9]{10,13}", str(raw)):
+        raise RuntimeError("KW12_STUDIO_START_TIME_UNCONFIRMED")
+    started = int(raw)
+    if started > 9999999999:
+        started //= 1000
+    if abs(int(time.time()) - started) > 600:
+        raise RuntimeError("KW12_STUDIO_START_TIME_OUT_OF_RANGE")
+    return started
+
+
+def align_hostinger_window(room: str, studio_start: int) -> None:
+    """Keep Hostinger's stop time synchronized with Kwai's actual live start."""
+    if not re.fullmatch(r"[0-9]{10,16}", room):
+        raise RuntimeError("KW12_WINDOW_ROOM_INVALID")
+    if not (1000000000 < studio_start < 9999999999):
+        raise RuntimeError("KW12_WINDOW_TIME_INVALID")
+    end = studio_start + SIX_HOURS
+    script = (
+        "set -euo pipefail; umask 077; root=" + REMOTE + "; "
+        'conf="$root/active-room.env"; '
+        'exec 9>"$root/.active-room.lock"; flock -w 10 9; '
+        'test -s "$conf"; test "$(stat -c %a "$conf")" = 600; '
+        'source "$conf"; '
+        'test "$ROOM_ID" = ' + shlex.quote(room) + '; '
+        'test "$START_EPOCH" -ge ' + str(studio_start - 600) + '; '
+        'test "$START_EPOCH" -le ' + str(studio_start + 600) + '; '
+        'test "$END_EPOCH" -gt "$(date +%s)"; '
+        'tmp=$(mktemp "$root/.room-window-XXXXXXXX"); '
+        'trap \'rm -f "$tmp"\' EXIT; '
+        'sed -e "s/^START_EPOCH=[0-9]*$/START_EPOCH=' + str(studio_start) + '/" '
+        '-e "s/^END_EPOCH=[0-9]*$/END_EPOCH=' + str(end) + '/" '
+        '"$conf" > "$tmp"; '
+        'chmod 600 "$tmp"; mv -f "$tmp" "$conf"; '
+        'source "$conf"; '
+        'test "$START_EPOCH" = ' + str(studio_start) + '; '
+        'test "$END_EPOCH" = ' + str(end) + '; '
+        'echo KW12_HOSTINGER_WINDOW_ALIGNED=1'
+    )
+    result = ssh("bash -c " + shlex.quote(script))
+    if "KW12_HOSTINGER_WINDOW_ALIGNED=1" not in result:
+        raise RuntimeError("KW12_HOSTINGER_WINDOW_ALIGNMENT_UNCONFIRMED")
+
+
 def create_and_start(page, issue_id: int, state: dict) -> None:
     room = ""
     host_active = False
@@ -215,9 +268,10 @@ def create_and_start(page, issue_id: int, state: dict) -> None:
             page.wait_for_timeout(2500)
         if good < 2:
             raise RuntimeError("KW12_STUDIO_LIVE_NOT_CONFIRMED")
-        now = int(time.time())
+        started_at = studio_confirmed_start(page, room)
+        align_hostinger_window(room, started_at)
         updated = {"version": 1, "status": "active", "room_id": room,
-                   "started_at": now, "renew_after": now + SIX_HOURS,
+                   "started_at": started_at, "renew_after": started_at + SIX_HOURS,
                    "cycle": int(state.get("cycle", 0)) + 1,
                    "hls_url": os.environ.get("ANTHARES_PUBLIC_HLS_URL", ""),
                    "mode": "rtmp_hostinger"}
