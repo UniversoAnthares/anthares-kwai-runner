@@ -80,7 +80,7 @@ jobs:
               time.sleep(3)
               code,after_status=call("/interactive-browser/status",timeout=35)
               current=str(after_status.get("url") or "")
-              redirect=re.search(r"^https://(?:www\\.)?tiktok\\.com/@([^/?#]+)",current,re.I)
+              redirect=re.search(r"^https://(?:www[.])?tiktok[.]com/@([^/?#]+)",current,re.I)
               matches=bool(redirect and redirect.group(1).lower()=="universo.anthares")
               print("AOI01_ACCOUNT_PROFILE_REDIRECT_VERIFIED="+str(matches))
               code,evidence=call("/interactive-browser/tiktok-evidence",timeout=75)
