@@ -14,8 +14,9 @@ import sys
 BRIDGE = r'''
 // AOI-02: read-only authentication gate for the existing GitLab Clipper producer.
 // Media production and publication remain controlled by the existing Neon ledger.
-let aoi02Jwks = null;
-let aoi02JwksAt = 0;
+const aoi02PinnedJwks = [{"kty":"RSA","kid":"kewiQq9jiC84CvSsJYOB-N6A8WFLSV20Mb-y7IlWDSQ","e":"AQAB","n":"5RyvCSgBoOGNE03CMcJ9Bzo1JDvsU8XgddvRuJtdJAIq5zJ8fiUEGCnMfAZI4of36YXBuBalIycqkgxrRkSOENRUCWN45bf8xsQCcQ8zZxozu0St4w5S-aC7N7UTTarPZTp4BZH8ttUm-VnK4aEdMx9L3Izo0hxaJ135undTuA6gQpK-0nVsm6tRVq4akDe3OhC-7b2h6z7GWJX1SD4sAD3iaq4LZa8y1mvBBz6AIM9co8R-vU1_CduxKQc3KxCnqKALbEKXm0mTGsXha9aNv3pLNRNs_J-cCjBpb1EXAe_7qOURTiIHdv8_sdjcFTJ0OTeLWywuSf7mD0Wpx2LKcD6ImENbyq5IBuR1e2ghnh5Y9H33cuQ0FRni8ikq5W3xP3HSMfwlayhIAJN_WnmbhENRU-m2_hDPiD9JYF2CrQneLkE3kcazSdtarPbg9ZDiydHbKWCV-X7HxxIKEr9N7P1V5HKatF4ZUrG60e3eBnRyccPwmT66i9NYyrcy1_ZNN8D1DY8xh9kflUDy4dSYu4R7AEWxNJWQQov525v0MjD5FNAS03rpk4SuW3Mt7IP73m-_BpmIhW3LZsnmfd8xHRjf0M9veyJD0--ETGmh8t3_CXh3I3R9IbcSEntUl_2lCvc_6B-m8W-t2nZr4wvOq9-iaTQXAn1Au6EaOYWvDRE","use":"sig","alg":"RS256"},{"kty":"RSA","kid":"4i3sFE7sxqNPOT7FdvcGA1ZVGGI_r-tsDXnEuYT4ZqE","e":"AQAB","n":"4cxDjTcJRJFID6UCgepPV45T1XDz_cLXSPgMur00WXB4jJrR9bfnZDx6dWqwps2dCw-lD3Fccj2oItwdRQ99In61l48MgiJaITf5JK2c63halNYiNo22_cyBG__nCkDZTZwEfGdfPRXSOWMg1E0pgGc1PoqwOdHZrQVqTcP3vWJt8bDQSOuoZBHSwVzDSjHPY6LmJMEO42H27t3ZkcYtS5crU8j2Yf-UH5U6rrSEyMdrCpc9IXe9WCmWjz5yOQa0r3U7M5OPEKD1-8wuP6_dPw0DyNO_Ei7UerVtsx5XSTd-Z5ujeB3PFVeAdtGxJ23oRNCq2MCOZBa58EGeRDLR7Q","use":"sig","alg":"RS256"},{"kty":"RSA","kid":"i3ZOa_TGMII4F39SBmXwxMok3WTPSU7kgacm4RIceio","e":"AQAB","n":"rtevzCHH0zGGwcgYFxBK00twLyHIOrD1jLyyQAD8-3QZX5JvozrkoCMFuMzdwt-6D4W4v_7PFtGolFW7ematuCYL6-NnJXUEEA_Tgz-AsbEQr0_qRQvfvkNnfvaqX_u5lCVc4Eh5HL3efQseA_mH4461B1dSzNi5DD_Mamx4CuksjrMQ2lr2AbcLg3Ip9wQYVX8a4y_uhoS2sz9bTJ9MqJ45wvfKpHK2m4pZmjSakPz6B9gLU6buVXzfx6wbhdEL1TQfvH901JnU_Scv7l70ymBpEoFtM0Vi_XvyYbkos8oc2R9o6_SXaodCHzOAZX5ujUwJZcrMdsgzBMgxItWZbQ","use":"sig","alg":"RS256"}];
+let aoi02Jwks = aoi02PinnedJwks;
+let aoi02JwksAt = Date.now() + 300000;
 async function aoi02SignedGitLab(req) {
   const match = /^Bearer\s+(.+)$/i.exec(req.headers.get("Authorization") || "");
   const jwt = match ? match[1] : "";
@@ -45,19 +46,27 @@ async function aoi02SignedGitLab(req) {
           || claims.nbf > now + 60))) return false;
   try {
     if (!aoi02Jwks || Date.now() > aoi02JwksAt) {
-      const discovery = await fetch("https://gitlab.com/.well-known/openid-configuration",
-        {signal: AbortSignal.timeout(7500)});
-      if (!discovery.ok) return false;
-      const keysURL = new URL((await discovery.json()).jwks_uri);
-      if (keysURL.origin !== "https://gitlab.com" || keysURL.username || keysURL.password) return false;
-      const response = await fetch(keysURL.toString(), {signal: AbortSignal.timeout(7500)});
-      if (!response.ok) return false;
-      const keys = (await response.json()).keys;
-      if (!Array.isArray(keys)) return false;
-      aoi02Jwks = keys; aoi02JwksAt = Date.now() + 300000;
+      try {
+        const discovery = await fetch("https://gitlab.com/.well-known/openid-configuration",
+          {signal: AbortSignal.timeout(7500)});
+        if (!discovery.ok) throw Error("discovery_failed");
+        const keysURL = new URL((await discovery.json()).jwks_uri);
+        if (keysURL.origin !== "https://gitlab.com" || keysURL.username || keysURL.password)
+          throw Error("unexpected_jwks_origin");
+        const response = await fetch(keysURL.toString(), {signal: AbortSignal.timeout(7500)});
+        if (!response.ok) throw Error("jwks_failed");
+        const keys = (await response.json()).keys;
+        if (!Array.isArray(keys)) throw Error("keys_invalid");
+        aoi02Jwks = keys;
+      } catch {
+        aoi02Jwks = aoi02Jwks || aoi02PinnedJwks;
+      }
+      aoi02JwksAt = Date.now() + 300000;
     }
-    const jwk = aoi02Jwks.find(k => k.kid === hdr.kid && k.kty === "RSA"
-      && (!k.alg || k.alg === "RS256"));
+    const jwk = (aoi02Jwks || []).find(k => k.kid === hdr.kid && k.kty === "RSA"
+      && (!k.alg || k.alg === "RS256"))
+      || aoi02PinnedJwks.find(k => k.kid === hdr.kid && k.kty === "RSA"
+        && (!k.alg || k.alg === "RS256"));
     if (!jwk) return false;
     const key = await crypto.subtle.importKey("jwk", jwk,
       {name: "RSASSA-PKCS1-v1_5", hash: "SHA-256"}, false, ["verify"]);
@@ -96,7 +105,7 @@ async function aoi02RuntimeSecrets(req, env) {
     const profile = await response.json();
     if (Number(profile?.id) !== 1)
       return reply(503, {ok: false, error: "wordpress_identity_mismatch"});
-  } catch (e) { return reply(503, {ok: false, error: "wordpress_auth_transport_failed", diagnostic: String(e && e.name || "Unknown").slice(0,40)}); }
+  } catch (e) { return reply(503, {ok: false, error: "wordpress_auth_transport_failed", diagnostic: String(e && e.name || "Unknown").slice(0,40), reason: (/redirect/i.test(String(e && e.message || "")) ? "redirect" : /fetch/i.test(String(e && e.message || "")) ? "fetch" : /invalid/i.test(String(e && e.message || "")) ? "invalid" : "other")}); }
   return reply(200, {ok: true, values: {
     WP_SITE_URL: site, WP_USERNAME: username, WP_APP_PASSWORD: password
   }});
