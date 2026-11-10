@@ -96,18 +96,33 @@ async function aoi02RuntimeSecrets(req, env) {
   if (typeof password !== "string" || !password)
     return reply(503, {ok: false, error: "runtime_secrets_unavailable"});
   const site = "https://anthares.us", username = "lucasyahn";
-  try {
-    const response = await fetch(site + "/wp-json/wp/v2/users/me", {
-      headers: {"Authorization": "Basic " + btoa(username + ":" + password),
-        "Accept": "application/json"},
-      redirect: "manual", signal: AbortSignal.timeout(9000)
-    });
-    if (!response.ok)
-      return reply(503, {ok: false, error: "wordpress_auth_unavailable", upstream_status: response.status});
-    const profile = await response.json();
-    if (Number(profile?.id) !== 1)
-      return reply(503, {ok: false, error: "wordpress_identity_mismatch"});
-  } catch (e) { return reply(503, {ok: false, error: "wordpress_auth_transport_failed", diagnostic: String(e && e.name || "Unknown").slice(0,40), reason: (/redirect/i.test(String(e && e.message || "")) ? "redirect" : /fetch/i.test(String(e && e.message || "")) ? "fetch" : /invalid/i.test(String(e && e.message || "")) ? "invalid" : "other")}); }
+  // Short, bounded read-only retries for transient WordPress network errors.
+  // Fail closed: the signed GitLab identity and WordPress owner must both pass.
+  let verified = false;
+  let failure = "wordpress_auth_transport_failed";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(site + "/wp-json/wp/v2/users/me", {
+        headers: {"Authorization": "Basic " + btoa(username + ":" + password),
+          "Accept": "application/json"},
+        redirect: "manual", signal: AbortSignal.timeout(6500)
+      });
+      if (!response.ok) {
+        failure = "wordpress_auth_unavailable";
+        if (![429, 502, 503, 504].includes(response.status)) break;
+      } else {
+        const profile = await response.json();
+        if (Number(profile?.id) !== 1)
+          return reply(503, {ok: false, error: "wordpress_identity_mismatch"});
+        verified = true;
+        break;
+      }
+    } catch {
+      failure = "wordpress_auth_transport_failed";
+    }
+    if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
+  }
+  if (!verified) return reply(503, {ok: false, error: failure});
   return reply(200, {ok: true, values: {
     WP_SITE_URL: site, WP_USERNAME: username, WP_APP_PASSWORD: password
   }});
