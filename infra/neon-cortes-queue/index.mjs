@@ -1210,9 +1210,29 @@ async function instagramDirectAction(verb,b){
  return {ok:false,error:'DIRECT_ACTION_INVALID'};
 }
 
+export function validatePinterestTerminalErrorProof(b, nowMs=Date.now()){
+ // A stale Buffer 'error' is terminal only after exact identity and a full
+ // day after provider due time. The original post is NEVER resubmitted.
+ const id=String(b?.id||''),remote=String(b?.remote_id||'');
+ if(!/^cortes-fanout-pinterest-[a-f0-9]{32}$/.test(id)
+    || !/^[A-Za-z0-9_:-]{1,160}$/.test(remote)
+    || b?.target_key!=='pinterest:lucasyahn'
+    || b?.buffer_channel_id!=='6ad8a46d778b240e2f79a40f'
+    || b?.provider_status!=='error'
+    || b?.scheduling_type!=='automatic'
+    || b?.external_link!==''
+    || b?.provider_link_present!==false)return null;
+ const due=String(b?.provider_due_at_utc||'');
+ if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)$/.test(due))return null;
+ const stamp=Date.parse(due);
+ if(!Number.isFinite(stamp)||stamp>=nowMs-24*60*60*1000
+     ||stamp<nowMs-366*24*60*60*1000)return null;
+ return {id,remote,provider_due_at_utc:new Date(stamp).toISOString()};
+}
+
 async function bufferAction(verb,b,platform){
  const dest=target(platform),owner='buffer-'+platform+':';
- const allowed=new Set(['lease','start','fail','media-missing','editorial-invalid','rejected','scheduled','pending','reconcile','stats','retention','cooldown','cooldown-status','policy']);
+ const allowed=new Set(['lease','start','fail','media-missing','editorial-invalid','rejected','scheduled','pending','reconcile','terminal-error','stats','retention','cooldown','cooldown-status','policy']);
  if(!allowed.has(verb))return{ok:false,error:'UNKNOWN_BUFFER_ACTION'};
  if(verb==='cooldown'||verb==='cooldown-status'){
   if(!['pinterest','instagram','linkedin'].includes(platform))return{ok:false,error:'BUFFER_COOLDOWN_SCOPE_ONLY'};
@@ -1338,7 +1358,7 @@ async function bufferAction(verb,b,platform){
 // target and buffer_scheduled evidence. It has no active lease by design:
 // buffer-scheduled explicitly clears lease_owner and lease_until.
 if(!id)return{ok:false,error:'INVALID_ID'};
-if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<1))
+if(!['reconcile','terminal-error'].includes(verb)&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<1))
   return{ok:false,error:'INVALID_FENCE'};
  if(verb==='start'){
   const rows=await query(`UPDATE cortes_publications SET status='started',publication_started_at=COALESCE(publication_started_at,now()),updated_at=now()
@@ -1366,6 +1386,32 @@ if(verb!=='reconcile'&&(!who.startsWith(owner)||!Number.isInteger(fence)||fence<
   if(rows.length)
     await query("DELETE FROM cortes_buffer_daily_slots WHERE job_id=$1 AND target_key=$2 AND local_day=(now() AT TIME ZONE 'America/Campo_Grande')::date",[id,dest]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'EDITORIAL_INVALID_FENCE_REJECTED'};
+ }
+ if(verb==='terminal-error'){
+  // A remote Buffer error quarantines an already accepted post; no resubmit.
+  // This route is accessible only to the pinned Pinterest main-branch worker.
+  if(platform!=='pinterest')return{ok:false,error:'PINTEREST_ERROR_ONLY'};
+  const proof=validatePinterestTerminalErrorProof(b);
+  if(!proof)return{ok:false,error:'PINTEREST_ERROR_PROOF_INVALID'};
+  const rows=await query(`UPDATE cortes_publications
+    SET status='failed',lease_owner=NULL,lease_until=NULL,updated_at=now(),
+      confirmation_evidence=jsonb_build_object(
+        'kind','buffer_remote_error_verified',
+        'buffer_post_id',$3::text,'provider_status','error',
+        'channel_id',$4::text,'provider_due_at_utc',$5::text,
+        'public_link_present',false,'confirmed_on_network',false,
+        'do_not_retry_remote_id',true,
+        'verified_at',to_char(now() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+    WHERE id=$1 AND target_key=$2 AND remote_id=$3
+      AND status='uncertain'
+      AND confirmation_evidence->>'kind'='buffer_scheduled'
+      AND confirmation_evidence->>'buffer_post_id'=$3
+      AND updated_at < now()-interval '24 hours'
+    RETURNING id,status,remote_id`,[
+      proof.id,dest,proof.remote,
+      String(b.buffer_channel_id),proof.provider_due_at_utc]);
+  return rows.length?{ok:true,job:rows[0],requeue:false}:
+    {ok:false,error:'PINTEREST_ERROR_CAS_REJECTED'};
  }
  if(verb==='rejected'){
   // A typed Buffer MutationError proves the createPost request was refused.

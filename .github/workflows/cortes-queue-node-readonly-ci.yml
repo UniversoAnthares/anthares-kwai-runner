@@ -8,6 +8,7 @@ on:
       - 'infra/neon-cortes-queue/index.mjs'
       - 'infra/cloudflare-cortes-queue-ha/src/index.js'
       - 'tests/test_cortes_queue_ha.mjs'
+      - 'tests/test_pinterest_terminal_error_backend.mjs'
   workflow_dispatch:
 
 permissions:
@@ -33,5 +34,6 @@ jobs:
           node --check infra/neon-cortes-queue/index.mjs
           node --check infra/cloudflare-cortes-queue-ha/src/index.js
           node --check tests/test_cortes_queue_ha.mjs
+          node --check tests/test_pinterest_terminal_error_backend.mjs
       - name: Run isolated queue Node test suite
-        run: node --test tests/test_cortes_queue_ha.mjs
+        run: node --test tests/test_cortes_queue_ha.mjs tests/test_pinterest_terminal_error_backend.mjs
