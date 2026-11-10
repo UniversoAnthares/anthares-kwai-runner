@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 12
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
-      TIKTOK_LIVE_STORAGE_STATE_FILE: ${{ runner.temp }}/tiktok-primary-session.json
+      TIKTOK_LIVE_STORAGE_STATE_FILE: /tmp/tiktok-primary-session.json
       TIKTOK_LIVE_EXPECTED_ACCOUNT: universo.anthares
     steps:
       - uses: actions/checkout@v4
