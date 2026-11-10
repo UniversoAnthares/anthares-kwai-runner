@@ -98,7 +98,8 @@ def home(s,preserve_upload=False):
  # task, unlike am force-stop or a launcher intent that resumes EditorActivity.
  out('KWAI_NATIVE_PRESERVE_UPLOAD=1')
  activity=PKG+'/com.yxcorp.gifshow.homepage.HomeActivity'
- p=adb(s,'shell','am','start','--activity-clear-top','-n',activity,check=False,timeout=25)
+ # Reorder the existing HomeActivity without destroying a pending editor/draft.
+ p=adb(s,'shell','am','start','--activity-reorder-to-front','-n',activity,check=False,timeout=25)
  if p.returncode or 'Error' in (p.stdout or ''):
   out('KWAI_NATIVE_HOME_INTENT_UNAVAILABLE')
   adb(s,'shell','monkey','-p',PKG,'-c','android.intent.category.LAUNCHER','1',check=False,timeout=25)
