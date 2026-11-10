@@ -5,6 +5,14 @@ on:
     # A 20-minute window allows the active room to be checked frequently and
     # renews soon after the six-hour deadline; room state prevents duplicates.
     - cron: '3,23,43 * * * *'
+  # GitHub schedule events have been absent for this workflow despite its
+  # enabled flag. The existing Kwai publisher is already dispatched remotely;
+  # use its completion as an independent wake-up, without creating a runner.
+  workflow_run:
+    workflows:
+      - 'Kwai Canonical Neon Cloud Publisher'
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       probe_studio_profile:
@@ -147,7 +155,7 @@ jobs:
 
   six_hour_cycle:
     # All runs share the workflow concurrency group, including manual dispatch.
-    if: ${{ (github.event_name == 'schedule' && vars.KWAI_LIVE_6H_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.six_hour_cycle == true) }}
+    if: ${{ ((github.event_name == 'schedule' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_repository.full_name == github.repository)) && vars.KWAI_LIVE_6H_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.six_hour_cycle == true) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
