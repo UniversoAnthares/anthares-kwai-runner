@@ -138,6 +138,8 @@ const KWAI_MOBILE_TOKEN_HASH='e67ce56a65791266af49f5318a85d35d8b78fcfcbf5fcb41ae
 // KW-09: independent, device-bound authorization for the primary account.
 // Store only a SHA-256 digest; the random token exists solely on the Redmi 9.
 const KWAI_MOBILE_PRIMARY_TOKEN_HASH='7dc4d0485f8472ac618ba000bad92739762e0cdb3c07c4514fd8df859f0740f8';
+// Additional device-local authorization for the Macrodroid primary publisher.
+const KWAI_MOBILE_PRIMARY_MACRO_HASH='7a4db5fb3429c7faf96d9f72f8e3588b5dc4393054c40f0004fc9b8792e7612c';
 async function kwaiMobileIdentity(request,action){
  if(request.method!=='POST'||!['kwai-physical-stats','kwai-lease','kwai-renew','kwai-start','kwai-confirm','kwai-fail'].includes(action))return null;
  const m=/^Bearer ([A-Za-z0-9_-]{43})$/.exec(request.headers.get('authorization')||'');
@@ -145,10 +147,11 @@ async function kwaiMobileIdentity(request,action){
  const actual=Buffer.from(sha(m[1]),'hex');
  const secondary=Buffer.from(KWAI_MOBILE_TOKEN_HASH,'hex');
  const primary=Buffer.from(KWAI_MOBILE_PRIMARY_TOKEN_HASH,'hex');
+ const primaryMacro=Buffer.from(KWAI_MOBILE_PRIMARY_MACRO_HASH,'hex');
  if(actual.length!==32)return null;
  if(crypto.timingSafeEqual(actual,secondary))
   return {role:'kwai-mobile',workflow:'mobile:M2004J19C:universoanthares',platform:'kwai'};
- if(crypto.timingSafeEqual(actual,primary))
+ if(crypto.timingSafeEqual(actual,primary)||crypto.timingSafeEqual(actual,primaryMacro))
   return {role:'kwai-mobile-primary',workflow:'mobile:M2004J19C:lucasrosalem',platform:'kwai'};
  return null;
 }
