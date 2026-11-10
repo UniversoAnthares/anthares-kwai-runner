@@ -150,11 +150,13 @@ def stream_endpoint(page, room: str) -> tuple[str, str]:
     raise RuntimeError("KW12_RTMP_DESTINATION_NOT_AVAILABLE")
 
 
-def activate_hostinger(room: str, server: str, key: str) -> None:
+def activate_hostinger(room: str, server: str, key: str, cycle_seconds: int) -> None:
     # Existing activate-room.sh accepts three stdin lines. Never place stream
     # credentials in a command argument, GitHub Issue, log, or GitHub artifact.
+    if cycle_seconds not in (600, SIX_HOURS):
+        raise RuntimeError("KW12_ACTIVATOR_CYCLE_INVALID")
     payload = f"{room}\n{server}\n{key}\n".encode("utf8")
-    receipt = ssh("bash " + REMOTE + "/activate-room.sh", payload)
+    receipt = ssh(f"KW12_CYCLE_SECONDS={cycle_seconds} bash " + REMOTE + "/activate-room.sh", payload)
     if "SALA_CONFIGURADA=" + room not in receipt:
         raise RuntimeError("KW12_HOSTINGER_ACTIVATION_NOT_ACKNOWLEDGED")
     # The user's minute cron may have started the stream concurrently.
@@ -355,7 +357,7 @@ def create_and_start(page, issue_id: int, state: dict) -> None:
     try:
         room = create_rtmp_room(page)
         server, key = stream_endpoint(page, room)
-        activate_hostinger(room, server, key)
+        activate_hostinger(room, server, key, cycle_seconds)
         host_active = True
         del server, key
         wait_for_stream(room)
