@@ -25,6 +25,14 @@ on:
         required: true
         default: false
         type: boolean
+      test_cycle_minutes:
+        description: 'Use exactly two successive 10-minute test lives, then resume six-hour cycles'
+        required: false
+        default: '0'
+        type: choice
+        options:
+          - '0'
+          - '10'
       activate:
         description: 'Create and start a short real LIVE canary'
         required: true
@@ -163,6 +171,7 @@ jobs:
       KWAI_PASSWORD: ${{ secrets.KWAI_PASSWORD }}
       KWAI_LIVE_STORAGE_STATE_B64: ${{ secrets.KWAI_LIVE_STORAGE_STATE_B64 }}
       KW12_SYSTEM_CHROME: '1'
+      KW12_TEST_CYCLE_MINUTES: ${{ github.event_name == 'workflow_dispatch' && inputs.test_cycle_minutes || '0' }}
       GH_TOKEN: ${{ github.token }}
       GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
       ANTHARES_PUBLIC_HLS_URL: https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8
