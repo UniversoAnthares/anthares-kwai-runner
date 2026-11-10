@@ -14,7 +14,7 @@ on:
         required: true
         default: false
       seconds:
-        description: 'Duration in seconds, max 21600'
+        description: 'Authorized canary duration in seconds (15-600)'
         type: string
         default: '600'
         required: true
@@ -26,7 +26,7 @@ concurrency:
 jobs:
   verify-and-optional-transmit:
     runs-on: ubuntu-24.04
-    timeout-minutes: 360
+    timeout-minutes: 20
     env:
       ANTHARES_LIVE_HLS_URL: https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8
       TIKTOK_LIVE_ACCOUNT_AUTHORIZED: ${{ vars.TIKTOK_LIVE_ACCOUNT_AUTHORIZED }}
@@ -56,6 +56,6 @@ jobs:
           python3 - <<'PY'
           import os
           n=int(os.environ['STREAM_SECONDS'])
-          if not 15<=n<=21600: raise SystemExit('duration_out_of_range')
+          if not 15<=n<=600: raise SystemExit('duration_out_of_range')
           PY
           python3 tools/tiktok_live_authorized_cloud.py --seconds "$STREAM_SECONDS"
