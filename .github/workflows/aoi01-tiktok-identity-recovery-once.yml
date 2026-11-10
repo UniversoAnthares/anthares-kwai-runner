@@ -58,6 +58,39 @@ jobs:
           if status.get("identity_verified") and status.get("ready_for_tiktok"):
               print("AOI01_IDENTITY_RECOVERY=ALREADY_READY")
               raise SystemExit(0)
+          # Read-only CDP examination. Browser state stays inside Northflank.
+          import re, time
+          code,bs=call("/interactive-browser/status",timeout=35)
+          active=bool(bs.get("active"))
+          print("AOI01_BROWSER_STATUS_HTTP="+str(code))
+          print("AOI01_BROWSER_ACTIVE_INITIAL="+str(active))
+          if code==200 and not active:
+              code,start=call("/interactive-browser/start",method="POST",payload={},timeout=270)
+              print("AOI01_BROWSER_START_HTTP="+str(code))
+              print("AOI01_BROWSER_START_OK="+str(bool(start.get("ok"))))
+              if code!=200 or not start.get("ok"):
+                  print("AOI01_BROWSER_START_BLOCKED")
+                  raise SystemExit(2)
+          if code==200:
+              code,nav=call("/interactive-browser/navigate",method="POST",payload={"url":"https://www.tiktok.com/profile"},timeout=110)
+              print("AOI01_PROFILE_NAVIGATION_HTTP="+str(code))
+              if code!=200 or not nav.get("ok"):
+                  print("AOI01_PROFILE_NAVIGATION_BLOCKED")
+                  raise SystemExit(2)
+              time.sleep(3)
+              code,after_status=call("/interactive-browser/status",timeout=35)
+              current=str(after_status.get("url") or "")
+              redirect=re.search(r"^https://(?:www[.])?tiktok[.]com/@([^/?#]+)",current,re.I)
+              matches=bool(redirect and redirect.group(1).lower()=="universo.anthares")
+              print("AOI01_ACCOUNT_PROFILE_REDIRECT_VERIFIED="+str(matches))
+              code,evidence=call("/interactive-browser/tiktok-evidence",timeout=75)
+              ev=evidence.get("evidence") if isinstance(evidence.get("evidence"),dict) else {}
+              print("AOI01_BROWSER_EVIDENCE_HTTP="+str(code))
+              print("AOI01_LOGIN_GATE_DETECTED="+str(bool(ev.get("login_gate"))))
+              print("AOI01_OWNER_MARKER="+str(bool(ev.get("account_marker"))))
+              if not matches or code!=200 or ev.get("login_gate") or not ev.get("account_marker"):
+                  print("AOI01_BROWSER_IDENTITY_UNVERIFIED_SAFE_STOP")
+                  raise SystemExit(2)
           code,tested=call("/session-test",method="POST",payload={},timeout=390)
           print("AOI01_SESSION_TEST_HTTP="+str(code))
           print("AOI01_SESSION_TEST_SUCCESS="+str(bool(tested.get("ok"))))
