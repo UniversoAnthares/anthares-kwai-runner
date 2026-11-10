@@ -1,0 +1,29 @@
+name: TikTok LIVE Standard User Web UI Probe (Read-Only)
+on:
+  push:
+    branches:
+      - 'feature/tiktok-live-authorized-cloud-*'
+    paths:
+      - '.github/workflows/tiktok-live-standard-user-ui-probe.yml'
+      - 'tools/tiktok_live_standard_user_probe.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-live-standard-user-ui
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare remote Chromium
+        run: |
+          python3 -m pip install -q playwright
+          python3 -m playwright install --with-deps chromium >/dev/null
+          echo TIKTOK_STANDARD_CHROMIUM_READY=1
+      - name: Inspect ordinary-user LIVE controls without starting broadcast
+        run: python3 tools/tiktok_live_standard_user_probe.py
