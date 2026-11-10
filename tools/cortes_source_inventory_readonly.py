@@ -79,7 +79,28 @@ def audit(state,stream_ids):
             "registered_clips":len(row.get("clips") or [])
         })
     blocker=state.get("blocker") or {}
+    phases=blocker.get("phases") or {}
+    raw_clips=[clip for clip in (blocker.get("clips") or []) if isinstance(clip,dict)]
+    locked={
+        "video_id":str(blocker.get("video_id") or ""),
+        "stage":str(blocker.get("stage") or ""),
+        "long_analyzed":bool((phases.get("long") or {}).get("analyzed")),
+        "short_analyzed":bool((phases.get("short") or {}).get("analyzed")),
+        "long_clips":sum(c.get("type")=="long" for c in raw_clips),
+        "short_clips":sum(c.get("type")=="short" for c in raw_clips),
+        "files_deleted":bool(blocker.get("files_deleted_at")),
+        "cycle_generation":blocker.get("cycle_generation"),
+        "total_clips":len(raw_clips),
+    }
+    result_by_id={str(r.get("video_id") or ""):r for r in current.values()}
+    counterpart=result_by_id.get(locked["video_id"]) or {}
+    item_phases=counterpart.get("phases") or {}
+    locked["registry_stage"]=str(counterpart.get("stage") or "")
+    locked["registry_long_analyzed"]=bool((item_phases.get("long") or {}).get("analyzed"))
+    locked["registry_short_analyzed"]=bool((item_phases.get("short") or {}).get("analyzed"))
+    locked["registry_clips"]=len(counterpart.get("clips") or [])
     return {"status":"READ_ONLY",
+            "locked_source":locked,
             "youtube_streams":len(stream_ids),
             "wordpress_lives":len(current),
             "active_missing_count":len(missing),
