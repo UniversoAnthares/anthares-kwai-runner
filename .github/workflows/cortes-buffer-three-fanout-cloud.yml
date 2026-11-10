@@ -30,10 +30,10 @@ jobs:
     timeout-minutes: 9
     env:
       RUNNER_ENVIRONMENT: github-hosted
-      WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
-      WP_USERNAME: ${{ secrets.WP_USERNAME }}
-      WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-      CORTES_FANOUT_DIAGNOSE_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnose_only && '1' || '0' }}
+      WP_SITE_URL: ${{ secrets.WP_QA_SITE_URL || secrets.WP_SITE_URL }}
+      WP_USERNAME: ${{ secrets.WP_QA_USERNAME || secrets.WP_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_QA_APP_PASSWORD || secrets.WP_APP_PASSWORD }}
+      CORTES_FANOUT_DIAGNOSE_ONLY: ${{ (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.diagnose_only)) && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
