@@ -108,7 +108,7 @@ def create_rtmp_room(page) -> str:
     # first text field corrupts the filter instead of setting the room title.
     # Scope the title to the currently open creation dialog.
     form = page.locator(".el-dialog:visible").last
-    fields = form.locator('input[type="text"]:visible')
+    fields = form.locator('input[type="text"]:visible:not([readonly]):not([disabled])')
     if not fields.count():
         raise RuntimeError("KW12_ROOM_TITLE_FIELD_MISSING")
     fields.last.fill("Universo Anthares: Livros e Escrita")
