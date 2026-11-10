@@ -1,0 +1,24 @@
+name: CORTES source chronology — hosted read-only inventory
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      WP_SITE_URL: ${{ secrets.WP_QA_SITE_URL }}
+      WP_USERNAME: ${{ secrets.WP_QA_USERNAME }}
+      WP_APP_PASSWORD: ${{ secrets.WP_QA_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run isolated comparison tests
+        run: python -m unittest discover -s tests -p test_cortes_source_inventory_readonly.py -v
+      - name: Install current YouTube playlist extractor
+        run: pip install --disable-pip-version-check 'yt-dlp[default]'
+      - name: Compare YouTube live IDs to stored WordPress source statuses
+        run: python -u tools/cortes_source_inventory_readonly.py
