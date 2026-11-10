@@ -1,4 +1,5 @@
 name: TikTok strong session identity verification
+# AOI-01 read-only current central account identity recheck; never publish.
 on:
   workflow_dispatch:
   push:
