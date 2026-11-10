@@ -18,7 +18,9 @@ on:
   schedule:
     # Best effort: first 5-minute run after the Neon cooldown expires.
     # Hourly during 09:00-22:59 local weekdays; admission prevents tomorrow rollover.
-    - cron: '8 0-2,13-23 * * 1-5'
+    - cron: '8 13-23 * * 1-5'
+    # 00-02 UTC on Tue-Sat belongs to the previous local weekday (20-22h).
+    - cron: '8 0-2 * * 2-6'
   workflow_dispatch:
     inputs:
       reconcile_only:
