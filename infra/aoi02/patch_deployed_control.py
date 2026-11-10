@@ -89,10 +89,10 @@ async function aoi02RuntimeSecrets(req, env) {
     const response = await fetch(site + "/wp-json/wp/v2/users/me", {
       headers: {"Authorization": "Basic " + btoa(username + ":" + password),
         "Accept": "application/json"},
-      redirect: "error", signal: AbortSignal.timeout(9000)
+      redirect: "manual", signal: AbortSignal.timeout(9000)
     });
     if (!response.ok)
-      return reply(503, {ok: false, error: "wordpress_auth_unavailable"});
+      return reply(503, {ok: false, error: "wordpress_auth_unavailable", upstream_status: response.status});
     const profile = await response.json();
     if (Number(profile?.id) !== 1)
       return reply(503, {ok: false, error: "wordpress_identity_mismatch"});
