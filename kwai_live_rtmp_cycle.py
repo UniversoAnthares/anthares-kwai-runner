@@ -298,6 +298,10 @@ def create_and_start(page, issue_id: int, state: dict) -> None:
 
 
 def open_context(playwright):
+    # ubuntu-24.04 GitHub-hosted runners include Google Chrome. Reuse it
+    # instead of downloading Chromium and apt dependencies for every wake-up.
+    browser_options = ({"channel": "chrome"}
+                       if os.environ.get("KW12_SYSTEM_CHROME") == "1" else {})
     state = os.environ.get("KWAI_LIVE_STORAGE_STATE_B64", "").strip()
     if state:
         try:
@@ -306,14 +310,15 @@ def open_context(playwright):
                 raise ValueError("storage state missing cookies")
         except (ValueError, TypeError) as exc:
             raise RuntimeError("KW12_CLOUD_STATE_SECRET_INVALID") from exc
-        b = playwright.chromium.launch(headless=True)
+        b = playwright.chromium.launch(headless=True, **browser_options)
         return b, b.new_context(storage_state=data, locale="pt-BR")
     directory = os.environ.get("KW12_STUDIO_PROFILE_DIR", "")
     if not directory or not Path(directory).is_dir():
         raise RuntimeError("KW12_REMOTE_STUDIO_AUTHORIZATION_REQUIRED")
     context = playwright.chromium.launch_persistent_context(
         directory, headless=True,
-        args=["--no-sandbox", "--disable-dev-shm-usage"], locale="pt-BR")
+        args=["--no-sandbox", "--disable-dev-shm-usage"], locale="pt-BR",
+        **browser_options)
     return None, context
 
 
