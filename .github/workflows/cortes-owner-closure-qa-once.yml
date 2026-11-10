@@ -48,7 +48,7 @@ jobs:
           php -l wp/anthares-clipper/cortes-control.php
           php -l wp/anthares-clipper/cortes-source-adapter.php
           php wp/tests/test-cortes-source-order.php
-          php wp/tests/test-cortes-access-failover.php
+          php -l wp/tests/test-cortes-access-failover.php
           (cd wp && python3 qa/manifest-coverage-preflight.py --check)
           echo "CORTES_CLOSURE_WORDPRESS_CHECKS=PASS"
       - uses: actions/setup-python@v5
