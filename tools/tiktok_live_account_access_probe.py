@@ -22,7 +22,10 @@ def state_from_secret():
     if not raw or len(raw) > 48000:
         raise ValueError("CLOUD_SESSION_SECRET_MISSING_OR_TOO_LARGE")
     try:
-        data = zlib.decompress(base64.b64decode(raw, validate=True), max_length=600001)
+        decoder = zlib.decompressobj()
+        data = decoder.decompress(base64.b64decode(raw, validate=True), 600001)
+        if not decoder.eof:
+            raise ValueError("CLOUD_SESSION_COMPRESSION_INCOMPLETE")
     except Exception as exc:
         raise ValueError("CLOUD_SESSION_FORMAT_UNSUPPORTED") from exc
     if len(data) > 600000:
