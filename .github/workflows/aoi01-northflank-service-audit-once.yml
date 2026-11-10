@@ -1,0 +1,66 @@
+name: AOI-01 Northflank service configuration audit (read-only)
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/aoi01-northflank-service-audit-once.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - name: Inspect existing Northflank TikTok service without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          token=os.environ.get("NORTHFLANK_API_TOKEN","")
+          if len(token)<20:
+              print("AOI01_NF_TOKEN=ABSENT");raise SystemExit(2)
+          url="https://api.northflank.com/v1"
+          headers={"Authorization":"Bearer "+token,"Accept":"application/json","User-Agent":"Anthares-Northflank-Audit/1.0"}
+          def read(path):
+              req=urllib.request.Request(url+path,headers=headers)
+              try:
+                  with urllib.request.urlopen(req,timeout=22) as resp:
+                      return resp.status,json.load(resp)
+              except urllib.error.HTTPError as e:return e.code,{}
+              except Exception as e:
+                  print("AOI01_NF_API_TRANSPORT="+type(e).__name__)
+                  return 0,{}
+          code,projects=read("/projects")
+          print("AOI01_NF_PROJECTS_HTTP="+str(code))
+          if code!=200:raise SystemExit(2)
+          entries=(projects.get("data") or {}).get("projects") or []
+          if isinstance(entries,dict):entries=list(entries.values())
+          found=False
+          for project in entries:
+              pid=project.get("id")
+              if not pid:continue
+              code,service_resp=read("/projects/"+str(pid)+"/services")
+              print("AOI01_NF_SERVICES_HTTP="+str(code))
+              if code!=200:continue
+              services=(service_resp.get("data") or {}).get("services") or []
+              if isinstance(services,dict):services=list(services.values())
+              for obj in services:
+                  if obj.get("name")!="anthares-tiktok-northflank":continue
+                  found=True; sid=obj.get("id") or obj.get("name")
+                  print("AOI01_NF_SERVICE_FOUND=1")
+                  print("AOI01_NF_SERVICE_STATUS="+str(obj.get("status") or "")[:60])
+                  code,detail=read("/projects/"+str(pid)+"/services/"+str(sid))
+                  print("AOI01_NF_SERVICE_DETAIL_HTTP="+str(code))
+                  safe=detail.get("data") if isinstance(detail.get("data"),dict) else {}
+                  for key in ("status","disabledCI","suspended","deploymentPlan"):
+                      value=safe.get(key)
+                      if isinstance(value,(bool,int,str)):
+                          print("AOI01_NF_"+key.upper()+"="+str(value)[:70])
+                  plan=((safe.get("billing") or {}).get("deploymentPlan") or "")
+                  if plan:print("AOI01_NF_PLAN="+str(plan)[:70])
+          if not found:
+              print("AOI01_NF_SERVICE_FOUND=0");raise SystemExit(2)
+          PY
