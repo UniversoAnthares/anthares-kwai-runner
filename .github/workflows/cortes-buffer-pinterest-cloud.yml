@@ -77,6 +77,10 @@ jobs:
           python -m unittest discover -s tests -p 'test_pinterest_qa_cooldown_loop.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_today_slot_gate.py' -v
           python -m py_compile tools/cortes_buffer_pinterest_cloud.py anthares_publisher/editorial.py
+      - name: Verify isolated Neon terminal error quarantine contracts
+        run: |
+          node --check infra/neon-cortes-queue/index.mjs
+          node --test tests/test_pinterest_terminal_error_backend.mjs
       - name: Read Buffer key from Anthares Secrets without logging it
         uses: bitwarden/sm-action@v2
         with:
