@@ -42,8 +42,8 @@ def main():
                 try:
                     page=context.new_page()
                     try:
-                        response=page.goto(OFFICIAL_PAGE,wait_until="domcontentloaded",timeout=30000)
-                        page.wait_for_timeout(5000)
+                        response=page.goto(OFFICIAL_PAGE,wait_until="commit",timeout=18000)
+                        page.wait_for_timeout(7000)
                     except Exception as exc:
                         print("TIKTOK_APK_PROBE="+type(exc).__name__.upper(),flush=True)
                         return 0
