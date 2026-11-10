@@ -79,7 +79,9 @@ def main():
             all_jobs=per_platform_jobs(selected,platform)
             budget=50
             windows=max(1,(len(all_jobs)+budget-1)//budget)
-            cursor=(int(time.time())//600)%windows
+            # Each scheduled pass is six hours apart. Rotate the visited slice
+            # once per pass instead of repeating the same 10-minute parity.
+            cursor=(int(time.time())//21600)%windows
             subset=all_jobs[cursor*budget:(cursor+1)*budget]
             created=known=0
             for job in subset:
