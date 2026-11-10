@@ -553,10 +553,81 @@ def audit_stale_buffer_pending():
     return 0
 
 
+def reconcile_buffer_terminal_errors():
+    """Quarantine up to three provably failed October Buffer posts.
+
+    A terminal provider error is never requeued or resent. Only the existing
+    main-branch OIDC role may persist a CAS quarantine; the provider is queried
+    again immediately before recording each source-specific receipt.
+    """
+    from datetime import datetime, timedelta, timezone
+    jobs=queue("pending").get("jobs") or []
+    known=[j for j in jobs if str(j.get("remote_id") or "")]
+    if not known or len(known)>25:
+        raise RuntimeError("PINTEREST_TERMINAL_ERROR_PENDING_UNVERIFIED")
+    remotes=[str(j["remote_id"]) for j in known]
+    if len(remotes)!=len(set(remotes)):
+        raise RuntimeError("PINTEREST_TERMINAL_ERROR_DUPLICATE_BUFFER_ID")
+    fixed=0
+    for offset in range(0,len(known),8):
+        part=known[offset:offset+8]
+        parts=[("p"+str(i)+": post(input: { id: "+json.dumps(str(item["remote_id"]))+
+                ' }) { id status externalLink channelId schedulingType dueAt }')
+               for i,item in enumerate(part)]
+        data=api("query CortesPinterestErrorRecovery { "+" ".join(parts)+" }")
+        if not isinstance(data,dict) or any("p"+str(i) not in data for i in range(len(part))):
+            raise RuntimeError("PINTEREST_TERMINAL_ERROR_RECEIPT_BATCH_INCOMPLETE")
+        for i,item in enumerate(part):
+            remote=str(item["remote_id"])
+            receipt=data.get("p"+str(i))
+            if not isinstance(receipt,dict):
+                continue
+            if (receipt.get("id")!=remote or receipt.get("channelId")!=PINTEREST_ID
+                    or str(receipt.get("status") or "").lower()!="error"
+                    or receipt.get("schedulingType")!="automatic"
+                    or receipt.get("externalLink") not in (None,"")):
+                continue
+            due=str(receipt.get("dueAt") or "")
+            try:
+                parsed=datetime.fromisoformat(due.replace("Z","+00:00"))
+                if parsed.tzinfo is None:
+                    raise ValueError("time without offset")
+                parsed=parsed.astimezone(timezone.utc)
+            except ValueError:
+                continue
+            if not datetime(2025,1,1,tzinfo=timezone.utc)<parsed<=datetime.now(timezone.utc)-timedelta(hours=24):
+                continue
+            evidence={
+                "id":item["id"],
+                "target_key":TARGET,
+                "remote_id":remote,
+                "buffer_channel_id":PINTEREST_ID,
+                "provider_status":"error",
+                "scheduling_type":"automatic",
+                "provider_due_at_utc":parsed.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "external_link":"",
+                "provider_link_present":False,
+            }
+            receipt_result=queue("terminal-error",evidence)
+            if not receipt_result.get("ok") or receipt_result.get("job",{}).get("status")!="failed":
+                raise RuntimeError("PINTEREST_TERMINAL_ERROR_CAS_UNVERIFIED")
+            fixed+=1
+            print("PINTEREST_TERMINAL_ERROR_QUARANTINED="+
+                  hashlib.sha256(remote.encode()).hexdigest()[:12],flush=True)
+            if fixed>=3:break
+        if fixed>=3:break
+    print(json.dumps({"pinterest_cloud":"TERMINAL_ERROR_RECONCILE",
+                      "terminal_errors_quarantined":fixed,
+                      "new_posts":0,"requeued_posts":0},separators=(",",":")),flush=True)
+    return 0
+
+
 def main():
     cloud_only()
     if os.getenv("CORTES_AUDIT_PENDING_ONLY")=="1":
         return audit_stale_buffer_pending()
+    if os.getenv("CORTES_RECONCILE_TERMINAL_ERROR_ONLY")=="1":
+        return reconcile_buffer_terminal_errors()
     # The Buffer quota governs NEW posts only. Existing scheduled posts
     # must still be reconciled even on disabled days or after the quota fills.
     state=queue("cooldown-status")
