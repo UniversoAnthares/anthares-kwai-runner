@@ -96,23 +96,90 @@ runner() {
   done
   echo TIKTOK_HOSTINGER_LOOP_EXITED=1
 }
+# Called by an independent scheduler. It never enables a disarmed transmitter.
+# A stale supervisor may have been killed by shared hosting outside Bash traps.
+process_is_ours() {
+  local pid="${1:-}" needle="${2:-}"
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  [[ -r "/proc/$pid/cmdline" ]] || return 1
+  tr '\0' ' ' < "/proc/$pid/cmdline" | grep -Fq -- "$needle"
+}
+launch_detached() {
+  command -v setsid >/dev/null || { log "SETSID_MISSING"; return 6; }
+  setsid -f nohup bash "$ROOT/supervisor.sh" run </dev/null >/dev/null 2>&1
+}
+watchdog_tick() {
+  enabled || { echo TIKTOK_WATCHDOG_DISARMED=1; return 0; }
+  test -s "$ROOT/rtmp-destination" || {
+    log "WATCHDOG_NO_CREDENTIAL"; echo TIKTOK_WATCHDOG_MISSING_SECRET=1; return 3;
+  }
+  exec 8>"$ROOT/watchdog.lock"
+  flock -n 8 || { echo TIKTOK_WATCHDOG_LOCK_BUSY=1; return 0; }
+  local sup="" childpid="" now=0 mtime=0
+  [[ -s "$ROOT/supervisor.pid" ]] && sup="$(cat "$ROOT/supervisor.pid")"
+  [[ -s "$ROOT/ffmpeg.pid" ]] && childpid="$(cat "$ROOT/ffmpeg.pid")"
+  if process_is_ours "$sup" "$ROOT/supervisor.sh"; then
+    # Normal handovers and supervised two-minute backoff are respected.
+    # Do not interfere with a working Kwai or TikTok stream.
+    if process_is_ours "$childpid" "$ROOT/ffmpeg.progress"; then
+      now="$(date +%s)"
+      mtime="$(stat -c %Y "$ROOT/ffmpeg.progress" 2>/dev/null || echo 0)"
+      if (( mtime > 0 && now-mtime > 420 )); then
+        log "WATCHDOG_STALLED_PROTECTED_TIKTOK"
+        kill -TERM "$sup" 2>/dev/null || true
+        sleep 4
+      else
+        echo TIKTOK_WATCHDOG_HEALTHY=1
+        return 0
+      fi
+    else
+      # Parent owns retry policy; do not prematurely reset fail counter.
+      echo TIKTOK_WATCHDOG_SUPERVISOR_RETRYING=1
+      return 0
+    fi
+  fi
+  # If any previously orphaned transcoder still owns TikTok progress,
+  # stop only that exact process. Do not touch the Kwai PID or files.
+  if process_is_ours "$childpid" "$ROOT/ffmpeg.progress"; then
+    log "WATCHDOG_TIKTOK_ORPHAN_FOUND"
+    kill -TERM "$childpid" 2>/dev/null || true
+    sleep 3
+    if process_is_ours "$childpid" "$ROOT/ffmpeg.progress"; then
+      log "WATCHDOG_TIKTOK_ORPHAN_STILL_ALIVE"
+      echo TIKTOK_WATCHDOG_ORPHAN_BLOCKED=1
+      return 5
+    fi
+  fi
+  log "WATCHDOG_RESTARTING"
+  launch_detached
+  sleep 3
+  if [[ -s "$ROOT/supervisor.pid" ]] && process_is_ours "$(cat "$ROOT/supervisor.pid")" "$ROOT/supervisor.sh"; then
+    echo TIKTOK_WATCHDOG_RESTARTED=1
+  else
+    log "WATCHDOG_RESTART_UNCONFIRMED"
+    echo TIKTOK_WATCHDOG_RESTART_UNCONFIRMED=1
+    return 4
+  fi
+}
 case "${1:-}" in
   run) runner ;;
+  tick) watchdog_tick ;;
   status) status ;;
   stop)
     echo false > "$ROOT/enabled"
     if [[ -s "$ROOT/supervisor.pid" ]]; then
       pid="$(cat "$ROOT/supervisor.pid")"
-      [[ "$pid" =~ ^[0-9]+$ ]] && kill "$pid" 2>/dev/null || true
+      process_is_ours "$pid" "$ROOT/supervisor.sh" && kill "$pid" 2>/dev/null || true
     fi
     echo TIKTOK_HOSTINGER_STOP_REQUESTED=1
     ;;
   start)
     test -s "$ROOT/rtmp-destination" || { echo TIKTOK_HOSTINGER_SECRET_MISSING=1;exit 4; }
     echo true > "$ROOT/enabled"
-    nohup bash "$0" run </dev/null >/dev/null 2>&1 &
+    launch_detached
     sleep 3
     status
     ;;
-  *) echo 'USAGE: start|stop|status|run'; exit 2 ;;
+  *) echo 'USAGE: start|stop|status|run|tick'; exit 2 ;;
 esac
