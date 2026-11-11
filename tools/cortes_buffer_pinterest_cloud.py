@@ -542,10 +542,10 @@ def audit_stale_buffer_pending():
             provider_error=(row.get("error") or {}).get("message") if isinstance(row.get("error"),dict) else ""
             if not isinstance(provider_error,str):
                 provider_error=""
-            provider_error=re.sub(r"https?://\\S+","[URL]",provider_error)
-            provider_error=re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}","[EMAIL]",provider_error)
-            provider_error=re.sub(r"(?i)(bearer|token|secret|password)\\s*[:=]\\s*\\S+",r"\\1=[REDACTED]",provider_error)
-            provider_error=re.sub(r"[^\\x20-\\x7E]"," ",provider_error)[:260]
+            provider_error=re.sub(r"https?://\S+","[URL]",provider_error)
+            provider_error=re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}","[EMAIL]",provider_error)
+            provider_error=re.sub(r"(?i)(bearer|token|secret|password)\s*[:=]\s*\S+",r"\1=[REDACTED]",provider_error)
+            provider_error=re.sub(r"[^\x20-\x7E]"," ",provider_error)[:260]
             print("PINTEREST_PENDING_AUDIT="+json.dumps({
                 "id_hash":fingerprint,
                 "identity_verified":identity,
