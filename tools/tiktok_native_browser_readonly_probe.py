@@ -101,6 +101,10 @@ def main():
                             time:video&&Number.isFinite(video.currentTime)?video.currentTime:0,
                             paused:video?.paused!==false,has_source:!!(video&&(video.currentSrc||video.src)),
                             source_object:!!video?.srcObject,
+                            audio_tracks:video?.srcObject?.getAudioTracks?.()?.length??0,
+                            audio_track_live:video?.srcObject?.getAudioTracks?.()?.some(x=>x.readyState==='live'&&!x.muted)??false,
+                            video_tracks:video?.srcObject?.getVideoTracks?.()?.length??0,
+                            muted:video?.muted??true,volume:video?.volume??0,
                             width:video?.videoWidth||0,height:video?.videoHeight||0,
                             duration:Number.isFinite(video?.duration)?Math.round(video.duration):null,
                             media_count:document.querySelectorAll('video').length,
@@ -117,6 +121,11 @@ def main():
                         result["public_media_paused"]=bool(after["paused"])
                         result["public_media_has_source"]=bool(after["has_source"])
                         result["public_media_source_object"]=bool(after["source_object"])
+                        result["public_audio_tracks"]=int(after["audio_tracks"])
+                        result["public_audio_track_live"]=bool(after["audio_track_live"])
+                        result["public_video_tracks"]=int(after["video_tracks"])
+                        result["public_player_muted"]=bool(after["muted"])
+                        result["public_player_volume"]=float(after["volume"])
                         result["public_media_dimensions"]=[int(after["width"]),int(after["height"])]
                         result["public_media_duration"]=after["duration"]
                         result["public_video_elements"]=int(after["media_count"])
