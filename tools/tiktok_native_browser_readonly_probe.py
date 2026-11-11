@@ -46,6 +46,13 @@ def inspect(page,response,label):
        "redirect_to_login":login_route,
        "login_ui":password or login_prompt,
        "route":current_path,
+       "visible_text_length":len(body),
+       "visible_control_count":len(controls),
+       "document_title_length":len(page.title()),
+       "studio_download_hint":any(k in body for k in ("live studio","baixar o live studio","download live studio")),
+       "shop_access_hint":any(k in body for k in ("seller center","central do vendedor","seller login","portal do vendedor")),
+       "login_button_hint":any(k in c for c in controls for k in ("log in","sign in","entrar","cadastre-se")),
+       "js_root_present":page.locator("#root,#app,#__next").count()>0,
        "browser_go_live_control": any(any(k in c for k in MARKERS["browser_go_live"]) for c in controls),
        "browser_camera_control":any(any(k in c for k in MARKERS["virtual_camera"]) for c in controls),
        "shop_live_manager_control":any(any(k in c for k in MARKERS["shop_manager"]) for c in controls),
@@ -75,7 +82,7 @@ def main():
             for name,url in PAGES:
                 try:
                     r=page.goto(url,wait_until="domcontentloaded",timeout=28000)
-                    page.wait_for_timeout(3200)
+                    page.wait_for_timeout(7200)
                     results.append(inspect(page,r,name))
                 except Exception as exc:
                     results.append({"name":name,"navigation_error":type(exc).__name__})
