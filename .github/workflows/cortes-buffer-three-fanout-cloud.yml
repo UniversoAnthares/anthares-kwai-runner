@@ -1,8 +1,9 @@
 name: CORTES 3 independent networks - all shorts cloud fanout
 on:
   schedule:
-    # 07h23, 13h23, 19h23 America/Campo_Grande; bounded daily fanout.
-    - cron: '23 11,17,23 * * *'
+    # 07h23-19h23 (every 2h), plus 21h23 America/Campo_Grande.
+    # Eight daily passes rotate 50-item windows under the same Neon CAS.
+    - cron: '23 1,11,13,15,17,19,21,23 * * *'
   workflow_dispatch:
     inputs:
       diagnose_only:
