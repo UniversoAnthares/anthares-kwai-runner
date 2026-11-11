@@ -79,9 +79,9 @@ def main():
             all_jobs=per_platform_jobs(selected,platform)
             budget=50
             windows=max(1,(len(all_jobs)+budget-1)//budget)
-            # Each scheduled pass is six hours apart. Rotate the visited slice
-            # once per pass instead of repeating the same 10-minute parity.
-            cursor=(int(time.time())//21600)%windows
+            # Every two-hour scheduled pass visits the next bounded window.
+            # Deterministic Neon IDs preserve deduplication across reruns.
+            cursor=(int(time.time())//7200)%windows
             subset=all_jobs[cursor*budget:(cursor+1)*budget]
             created=known=0
             for job in subset:
