@@ -540,3 +540,26 @@ test('expired Threads quarantine cannot silently fail queued publications',()=>{
  assert.match(src,/q.status='isolated'/);
  assert.doesNotMatch(src,/q.status='isolated' AND q.expires_at>now\(\)/);
 });
+
+test('restored 256:297 caption must follow independently verified transcript',()=>{
+ const doc=JSON.parse(fs.readFileSync('config/threads-verified-transcripts.json','utf8'));
+ const id='fOmihuHUT1M|g1:fOmihuHUT1M:256:297';
+ const meta=doc.items[id];
+ assert.ok(meta,'canonical editorial attestation must exist');
+ const att=meta.transcript_attestation;
+ assert.equal(att.media_sha256,'ba9b2cfd9171d2b4934da14641acc49b2a4192704e8a8a7d94c23c2007f13aca');
+ const clip={
+  id,clip_id:'g1:fOmihuHUT1M:256:297',
+  attachment_id:16981,sha256:att.media_sha256,duration:41,
+  url:'https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_fOmihuHUT1M_g1_256_297.mp4'
+ };
+ const evidence={
+  title:meta.title,description:meta.description,
+  caption:meta.hashtags.join(' '),alt_text:meta.keywords.join(', '),
+  transcript_attestation:att
+ };
+ assert.doesNotThrow(()=>validateEditorial(evidence,clip));
+ const result=captionForClip(evidence,clip);
+ assert.equal(result.caption,'Quem Odeia Quem? A Thumb');
+ assert.equal(result.editorial_policy,'anthares_editorial_transcript_attested_v3');
+});
