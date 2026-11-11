@@ -104,5 +104,21 @@ class KwaiNativeUiRecoveryTests(unittest.TestCase):
         tap.assert_called_once_with('device',close)
         self.assertEqual(native.center(selected.attrib['bounds'])[0],972)
 
+
+    def test_verification_uses_actual_attempt_time_not_current_time(self):
+        from datetime import datetime
+        st_time=int(datetime(2026,11,11,10,19).timestamp())
+        baseline={'caption':'older unrelated entry','post_time':'2026-11-10 09:21 AM'}
+        expected='Kafka e o simbolo do inseto na Metamorfose www.anthares.us - Universo Anthares'
+        published={'account':'lucasrosalem','caption':'Kafka e o simbolo do inseto na Metam...','post_time':'2026-11-11 10:19 AM'}
+        with patch.object(native,'latest',return_value=published),patch.object(native.time,'sleep'):
+            found,_,proof=native.confirm('fixture',baseline,tries=1,delay=0,attempted_at=st_time,expected_caption=expected)
+        self.assertTrue(found)
+        self.assertEqual(proof,'profile-account-post-time-and-caption-prefix')
+        published['caption']='Unrelated entry at the same time'
+        with patch.object(native,'latest',return_value=published),patch.object(native.time,'sleep'):
+            found,_,_=native.confirm('fixture',baseline,tries=1,delay=0,attempted_at=st_time,expected_caption=expected)
+        self.assertFalse(found)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

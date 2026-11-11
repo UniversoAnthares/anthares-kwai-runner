@@ -174,16 +174,20 @@ def ptime(t):
   try:return datetime.strptime((t or '').strip(),f)
   except ValueError:pass
  return None
-def confirm(s,baseline,tries=5,delay=15):
+def confirm(s,baseline,tries=5,delay=15,attempted_at=0,expected_caption=None):
  # Allow async upload a brief grace period before read-only profile checks.
  time.sleep(25)
  last={}
  for i in range(tries):
   try:
    last=latest(s,f'{safe()}-verify-{i:02d}',preserve_upload=True); changed=(last.get('caption'),last.get('post_time'))!=(baseline.get('caption'),baseline.get('post_time'))
-   dt=ptime(last.get('post_time','')); fresh=bool(dt and datetime.now()-timedelta(minutes=20)<=dt<=datetime.now()+timedelta(minutes=5))
-   title=bool(CAPTION and CAPTION.casefold() in (last.get('caption') or '').casefold())
-   if last.get('account')==ACCOUNT and changed and (fresh or title): return True,last,'profile-account-title-time' if title else 'profile-account-new-post-time'
+   dt=ptime(last.get('post_time',''))
+   anchor=datetime.fromtimestamp(int(attempted_at)) if attempted_at else datetime.now()
+   fresh=bool(dt and anchor-timedelta(minutes=5)<=dt<=anchor+timedelta(minutes=20))
+   caption=expected_caption if expected_caption is not None else CAPTION
+   title=bool(caption and caption.casefold() in (last.get('caption') or '').casefold())
+   partial=bool(caption and caption[:28].casefold() in (last.get('caption') or '').casefold())
+   if last.get('account')==ACCOUNT and changed and (title or (fresh and partial)): return True,last,'profile-account-title-time' if title else 'profile-account-post-time-and-caption-prefix'
   except E as e:last={'error':str(e)}
   if i+1<tries:time.sleep(delay)
  return False,last,''
@@ -201,7 +205,7 @@ def commit():
  if digest!=st.get('media_sha256'): raise E('media-changed-after-prepare')
  st['publication_attempted']=True; st['state']='publication_attempted'; st['publication_attempted_at']=int(time.time()); save(st)
  p=adb(s,'shell',NATIVE,JOB,timeout=120,check=False); st['native_rc']=p.returncode; st['native_stdout']=(p.stdout or '')[-4000:]; st['native_stderr']=(p.stderr or '')[-2000:]; save(st)
- ok,proof,evidence=confirm(s,st.get('baseline') or {}); st['profile_verification']=proof; st['verification_evidence']=evidence
+ ok,proof,evidence=confirm(s,st.get('baseline') or {},attempted_at=st.get('publication_attempted_at',0),expected_caption=st.get('caption')); st['profile_verification']=proof; st['verification_evidence']=evidence
  if ok:
   st['state']='verified'; st['verified_at']=int(time.time()); save(st); out(f"KWAI_UP_STATE=VERIFIED EVIDENCE={evidence} POST_TIME={proof.get('post_time','')}"); return 0
  st['state']='uncertain'; st['uncertain_at']=int(time.time()); save(st); out('KWAI_UP_STATE=UNCERTAIN PROFILE_CONFIRMATION_MISSING'); return 90
@@ -209,7 +213,7 @@ def verify():
  st=load()
  if not st.get('publication_attempted'): raise E('publication-not-attempted')
  if st.get('state')=='verified': out('KWAI_UP_STATE=VERIFIED EVIDENCE='+st.get('verification_evidence','persisted')); return 0
- s=connect(); ok,proof,evidence=confirm(s,st.get('baseline') or {},6,10); st['profile_verification']=proof; st['verification_evidence']=evidence
+ s=connect(); ok,proof,evidence=confirm(s,st.get('baseline') or {},6,10,attempted_at=st.get('publication_attempted_at',0),expected_caption=st.get('caption')); st['profile_verification']=proof; st['verification_evidence']=evidence
  if ok: st['state']='verified'; st['verified_at']=int(time.time()); save(st); out(f"KWAI_UP_STATE=VERIFIED EVIDENCE={evidence} POST_TIME={proof.get('post_time','')}"); return 0
  st['state']='uncertain'; save(st); out('KWAI_UP_STATE=UNCERTAIN PROFILE_CONFIRMATION_MISSING'); return 90
 def main():
