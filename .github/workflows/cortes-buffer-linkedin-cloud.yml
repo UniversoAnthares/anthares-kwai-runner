@@ -15,6 +15,11 @@ on:
         type: boolean
         required: false
         default: false
+      legacy_readback_only:
+        description: 'Consult historic Buffer receipts of existing records; no uploads, tests or queue writes'
+        type: boolean
+        required: false
+        default: false
   # Independent wake-up when the upstream CORTES fanout completes.
   # GitHub scheduled events can be delayed or dropped under load.
   workflow_run:
@@ -32,7 +37,7 @@ jobs:
     # Independently scheduled; never blocks any other network. Same-day drain,
     # hard provider quotas and shared Neon dedupe/fencing still apply.
     # Excludes self-hosted machines and keeps a master switch for emergency pause.
-    if: ${{ vars.CORTES_LINKEDIN_BUFFER_PAUSED != 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
+    if: ${{ github.event_name != 'push' && vars.CORTES_LINKEDIN_BUFFER_PAUSED != 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
@@ -48,9 +53,18 @@ jobs:
           secrets: |
             0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
       - name: Publish one LinkedIn cut and reconcile scheduled publications
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.legacy_readback_only != true }}
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
           CORTES_RECONCILE_ONLY: ${{ inputs.reconcile_only && '1' || '0' }}
         run: |
           set -euo pipefail
           python -u tools/cortes_buffer_linkedin_cloud.py
+
+      - name: Reconcile orphan historical Buffer receipts with exact media fingerprint
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.legacy_readback_only == true }}
+        env:
+          ANTHARES_SOCIAL_COMMIT: '0'
+        run: |
+          set -euo pipefail
+          python -u -m tools.cortes_buffer_orphan_readback
