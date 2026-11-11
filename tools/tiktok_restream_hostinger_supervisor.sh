@@ -17,13 +17,29 @@ enabled() {
   test -f "$ROOT/enabled" && test "$(cat "$ROOT/enabled")" = true
 }
 status() {
-  if [[ -s "$ROOT/supervisor.pid" ]] && kill -0 "$(cat "$ROOT/supervisor.pid")" 2>/dev/null; then
+  local sup="" childpid="" mtime=0 now=0
+  [[ -s "$ROOT/supervisor.pid" ]] && sup="$(cat "$ROOT/supervisor.pid")"
+  [[ -s "$ROOT/ffmpeg.pid" ]] && childpid="$(cat "$ROOT/ffmpeg.pid")"
+  if process_is_ours "$sup" "$ROOT/supervisor.sh"; then
     echo TIKTOK_HOSTINGER_SUPERVISOR=RUNNING
+    local sid=""
+    sid="$(ps -p "$sup" -o sid= 2>/dev/null | tr -d ' ')"
+    if [[ "$sid" = "$sup" ]]; then
+      echo TIKTOK_HOSTINGER_SESSION_ISOLATED=1
+    else
+      echo TIKTOK_HOSTINGER_SESSION_ISOLATED=0
+    fi
   else
     echo TIKTOK_HOSTINGER_SUPERVISOR=STOPPED
   fi
-  if [[ -s "$ROOT/ffmpeg.pid" ]] && kill -0 "$(cat "$ROOT/ffmpeg.pid")" 2>/dev/null; then
-    echo TIKTOK_HOSTINGER_FFMPEG=RUNNING
+  if tiktok_child_is_ours "$childpid" "$sup"; then
+    now="$(date +%s)"
+    mtime="$(stat -c %Y "$ROOT/ffmpeg.progress" 2>/dev/null || echo 0)"
+    if ((mtime>0 && now-mtime<=420)); then
+      echo TIKTOK_HOSTINGER_FFMPEG=RUNNING
+    else
+      echo TIKTOK_HOSTINGER_FFMPEG=STALLED
+    fi
   else
     echo TIKTOK_HOSTINGER_FFMPEG=STOPPED
   fi
