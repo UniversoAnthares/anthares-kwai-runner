@@ -3,22 +3,30 @@ set -euo pipefail
 
 # Single-owner recovery of the existing Hostinger Forgejo instance.
 # This file never changes Git refs, service configuration or credentials.
-base="$HOME/.anthares-forgejo"
+# Hostinger cron may supply a different HOME than the interactive shell.
+# The hosting account path was verified in hPanel.
+base="/home/u566597497/.anthares-forgejo"
 sock="$base/forgejo.sock"
 bin="$base/bin/forgejo"
 conf="$base/custom/conf/app.ini"
 log="$base/forgejo.log"
 status_file="$base/keepalive-last.json"
 
-# One small atomic record per scheduled tick; requires no shell spawn for a date.
-# Monitoring must never block health recovery when the hosting process cap is tight.
+# The shell itself records each tick, even when hosting NPROC prevents fork.
+# Durable state plus append-only 5-minute observations distinguish a skipped cron
+# from a daemon crash. No mv/date/tee/grep subprocess is needed to write them.
+ticks_file="$base/keepalive-ticks.log"
 record_status() {
-  local state="$1" tmp="$base/.keepalive-last.$"
-  if printf '{"checked_epoch":%s,"state":"%s"}\n' "${EPOCHSECONDS:-0}" "$state" > "$tmp" 2>/dev/null; then
-    mv -f -- "$tmp" "$status_file" 2>/dev/null || :
-  fi
+  local state="$1" stamp
+  [[ -d "$base" ]] || return 0
+  printf -v stamp '%(%s)T' -1 2>/dev/null || stamp="${EPOCHSECONDS:-0}"
+  printf '{"checked_epoch":%s,"state":"%s"}\n' "$stamp" "$state" > "$status_file" 2>/dev/null || :
+  printf '%s %s\n' "$stamp" "$state" >> "$ticks_file" 2>/dev/null || :
   return 0
 }
+
+# Executed before curl, flock, /proc inspection and process launch.
+record_status STARTED
 
 if [[ ! -d "$base" || ! -x "$bin" || ! -f "$conf" ]]; then
   record_status INSTALLATION_MISSING
