@@ -21,16 +21,15 @@ jobs:
       - name: Verify credentials without disclosing values
         run: |
           set -euo pipefail
-          test -n "$NORTHFLANK_API_TOKEN"
           test -n "$ARA_SHARED"
-          echo NF_EXISTING_RELEASE_SECRETS_PRESENT=1
+          echo NF_RUNTIME_AUTH_PRESENT=1
       - name: Build only the known existing Northflank service and verify v12
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json,os,time,urllib.request,urllib.error
-          token=os.environ["NORTHFLANK_API_TOKEN"]
+          token=os.getenv("NORTHFLANK_API_TOKEN","")
           shared=os.environ["ARA_SHARED"]
           api_root="https://api.northflank.com/v1"
           service_name="anthares-tiktok-northflank"
@@ -50,29 +49,34 @@ jobs:
                   return exc.code,{}
               except Exception:
                   return 0,{}
-          code,projects=request_json(api_root+"/projects",token=token)
-          print("NF_PROJECTS_HTTP="+str(code))
-          if code!=200:raise SystemExit("NORTHFLANK_ADMIN_AUTH_REQUIRED")
-          entries=(projects.get("data") or {}).get("projects") or []
-          if isinstance(entries,dict):entries=list(entries.values())
-          found=[]
-          for project in entries:
-              project_id=project.get("id")
-              if not project_id:continue
-              status,body=request_json(api_root+"/projects/"+project_id+"/services",token=token)
-              if status!=200:continue
-              services=(body.get("data") or {}).get("services") or []
-              if isinstance(services,dict):services=list(services.values())
-              for service in services:
-                  if service.get("name")==service_name:
-                      found.append((project_id,service.get("id") or service_name))
-          if len(found)!=1:raise SystemExit("NORTHFLANK_EXISTING_SERVICE_MISSING_OR_AMBIGUOUS")
-          project_id,service_id=found[0]
-          # Never modify runtime vars, compute plan, scaling, credentials or router.
+          # Check the authenticated current runtime before requiring admin credentials.
           code,revision=request_json(existing_base+"/interactive-browser/revision",token=shared,timeout=20)
+          print("NF_RUNTIME_REVISION_HTTP="+str(code))
+          if code in (401,403):raise SystemExit("NORTHFLANK_RUNTIME_AUTH_REQUIRED")
           if code==200 and revision.get("revision")==expected_revision:
               print("NF_RELEASE_ALREADY_CURRENT=1")
           else:
+              # Build only the known existing service when a real upgrade is required.
+              if len(token)<20:raise SystemExit("NORTHFLANK_ADMIN_AUTH_REQUIRED")
+              code,projects=request_json(api_root+"/projects",token=token)
+              print("NF_PROJECTS_HTTP="+str(code))
+              if code!=200:raise SystemExit("NORTHFLANK_ADMIN_AUTH_REQUIRED")
+              entries=(projects.get("data") or {}).get("projects") or []
+              if isinstance(entries,dict):entries=list(entries.values())
+              found=[]
+              for project in entries:
+                  project_id=project.get("id")
+                  if not project_id:continue
+                  status,body=request_json(api_root+"/projects/"+project_id+"/services",token=token)
+                  if status!=200:continue
+                  services=(body.get("data") or {}).get("services") or []
+                  if isinstance(services,dict):services=list(services.values())
+                  for service in services:
+                      if service.get("name")==service_name:
+                          found.append((project_id,service.get("id") or service_name))
+              if len(found)!=1:raise SystemExit("NORTHFLANK_EXISTING_SERVICE_MISSING_OR_AMBIGUOUS")
+              project_id,service_id=found[0]
+              # Never modify runtime vars, compute plan, scaling, credentials or router.
               status,_=request_json(api_root+"/projects/"+project_id+"/services/"+service_id+"/build",method="POST",token=token,payload={},timeout=40)
               print("NF_EXISTING_BUILD_HTTP="+str(status))
               if status not in (200,201,202):raise SystemExit("NORTHFLANK_BUILD_UNCONFIRMED_OR_REJECTED")
