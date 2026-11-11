@@ -74,8 +74,8 @@ def rid(root,r):
  known={
   RID_PROFILE:('kwai.lite.video.basis:id/id_home_bottom_tab_me',),
   RID_NEXT:('kwai.lite.video.product:id/edit_post_next_step_button',),
-  RID_USER:('kwai.lite.video.basis:id/tv_user_id','com.kwai.video.basis:id/tv_user_id'),
-  RID_THUMB:('kwai.lite.video.basis:id/thumb','com.kwai.video.basis:id/thumb'),
+  RID_USER:('kwai.lite.video.basis:id/tv_user_id','kwai.lite.video.basis_extension:id/tv_user_id','com.kwai.video.basis:id/tv_user_id'),
+  RID_THUMB:('kwai.lite.video.basis:id/thumb','kwai.lite.video.basis_extension:id/thumb','com.kwai.video.basis:id/thumb'),
   RID_NAME:('kwai.lite.video.basis:id/tv_slide_play_user_name',),
   RID_CAP:('kwai.lite.video.basis:id/slide_play_tv_user_info_desc',),
   RID_TIME:('kwai.lite.video.basis:id/tv_slide_play_post_time',),
@@ -94,7 +94,14 @@ def wait(s,r,name,seconds=30):
  end=time.monotonic()+seconds
  while time.monotonic()<end:
   root,path=dump(s,name); xs=rid(root,r)
+  if xs and r==RID_PROFILE:
+   xs=[n for n in xs if n.attrib.get('clickable')=='true' and n.attrib.get('enabled')=='true' and center(n.attrib.get('bounds',''))]
+   xs.sort(key=lambda n:center(n.attrib['bounds'])[0],reverse=True)
   if xs:return root,xs[0],path
+  notification_prompt=any(n.attrib.get('resource-id')=='kwai.lite.video.basis:id/tv_dialog_title' and 'notifica' in (n.attrib.get('text') or '').lower() for n in root.iter('node'))
+  notification_close=[n for n in root.iter('node') if n.attrib.get('resource-id')=='kwai.lite.video:id/iv_close' and n.attrib.get('clickable')=='true']
+  if r==RID_PROFILE and notification_prompt and len(notification_close)==1:
+   tap(s,notification_close[0]);time.sleep(1);continue
   if r==RID_PROFILE and any(n.attrib.get('resource-id','').endswith(('/edit_post_next_step_button','/post_button_normal')) for n in root.iter('node')):
    raise E('ui-surface-unexpected:editor-screen-active:preserve-draft')
   time.sleep(1)
@@ -105,6 +112,9 @@ def home(s,preserve_upload=False):
  # Validated on Kwai Lite 2026-10-22. Explicit HomeActivity retains the upload
  # task, unlike am force-stop or a launcher intent that resumes EditorActivity.
  out('KWAI_NATIVE_PRESERVE_UPLOAD=1')
+ if 'mWakefulness=Asleep' in (adb(s,'shell','dumpsys','power',timeout=15).stdout or ''):
+  adb(s,'shell',TOUCH,'540','1200',timeout=15)
+  time.sleep(1)
  activity=PKG+'/com.yxcorp.gifshow.homepage.HomeActivity'
  # Reorder the existing HomeActivity without destroying a pending editor/draft.
  p=adb(s,'shell','am','start','--activity-reorder-to-front','-n',activity,check=False,timeout=25)

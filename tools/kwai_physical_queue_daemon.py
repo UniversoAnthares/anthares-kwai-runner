@@ -176,6 +176,9 @@ def preflight():
    adb('-s',s,'shell','input','keyevent','224',timeout=12)
    time.sleep(2)
    if 'mWakefulness=Asleep' in (adb('-s',s,'shell','dumpsys','power',timeout=15).stdout or ''):
+    adb('-s',s,'shell','/data/local/tmp/anthares-hid-tap.sh','540','1200',timeout=18)
+    time.sleep(1)
+   if 'mWakefulness=Asleep' in (adb('-s',s,'shell','dumpsys','power',timeout=15).stdout or ''):
     log('KWAI_PHYSICAL_SLEEP_BLOCKED no_lease=1 priority=P0')
     return False,s
   native=adb('-s',s,'shell','test','-x','/data/local/tmp/anthares-kwai-native.sh').returncode==0
