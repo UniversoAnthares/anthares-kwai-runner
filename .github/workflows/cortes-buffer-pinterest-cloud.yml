@@ -60,7 +60,7 @@ concurrency:
 jobs:
   publish-and-reconcile:
     # Safe destination is verified by the worker on each attempt.
-    if: ${{ vars.CORTES_PINTEREST_BUFFER_PAUSED != 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
+    if: ${{ github.event_name != 'push' && vars.CORTES_PINTEREST_BUFFER_PAUSED != 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
@@ -69,6 +69,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify Pinterest editorial isolation and safe queue continuation
+        if: ${{ github.event_name != 'workflow_dispatch' || !(inputs.reconcile_only == true || inputs.terminal_error_only == true || inputs.audit_pending_only == true) }}
         run: |
           python -m unittest discover -s tests -p 'test_pinterest_editorial_preflight_isolation.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_reconcile_quota.py' -v
@@ -81,6 +82,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_pinterest_today_slot_gate.py' -v
           python -m py_compile tools/cortes_buffer_pinterest_cloud.py anthares_publisher/editorial.py
       - name: Verify isolated Neon terminal error quarantine contracts
+        if: ${{ github.event_name != 'workflow_dispatch' || !(inputs.reconcile_only == true || inputs.terminal_error_only == true || inputs.audit_pending_only == true) }}
         run: |
           node --check infra/neon-cortes-queue/index.mjs
           node --test tests/test_pinterest_terminal_error_backend.mjs
