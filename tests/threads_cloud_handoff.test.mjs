@@ -340,10 +340,14 @@ test('scheduled cloud is idempotent and requires Neon primary enabled',()=>{
 
  assert.match(
   workflow,
-  /cron: '3-59\/6 \* \* \* \*'/
+  /cron: '3,9,15,21,27,33,39,45,51,57 \* \* \* \*'/
  );
 
  assert.match(workflow,/issues: write/);
+ assert.match(workflow,/workflow_run:/);
+ assert.match(workflow,/gh workflow run cortes-threads-cloud-handoff\.yml/);
+ assert.match(workflow,/github\.event_name != 'workflow_run'/);
+ assert.match(workflow,/github\.event\.workflow_run\.head_repository\.full_name == github\.repository/);
 
  assert.match(
   src,
