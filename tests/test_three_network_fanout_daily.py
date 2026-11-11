@@ -45,7 +45,7 @@ class ThreeNetworkDailyFanoutTests(unittest.TestCase):
         self.assertEqual(result["distribution"]["pinterest"]["known"],1)
         self.assertTrue(result["independent_destinations"])
 
-    def test_daily_six_hour_cycles_visit_distinct_windows(self):
+    def test_daily_two_hour_cycles_visit_distinct_windows(self):
         from datetime import datetime, timezone
         jobs=[{"source_id":"video-test","segment_id":f"g1:video-test:{i}:{i+40}"}
               for i in range(60)]
@@ -67,10 +67,33 @@ class ThreeNetworkDailyFanoutTests(unittest.TestCase):
         run_at(11)
         first=set(seen)
         seen.clear()
-        run_at(17)
+        run_at(13)
         second=set(seen)
         self.assertEqual(len(first | second),60)
         self.assertFalse(first & second)
+
+    def test_five_windows_are_exhausted_without_duplicate_replay(self):
+        from datetime import datetime, timezone
+        jobs=[{"source_id":"five-window-test",
+               "segment_id":f"g1:five-window-test:{i}:{i+40}"}
+              for i in range(229)]
+        seen=set()
+        def enqueue(job):
+            if job["target_key"]=="pinterest:lucasyahn":
+                self.assertNotIn(job["segment_id"],seen)
+                seen.add(job["segment_id"])
+            return True
+        for hour in (11,13,15,17,19):
+            timestamp=datetime(2026,11,10,hour,23,tzinfo=timezone.utc).timestamp()
+            with patch.object(fanout.linked,"require_cloud"), \
+                 patch.object(fanout.linked,"wp_state",return_value={}), \
+                 patch.object(fanout.linked,"candidate_jobs",return_value=jobs), \
+                 patch.object(fanout,"enqueue",side_effect=enqueue), \
+                 patch.object(fanout.time,"time",return_value=timestamp), \
+                 patch.dict(os.environ,{"CORTES_FANOUT_DIAGNOSE_ONLY":"0"}):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    fanout.main()
+        self.assertEqual(len(seen),229)
 
     def test_preflight_failure_preserves_ledger(self):
         out=io.StringIO()
