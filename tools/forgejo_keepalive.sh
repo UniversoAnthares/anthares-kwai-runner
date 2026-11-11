@@ -114,15 +114,28 @@ if [[ -e "$sock" && ! -S "$sock" ]]; then
 fi
 if [[ -S "$sock" ]]; then rm -- "$sock"; fi
 
-GOMAXPROCS=2 nohup "$bin" web --config "$conf" 9>&- >>"$log" 2>&1 </dev/null &
+# A web daemon must leave the cron's process session before the job ends.
+# Without this, a scheduler tracking the process group can block later ticks.
+# Keep all original LVE/account limits; only detach the process session.
+pid_check=1
+if command -v setsid >/dev/null 2>&1; then
+  GOMAXPROCS=2 setsid -f nohup "$bin" web --config "$conf" 9>&- >>"$log" 2>&1 </dev/null &
+  pid_check=0 # setsid -f forks; $! identifies its short-lived launcher.
+else
+  GOMAXPROCS=2 nohup "$bin" web --config "$conf" 9>&- >>"$log" 2>&1 </dev/null &
+fi
 new_pid=$!
-for attempt in $(seq 1 20); do
+for ((attempt=1; attempt<=20; attempt++)); do
   if healthy; then
     record_status RECOVERED
-    echo "FORGEJO_KEEPALIVE_RECOVERED=PASS pid=$new_pid"
+    if [[ "$pid_check" == 1 ]]; then
+      echo "FORGEJO_KEEPALIVE_RECOVERED=PASS pid=$new_pid"
+    else
+      echo "FORGEJO_KEEPALIVE_RECOVERED=PASS detached_launcher_pid=$new_pid"
+    fi
     exit 0
   fi
-  if ! kill -0 "$new_pid" 2>/dev/null; then
+  if [[ "$pid_check" == 1 ]] && ! kill -0 "$new_pid" 2>/dev/null; then
     record_status DAEMON_EXITED
     echo "FORGEJO_KEEPALIVE_DAEMON_EXITED" >&2
     exit 1
