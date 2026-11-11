@@ -1,0 +1,46 @@
+name: TikTok Hostinger Cron API Credential Discovery (read-only)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feature/tiktok-live-authorized-cloud-*'
+    paths:
+      - '.github/workflows/tiktok-hostinger-cron-token-discovery.yml'
+permissions:
+  contents: read
+jobs:
+  check-available-hostinger-credential-names:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+      HPANEL_API_TOKEN: ${{ secrets.HPANEL_API_TOKEN }}
+    steps:
+      - name: Check existing providers without revealing tokens
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request
+          print('HOSTINGER_GITHUB_TOKEN_AVAILABLE='+str(bool(os.getenv('HOSTINGER_API_TOKEN'))).lower())
+          print('HOSTINGER_GITHUB_PANEL_TOKEN_AVAILABLE='+str(bool(os.getenv('HPANEL_API_TOKEN'))).lower())
+          token=os.getenv('GITLAB_TOKEN','')
+          if not token:
+              print('GITLAB_PROVIDER_UNAVAILABLE=1')
+              raise SystemExit(0)
+          for project in ('87361776','87361774'):
+              try:
+                  req=urllib.request.Request(
+                    'https://gitlab.com/api/v4/projects/'+project+'/variables?per_page=100',
+                    headers={'PRIVATE-TOKEN':token,'User-Agent':'anthares-hostinger-readonly-credential-inventory'})
+                  with urllib.request.urlopen(req,timeout=24) as response:
+                      rows=json.load(response)
+                  names=sorted(str(item.get('key') or '') for item in rows if any(
+                    part in str(item.get('key') or '').upper() for part in ('HOSTINGER','HPANEL','HAPI','CRON')))
+                  print('GITLAB_PROJECT_'+project+'_HOSTINGER_API_CANDIDATE_COUNT='+str(len(names)))
+                  for name in names:
+                      print('GITLAB_CREDENTIAL_NAME='+project+':'+name)
+              except Exception as exc:
+                  print('GITLAB_PROJECT_'+project+'_DISCOVERY_ERROR='+type(exc).__name__)
+          PY
