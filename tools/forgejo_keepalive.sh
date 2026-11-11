@@ -36,7 +36,7 @@ for attempt in 1 2 3; do
 done
 
 # Fail closed when the original daemon still runs and needs an operator diagnosis.
-# Match exact binary and configuration argv, without killing any processes.
+# Match the existing Forgejo web binary even with alternate config argv; never kill it.
 if [[ ! -d /proc || ! -r /proc/self/cmdline ]]; then
   echo "FORGEJO_KEEPALIVE_PROCESS_INSPECTION_UNAVAILABLE" >&2
   exit 70
@@ -45,8 +45,7 @@ for cmdline in /proc/[0-9]*/cmdline; do
   [[ -r "$cmdline" ]] || continue
   argv=()
   if ! mapfile -d "" -t argv < "$cmdline" 2>/dev/null; then continue; fi
-  if [[ "${argv[0]-}" == "$bin" && "${argv[1]-}" == "web" && \
-        "${argv[2]-}" == "--config" && "${argv[3]-}" == "$conf" ]]; then
+  if [[ "${argv[0]-}" == "$bin" && "${argv[1]-}" == "web" ]]; then
     echo "FORGEJO_KEEPALIVE_RUNNING_BUT_UNHEALTHY" >&2
     exit 70
   fi
