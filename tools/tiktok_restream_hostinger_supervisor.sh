@@ -195,8 +195,8 @@ watchdog_loop() {
   # hPanel Cron entry can be registered. Lock prevents parallel loops.
   exec 6>"$ROOT/watchdog-loop.lock"
   flock -n 6 || { echo TIKTOK_WATCHDOG_LOOP_ALREADY_RUNNING=1; return 0; }
-  echo "$" > "$ROOT/watchdog-loop.pid"
-  trap '[[ -s "$ROOT/watchdog-loop.pid" ]] && [[ "$(cat "$ROOT/watchdog-loop.pid")" = "$" ]] && rm -f "$ROOT/watchdog-loop.pid"; true' EXIT
+  echo "$BASHPID" > "$ROOT/watchdog-loop.pid"
+  trap '[[ -s "$ROOT/watchdog-loop.pid" ]] && [[ "$(cat "$ROOT/watchdog-loop.pid")" = "$BASHPID" ]] && rm -f "$ROOT/watchdog-loop.pid"; true' EXIT
   trap 'exit 0' TERM INT
   while enabled; do
     /usr/bin/timeout 20 /bin/bash "$ROOT/supervisor.sh" tick >/dev/null 2>&1 || true
