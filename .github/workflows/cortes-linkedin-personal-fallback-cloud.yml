@@ -2,7 +2,13 @@ name: CORTES LinkedIn personal - primary hosted cloud publisher
 on:
   schedule:
     - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      reconcile_only:
+        description: 'Only reconcile existing public LinkedIn receipts; never upload'
+        type: boolean
+        required: false
+        default: false
   push:
     branches: [main]
     paths:
@@ -37,7 +43,15 @@ jobs:
           cloud_region: us
           secrets: |
             bd261e5e-11bf-49fb-9baf-b4ea014ec5b7 > LINKEDIN_PERSONAL_ACCESS_TOKEN
+      - name: Reconcile pending personal posts using public proof, without upload
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true }}
+        env:
+          ANTHARES_SOCIAL_COMMIT: '1'
+        run: |
+          set -euo pipefail
+          python -u -c 'from tools.cortes_linkedin_personal_cloud import reconcile_personal; count=reconcile_personal(); print("PERSONAL_READBACK_ONLY_RECONCILED="+str(count),flush=True)'
       - name: Retry only distinct Neon jobs; never blindly repost uncertain media
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.reconcile_only != true }}
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
         run: |
