@@ -234,7 +234,7 @@ jobs:
           test -n "$KWAI_SESSION_ENCRYPTION_KEY" || { echo 'KWAI_SESSION_ENCRYPTION_KEY_MISSING'; exit 42; }
           test -e /dev/kvm
           sudo chmod 666 /dev/kvm
-          bash -n kwai_session_state.sh kwai_headless_login.sh
+          bash -n kwai_session_state.sh kwai_headless_login.sh kwai_android_network_recovery.sh
           python3 -m py_compile kwai_auth_probe.py tools/kwai_login_surface_recovery.py tools/kwai_android_login_entry.py tools/kwai_session_vault_client.py
           echo KWAI_MOBILE_AUTH_PREREQUISITES=PASS
 
@@ -288,6 +288,9 @@ jobs:
           timeout 120 bash -c 'until [ "$("$1" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done' _ "$ADB"
           "$ADB" root >/dev/null 2>&1 || true
           "$ADB" wait-for-device
+          # Repair stale Android DNS/proxy/network state BEFORE OAuth/Kwai starts.
+          bash kwai_android_network_recovery.sh preflight | tee /tmp/kwai-mobile-network-preflight.log
+          echo KWAI_MOBILE_NETWORK_PREFLIGHT=COMPLETED
           curl -fL --retry 3 --connect-timeout 10 --max-time 180 -o kwai-vault.zip https://github.com/UniversoAnthares/anthares-kwai-runner/releases/download/kwai-package-vault/kwai-vault.zip
           echo '96650454576a2cf5cc5e63d90011f0b60a03d2702605756f40cc934cd6ae5543  kwai-vault.zip' | sha256sum -c -
           rm -rf kwai-vault
@@ -421,6 +424,12 @@ jobs:
           set -euo pipefail
           deadline=$((SECONDS+1200))
           previous_observation=''
+          # The existing Kwai offline watchdog guards Google SSO and repairs
+          # Kwai's false-offline screen without resetting the Android session.
+          nohup bash kwai_android_network_recovery.sh watch > /tmp/kwai-mobile-offline-watchdog.log 2>&1 < /dev/null &
+          offline_pid=$!
+          trap 'kill "$offline_pid" 2>/dev/null || true' EXIT
+          echo KWAI_MOBILE_OFFLINE_WATCHDOG_ACTIVE=1
           while [ "$SECONDS" -lt "$deadline" ]; do
             if ! kill -0 "$(cat /tmp/kwai-mobile-tunnel.pid)" 2>/dev/null; then
               echo KWAI_MOBILE_AUTH_TUNNEL_DIED
@@ -442,6 +451,8 @@ jobs:
             sleep 8
           done
           echo KWAI_MOBILE_AUTH_TIMEOUT=1
+          # Only redacted allowlisted signals: never export raw Android logs.
+          grep -E 'ANDROID_NETWORK_VALIDATED=|ANDROID_WIFI_VALIDATED=|KWAI_OFFLINE_SCREEN_STILL_PRESENT|KWAI_FALSE_OFFLINE_BYPASS_|KWAI_OFFLINE_DIAGNOSTIC_WATCH_STARTED|KWAI_HOST_(DNS_OK|DNS_OR_ICMP_FAIL)=' /tmp/kwai-mobile-offline-watchdog.log | tail -25 || true
           exit 72
 
       - name: Close the temporary Android tunnel
