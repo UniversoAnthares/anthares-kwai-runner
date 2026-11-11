@@ -73,7 +73,8 @@ def write_playlist(parts, position, path):
 def make_args(playlist, residual, seconds, destination):
     return [
         "ffmpeg", "-y", "-nostdin", "-hide_banner", "-loglevel", "error",
-        "-re", "-ss", "{:.6f}".format(residual), "-i", str(playlist),
+        "-re", "-ss", "{:.6f}".format(residual),
+        "-protocol_whitelist", "file,crypto,data,http,https,tcp,tls", "-i", str(playlist),
         "-t", str(seconds), "-c:v", "copy", "-c:a", "aac",
         "-af", "aresample=async=1:first_pts=0,asetpts=N/SR/TB",
         "-b:a", "128k", "-ar", "44100", "-avoid_negative_ts", "make_zero",
