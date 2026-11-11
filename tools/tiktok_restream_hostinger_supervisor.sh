@@ -142,6 +142,8 @@ watchdog_tick() {
   }
   exec 8>"$ROOT/watchdog.lock"
   flock -n 8 || { echo TIKTOK_WATCHDOG_LOCK_BUSY=1; return 0; }
+  # Observable receipt for a native hPanel cron invocation, never a credential.
+  date -u +%FT%TZ > "$ROOT/watchdog-last-tick"
   local sup="" childpid="" now=0 mtime=0
   [[ -s "$ROOT/supervisor.pid" ]] && sup="$(cat "$ROOT/supervisor.pid")"
   [[ -s "$ROOT/ffmpeg.pid" ]] && childpid="$(cat "$ROOT/ffmpeg.pid")"
