@@ -507,7 +507,7 @@ def audit_stale_buffer_pending():
     for offset in range(0,len(ids),8):
         part=ids[offset:offset+8]
         parts=[("p"+str(i)+": post(input: { id: "+json.dumps(remote)+
-                ' }) { id status externalLink channelId schedulingType dueAt }')
+                ' }) { id status externalLink channelId schedulingType dueAt error { message } }')
                for i,remote in enumerate(part)]
         response=api("query CortesPinterestPendingAudit { "+" ".join(parts)+" }")
         if not isinstance(response,dict):
@@ -539,13 +539,21 @@ def audit_stale_buffer_pending():
             valid_link=(uri.scheme=="https" and uri.hostname in
                         ("pinterest.com","www.pinterest.com") and
                         re.fullmatch(r"/pin/[0-9]+/?",uri.path) is not None)
+            provider_error=(row.get("error") or {}).get("message") if isinstance(row.get("error"),dict) else ""
+            if not isinstance(provider_error,str):
+                provider_error=""
+            provider_error=re.sub(r"https?://\S+","[URL]",provider_error)
+            provider_error=re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}","[EMAIL]",provider_error)
+            provider_error=re.sub(r"(?i)(bearer|token|secret|password)\s*[:=]\s*\S+",r"\1=[REDACTED]",provider_error)
+            provider_error=re.sub(r"[^\x20-\x7E]"," ",provider_error)[:260]
             print("PINTEREST_PENDING_AUDIT="+json.dumps({
                 "id_hash":fingerprint,
                 "identity_verified":identity,
                 "status":status if identity else "IDENTITY_MISMATCH",
                 "schedulingType":str(row.get("schedulingType") or "")[:32],
                 "due_at_utc":due,
-                "public_link_verified":bool(identity and valid_link)
+                "public_link_verified":bool(identity and valid_link),
+                "provider_error_message":provider_error if identity and status=="error" else ""
             },separators=(",",":")),flush=True)
     print(json.dumps({"pinterest_cloud":"AUDIT_PENDING_READ_ONLY",
                       "inspected":len(ids),"new_posts":0,
