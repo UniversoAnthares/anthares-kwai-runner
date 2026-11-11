@@ -72,7 +72,7 @@ def main():
     # The cookie jar is loaded in-memory. Storage is never saved to disk or re-exported.
     print("NATIVE_TIKTOK_EXISTING_STATE_LOADED=1",flush=True)
     with sync_playwright() as p:
-        browser=p.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage",
+        browser=p.chromium.launch(channel="chrome",headless=True,args=["--no-sandbox","--disable-dev-shm-usage",
                                     "--use-fake-device-for-media-stream",
                                     "--use-fake-ui-for-media-stream"])
         try:
@@ -84,7 +84,7 @@ def main():
             for name,url in PAGES:
                 try:
                     r=page.goto(url,wait_until="domcontentloaded",timeout=28000)
-                    page.wait_for_timeout(7200)
+                    page.wait_for_timeout(3500)
                     results.append(inspect(page,r,name))
                 except Exception as exc:
                     results.append({"name":name,"navigation_error":type(exc).__name__})
