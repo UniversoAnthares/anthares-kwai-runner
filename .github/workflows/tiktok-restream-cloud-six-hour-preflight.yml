@@ -22,7 +22,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          command -v ffmpeg
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg
+          fi
           ffmpeg -hide_banner -version | head -n 1
           echo CLOUD_RUNNER_STANDARD=1
       - name: Validate 6h VOD remux at three offsets without RTMP publishing
