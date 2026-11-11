@@ -18,7 +18,7 @@ from tiktok_restream_cloud_encoder import fetch_manifest, write_playlist, make_a
 
 HOST_SCRIPT = '/home/u566597497/.anthares-tiktok-restream/cloud-failover.py'
 ORIGIN = '/home/u566597497/.anthares-tiktok-restream/program-origin-epoch'
-MAX_RUNTIME = 20520
+MAX_RUNTIME = 240
 stop_requested = False
 
 
@@ -68,7 +68,7 @@ def main():
     signal.signal(signal.SIGINT, stop_handler)
     signal.signal(signal.SIGTERM, stop_handler)
     url, owner = gate()
-    requested = int(os.environ.get('STREAM_SECONDS', '19800'))
+    requested = int(os.environ.get('STREAM_SECONDS', '120'))
     if not 90 <= requested <= MAX_RUNTIME:
         raise RuntimeError('duration_out_of_bounds')
     origin = remote('cat ' + ORIGIN)
