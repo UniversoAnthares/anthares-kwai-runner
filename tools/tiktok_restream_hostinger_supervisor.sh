@@ -61,15 +61,14 @@ runner() {
     : > "$ROOT/ffmpeg.progress"
     local begun ended rc
     begun="$(date +%s)"
-    (
-      ulimit -c 0
-      nice -n 15 "$FF" -nostdin -hide_banner -loglevel error -fflags +genpts \
-        -re -i "$VOD" -t "$MAX_SECONDS" \
-        -c:v copy -c:a aac -af aresample=async=1:first_pts=0,asetpts=N/SR/TB \
-        -b:a 128k -ar 44100 -avoid_negative_ts make_zero \
-        -f flv -progress "$ROOT/ffmpeg.progress" "$destination" \
-        </dev/null >/dev/null 2>"$ROOT/ffmpeg.stderr"
-    ) &
+    # Start FFmpeg directly so $! is the encoder PID, not a Bash wrapper.
+    ulimit -c 0
+    nice -n 15 "$FF" -nostdin -hide_banner -loglevel error -fflags +genpts \
+      -re -i "$VOD" -t "$MAX_SECONDS" \
+      -c:v copy -c:a aac -af aresample=async=1:first_pts=0,asetpts=N/SR/TB \
+      -b:a 128k -ar 44100 -avoid_negative_ts make_zero \
+      -f flv -progress "$ROOT/ffmpeg.progress" "$destination" \
+      </dev/null >/dev/null 2>"$ROOT/ffmpeg.stderr" &
     child=$!
     echo "$child" > "$ROOT/ffmpeg.pid"
     log "CYCLE_STARTED"
