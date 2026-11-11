@@ -190,9 +190,33 @@ watchdog_tick() {
     return 4
   fi
 }
+watchdog_loop() {
+  # Independent, low-cost minute watchdog; this is a fallback until an actual
+  # hPanel Cron entry can be registered. Lock prevents parallel loops.
+  exec 6>"$ROOT/watchdog-loop.lock"
+  flock -n 6 || { echo TIKTOK_WATCHDOG_LOOP_ALREADY_RUNNING=1; return 0; }
+  echo "$" > "$ROOT/watchdog-loop.pid"
+  trap '[[ -s "$ROOT/watchdog-loop.pid" ]] && [[ "$(cat "$ROOT/watchdog-loop.pid")" = "$" ]] && rm -f "$ROOT/watchdog-loop.pid"; true' EXIT
+  trap 'exit 0' TERM INT
+  while enabled; do
+    /usr/bin/timeout 20 /bin/bash "$ROOT/supervisor.sh" tick >/dev/null 2>&1 || true
+    sleep 60
+  done
+}
+start_watchdog_loop() {
+  local pid=""
+  [[ -s "$ROOT/watchdog-loop.pid" ]] && pid="$(cat "$ROOT/watchdog-loop.pid")"
+  if process_is_ours "$pid" "$ROOT/supervisor.sh" ; then
+    echo TIKTOK_WATCHDOG_LOOP_ALREADY_RUNNING=1
+    return 0
+  fi
+  setsid -f nohup bash "$ROOT/supervisor.sh" watchdog-loop </dev/null >/dev/null 2>&1
+  echo TIKTOK_WATCHDOG_LOOP_START_ATTEMPTED=1
+}
 case "${1:-}" in
   run) runner ;;
   tick) watchdog_tick ;;
+  watchdog-loop) watchdog_loop ;;
   status) status ;;
   stop)
     echo false > "$ROOT/enabled"
@@ -200,14 +224,19 @@ case "${1:-}" in
       pid="$(cat "$ROOT/supervisor.pid")"
       process_is_ours "$pid" "$ROOT/supervisor.sh" && kill "$pid" 2>/dev/null || true
     fi
+    if [[ -s "$ROOT/watchdog-loop.pid" ]]; then
+      wp="$(cat "$ROOT/watchdog-loop.pid")"
+      process_is_ours "$wp" "$ROOT/supervisor.sh" && kill "$wp" 2>/dev/null || true
+    fi
     echo TIKTOK_HOSTINGER_STOP_REQUESTED=1
     ;;
   start)
     test -s "$ROOT/rtmp-destination" || { echo TIKTOK_HOSTINGER_SECRET_MISSING=1;exit 4; }
     echo true > "$ROOT/enabled"
     launch_detached
+    start_watchdog_loop
     sleep 3
     status
     ;;
-  *) echo 'USAGE: start|stop|status|run|tick'; exit 2 ;;
+  *) echo 'USAGE: start|stop|status|run|tick|watchdog-loop'; exit 2 ;;
 esac
