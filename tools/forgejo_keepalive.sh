@@ -14,17 +14,28 @@ if [[ ! -d "$base" || ! -x "$bin" || ! -f "$conf" ]]; then
   exit 78
 fi
 
-# A busy lock means someone else owns recovery. Do not report false success.
-exec 9>>"$base/keepalive.lock"
-if ! flock -n 9; then
-  echo "FORGEJO_KEEPALIVE_RECOVERY_BUSY" >&2
-  exit 75
-fi
-
 healthy() {
   curl -fsS --connect-timeout 2 --max-time 3 --unix-socket "$sock" \
     http://unix/api/v1/version >/dev/null 2>&1
 }
+
+# The existing daemon may have inherited fd9 from an older keepalive release.
+# A healthy daemon must be acknowledged even when that historic lock is held.
+if healthy; then
+  echo "FORGEJO_KEEPALIVE_ALREADY_HEALTHY=PASS"
+  exit 0
+fi
+
+# Only an unhealthy daemon requires exclusive recovery ownership.
+exec 9>>"$base/keepalive.lock"
+if ! flock -n 9; then
+  if healthy; then
+    echo "FORGEJO_KEEPALIVE_ALREADY_HEALTHY=PASS"
+    exit 0
+  fi
+  echo "FORGEJO_KEEPALIVE_RECOVERY_BUSY" >&2
+  exit 75
+fi
 
 # Avoid destroying a live socket after one transient HTTP/Unix connection error.
 for attempt in 1 2 3; do
@@ -62,7 +73,7 @@ if [[ -e "$sock" && ! -S "$sock" ]]; then
 fi
 if [[ -S "$sock" ]]; then rm -- "$sock"; fi
 
-nohup "$bin" web --config "$conf" >>"$log" 2>&1 </dev/null &
+nohup "$bin" web --config "$conf" 9>&- >>"$log" 2>&1 </dev/null &
 new_pid=$!
 for attempt in $(seq 1 20); do
   if healthy; then
