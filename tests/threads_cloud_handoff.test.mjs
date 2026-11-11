@@ -340,7 +340,7 @@ test('scheduled cloud is idempotent and requires Neon primary enabled',()=>{
 
  assert.match(
   workflow,
-  /cron: '\*\/6 \* \* \* \*'/
+  /cron: '3-59\/6 \* \* \* \*'/
  );
 
  assert.match(workflow,/issues: write/);
