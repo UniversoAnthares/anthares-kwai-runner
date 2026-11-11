@@ -39,6 +39,11 @@ on:
         type: boolean
         required: false
         default: false
+      repair_destination_only:
+        description: 'Edit only existing future Pinterest Buffer posts with the rejected site URL; no uploads'
+        type: boolean
+        required: false
+        default: false
       audit_pending_only:
         description: 'Read exact Buffer post status and dueAt for all eight uncertain reservations (no mutations)'
         type: boolean
@@ -99,6 +104,7 @@ jobs:
           ANTHARES_SOCIAL_COMMIT: '1'
           CORTES_RECONCILE_ONLY: ${{ inputs.reconcile_only && '1' || '0' }}
           CORTES_AUDIT_PENDING_ONLY: ${{ inputs.audit_pending_only && '1' || '0' }}
+          CORTES_REPAIR_PIN_DESTINATION_ONLY: ${{ inputs.repair_destination_only && '1' || '0' }}
           CORTES_RECONCILE_TERMINAL_ERROR_ONLY: ${{ inputs.terminal_error_only && '1' || '0' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CORTES_QUEUE_PRIMARY: neon
