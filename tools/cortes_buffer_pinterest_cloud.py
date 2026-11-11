@@ -667,13 +667,15 @@ def repair_scheduled_destination_only():
             skipped+=1
             continue
         mutation=('mutation { editPost(input: { id: '+json.dumps(remote)+
-                  ', metadata: { pinterest: { url: null } } }) { '+
+                  ', metadata: { pinterest: { url: "" } } }) { '+
                   '... on PostActionSuccess { post { id status channelId dueAt metadata { '+
                   '... on PinterestPostMetadata { url } } } } '+
                   '... on MutationError { message } } }')
         result=api(mutation).get("editPost") or {}
         post=result.get("post") or {}
         if not post and result.get("message"):
+            from social_adapters.buffer_three_channels import redacted_mutation_diagnostic
+            print("PINTEREST_DESTINATION_REPAIR_REJECTED="+redacted_mutation_diagnostic(result["message"]),flush=True)
             raise RuntimeError("PINTEREST_DESTINATION_REPAIR_PROVIDER_REJECTED")
         if (post.get("id")!=remote or post.get("channelId")!=PINTEREST_ID
                 or post.get("status")!="scheduled"
