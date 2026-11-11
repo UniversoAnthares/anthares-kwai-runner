@@ -92,7 +92,8 @@ def preflight(offsets):
             completed = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        timeout=60, text=True)
             if completed.returncode or "progress=end" not in completed.stdout or "out_time=" not in completed.stdout:
-                print("CLOUD_RESUME_TEST=FAILED offset={} rc={}".format(offset, completed.returncode), flush=True)
+                detail = completed.stderr[-900:].replace(SOURCE, "[PUBLIC_SOURCE]")
+                print("CLOUD_RESUME_TEST=FAILED offset={} rc={} detail={}".format(offset, completed.returncode, repr(detail)), flush=True)
                 raise RuntimeError("cloud_encoder_preflight_failed")
             print("CLOUD_RESUME_TEST=PASS offset={} progress=end".format(offset), flush=True)
     print("CLOUD_PREFLIGHT_COMPLETE=1", flush=True)
