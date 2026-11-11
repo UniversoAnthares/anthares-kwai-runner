@@ -18,7 +18,9 @@ from cortes_tiktok_lucasrosalem4_cloud_publish import state_from_secret
 
 PAGES=[
     ("creator_studio","https://www.tiktok.com/tiktokstudio"),
+    ("live_producer","https://livecenter.tiktok.com/producer"),
     ("live_center","https://livecenter.tiktok.com/"),
+    ("creator_live","https://www.tiktok.com/tiktokstudio/live"),
     ("seller_center","https://seller-br.tiktok.com/"),
 ]
 MARKERS={
