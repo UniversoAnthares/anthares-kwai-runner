@@ -4,6 +4,7 @@ on:
     branches: ['feature/tiktok-live-authorized-cloud-*']
     paths:
       - 'tools/tiktok_avd_sealed_state.py'
+      - 'tools/tiktok_avd_checkpoint.sh'
       - '.github/workflows/tiktok-avd-sealed-persistence-smoke.yml'
   workflow_dispatch:
 permissions:
@@ -26,6 +27,12 @@ jobs:
           sudo apt-get install -y -qq zstd
           python3 -m pip install -q cryptography
           echo TIKTOK_AVD_TEST_DEPENDENCIES_READY=1
+      - name: Validate real-AVD checkpoint shell contract without touching any device
+        run: |
+          bash -n tools/tiktok_avd_checkpoint.sh
+          grep -q 'TIKTOK_CHECKPOINT_SNAPSHOT_ACTUAL_LOAD=1' tools/tiktok_avd_checkpoint.sh
+          grep -q 'TIKTOK_CHECKPOINT_ENCRYPTED_READY=1' tools/tiktok_avd_checkpoint.sh
+          echo TIKTOK_AVD_REAL_CHECKPOINT_CONTRACT_READY=1
       - name: Generate harmless synthetic AVD fixture and seal it
         shell: bash
         run: |
