@@ -69,7 +69,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify Pinterest editorial isolation and safe queue continuation
-        if: ${{ github.event_name != 'workflow_dispatch' || !(inputs.reconcile_only == true || inputs.terminal_error_only == true || inputs.audit_pending_only == true) }}
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         run: |
           python -m unittest discover -s tests -p 'test_pinterest_editorial_preflight_isolation.py' -v
           python -m unittest discover -s tests -p 'test_pinterest_reconcile_quota.py' -v
@@ -82,7 +82,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_pinterest_today_slot_gate.py' -v
           python -m py_compile tools/cortes_buffer_pinterest_cloud.py anthares_publisher/editorial.py
       - name: Verify isolated Neon terminal error quarantine contracts
-        if: ${{ github.event_name != 'workflow_dispatch' || !(inputs.reconcile_only == true || inputs.terminal_error_only == true || inputs.audit_pending_only == true) }}
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         run: |
           node --check infra/neon-cortes-queue/index.mjs
           node --test tests/test_pinterest_terminal_error_backend.mjs
@@ -120,7 +120,7 @@ jobs:
           path: /tmp/pinterest-evidence/
           retention-days: 7
       - name: Verify cooldown recovery and update existing Pinterest QA P0
-        if: ${{ always() && (github.event_name != 'workflow_dispatch' || (inputs.audit_pending_only != true && inputs.terminal_error_only != true)) }}
+        if: ${{ always() && github.event_name != 'workflow_dispatch' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           CORTES_QUEUE_PRIMARY: neon
