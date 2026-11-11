@@ -32,9 +32,23 @@ def run(args,timeout=20,github=False):
   e['GIT_SSH_COMMAND']='ssh -F /dev/null -i '+shlex.quote(str(key))+' -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes -o StrictHostKeyChecking=yes -o HostKeyAlgorithms=ssh-ed25519 -o UserKnownHostsFile='+shlex.quote(str(base/'keys/github-known-hosts-ed25519'))+' -o ConnectTimeout=8'
  if github and token_file.is_file() and token_file.stat().st_size:
   e['GIT_ASKPASS']=str(github_askpass)
+ # The Kwai GitHub source is public; prevent a stale private credential helper
+ # from being sent when GitHub challenges. Other private sources keep their auth.
+ public_kwai=github and 'https://github.com/UniversoAnthares/anthares-kwai-runner.git' in args
+ if public_kwai:
+  e['GIT_ASKPASS']='/bin/false'
  p=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True,env=e,timeout=timeout)
  if p.returncode:
-  if 'Resource temporarily unavailable' in p.stderr:raise RuntimeError('HOSTING_PROCESS_LIMIT')
+  error=(p.stderr or '').lower()
+  if 'resource temporarily unavailable' in error:raise RuntimeError('HOSTING_PROCESS_LIMIT')
+  if public_kwai:
+   # Publish only allowlisted diagnostics; never expose credentials or stderr.
+   if 'requested url returned error: 403' in error:raise RuntimeError('PUBLIC_GITHUB_HTTP_403')
+   if 'requested url returned error: 429' in error:raise RuntimeError('PUBLIC_GITHUB_HTTP_429')
+   if 'authentication failed' in error or 'could not read username' in error:raise RuntimeError('PUBLIC_GITHUB_AUTH_CHALLENGE')
+   if 'could not resolve host' in error:raise RuntimeError('PUBLIC_GITHUB_DNS_UNAVAILABLE')
+   if 'ssl' in error or 'tls' in error or 'certificate' in error:raise RuntimeError('PUBLIC_GITHUB_TLS_UNAVAILABLE')
+   raise RuntimeError('PUBLIC_GITHUB_GIT_'+str(p.returncode))
   raise RuntimeError('GIT_FAILED_'+str(p.returncode))
  return p.stdout
 def refs(lines):
@@ -64,7 +78,7 @@ def verify_repo(name):
  if not row or bool(row[0])!=is_private:raise RuntimeError('FORGEJO_VISIBILITY_UNEXPECTED')
  try:s=refs(run(['git','ls-remote','--refs',source,'refs/heads/*','refs/tags/*'],timeout=22,github=True))
  except RuntimeError as e:
-  if str(e)=='HOSTING_PROCESS_LIMIT':raise
+  if str(e)=='HOSTING_PROCESS_LIMIT' or str(e).startswith('PUBLIC_GITHUB_'):raise
   raise RuntimeError('GITHUB_SOURCE_NOT_AUTHORIZED_OR_UNAVAILABLE')
  try:d=refs(run(['git','--git-dir='+str(path),'for-each-ref','--format=%(objectname) %(refname)','refs/heads','refs/tags'],timeout=22))
  except RuntimeError:raise RuntimeError('FORGEJO_LOCAL_REFS_UNAVAILABLE')
