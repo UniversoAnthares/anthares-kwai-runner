@@ -12,6 +12,10 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
+      - name: Test native Kwai profile selection and notification-only dismiss
+        run: |
+          python3 -m py_compile tools/kwai_native_cortes.py tools/kwai_physical_queue_daemon.py
+          PYTHONPATH=tools python3 -m unittest discover -s tests -p 'test_kwai_device_failover_worker.py' -v
       - name: Validate syntax and fail-closed invariants
         shell: bash
         run: |
