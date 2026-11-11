@@ -642,7 +642,7 @@ def repair_scheduled_destination_only():
     for remote in remotes:
         fingerprint=hashlib.sha256(remote.encode()).hexdigest()[:12]
         query=('query { post(input: { id: '+json.dumps(remote)+
-               ' }) { id status channelId schedulingType dueAt metadata { '+
+               ' }) { id status channelId schedulingType dueAt text assets { type source ... on VideoAsset { video { thumbnailOffset } } } metadata { '+
                '... on PinterestPostMetadata { url } } } }')
         row=api(query).get("post") or {}
         if str(row.get("id") or "")!=remote or row.get("channelId")!=PINTEREST_ID:
@@ -666,9 +666,29 @@ def repair_scheduled_destination_only():
         if due.tzinfo is None or due<=datetime.now(timezone.utc)+timedelta(seconds=30):
             skipped+=1
             continue
+        # The provider currently validates text and media even on partial edit.
+        # Supply the exact existing caption and source; never substitute another clip.
+        source_assets=row.get("assets") or []
+        original_text=row.get("text")
+        if (not isinstance(original_text,str) or not original_text.strip()
+                or len(source_assets)!=1 or
+                str((source_assets[0] or {}).get("type") or "").lower()!="video"):
+            raise RuntimeError("PINTEREST_DESTINATION_REPAIR_ORIGINAL_ASSET_UNVERIFIED")
+        source_url=str(source_assets[0].get("source") or "")
+        parsed=urllib.parse.urlsplit(source_url)
+        if (parsed.scheme!="https" or parsed.hostname not in
+                ("anthares.us","www.anthares.us") or
+                not parsed.path.endswith(".mp4") or parsed.username or parsed.password):
+            raise RuntimeError("PINTEREST_DESTINATION_REPAIR_ORIGINAL_MEDIA_MISMATCH")
+        offset_ms=((source_assets[0].get("video") or {}).get("thumbnailOffset"))
+        if offset_ms is not None and (not isinstance(offset_ms,int) or offset_ms<0 or offset_ms>90000):
+            raise RuntimeError("PINTEREST_DESTINATION_REPAIR_THUMBNAIL_INVALID")
+        offset_part=(', metadata: { thumbnailOffset: '+str(offset_ms)+' }') if offset_ms is not None else ''
         mutation=('mutation { editPost(input: { id: '+json.dumps(remote)+
+                  ', text: '+json.dumps(original_text,ensure_ascii=False)+
+                  ', assets: [{ video: { url: '+json.dumps(source_url)+offset_part+' } }]'+
                   ', metadata: { pinterest: { url: "" } } }) { '+
-                  '... on PostActionSuccess { post { id status channelId dueAt metadata { '+
+                  '... on PostActionSuccess { post { id status channelId dueAt assets { type source } metadata { '+
                   '... on PinterestPostMetadata { url } } } } '+
                   '... on MutationError { message } } }')
         result=api(mutation).get("editPost") or {}
@@ -680,6 +700,8 @@ def repair_scheduled_destination_only():
         if (post.get("id")!=remote or post.get("channelId")!=PINTEREST_ID
                 or post.get("status")!="scheduled"
                 or post.get("dueAt")!=row.get("dueAt")
+                or len(post.get("assets") or [])!=1
+                or str((post.get("assets") or [{}])[0].get("source") or "")!=source_url
                 or (post.get("metadata") or {}).get("url") not in (None,"")):
             raise RuntimeError("PINTEREST_DESTINATION_REPAIR_MUTATION_UNVERIFIED")
         # Re-read the remote object, to prove the public publishing slot remains unchanged.
@@ -687,6 +709,8 @@ def repair_scheduled_destination_only():
         if (after.get("id")!=remote or after.get("status")!="scheduled"
                 or after.get("channelId")!=PINTEREST_ID
                 or after.get("dueAt")!=row.get("dueAt")
+                or len(after.get("assets") or [])!=1
+                or str((after.get("assets") or [{}])[0].get("source") or "")!=source_url
                 or (after.get("metadata") or {}).get("url") not in (None,"")):
             raise RuntimeError("PINTEREST_DESTINATION_REPAIR_READBACK_UNVERIFIED")
         done+=1
