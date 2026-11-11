@@ -15,7 +15,7 @@ concurrency:
 jobs:
   test-native-browser-controls:
     runs-on: ubuntu-24.04
-    timeout-minutes: 9
+    timeout-minutes: 7
     env:
       TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
     steps:
@@ -25,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m pip install -q playwright requests cryptography
-          python3 -m playwright install --with-deps chromium >/dev/null
+          command -v google-chrome >/dev/null
           echo NATIVE_TIKTOK_BROWSER_RUNTIME_READY=1
       - name: Check native TikTok LIVE without initiating or ending any stream
         shell: bash
@@ -51,7 +51,7 @@ jobs:
           thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
           try:
               with sync_playwright() as p:
-                  browser=p.chromium.launch(headless=True,args=[
+                  browser=p.chromium.launch(channel='chrome',headless=True,args=[
                       '--no-sandbox','--use-fake-device-for-media-stream',
                       '--use-fake-ui-for-media-stream'])
                   try:
