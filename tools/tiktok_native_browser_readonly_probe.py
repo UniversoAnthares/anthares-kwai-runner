@@ -22,6 +22,7 @@ PAGES=[
     ("live_center","https://livecenter.tiktok.com/"),
     ("creator_live","https://www.tiktok.com/tiktokstudio/live"),
     ("seller_center","https://seller-br.tiktok.com/"),
+    ("public_live","https://www.tiktok.com/@lucasrosalem4/live"),
 ]
 MARKERS={
   "browser_go_live": ["go live","fazer live","iniciar live","transmitir ao vivo"],
@@ -85,7 +86,35 @@ def main():
                 try:
                     r=page.goto(url,wait_until="domcontentloaded",timeout=28000)
                     page.wait_for_timeout(3500)
-                    results.append(inspect(page,r,name))
+                    result=inspect(page,r,name)
+                    if name=="public_live":
+                        # Only rendered media and visible labels; never record stream URLs,
+                        # cookies, tokens or the page's content.
+                        js="""() => {
+                          const visible = e => {
+                            const r=e.getBoundingClientRect(),s=getComputedStyle(e);
+                            return r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden';
+                          };
+                          const video=[...document.querySelectorAll('video')].filter(visible)[0];
+                          const labels=(document.body?.innerText||'').slice(0,6000).toLowerCase();
+                          return {media_visible:!!video,ready_state:video?.readyState||0,
+                            time:video&&Number.isFinite(video.currentTime)?video.currentTime:0,
+                            paused:video?.paused!==false,has_source:!!(video&&(video.currentSrc||video.src)),
+                            visible_live_label:/\b(live|ao vivo)\b/.test(labels),
+                            visible_offline_label:/\b(not live|offline|ended|indisponível|transmissão encerrada)\b/.test(labels)};
+                        }"""
+                        before=page.evaluate(js)
+                        page.wait_for_timeout(4200)
+                        after=page.evaluate(js)
+                        result["public_media_visible"]=bool(after["media_visible"])
+                        result["public_media_ready"]=bool(after["ready_state"]>=2)
+                        result["public_media_playback_advancing"]=bool(after["time"]>before["time"]+0.5)
+                        result["public_media_paused"]=bool(after["paused"])
+                        result["public_media_has_source"]=bool(after["has_source"])
+                        result["public_live_label"]=bool(after["visible_live_label"])
+                        result["public_offline_label"]=bool(after["visible_offline_label"])
+                        result["public_observation"]="playing" if result["public_media_ready"] and result["public_media_playback_advancing"] else ("login_required" if result["redirect_to_login"] or result["login_ui"] else "unconfirmed")
+                    results.append(result)
                 except Exception as exc:
                     results.append({"name":name,"navigation_error":type(exc).__name__})
             print("NATIVE_TIKTOK_BROWSER_PROBE="+json.dumps({"results":results},
