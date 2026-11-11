@@ -630,8 +630,77 @@ def reconcile_buffer_terminal_errors():
     return 0
 
 
+def repair_scheduled_destination_only():
+    """Correct the optional destination on existing Buffer posts, no new post or queue write."""
+    from datetime import datetime, timezone, timedelta
+    jobs=queue("pending").get("jobs") or []
+    remotes=[str(j.get("remote_id") or "") for j in jobs if j.get("remote_id")]
+    if not remotes or len(remotes)>25 or len(remotes)!=len(set(remotes)):
+        raise RuntimeError("PINTEREST_DESTINATION_REPAIR_PENDING_INVALID")
+    done=0
+    skipped=0
+    for remote in remotes:
+        fingerprint=hashlib.sha256(remote.encode()).hexdigest()[:12]
+        query=('query { post(input: { id: '+json.dumps(remote)+
+               ' }) { id status channelId schedulingType dueAt metadata { '+
+               '... on PinterestPostMetadata { url } } } }')
+        row=api(query).get("post") or {}
+        if str(row.get("id") or "")!=remote or row.get("channelId")!=PINTEREST_ID:
+            raise RuntimeError("PINTEREST_DESTINATION_REPAIR_IDENTITY_MISMATCH")
+        if row.get("status")!="scheduled":
+            skipped+=1
+            continue
+        if str(row.get("schedulingType") or "").lower()!="automatic":
+            raise RuntimeError("PINTEREST_DESTINATION_REPAIR_NOT_AUTOMATIC")
+        meta=row.get("metadata") or {}
+        old_url=str(meta.get("url") or "")
+        if old_url not in ("https://www.anthares.us",""):
+            raise RuntimeError("PINTEREST_DESTINATION_REPAIR_UNEXPECTED_URL")
+        if old_url=="":
+            skipped+=1
+            continue
+        try:
+            due=datetime.fromisoformat(str(row.get("dueAt") or "").replace("Z","+00:00"))
+        except ValueError:
+            raise RuntimeError("PINTEREST_DESTINATION_REPAIR_DUE_UNVERIFIED") from None
+        if due.tzinfo is None or due<=datetime.now(timezone.utc)+timedelta(seconds=30):
+            skipped+=1
+            continue
+        mutation=('mutation { editPost(input: { id: '+json.dumps(remote)+
+                  ', metadata: { pinterest: { url: null } } }) { '+
+                  '... on PostActionSuccess { post { id status channelId dueAt metadata { '+
+                  '... on PinterestPostMetadata { url } } } } '+
+                  '... on MutationError { message } } }')
+        result=api(mutation).get("editPost") or {}
+        post=result.get("post") or {}
+        if not post and result.get("message"):
+            raise RuntimeError("PINTEREST_DESTINATION_REPAIR_PROVIDER_REJECTED")
+        if (post.get("id")!=remote or post.get("channelId")!=PINTEREST_ID
+                or post.get("status")!="scheduled"
+                or post.get("dueAt")!=row.get("dueAt")
+                or (post.get("metadata") or {}).get("url") not in (None,"")):
+            raise RuntimeError("PINTEREST_DESTINATION_REPAIR_MUTATION_UNVERIFIED")
+        # Re-read the remote object, to prove the public publishing slot remains unchanged.
+        after=api(query).get("post") or {}
+        if (after.get("id")!=remote or after.get("status")!="scheduled"
+                or after.get("channelId")!=PINTEREST_ID
+                or after.get("dueAt")!=row.get("dueAt")
+                or (after.get("metadata") or {}).get("url") not in (None,"")):
+            raise RuntimeError("PINTEREST_DESTINATION_REPAIR_READBACK_UNVERIFIED")
+        done+=1
+        print("PINTEREST_DESTINATION_CORRECTED="+fingerprint,flush=True)
+    print(json.dumps({"pinterest_cloud":"DESTINATION_REPAIR",
+                      "scheduled_posts_corrected":done,
+                      "other_posts_unchanged":skipped,
+                      "new_posts":0,"neon_mutations":0},
+                     separators=(",",":")),flush=True)
+    return 0
+
+
 def main():
     cloud_only()
+    if os.getenv("CORTES_REPAIR_PIN_DESTINATION_ONLY")=="1":
+        return repair_scheduled_destination_only()
     if os.getenv("CORTES_AUDIT_PENDING_ONLY")=="1":
         return audit_stale_buffer_pending()
     if os.getenv("CORTES_RECONCILE_TERMINAL_ERROR_ONLY")=="1":
