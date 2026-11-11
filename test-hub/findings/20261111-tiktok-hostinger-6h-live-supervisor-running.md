@@ -1,6 +1,6 @@
 # TikTok Restream Hostinger six-hour rolling LIVE - running
 DATE: 2026-11-11
-STATUS: RUNNING (first six-hour completion and automatic renewal not yet proven)
+STATUS: UNSTABLE_HOST_BACKGROUND_PROCESS (first 6h cycle interrupted; restored manually once)
 AREA: tiktok-live-restream-hostinger-6h
 OWNER: chatgpt-anthares-tiktok-20261111
 ROOT: /home/u566597497/.anthares-tiktok-restream
@@ -17,6 +17,15 @@ PR: https://github.com/UniversoAnthares/anthares-kwai-runner/pull/2301
 - Hostinger read-only status at ~12:17Z showed `2026-11-11T12:15:40Z CYCLE_STARTED`, FFmpeg progress `out_time_ms=90989889`, two FFmpeg processes (approximately 3.2% and 3.3% CPU; RSS ~39-40MiB) and no change to Kwai scripts.
 - Independent public browser viewer https://www.tiktok.com/@lucasrosalem4/live: LIVE title presented, visible decoded footage in public screenshot (landscape video with TikTok margins), media element readyState=4, playing=true, 1280x720. Audio confirmed using WebAudio RMS 0.06218, without login. The prerecorded nature is disclosed by Restream TikTok title `ANTHARES | PROGRAMA GRAVADO`.
 - Recurring hourly condition-watch monitor created for Hostinger supervisor and public LIVE. It may restart unexpected crash only while enabled=true; circuit breaker or authorization errors remain disabled.
+
+## Incident and recovery at 13:16-13:20 UTC
+- 2026-11-11T13:16Z host status: `supervisor=STOPPED`, `ffmpeg=STOPPED`, `enabled=1`. Last progress mtime 13:16:20Z, log only contained `12:15:40Z CYCLE_STARTED`; no `CYCLE_COMPLETED` or circuit-breaker marker. Stale supervisor PID 341707 / child PID 341726 were absent from process table; the separate Kwai FFmpeg PID 869182 was present.
+- Thus the first six-hour cycle ended unexpectedly after approximately one hour. It is not technically correct to describe the Hostinger strategy as fully continuous 6h until this termination problem is resolved.
+- At 13:19 UTC dispatch of existing authenticated GitHub controller `action=start` restored both isolated processes: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/43028024641. New host log: `2026-11-11T13:19:19Z CYCLE_STARTED`.
+- Independent public TikTok spectator browser showed video 1280x720, playing=true, and nonzero WebAudio RMS=0.12454 with one live audio track after recovery.
+- No touch to owner's interactive pointer, keyboard, desktop windows or local audio; commands used the authenticated background SSH execution channel.
+- Existing hourly condition-watch monitor should catch future process deaths but can allow downtime until next scheduled check. Hostinger docs support scheduled hPanel Cron for background processes, but durable recovery directly through hPanel was NOT established. Do not claim six-hour seamless operation.
+- Cloud native Windows TikTok LIVE Studio fallback was checked in job https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/43027322351 and has no accelerated GPU; authenticated browser LIVE Manager also lacks Go LIVE control.
 
 ## Limitations
 - An actual six-hour completed cycle, next-cycle automatic renewal and week-long uptime have not yet occurred; leave this finding RUNNING until independently observed. Expected first six-hour boundary from 2026-11-11T12:15:40Z is around 18:15:40Z; account for clock jitter and FFmpeg progress.
