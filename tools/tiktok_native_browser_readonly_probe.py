@@ -100,6 +100,11 @@ def main():
                           return {media_visible:!!video,ready_state:video?.readyState||0,
                             time:video&&Number.isFinite(video.currentTime)?video.currentTime:0,
                             paused:video?.paused!==false,has_source:!!(video&&(video.currentSrc||video.src)),
+                            source_object:!!video?.srcObject,
+                            width:video?.videoWidth||0,height:video?.videoHeight||0,
+                            duration:Number.isFinite(video?.duration)?Math.round(video.duration):null,
+                            media_count:document.querySelectorAll('video').length,
+                            player_e2e:video?.closest('[data-e2e]')?.getAttribute('data-e2e')||null,
                             visible_live_label:/\b(live|ao vivo)\b/.test(labels),
                             visible_offline_label:/\b(not live|offline|ended|indisponível|transmissão encerrada)\b/.test(labels)};
                         }"""
@@ -111,6 +116,11 @@ def main():
                         result["public_media_playback_advancing"]=bool(after["time"]>before["time"]+0.5)
                         result["public_media_paused"]=bool(after["paused"])
                         result["public_media_has_source"]=bool(after["has_source"])
+                        result["public_media_source_object"]=bool(after["source_object"])
+                        result["public_media_dimensions"]=[int(after["width"]),int(after["height"])]
+                        result["public_media_duration"]=after["duration"]
+                        result["public_video_elements"]=int(after["media_count"])
+                        result["public_player_e2e"]=after["player_e2e"]
                         result["public_live_label"]=bool(after["visible_live_label"])
                         result["public_offline_label"]=bool(after["visible_offline_label"])
                         result["public_observation"]="playing" if result["public_media_ready"] and result["public_media_playback_advancing"] else ("login_required" if result["redirect_to_login"] or result["login_ui"] else "unconfirmed")
