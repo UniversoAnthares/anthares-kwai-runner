@@ -96,12 +96,25 @@ def main():
                             return r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden';
                           };
                           const video=[...document.querySelectorAll('video')].filter(visible)[0];
+                          let captured_audio=null,captured_video=null,capture_error=null;
+                          try {
+                            const cap=video?.captureStream?.();
+                            if(cap) {
+                              captured_audio=cap.getAudioTracks().length;
+                              captured_video=cap.getVideoTracks().length;
+                              cap.getTracks().forEach(t=>t.stop());
+                            }
+                          } catch(e) { capture_error=e.name; }
                           const labels=(document.body?.innerText||'').slice(0,6000).toLowerCase();
                           return {media_visible:!!video,ready_state:video?.readyState||0,
                             time:video&&Number.isFinite(video.currentTime)?video.currentTime:0,
                             paused:video?.paused!==false,has_source:!!(video&&(video.currentSrc||video.src)),
                             source_object:!!video?.srcObject,
                             audio_tracks:video?.srcObject?.getAudioTracks?.()?.length??0,
+                            captured_audio_tracks:captured_audio,captured_video_tracks:captured_video,
+                            capture_error:capture_error,
+                            media_source_kind:video?.srcObject?.constructor?.name||null,
+                            audio_decoded_bytes:Number.isFinite(video?.webkitAudioDecodedByteCount)?video.webkitAudioDecodedByteCount:null,
                             audio_track_live:video?.srcObject?.getAudioTracks?.()?.some(x=>x.readyState==='live'&&!x.muted)??false,
                             video_tracks:video?.srcObject?.getVideoTracks?.()?.length??0,
                             muted:video?.muted??true,volume:video?.volume??0,
@@ -122,6 +135,11 @@ def main():
                         result["public_media_has_source"]=bool(after["has_source"])
                         result["public_media_source_object"]=bool(after["source_object"])
                         result["public_audio_tracks"]=int(after["audio_tracks"])
+                        result["public_captured_audio_tracks"]=after["captured_audio_tracks"]
+                        result["public_captured_video_tracks"]=after["captured_video_tracks"]
+                        result["public_capture_error"]=after["capture_error"]
+                        result["public_media_source_kind"]=after["media_source_kind"]
+                        result["public_audio_decoded_bytes"]=after["audio_decoded_bytes"]
                         result["public_audio_track_live"]=bool(after["audio_track_live"])
                         result["public_video_tracks"]=int(after["video_tracks"])
                         result["public_player_muted"]=bool(after["muted"])
