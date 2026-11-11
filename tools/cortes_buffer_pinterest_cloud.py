@@ -656,9 +656,6 @@ def repair_scheduled_destination_only():
         old_url=str(meta.get("url") or "")
         if old_url not in ("https://www.anthares.us",""):
             raise RuntimeError("PINTEREST_DESTINATION_REPAIR_UNEXPECTED_URL")
-        if old_url=="":
-            skipped+=1
-            continue
         try:
             due=datetime.fromisoformat(str(row.get("dueAt") or "").replace("Z","+00:00"))
         except ValueError:
@@ -684,6 +681,10 @@ def repair_scheduled_destination_only():
         if offset_ms is not None and (not isinstance(offset_ms,int) or offset_ms<0 or offset_ms>90000):
             raise RuntimeError("PINTEREST_DESTINATION_REPAIR_THUMBNAIL_INVALID")
         offset_part=(', metadata: { thumbnailOffset: '+str(offset_ms)+' }') if offset_ms is not None else ''
+        if old_url=="":
+            skipped+=1
+            print("PINTEREST_SCHEDULED_VIDEO_AND_CAPTION_VERIFIED="+fingerprint,flush=True)
+            continue
         mutation=('mutation { editPost(input: { id: '+json.dumps(remote)+
                   ', text: '+json.dumps(original_text,ensure_ascii=False)+
                   ', assets: [{ video: { url: '+json.dumps(source_url)+offset_part+' } }]'+
