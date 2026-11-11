@@ -1,4 +1,4 @@
-"""Seven isolated tests for the existing Hostinger Forgejo keepalive.
+"""Nine isolated tests for the existing Hostinger Forgejo keepalive.
 
 The synthetic HOME, Unix socket, process and curl stub never touch Hostinger.
 Run on Linux: python3 -m unittest tests/test_forgejo_keepalive_safety.py -v
@@ -87,6 +87,30 @@ class ForgejoKeepaliveSafetyTests(unittest.TestCase):
                 self.assertFalse((self.base / "starts").exists())
             finally:
                 fcntl.flock(locked, fcntl.LOCK_UN)
+
+    def test_healthy_daemon_with_inherited_lock_is_acknowledged(self):
+        (self.base / "healthy").touch()
+        with (self.base / "keepalive.lock").open("ab") as locked:
+            fcntl.flock(locked, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            try:
+                result = self.invoke()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("ALREADY_HEALTHY=PASS", result.stdout)
+                self.assertFalse((self.base / "starts").exists())
+            finally:
+                fcntl.flock(locked, fcntl.LOCK_UN)
+
+    def test_spawned_daemon_closes_fd9_and_next_probe_succeeds(self):
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("RECOVERED=PASS", result.stdout)
+        pid = int(result.stdout.split("pid=")[-1].split()[0])
+        self.assertTrue(pathlib.Path(f"/proc/{pid}").exists())
+        self.assertFalse(os.path.lexists(f"/proc/{pid}/fd/9"))
+        second = self.invoke()
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("ALREADY_HEALTHY=PASS", second.stdout)
+        self.assertEqual((self.base / "starts").read_text().count("START"), 1)
 
     def test_unhealthy_existing_daemon_fails_closed(self):
         compiler = shutil.which("cc") or shutil.which("gcc")
