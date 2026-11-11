@@ -1,0 +1,50 @@
+name: TikTok Render existing-account capacity audit (read-only)
+on:
+  push:
+    branches: ['feature/tiktok-live-authorized-cloud-*']
+    paths: ['.github/workflows/tiktok-render-existing-capacity-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-existing-services:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect existing Render free-tier services without modifying state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          key=os.getenv('RENDER_API_KEY','')
+          if not key:
+              print('RENDER_AUDIT_AUTH=MISSING')
+              raise SystemExit(0)
+          req=urllib.request.Request('https://api.render.com/v1/services?limit=100',
+              headers={'Authorization':'Bearer '+key,'Accept':'application/json',
+                       'User-Agent':'anthares-tiktok-existing-capacity-audit'})
+          try:
+              with urllib.request.urlopen(req,timeout=20) as r:
+                  data=json.load(r)
+              print('RENDER_AUDIT_HTTP=200')
+          except urllib.error.HTTPError as e:
+              print('RENDER_AUDIT_HTTP='+str(e.code))
+              raise SystemExit(0)
+          except Exception as e:
+              print('RENDER_AUDIT_NETWORK_ERROR='+type(e).__name__)
+              raise SystemExit(0)
+          for rec in data if isinstance(data,list) else data.get('services',[]):
+              s=rec.get('service',rec)
+              if 'tiktok' in str(s.get('name','')).lower() or 'restream' in str(s.get('name','')).lower():
+                  print('RENDER_TIKTOK_SERVICE='+json.dumps({
+                      'id':s.get('id'),'name':s.get('name'),'type':s.get('type'),
+                      'plan':(s.get('serviceDetails') or {}).get('plan'),
+                      'suspended':s.get('suspended'),
+                      'suspenders':s.get('suspenders'),
+                      'updatedAt':s.get('updatedAt')},separators=(',',':')))
+          print('RENDER_AUDIT_COMPLETE=1')
+          PY
