@@ -4,6 +4,12 @@ on:
     paths:
       - '.kwai-publish-safety-trigger'
   workflow_dispatch:
+    inputs:
+      ui_recovery_only:
+        description: 'Run isolated native Kwai UI recovery regressions without unrelated legacy publisher checks'
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
 jobs:
@@ -13,10 +19,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test native Kwai profile selection and notification-only dismiss
+        if: inputs.ui_recovery_only == true
         run: |
           python3 -m py_compile tools/kwai_native_cortes.py tools/kwai_physical_queue_daemon.py
           PYTHONPATH=tools python3 -m unittest discover -s tests -p 'test_kwai_device_failover_worker.py' -v
       - name: Validate syntax and fail-closed invariants
+        if: inputs.ui_recovery_only != true
         shell: bash
         run: |
           set -euo pipefail
