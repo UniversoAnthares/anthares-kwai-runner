@@ -313,3 +313,9 @@ A existência de um lease ativo não impede probes somente-leitura, mas impede o
 - **Condição aberta**: o boost expira aproximadamente em 2026-11-12T12:09Z. A saída do keepalive após o boost continua vazia; não há novo recibo de execução, espelhos atualizados ou disponibilidade HTTPS externa atestados. A recuperação local inicial continua comprovada pelo recibo histórico `FORGEJO_KEEPALIVE_RECOVERED=PASS pid=2880553`.
 - **Critério permanente**: identificar pela via administrativa autorizada os consumidores de NPROC e reduzir a ocupação/picos abaixo de 80, mantendo os publicadores, crons de espelho e demais serviços; jamais usar o botão global `Parar processos em execução` sem avaliação de impacto. A consulta de processos ao executor Hostinger devolveu `external_executor_operation_not_supported`; proibição de contornar o bloqueio preservada.
 - Registro: `test-hub/findings/20261111-aoi7-hostinger-nproc-boost-temporary.md`.
+
+### Hostinger: backup Drive duplicado corrigido (2026-11-11)
+- **Concluído em produção**: removida uma duplicação real de cron Drive a cada 15 minutos. Antes havia duas execuções simultâneas do mesmo script sync oldest; uma terminou com SYNC RESULT uploaded=0 failed=0, enquanto a outra saiu com Other backup worker already running.
+- Preservada a tarefa única com registro em worker.log, os espelhos Forgejo, o keepalive, o Kwai e os demais agendamentos. Conferência depois de reload: **9 cron jobs** em vez de 10; apenas um backup Drive, e zero cópias sem log.
+- A deduplicação reduz execuções redundantes, mas **não comprova ainda** que os picos NPROC ficarão abaixo do teto original de 80 após expirar a ampliação gratuita.
+- Finding de produção: test-hub/findings/20261111-hostinger-drive-backup-cron-dedup-proven.md.
