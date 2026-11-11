@@ -105,6 +105,17 @@ process_is_ours() {
   [[ -r "/proc/$pid/cmdline" ]] || return 1
   tr '\0' ' ' < "/proc/$pid/cmdline" | grep -Fq -- "$needle"
 }
+tiktok_child_is_ours() {
+  local childpid="${1:-}" supervisorpid="${2:-}" ppid=""
+  process_is_ours "$childpid" "$ROOT/ffmpeg.progress" && return 0
+  # The recorded $! PID belongs to a Bash subshell; ffmpeg is its child.
+  # Only accept it if the process belongs to this script and is parented
+  # by the expected supervisor. An orphan is accepted solely for cleanup.
+  process_is_ours "$childpid" "$ROOT/supervisor.sh" || return 1
+  [[ "$supervisorpid" =~ ^[0-9]+$ ]] || return 1
+  ppid="$(ps -p "$childpid" -o ppid= 2>/dev/null | tr -d ' ')"
+  [[ "$ppid" = "$supervisorpid" || "$ppid" = 1 ]]
+}
 launch_detached() {
   command -v setsid >/dev/null || { log "SETSID_MISSING"; return 6; }
   setsid -f nohup bash "$ROOT/supervisor.sh" run </dev/null >/dev/null 2>&1
@@ -122,7 +133,7 @@ watchdog_tick() {
   if process_is_ours "$sup" "$ROOT/supervisor.sh"; then
     # Normal handovers and supervised two-minute backoff are respected.
     # Do not interfere with a working Kwai or TikTok stream.
-    if process_is_ours "$childpid" "$ROOT/ffmpeg.progress"; then
+    if tiktok_child_is_ours "$childpid" "$sup"; then
       now="$(date +%s)"
       mtime="$(stat -c %Y "$ROOT/ffmpeg.progress" 2>/dev/null || echo 0)"
       if (( mtime > 0 && now-mtime > 420 )); then
@@ -141,11 +152,11 @@ watchdog_tick() {
   fi
   # If any previously orphaned transcoder still owns TikTok progress,
   # stop only that exact process. Do not touch the Kwai PID or files.
-  if process_is_ours "$childpid" "$ROOT/ffmpeg.progress"; then
+  if tiktok_child_is_ours "$childpid" "$sup"; then
     log "WATCHDOG_TIKTOK_ORPHAN_FOUND"
     kill -TERM "$childpid" 2>/dev/null || true
     sleep 3
-    if process_is_ours "$childpid" "$ROOT/ffmpeg.progress"; then
+    if tiktok_child_is_ours "$childpid" "$sup"; then
       log "WATCHDOG_TIKTOK_ORPHAN_STILL_ALIVE"
       echo TIKTOK_WATCHDOG_ORPHAN_BLOCKED=1
       return 5
