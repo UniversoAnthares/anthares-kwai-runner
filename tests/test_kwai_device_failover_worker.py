@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import kwai_device_failover_worker as worker
+import kwai_native_cortes as native
+import xml.etree.ElementTree as ET
 
 
 class KwaiDeviceFailoverWorkerTests(unittest.TestCase):
@@ -79,6 +81,28 @@ class KwaiDeviceFailoverWorkerTests(unittest.TestCase):
         finally:
             worker.ACK_PATH = original
 
+
+
+class KwaiNativeUiRecoveryTests(unittest.TestCase):
+    def test_profile_duplicate_id_picks_rightmost_tappable_node(self):
+        root=ET.Element('hierarchy')
+        rid=native.RID_PROFILE
+        ET.SubElement(root,'node',{'resource-id':rid,'bounds':'[648,2059][864,2134]','clickable':'true','enabled':'true'})
+        ET.SubElement(root,'node',{'resource-id':rid,'bounds':'[864,2059][1080,2134]','clickable':'true','enabled':'true'})
+        with patch.object(native,'dump',return_value=(root,Path('synthetic.xml'))):
+            _,selected,_=native.wait('device',rid,'synthetic',seconds=2)
+        self.assertEqual(native.center(selected.attrib['bounds']),(972,2096))
+
+    def test_notification_offer_is_dismissed_without_enabling_notifications(self):
+        modal=ET.Element('hierarchy')
+        ET.SubElement(modal,'node',{'resource-id':'kwai.lite.video.basis:id/tv_dialog_title','text':'Ative as notificações instantâneas'})
+        close=ET.SubElement(modal,'node',{'resource-id':'kwai.lite.video:id/iv_close','clickable':'true','bounds':'[983,692][1038,747]'})
+        home=ET.Element('hierarchy')
+        ET.SubElement(home,'node',{'resource-id':native.RID_PROFILE,'clickable':'true','enabled':'true','bounds':'[864,2059][1080,2134]'})
+        with patch.object(native,'dump',side_effect=[(modal,Path('modal.xml')),(home,Path('home.xml'))]),patch.object(native,'tap') as tap,patch.object(native.time,'sleep'):
+            _,selected,_=native.wait('device',native.RID_PROFILE,'synthetic',seconds=2)
+        tap.assert_called_once_with('device',close)
+        self.assertEqual(native.center(selected.attrib['bounds'])[0],972)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
