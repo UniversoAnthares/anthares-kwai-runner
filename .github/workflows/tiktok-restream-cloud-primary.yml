@@ -11,10 +11,10 @@ on:
         required: true
         default: false
       seconds:
-        description: 'Cloud runtime: 90 to 20520 seconds'
+        description: 'Cloud integration test: 90 to 240 seconds'
         type: string
         required: true
-        default: '19800'
+        default: '120'
 permissions:
   contents: read
 concurrency:
@@ -23,13 +23,13 @@ concurrency:
 jobs:
   cloud-primary:
     runs-on: ubuntu-24.04
-    timeout-minutes: 350
+    timeout-minutes: 12
     env:
       GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
       RESTREAM_ENCODER_RTMP_DESTINATION: ${{ secrets.RESTREAM_ENCODER_RTMP_DESTINATION }}
       RESTREAM_TIKTOK_CHANNEL_AUTHORIZED: ${{ vars.RESTREAM_TIKTOK_CHANNEL_AUTHORIZED }}
       RESTREAM_PRERECORDED_APPROVED: ${{ vars.RESTREAM_PRERECORDED_APPROVED }}
-      STREAM_SECONDS: ${{ github.event_name == 'workflow_dispatch' && inputs.seconds || '19800' }}
+      STREAM_SECONDS: ${{ github.event_name == 'workflow_dispatch' && inputs.seconds || '120' }}
     steps:
       - uses: actions/checkout@v4
       - name: Install standard cloud FFmpeg
