@@ -20,6 +20,19 @@ record_status() {
   local state="$1" stamp
   [[ -d "$base" ]] || return 0
   printf -v stamp '%(%s)T' -1 2>/dev/null || stamp="${EPOCHSECONDS:-0}"
+  # Older Bash releases lack EPOCHSECONDS and printf %T. Derive wall time from
+  # Linux procfs using shell builtins; avoid fork while process quota is tight.
+  if [[ "$stamp" == 0 && -r /proc/stat && -r /proc/uptime ]]; then
+    local k v rest boot='' uptime=''
+    while read -r k v rest; do
+      if [[ "$k" == btime ]]; then boot="$v"; break; fi
+    done < /proc/stat
+    read -r uptime rest < /proc/uptime || :
+    uptime="${uptime%%.*}"
+    if [[ "$boot" =~ ^[0-9]+$ && "$uptime" =~ ^[0-9]+$ ]]; then
+      stamp="$((boot + uptime))"
+    fi
+  fi
   printf '{"checked_epoch":%s,"state":"%s"}\n' "$stamp" "$state" > "$status_file" 2>/dev/null || :
   printf '%s %s\n' "$stamp" "$state" >> "$ticks_file" 2>/dev/null || :
   return 0
