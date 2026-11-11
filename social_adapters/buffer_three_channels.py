@@ -419,7 +419,7 @@ def schedule(payload: dict, *, token: str | None = None, validated_channels: lis
         title = branded_title(str(payload.get("title") or payload.get("video_title") or ""), limit=100)
         metadata = ('metadata: { pinterest: { boardServiceId: ' + json.dumps(board_id) +
                     ', title: ' + json.dumps(title, ensure_ascii=False) +
-                    ', url: "https://www.anthares.us" } }')
+                    ' } }')
     mutation = """mutation CortesBufferVideo {
       createPost(input: {
         text: CAPTION
