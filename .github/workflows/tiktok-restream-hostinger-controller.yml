@@ -1,0 +1,139 @@
+name: TikTok Restream Hostinger 6h Controller
+on:
+  push:
+    branches:
+      - 'feature/tiktok-live-authorized-cloud-*'
+    paths:
+      - '.github/workflows/tiktok-restream-hostinger-controller.yml'
+      - 'tools/tiktok_restream_hostinger_supervisor.sh'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Independent TikTok controller command'
+        required: true
+        default: 'status'
+        type: choice
+        options:
+          - status
+          - deploy
+          - start
+          - stop
+permissions:
+  contents: read
+concurrency:
+  group: anthares-tiktok-restream-hostinger-controller
+  cancel-in-progress: false
+jobs:
+  control:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      TIKTOK_ACTION: ${{ github.event_name == 'push' && 'deploy' || inputs.action }}
+      RESTREAM_ENCODER_RTMP_DESTINATION: ${{ secrets.RESTREAM_ENCODER_RTMP_DESTINATION }}
+      RESTREAM_TIKTOK_CHANNEL_AUTHORIZED: ${{ vars.RESTREAM_TIKTOK_CHANNEL_AUTHORIZED }}
+      RESTREAM_PRERECORDED_APPROVED: ${{ vars.RESTREAM_PRERECORDED_APPROVED }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check for independent host supervisor
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tools/tiktok_restream_hostinger_supervisor.sh
+          echo TIKTOK_HOSTINGER_CONTROLLER_SYNTAX_OK=1
+      - name: Retrieve existing Hostinger SSH bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GITLAB_TOKEN" || { echo TIKTOK_SSH_BRIDGE_UNAVAILABLE=1; exit 2; }
+          python3 - <<'PY'
+          import json,os,pathlib,urllib.request
+          req=urllib.request.Request(
+            'https://gitlab.com/api/v4/projects/87361776/variables?per_page=100',
+            headers={'PRIVATE-TOKEN':os.environ['GITLAB_TOKEN'],
+                     'User-Agent':'anthares-tiktok-restream-hostinger-controller'})
+          with urllib.request.urlopen(req,timeout=30) as response:
+              records=json.load(response)
+          data={str(v.get('key')):str(v.get('value') or '') for v in records}
+          names=('ANTHARES_QA_SSH_KEY','ANTHARES_QA_SSH_HOST','ANTHARES_QA_SSH_USER')
+          if any(not data.get(k) for k in names):
+              raise SystemExit('TIKTOK_SSH_BRIDGE_INCOMPLETE')
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'tiktok-restream-ssh'
+          root.mkdir(mode=0o700)
+          pem=root/'id_hostinger'
+          pem.write_text(data[names[0]])
+          pem.chmod(0o600)
+          for name in names:
+              print('::add-mask::'+data[name].replace('\n','%0A'))
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write('TIKTOK_SSH_HOST='+data[names[1]]+'\n')
+              f.write('TIKTOK_SSH_USER='+data[names[2]]+'\n')
+              f.write('TIKTOK_SSH_PORT='+(data.get('ANTHARES_QA_SSH_PORT') or '65002')+'\n')
+              f.write('TIKTOK_SSH_KEY_FILE='+str(pem)+'\n')
+          print('TIKTOK_SSH_BRIDGE_READY=1')
+          PY
+      - name: Deploy isolated TikTok controller without enabling it
+        if: ${{ env.TIKTOK_ACTION == 'deploy' || env.TIKTOK_ACTION == 'start' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/home/u566597497/.anthares-tiktok-restream
+          ssh -p "$TIKTOK_SSH_PORT" -i "$TIKTOK_SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 \
+            -o StrictHostKeyChecking=accept-new "$TIKTOK_SSH_USER@$TIKTOK_SSH_HOST" \
+            "umask 077; mkdir -p '$ROOT'; chmod 700 '$ROOT'"
+          scp -q -P "$TIKTOK_SSH_PORT" -i "$TIKTOK_SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 \
+            -o StrictHostKeyChecking=accept-new \
+            tools/tiktok_restream_hostinger_supervisor.sh \
+            "$TIKTOK_SSH_USER@$TIKTOK_SSH_HOST:$ROOT/supervisor.sh"
+          ssh -p "$TIKTOK_SSH_PORT" -i "$TIKTOK_SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 \
+            -o StrictHostKeyChecking=accept-new "$TIKTOK_SSH_USER@$TIKTOK_SSH_HOST" \
+            "chmod 700 '$ROOT/supervisor.sh'; bash -n '$ROOT/supervisor.sh'"
+          echo TIKTOK_HOSTINGER_SUPERVISOR_DEPLOYED=1
+      - name: Arm only with an established authorized Restream channel
+        if: ${{ env.TIKTOK_ACTION == 'start' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RESTREAM_TIKTOK_CHANNEL_AUTHORIZED" = true || { echo TIKTOK_RESTREAM_CHANNEL_NOT_AUTHORIZED=1; exit 8; }
+          test "$RESTREAM_PRERECORDED_APPROVED" = true || { echo TIKTOK_PRERECORDED_PUBLISHING_DISABLED=1; exit 8; }
+          case "$RESTREAM_ENCODER_RTMP_DESTINATION" in
+            rtmp://live.restream.io/live/*|rtmps://live.restream.io/live/*) ;;
+            *) echo TIKTOK_RESTREAM_INGEST_SECRET_INVALID=1; exit 9 ;;
+          esac
+          ROOT=/home/u566597497/.anthares-tiktok-restream
+          printf %s "$RESTREAM_ENCODER_RTMP_DESTINATION" | \
+          ssh -p "$TIKTOK_SSH_PORT" -i "$TIKTOK_SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 \
+            -o StrictHostKeyChecking=accept-new "$TIKTOK_SSH_USER@$TIKTOK_SSH_HOST" \
+            "umask 077; cat > '$ROOT/rtmp-destination'; chmod 600 '$ROOT/rtmp-destination'"
+          ssh -p "$TIKTOK_SSH_PORT" -i "$TIKTOK_SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 \
+            -o StrictHostKeyChecking=accept-new "$TIKTOK_SSH_USER@$TIKTOK_SSH_HOST" \
+            "bash '$ROOT/supervisor.sh' start"
+          echo TIKTOK_HOSTINGER_START_SENT=1
+      - name: Read isolated controller status without retrieving credentials
+        if: ${{ env.TIKTOK_ACTION != 'stop' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/home/u566597497/.anthares-tiktok-restream
+          ssh -p "$TIKTOK_SSH_PORT" -i "$TIKTOK_SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 \
+            -o StrictHostKeyChecking=accept-new "$TIKTOK_SSH_USER@$TIKTOK_SSH_HOST" \
+            "if test -s '$ROOT/supervisor.sh'; then bash '$ROOT/supervisor.sh' status; else echo TIKTOK_HOSTINGER_NOT_DEPLOYED=1; fi"
+      - name: Stop only the independent TikTok transmitter
+        if: ${{ env.TIKTOK_ACTION == 'stop' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/home/u566597497/.anthares-tiktok-restream
+          ssh -p "$TIKTOK_SSH_PORT" -i "$TIKTOK_SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 \
+            -o StrictHostKeyChecking=accept-new "$TIKTOK_SSH_USER@$TIKTOK_SSH_HOST" \
+            "bash '$ROOT/supervisor.sh' stop"
+      - name: Purge temporary SSH bridge
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/tiktok-restream-ssh"
