@@ -1,0 +1,32 @@
+name: TikTok Restream cloud 6h source preflight (read-only)
+on:
+  push:
+    branches:
+      - 'feature/tiktok-live-authorized-cloud-*'
+    paths:
+      - '.github/workflows/tiktok-restream-cloud-six-hour-preflight.yml'
+      - 'tools/tiktok_restream_cloud_encoder.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: anthares-tiktok-restream-cloud-source-preflight
+  cancel-in-progress: false
+jobs:
+  validate-cloud-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check FFmpeg on standard cloud runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v ffmpeg
+          ffmpeg -hide_banner -version | head -n 1
+          echo CLOUD_RUNNER_STANDARD=1
+      - name: Validate 6h VOD remux at three offsets without RTMP publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/tiktok_restream_cloud_encoder.py --preflight
