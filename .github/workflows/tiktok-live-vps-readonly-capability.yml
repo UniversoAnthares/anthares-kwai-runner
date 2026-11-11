@@ -31,7 +31,7 @@ jobs:
           sudo apt-get install -y -qq sshpass
           export SSHPASS="$VPS_PASSWORD"
           host_port=''
-          for port in 22 2222 2121 2200 2022 443; do
+          for port in 65002 22 2222 2121 2200 2022 443; do
             if timeout 3 bash -c "exec 3<>/dev/tcp/$VPS_HOST/$port" 2>/dev/null; then host_port="$port";break;fi
           done
           if [ -z "$host_port" ]; then echo 'TIKTOK_VPS_SSH=UNREACHABLE';exit 3;fi
