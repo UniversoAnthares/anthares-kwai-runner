@@ -1,0 +1,34 @@
+name: CORTES Instagram - four historical exact receipts (read only)
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-instagram-historical-readback-only
+  cancel-in-progress: false
+jobs:
+  historical-four:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read Buffer credential securely
+        uses: bitwarden/sm-action@v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          cloud_region: us
+          secrets: |
+            0ec34434-3b81-4cc6-93af-b4ea00d11733 > BUFFER_API_KEY
+      - name: Reconcile only the four existing Instagram records without publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from tools.cortes_buffer_orphan_readback import EXPECTED, read_organizations, read_channel
+          assert len(EXPECTED['instagram']) == 4, 'HISTORICAL_INSTAGRAM_SCOPE_CHANGED'
+          organizations = read_organizations()
+          read_channel('instagram', organizations['instagram'])
+          PY
