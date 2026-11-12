@@ -10,6 +10,7 @@ on:
       - 'tools/cortes_queue_ha.py'
       - 'infra/neon-cortes-queue/index.mjs'
       - 'tests/test_instagram_public_reconcile.py'
+      - 'tests/test_instagram_public_neon.mjs'
   workflow_dispatch: {}
   schedule:
     # Independent reconciliation at 06:19, 12:19 and 18:19 Campo Grande.
@@ -44,6 +45,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_instagram_direct_cloud.py' -v
           python -m unittest discover -s tests -p 'test_instagram_vertical_asset.py' -v
           python -m unittest discover -s tests -p 'test_instagram_public_reconcile.py' -v
+          node --check infra/neon-cortes-queue/index.mjs
+          node --test tests/test_instagram_public_neon.mjs
           python -c 'from tools.cortes_instagram_vertical_asset import _ffmpeg_exe; assert _ffmpeg_exe()'
       - name: Publish up to two separately confirmed Reels through official Instagram Graph
         id: publish
