@@ -34,6 +34,19 @@ class TikTokQueueContract(unittest.TestCase):
         self.assertFalse(hosted.publication_window_open(now, None))
         self.assertFalse(hosted.publication_window_open(now, "invalid"))
 
+    def test_requests_identify_authorized_service_without_impersonating_browser(self):
+        from unittest.mock import patch
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *_): return False
+            def read(self, *args): return b'{"ok":true}'
+        def capture(req, timeout):
+            self.assertEqual(req.get_header("User-agent"), "Anthares-CortesTikTok-AuthorizedWorker/1.0")
+            self.assertEqual(req.get_header("Authorization"), "Bearer signed")
+            return Response()
+        with patch.object(c.urllib.request, "urlopen", side_effect=capture):
+            self.assertTrue(c.http("https://anthares-cortes-tiktok-ha.anthares1.workers.dev/?action=status", {"Authorization":"Bearer signed"})["ok"])
+
     def test_valid_job(self):
         self.assertEqual(c.validate_job(job()), ("g1:a4w8KAOxANc:30:80", 2))
 
