@@ -71,7 +71,7 @@ test('TikTok queue selects the newest source by original ingestion, not a late h
   assert(text.includes('GROUP BY source_id'));
   assert(text.includes('HAVING COUNT(*) FILTER'));
   assert(text.includes('ORDER BY MIN(created_at) DESC,source_id DESC LIMIT 1'));
-  assert(!text.includes('WHERE status=\\'queued\\' ORDER BY created_at DESC,id DESC LIMIT 1'));
+  assert(!text.includes('ORDER BY created_at DESC,id DESC LIMIT 1'));
 });
 
 test('Source-priority change retains queued-only, cooldown, 100/day and fenced single-claim protection',async()=>{
