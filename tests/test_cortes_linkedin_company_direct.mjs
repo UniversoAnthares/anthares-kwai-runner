@@ -19,3 +19,9 @@ test('Company uses only official REST organization token; Buffer absent',()=>{
   assert(workflow.includes('id-token: write'));
   assert(workflow.includes('workflow_dispatch:'));
 });
+
+test('HTTP queue adapter explicitly permits the eight fenced company actions',()=>{
+ const q=readFileSync(new URL('../tools/cortes_queue_ha.py',import.meta.url),'utf8');
+ for(const action of ['lease','start','fail','accepted','confirmed','media-missing','pending','reconcile-public'])
+  assert(q.includes('"company-'+action+'"'));
+});
