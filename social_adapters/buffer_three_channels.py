@@ -315,7 +315,7 @@ def resolve_pinterest_board(channel_id: str, *, token: str | None = None) -> str
 def pinterest_caption(title: str, description: str, hashtags) -> str:
     """Preserve editorial context without a website link blocked by Pinterest."""
     import re
-    site = re.compile(r"(?:https?://)?(?:www\\.)?anthares\\.us(?:/[^\\s]*)?", re.I)
+    site = re.compile(r"(?:https?://)?(?:www\.)?anthares\.us(?:/[^\s]*)?", re.I)
     def without_site(value):
         return " ".join(site.sub("", str(value or "")).split())
 
