@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { deliveryUrlForClip } from './cortes_threads_cloud_media_delivery.mjs';
 import fs from 'node:fs';
 import {fetchCloudClipByIdentity} from './cortes_threads_cloud_feed.mjs';
-import {captionForClip} from './cortes_threads_cloud_captions.mjs';
+import {captionForClip,validateEditorial} from './cortes_threads_cloud_captions.mjs';
 
 const GRAPH='https://graph.threads.net/v1.0';
 const CONTROL='https://br-crimson-unit-b89nau08-cortesthreadspub.compute.c-14.us-east-1.aws.neon.tech/';
@@ -24,6 +24,9 @@ async function graph(path,token,form){
  }
  const res=await fetch(GRAPH+path,opts);
  const body=await res.json().catch(()=>({}));
+ if(form&&Object.hasOwn(form,'text')&&res.status===400&&
+    /\b(?:text|caption)\b/i.test(String(body.error?.message||'')))
+   throw Error('GRAPH_CAPTION_FIELD_REJECTED');
  requireOk(
   res.ok,
   'GRAPH_HTTP_'+res.status+'_CODE_'+(body.error?.code||'none')
@@ -244,10 +247,18 @@ async function choose(jwt,publish){
    digest=await mediaDigest(delivery);
    candidate={...candidate,delivery_url:delivery};
 
-   tagged=captionForClip(
-    candidate.editorial,
-    {...candidate,sha256:digest.sha256}
-   );
+   try{
+    tagged=captionForClip(candidate.editorial,{...candidate,sha256:digest.sha256});
+   }catch(captionError){
+    if(String(captionError?.message)!=='EDITORIAL_THREADS_CAPTION_INVALID')throw captionError;
+    // The transcript, segment, source SHA and editorial evidence still pass.
+    const validated=validateEditorial(candidate.editorial,{...candidate,sha256:digest.sha256});
+    tagged={...candidate,title:validated.title,caption:'',
+      description:validated.description,keywords:validated.keywords,
+      hashtags:validated.hashtags,caption_optional_media_only:true,
+      editorial_policy:'anthares_editorial_transcript_attested_v3'};
+    console.log('THREADS_CAPTION_SKIPPED_AFTER_EDITORIAL_VALIDATION='+id);
+   }
   }catch(error){
    const msg=String(error?.message||'');
 
@@ -319,11 +330,18 @@ async function choose(jwt,publish){
 
 async function publishVideo(item,token,id){
  // A reserva e o fencing são estabelecidos antes desta chamada.
- const create=await graph('/'+id+'/threads',token,{
-  media_type:'VIDEO',
-  video_url:item.delivery_url||item.url,
-  text:item.caption
- });
+ const video={media_type:'VIDEO',video_url:item.delivery_url||item.url};
+ let create;
+ try{
+  create=await graph('/'+id+'/threads',token,
+   item.caption?{...video,text:item.caption}:video);
+ }catch(captionError){
+  if(String(captionError?.message)!=='GRAPH_CAPTION_FIELD_REJECTED')throw captionError;
+  // A definitive HTTP 400 caption validation creates no publish container.
+  // Reuse the same media/lease; never repeat a threads_publish attempt.
+  create=await graph('/'+id+'/threads',token,video);
+  console.log('THREADS_GRAPH_CAPTION_SKIPPED_MEDIA_ONLY=1');
+ }
 
  requireOk(create.id,'THREADS_CONTAINER_MISSING');
 
