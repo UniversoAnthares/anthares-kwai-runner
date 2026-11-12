@@ -118,6 +118,11 @@ def record_result(history: dict, executor: str, success: bool, failure_class: st
 
 
 def classify_failure(text: str, rc: int) -> str:
+    # The native process has not invoked Publish when rc=75 is a prepare
+    # timeout. Log text such as STAGE_PUSH_REQUIRED must not be classified
+    # as a permanent policy denial; keep the short physical retry fence.
+    if rc==75 and 'KWAI_UP_STATE=FAILED ERROR=timeout' in text:
+        return 'device'
     if UNCERTAIN_PATTERNS.search(text):
         return "uncertain"
     if NON_FAILOVER_PATTERNS.search(text):

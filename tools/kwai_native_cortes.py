@@ -208,7 +208,9 @@ def stage(s,path,digest):
  out('KWAI_MEDIASTORE_UNIQUE_MEDIA_ID_VERIFIED=1')
  return remote,MEDIA_URI+'/'+media_id
 def editor(s,uri):
- adb(s,'shell','am','start','-W','-a','android.intent.action.SEND','-t','video/mp4','--eu','android.intent.extra.STREAM',uri,'-p',PKG,timeout=45)
+ # Avoid -W: Android can hang during editor initialization after SEND delivery.
+ # The next line verifies that the exact editor Next control appears.
+ adb(s,'shell','am','start','-a','android.intent.action.SEND','-t','video/mp4','--eu','android.intent.extra.STREAM',uri,'-p',PKG,timeout=15)
  _,n,_=wait(s,RID_NEXT,safe()+'-editor',35)
  if n.attrib.get('enabled')!='true': raise E('next-disabled')
 def ptime(t):
