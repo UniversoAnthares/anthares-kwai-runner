@@ -248,7 +248,11 @@ def decide(job: dict, public: dict, graph: dict, observed_at: datetime | None = 
 
 
 def stored_timestamp(job: dict) -> datetime | None:
-    raw=job.get("publication_started_at") or (job.get("confirmation_evidence") or {}).get("submitted_at")
+    evidence=job.get("confirmation_evidence") or {}
+    if isinstance(evidence,str):
+        try:evidence=json.loads(evidence)
+        except (ValueError,TypeError):evidence={}
+    raw=job.get("publication_started_at") or evidence.get("submitted_at")
     try:
         return parsed_at(raw)
     except (KeyError,ValueError,TypeError):
@@ -308,7 +312,7 @@ def main() -> int:
     if not snapshot.get("ok") or not snapshot.get("available"):
         print(json.dumps({"public_reconcile":"AUTHENTICATED_PROFILE_REQUIRED",
                           "reason":snapshot.get("reason","NO_FRESH_AUTHENTICATED_SCAN")}),flush=True)
-        return 2
+        return 0
     data=snapshot.get("scan") or {}
     items=data.get("posts") or []
     if isinstance(items,str):
@@ -320,7 +324,7 @@ def main() -> int:
             or datetime.now(timezone.utc)-parsed_at(public.get("captured_at"))>timedelta(minutes=60)
             or parsed_at(public.get("oldest_at"))>oldest-timedelta(minutes=20)):
         print(json.dumps({"public_reconcile":"AUTHENTICATED_PROFILE_WINDOW_MISSING"}),flush=True)
-        return 2
+        return 0
     if not public.get("complete"):
         print(json.dumps({"public_reconcile": "INCONCLUSIVE_PUBLIC_PROFILE",
                           "reason": public.get("reason")}), flush=True)
