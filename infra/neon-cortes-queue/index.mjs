@@ -1141,6 +1141,100 @@ async function writeProbe(body){
 }
 async function instagramDirectAction(verb,b){
  const target='instagram:universoanthares';
+ if(verb==='pending'){
+  // The same authorized GitHub-hosted Instagram workflow may enumerate ONLY
+  // its own uncertain queue. No token or credential enters the response.
+  const limit=Number(b.limit||20);
+  if(!Number.isSafeInteger(limit)||limit<1||limit>50)return{ok:false,error:'DIRECT_PUBLIC_LIMIT_INVALID'};
+  const rows=await query(`SELECT id,payload->>'title' AS title,
+     payload->>'description' AS description,publication_started_at,
+     confirmation_evidence,status
+     FROM cortes_publications WHERE target_key=$1 AND status='uncertain'
+       AND publication_started_at IS NOT NULL
+     ORDER BY publication_started_at DESC,id LIMIT $2`,[target,limit]);
+  return{ok:true,target_key:target,items:rows};
+ }
+ if(verb==='reconcile'){
+  const id=String(b.id||''),kind=String(b.decision||'');
+  if(!/^cortes-fanout-instagram-[a-f0-9]{32}$/.test(id)
+     || !['visible','absent'].includes(kind))return{ok:false,error:'DIRECT_PUBLIC_DECISION_INVALID'};
+  const tag='#antharescorte'+sha(id).slice(0,12);
+  const proof=b.proof;
+  if(!proof||proof.username!=='universoanthares'
+     ||proof.origin!=='instagram_public_profile'
+     ||proof.profile_url!=='https://www.instagram.com/universoanthares/reels/'
+     ||proof.complete!==true||proof.graph_complete!==true
+     ||!Number.isSafeInteger(proof.scanned_count)||proof.scanned_count<1
+     ||!Number.isSafeInteger(proof.graph_scanned_count)||proof.graph_scanned_count<1
+     ||proof.tag!==tag)return{ok:false,error:'DIRECT_PUBLIC_PROOF_INCOMPLETE'};
+  const newer=Date.parse(String(proof.newest_at||'')),older=Date.parse(String(proof.oldest_at||''));
+  const graphOlder=Date.parse(String(proof.graph_oldest_at||''));
+  const at=Date.parse(String(proof.observed_at||''));
+  if(![newer,older,graphOlder,at].every(Number.isFinite)
+     ||newer<older||Math.abs(Date.now()-at)>15*60*1000)
+     return{ok:false,error:'DIRECT_PUBLIC_WINDOW_INVALID'};
+  const meta=await query(`SELECT id,publication_started_at,confirmation_evidence
+     FROM cortes_publications WHERE id=$1 AND target_key=$2 AND status='uncertain'
+       AND publication_started_at IS NOT NULL LIMIT 1`,[id,target]);
+  const item=meta[0];if(!item)return{ok:false,error:'DIRECT_PUBLIC_ITEM_NOT_UNCERTAIN'};
+  const started=Date.parse(String(item.publication_started_at));
+  if(!Number.isFinite(started)||older>started-20*60000
+     ||graphOlder>started-20*60000||newer<started+20*60000)
+     return{ok:false,error:'DIRECT_PUBLIC_WINDOW_NOT_COVERED'};
+  // A visible Reel can be independently confirmed immediately. An absence
+  // requires two complete scans after a full 36-hour publication grace.
+  if(kind==='absent'&&(Date.now()-started<36*3600*1000
+      ||started<Date.parse('2026-11-12T13:00:00Z')))
+    return{ok:false,error:'DIRECT_PUBLIC_ABSENCE_TOO_EARLY_OR_LEGACY'};
+  if(kind==='visible'){
+    const remote=String(b.media_id||''),link=String(b.permalink||'');
+    let url;try{url=new URL(link)}catch{return{ok:false,error:'DIRECT_PUBLIC_LINK_INVALID'};}
+    if(!/^\d{6,30}$/.test(remote)||url.protocol!=='https:'
+       ||!['instagram.com','www.instagram.com'].includes(url.hostname)
+       ||!/^\/(reel|p)\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)
+       ||url.search||url.hash||proof.matching_caption_tag!==true
+       ||proof.matched_permalink!==link||proof.graph_media_id!==remote
+       ||proof.graph_permalink!==link)
+      return{ok:false,error:'DIRECT_PUBLIC_MATCH_INVALID'};
+    const evidence={kind:'instagram_public_profile_and_graph_verified',
+       public_permalink:link,remote_id:remote,tag,scan_at:new Date().toISOString(),
+       scanned_count:proof.scanned_count,window_oldest:proof.oldest_at};
+    const rows=await query(`UPDATE cortes_publications SET status='confirmed',
+       remote_id=$3,confirmation_evidence=$4::jsonb,updated_at=now()
+       WHERE id=$1 AND target_key=$2 AND status='uncertain' AND remote_id IS NULL
+       RETURNING id,status,remote_id`,[id,target,remote,JSON.stringify(evidence)]);
+    return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'DIRECT_PUBLIC_CAS_STALE'};
+  }
+  if(proof.matching_caption_tag!==false||proof.graph_matching_tag!==false)
+    return{ok:false,error:'DIRECT_PUBLIC_ABSENCE_UNPROVEN'};
+  const previous=item.confirmation_evidence||{};
+  const prev=previous.kind==='instagram_public_absence_first_pass'
+      ?Date.parse(String(previous.first_scan_at||'')):NaN;
+  if(Number.isFinite(prev)&&Date.now()-prev>=60*60000){
+    const evidence={kind:'instagram_public_profile_absence_two_complete_scans',
+      decision:'failed',tag,first_scan_at:previous.first_scan_at,
+      second_scan_at:new Date().toISOString(),
+      scanned_count:proof.scanned_count,graph_scanned_count:proof.graph_scanned_count,
+      no_replay:true};
+    const rows=await query(`UPDATE cortes_publications SET status='failed',
+       confirmation_evidence=$3::jsonb,updated_at=now()
+       WHERE id=$1 AND target_key=$2 AND status='uncertain'
+         AND remote_id IS NULL AND publication_started_at IS NOT NULL
+         AND confirmation_evidence->>'kind'='instagram_public_absence_first_pass'
+       RETURNING id,status`,[id,target,JSON.stringify(evidence)]);
+    return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'DIRECT_PUBLIC_CAS_STALE'};
+  }
+  const evidence={kind:'instagram_public_absence_first_pass',tag,
+    first_scan_at:new Date().toISOString(),scanned_count:proof.scanned_count,
+    graph_scanned_count:proof.graph_scanned_count,previous_kind:previous.kind||null};
+  const rows=await query(`UPDATE cortes_publications SET
+    confirmation_evidence=$3::jsonb,updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status='uncertain'
+      AND remote_id IS NULL AND publication_started_at IS NOT NULL
+    RETURNING id,status`,[id,target,JSON.stringify(evidence)]);
+  return rows.length?{ok:true,first_scan_complete:true,job:rows[0]}:
+    {ok:false,error:'DIRECT_PUBLIC_CAS_STALE'};
+ }
  if(verb==='lease'){
   if(b.target_key!==target||b.owner!=='instagram-direct:github-cloud-v1')
     return {ok:false,error:'DIRECT_OWNER_INVALID'};

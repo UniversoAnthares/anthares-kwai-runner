@@ -152,26 +152,20 @@ def _download(url: str, dst: Path) -> None:
         raise RuntimeError("INSTAGRAM_SOURCE_TOO_SMALL")
 
 
-def _render(source: Path, target: Path) -> None:
-    exe = _ffmpeg_exe()
-    # Preserve the full original frame in the foreground; blurred background
-    # fills the exact portrait canvas without cropping speakers or book covers.
-    filt = ("[0:v]split=2[fg][bg];"
-            "[bg]scale=720:1280:force_original_aspect_ratio=increase,"
-            "crop=720:1280,boxblur=20:1[back];"
-            "[fg]scale=720:1280:force_original_aspect_ratio=decrease[front];"
-            "[back][front]overlay=(W-w)/2:(H-h)/2,format=yuv420p[v]")
-    cmd = [exe, "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
-           "-i", str(source), "-filter_complex", filt, "-map", "[v]",
-           "-map", "0:a:0?", "-t", "90", "-r", "30", "-c:v", "libx264",
-           "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
-           "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", str(target)]
+def _render(source: Path, target: Path, title: str = "") -> None:
+    # Match the established CORTES portrait template, with a real title
+    # header and 1/2/3/4 independently verified presenter panels.
+    from tools.cortes_instagram_layout_standard import render_standard
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=420)
+        count = render_standard(source, target, title or "Universo Anthares",
+                                _ffmpeg_exe())
     except subprocess.SubprocessError:
         raise RuntimeError("INSTAGRAM_VERTICAL_RENDER_FAILED") from None
     if not exact_vertical(*_probe(target)) or target.stat().st_size < 100_000:
         raise RuntimeError("INSTAGRAM_VERTICAL_RENDER_UNVERIFIED")
+    print(json.dumps({"instagram_asset": "CANONICAL_CORTES_EDITORIAL_LAYOUT",
+                      "presenters": count, "layout": "anthares-portrait-layout-v2",
+                      "ratio": "9:16"}), flush=True)
 
 
 def _upload(path: Path) -> str:
@@ -209,7 +203,7 @@ def _upload(path: Path) -> str:
             print("::warning::INSTAGRAM_WP_RESERVATION_RELEASE_PENDING", flush=True)
 
 
-def ensure_vertical_media(url: str, job_id: str, attachment_id: object = None) -> str:
+def ensure_vertical_media(url: str, job_id: str, attachment_id: object = None, title: str = '') -> str:
     _source_url(url)
     dimensions = _known_dimensions(url, attachment_id)
     if dimensions is None:
@@ -218,8 +212,11 @@ def ensure_vertical_media(url: str, job_id: str, attachment_id: object = None) -
         print(json.dumps({"instagram_asset": "EXACT_9X16_VERIFIED",
                           "reencoded": False}), flush=True)
         return url
-    filename = "cortes-ig9x16-" + hashlib.sha256(
-        (str(job_id) + "|" + url).encode()).hexdigest()[:24] + ".mp4"
+    # Changing the revision invalidates legacy blurred-background derivatives;
+    # new files follow exactly the same 150/1080/50 editorial geometry.
+    filename = "cortes-iglayout-v2-" + hashlib.sha256(
+        ("anthares-portrait-layout-v2|" + str(job_id) + "|" + url + "|" + title).encode()
+    ).hexdigest()[:24] + ".mp4"
     existing = _existing(filename)
     if existing:
         if not exact_vertical(*_probe(existing)):
@@ -231,7 +228,7 @@ def ensure_vertical_media(url: str, job_id: str, attachment_id: object = None) -
         source = Path(temp) / "original.mp4"
         target = Path(temp) / filename
         _download(url, source)
-        _render(source, target)
+        _render(source, target, title)
         new_url = _upload(target)
     if not exact_vertical(*_probe(new_url)):
         raise RuntimeError("INSTAGRAM_DERIVATIVE_PUBLIC_RATIO_INVALID")
