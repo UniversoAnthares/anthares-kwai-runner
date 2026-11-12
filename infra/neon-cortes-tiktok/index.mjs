@@ -274,6 +274,39 @@ async function markFail(b){
  return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'stale_fence'};
 }
 
+// Live read-only proof of every STARTED receipt and database admission guard.
+export async function pacingAudit(){
+ const times=await pool.query(
+  "SELECT publication_started_at,"+
+  "to_char(publication_started_at AT TIME ZONE 'America/Campo_Grande','HH24:MI:SS.US') AS local_time "+
+  "FROM public.cortes_tiktok_publications WHERE publication_started_at IS NOT NULL "+
+  "AND (publication_started_at AT TIME ZONE 'America/Campo_Grande')::date="+
+  "(now() AT TIME ZONE 'America/Campo_Grande')::date "+
+  "ORDER BY publication_started_at ASC LIMIT 102");
+ const triggers=await pool.query(
+  "SELECT tgname,tgenabled FROM pg_trigger WHERE tgrelid='public.cortes_tiktok_publications'::regclass "+
+  "AND NOT tgisinternal AND tgname IN ("+
+  "'cortes_tiktok_daily_start_guard_v1','cortes_tiktok_hard_window_06_23_v1',"+
+  "'cortes_tiktok_platform_daily_cap_100') ORDER BY tgname");
+ const clock=await pool.query(
+  "SELECT to_char(now() AT TIME ZONE 'America/Campo_Grande','YYYY-MM-DD') AS local_day, now() AS server_now");
+ const slots=times.rows.map(r=>({utc:r.publication_started_at,local_time:String(r.local_time||'')}));
+ const outside=slots.filter(r=>r.local_time<'06:00:00'||r.local_time>='23:00:00');
+ const guards=Object.fromEntries(triggers.rows.map(r=>[r.tgname,r.tgenabled]));
+ const expected=[
+  'cortes_tiktok_daily_start_guard_v1','cortes_tiktok_hard_window_06_23_v1',
+  'cortes_tiktok_platform_daily_cap_100'];
+ const guardsActive=expected.every(key=>guards[key]==='O');
+ const pace=await proportionalDue(false);
+ return {ok:guardsActive&&slots.length<=100&&outside.length===0,
+         account:'universo.anthares',timezone:'America/Campo_Grande',
+         local_day:clock.rows[0].local_day,server_now:clock.rows[0].server_now,
+         started_today:slots.length,window_violation_count:outside.length,
+         guards_active:guardsActive,guards,starts:slots,
+         next_due:pace.due_at||null,mode:pace.mode,available:pace.available,
+         capacity_used:pace.used,deadline_at:pace.deadline_at||null};
+}
+
 async function handler(req,res){
  try{
   const u=new URL(req.url,'https://local.invalid'),action=u.searchParams.get('action')||'';
@@ -290,6 +323,11 @@ async function handler(req,res){
   if(!role)return reply(res,401,{ok:false,error:'unauthorized_oidc'});
   const b=body(req);
   if(req.method==='POST'&&action==='enqueue'&&role==='producer')return reply(res,200,await enqueue(b));
+  if(req.method==='GET'&&action==='pacing-audit'&&role==='consumer'){
+   await schema();
+   const audit=await pacingAudit();
+   return reply(res,audit.ok?200:409,audit);
+  }
   if(req.method==='GET'&&action==='source-manifest'&&role==='consumer'){
    await schema();
    const rows=await pool.query(
