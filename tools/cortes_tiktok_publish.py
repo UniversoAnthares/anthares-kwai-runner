@@ -19,6 +19,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from urllib.parse import urlsplit
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 ACCOUNT = "universo.anthares"
 WORKER = os.environ.get("ANTHARES_TIKTOK_WORKER_URL", "https://anthares-tiktok-worker.anthares1.workers.dev").rstrip("/")
@@ -261,6 +263,9 @@ def main() -> int:
             raise Blocked("TIKTOK_NETWORK_ACTIVATION_FAILED")
         print("TIKTOK_CORTES_NETWORK_ENABLED=1")
 
+    # Redundant final check: the WP plan was already validated before selection.
+    from tools.cortes_deadline_pacing import assert_due
+    assert_due(pace, datetime.now(timezone.utc))
     # Persist fencing BEFORE submitting the irreversible upload request.
     processing = _json_request(base + "clip-network", auth_wp, {
         "video_id": blocker["video_id"], "clip_id": sid,
