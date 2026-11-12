@@ -21,7 +21,7 @@ jobs:
     # Serialize only the media job; Neon fencing remains the final authority.
     concurrency:
       # A scheduled run cannot cancel a user-initiated rescue; Neon fences both.
-  group: cortes-instagram-direct-neon-primary-${{ github.event_name }}
+      group: cortes-instagram-direct-neon-primary-${{ github.event_name }}
       cancel-in-progress: false
     outputs:
       confirmed: ${{ steps.publish.outputs.confirmed }}
