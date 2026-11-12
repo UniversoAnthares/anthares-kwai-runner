@@ -33,14 +33,16 @@ try:
  taps=[]
  def read_wrong(serial,name):
   if taps:raise AssertionError('unauthorized UI close')
-  raise n.E('AUTH_PROMPT_REMUST_REMAIN_OPEN') if getattr(read_wrong,'called',False) else first()
+  if not getattr(read_wrong,'called',False):
+   return first()
+  raise n.E('UNKNOWN_SECURITY_PROMPT_MUST_REMAIN_OPEN')
  def first():
   read_wrong.called=True
   return wrong,None
  read_wrong.called=False
  n.dump=read_wrong;n.tap=lambda serial,node:taps.append(node)
  try:n.wait('simulated',n.RID_PROFILE,'security-prompt',seconds=3)
- except n.E as exc:assert 'AUTH_PROMPT_REMUST_REMAIN_OPEN' in str(exc)
+ except n.E as exc:assert 'UNKNOWN_SECURITY_PROMPT_MUST_REMAIN_OPEN' in str(exc)
  else:raise AssertionError('wrong prompt unexpectedly passed')
  assert not taps
  print('KWAI_UNKNOWN_PROMPT_FAIL_CLOSED_PASS')
