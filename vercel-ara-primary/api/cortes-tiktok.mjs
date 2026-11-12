@@ -120,6 +120,64 @@ async function reaper(){
  await pool.query('UPDATE cortes_tiktok_publications SET status=\'queued\',lease_until=NULL,updated_at=now() WHERE status=\'leased\' AND lease_until<now() AND publication_started_at IS NULL');
  await pool.query('UPDATE cortes_tiktok_publications SET status=\'uncertain\',lease_until=NULL,updated_at=now() WHERE status IN (\'leased\',\'started\') AND lease_until<now() AND publication_started_at IS NOT NULL');
 }
+async function proportionalDue(includeCurrentLease=false){
+   const d=await pool.query("SELECT "+
+     "COUNT(*) FILTER (WHERE publication_started_at IS NOT NULL AND "+
+     "(publication_started_at AT TIME ZONE 'America/Campo_Grande')::date="+
+     "(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS daily,"+
+     "COUNT(*) FILTER (WHERE status='queued' AND "+
+     "(retry_not_before IS NULL OR retry_not_before<=now()))::int AS eligible,"+
+     "COUNT(*) FILTER (WHERE status='leased' AND lease_until>now())::int AS leased,"+
+     "MIN(confirmed_at) FILTER (WHERE status='confirmed' AND "+
+     "(confirmed_at AT TIME ZONE 'America/Campo_Grande')::date="+
+     "(now() AT TIME ZONE 'America/Campo_Grande')::date) AS first_confirmed,"+
+     "MAX(confirmed_at) FILTER (WHERE status='confirmed' AND "+
+     "(confirmed_at AT TIME ZONE 'America/Campo_Grande')::date="+
+     "(now() AT TIME ZONE 'America/Campo_Grande')::date) AS last_confirmed,"+
+     "MAX(publication_started_at) FILTER (WHERE publication_started_at IS NOT NULL AND "+
+     "(publication_started_at AT TIME ZONE 'America/Campo_Grande')::date="+
+     "(now() AT TIME ZONE 'America/Campo_Grande')::date) AS last_started,"+
+     "now() AS server_now,"+
+     "((now() AT TIME ZONE 'America/Campo_Grande')::date + time '06:00:00') AT TIME ZONE 'America/Campo_Grande' AS start_utc,"+
+     "((now() AT TIME ZONE 'America/Campo_Grande')::date + time '22:59:00') AT TIME ZONE 'America/Campo_Grande' AS final_due_utc,"+
+     "((now() AT TIME ZONE 'America/Campo_Grande')::date + "+
+     "time '23:00:00') AT TIME ZONE 'America/Campo_Grande' AS deadline_utc "+
+     "FROM cortes_tiktok_publications");
+   const row=d.rows[0]||{},used=Number(row.daily),queued=Number(row.eligible),
+         leased=includeCurrentLease?Number(row.leased):0,
+         now=new Date(row.server_now).getTime(),
+         end=new Date(row.deadline_utc).getTime(),
+         start=new Date(row.start_utc).getTime(),
+         finalSlot=new Date(row.final_due_utc).getTime();
+   if(!Number.isSafeInteger(used)||used<0||
+      !Number.isSafeInteger(queued)||queued<0||
+      !Number.isSafeInteger(leased)||leased<0||
+      !Number.isFinite(now)||!Number.isFinite(end)||
+      !Number.isFinite(start)||!Number.isFinite(finalSlot)||!(start<finalSlot&&finalSlot<end))
+     throw Error('TIKTOK_PACING_LEDGER_INVALID');
+   const available=Math.min(queued+leased,Math.max(0,100-used));
+   const first=row.first_confirmed?new Date(row.first_confirmed).getTime():null;
+   const last=row.last_confirmed?new Date(row.last_confirmed).getTime():null;
+   const lastStarted=row.last_started?new Date(row.last_started).getTime():null;
+   if((first===null)!==(last===null)||
+      (last!==null&&(!Number.isFinite(first)||!Number.isFinite(last)||
+                      first>last||last>now||last>end))||
+      (lastStarted!==null&&(!Number.isFinite(lastStarted)||lastStarted>now||lastStarted>end)))
+     throw Error('TIKTOK_PACING_RECEIPT_INVALID');
+   if(now<start)return{mode:'before_window',due_at:new Date(start).toISOString(),used,available};
+   if(now>=end||used>=100)return{mode:'cap',due_at:null,used,available};
+   if(!available)return{mode:'idle',due_at:null,used,available};
+   const anchor=Math.max(last??-Infinity,lastStarted??-Infinity);
+   if(anchor===-Infinity)return{mode:'publish',due_at:new Date(now).toISOString(),used,available};
+   if(anchor>=finalSlot)return{mode:'cap',due_at:null,used,available};
+   // Reserve the last actual start for 22:59; 23h is an exclusive hard stop.
+   const due=anchor+(finalSlot-anchor)/available;
+   return{mode:now>=due?'publish':'paced',due_at:new Date(due).toISOString(),
+     used,available,first_confirmed_at:row.first_confirmed,
+     last_confirmed_at:row.last_confirmed,deadline_at:new Date(end).toISOString()};
+ }
+ 
+
 async function getNext(){
  await reaper();
  const concurrent=await pool.query('SELECT id FROM cortes_tiktok_publications WHERE status=\'leased\' AND lease_until>now() LIMIT 1');
@@ -127,22 +185,10 @@ async function getNext(){
 
  // Keep an uncertain upload isolated for reconciliation without starving safe queued clips.
  const uncertain=await pool.query('SELECT * FROM cortes_tiktok_publications WHERE status IN (\'uncertain\',\'started\') ORDER BY created_at LIMIT 1');
- const cadence=await pool.query("SELECT COUNT(*) FILTER (WHERE status='confirmed' AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS daily, MAX(confirmed_at) AS last_post, COUNT(*) FILTER (WHERE status='queued')::int AS pending FROM cortes_tiktok_publications");
- const daily=Number(cadence.rows[0]?.daily||0);
- const pending=Number(cadence.rows[0]?.pending||0);
- const last=cadence.rows[0]?.last_post;
- // Same-day catch-up: three-minute verified minimum, four-minute preferred.
- // Never overlap leases, exceed 100 confirmed/day or fabricate confirmation.
- const boundary=await pool.query("SELECT ((now() AT TIME ZONE 'America/Campo_Grande')::date + time '23:45:00') AT TIME ZONE 'America/Campo_Grande' AS deadline_utc");
- const remaining=Math.max(0,new Date(boundary.rows[0].deadline_utc).getTime()-Date.now());
- const dueSeconds=Math.floor(Math.max(0,remaining-120000)/Math.max(1,pending)/1000);
- const paceSeconds=Math.max(180,Math.min(240,dueSeconds));
- if(pending>0&&remaining<pending*180000)console.warn('CORTES_SAME_DAY_CAPACITY_RISK platform=tiktok pending='+pending+' window_seconds='+Math.floor(remaining/1000));
- const paced=Boolean(last&&Date.now()-new Date(last).getTime()<paceSeconds*1000);
-
- // Preserve the 100/day cap and adaptive same-day safe cadence. An ambiguous earlier upload
- // never returns to the publish state; the 29 confirmed-safe queued clips can proceed.
- if(daily<100&&!paced){
+ const timing=await proportionalDue(false);
+ const daily=timing.used, paced=timing.mode==='paced';
+ // DB hard gate and API select the same 06h-23h proportional schedule.
+ if(timing.mode==='publish'){
   const q=await pool.query(
    'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' '+
    'ORDER BY CASE WHEN source_id=(SELECT source_id FROM cortes_tiktok_publications WHERE status=\'queued\' ORDER BY created_at DESC,id DESC LIMIT 1) THEN 0 ELSE 1 END,created_at,id '+
@@ -152,12 +198,15 @@ async function getNext(){
   if(q.rowCount)return{ok:true,job:q.rows[0],mode:'publish'};
  }
  if(uncertain.rowCount)return{ok:true,job:uncertain.rows[0],mode:'reconcile'};
- if(daily>=100)return{ok:true,job:null,mode:'cap'};
- if(paced)return{ok:true,job:null,mode:'paced'};
+ if(timing.mode==='cap')return{ok:true,job:null,mode:'cap',pacing:timing};
+ if(paced)return{ok:true,job:null,mode:'paced',pacing:timing};
  return{ok:true,job:null,mode:'idle'};
 }
 async function start(b){
  await schema();
+ // DB trigger independently checks every route; API also refuses early starts.
+ const timing=await proportionalDue(true);
+ if(timing.mode!=='publish')return{ok:false,error:'TIKTOK_PROPORTIONAL_NOT_DUE',pacing:timing};
  const id=clean(b.id),gen=Number(b.lease_generation);
  const r=await pool.query('UPDATE cortes_tiktok_publications SET status=\'started\',publication_started_at=now(),updated_at=now()'+
  ' WHERE id=$1 AND status=\'leased\' AND lease_generation=$2 AND lease_until>now() RETURNING id,status,lease_generation',[id,gen]);
