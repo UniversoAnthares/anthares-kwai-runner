@@ -7,10 +7,15 @@ on:
       - 'tools/kwai_unproven_reconcile_policy.py'
       - 'tools/kwai_native_cortes.py'
       - 'tools/kwai_native_stage_regression.py'
+      - 'tools/kwai_device_failover_worker.py'
+      - 'tools/kwai_timeout_precommit_regression.py'
       - '.github/workflows/kwai-proportional-pacing.yml'
   pull_request:
     paths:
       - 'infra/neon-cortes-queue/index.mjs'
+      - 'tools/kwai_native_cortes.py'
+      - 'tools/kwai_device_failover_worker.py'
+      - 'tools/kwai_timeout_precommit_regression.py'
       - 'infra/neon-cortes-queue/kwai-pacing-*.mjs'
       - '.github/workflows/kwai-proportional-pacing.yml'
 permissions:
@@ -32,3 +37,5 @@ jobs:
         run: python3 -c "import ast,pathlib;ast.parse(pathlib.Path('tools/kwai_unproven_reconcile_policy.py').read_text())"
       - name: Verify MediaStore fallback without Android or media files
         run: python3 -B tools/kwai_native_stage_regression.py
+      - name: Verify Android editor timeout safety and device failover classifier
+        run: python3 -B tools/kwai_timeout_precommit_regression.py
