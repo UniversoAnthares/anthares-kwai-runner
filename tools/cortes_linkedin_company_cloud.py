@@ -45,6 +45,40 @@ def cloud_only():
         raise ConfigRequired("LINKEDIN_COMPANY_AUTHOR_URN_INVALID")
     os.environ["CORTES_QUEUE_PRIMARY"] = "neon"
 
+def authorize_company_admin():
+    """Verify this OAuth subject administers the pinned organization before Neon lease.
+
+    A member token alone grants no organization publication. Permission checks
+    are read-only and fail closed; neither body nor subject is ever logged.
+    """
+    token=os.environ["LINKEDIN_ACCESS_TOKEN"].strip()
+    endpoint=("https://api.linkedin.com/v2/organizationalEntityAcls?"
+              "q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&count=100")
+    request=urllib.request.Request(endpoint, method="GET", headers={
+        "Authorization":"Bearer "+token,
+        "X-Restli-Protocol-Version":"2.0.0",
+        "Accept":"application/json",
+    })
+    try:
+        with urllib.request.urlopen(request,timeout=22) as response:
+            doc=json.load(response)
+    except (urllib.error.HTTPError,urllib.error.URLError,TimeoutError,
+            ValueError,OSError) as exc:
+        raise ConfigRequired("LINKEDIN_COMPANY_ADMIN_READ_AUTH_REQUIRED") from None
+    if not isinstance(doc,dict) or not isinstance(doc.get("elements"),list):
+        raise ConfigRequired("LINKEDIN_COMPANY_ADMIN_RESPONSE_INVALID")
+    for entry in doc["elements"]:
+        if not isinstance(entry,dict):
+            continue
+        if entry.get("role")!="ADMINISTRATOR" or entry.get("state")!="APPROVED":
+            continue
+        target=str(entry.get("organization") or entry.get("organizationalTarget") or "")
+        if target==COMPANY:
+            print("LINKEDIN_COMPANY_PINNED_ADMIN_VERIFIED=1",flush=True)
+            return
+    raise ConfigRequired("LINKEDIN_COMPANY_ACCOUNT_ADMIN_NOT_VERIFIED")
+
+
 def oidc():
     url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
     url += ("&" if "?" in url else "?") + urllib.parse.urlencode({"audience": AUDIENCE})
@@ -121,6 +155,7 @@ def publish_one():
 def main():
     try:
         cloud_only()
+        authorize_company_admin()
         try:
             n=reconcile()
         except Exception:
