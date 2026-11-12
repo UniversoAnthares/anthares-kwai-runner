@@ -81,8 +81,14 @@ test('Source-priority change retains queued-only, cooldown, 100/day and fenced s
   assert(text.includes('FOR UPDATE SKIP LOCKED LIMIT 1'));
   assert(text.includes('COUNT(*) FILTER'));
   assert(text.includes('retry_not_before IS NULL OR retry_not_before<=now()'));
-  assert(text.includes('daily<100&&!paced'));
-  assert(text.includes('Math.max(180,Math.min(240,dueSeconds))'));
+  // The canonical scheduler now computes a proportional slot through 22:59,
+  // fenced again immediately before STARTED, with 23:00 as an exclusive stop.
+  assert(text.includes('if(now>=end||used>=100)'));
+  assert(text.includes('const available=Math.min(queued+leased,Math.max(0,100-used))'));
+  assert(text.includes('const due=anchor+(finalSlot-anchor)/available'));
+  assert(text.includes("if(timing.mode!=='publish')"));
+  assert(text.includes("time '06:00:00'"));
+  assert(text.includes("time '23:00:00'"));
   assert(!text.includes("source_id='cOhqEaY3-08'"));
 });
 
