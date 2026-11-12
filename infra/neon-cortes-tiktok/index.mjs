@@ -147,7 +147,7 @@ async function reaper(){
 }
 // Derive every TikTok account's actual next due from confirmed receipts.
  // Cron triggers are wake-ups; the SQL ledger and local 23h deadline control.
- async function proportionalDue(includeCurrentLease=false){
+ export async function proportionalDue(includeCurrentLease=false){
    const d=await pool.query("SELECT "+
      "COUNT(*) FILTER (WHERE publication_started_at IS NOT NULL AND "+
      "(publication_started_at AT TIME ZONE 'America/Campo_Grande')::date="+
