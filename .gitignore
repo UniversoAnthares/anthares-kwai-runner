@@ -9,3 +9,4 @@ __pycache__/
 *.log
 
 anthares-remote-mcp/node_modules/
+vercel-ara-primary/node_modules/

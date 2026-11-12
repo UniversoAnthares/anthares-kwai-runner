@@ -5,11 +5,25 @@ Captured 2026-10-13, device `DESKTOP-FTDK0HP`, installation root `C:\ProgramData
 | File | Bytes | SHA-256 |
 |---|---:|---|
 | anthares-remote-agent-v4.exe | 7418368 | C8BA6137A464720A5A95A290F4001BCE98489B92C4D93894B2AC5E22CCC2499E |
+| anthares-remote-agent-v4-c8.exe | - | Pendente — gerar via workflow ara-v4-publish-binary.yml a partir de commit limpo |
 | run-agent-system-supervisor.ps1 | 5887 | 0C3893C648D6B38184CC5F0888B4B61BB4ACD0788D514D78737F96ED0161D268 |
 | recovery-watchdog-loop.ps1 | 361 | 9408BCC016CDBEC860B45FEF6B3CA5AD23BB8CEB9DA3EEFFC49087D9F9F57226 |
 | recovery-watchdog.ps1 | 7368 | 532020E44427819A90674A08DD3A4637A36B3BC7DB2D68E1C6E65CE8C2CBCF6E |
 | agent-env.ps1 | 3348 | 164A9A939093CFE7AF2128F8A1E0184BBC377844513C1AB992AB12B0E277F115 |
 | load-issue-queue-auth.ps1 | 2378 | 80BBCC64448F5957296BFB328CEC41465E9C5A716653913A020ADFF0789149FE |
+| windows/remote-job-bootstrap.ps1 | - | Novo — implantar ao lado de remote-job-handler.ps1 em C:\ProgramData\Anthares\remote-job\ |
+
+## Novo tipo de job: remote_job
+
+O binário v4-c8 deve ser recompilado via workflow `ara-v4-publish-binary.yml` (apenas branch main, `workflow_dispatch` ou push com caminho `anthares-remote-agent/**`). O novo binário adiciona o tipo de job `remote_job` que:
+
+- Valida que `scope == "ara.exec"` nos metadados assinados do job
+- Chama `C:\ProgramData\Anthares\remote-job\remote-job-bootstrap.ps1` com JSON via stdin
+- O bootstrap chama `remote-job-handler.ps1` por splatting (nunca interpola dados como código)
+- Preserva os ramos `shell` e `job_start` inalterados
+- Trata `ok=false` do handler como falha do job mesmo com código de saída 0
+
+Não substitua o binário em produção nem reinicie o agente sem aprovação explícita.
 
 ## Safe reconciliation procedure
 
