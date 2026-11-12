@@ -15,8 +15,8 @@
     "vercel_hobby_fluid_active_cpu_deployments": {
       "state": "BLOCKED_QUOTA",
       "confidence": "verified_authenticated_vercel_usage_dashboard",
-      "scope": "Vercel Hobby team_0LJFNVrGdH5dvDqnTEN3FFoT; Fluid Active CPU; deployment/build and affected Vercel-hosted functions",
-      "quota_scope": "vercel_hobby_team_0LJFNVrGdH5dvDqnTEN3FFoT_fluid_active_cpu",
+      "scope": "Vercel Hobby Anthares; Fluid Active CPU; deployment/build and affected Vercel-hosted functions",
+      "quota_scope": "anthares_vercel_hobby_fluid_active_cpu",
       "observed_at_utc": "2026-11-12",
       "evidence": "Authenticated Vercel Usage shows Deployments Paused since Oct 29 2026 for Fluid Active CPU, Hobby fair-use exceeded, pause ends Nov 28 2026; prior Vercel function endpoints returned HTTP 402 DEPLOYMENT_DISABLED (Test Hub AOI8 20261104).",
       "routing_priority": "LAST",
