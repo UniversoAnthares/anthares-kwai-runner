@@ -1178,9 +1178,14 @@ async function instagramDirectAction(verb,b){
        AND publication_started_at IS NOT NULL LIMIT 1`,[id,target]);
   const item=meta[0];if(!item)return{ok:false,error:'DIRECT_PUBLIC_ITEM_NOT_UNCERTAIN'};
   const started=Date.parse(String(item.publication_started_at));
-  if(!Number.isFinite(started)||Date.now()-started<36*3600*1000
-     ||older>started-20*60000||graphOlder>started-20*60000
-     ||newer<started+20*60000)return{ok:false,error:'DIRECT_PUBLIC_WINDOW_NOT_COVERED'};
+  if(!Number.isFinite(started)||older>started-20*60000
+     ||graphOlder>started-20*60000||newer<started+20*60000)
+     return{ok:false,error:'DIRECT_PUBLIC_WINDOW_NOT_COVERED'};
+  // A visible Reel can be independently confirmed immediately. An absence
+  // requires two complete scans after a full 36-hour publication grace.
+  if(kind==='absent'&&(Date.now()-started<36*3600*1000
+      ||started<Date.parse('2026-11-12T13:00:00Z')))
+    return{ok:false,error:'DIRECT_PUBLIC_ABSENCE_TOO_EARLY_OR_LEGACY'};
   if(kind==='visible'){
     const remote=String(b.media_id||''),link=String(b.permalink||'');
     let url;try{url=new URL(link)}catch{return{ok:false,error:'DIRECT_PUBLIC_LINK_INVALID'};}
