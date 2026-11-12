@@ -1,0 +1,40 @@
+name: CORTES Codeberg one-time main mirror
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-codeberg-main-once.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  fast-forward-only:
+    runs-on: [cortes-codeberg-mirror-only-20261021]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Mirror exact GitHub main to Codeberg, without force
+        shell: powershell
+        env:
+          CODEBERG_PUSH_URL: ${{ secrets.CODEBERG_PUSH_URL }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $env:GIT_TERMINAL_PROMPT='0'
+          if (-not $env:CODEBERG_PUSH_URL) { throw 'CODEBERG_SECRET_MISSING' }
+          $source='https://github.com/UniversoAnthares/anthares-kwai-runner.git'
+          $target='https://codeberg.org/UniversoAnthares/anthares-kwai-runner.git'
+          git fetch $source +refs/heads/main:refs/remotes/freshgithub/main
+          if ($LASTEXITCODE -ne 0) { throw 'SOURCE_FETCH_FAILED' }
+          git fetch $target +refs/heads/main:refs/remotes/freshcodeberg/main
+          if ($LASTEXITCODE -ne 0) { throw 'TARGET_FETCH_FAILED' }
+          git merge-base --is-ancestor refs/remotes/freshcodeberg/main refs/remotes/freshgithub/main
+          if ($LASTEXITCODE -ne 0) { throw 'NON_FAST_FORWARD_PUSH_BLOCKED' }
+          $expected=(git rev-parse refs/remotes/freshgithub/main).Trim()
+          git -c core.askPass= push --quiet $env:CODEBERG_PUSH_URL refs/remotes/freshgithub/main:refs/heads/main
+          if ($LASTEXITCODE -ne 0) { throw 'CODEBERG_PUSH_FAILED' }
+          $actual=((git ls-remote $target refs/heads/main) -split '\s+')[0]
+          if ($actual -ne $expected) { throw 'SHA_NOT_MATCHED' }
+          Write-Output "CODEBERG_MAIN_FAST_FORWARD_VERIFIED=$expected"
