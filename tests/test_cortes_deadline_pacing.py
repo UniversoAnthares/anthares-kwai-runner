@@ -63,7 +63,7 @@ class DeadlinePacingTests(unittest.TestCase):
         self.assertEqual(p.status, "BLOCKED_PLATFORM_LIMIT")
 
     def test_provider_minimum_gap_can_block_infeasible_plan(self):
-        p = plan(queued=60, now=dt(10), first_confirmed_at=dt(22),
+        p = plan(queued=60, now=dt(22, 1), first_confirmed_at=dt(22),
                  last_confirmed_at=dt(22), provider_min_gap_seconds=180)
         self.assertEqual(p.status, "BLOCKED_PLATFORM_LIMIT")
 
@@ -81,7 +81,7 @@ class DeadlinePacingTests(unittest.TestCase):
 
     def test_independent_utc_conversion(self):
         p = plan(now=dt(15).astimezone(timezone.utc))
-        self.assertEqual(p.due_at.astimezone(TZ), dt(9, 52, 30)) if False else self.assertEqual(p.due_at.tzinfo, TZ)
+        self.assertEqual(p.due_at.astimezone(TZ), dt(9, 52, 30))
 
 
 if __name__ == "__main__":
