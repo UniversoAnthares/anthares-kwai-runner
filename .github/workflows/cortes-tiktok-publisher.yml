@@ -188,7 +188,6 @@ jobs:
           fi
       - name: Independently audit Neon and Cloudflare start receipts, hard window and live due (read-only)
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        continue-on-error: true
         timeout-minutes: 3
         run: python3 -u tools/cortes_tiktok_pacing_receipt_watch.py
       - name: Reconcile ten historic uncertain TikTok segments using signed-in Studio (read-only)
