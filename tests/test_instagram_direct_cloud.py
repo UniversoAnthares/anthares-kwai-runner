@@ -206,8 +206,20 @@ class DirectInstagramTests(unittest.TestCase):
              "payload":{"platform":"instagram","account_id":"universoanthares",
                         "title":"Exemplo",
                         "media_url":"https://anthares.us/wp-content/uploads/anthares-clips/2026/11/test.mp4"}}
-        client=SimpleNamespace(get_quota=lambda:SimpleNamespace(total=100,usage=44))
+        events=[]
+        def create(*args, **kwargs):
+            events.append("container_created")
+            return "mock_container"
+        def ready(*args, **kwargs):
+            events.append("container_ready")
+        def should_never_publish(*args, **kwargs):
+            raise AssertionError("Media publish occurred before computed due time")
+        client=SimpleNamespace(get_quota=lambda:SimpleNamespace(total=100,usage=44),
+                               create_reel_container=create,
+                               wait_until_ready=ready,
+                               publish_container=should_never_publish)
         def fake_neon(action, data):
+            events.append(action)
             if action=="lease":return {"ok":True,"job":job}
             if action=="start":return {"ok":True,"job":None,"pacing":{"status":"WAIT"}}
             if action=="fail":return {"ok":True,"job":{"status":"queued"}}
@@ -217,6 +229,7 @@ class DirectInstagramTests(unittest.TestCase):
              patch.object(direct,"ensure_vertical_media",return_value=job["payload"]["media_url"]):
             self.assertEqual(direct.publish_once(client),0)
             self.assertEqual([c.args[0] for c in q.call_args_list],["lease","start","fail"])
+            self.assertEqual(events,["lease","container_created","container_ready","start","fail"])
             self.assertEqual(q.call_args_list[1].args[1]["quota_remaining"],56)
 
     def test_day_ends_at_2300_exactly(self):
