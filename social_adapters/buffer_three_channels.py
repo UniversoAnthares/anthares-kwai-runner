@@ -313,25 +313,27 @@ def resolve_pinterest_board(channel_id: str, *, token: str | None = None) -> str
 
 
 def pinterest_caption(title: str, description: str, hashtags) -> str:
-    """Pinterest limits text to 500 characters; preserve context and keywords."""
-    heading=branded_title(title, limit=100)
-    # Description is transcript-derived, while metadata.pinterest.title carries
-    # the full strategic heading. Never use the live's generic title as a fallback.
-    excerpt=" ".join(str(description or "").replace("www.anthares.us","").split())
+    """Preserve editorial context without a website link blocked by Pinterest."""
+    import re
+    site = re.compile(r"(?:https?://)?(?:www\.)?anthares\.us(?:/[^\s]*)?", re.I)
+    def without_site(value):
+        return " ".join(site.sub("", str(value or "")).split())
+
+    heading=branded_title(without_site(title), limit=100)
+    excerpt=without_site(description)
     tags=list(dict.fromkeys(str(x).strip() for x in (hashtags or [])
                             if isinstance(x,str) and x.strip().startswith("#")))[:4]
-    # Always retain the user's destination, even if excerpt must be shortened.
-    tail="\nwww.anthares.us"+("\n"+" ".join(tags) if tags else "")
+    # The video is uploaded directly to Pinterest. Site links are optional.
+    tail=("\n"+" ".join(tags)) if tags else ""
     room=500-len(heading)-1-len(tail)
     if room<50:
         raise BufferBlocked("PINTEREST_CAPTION_BUDGET_EXHAUSTED")
     if len(excerpt)>room:
         excerpt=excerpt[:room].rsplit(" ",1)[0].rstrip(" ,.;:")
     caption=heading+"\n"+excerpt+tail
-    if len(caption)>500 or len(caption)<40 or "www.anthares.us" not in caption:
+    if len(caption)>500 or len(caption)<40 or site.search(caption):
         raise BufferBlocked("PINTEREST_CAPTION_LENGTH_INVALID")
     return caption
-
 
 def prepare(payload: dict) -> dict:
     platform = str(payload.get("platform") or "").lower()
@@ -419,7 +421,7 @@ def schedule(payload: dict, *, token: str | None = None, validated_channels: lis
         title = branded_title(str(payload.get("title") or payload.get("video_title") or ""), limit=100)
         metadata = ('metadata: { pinterest: { boardServiceId: ' + json.dumps(board_id) +
                     ', title: ' + json.dumps(title, ensure_ascii=False) +
-                    ' } }')
+                    ', url: "" } }')
     mutation = """mutation CortesBufferVideo {
       createPost(input: {
         text: CAPTION
