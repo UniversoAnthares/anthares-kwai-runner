@@ -11,6 +11,10 @@ Estas instruções não ampliam permissões nem substituem políticas superiores
 
 # Claude — Anthares instructions
 
+## Permanent owner rule — agent-owned window lifecycle (2026-10-21)
+Any temporary window, tab, console, dialog or emulator GUI created by Claude, Claude Code or a delegated agent MUST be closed immediately after its use (success, error, timeout, cancellation). Register PID and window/tab ownership; close in `finally`; recover only positively identified orphaned resources. Preserve the owner's personal windows and active shared browser/VM services. Keep automation invisible and silent. See [AGENTS.md](AGENTS.md) and canonical https://github.com/UniversoAnthares/home/blob/main/AGENTS.md. Propagate to subagents and run verification.
+
+
 This repository participates in a distributed system. Claude must read `AGENTS.md` and `test-hub/README.md` before changing any code, configuration, documentation, tests, or infrastructure.
 
 ## Scope and coordination
