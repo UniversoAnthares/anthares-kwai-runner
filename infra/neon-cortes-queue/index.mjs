@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {deriveKwaiPacing,KWAI_PACING_VERSION} from './kwai-pacing-policy.mjs';
 // Canonical CORTES ledger is Neon PostgreSQL. No local queue or Vercel dependency.
 // This function never publishes media and never accepts device-PC authentication.
 const AUD='https://anthares-remote-primary.vercel.app/api/cortes-queue';
@@ -420,20 +421,11 @@ async function kwaiAction(action,b,actor){
  if(action==='kwai-physical-stats'){
   if(!physical&&!mobilePrimary)return{ok:false,error:'KWAI_DEVICE_ONLY'};
   const rows=await query("SELECT status,count(*)::int AS n FROM cortes_publications WHERE target_key=$1 GROUP BY status",[KWAI_TARGET]);
-  const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
-  const usage=await query("SELECT count(*)::int AS n,min(updated_at) AS earliest,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
-  const safe=await query("SELECT count(*)::int AS n FROM cortes_publications p "+
-   "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
-   "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE d.target_key=$1 AND d.id<>p.id "+
-   "AND d.status<>'failed' AND ((d.source_id=p.source_id AND d.source_start<p.source_end "+
-   "AND d.source_end>p.source_start) OR d.media_sha256=p.media_sha256) "+
-   "AND (d.status IN ('leased','started','confirmed','uncertain') OR "+
-   "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))",[KWAI_TARGET]);
-  return{ok:true,pending:Number(safe[0]?.n||0),confirmed_today:Number(usage[0]?.n||0),
-   first_confirmed_at:usage[0]?.earliest||null,last_confirmed_at:usage[0]?.latest||null,states:rows};
+  const pacing=await kwaiDeadlinePacing(KWAI_TARGET,100);
+  return {ok:true,...pacing,states:rows};
  }
  if(action==='kwai-lease'){
-  const pacing=await cortesDeadlinePacing(String(b.target_key||''),100);
+  const pacing=await kwaiDeadlinePacing(String(b.target_key||''),100);
   if(pacing.status!=='DUE')return{ok:true,job:null,pacing};
   const seconds=Number(b.lease_seconds||180);
   if(!Number.isSafeInteger(seconds)||seconds<60||seconds>(physical?3600:600))
@@ -899,20 +891,11 @@ async function kwaiSecondaryAction(action,b,actor){
  if(action==='kwai-physical-stats'){
   if(!physical&&!mobile)return{ok:false,error:'KWAI_DEVICE_ONLY'};
   const rows=await query("SELECT status,count(*)::int AS n FROM cortes_publications WHERE target_key=$1 GROUP BY status",[KWAI_TARGET]);
-  const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
-  const usage=await query("SELECT count(*)::int AS n,min(updated_at) AS earliest,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
-  const safe=await query("SELECT count(*)::int AS n FROM cortes_publications p "+
-   "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
-   "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE d.target_key=$1 AND d.id<>p.id "+
-   "AND d.status<>'failed' AND ((d.source_id=p.source_id AND d.source_start<p.source_end "+
-   "AND d.source_end>p.source_start) OR d.media_sha256=p.media_sha256) "+
-   "AND (d.status IN ('leased','started','confirmed','uncertain') OR "+
-   "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))",[KWAI_TARGET]);
-  return{ok:true,pending:Number(safe[0]?.n||0),confirmed_today:Number(usage[0]?.n||0),
-   first_confirmed_at:usage[0]?.earliest||null,last_confirmed_at:usage[0]?.latest||null,states:rows};
+  const pacing=await kwaiDeadlinePacing(KWAI_TARGET,100);
+  return {ok:true,...pacing,states:rows};
  }
  if(action==='kwai-lease'){
-  const pacing=await cortesDeadlinePacing(String(b.target_key||''),100);
+  const pacing=await kwaiDeadlinePacing(String(b.target_key||''),100);
   if(pacing.status!=='DUE')return{ok:true,job:null,pacing};
   const seconds=Number(b.lease_seconds||180);
   if(!Number.isSafeInteger(seconds)||seconds<60||seconds>((physical||mobile)?3600:600))
@@ -1146,6 +1129,46 @@ async function writeProbe(body){
 }
 // Production deadline gate for every Neon-backed account/destination. Cron and
 // redundant triggers wake workers; only the computed due time authorizes lease.
+// Verified public timestamps, rather than ledger updates, control Kwai pacing.
+// Both accounts share this canonical server-side lease guard; the PC computes
+// an independent estimate but cannot override the production lease decision.
+async function kwaiDeadlinePacing(targetKey,dailyLimit=100){
+ if(!['kwai:lucasrosalem','kwai:universoanthares'].includes(targetKey))
+   throw Error('KWAI_PACING_UNAUTHORIZED_ACCOUNT');
+ const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+ const end="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '23 hours') AT TIME ZONE 'America/Campo_Grande')";
+ const actual="(CASE WHEN t.status='confirmed' AND (t.confirmation_evidence->>'public_post_timestamp_ms') ~ '^[0-9]{13}$' THEN to_timestamp((t.confirmation_evidence->>'public_post_timestamp_ms')::double precision/1000) WHEN t.status='confirmed' THEN t.publication_started_at ELSE NULL END)";
+ const eligible="SELECT count(*)::int AS n FROM cortes_publications p WHERE p.target_key=$1 "+
+   "AND p.status='queued' AND p.publication_started_at IS NULL AND "+
+   "NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE d.target_key=p.target_key "+
+   "AND d.id<>p.id AND d.status<>'failed' AND "+
+   "((d.source_id=p.source_id AND d.source_start<p.source_end AND d.source_end>p.source_start) "+
+   "OR d.media_sha256=p.media_sha256) AND "+
+   "(d.status IN ('leased','started','confirmed','uncertain') OR "+
+   "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))";
+ const sql="WITH time_bounds AS (SELECT now() AS clock, "+day+" AS start_at, "+end+" AS end_at),"+
+   " eligible AS ("+eligible+"),"+
+   " post_history AS (SELECT t.status,t.publication_started_at,"+actual+" AS actual_at "+
+   "FROM cortes_publications t WHERE t.target_key=$1) "+
+   "SELECT e.n AS pending, b.clock AS server_now,b.end_at AS deadline_at,"+
+   " count(*) FILTER (WHERE h.status='confirmed' AND h.actual_at>=b.start_at AND h.actual_at<b.end_at)::int AS confirmed_today,"+
+   " count(*) FILTER (WHERE (h.status='confirmed' AND h.actual_at>=b.start_at AND h.actual_at<b.end_at) OR "+
+   "(h.status IN ('started','uncertain') AND h.publication_started_at>=b.start_at AND h.publication_started_at<b.end_at))::int AS used,"+
+   " min(h.actual_at) FILTER (WHERE h.status='confirmed' AND h.actual_at>=b.start_at AND h.actual_at<b.end_at) AS first_confirmed,"+
+   " max(h.actual_at) FILTER (WHERE h.status='confirmed' AND h.actual_at>=b.start_at AND h.actual_at<b.end_at) AS last_confirmed "+
+   "FROM time_bounds b CROSS JOIN eligible e LEFT JOIN post_history h ON TRUE "+
+   "GROUP BY e.n,b.clock,b.end_at";
+ const result=await query(sql,[targetKey]);
+ const row=result[0];
+ if(!row)throw Error('KWAI_PACING_EMPTY_SNAPSHOT');
+ return deriveKwaiPacing({target_key:targetKey,daily_limit:dailyLimit,
+   pending:Number(row.pending),used:Number(row.used),
+   confirmed_today:Number(row.confirmed_today),
+   first_confirmed_at:row.first_confirmed,
+   last_confirmed_at:row.last_confirmed,
+   now:row.server_now,deadline:row.deadline_at});
+}
+
 async function cortesDeadlinePacing(targetKey,dailyLimit){
  if(!/^[a-z]+:[A-Za-z0-9_.@-]{2,100}$/.test(String(targetKey||''))||
     !Number.isSafeInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)
