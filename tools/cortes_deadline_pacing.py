@@ -14,6 +14,8 @@ from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 LOCAL_ZONE = ZoneInfo("America/Campo_Grande")
+DAY_START = time(6, 0)
+LAST_SLOT = time(22, 59)
 DAY_END = time(23, 0)
 
 
@@ -31,7 +33,10 @@ class PublicationPace:
     def is_due(self, now: datetime) -> bool:
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("CORTES_PACING_NAIVE_NOW")
-        return self.status == "DUE" and self.due_at is not None and now >= self.due_at
+        local = now.astimezone(LOCAL_ZONE)
+        start = datetime.combine(local.date(), DAY_START, LOCAL_ZONE)
+        return (self.status == "DUE" and self.due_at is not None
+                and start <= local < self.deadline_at and now >= self.due_at)
 
 
 def _aware(value: datetime | None, name: str) -> datetime | None:
@@ -49,6 +54,7 @@ def plan_publications(
     daily_limit: int,
     first_confirmed_at: datetime | None = None,
     last_confirmed_at: datetime | None = None,
+    last_started_at: datetime | None = None,
     provider_remaining: int | None = None,
     provider_min_gap_seconds: float = 0,
 ) -> PublicationPace:
@@ -64,6 +70,7 @@ def plan_publications(
     _aware(now, "NOW")
     _aware(first_confirmed_at, "FIRST_CONFIRMED")
     _aware(last_confirmed_at, "LAST_CONFIRMED")
+    _aware(last_started_at, "LAST_STARTED")
     if ":" not in target_key or not all(s.strip() for s in target_key.split(":", 1)):
         raise ValueError("CORTES_PACING_ACCOUNT_TARGET_REQUIRED")
     if not all(isinstance(n, int) and not isinstance(n, bool) and n >= 0
@@ -75,9 +82,14 @@ def plan_publications(
     if not (0 <= provider_min_gap_seconds <= 86400):
         raise ValueError("CORTES_PACING_PROVIDER_GAP_INVALID")
     local = now.astimezone(LOCAL_ZONE)
+    start = datetime.combine(local.date(), DAY_START, LOCAL_ZONE)
+    last_slot = datetime.combine(local.date(), LAST_SLOT, LOCAL_ZONE)
     deadline = datetime.combine(local.date(), DAY_END, LOCAL_ZONE)
     first = first_confirmed_at.astimezone(LOCAL_ZONE) if first_confirmed_at else None
     last = last_confirmed_at.astimezone(LOCAL_ZONE) if last_confirmed_at else None
+    started = last_started_at.astimezone(LOCAL_ZONE) if last_started_at else None
+    if started and (started.date() != local.date() or started > local):
+        raise ValueError("CORTES_PACING_LAST_STARTED_INVALID")
     if first and first.date() != local.date():
         raise ValueError("CORTES_PACING_FIRST_OUTSIDE_LOCAL_DAY")
     if last and last.date() != local.date():
@@ -95,22 +107,27 @@ def plan_publications(
               last_confirmed_at=last)
     if queued == 0:
         return PublicationPace("IDLE", None, interval_seconds=None, **kw)
+    if local < start:
+        return PublicationPace("WAIT_DAY_START", start, interval_seconds=None, **kw)
     if local >= deadline:
         return PublicationPace("BLOCKED_SAME_DAY_CAPACITY", None, interval_seconds=None, **kw)
     if remaining == 0:
         return PublicationPace(
             "BLOCKED_PLATFORM_LIMIT" if provider_remaining == 0 else "BLOCKED_SAME_DAY_CAPACITY",
             None, interval_seconds=None, **kw)
-    if not last:
+    anchor = max((t for t in (last, started) if t is not None), default=None)
+    if anchor is None:
         return PublicationPace("DUE", now, interval_seconds=None, **kw)
-    seconds = (deadline - last).total_seconds() / remaining
+    if anchor >= last_slot:
+        return PublicationPace("BLOCKED_SAME_DAY_CAPACITY", None, interval_seconds=None, **kw)
+    seconds = (last_slot - anchor).total_seconds() / remaining
     if seconds <= 0:
         return PublicationPace("BLOCKED_SAME_DAY_CAPACITY", None, interval_seconds=None, **kw)
     if provider_min_gap_seconds > seconds:
         # Reject an infeasible projected daily schedule explicitly. The caller
         # can then use the provider's real capacity without inventing results.
         return PublicationPace("BLOCKED_PLATFORM_LIMIT", None, interval_seconds=seconds, **kw)
-    next_due = last + timedelta(seconds=seconds)
+    next_due = anchor + timedelta(seconds=seconds)
     return PublicationPace(
         "DUE" if local >= next_due else "WAIT",
         next_due, interval_seconds=seconds, **kw)
