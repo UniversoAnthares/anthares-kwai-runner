@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import {resolve,dirname} from 'node:path';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const c=readFileSync(resolve(root,'tools/cortes_threads_local_publisher.mjs'),'utf8');
+await test('local owner cannot use fixed gap or bypass live Neon due at publish',()=>{
+ assert.equal(c.includes('minGapMs'),false);
+ assert.equal(c.includes("action:'COOLDOWN'"),false);
+ assert.ok(c.includes('cortesthreadspub.compute.c-14.us-east-1.aws.neon.tech/?action=gate'));
+ assert.ok(c.includes("pacingReady('PRE_SELECT')"));
+ assert.ok(c.includes("pacingReady('PRE_SUBMIT')"));
+ assert.ok(c.indexOf("pacingReady('PRE_SELECT')")<c.indexOf('let item;'));
+ assert.ok(c.indexOf("pacingReady('PRE_SUBMIT')")<c.indexOf("action:'CLICKED_PUBLISH'"));
+ assert.ok(c.includes("state.owner!=='local'"));
+ assert.ok(c.includes("pace.status!=='DUE'"));
+ assert.ok(c.includes('Date.now()>=deadline'));
+ assert.ok(c.includes('THREADS_PACING_UNVERIFIED'));
+});
