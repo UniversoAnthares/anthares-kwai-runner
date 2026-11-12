@@ -468,6 +468,13 @@ def once():
   if LAST_NETWORK_BAD:log('KWAI_ANDROID_DNS_PREFLIGHT_RECOVERED no_lease=1')
   LAST_NETWORK_BAD=False
  if owner_cap_reached():return 0
+ # Independent check after device/network readiness, immediately before lease.
+ try:
+  from tools.cortes_deadline_pacing import assert_due
+  assert_due(pace,datetime.datetime.now(zone))
+ except Exception as exc:
+  log('PUBLICATION_PACING_SECOND_GATE_STOP reason='+type(exc).__name__+' no_lease=1')
+  return 0
  code,d=signed_post('/job/lease',{'executor':EXECUTOR,'platform':'kwai','ttl_seconds':TTL})
  if code//100!=2 or not d.get('ok'):queue_failure('lease',code,d)
  job=d.get('job')
