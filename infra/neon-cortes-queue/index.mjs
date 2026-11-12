@@ -652,6 +652,53 @@ async function kwaiUnprovenAction(b,actor,target){
     "ORDER BY p.publication_started_at LIMIT 5",[target]);
   return {ok:true,policy:'kwai_reconcile_then_disregard_v1',jobs:rows};
  }
+ if(mode==='confirm'){
+  const id=String(b.id||''),proof=b.proof||{};
+  const photo=String(proof.photo_id||''),posted=Number(proof.posted_ms);
+  const frameScores=proof.frame_inliers;
+  if(!/^kwai-cortes-[A-Za-z0-9_.:-]{12,180}$/.test(id)||
+     proof.kind!=='kwai_logged_source_to_public_four_frame_v1'||
+     proof.account!==account||proof.job_id!==id||
+     proof.authenticated_identity_checked!==true||
+     !/^\d{16,21}$/.test(photo)||
+     !Number.isSafeInteger(posted)||
+     !/^[a-f0-9]{64}$/.test(String(proof.source_sha256||''))||
+     !Array.isArray(frameScores)||frameScores.length!==4||
+     frameScores.some(v=>!Number.isInteger(v)||v<75||v>3000)||
+     !Number.isFinite(proof.source_duration_seconds)||
+     !Number.isFinite(proof.public_duration_seconds)||
+     Math.abs(proof.source_duration_seconds-proof.public_duration_seconds)>2||
+     typeof proof.source_url!=='string'||proof.source_url.length>380||
+     proof.public_url!==`https://www.kwai.com/@${account}/video/${photo}`)
+    return{ok:false,error:'KWAI_UNPROVEN_MEDIA_PROOF_INVALID'};
+  const checked=await query("SELECT status,publication_started_at,payload->>'video_url' AS source_url "+
+     "FROM cortes_publications WHERE id=$1 AND target_key=$2 AND remote_id IS NULL LIMIT 1",
+     [id,target]);
+  if(checked.length!==1||!['uncertain','started'].includes(checked[0].status)||
+     checked[0].source_url!==proof.source_url)
+    return{ok:false,error:'KWAI_UNPROVEN_SOURCE_FENCE_CHANGED'};
+  const started=Date.parse(checked[0].publication_started_at);
+  if(!Number.isFinite(started)||posted<started-8*60000||posted>started+18*60000)
+    return{ok:false,error:'KWAI_UNPROVEN_TIME_MISMATCH'};
+  if(JSON.stringify(proof).length>2500)
+    return{ok:false,error:'KWAI_UNPROVEN_MEDIA_PROOF_TOO_LARGE'};
+  const rows=await query(
+    "UPDATE cortes_publications p SET status='confirmed',lease_owner=NULL,lease_until=NULL,"+
+    "remote_id=$3,updated_at=now(),"+
+    "confirmation_evidence=$4::jsonb WHERE p.id=$1 AND p.target_key=$2 "+
+    "AND p.status IN ('uncertain','started') AND p.remote_id IS NULL "+
+    "AND p.publication_started_at IS NOT NULL AND "+
+    "(p.lease_until IS NULL OR p.lease_until<now()) AND NOT EXISTS ("+
+    "SELECT 1 FROM cortes_publications d WHERE d.id<>p.id AND d.target_key=p.target_key "+
+    "AND d.status='confirmed' AND d.remote_id=$3) "+
+    "RETURNING p.id,p.status,p.remote_id",
+    [id,target,proof.public_url,JSON.stringify({
+      ...proof,kind:'kwai_authenticated_source_frames_reconciled_v1',
+      public_post_timestamp_ms:posted,
+      qualified_distinct_frames:4,reconciled_at:new Date().toISOString()})]);
+  return rows.length?{ok:true,job:rows[0],confirmed_media:true}:
+    {ok:false,error:'KWAI_UNPROVEN_CONFIRM_FENCE_CHANGED'};
+ }
  if(mode!=='discard')return{ok:false,error:'KWAI_UNPROVEN_MODE_INVALID'};
  const id=String(b.id||''),proof=b.proof||{},now=Date.now();
  if(!/^kwai-cortes-[A-Za-z0-9_.:-]{12,180}$/.test(id)||
