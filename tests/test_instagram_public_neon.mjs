@@ -9,9 +9,15 @@ const a=source.indexOf('async function instagramDirectAction(');
 const b=source.indexOf('\nexport function validatePinterestTerminalErrorProof(',a);
 assert.ok(a>=0&&b>a);
 const snippet=source.slice(a,b)+'\nthis.direct=instagramDirectAction;';
-function mock(evidence={}, started=new Date(Date.now()-48*3600e3).toISOString()){
+const FUTURE_NOW=Date.parse('2026-11-16T14:00:00Z');
+class TestDate extends Date {
+  constructor(...args){super(...(args.length?args:[FUTURE_NOW]));}
+  static now(){return FUTURE_NOW;}
+}
+
+function mock(evidence={}, started=new Date(FUTURE_NOW-48*3600e3).toISOString()){
   const statements=[];
-  const context={URL,Date,JSON,String,Number,Object,Set,Math,
+  const context={URL,Date:TestDate,JSON,String,Number,Object,Set,Math,
     sha:s=>crypto.createHash('sha256').update(String(s)).digest('hex'),
     query:async (sql,p=[])=>{
       statements.push({sql,params:p});
@@ -33,7 +39,7 @@ function proof(id,start){
  return {username:'universoanthares',origin:'instagram_public_profile',
   profile_url:'https://www.instagram.com/universoanthares/reels/',
   complete:true,graph_complete:true,scanned_count:75,graph_scanned_count:92,
-  tag,observed_at:new Date().toISOString(),newest_at:new Date(when+3*3600e3).toISOString(),
+  tag,observed_at:new Date(FUTURE_NOW).toISOString(),newest_at:new Date(when+3*3600e3).toISOString(),
   oldest_at:new Date(when-3*3600e3).toISOString(),
   graph_oldest_at:new Date(when-3*3600e3).toISOString(),
   matching_caption_tag:false,graph_matching_tag:false};
@@ -41,7 +47,7 @@ function proof(id,start){
 const id='cortes-fanout-instagram-'+'a'.repeat(32);
 test('reject incomplete public timeline without database changes',async()=>{
   const h=mock();
-  const p=proof(id,new Date(Date.now()-48*3600e3));p.complete=false;
+  const p=proof(id,new Date(FUTURE_NOW-48*3600e3));p.complete=false;
   const r=await h.call('reconcile',{id,decision:'absent',proof:p});
   assert.equal(r.error,'DIRECT_PUBLIC_PROOF_INCOMPLETE');
   assert.equal(h.statements.length,0);
@@ -57,28 +63,28 @@ test('bounded per-account pending action',async()=>{
 });
 test('first complete absence adds audit without changing failed state',async()=>{
   const h=mock();
-  const r=await h.call('reconcile',{id,decision:'absent',proof:proof(id,new Date(Date.now()-48*3600e3))});
+  const r=await h.call('reconcile',{id,decision:'absent',proof:proof(id,new Date(FUTURE_NOW-48*3600e3))});
   assert.equal(r.ok,true);
   assert.equal(r.first_scan_complete,true);
   assert.match(h.statements[1].sql,/confirmation_evidence=/);
   assert.doesNotMatch(h.statements[1].sql,/status='failed'/);
 });
 test('second complete scan after one hour marks failed, never queued',async()=>{
-  const old=new Date(Date.now()-2*3600e3).toISOString();
+  const old=new Date(FUTURE_NOW-2*3600e3).toISOString();
   const h=mock({kind:'instagram_public_absence_first_pass',first_scan_at:old});
-  const r=await h.call('reconcile',{id,decision:'absent',proof:proof(id,new Date(Date.now()-48*3600e3))});
+  const r=await h.call('reconcile',{id,decision:'absent',proof:proof(id,new Date(FUTURE_NOW-48*3600e3))});
   assert.equal(r.ok,true);
   assert.match(h.statements[1].sql,/status='failed'/);
   assert.doesNotMatch(h.statements[1].sql,/status='queued'/);
 });
 test('reject absent without separate Graph absence',async()=>{
- const h=mock();const p=proof(id,new Date(Date.now()-48*3600e3));
+ const h=mock();const p=proof(id,new Date(FUTURE_NOW-48*3600e3));
  p.graph_matching_tag=true;
  const r=await h.call('reconcile',{id,decision:'absent',proof:p});
  assert.equal(r.error,'DIRECT_PUBLIC_ABSENCE_UNPROVEN');
 });
 test('exact public and Graph permalink can confirm with remote media id',async()=>{
- const h=mock();const p=proof(id,new Date(Date.now()-48*3600e3));
+ const h=mock();const p=proof(id,new Date(FUTURE_NOW-48*3600e3));
  const permalink='https://www.instagram.com/reel/XyzQ987/';
  p.matching_caption_tag=true;p.graph_matching_tag=true;
  p.matched_permalink=permalink;p.graph_permalink=permalink;p.graph_media_id='18123456789012345';
