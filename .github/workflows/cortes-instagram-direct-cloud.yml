@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/cortes-instagram-direct-cloud.yml'
       - 'tools/cortes_instagram_direct_cloud.py'
+      - 'tools/cortes_instagram_vertical_asset.py'
   workflow_dispatch: {}
   schedule:
     - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
@@ -15,7 +16,7 @@ permissions:
 jobs:
   publish-direct-reel:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 18
     if: ${{ vars.CORTES_INSTAGRAM_DIRECT_PAUSED != 'true' }}
     # The five-minute follow-up must not hold the Graph publication mutex.
     # Serialize only the media job; Neon fencing remains the final authority.
@@ -32,8 +33,11 @@ jobs:
           python-version: '3.12'
       - name: Verify direct publisher syntax and source
         run: |
-          python -m py_compile tools/cortes_instagram_direct_cloud.py scripts/instagram_publish.py tools/cortes_queue_ha.py
+          python -m py_compile tools/cortes_instagram_direct_cloud.py tools/cortes_instagram_vertical_asset.py scripts/instagram_publish.py tools/cortes_queue_ha.py
           python -m unittest discover -s tests -p 'test_instagram_direct_cloud.py' -v
+          python -m unittest discover -s tests -p 'test_instagram_vertical_asset.py' -v
+          command -v ffmpeg
+          command -v ffprobe
       - name: Publish up to two separately confirmed Reels through official Instagram Graph
         id: publish
         env:
@@ -44,6 +48,9 @@ jobs:
           INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
           INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST || 'graph.instagram.com' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WP_SITE_URL: ${{ secrets.WP_QA_SITE_URL || secrets.WP_SITE_URL }}
+          WP_USERNAME: ${{ secrets.WP_QA_USERNAME || secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_QA_APP_PASSWORD || secrets.WP_APP_PASSWORD }}
         run: |
           set -euo pipefail
           receipt_file="$RUNNER_TEMP/instagram-graph-${GITHUB_RUN_ID}.jsonl"
