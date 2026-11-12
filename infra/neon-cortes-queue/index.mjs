@@ -1151,6 +1151,8 @@ async function cortesDeadlinePacing(targetKey,dailyLimit){
     !Number.isSafeInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)
    throw Error('CORTES_PACING_SCOPE_INVALID');
  const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+ const start="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '6 hours') AT TIME ZONE 'America/Campo_Grande')";
+ const lastSlot="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '22 hours 59 minutes') AT TIME ZONE 'America/Campo_Grande')";
  const deadline="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '23 hours') AT TIME ZONE 'America/Campo_Grande')";
  const rows=await query(`SELECT
    count(*) FILTER (WHERE status='queued')::int AS pending,
@@ -1158,31 +1160,42 @@ async function cortesDeadlinePacing(targetKey,dailyLimit){
      OR (publication_started_at>=${day} AND status IN ('started','uncertain','confirmed')))::int AS used,
    min(updated_at) FILTER (WHERE status='confirmed' AND updated_at>=${day}) AS first_confirmed,
    max(updated_at) FILTER (WHERE status='confirmed' AND updated_at>=${day}) AS last_confirmed,
-   now() AS server_now, ${deadline} AS deadline_at
+   max(publication_started_at) FILTER (WHERE publication_started_at>=${day}) AS last_started,
+   now() AS server_now, ${start} AS start_at, ${lastSlot} AS final_at,
+   ${deadline} AS deadline_at
    FROM cortes_publications WHERE target_key=$1`,[targetKey]);
- const r=rows[0]||{},now=new Date(r.server_now),end=new Date(r.deadline_at);
- if(!Number.isFinite(now.getTime())||!Number.isFinite(end.getTime()))
+ const r=rows[0]||{},now=new Date(r.server_now),end=new Date(r.deadline_at),
+       begin=new Date(r.start_at),finalSlot=new Date(r.final_at);
+ if(!Number.isFinite(now.getTime())||!Number.isFinite(end.getTime())||
+    !Number.isFinite(begin.getTime())||!Number.isFinite(finalSlot.getTime())||
+    !(begin<finalSlot&&finalSlot<end))
    throw Error('CORTES_PACING_CLOCK_UNVERIFIED');
  const pending=Number(r.pending||0),used=Number(r.used||0),
        remaining=Math.min(pending,Math.max(0,dailyLimit-used));
  const plan={target_key:targetKey,daily_limit:dailyLimit,pending,started_today:used,
    remaining_today:remaining,excess_over_limit:Math.max(0,pending-remaining),
    first_confirmed_at:r.first_confirmed||null,last_confirmed_at:r.last_confirmed||null,
-   deadline_at:end.toISOString(),server_now:now.toISOString(),
+   start_at:begin.toISOString(),deadline_at:end.toISOString(),server_now:now.toISOString(),
    next_due_at:null,status:'IDLE'};
  if(!pending)return plan;
+ if(now<begin){plan.status='WAIT_DAY_START';plan.next_due_at=begin.toISOString();return plan;}
  if(now>=end){plan.status='BLOCKED_SAME_DAY_CAPACITY';return plan;}
  if(!remaining){plan.status='BLOCKED_PLATFORM_LIMIT';return plan;}
- if(!r.first_confirmed||!r.last_confirmed){
-   if(!!r.first_confirmed!==!!r.last_confirmed)throw Error('CORTES_PACING_CONFIRMATION_INCOMPLETE');
-   plan.status='DUE';plan.next_due_at=plan.server_now;return plan;
- }
- const first=new Date(r.first_confirmed),last=new Date(r.last_confirmed);
- if(!Number.isFinite(first.getTime())||!Number.isFinite(last.getTime())||
-    first>last||last>end||last>now)throw Error('CORTES_PACING_CONFIRMATION_CLOCK_INVALID');
- const interval=(end.getTime()-last.getTime())/remaining;
+ if(!!r.first_confirmed!==!!r.last_confirmed)
+   throw Error('CORTES_PACING_CONFIRMATION_INCOMPLETE');
+ const first=r.first_confirmed?new Date(r.first_confirmed):null;
+ const last=r.last_confirmed?new Date(r.last_confirmed):null;
+ const started=r.last_started?new Date(r.last_started):null;
+ if((last&&(!Number.isFinite(first.getTime())||!Number.isFinite(last.getTime())||
+    first>last||last>end||last>now))||
+    (started&&(!Number.isFinite(started.getTime())||started>now||started>end)))
+   throw Error('CORTES_PACING_CONFIRMATION_CLOCK_INVALID');
+ const anchor=Math.max(last?.getTime()??-Infinity,started?.getTime()??-Infinity);
+ if(anchor===-Infinity){plan.status='DUE';plan.next_due_at=plan.server_now;return plan;}
+ if(anchor>=finalSlot.getTime()){plan.status='BLOCKED_SAME_DAY_CAPACITY';return plan;}
+ const interval=(finalSlot.getTime()-anchor)/remaining;
  if(!(interval>0)){plan.status='BLOCKED_SAME_DAY_CAPACITY';return plan;}
- const due=new Date(last.getTime()+interval);
+ const due=new Date(anchor+interval);
  plan.next_due_at=due.toISOString();
  plan.interval_seconds=interval/1000;
  plan.status=now>=due?'DUE':'WAIT';

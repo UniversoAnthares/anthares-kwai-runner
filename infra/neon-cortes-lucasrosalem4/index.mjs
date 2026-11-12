@@ -177,30 +177,44 @@ async function reaper(){
      "MAX(confirmed_at) FILTER (WHERE status='confirmed' AND "+
      "(confirmed_at AT TIME ZONE 'America/Campo_Grande')::date="+
      "(now() AT TIME ZONE 'America/Campo_Grande')::date) AS last_confirmed,"+
+     "MAX(publication_started_at) FILTER (WHERE publication_started_at IS NOT NULL AND "+
+     "(publication_started_at AT TIME ZONE 'America/Campo_Grande')::date="+
+     "(now() AT TIME ZONE 'America/Campo_Grande')::date) AS last_started,"+
      "now() AS server_now,"+
+     "((now() AT TIME ZONE 'America/Campo_Grande')::date + time '06:00:00') AT TIME ZONE 'America/Campo_Grande' AS start_utc,"+
+     "((now() AT TIME ZONE 'America/Campo_Grande')::date + time '22:59:00') AT TIME ZONE 'America/Campo_Grande' AS final_due_utc,"+
      "((now() AT TIME ZONE 'America/Campo_Grande')::date + "+
      "time '23:00:00') AT TIME ZONE 'America/Campo_Grande' AS deadline_utc "+
      "FROM cortes_tiktok_lucasrosalem4_publications");
    const row=d.rows[0]||{},used=Number(row.daily),queued=Number(row.eligible),
          leased=includeCurrentLease?Number(row.leased):0,
          now=new Date(row.server_now).getTime(),
-         end=new Date(row.deadline_utc).getTime();
+         end=new Date(row.deadline_utc).getTime(),
+         start=new Date(row.start_utc).getTime(),
+         finalSlot=new Date(row.final_due_utc).getTime();
    if(!Number.isSafeInteger(used)||used<0||
       !Number.isSafeInteger(queued)||queued<0||
       !Number.isSafeInteger(leased)||leased<0||
-      !Number.isFinite(now)||!Number.isFinite(end))
+      !Number.isFinite(now)||!Number.isFinite(end)||
+      !Number.isFinite(start)||!Number.isFinite(finalSlot)||!(start<finalSlot&&finalSlot<end))
      throw Error('TIKTOK_PACING_LEDGER_INVALID');
    const available=Math.min(queued+leased,Math.max(0,100-used));
    const first=row.first_confirmed?new Date(row.first_confirmed).getTime():null;
    const last=row.last_confirmed?new Date(row.last_confirmed).getTime():null;
+   const lastStarted=row.last_started?new Date(row.last_started).getTime():null;
    if((first===null)!==(last===null)||
       (last!==null&&(!Number.isFinite(first)||!Number.isFinite(last)||
-                      first>last||last>now||last>end)))
+                      first>last||last>now||last>end))||
+      (lastStarted!==null&&(!Number.isFinite(lastStarted)||lastStarted>now||lastStarted>end)))
      throw Error('TIKTOK_PACING_RECEIPT_INVALID');
+   if(now<start)return{mode:'before_window',due_at:new Date(start).toISOString(),used,available};
    if(now>=end||used>=100)return{mode:'cap',due_at:null,used,available};
    if(!available)return{mode:'idle',due_at:null,used,available};
-   if(last===null)return{mode:'publish',due_at:new Date(now).toISOString(),used,available};
-   const due=last+(end-last)/available;
+   const anchor=Math.max(last??-Infinity,lastStarted??-Infinity);
+   if(anchor===-Infinity)return{mode:'publish',due_at:new Date(now).toISOString(),used,available};
+   if(anchor>=finalSlot)return{mode:'cap',due_at:null,used,available};
+   // Reserve the last actual start for 22:59; 23h is an exclusive hard stop.
+   const due=anchor+(finalSlot-anchor)/available;
    return{mode:now>=due?'publish':'paced',due_at:new Date(due).toISOString(),
      used,available,first_confirmed_at:row.first_confirmed,
      last_confirmed_at:row.last_confirmed,deadline_at:new Date(end).toISOString()};

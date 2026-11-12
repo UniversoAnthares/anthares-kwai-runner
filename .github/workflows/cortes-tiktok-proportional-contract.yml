@@ -1,11 +1,14 @@
 name: CORTES TikTok per-account proportional pacing contract
 on:
   push:
-    branches: [main, fix/cortes-tiktok-neon-proportional-23h-20261112]
+    branches: [main, fix/cortes-tiktok-neon-proportional-23h-20261112, fix/tiktok-100-by-0938-proportional-db-gate-20261112]
     paths:
       - 'infra/neon-cortes-tiktok/index.mjs'
       - 'infra/neon-cortes-lucasrosalem4/index.mjs'
       - 'tests/test_cortes_tiktok_proportional_due.mjs'
+      - 'tests/test_cortes_tiktok_hard_window_guard.mjs'
+      - 'db/migrations/20261112_tiktok_hard_window_proportional_guard.sql'
+      - 'vercel-ara-primary/api/cortes-tiktok.mjs'
       - '.github/workflows/cortes-tiktok-proportional-contract.yml'
   workflow_dispatch: {}
 permissions:
@@ -28,5 +31,6 @@ jobs:
           set -euo pipefail
           node --check infra/neon-cortes-tiktok/index.mjs
           node --check infra/neon-cortes-lucasrosalem4/index.mjs
-          node --test tests/test_cortes_tiktok_proportional_due.mjs
+          node --check vercel-ara-primary/api/cortes-tiktok.mjs
+          node --test tests/test_cortes_tiktok_proportional_due.mjs tests/test_cortes_tiktok_hard_window_guard.mjs
           echo TIKTOK_DEADLINE_PROPORTIONAL_CONTRACT=PASS
