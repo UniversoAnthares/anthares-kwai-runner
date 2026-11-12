@@ -97,6 +97,12 @@ def merge_health(probes: dict, history: dict) -> dict:
         row["consecutive_failures"] = int(old.get("consecutive_failures", 0) or 0)
         row["last_failure_class"] = str(old.get("last_failure_class", "") or "")
         row["degraded"] = bool(old.get("degraded", False))
+        # Old transport failures expire after recovery and a successful live probe.
+        age = time.time() - float(old.get('last_failure_at', 0) or 0)
+        if key == 'physical_android' and probe.get('healthy') is True and probe.get('ready') is True and age > 300:
+            row['consecutive_failures'] = 0
+            row['last_failure_class'] = ''
+            row['degraded'] = False
         out[key] = row
     return out
 
@@ -118,9 +124,9 @@ def record_result(history: dict, executor: str, success: bool, failure_class: st
 
 
 def classify_failure(text: str, rc: int) -> str:
-    # The native process has not invoked Publish when rc=75 is a prepare
-    # timeout. Log text such as STAGE_PUSH_REQUIRED must not be classified
-    # as a permanent policy denial; keep the short physical retry fence.
+    # A confirmed native Android pre-commit transport timeout returns rc=75.
+    # Stage log 'PUSH_REQUIRED' may contain the word 'required', which must
+    # never be mistaken for a platform rule/security refusal.
     if rc==75 and 'KWAI_UP_STATE=FAILED ERROR=timeout' in text:
         return 'device'
     if UNCERTAIN_PATTERNS.search(text):
@@ -133,19 +139,24 @@ def classify_failure(text: str, rc: int) -> str:
 
 
 def download_media(url: str) -> pathlib.Path:
-    target_dir = pathlib.Path(tempfile.mkdtemp(prefix="anthares-kwai-device-"))
-    target = target_dir / "upload.mp4"
-    req = urllib.request.Request(url, headers={"User-Agent": "AntharesDeviceFailover/1.0"})
-    with urllib.request.urlopen(req, timeout=90) as src, target.open("wb") as dst:
-        while True:
-            block = src.read(1024 * 1024)
-            if not block:
-                break
-            dst.write(block)
-    if target.stat().st_size < 1024:
-        raise RuntimeError("media-download-invalid")
+    # Use the already-installed Windows curl.exe: Python's legacy urlopen may
+    # block indefinitely before reaching the phone's existing MediaStore.
+    from urllib.parse import urlsplit
+    u=urlsplit(url)
+    if (u.scheme!="https" or u.hostname not in {"anthares.us","www.anthares.us"}
+            or u.username or u.password or u.port
+            or not u.path.startswith("/wp-content/uploads/anthares-clips/")
+            or not u.path.endswith(".mp4")):
+        raise RuntimeError("KWAI_MEDIA_SOURCE_NOT_ALLOWED")
+    folder=pathlib.Path(tempfile.mkdtemp(prefix="anthares-kwai-device-"))
+    target=folder/"upload.mp4"
+    command=["curl.exe","--fail","--location","--silent","--show-error",
+             "--connect-timeout","8","--max-time","65","--retry","1",
+             "--output",str(target),url]
+    proc=subprocess.run(command,capture_output=True,text=True,timeout=78)
+    if proc.returncode or not target.is_file() or target.stat().st_size<1024:
+        raise RuntimeError("KWAI_MEDIA_DOWNLOAD_FAILED:"+str(proc.returncode))
     return target
-
 
 def source_ms(name: str) -> int:
     raw = required(name)
@@ -155,9 +166,28 @@ def source_ms(name: str) -> int:
         raise RuntimeError(f"{name}-invalid") from exc
 
 
+
+def _anthares_social_caption(value: str) -> str:
+    # Legenda com maximo de 150 caracteres, URL literal e marca no final.
+    suffix = " - Universo Anthares"
+    site = "www.anthares.us"
+    original = " ".join(str(value or "").split())
+    original = re.sub(r"\s*(?:[●•|–—-]\s*)?Universo Anthares\s*$", "", original, flags=re.I)
+    original = re.sub(r"(?i)(?:https?://)?(?:www\.)?anthares\.us/?", "", original).strip(" .,;:-")
+    # The authorized physical HID keyboard uses the invariant ASCII layout.
+    # Keep the expected caption identical to the exact text typed/read back.
+    original = "".join(c for c in unicodedata.normalize("NFKD", original)
+                       if not unicodedata.combining(c))
+    if not original:
+        raise RuntimeError("kwai_caption_title_missing")
+    room = 150 - len(site) - len(suffix) - 1
+    title = original[:room].rstrip(" .,;:-")
+    return title + " " + site + suffix
+
+
 def physical_env(media: pathlib.Path) -> dict:
     env = os.environ.copy()
-    port=os.getenv("ANTHARES_PHYSICAL_ADB_PORT","5038")
+    port=os.getenv("ANTHARES_PHYSICAL_ADB_PORT","5037")
     env["ADB_SERVER_SOCKET"] = "tcp:127.0.0.1:"+port
     env["ADB_SERVER_PORT"] = port
     serial = required("ANTHARES_PHYSICAL_ADB_SERIAL")
@@ -168,9 +198,9 @@ def physical_env(media: pathlib.Path) -> dict:
         "KWAI_UP_END_MS": str(source_ms("KWAI_SOURCE_END")),
         "KWAI_UP_MEDIA": str(media),
         "KWAI_UP_ADB_SERIAL": serial,
-        "KWAI_UP_PACKAGE": os.getenv("ANTHARES_PHYSICAL_KWAI_PACKAGE", "kwai.lite.video"),
+        "KWAI_UP_PACKAGE": os.getenv("ANTHARES_PHYSICAL_KWAI_PACKAGE", "com.kwai.video" if os.getenv("KWAI_EXPECTED_ACCOUNT", "").strip().lstrip("@").lower()=="universoanthares" else "kwai.lite.video"),
         "KWAI_UP_EXPECTED_ACCOUNT": os.getenv("KWAI_EXPECTED_ACCOUNT", "lucasrosalem"),
-        "KWAI_UP_CAPTION": os.getenv("KWAI_VIDEO_TITLE", ""),
+        "KWAI_UP_CAPTION": _anthares_social_caption(os.getenv("KWAI_VIDEO_TITLE", "")),
     })
     adb = os.getenv("ANTHARES_ADB", "").strip()
     if adb:
@@ -255,8 +285,6 @@ def run_physical_prepare(media: pathlib.Path) -> tuple[bool, str, str, dict]:
 
 
 def run_physical_commit(env: dict, prepare_out: str) -> tuple[bool, str, str]:
-    # STARTED fence has already been recorded. Even a watchdog timeout may
-    # follow a real tap on Publish; never treat it as a safe pre-submit retry.
     try:
         rc, commit_out = run_process([sys.executable, str(PHYSICAL_SAFE), "commit"], env)
     except subprocess.TimeoutExpired:
@@ -271,7 +299,7 @@ def verify_memu_standby_identity() -> bool:
     """Prove MEmu Kwai profile before standby promotion; never assume auth."""
     serial = os.getenv("ANTHARES_MEMU_ADB_SERIAL", "127.0.0.1:21543")
     env = os.environ.copy()
-    env["ADB_SERVER_PORT"] = "5037"
+    env['ADB_SERVER_PORT']='5037'; env['ADB_SERVER_SOCKET']='tcp:127.0.0.1:5037'
     env["KWAI_UP_ADB_SERIAL"] = serial
     env["KWAI_UP_PACKAGE"] = "com.kwai.video"
     env["KWAI_UP_EXPECTED_ACCOUNT"] = os.getenv("KWAI_EXPECTED_ACCOUNT", "lucasrosalem")
@@ -347,21 +375,30 @@ def memu_caption_input(value: str) -> str:
 
 def prepare_memu(media):
     env=os.environ.copy()
-    env['ADB_SERVER_PORT']='5037'
-    env['KWAI_UP_CAPTION_INPUT_METHOD']='adbkeyboard'
+    env['ADB_SERVER_PORT']='5037'; env['ADB_SERVER_SOCKET']='tcp:127.0.0.1:5037'
     job=required('KWAI_QUEUE_JOB_ID')
     env.update({'KWAI_UP_JOB_ID':job,'KWAI_UP_MEDIA':str(media),
         'KWAI_UP_ADB_SERIAL':required('ANTHARES_MEMU_ADB_SERIAL'),
         'KWAI_UP_PACKAGE':'com.kwai.video',
         'KWAI_UP_EXPECTED_ACCOUNT':os.getenv('KWAI_EXPECTED_ACCOUNT','lucasrosalem'),
-        'KWAI_UP_CAPTION':str(os.getenv('KWAI_VIDEO_TITLE','')).strip()[:150] or 'Universo Anthares',
+        'KWAI_UP_CAPTION':_anthares_social_caption(os.getenv('KWAI_VIDEO_TITLE','')),
         'KWAI_UP_UIAUTOMATOR_JAR':os.getenv('ANTHARES_MEMU_UIAUTOMATOR_JAR', r'D:\AntharsWork\temp\anthares-kwai-ui-bridge\kwai-uiautomator-driver.jar'),
         'KWAI_UP_MEDIA_SHA256':os.getenv('KWAI_MEDIA_SHA256',''),
         'KWAI_UP_ARTIFACT_DIR':str(ROOT/'.state'/'kwai-memu-evidence'/re.sub(r'[^A-Za-z0-9._-]+','_',job)[-100:])})
+    # Preferred UTF-8 input through the installed, active ADBKeyboard.
+    env['KWAI_UP_CAPTION_INPUT_METHOD']='adbkeyboard'
     adb=os.getenv('ANTHARES_ADB','').strip()
     if adb:env['PATH']=str(pathlib.Path(adb).parent)+os.pathsep+env.get('PATH','')
-    rc,out=run_process([sys.executable,str(MEMU_SAFE),'prepare'],env)
-    return rc==0 and 'KWAI_UP_STATE=READY_TO_PUBLISH' in out,out,env
+    # Retry pre-publication gallery discovery only; commit is never retried here.
+    for attempt in range(1, 5):
+        rc,out=run_process([sys.executable,str(MEMU_SAFE),'prepare'],env,timeout=600)
+        if rc==0 and 'KWAI_UP_STATE=READY_TO_PUBLISH' in out:
+            return True,out,env
+        if attempt < 4 and any(marker in out.lower() for marker in ('media-not-found','mediastore-not-dedicated','gallery-not-found','video-not-found')):
+            time.sleep(8)
+            continue
+        return False,out,env
+    return False,out,env
 
 
 def commit_memu(env):
@@ -369,8 +406,33 @@ def commit_memu(env):
     return rc==0 and 'KWAI_UP_STATE=VERIFIED' in out,out
 
 
-def finalize_verified_publish(job_id: str, executor: str) -> int:
+def finalize_verified_publish(job_id: str, executor: str, source_media: pathlib.Path | None=None) -> int:
     mark_pending_ack(job_id, executor)
+    if executor=="physical_android" and source_media is not None:
+        # The short-lived downloaded MP4 is removed after this process exits.
+        # Persist only the canonical source URL so a delayed Kwai public
+        # profile update can still be independently matched and acknowledged.
+        path=ROOT/".state"/"kwai-native-cortes"/(re.sub(r"[^A-Za-z0-9._-]+","_",job_id)[-100:]+".json")
+        state=load_json_file(path)
+        if state.get("job_id")!=job_id or state.get("publication_attempted") is not True:
+            raise RuntimeError("KWAI_POST_STATE_INVALID_FOR_RECOVERY")
+        state["source_video_url"]=required("KWAI_VIDEO_URL")
+        save_json_file(path,state)
+        # The device is still on the exact, newly posted Kwai detail page.
+        # Copy its official share URL through the authorized HID and existing
+        # Chrome clipboard control, without installing a receiver application.
+        short_helper=ROOT/"tools"/"kwai_phone_share_clipboard.py"
+        copy=subprocess.run([sys.executable,str(short_helper),job_id],
+            capture_output=True,text=True,timeout=110)
+        print(("KWAI_PUBLIC_SHARE_COPIED=PASS" if copy.returncode==0 else
+               "KWAI_PUBLIC_SHARE_COPY_PENDING")+" "+str((copy.stdout or "")[-230:]),flush=True)
+        proof=ROOT/"tools"/"kwai_physical_public_proof.py"
+        proc=subprocess.run([sys.executable,str(proof),job_id,str(source_media)],
+            capture_output=True,text=True,timeout=350)
+        if proc.returncode!=0 or "KWAI_PUBLIC_VIDEO_PROVEN" not in (proc.stdout or ""):
+            print("KWAI_PHYSICAL_PUBLIC_PROOF_PENDING "+str((proc.stdout or proc.stderr or "")[-400:]),flush=True)
+            return 91
+        print("KWAI_PHYSICAL_PUBLIC_PROOF_AUTO=OK",flush=True)
     ok, detail = queue_callback("complete", executor)
     if ok:
         mark_acknowledged(job_id)
@@ -390,11 +452,24 @@ def main() -> int:
 
     url = required("KWAI_VIDEO_URL")
     history = load_health()
-    probes = AndroidExecutorRouter().status()
-    state = merge_health(probes, history)
+    exclusive=os.getenv("ANTHARES_KWAI_PHYSICAL_PRIMARY_EXCLUSIVE","0")=="1"
     manifest = routing.load_manifest()
-    selected = routing.choose(manifest, state, workload="kwai_publish")
-    if not selected and routing._primary_allows_memufailover(manifest, state):
+    if exclusive:
+        # The canonical daemon already passed the live phone preflight before
+        # leasing. The native phone prepare re-checks the app identity. Do not
+        # invoke standby MEmu or recovery subprocesses on the primary route.
+        if not os.getenv("ANTHARES_PHYSICAL_ADB_SERIAL") or (
+            os.getenv("ANTHARES_PHYSICAL_KWAI_AUTHENTICATED")!="true"):
+            print("KWAI_DEVICE_STATE=PHYSICAL_PRECHECK_REQUIRED",flush=True)
+            return 75
+        probes={}
+        state={}
+        selected="physical_android"
+    else:
+        probes = AndroidExecutorRouter().status()
+        state = merge_health(probes, history)
+        selected = routing.choose(manifest, state, workload="kwai_publish")
+    if not exclusive and not selected and routing._primary_allows_memufailover(manifest, state):
         # A physically connected phone may have an unusable/sleeping UI.
         # Probe the MEmu account before taking a lease through the irreversible
         # STARTED fence. The profile check cannot publish media.
@@ -402,6 +477,19 @@ def main() -> int:
             probes = AndroidExecutorRouter().status()
             state = merge_health(probes, history)
             selected = routing.choose(manifest, state, workload="kwai_publish")
+    # Explicitly selected approved MEmu4 route while the physical publisher
+    # cannot guarantee caption correctness. Require live auth and health proof.
+    if os.getenv("ANTHARES_KWAI_FORCE_MEMU", "").strip() == "1":
+        if not verify_memu_standby_identity():
+            print("KWAI_MEMU_PREFERRED_BLOCKED_ACCOUNT_NOT_VERIFIED", flush=True)
+            return 75
+        confirmed = AndroidExecutorRouter().status().get("memu_android", {})
+        if not all(confirmed.get(k) is True
+                   for k in ("online", "healthy", "ready", "authenticated")):
+            print("KWAI_MEMU_PREFERRED_BLOCKED_HEALTH_NOT_PROVEN", flush=True)
+            return 75
+        selected = "memu_android"
+        print("KWAI_EXECUTOR_PREFERENCE=MEMU_INDEPENDENT_IDENTITY_PROVEN", flush=True)
     print("KWAI_DEVICE_ROUTER_SELECTED=" + (selected or "NONE"), flush=True)
     if not selected:
         print("KWAI_DEVICE_STATE=QUEUED_NO_EXECUTOR", flush=True)
@@ -421,6 +509,9 @@ def main() -> int:
                 if failure_class not in routing.DEVICE_FAILURES:
                     print(f"KWAI_DEVICE_STATE=FAILED_NO_FAILOVER CLASS={failure_class}", flush=True)
                     return 80
+                if os.getenv("ANTHARES_KWAI_PHYSICAL_PRIMARY_EXCLUSIVE","0")=="1":
+                    print("KWAI_DEVICE_STATE=PHYSICAL_PREPARE_BLOCKED_NO_MEMU_SWITCH", flush=True)
+                    return 81
                 verify_memu_standby_identity()
                 probes2 = AndroidExecutorRouter().status()
                 state2 = merge_health(probes2, history)
@@ -453,7 +544,7 @@ def main() -> int:
             if not ok:
                 print("KWAI_DEVICE_STATE=UNCERTAIN EXECUTOR=physical_android", flush=True)
                 return 90
-            return finalize_verified_publish(job_id, "physical_android")
+            return finalize_verified_publish(job_id, "physical_android", media)
 
         if selected == "memu_android":
             ok, detail = commit_memu(memu_env_data)
