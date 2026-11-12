@@ -74,13 +74,34 @@ def scan_public_profile(start: datetime) -> dict:
         from playwright.sync_api import sync_playwright
     except ImportError:
         return {"complete": False, "reason": "PLAYWRIGHT_NOT_INSTALLED"}
+    # An anonymous context is forbidden. Use ONLY the existing authorized
+    # persistent session; browser authentication and account view are mandatory.
+    profile = os.environ.get("CORTES_INSTAGRAM_AUTH_PROFILE", "").strip()
+    expected = r"D:\AntharsWork\browser-profiles\AntharesInstagram"
+    if not profile or os.path.normcase(os.path.normpath(profile)) != os.path.normcase(os.path.normpath(expected)):
+        return {"complete": False, "reason": "PERSISTENT_AUTH_PROFILE_REQUIRED"}
+    if not Path(profile).is_dir():
+        return {"complete": False, "reason": "PERSISTENT_AUTH_PROFILE_NOT_FOUND"}
     posts: dict[str, dict] = {}
     try:
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
+            context = pw.chromium.launch_persistent_context(
+                user_data_dir=profile, channel="chrome", headless=True,
+                viewport={"width": 1200, "height": 900}, locale="pt-BR",
+                args=["--no-first-run", "--disable-notifications", "--mute-audio"])
             try:
-                context = browser.new_context(locale="pt-BR", viewport={"width": 1200, "height": 900})
-                grid = context.new_page()
+                grid = context.pages[0] if context.pages else context.new_page()
+                # The settings page is private; a login redirect proves the
+                # existing profile is not authenticated in this session.
+                grid.goto("https://www.instagram.com/accounts/edit/",
+                          wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
+                grid.wait_for_timeout(900)
+                if ("/accounts/login/" in grid.url or "/challenge/" in grid.url
+                        or grid.locator('input[name="username"]').count()):
+                    return {"complete": False, "reason": "PERSISTENT_PROFILE_LOGIN_REQUIRED"}
+                # Avoid accepting an arbitrary public/redirect page as login.
+                if "/accounts/" not in grid.url:
+                    return {"complete": False, "reason": "PERSISTENT_PROFILE_AUTH_UNVERIFIED"}
                 grid.goto(PROFILE_URL, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
                 if "/accounts/login/" in grid.url or "/challenge/" in grid.url:
                     return {"complete": False, "reason": "PUBLIC_PROFILE_ACCESS_GATE"}
@@ -141,7 +162,7 @@ def scan_public_profile(start: datetime) -> dict:
                         "oldest_at": oldest, "newest_at": newest,
                         "grid_count": len(candidates)}
             finally:
-                browser.close()
+                context.close()
     except Exception:
         return {"complete": False, "reason": "PUBLIC_BROWSER_UNAVAILABLE"}
 
