@@ -1,0 +1,99 @@
+name: CORTES Instagram - compare two uncertain videos to published Reels
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cortes-instagram-two-candidate-media-proof.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  audio-content-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compare owned source clips to Graph-authenticated published media without publishing
+        env:
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
+          INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST || 'graph.instagram.com' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ffmpeg -version | head -1
+          python - <<'PY'
+          import json,math,os,subprocess,tempfile,urllib.request
+          from array import array
+          from pathlib import Path
+          from scripts.instagram_publish import InstagramClient
+          c=InstagramClient(os.environ['INSTAGRAM_USER_ID'],os.environ['INSTAGRAM_ACCESS_TOKEN'],
+             os.environ.get('INSTAGRAM_API_VERSION','v26.0'),
+             os.environ.get('INSTAGRAM_GRAPH_HOST','graph.instagram.com'))
+          pairs=[
+           {'job_suffix':'85f0788b','graph_id':'18155725804557683',
+            'source':'https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_-CSeY1OpvwA_g1_429_482.mp4'},
+           {'job_suffix':'a3e5d3b4','graph_id':'18121626946995788',
+            'source':'https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_fOmihuHUT1M_g1_9303_9360.mp4'}]
+          def download(url,dest):
+            req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+            with urllib.request.urlopen(req,timeout=45) as response:
+              if int(response.headers.get('Content-Length','0'))>70000000:
+                raise ValueError('MEDIA_TOO_LARGE')
+              n=0
+              with open(dest,'wb') as f:
+                while True:
+                  data=response.read(1024*1024)
+                  if not data:break
+                  n+=len(data)
+                  if n>70000000:raise ValueError('MEDIA_TOO_LARGE')
+                  f.write(data)
+            if n<20000:raise ValueError('MEDIA_NOT_AVAILABLE')
+            return n
+          def envelope(path):
+            proc=subprocess.run(['ffmpeg','-nostdin','-hide_banner','-loglevel','error',
+               '-i',str(path),'-vn','-t','90','-ar','4000','-ac','1',
+               '-f','s16le','pipe:1'],capture_output=True,timeout=50,check=True)
+            pcm=array('h')
+            pcm.frombytes(proc.stdout)
+            width=200
+            return [sum(abs(v) for v in pcm[i:i+width])/width
+                      for i in range(0,len(pcm)-width,width)]
+          def similarity(a,b):
+            best=(-1.0,0)
+            for shift in range(-600,601,2):
+              ia=max(0,-shift);ib=max(0,shift)
+              n=min(len(a)-ia,len(b)-ib)
+              if n<200:continue
+              aa=a[ia:ia+n];bb=b[ib:ib+n]
+              am=sum(aa)/n;bm=sum(bb)/n
+              va=sum((x-am)*(x-am) for x in aa)
+              vb=sum((x-bm)*(x-bm) for x in bb)
+              if va<1e-6 or vb<1e-6:continue
+              corr=sum((x-am)*(y-bm) for x,y in zip(aa,bb))/math.sqrt(va*vb)
+              if corr>best[0]:best=(corr,shift)
+            return {'peak_correlation':round(best[0],4),'shift_seconds':round(best[1]/20,2),
+                    'source_seconds':round(len(a)/20,1),'reel_seconds':round(len(b)/20,1)}
+          with tempfile.TemporaryDirectory(prefix='ig-reconcile-') as tmp:
+            for row in pairs:
+              record={'job':row['job_suffix'],'graph_media_id':row['graph_id'],
+                      'method':'independent_audio_envelope_cross_correlation'}
+              try:
+                media=c._request('GET',row['graph_id'],query={'fields':'id,permalink,timestamp,media_url'})
+                video=media.get('media_url')
+                if not isinstance(video,str) or not video.startswith('https://'):
+                  raise RuntimeError('GRAPH_MEDIA_URL_NOT_AVAILABLE')
+                source=Path(tmp)/('src-'+row['job_suffix']+'.mp4')
+                published=Path(tmp)/('pub-'+row['job_suffix']+'.mp4')
+                record['source_bytes']=download(row['source'],source)
+                record['published_bytes']=download(video,published)
+                record.update(similarity(envelope(source),envelope(published)))
+              except Exception as e:
+                record['inconclusive_reason']=type(e).__name__
+                if str(e).startswith('GRAPH_MEDIA_URL_NOT_AVAILABLE'):
+                  record['inconclusive_reason']='GRAPH_MEDIA_URL_NOT_AVAILABLE'
+              print('GRAPH_AUDIO_CONTENT_PROOF='+json.dumps(record,ensure_ascii=False),flush=True)
+          PY
