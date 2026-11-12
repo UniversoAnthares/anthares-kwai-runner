@@ -208,6 +208,19 @@ def decide(job: dict, public: dict, graph: dict, observed_at: datetime | None = 
         return {"id": job["id"], "decision": "visible",
                 "permalink": pub[0]["permalink"], "media_id": own[0]["id"], "proof": proof}
     if not pub and not own and started <= datetime.now(timezone.utc) - timedelta(hours=36):
+        # Before declaring absence, every public Reel in the fully covered
+        # interval must exist in the account-owner Graph feed as well. A
+        # truncated OpenGraph caption or incomplete public listing is not
+        # trustworthy negative evidence unless the two listings are in parity.
+        start_edge = started - timedelta(minutes=20)
+        end_edge = datetime.now(timezone.utc)
+        public_links = {p.get("permalink") for p in public["items"]
+                        if start_edge <= parsed_at(p["timestamp"]) <= end_edge}
+        graph_links = {p.get("permalink") for p in graph["items"]
+                       if start_edge <= parsed_at(p["timestamp"]) <= end_edge}
+        if not public_links or not public_links.issubset(graph_links):
+            return None
+        proof["public_graph_profile_parity"] = True
         return {"id": job["id"], "decision": "absent", "proof": proof}
     return None
 

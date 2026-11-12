@@ -69,6 +69,14 @@ class PublicProfileReconciliationTests(unittest.TestCase):
         self.graph["items"][1]["permalink"]="https://www.instagram.com/reel/Other/"
         self.assertIsNone(r.decide(self.job,self.public,self.graph))
 
+    def test_incomplete_public_graph_shortcode_parity_keeps_uncertain(self):
+        for item in self.public["items"]:
+            item["caption"] = "outro reel"
+        for item in self.graph["items"]:
+            item["caption"] = "outro reel"
+        self.graph["items"][1]["permalink"] = "https://www.instagram.com/reel/Different/"
+        self.assertIsNone(r.decide(self.job, self.public, self.graph))
+
     def test_uncovered_older_window_rejects_coverage(self):
         self.public["items"]=self.public["items"][:2]
         result=r.cover(self.started,self.public["items"])
