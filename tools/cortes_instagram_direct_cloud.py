@@ -11,6 +11,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -151,8 +152,7 @@ def instagram_caption(payload: dict) -> str:
     return title + "\n" + description
 
 
-def main() -> int:
-    client = require_cloud()
+def publish_once(client: InstagramClient) -> int:
     claim = neon("lease", {"target_key": TARGET, "owner": OWNER})
     job = claim.get("job")
     if not job:
@@ -174,7 +174,7 @@ def main() -> int:
             neon("missing", fence)
             qa_404(job, url)
             print(json.dumps({"direct_cloud": "QUARANTINED_404", "id": job["id"]}), flush=True)
-            return 0
+            return 3
         caption = instagram_caption(payload)
         quota = client.get_quota()
         if (quota.total is not None and quota.usage is not None
@@ -194,7 +194,7 @@ def main() -> int:
         neon("confirm", {**fence, "media_id": media_id, "permalink": permalink})
         print(json.dumps({"direct_cloud": "INSTAGRAM_REEL_CONFIRMED",
                           "id": job["id"], "permalink": permalink}), flush=True)
-        return 0
+        return 1
     except Exception as exc:
         try:
             neon("fail", fence)
@@ -204,6 +204,27 @@ def main() -> int:
                           "reason": type(exc).__name__, "id": job["id"]}), flush=True)
         # No automatic replay after a submission has started.
         return 2
+
+
+def main() -> int:
+    client = require_cloud()
+    confirmed = 0
+    # Two existing fenced queue items per hosted run; Meta quota is checked
+    # immediately before each POST and each remote receipt is committed alone.
+    for index in range(2):
+        state = publish_once(client)
+        if state == 2:
+            return 2
+        if state == 0:
+            break
+        if state == 1:
+            confirmed += 1
+            if index == 0:
+                time.sleep(65)
+        # A quarantined missing source can be skipped without stopping the queue.
+    print(json.dumps({"direct_cloud": "BATCH_COMPLETE",
+                      "confirmed": confirmed, "maximum_per_run": 2}), flush=True)
+    return 0
 
 
 if __name__ == "__main__":
