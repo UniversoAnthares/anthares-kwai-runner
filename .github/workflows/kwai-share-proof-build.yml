@@ -1,0 +1,47 @@
+name: Kwai Share Intent Receiver Build
+on:
+  push:
+    paths:
+      - 'android-agent/kwai-share-proof/**'
+      - '.github/workflows/kwai-share-proof-build.yml'
+  pull_request:
+    paths:
+      - 'android-agent/kwai-share-proof/**'
+      - '.github/workflows/kwai-share-proof-build.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile isolated Android share receiver
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          PLATFORM="$SDK/platforms/android-35/android.jar"
+          test -f "$PLATFORM"
+          TOOLS="$(find "$SDK/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          test -x "$TOOLS/d8"
+          test -x "$TOOLS/aapt"
+          test -x "$TOOLS/apksigner"
+          cd android-agent/kwai-share-proof
+          mkdir -p build/classes build/dex
+          javac -encoding UTF-8 -source 8 -target 8 -cp "$PLATFORM" -d build/classes src/org/universoanthares/kwaishareproof/ShareActivity.java
+          "$TOOLS/d8" --min-api 23 --lib "$PLATFORM" --output build/dex build/classes/org/universoanthares/kwaishareproof/ShareActivity.class
+          "$TOOLS/aapt" package -f -M AndroidManifest.xml -I "$PLATFORM" -F build/unsigned.apk
+          (cd build/dex && "$TOOLS/aapt" add ../unsigned.apk classes.dex)
+          keytool -genkeypair -keystore build/temporary-key.jks -storepass changeit -keypass changeit -alias proof -keyalg RSA -keysize 2048 -validity 365 -dname "CN=Anthares Offline Share Proof" -noprompt
+          "$TOOLS/apksigner" sign --ks build/temporary-key.jks --ks-pass pass:changeit --key-pass pass:changeit --ks-key-alias proof --out build/anthares-kwai-share-proof.apk build/unsigned.apk
+          "$TOOLS/apksigner" verify --verbose build/anthares-kwai-share-proof.apk
+          unzip -l build/anthares-kwai-share-proof.apk | grep -q classes.dex
+          echo KWAI_SHARE_PROOF_APK_VALIDATED=PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kwai-share-proof-apk
+          path: android-agent/kwai-share-proof/build/anthares-kwai-share-proof.apk
+          if-no-files-found: error
+          retention-days: 3

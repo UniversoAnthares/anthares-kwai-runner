@@ -4,6 +4,9 @@ on:
     paths:
       - 'tools/cortes_neon_queue_client.py'
       - 'tools/kwai_physical_queue_daemon.py'
+      - 'tools/kwai_physical_public_proof.py'
+      - 'tools/kwai_verify_public_post.py'
+      - 'tests/test_kwai_cross_device_proof_gate.py'
       - 'ops/windows/cortes-kwai-*.ps1'
       - 'ops/windows/cortes-kwai-*.py'
       - 'ops/windows/install-cortes-kwai-continuity-watchdog.ps1'
@@ -21,9 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Python static tests (no publisher invocation)
-        run: python3 tests/test_kwai_dispatch_continuity.py -v
+        run: |
+          python3 tests/test_kwai_dispatch_continuity.py -v
+          python3 tests/test_kwai_cross_device_proof_gate.py -v
       - name: Compile recovery Python scripts
-        run: python3 -m py_compile tools/cortes_neon_queue_client.py tools/kwai_physical_queue_daemon.py ops/windows/cortes-kwai-autoheal.py
+        run: python3 -m py_compile tools/cortes_neon_queue_client.py tools/kwai_physical_queue_daemon.py tools/kwai_physical_public_proof.py tools/kwai_verify_public_post.py ops/windows/cortes-kwai-autoheal.py
       - name: Parse PowerShell files without executing them
         shell: pwsh
         run: |
