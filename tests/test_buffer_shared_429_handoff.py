@@ -17,5 +17,5 @@ class SharedBufferBackoff(unittest.TestCase):
             self.assertIn('queue("cooldown",{"seconds":buffer_cooldown_seconds(',code)
             self.assertIn("BUFFER_HTTP_429",code)
         pin=(ROOT/"tools/cortes_buffer_pinterest_cloud.py").read_text()
-        self.assertIn('queue("cooldown",{"seconds":1800})',pin)
+        self.assertIn('queue("cooldown",{"seconds":buffer_cooldown_seconds(',pin)
 if __name__=="__main__":unittest.main()
