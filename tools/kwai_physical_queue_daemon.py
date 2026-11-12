@@ -620,7 +620,7 @@ def repair_pending():
    now=int(time.time())
    try:prior=int(stamp.read_text(encoding='utf-8'))
    except (OSError,ValueError):prior=0
-   if now-prior>=120:
+   if now-prior>=65:
     proofdir.mkdir(parents=True,exist_ok=True)
     stamp.write_text(str(now),encoding='utf-8')
     env=os.environ.copy()
@@ -630,7 +630,13 @@ def repair_pending():
     log('KWAI_PROOF_RECOVERY_START '+jid)
     try:
      r=subprocess.run([PYTHON,str(helper),jid],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=220,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-     log('KWAI_PROOF_RECOVERY_'+('OK' if r.returncode==0 else 'FAILED priority=P0')+' '+jid+' '+(r.stdout or '').splitlines()[-1][:150])
+     last=(r.stdout or '').splitlines()[-1][:150] if (r.stdout or '').splitlines() else 'no_stdout'
+     pending=('KWAI_PUBLIC_PROFILE_INDEX_PENDING_RETRYABLE' in last or
+              'KWAI_PUBLIC_MEDIA_MATCH_PENDING_RETRYABLE' in last or
+              'KWAI_PUBLIC_PROFILE_POST_NOT_YET_INDEXED' in last or
+              'KWAI_CAPTIONLESS_UNIQUE_MEDIA_PROOF_REQUIRED:0' in last)
+     state='OK' if r.returncode==0 else ('PUBLIC_INDEX_PENDING retryable=1' if pending else 'FAILED priority=P0')
+     log('KWAI_PROOF_RECOVERY_'+state+' '+jid+' '+last)
     except (OSError,subprocess.TimeoutExpired) as exc:log('KWAI_PROOF_RECOVERY_FAILED priority=P0 '+type(exc).__name__+' '+jid)
    if not (proofdir/'public-link-proof.json').is_file():
     age=now-int(row.get('published_at') or now)
