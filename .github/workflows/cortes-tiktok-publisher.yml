@@ -86,6 +86,7 @@ jobs:
           import sys
           import urllib.error
           import urllib.request
+          import urllib.parse
           sys.path.insert(0, 'tools')
           import cortes_tiktok_queue_consumer as q
 
@@ -96,35 +97,54 @@ jobs:
                   with urllib.request.urlopen(req, timeout=25) as resp:
                       return resp.status, json.load(resp)
               except urllib.error.HTTPError as exc:
+                  route=str(exc.headers.get('X-Anthares-TikTok-Route') or 'none')
+                  ctype=str(exc.headers.get('Content-Type') or '')
+                  detail='non_json'
+                  if 'application/json' in ctype:
+                      try:
+                          obj=json.loads(exc.read(1024))
+                          detail=str(obj.get('error') or 'none')[:64]
+                      except (ValueError,AttributeError):
+                          detail='invalid_json'
+                  detail=''.join(c for c in detail if c.isalnum() or c in '_-')
+                  print('TIKTOK_OIDC_DENIAL http='+str(exc.code)+' host='+str(urllib.parse.urlparse(url).hostname)+' route='+route+' error='+detail,flush=True)
                   return exc.code, {}
 
           queue_token=q.oidc(q.AUDIENCE)
           worker_token=q.worker_auth()
+          errors=[]
           for name,base in (('NEON_DIRECT',q.BACKENDS[0]),('CLOUDFLARE_HA',q.BACKENDS[1])):
               url=base.rstrip('/')+'?action=status'
               code,result=probe(url,queue_token)
               if code!=200 or result.get('ok') is not True or not isinstance(result.get('count'),dict):
-                  raise RuntimeError('TIKTOK_OIDC_'+name+'_AUTHORIZED_READ_FAILED_'+str(code))
-              print('TIKTOK_OIDC_'+name+'_AUTHORIZED_STATUS=PASS',flush=True)
+                  errors.append('TIKTOK_OIDC_'+name+'_AUTHORIZED_READ_FAILED_'+str(code))
+              else:
+                  print('TIKTOK_OIDC_'+name+'_AUTHORIZED_STATUS=PASS',flush=True)
               code,_=probe(url)
               if code!=401:
-                  raise RuntimeError('TIKTOK_OIDC_'+name+'_ANONYMOUS_NOT_REJECTED_'+str(code))
-              print('TIKTOK_OIDC_'+name+'_DENIES_ANONYMOUS=PASS',flush=True)
+                  errors.append('TIKTOK_OIDC_'+name+'_ANONYMOUS_NOT_REJECTED_'+str(code))
+              else:
+                  print('TIKTOK_OIDC_'+name+'_DENIES_ANONYMOUS=PASS',flush=True)
               code,_=probe(url,worker_token)
               if code!=401:
-                  raise RuntimeError('TIKTOK_OIDC_'+name+'_WRONG_AUDIENCE_ACCEPTED_'+str(code))
-              print('TIKTOK_OIDC_'+name+'_DENIES_WRONG_AUDIENCE=PASS',flush=True)
+                  errors.append('TIKTOK_OIDC_'+name+'_WRONG_AUDIENCE_ACCEPTED_'+str(code))
+              else:
+                  print('TIKTOK_OIDC_'+name+'_DENIES_WRONG_AUDIENCE=PASS',flush=True)
 
           endpoint=q.WORKER+'/session-status'
           code,result=probe(endpoint,worker_token)
           if code!=200 or result.get('ok') is not True:
-              raise RuntimeError('TIKTOK_OIDC_WORKER_AUTH_FAILED_'+str(code))
-          print('TIKTOK_OIDC_WORKER_AUTHORIZED_READ=PASS',flush=True)
-          print('TIKTOK_WORKER_SESSION_READY='+str(bool(result.get('ready_for_tiktok'))),flush=True)
+              errors.append('TIKTOK_OIDC_WORKER_AUTH_FAILED_'+str(code))
+          else:
+              print('TIKTOK_OIDC_WORKER_AUTHORIZED_READ=PASS',flush=True)
+              print('TIKTOK_WORKER_SESSION_READY='+str(bool(result.get('ready_for_tiktok'))),flush=True)
           code,_=probe(endpoint)
           if code not in (401,403):
-              raise RuntimeError('TIKTOK_OIDC_WORKER_ANONYMOUS_NOT_REJECTED_'+str(code))
-          print('TIKTOK_OIDC_WORKER_DENIES_ANONYMOUS=PASS',flush=True)
+              errors.append('TIKTOK_OIDC_WORKER_ANONYMOUS_NOT_REJECTED_'+str(code))
+          else:
+              print('TIKTOK_OIDC_WORKER_DENIES_ANONYMOUS=PASS',flush=True)
+          if errors:
+              raise RuntimeError(';'.join(errors))
           PY
       - name: Install GitHub-hosted TikTok browser and vault dependencies
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
