@@ -78,6 +78,54 @@ jobs:
           import os
           print('TIKTOK_WORKER_SECRET_BOUND=' + str(bool(os.getenv('ARA_SHARED'))))
           PY
+      - name: Verify GitHub OIDC against Neon, Cloudflare and TikTok worker (read-only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          python3 - <<'PY'
+          import json
+          import sys
+          import urllib.error
+          import urllib.request
+          sys.path.insert(0, 'tools')
+          import cortes_tiktok_queue_consumer as q
+
+          def probe(url, credentials=None):
+              headers={'Accept':'application/json', **(credentials or {})}
+              req=urllib.request.Request(url, headers=headers, method='GET')
+              try:
+                  with urllib.request.urlopen(req, timeout=25) as resp:
+                      return resp.status, json.load(resp)
+              except urllib.error.HTTPError as exc:
+                  return exc.code, {}
+
+          queue_token=q.oidc(q.AUDIENCE)
+          worker_token=q.worker_auth()
+          for name,base in (('NEON_DIRECT',q.BACKENDS[0]),('CLOUDFLARE_HA',q.BACKENDS[1])):
+              url=base.rstrip('/')+'?action=status'
+              code,result=probe(url,queue_token)
+              if code!=200 or result.get('ok') is not True or not isinstance(result.get('count'),dict):
+                  raise RuntimeError('TIKTOK_OIDC_'+name+'_AUTHORIZED_READ_FAILED_'+str(code))
+              print('TIKTOK_OIDC_'+name+'_AUTHORIZED_STATUS=PASS',flush=True)
+              code,_=probe(url)
+              if code!=401:
+                  raise RuntimeError('TIKTOK_OIDC_'+name+'_ANONYMOUS_NOT_REJECTED_'+str(code))
+              print('TIKTOK_OIDC_'+name+'_DENIES_ANONYMOUS=PASS',flush=True)
+              code,_=probe(url,worker_token)
+              if code!=401:
+                  raise RuntimeError('TIKTOK_OIDC_'+name+'_WRONG_AUDIENCE_ACCEPTED_'+str(code))
+              print('TIKTOK_OIDC_'+name+'_DENIES_WRONG_AUDIENCE=PASS',flush=True)
+
+          endpoint=q.WORKER+'/session-status'
+          code,result=probe(endpoint,worker_token)
+          if code!=200 or result.get('ok') is not True:
+              raise RuntimeError('TIKTOK_OIDC_WORKER_AUTH_FAILED_'+str(code))
+          print('TIKTOK_OIDC_WORKER_AUTHORIZED_READ=PASS',flush=True)
+          print('TIKTOK_WORKER_SESSION_READY='+str(bool(result.get('ready_for_tiktok'))),flush=True)
+          code,_=probe(endpoint)
+          if code not in (401,403):
+              raise RuntimeError('TIKTOK_OIDC_WORKER_ANONYMOUS_NOT_REJECTED_'+str(code))
+          print('TIKTOK_OIDC_WORKER_DENIES_ANONYMOUS=PASS',flush=True)
+          PY
       - name: Install GitHub-hosted TikTok browser and vault dependencies
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: |
