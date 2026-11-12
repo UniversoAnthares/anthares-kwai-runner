@@ -163,20 +163,37 @@ def main():
                 if page.locator('input[type="password"]').count() or "/login" in page.url:
                     raise RuntimeError("TIKTOK_STUDIO_SESSION_INVALID")
                 controls=history_controls(page)
-                for _ in range(90):
-                    before=sum(len(v) for v in hits.values())
-                    count=inspect_page(page,hits)
-                    pages+=1
-                    urls=page.locator('a[href*="/video/"]').evaluate_all("es=>es.map(a=>a.href)")
-                    fingerprint=tuple(urls[:25])
-                    is_new=fingerprint not in distinct_urls
-                    distinct_urls.add(fingerprint)
-                    if all(len(v)==1 for v in hits.values()):
-                        break
-                    advanced=next_page(page)
-                    stagnant=0 if advanced or is_new or sum(len(v) for v in hits.values())>before else stagnant+1
-                    if stagnant>=4 or count==0 and pages>=5:
-                        break
+                search=page.get_by_placeholder(re.compile(r"Pesquise a descri|Search.*description",re.I)).first
+                search_used=bool(search.count())
+                search_links={}
+                if search_used:
+                    # Search by each unique marker through the official signed-in
+                    # Studio description filter. Enter/clear are read-only UI actions.
+                    for segment,mark in MARKERS.items():
+                        search.fill(mark,timeout=3000)
+                        search.press("Enter",timeout=3000)
+                        page.wait_for_timeout(2100)
+                        if "/login" in page.url or page.locator('input[type="password"]').count():
+                            raise RuntimeError("TIKTOK_STUDIO_SEARCH_SESSION_LOST")
+                        search_links[segment]=inspect_page(page,hits)
+                    search.fill("",timeout=3000)
+                    page.wait_for_timeout(450)
+                    pages=len(MARKERS)
+                else:
+                    for _ in range(90):
+                        before=sum(len(v) for v in hits.values())
+                        count=inspect_page(page,hits)
+                        pages+=1
+                        urls=page.locator('a[href*="/video/"]').evaluate_all("es=>es.map(a=>a.href)")
+                        fingerprint=tuple(urls[:25])
+                        is_new=fingerprint not in distinct_urls
+                        distinct_urls.add(fingerprint)
+                        if all(len(v)==1 for v in hits.values()):
+                            break
+                        advanced=next_page(page)
+                        stagnant=0 if advanced or is_new or sum(len(v) for v in hits.values())>before else stagnant+1
+                        if stagnant>=4 or count==0 and pages>=5:
+                            break
             finally:
                 ctx.close()
         finally:
@@ -185,6 +202,8 @@ def main():
         "account":ACCOUNT,"authenticated_owner":True,"pages_scanned":pages,
         "unique_page_fingerprints":len(distinct_urls),
         "history_controls":controls,
+        "description_search_used":search_used,
+        "search_video_links_per_query":search_links,
         "items":[{"segment_id":s,"status":"EXACT_MATCH" if len(hits[s])==1 else
                   "AMBIGUOUS" if len(hits[s])>1 else "UNVERIFIED",
                   "remote_id":next(iter(hits[s])) if len(hits[s])==1 else None}
