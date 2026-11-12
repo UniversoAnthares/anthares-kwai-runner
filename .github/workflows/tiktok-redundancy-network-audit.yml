@@ -89,6 +89,23 @@ jobs:
                   if code==200:
                       allowed=('ok','bootstrapped','identity_verified','ready_for_tiktok','ffmpeg_ready','active','backend','revision','auth_required')
                       print(label+'_SAFE='+json.dumps({k:data[k] for k in allowed if k in data},sort_keys=True)[:600],flush=True)
+          cf=os.getenv('CLOUDFLARE_API_TOKEN','')
+          if cf:
+              status,cfdata=call('CLOUDFLARE_API_TOKEN_VERIFY','https://api.cloudflare.com/client/v4/user/tokens/verify',bearer=cf,timeout=12)
+              if status==200:
+                  obj=cfdata.get('result') if isinstance(cfdata.get('result'),dict) else {}
+                  print('CLOUDFLARE_API_TOKEN_STATUS='+str(obj.get('status') or 'unknown')[:40],flush=True)
+              status,accs=call('CLOUDFLARE_API_ACCOUNTS','https://api.cloudflare.com/client/v4/accounts?per_page=50',bearer=cf,timeout=12)
+              if status==200 and isinstance(accs.get('result'),list):
+                  print('CLOUDFLARE_ACCOUNT_COUNT='+str(len(accs['result'])),flush=True)
+          if token:
+              code,data=call('NORTHFLANK_REVISION_SHARED',N+'/interactive-browser/revision',bearer=token,timeout=10)
+              if code==200:
+                  print('NORTHFLANK_BROWSER_REVISION='+str(data.get('revision') or 'unknown')[:100],flush=True)
+              code,data=call('NORTHFLANK_CONFIG_FIELDS',N+'/config-status',bearer=token,timeout=12)
+              if code==200:
+                  flags={k:bool(v) for k,v in data.items() if isinstance(v,bool)}
+                  print('NORTHFLANK_CONFIG_BOOLEAN_FLAGS='+json.dumps(flags,sort_keys=True)[:1200],flush=True)
           admin=os.getenv('NORTHFLANK_API_TOKEN','')
           if admin:
               code,_=call('NORTHFLANK_ADMIN_PROJECTS','https://api.northflank.com/v1/projects',bearer=admin,timeout=10)
