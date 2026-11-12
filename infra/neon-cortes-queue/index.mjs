@@ -531,6 +531,8 @@ async function kwaiAction(action,b,actor){
   }
   const proof=b.confirmation_evidence||{},remote=String(b.remote_id||'');
   if(physical){
+   if(proof.kind==='kwai_public_profile_source_frame_proof_v1')
+    return kwaiPhysicalSourceFrameConfirm(KWAI_TARGET,owner,b,proof,remote);
    // The existing phone signs this request with its private RSA key.
    // Accept either a fresh direct share receipt or an independently fetched
    // public author profile, caption and matching original/public CDN frames.
@@ -635,6 +637,62 @@ async function kwaiAction(action,b,actor){
 // Terminal no-retry disposition for the owner's "reconcile once, then disregard"
 // policy. The RSA-attested physical publisher is the only caller. Cancelling
 // retains the ledger's source identity so the same clip stays deduplicated.
+// A separately source-matched, captionless physical Kwai video may lack an
+// in-app share receipt. The signed physical job still owns STARTED and
+// independently proves four visual correspondences to its exact source URL.
+async function kwaiPhysicalSourceFrameConfirm(target,owner,b,proof,remote){
+ const account=target.split(':')[1],job=String(b.id||''),photo=String(proof.photo_id||'');
+ const source=String(proof.source_video_url||'');
+ const publicUrl='https://www.kwai.com/@'+account+'/video/'+photo;
+ const scores=proof.media_match?.source_best_inliers;
+ const evidenceTime=Number(proof.verified_at_epoch_ms);
+ const postTime=Number(proof.public_post_timestamp_ms),now=Date.now();
+ const gen=Number(b.lease_generation);
+ if(!/^[a-z]+:[A-Za-z0-9_.-]{2,100}$/.test(target)||
+    !/^kwai-cortes-[A-Za-z0-9_.:-]{12,180}$/.test(job)||
+    proof.kind!=='kwai_public_profile_source_frame_proof_v1'||
+    proof.ok!==true||proof.verified_publication_job_id!==job||
+    proof.job_id!==job||proof.expected_account!==account||
+    proof.actual_author_handle!==account||proof.caption!==''||
+    proof.caption_optional!==true||proof.title_match!==true||
+    !['','...'].includes(String(proof.actual_public_caption||''))||
+    !/^\d{16,21}$/.test(photo)||proof.public_url!==publicUrl||
+    remote!==publicUrl||!/^[a-f0-9]{64}$/.test(String(proof.media_sha256||''))||
+    proof.source_media_sha256!==proof.media_sha256||
+    typeof source!=='string'||!/^https:\/\/(?:www\.)?anthares\.us\/wp-content\/uploads\/anthares-clips\/[A-Za-z0-9_.\/-]+\.mp4$/.test(source)||
+    !Number.isInteger(proof.source_media_bytes)||proof.source_media_bytes<2048||
+    !Number.isSafeInteger(postTime)||!Number.isSafeInteger(evidenceTime)||
+    evidenceTime<postTime||evidenceTime>now+30000||now-evidenceTime>24*3600000||
+    !Number.isSafeInteger(gen)||gen<1||
+    proof.media_match?.kind!=='sift_source_to_public_stream_memory_v2'||
+    !Array.isArray(scores)||scores.length!==4||
+    scores.some(v=>!Number.isInteger(v)||v<240||v>10000)||
+    proof.media_match.qualifying_distinct_frames!==4||
+    !Number.isFinite(proof.media_match.source_duration_seconds)||
+    !Number.isFinite(proof.media_match.public_duration_seconds)||
+    Math.abs(proof.media_match.source_duration_seconds-proof.media_match.public_duration_seconds)>2)
+   return {ok:false,error:'KWAI_PHYSICAL_SOURCE_FRAMES_INVALID'};
+ const evidence={...proof,
+   kind:'kwai_authenticated_source_frame_media_proof_v1',
+   attested_device:'DESKTOP-FTDK0HP',device_signature_verified:true,
+   verified_at_neon:new Date().toISOString()};
+ const rows=await query(
+   "UPDATE cortes_publications p SET status='confirmed',remote_id=$5,"+
+   "confirmation_evidence=$6::jsonb,lease_owner=NULL,lease_until=NULL,updated_at=now() "+
+   "WHERE p.id=$1 AND p.target_key=$2 AND p.status='started' "+
+   "AND p.lease_owner=$3 AND p.lease_generation=$4 "+
+   "AND p.remote_id IS NULL AND p.publication_started_at IS NOT NULL "+
+   "AND p.payload->>'video_url'=$7 "+
+   "AND abs(extract(epoch from (p.publication_started_at-to_timestamp($8/1000.0))))<480 "+
+   "AND NOT EXISTS (SELECT 1 FROM cortes_publications d "+
+   "WHERE d.id<>p.id AND d.target_key=p.target_key "+
+   "AND d.status='confirmed' AND d.remote_id=$5) "+
+   "RETURNING p.id,p.status,p.remote_id",
+   [job,target,owner,gen,remote,JSON.stringify(evidence),source,postTime]);
+ return rows.length?{ok:true,job:rows[0],public_media_proof:'FOUR_SOURCE_FRAMES'}:
+   {ok:false,error:'KWAI_PHYSICAL_SOURCE_FRAME_STALE_FENCE'};
+}
+
 async function kwaiUnprovenAction(b,actor,target){
  if(actor.role!=='kwai-physical'||actor.workflow!=='physical:DESKTOP-FTDK0HP')
    return {ok:false,error:'KWAI_UNPROVEN_PHYSICAL_PUBLISHER_ONLY'};
@@ -1112,6 +1170,8 @@ async function kwaiSecondaryAction(action,b,actor){
   }
   const proof=b.confirmation_evidence||{},remote=String(b.remote_id||'');
   if(physical){
+   if(proof.kind==='kwai_public_profile_source_frame_proof_v1')
+    return kwaiPhysicalSourceFrameConfirm(KWAI_TARGET,owner,b,proof,remote);
    // The existing phone signs this request with its private RSA key.
    // Accept either a fresh direct share receipt or an independently fetched
    // public author profile, caption and matching original/public CDN frames.
