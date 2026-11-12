@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timedelta, timezone
 import re
 import sys
 import time
@@ -27,6 +28,63 @@ from tools.cortes_instagram_vertical_asset import ensure_vertical_media
 AUDIENCE = "https://anthares-remote-primary.vercel.app/api/cortes-queue"
 TARGET = "instagram:universoanthares"
 OWNER = "instagram-direct:github-cloud-v1"
+QUOTA_ISSUE = "https://api.github.com/repos/UniversoAnthares/anthares-kwai-runner/issues/2409"
+QUOTA_SERVICE = "instagram-direct-graph"
+
+
+def quota_issue(method: str = "GET", body: dict | None = None) -> dict:
+    """Durable, account-scoped provider backoff. Any unreadable state fails closed."""
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if not token:
+        raise RuntimeError("INSTAGRAM_QUOTA_GATE_TOKEN_MISSING")
+    headers = {"Authorization": "Bearer " + token,
+               "Accept": "application/vnd.github+json",
+               "Content-Type": "application/json",
+               "User-Agent": "Anthares-Cortes-Instagram-Quota"}
+    request = urllib.request.Request(QUOTA_ISSUE,
+        data=json.dumps(body).encode() if body is not None else None,
+        method=method, headers=headers)
+    with urllib.request.urlopen(request, timeout=20) as response:
+        doc = json.load(response)
+    if not isinstance(doc, dict) or not isinstance(doc.get("body"), str):
+        raise RuntimeError("INSTAGRAM_QUOTA_GATE_RESPONSE_INVALID")
+    return doc
+
+
+def quota_record(issue_body: str) -> tuple[dict, re.Match]:
+    match = re.search(r"```json\s*(\{[^<>]*?\})\s*```", issue_body, flags=re.S)
+    if not match:
+        raise RuntimeError("INSTAGRAM_QUOTA_GATE_FORMAT_INVALID")
+    record = json.loads(match.group(1))
+    if record.get("service") != QUOTA_SERVICE:
+        raise RuntimeError("INSTAGRAM_QUOTA_GATE_SCOPE_INVALID")
+    return record, match
+
+
+def quota_hold_until() -> str | None:
+    record, _ = quota_record(quota_issue()["body"])
+    value = record.get("cooldown_until_utc")
+    if not isinstance(value, str):
+        return None
+    expiry = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if expiry.tzinfo is None:
+        raise RuntimeError("INSTAGRAM_QUOTA_GATE_TIMESTAMP_INVALID")
+    return value if expiry > datetime.now(timezone.utc) else None
+
+
+def record_quota_hold() -> str:
+    issue = quota_issue()
+    record, match = quota_record(issue["body"])
+    until = datetime.now(timezone.utc) + timedelta(hours=24)
+    value = until.isoformat(timespec="seconds").replace("+00:00", "Z")
+    record.update(cooldown_until_utc=value, last_error_code=9,
+                  last_error_subcode=2207042,
+                  last_error_at_utc=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"))
+    new_fence = "```json\n" + json.dumps(record, indent=2) + "\n```"
+    current = issue["body"]
+    updated = current[:match.start()] + new_fence + current[match.end():]
+    quota_issue("PATCH", {"body": updated})
+    return value
 
 
 def oidc() -> str:
@@ -218,18 +276,36 @@ def publish_once(client: InstagramClient) -> int:
         http = re.search(r"HTTP\s+(\d{3})", error_text)
         code = re.search(r"\bcode=(\d+)", error_text)
         subcode = re.search(r"\bsubcode=(\d+)", error_text)
+        # Meta explicitly rejected the media_publish call under its 24-hour quota.
+        # Persist cooldown before any other scheduled run can claim a new clip.
+        quota_stopped = False
+        if (phase == "media_publish" and http and http.group(1) == "400"
+                and code and code.group(1) == "9"
+                and subcode and subcode.group(1) == "2207042"):
+            try:
+                until = record_quota_hold()
+                quota_stopped = True
+                print(json.dumps({"direct_cloud": "PROVIDER_QUOTA_COOLDOWN",
+                                  "resume_after_utc": until}), flush=True)
+            except Exception:
+                print("::error::INSTAGRAM_QUOTA_GATE_WRITE_UNACKNOWLEDGED", flush=True)
         print(json.dumps({"direct_cloud": "HELD_UNVERIFIED" if started else "BLOCKED_PRE_SUBMIT",
                           "reason": type(exc).__name__, "id": job["id"],
                           "phase": phase, "http_status": int(http.group(1)) if http else None,
                           "graph_code": int(code.group(1)) if code else None,
                           "graph_subcode": int(subcode.group(1)) if subcode else None,
                           "ledger_fenced": fenced}), flush=True)
-        # No automatic replay of the same media after a submission has started.
-        return 4 if fenced and started else 2
+        # The rejected media stays fenced; quota resumes without replay after reset.
+        return 5 if quota_stopped else (4 if fenced and started else 2)
 
 
 def main() -> int:
     client = require_cloud()
+    hold = quota_hold_until()
+    if hold:
+        print(json.dumps({"direct_cloud": "IDLE_PROVIDER_QUOTA_COOLDOWN",
+                          "resume_after_utc": hold}), flush=True)
+        return 0
     confirmed = 0
     quarantined = 0
     # Two existing fenced queue items per hosted run; Meta quota is checked
@@ -242,6 +318,11 @@ def main() -> int:
             break
         if state == 1:
             confirmed += 1
+        if state == 5:
+            quarantined += 1
+            print(json.dumps({"direct_cloud": "BATCH_STOPPED_PROVIDER_QUOTA",
+                              "confirmed_this_run": confirmed}), flush=True)
+            break
         if state == 4:
             quarantined += 1
             # Provider status is ambiguous. Keep the fenced claim for remote
