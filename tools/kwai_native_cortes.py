@@ -152,19 +152,61 @@ def media():
  if EXPECTED_SHA and digest!=EXPECTED_SHA: raise E('media-sha-mismatch')
  return MEDIA,digest
 def stage(s,path,digest):
- name=f'anthares-{safe()[-70:]}-{digest[:12]}.mp4'; remote=f'{REMOTE_DIR}/{name}'
- adb(s,'shell','mkdir','-p',REMOTE_DIR); adb(s,'push',str(path),remote,timeout=240)
- adb(s,'shell','am','broadcast','-a','android.intent.action.MEDIA_SCANNER_SCAN_FILE','-d','file://'+remote,check=False,timeout=30)
- end=time.monotonic()+20; matches=[]
- while time.monotonic()<end:
-  raw=adb(s,'shell','content','query','--uri',MEDIA_URI,'--projection','_id:_display_name:_data:duration:width:height',timeout=30).stdout
-  matches=[x for x in raw.splitlines() if name in x]
-  if len(matches)==1: break
-  time.sleep(.5)
- if len(matches)!=1: raise E('mediastore-not-unique')
- m=re.search(r'(?:^|[,\s])_id=(\d+)',matches[0])
- if not m: raise E('mediastore-id-missing')
- return remote,MEDIA_URI+'/'+m.group(1)
+ # Resilient content-addressed staging. Reuse a phone file only after exact
+ # SHA-256 proof; this avoids repeated 6MB ADB pushes and blocking scanner
+ # broadcasts when an earlier PRE-COMMIT prepare failed.
+ name=f'anthares-{safe()[-70:]}-{digest[:12]}.mp4'
+ remote=f'{REMOTE_DIR}/{name}'
+ adb(s,'shell','mkdir','-p',REMOTE_DIR,timeout=12)
+ known=adb(s,'shell','sha256sum',remote,timeout=12,check=False)
+ if known.returncode==0:
+  value=(known.stdout or '').split()
+  if not value or value[0].lower()!=digest.lower():
+   raise E('kwai_phone_media_same_name_different_sha256')
+  out('KWAI_PHONE_MEDIA_REUSED_VERIFIED_SHA256=1')
+ else:
+  out('KWAI_PHONE_MEDIA_STAGE_PUSH_REQUIRED=1')
+  adb(s,'push',str(path),remote,timeout=120)
+  delivered=adb(s,'shell','sha256sum',remote,timeout=12,check=False)
+  actual=(delivered.stdout or '').split()
+  if delivered.returncode or not actual or actual[0].lower()!=digest.lower():
+   raise E('kwai_phone_media_push_sha256_mismatch')
+  out('KWAI_PHONE_MEDIA_PUSH_VERIFIED_SHA256=1')
+ def unique_media_row():
+  try:
+   p=adb(s,'shell','content','query','--uri',MEDIA_URI,
+         '--projection','_id:_display_name:_data:duration:width:height',
+         timeout=12,check=False)
+  except subprocess.TimeoutExpired:
+   out('KWAI_MEDIASTORE_QUERY_TIMEOUT_PRECOMMIT=1')
+   return None
+  if p.returncode:
+   out('KWAI_MEDIASTORE_QUERY_FAILED_PRECOMMIT=1')
+   return None
+  rows=[line for line in (p.stdout or '').splitlines()
+        if '_display_name='+name in line]
+  if len(rows)>1:raise E('kwai_mediastore_ambiguous_duplicate')
+  if not rows:return None
+  match=re.search(r'(?:^|[,\s])_id=(\d+)',rows[0])
+  if not match:raise E('kwai_mediastore_id_missing')
+  return match.group(1)
+ media_id=unique_media_row()
+ if not media_id:
+  # Fire the scanner only when MediaStore does not already contain this media.
+  # A stalled asynchronous Android broadcast must never consume the entire
+  # preparation budget or trigger a speculative publication.
+  try:
+   adb(s,'shell','am','broadcast','-a','android.intent.action.MEDIA_SCANNER_SCAN_FILE',
+       '-d','file://'+remote,timeout=10,check=False)
+  except subprocess.TimeoutExpired:
+   out('KWAI_MEDIA_SCAN_BROADCAST_TIMEOUT_PRECOMMIT=1')
+  for _ in range(5):
+   time.sleep(1)
+   media_id=unique_media_row()
+   if media_id:break
+ if not media_id:raise E('kwai_mediastore_index_unavailable_precommit')
+ out('KWAI_MEDIASTORE_UNIQUE_MEDIA_ID_VERIFIED=1')
+ return remote,MEDIA_URI+'/'+media_id
 def editor(s,uri):
  adb(s,'shell','am','start','-W','-a','android.intent.action.SEND','-t','video/mp4','--eu','android.intent.extra.STREAM',uri,'-p',PKG,timeout=45)
  _,n,_=wait(s,RID_NEXT,safe()+'-editor',35)
