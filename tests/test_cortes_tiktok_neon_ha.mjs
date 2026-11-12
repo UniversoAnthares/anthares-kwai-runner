@@ -46,6 +46,17 @@ test('Cloudflare TikTok edge blocks untrusted writes before upstream',async()=>{
  }finally{globalThis.fetch=old;}
 });
 
+test('Cloudflare pacing-audit route requires OIDC before forwarding',async()=>{
+ const old=globalThis.fetch;let called=false;
+ globalThis.fetch=()=>{called=true;throw Error('unexpected');};
+ try{
+  const r=await edge.fetch(new Request('https://edge.invalid/?action=pacing-audit'));
+  assert.equal(r.status,401);
+  assert.equal((await r.json()).error,'oidc_required');
+  assert.equal(called,false);
+ }finally{globalThis.fetch=old;}
+});
+
 test('Cloudflare edge routes only to fixed Neon TikTok backend',async()=>{
  const old=globalThis.fetch;let last='';
  globalThis.fetch=(url)=>{last=url;return Promise.resolve(Response.json(
