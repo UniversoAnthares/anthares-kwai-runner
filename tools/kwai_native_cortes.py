@@ -12,11 +12,13 @@ PKG=os.getenv('KWAI_UP_PACKAGE','kwai.lite.video'); JOB=os.getenv('KWAI_UP_JOB_I
 MEDIA=pathlib.Path(os.getenv('KWAI_UP_MEDIA','')) if os.getenv('KWAI_UP_MEDIA') else None
 EXPECTED_SHA=os.getenv('KWAI_MEDIA_SHA256','').strip().lower()
 ACCOUNT=os.getenv('KWAI_UP_EXPECTED_ACCOUNT',os.getenv('KWAI_EXPECTED_ACCOUNT','lucasrosalem')).strip().lstrip('@').lower()
-CAPTION=os.getenv('KWAI_UP_CAPTION',os.getenv('KWAI_VIDEO_TITLE','')).strip()
+CAPTION_OPTIONAL=os.getenv('ANTHARES_KWAI_CAPTION_OPTIONAL','0')=='1'
+CAPTION='' if CAPTION_OPTIONAL else os.getenv('KWAI_UP_CAPTION',os.getenv('KWAI_VIDEO_TITLE','')).strip()
 TOUCH='/data/local/tmp/anthares-hid-tap.sh'; NATIVE='/data/local/tmp/anthares-kwai-native.sh'
 MEDIA_URI='content://media/external/video/media'; REMOTE_DIR='/sdcard/DCIM/Anthares'
 RID_PROFILE='kwai.lite.video.basis:id/id_home_bottom_tab_me'; RID_USER='kwai.lite.video.basis:id/tv_user_id'
 RID_THUMB='kwai.lite.video.basis:id/thumb'; RID_NEXT='kwai.lite.video.product:id/edit_post_next_step_button'
+RID_EDITOR='kwai.lite.video.basis:id/editor'
 RID_NAME='kwai.lite.video.basis:id/tv_slide_play_user_name'; RID_CAP='kwai.lite.video.basis:id/slide_play_tv_user_info_desc'; RID_TIME='kwai.lite.video.basis:id/tv_slide_play_post_time'
 
 class E(RuntimeError): pass
@@ -74,6 +76,7 @@ def rid(root,r):
  known={
   RID_PROFILE:('kwai.lite.video.basis:id/id_home_bottom_tab_me',),
   RID_NEXT:('kwai.lite.video.product:id/edit_post_next_step_button',),
+  RID_EDITOR:('com.kwai.video.basis:id/editor',),
   RID_USER:('kwai.lite.video.basis:id/tv_user_id','kwai.lite.video.basis_extension:id/tv_user_id','com.kwai.video.basis:id/tv_user_id'),
   RID_THUMB:('kwai.lite.video.basis:id/thumb','kwai.lite.video.basis_extension:id/thumb','com.kwai.video.basis:id/thumb'),
   RID_NAME:('kwai.lite.video.basis:id/tv_slide_play_user_name',),
@@ -169,6 +172,13 @@ def editor(s,uri):
  adb(s,'shell','am','start','-W','-a','android.intent.action.SEND','-t','video/mp4','--eu','android.intent.extra.STREAM',uri,'-p',PKG,timeout=45)
  _,n,_=wait(s,RID_NEXT,safe()+'-editor',35)
  if n.attrib.get('enabled')!='true': raise E('next-disabled')
+ tap(s,n)
+ if CAPTION_OPTIONAL:
+  root,field,_=wait(s,RID_EDITOR,safe()+'-caption-optional-form',32)
+  editors=rid(root,RID_EDITOR)
+  if len(editors)!=1 or (field.attrib.get('text') or '').strip():
+   raise E('kwai_caption_optional_stale_editor_text')
+  out('KWAI_CAPTION_OPTIONAL_BLANK_EDITOR_VERIFIED')
 def ptime(t):
  for f in ('%Y-%m-%d %I:%M %p','%Y-%m-%d %H:%M','%d/%m/%Y %H:%M','%d/%m/%Y %I:%M %p'):
   try:return datetime.strptime((t or '').strip(),f)
@@ -187,6 +197,8 @@ def confirm(s,baseline,tries=5,delay=15,attempted_at=0,expected_caption=None):
    caption=expected_caption if expected_caption is not None else CAPTION
    title=bool(caption and caption.casefold() in (last.get('caption') or '').casefold())
    partial=bool(caption and caption[:28].casefold() in (last.get('caption') or '').casefold())
+   if last.get('account')==ACCOUNT and changed and fresh and CAPTION_OPTIONAL and not caption:
+    return True,last,'profile-account-post-time-caption-optional-await-media'
    if last.get('account')==ACCOUNT and changed and (title or (fresh and partial)): return True,last,'profile-account-title-time' if title else 'profile-account-post-time-and-caption-prefix'
   except E as e:last={'error':str(e)}
   if i+1<tries:time.sleep(delay)
@@ -196,7 +208,7 @@ def prepare():
  st=load()
  if st.get('publication_attempted') or st.get('state') in ('publication_attempted','verified','uncertain'): out('KWAI_UP_STATE=UNCERTAIN DEDUPE_GUARD=1'); return 90
  s=connect(); path,digest=media(); baseline=latest(s,safe()+'-baseline'); remote,uri=stage(s,path,digest); editor(s,uri)
- st={'job_id':JOB,'state':'ready','publication_attempted':False,'prepared_at':int(time.time()),'serial':s,'media_sha256':digest,'media_path':str(path),'remote_media':remote,'media_uri':uri,'expected_account':ACCOUNT,'caption':CAPTION,'baseline':baseline}; save(st)
+ st={'job_id':JOB,'state':'ready','publication_attempted':False,'prepared_at':int(time.time()),'serial':s,'media_sha256':digest,'media_path':str(path),'remote_media':remote,'media_uri':uri,'expected_account':ACCOUNT,'caption':CAPTION,'caption_optional':CAPTION_OPTIONAL,'baseline':baseline}; save(st)
  out(f'KWAI_UP_STATE=READY_TO_PUBLISH SERIAL={s} SHA256={digest}'); return 0
 def commit():
  st=load()
