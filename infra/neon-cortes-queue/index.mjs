@@ -166,6 +166,7 @@ async function kwaiMobileIdentity(request,action){
 const KWAI_TARGET='kwai:lucasrosalem';
 async function kwaiAction(action,b,actor){
  if(b.target_key==='kwai:universoanthares')return kwaiSecondaryAction(action,b,actor);
+ if(action==='kwai-unproven')return kwaiUnprovenAction(b,actor,'kwai:lucasrosalem');
  if(action==='kwai-physical-repair-no-post'){
   // Recover a fresh UNCERTAIN state where the physical Android publisher
   // never sent a new post: its old October on-device anti-duplicate marker
@@ -631,10 +632,129 @@ async function kwaiAction(action,b,actor){
  return{ok:false,error:'KWAI_ACTION_NOT_ALLOWED'};
 }
 
+// Terminal no-retry disposition for the owner's "reconcile once, then disregard"
+// policy. The RSA-attested physical publisher is the only caller. Cancelling
+// retains the ledger's source identity so the same clip stays deduplicated.
+async function kwaiUnprovenAction(b,actor,target){
+ if(actor.role!=='kwai-physical'||actor.workflow!=='physical:DESKTOP-FTDK0HP')
+   return {ok:false,error:'KWAI_UNPROVEN_PHYSICAL_PUBLISHER_ONLY'};
+ const account=target.split(':')[1];
+ if(b.target_key!==target||b.expected_account!==account)
+   return {ok:false,error:'KWAI_UNPROVEN_ACCOUNT_MISMATCH'};
+ const mode=String(b.mode||'');
+ const eligibility="(p.status='uncertain' OR (p.status='started' AND p.lease_until<now()-interval '30 minutes'))";
+ if(mode==='list'){
+  const rows=await query("SELECT p.id,p.status,p.publication_started_at,p.lease_until,"+
+    "p.payload->>'video_url' AS source_url,p.media_sha256 "+
+    "FROM cortes_publications p WHERE p.target_key=$1 "+
+    "AND "+eligibility+" AND p.remote_id IS NULL "+
+    "AND p.publication_started_at<now()-interval '45 minutes' "+
+    "ORDER BY p.publication_started_at LIMIT 5",[target]);
+  return {ok:true,policy:'kwai_reconcile_then_disregard_v1',jobs:rows};
+ }
+ if(mode==='confirm'){
+  const id=String(b.id||''),proof=b.proof||{};
+  const photo=String(proof.photo_id||''),posted=Number(proof.posted_ms);
+  const frameScores=proof.frame_inliers;
+  if(!/^kwai-cortes-[A-Za-z0-9_.:-]{12,180}$/.test(id)||
+     proof.kind!=='kwai_logged_source_to_public_four_frame_v1'||
+     proof.account!==account||proof.job_id!==id||
+     proof.authenticated_identity_checked!==true||
+     !/^\d{16,21}$/.test(photo)||
+     !Number.isSafeInteger(posted)||
+     !/^[a-f0-9]{64}$/.test(String(proof.source_sha256||''))||
+     !Array.isArray(frameScores)||frameScores.length!==4||
+     frameScores.some(v=>!Number.isInteger(v)||v<75||v>3000)||
+     !Number.isFinite(proof.source_duration_seconds)||
+     !Number.isFinite(proof.public_duration_seconds)||
+     Math.abs(proof.source_duration_seconds-proof.public_duration_seconds)>2||
+     typeof proof.source_url!=='string'||proof.source_url.length>380||
+     proof.public_url!==`https://www.kwai.com/@${account}/video/${photo}`)
+    return{ok:false,error:'KWAI_UNPROVEN_MEDIA_PROOF_INVALID'};
+  const checked=await query("SELECT status,publication_started_at,payload->>'video_url' AS source_url "+
+     "FROM cortes_publications WHERE id=$1 AND target_key=$2 AND remote_id IS NULL LIMIT 1",
+     [id,target]);
+  if(checked.length!==1||!['uncertain','started'].includes(checked[0].status)||
+     checked[0].source_url!==proof.source_url)
+    return{ok:false,error:'KWAI_UNPROVEN_SOURCE_FENCE_CHANGED'};
+  const started=Date.parse(checked[0].publication_started_at);
+  if(!Number.isFinite(started)||posted<started-8*60000||posted>started+18*60000)
+    return{ok:false,error:'KWAI_UNPROVEN_TIME_MISMATCH'};
+  if(JSON.stringify(proof).length>2500)
+    return{ok:false,error:'KWAI_UNPROVEN_MEDIA_PROOF_TOO_LARGE'};
+  const rows=await query(
+    "UPDATE cortes_publications p SET status='confirmed',lease_owner=NULL,lease_until=NULL,"+
+    "remote_id=$3,updated_at=now(),"+
+    "confirmation_evidence=$4::jsonb WHERE p.id=$1 AND p.target_key=$2 "+
+    "AND p.status IN ('uncertain','started') AND p.remote_id IS NULL "+
+    "AND p.publication_started_at IS NOT NULL AND "+
+    "(p.lease_until IS NULL OR p.lease_until<now()) AND NOT EXISTS ("+
+    "SELECT 1 FROM cortes_publications d WHERE d.id<>p.id AND d.target_key=p.target_key "+
+    "AND d.status='confirmed' AND d.remote_id=$3) "+
+    "RETURNING p.id,p.status,p.remote_id",
+    [id,target,proof.public_url,JSON.stringify({
+      ...proof,kind:'kwai_authenticated_source_frames_reconciled_v1',
+      public_post_timestamp_ms:posted,
+      qualified_distinct_frames:4,reconciled_at:new Date().toISOString()})]);
+  return rows.length?{ok:true,job:rows[0],confirmed_media:true}:
+    {ok:false,error:'KWAI_UNPROVEN_CONFIRM_FENCE_CHANGED'};
+ }
+ if(mode!=='discard')return{ok:false,error:'KWAI_UNPROVEN_MODE_INVALID'};
+ const id=String(b.id||''),proof=b.proof||{},now=Date.now();
+ if(!/^kwai-cortes-[A-Za-z0-9_.:-]{12,180}$/.test(id)||
+    proof.kind!=='kwai_bounded_public_scan_discard_v1'||
+    proof.account!==account||proof.job_id!==id||
+    !Number.isInteger(proof.scanned_at_epoch_ms)||
+    Math.abs(now-proof.scanned_at_epoch_ms)>15*60000||
+    proof.confirmed_public_media!==false||
+    !['complete_absence','candidate_unproven','scan_failed_bounded'].includes(proof.result)||
+    !Number.isInteger(proof.attempt_count)||proof.attempt_count<1||proof.attempt_count>10)
+   return{ok:false,error:'KWAI_UNPROVEN_DISCARD_PROOF_INVALID'};
+ const bounded=proof.result==='scan_failed_bounded';
+ if(bounded&&proof.attempt_count<2)
+   return{ok:false,error:'KWAI_UNPROVEN_TWO_ATTEMPTS_REQUIRED'};
+ if(!bounded&&(
+    proof.authenticated_identity_checked!==true||
+    !Number.isInteger(proof.oldest_public_ms)||
+    !Number.isInteger(proof.newest_public_ms)||
+    proof.oldest_public_ms>=proof.newest_public_ms||
+    !Number.isInteger(proof.scanned_items)||proof.scanned_items<2||
+    !Array.isArray(proof.candidate_photo_ids)||proof.candidate_photo_ids.length>15||
+    proof.candidate_photo_ids.some(x=>!/^\d{16,21}$/.test(String(x)))))
+   return{ok:false,error:'KWAI_UNPROVEN_PROFILE_SCAN_INVALID'};
+ if(JSON.stringify(proof).length>3000)
+   return{ok:false,error:'KWAI_UNPROVEN_PROOF_TOO_LARGE'};
+ const prior=await query("SELECT id,status,publication_started_at FROM cortes_publications "+
+   "WHERE id=$1 AND target_key=$2 LIMIT 1",[id,target]);
+ if(prior.length!==1)return{ok:false,error:'KWAI_UNPROVEN_JOB_MISSING'};
+ if(prior[0].status==='cancelled')
+   return{ok:true,already_discarded:true,job:{id,status:'cancelled'}};
+ const started=Date.parse(prior[0].publication_started_at);
+ if(!Number.isFinite(started)||started>now-45*60000||
+    (bounded&&started>now-90*60000))
+   return{ok:false,error:'KWAI_UNPROVEN_GRACE_PERIOD_NOT_MET'};
+ if(!bounded&&(proof.oldest_public_ms>started-18*60000||
+               proof.newest_public_ms<started+18*60000))
+   return{ok:false,error:'KWAI_UNPROVEN_PUBLIC_WINDOW_INCOMPLETE'};
+ const rows=await query("UPDATE cortes_publications p SET status='cancelled',"+
+   "lease_owner=NULL,lease_until=NULL,updated_at=now(),"+
+   "confirmation_evidence=coalesce(p.confirmation_evidence,'{}'::jsonb)||"+
+   "jsonb_build_object('kind','kwai_reconcile_then_disregard_v1',"+
+   "'no_retry',true,'possible_publication',true,'public_media_identity_proven',false,"+
+   "'disregard_reason',$3::text,'proof',$4::jsonb,'disregarded_at',now()) "+
+   "WHERE p.id=$1 AND p.target_key=$2 AND p.remote_id IS NULL "+
+   "AND "+eligibility+" AND p.publication_started_at<now()-interval '45 minutes' "+
+   (bounded?"AND p.publication_started_at<now()-interval '90 minutes' ":"")+
+   "RETURNING p.id,p.status",[id,target,proof.result,JSON.stringify(proof)]);
+ return rows.length?{ok:true,job:rows[0],no_retry:true}:
+   {ok:false,error:'KWAI_UNPROVEN_FENCE_CHANGED_OR_ACTIVE'};
+}
+
 async function kwaiSecondaryAction(action,b,actor){
  const KWAI_TARGET='kwai:universoanthares';
  if(!((actor.role==='kwai-physical'&&actor.workflow==='physical:DESKTOP-FTDK0HP')||(actor.role==='kwai-mobile'&&actor.workflow==='mobile:M2004J19C:universoanthares')))return{ok:false,error:'KWAI_SECONDARY_PUBLISHER_ONLY'};
  if(b.target_key!==KWAI_TARGET||b.expected_account!=='universoanthares')return{ok:false,error:'KWAI_SECONDARY_ACCOUNT_MISMATCH'};
+ if(action==='kwai-unproven')return kwaiUnprovenAction(b,actor,KWAI_TARGET);
  if(!['kwai-physical-stats','kwai-lease','kwai-renew','kwai-start','kwai-confirm','kwai-fail'].includes(action))return{ok:false,error:'KWAI_SECONDARY_UNSUPPORTED_ACTION'};
  if(action==='kwai-physical-repair-no-post'){
   // Recover a fresh UNCERTAIN state where the physical Android publisher
