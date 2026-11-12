@@ -64,3 +64,24 @@ test('Neon SQL string counts are normalized before client status processing',asy
   assert(text.includes('Number(x.count)'));
   assert(text.includes('db_ledger_total'));
 });
+
+test('TikTok queue selects the newest source by original ingestion, not a late historic refill',async()=>{
+  const {readFileSync}=await import('node:fs');
+  const text=readFileSync(new URL('../infra/neon-cortes-tiktok/index.mjs',import.meta.url),'utf8');
+  assert(text.includes('GROUP BY source_id'));
+  assert(text.includes('HAVING COUNT(*) FILTER'));
+  assert(text.includes('ORDER BY MIN(created_at) DESC,source_id DESC LIMIT 1'));
+  assert(!text.includes('ORDER BY created_at DESC,id DESC LIMIT 1'));
+});
+
+test('Source-priority change retains queued-only, cooldown, 100/day and fenced single-claim protection',async()=>{
+  const {readFileSync}=await import('node:fs');
+  const text=readFileSync(new URL('../infra/neon-cortes-tiktok/index.mjs',import.meta.url),'utf8');
+  assert(text.includes('pg_try_advisory_xact_lock(19283746501001::bigint)'));
+  assert(text.includes('FOR UPDATE SKIP LOCKED LIMIT 1'));
+  assert(text.includes('COUNT(*) FILTER'));
+  assert(text.includes('retry_not_before IS NULL OR retry_not_before<=now()'));
+  assert(text.includes('daily<100&&!paced'));
+  assert(text.includes('Math.max(180,Math.min(240,dueSeconds))'));
+  assert(!text.includes("source_id='cOhqEaY3-08'"));
+});
