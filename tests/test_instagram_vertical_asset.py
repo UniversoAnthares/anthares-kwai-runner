@@ -15,6 +15,14 @@ class VerticalInstagramAssetTests(unittest.TestCase):
         self.assertFalse(asset.exact_vertical(719, 1280))
         self.assertFalse(asset.exact_vertical(0, 1280))
 
+    def test_ffmpeg_header_parses_exact_video_dimensions(self):
+        from unittest.mock import Mock
+        result = Mock(stderr=("Input #0, mov, from 'asset.mp4':\\n"
+                              "  Stream #0:0: Video: h264 (avc1), yuv420p, 720x1280, 30 fps"))
+        with patch.object(asset, "_ffmpeg_exe", return_value="/tmp/ffmpeg"), \
+             patch.object(asset.subprocess, "run", return_value=result):
+            self.assertEqual(asset._probe("/tmp/asset.mp4"), (720, 1280))
+
     def test_original_vertical_reuses_master_without_upload(self):
         source = "https://anthares.us/wp-content/uploads/anthares-clips/2026/11/clip.mp4"
         with patch.object(asset, "_known_dimensions", return_value=(1080, 1920)), \
