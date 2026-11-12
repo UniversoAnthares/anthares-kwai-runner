@@ -26,22 +26,40 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Load existing Anthares admin OAuth from protected Bitwarden if company secret is absent
-        uses: bitwarden/sm-action@v2
-        with:
-          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
-          cloud_region: us
-          secrets: |
-            bd261e5e-11bf-49fb-9baf-b4ea014ec5b7 > LINKEDIN_PERSONAL_ACCESS_TOKEN
+      - name: Resolve organization-specific OAuth from protected existing secrets
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+          LINKEDIN_COMPANY_SECRET: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LINKEDIN_COMPANY_SECRET:-}" ]; then
+            printf 'LINKEDIN_ACCESS_TOKEN=%s\n' "$LINKEDIN_COMPANY_SECRET" >> "$GITHUB_ENV"
+            echo LINKEDIN_COMPANY_OAUTH_SOURCE=DEDICATED_GITHUB
+          else
+            test -n "${BWS_ACCESS_TOKEN:-}"
+            docker run --rm -e BWS_ACCESS_TOKEN ghcr.io/bitwarden/bws secret list |
+              python3 -c '
+          import json,sys,os
+          rows=json.load(sys.stdin)
+          names={"LINKEDIN_ACCESS_TOKEN","LINKEDIN_ORGANIZATION_ACCESS_TOKEN","LINKEDIN_COMPANY_ACCESS_TOKEN"}
+          found=[str(x.get("value") or "").strip() for x in rows if str(x.get("key") or "").upper() in names and str(x.get("value") or "").strip()]
+          if len(found)!=1:
+              print("LINKEDIN_COMPANY_OAUTH_NOT_CONFIGURED",flush=True)
+              sys.exit(3)
+          token=found[0]
+          if any(ch in token for ch in "\\r\\n\\x00"):
+              sys.exit(3)
+          print("::add-mask::"+token,flush=True)
+          with open(os.environ["GITHUB_ENV"],"a",encoding="utf-8") as fp:
+              fp.write("LINKEDIN_ACCESS_TOKEN="+token+"\\n")
+          print("LINKEDIN_COMPANY_OAUTH_SOURCE=DEDICATED_BWS",flush=True)
+          '
+          fi
       - name: Post directly to official LinkedIn organization account with Neon fence
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
           CORTES_QUEUE_PRIMARY: neon
-          LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
           LINKEDIN_AUTHOR_URN: urn:li:organization:145345334
         run: |
           set -euo pipefail
-          if [ -z "${LINKEDIN_ACCESS_TOKEN:-}" ]; then
-            export LINKEDIN_ACCESS_TOKEN="${LINKEDIN_PERSONAL_ACCESS_TOKEN:-}"
-          fi
           python3 -u -m tools.cortes_linkedin_company_cloud
