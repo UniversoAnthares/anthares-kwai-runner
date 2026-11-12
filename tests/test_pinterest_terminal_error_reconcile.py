@@ -13,6 +13,26 @@ NID="cortes-fanout-pinterest-8ede43982585af595543fd3056584f2d"
 
 
 class BufferErrorQuarantine(unittest.TestCase):
+    def test_no_pending_receipts_has_zero_mutations(self):
+        out=io.StringIO()
+        with patch.object(publisher,"queue",return_value={"jobs":[]}), \
+             patch.object(publisher,"api") as api, \
+             contextlib.redirect_stdout(out):
+            self.assertEqual(publisher.reconcile_buffer_terminal_errors(),0)
+        api.assert_not_called()
+        self.assertIn('"terminal_errors_quarantined":0',out.getvalue())
+
+    def test_only_two_natural_utc_windows_allow_terminal_maintenance(self):
+        for hour in (16,17):
+            stamp=datetime(2026,11,12,hour,8,tzinfo=timezone.utc)
+            self.assertTrue(publisher.terminal_maintenance_window(stamp,event="schedule"))
+            self.assertFalse(publisher.terminal_maintenance_window(stamp,event="workflow_dispatch"))
+        for hour in (15,18,23):
+            self.assertFalse(publisher.terminal_maintenance_window(
+                datetime(2026,11,12,hour,8,tzinfo=timezone.utc),event="schedule"))
+        self.assertFalse(publisher.terminal_maintenance_window(
+            datetime(2026,11,12,16,8),event="schedule"))
+
     def run_provider(self, status="error", channel=None,
                      due="2026-10-21T20:58:00Z", public=None):
         applied=[]
