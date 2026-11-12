@@ -79,33 +79,70 @@ def inspect_page(page,hits):
     return len(rows)
 
 def next_page(page):
-    choices=(
+    # TikTok Studio may use either pagination or an inner scroll container.
+    # Only navigate the owned post list; never select per-video action menus.
+    for selector in (
         'button[aria-label="Next page"]',
         'button[aria-label="Next"]',
         'button[aria-label="Próxima página"]',
         'button[title="Next page"]',
         '[data-e2e="pagination-next"]',
         '[data-e2e="next-page"]',
-    )
-    for selector in choices:
-        b=page.locator(selector).first
+        '.ant-pagination-next:not(.ant-pagination-disabled) button',
+    ):
+        button=page.locator(selector).first
         try:
-            if b.count() and b.is_visible(timeout=350) and b.is_enabled():
-                b.click(timeout=3000)
-                page.wait_for_timeout(900)
+            if button.count() and button.is_visible(timeout=350) and button.is_enabled():
+                button.click(timeout=3000)
+                page.wait_for_timeout(1200)
                 return True
         except Exception:
             continue
+    for label in (r"^(Next|Próxima página|Próximo|Load more|Carregar mais)$",):
+        try:
+            button=page.get_by_role("button",name=re.compile(label,re.I)).first
+            if button.count() and button.is_visible(timeout=350) and button.is_enabled():
+                button.click(timeout=3000)
+                page.wait_for_timeout(1200)
+                return True
+        except Exception:
+            pass
     try:
-        # Read-only scroll in the isolated browser; no personal mouse or keyboard.
         page.evaluate("""() => {
-          const els=[document.scrollingElement,...document.querySelectorAll('[role="main"],main,[class*="scroll"]')];
-          for(const e of els){if(e&&e.scrollHeight>e.clientHeight){e.scrollTop=e.scrollHeight;}}
+          const all=[document.scrollingElement,...document.querySelectorAll('main,section,div,ul')];
+          for(const e of all){
+            if(!e || e.scrollHeight<e.clientHeight+100 || e.clientHeight<110)continue;
+            const y=getComputedStyle(e).overflowY;
+            if(/auto|scroll|overlay/.test(y) || e===document.scrollingElement){
+              e.scrollTop=e.scrollHeight;
+            }
+          }
+          window.scrollTo(0,document.body.scrollHeight);
         }""")
-        page.wait_for_timeout(1100)
+        page.mouse.wheel(0,1800)
+        page.wait_for_timeout(1400)
     except Exception:
         pass
     return False
+
+def history_controls(page):
+    try:
+        return page.evaluate("""() => ({
+          nav: [...document.querySelectorAll('button,[role=button],input,select')]
+            .map(x=>({role:x.tagName.toLowerCase(),text:(
+              x.getAttribute('aria-label')||x.getAttribute('title')||
+              x.getAttribute('placeholder')||x.innerText||'').trim().slice(0,55)}))
+            .filter(x=>/next|prev|older|page|página|próxi|carregar|filter|filtro|buscar|search|date|data|post|publicaç|gerenciar/i.test(x.text))
+            .slice(0,45),
+          scroll_regions: [...document.querySelectorAll('main,section,div')]
+            .filter(e=>e.scrollHeight>e.clientHeight+100 && e.clientHeight>110 &&
+              /auto|scroll|overlay/.test(getComputedStyle(e).overflowY))
+            .map(e=>({tag:e.tagName.toLowerCase(),height:e.clientHeight,
+              scroll_height:e.scrollHeight})).slice(0,12)
+        })""")
+    except Exception:
+        return {"nav":[],"scroll_regions":[]}
+
 
 def main():
     state=preflight_vault()  # exact logged-in @universo.anthares identity
@@ -125,6 +162,7 @@ def main():
                     raise RuntimeError("TIKTOK_STUDIO_CONTENT_UNAVAILABLE")
                 if page.locator('input[type="password"]').count() or "/login" in page.url:
                     raise RuntimeError("TIKTOK_STUDIO_SESSION_INVALID")
+                controls=history_controls(page)
                 for _ in range(90):
                     before=sum(len(v) for v in hits.values())
                     count=inspect_page(page,hits)
@@ -146,6 +184,7 @@ def main():
     report={
         "account":ACCOUNT,"authenticated_owner":True,"pages_scanned":pages,
         "unique_page_fingerprints":len(distinct_urls),
+        "history_controls":controls,
         "items":[{"segment_id":s,"status":"EXACT_MATCH" if len(hits[s])==1 else
                   "AMBIGUOUS" if len(hits[s])>1 else "UNVERIFIED",
                   "remote_id":next(iter(hits[s])) if len(hits[s])==1 else None}
