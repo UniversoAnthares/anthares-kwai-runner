@@ -183,8 +183,6 @@ def decide(job: dict, public: dict, graph: dict, observed_at: datetime | None = 
         return None
     if not public.get("complete") or not graph.get("complete"):
         return None
-    if started > datetime.now(timezone.utc) - timedelta(hours=36):
-        return None
     tag = tag_for(str(job["id"]))
     pub = [p for p in public["items"] if tag.lower() in str(p.get("caption","")).lower()]
     own = [p for p in graph["items"] if tag.lower() in str(p.get("caption","")).lower()]
@@ -209,7 +207,7 @@ def decide(job: dict, public: dict, graph: dict, observed_at: datetime | None = 
                      graph_media_id=own[0]["id"])
         return {"id": job["id"], "decision": "visible",
                 "permalink": pub[0]["permalink"], "media_id": own[0]["id"], "proof": proof}
-    if not pub and not own:
+    if not pub and not own and started <= datetime.now(timezone.utc) - timedelta(hours=36):
         return {"id": job["id"], "decision": "absent", "proof": proof}
     return None
 
