@@ -4,7 +4,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/cortes-linkedin-company-direct-cloud.yml'
-      - 'tools/cortes_queue_ha.py'
+      - 'tools/cortes_linkedin_company_cloud.py'
+      - 'tests/test_cortes_linkedin_company_admin_preflight.py'
   workflow_dispatch: {}
   schedule:
     - cron: '1 * * * *'
@@ -49,30 +50,17 @@ jobs:
             echo LINKEDIN_COMPANY_OAUTH_SETUP_REQUIRED=1
             exit 2
           fi
-          if [[ "$token" == *
-      - name: Post directly to official LinkedIn organization account with Neon fence
-        env:
-          ANTHARES_SOCIAL_COMMIT: '1'
-          CORTES_QUEUE_PRIMARY: neon
-          LINKEDIN_AUTHOR_URN: urn:li:organization:145345334
-        run: |
-          set -euo pipefail
-          python3 -u -m tools.cortes_linkedin_company_cloud
-\n'* || "$token" == *
-      - name: Post directly to official LinkedIn organization account with Neon fence
-        env:
-          ANTHARES_SOCIAL_COMMIT: '1'
-          CORTES_QUEUE_PRIMARY: neon
-          LINKEDIN_AUTHOR_URN: urn:li:organization:145345334
-        run: |
-          set -euo pipefail
-          python3 -u -m tools.cortes_linkedin_company_cloud
-\r'* ]]; then
+          if [[ "$token" == *$'\n'* || "$token" == *$'\r'* ]]; then
             echo LINKEDIN_COMPANY_CREDENTIAL_FORMAT_INVALID=1
             exit 2
           fi
           echo "::add-mask::$token"
           printf 'LINKEDIN_ACCESS_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+      - name: Verify administrator role and safe queue contracts
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_cortes_linkedin_company_admin_preflight.py -q
+          python -m py_compile tools/cortes_linkedin_company_cloud.py
       - name: Post directly to official LinkedIn organization account with Neon fence
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
