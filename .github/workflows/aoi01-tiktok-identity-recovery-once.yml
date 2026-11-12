@@ -23,7 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,os,urllib.error,urllib.request
+          import json,os,urllib.error,urllib.request,atexit
           BASE="https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run"
           TOKEN=os.getenv("ARA_SHARED","")
           if len(TOKEN)<20:
@@ -46,6 +46,13 @@ jobs:
               except Exception as e:
                   print("AOI01_"+path.strip("/").upper().replace("-","_")+"_TRANSPORT="+type(e).__name__)
                   return 0,{}
+          browser_started_by_this_run=False
+          def cleanup_own_browser():
+              if browser_started_by_this_run:
+                  code,resp=call("/interactive-browser/close",method="POST",payload={},timeout=32)
+                  print("AOI01_CLEANUP_OWN_BROWSER_HTTP="+str(code))
+                  print("AOI01_CLEANUP_OWN_BROWSER_OK="+str(bool(resp.get("ok"))))
+          atexit.register(cleanup_own_browser)
           code,health=call("/health")
           print("AOI01_HEALTH_HTTP="+str(code))
           if code!=200 or not health.get("ok") or not health.get("session_bootstrapped"):
@@ -60,19 +67,32 @@ jobs:
               raise SystemExit(0)
           # Read-only CDP examination. Browser state stays inside Northflank.
           import re, time
-          code,bs=call("/interactive-browser/status",timeout=35)
+          code,bs=call("/interactive-browser/status",timeout=20)
           active=bool(bs.get("active"))
           print("AOI01_BROWSER_STATUS_HTTP="+str(code))
           print("AOI01_BROWSER_ACTIVE_INITIAL="+str(active))
-          if code==200 and not active:
-              code,start=call("/interactive-browser/start",method="POST",payload={},timeout=270)
-              print("AOI01_BROWSER_START_HTTP="+str(code))
-              print("AOI01_BROWSER_START_OK="+str(bool(start.get("ok"))))
-              if code!=200 or not start.get("ok"):
-                  print("AOI01_BROWSER_START_BLOCKED")
+          # Cleanup only the isolated TikTok worker browser left by the preceding
+          # timed-out AOI01 recovery. Never touch the owner's Windows browser.
+          # The production Neon TikTok lease count must be zero before this run.
+          if code!=200 or active:
+              close_code,closed=call("/interactive-browser/close",method="POST",payload={},timeout=60)
+              print("AOI01_STALE_BROWSER_CLOSE_HTTP="+str(close_code))
+              print("AOI01_STALE_BROWSER_CLOSE_OK="+str(bool(closed.get("ok"))))
+              if close_code!=200 or closed.get("ok") is not True:
+                  print("AOI01_ORPHAN_BROWSER_CLEANUP_UNVERIFIED_SAFE_STOP")
                   raise SystemExit(2)
+              code,bs=call("/interactive-browser/status",timeout=20)
+              if code!=200 or bs.get("active"):
+                  raise SystemExit("AOI01_BROWSER_NOT_INACTIVE_AFTER_CLEANUP")
+          code,start=call("/interactive-browser/start",method="POST",payload={},timeout=200)
+          print("AOI01_BROWSER_START_HTTP="+str(code))
+          print("AOI01_BROWSER_START_OK="+str(bool(start.get("ok"))))
+          if code!=200 or not start.get("ok"):
+              print("AOI01_BROWSER_START_BLOCKED")
+              raise SystemExit(2)
+          browser_started_by_this_run=True
           if code==200:
-              code,nav=call("/interactive-browser/navigate",method="POST",payload={"url":"https://www.tiktok.com/profile"},timeout=110)
+              code,nav=call("/interactive-browser/navigate",method="POST",payload={"url":"https://www.tiktok.com/profile"},timeout=90)
               print("AOI01_PROFILE_NAVIGATION_HTTP="+str(code))
               if code!=200 or not nav.get("ok"):
                   print("AOI01_PROFILE_NAVIGATION_BLOCKED")
@@ -101,5 +121,6 @@ jobs:
           code,after=call("/health")
           print("AOI01_FINAL_READY_FOR_TIKTOK="+str(bool(after.get("ready_for_tiktok"))))
           if code!=200 or not after.get("ready_for_tiktok"):raise SystemExit(2)
+          browser_started_by_this_run=False
           print("AOI01_IDENTITY_RECOVERY=PROVEN")
           PY
