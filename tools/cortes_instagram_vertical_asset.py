@@ -27,21 +27,33 @@ def exact_vertical(width: int, height: int) -> bool:
     return width > 0 and height > 0 and width * 16 == height * 9
 
 
+def _ffmpeg_exe() -> str:
+    installed = shutil.which("ffmpeg")
+    if installed:
+        return installed
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except (ImportError, OSError):
+        raise RuntimeError("INSTAGRAM_FFMPEG_UNAVAILABLE") from None
+
+
 def _probe(source: str | Path) -> tuple[int, int]:
-    exe = shutil.which("ffprobe")
-    if not exe:
-        raise RuntimeError("INSTAGRAM_FFPROBE_UNAVAILABLE")
-    cmd = [exe, "-v", "error", "-select_streams", "v:0",
-           "-show_entries", "stream=width,height", "-of", "json"]
+    # imageio-ffmpeg bundles the encoder without ffprobe. Its stream header
+    # contains the dimensions even when ffmpeg exits 1 (no output specified).
+    import re
+    cmd = [_ffmpeg_exe(), "-hide_banner", "-nostdin"]
     if isinstance(source, str) and source.startswith("https://"):
         cmd += ["-headers", PROBE_HEADERS]
-    cmd.append(str(source))
+    cmd += ["-i", str(source)]
     try:
-        run = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=50)
-        streams = json.loads(run.stdout).get("streams") or []
-        return int(streams[0]["width"]), int(streams[0]["height"])
-    except (subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError):
-        raise RuntimeError("INSTAGRAM_MEDIA_DIMENSIONS_UNVERIFIED") from None
+        run = subprocess.run(cmd, capture_output=True, text=True, timeout=50)
+        match = re.search(r"Video:[^\n]*?\b(\d{2,5})x(\d{2,5})\b", run.stderr)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+    except subprocess.SubprocessError:
+        pass
+    raise RuntimeError("INSTAGRAM_MEDIA_DIMENSIONS_UNVERIFIED")
 
 
 def _source_url(url: str) -> str:
@@ -141,9 +153,7 @@ def _download(url: str, dst: Path) -> None:
 
 
 def _render(source: Path, target: Path) -> None:
-    exe = shutil.which("ffmpeg")
-    if not exe:
-        raise RuntimeError("INSTAGRAM_FFMPEG_UNAVAILABLE")
+    exe = _ffmpeg_exe()
     # Preserve the full original frame in the foreground; blurred background
     # fills the exact portrait canvas without cropping speakers or book covers.
     filt = ("[0:v]split=2[fg][bg];"
