@@ -1,0 +1,22 @@
+name: CORTES LinkedIn organization direct QA
+on:
+  pull_request:
+    paths:
+      - 'infra/neon-cortes-queue/index.mjs'
+      - 'tools/cortes_linkedin_company_cloud.py'
+      - 'social_adapters/video_social.py'
+      - '.github/workflows/cortes-linkedin-company-direct-cloud.yml'
+      - 'tests/test_cortes_linkedin_company_direct.mjs'
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: node --check infra/neon-cortes-queue/index.mjs
+      - run: node --test tests/test_cortes_linkedin_company_direct.mjs
+      - run: python3 -m py_compile tools/cortes_linkedin_company_cloud.py social_adapters/video_social.py
