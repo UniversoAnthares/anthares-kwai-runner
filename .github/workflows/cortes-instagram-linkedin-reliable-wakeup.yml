@@ -51,24 +51,10 @@ jobs:
             # LinkedIn keeps its separate eight-run cadence.
             instagram_due=1
             linkedin_due=$((SOURCE_RUN_NUMBER % 8 == 0))
-            # Independent, throttled fallback for stalled Buffer lanes.
-            company_due=$((SOURCE_RUN_NUMBER % 12 == 3))
-            pinterest_due=$((SOURCE_RUN_NUMBER % 12 == 9))
           else
             # Independently fired five-minute scheduled/manual recovery.
             instagram_due=1
             linkedin_due=1
-            if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
-              company_due=1
-              pinterest_due=1
-            else
-              # One additional chance per hour for each Buffer destination.
-              # The workers retain their provider quota, Neon fencing and
-              # separate concurrency groups; no uncontrolled batch.
-              utc_minute="$(date -u +%M)"
-              company_due=$(( (10#$utc_minute / 5) % 12 == 3 ))
-              pinterest_due=$(( (10#$utc_minute / 5) % 12 == 9 ))
-            fi
           fi
           if (( instagram_due )); then
             gh workflow run cortes-instagram-direct-cloud.yml --repo "$GH_REPO" --ref main
@@ -81,12 +67,4 @@ jobs:
             echo CORTES_LINKEDIN_CANONICAL_WAKEUP_DISPATCHED=1
           else
             echo CORTES_LINKEDIN_CANONICAL_WAKEUP_NOT_DUE=1
-          fi
-          if (( company_due )); then
-            gh workflow run cortes-buffer-linkedin-cloud.yml --repo "$GH_REPO" --ref main -f reconcile_only=false
-            echo CORTES_LINKEDIN_COMPANY_BUFFER_WAKEUP_DISPATCHED=1
-          fi
-          if (( pinterest_due )); then
-            gh workflow run cortes-buffer-pinterest-cloud.yml --repo "$GH_REPO" --ref main -f reconcile_only=false
-            echo CORTES_PINTEREST_BUFFER_WAKEUP_DISPATCHED=1
           fi
