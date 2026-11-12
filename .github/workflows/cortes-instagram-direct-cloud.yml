@@ -12,14 +12,16 @@ permissions:
   contents: read
   id-token: write
   issues: write
-concurrency:
-  group: cortes-instagram-direct-neon-primary
-  cancel-in-progress: false
 jobs:
   publish-direct-reel:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     if: ${{ vars.CORTES_INSTAGRAM_DIRECT_PAUSED != 'true' }}
+    # The five-minute follow-up must not hold the Graph publication mutex.
+    # Serialize only the media job; Neon fencing remains the final authority.
+    concurrency:
+      group: cortes-instagram-direct-neon-primary
+      cancel-in-progress: false
     outputs:
       confirmed: ${{ steps.publish.outputs.confirmed }}
     steps:
