@@ -92,7 +92,8 @@ async function identity(request){
    // owner lease and quota. Neither path can replay an uncertain delivery.
    role='personal';platform='linkedin';
   }
- }else if(repo===CLIPPER&&CLIPPER_PRODUCERS.has(wf))role='producer';
+ }else if(repo===CLIPPER&&wf==='cortes-instagram-authenticated-scan.yml'){role='instagram-profile';platform='instagram';}
+ else if(repo===CLIPPER&&CLIPPER_PRODUCERS.has(wf))role='producer';
  if(!role)return null;
  try{
   if(!keys||Date.now()>=keyExpires){
@@ -1188,8 +1189,51 @@ async function cortesDeadlinePacing(targetKey,dailyLimit){
  return plan;
 }
 
+async function instagramAuthenticatedProfileSave(actor,b){
+ if(actor.role!=='instagram-profile'||actor.platform!=='instagram')
+   return {ok:false,error:'PROFILE_SCANNER_ONLY'};
+ if(b.profile!=='AntharesInstagram'||b.account!=='universoanthares'||
+    b.authenticated!==true||b.complete!==true||
+    !Array.isArray(b.posts)||b.posts.length<2||b.posts.length>250)
+   return {ok:false,error:'PROFILE_SESSION_PROOF_INVALID'};
+ const captured=Date.parse(String(b.captured_at||'')), first=Date.parse(String(b.first_at||''));
+ if(!Number.isFinite(captured)||!Number.isFinite(first)||
+    Math.abs(Date.now()-captured)>15*60*1000)
+   return {ok:false,error:'PROFILE_SCAN_TIMESTAMP_INVALID'};
+ for(const p of b.posts){
+   if(!p||typeof p!=='object'||
+      !/^https:\/\/www\.instagram\.com\/reel\/[A-Za-z0-9_-]+\/$/.test(String(p.permalink||''))||
+      !Number.isFinite(Date.parse(String(p.timestamp||'')))||
+      String(p.caption||'').length>300)
+     return {ok:false,error:'PROFILE_POST_INVALID'};
+ }
+ const sorted=b.posts.map(p=>Date.parse(p.timestamp)).sort((a,b)=>a-b);
+ if(sorted[0]>first-20*60000||sorted[sorted.length-1]<first+20*60000)
+   return {ok:false,error:'PROFILE_SCAN_WINDOW_INCOMPLETE'};
+ const run=String(b.workflow_run_id||'');
+ if(!/^\d{7,25}$/.test(run))return {ok:false,error:'PROFILE_SCANNER_RUN_INVALID'};
+ await query(`INSERT INTO cortes_instagram_authenticated_scans
+ (profile_name,account_name,complete,authenticated,first_at,oldest_at,newest_at,
+  scanned_count,posts,workflow_run_id,captured_at)
+ VALUES ('AntharesInstagram','universoanthares',true,true,$1::timestamptz,
+  $2::timestamptz,$3::timestamptz,$4::int,$5::jsonb,$6,$7::timestamptz)`,
+ [new Date(first).toISOString(),new Date(sorted[0]).toISOString(),
+  new Date(sorted[sorted.length-1]).toISOString(),b.posts.length,
+  JSON.stringify(b.posts),run,new Date(captured).toISOString()]);
+ return {ok:true,accepted:true,posts:b.posts.length};
+}
 async function instagramDirectAction(verb,b){
  const target='instagram:universoanthares';
+ if(verb==='profile-snapshot'){
+  const rows=await query(`SELECT profile_name,account_name,captured_at,first_at,
+   oldest_at,newest_at,scanned_count,posts FROM cortes_instagram_authenticated_scans
+   WHERE complete=true AND authenticated=true
+     AND profile_name='AntharesInstagram' AND account_name='universoanthares'
+     AND captured_at>now()-interval '60 minutes'
+   ORDER BY captured_at DESC,id DESC LIMIT 1`);
+  if(!rows.length)return{ok:true,available:false,reason:'NO_FRESH_LOGGED_PROFILE_SCAN'};
+  return{ok:true,available:true,scan:rows[0]};
+ }
  if(verb==='pending'){
   // The same authorized GitHub-hosted Instagram workflow may enumerate ONLY
   // its own uncertain queue. No token or credential enters the response.
@@ -1199,8 +1243,7 @@ async function instagramDirectAction(verb,b){
      payload->>'description' AS description,publication_started_at,
      confirmation_evidence,status
      FROM cortes_publications WHERE target_key=$1 AND status='uncertain'
-       AND publication_started_at IS NOT NULL
-     ORDER BY publication_started_at DESC,id LIMIT $2`,[target,limit]);
+     ORDER BY publication_started_at DESC NULLS LAST,id LIMIT $2`,[target,limit]);
   return{ok:true,target_key:target,items:rows};
  }
  if(verb==='reconcile'){
@@ -2141,6 +2184,10 @@ export default {async fetch(request){
    if(actor.workflow==='cortes-linkedin-neon-fanout.yml'&&body.platform!=='linkedin')
        return answer({ok:false,error:'WORKFLOW_DESTINATION_MISMATCH'},403);
    return answer(await enqueue(body));
+  }
+  if(action==='instagram-profile-save'){
+   const out=await instagramAuthenticatedProfileSave(actor,body);
+   return answer(out,out.ok?200:403);
   }
   if(action.startsWith('instagram-direct-')){
    if(actor.role!=='instagram-direct')return answer({ok:false,error:'DIRECT_WORKER_ONLY'},403);
