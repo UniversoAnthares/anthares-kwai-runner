@@ -5,7 +5,7 @@ const ACTIONS=new Set(['enqueue','claim','start','confirm','fail']);
 const failure=(status,error)=>Response.json({ok:false,error},{status,headers:{'Cache-Control':'no-store'}});
 export default {async fetch(request){
  const u=new URL(request.url),action=u.searchParams.get('action')||'';
- if(request.method==='GET'&&!['health','status'].includes(action))return failure(404,'not_found');
+ if(request.method==='GET'&&!['health','status','pacing-audit'].includes(action))return failure(404,'not_found');
  if(request.method==='POST'&&!ACTIONS.has(action))return failure(404,'not_found');
  if(!['/','/api/cortes-tiktok'].includes(u.pathname))return failure(404,'not_found');
  const auth=request.headers.get('authorization')||'';
