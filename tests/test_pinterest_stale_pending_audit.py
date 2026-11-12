@@ -15,13 +15,16 @@ class BufferPendingAudit(unittest.TestCase):
         out=io.StringIO()
         def fake_api(query):
             self.assertIn("CortesPinterestPendingAudit",query)
+            self.assertIn("PinterestPostMetadata { url }",query)
             return {
                 "p0":{"id":old,"channelId":m.PINTEREST_ID,
                       "status":"failed","externalLink":None,
+                      "metadata":{"url":"https://www.anthares.us"},
                       "schedulingType":"automatic",
                       "dueAt":"2026-10-21T19:00:00Z"},
                 "p1":{"id":new,"channelId":m.PINTEREST_ID,
                       "status":"scheduled","externalLink":None,
+                      "metadata":{"url":""},
                       "schedulingType":"automatic",
                       "dueAt":"2026-11-10T21:39:00Z"}
             }
@@ -40,6 +43,9 @@ class BufferPendingAudit(unittest.TestCase):
         self.assertNotIn(old,raw)
         self.assertNotIn(new,raw)
         self.assertIn('"cas_mutations":0',raw)
+        self.assertEqual([x["destination_url_class"] for x in rows],
+                         ["LEGACY_WWW_ANTHARES","EMPTY"])
+        self.assertNotIn("https://www.anthares.us",raw)
 
     def test_wrong_identity_never_claims_public_link(self):
         remote="6ad914067d80fe56e7308119"
