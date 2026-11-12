@@ -1,9 +1,11 @@
 name: CORTES Threads independent proportional pacing contract
 on:
   push:
-    branches: [main, fix/cortes-threads-independent-proportional-23h-20261112]
+    branches: [main, fix/cortes-threads-independent-proportional-23h-20261112, fix/cortes-threads-local-runtime-proportional-23h-20261112]
     paths:
       - 'infra/neon-cortes-threads-execution/index.mjs'
+      - 'tools/cortes_threads_local_publisher.mjs'
+      - 'tests/test_cortes_threads_local_pacing_contract.mjs'
       - 'tests/test_cortes_threads_independent_pacing.mjs'
       - '.github/workflows/cortes-threads-proportional-contract.yml'
   workflow_dispatch: {}
@@ -25,5 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check infra/neon-cortes-threads-execution/index.mjs
+          node --check tools/cortes_threads_local_publisher.mjs
+          node --test tests/test_cortes_threads_local_pacing_contract.mjs
           node --test tests/test_cortes_threads_independent_pacing.mjs
           echo THREADS_INDEPENDENT_PROPORTIONAL_CONTRACT=PASS
