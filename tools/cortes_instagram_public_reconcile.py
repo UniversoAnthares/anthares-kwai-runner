@@ -304,12 +304,22 @@ def main() -> int:
                           "unresolved": len(jobs)}), flush=True)
         return 0
     oldest = min(stored_timestamp(j) for j in eligible)
-    public = json.loads(Path(os.environ["CORTES_INSTAGRAM_PROFILE_INPUT"]).read_text(
-        encoding="utf-8"))
-    if (public.get("profile")!="AntharesInstagram" or public.get("authenticated") is not True
-            or datetime.now(timezone.utc)-parsed_at(public.get("captured_at"))>timedelta(minutes=60)):
+    snapshot=post("instagram-direct-profile-snapshot", {}, oidc)
+    if not snapshot.get("ok") or not snapshot.get("available"):
         print(json.dumps({"public_reconcile":"AUTHENTICATED_PROFILE_REQUIRED",
-                          "reason":public.get("reason")}),flush=True)
+                          "reason":snapshot.get("reason","NO_FRESH_AUTHENTICATED_SCAN")}),flush=True)
+        return 2
+    data=snapshot.get("scan") or {}
+    items=data.get("posts") or []
+    if isinstance(items,str):
+        items=json.loads(items)
+    public={"complete":True,"authenticated":True,"profile":data.get("profile_name"),
+            "captured_at":data.get("captured_at"),"oldest_at":data.get("oldest_at"),
+            "newest_at":data.get("newest_at"),"count":len(items),"items":items}
+    if (public.get("profile")!="AntharesInstagram"
+            or datetime.now(timezone.utc)-parsed_at(public.get("captured_at"))>timedelta(minutes=60)
+            or parsed_at(public.get("oldest_at"))>oldest-timedelta(minutes=20)):
+        print(json.dumps({"public_reconcile":"AUTHENTICATED_PROFILE_WINDOW_MISSING"}),flush=True)
         return 2
     if not public.get("complete"):
         print(json.dumps({"public_reconcile": "INCONCLUSIVE_PUBLIC_PROFILE",
