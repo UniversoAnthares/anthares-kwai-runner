@@ -227,9 +227,16 @@ def main() -> int:
             confirmed += 1
         if state == 4:
             quarantined += 1
-        if index == 0 and state in (1, 4):
+            # Provider status is ambiguous. Keep the fenced claim for remote
+            # readback and stop this invocation before any second submission.
+            # Independent scheduled runs can continue with a distinct clip.
+            print(json.dumps({"direct_cloud": "BATCH_STOPPED_AFTER_UNCERTAIN",
+                              "confirmed_this_run": confirmed,
+                              "uncertain_this_run": quarantined}), flush=True)
+            break
+        if index == 0 and state == 1:
             time.sleep(65)
-        # A quarantined 404 or fenced uncertain source does not halt other jobs.
+        # Confirmed posts may continue to a distinct queue item.
     print(json.dumps({"direct_cloud": "BATCH_COMPLETE",
                       "confirmed": confirmed, "fenced_uncertain": quarantined,
                       "maximum_per_run": 2}), flush=True)
