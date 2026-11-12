@@ -175,6 +175,22 @@ jobs:
           sleep 180
           gh api -X POST "repos/$GITHUB_REPOSITORY/actions/workflows/cortes-tiktok-publisher.yml/dispatches" -f ref=main
           echo CORTES_TIKTOK_DELAYED_FOLLOWUP_DISPATCH_ACK=1
+      - name: Independently wake Instagram and LinkedIn cloud publishers
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Independent redundancy for dropped workflow_run/schedule events.
+          # Separate phases avoid simultaneous relay wakeups for one tick.
+          if (( GITHUB_RUN_NUMBER % 8 == 4 )); then
+            gh workflow run cortes-instagram-direct-cloud.yml --repo "$GITHUB_REPOSITORY" --ref main
+            echo CORTES_INSTAGRAM_DIRECT_FOLLOWUP_WAKEUP=1
+          fi
+          if (( GITHUB_RUN_NUMBER % 16 == 8 )); then
+            gh workflow run cortes-linkedin-personal-fallback-cloud.yml --repo "$GITHUB_REPOSITORY" --ref main -f reconcile_only=false
+            echo CORTES_LINKEDIN_DIRECT_FOLLOWUP_WAKEUP=1
+          fi
 
   # Event-driven P0 QA. The ordinary 12-hour QA cadence is unchanged.
   qa_tiktok_p0:
