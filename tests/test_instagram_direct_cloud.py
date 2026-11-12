@@ -92,25 +92,25 @@ class DirectInstagramTests(unittest.TestCase):
         self.assertIn("www.anthares.us", result)
 
     def test_durable_quota_gate_parses_existing_issue_state(self):
-        body = 'Quota control.\\n\\n```json\\n{"service":"instagram-direct-graph","cooldown_until_utc":"2099-11-13T06:00:00Z"}\\n```'
+        body = 'Quota control.\n\n```json\n{"service":"instagram-direct-graph","cooldown_until_utc":"2099-11-13T06:00:00Z"}\n```'
         with patch.object(direct, "quota_issue", return_value={"body": body}):
             self.assertEqual(direct.quota_hold_until(), "2099-11-13T06:00:00Z")
 
     def test_wrong_quota_scope_fails_closed(self):
         with self.assertRaisesRegex(RuntimeError, "SCOPE_INVALID"):
-            direct.quota_record('```json\\n{"service":"different-account"}\\n```')
+            direct.quota_record('```json\n{"service":"different-account"}\n```')
 
     def test_cooldown_blocks_all_claims_and_graph_posts(self):
-        with patch.object(direct, "require_cloud", return_value=object()), \\
-             patch.object(direct, "quota_hold_until", return_value="2099-11-13T06:00:00Z"), \\
+        with patch.object(direct, "require_cloud", return_value=object()), \
+             patch.object(direct, "quota_hold_until", return_value="2099-11-13T06:00:00Z"), \
              patch.object(direct, "publish_once") as once:
             self.assertEqual(direct.main(), 0)
             once.assert_not_called()
 
     def test_quota_batch_terminal_does_not_submit_next_clip(self):
-        with patch.object(direct, "require_cloud", return_value=object()), \\
-             patch.object(direct, "quota_hold_until", return_value=None), \\
-             patch.object(direct, "publish_once", side_effect=[5, 1]) as once, \\
+        with patch.object(direct, "require_cloud", return_value=object()), \
+             patch.object(direct, "quota_hold_until", return_value=None), \
+             patch.object(direct, "publish_once", side_effect=[5, 1]) as once, \
              patch.object(direct.time, "sleep") as sleeper:
             self.assertEqual(direct.main(), 0)
             self.assertEqual(once.call_count, 1)
