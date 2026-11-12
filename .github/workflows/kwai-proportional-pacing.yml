@@ -6,6 +6,11 @@ on:
       - 'infra/neon-cortes-queue/kwai-*.mjs'
       - 'tools/kwai_unproven_reconcile_policy.py'
       - 'tools/kwai_native_cortes.py'
+      - 'tools/kwai_canonical_runtime_regression.py'
+      - 'tools/cortes_neon_queue_client.py'
+      - 'tools/kwai_phone_share_clipboard.py'
+      - 'tools/kwai_physical_public_proof.py'
+      - 'tools/kwai_physical_queue_daemon.py'
       - 'tools/kwai_notification_overlay_regression.py'
       - 'tools/kwai_native_stage_regression.py'
       - 'tools/kwai_device_failover_worker.py'
@@ -15,6 +20,11 @@ on:
     paths:
       - 'infra/neon-cortes-queue/index.mjs'
       - 'tools/kwai_native_cortes.py'
+      - 'tools/kwai_canonical_runtime_regression.py'
+      - 'tools/cortes_neon_queue_client.py'
+      - 'tools/kwai_phone_share_clipboard.py'
+      - 'tools/kwai_physical_public_proof.py'
+      - 'tools/kwai_physical_queue_daemon.py'
       - 'tools/kwai_notification_overlay_regression.py'
       - 'tools/kwai_device_failover_worker.py'
       - 'tools/kwai_timeout_precommit_regression.py'
@@ -43,3 +53,5 @@ jobs:
         run: python3 -B tools/kwai_timeout_precommit_regression.py
       - name: Check both Kwai app notification overlays and exact account profile
         run: python3 -B tools/kwai_notification_overlay_regression.py
+      - name: Verify canonical Windows daemon and share/public two-stage proof
+        run: python3 -B tools/kwai_canonical_runtime_regression.py

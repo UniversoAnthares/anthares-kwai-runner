@@ -12,12 +12,14 @@ PKG=os.getenv('KWAI_UP_PACKAGE','kwai.lite.video'); JOB=os.getenv('KWAI_UP_JOB_I
 MEDIA=pathlib.Path(os.getenv('KWAI_UP_MEDIA','')) if os.getenv('KWAI_UP_MEDIA') else None
 EXPECTED_SHA=os.getenv('KWAI_MEDIA_SHA256','').strip().lower()
 ACCOUNT=os.getenv('KWAI_UP_EXPECTED_ACCOUNT',os.getenv('KWAI_EXPECTED_ACCOUNT','lucasrosalem')).strip().lstrip('@').lower()
-CAPTION=os.getenv('KWAI_UP_CAPTION',os.getenv('KWAI_VIDEO_TITLE','')).strip()
+CAPTION_OPTIONAL=os.getenv('ANTHARES_KWAI_CAPTION_OPTIONAL','0')=='1'
+CAPTION='' if CAPTION_OPTIONAL else os.getenv('KWAI_UP_CAPTION',os.getenv('KWAI_VIDEO_TITLE','')).strip()
 TOUCH='/data/local/tmp/anthares-hid-tap.sh'; NATIVE='/data/local/tmp/anthares-kwai-native.sh'
 MEDIA_URI='content://media/external/video/media'; REMOTE_DIR='/sdcard/DCIM/Anthares'
-RID_PROFILE='kwai.lite.video.basis:id/id_home_bottom_tab_me'; RID_USER='kwai.lite.video.basis:id/tv_user_id'
-RID_THUMB='kwai.lite.video.basis:id/thumb'; RID_NEXT='kwai.lite.video.product:id/edit_post_next_step_button'
-RID_NAME='kwai.lite.video.basis:id/tv_slide_play_user_name'; RID_CAP='kwai.lite.video.basis:id/slide_play_tv_user_info_desc'; RID_TIME='kwai.lite.video.basis:id/tv_slide_play_post_time'
+RID_PROFILE='com.kwai.video.basis:id/id_home_bottom_tab_me'; RID_USER='com.kwai.video.basis_extension:id/tv_user_id'
+RID_THUMB='com.kwai.video.basis_extension:id/thumb'; RID_NEXT='com.kwai.video.product:id/edit_post_next_step_button'
+RID_EDITOR='kwai.lite.video.basis:id/editor'; RID_POST='kwai.lite.video.basis:id/post'; RID_PUBLIC='kwai.lite.video.ca_product:id/tv_select_permission'
+RID_NAME='com.kwai.video.basis:id/tv_slide_play_user_name'; RID_CAP='com.kwai.video.basis:id/slide_play_tv_user_info_desc'; RID_TIME='com.kwai.video.basis:id/tv_slide_play_post_time'
 
 class E(RuntimeError): pass
 
@@ -34,7 +36,7 @@ def run(a,timeout=60,check=True,text=True):
  p=subprocess.run(a,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout,check=False,text=text)
  if check and p.returncode: raise E(f'cmd-failed:{p.returncode}:{str(p.stderr)[-500:]}')
  return p
-def acmd(serial,*a): return [ADB,'-P',os.getenv('ANTHARES_PHYSICAL_ADB_PORT','5038')]+(['-s',serial] if serial else [])+list(a)
+def acmd(serial,*a): return [ADB,'-P',os.getenv('ANTHARES_PHYSICAL_ADB_PORT','5037')]+(['-s',serial] if serial else [])+list(a)
 def adb(serial,*a,timeout=60,check=True,text=True): return run(acmd(serial,*a),timeout,check,text)
 def devices():
  p=adb(None,'devices','-l',check=False)
@@ -72,8 +74,11 @@ def dump(s,name):
 def rid(root,r):
  # Exact whitelisted UI variants; package installation name differs from view ids.
  known={
-  RID_PROFILE:('kwai.lite.video.basis:id/id_home_bottom_tab_me','com.kwai.video.basis:id/id_home_bottom_tab_me'),
-  RID_NEXT:('kwai.lite.video.product:id/edit_post_next_step_button',),
+  RID_PROFILE:('kwai.lite.video.basis:id/id_home_bottom_tab_me',),
+  RID_NEXT:('kwai.lite.video.product:id/edit_post_next_step_button','kwai.lite.video.ca_product:id/next_button_normal','com.kwai.video.ca_product:id/next_button_normal'),
+  RID_EDITOR:('com.kwai.video.basis:id/editor',),
+  RID_POST:('com.kwai.video.basis:id/post','com.kwai.video.basis:id/right_btn'),
+  RID_PUBLIC:('com.kwai.video.ca_product:id/tv_select_permission',),
   RID_USER:('kwai.lite.video.basis:id/tv_user_id','kwai.lite.video.basis_extension:id/tv_user_id','com.kwai.video.basis:id/tv_user_id'),
   RID_THUMB:('kwai.lite.video.basis:id/thumb','kwai.lite.video.basis_extension:id/thumb','com.kwai.video.basis:id/thumb'),
   RID_NAME:('kwai.lite.video.basis:id/tv_slide_play_user_name',),
@@ -95,12 +100,12 @@ def wait(s,r,name,seconds=30):
  while time.monotonic()<end:
   root,path=dump(s,name); xs=rid(root,r)
   if xs and r==RID_PROFILE:
-   xs=[n for n in xs if n.attrib.get('clickable')=='true' and n.attrib.get('enabled')=='true' and center(n.attrib.get('bounds',''))]
-   xs.sort(key=lambda n:center(n.attrib['bounds'])[0],reverse=True)
+   xs=[n for n in xs if n.attrib.get("clickable")=="true" and n.attrib.get("enabled")=="true" and center(n.attrib.get("bounds",""))]
+   xs.sort(key=lambda n:center(n.attrib["bounds"])[0],reverse=True)
   if xs:return root,xs[0],path
-  # Kwai Lite and Kwai show account-specific notification promotions above
-  # the authenticated profile. Close only the identified optional popup.
-  # Never select its permission-enable button.
+  # Both Kwai variants can display an optional notifications promotion over
+  # the authenticated profile tab. Dismiss only its exact close control, never
+  # the permission/enable button; preserve account and privacy settings.
   prefix='com.kwai.video' if ACCOUNT=='universoanthares' else 'kwai.lite.video'
   notification_prompt=any(
    n.attrib.get('resource-id')==prefix+'.basis:id/tv_dialog_title' and
@@ -113,6 +118,61 @@ def wait(s,r,name,seconds=30):
    and center(n.attrib.get('bounds',''))]
   if r==RID_PROFILE and notification_prompt and len(notification_close)==1:
    tap(s,notification_close[0]);time.sleep(1);continue
+  # Redmi 9 can open Android's USB-use chooser while the cable is
+  # connected. Cancel this system overlay to preserve the existing USB mode.
+  usb_alert=any(n.attrib.get('resource-id')=='com.android.settings:id/alertTitle'
+    and (n.attrib.get('text') or '').strip()=='Usar USB para'
+    for n in root.iter('node'))
+  usb_cancel=[n for n in root.iter('node')
+    if n.attrib.get('resource-id')=='android:id/button2' and
+    (n.attrib.get('text') or '').strip()=='Cancelar']
+  if usb_alert and len(usb_cancel)==1:
+   tap(s,usb_cancel[0]);time.sleep(1);continue
+  # Dismiss only the known, optional birthdate promotion.
+  notice=any('data de nascimento' in (n.attrib.get('text') or '').lower()
+             for n in root.iter('node'))
+  dismiss=[n for n in root.iter('node') if
+           n.attrib.get('resource-id')=='kwai.lite.video.basis:id/second_button' and
+           (n.attrib.get('text') or '').strip().lower().startswith('agora')]
+  if notice and len(dismiss)==1:
+   tap(s,dismiss[0]); time.sleep(1); continue
+  # Close the optional Kwai creator-family popup without joining anything.
+  creator_close=[n for n in root.iter('node') if
+    n.attrib.get('resource-id')=='kwai.lite.video.basis_extension:id/fmy_guide_close']
+  if r==RID_USER and len(creator_close)==1 and any(
+    n.attrib.get('resource-id')=='kwai.lite.video.basis_extension:id/fmy_guide_banner_viewpager'
+    for n in root.iter('node')):
+   tap(s,creator_close[0]);time.sleep(1);continue
+  # Known Kwai Lite overlay-permission promotion on the published-video
+  # details page. Close the optional notice; never enable permissions.
+  overlay_close=[n for n in root.iter('node') if
+     n.attrib.get('resource-id')=='kwai.lite.video:id/iv_close']
+  if r==RID_NAME and len(overlay_close)==1 and any(
+      n.attrib.get('resource-id')=='kwai.lite.video.basis:id/after_popups_frame'
+      for n in root.iter('node')) and any(
+      n.attrib.get('resource-id')=='kwai.lite.video.basis:id/lottie_overlay_guide'
+      for n in root.iter('node')):
+   tap(s,overlay_close[0]);time.sleep(1);continue
+  # Profile can be scrolled down after a prior operation, hiding the Kwai ID.
+  # Restore it with the existing authenticated HID touch interface before
+  # resolving identity; never substitute the display name for the exact ID.
+  if r==RID_USER and (
+      (ACCOUNT=='lucasrosalem' and any(
+          n.attrib.get('resource-id')=='kwai.lite.video.basis_extension:id/profile_root'
+          for n in root.iter('node')) and any(
+          n.attrib.get('resource-id')=='kwai.lite.video.basis:id/title_tv' and
+          (n.attrib.get('text') or '').strip()=='Lucas Rosalem'
+          for n in root.iter('node')))
+      or (ACCOUNT=='universoanthares' and any(
+          n.attrib.get('resource-id')=='com.kwai.video.basis:id/title_tv' and
+          (n.attrib.get('text') or '').strip()=='Universo Anthares'
+          for n in root.iter('node')) and any(
+          n.attrib.get('resource-id')=='com.kwai.video.basis_extension:id/profile_settings_button' and
+          (n.attrib.get('text') or '').strip()=='Editar perfil'
+          for n in root.iter('node')))):
+   # Recover hidden @handle on the logged-in profile; exact ID remains required.
+   adb(s,'shell','sh','/data/local/tmp/anthares-kwai-profile-scroll.sh',timeout=16)
+   time.sleep(1);continue
   if r==RID_PROFILE and any(n.attrib.get('resource-id','').endswith(('/edit_post_next_step_button','/post_button_normal')) for n in root.iter('node')):
    raise E('ui-surface-unexpected:editor-screen-active:preserve-draft')
   time.sleep(1)
@@ -123,11 +183,11 @@ def home(s,preserve_upload=False):
  # Validated on Kwai Lite 2026-10-22. Explicit HomeActivity retains the upload
  # task, unlike am force-stop or a launcher intent that resumes EditorActivity.
  out('KWAI_NATIVE_PRESERVE_UPLOAD=1')
- if 'mWakefulness=Asleep' in (adb(s,'shell','dumpsys','power',timeout=15).stdout or ''):
-  adb(s,'shell',TOUCH,'540','1200',timeout=15)
+ if "mWakefulness=Asleep" in (adb(s,"shell","dumpsys","power",timeout=15).stdout or ""):
+  adb(s,"shell",TOUCH,"540","1200",timeout=15)
   time.sleep(1)
  activity=PKG+'/com.yxcorp.gifshow.homepage.HomeActivity'
- # Reorder the existing HomeActivity without destroying a pending editor/draft.
+ # Preserve an existing editor while bringing the HomeActivity to the foreground.
  p=adb(s,'shell','am','start','--activity-reorder-to-front','-n',activity,check=False,timeout=25)
  if p.returncode or 'Error' in (p.stdout or ''):
   out('KWAI_NATIVE_HOME_INTENT_UNAVAILABLE')
@@ -146,7 +206,13 @@ def latest(s,prefix,preserve_upload=False):
  account=(user.attrib.get('text') or '').strip().lstrip('@').lower()
  if account!=ACCOUNT: raise E('profile-account:'+account)
  thumbs=[n for n in rid(root,RID_THUMB) if n.attrib.get('clickable')=='true' and center(n.attrib.get('bounds',''))]
- if not thumbs: raise E('no-published-thumb')
+ if not thumbs:
+  if ACCOUNT!='universoanthares':raise E('no-published-thumb')
+  # A new secondary account may have no prior public video. The account ID
+  # was verified above; final confirmation still requires the exact new post.
+  return {'account':account,'display_name':'','caption':'','post_time':'',
+          'profile_xml':str(px),'detail_xml':'','screenshot':str(shot(s,prefix+'-empty-profile')),
+          'profile_empty':True}
  thumbs.sort(key=lambda n:(center(n.attrib['bounds'])[1],center(n.attrib['bounds'])[0])); tap(s,thumbs[0]); time.sleep(4)
  detail,_,dx=wait(s,RID_NAME,prefix+'-detail',30)
  def text(r):
@@ -218,20 +284,83 @@ def stage(s,path,digest):
  if not media_id:raise E('kwai_mediastore_index_unavailable_precommit')
  out('KWAI_MEDIASTORE_UNIQUE_MEDIA_ID_VERIFIED=1')
  return remote,MEDIA_URI+'/'+media_id
+
+def publish_ui(s,name):
+ root,path=dump(s,name)
+ editors=rid(root,RID_EDITOR); posts=rid(root,RID_POST); permissions=rid(root,RID_PUBLIC)
+ # Current ShareActivity publishes through right_btn=Publicar; bind the
+ # fallback to this exact account-specific text and enabled control.
+ posts=[n for n in posts if n.attrib.get("resource-id")!=
+        "com.kwai.video.basis:id/right_btn" or (
+        (n.attrib.get("text") or "").strip().casefold()=="publicar"
+        and n.attrib.get("clickable")=="true")]
+ if len(editors)!=1 or len(posts)!=1 or len(permissions)!=1:
+  raise E('kwai-publish-ui-contract-mismatch')
+ if posts[0].attrib.get('enabled')!='true':
+  raise E('kwai-publish-disabled')
+ if (permissions[0].attrib.get('text') or '').strip()!='Público':
+  raise E('kwai-public-privacy-required')
+ current_caption=(editors[0].attrib.get('text') or '').strip()
+ hint=bool(re.fullmatch(
+  r'Descreva sua publica.{1,3}o, adicione hashtags ou @amigos',
+  current_caption,flags=re.IGNORECASE)) and editors[0].attrib.get('class')=='android.widget.EditText'
+ if current_caption!=CAPTION and not (CAPTION_OPTIONAL and CAPTION=='' and hint):
+  raise E('kwai-caption-differs-from-target')
+ return root
+
 def editor(s,uri):
- # Avoid -W: Android can hang during editor initialization after SEND delivery.
- # The next line verifies that the exact editor Next control appears.
- adb(s,'shell','am','start','-a','android.intent.action.SEND','-t','video/mp4','--eu','android.intent.extra.STREAM',uri,'-p',PKG,timeout=15)
+ # Android am start -W can hang until full editor initialization even when
+ # intent delivery succeeded. Launch asynchronously, then verify exact UI
+ # nodes before proceeding. No Publish action occurs during prepare.
+ adb(s,'shell','am','start','-a','android.intent.action.SEND',
+     '-t','video/mp4','--eu','android.intent.extra.STREAM',uri,'-p',PKG,timeout=15)
  _,n,_=wait(s,RID_NEXT,safe()+'-editor',35)
  if n.attrib.get('enabled')!='true': raise E('next-disabled')
+ tap(s,n)
+ try:
+  wait(s,RID_EDITOR,safe()+'-publish-form',12)
+ except E as err:
+  if str(err)!='missing:'+RID_EDITOR:
+   raise
+  # The editor's first Next tap may be absorbed during video preview
+  # initialization. Retry only while the same enabled Next control remains
+  # visible; never touch the nearby direct-Publish control.
+  _,retry,_=wait(s,RID_NEXT,safe()+'-editor-next-retry',12)
+  if retry.attrib.get('enabled')!='true':raise E('next-retry-disabled')
+  tap(s,retry)
+  wait(s,RID_EDITOR,safe()+'-publish-form-retry',22)
+ env=os.environ.copy()
+ env['ANTHARES_PHYSICAL_ADB_SERIAL']=s
+ env['ANTHARES_ADB']=ADB
+ if CAPTION_OPTIONAL:
+  root,_,_=wait(s,RID_EDITOR,safe()+'-caption-optional-check',15)
+  fields=rid(root,RID_EDITOR)
+  # Kwai exposes its native EditText hint through UIAutomator as `text`,
+  # even when the actual caption is empty. Accept only the exact documented
+  # placeholder on the authenticated ShareActivity (never arbitrary text).
+  if len(fields)!=1:
+   raise E('kwai_caption_optional_editor_missing_or_ambiguous')
+  content=(fields[0].attrib.get('text') or '').strip()
+  placeholder=bool(re.fullmatch(
+   r'Descreva sua publica.{1,3}o, adicione hashtags ou @amigos',content,
+   flags=re.IGNORECASE)) and fields[0].attrib.get('class')=='android.widget.EditText'
+  if content and not placeholder:
+   raise E('kwai_caption_optional_stale_editor_text')
+  out('KWAI_CAPTION_OPTIONAL_BLANK_EDITOR_VERIFIED')
+  return
+ proc=subprocess.run([sys.executable,str(ROOT/'tools'/'kwai_hid_caption.py'),CAPTION],
+       capture_output=True,text=True,timeout=145,env=env)
+ if proc.returncode or 'KWAI_CAPTION_READBACK=PASS' not in (proc.stdout or ''):
+  raise E('kwai-caption-auto-fill-failed:'+str((proc.stderr or proc.stdout or '')[-240:]))
+ out('KWAI_CAPTION_AUTOMATED=PASS')
+
 def ptime(t):
  for f in ('%Y-%m-%d %I:%M %p','%Y-%m-%d %H:%M','%d/%m/%Y %H:%M','%d/%m/%Y %I:%M %p'):
   try:return datetime.strptime((t or '').strip(),f)
   except ValueError:pass
  return None
 def confirm(s,baseline,tries=5,delay=15,attempted_at=0,expected_caption=None):
- # Allow async upload a brief grace period before read-only profile checks.
- time.sleep(25)
+ time.sleep(25) # Allow async upload to progress before visiting profile
  last={}
  for i in range(tries):
   try:
@@ -242,6 +371,8 @@ def confirm(s,baseline,tries=5,delay=15,attempted_at=0,expected_caption=None):
    caption=expected_caption if expected_caption is not None else CAPTION
    title=bool(caption and caption.casefold() in (last.get('caption') or '').casefold())
    partial=bool(caption and caption[:28].casefold() in (last.get('caption') or '').casefold())
+   if last.get('account')==ACCOUNT and changed and fresh and CAPTION_OPTIONAL and not caption:
+    return True,last,'profile-account-post-time-caption-optional-await-media'
    if last.get('account')==ACCOUNT and changed and (title or (fresh and partial)): return True,last,'profile-account-title-time' if title else 'profile-account-post-time-and-caption-prefix'
   except E as e:last={'error':str(e)}
   if i+1<tries:time.sleep(delay)
@@ -249,15 +380,94 @@ def confirm(s,baseline,tries=5,delay=15,attempted_at=0,expected_caption=None):
 def prepare():
  if not JOB or not re.fullmatch(r'[A-Za-z0-9._:-]{3,160}',JOB): raise E('bad-job-id')
  st=load()
- if st.get('publication_attempted') or st.get('state') in ('publication_attempted','verified','uncertain'): out('KWAI_UP_STATE=UNCERTAIN DEDUPE_GUARD=1'); return 90
- s=connect(); path,digest=media(); baseline=latest(s,safe()+'-baseline'); remote,uri=stage(s,path,digest); editor(s,uri)
- st={'job_id':JOB,'state':'ready','publication_attempted':False,'prepared_at':int(time.time()),'serial':s,'media_sha256':digest,'media_path':str(path),'remote_media':remote,'media_uri':uri,'expected_account':ACCOUNT,'caption':CAPTION,'baseline':baseline}; save(st)
+ prior_attempt=bool(st.get('publication_attempted') or st.get('state') in ('publication_attempted','verified','uncertain'))
+ historical=None
+ if prior_attempt:
+  # Only a new canonical Neon lease bearing independent public-absence proof
+  # may supersede the prior, deliberately quarantined phone state.
+  raw=os.getenv('KWAI_HISTORICAL_REQUEUE_PROOF_JSON','')
+  try: historical=json.loads(raw)
+  except (ValueError,TypeError): historical=None
+  try:
+   generation=int(os.getenv('KWAI_LEASE_GENERATION','0'))
+   previous=int(historical['prior_lease_generation'])
+   when=int(historical['previous_started_at_epoch_ms'])
+  except (TypeError,KeyError,ValueError):
+   generation=previous=when=0
+  if (not isinstance(historical,dict) or
+      historical.get('kind')!='kwai_historical_verified_public_absent_v1' or
+      historical.get('job_id')!=JOB or historical.get('author_handle')!='lucasrosalem' or
+      historical.get('attested_device')!='DESKTOP-FTDK0HP' or
+      historical.get('device_signature_verified') is not True or
+      not (0<previous<generation) or
+      abs(when-int(st.get('publication_attempted_at') or 0)*1000)>5000 or
+      historical.get('source_sha256')!=st.get('media_sha256') or
+      int(historical.get('source_http_code') or 0)!=200):
+   out('KWAI_UP_STATE=UNCERTAIN DEDUPE_GUARD=1 HISTORICAL_FENCE_REQUIRED=1')
+   return 90
+  out('KWAI_HISTORICAL_SAFE_REQUEUE=ACCEPTED CURRENT_LEASE='+str(generation))
+ s=connect(); path,digest=media()
+ if historical and digest!=historical['source_sha256']:
+  raise E('historical-verified-source-sha256-changed')
+ baseline=latest(s,safe()+'-baseline'); remote,uri=stage(s,path,digest); editor(s,uri)
+ st={'job_id':JOB,'state':'ready','publication_attempted':False,'prepared_at':int(time.time()),'serial':s,'media_sha256':digest,'media_path':str(path),'remote_media':remote,'media_uri':uri,'expected_account':ACCOUNT,'caption':CAPTION,'caption_optional':CAPTION_OPTIONAL,'baseline':baseline}; save(st)
  out(f'KWAI_UP_STATE=READY_TO_PUBLISH SERIAL={s} SHA256={digest}'); return 0
+def unlock_historical_android_attempt(s,st):
+ # A signed Neon lease explicitly proved the October attempt absent from
+ # the complete public feed. Preserve the Android's older attempt marker
+ # before allowing the replacement publication. This never runs on ordinary
+ # jobs, and never clears a marker created during the current lease.
+ raw=os.getenv('KWAI_HISTORICAL_REQUEUE_PROOF_JSON','')
+ if not raw:return
+ try:
+  p=json.loads(raw)
+  generation=int(os.getenv('KWAI_LEASE_GENERATION','0'))
+  prior=int(p['prior_lease_generation'])
+  old=int(p['previous_started_at_epoch_ms'])
+  proof_at=int(p['verified_at_epoch_ms'])
+ except (ValueError,TypeError,KeyError) as ex:raise E('historical-native-proof-invalid') from ex
+ if (p.get('kind')!='kwai_historical_verified_public_absent_v1' or
+     p.get('job_id')!=JOB or p.get('author_handle')!='lucasrosalem' or
+     p.get('attested_device')!='DESKTOP-FTDK0HP' or
+     p.get('device_signature_verified') is not True or
+     p.get('source_sha256')!=st.get('media_sha256') or
+     p.get('source_http_code')!=200 or
+     not(0<prior<generation) or
+     old<1760000000000 or
+     not (old<=proof_at<=int(time.time()*1000)+15000) or
+     st.get('state')!='ready' or st.get('publication_attempted') or
+     st.get('job_id')!=JOB):raise E('historical-native-lease-fence-invalid')
+ base='/data/local/tmp/anthares-kwai-native/'+JOB
+ mark=base+'.state'
+ oldvalue=adb(s,'shell','cat',mark,check=False)
+ if oldvalue.returncode:
+  out('KWAI_HISTORICAL_NATIVE_MARKER_ABSENT CURRENT_LEASE='+str(generation))
+  return
+ if oldvalue.stdout.strip()!='PUBLICATION_ATTEMPTED_UNVERIFIED':
+  raise E('historical-native-marker-unexpected')
+ # Marker mtime must precede this verified public-absence scan.
+ stamp=adb(s,'shell','stat','-c','%Y',mark,check=False)
+ try:mtime=int(stamp.stdout.strip())
+ except (ValueError,AttributeError):raise E('historical-native-marker-time-unreadable')
+ if stamp.returncode or mtime*1000>proof_at+2000:
+  raise E('historical-native-marker-newer-than-public-scan')
+ archive=base+'.before-historical-requeue-lease-'+str(generation)+'.state'
+ if adb(s,'shell','test','-e',archive,check=False).returncode==0:
+  raise E('historical-native-marker-archive-collision')
+ if adb(s,'shell','cat',mark,check=False).stdout.strip()!='PUBLICATION_ATTEMPTED_UNVERIFIED':
+  raise E('historical-native-marker-changed-before-archive')
+ mv=adb(s,'shell','mv',mark,archive,check=False)
+ if mv.returncode or adb(s,'shell','test','-e',mark,check=False).returncode==0:
+  raise E('historical-native-marker-archive-failed')
+ out('KWAI_HISTORICAL_NATIVE_MARKER_ARCHIVED LEASE='+str(generation))
+
 def commit():
  st=load()
  if not st or st.get('state')!='ready' or st.get('publication_attempted'): out('KWAI_UP_STATE=UNCERTAIN DEDUPE_GUARD=1'); return 90
  s=connect(); _,digest=media()
  if digest!=st.get('media_sha256'): raise E('media-changed-after-prepare')
+ publish_ui(s,safe()+'commit-preflight')
+ unlock_historical_android_attempt(s,st)
  st['publication_attempted']=True; st['state']='publication_attempted'; st['publication_attempted_at']=int(time.time()); save(st)
  p=adb(s,'shell',NATIVE,JOB,timeout=120,check=False); st['native_rc']=p.returncode; st['native_stdout']=(p.stdout or '')[-4000:]; st['native_stderr']=(p.stderr or '')[-2000:]; save(st)
  ok,proof,evidence=confirm(s,st.get('baseline') or {},attempted_at=st.get('publication_attempted_at',0),expected_caption=st.get('caption')); st['profile_verification']=proof; st['verification_evidence']=evidence
