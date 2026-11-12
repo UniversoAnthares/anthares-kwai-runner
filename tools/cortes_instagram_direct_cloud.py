@@ -215,7 +215,7 @@ def instagram_caption(payload: dict, job_id: str | None = None) -> str:
         raise RuntimeError("DIRECT_CAPTION_TITLE_TOO_LONG")
     if len(description) > room:
         # Keep public proof tag and website even if older text exceeds the API cap.
-        suffix = WEBSITE + (("\\n" + tag) if job_id else "")
+        suffix = WEBSITE + (("\n" + tag) if job_id else "")
         description = description[:room - len(suffix) - 1].rstrip() + "\n" + suffix
     return title + "\n" + description
 
