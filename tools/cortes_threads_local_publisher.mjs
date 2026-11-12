@@ -144,11 +144,30 @@ try{
    if(n===89)log({action:'MEDIA_NOT_READY',state:r})
  }
  if(!ready)throw Error('VIDEO_PREVIEW_NOT_READY');
- const editor=await composer.evaluate('(()=>{const e=document.querySelector("[role=dialog] [contenteditable=true]");if(!e)return false;e.focus();return true})()');
- if(!editor)throw Error('COMPOSER_EDITOR_MISSING');
- await composer.send('Input.insertText',{text:item.caption});
- const text=await composer.evaluate('document.querySelector("[role=dialog] [contenteditable=true]")?.innerText');
- if(!text||!text.includes(item.title)||!text.includes('www.anthares.us'))throw Error('CAPTION_NOT_APPLIED');
+ let captionSkipped=false;
+ try{
+  const editor=await composer.evaluate('(()=>{const e=document.querySelector("[role=dialog] [contenteditable=true]");if(!e)return false;e.focus();return true})()');
+  if(!editor)throw Error('COMPOSER_EDITOR_MISSING');
+  await composer.send('Input.insertText',{text:item.caption});
+  const text=await composer.evaluate('document.querySelector("[role=dialog] [contenteditable=true]")?.innerText');
+  if(!text||!text.includes(item.title)||!text.includes('www.anthares.us'))throw Error('CAPTION_NOT_APPLIED');
+ }catch(captionError){
+  // Video-only Threads publication: clean any partial editor content, and
+  // preserve upload/account/visibility/confirmation guards.
+  const cleared=await composer.evaluate('(()=>{const e=document.querySelector("[role=dialog] [contenteditable=true]");if(!e)return true;e.focus();e.textContent="";e.dispatchEvent(new InputEvent("input",{bubbles:true,inputType:"deleteContent"}));return !(e.innerText||"").trim()})()');
+  if(!cleared)throw Error('CAPTION_SKIP_REJECTED_NONEMPTY_EDITOR');
+  captionSkipped=true;
+  log({action:'THREADS_CAPTION_SKIPPED_MEDIA_ONLY',id:item.id,reason:String(captionError?.message||captionError).slice(0,95)});
+ }
+ let profileBaseline=[];
+ if(captionSkipped){
+  const baselineTab=await createTab('https://www.threads.com/@universoanthares');
+  try{
+   await delay(1300);
+   profileBaseline=await baselineTab.evaluate('([...document.querySelectorAll("a[href*=\\"/post/\\"]")].map(x=>x.href))')||[];
+  }finally{await baselineTab.close()}
+  if(profileBaseline.length===0)throw Error('MEDIA_ONLY_PROFILE_BASELINE_UNAVAILABLE');
+ }
  await delay(1700);
  const canSubmit=await composer.evaluate('(()=>{const x=[...document.querySelectorAll("[role=dialog] [role=button]")].filter(e=>e.textContent?.trim()==="Postar");return x.length>0&&x.at(-1).getAttribute("aria-disabled")!=="true"})()');
  if(!canSubmit)throw Error('SUBMIT_DISABLED');
@@ -161,7 +180,9 @@ try{
  let post=null;
  for(let attempt=0;attempt<22;attempt++){
   await delay(attempt===0?8000:5000);
-  const found=await profile.evaluate('(()=>{const wanted='+JSON.stringify(item.title)+';const txt=document.body.innerText;if(!txt.includes(wanted))return {found:false,head:txt.slice(0,150)};const links=[...document.querySelectorAll("a[href*=\\"/post/\\"]")];for(const link of links){let e=link;for(let i=0;i<11&&e;i++,e=e.parentElement){if(e.innerText?.includes(wanted))return {found:true,url:link.href};}}return {found:true,url:null}})()');
+  const found=captionSkipped
+   ? await profile.evaluate('(()=>{const old='+JSON.stringify(profileBaseline)+';const urls=[...new Set([...document.querySelectorAll("a[href*=\"/post/\"]")].map(x=>x.href).filter(x=>x.includes("@universoanthares/post/")&&!old.includes(x)))];return urls.length===1?{found:true,url:urls[0]}:{found:false,count:urls.length}})()')
+   : await profile.evaluate('(()=>{const wanted='+JSON.stringify(item.title)+';const txt=document.body.innerText;if(!txt.includes(wanted))return {found:false,head:txt.slice(0,150)};const links=[...document.querySelectorAll("a[href*=\\"/post/\\"]")];for(const link of links){let e=link;for(let i=0;i<11&&e;i++,e=e.parentElement){if(e.innerText?.includes(wanted))return {found:true,url:link.href};}}return {found:true,url:null}})()');
   if(found.found&&found.url){post=found.url;break}
   if(found.found&&!found.url)log({action:'MATCH_WITHOUT_POST_URL',id:item.id});
   if(attempt%4===3)await profile.send('Page.reload',{ignoreCache:true});
