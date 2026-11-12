@@ -91,5 +91,28 @@ class DirectInstagramTests(unittest.TestCase):
         self.assertLessEqual(len(result), 2200)
         self.assertIn("www.anthares.us", result)
 
+    def test_batch_can_commit_two_distinct_confirmations(self):
+        with patch.object(direct,"require_cloud",return_value=object()), \
+             patch.object(direct,"publish_once",side_effect=[1,1]) as once, \
+             patch.object(direct.time,"sleep") as delay:
+            self.assertEqual(direct.main(),0)
+            self.assertEqual(once.call_count,2)
+            delay.assert_called_once_with(65)
+
+    def test_batch_stops_at_quota_or_empty_queue(self):
+        with patch.object(direct,"require_cloud",return_value=object()), \
+             patch.object(direct,"publish_once",side_effect=[1,0]) as once, \
+             patch.object(direct.time,"sleep") as delay:
+            self.assertEqual(direct.main(),0)
+            self.assertEqual(once.call_count,2)
+            delay.assert_called_once_with(65)
+
+    def test_batch_stops_on_uncertain_submission(self):
+        with patch.object(direct,"require_cloud",return_value=object()), \
+             patch.object(direct,"publish_once",side_effect=[1,2]) as once, \
+             patch.object(direct.time,"sleep"):
+            self.assertEqual(direct.main(),2)
+            self.assertEqual(once.call_count,2)
+
 if __name__=="__main__":
     unittest.main()
