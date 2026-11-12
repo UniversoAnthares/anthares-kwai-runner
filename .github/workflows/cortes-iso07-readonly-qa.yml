@@ -1,0 +1,60 @@
+name: CORTES ISO-07 readonly admission QA
+on:
+  push:
+    branches:
+      - chatgpt/r07-iso07-readiness-qa-20261025
+    paths:
+      - qa/iso07/**
+      - .github/workflows/cortes-iso07-readonly-qa.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: iso07-readonly-qa-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Fetch immutable branch commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prove no secret, OIDC or publishing permission
+        shell: bash
+        run: |
+          test "${{ github.event_name }}" = push || test "${{ github.event_name }}" = workflow_dispatch
+          test -f qa/iso07/preflight.py
+          test -f qa/iso07/test_preflight.py
+      - name: Run isolated QA tests
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHONWARNINGS: error
+        run: |
+          python3 -m unittest qa.iso07.test_preflight -v
+      - name: Audit actual repository workflows (no credentials)
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -m qa.iso07.preflight \
+            --cloud .github/workflows/cortes-tiktok-lucasrosalem4-cloud-publisher.yml \
+            --fallback .github/workflows/cortes-tiktok-lucasrosalem4-windows-fallback.yml > iso07-report.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("iso07-report.json").read_text())
+          assert data["control"] == "R07.6-13/CORTES-ISO-07"
+          assert data["status"] == "BLOCKED"
+          assert len(data["blocked_gates"]) >= 2
+          assert data["authorized_to_publish"] is False
+          assert data["live_publication_invoked"] is False
+          print("ISO07_QA_ASSERT=PASS")
+          print("ISO07_QA_ONLY=true")
+          print("ISO07_PRODUCTION_CUTOVER=false")
+          print("ISO07_GATE_COUNT=" + str(len(data["blocked_gates"])))
+          PY
+          rm -f iso07-report.json
