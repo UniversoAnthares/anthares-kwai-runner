@@ -1,0 +1,29 @@
+name: CORTES Threads independent proportional pacing contract
+on:
+  push:
+    branches: [main, fix/cortes-threads-independent-proportional-23h-20261112]
+    paths:
+      - 'infra/neon-cortes-threads-execution/index.mjs'
+      - 'tests/test_cortes_threads_independent_pacing.mjs'
+      - '.github/workflows/cortes-threads-proportional-contract.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-threads-proportional-contract-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify standalone Threads cloud 23h pace and independent submit gate
+        run: |
+          set -euo pipefail
+          node --check infra/neon-cortes-threads-execution/index.mjs
+          node --test tests/test_cortes_threads_independent_pacing.mjs
+          echo THREADS_INDEPENDENT_PROPORTIONAL_CONTRACT=PASS

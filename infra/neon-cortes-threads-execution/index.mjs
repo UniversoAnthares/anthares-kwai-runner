@@ -73,6 +73,46 @@ async function control(){
  return rows[0]||{};
 }
 const daySQL="(now() AT TIME ZONE 'America/Campo_Grande')::date";
+// Independent cloud handoff must honor the same per-account deadline as
+// the local WordPress publisher. Recomputed after each verified confirmation.
+export async function threadsProportionalDue(includeLeased=false){
+ const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+ const end="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '23 hours') AT TIME ZONE 'America/Campo_Grande')";
+ const rows=await database(`SELECT
+   count(*) FILTER (WHERE p.status='queued' AND NOT EXISTS(
+    SELECT 1 FROM cortes_threads_quarantine q WHERE q.id=p.id AND q.status='isolated'))::int AS eligible,
+   count(*) FILTER (WHERE p.status='leased' AND p.lease_until>now()
+    AND p.lease_owner LIKE 'github-threads:%')::int AS cloud_leased,
+   count(*) FILTER (WHERE (p.status='confirmed' AND p.updated_at>=${day})
+    OR (p.publication_started_at>=${day} AND p.status IN ('started','uncertain','confirmed')))::int AS started,
+   min(p.updated_at) FILTER (WHERE p.status='confirmed' AND p.updated_at>=${day}) AS first_confirmed,
+   max(p.updated_at) FILTER (WHERE p.status='confirmed' AND p.updated_at>=${day}) AS last_confirmed,
+   now() AS server_now,${end} AS deadline_at
+   FROM cortes_publications p WHERE p.target_key=$1`,[TARGET]);
+ const r=rows[0]||{},eligible=Number(r.eligible),started=Number(r.started),
+       leased=includeLeased?Number(r.cloud_leased):0,
+       now=new Date(r.server_now).getTime(),deadline=new Date(r.deadline_at).getTime();
+ if(!Number.isSafeInteger(eligible)||eligible<0||!Number.isSafeInteger(started)||
+    started<0||!Number.isSafeInteger(leased)||leased<0||
+    !Number.isFinite(now)||!Number.isFinite(deadline))
+  throw Error('THREADS_PACING_LEDGER_INVALID');
+ const available=Math.min(eligible+leased,Math.max(0,100-started));
+ const first=r.first_confirmed?new Date(r.first_confirmed).getTime():null;
+ const last=r.last_confirmed?new Date(r.last_confirmed).getTime():null;
+ if((first===null)!==(last===null)||
+    (last!==null&&(!Number.isFinite(first)||!Number.isFinite(last)||
+                    first>last||last>now||last>deadline)))
+  throw Error('THREADS_PACING_RECEIPT_INVALID');
+ const base={remaining_today:available,eligible,started_today:started,
+             deadline_at:new Date(deadline).toISOString(),next_due_at:null};
+ if(now>=deadline)return{status:'BLOCKED_SAME_DAY_CAPACITY',...base};
+ if(!available)return{status:eligible?'BLOCKED_PLATFORM_LIMIT':'IDLE',...base};
+ if(last===null)return{status:'DUE',...base,next_due_at:new Date(now).toISOString()};
+ const due=last+(deadline-last)/available;
+ return{status:now>=due?'DUE':'WAIT',...base,next_due_at:new Date(due).toISOString(),
+   first_confirmed_at:r.first_confirmed,last_confirmed_at:r.last_confirmed};
+}
+
 async function stats(){
  // Expiration is a review deadline, never evidence that a queued clip failed.
  // Preserve isolated records and their queue identity until independently verified.
@@ -83,7 +123,7 @@ async function stats(){
   database("SELECT id,remote_id FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND confirmation_evidence->>'kind'='threads_cloud_verified' ORDER BY updated_at DESC LIMIT 100",[TARGET]),database("SELECT p.id,p.payload->>'source_day' AS source_day FROM cortes_publications p WHERE p.target_key=$1 AND p.status='queued' AND NOT EXISTS (SELECT 1 FROM cortes_threads_quarantine q WHERE q.id=p.id AND q.status='isolated') ORDER BY p.created_at ASC LIMIT 200",[TARGET]),database("SELECT count(*)::int AS n FROM cortes_publications WHERE target_key=$1 AND status IN ('started','leased') AND lease_owner LIKE 'github-threads:%'",[TARGET])]);
  return{ok:true,owner:controlState.owner||'local',epoch:Number(controlState.epoch||0),
   lease_until:controlState.lease_until||null,cloud_primary_enabled:controlState.cloud_primary_enabled===true||controlState.cloud_primary_enabled==='t',cloud_heartbeat_at:controlState.cloud_heartbeat_at||null,cloud_last_success_at:controlState.cloud_last_success_at||null,cloud_inflight:Number(inflight[0]?.n||0),queued_ids:queued.map(z=>z.id),queued_rows:queued.map(z=>({id:z.id,source_day:z.source_day})),confirmed:confirmed.map(z=>({id:z.id,url:z.remote_id})),
-  counts:Object.fromEntries(counts.map(z=>[z.status,Number(z.n)]))};
+  counts:Object.fromEntries(counts.map(z=>[z.status,Number(z.n)])),pacing:await threadsProportionalDue(false)};
 }
 async function action(body,role,claims){
  const id=String(body?.id||''),epoch=Number(body?.epoch),run=String(claims?.run_id||'');
@@ -115,11 +155,15 @@ async function action(body,role,claims){
   return rows[0]?{ok:true,quarantine:rows[0],first_notice:Number(rows[0].error_count)===1}:{ok:false,error:'CANNOT_QUARANTINE_NONQUEUED'};
  }
  if(body.action==='claim'){
+  const pacing=await threadsProportionalDue(false);
+  if(pacing.status!=='DUE')return{ok:false,error:'THREADS_PROPORTIONAL_NOT_DUE',pacing};
   const rows=await database("UPDATE cortes_threads_executor_handoff SET owner='cloud',epoch=epoch+1,lease_until=now()+interval '10 minutes',local_pause_until=NULL,updated_at=now() WHERE target_key=$1 AND ((cloud_primary_enabled=true AND (cloud_last_success_at IS NULL OR cloud_last_success_at<now()-interval '6 minutes')) OR (local_paused_at>now()-interval '8 minutes' AND local_pause_until>now() AND $2='workflow_dispatch')) AND (owner='local' OR lease_until<now()) RETURNING epoch,owner,lease_until",[TARGET,claims?.event_name||'']);
   return rows[0]?{ok:true,lease:rows[0]}:{ok:false,error:'NO_FRESH_LOCAL_PAUSE_ACK'};
  }
  if(!Number.isSafeInteger(epoch)||epoch<1)return{ok:false,error:'INVALID_FENCE_EPOCH'};
  if(body.action==='reserve'){
+  const pacing=await threadsProportionalDue(false);
+  if(pacing.status!=='DUE')return{ok:false,error:'THREADS_PROPORTIONAL_NOT_DUE',pacing};
   if(!idValid(id))return{ok:false,error:'INVALID_MEDIA_ID'};
   const hash=String(body.sha256||'').toLowerCase();
   const media=String(body.media_url||'');
@@ -129,6 +173,8 @@ async function action(body,role,claims){
   return rows[0]?{ok:true,job:rows[0]}:{ok:false,error:'NOT_QUEUED_OR_CLOUD_FENCE_INVALID'};
  }
  if(body.action==='start'){
+  const pacing=await threadsProportionalDue(true);
+  if(pacing.status!=='DUE')return{ok:false,error:'THREADS_PROPORTIONAL_NOT_DUE',pacing};
   if(!idValid(id))return{ok:false,error:'INVALID_MEDIA_ID'};
   const generation=Number(body.generation);
   const rows=await database("UPDATE cortes_publications SET status='started',publication_started_at=now(),updated_at=now() WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 AND lease_generation=$4 AND lease_until>now() AND EXISTS (SELECT 1 FROM cortes_threads_executor_handoff h WHERE h.target_key=$2 AND h.owner='cloud' AND h.epoch=$5 AND h.lease_until>now()) RETURNING id,status",[id,TARGET,'github-threads:'+run,generation,epoch]);
