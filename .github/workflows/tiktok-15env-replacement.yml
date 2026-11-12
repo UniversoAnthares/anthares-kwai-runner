@@ -8,6 +8,9 @@ permissions:
   id-token: write
 jobs:
   probe:
+    # Dedicated diagnostic boundary; it contains no secrets and does not publish.
+    environment:
+      name: tiktok-diagnostic
     strategy:
       fail-fast: false
       matrix:
