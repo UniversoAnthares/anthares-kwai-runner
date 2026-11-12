@@ -1152,8 +1152,9 @@ async function instagramDirectAction(verb,b){
     )`,[target]);
   if(Number(used[0]?.n||0)>=100)return {ok:true,job:null,daily_limit_reached:true,limit:100};
   const row=await query(`WITH candidate AS (
-    SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued'
-    ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1
+    SELECT q.id FROM cortes_publications q WHERE q.target_key=$1 AND q.status='queued'
+    ORDER BY (SELECT MIN(origin.created_at) FROM cortes_publications origin WHERE origin.target_key=q.target_key AND origin.source_id=q.source_id) DESC,
+      q.created_at,q.id FOR UPDATE OF q SKIP LOCKED LIMIT 1
    ) UPDATE cortes_publications p SET status='leased',lease_owner=$2,
     lease_generation=p.lease_generation+1,lease_until=now()+interval '20 minutes',updated_at=now()
     FROM candidate WHERE p.id=candidate.id AND p.status='queued'
@@ -1701,7 +1702,8 @@ async function pinterestBrowserAction(verb,b){
            OR COALESCE((p.confirmation_evidence->>'retry_after_at')::timestamptz,
                (p.confirmation_evidence->>'retry_after_date')::date AT TIME ZONE 'America/Campo_Grande',
                now()) <= now() )
-   ORDER BY p.created_at,p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
+   ORDER BY (SELECT MIN(origin.created_at) FROM cortes_publications origin WHERE origin.target_key=p.target_key AND origin.source_id=p.source_id) DESC,
+      p.created_at,p.updated_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 1
   ) UPDATE cortes_publications p SET status='leased',lease_owner=$2,
      lease_generation=p.lease_generation+1,lease_until=now()+interval '15 minutes',updated_at=now()
     FROM picked WHERE p.id=picked.id AND p.status='queued'
@@ -1798,7 +1800,9 @@ async function personalAction(verb,b){
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
   const used=await query(`SELECT count(*)::int n FROM cortes_publications WHERE target_key=$1 AND status IN ('confirmed','leased','started','uncertain') AND updated_at >= ${day}`,[P_TARGET]);
   if(Number(used[0]?.n||0)>=P_LIMIT)return{ok:true,job:null,daily_limit_reached:true,limit:P_LIMIT};
-  const rows=await query(`WITH picked AS (SELECT id FROM cortes_publications WHERE target_key=$1 AND status='queued' ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE cortes_publications p SET status='leased',lease_owner=$2,lease_generation=p.lease_generation+1,lease_until=now()+interval '30 minutes',updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued' RETURNING p.*`,[P_TARGET,P_OWNER]);
+  const rows=await query(`WITH picked AS (SELECT q.id FROM cortes_publications q WHERE q.target_key=$1 AND q.status='queued'
+      ORDER BY (SELECT MIN(origin.created_at) FROM cortes_publications origin WHERE origin.target_key=q.target_key AND origin.source_id=q.source_id) DESC,
+        q.created_at,q.id FOR UPDATE OF q SKIP LOCKED LIMIT 1) UPDATE cortes_publications p SET status='leased',lease_owner=$2,lease_generation=p.lease_generation+1,lease_until=now()+interval '30 minutes',updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued' RETURNING p.*`,[P_TARGET,P_OWNER]);
   return{ok:true,job:rows[0]||null,limit:P_LIMIT};
  }
  if(verb==='pending'){
