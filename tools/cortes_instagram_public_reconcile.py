@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.instagram_publish import InstagramClient
-from tools.cortes_queue_ha import post
+from tools.cortes_queue_ha import post, BackendUnavailable
 from tools.cortes_instagram_direct_cloud import oidc, require_cloud
 
 USERNAME = "universoanthares"
@@ -298,6 +298,13 @@ def action_scan() -> int:
 def main() -> int:
     # Only the hosted GitHub OIDC role can update the canonical Neon ledger.
     client = require_cloud()
+    # Require fresh authenticated profile readback before even examining jobs:
+    # anonymous or expired browser state can never classify an uncertain Reel.
+    snapshot=post("instagram-direct-profile-snapshot", {}, oidc)
+    if not snapshot.get("ok") or not snapshot.get("available"):
+        print(json.dumps({"public_reconcile":"AUTHENTICATED_PROFILE_REQUIRED",
+                          "reason":snapshot.get("reason","NO_FRESH_AUTHENTICATED_SCAN")}),flush=True)
+        return 0
     pending = post("instagram-direct-pending", {"limit": 50}, oidc)
     if not pending.get("ok") or pending.get("target_key") != "instagram:universoanthares":
         raise RuntimeError("PUBLIC_RECONCILE_QUEUE_REJECTED")
@@ -308,11 +315,6 @@ def main() -> int:
                           "unresolved": len(jobs)}), flush=True)
         return 0
     oldest = min(stored_timestamp(j) for j in eligible)
-    snapshot=post("instagram-direct-profile-snapshot", {}, oidc)
-    if not snapshot.get("ok") or not snapshot.get("available"):
-        print(json.dumps({"public_reconcile":"AUTHENTICATED_PROFILE_REQUIRED",
-                          "reason":snapshot.get("reason","NO_FRESH_AUTHENTICATED_SCAN")}),flush=True)
-        return 0
     data=snapshot.get("scan") or {}
     items=data.get("posts") or []
     if isinstance(items,str):
@@ -358,6 +360,7 @@ if __name__ == "__main__":
             raise RuntimeError("PUBLIC_RECONCILE_MODE_INVALID")
         raise SystemExit(handler())
     except Exception as error:
+        reason=str(error)[:90] if isinstance(error,BackendUnavailable) else type(error).__name__
         print(json.dumps({"public_reconcile": "FAILED_SAFE",
-                          "reason": type(error).__name__}), file=sys.stderr)
+                          "reason": reason}), file=sys.stderr)
         raise SystemExit(2)
