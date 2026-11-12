@@ -693,6 +693,83 @@ async function kwaiPhysicalSourceFrameConfirm(target,owner,b,proof,remote){
    {ok:false,error:'KWAI_PHYSICAL_SOURCE_FRAME_STALE_FENCE'};
 }
 
+// Reconciled source-video confirmations also update the canonical CORTES origin.
+// Read the WordPress callback token ONLY inside Neon. Never return or log it.
+// Retried callbacks are idempotent; a failed callback never rolls back a real post.
+async function kwaiSyncReconciledWordpress(target,jobId=''){
+ const account=target.split(':')[1];
+ const id=String(jobId||'');
+ if(id&&!/^kwai-cortes-[A-Za-z0-9_.:-]{12,180}$/.test(id))
+   return {ok:false,error:'KWAI_WP_SYNC_JOB_ID_INVALID'};
+ const rows=await query(
+  "SELECT p.id,p.remote_id,p.payload FROM cortes_publications p "+
+  "WHERE p.target_key=$1 AND p.status='confirmed' "+
+  "AND p.confirmation_evidence->>'kind'='kwai_authenticated_source_frames_reconciled_v1' "+
+  "AND coalesce(p.confirmation_evidence->>'wp_callback_state','')<>'completed' "+
+  (id?"AND p.id=$2 ":"")+
+  "ORDER BY p.updated_at ASC LIMIT 2",id?[target,id]:[target]);
+ const results=[];
+ for(const row of rows){
+  let media=row.payload;
+  if(typeof media==='string'){try{media=JSON.parse(media);}catch{media=null;}}
+  const url=String(media?.cortes_callback_url||'');
+  const token=String(media?.cortes_callback_token||'');
+  const remote=String(row.remote_id||'');
+  let endpoint;try{endpoint=new URL(url);}catch{}
+  if(!endpoint||endpoint.protocol!=='https:'||
+     !['anthares.us','www.anthares.us'].includes(endpoint.hostname)||
+     endpoint.port||endpoint.username||endpoint.password||endpoint.search||endpoint.hash||
+     !endpoint.pathname.includes('/cortes/clip-network-callback')||
+     !/^https:\/\/www\.kwai\.com\/@[A-Za-z0-9_.-]+\/video\/\d{16,21}$/.test(remote)||
+     !remote.startsWith('https://www.kwai.com/@'+account+'/')||
+     token.length<16||token.length>1000||
+     !media?.cortes_video_id||!media?.cortes_clip_id){
+    results.push({id:row.id,ok:false,reason:'WP_CALLBACK_CONTRACT_INVALID'});
+    continue;
+  }
+  const payload={
+   video_id:String(media.cortes_video_id||media.source_id||''),
+   clip_id:String(media.cortes_clip_id||media.segment_id||''),
+   attachment_id:Number(media.cortes_attachment_id||0),
+   network:'kwai',account_id:String(media.cortes_account_id||'primary'),
+   status:'completed',remote_id:remote,error:'',token
+  };
+  if(!Number.isSafeInteger(payload.attachment_id)||payload.attachment_id<0){
+   results.push({id:row.id,ok:false,reason:'WP_ATTACHMENT_ID_INVALID'});
+   continue;
+  }
+  let succeeded=false,reason='WP_CALLBACK_TRANSPORT_UNAVAILABLE';
+  try{
+   const response=await fetch(endpoint.toString(),{
+    method:'POST',headers:{
+      'Content-Type':'application/json','Accept':'application/json',
+      'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36'},
+    body:JSON.stringify(payload),signal:AbortSignal.timeout(18000)
+   });
+   if(response.ok){
+    const answer=await response.json();
+    if(answer&&answer.ok===true){succeeded=true;reason='OK';}
+    else reason='WP_CALLBACK_RESPONSE_NOT_CONFIRMED';
+   }else reason='WP_CALLBACK_HTTP_'+String(response.status);
+  }catch{reason='WP_CALLBACK_TRANSPORT_UNAVAILABLE';}
+  if(succeeded){
+   const saved=await query(
+    "UPDATE cortes_publications SET confirmation_evidence="+
+    "confirmation_evidence||jsonb_build_object('wp_callback_state','completed',"+
+    "'wp_callback_verified_at',now(),'wp_callback_transport','neon-cortesqueue') "+
+    "WHERE id=$1 AND target_key=$2 AND status='confirmed' AND remote_id=$3 "+
+    "AND confirmation_evidence->>'kind'='kwai_authenticated_source_frames_reconciled_v1' "+
+    "RETURNING id",
+    [row.id,target,remote]);
+   succeeded=saved.length===1;
+   if(!succeeded)reason='WP_CALLBACK_DB_ACK_PENDING';
+  }
+  results.push({id:row.id,ok:succeeded,reason});
+ }
+ return {ok:true,attempted:results.length,synced:results.filter(x=>x.ok).length,
+  pending:results.filter(x=>!x.ok).length,results};
+}
+
 async function kwaiUnprovenAction(b,actor,target){
  if(actor.role!=='kwai-physical'||actor.workflow!=='physical:DESKTOP-FTDK0HP')
    return {ok:false,error:'KWAI_UNPROVEN_PHYSICAL_PUBLISHER_ONLY'};
@@ -701,6 +778,7 @@ async function kwaiUnprovenAction(b,actor,target){
    return {ok:false,error:'KWAI_UNPROVEN_ACCOUNT_MISMATCH'};
  const mode=String(b.mode||'');
  const eligibility="(p.status='uncertain' OR (p.status='started' AND p.lease_until<now()-interval '30 minutes'))";
+ if(mode==='wp-sync')return kwaiSyncReconciledWordpress(target,String(b.id||''));
  if(mode==='list'){
   const rows=await query("SELECT p.id,p.status,p.publication_started_at,p.lease_until,"+
     "p.payload->>'video_url' AS source_url,p.media_sha256 "+
@@ -754,8 +832,9 @@ async function kwaiUnprovenAction(b,actor,target){
       ...proof,kind:'kwai_authenticated_source_frames_reconciled_v1',
       public_post_timestamp_ms:posted,
       qualified_distinct_frames:4,reconciled_at:new Date().toISOString()})]);
-  return rows.length?{ok:true,job:rows[0],confirmed_media:true}:
-    {ok:false,error:'KWAI_UNPROVEN_CONFIRM_FENCE_CHANGED'};
+  if(!rows.length)return{ok:false,error:'KWAI_UNPROVEN_CONFIRM_FENCE_CHANGED'};
+  const wp=await kwaiSyncReconciledWordpress(target,id);
+  return{ok:true,job:rows[0],confirmed_media:true,wp_callback:wp};
  }
  if(mode!=='discard')return{ok:false,error:'KWAI_UNPROVEN_MODE_INVALID'};
  const id=String(b.id||''),proof=b.proof||{},now=Date.now();
