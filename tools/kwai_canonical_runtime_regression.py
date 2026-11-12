@@ -31,7 +31,7 @@ share=code('kwai_phone_share_clipboard.py')
 for term in ('def compute_schedule(', 'def sweep_unproven(', 'def acquire_physical_device_lock(',
              'def release_physical_device_lock(', 'def repair_pending(', 'def complete_origin_callback(',
              'KWAI_RECONCILED_WP_SYNC', "if now-prior>=65:", 'KWAI_PROOF_RECOVERY_',
-             'KWAI_PACING_VERSION', 'def can_attempt_cut('):
+             'kwai-public-post-proportional-v2', 'def can_attempt_cut('):
     assert term in daemon, 'Windows daemon lost safety guard: '+term
 for term in ('KWAI_PUBLIC_PROFILE_INDEX_PENDING_RETRYABLE',
              'KWAI_PUBLIC_MEDIA_MATCH_PENDING_RETRYABLE',
