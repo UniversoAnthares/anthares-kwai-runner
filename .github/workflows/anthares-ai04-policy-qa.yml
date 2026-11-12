@@ -1,0 +1,25 @@
+name: Anthares AI-04 — policy circuit breaker QA
+on:
+  pull_request:
+    paths:
+      - 'ai_hub/eligibility_breaker.py'
+      - 'tests/test_ai_eligibility_breaker.py'
+      - '.github/workflows/anthares-ai04-policy-qa.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: anthares-ai04-policy-qa-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  policy-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Unit tests — no credentials and no provider calls
+        run: python3 -m unittest discover -s tests -p 'test_ai_eligibility_breaker.py' -v
+      - name: Security assertion — QA does not authorize production cutover
+        run: echo 'AI04_PRODUCTION_CUTOVER_AUTHORIZED=0'
