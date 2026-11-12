@@ -29,7 +29,10 @@ ACTIONS = frozenset({"enqueue", "buffer-lease", "buffer-start", "buffer-fail",
                      "instagram-direct-fail", "instagram-direct-missing",
                      "personal-lease", "personal-start", "personal-fail",
                      "personal-accepted", "personal-confirmed", "personal-media-missing",
-                     "personal-pending", "personal-reconcile-public"})
+                     "personal-pending", "personal-reconcile-public",
+                     "company-lease", "company-start", "company-fail",
+                     "company-accepted", "company-confirmed", "company-media-missing",
+                     "company-pending", "company-reconcile-public"})
 RETRYABLE = frozenset({"enqueue", "buffer-pending"})
 
 

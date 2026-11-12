@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/cortes-linkedin-company-direct-cloud.yml'
+      - 'tools/cortes_queue_ha.py'
   workflow_dispatch: {}
   schedule:
     - cron: '1,16,31,46 * * * *'
