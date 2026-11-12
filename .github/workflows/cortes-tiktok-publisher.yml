@@ -109,7 +109,9 @@ jobs:
                       except (ValueError,AttributeError):
                           detail='invalid_json'
                   detail=''.join(c for c in detail if c.isalnum() or c in '_-')
-                  print('TIKTOK_OIDC_DENIAL http='+str(exc.code)+' host='+str(urllib.parse.urlparse(url).hostname)+' route='+route+' error='+detail,flush=True)
+                  ray=str(exc.headers.get('CF-Ray') or 'none')[:90]
+                  srv=str(exc.headers.get('Server') or 'none')[:40]
+                  print('TIKTOK_OIDC_DENIAL http='+str(exc.code)+' host='+str(urllib.parse.urlparse(url).hostname)+' route='+route+' server='+srv+' ray='+ray+' error='+detail,flush=True)
                   return exc.code, {}
               except (urllib.error.URLError, TimeoutError, OSError) as exc:
                   print('TIKTOK_OIDC_TRANSPORT '+str(urllib.parse.urlparse(url).hostname)+' '+type(exc).__name__,flush=True)
