@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import re
 import sys
+import unicodedata
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -32,6 +34,54 @@ SEGMENTS=(
     "g1:A7BsgCe3-oo:4989:5029",
 )
 MARKERS={s:marker(s) for s in SEGMENTS}
+TITLES={
+    "g1:A7BsgCe3-oo:3463:3503": "Rumores sobre a batalha do estabulo e o tiro",
+    "g1:A7BsgCe3-oo:3503:3544": "O tiro no ombro e a mentira do espetaculo",
+    "g1:A7BsgCe3-oo:2513:2554": "A estrutura de fábula e a imanência em Animal Farm",
+    "g1:A7BsgCe3-oo:4741:4781": "Resgatando os nomes dos personagens e equinos na trama",
+    "g1:A7BsgCe3-oo:4781:4822": "A fuga da égua Mimosa e o apego aos velhos hábitos na fazenda",
+    "g1:A7BsgCe3-oo:4822:4864": "A personagem Quitéria e a leitura das letras do alfabeto",
+    "g1:A7BsgCe3-oo:4864:4905": "O terceiro regime e os Porquinhos diante de Napoleão",
+    "g1:A7BsgCe3-oo:4905:4946": "Confessar crimes que não cometeram na União Soviética",
+    "g1:A7BsgCe3-oo:4946:4989": "Os cães e os inimigos do regime na fazenda",
+    "g1:A7BsgCe3-oo:4989:5029": "Moinho em construção e a aurora no horizonte verdejante",
+}
+
+OCT27_START=int(datetime(2026,10,27,tzinfo=timezone.utc).timestamp())
+OCT29_END=int(datetime(2026,10,30,tzinfo=timezone.utc).timestamp())
+
+def norm(text):
+    text=unicodedata.normalize("NFKD",str(text).casefold())
+    text="".join(c for c in text if not unicodedata.combining(c))
+    return " ".join(re.findall(r"[a-z0-9]+",text))
+
+# Full caption may be truncated by the publisher, so require its long,
+# uniquely distinguishing prefix. Short search input is only discovery.
+PREFIXES={s:norm(title)[:47].rsplit(" ",1)[0] for s,title in TITLES.items()}
+
+def inspect_title_candidates(page,candidates):
+    # Independent of #anthares marker: title + exact owner video URL +
+    # independently decoded TikTok video-ID date, all in the SAME card.
+    # Candidate ≠ confirmation; only the exact stable marker can auto-confirm.
+    rows=page.locator('a[href*="/video/"]').evaluate_all("""xs=>xs.map(a=>{
+      const card=a.closest('tr,[role="row"],[data-e2e*="video-card"],li');
+      return {url:a.href,caption:(card?card.innerText:(a.innerText||a.getAttribute('aria-label')||'')).slice(0,1600)}
+    })""")
+    for row in rows[:600]:
+        m=URL.search(str(row.get("url") or ""))
+        if not m:
+            continue
+        remote=m.group(1)
+        # TikTok's high-order video ID component encodes creation time.
+        stamp=int(remote)>>32
+        if not OCT27_START-86400<=stamp<=OCT29_END:
+            continue
+        caption=norm(row.get("caption") or "")
+        for segment,prefix in PREFIXES.items():
+            if prefix in caption:
+                candidates[segment].add(remote)
+    return len(rows)
+
 VID=re.compile(r"^[0-9]{12,25}$")
 URL=re.compile(r"/@"+re.escape(ACCOUNT)+r"/video/([0-9]{12,25})")
 
@@ -147,6 +197,7 @@ def history_controls(page):
 def main():
     state=preflight_vault()  # exact logged-in @universo.anthares identity
     hits={s:set() for s in SEGMENTS}
+    candidates={s:set() for s in SEGMENTS}
     pages=0
     stagnant=0
     distinct_urls=set()
@@ -176,13 +227,24 @@ def main():
                         if "/login" in page.url or page.locator('input[type="password"]').count():
                             raise RuntimeError("TIKTOK_STUDIO_SEARCH_SESSION_LOST")
                         search_links[segment]=inspect_page(page,hits)
+                    # Second forensic route: search the actual editorial
+                    # title rather than the marker, which the failed Oct27
+                    # post may never have written to the remote caption.
+                    for segment,title in TITLES.items():
+                        search.fill(" ".join(title.split()[:5]),timeout=3000)
+                        search.press("Enter",timeout=3000)
+                        page.wait_for_timeout(1500)
+                        if "/login" in page.url or page.locator('input[type="password"]').count():
+                            raise RuntimeError("TIKTOK_STUDIO_TITLE_SEARCH_SESSION_LOST")
+                        inspect_title_candidates(page,candidates)
                     search.fill("",timeout=3000)
                     page.wait_for_timeout(450)
-                    pages=len(MARKERS)
+                    pages=2*len(MARKERS)
                 else:
                     for _ in range(90):
                         before=sum(len(v) for v in hits.values())
                         count=inspect_page(page,hits)
+                        inspect_title_candidates(page,candidates)
                         pages+=1
                         urls=page.locator('a[href*="/video/"]').evaluate_all("es=>es.map(a=>a.href)")
                         fingerprint=tuple(urls[:25])
@@ -194,6 +256,21 @@ def main():
                         stagnant=0 if advanced or is_new or sum(len(v) for v in hits.values())>before else stagnant+1
                         if stagnant>=4 or count==0 and pages>=5:
                             break
+                # A separate read-only surface, not the Studio search index.
+                # The owner link remains mandatory for any candidate.
+                try:
+                    response=page.goto("https://www.tiktok.com/@"+ACCOUNT,wait_until="domcontentloaded",timeout=35000)
+                    page.wait_for_timeout(2400)
+                    if (response is not None and response.status<400 and
+                        "/login" not in page.url and
+                        not page.locator('input[type="password"]').count()):
+                        inspect_page(page,hits)
+                        inspect_title_candidates(page,candidates)
+                        public_profile_scanned=True
+                    else:
+                        public_profile_scanned=False
+                except Exception:
+                    public_profile_scanned=False
             finally:
                 ctx.close()
         finally:
@@ -204,8 +281,11 @@ def main():
         "history_controls":controls,
         "description_search_used":search_used,
         "search_video_links_per_query":search_links,
+        "title_time_candidates_per_segment":{s:sorted(candidates[s]) for s in SEGMENTS},
+        "public_profile_scanned":public_profile_scanned,
         "items":[{"segment_id":s,"status":"EXACT_MATCH" if len(hits[s])==1 else
-                  "AMBIGUOUS" if len(hits[s])>1 else "UNVERIFIED",
+                  "AMBIGUOUS" if len(hits[s])>1 else
+                  "TITLE_TIME_CANDIDATE_NEEDS_REVIEW" if candidates[s] else "UNVERIFIED",
                   "remote_id":next(iter(hits[s])) if len(hits[s])==1 else None}
                  for s in SEGMENTS],
     }
