@@ -1,0 +1,35 @@
+name: CORTES R07.6 ISO-03 — QA-only fencing and OS-network isolation
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'control_plane/qa_iso03_fenced_queue.py'
+      - 'control_plane/test_qa_iso03_fenced_queue.py'
+      - '.github/workflows/cortes-r076-iso03-qa.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-r076-iso03-qa-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  isolated-qa:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile QA-only broker
+        run: |
+          python3 -m py_compile control_plane/qa_iso03_fenced_queue.py
+          python3 -m py_compile control_plane/test_qa_iso03_fenced_queue.py
+      - name: Exercise two real contenders and independent POSIX principals
+        run: |
+          # Disposable hosted Ubuntu runner, not a publisher/deployment.
+          sudo -n python3 -m unittest discover -s control_plane -p test_qa_iso03_fenced_queue.py -v
+      - name: No publication or deployment authorization
+        run: |
+          echo 'ISO03_QA_ONLY=1'
+          echo 'ISO03_PRODUCTION_DEPLOY_AUTHORIZED=0'
