@@ -1,0 +1,27 @@
+name: CORTES Pinterest - direct invisible browser publisher
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '8,38 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: cortes-pinterest-direct-invisible-browser
+  cancel-in-progress: false
+jobs:
+  publish-direct:
+    if: ${{ vars.CORTES_PINTEREST_DIRECT_PAUSED != 'true' }}
+    runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Publish one fenced Pin from isolated silent Chrome profile without Buffer
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = Join-Path $env:GITHUB_WORKSPACE 'tools\run_pinterest_browser_local.ps1'
+          if (!(Test-Path $script)) { throw 'PINTEREST_DIRECT_SCRIPT_UNAVAILABLE' }
+          & $script
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
