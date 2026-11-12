@@ -82,6 +82,8 @@ def plan_publications(
         raise ValueError("CORTES_PACING_FIRST_OUTSIDE_LOCAL_DAY")
     if last and last.date() != local.date():
         raise ValueError("CORTES_PACING_LAST_OUTSIDE_LOCAL_DAY")
+    if last and last > local:
+        raise ValueError("CORTES_PACING_CONFIRMATION_IN_FUTURE")
     if (first is None) != (last is None) or (first and last and last < first):
         raise ValueError("CORTES_PACING_CONFIRMATION_ORDER_INVALID")
     free = max(0, daily_limit - started_today)
