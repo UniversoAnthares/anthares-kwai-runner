@@ -33,6 +33,7 @@ jobs:
       - name: Verify direct publisher syntax and source
         run: |
           python -m py_compile tools/cortes_instagram_direct_cloud.py scripts/instagram_publish.py tools/cortes_queue_ha.py
+          python -m unittest discover -s tests -p 'test_instagram_direct_cloud.py' -v
       - name: Publish exactly one eligible Reel through official Instagram Graph
         id: publish
         env:
