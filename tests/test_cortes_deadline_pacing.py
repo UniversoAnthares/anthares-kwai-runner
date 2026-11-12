@@ -79,6 +79,32 @@ class DeadlinePacingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "FIRST_OUTSIDE"):
             plan(first_confirmed_at=dt(8) - timedelta(days=1))
 
+    def test_actual_confirmed_reel_receipts_without_posting(self):
+        # Real independent receipt lines: GitHub run 43158278732, job 130983231487.
+        # Public records: DfoQMcnymvA and DfoQZKMJG-H. No Graph API access.
+        real_first = datetime.fromisoformat("2026-11-12T04:59:37.554987+00:00")
+        real_last = datetime.fromisoformat("2026-11-12T05:01:27.017535+00:00")
+        hypothetical_remaining = 4  # scenario only; NOT a live queue count
+        p = plan_publications(
+            now=dt(9, 26), target_key="instagram:universoanthares",
+            queued=hypothetical_remaining, started_today=2, daily_limit=100,
+            first_confirmed_at=real_first, last_confirmed_at=real_last)
+        self.assertEqual(p.status, "DUE")
+        self.assertEqual(
+            p.due_at.astimezone(TZ),
+            datetime(2026, 11, 12, 6, 31, 5, 263151, tzinfo=TZ))
+        assert_due(p, dt(9, 26))
+        self.assertEqual(p.remaining_today, 4)
+        # Real provider quota may force a block, irrespective of due time.
+        blocked = plan_publications(
+            now=dt(9, 26), target_key="instagram:universoanthares",
+            queued=hypothetical_remaining, started_today=2, daily_limit=100,
+            first_confirmed_at=real_first, last_confirmed_at=real_last,
+            provider_remaining=0)
+        self.assertEqual(blocked.status, "BLOCKED_PLATFORM_LIMIT")
+        with self.assertRaisesRegex(RuntimeError, "BLOCKED_PLATFORM_LIMIT"):
+            assert_due(blocked, dt(9, 26))
+
     def test_independent_utc_conversion(self):
         p = plan(now=dt(15).astimezone(timezone.utc))
         self.assertEqual(p.due_at.astimezone(TZ), datetime(2026, 11, 12, 9, 52, 30, tzinfo=TZ))
