@@ -67,5 +67,29 @@ class DirectInstagramTests(unittest.TestCase):
                     direct.main()
                 q.assert_not_called()
 
+    def test_caption_has_exact_site_and_single_brand_suffix(self):
+        payload = {
+            "title": "Por que a construção das personagens exige uma decisão formal",
+            "description": "Análise de um procedimento específico de escrita literária.",
+        }
+        result = direct.instagram_caption(payload)
+        self.assertTrue(result.splitlines()[0].endswith(" ● Universo Anthares"))
+        self.assertIn("www.anthares.us", result)
+        self.assertEqual(result.count(" ● Universo Anthares"), 1)
+        again = direct.instagram_caption({
+            **payload, "title": result.splitlines()[0],
+            "description": result.split("\n", 1)[1],
+        })
+        self.assertEqual(again, result)
+
+    def test_caption_preserves_website_when_long(self):
+        payload = {
+            "title": "Narradores e os problemas de focalização no conto moderno",
+            "description": ("A descrição explica o segmento selecionado. " * 100),
+        }
+        result = direct.instagram_caption(payload)
+        self.assertLessEqual(len(result), 2200)
+        self.assertIn("www.anthares.us", result)
+
 if __name__=="__main__":
     unittest.main()

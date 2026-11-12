@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.instagram_publish import InstagramClient
 from tools.cortes_queue_ha import post
+from anthares_publisher.editorial import branded_title, add_site_to_keywords, WEBSITE
 
 AUDIENCE = "https://anthares-remote-primary.vercel.app/api/cortes-queue"
 TARGET = "instagram:universoanthares"
@@ -135,6 +136,21 @@ def qa_404(job: dict, url: str) -> None:
         print("::warning::INSTAGRAM_DIRECT_QA_ALERT_DELIVERY_FAILED", flush=True)
 
 
+def instagram_caption(payload: dict) -> str:
+    """Preserve source-specific editorial text and enforce universal branding."""
+    title = branded_title(str(payload.get("title") or "").strip(), limit=180)
+    description = add_site_to_keywords(str(payload.get("description") or "").strip())
+    if WEBSITE not in description:
+        description = description.rstrip() + "\n" + WEBSITE
+    room = 2200 - len(title) - 1
+    if room < len(WEBSITE) + 1:
+        raise RuntimeError("DIRECT_CAPTION_TITLE_TOO_LONG")
+    if len(description) > room:
+        # Keep the exact website even when older metadata exceeds caption limit.
+        description = description[:room - len(WEBSITE) - 1].rstrip() + "\n" + WEBSITE
+    return title + "\n" + description
+
+
 def main() -> int:
     client = require_cloud()
     claim = neon("lease", {"target_key": TARGET, "owner": OWNER})
@@ -159,10 +175,7 @@ def main() -> int:
             qa_404(job, url)
             print(json.dumps({"direct_cloud": "QUARANTINED_404", "id": job["id"]}), flush=True)
             return 0
-        caption = ((payload.get("title") or "").strip() + "\n"
-                   + (payload.get("description") or "").strip())[:2200]
-        if not caption.strip():
-            raise RuntimeError("DIRECT_CAPTION_EMPTY")
+        caption = instagram_caption(payload)
         quota = client.get_quota()
         if (quota.total is not None and quota.usage is not None
                 and quota.usage >= quota.total):
