@@ -1,0 +1,32 @@
+name: CORTES TikTok per-account proportional pacing contract
+on:
+  push:
+    branches: [main, fix/cortes-tiktok-neon-proportional-23h-20261112]
+    paths:
+      - 'infra/neon-cortes-tiktok/index.mjs'
+      - 'infra/neon-cortes-lucasrosalem4/index.mjs'
+      - 'tests/test_cortes_tiktok_proportional_due.mjs'
+      - '.github/workflows/cortes-tiktok-proportional-contract.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-tiktok-proportional-contract-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Read-only deadline and per-account confirmation tests; no posts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check infra/neon-cortes-tiktok/index.mjs
+          node --check infra/neon-cortes-lucasrosalem4/index.mjs
+          node --test tests/test_cortes_tiktok_proportional_due.mjs
+          echo TIKTOK_DEADLINE_PROPORTIONAL_CONTRACT=PASS
