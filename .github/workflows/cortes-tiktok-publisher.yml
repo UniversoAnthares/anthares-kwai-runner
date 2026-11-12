@@ -16,6 +16,7 @@ on:
       - 'tests/test_tiktok_cloud_event_guard.py'
       - 'tests/test_cortes_tiktok_queue_consumer.py'
       - 'tools/tiktok_upload_readonly_diagnostic.py'
+      - 'tools/cortes_tiktok_uncertain_batch_audit.py'
       - 'vercel-ara-primary/api/cortes-tiktok.mjs'
       - 'vercel-ara-primary/api/router-entry.mjs'
       - 'vercel-ara-primary/vercel.json'
@@ -38,6 +39,7 @@ on:
       - 'tests/test_tiktok_creator_inventory.py'
       - 'tests/test_tiktok_cloud_event_guard.py'
       - 'tests/test_cortes_tiktok_queue_consumer.py'
+      - 'tools/cortes_tiktok_uncertain_batch_audit.py'
 
 permissions:
   contents: read
@@ -63,7 +65,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate queue consumer and TikTok safety contracts
         run: |
-          python3 -m py_compile tools/cortes_tiktok_queue_consumer.py tools/cortes_tiktok_hosted_publish.py tools/tiktok_uncertain_post_audit.py
+          python3 -m py_compile tools/cortes_tiktok_queue_consumer.py tools/cortes_tiktok_hosted_publish.py tools/tiktok_uncertain_post_audit.py tools/cortes_tiktok_uncertain_batch_audit.py
           node --check vercel-ara-primary/api/cortes-tiktok.mjs
           node --check infra/neon-cortes-tiktok/index.mjs
           node --check infra/cloudflare-cortes-tiktok-ha/src/index.js
@@ -182,6 +184,11 @@ jobs:
           else
             echo CORTES_TIKTOK_HEADFUL_PROBE_SKIPPED_NO_XVFB
           fi
+      - name: Reconcile ten historic uncertain TikTok segments using signed-in Studio (read-only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        continue-on-error: true
+        timeout-minutes: 8
+        run: python3 -u tools/cortes_tiktok_uncertain_batch_audit.py
       - name: Audit original uncertain TikTok clip on owned account without upload
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         env:
