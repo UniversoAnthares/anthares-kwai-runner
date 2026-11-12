@@ -5,6 +5,8 @@ on:
       - 'infra/neon-cortes-queue/index.mjs'
       - 'infra/neon-cortes-queue/kwai-*.mjs'
       - 'tools/kwai_unproven_reconcile_policy.py'
+      - 'tools/kwai_native_cortes.py'
+      - 'tools/kwai_native_stage_regression.py'
       - '.github/workflows/kwai-proportional-pacing.yml'
   pull_request:
     paths:
@@ -28,3 +30,5 @@ jobs:
         run: node --test infra/neon-cortes-queue/kwai-pacing-policy.test.mjs infra/neon-cortes-queue/kwai-pacing-integration.test.mjs infra/neon-cortes-queue/kwai-unproven-discard.test.mjs
       - name: Check bounded-reconcile Python helper syntax
         run: python3 -c "import ast,pathlib;ast.parse(pathlib.Path('tools/kwai_unproven_reconcile_policy.py').read_text())"
+      - name: Verify MediaStore fallback without Android or media files
+        run: python3 -B tools/kwai_native_stage_regression.py
