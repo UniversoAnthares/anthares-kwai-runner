@@ -23,7 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,os,urllib.error,urllib.request
+          import json,os,urllib.error,urllib.request,atexit
           BASE="https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run"
           TOKEN=os.getenv("ARA_SHARED","")
           if len(TOKEN)<20:
@@ -46,6 +46,13 @@ jobs:
               except Exception as e:
                   print("AOI01_"+path.strip("/").upper().replace("-","_")+"_TRANSPORT="+type(e).__name__)
                   return 0,{}
+          browser_started_by_this_run=False
+          def cleanup_own_browser():
+              if browser_started_by_this_run:
+                  code,resp=call("/interactive-browser/close",method="POST",payload={},timeout=32)
+                  print("AOI01_CLEANUP_OWN_BROWSER_HTTP="+str(code))
+                  print("AOI01_CLEANUP_OWN_BROWSER_OK="+str(bool(resp.get("ok"))))
+          atexit.register(cleanup_own_browser)
           code,health=call("/health")
           print("AOI01_HEALTH_HTTP="+str(code))
           if code!=200 or not health.get("ok") or not health.get("session_bootstrapped"):
@@ -83,6 +90,7 @@ jobs:
           if code!=200 or not start.get("ok"):
               print("AOI01_BROWSER_START_BLOCKED")
               raise SystemExit(2)
+          browser_started_by_this_run=True
           if code==200:
               code,nav=call("/interactive-browser/navigate",method="POST",payload={"url":"https://www.tiktok.com/profile"},timeout=90)
               print("AOI01_PROFILE_NAVIGATION_HTTP="+str(code))
@@ -113,5 +121,6 @@ jobs:
           code,after=call("/health")
           print("AOI01_FINAL_READY_FOR_TIKTOK="+str(bool(after.get("ready_for_tiktok"))))
           if code!=200 or not after.get("ready_for_tiktok"):raise SystemExit(2)
+          browser_started_by_this_run=False
           print("AOI01_IDENTITY_RECOVERY=PROVEN")
           PY
