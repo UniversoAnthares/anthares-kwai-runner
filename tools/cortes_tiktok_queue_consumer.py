@@ -34,6 +34,7 @@ class SafeStop(RuntimeError):
 def http(url, headers=None, body=None, timeout=40):
     headers = dict(headers or {})
     headers["Accept"] = "application/json"
+    headers.setdefault("User-Agent", "Anthares-CortesTikTok-AuthorizedWorker/1.0")
     data = None
     if body is not None:
         headers["Content-Type"] = "application/json"
