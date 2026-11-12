@@ -3,7 +3,8 @@ on:
   push:
     paths:
       - 'infra/neon-cortes-queue/index.mjs'
-      - 'infra/neon-cortes-queue/kwai-pacing-*.mjs'
+      - 'infra/neon-cortes-queue/kwai-*.mjs'
+      - 'tools/kwai_unproven_reconcile_policy.py'
       - '.github/workflows/kwai-proportional-pacing.yml'
   pull_request:
     paths:
@@ -24,4 +25,6 @@ jobs:
       - name: Check deployed entrypoint syntax
         run: node --check infra/neon-cortes-queue/index.mjs
       - name: Verify two account gates and proportional intervals
-        run: node --test infra/neon-cortes-queue/kwai-pacing-policy.test.mjs infra/neon-cortes-queue/kwai-pacing-integration.test.mjs
+        run: node --test infra/neon-cortes-queue/kwai-pacing-policy.test.mjs infra/neon-cortes-queue/kwai-pacing-integration.test.mjs infra/neon-cortes-queue/kwai-unproven-discard.test.mjs
+      - name: Check bounded-reconcile Python helper syntax
+        run: python3 -c "import ast,pathlib;ast.parse(pathlib.Path('tools/kwai_unproven_reconcile_policy.py').read_text())"
