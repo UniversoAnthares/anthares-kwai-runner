@@ -8,6 +8,10 @@ from tools import cortes_instagram_public_reconcile as r
 
 class PublicProfileReconciliationTests(unittest.TestCase):
     def setUp(self):
+        # Simulate a mature tagged cohort without waiting 36 hours in CI.
+        cutover = patch.object(r,"TAG_CUTOVER",datetime(2026,1,1,tzinfo=timezone.utc))
+        cutover.start()
+        self.addCleanup(cutover.stop)
         self.started = datetime.now(timezone.utc) - timedelta(days=2)
         self.id = "cortes-fanout-instagram-" + "a" * 32
         self.tag = r.tag_for(self.id)
@@ -58,7 +62,8 @@ class PublicProfileReconciliationTests(unittest.TestCase):
 
     def test_untagged_historical_clips_are_not_replayed_or_failed(self):
         old=dict(self.job,publication_started_at="2026-10-29T12:00:00+00:00")
-        self.assertIsNone(r.decide(old,self.public,self.graph))
+        with patch.object(r,"TAG_CUTOVER",datetime(2026,11,12,13,tzinfo=timezone.utc)):
+            self.assertIsNone(r.decide(old,self.public,self.graph))
 
     def test_conflicting_graph_match_blocks_result(self):
         self.graph["items"][1]["permalink"]="https://www.instagram.com/reel/Other/"
