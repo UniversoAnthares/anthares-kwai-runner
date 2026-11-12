@@ -11,6 +11,8 @@ on:
       - 'tools/kwai_android_login_entry.py'
       - 'tools/kwai_login_ui_locator.py'
       - 'tools/kwai_semantic_login_route_probe.py'
+      - 'tools/kwai_chooser_failure_triage.py'
+      - 'tests/test_kwai_chooser_failure_triage.py'
 
 permissions:
   contents: read
@@ -29,6 +31,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           python3 -m unittest discover -s tests -p 'test_android_executor_router.py' -v
+          python3 -m unittest discover -s tests -p 'test_kwai_chooser_failure_triage.py' -v
           python3 - <<'PY'
           import json
           m=json.load(open('ci-hub/executor-routing.json'))
@@ -41,8 +44,21 @@ jobs:
 
   android-kwai-real:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 14
     needs: routing-contract
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - route: me_retry
+            network: network_wait
+            settle: '2'
+          - route: me_relaunch
+            network: wifi_cycle
+            settle: '2'
+          - route: me_direct
+            network: baseline
+            settle: '4'
     steps:
       - uses: actions/checkout@v4
       - name: Install Android SDK command-line tools (no emulator action)
@@ -92,7 +108,7 @@ jobs:
           adb shell pm path com.kwai.video | grep -q '^package:'
           echo GITHUB_KWAI_INSTALL=PASS
           PHASE=CHOOSER
-          timeout 300 env KWAI_ROUTE=me_direct KWAI_NETWORK=baseline KWAI_SETTLE=2 python3 tools/kwai_semantic_login_route_probe.py | tee kwai-route.txt
+          timeout 240 env KWAI_ROUTE='${{ matrix.route }}' KWAI_NETWORK='${{ matrix.network }}' KWAI_SETTLE='${{ matrix.settle }}' python3 tools/kwai_semantic_login_route_probe.py | tee kwai-route.txt
           grep -Eq 'SEMANTIC_LOGIN_ROUTE=PASS' kwai-route.txt
           echo GITHUB_KWAI_CHOOSER=PASS
           PHASE=FORM
@@ -100,6 +116,12 @@ jobs:
           grep -Eq 'KWAI_NATIVE_LOGIN_FORM_(VISIBLE|ALREADY_VISIBLE)' kwai-method.txt
           echo GITHUB_KWAI_FORM=PASS
           echo 'KWAI_AUTHENTICATED=NOT_TESTED KWAI_PUBLISHED=NOT_TESTED'
+      - name: Privacy-safe UI triage on failed navigation
+        if: failure()
+        shell: bash
+        run: |
+          python3 tools/kwai_chooser_failure_triage.py
+          echo 'KWAI_LOGIN_BLOCKED_NO_MANUAL_AUTH_ATTEMPT=1'
       - name: Safe diagnostics - no screenshots or credential XML
         if: always()
         shell: bash
@@ -111,7 +133,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: kwai-android-phase-logs
+          name: kwai-android-phase-logs-${{ matrix.route }}-${{ matrix.network }}
           path: |
             kwai-route.txt
             kwai-method.txt
