@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.instagram_publish import InstagramClient
 from tools.cortes_queue_ha import post
 from anthares_publisher.editorial import branded_title, add_site_to_keywords, WEBSITE
+from tools.cortes_instagram_vertical_asset import ensure_vertical_media
 
 AUDIENCE = "https://anthares-remote-primary.vercel.app/api/cortes-queue"
 TARGET = "instagram:universoanthares"
@@ -176,6 +177,9 @@ def publish_once(client: InstagramClient) -> int:
             print(json.dumps({"direct_cloud": "QUARANTINED_404", "id": job["id"]}), flush=True)
             return 3
         caption = instagram_caption(payload)
+        # Build/verify a 9:16 Instagram-only derivative before irreversible Graph submission.
+        # The canonical WordPress master and Neon queue identity remain unchanged.
+        url = ensure_vertical_media(url, job["id"], payload.get("cortes_attachment_id"))
         quota = client.get_quota()
         if (quota.total is not None and quota.usage is not None
                 and quota.usage >= quota.total):
