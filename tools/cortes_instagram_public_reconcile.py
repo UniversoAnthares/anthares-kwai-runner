@@ -295,6 +295,44 @@ def action_scan() -> int:
     return 0
 
 
+def decide_legacy(job: dict, public: dict, graph: dict) -> dict | None:
+    """Legacy Reels lacked unique tags; use strict chronological uniqueness.
+
+    Any ambiguity remains uncertain. Absence requires both chronological
+    listings complete and absolutely no Reel near the expected submit time.
+    """
+    started=stored_timestamp(job)
+    if started is None or not public.get("authenticated") or not public.get("complete") or not graph.get("complete"):
+        return None
+    if not (parsed_at(public["oldest_at"])<=started-timedelta(minutes=20)
+            and parsed_at(graph["oldest_at"])<=started-timedelta(minutes=20)
+            and parsed_at(public["newest_at"])>=started+timedelta(minutes=20)):
+        return None
+    def in_window(post: dict) -> bool:
+        try:return abs((parsed_at(post["timestamp"])-started).total_seconds())<=120
+        except (ValueError,TypeError,KeyError):return False
+    pub=[p for p in public["items"] if in_window(p)]
+    own=[p for p in graph["items"] if in_window(p)]
+    proof={"username":USERNAME,"profile_url":PROFILE_URL,"origin":"instagram_public_profile",
+           "authenticated":True,"complete":True,"graph_complete":True,
+           "observed_at":datetime.now(timezone.utc).isoformat().replace("+00:00","Z"),
+           "scanned_count":public["count"],"graph_scanned_count":graph["count"],
+           "oldest_at":public["oldest_at"],"newest_at":public["newest_at"],
+           "graph_oldest_at":graph["oldest_at"]}
+    title=str(job.get("title") or "").split(" ●",1)[0].strip().casefold()[:28]
+    if len(pub)==1 and len(own)==1 and pub[0]["permalink"]==own[0]["permalink"]:
+        if (title and title in str(own[0].get("caption","")).casefold()
+            and title in str(pub[0].get("caption","")).casefold()):
+            proof.update(unique_title_match=True,graph_permalink=own[0]["permalink"],
+                         matched_permalink=pub[0]["permalink"],graph_media_id=own[0]["id"])
+            return {"id":job["id"],"decision":"visible","permalink":pub[0]["permalink"],
+                    "media_id":own[0]["id"],"proof":proof}
+    if not pub and not own and datetime.now(timezone.utc)-started>=timedelta(hours=36):
+        proof["no_candidates_in_window"]=True
+        return {"id":job["id"],"decision":"absent","proof":proof}
+    return None
+
+
 def main() -> int:
     # Only the hosted GitHub OIDC role can update the canonical Neon ledger.
     client = require_cloud()
@@ -338,10 +376,14 @@ def main() -> int:
         return 0
     total = 0
     for job in eligible:
-        action = decide(job, public, graph)
+        started=stored_timestamp(job)
+        legacy=started<TAG_CUTOVER
+        action=(decide_legacy(job,public,graph) if legacy else
+                decide(job,public,graph))
         if not action:
             continue
-        result = post("instagram-direct-reconcile", action, oidc)
+        result = post("instagram-direct-reconcile-legacy" if legacy else
+                      "instagram-direct-reconcile", action, oidc)
         if result.get("ok"):
             total += 1
     print(json.dumps({"public_reconcile": "FINISHED",

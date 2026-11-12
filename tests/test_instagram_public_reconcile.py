@@ -69,6 +69,31 @@ class PublicProfileReconciliationTests(unittest.TestCase):
         self.graph["items"][1]["permalink"]="https://www.instagram.com/reel/Other/"
         self.assertIsNone(r.decide(self.job,self.public,self.graph))
 
+    def test_legacy_exact_time_and_unique_title_confirms(self):
+        title="Autor importante e dificuldade de criação"
+        self.job["title"]=title
+        self.public["items"][1]["caption"]=title+" • Universo Anthares"
+        self.graph["items"][1]["caption"]=title+" • Universo Anthares"
+        a=r.decide_legacy(self.job,self.public,self.graph)
+        self.assertEqual(a["decision"],"visible")
+        self.assertEqual(a["media_id"],"1234567891")
+
+    def test_legacy_absence_requires_two_complete_timeline_sources(self):
+        self.job["title"]="Autor importante"
+        self.public["items"].pop(1)
+        self.graph["items"].pop(1)
+        a=r.decide_legacy(self.job,self.public,self.graph)
+        self.assertEqual(a["decision"],"absent")
+        self.assertTrue(a["proof"]["no_candidates_in_window"])
+        self.public["authenticated"]=False
+        self.assertIsNone(r.decide_legacy(self.job,self.public,self.graph))
+
+    def test_legacy_ambiguous_does_not_resolve(self):
+        self.job["title"]="A Morte de Ivan Ilitch"
+        self.public["items"][1]["caption"]="A Morte de Ivan Ilitch"
+        self.graph["items"][1]["caption"]="Outro conteúdo"
+        self.assertIsNone(r.decide_legacy(self.job,self.public,self.graph))
+
     def test_incomplete_public_graph_shortcode_parity_keeps_uncertain(self):
         for item in self.public["items"]:
             item["caption"] = "outro reel"

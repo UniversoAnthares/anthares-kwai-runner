@@ -1246,6 +1246,73 @@ async function instagramDirectAction(verb,b){
      ORDER BY publication_started_at DESC NULLS LAST,id LIMIT $2`,[target,limit]);
   return{ok:true,target_key:target,items:rows};
  }
+ if(verb==='reconcile-legacy'){
+  const id=String(b.id||''), decision=String(b.decision||''), proof=b.proof||{};
+  if(!/^cortes-fanout-instagram-[a-f0-9]{32}$/.test(id)||
+     !['visible','absent'].includes(decision))
+    return{ok:false,error:'LEGACY_DECISION_INVALID'};
+  const checks=(proof.profile_url==='https://www.instagram.com/universoanthares/reels/'
+    &&proof.username==='universoanthares'&&proof.origin==='instagram_public_profile'
+    &&proof.authenticated===true&&proof.complete===true&&proof.graph_complete===true
+    &&Number(proof.scanned_count)>=2&&Number(proof.graph_scanned_count)>=2);
+  const at=Date.parse(String(proof.observed_at||''));
+  if(!checks||!Number.isFinite(at)||Math.abs(Date.now()-at)>15*60000)
+    return{ok:false,error:'LEGACY_AUTHENTICATED_PROOF_INVALID'};
+  const scans=await query(`SELECT id FROM cortes_instagram_authenticated_scans
+      WHERE profile_name='AntharesInstagram' AND account_name='universoanthares'
+       AND authenticated=true AND complete=true AND captured_at>now()-interval '60 minutes'
+      ORDER BY id DESC LIMIT 1`);
+  if(!scans.length)return{ok:false,error:'LEGACY_PROFILE_SNAPSHOT_MISSING'};
+  const row=await query(`SELECT id,publication_started_at,confirmation_evidence
+    FROM cortes_publications WHERE id=$1 AND target_key=$2 AND status='uncertain'
+    LIMIT 1`,[id,target]);
+  if(!row.length)return{ok:false,error:'LEGACY_ITEM_NOT_UNCERTAIN'};
+  const item=row[0];let prev=item.confirmation_evidence||{};
+  if(typeof prev==='string'){try{prev=JSON.parse(prev)}catch{prev={}}}
+  const started=Date.parse(String(item.publication_started_at||prev.submitted_at||''));
+  const oldest=Date.parse(String(proof.oldest_at||'')), newest=Date.parse(String(proof.newest_at||''));
+  const graphOldest=Date.parse(String(proof.graph_oldest_at||''));
+  if(!Number.isFinite(started)||!Number.isFinite(oldest)||!Number.isFinite(newest)||
+     !Number.isFinite(graphOldest)||started<Date.parse('2026-10-01T00:00:00Z')||
+     oldest>started-20*60000||graphOldest>started-20*60000||
+     newest<started+20*60000)
+    return{ok:false,error:'LEGACY_TIMELINE_UNCOVERED'};
+  if(decision==='visible'){
+    const remote=String(b.media_id||''),link=String(b.permalink||'');
+    if(!/^\d{6,30}$/.test(remote)||
+       !/^https:\/\/www\.instagram\.com\/reel\/[A-Za-z0-9_-]+\/$/.test(link)||
+       proof.unique_title_match!==true||proof.graph_permalink!==link||
+       proof.matched_permalink!==link||proof.graph_media_id!==remote)
+      return{ok:false,error:'LEGACY_VISIBLE_IDENTITY_INCOMPLETE'};
+    const evidence={kind:'instagram_logged_profile_legacy_confirmed',remote_id:remote,
+       public_permalink:link,profile_snapshot_id:String(scans[0].id),
+       observed_at:new Date().toISOString()};
+    const rows=await query(`UPDATE cortes_publications SET status='confirmed',
+      remote_id=$3,confirmation_evidence=$4::jsonb,updated_at=now()
+      WHERE id=$1 AND target_key=$2 AND status='uncertain' AND remote_id IS NULL
+      RETURNING id,status,remote_id`,[id,target,remote,JSON.stringify(evidence)]);
+    return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'LEGACY_CAS_STALE'};
+  }
+  if(Date.now()-started<36*3600000||proof.no_candidates_in_window!==true)
+    return{ok:false,error:'LEGACY_ABSENCE_PREMATURE_OR_AMBIGUOUS'};
+  const prevScan=prev.kind==='instagram_logged_legacy_absence_first_scan'
+      ?Date.parse(String(prev.first_scan_at||'')):NaN;
+  const evidence={kind:Number.isFinite(prevScan)&&Date.now()-prevScan>=3600000
+       ?'instagram_logged_legacy_absence_two_scans'
+       :'instagram_logged_legacy_absence_first_scan',
+     first_scan_at:Number.isFinite(prevScan)?prev.first_scan_at:new Date().toISOString(),
+     second_scan_at:Number.isFinite(prevScan)?new Date().toISOString():null,
+     original_submission_at:new Date(started).toISOString(),profile_snapshot_id:String(scans[0].id),
+     no_replay:true};
+  const terminal=evidence.kind==='instagram_logged_legacy_absence_two_scans';
+  const rows=await query(`UPDATE cortes_publications SET
+    status=CASE WHEN $3::boolean THEN 'failed' ELSE status END,
+    confirmation_evidence=$4::jsonb,updated_at=now()
+    WHERE id=$1 AND target_key=$2 AND status='uncertain' AND remote_id IS NULL
+    RETURNING id,status`,[id,target,terminal,JSON.stringify(evidence)]);
+  return rows.length?{ok:true,job:rows[0],first_scan_only:!terminal}:
+      {ok:false,error:'LEGACY_CAS_STALE'};
+ }
  if(verb==='reconcile'){
   const id=String(b.id||''),kind=String(b.decision||'');
   if(!/^cortes-fanout-instagram-[a-f0-9]{32}$/.test(id)
