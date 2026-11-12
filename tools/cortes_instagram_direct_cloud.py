@@ -275,8 +275,13 @@ def publish_once(client: InstagramClient) -> int:
         # The canonical WordPress master and Neon queue identity remain unchanged.
         url = ensure_vertical_media(url, job["id"], payload.get("cortes_attachment_id"),
                                    title=str(payload.get("title") or "Universo Anthares"))
-        # Always recheck provider quota and the computed slot at the last
-        # reversible boundary, immediately before creating a Meta container.
+        # Media container creation and processing are reversible preparation.
+        # Reserve the irreversible Neon start IMMEDIATELY BEFORE media_publish;
+        # this protects the actual published spacing and exact 23:00 cutoff.
+        phase = "container_create"
+        container = client.create_reel_container(url, caption, share_to_feed=True)
+        phase = "container_processing"
+        client.wait_until_ready(container, interval=15, attempts=24)
         updated_room = provider_room(client)
         if updated_room is None or updated_room == 0:
             neon("fail", fence)
@@ -289,10 +294,6 @@ def publish_once(client: InstagramClient) -> int:
                               "pacing": reservation.get("pacing")}), flush=True)
             return 0
         started = True
-        phase = "container_create"
-        container = client.create_reel_container(url, caption, share_to_feed=True)
-        phase = "container_processing"
-        client.wait_until_ready(container, interval=15, attempts=24)
         phase = "media_publish"
         media_id = client.publish_container(container)
         phase = "receipt_verify"
