@@ -52,7 +52,7 @@ def quota_issue(method: str = "GET", body: dict | None = None) -> dict:
 
 
 def quota_record(issue_body: str) -> tuple[dict, re.Match]:
-    match = re.search(r"```json\\s*(\\{[^<>]*?\\})\\s*```", issue_body, flags=re.S)
+    match = re.search(r"```json\s*(\{[^<>]*?\})\s*```", issue_body, flags=re.S)
     if not match:
         raise RuntimeError("INSTAGRAM_QUOTA_GATE_FORMAT_INVALID")
     record = json.loads(match.group(1))
@@ -80,7 +80,7 @@ def record_quota_hold() -> str:
     record.update(cooldown_until_utc=value, last_error_code=9,
                   last_error_subcode=2207042,
                   last_error_at_utc=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"))
-    new_fence = "```json\\n" + json.dumps(record, indent=2) + "\\n```"
+    new_fence = "```json\n" + json.dumps(record, indent=2) + "\n```"
     current = issue["body"]
     updated = current[:match.start()] + new_fence + current[match.end():]
     quota_issue("PATCH", {"body": updated})
