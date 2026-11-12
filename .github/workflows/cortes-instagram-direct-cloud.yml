@@ -136,3 +136,41 @@ jobs:
         run: |
           set -euo pipefail
           python -u tools/cortes_instagram_public_reconcile.py
+
+  # Run exactly one audited reconciliation on the merge introducing this job.
+  # Exact target, media ID and original audio proof are checked in Neon CAS.
+  reconcile-one-audio-proven:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirm only independently audio-proven October Reel in canonical ledger
+        env:
+          ANTHARES_SOCIAL_COMMIT: '1'
+          CORTES_QUEUE_PRIMARY: neon
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
+          INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST || 'graph.instagram.com' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from tools.cortes_instagram_direct_cloud import require_cloud,neon
+          require_cloud()
+          result=neon("audio-confirm-one",{
+             "id":"cortes-fanout-instagram-2ecd394d6d76b9c1a89a4b66a3e5d3b4",
+             "remote_id":"18121626946995788",
+             "proof_workflow_run":"43266870818",
+             "authenticated_inventory_run":"43266099213",
+             "confirmation_audio_correlation":0.977
+          })
+          print("INSTAGRAM_ONE_PROVEN_RECONCILED="+json.dumps(result,ensure_ascii=False))
+          PY
