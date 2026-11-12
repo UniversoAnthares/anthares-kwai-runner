@@ -247,13 +247,10 @@ def linkedin(payload, publish=False):
     try:
         verified, _ = _request(base + "/posts/" + urllib.parse.quote(remote_id, safe=""), token=token, headers=headers)
     except PublishUncertain:
-        if account != "personal":
-            raise
+        # A 201 with a remote ID is held for public readback for either author type.
         return {"status": "ACCEPTED_UNVERIFIED", "destination_key": key, "remote_id": remote_id,
                 "confirmation_evidence": {"kind": "linkedin_api_201_unverified", "verified_id": remote_id}}
     if str(verified.get("id") or "") != remote_id or str(verified.get("author") or "") != owner:
-        if account != "personal":
-            raise PublishUncertain("linkedin_post_readback_unverified")
         return {"status": "ACCEPTED_UNVERIFIED", "destination_key": key, "remote_id": remote_id,
                 "confirmation_evidence": {"kind": "linkedin_api_201_unverified", "verified_id": remote_id}}
     return {"status": "CONFIRMED", "destination_key": key, "remote_id": remote_id,

@@ -1,0 +1,31 @@
+name: CORTES LinkedIn organization - direct REST publisher
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '1,16,31,46 * * * *'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: cortes-linkedin-company-direct-${{ github.event_name }}
+  cancel-in-progress: false
+jobs:
+  publish-company-direct:
+    if: ${{ vars.CORTES_LINKEDIN_COMPANY_DIRECT_PAUSED != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Post directly to official LinkedIn organization account with Neon fence
+        env:
+          ANTHARES_SOCIAL_COMMIT: '1'
+          CORTES_QUEUE_PRIMARY: neon
+          LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
+          LINKEDIN_AUTHOR_URN: urn:li:organization:145345334
+        run: |
+          python3 -u -m tools.cortes_linkedin_company_cloud

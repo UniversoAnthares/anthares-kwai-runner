@@ -81,6 +81,7 @@ async function identity(request){
   platform=Object.keys(BUFFER_WORKFLOWS).find(p=>BUFFER_WORKFLOWS[p]===wf);
   if(wf==='cortes-buffer-instagram-windows-fallback.yml')platform='instagram';
   if(wf==='cortes-instagram-direct-cloud.yml'){role='instagram-direct';platform='instagram';}
+  else if(wf==='cortes-linkedin-company-direct-cloud.yml'){role='linkedin-company';platform='linkedin';}
   else if(platform)role='buffer';
   else if(RUNNER_PRODUCERS.has(wf))role='producer';
   else if(PROBE_WORKFLOWS.has(wf))role='probe';
@@ -1783,6 +1784,64 @@ async function recoverExpiredLinkedin(targetKey){
    [targetKey,JSON.stringify(evidence)]);
 }
 const LINKEDIN_EXCEPTION_START="(CASE WHEN (now() AT TIME ZONE 'America/Campo_Grande') >= TIMESTAMP '2026-10-21 22:45:00' AND (now() AT TIME ZONE 'America/Campo_Grande') < TIMESTAMP '2026-10-22 05:00:00' THEN (TIMESTAMP '2026-10-21 00:00:00' AT TIME ZONE 'America/Campo_Grande') ELSE (date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande') END)";
+const COMPANY_TARGET='linkedin:primary',COMPANY_OWNER='linkedin-company:github-cloud-v1',COMPANY_LIMIT=50;
+async function companyAction(verb,b){
+ const id=String(b.id||''),owner=String(b.owner||'');
+ if(verb==='lease'){
+  if(b.target_key!==COMPANY_TARGET||owner!==COMPANY_OWNER)return{ok:false,error:'COMPANY_TARGET_OWNER_INVALID'};
+  await recoverExpiredLinkedin(COMPANY_TARGET);
+  await query(`UPDATE cortes_publications SET status='failed',lease_owner=NULL,lease_until=NULL,updated_at=now()
+    WHERE target_key=$1 AND status='uncertain'
+      AND confirmation_evidence->>'kind'='source_media_http_404'
+      AND COALESCE(NULLIF(confirmation_evidence->>'quarantine_at','')::timestamptz,updated_at)
+          <= now()-interval '24 hours'
+      AND confirmation_evidence @> '{"qa_recovery_exhausted":true}'::jsonb`,[COMPANY_TARGET]);
+  // A read-only permission can be unavailable to self-serve member apps.
+  // Keep accepted-but-unverified items UNCERTAIN and never retry their IDs;
+  // other distinct queued shorts must continue under the shared daily budget.
+  const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+  const used=await query(`SELECT count(*)::int n FROM cortes_publications WHERE target_key=$1 AND status IN ('confirmed','leased','started','uncertain') AND updated_at >= ${day}`,[COMPANY_TARGET]);
+  if(Number(used[0]?.n||0)>=COMPANY_LIMIT)return{ok:true,job:null,daily_limit_reached:true,limit:COMPANY_LIMIT};
+  const rows=await query(`WITH picked AS (SELECT q.id FROM cortes_publications q WHERE q.target_key=$1 AND q.status='queued'
+      ORDER BY (SELECT MIN(origin.created_at) FROM cortes_publications origin WHERE origin.target_key=q.target_key AND origin.source_id=q.source_id) DESC,
+        q.created_at,q.id FOR UPDATE OF q SKIP LOCKED LIMIT 1) UPDATE cortes_publications p SET status='leased',lease_owner=$2,lease_generation=p.lease_generation+1,lease_until=now()+interval '30 minutes',updated_at=now() FROM picked WHERE p.id=picked.id AND p.status='queued' RETURNING p.*`,[COMPANY_TARGET,COMPANY_OWNER]);
+  return{ok:true,job:rows[0]||null,limit:COMPANY_LIMIT};
+ }
+ if(verb==='pending'){
+  const rows=await query("SELECT id,remote_id,confirmation_evidence FROM cortes_publications WHERE target_key=$1 AND status='uncertain' AND confirmation_evidence->>'kind'='linkedin_api_201_unverified' AND remote_id IS NOT NULL ORDER BY updated_at,id LIMIT 5",[COMPANY_TARGET]);
+  return{ok:true,jobs:rows};
+ }
+ if(verb==='reconcile-public'){
+  const remote=String(b.remote_id||'');
+  if(!id||!/^urn:li:(ugcPost|share):[0-9]{8,25}$/.test(remote)||b.public_status!==200||b.control_status!==404||b.proof_kind!=='linkedin_public_embed_head')return{ok:false,error:'COMPANY_PUBLIC_PROOF_INVALID'};
+  const evidence={kind:'linkedin_public_embed_http200',verified_id:remote,oauth_author_at_creation:true,public_embed_status:200,control_embed_status:404,permalink:'https://www.linkedin.com/embed/feed/update/'+remote};
+  const rows=await query("UPDATE cortes_publications SET status='confirmed',confirmation_evidence=$4::jsonb,updated_at=now() WHERE id=$1 AND target_key=$2 AND status='uncertain' AND remote_id=$3 AND confirmation_evidence->>'kind'='linkedin_api_201_unverified' RETURNING id,status,remote_id",[id,COMPANY_TARGET,remote,JSON.stringify(evidence)]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'COMPANY_PUBLIC_RECONCILE_STALE'};
+ }
+ if(!['start','fail','media-missing','accepted','confirmed'].includes(verb))return{ok:false,error:'COMPANY_ACTION_DENIED'};
+ const generation=Number(b.lease_generation);
+ if(!id||owner!==COMPANY_OWNER||!Number.isInteger(generation)||generation<1)return{ok:false,error:'COMPANY_INVALID_FENCE'};
+ if(verb==='start'){
+  const r=await query("UPDATE cortes_publications SET status='started',publication_started_at=COALESCE(publication_started_at,now()),updated_at=now() WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 AND lease_generation=$4 AND lease_until>now() RETURNING id,status",[id,COMPANY_TARGET,owner,generation]);
+  return r.length?{ok:true,job:r[0]}:{ok:false,error:'COMPANY_STALE_FENCE'};
+ }
+ if(verb==='fail'){
+  const r=await query("UPDATE cortes_publications SET status=CASE WHEN publication_started_at IS NULL THEN 'queued' ELSE 'uncertain' END,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status IN ('leased','started') AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",[id,COMPANY_TARGET,owner,generation]);
+  return r.length?{ok:true,job:r[0]}:{ok:false,error:'COMPANY_STALE_FENCE'};
+ }
+ if(verb==='media-missing'){
+  const evidence={kind:'source_media_http_404',account:'organization',confirmed_on_network:false,quarantine_at:new Date().toISOString(),discard_policy:'qa_24h_then_qa_exhaustion_required'};
+  const rows=await query("UPDATE cortes_publications SET status='uncertain',confirmation_evidence=$5::jsonb,lease_until=NULL,lease_owner=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status",[id,COMPANY_TARGET,owner,generation,JSON.stringify(evidence)]);
+  return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'COMPANY_STALE_FENCE'};
+ }
+ const remote=String(b.remote_id||'');
+ if(!/^urn:li:(share|ugcPost):[0-9]{8,25}$/.test(remote))return{ok:false,error:'COMPANY_REMOTE_INVALID'};
+ if(verb==='confirmed'&&(b.confirmation_evidence?.kind!=='linkedin_author_readback_verified'||b.confirmation_evidence?.verified_id!==remote||b.confirmation_evidence?.author_verified!==true))return{ok:false,error:'COMPANY_READBACK_REQUIRED'};
+ const evidence=verb==='confirmed'?b.confirmation_evidence:{kind:'linkedin_api_201_unverified',verified_id:remote,account:'organization'};
+ const status=verb==='confirmed'?'confirmed':'uncertain';
+ const r=await query("UPDATE cortes_publications SET status=$5,remote_id=$6,confirmation_evidence=$7::jsonb,lease_until=NULL,updated_at=now() WHERE id=$1 AND target_key=$2 AND status='started' AND lease_owner=$3 AND lease_generation=$4 RETURNING id,status,remote_id",[id,COMPANY_TARGET,owner,generation,status,remote,JSON.stringify(evidence)]);
+ return r.length?{ok:true,job:r[0]}:{ok:false,error:'COMPANY_STALE_FENCE'};
+}
 async function personalAction(verb,b){
  const id=String(b.id||''),owner=String(b.owner||'');
  if(verb==='lease'){
@@ -1910,6 +1969,11 @@ export default {async fetch(request){
    const out=await writeProbe(body);
    return answer(out,out.ok?200:409);
   }
+  if(action.startsWith('company-')){
+    if(actor.role!=='linkedin-company')return answer({ok:false,error:'COMPANY_WORKFLOW_ONLY'},403);
+    const out=await companyAction(action.slice('company-'.length),body);
+    return answer(out,out.ok?200:409);
+   }
   if(action.startsWith('personal-')){
    if(actor.role!=='personal')return answer({ok:false,error:'PERSONAL_WORKFLOW_ONLY'},403);
    const out=await personalAction(action.slice('personal-'.length),body);
