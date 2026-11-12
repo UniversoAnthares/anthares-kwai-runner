@@ -1,14 +1,20 @@
 name: CORTES Instagram LinkedIn reliable cloud wakeup
 
 # GitHub routinely drops high-frequency schedule events on busy repositories.
-# Successful canonical TikTok runs provide an independent cloud heartbeat.
+# Independent canonical workflow completions, including failures, provide a cloud heartbeat.
 # Only the existing authenticated publisher workflows may make API writes.
 on:
   workflow_run:
     workflows:
       - "CORTES TikTok hosted canonical Neon publisher"
+      - "CORTES 3 independent networks - all shorts cloud fanout"
+      - "CORTES Pinterest - direct invisible browser publisher"
     types: [completed]
     branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-instagram-linkedin-reliable-wakeup.yml'
   schedule:
     # Five-minute fallback; TikTok completion triggers Graph independently.
     - cron: '*/5 * * * *'
@@ -24,7 +30,7 @@ concurrency:
 
 jobs:
   trusted-dispatch:
-    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == 'UniversoAnthares/anthares-kwai-runner' && github.event.workflow_run.name == 'CORTES TikTok hosted canonical Neon publisher') }}
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == 'UniversoAnthares/anthares-kwai-runner' && contains(fromJSON('["CORTES TikTok hosted canonical Neon publisher","CORTES 3 independent networks - all shorts cloud fanout","CORTES Pinterest - direct invisible browser publisher"]'), github.event.workflow_run.name)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
@@ -34,6 +40,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           SOURCE_RUN_NUMBER: ${{ github.event.workflow_run.run_number || '0' }}
+          SOURCE_WORKFLOW: ${{ github.event.workflow_run.name || '' }}
+          SOURCE_CONCLUSION: ${{ github.event.workflow_run.conclusion || 'none' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -46,11 +54,19 @@ jobs:
               echo CORTES_WAKEUP_INVALID_SOURCE_RUN
               exit 1
             fi
-            # Every successful canonical TikTok completion wakes the Graph publisher.
-            # Neon fencing and the Meta API enforce per-account daily limits.
-            # LinkedIn keeps its separate eight-run cadence.
-            instagram_due=1
-            linkedin_due=$((SOURCE_RUN_NUMBER % 8 == 0))
+            # A failed TikTok or Pinterest publishing job is still an
+            # authenticated main-branch heartbeat. No cross-network state is
+            # trusted: Instagram uses its OWN Neon proportional slot gate.
+            # Bound TikTok to every other completion (~6min under normal cron)
+            # to avoid extra GitHub runner load. Fanout/Pinterest add fallback.
+            if [[ "$SOURCE_WORKFLOW" == 'CORTES TikTok hosted canonical Neon publisher' ]]; then
+              instagram_due=$((SOURCE_RUN_NUMBER % 2 == 0))
+              linkedin_due=$((SOURCE_RUN_NUMBER % 8 == 0))
+            else
+              instagram_due=1
+              linkedin_due=0
+            fi
+            echo "CORTES_WAKEUP_HEARTBEAT=$SOURCE_WORKFLOW:$SOURCE_CONCLUSION"
           else
             # Independently fired five-minute scheduled/manual recovery.
             instagram_due=1
