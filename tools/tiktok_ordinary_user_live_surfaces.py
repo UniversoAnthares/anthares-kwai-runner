@@ -22,7 +22,7 @@ SCRIPT = r"""() => {
  const safe=e=>{let t=(e.innerText||e.getAttribute('aria-label')||e.getAttribute('title')||'').replace(/\s+/g,' ').trim();return t.slice(0,70)};
  const liveRelated=elem.filter(e=>/(live|ao vivo|transmitir|broadcast|criar|create|upload|studio|camera|câmera|go live|entrar ao vivo|iniciar)/i.test(safe(e)));
  const out=liveRelated.slice(0,18).map(e=>({kind:e.tagName.toLowerCase(),role:e.getAttribute('role')||'',text:safe(e),
-   disabled:!!e.disabled,href:e.tagName==='A'?new URL(e.href).pathname.slice(0,65):null}));
+   disabled:!!e.disabled,href:e.tagName==='A'?(e.getAttribute('href')||'').slice(0,65):null}));
  const body=document.body?.innerText||'';
  return {visible_elements:elem.length,match_count:liveRelated.length,matches:out,
   mentions_live_studio:/live studio/i.test(body),mentions_go_live:/go live|fazer live|iniciar live/i.test(body),
@@ -54,7 +54,7 @@ def main():
       host=urlsplit(page.url)
       results.append(dict(device=device,page=label,route=host.path[:90],domain_tiktok=bool(host.hostname and host.hostname.endswith("tiktok.com")),
                           http=reply.status if reply else 0,login_required="/login" in host.path.lower(),**result))
-     except Exception as e:results.append({"device":device,"page":label,"error":type(e).__name__})
+     except Exception as e:results.append({"device":device,"page":label,"error":type(e).__name__,"detail":str(e).split("\n")[0][:100]})
     context.close()
    print("NORMAL_USER_TIKTOK_LIVE_SURFACES="+json.dumps(results,ensure_ascii=False,separators=(',',':')),flush=True)
   finally:browser.close()
