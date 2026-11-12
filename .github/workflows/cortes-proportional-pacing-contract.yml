@@ -32,5 +32,7 @@ jobs:
           set -euo pipefail
           python -m py_compile tools/cortes_deadline_pacing.py tools/cortes_tiktok_publish.py tools/kwai_physical_queue_daemon.py
           python -m unittest discover -s tests -p 'test_cortes_deadline_pacing.py' -v
+          python -m unittest discover -s tests -p 'test_cortes_quota_routing_contract.py' -v
+          python -m unittest discover -s tests -p 'test_buffer_shared_429_handoff.py' -v
           node --check infra/neon-cortes-queue/index.mjs
           echo CORTES_PROPORTIONAL_PACING_SOURCE_CONTRACT=PASS

@@ -14,8 +14,8 @@ class SharedBufferBackoff(unittest.TestCase):
     def test_private_consumers_persist_rate_limit_without_tokens(self):
         for filename in ("cortes_buffer_linkedin_cloud.py","cortes_buffer_instagram_cloud.py"):
             code=(ROOT/"tools"/filename).read_text()
-            self.assertIn('queue("cooldown",{"seconds":1800})',code)
+            self.assertIn('queue("cooldown",{"seconds":buffer_cooldown_seconds(',code)
             self.assertIn("BUFFER_HTTP_429",code)
         pin=(ROOT/"tools/cortes_buffer_pinterest_cloud.py").read_text()
-        self.assertIn('queue("cooldown",{"seconds":1800})',pin)
+        self.assertIn('queue("cooldown",{"seconds":buffer_cooldown_seconds(',pin)
 if __name__=="__main__":unittest.main()
