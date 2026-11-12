@@ -159,58 +159,72 @@ class DirectInstagramTests(unittest.TestCase):
             2026, 11, 12, 9, 30, tzinfo=timezone.utc)))
         self.assertTrue(direct.daily_publication_window(datetime(
             2026, 11, 12, 10, 30, tzinfo=timezone.utc)))
-        self.assertTrue(direct.daily_publication_window(datetime(
+        self.assertFalse(direct.daily_publication_window(datetime(
             2026, 11, 13, 3, 30, tzinfo=timezone.utc)))
         self.assertFalse(direct.daily_publication_window(datetime(
             2026, 11, 13, 4, 30, tzinfo=timezone.utc)))
 
-    def test_batch_can_commit_two_distinct_confirmations(self):
-        with patch.object(direct,"require_cloud",return_value=object()), \
-             patch.object(direct,"daily_publication_window",return_value=True), \
-             patch.object(direct,"quota_hold_until",return_value=None), \
-             patch.object(direct,"publish_once",side_effect=[1,1]) as once, \
-             patch.object(direct.time,"sleep") as delay:
-            self.assertEqual(direct.main(),0)
-            self.assertEqual(once.call_count,2)
-            delay.assert_called_once_with(65)
-
-    def test_batch_stops_at_quota_or_empty_queue(self):
-        with patch.object(direct,"require_cloud",return_value=object()), \
-             patch.object(direct,"daily_publication_window",return_value=True), \
-             patch.object(direct,"quota_hold_until",return_value=None), \
-             patch.object(direct,"publish_once",side_effect=[1,0]) as once, \
-             patch.object(direct.time,"sleep") as delay:
-            self.assertEqual(direct.main(),0)
-            self.assertEqual(once.call_count,2)
-            delay.assert_called_once_with(65)
-
-    def test_batch_keeps_confirmed_success_after_fenced_uncertain(self):
-        with patch.object(direct,"require_cloud",return_value=object()), \
-             patch.object(direct,"daily_publication_window",return_value=True), \
-             patch.object(direct,"quota_hold_until",return_value=None), \
-             patch.object(direct,"publish_once",side_effect=[1,4]) as once, \
-             patch.object(direct.time,"sleep"):
+    def test_one_due_slot_submits_at_most_one_reel_per_run(self):
+        with patch.object(direct, "require_cloud", return_value=object()), \
+             patch.object(direct, "daily_publication_window", return_value=True), \
+             patch.object(direct, "quota_hold_until", return_value=None), \
+             patch.object(direct, "publish_once", side_effect=[1,1]) as once:
             self.assertEqual(direct.main(), 0)
-            self.assertEqual(once.call_count, 2)
+            self.assertEqual(once.call_count, 1)
 
-    def test_batch_halts_after_first_fenced_uncertain_post(self):
-        with patch.object(direct,"require_cloud",return_value=object()), \
-             patch.object(direct,"daily_publication_window",return_value=True), \
-             patch.object(direct,"quota_hold_until",return_value=None), \
-             patch.object(direct,"publish_once",side_effect=[4,1]) as once, \
+    def test_provider_room_is_taken_from_authenticated_account_api(self):
+        from types import SimpleNamespace
+        for total, used, expected in ((100,44,56),(100,100,0),
+                                      (100,None,None),(101,0,None)):
+            client=SimpleNamespace(get_quota=lambda t=total,u=used:
+                                      SimpleNamespace(total=t,usage=u))
+            self.assertEqual(direct.provider_room(client),expected)
+
+    def test_no_lease_before_provider_quota_known(self):
+        from types import SimpleNamespace
+        client=SimpleNamespace(get_quota=lambda:SimpleNamespace(total=None,usage=None))
+        with patch.object(direct, "neon") as q:
+            self.assertEqual(direct.publish_once(client), 0)
+            q.assert_not_called()
+
+    def test_wait_slot_obeys_neon_due_without_claiming_or_sleeping(self):
+        from types import SimpleNamespace
+        client=SimpleNamespace(get_quota=lambda:SimpleNamespace(total=100,usage=44))
+        plan={"status":"WAIT","next_due_at":"2026-11-12T19:12:00Z",
+              "interval_seconds":572.0,"remaining_today":54}
+        with patch.object(direct,"neon",return_value={"ok":True,"job":None,"pacing":plan}) as neon, \
              patch.object(direct.time,"sleep") as sleeper:
-            self.assertEqual(direct.main(),0)
-            self.assertEqual(once.call_count,1)
+            self.assertEqual(direct.publish_once(client),0)
+            neon.assert_called_once_with("lease", {"target_key":direct.TARGET,
+                                         "owner":direct.OWNER,"quota_remaining":56})
             sleeper.assert_not_called()
 
-    def test_batch_stops_on_uncertain_submission(self):
-        with patch.object(direct,"require_cloud",return_value=object()), \
-             patch.object(direct,"daily_publication_window",return_value=True), \
-             patch.object(direct,"quota_hold_until",return_value=None), \
-             patch.object(direct,"publish_once",side_effect=[1,2]) as once, \
-             patch.object(direct.time,"sleep"):
-            self.assertEqual(direct.main(),2)
-            self.assertEqual(once.call_count,2)
+    def test_start_recheck_blocks_media_without_mutating_terminal_state(self):
+        from types import SimpleNamespace
+        job={"id":"cortes-fanout-instagram-"+"a"*32,
+             "lease_generation":2,"target_key":direct.TARGET,"duration_class":"short",
+             "payload":{"platform":"instagram","account_id":"universoanthares",
+                        "title":"Exemplo",
+                        "media_url":"https://anthares.us/wp-content/uploads/anthares-clips/2026/11/test.mp4"}}
+        client=SimpleNamespace(get_quota=lambda:SimpleNamespace(total=100,usage=44))
+        def fake_neon(action, data):
+            if action=="lease":return {"ok":True,"job":job}
+            if action=="start":return {"ok":True,"job":None,"pacing":{"status":"WAIT"}}
+            if action=="fail":return {"ok":True,"job":{"status":"queued"}}
+            raise AssertionError(action)
+        with patch.object(direct,"neon",side_effect=fake_neon) as q, \
+             patch.object(direct,"missing_media",return_value=False), \
+             patch.object(direct,"ensure_vertical_media",return_value=job["payload"]["media_url"]):
+            self.assertEqual(direct.publish_once(client),0)
+            self.assertEqual([c.args[0] for c in q.call_args_list],["lease","start","fail"])
+            self.assertEqual(q.call_args_list[1].args[1]["quota_remaining"],56)
+
+    def test_day_ends_at_2300_exactly(self):
+        from datetime import datetime, timezone
+        self.assertTrue(direct.daily_publication_window(datetime(
+            2026,11,13,2,59,59,tzinfo=timezone.utc)))
+        self.assertFalse(direct.daily_publication_window(datetime(
+            2026,11,13,3,0,0,tzinfo=timezone.utc)))
 
 if __name__=="__main__":
     unittest.main()
