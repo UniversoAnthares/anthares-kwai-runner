@@ -25,7 +25,6 @@ WORKER = os.environ.get("ANTHARES_TIKTOK_WORKER_URL", "https://anthares-tiktok-w
 EXPECTED_WORKER_HOST = "anthares-tiktok-worker.anthares1.workers.dev"
 WP = os.environ.get("WP_SITE_URL", "").strip().rstrip("/")
 TIMEOUT = 40
-MIN_GAP_SECONDS = 10 * 60
 MAX_PER_DAY = 100
 
 
@@ -152,24 +151,39 @@ def get_network_enabled(state: dict) -> bool:
                for n in state.get("networks") or [])
 
 
-def posting_pace(state: dict, now: datetime):
-    rows = []
+def posting_pace(state: dict, now: datetime, eligible_count: int):
+    """Plan only the account's remaining short clips through 23:00 MS."""
+    from tools.cortes_deadline_pacing import plan_publications
+    from zoneinfo import ZoneInfo
+    zone = ZoneInfo("America/Campo_Grande")
+    today = now.astimezone(zone).date()
+    confirmations = []
+    started = 0
     for live in state.get("items") or []:
         for clip in live.get("clips") or []:
             net = ((clip.get("networks") or {}).get("tiktok") or {})
-            if net.get("status") != "completed":
-                continue
+            status = str(net.get("status") or "")
+            ts = None
             try:
-                ts = datetime.fromisoformat(str(net.get("updated_at") or "").replace("Z", "+00:00")).astimezone(timezone.utc)
-                rows.append(ts)
+                ts = datetime.fromisoformat(
+                    str(net.get("updated_at") or "").replace("Z", "+00:00"))
+                if ts.tzinfo is None:
+                    ts = None
             except (TypeError, ValueError):
                 pass
-    today = now.astimezone(timezone(timedelta(hours=-4))).date()
-    if sum(x.astimezone(timezone(timedelta(hours=-4))).date() == today for x in rows) >= MAX_PER_DAY:
-        raise Blocked("TIKTOK_DAILY_CAP")
-    if rows and (now - max(rows)).total_seconds() < MIN_GAP_SECONDS:
-        raise Blocked("TIKTOK_PACING_COOLDOWN")
-
+            if ts is None or ts.astimezone(zone).date() != today:
+                continue
+            if status == "completed":
+                confirmations.append(ts)
+                started += 1
+            elif status in ("processing", "uncertain"):
+                started += 1
+    return plan_publications(
+        now=now, target_key="tiktok:" + ACCOUNT,
+        queued=eligible_count, started_today=started,
+        daily_limit=MAX_PER_DAY,
+        first_confirmed_at=min(confirmations, default=None),
+        last_confirmed_at=max(confirmations, default=None))
 
 def main() -> int:
     if os.getenv("CORTES_TIKTOK_DRY_RUN", "0") == "1":
@@ -224,7 +238,12 @@ def main() -> int:
         print("TIKTOK_CORTES_IDLE_NO_PENDING_SHORT")
         return 0
     now = datetime.now(timezone.utc)
-    posting_pace(state, now)
+    pace = posting_pace(state, now, len(ready))
+    if pace.status != "DUE":
+        print("TIKTOK_CORTES_PACING status=" + pace.status +
+              " remaining=" + str(pace.remaining_today) +
+              " due_at=" + str(pace.due_at or "none"), flush=True)
+        return 0
     clip = ready[0]
     sid = segment_id(clip)
     target = marker(sid)
