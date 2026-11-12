@@ -579,8 +579,13 @@ def reconcile_buffer_terminal_errors():
     from datetime import datetime, timedelta, timezone
     jobs=queue("pending").get("jobs") or []
     known=[j for j in jobs if str(j.get("remote_id") or "")]
-    if not known or len(known)>25:
+    if len(known)>25:
         raise RuntimeError("PINTEREST_TERMINAL_ERROR_PENDING_UNVERIFIED")
+    if not known:
+        print(json.dumps({"pinterest_cloud":"TERMINAL_ERROR_RECONCILE",
+                          "terminal_errors_quarantined":0,
+                          "new_posts":0,"requeued_posts":0},separators=(",",":")),flush=True)
+        return 0
     remotes=[str(j["remote_id"]) for j in known]
     if len(remotes)!=len(set(remotes)):
         raise RuntimeError("PINTEREST_TERMINAL_ERROR_DUPLICATE_BUFFER_ID")
@@ -732,6 +737,20 @@ def repair_scheduled_destination_only():
     return 0
 
 
+def terminal_maintenance_window(now=None, *, event=None):
+    """Two narrow daily UTC windows for independently verified 24h Buffer errors.
+
+    Never run from manual/QA invocations. Each provider receipt is reread
+    and Neon CAS-fenced; unknown posts are preserved.
+    """
+    from datetime import datetime, timezone
+    stamp=now or datetime.now(timezone.utc)
+    if stamp.tzinfo is None:
+        return False
+    event=os.getenv("GITHUB_EVENT_NAME","") if event is None else event
+    return event=="schedule" and stamp.astimezone(timezone.utc).hour in (16,17)
+
+
 def main():
     cloud_only()
     if os.getenv("CORTES_REPAIR_PIN_DESTINATION_ONLY")=="1":
@@ -751,6 +770,10 @@ def main():
     try:
         # Readback comes first; never lose remote evidence on board outages.
         confirmed=reconcile()
+        # Finish yesterday's provably failed Buffer reservations on the
+        # existing natural scheduler. Never requeue or repost terminal errors.
+        if terminal_maintenance_window():
+            reconcile_buffer_terminal_errors()
         if os.getenv("CORTES_RECONCILE_ONLY")=="1":
             print(json.dumps({"pinterest_cloud":"RECONCILE_ONLY",
                               "posts_confirmed_this_run":confirmed,"new_posts":0},
