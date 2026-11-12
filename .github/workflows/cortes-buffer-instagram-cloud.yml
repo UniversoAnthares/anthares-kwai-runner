@@ -23,9 +23,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish-and-reconcile:
-    # Manual readback is allowed under pause; routine publication requires explicit enablement.
-    # Missing or true pause variable fails closed for schedule and ordinary dispatch.
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.reconcile_only == true) || vars.CORTES_INSTAGRAM_BUFFER_PAUSED == 'false' }}
+    # Buffer disabled by explicit owner instruction; direct publishers own delivery.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:

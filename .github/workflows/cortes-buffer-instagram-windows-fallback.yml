@@ -12,6 +12,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish-with-fenced-neon:
+    # Buffer disabled by explicit owner instruction; direct publishers own delivery.
+    if: ${{ false }}
     runs-on: [self-hosted, Windows, tiktok-lucas4-fallback]
     timeout-minutes: 13
     steps:
