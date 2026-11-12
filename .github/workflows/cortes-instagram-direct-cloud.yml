@@ -33,11 +33,11 @@ jobs:
           python-version: '3.12'
       - name: Verify direct publisher syntax and source
         run: |
+          python -m pip install --quiet --disable-pip-version-check imageio-ffmpeg
           python -m py_compile tools/cortes_instagram_direct_cloud.py tools/cortes_instagram_vertical_asset.py scripts/instagram_publish.py tools/cortes_queue_ha.py
           python -m unittest discover -s tests -p 'test_instagram_direct_cloud.py' -v
           python -m unittest discover -s tests -p 'test_instagram_vertical_asset.py' -v
-          command -v ffmpeg
-          command -v ffprobe
+          python -c 'from tools.cortes_instagram_vertical_asset import _ffmpeg_exe; assert _ffmpeg_exe()'
       - name: Publish up to two separately confirmed Reels through official Instagram Graph
         id: publish
         env:
