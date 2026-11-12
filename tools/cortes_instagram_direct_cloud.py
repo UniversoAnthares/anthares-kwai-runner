@@ -162,6 +162,7 @@ def publish_once(client: InstagramClient) -> int:
         return 0
     fence = {"id": job["id"], "owner": OWNER, "lease_generation": job["lease_generation"]}
     started = False
+    phase = "preflight"
     try:
         payload = job.get("payload") or {}
         if isinstance(payload, str):
@@ -188,9 +189,13 @@ def publish_once(client: InstagramClient) -> int:
             return 0
         neon("start", fence)
         started = True
+        phase = "container_create"
         container = client.create_reel_container(url, caption, share_to_feed=True)
+        phase = "container_processing"
         client.wait_until_ready(container, interval=15, attempts=24)
+        phase = "media_publish"
         media_id = client.publish_container(container)
+        phase = "receipt_verify"
         proof = client._request("GET", media_id, query={"fields": "id,permalink"})
         permalink = str(proof.get("permalink") or "")
         if str(proof.get("id") or "") != media_id:
@@ -208,8 +213,16 @@ def publish_once(client: InstagramClient) -> int:
             fenced = True
         except Exception:
             print("::error::INSTAGRAM_NEON_HOLD_NOT_ACKNOWLEDGED", flush=True)
+        # Print only numeric Meta diagnostics; omit potentially sensitive provider messages.
+        error_text = str(exc)
+        http = re.search(r"HTTP\s+(\d{3})", error_text)
+        code = re.search(r"\bcode=(\d+)", error_text)
+        subcode = re.search(r"\bsubcode=(\d+)", error_text)
         print(json.dumps({"direct_cloud": "HELD_UNVERIFIED" if started else "BLOCKED_PRE_SUBMIT",
                           "reason": type(exc).__name__, "id": job["id"],
+                          "phase": phase, "http_status": int(http.group(1)) if http else None,
+                          "graph_code": int(code.group(1)) if code else None,
+                          "graph_subcode": int(subcode.group(1)) if subcode else None,
                           "ledger_fenced": fenced}), flush=True)
         # No automatic replay of the same media after a submission has started.
         return 4 if fenced and started else 2
