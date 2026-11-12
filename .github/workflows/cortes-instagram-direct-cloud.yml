@@ -7,7 +7,7 @@ on:
       - 'tools/cortes_instagram_direct_cloud.py'
   workflow_dispatch: {}
   schedule:
-    - cron: '2,17,32,47 * * * *'
+    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
 permissions:
   contents: read
   id-token: write
@@ -21,7 +21,7 @@ jobs:
     # Serialize only the media job; Neon fencing remains the final authority.
     concurrency:
       # A scheduled run cannot cancel a user-initiated rescue; Neon fences both.
-      group: cortes-instagram-direct-neon-primary-${{ github.event_name }}
+      group: cortes-instagram-direct-neon-primary
       cancel-in-progress: false
     outputs:
       confirmed: ${{ steps.publish.outputs.confirmed }}
@@ -34,7 +34,7 @@ jobs:
         run: |
           python -m py_compile tools/cortes_instagram_direct_cloud.py scripts/instagram_publish.py tools/cortes_queue_ha.py
           python -m unittest discover -s tests -p 'test_instagram_direct_cloud.py' -v
-      - name: Publish exactly one eligible Reel through official Instagram Graph
+      - name: Publish up to two separately confirmed Reels through official Instagram Graph
         id: publish
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
