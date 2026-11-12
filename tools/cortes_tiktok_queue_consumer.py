@@ -71,10 +71,13 @@ def worker_auth():
     return oidc("anthares-render-worker")
 
 
+# The historical Vercel primary project is blocked by account fair-use (402)
+# and still serves the Oct28 cadence. Keep QUEUE only as stable OIDC audience.
+# Actual mutable actions must use Neon or its Cloudflare HA ingress, which
+# share the PostgreSQL 06h–23h hard-window trigger and fenced account ledger.
 BACKENDS = (
     "https://br-crimson-unit-b89nau08-cortestiktok.compute.c-14.us-east-1.aws.neon.tech/",
     "https://anthares-cortes-tiktok-ha.anthares1.workers.dev/",
-    QUEUE,
 )
 _CHOSEN = None
 
