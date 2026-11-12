@@ -13,7 +13,7 @@
     "blocked_scope_source": "ci-hub/quota-status.json",
     "unblock_only_after": "fresh_provider_quota_ready_proof_and_owner_fenced_receipt",
     "blocked_current": [
-      "vercel_hobby_team_0LJFNVrGdH5dvDqnTEN3FFoT_fluid_active_cpu"
+      "anthares_vercel_hobby_fluid_active_cpu"
     ],
     "replacement_contract": "no_new_cost_no_duplicate_publisher_no_credentials_no_manual_retry_on_uncertain"
   },
@@ -28,7 +28,7 @@
     "current_selected_backend": "vercel_neon_control",
     "selected_backend_state": "HISTORICAL_STALE_UNTIL_VERIFIED_RESELECTION",
     "fresh_backend_selection_required_for_new_jobs": true,
-    "current_quota_block": "vercel_hobby_team_0LJFNVrGdH5dvDqnTEN3FFoT_fluid_active_cpu",
+    "current_quota_block": "anthares_vercel_hobby_fluid_active_cpu",
     "recovery_priority": [
       "gitlab_private_issue_queue",
       "github_private_issue_queue"
@@ -360,7 +360,7 @@
       "remote_backend_eligible": false,
       "status": "BLOCKED_QUOTA_HOBBY_FLUID_CPU_FOR_NEW_REMOTE_COMPUTE_20261112",
       "role": "ara_preserved_historical_mcp_control",
-      "quota_scope": "vercel_hobby_team_0LJFNVrGdH5dvDqnTEN3FFoT_fluid_active_cpu",
+      "quota_scope": "anthares_vercel_hobby_fluid_active_cpu",
       "routing_priority": "LAST",
       "reopen_condition": "fresh endpoint+quota proof after pause, then coordinate owner and shared ledger before promotion"
     },
