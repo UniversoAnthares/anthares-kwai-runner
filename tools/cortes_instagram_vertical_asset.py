@@ -48,7 +48,7 @@ def _probe(source: str | Path) -> tuple[int, int]:
     cmd += ["-i", str(source)]
     try:
         run = subprocess.run(cmd, capture_output=True, text=True, timeout=50)
-        match = re.search(r"Video:[^\\n]*?\\b(\\d{2,5})x(\\d{2,5})\\b", run.stderr)
+        match = re.search(r"Video:[^\n]*?\b(\d{2,5})x(\d{2,5})\b", run.stderr)
         if match:
             return int(match.group(1)), int(match.group(2))
     except subprocess.SubprocessError:
