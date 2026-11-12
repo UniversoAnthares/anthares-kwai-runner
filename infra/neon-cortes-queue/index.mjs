@@ -1224,6 +1224,42 @@ async function instagramAuthenticatedProfileSave(actor,b){
 }
 async function instagramDirectAction(verb,b){
  const target='instagram:universoanthares';
+ if(verb==='audio-confirm-one'){
+  // Exact audit-only exception for the independently proven 21 Oct Reel.
+  // The media asset was compared byte-to-byte via two authenticated fetches,
+  // decoded to PCM, and correlated with the original audio (0.977).
+  const id='cortes-fanout-instagram-2ecd394d6d76b9c1a89a4b66a3e5d3b4';
+  const remote='18121626946995788';
+  const permalink='https://www.instagram.com/reel/DewkE18xDD3/';
+  const source='https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_fOmihuHUT1M_g1_9303_9360.mp4';
+  if(b.id!==id||b.remote_id!==remote||b.proof_workflow_run!=='43266870818'
+    ||b.authenticated_inventory_run!=='43266099213'
+    ||b.confirmation_audio_correlation!==0.977)
+    return{ok:false,error:'AUDIO_PROOF_IDENTITY_MISMATCH'};
+  const original=await query(`SELECT id,source_id,status,payload->>'media_url' media_url,
+    confirmation_evidence FROM cortes_publications
+    WHERE id=$1 AND target_key=$2 LIMIT 1`,[id,target]);
+  const row=original[0];
+  if(!row||row.source_id!=='fOmihuHUT1M'||row.media_url!==source)
+    return{ok:false,error:'AUDIO_PROOF_SOURCE_MISMATCH'};
+  if(row.status==='confirmed')
+    return{ok:true,already_confirmed:true};
+  if(row.status!=='uncertain')return{ok:false,error:'AUDIO_PROOF_STATE_MISMATCH'};
+  const evidence={kind:'authenticated_graph_source_audio_exact_match',
+    confirmed_on_network:true,remote_id:remote,public_permalink:permalink,
+    published_at_utc:'2026-10-21T13:55:41Z',audio_correlation:0.977,
+    source_bytes:6464228,published_bytes:1972685,relative_shift_seconds:0,
+    authenticated_inventory_run:'43266099213',
+    media_proof_run:'43266870818',prior_evidence:row.confirmation_evidence,
+    reviewed_at:new Date().toISOString()};
+  const updated=await query(`UPDATE cortes_publications SET status='confirmed',
+   remote_id=$3,confirmation_evidence=$4::jsonb,updated_at=now()
+   WHERE id=$1 AND target_key=$2 AND status='uncertain' AND remote_id IS NULL
+   AND NOT EXISTS (SELECT 1 FROM cortes_publications other
+    WHERE other.target_key=$2 AND other.remote_id=$3 AND other.id<>$1)
+   RETURNING id,status,remote_id`,[id,target,remote,JSON.stringify(evidence)]);
+  return updated.length?{ok:true,job:updated[0]}:{ok:false,error:'AUDIO_PROOF_CAS_STALE'};
+ }
  if(verb==='profile-snapshot'){
   const rows=await query(`SELECT profile_name,account_name,captured_at,first_at,
    oldest_at,newest_at,scanned_count,posts FROM cortes_instagram_authenticated_scans
