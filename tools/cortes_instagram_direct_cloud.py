@@ -196,19 +196,25 @@ def publish_once(client: InstagramClient) -> int:
                           "id": job["id"], "permalink": permalink}), flush=True)
         return 1
     except Exception as exc:
+        # An uncertain remote submission is fenced and held in Neon. Only a
+        # committed fail/hold transition permits progress to another job.
+        fenced = False
         try:
             neon("fail", fence)
+            fenced = True
         except Exception:
-            pass
+            print("::error::INSTAGRAM_NEON_HOLD_NOT_ACKNOWLEDGED", flush=True)
         print(json.dumps({"direct_cloud": "HELD_UNVERIFIED" if started else "BLOCKED_PRE_SUBMIT",
-                          "reason": type(exc).__name__, "id": job["id"]}), flush=True)
-        # No automatic replay after a submission has started.
-        return 2
+                          "reason": type(exc).__name__, "id": job["id"],
+                          "ledger_fenced": fenced}), flush=True)
+        # No automatic replay of the same media after a submission has started.
+        return 4 if fenced and started else 2
 
 
 def main() -> int:
     client = require_cloud()
     confirmed = 0
+    quarantined = 0
     # Two existing fenced queue items per hosted run; Meta quota is checked
     # immediately before each POST and each remote receipt is committed alone.
     for index in range(2):
@@ -219,11 +225,14 @@ def main() -> int:
             break
         if state == 1:
             confirmed += 1
-            if index == 0:
-                time.sleep(65)
-        # A quarantined missing source can be skipped without stopping the queue.
+        if state == 4:
+            quarantined += 1
+        if index == 0 and state in (1, 4):
+            time.sleep(65)
+        # A quarantined 404 or fenced uncertain source does not halt other jobs.
     print(json.dumps({"direct_cloud": "BATCH_COMPLETE",
-                      "confirmed": confirmed, "maximum_per_run": 2}), flush=True)
+                      "confirmed": confirmed, "fenced_uncertain": quarantined,
+                      "maximum_per_run": 2}), flush=True)
     return 0
 
 
