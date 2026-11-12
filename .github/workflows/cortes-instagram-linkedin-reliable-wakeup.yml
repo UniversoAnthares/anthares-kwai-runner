@@ -10,8 +10,8 @@ on:
     types: [completed]
     branches: [main]
   schedule:
-    # Independent fallback when the TikTok producer has no eligible source.
-    - cron: '13 * * * *'
+    # Five-minute fallback; TikTok completion triggers Graph independently.
+    - cron: '*/5 * * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -46,13 +46,13 @@ jobs:
               echo CORTES_WAKEUP_INVALID_SOURCE_RUN
               exit 1
             fi
-            # Approx. one Graph Reel per 20-minute TikTok cadence;
-            # LinkedIn at half that rate. Each destination independently
-            # enforces Neon daily quota, lease fencing and remote readback.
-            instagram_due=$((SOURCE_RUN_NUMBER % 4 == 0))
+            # Every successful canonical TikTok completion wakes the Graph publisher.
+            # Neon fencing and the Meta API enforce per-account daily limits.
+            # LinkedIn keeps its separate eight-run cadence.
+            instagram_due=1
             linkedin_due=$((SOURCE_RUN_NUMBER % 8 == 0))
           else
-            # Independently fired hourly scheduled/manual recovery.
+            # Independently fired five-minute scheduled/manual recovery.
             instagram_due=1
             linkedin_due=1
           fi
