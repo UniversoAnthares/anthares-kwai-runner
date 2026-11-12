@@ -260,6 +260,30 @@ def fill_caption(page,caption):
     raise SafeStop("SECONDARY_CAPTION_UNVERIFIED")
 
 
+def clear_optional_caption(page):
+    """Skip caption-only failures for an already staged video; no partial text."""
+    selectors=('[contenteditable="true"][data-e2e*="caption"]',
+               'div[contenteditable="true"]','[role="textbox"]','textarea')
+    for css in selectors:
+        els=page.locator(css)
+        for index in range(min(12,els.count())):
+            element=els.nth(index)
+            try:
+                if not element.is_visible(timeout=900):
+                    continue
+                element.fill("",timeout=5500)
+                current=(element.inner_text(timeout=1800)
+                         if element.get_attribute("contenteditable")=="true"
+                         else element.input_value(timeout=1800))
+                if current.strip():
+                    raise SafeStop("SECONDARY_CAPTION_OPTIONAL_NONEMPTY_EDITOR")
+            except SafeStop:
+                raise
+            except Exception as exc:
+                raise SafeStop("SECONDARY_CAPTION_OPTIONAL_CLEAR_UNVERIFIED") from exc
+    return True
+
+
 def marker_from_caption(value):
     found=re.search(r"#anthares[a-f0-9]{10}",value,re.I)
     if not found:
@@ -377,7 +401,16 @@ def publish_one(job,token,state):
                     button=t.wait_upload_ready(page,timeout_seconds=260)
                     close_editor_modals(page)
                     print("SECONDARY_CLOUD_PRESTART_STAGE=caption",flush=True)
-                    fill_caption(page,caption_for(job))
+                    caption_skipped=False
+                    try:
+                        fill_caption(page,caption_for(job))
+                    except SafeStop as exc:
+                        if str(exc)!="SECONDARY_CAPTION_UNVERIFIED":
+                            raise
+                        clear_optional_caption(page)
+                        caption_skipped=True
+                        print("SECONDARY_CAPTION_SKIPPED_MEDIA_ONLY=1",flush=True)
+
                     print("SECONDARY_CLOUD_PRESTART_STAGE=visibility",flush=True)
                     if t.set_public_visibility(page) is not True:
                         raise SafeStop("SECONDARY_VISIBILITY_NOT_PUBLIC")
@@ -455,9 +488,11 @@ def publish_one(job,token,state):
                     for _ in range(4):
                         newest=studio(page)
                         matches=[id for id,label in newest.items()
-                                 if id not in previous and target.casefold() in label.casefold()]
+                                 if id not in previous and (caption_skipped or target.casefold() in label.casefold())]
                         if len(matches)==1:
                             found=matches[0]
+                            if caption_skipped:
+                                print("SECONDARY_MEDIA_ONLY_UNIQUE_STUDIO_VIDEO="+found,flush=True)
                             break
                         if len(matches)>1:
                             raise SafeStop("SECONDARY_MULTIPLE_NEW_MATCHES_RECONCILE")
