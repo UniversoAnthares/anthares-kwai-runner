@@ -107,14 +107,6 @@ class DirectInstagramTests(unittest.TestCase):
             self.assertEqual(once.call_count,2)
             delay.assert_called_once_with(65)
 
-    def test_batch_continues_after_fenced_uncertain_item(self):
-        with patch.object(direct,"require_cloud",return_value=object()), \
-             patch.object(direct,"publish_once",side_effect=[4,1]) as once, \
-             patch.object(direct.time,"sleep") as pause:
-            self.assertEqual(direct.main(), 0)
-            self.assertEqual(once.call_count, 2)
-            pause.assert_called_once_with(65)
-
     def test_batch_keeps_confirmed_success_after_fenced_uncertain(self):
         with patch.object(direct,"require_cloud",return_value=object()), \
              patch.object(direct,"publish_once",side_effect=[1,4]) as once, \
