@@ -22,6 +22,7 @@ on:
       - 'vercel-ara-primary/vercel.json'
   schedule:
     - cron: '*/3 * * * *'
+    - cron: '17 11 * * *' # independent daily forensic readback, no publication
   workflow_run:
     workflows: ['Anthares Core Supervisor']
     types: [completed]
@@ -191,7 +192,7 @@ jobs:
         timeout-minutes: 3
         run: python3 -u tools/cortes_tiktok_pacing_receipt_watch.py
       - name: Reconcile ten historic uncertain TikTok segments using signed-in Studio (read-only)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'schedule' && github.event.schedule == '17 11 * * *'))
         continue-on-error: true
         timeout-minutes: 8
         run: python3 -u tools/cortes_tiktok_uncertain_batch_audit.py
@@ -220,7 +221,7 @@ jobs:
           PY
       - name: Publish or reconcile at most one queued TikTok short (main only)
         id: publish
-        if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == 'UniversoAnthares/anthares-kwai-runner' && github.event.workflow_run.name == 'Anthares Core Supervisor'))
+        if: github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && github.event.schedule != '17 11 * * *') || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == 'UniversoAnthares/anthares-kwai-runner' && github.event.workflow_run.name == 'Anthares Core Supervisor'))
         env:
           EXPECTED_TIKTOK_USERNAME: universo.anthares
           TIKTOK_PUBLISH_NOT_BEFORE_UTC: '2026-10-20T10:00:00Z'
