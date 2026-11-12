@@ -75,16 +75,44 @@ runner() {
     # Avoid uncontrolled log growth and accidental storage of FFmpeg URLs.
     : > "$ROOT/ffmpeg.stderr"
     : > "$ROOT/ffmpeg.progress"
-    local begun ended rc
+    local begun ended rc phase residual remaining plan
+    if ! plan="$(python3 "$ROOT/make-continuity-playlist.py" "$VOD" "$ROOT/program-origin-epoch" "$MAX_SECONDS" "$ROOT/seek-current.m3u8")"; then
+      log "CONTINUITY_PREP_FAILED"
+      echo false > "$ROOT/enabled"
+      log "CIRCUIT_BREAKER_OPEN"
+      exit 5
+    fi
+    read -r phase residual remaining <<< "$plan"
+    [[ "$phase" =~ ^[0-9]+$ && "$remaining" =~ ^[0-9]+$ && "$residual" =~ ^[0-9]+([.][0-9]+)?$ ]] || {
+      log "CONTINUITY_PLAN_INVALID"
+      echo false > "$ROOT/enabled"
+      log "CIRCUIT_BREAKER_OPEN"
+      exit 5
+    }
     begun="$(date +%s)"
+    log "PROGRAM_RESUMED position=$phase remaining=$remaining"
     # Start FFmpeg directly so $! is the encoder PID, not a Bash wrapper.
     ulimit -c 0
-    nice -n 15 "$FF" -nostdin -hide_banner -loglevel error -fflags +genpts \
-      -re -i "$VOD" -t "$MAX_SECONDS" \
-      -c:v copy -c:a aac -af aresample=async=1:first_pts=0,asetpts=N/SR/TB \
-      -b:a 128k -ar 44100 -avoid_negative_ts make_zero \
-      -f flv -progress "$ROOT/ffmpeg.progress" "$destination" \
-      </dev/null >/dev/null 2>"$ROOT/ffmpeg.stderr" &
+    local stream_mode=hls
+    if [[ -r "$ROOT/normalized/show.ffconcat" && -r "$ROOT/normalized/build-state.json" ]] \
+        && grep -Fq '"stage": "READY"' "$ROOT/normalized/build-state.json" \
+        && [[ ! -e "$ROOT/normalized/disabled" ]]; then
+      stream_mode=normalized
+      log "NORMALIZED_STREAM_START position=$phase"
+      nice -n 15 "$FF" -nostdin -hide_banner -loglevel error -fflags +genpts \
+        -re -ss "$phase" -f concat -safe 0 -i "$ROOT/normalized/show.ffconcat" \
+        -t "$remaining" -c:v copy -c:a copy -avoid_negative_ts make_zero \
+        -f flv -progress "$ROOT/ffmpeg.progress" "$destination" \
+        </dev/null >/dev/null 2>"$ROOT/ffmpeg.stderr" &
+    else
+      log "NORMALIZED_SOURCE_UNAVAILABLE_USING_HLS"
+      nice -n 15 "$FF" -nostdin -hide_banner -loglevel error -fflags +genpts \
+        -re -ss "$residual" -i "$ROOT/seek-current.m3u8" -t "$remaining" \
+        -c:v copy -c:a aac -af aresample=async=1:first_pts=0,asetpts=N/SR/TB \
+        -b:a 128k -ar 44100 -avoid_negative_ts make_zero \
+        -f flv -progress "$ROOT/ffmpeg.progress" "$destination" \
+        </dev/null >/dev/null 2>"$ROOT/ffmpeg.stderr" &
+    fi
     child=$!
     echo "$child" > "$ROOT/ffmpeg.pid"
     log "CYCLE_STARTED"
@@ -94,9 +122,24 @@ runner() {
     child=""
     rm -f "$ROOT/ffmpeg.pid"
     if ! enabled; then break; fi
-    if [[ "$rc" -eq 0 && $((ended-begun)) -ge "$MIN_GOOD_SECONDS" ]]; then
+    # If a normalized stream fails, revert to the proven HLS encoder immediately.
+    # Never permanently disarm merely because a newly generated MP4 is faulty.
+    if [[ "$stream_mode" = normalized ]] && {
+      [[ "$rc" -ne 0 ]] || (( ended-begun < (remaining > 15 ? remaining-15 : 0) ))
+    }; then
+      : > "$ROOT/normalized/disabled"
+      chmod 600 "$ROOT/normalized/disabled"
+      log "NORMALIZED_FAILURE_FALLBACK_HLS rc=$rc duration=$((ended-begun))"
       failures=0
-      log "CYCLE_COMPLETED"
+      continue
+    fi
+    if [[ "$rc" -eq 0 && $((ended-begun)) -ge $((remaining > 15 ? remaining - 15 : 0)) ]]; then
+      failures=0
+      if (( phase == 0 && ended-begun >= MIN_GOOD_SECONDS )); then
+        log "CYCLE_COMPLETED"
+      else
+        log "PROGRAM_WINDOW_COMPLETED position=$phase elapsed=$((ended-begun))"
+      fi
       sleep 5
     else
       failures=$((failures+1))
@@ -133,7 +176,7 @@ tiktok_child_is_ours() {
 }
 launch_detached() {
   command -v setsid >/dev/null || { log "SETSID_MISSING"; return 6; }
-  setsid -f nohup bash "$ROOT/supervisor.sh" run </dev/null >/dev/null 2>&1
+  setsid -f nohup bash "$ROOT/supervisor.sh" run </dev/null >/dev/null 2>&1 8>&- 6>&-
 }
 watchdog_tick() {
   enabled || { echo TIKTOK_WATCHDOG_DISARMED=1; return 0; }
