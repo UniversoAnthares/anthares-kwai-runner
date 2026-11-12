@@ -1,0 +1,20 @@
+name: CORTES direct social providers only (no Buffer)
+on:
+  pull_request:
+    paths:
+      - 'infra/neon-cortes-queue/index.mjs'
+      - '.github/workflows/cortes-buffer-*.yml'
+      - 'tests/test_cortes_direct_no_buffer.mjs'
+      - '.github/workflows/cortes-direct-no-buffer-qa.yml'
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: node --check infra/neon-cortes-queue/index.mjs
+      - run: node --test tests/test_cortes_direct_no_buffer.mjs
