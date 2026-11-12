@@ -322,9 +322,24 @@ def main() -> int:
     client = require_cloud()
     hold = quota_hold_until()
     if hold:
-        print(json.dumps({"direct_cloud": "IDLE_PROVIDER_QUOTA_COOLDOWN",
-                          "resume_after_utc": hold}), flush=True)
-        return 0
+        # The 24-hour marker is a conservative fallback, not a fixed Meta reset.
+        # Meta's authoritative moving-window quota may regain capacity earlier.
+        # A failed/unreadable quota check keeps the existing hold (fail closed).
+        try:
+            live_quota = client.get_quota()
+            total = live_quota.total
+            used = live_quota.usage
+        except Exception:
+            total = used = None
+        if (not isinstance(total, int) or not isinstance(used, int)
+                or total <= 0 or used < 0 or used >= total):
+            print(json.dumps({"direct_cloud": "IDLE_PROVIDER_QUOTA_COOLDOWN",
+                              "resume_after_utc": hold,
+                              "quota_readback": "CAP_REACHED_OR_UNKNOWN"}), flush=True)
+            return 0
+        print(json.dumps({"direct_cloud": "PROVIDER_QUOTA_REOPENED",
+                          "quota_total": total, "quota_usage": used,
+                          "quota_remaining": total - used}), flush=True)
     confirmed = 0
     quarantined = 0
     # Two existing fenced queue items per hosted run; Meta quota is checked

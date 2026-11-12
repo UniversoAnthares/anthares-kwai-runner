@@ -101,10 +101,32 @@ class DirectInstagramTests(unittest.TestCase):
             direct.quota_record('```json\n{"service":"different-account"}\n```')
 
     def test_cooldown_blocks_all_claims_and_graph_posts(self):
-        with patch.object(direct, "require_cloud", return_value=object()), \
+        from types import SimpleNamespace
+        client=SimpleNamespace(get_quota=lambda: SimpleNamespace(total=100,usage=100))
+        with patch.object(direct, "require_cloud", return_value=client), \
              patch.object(direct, "quota_hold_until", return_value="2099-11-13T06:00:00Z"), \
              patch.object(direct, "publish_once") as once:
             self.assertEqual(direct.main(), 0)
+            once.assert_not_called()
+
+    def test_stale_24h_cooldown_yields_to_live_provider_quota(self):
+        from types import SimpleNamespace
+        client=SimpleNamespace(get_quota=lambda: SimpleNamespace(total=100,usage=44))
+        with patch.object(direct, "require_cloud", return_value=client), \
+             patch.object(direct, "daily_publication_window", return_value=True), \
+             patch.object(direct, "quota_hold_until", return_value="2099-11-13T06:00:00Z"), \
+             patch.object(direct, "publish_once", return_value=0) as once:
+            self.assertEqual(direct.main(),0)
+            once.assert_called_once_with(client)
+
+    def test_unknown_provider_quota_does_not_bypass_hold(self):
+        from types import SimpleNamespace
+        client=SimpleNamespace(get_quota=lambda: SimpleNamespace(total=None,usage=None))
+        with patch.object(direct, "require_cloud", return_value=client), \
+             patch.object(direct, "daily_publication_window", return_value=True), \
+             patch.object(direct, "quota_hold_until", return_value="2099-11-13T06:00:00Z"), \
+             patch.object(direct, "publish_once") as once:
+            self.assertEqual(direct.main(),0)
             once.assert_not_called()
 
     def test_quota_batch_terminal_does_not_submit_next_clip(self):
