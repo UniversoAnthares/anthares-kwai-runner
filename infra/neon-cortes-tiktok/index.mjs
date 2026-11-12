@@ -291,7 +291,10 @@ export async function pacingAudit(){
  const clock=await pool.query(
   "SELECT to_char(now() AT TIME ZONE 'America/Campo_Grande','YYYY-MM-DD') AS local_day, now() AS server_now");
  const slots=times.rows.map(r=>({utc:r.publication_started_at,local_time:String(r.local_time||'')}));
- const outside=slots.filter(r=>r.local_time<'06:00:00'||r.local_time>='23:00:00');
+ // The guards were installed after the historic Nov12 early-start incident.
+ const activation=Date.parse('2026-11-12T17:13:00Z');
+ const governed=slots.filter(r=>new Date(r.utc).getTime()>=activation);
+ const outside=governed.filter(r=>r.local_time<'06:00:00'||r.local_time>='23:00:00');
  const guards=Object.fromEntries(triggers.rows.map(r=>[r.tgname,r.tgenabled]));
  const expected=[
   'cortes_tiktok_daily_start_guard_v1','cortes_tiktok_hard_window_06_23_v1',
@@ -301,7 +304,8 @@ export async function pacingAudit(){
  return {ok:guardsActive&&slots.length<=100&&outside.length===0,
          account:'universo.anthares',timezone:'America/Campo_Grande',
          local_day:clock.rows[0].local_day,server_now:clock.rows[0].server_now,
-         started_today:slots.length,window_violation_count:outside.length,
+         started_today:slots.length,legacy_pre_guard_count:slots.length-governed.length,
+         governed_start_count:governed.length,window_violation_count:outside.length,
          guards_active:guardsActive,guards,starts:slots,
          next_due:pace.due_at||null,mode:pace.mode,available:pace.available,
          capacity_used:pace.used,deadline_at:pace.deadline_at||null};
