@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+import hashlib
 import re
 import sys
 import time
@@ -196,18 +198,25 @@ def qa_404(job: dict, url: str) -> None:
         print("::warning::INSTAGRAM_DIRECT_QA_ALERT_DELIVERY_FAILED", flush=True)
 
 
-def instagram_caption(payload: dict) -> str:
+def instagram_caption(payload: dict, job_id: str | None = None) -> str:
     """Preserve source-specific editorial text and enforce universal branding."""
     title = branded_title(str(payload.get("title") or "").strip(), limit=180)
     description = add_site_to_keywords(str(payload.get("description") or "").strip())
     if WEBSITE not in description:
         description = description.rstrip() + "\n" + WEBSITE
+    # Stable public-caption key enables exact chronological reconciliation.
+    # An older untagged Reel remains uncertain if no unique proof exists.
+    if job_id:
+        tag = "#antharescorte" + hashlib.sha256(job_id.encode()).hexdigest()[:12]
+        if tag not in description:
+            description = description.rstrip() + "\n" + tag
     room = 2200 - len(title) - 1
     if room < len(WEBSITE) + 1:
         raise RuntimeError("DIRECT_CAPTION_TITLE_TOO_LONG")
     if len(description) > room:
-        # Keep the exact website even when older metadata exceeds caption limit.
-        description = description[:room - len(WEBSITE) - 1].rstrip() + "\n" + WEBSITE
+        # Keep public proof tag and website even if older text exceeds the API cap.
+        suffix = WEBSITE + (("\\n" + tag) if job_id else "")
+        description = description[:room - len(suffix) - 1].rstrip() + "\n" + suffix
     return title + "\n" + description
 
 
@@ -235,7 +244,7 @@ def publish_once(client: InstagramClient) -> int:
             qa_404(job, url)
             print(json.dumps({"direct_cloud": "QUARANTINED_404", "id": job["id"]}), flush=True)
             return 3
-        caption = instagram_caption(payload)
+        caption = instagram_caption(payload, job["id"])
         # Build/verify a 9:16 Instagram-only derivative before irreversible Graph submission.
         # The canonical WordPress master and Neon queue identity remain unchanged.
         url = ensure_vertical_media(url, job["id"], payload.get("cortes_attachment_id"))
@@ -299,7 +308,16 @@ def publish_once(client: InstagramClient) -> int:
         return 5 if quota_stopped else (4 if fenced and started else 2)
 
 
+def daily_publication_window(now: datetime | None = None) -> bool:
+    local = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/Campo_Grande"))
+    return 6 <= local.hour <= 23
+
+
 def main() -> int:
+    if not daily_publication_window():
+        print(json.dumps({"direct_cloud": "IDLE_OUTSIDE_DAILY_PUBLICATION_WINDOW",
+                          "timezone": "America/Campo_Grande", "opens": "06:00"}), flush=True)
+        return 0
     client = require_cloud()
     hold = quota_hold_until()
     if hold:
