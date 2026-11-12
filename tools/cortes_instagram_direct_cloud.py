@@ -247,7 +247,8 @@ def publish_once(client: InstagramClient) -> int:
         caption = instagram_caption(payload, job["id"])
         # Build/verify a 9:16 Instagram-only derivative before irreversible Graph submission.
         # The canonical WordPress master and Neon queue identity remain unchanged.
-        url = ensure_vertical_media(url, job["id"], payload.get("cortes_attachment_id"))
+        url = ensure_vertical_media(url, job["id"], payload.get("cortes_attachment_id"),
+                                   title=str(payload.get("title") or "Universo Anthares"))
         quota = client.get_quota()
         if (quota.total is not None and quota.usage is not None
                 and quota.usage >= quota.total):
