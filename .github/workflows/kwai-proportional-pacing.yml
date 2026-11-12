@@ -1,0 +1,27 @@
+name: Kwai proporcional até 23h - invariantes
+on:
+  push:
+    paths:
+      - 'infra/neon-cortes-queue/index.mjs'
+      - 'infra/neon-cortes-queue/kwai-pacing-*.mjs'
+      - '.github/workflows/kwai-proportional-pacing.yml'
+  pull_request:
+    paths:
+      - 'infra/neon-cortes-queue/index.mjs'
+      - 'infra/neon-cortes-queue/kwai-pacing-*.mjs'
+      - '.github/workflows/kwai-proportional-pacing.yml'
+permissions:
+  contents: read
+jobs:
+  verify_kwai_2300_rule:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check deployed entrypoint syntax
+        run: node --check infra/neon-cortes-queue/index.mjs
+      - name: Verify two account gates and proportional intervals
+        run: node --test infra/neon-cortes-queue/kwai-pacing-policy.test.mjs infra/neon-cortes-queue/kwai-pacing-integration.test.mjs
