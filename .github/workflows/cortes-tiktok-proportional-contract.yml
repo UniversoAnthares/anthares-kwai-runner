@@ -1,9 +1,11 @@
 name: CORTES TikTok per-account proportional pacing contract
 on:
   push:
-    branches: [main, fix/cortes-tiktok-neon-proportional-23h-20261112, fix/tiktok-100-by-0938-proportional-db-gate-20261112]
+    branches: [main, fix/cortes-tiktok-neon-proportional-23h-20261112, fix/tiktok-100-by-0938-proportional-db-gate-20261112, fix/tiktok-disable-stale-vercel-fallback-20261112]
     paths:
       - 'infra/neon-cortes-tiktok/index.mjs'
+      - 'tools/cortes_tiktok_queue_consumer.py'
+      - 'tests/test_cortes_tiktok_hard_window_ingress.py'
       - 'infra/neon-cortes-lucasrosalem4/index.mjs'
       - 'tests/test_cortes_tiktok_proportional_due.mjs'
       - 'tests/test_cortes_tiktok_hard_window_guard.mjs'
@@ -33,4 +35,5 @@ jobs:
           node --check infra/neon-cortes-lucasrosalem4/index.mjs
           node --check vercel-ara-primary/api/cortes-tiktok.mjs
           node --test tests/test_cortes_tiktok_proportional_due.mjs tests/test_cortes_tiktok_hard_window_guard.mjs
+          python3 -m unittest discover -s tests -p 'test_cortes_tiktok_hard_window_ingress.py' -v
           echo TIKTOK_DEADLINE_PROPORTIONAL_CONTRACT=PASS
