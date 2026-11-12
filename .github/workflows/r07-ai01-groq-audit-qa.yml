@@ -1,0 +1,35 @@
+name: AI-01 Groq QA capability audit (no secrets)
+
+on:
+  pull_request:
+    paths:
+      - 'ai_hub/qa_ai01_groq_certifier.py'
+      - 'ai_hub/test_qa_ai01_groq_certifier.py'
+      - '.github/workflows/r07-ai01-groq-audit-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai01-groq-qa-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  groq-qa-offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit tests — isolated, no upstream calls
+        run: python -m unittest discover -s ai_hub -p 'test_qa_ai01_groq_certifier.py' -v
+      - name: Read-only dry run (never calls API)
+        run: |
+          python ai_hub/qa_ai01_groq_certifier.py
+          echo "AI01_CALLS_ATTEMPTED=0"
+          echo "AI01_QA_ONLY=1"
