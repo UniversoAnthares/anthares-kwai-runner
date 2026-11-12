@@ -1,0 +1,29 @@
+name: CORTES TikTok source-priority isolated QA
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/cortes-tiktok-source-priority-qa.yml'
+      - 'infra/neon-cortes-tiktok/index.mjs'
+      - 'vercel-ara-primary/api/cortes-tiktok.mjs'
+      - 'tests/test_cortes_tiktok_neon_ha.mjs'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  source-priority-static-qa:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify both backends and source-priority safety without credentials or publication
+        run: |
+          node --version
+          node --check infra/neon-cortes-tiktok/index.mjs
+          node --check vercel-ara-primary/api/cortes-tiktok.mjs
+          node --test tests/test_cortes_tiktok_neon_ha.mjs

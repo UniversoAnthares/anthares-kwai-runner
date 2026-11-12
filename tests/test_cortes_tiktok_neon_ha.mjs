@@ -85,3 +85,15 @@ test('Source-priority change retains queued-only, cooldown, 100/day and fenced s
   assert(text.includes('Math.max(180,Math.min(240,dueSeconds))'));
   assert(!text.includes("source_id='cOhqEaY3-08'"));
 });
+
+test('Neon and Vercel TikTok failover agree on original-source priority',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const neon=readFileSync(new URL('../infra/neon-cortes-tiktok/index.mjs',import.meta.url),'utf8');
+ const backup=readFileSync(new URL('../vercel-ara-primary/api/cortes-tiktok.mjs',import.meta.url),'utf8');
+ const clause='ORDER BY MIN(created_at) DESC,source_id DESC LIMIT 1';
+ assert(neon.includes(clause));
+ assert(backup.includes(clause));
+ assert(neon.includes('HAVING COUNT(*) FILTER'));
+ assert(backup.includes('HAVING COUNT(*) FILTER'));
+ assert(!backup.includes('ORDER BY created_at DESC,id DESC LIMIT 1'));
+});

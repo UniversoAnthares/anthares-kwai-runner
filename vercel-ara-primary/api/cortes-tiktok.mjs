@@ -149,7 +149,10 @@ async function getNext(){
  if(daily<100&&!paced){
   const q=await pool.query(
    'WITH candidate AS (SELECT id FROM cortes_tiktok_publications WHERE status=\'queued\' AND (retry_not_before IS NULL OR retry_not_before<=now()) '+
-   'ORDER BY CASE WHEN source_id=(SELECT source_id FROM cortes_tiktok_publications WHERE status=\'queued\' ORDER BY created_at DESC,id DESC LIMIT 1) THEN 0 ELSE 1 END,created_at,id '+
+   // Select the newest original source, regardless of late backfills of historical videos.
+   'ORDER BY CASE WHEN source_id=(SELECT source_id FROM cortes_tiktok_publications GROUP BY source_id '+
+   'HAVING COUNT(*) FILTER (WHERE status=\'queued\' AND (retry_not_before IS NULL OR retry_not_before<=now()))>0 '+
+   'ORDER BY MIN(created_at) DESC,source_id DESC LIMIT 1) THEN 0 ELSE 1 END,created_at,id '+
    'FOR UPDATE SKIP LOCKED LIMIT 1)'+
    ' UPDATE cortes_tiktok_publications p SET status=\'leased\',lease_generation=p.lease_generation+1,'+
    'lease_until=now()+interval \'8 minutes\',updated_at=now() FROM candidate WHERE p.id=candidate.id RETURNING p.*');
