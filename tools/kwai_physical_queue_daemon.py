@@ -409,62 +409,56 @@ def once():
  if MAINTENANCE.exists():
   log('QUEUE_PAUSED_MAINTENANCE_BEFORE_LEASE no_lease=1')
   return 0
- # One serial Android publisher; no fixed noon/midnight target that delays jobs.
- # Safe cap: at most 100 confirmed posts/day. Default pace: one per ten minutes.
+ # Schedule is anchored to first real Kwai confirmation, then recomputed
+ # after every real confirmation through 23:00 America/Campo_Grande.
  import datetime
+ from zoneinfo import ZoneInfo
+ from tools.cortes_deadline_pacing import plan_publications
  try:
   from cortes_neon_queue_client import call
-  now=datetime.datetime.now().astimezone()
-  try:
-   stats=call('stats',{'target_key':'kwai:'+EXPECTED_ACCOUNT})
-  except Exception as stats_err:
-   log('PUBLICATION_STATS_UNAVAILABLE exception='+type(stats_err).__name__+' fallback=neon_fenced_lease')
-   stats={'ok':True,'pending':1}
-  if not stats.get('ok'):
-   log('PUBLICATION_STATS_UNAVAILABLE http='+str(stats.get('http_status','unknown'))+' reason='+str(stats.get('error','unknown'))[:80]+' fallback=neon_fenced_lease')
-   stats={'ok':True,'pending':1}
+  zone=ZoneInfo("America/Campo_Grande")
+  now=datetime.datetime.now(zone)
+  stats=call('stats',{'target_key':'kwai:'+EXPECTED_ACCOUNT})
+  if not stats.get('ok'):raise RuntimeError('kwai_stats_not_authoritative')
   pending=int(stats.get('pending',-1))
-  if pending<0:raise RuntimeError('queue_pending_invalid')
+  if pending<0:raise RuntimeError('kwai_pending_invalid')
   if pending==0:
-   if not LAST_QUEUE_EMPTY:log('PUBLICATION_QUEUE_DRAINED stats=verified next_poll_seconds='+str(EMPTY_POLL))
+   if not LAST_QUEUE_EMPTY:log('PUBLICATION_QUEUE_DRAINED stats=verified')
    LAST_QUEUE_EMPTY=True
    return 0
   if LAST_QUEUE_EMPTY:log('PUBLICATION_QUEUE_REPLENISHED pending='+str(pending))
   LAST_QUEUE_EMPTY=False
   recent=[ln for ln in LOG.read_text(encoding='utf-8').splitlines()
           if ' JOB_OK ' in ln] if LOG.exists() else []
-  today=now.date().isoformat()
-  posted_today=sum(ln.startswith(today) for ln in recent)
+  local=[]
+  for ln in recent:
+   try:
+    ts=datetime.datetime.fromisoformat(ln[:19]).replace(tzinfo=zone)
+    if ts.date()==now.date():local.append(ts)
+   except (ValueError,TypeError):pass
+  def _parsed(v):
+   if not v:return None
+   ts=datetime.datetime.fromisoformat(str(v).replace('Z','+00:00'))
+   if ts.tzinfo is None:raise RuntimeError('kwai_timestamp_naive')
+   return ts.astimezone(zone)
+  remote_first=_parsed(stats.get('first_confirmed_at'))
+  remote_last=_parsed(stats.get('last_confirmed_at'))
+  first=min([x for x in [remote_first,remote_last,*local] if x],default=None)
+  last=max([x for x in [remote_last,*local] if x],default=None)
   cap=max(1,min(100,int(os.getenv('CORTES_KWAI_DAILY_POST_LIMIT','100'))))
-  if posted_today>=cap:
-   log('PUBLICATION_DAILY_CAP_REACHED posted='+str(posted_today)+' cap='+str(cap)+' no_lease=1')
+  started=max(int(stats.get('confirmed_today',0)),len(local))
+  pace=plan_publications(now=now,target_key='kwai:'+EXPECTED_ACCOUNT,
+      queued=pending,started_today=started,daily_limit=cap,
+      first_confirmed_at=first,last_confirmed_at=last)
+  if pace.status!='DUE':
+   log('PUBLICATION_PACING status='+pace.status+' pending='+str(pending)+
+       ' next_due='+str(pace.due_at or 'none')+
+       ' blocked_same_day='+str(pace.deferred_due_to_limit))
    return 0
-  prior=[]
-  for ln in recent[-8:]:
-   try:prior.append(datetime.datetime.fromisoformat(ln[:19]).replace(tzinfo=now.tzinfo))
-   except ValueError:pass
-  if stats.get('last_confirmed_at'):
-   remote=datetime.datetime.fromisoformat(str(stats['last_confirmed_at']).replace('Z','+00:00'))
-   if remote.tzinfo is None:raise RuntimeError('queue_timestamp_missing_tz')
-   prior.append(remote.astimezone(now.tzinfo))
-  last=max(prior,default=None)
-  # Same-day catch-up: pace confirmed jobs with a three-minute minimum.
-  # Preserve the single-device lock, 100/day cap, fenced lease and uncertain state.
-  deadline=now.replace(hour=23,minute=45,second=0,microsecond=0)
-  available_seconds=max(0,(deadline-now).total_seconds())
-  safe_floor=max(180,min(300,int(os.getenv('CORTES_KWAI_SAFE_FLOOR_SECONDS','180'))))
-  preferred=max(safe_floor,min(1800,int(os.getenv('CORTES_KWAI_MIN_POST_INTERVAL_SECONDS','180'))))
-  required=int(max(0,available_seconds-120)/max(1,pending))
-  interval=max(safe_floor,min(preferred,required))
-  if available_seconds < pending*safe_floor:
-   log('CORTES_SAME_DAY_CAPACITY_RISK platform=kwai pending='+str(pending)+' window_seconds='+str(int(available_seconds))+' floor='+str(safe_floor))
-  if last and last>now-datetime.timedelta(seconds=interval):
-   wait=max(1,int((last+datetime.timedelta(seconds=interval)-now).total_seconds()))
-   log('PUBLICATION_INTERVAL_WAIT seconds='+str(wait)+' pending='+str(pending)+' cap='+str(cap))
-   return 0
-  log('PUBLICATION_DUE pending='+str(pending)+' posted_today='+str(posted_today)+' daily_cap='+str(cap))
+  log('PUBLICATION_DUE calculated=1 pending='+str(pending)+
+      ' remaining='+str(pace.remaining_today))
  except Exception as exc:
-  log('PUBLICATION_PACING_SAFE_RETRY error='+type(exc).__name__+' no_lease=1')
+  log('PUBLICATION_PACING_SAFE_STOP error='+type(exc).__name__+' no_lease=1')
   return 0
  if healthy and serial:
   if not network_ready(serial):
@@ -474,6 +468,13 @@ def once():
   if LAST_NETWORK_BAD:log('KWAI_ANDROID_DNS_PREFLIGHT_RECOVERED no_lease=1')
   LAST_NETWORK_BAD=False
  if owner_cap_reached():return 0
+ # Independent check after device/network readiness, immediately before lease.
+ try:
+  from tools.cortes_deadline_pacing import assert_due
+  assert_due(pace,datetime.datetime.now(zone))
+ except Exception as exc:
+  log('PUBLICATION_PACING_SECOND_GATE_STOP reason='+type(exc).__name__+' no_lease=1')
+  return 0
  code,d=signed_post('/job/lease',{'executor':EXECUTOR,'platform':'kwai','ttl_seconds':TTL})
  if code//100!=2 or not d.get('ok'):queue_failure('lease',code,d)
  job=d.get('job')

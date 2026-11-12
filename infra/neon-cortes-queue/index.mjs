@@ -420,7 +420,7 @@ async function kwaiAction(action,b,actor){
   if(!physical&&!mobilePrimary)return{ok:false,error:'KWAI_DEVICE_ONLY'};
   const rows=await query("SELECT status,count(*)::int AS n FROM cortes_publications WHERE target_key=$1 GROUP BY status",[KWAI_TARGET]);
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
-  const usage=await query("SELECT count(*)::int AS n,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
+  const usage=await query("SELECT count(*)::int AS n,min(updated_at) AS earliest,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
   const safe=await query("SELECT count(*)::int AS n FROM cortes_publications p "+
    "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
    "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE d.target_key=$1 AND d.id<>p.id "+
@@ -429,9 +429,11 @@ async function kwaiAction(action,b,actor){
    "AND (d.status IN ('leased','started','confirmed','uncertain') OR "+
    "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))",[KWAI_TARGET]);
   return{ok:true,pending:Number(safe[0]?.n||0),confirmed_today:Number(usage[0]?.n||0),
-   last_confirmed_at:usage[0]?.latest||null,states:rows};
+   first_confirmed_at:usage[0]?.earliest||null,last_confirmed_at:usage[0]?.latest||null,states:rows};
  }
  if(action==='kwai-lease'){
+  const pacing=await cortesDeadlinePacing(String(b.target_key||''),100);
+  if(pacing.status!=='DUE')return{ok:true,job:null,pacing};
   const seconds=Number(b.lease_seconds||180);
   if(!Number.isSafeInteger(seconds)||seconds<60||seconds>(physical?3600:600))
    return{ok:false,error:'KWAI_TTL_INVALID'};
@@ -897,7 +899,7 @@ async function kwaiSecondaryAction(action,b,actor){
   if(!physical&&!mobile)return{ok:false,error:'KWAI_DEVICE_ONLY'};
   const rows=await query("SELECT status,count(*)::int AS n FROM cortes_publications WHERE target_key=$1 GROUP BY status",[KWAI_TARGET]);
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
-  const usage=await query("SELECT count(*)::int AS n,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
+  const usage=await query("SELECT count(*)::int AS n,min(updated_at) AS earliest,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
   const safe=await query("SELECT count(*)::int AS n FROM cortes_publications p "+
    "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
    "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE d.target_key=$1 AND d.id<>p.id "+
@@ -906,9 +908,11 @@ async function kwaiSecondaryAction(action,b,actor){
    "AND (d.status IN ('leased','started','confirmed','uncertain') OR "+
    "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))",[KWAI_TARGET]);
   return{ok:true,pending:Number(safe[0]?.n||0),confirmed_today:Number(usage[0]?.n||0),
-   last_confirmed_at:usage[0]?.latest||null,states:rows};
+   first_confirmed_at:usage[0]?.earliest||null,last_confirmed_at:usage[0]?.latest||null,states:rows};
  }
  if(action==='kwai-lease'){
+  const pacing=await cortesDeadlinePacing(String(b.target_key||''),100);
+  if(pacing.status!=='DUE')return{ok:true,job:null,pacing};
   const seconds=Number(b.lease_seconds||180);
   if(!Number.isSafeInteger(seconds)||seconds<60||seconds>((physical||mobile)?3600:600))
    return{ok:false,error:'KWAI_TTL_INVALID'};
@@ -1139,6 +1143,51 @@ async function writeProbe(body){
  await query('DELETE FROM cortes_queue_ha_probe WHERE nonce=$1',[nonce]);
  return{ok:true,probe:'SIGNED_OIDC_NEON_WRITE_READ_DELETE',database_ok:true};
 }
+// Production deadline gate for every Neon-backed account/destination. Cron and
+// redundant triggers wake workers; only the computed due time authorizes lease.
+async function cortesDeadlinePacing(targetKey,dailyLimit){
+ if(!/^[a-z]+:[A-Za-z0-9_.@-]{2,100}$/.test(String(targetKey||''))||
+    !Number.isSafeInteger(dailyLimit)||dailyLimit<1||dailyLimit>100)
+   throw Error('CORTES_PACING_SCOPE_INVALID');
+ const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+ const deadline="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '23 hours') AT TIME ZONE 'America/Campo_Grande')";
+ const rows=await query(`SELECT
+   count(*) FILTER (WHERE status='queued')::int AS pending,
+   count(*) FILTER (WHERE (status='confirmed' AND updated_at>=${day})
+     OR (publication_started_at>=${day} AND status IN ('started','uncertain','confirmed')))::int AS used,
+   min(updated_at) FILTER (WHERE status='confirmed' AND updated_at>=${day}) AS first_confirmed,
+   max(updated_at) FILTER (WHERE status='confirmed' AND updated_at>=${day}) AS last_confirmed,
+   now() AS server_now, ${deadline} AS deadline_at
+   FROM cortes_publications WHERE target_key=$1`,[targetKey]);
+ const r=rows[0]||{},now=new Date(r.server_now),end=new Date(r.deadline_at);
+ if(!Number.isFinite(now.getTime())||!Number.isFinite(end.getTime()))
+   throw Error('CORTES_PACING_CLOCK_UNVERIFIED');
+ const pending=Number(r.pending||0),used=Number(r.used||0),
+       remaining=Math.min(pending,Math.max(0,dailyLimit-used));
+ const plan={target_key:targetKey,daily_limit:dailyLimit,pending,started_today:used,
+   remaining_today:remaining,excess_over_limit:Math.max(0,pending-remaining),
+   first_confirmed_at:r.first_confirmed||null,last_confirmed_at:r.last_confirmed||null,
+   deadline_at:end.toISOString(),server_now:now.toISOString(),
+   next_due_at:null,status:'IDLE'};
+ if(!pending)return plan;
+ if(now>=end){plan.status='BLOCKED_SAME_DAY_CAPACITY';return plan;}
+ if(!remaining){plan.status='BLOCKED_PLATFORM_LIMIT';return plan;}
+ if(!r.first_confirmed||!r.last_confirmed){
+   if(!!r.first_confirmed!==!!r.last_confirmed)throw Error('CORTES_PACING_CONFIRMATION_INCOMPLETE');
+   plan.status='DUE';plan.next_due_at=plan.server_now;return plan;
+ }
+ const first=new Date(r.first_confirmed),last=new Date(r.last_confirmed);
+ if(!Number.isFinite(first.getTime())||!Number.isFinite(last.getTime())||
+    first>last||last>end||last>now)throw Error('CORTES_PACING_CONFIRMATION_CLOCK_INVALID');
+ const interval=(end.getTime()-last.getTime())/remaining;
+ if(!(interval>0)){plan.status='BLOCKED_SAME_DAY_CAPACITY';return plan;}
+ const due=new Date(last.getTime()+interval);
+ plan.next_due_at=due.toISOString();
+ plan.interval_seconds=interval/1000;
+ plan.status=now>=due?'DUE':'WAIT';
+ return plan;
+}
+
 async function instagramDirectAction(verb,b){
  const target='instagram:universoanthares';
  if(verb==='pending'){
@@ -1238,6 +1287,8 @@ async function instagramDirectAction(verb,b){
  if(verb==='lease'){
   if(b.target_key!==target||b.owner!=='instagram-direct:github-cloud-v1')
     return {ok:false,error:'DIRECT_OWNER_INVALID'};
+  const pacing=await cortesDeadlinePacing(target,100);
+  if(pacing.status!=='DUE')return{ok:true,job:null,pacing};
   // Provider quota and CORTES hard daily limit are separate; both apply.
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
   const used=await query(`SELECT count(*)::int AS n FROM cortes_publications
@@ -1255,7 +1306,7 @@ async function instagramDirectAction(verb,b){
     FROM candidate WHERE p.id=candidate.id AND p.status='queued'
     RETURNING p.id,p.target_key,p.payload,p.duration_class,p.lease_generation`,
     [target,b.owner]);
-  return {ok:true,job:row[0]||null};
+  return {ok:true,job:row[0]||null,pacing};
  }
  const id=String(b.id||''),owner=String(b.owner||''),gen=Number(b.lease_generation);
  if(!id||owner!=='instagram-direct:github-cloud-v1'||!Number.isSafeInteger(gen)||gen<1)
@@ -1392,6 +1443,8 @@ async function bufferAction(verb,b,platform){
  }
  if(verb==='lease'){
   if(b.target_key!==dest||!String(b.owner||'').startsWith(owner))return{ok:false,error:'WRONG_QUEUE_OWNER'};
+  const pacing=await cortesDeadlinePacing(dest,LIMITS[platform]);
+  if(pacing.status!=='DUE')return{ok:true,job:null,pacing};
   if(platform==='linkedin')await recoverExpiredLinkedin(dest);
   const weekday=await query("SELECT extract(isodow FROM now() AT TIME ZONE 'America/Campo_Grande')::int AS n");
   if(Number(weekday[0]?.n||0)>5)return{ok:true,job:null,buffer_off_day:true};
@@ -1741,6 +1794,8 @@ async function pinterestBrowserAction(verb,b){
  }
 
  if(verb==='lease'){
+  const pacing=await cortesDeadlinePacing(target,100);
+  if(pacing.status!=='DUE')return{ok:true,job:null,pacing};
   // Recover leases abandoned by crashed local workers. Never retry a video
   // after publication started: it must remain UNCERTAIN for independent QA.
   await query(`UPDATE cortes_publications SET
@@ -1883,6 +1938,8 @@ async function companyAction(verb,b){
  const id=String(b.id||''),owner=String(b.owner||'');
  if(verb==='lease'){
   if(b.target_key!==COMPANY_TARGET||owner!==COMPANY_OWNER)return{ok:false,error:'COMPANY_TARGET_OWNER_INVALID'};
+  const pacing=await cortesDeadlinePacing(COMPANY_TARGET,COMPANY_LIMIT);
+  if(pacing.status!=='DUE')return{ok:true,job:null,pacing};
   await recoverExpiredLinkedin(COMPANY_TARGET);
   await query(`UPDATE cortes_publications SET status='failed',lease_owner=NULL,lease_until=NULL,updated_at=now()
     WHERE target_key=$1 AND status='uncertain'
@@ -1940,6 +1997,8 @@ async function personalAction(verb,b){
  const id=String(b.id||''),owner=String(b.owner||'');
  if(verb==='lease'){
   if(b.target_key!==P_TARGET||owner!==P_OWNER)return{ok:false,error:'PERSONAL_TARGET_OWNER_INVALID'};
+  const pacing=await cortesDeadlinePacing(P_TARGET,P_LIMIT);
+  if(pacing.status!=='DUE')return{ok:true,job:null,pacing};
   await recoverExpiredLinkedin(P_TARGET);
   await query(`UPDATE cortes_publications SET status='failed',lease_owner=NULL,lease_until=NULL,updated_at=now()
     WHERE target_key=$1 AND status='uncertain'

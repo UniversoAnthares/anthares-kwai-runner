@@ -1,0 +1,36 @@
+name: CORTES proportional deadline pacing - source contract
+on:
+  push:
+    branches:
+      - main
+      - feat/cortes-universal-deadline-pacing-20261112
+    paths:
+      - tools/cortes_deadline_pacing.py
+      - tools/cortes_tiktok_publish.py
+      - tools/kwai_physical_queue_daemon.py
+      - tests/test_cortes_deadline_pacing.py
+      - infra/neon-cortes-queue/index.mjs
+      - .github/workflows/cortes-proportional-pacing-contract.yml
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cortes-proportional-pacing-source-contract-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Math, source and backend syntax - no network, posting or database writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/cortes_deadline_pacing.py tools/cortes_tiktok_publish.py tools/kwai_physical_queue_daemon.py
+          python -m unittest discover -s tests -p 'test_cortes_deadline_pacing.py' -v
+          node --check infra/neon-cortes-queue/index.mjs
+          echo CORTES_PROPORTIONAL_PACING_SOURCE_CONTRACT=PASS
