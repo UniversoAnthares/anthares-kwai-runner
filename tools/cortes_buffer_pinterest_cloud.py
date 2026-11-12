@@ -507,7 +507,7 @@ def audit_stale_buffer_pending():
     for offset in range(0,len(ids),8):
         part=ids[offset:offset+8]
         parts=[("p"+str(i)+": post(input: { id: "+json.dumps(remote)+
-                ' }) { id status externalLink channelId schedulingType dueAt error { message } }')
+                ' }) { id status externalLink channelId schedulingType dueAt error { message } metadata { ... on PinterestPostMetadata { url } } }')
                for i,remote in enumerate(part)]
         response=api("query CortesPinterestPendingAudit { "+" ".join(parts)+" }")
         if not isinstance(response,dict):
@@ -546,7 +546,15 @@ def audit_stale_buffer_pending():
             provider_error=re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}","[EMAIL]",provider_error)
             provider_error=re.sub(r"(?i)(bearer|token|secret|password)\s*[:=]\s*\S+",r"\1=[REDACTED]",provider_error)
             provider_error=re.sub(r"[^\x20-\x7E]"," ",provider_error)[:260]
+            # Only a destination class is public. Never log arbitrary links.
+            pin_metadata=row.get("metadata") or {}
+            pin_url=str(pin_metadata.get("url") or "") if isinstance(pin_metadata,dict) else ""
+            destination_class=("EMPTY" if not pin_url else
+                               "LEGACY_WWW_ANTHARES" if pin_url=="https://www.anthares.us" else
+                               "APEX_ANTHARES" if pin_url=="https://anthares.us" else
+                               "OTHER")
             print("PINTEREST_PENDING_AUDIT="+json.dumps({
+                "destination_url_class":destination_class if identity else "UNVERIFIED",
                 "id_hash":fingerprint,
                 "identity_verified":identity,
                 "status":status if identity else "IDENTITY_MISMATCH",
