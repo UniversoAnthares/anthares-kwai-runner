@@ -74,6 +74,7 @@ class PublicProfileReconciliationTests(unittest.TestCase):
             item["caption"] = "outro reel"
         for item in self.graph["items"]:
             item["caption"] = "outro reel"
+        self.public["items"][1]["permalink"] = "https://www.instagram.com/reel/PublicUnique/"
         self.graph["items"][1]["permalink"] = "https://www.instagram.com/reel/Different/"
         self.assertIsNone(r.decide(self.job, self.public, self.graph))
 
