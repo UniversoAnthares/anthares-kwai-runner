@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - feat/cortes-universal-deadline-pacing-20261112
+      - fix/tiktok-100-by-0938-proportional-db-gate-20261112
     paths:
       - tools/cortes_deadline_pacing.py
       - tools/cortes_tiktok_publish.py
