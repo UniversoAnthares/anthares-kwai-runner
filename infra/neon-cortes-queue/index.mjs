@@ -420,7 +420,7 @@ async function kwaiAction(action,b,actor){
   if(!physical&&!mobilePrimary)return{ok:false,error:'KWAI_DEVICE_ONLY'};
   const rows=await query("SELECT status,count(*)::int AS n FROM cortes_publications WHERE target_key=$1 GROUP BY status",[KWAI_TARGET]);
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
-  const usage=await query("SELECT count(*)::int AS n,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
+  const usage=await query("SELECT count(*)::int AS n,min(updated_at) AS earliest,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
   const safe=await query("SELECT count(*)::int AS n FROM cortes_publications p "+
    "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
    "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE d.target_key=$1 AND d.id<>p.id "+
@@ -429,7 +429,7 @@ async function kwaiAction(action,b,actor){
    "AND (d.status IN ('leased','started','confirmed','uncertain') OR "+
    "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))",[KWAI_TARGET]);
   return{ok:true,pending:Number(safe[0]?.n||0),confirmed_today:Number(usage[0]?.n||0),
-   last_confirmed_at:usage[0]?.latest||null,states:rows};
+   first_confirmed_at:usage[0]?.earliest||null,last_confirmed_at:usage[0]?.latest||null,states:rows};
  }
  if(action==='kwai-lease'){
   const pacing=await cortesDeadlinePacing(String(b.target_key||''),100);
@@ -899,7 +899,7 @@ async function kwaiSecondaryAction(action,b,actor){
   if(!physical&&!mobile)return{ok:false,error:'KWAI_DEVICE_ONLY'};
   const rows=await query("SELECT status,count(*)::int AS n FROM cortes_publications WHERE target_key=$1 GROUP BY status",[KWAI_TARGET]);
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
-  const usage=await query("SELECT count(*)::int AS n,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
+  const usage=await query("SELECT count(*)::int AS n,min(updated_at) AS earliest,max(updated_at) AS latest FROM cortes_publications WHERE target_key=$1 AND status='confirmed' AND updated_at>="+day,[KWAI_TARGET]);
   const safe=await query("SELECT count(*)::int AS n FROM cortes_publications p "+
    "WHERE p.target_key=$1 AND p.status='queued' AND p.publication_started_at IS NULL "+
    "AND NOT EXISTS (SELECT 1 FROM cortes_publications d WHERE d.target_key=$1 AND d.id<>p.id "+
@@ -908,7 +908,7 @@ async function kwaiSecondaryAction(action,b,actor){
    "AND (d.status IN ('leased','started','confirmed','uncertain') OR "+
    "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))",[KWAI_TARGET]);
   return{ok:true,pending:Number(safe[0]?.n||0),confirmed_today:Number(usage[0]?.n||0),
-   last_confirmed_at:usage[0]?.latest||null,states:rows};
+   first_confirmed_at:usage[0]?.earliest||null,last_confirmed_at:usage[0]?.latest||null,states:rows};
  }
  if(action==='kwai-lease'){
   const pacing=await cortesDeadlinePacing(String(b.target_key||''),100);
@@ -1212,7 +1212,7 @@ async function instagramDirectAction(verb,b){
     FROM candidate WHERE p.id=candidate.id AND p.status='queued'
     RETURNING p.id,p.target_key,p.payload,p.duration_class,p.lease_generation`,
     [target,b.owner]);
-  return {ok:true,job:row[0]||null};
+  return {ok:true,job:row[0]||null,pacing};
  }
  const id=String(b.id||''),owner=String(b.owner||''),gen=Number(b.lease_generation);
  if(!id||owner!=='instagram-direct:github-cloud-v1'||!Number.isSafeInteger(gen)||gen<1)
