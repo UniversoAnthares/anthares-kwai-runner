@@ -73,11 +73,20 @@ def main():
     for label,base in zip(("neon","cloudflare"),BASES):
         try:
             result=queue.http(base+"?action=pacing-audit",creds,timeout=25)
-            proof=check(result)
-            results[label]=(result,proof)
-            print("CORTES_TIKTOK_PACING_"+label.upper()+"=PASS "+json.dumps(proof,sort_keys=True),flush=True)
-        except (Exception,AssertionError) as exc:
-            print("CORTES_TIKTOK_PACING_"+label.upper()+"=FAIL "+type(exc).__name__+":"+str(exc)[:100],flush=True)
+        except queue.SafeStop as exc:
+            # HTTP 409 indicates a live safety-rule violation, never failover.
+            if "HTTP_409_" in str(exc):
+                raise RuntimeError("PACING_REMOTE_INVARIANT_VIOLATION_"+label.upper()) from exc
+            print("CORTES_TIKTOK_PACING_"+label.upper()+"=UNAVAILABLE "+str(exc)[:90],flush=True)
+            continue
+        except (OSError,TimeoutError) as exc:
+            print("CORTES_TIKTOK_PACING_"+label.upper()+"=UNAVAILABLE "+type(exc).__name__,flush=True)
+            continue
+        # Every reachable provider must independently validate ALL invariants.
+        # A semantic failure is terminal, even if the other ingress is healthy.
+        proof=check(result)
+        results[label]=(result,proof)
+        print("CORTES_TIKTOK_PACING_"+label.upper()+"=PASS "+json.dumps(proof,sort_keys=True),flush=True)
     if len(results)==2:
         one,two=(results["neon"][0],results["cloudflare"][0])
         for key in ("account","local_day","started_today","window_violation_count","guards_active","legacy_pre_guard_count","governed_start_count"):
