@@ -1,0 +1,137 @@
+name: X Android native auth 40 real probes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-auth:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        include:
+          - { id: "01", install: 0, wait: 2, input: adb, launch: 0 }
+          - { id: "02", install: 0, wait: 2, input: u2,  launch: 1 }
+          - { id: "03", install: 0, wait: 4, input: adb, launch: 2 }
+          - { id: "04", install: 0, wait: 4, input: u2,  launch: 3 }
+          - { id: "05", install: 0, wait: 6, input: adb, launch: 0 }
+          - { id: "06", install: 0, wait: 6, input: u2,  launch: 1 }
+          - { id: "07", install: 0, wait: 8, input: adb, launch: 2 }
+          - { id: "08", install: 0, wait: 8, input: u2,  launch: 3 }
+          - { id: "09", install: 0, wait: 10, input: adb, launch: 0 }
+          - { id: "10", install: 0, wait: 10, input: u2,  launch: 1 }
+          - { id: "11", install: 1, wait: 2, input: adb, launch: 2 }
+          - { id: "12", install: 1, wait: 2, input: u2,  launch: 3 }
+          - { id: "13", install: 1, wait: 4, input: adb, launch: 0 }
+          - { id: "14", install: 1, wait: 4, input: u2,  launch: 1 }
+          - { id: "15", install: 1, wait: 6, input: adb, launch: 2 }
+          - { id: "16", install: 1, wait: 6, input: u2,  launch: 3 }
+          - { id: "17", install: 1, wait: 8, input: adb, launch: 0 }
+          - { id: "18", install: 1, wait: 8, input: u2,  launch: 1 }
+          - { id: "19", install: 1, wait: 10, input: adb, launch: 2 }
+          - { id: "20", install: 1, wait: 10, input: u2,  launch: 3 }
+          - { id: "21", install: 2, wait: 2, input: adb, launch: 0 }
+          - { id: "22", install: 2, wait: 2, input: u2,  launch: 1 }
+          - { id: "23", install: 2, wait: 4, input: adb, launch: 2 }
+          - { id: "24", install: 2, wait: 4, input: u2,  launch: 3 }
+          - { id: "25", install: 2, wait: 6, input: adb, launch: 0 }
+          - { id: "26", install: 2, wait: 6, input: u2,  launch: 1 }
+          - { id: "27", install: 2, wait: 8, input: adb, launch: 2 }
+          - { id: "28", install: 2, wait: 8, input: u2,  launch: 3 }
+          - { id: "29", install: 2, wait: 10, input: adb, launch: 0 }
+          - { id: "30", install: 2, wait: 10, input: u2,  launch: 1 }
+          - { id: "31", install: 3, wait: 2, input: adb, launch: 2 }
+          - { id: "32", install: 3, wait: 2, input: u2,  launch: 3 }
+          - { id: "33", install: 3, wait: 4, input: adb, launch: 0 }
+          - { id: "34", install: 3, wait: 4, input: u2,  launch: 1 }
+          - { id: "35", install: 3, wait: 6, input: adb, launch: 2 }
+          - { id: "36", install: 3, wait: 6, input: u2,  launch: 3 }
+          - { id: "37", install: 3, wait: 8, input: adb, launch: 0 }
+          - { id: "38", install: 3, wait: 8, input: u2,  launch: 1 }
+          - { id: "39", install: 3, wait: 10, input: adb, launch: 2 }
+          - { id: "40", install: 3, wait: 10, input: u2,  launch: 3 }
+
+    env:
+      X_ANDROID_PASSWORD: ${{ secrets.X_ANDROID_PASSWORD }}
+      X_ANDROID_USERNAME: lucasrosalem
+      X_LOGIN_VARIANT: ${{ matrix.id }}
+      X_INSTALL_MODE: ${{ matrix.install }}
+      X_LOGIN_WAIT: ${{ matrix.wait }}
+      X_LOGIN_INPUT_BACKEND: ${{ matrix.input }}
+      X_LOGIN_LAUNCH_MODE: ${{ matrix.launch }}
+      EVIDENCE_DIR: evidence/auth-${{ matrix.id }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require real Android login credential
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence
+          if [[ -z "$X_ANDROID_PASSWORD" ]]; then
+            echo BLOCKED_MISSING_X_ANDROID_PASSWORD | tee evidence/preflight.txt
+            exit 90
+          fi
+          echo X_ANDROID_PASSWORD_PRESENT | tee evidence/preflight.txt
+
+      - name: Restore verified X APK cache
+        id: apk-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/xout
+          key: x-official-apk-auth-v1
+
+      - name: Acquire X APK when cache is unavailable
+        if: steps.apk-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          X_APK_OUT=/tmp/xout X_APK_EVIDENCE=evidence/apk-acquire bash scripts/x_acquire_official_apk.sh
+
+      - name: Reverify package identity and official signing certificate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          X_APK_OUT=/tmp/xout X_APK_EVIDENCE=evidence/apk-verify bash scripts/x_verify_official_apk.sh
+
+      - name: Prepare alternate text-input backend
+        if: ${{ matrix.input == 'u2' }}
+        shell: bash
+        run: python3 -m pip install -q --disable-pip-version-check 'uiautomator2>=3,<4'
+
+      - name: Enable KVM acceleration
+        shell: bash
+        run: |
+          if [[ -e /dev/kvm ]]; then
+            sudo chmod 666 /dev/kvm || true
+            ls -l /dev/kvm
+          else
+            echo NO_KVM_DEVICE
+          fi
+
+      - name: Install official X and prove authenticated native session
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          cores: 2
+          emulator-boot-timeout: 300
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          script: bash scripts/x_native_auth_probe.sh
+
+      - name: Upload sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-native-auth-${{ matrix.id }}-${{ github.run_id }}
+          path: evidence/
+          retention-days: 3
+          if-no-files-found: warn

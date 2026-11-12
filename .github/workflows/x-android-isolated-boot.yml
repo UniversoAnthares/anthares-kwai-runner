@@ -1,0 +1,35 @@
+name: X Android isolated boot smoke test
+on:
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths: [.github/workflows/x-android-isolated-boot.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [33, 34, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check emulator without APK dependency
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          script: |
+            set -Eeuo pipefail
+            adb wait-for-device
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+            adb shell getprop ro.product.cpu.abi | grep -q x86_64
+            adb shell pm list packages | head -10
+            adb shell input keyevent KEYCODE_HOME
+            adb shell dumpsys activity activities | tail -40
+            echo ANDROID_BOOT_PASS

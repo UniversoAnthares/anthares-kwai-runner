@@ -1,0 +1,214 @@
+name: X camera kernel root cause 40
+on:
+  push:
+    branches: [feature/x-native-live-android-bridge]
+    paths: [.github/workflows/x-camera-kernel-rootcause-40.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnosis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    strategy:
+      fail-fast: false
+      max-parallel: 40
+      matrix:
+        include:
+          - variant: 1
+            kernel: running
+            build: dkms
+            mode: probe
+          - variant: 2
+            kernel: running
+            build: dkms
+            mode: load
+          - variant: 3
+            kernel: running
+            build: dkms
+            mode: video
+          - variant: 4
+            kernel: running
+            build: dkms
+            mode: audio
+          - variant: 5
+            kernel: running
+            build: dkms
+            mode: fallback
+          - variant: 6
+            kernel: running
+            build: make
+            mode: probe
+          - variant: 7
+            kernel: running
+            build: make
+            mode: load
+          - variant: 8
+            kernel: running
+            build: make
+            mode: video
+          - variant: 9
+            kernel: running
+            build: make
+            mode: audio
+          - variant: 10
+            kernel: running
+            build: make
+            mode: fallback
+          - variant: 11
+            kernel: running
+            build: prebuilt
+            mode: probe
+          - variant: 12
+            kernel: running
+            build: prebuilt
+            mode: load
+          - variant: 13
+            kernel: running
+            build: prebuilt
+            mode: video
+          - variant: 14
+            kernel: running
+            build: prebuilt
+            mode: audio
+          - variant: 15
+            kernel: running
+            build: prebuilt
+            mode: fallback
+          - variant: 16
+            kernel: running
+            build: none
+            mode: probe
+          - variant: 17
+            kernel: running
+            build: none
+            mode: load
+          - variant: 18
+            kernel: running
+            build: none
+            mode: video
+          - variant: 19
+            kernel: running
+            build: none
+            mode: audio
+          - variant: 20
+            kernel: running
+            build: none
+            mode: fallback
+          - variant: 21
+            kernel: headers
+            build: dkms
+            mode: probe
+          - variant: 22
+            kernel: headers
+            build: dkms
+            mode: load
+          - variant: 23
+            kernel: headers
+            build: dkms
+            mode: video
+          - variant: 24
+            kernel: headers
+            build: dkms
+            mode: audio
+          - variant: 25
+            kernel: headers
+            build: dkms
+            mode: fallback
+          - variant: 26
+            kernel: headers
+            build: make
+            mode: probe
+          - variant: 27
+            kernel: headers
+            build: make
+            mode: load
+          - variant: 28
+            kernel: headers
+            build: make
+            mode: video
+          - variant: 29
+            kernel: headers
+            build: make
+            mode: audio
+          - variant: 30
+            kernel: headers
+            build: make
+            mode: fallback
+          - variant: 31
+            kernel: headers
+            build: prebuilt
+            mode: probe
+          - variant: 32
+            kernel: headers
+            build: prebuilt
+            mode: load
+          - variant: 33
+            kernel: headers
+            build: prebuilt
+            mode: video
+          - variant: 34
+            kernel: headers
+            build: prebuilt
+            mode: audio
+          - variant: 35
+            kernel: headers
+            build: prebuilt
+            mode: fallback
+          - variant: 36
+            kernel: headers
+            build: none
+            mode: probe
+          - variant: 37
+            kernel: headers
+            build: none
+            mode: load
+          - variant: 38
+            kernel: headers
+            build: none
+            mode: video
+          - variant: 39
+            kernel: headers
+            build: none
+            mode: audio
+          - variant: 40
+            kernel: headers
+            build: none
+            mode: fallback
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kernel dependency and alternate media diagnostics
+        shell: bash
+        env:
+          BUILD: ${{ matrix.build }}
+          MODE: ${{ matrix.mode }}
+          KERNEL: ${{ matrix.kernel }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence
+          uname -a | tee evidence/kernel.txt
+          ls -l /dev/video* /dev/kvm 2>&1 | tee evidence/devices.txt || true
+          test -d "/lib/modules/$(uname -r)/build" || { echo 'Missing matching kernel headers'; exit 10; }
+          case "$BUILD" in
+            dkms) sudo apt-get update -qq; sudo apt-get install -y dkms v4l2loopback-dkms v4l-utils ;;
+            make) sudo apt-get update -qq; sudo apt-get install -y git make gcc linux-headers-$(uname -r) v4l-utils; git clone --depth 1 https://github.com/v4l2loopback/v4l2loopback.git /tmp/v4l; make -C /tmp/v4l; sudo make -C /tmp/v4l install ;;
+            prebuilt) sudo apt-get update -qq; sudo apt-get install -y v4l2loopback-utils v4l-utils ;;
+            none) sudo apt-get update -qq; sudo apt-get install -y ffmpeg pulseaudio-utils ;;
+          esac
+          case "$MODE" in
+            probe) modinfo v4l2loopback 2>&1 | tee evidence/modinfo.txt; grep -E 'vermagic|depends' evidence/modinfo.txt ;;
+            load) sudo modprobe videodev || true; sudo modprobe v4l2loopback video_nr=10 exclusive_caps=0 2>&1 | tee evidence/load.txt; test -e /dev/video10 ;;
+            video) ffmpeg -hide_banner -f lavfi -i testsrc2=size=320x240:rate=10 -frames:v 5 -f null - 2>&1 | tee evidence/ffmpeg.txt; grep -q 'frame=' evidence/ffmpeg.txt ;;
+            audio) ffmpeg -hide_banner -f lavfi -i sine=frequency=440:duration=1 -f null - 2>&1 | tee evidence/audio.txt; grep -q 'audio:' evidence/audio.txt ;;
+            fallback) command -v ffmpeg; command -v python3; test -x "$ANDROID_HOME/emulator/emulator"; "$ANDROID_HOME/emulator/emulator" -version ;;
+          esac
+          sudo dmesg 2>&1 | tail -100 > evidence/dmesg.txt || true
+          echo "DIAGNOSTIC_PASS variant=${{ matrix.variant }}"
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: camera-kernel-${{ matrix.variant }}-${{ github.run_id }}
+          path: evidence/
+          retention-days: 2
+          if-no-files-found: ignore
