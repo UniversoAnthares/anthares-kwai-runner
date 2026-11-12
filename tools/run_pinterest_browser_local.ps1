@@ -34,5 +34,7 @@ $running = @(Get-CimInstance Win32_Process -Filter "name='chrome.exe'" |
 if ($running.Count -ne 1) { throw 'PINTEREST_CDP_PROFILE_MISMATCH' }
 $runner = Join-Path $root 'tools\cortes_pinterest_browser_local.py'
 if (-not (Test-Path $runner)) { throw 'CORTES_PINTEREST_BROWSER_WORKER_MISSING' }
-& py -3 $runner
+$python = 'C:\Users\Lucas\AppData\Local\Programs\Python\Python311\python.exe'
+if (-not (Test-Path $python)) { throw 'PINTEREST_PINNED_PYTHON_MISSING' }
+& $python $runner
 exit $LASTEXITCODE
