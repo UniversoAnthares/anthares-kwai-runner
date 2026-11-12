@@ -1,5 +1,9 @@
 name: CORTES LinkedIn organization - direct REST publisher
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-linkedin-company-direct-cloud.yml'
   workflow_dispatch: {}
   schedule:
     - cron: '1,16,31,46 * * * *'
