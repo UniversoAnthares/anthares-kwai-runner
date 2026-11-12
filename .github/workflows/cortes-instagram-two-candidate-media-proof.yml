@@ -24,12 +24,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ffmpeg -version | head -1
+          python -m pip install --quiet --disable-pip-version-check imageio-ffmpeg
           python - <<'PY'
           import json,math,os,subprocess,tempfile,urllib.request
           from array import array
           from pathlib import Path
           from scripts.instagram_publish import InstagramClient
+          import imageio_ffmpeg
+          FFMPEG_EXE=imageio_ffmpeg.get_ffmpeg_exe()
           c=InstagramClient(os.environ['INSTAGRAM_USER_ID'],os.environ['INSTAGRAM_ACCESS_TOKEN'],
              os.environ.get('INSTAGRAM_API_VERSION','v26.0'),
              os.environ.get('INSTAGRAM_GRAPH_HOST','graph.instagram.com'))
@@ -54,7 +56,7 @@ jobs:
             if n<20000:raise ValueError('MEDIA_NOT_AVAILABLE')
             return n
           def envelope(path):
-            proc=subprocess.run(['ffmpeg','-nostdin','-hide_banner','-loglevel','error',
+            proc=subprocess.run([FFMPEG_EXE,'-nostdin','-hide_banner','-loglevel','error',
                '-i',str(path),'-vn','-t','90','-ar','4000','-ac','1',
                '-f','s16le','pipe:1'],capture_output=True,timeout=50,check=True)
             pcm=array('h')
