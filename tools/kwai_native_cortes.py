@@ -176,7 +176,14 @@ def editor(s,uri):
  if CAPTION_OPTIONAL:
   root,field,_=wait(s,RID_EDITOR,safe()+'-caption-optional-form',32)
   editors=rid(root,RID_EDITOR)
-  if len(editors)!=1 or (field.attrib.get('text') or '').strip():
+  if len(editors)!=1:
+   raise E('kwai_caption_optional_editor_missing_or_ambiguous')
+  actual=(field.attrib.get('text') or '').strip()
+  # UIAutomator exposes the native empty-field hint as text.
+  hint=bool(re.fullmatch(
+   r'Descreva sua publica.{1,3}o, adicione hashtags ou @amigos',
+   actual,flags=re.IGNORECASE)) and field.attrib.get('class')=='android.widget.EditText'
+  if actual and not hint:
    raise E('kwai_caption_optional_stale_editor_text')
   out('KWAI_CAPTION_OPTIONAL_BLANK_EDITOR_VERIFIED')
 def ptime(t):
