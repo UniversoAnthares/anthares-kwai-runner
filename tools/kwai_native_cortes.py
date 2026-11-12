@@ -98,8 +98,19 @@ def wait(s,r,name,seconds=30):
    xs=[n for n in xs if n.attrib.get('clickable')=='true' and n.attrib.get('enabled')=='true' and center(n.attrib.get('bounds',''))]
    xs.sort(key=lambda n:center(n.attrib['bounds'])[0],reverse=True)
   if xs:return root,xs[0],path
-  notification_prompt=any(n.attrib.get('resource-id')=='kwai.lite.video.basis:id/tv_dialog_title' and 'notifica' in (n.attrib.get('text') or '').lower() for n in root.iter('node'))
-  notification_close=[n for n in root.iter('node') if n.attrib.get('resource-id')=='kwai.lite.video:id/iv_close' and n.attrib.get('clickable')=='true']
+  # Kwai Lite and Kwai show account-specific notification promotions above
+  # the authenticated profile. Close only the identified optional popup.
+  # Never select its permission-enable button.
+  prefix='com.kwai.video' if ACCOUNT=='universoanthares' else 'kwai.lite.video'
+  notification_prompt=any(
+   n.attrib.get('resource-id')==prefix+'.basis:id/tv_dialog_title' and
+   'notifica' in (n.attrib.get('text') or '').casefold()
+   for n in root.iter('node'))
+  notification_close=[n for n in root.iter('node')
+   if n.attrib.get('resource-id')==prefix+':id/iv_close'
+   and n.attrib.get('clickable')=='true'
+   and n.attrib.get('enabled')=='true'
+   and center(n.attrib.get('bounds',''))]
   if r==RID_PROFILE and notification_prompt and len(notification_close)==1:
    tap(s,notification_close[0]);time.sleep(1);continue
   if r==RID_PROFILE and any(n.attrib.get('resource-id','').endswith(('/edit_post_next_step_button','/post_button_normal')) for n in root.iter('node')):
