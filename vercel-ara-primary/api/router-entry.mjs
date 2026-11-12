@@ -1,29 +1,11 @@
-import { Pool } from 'pg';
-
 if (!process.env.ARA_PUBLIC_ORIGIN) {
   process.env.ARA_PUBLIC_ORIGIN = 'https://anthares-remote-primary.vercel.app';
-}
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1, ssl: { rejectUnauthorized: false } });
-let compatibilityReady = false;
-
-async function ensureCompatibility() {
-  if (compatibilityReady) return;
-  await pool.query(`
-    ALTER TABLE IF EXISTS ara_reserve_jobs
-      DROP CONSTRAINT IF EXISTS ara_reserve_jobs_status_check;
-    ALTER TABLE IF EXISTS ara_reserve_jobs
-      ADD CONSTRAINT ara_reserve_jobs_status_check
-      CHECK (status IN ('queued','leased','done','failed','uncertain','expired'));
-  `);
-  compatibilityReady = true;
 }
 
 const mod = await import('./router.mjs');
 const app = mod.default;
 
 export default async function handler(req, res) {
-  await ensureCompatibility();
   const route = String(req.query?.route || '').replace(/^\/+|\/+$/g, '');
 
   // The TikTok queue retains separate OIDC roles, Neon storage and leases.
