@@ -77,6 +77,8 @@ const daySQL="(now() AT TIME ZONE 'America/Campo_Grande')::date";
 // the local WordPress publisher. Recomputed after each verified confirmation.
 export async function threadsProportionalDue(includeLeased=false){
  const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+ const begin="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '6 hours') AT TIME ZONE 'America/Campo_Grande')";
+ const lastSlot="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '22 hours 59 minutes') AT TIME ZONE 'America/Campo_Grande')";
  const end="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '23 hours') AT TIME ZONE 'America/Campo_Grande')";
  const rows=await database(`SELECT
    count(*) FILTER (WHERE p.status='queued' AND NOT EXISTS(
@@ -87,28 +89,36 @@ export async function threadsProportionalDue(includeLeased=false){
     OR (p.publication_started_at>=${day} AND p.status IN ('started','uncertain','confirmed')))::int AS started,
    min(p.updated_at) FILTER (WHERE p.status='confirmed' AND p.updated_at>=${day}) AS first_confirmed,
    max(p.updated_at) FILTER (WHERE p.status='confirmed' AND p.updated_at>=${day}) AS last_confirmed,
-   now() AS server_now,${end} AS deadline_at
+   max(p.publication_started_at) FILTER (WHERE p.publication_started_at>=${day}) AS last_started,
+   now() AS server_now,${begin} AS start_at,${lastSlot} AS final_at,${end} AS deadline_at
    FROM cortes_publications p WHERE p.target_key=$1`,[TARGET]);
  const r=rows[0]||{},eligible=Number(r.eligible),started=Number(r.started),
        leased=includeLeased?Number(r.cloud_leased):0,
-       now=new Date(r.server_now).getTime(),deadline=new Date(r.deadline_at).getTime();
+       now=new Date(r.server_now).getTime(),deadline=new Date(r.deadline_at).getTime(),
+       start=new Date(r.start_at).getTime(),finalAt=new Date(r.final_at).getTime();
  if(!Number.isSafeInteger(eligible)||eligible<0||!Number.isSafeInteger(started)||
     started<0||!Number.isSafeInteger(leased)||leased<0||
-    !Number.isFinite(now)||!Number.isFinite(deadline))
+    !Number.isFinite(now)||!Number.isFinite(deadline)||
+    !Number.isFinite(start)||!Number.isFinite(finalAt)||!(start<finalAt&&finalAt<deadline))
   throw Error('THREADS_PACING_LEDGER_INVALID');
  const available=Math.min(eligible+leased,Math.max(0,100-started));
  const first=r.first_confirmed?new Date(r.first_confirmed).getTime():null;
  const last=r.last_confirmed?new Date(r.last_confirmed).getTime():null;
+ const startedAt=r.last_started?new Date(r.last_started).getTime():null;
  if((first===null)!==(last===null)||
     (last!==null&&(!Number.isFinite(first)||!Number.isFinite(last)||
-                    first>last||last>now||last>deadline)))
+                    first>last||last>now||last>deadline))||
+    (startedAt!==null&&(!Number.isFinite(startedAt)||startedAt>now||startedAt>deadline)))
   throw Error('THREADS_PACING_RECEIPT_INVALID');
  const base={remaining_today:available,eligible,started_today:started,
-             deadline_at:new Date(deadline).toISOString(),next_due_at:null};
+             start_at:new Date(start).toISOString(),deadline_at:new Date(deadline).toISOString(),next_due_at:null};
+ if(now<start)return{status:'WAIT_DAY_START',...base,next_due_at:new Date(start).toISOString()};
  if(now>=deadline)return{status:'BLOCKED_SAME_DAY_CAPACITY',...base};
  if(!available)return{status:eligible?'BLOCKED_PLATFORM_LIMIT':'IDLE',...base};
- if(last===null)return{status:'DUE',...base,next_due_at:new Date(now).toISOString()};
- const due=last+(deadline-last)/available;
+ const anchor=Math.max(last??-Infinity,startedAt??-Infinity);
+ if(anchor===-Infinity)return{status:'DUE',...base,next_due_at:new Date(now).toISOString()};
+ if(anchor>=finalAt)return{status:'BLOCKED_SAME_DAY_CAPACITY',...base};
+ const due=anchor+(finalAt-anchor)/available;
  return{status:now>=due?'DUE':'WAIT',...base,next_due_at:new Date(due).toISOString(),
    first_confirmed_at:r.first_confirmed,last_confirmed_at:r.last_confirmed};
 }
