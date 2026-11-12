@@ -116,8 +116,35 @@ class DirectInstagramTests(unittest.TestCase):
             self.assertEqual(once.call_count, 1)
             sleeper.assert_not_called()
 
+    def test_tagged_captions_are_unique_per_clip_and_idempotent(self):
+        payload = {"title": "A Poética de Aristóteles", "description": "Análise da tragédia."}
+        one = "cortes-fanout-instagram-" + "a"*32
+        two = "cortes-fanout-instagram-" + "b"*32
+        c1 = direct.instagram_caption(payload, one)
+        c2 = direct.instagram_caption(payload, two)
+        self.assertNotEqual(c1, c2)
+        self.assertIn("www.anthares.us", c1)
+        self.assertEqual(c1.count("#antharescorte"), 1)
+        self.assertTrue(c1.splitlines()[0].endswith(" ● Universo Anthares"))
+        self.assertEqual(c1, direct.instagram_caption({
+            "title": c1.splitlines()[0],
+            "description": c1.split("\\n",1)[1],
+        }, one))
+
+    def test_daily_window_is_local_six_to_midnight(self):
+        from datetime import datetime, timezone
+        self.assertFalse(direct.daily_publication_window(datetime(
+            2026, 11, 12, 9, 30, tzinfo=timezone.utc)))
+        self.assertTrue(direct.daily_publication_window(datetime(
+            2026, 11, 12, 10, 30, tzinfo=timezone.utc)))
+        self.assertTrue(direct.daily_publication_window(datetime(
+            2026, 11, 13, 3, 30, tzinfo=timezone.utc)))
+        self.assertFalse(direct.daily_publication_window(datetime(
+            2026, 11, 13, 4, 30, tzinfo=timezone.utc)))
+
     def test_batch_can_commit_two_distinct_confirmations(self):
         with patch.object(direct,"require_cloud",return_value=object()), \
+             patch.object(direct,"daily_publication_window",return_value=True), \
              patch.object(direct,"quota_hold_until",return_value=None), \
              patch.object(direct,"publish_once",side_effect=[1,1]) as once, \
              patch.object(direct.time,"sleep") as delay:
@@ -127,6 +154,7 @@ class DirectInstagramTests(unittest.TestCase):
 
     def test_batch_stops_at_quota_or_empty_queue(self):
         with patch.object(direct,"require_cloud",return_value=object()), \
+             patch.object(direct,"daily_publication_window",return_value=True), \
              patch.object(direct,"quota_hold_until",return_value=None), \
              patch.object(direct,"publish_once",side_effect=[1,0]) as once, \
              patch.object(direct.time,"sleep") as delay:
@@ -136,6 +164,7 @@ class DirectInstagramTests(unittest.TestCase):
 
     def test_batch_keeps_confirmed_success_after_fenced_uncertain(self):
         with patch.object(direct,"require_cloud",return_value=object()), \
+             patch.object(direct,"daily_publication_window",return_value=True), \
              patch.object(direct,"quota_hold_until",return_value=None), \
              patch.object(direct,"publish_once",side_effect=[1,4]) as once, \
              patch.object(direct.time,"sleep"):
@@ -144,6 +173,7 @@ class DirectInstagramTests(unittest.TestCase):
 
     def test_batch_halts_after_first_fenced_uncertain_post(self):
         with patch.object(direct,"require_cloud",return_value=object()), \
+             patch.object(direct,"daily_publication_window",return_value=True), \
              patch.object(direct,"quota_hold_until",return_value=None), \
              patch.object(direct,"publish_once",side_effect=[4,1]) as once, \
              patch.object(direct.time,"sleep") as sleeper:
@@ -153,6 +183,7 @@ class DirectInstagramTests(unittest.TestCase):
 
     def test_batch_stops_on_uncertain_submission(self):
         with patch.object(direct,"require_cloud",return_value=object()), \
+             patch.object(direct,"daily_publication_window",return_value=True), \
              patch.object(direct,"quota_hold_until",return_value=None), \
              patch.object(direct,"publish_once",side_effect=[1,2]) as once, \
              patch.object(direct.time,"sleep"):
