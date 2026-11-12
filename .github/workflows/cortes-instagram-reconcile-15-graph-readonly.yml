@@ -1,0 +1,69 @@
+name: CORTES Instagram 15 uncertain - authenticated Graph readback once
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cortes-instagram-reconcile-15-graph-readonly.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  official-account-inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read only authenticated Instagram account media
+        env:
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v26.0' }}
+          INSTAGRAM_GRAPH_HOST: ${{ vars.INSTAGRAM_GRAPH_HOST || 'graph.instagram.com' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from scripts.instagram_publish import InstagramClient
+          c=InstagramClient(os.environ['INSTAGRAM_USER_ID'],os.environ['INSTAGRAM_ACCESS_TOKEN'],
+             os.environ.get('INSTAGRAM_API_VERSION','v26.0'),
+             os.environ.get('INSTAGRAM_GRAPH_HOST','graph.instagram.com'))
+          windows=[
+             ('2026-10-21T10:00:00Z','2026-10-22T05:00:00Z'),
+             ('2026-10-29T06:00:00Z','2026-10-30T05:00:00Z'),
+             ('2026-11-12T04:00:00Z','2026-11-12T08:00:00Z')]
+          def ts(s):return datetime.fromisoformat(s.replace('Z','+00:00')).astimezone(timezone.utc)
+          starts=[ts(a) for a,b in windows];ends=[ts(b) for a,b in windows]
+          rows=[];after=None;cover=False;pages=0;seen=set()
+          for n in range(15):
+            query={'fields':'id,permalink,timestamp,caption,media_type','limit':100}
+            if after:query['after']=after
+            result=c._request('GET',f'{c.user_id}/media',query=query)
+            data=result.get('data') or []
+            if not isinstance(data,list):raise ValueError('INVALID_ACCOUNT_MEDIA_RESPONSE')
+            pages+=1
+            for item in data:
+              date=ts(item['timestamp']) if item.get('timestamp') else None
+              if not date or not item.get('id') or not item.get('permalink'):continue
+              mid=str(item['id'])
+              if mid in seen:continue
+              seen.add(mid)
+              if any(a<=date<=b for a,b in zip(starts,ends)):
+                rows.append({'media_id':mid,'timestamp':date.isoformat(),
+                  'permalink':str(item['permalink']).split('?')[0][:200],
+                  'caption':str(item.get('caption') or '')[:250],
+                  'media_type':item.get('media_type')})
+            dates=[ts(x['timestamp']) for x in data if x.get('timestamp')]
+            if dates and max(dates)<min(starts):
+              cover=True;break
+            after=(result.get('paging') or {}).get('cursors',{}).get('after')
+            if not after or len(data)==0:cover=True;break
+          print('GRAPH_ACCOUNT_AUTHENTICATED_READBACK='+json.dumps({
+            'pages':pages,'total_visited':len(seen),'full_older_period_covered':cover,
+            'window_rows':len(rows)},ensure_ascii=False),flush=True)
+          for row in sorted(rows,key=lambda r:r['timestamp'],reverse=True):
+            print('GRAPH_ACCOUNT_REEL='+json.dumps(row,ensure_ascii=False),flush=True)
+          PY
