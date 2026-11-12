@@ -220,12 +220,38 @@ def instagram_caption(payload: dict, job_id: str | None = None) -> str:
     return title + "\n" + description
 
 
+def provider_room(client: InstagramClient) -> int | None:
+    """Real per-account rolling 24h limit; unknown capacity blocks submissions."""
+    try:
+        quota = client.get_quota()
+        if (not isinstance(quota.total, int) or not isinstance(quota.usage, int)
+                or quota.total < 1 or quota.total > 100
+                or quota.usage < 0 or quota.usage > quota.total):
+            return None
+        return quota.total - quota.usage
+    except Exception:
+        return None
+
+
 def publish_once(client: InstagramClient) -> int:
-    claim = neon("lease", {"target_key": TARGET, "owner": OWNER})
+    room = provider_room(client)
+    if room is None:
+        print(json.dumps({"direct_cloud": "IDLE_PROVIDER_QUOTA_UNKNOWN"}), flush=True)
+        return 0
+    if room == 0:
+        print(json.dumps({"direct_cloud": "IDLE_PROVIDER_QUOTA_EXHAUSTED"}), flush=True)
+        return 0
+    claim = neon("lease", {"target_key": TARGET, "owner": OWNER,
+                           "quota_remaining": room})
     job = claim.get("job")
     if not job:
-        print(json.dumps({"direct_cloud": "IDLE", "daily_limit_reached": bool(
-            claim.get("daily_limit_reached"))}), flush=True)
+        plan = claim.get("pacing") or {}
+        print(json.dumps({"direct_cloud": "WAIT_PROPORTIONAL_SLOT",
+                          "status": plan.get("status"),
+                          "interval_seconds": plan.get("interval_seconds"),
+                          "next_due_at": plan.get("next_due_at"),
+                          "remaining_today": plan.get("remaining_today"),
+                          "provider_remaining": room}), flush=True)
         return 0
     fence = {"id": job["id"], "owner": OWNER, "lease_generation": job["lease_generation"]}
     started = False
@@ -249,13 +275,19 @@ def publish_once(client: InstagramClient) -> int:
         # The canonical WordPress master and Neon queue identity remain unchanged.
         url = ensure_vertical_media(url, job["id"], payload.get("cortes_attachment_id"),
                                    title=str(payload.get("title") or "Universo Anthares"))
-        quota = client.get_quota()
-        if (quota.total is not None and quota.usage is not None
-                and quota.usage >= quota.total):
+        # Always recheck provider quota and the computed slot at the last
+        # reversible boundary, immediately before creating a Meta container.
+        updated_room = provider_room(client)
+        if updated_room is None or updated_room == 0:
             neon("fail", fence)
-            print(json.dumps({"direct_cloud": "IDLE_PROVIDER_QUOTA"}), flush=True)
+            print(json.dumps({"direct_cloud": "IDLE_PROVIDER_QUOTA_RECHECK"}), flush=True)
             return 0
-        neon("start", fence)
+        reservation = neon("start", {**fence, "quota_remaining": updated_room})
+        if not reservation.get("job"):
+            neon("fail", fence)
+            print(json.dumps({"direct_cloud": "WAIT_PROPORTIONAL_RECHECK",
+                              "pacing": reservation.get("pacing")}), flush=True)
+            return 0
         started = True
         phase = "container_create"
         container = client.create_reel_container(url, caption, share_to_feed=True)
@@ -311,7 +343,7 @@ def publish_once(client: InstagramClient) -> int:
 
 def daily_publication_window(now: datetime | None = None) -> bool:
     local = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/Campo_Grande"))
-    return 6 <= local.hour <= 23
+    return 6 <= local.hour < 23
 
 
 def main() -> int:
@@ -340,34 +372,10 @@ def main() -> int:
         print(json.dumps({"direct_cloud": "PROVIDER_QUOTA_REOPENED",
                           "quota_total": total, "quota_usage": used,
                           "quota_remaining": total - used}), flush=True)
-    confirmed = 0
-    quarantined = 0
-    # Two existing fenced queue items per hosted run; Meta quota is checked
-    # immediately before each POST and each remote receipt is committed alone.
-    for index in range(2):
-        state = publish_once(client)
-        if state == 2:
-            return 2
-        if state == 0:
-            break
-        if state == 1:
-            confirmed += 1
-        if state == 5:
-            quarantined += 1
-            print(json.dumps({"direct_cloud": "BATCH_STOPPED_PROVIDER_QUOTA",
-                              "confirmed_this_run": confirmed}), flush=True)
-            break
-        if state == 4:
-            quarantined += 1
-            # Provider status is ambiguous. Keep the fenced claim for remote
-            # readback and stop this invocation before any second submission.
-            # Independent scheduled runs can continue with a distinct clip.
-            print(json.dumps({"direct_cloud": "BATCH_STOPPED_AFTER_UNCERTAIN",
-                              "confirmed_this_run": confirmed,
-                              "uncertain_this_run": quarantined}), flush=True)
-            break
-        if index == 0 and state == 1:
-            time.sleep(65)
+    # One submitted Reel at most per workflow invocation. The Neon slot is
+    # authoritative; no 65-second batch or fixed five-minute continuation.
+    state = publish_once(client)
+    return 2 if state == 2 else 0
         # Confirmed posts may continue to a distinct queue item.
     print(json.dumps({"direct_cloud": "BATCH_COMPLETE",
                       "confirmed": confirmed, "fenced_uncertain": quarantined,

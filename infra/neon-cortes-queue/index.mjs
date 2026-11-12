@@ -1189,6 +1189,60 @@ async function cortesDeadlinePacing(targetKey,dailyLimit){
  return plan;
 }
 
+// Instagram-specific, source-of-truth deadline pacing. All triggers (cron,
+// dispatch, push) are wake-ups only: only this Neon gate authorizes a slot.
+// Count irreversible starts, not reconciliation timestamps (updated_at).
+// Account's live rolling 24h quota is an additional bound supplied by the
+// OIDC-authenticated Instagram workflow after calling Meta.
+async function instagramDeadlinePacing(targetKey,dailyLimit,providerRemaining){
+ if(targetKey!=='instagram:universoanthares'||dailyLimit!==100||
+    !Number.isSafeInteger(providerRemaining)||providerRemaining<0||providerRemaining>100)
+   throw Error('INSTAGRAM_DEADLINE_QUOTA_SCOPE_INVALID');
+ const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+ const deadline="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '23 hours') AT TIME ZONE 'America/Campo_Grande')";
+ const rows=await query(`SELECT
+    count(*) FILTER (WHERE status IN ('queued','leased') AND publication_started_at IS NULL)::int AS pending,
+    count(*) FILTER (WHERE status IN ('started','uncertain','confirmed')
+      AND publication_started_at>=${day} AND publication_started_at<${deadline})::int AS started_today,
+    max(publication_started_at) FILTER (WHERE status IN ('started','uncertain','confirmed')
+      AND publication_started_at>=${day} AND publication_started_at<${deadline}) AS last_started,
+    min(publication_started_at) FILTER (WHERE status IN ('started','uncertain','confirmed')
+      AND publication_started_at>=${day} AND publication_started_at<${deadline}) AS first_started,
+    now() AS server_now,${deadline} AS deadline_at
+    FROM cortes_publications WHERE target_key=$1`,[targetKey]);
+ const r=rows[0]||{},now=new Date(r.server_now),end=new Date(r.deadline_at);
+ if(!Number.isFinite(now.getTime())||!Number.isFinite(end.getTime()))
+   throw Error('INSTAGRAM_DEADLINE_CLOCK_UNVERIFIED');
+ const pending=Number(r.pending||0),started=Number(r.started_today||0);
+ const remaining=Math.min(pending,Math.max(0,dailyLimit-started),providerRemaining);
+ const plan={status:'IDLE',target_key:targetKey,deadline_at:end.toISOString(),
+   server_now:now.toISOString(),pending,started_today:started,
+   provider_remaining:providerRemaining,remaining_today:remaining,
+   carryover:Math.max(0,pending-remaining),first_started_at:r.first_started||null,
+   last_started_at:r.last_started||null,next_due_at:null,interval_seconds:null};
+ // Last eligible start is strictly before 23:00 local. No 23h59 grace.
+ if(now>=end){plan.status='WINDOW_CLOSED';return plan;}
+ if(!pending){plan.status='EMPTY';return plan;}
+ if(remaining<1){plan.status='LIMIT_REACHED';return plan;}
+ if(!r.last_started){
+   if(r.first_started||started!==0)throw Error('INSTAGRAM_FIRST_START_INCONSISTENT');
+   plan.status='DUE';plan.next_due_at=plan.server_now;return plan;
+ }
+ const last=new Date(r.last_started);
+ if(!Number.isFinite(last.getTime())||last>now||last>=end)
+   throw Error('INSTAGRAM_LAST_START_INVALID');
+ // After the first submission, allocate the remaining time over the remaining
+ // slots. Recalculate after each actual start and when Meta's quota changes.
+ // Missed slots are carried forward: no catch-up burst and no arbitrary 65s.
+ const interval=(end.getTime()-last.getTime())/remaining;
+ if(!(interval>0)||!Number.isFinite(interval))throw Error('INSTAGRAM_INTERVAL_INVALID');
+ const due=last.getTime()+interval;
+ plan.interval_seconds=interval/1000;
+ plan.next_due_at=new Date(due).toISOString();
+ plan.status=now.getTime()>=due?'DUE':'WAIT';
+ return plan;
+}
+
 async function instagramAuthenticatedProfileSave(actor,b){
  if(actor.role!=='instagram-profile'||actor.platform!=='instagram')
    return {ok:false,error:'PROFILE_SCANNER_ONLY'};
@@ -1433,7 +1487,7 @@ async function instagramDirectAction(verb,b){
  if(verb==='lease'){
   if(b.target_key!==target||b.owner!=='instagram-direct:github-cloud-v1')
     return {ok:false,error:'DIRECT_OWNER_INVALID'};
-  const pacing=await cortesDeadlinePacing(target,100);
+  const pacing=await instagramDeadlinePacing(target,100,Number(b.quota_remaining));
   if(pacing.status!=='DUE')return{ok:true,job:null,pacing};
   // Provider quota and CORTES hard daily limit are separate; both apply.
   const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
@@ -1458,6 +1512,10 @@ async function instagramDirectAction(verb,b){
  if(!id||owner!=='instagram-direct:github-cloud-v1'||!Number.isSafeInteger(gen)||gen<1)
   return {ok:false,error:'DIRECT_FENCE_INVALID'};
  if(verb==='start'){
+  // Recheck immediately before the irreversible provider submission. A lease
+  // acquired while due never authorizes a late/early second publication.
+  const pacing=await instagramDeadlinePacing(target,100,Number(b.quota_remaining));
+  if(pacing.status!=='DUE')return{ok:true,job:null,pacing};
   const row=await query(`UPDATE cortes_publications SET status='started',
     publication_started_at=COALESCE(publication_started_at,now()),updated_at=now()
     WHERE id=$1 AND target_key=$2 AND status='leased' AND lease_owner=$3
