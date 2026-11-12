@@ -128,6 +128,49 @@ def _fill_caption(page, caption: str) -> None:
     raise RuntimeError("Campo de legenda/título do TikTok não foi localizado.")
 
 
+def _fill_caption_or_verify_empty(page, caption: str) -> bool:
+    """Allow a blank caption only when browser editors are verified empty."""
+    try:
+        _fill_caption(page, caption)
+        return True
+    except RuntimeError as exc:
+        if str(exc) != "Campo de legenda/título do TikTok não foi localizado.":
+            raise
+    if tw.challenge_detected(page) or tw.login_visible(page) or t.HUMAN_RE.search(t.page_text(page, 12000)):
+        raise RuntimeError("TIKTOK_CAPTION_FALLBACK_SECURITY_GATE")
+    selectors = (
+        '[contenteditable="true"][data-e2e*="caption"]',
+        '[contenteditable="true"]',
+        'textarea[placeholder*="descr"]',
+        'textarea[placeholder*="caption"]',
+    )
+    checked = 0
+    for selector in selectors:
+        loc = page.locator(selector)
+        for i in range(min(loc.count(), 8)):
+            item = loc.nth(i)
+            try:
+                if not item.is_visible(timeout=700):
+                    continue
+                item.fill("")
+                editable = str(item.get_attribute("contenteditable") or "").lower() == "true"
+                value = item.inner_text(timeout=2000) if editable else item.input_value(timeout=2000)
+                if value.strip():
+                    raise RuntimeError("TIKTOK_CAPTION_RESET_UNVERIFIED")
+                checked += 1
+            except RuntimeError:
+                raise
+            except Exception as exc:
+                raise RuntimeError("TIKTOK_CAPTION_RESET_UNVERIFIED") from exc
+    if not checked and page.locator(
+        '[contenteditable="true"],textarea[placeholder*="descr"],'
+        'textarea[placeholder*="caption"],[data-e2e*="caption"]'
+    ).count():
+        raise RuntimeError("TIKTOK_CAPTION_EDITOR_UNVERIFIED")
+    print("TIKTOK_CAPTION_OPTIONAL_EMPTY_VERIFIED=1", flush=True)
+    return False
+
+
 def _inventory_profile_videos_isolated(account: str) -> list[dict]:
     """Run profile inventory in a separate process so Playwright Sync never nests."""
     fd, path = tempfile.mkstemp(prefix="tiktok-inventory-", suffix=".json")
@@ -228,7 +271,7 @@ def main() -> None:
             file_input.set_input_files(str(media_path))
             post_button = t.wait_upload_ready(page)
             t.handle_auto_checks_modal(page)
-            _fill_caption(page, _caption(plan))
+            caption_written = _fill_caption_or_verify_empty(page, _caption(plan))
             t.screenshot(page, "tiktok-owned-upload-ready.png")
 
             privacy = t.set_public_visibility(page)
@@ -289,7 +332,8 @@ def main() -> None:
                 "account": os.getenv("EXPECTED_TIKTOK_USERNAME", ""),
                 "segment_id": str(plan.get("segment_id") or ""),
                 "source_id": str(plan.get("source_id") or ""),
-                "caption": _caption(plan),
+                "caption": _caption(plan) if caption_written else "",
+                "caption_mode": "filled" if caption_written else "empty_optional",
                 "remote_url": evidence_url,
                 "remote_id": evidence_id,
                 "confirmation": "profile_new_post",
