@@ -157,7 +157,8 @@ def scan_public_profile(start: datetime) -> dict:
                     except Exception:
                         return {"complete": False, "reason": "PUBLIC_REEL_READ_FAILED"}
                 covered, oldest, newest = cover(start, list(posts.values()))
-                return {"complete": covered, "reason": "COVERED" if covered else "PUBLIC_TIMELINE_INCOMPLETE",
+                return {"complete": covered, "authenticated": True, "profile": "AntharesInstagram",
+                        "reason": "COVERED" if covered else "PUBLIC_TIMELINE_INCOMPLETE",
                         "items": list(posts.values()), "count": len(posts),
                         "oldest_at": oldest, "newest_at": newest,
                         "grid_count": len(candidates)}
@@ -246,20 +247,70 @@ def decide(job: dict, public: dict, graph: dict, observed_at: datetime | None = 
     return None
 
 
+def stored_timestamp(job: dict) -> datetime | None:
+    raw=job.get("publication_started_at") or (job.get("confirmation_evidence") or {}).get("submitted_at")
+    try:
+        return parsed_at(raw)
+    except (KeyError,ValueError,TypeError):
+        return None
+
+
+def action_prepare() -> int:
+    """OIDC hosted job saves only the earliest uncertain timestamp for browser scan."""
+    require_cloud()
+    pending=post("instagram-direct-pending", {"limit":50}, oidc)
+    if not pending.get("ok") or pending.get("target_key")!="instagram:universoanthares":
+        raise RuntimeError("PUBLIC_RECONCILE_QUEUE_READ_FAILED")
+    dates=[d for j in pending.get("items",[]) if (d:=stored_timestamp(j))]
+    path=Path(os.environ["CORTES_INSTAGRAM_WINDOW_OUTPUT"])
+    body={"oldest_at":min(dates).isoformat() if dates else None,
+          "candidates":len(dates),"created_at":datetime.now(timezone.utc).isoformat(),
+          "target_key":"instagram:universoanthares"}
+    path.write_text(json.dumps(body),encoding="utf-8")
+    print(json.dumps({"public_reconcile":"WINDOW_PREPARED","candidates":len(dates)}),flush=True)
+    return 0
+
+
+def action_scan() -> int:
+    """Windows-only read: use the existing logged-in profile, publish metadata only."""
+    filename=Path(os.environ["CORTES_INSTAGRAM_WINDOW_INPUT"])
+    params=json.loads(filename.read_text(encoding="utf-8"))
+    if params.get("target_key")!="instagram:universoanthares":
+        raise RuntimeError("RECONCILE_WINDOW_INVALID")
+    oldest=params.get("oldest_at")
+    if not oldest:
+        result={"complete":True,"empty":True,"authenticated":False,"reason":"NO_UNCERTAIN_WITH_TIMESTAMP"}
+    else:
+        result=scan_public_profile(parsed_at(oldest))
+    result["captured_at"]=datetime.now(timezone.utc).isoformat()
+    Path(os.environ["CORTES_INSTAGRAM_PROFILE_OUTPUT"]).write_text(
+        json.dumps(result,ensure_ascii=False),encoding="utf-8")
+    print(json.dumps({"public_reconcile":"PROFILE_SCANNED","complete":result.get("complete"),
+                      "authenticated":result.get("authenticated",False),
+                      "reason":result.get("reason"),"reels":result.get("count",0)}),flush=True)
+    return 0
+
+
 def main() -> int:
-    # The same OIDC-identified cloud workflow is required for queue mutations.
+    # Only the hosted GitHub OIDC role can update the canonical Neon ledger.
     client = require_cloud()
     pending = post("instagram-direct-pending", {"limit": 50}, oidc)
     if not pending.get("ok") or pending.get("target_key") != "instagram:universoanthares":
         raise RuntimeError("PUBLIC_RECONCILE_QUEUE_REJECTED")
     jobs = pending.get("items") or []
-    eligible = [j for j in jobs if parsed_at(j["publication_started_at"]) >= TAG_CUTOVER]
+    eligible = [j for j in jobs if stored_timestamp(j) is not None]
     if not eligible:
-        print(json.dumps({"public_reconcile": "NO_TAGGED_CANDIDATES",
-                          "legacy_uncertain_preserved": len(jobs)}), flush=True)
+        print(json.dumps({"public_reconcile": "NO_TIMESTAMP_CANDIDATES",
+                          "unresolved": len(jobs)}), flush=True)
         return 0
-    oldest = min(parsed_at(j["publication_started_at"]) for j in eligible)
-    public = scan_public_profile(oldest)
+    oldest = min(stored_timestamp(j) for j in eligible)
+    public = json.loads(Path(os.environ["CORTES_INSTAGRAM_PROFILE_INPUT"]).read_text(
+        encoding="utf-8"))
+    if (public.get("profile")!="AntharesInstagram" or public.get("authenticated") is not True
+            or datetime.now(timezone.utc)-parsed_at(public.get("captured_at"))>timedelta(minutes=60)):
+        print(json.dumps({"public_reconcile":"AUTHENTICATED_PROFILE_REQUIRED",
+                          "reason":public.get("reason")}),flush=True)
+        return 2
     if not public.get("complete"):
         print(json.dumps({"public_reconcile": "INCONCLUSIVE_PUBLIC_PROFILE",
                           "reason": public.get("reason")}), flush=True)
@@ -286,7 +337,12 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(main())
+        operation=sys.argv[1] if len(sys.argv)>1 else "reconcile"
+        handler={"prepare":action_prepare,"profile-scan":action_scan,
+                 "reconcile":main}.get(operation)
+        if handler is None:
+            raise RuntimeError("PUBLIC_RECONCILE_MODE_INVALID")
+        raise SystemExit(handler())
     except Exception as error:
         print(json.dumps({"public_reconcile": "FAILED_SAFE",
                           "reason": type(error).__name__}), file=sys.stderr)
