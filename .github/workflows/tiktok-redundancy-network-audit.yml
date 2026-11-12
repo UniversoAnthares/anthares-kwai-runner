@@ -1,0 +1,96 @@
+name: TikTok redundancy secure network diagnostic
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tiktok-redundancy-network-audit.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: tiktok-redundancy-secure-readonly-audit
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Inspect queue ingress, worker auth and Northflank admin status without mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error,urllib.parse,ssl,socket
+          B='https://anthares-cortes-tiktok-ha.anthares1.workers.dev'
+          N='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run'
+          for name in ('ARA_SHARED','NORTHFLANK_API_TOKEN','CLOUDFLARE_API_TOKEN'):
+              print('SECRET_'+name+'_PRESENT='+str(bool(os.getenv(name))),flush=True)
+          def call(label,url,bearer=None,timeout=12):
+              h={'Accept':'application/json','User-Agent':'Anthares-Owner-Network-Diagnostics/1.0'}
+              if bearer:h['Authorization']='Bearer '+bearer
+              req=urllib.request.Request(url,headers=h,method='GET')
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as r:
+                      blob=r.read(70000)
+                      try: data=json.loads(blob)
+                      except ValueError:data={}
+                      print(label+'_HTTP='+str(r.status),flush=True)
+                      print(label+'_SERVER='+str(r.headers.get('server') or '')[:50],flush=True)
+                      print(label+'_ROUTE='+str(r.headers.get('X-Anthares-TikTok-Route') or 'none')[:70],flush=True)
+                      return r.status,data
+              except urllib.error.HTTPError as e:
+                  data=e.read(1024)
+                  title=''
+                  # Only a bounded HTML title or JSON error code, never untrusted body.
+                  try:
+                      obj=json.loads(data)
+                      title='error='+str(obj.get('error') or '')[:70]
+                  except (ValueError,AttributeError):
+                      import re
+                      m=re.search(rb'<title[^>]*>([^<]{0,90})',data,re.I)
+                      title='title='+m.group(1).decode('utf8','replace') if m else 'non_json'
+                  print(label+'_HTTP='+str(e.code),flush=True)
+                  print(label+'_SERVER='+str(e.headers.get('server') or '')[:50],flush=True)
+                  print(label+'_ROUTE='+str(e.headers.get('X-Anthares-TikTok-Route') or 'none')[:70],flush=True)
+                  print(label+'_DENIAL='+title.replace('\n',' ')[:100],flush=True)
+                  return e.code,{}
+              except Exception as e:
+                  print(label+'_TRANSPORT='+type(e).__name__,flush=True)
+                  return 0,{}
+          for path,label in [('/?action=health','EDGE_HEALTH'),('/?action=status','EDGE_ANON_STATUS')]:
+              call(label,B+path,timeout=10)
+          # Use the signed GitHub OIDC identity only for read-only API status.
+          oidc_u=os.getenv('ACTIONS_ID_TOKEN_REQUEST_URL','')
+          oidc_req=os.getenv('ACTIONS_ID_TOKEN_REQUEST_TOKEN','')
+          if oidc_u and oidc_req:
+              url=oidc_u+('&' if '?' in oidc_u else '?')+urllib.parse.urlencode({'audience':'https://anthares-remote-primary.vercel.app/api/cortes-tiktok'})
+              req=urllib.request.Request(url,headers={'Authorization':'Bearer '+oidc_req})
+              try:
+                  with urllib.request.urlopen(req,timeout=12) as r:
+                      tok=json.load(r).get('value','')
+                  if tok:
+                      call('EDGE_OIDC_STATUS',B+'/?action=status',bearer=tok,timeout=10)
+                      call('NEON_OIDC_STATUS','https://br-crimson-unit-b89nau08-cortestiktok.compute.c-14.us-east-1.aws.neon.tech/?action=status',bearer=tok,timeout=10)
+              except Exception as e:print('OIDC_TOKEN_ISSUANCE_ERROR='+type(e).__name__,flush=True)
+          code,health=call('NORTHFLANK_HEALTH',N+'/health',timeout=12)
+          if code==200:
+              for k in ('auth_required','ffmpeg_ready','session_bootstrapped','identity_verified','ready_for_tiktok'):
+                  print('NORTHFLANK_'+k.upper()+'='+str(health.get(k)),flush=True)
+          for url,label in [('/config-status','NORTHFLANK_CONFIG_ANON'),('/session-status','NORTHFLANK_SESSION_ANON'),('/interactive-browser/status','NORTHFLANK_BROWSER_ANON')]:
+              call(label,N+url,timeout=9)
+          token=os.getenv('ARA_SHARED','')
+          if token:
+              for url,label in [('/config-status','NORTHFLANK_CONFIG_SHARED'),('/session-status','NORTHFLANK_SESSION_SHARED'),('/interactive-browser/status','NORTHFLANK_BROWSER_SHARED')]:
+                  code,data=call(label,N+url,bearer=token,timeout=12)
+                  if code==200:
+                      allowed=('ok','bootstrapped','identity_verified','ready_for_tiktok','ffmpeg_ready','active','backend','revision','auth_required')
+                      print(label+'_SAFE='+json.dumps({k:data[k] for k in allowed if k in data},sort_keys=True)[:600],flush=True)
+          admin=os.getenv('NORTHFLANK_API_TOKEN','')
+          if admin:
+              code,_=call('NORTHFLANK_ADMIN_PROJECTS','https://api.northflank.com/v1/projects',bearer=admin,timeout=10)
+          print('REDUNDANCY_READONLY_AUDIT_COMPLETE=1',flush=True)
+          PY
