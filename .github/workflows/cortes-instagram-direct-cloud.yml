@@ -13,8 +13,10 @@ on:
       - 'tests/test_instagram_public_reconcile.py'
       - 'tests/test_instagram_public_neon.mjs'
       - 'tests/test_instagram_layout_standard.py'
+      - 'tests/test_instagram_deadline_pacing.mjs'
   workflow_dispatch: {}
   schedule:
+    # Polling triggers only; Neon decides every proportional publication slot.
     # Independent reconciliation at 06:19, 12:19 and 18:19 Campo Grande.
     - cron: '19 10,16,22 * * *'
     - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
@@ -27,7 +29,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     if: ${{ vars.CORTES_INSTAGRAM_DIRECT_PAUSED != 'true' }}
-    # The five-minute follow-up must not hold the Graph publication mutex.
+    # Five-minute cron is polling only; each Neon due time authorizes one Reel.
     # Serialize only the media job; Neon fencing remains the final authority.
     concurrency:
       # A scheduled run cannot cancel a user-initiated rescue; Neon fences both.
@@ -50,8 +52,9 @@ jobs:
           python -m unittest discover -s tests -p 'test_instagram_public_reconcile.py' -v
           node --check infra/neon-cortes-queue/index.mjs
           node --test tests/test_instagram_public_neon.mjs
+          node --test tests/test_instagram_deadline_pacing.mjs
           python -c 'from tools.cortes_instagram_vertical_asset import _ffmpeg_exe; assert _ffmpeg_exe()'
-      - name: Publish up to two separately confirmed Reels through official Instagram Graph
+      - name: Publish at most one Neon-scheduled Reel through official Instagram Graph
         id: publish
         env:
           ANTHARES_SOCIAL_COMMIT: '1'
@@ -71,32 +74,6 @@ jobs:
           if grep -Fq '"direct_cloud": "INSTAGRAM_REEL_CONFIRMED"' "$receipt_file"; then
             echo 'confirmed=true' >> "$GITHUB_OUTPUT"
           fi
-
-  # A confirmed Reel starts one bounded continuation, independent of cron.
-  # A later confirmation supersedes the previous sleeper to avoid parallel bursts.
-  continue-confirmed-queue:
-    needs: [publish-direct-reel]
-    if: ${{ needs['publish-direct-reel'].result == 'success' && needs['publish-direct-reel'].outputs.confirmed == 'true' && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 8
-    permissions:
-      contents: read
-      actions: write
-    concurrency:
-      group: cortes-instagram-graph-confirmed-continuation
-      cancel-in-progress: true
-    steps:
-      - name: Continue verified Instagram queue after five-minute spacing
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$GH_REPO" = 'UniversoAnthares/anthares-kwai-runner'
-          sleep 300
-          gh workflow run cortes-instagram-direct-cloud.yml --repo "$GH_REPO" --ref main
-          echo CORTES_INSTAGRAM_DIRECT_CONFIRMED_SUCCESSOR_DISPATCHED=1
 
   # Independent proof route: authenticated Windows profile snapshot + Graph readback.
   # It never triggers a publish/retry and never changes a queued item.
