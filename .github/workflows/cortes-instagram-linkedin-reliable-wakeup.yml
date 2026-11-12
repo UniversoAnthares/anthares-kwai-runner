@@ -1,0 +1,70 @@
+name: CORTES Instagram LinkedIn reliable cloud wakeup
+
+# GitHub routinely drops high-frequency schedule events on busy repositories.
+# Successful canonical TikTok runs provide an independent cloud heartbeat.
+# Only the existing authenticated publisher workflows may make API writes.
+on:
+  workflow_run:
+    workflows:
+      - "CORTES TikTok hosted canonical Neon publisher"
+    types: [completed]
+    branches: [main]
+  schedule:
+    # Independent fallback when the TikTok producer has no eligible source.
+    - cron: '13 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: cortes-instagram-linkedin-reliable-wakeup
+  cancel-in-progress: false
+
+jobs:
+  trusted-dispatch:
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == 'UniversoAnthares/anthares-kwai-runner' && github.event.workflow_run.name == 'CORTES TikTok hosted canonical Neon publisher') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Wake fenced official cloud publishers with bounded cadence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_RUN_NUMBER: ${{ github.event.workflow_run.run_number || '0' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != 'refs/heads/main' || "$GH_REPO" != 'UniversoAnthares/anthares-kwai-runner' ]]; then
+            echo CORTES_WAKEUP_UNTRUSTED_REF
+            exit 1
+          fi
+          if [[ "$EVENT_NAME" == 'workflow_run' ]]; then
+            if [[ ! "$SOURCE_RUN_NUMBER" =~ ^[0-9]+$ ]]; then
+              echo CORTES_WAKEUP_INVALID_SOURCE_RUN
+              exit 1
+            fi
+            # Approx. one Graph Reel per 20-minute TikTok cadence;
+            # LinkedIn at half that rate. Each destination independently
+            # enforces Neon daily quota, lease fencing and remote readback.
+            instagram_due=$((SOURCE_RUN_NUMBER % 4 == 0))
+            linkedin_due=$((SOURCE_RUN_NUMBER % 8 == 0))
+          else
+            # Independently fired hourly scheduled/manual recovery.
+            instagram_due=1
+            linkedin_due=1
+          fi
+          if (( instagram_due )); then
+            gh workflow run cortes-instagram-direct-cloud.yml --repo "$GH_REPO" --ref main
+            echo CORTES_INSTAGRAM_CANONICAL_WAKEUP_DISPATCHED=1
+          else
+            echo CORTES_INSTAGRAM_CANONICAL_WAKEUP_NOT_DUE=1
+          fi
+          if (( linkedin_due )); then
+            gh workflow run cortes-linkedin-personal-fallback-cloud.yml --repo "$GH_REPO" --ref main -f reconcile_only=false
+            echo CORTES_LINKEDIN_CANONICAL_WAKEUP_DISPATCHED=1
+          else
+            echo CORTES_LINKEDIN_CANONICAL_WAKEUP_NOT_DUE=1
+          fi
