@@ -38,7 +38,7 @@ class DeadlinePacingTests(unittest.TestCase):
         self.assertEqual(p.due_at, dt(9, 16))
 
     def test_plan_is_independent_for_each_account(self):
-        p = plan(target_key="kwai:lucasrosalem", first_confirmed_at=dt(10),
+        p = plan(target_key="kwai:lucasrosalem", now=dt(10), first_confirmed_at=dt(10),
                  last_confirmed_at=dt(10), queued=4, started_today=1)
         self.assertEqual(p.due_at, dt(13, 15))
 
@@ -81,7 +81,7 @@ class DeadlinePacingTests(unittest.TestCase):
 
     def test_independent_utc_conversion(self):
         p = plan(now=dt(15).astimezone(timezone.utc))
-        self.assertEqual(p.due_at.astimezone(TZ), dt(9, 52, 30))
+        self.assertEqual(p.due_at.astimezone(TZ), datetime(2026, 11, 12, 9, 52, 30, tzinfo=TZ))
 
 
 if __name__ == "__main__":
