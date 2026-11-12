@@ -304,10 +304,12 @@ def main():
             preflight_error = "media_preflight_failed_before_start"
             try:
                 download_verified(job,folder/"short.mp4")
-                if os.getenv("FORGEJO_REPOSITORY")=="UniversoAnthares/anthares-kwai-runner":
-                    preflight_error = "publisher_import_preflight_failed_before_start"
-                    q.caption(job)
-                    preflight_codeberg_publisher_import(folder,state)
+                # Run publisher-import and canonical-session file preflight on
+                # ALL hosted routes. A module/import error after STARTED used to
+                # produce an irreconcilable UNCERTAIN in under two seconds.
+                preflight_error = "publisher_import_preflight_failed_before_start"
+                q.caption(job)
+                preflight_codeberg_publisher_import(folder,state)
             except Exception:
                 try:
                     q.qcall("fail",control,{
