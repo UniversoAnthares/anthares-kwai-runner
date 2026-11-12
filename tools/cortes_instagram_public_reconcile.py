@@ -74,13 +74,34 @@ def scan_public_profile(start: datetime) -> dict:
         from playwright.sync_api import sync_playwright
     except ImportError:
         return {"complete": False, "reason": "PLAYWRIGHT_NOT_INSTALLED"}
+    # An anonymous context is forbidden. Use ONLY the existing authorized
+    # persistent session; browser authentication and account view are mandatory.
+    profile = os.environ.get("CORTES_INSTAGRAM_AUTH_PROFILE", "").strip()
+    expected = r"D:\AntharsWork\browser-profiles\AntharesInstagram"
+    if not profile or os.path.normcase(os.path.normpath(profile)) != os.path.normcase(os.path.normpath(expected)):
+        return {"complete": False, "reason": "PERSISTENT_AUTH_PROFILE_REQUIRED"}
+    if not Path(profile).is_dir():
+        return {"complete": False, "reason": "PERSISTENT_AUTH_PROFILE_NOT_FOUND"}
     posts: dict[str, dict] = {}
     try:
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
+            context = pw.chromium.launch_persistent_context(
+                user_data_dir=profile, channel="chrome", headless=True,
+                viewport={"width": 1200, "height": 900}, locale="pt-BR",
+                args=["--no-first-run", "--disable-notifications", "--mute-audio"])
             try:
-                context = browser.new_context(locale="pt-BR", viewport={"width": 1200, "height": 900})
-                grid = context.new_page()
+                grid = context.pages[0] if context.pages else context.new_page()
+                # The settings page is private; a login redirect proves the
+                # existing profile is not authenticated in this session.
+                grid.goto("https://www.instagram.com/accounts/edit/",
+                          wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
+                grid.wait_for_timeout(900)
+                if ("/accounts/login/" in grid.url or "/challenge/" in grid.url
+                        or grid.locator('input[name="username"]').count()):
+                    return {"complete": False, "reason": "PERSISTENT_PROFILE_LOGIN_REQUIRED"}
+                # Avoid accepting an arbitrary public/redirect page as login.
+                if "/accounts/" not in grid.url:
+                    return {"complete": False, "reason": "PERSISTENT_PROFILE_AUTH_UNVERIFIED"}
                 grid.goto(PROFILE_URL, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
                 if "/accounts/login/" in grid.url or "/challenge/" in grid.url:
                     return {"complete": False, "reason": "PUBLIC_PROFILE_ACCESS_GATE"}
@@ -136,12 +157,13 @@ def scan_public_profile(start: datetime) -> dict:
                     except Exception:
                         return {"complete": False, "reason": "PUBLIC_REEL_READ_FAILED"}
                 covered, oldest, newest = cover(start, list(posts.values()))
-                return {"complete": covered, "reason": "COVERED" if covered else "PUBLIC_TIMELINE_INCOMPLETE",
+                return {"complete": covered, "authenticated": True, "profile": "AntharesInstagram",
+                        "reason": "COVERED" if covered else "PUBLIC_TIMELINE_INCOMPLETE",
                         "items": list(posts.values()), "count": len(posts),
                         "oldest_at": oldest, "newest_at": newest,
                         "grid_count": len(candidates)}
             finally:
-                browser.close()
+                context.close()
     except Exception:
         return {"complete": False, "reason": "PUBLIC_BROWSER_UNAVAILABLE"}
 
@@ -225,20 +247,84 @@ def decide(job: dict, public: dict, graph: dict, observed_at: datetime | None = 
     return None
 
 
+def stored_timestamp(job: dict) -> datetime | None:
+    evidence=job.get("confirmation_evidence") or {}
+    if isinstance(evidence,str):
+        try:evidence=json.loads(evidence)
+        except (ValueError,TypeError):evidence={}
+    raw=job.get("publication_started_at") or evidence.get("submitted_at")
+    try:
+        return parsed_at(raw)
+    except (KeyError,ValueError,TypeError):
+        return None
+
+
+def action_prepare() -> int:
+    """OIDC hosted job saves only the earliest uncertain timestamp for browser scan."""
+    require_cloud()
+    pending=post("instagram-direct-pending", {"limit":50}, oidc)
+    if not pending.get("ok") or pending.get("target_key")!="instagram:universoanthares":
+        raise RuntimeError("PUBLIC_RECONCILE_QUEUE_READ_FAILED")
+    dates=[d for j in pending.get("items",[]) if (d:=stored_timestamp(j))]
+    path=Path(os.environ["CORTES_INSTAGRAM_WINDOW_OUTPUT"])
+    body={"oldest_at":min(dates).isoformat() if dates else None,
+          "candidates":len(dates),"created_at":datetime.now(timezone.utc).isoformat(),
+          "target_key":"instagram:universoanthares"}
+    path.write_text(json.dumps(body),encoding="utf-8")
+    print(json.dumps({"public_reconcile":"WINDOW_PREPARED","candidates":len(dates)}),flush=True)
+    return 0
+
+
+def action_scan() -> int:
+    """Windows-only read: use the existing logged-in profile, publish metadata only."""
+    filename=Path(os.environ["CORTES_INSTAGRAM_WINDOW_INPUT"])
+    params=json.loads(filename.read_text(encoding="utf-8"))
+    if params.get("target_key")!="instagram:universoanthares":
+        raise RuntimeError("RECONCILE_WINDOW_INVALID")
+    oldest=params.get("oldest_at")
+    if not oldest:
+        result={"complete":True,"empty":True,"authenticated":False,"reason":"NO_UNCERTAIN_WITH_TIMESTAMP"}
+    else:
+        result=scan_public_profile(parsed_at(oldest))
+    result["captured_at"]=datetime.now(timezone.utc).isoformat()
+    Path(os.environ["CORTES_INSTAGRAM_PROFILE_OUTPUT"]).write_text(
+        json.dumps(result,ensure_ascii=False),encoding="utf-8")
+    print(json.dumps({"public_reconcile":"PROFILE_SCANNED","complete":result.get("complete"),
+                      "authenticated":result.get("authenticated",False),
+                      "reason":result.get("reason"),"reels":result.get("count",0)}),flush=True)
+    return 0
+
+
 def main() -> int:
-    # The same OIDC-identified cloud workflow is required for queue mutations.
+    # Only the hosted GitHub OIDC role can update the canonical Neon ledger.
     client = require_cloud()
     pending = post("instagram-direct-pending", {"limit": 50}, oidc)
     if not pending.get("ok") or pending.get("target_key") != "instagram:universoanthares":
         raise RuntimeError("PUBLIC_RECONCILE_QUEUE_REJECTED")
     jobs = pending.get("items") or []
-    eligible = [j for j in jobs if parsed_at(j["publication_started_at"]) >= TAG_CUTOVER]
+    eligible = [j for j in jobs if stored_timestamp(j) is not None]
     if not eligible:
-        print(json.dumps({"public_reconcile": "NO_TAGGED_CANDIDATES",
-                          "legacy_uncertain_preserved": len(jobs)}), flush=True)
+        print(json.dumps({"public_reconcile": "NO_TIMESTAMP_CANDIDATES",
+                          "unresolved": len(jobs)}), flush=True)
         return 0
-    oldest = min(parsed_at(j["publication_started_at"]) for j in eligible)
-    public = scan_public_profile(oldest)
+    oldest = min(stored_timestamp(j) for j in eligible)
+    snapshot=post("instagram-direct-profile-snapshot", {}, oidc)
+    if not snapshot.get("ok") or not snapshot.get("available"):
+        print(json.dumps({"public_reconcile":"AUTHENTICATED_PROFILE_REQUIRED",
+                          "reason":snapshot.get("reason","NO_FRESH_AUTHENTICATED_SCAN")}),flush=True)
+        return 0
+    data=snapshot.get("scan") or {}
+    items=data.get("posts") or []
+    if isinstance(items,str):
+        items=json.loads(items)
+    public={"complete":True,"authenticated":True,"profile":data.get("profile_name"),
+            "captured_at":data.get("captured_at"),"oldest_at":data.get("oldest_at"),
+            "newest_at":data.get("newest_at"),"count":len(items),"items":items}
+    if (public.get("profile")!="AntharesInstagram"
+            or datetime.now(timezone.utc)-parsed_at(public.get("captured_at"))>timedelta(minutes=60)
+            or parsed_at(public.get("oldest_at"))>oldest-timedelta(minutes=20)):
+        print(json.dumps({"public_reconcile":"AUTHENTICATED_PROFILE_WINDOW_MISSING"}),flush=True)
+        return 0
     if not public.get("complete"):
         print(json.dumps({"public_reconcile": "INCONCLUSIVE_PUBLIC_PROFILE",
                           "reason": public.get("reason")}), flush=True)
@@ -265,7 +351,12 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(main())
+        operation=sys.argv[1] if len(sys.argv)>1 else "reconcile"
+        handler={"prepare":action_prepare,"profile-scan":action_scan,
+                 "reconcile":main}.get(operation)
+        if handler is None:
+            raise RuntimeError("PUBLIC_RECONCILE_MODE_INVALID")
+        raise SystemExit(handler())
     except Exception as error:
         print(json.dumps({"public_reconcile": "FAILED_SAFE",
                           "reason": type(error).__name__}), file=sys.stderr)
