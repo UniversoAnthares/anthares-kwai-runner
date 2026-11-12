@@ -128,7 +128,7 @@ class DirectInstagramTests(unittest.TestCase):
         self.assertTrue(c1.splitlines()[0].endswith(" ● Universo Anthares"))
         self.assertEqual(c1, direct.instagram_caption({
             "title": c1.splitlines()[0],
-            "description": c1.split("\\n",1)[1],
+            "description": c1.split("\n",1)[1],
         }, one))
 
     def test_daily_window_is_local_six_to_midnight(self):
