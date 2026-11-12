@@ -20,6 +20,7 @@ class PublicProfileReconciliationTests(unittest.TestCase):
             return {"timestamp": ts.isoformat(), "caption": caption,
                     "permalink": url or self.url}
         self.public = {
+            "authenticated": True,
             "complete": True,
             "count": 3,
             "oldest_at": (self.started - timedelta(hours=2)).isoformat(),
