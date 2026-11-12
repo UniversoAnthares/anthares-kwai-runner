@@ -72,7 +72,7 @@ def dump(s,name):
 def rid(root,r):
  # Exact whitelisted UI variants; package installation name differs from view ids.
  known={
-  RID_PROFILE:('kwai.lite.video.basis:id/id_home_bottom_tab_me',),
+  RID_PROFILE:('kwai.lite.video.basis:id/id_home_bottom_tab_me','com.kwai.video.basis:id/id_home_bottom_tab_me'),
   RID_NEXT:('kwai.lite.video.product:id/edit_post_next_step_button',),
   RID_USER:('kwai.lite.video.basis:id/tv_user_id','kwai.lite.video.basis_extension:id/tv_user_id','com.kwai.video.basis:id/tv_user_id'),
   RID_THUMB:('kwai.lite.video.basis:id/thumb','kwai.lite.video.basis_extension:id/thumb','com.kwai.video.basis:id/thumb'),
