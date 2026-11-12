@@ -64,8 +64,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish-and-reconcile:
-    # Buffer deliberately disabled: direct provider publishers are authoritative.\n    if: ${{ false }}\n    # Safe destination is verified by the worker on each attempt.
-    if: ${{ github.event_name != 'push' && vars.CORTES_PINTEREST_BUFFER_PAUSED != 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
+    # Buffer disabled by explicit owner instruction; direct publishers own delivery.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
