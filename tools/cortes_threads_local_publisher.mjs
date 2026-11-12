@@ -8,10 +8,38 @@ const ledgerPath=path.join(root,'threads-ledger.json');
 const eventFile=path.join(root,'threads-events.log');
 const lock=path.join(root,'threads-worker.lock');
 const mode=process.argv[2]||'test';
-const minGapMs=6*60*1000;
 const maxPerDay=100;
 const port=9225;
 const log=(msg)=>{const line=new Date().toISOString()+' '+JSON.stringify(msg);fs.appendFileSync(eventFile,line+'\n');console.log(line)};
+const PACING_GATE='https://br-crimson-unit-b89nau08-cortesthreadspub.compute.c-14.us-east-1.aws.neon.tech/?action=gate';
+async function pacingReady(stage){
+ let state;
+ try{
+  const response=await fetch(PACING_GATE,{method:'GET',
+   headers:{'Accept':'application/json','Cache-Control':'no-cache',
+     'User-Agent':'AntharesCortesThreadsLocalPacing/1.0'},
+   signal:AbortSignal.timeout(18000)});
+  if(!response.ok)throw Error('PACING_BACKEND_HTTP_'+response.status);
+  state=await response.json();
+ }catch(e){
+  log({action:'PACING_GATE_UNAVAILABLE',stage,reason:e?.name||'Error'});
+  throw Error('THREADS_PACING_UNVERIFIED');
+ }
+ const pace=state?.pacing;
+ if(state?.ok!==true||state.owner!=='local'||!pace||
+    !['DUE','WAIT','IDLE','BLOCKED_PLATFORM_LIMIT','BLOCKED_SAME_DAY_CAPACITY'].includes(pace.status))
+  throw Error('THREADS_PACING_LEDGER_OR_OWNER_INVALID');
+ if(pace.status!=='DUE'){
+  log({action:'PROPORTIONAL_SCHEDULE_WAIT',stage,status:pace.status,
+       next_due_at:pace.next_due_at||null,deadline_at:pace.deadline_at});
+  return false;
+ }
+ const due=Date.parse(pace.next_due_at||''),deadline=Date.parse(pace.deadline_at||'');
+ if(!Number.isFinite(due)||!Number.isFinite(deadline)||
+    Date.now()<due||Date.now()>=deadline||!(Number(pace.remaining_today)>0))
+  throw Error('THREADS_PACING_TIMING_INVALID');
+ return true;
+}
 const readJson=(f,fallback)=>{try{return JSON.parse(fs.readFileSync(f,'utf8').replace(/^\uFEFF/,''))}catch{return fallback}};
 const saveJson=(f,v)=>{const temp=f+'.tmp';fs.writeFileSync(temp,JSON.stringify(v,null,2),'utf8');fs.renameSync(temp,f)};
 async function delay(ms){return new Promise(r=>setTimeout(r,ms))}
@@ -55,11 +83,10 @@ if(list.length===0)throw Error('MANIFEST_EMPTY');
 const today=new Date().toLocaleDateString('en-CA',{timeZone:'America/Campo_Grande'});
 const publishedToday=Object.values(ledger.items).filter(x=>x.status==='published'&&new Date(x.published_at).toLocaleDateString('en-CA',{timeZone:'America/Campo_Grande'})===today).length;
 const uncertainToday=Object.values(ledger.items).filter(x=>x.status==='submitting_uncertain'&&x.submitAt&&new Date(x.submitAt).toLocaleDateString('en-CA',{timeZone:'America/Campo_Grande'})===today).length;
-const last=ledger.lastPublished?new Date(ledger.lastPublished).getTime():0;
 if(mode==='auto'){
  if(publishedToday+uncertainToday>=maxPerDay){log({action:"DAILY_CAP_REACHED_PENDING_PRESERVED",count:publishedToday,uncertain:uncertainToday});process.exit(0)}
- if(last&&Date.now()-last<minGapMs){log({action:'COOLDOWN',remainingSeconds:Math.ceil((minGapMs-Date.now()+last)/1000)});process.exit(0)}
 }
+if(!(await pacingReady('PRE_SELECT')))process.exit(0);
 let item;
 if(mode==='test')item=list.find(x=>x.clip_id==='g1:fOmihuHUT1M:9434:9515');
 else item=list.find(x=>{
@@ -152,6 +179,7 @@ try{
  await delay(1700);
  const canSubmit=await composer.evaluate('(()=>{const x=[...document.querySelectorAll("[role=dialog] [role=button]")].filter(e=>e.textContent?.trim()==="Postar");return x.length>0&&x.at(-1).getAttribute("aria-disabled")!=="true"})()');
  if(!canSubmit)throw Error('SUBMIT_DISABLED');
+ if(!(await pacingReady('PRE_SUBMIT')))throw Error('THREADS_PROPORTIONAL_NOT_DUE_AT_SUBMIT');
  ledger.items[item.id].status='submitting_uncertain';ledger.items[item.id].submitAt=new Date().toISOString();saveJson(ledgerPath,ledger);
  const submitted=await composer.evaluate('(()=>{const a=[...document.querySelectorAll("[role=dialog] [role=button]")].filter(e=>e.textContent?.trim()==="Postar");if(a.length!==1)return {ok:false,count:a.length};a[0].click();return {ok:true}})()');
  if(!submitted.ok)throw Error('SUBMIT_BUTTON_UNEXPECTED');
